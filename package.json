@@ -9,11 +9,13 @@
   },
   "scripts": {
     "dev:web": "pnpm --filter @yumpoo/web-app dev",
-    "lint": "eslint \"frontend/**/*.{ts,vue}\"",
-    "typecheck": "pnpm --filter @yumpoo/web-app typecheck",
-    "test": "pnpm --filter @yumpoo/web-app test",
-    "build": "pnpm --filter @yumpoo/web-app build",
-    "verify:node": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"
+    "dev:desktop": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/desktop-shell start",
+    "lint": "eslint \"frontend/**/*.{ts,vue}\" \"desktop/**/*.ts\" \"packages/**/*.ts\"",
+    "test:architecture": "node --test tools/architecture/workspace-boundaries.test.mjs",
+    "typecheck": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/web-app typecheck && pnpm --filter @yumpoo/desktop-shell typecheck",
+    "test": "pnpm --filter @yumpoo/web-app test && pnpm --filter @yumpoo/desktop-shell test",
+    "build": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/web-app build && pnpm --filter @yumpoo/desktop-shell build",
+    "verify:node": "pnpm run lint && pnpm run test:architecture && pnpm run typecheck && pnpm run test && pnpm run build"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "8.66.0",

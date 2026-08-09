@@ -2,6 +2,19 @@ import tsPlugin from '@typescript-eslint/eslint-plugin'
 import tsParser from '@typescript-eslint/parser'
 import vuePlugin from 'eslint-plugin-vue'
 import vueParser from 'vue-eslint-parser'
+import workspacePlugin from './tools/architecture/workspace-boundaries.mjs'
+
+const typescriptFiles = [
+  'frontend/**/*.ts',
+  'desktop/**/*.ts',
+  'packages/**/*.ts',
+]
+
+const workspaceFiles = [
+  'frontend/**/*.{ts,vue}',
+  'desktop/**/*.ts',
+  'packages/**/*.ts',
+]
 
 export default [
   {
@@ -15,7 +28,7 @@ export default [
   },
   ...vuePlugin.configs['flat/recommended'],
   {
-    files: ['frontend/**/*.ts'],
+    files: typescriptFiles,
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -51,6 +64,28 @@ export default [
     rules: {
       ...tsPlugin.configs.recommended.rules,
       'vue/multi-word-component-names': 'off',
+    },
+  },
+  {
+    files: workspaceFiles,
+    plugins: {
+      yumpoo: workspacePlugin,
+    },
+    rules: {
+      'yumpoo/workspace-boundaries': 'error',
+    },
+  },
+  {
+    files: ['frontend/**/*.{ts,vue}'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        'process',
+        'require',
+        'module',
+        '__dirname',
+        '__filename',
+      ],
     },
   },
 ]
