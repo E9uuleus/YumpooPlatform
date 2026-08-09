@@ -1,0 +1,31 @@
+{
+  "name": "@yumpoo/web-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.14.x"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "lint": "eslint \"src/**/*.{ts,vue}\" vite.config.ts",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "build": "vue-tsc --noEmit -p tsconfig.json && vite build"
+  },
+  "dependencies": {
+    "element-plus": "2.14.4",
+    "vue": "3.5.41",
+    "vue-router": "4.6.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "6.0.8",
+    "@vue/compiler-sfc": "3.5.41",
+    "@vue/test-utils": "2.4.11",
+    "happy-dom": "20.8.3",
+    "vite": "8.2.1",
+    "vitest": "4.1.10",
+    "vue-tsc": "3.3.9"
+  }
+}

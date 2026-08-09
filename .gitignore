@@ -4,3 +4,9 @@
 /backend/.project
 /backend/.settings/
 /backend/*.iml
+/node_modules/
+/**/node_modules/
+/**/dist/
+/**/coverage/
+/.pnpm-store/
+*.log
