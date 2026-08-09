@@ -1,6 +1,20 @@
 spring:
   application:
     name: yumpoo-server
+  datasource:
+    hikari:
+      connection-init-sql: SET TIME ZONE 'UTC'
+  flyway:
+    enabled: true
+    locations:
+      - classpath:db/migration
+    default-schema: yumpoo
+    schemas:
+      - yumpoo
+    create-schemas: true
+    validate-on-migrate: true
+    clean-disabled: true
+    baseline-on-migrate: false
 
 server:
   address: 127.0.0.1
@@ -15,4 +29,12 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        liveness:
+          include:
+            - livenessState
+        readiness:
+          include:
+            - readinessState
+            - db
       show-details: never
