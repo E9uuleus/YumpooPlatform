@@ -14,6 +14,22 @@ class ModuleArchitectureTest {
             .importPackages(ArchitectureRules.PRODUCTION_ROOT);
 
     @Test
+    void productionPackagesUseOnlyKnownModulesAndLayers() {
+        assertThat(ArchitectureRules.packageLayoutViolations(
+                PRODUCTION_CLASSES,
+                ArchitectureRules.PRODUCTION_ROOT
+        )).isEmpty();
+    }
+
+    @Test
+    void everyModuleContainsAllFourLayerMarkers() {
+        assertThat(ArchitectureRules.missingModuleLayerMarkers(
+                PRODUCTION_CLASSES,
+                ArchitectureRules.PRODUCTION_ROOT
+        )).isEmpty();
+    }
+
+    @Test
     void modulesFollowTheAllowedDependencyMatrixAndLayerBoundaries() {
         assertThat(ArchitectureRules.moduleBoundaryViolations(
                 PRODUCTION_CLASSES,

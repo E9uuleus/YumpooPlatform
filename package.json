@@ -15,7 +15,9 @@
     "typecheck": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/web-app typecheck && pnpm --filter @yumpoo/desktop-shell typecheck",
     "test": "pnpm --filter @yumpoo/web-app test && pnpm --filter @yumpoo/desktop-shell test",
     "build": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/web-app build && pnpm --filter @yumpoo/desktop-shell build",
-    "verify:node": "pnpm run lint && pnpm run test:architecture && pnpm run typecheck && pnpm run test && pnpm run build"
+    "verify:node": "pnpm run lint && pnpm run test:architecture && pnpm run typecheck && pnpm run test && pnpm run build",
+    "verify:m0-07": "node tools/verification/verify-m0-07.mjs",
+    "smoke:desktop": "node tools/verification/smoke-desktop.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "8.66.0",

@@ -6,6 +6,7 @@ import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.lang.ArchRule;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -18,7 +19,7 @@ final class ArchitectureRules {
 
     static final String PRODUCTION_ROOT = "com.yumpoo.platform";
 
-    private static final Set<String> MODULES = Set.of(
+    static final Set<String> MODULES = Set.of(
             "foundation",
             "organization",
             "identityaccess",
@@ -34,8 +35,15 @@ final class ArchitectureRules {
             "administration"
     );
 
-    private static final Set<String> LAYERS = Set.of(
+    static final Set<String> LAYERS = Set.of(
             "api", "application", "domain", "infrastructure"
+    );
+
+    private static final Map<String, Set<String>> ALLOWED_SAME_MODULE_LAYER_DEPENDENCIES = Map.of(
+            "api", Set.of("api", "application"),
+            "application", Set.of("application", "domain"),
+            "domain", Set.of("domain"),
+            "infrastructure", Set.of("infrastructure", "application", "domain")
     );
 
     private static final Map<String, Set<String>> ALLOWED_MODULE_DEPENDENCIES = Map.ofEntries(
@@ -68,6 +76,55 @@ final class ArchitectureRules {
     );
 
     private ArchitectureRules() {
+    }
+
+    static List<String> packageLayoutViolations(JavaClasses classes, String rootPackage) {
+        List<String> violations = new ArrayList<>();
+        String rootApplicationClass = rootPackage + ".YumpooServerApplication";
+        String packagePrefix = rootPackage + ".";
+
+        for (JavaClass javaClass : classes) {
+            String packageName = javaClass.getPackageName();
+            if (packageName.equals(rootPackage)) {
+                if (!javaClass.getName().equals(rootApplicationClass)) {
+                    violations.add("根包只允许启动类 " + rootApplicationClass + ": " + javaClass.getName());
+                }
+                continue;
+            }
+            if (!packageName.startsWith(packagePrefix)) {
+                continue;
+            }
+
+            String[] segments = packageName.substring(packagePrefix.length()).split("\\.");
+            if (segments.length == 0 || !MODULES.contains(segments[0])) {
+                String actualModule = segments.length == 0 ? "<missing>" : segments[0];
+                violations.add("未知一级模块 " + actualModule + ": " + javaClass.getName());
+                continue;
+            }
+            if (segments.length < 2 || !LAYERS.contains(segments[1])) {
+                String actualLayer = segments.length < 2 ? "<missing>" : segments[1];
+                violations.add("未知模块层级 " + segments[0] + "." + actualLayer + ": " + javaClass.getName());
+            }
+        }
+        return List.copyOf(violations);
+    }
+
+    static List<String> missingModuleLayerMarkers(JavaClasses classes, String rootPackage) {
+        Set<String> importedClassNames = new HashSet<>();
+        for (JavaClass javaClass : classes) {
+            importedClassNames.add(javaClass.getName());
+        }
+
+        List<String> missingMarkers = new ArrayList<>();
+        for (String module : MODULES) {
+            for (String layer : LAYERS) {
+                String markerClass = rootPackage + "." + module + "." + layer + ".LayerMarker";
+                if (!importedClassNames.contains(markerClass)) {
+                    missingMarkers.add(markerClass);
+                }
+            }
+        }
+        return List.copyOf(missingMarkers);
     }
 
     static ArchRule modulesAreAcyclic(String rootPackage) {
@@ -126,7 +183,9 @@ final class ArchitectureRules {
             List<String> violations
     ) {
         if (source.module().equals(target.module())) {
-            if (isForbiddenSameModuleLayerDependency(source.layer(), target.layer())) {
+            if (!ALLOWED_SAME_MODULE_LAYER_DEPENDENCIES
+                    .getOrDefault(source.layer(), Set.of())
+                    .contains(target.layer())) {
                 violations.add("非法层级依赖: " + dependency.getDescription());
             }
             return;
@@ -154,15 +213,6 @@ final class ArchitectureRules {
         if (!target.layer().equals("api")) {
             violations.add("跨模块只能依赖目标模块 api: " + dependency.getDescription());
         }
-    }
-
-    private static boolean isForbiddenSameModuleLayerDependency(String sourceLayer, String targetLayer) {
-        return switch (sourceLayer) {
-            case "domain" -> !targetLayer.equals("domain");
-            case "application" -> targetLayer.equals("api") || targetLayer.equals("infrastructure");
-            case "api" -> targetLayer.equals("infrastructure");
-            default -> false;
-        };
     }
 
     private static Optional<PackageLocation> locate(JavaClass javaClass, String rootPackage) {

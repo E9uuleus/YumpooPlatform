@@ -14,9 +14,37 @@ class ArchitectureRulesContractTest {
             .importPackages(FIXTURE_ROOT);
 
     @Test
+    void packageLayoutRuleRejectsUnknownModulesAndLayers() {
+        assertThat(ArchitectureRules.packageLayoutViolations(INVALID_FIXTURES, FIXTURE_ROOT))
+                .anyMatch(message -> message.contains("未知一级模块 rogue"))
+                .anyMatch(message -> message.contains("未知模块层级 workitem.rogue"));
+    }
+
+    @Test
     void dependencyRuleRejectsAnUnapprovedInternalModuleDependency() {
         assertThat(ArchitectureRules.moduleBoundaryViolations(INVALID_FIXTURES, FIXTURE_ROOT))
                 .anyMatch(message -> message.contains("workitem -> notification"));
+    }
+
+    @Test
+    void dependencyRuleRejectsRepositoryImplementationFromAnAllowedModule() {
+        assertThat(ArchitectureRules.moduleBoundaryViolations(INVALID_FIXTURES, FIXTURE_ROOT))
+                .anyMatch(message -> message.contains("跨模块只能依赖目标模块 api")
+                        && message.contains("CatalogJdbcRepository"));
+    }
+
+    @Test
+    void layerRuleRejectsApiDependingDirectlyOnDomain() {
+        assertThat(ArchitectureRules.moduleBoundaryViolations(INVALID_FIXTURES, FIXTURE_ROOT))
+                .anyMatch(message -> message.contains("非法层级依赖")
+                        && message.contains("ApiDomainLeak"));
+    }
+
+    @Test
+    void layerRuleRejectsInfrastructureDependingOnApi() {
+        assertThat(ArchitectureRules.moduleBoundaryViolations(INVALID_FIXTURES, FIXTURE_ROOT))
+                .anyMatch(message -> message.contains("非法层级依赖")
+                        && message.contains("InfrastructureApiLeak"));
     }
 
     @Test
@@ -28,6 +56,12 @@ class ArchitectureRulesContractTest {
     @Test
     void domainRuleRejectsSpringCoupling() {
         assertThatThrownBy(() -> ArchitectureRules.domainsAreFrameworkIndependent().check(INVALID_FIXTURES))
+                .isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void apiRuleRejectsDirectJdbcAccess() {
+        assertThatThrownBy(() -> ArchitectureRules.apiDoesNotAccessPersistenceTechnology().check(INVALID_FIXTURES))
                 .isInstanceOf(AssertionError.class);
     }
 }
