@@ -1,0 +1,74 @@
+:root {
+  color: #182027;
+  background: #f4f6f8;
+  font-family:
+    Inter, "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#app,
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: auto;
+  min-height: 88px;
+  padding: 20px clamp(24px, 5vw, 72px);
+  color: #ffffff;
+  background: #12395b;
+}
+
+.app-header h1,
+.app-kicker {
+  margin: 0;
+}
+
+.app-header h1 {
+  margin-top: 4px;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.app-kicker {
+  color: #9fc5e5;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.app-main {
+  width: min(1040px, 100%);
+  margin: 0 auto;
+  padding: clamp(32px, 6vw, 72px) 24px;
+}
+
+.skeleton-card {
+  border: 1px solid #d8e0e7;
+}
+
+.skeleton-card p {
+  margin: 0 0 24px;
+  color: #52606b;
+  line-height: 1.7;
+}
+
+.card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}

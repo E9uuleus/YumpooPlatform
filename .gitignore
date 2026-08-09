@@ -1,1 +1,13 @@
 /docs/
+/backend/target/
+/backend/.classpath
+/backend/.project
+/backend/.settings/
+/backend/*.iml
+/node_modules/
+/**/node_modules/
+/**/dist/
+/**/coverage/
+/**/*.tsbuildinfo
+/.pnpm-store/
+*.log
