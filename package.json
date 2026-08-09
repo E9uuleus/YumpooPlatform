@@ -17,6 +17,7 @@
     "build": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/web-app build && pnpm --filter @yumpoo/desktop-shell build",
     "verify:node": "pnpm run lint && pnpm run test:architecture && pnpm run typecheck && pnpm run test && pnpm run build",
     "verify:m0-07": "node tools/verification/verify-m0-07.mjs",
+    "verify:m0-08": "pnpm run verify:m0-07",
     "smoke:desktop": "node tools/verification/smoke-desktop.mjs"
   },
   "devDependencies": {
