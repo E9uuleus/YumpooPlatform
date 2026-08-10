@@ -32,6 +32,8 @@
     "verify:m0-12:live": "node tools/verification/verify-m0-12-live.mjs",
     "verify:m0-13": "node tools/verification/verify-m0-13.mjs",
     "verify:m0-13:live": "node tools/verification/verify-m0-13-live.mjs",
+    "verify:m0-14": "node tools/verification/verify-m0-14.mjs",
+    "verify:m0-14:live": "node tools/verification/verify-m0-14-live.mjs",
     "smoke:desktop": "node tools/verification/smoke-desktop.mjs"
   },
   "devDependencies": {

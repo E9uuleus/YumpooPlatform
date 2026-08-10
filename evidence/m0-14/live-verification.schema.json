@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/evidence/m0-14/live-verification.schema.json",
+  "title": "M0-14 Defender and NTFS live verification evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "milestone",
+    "status",
+    "verifiedAt",
+    "filesystemType",
+    "maxBytes",
+    "bufferBytes",
+    "scannerProvider",
+    "checks"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "milestone": { "const": "M0-14" },
+    "status": { "enum": ["NOT_RUN", "PASS"] },
+    "verifiedAt": { "type": ["string", "null"], "format": "date-time" },
+    "filesystemType": { "type": ["string", "null"], "enum": [null, "NTFS"] },
+    "maxBytes": { "const": 104857600 },
+    "bufferBytes": { "const": 65536 },
+    "scannerProvider": { "const": "MICROSOFT_DEFENDER" },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configurationPreflight",
+        "ntfsVerified",
+        "sameVolumeVerified",
+        "boundedExactLimitUpload",
+        "limitPlusOneRejected",
+        "interruptedUploadCleaned",
+        "cleanSampleScanned",
+        "eicarFailedClosed",
+        "atomicMoveVerified",
+        "pathsRedacted",
+        "signedReceiptVerified"
+      ],
+      "properties": {
+        "configurationPreflight": { "type": "boolean" },
+        "ntfsVerified": { "type": "boolean" },
+        "sameVolumeVerified": { "type": "boolean" },
+        "boundedExactLimitUpload": { "type": "boolean" },
+        "limitPlusOneRejected": { "type": "boolean" },
+        "interruptedUploadCleaned": { "type": "boolean" },
+        "cleanSampleScanned": { "type": "boolean" },
+        "eicarFailedClosed": { "type": "boolean" },
+        "atomicMoveVerified": { "type": "boolean" },
+        "pathsRedacted": { "type": "boolean" },
+        "signedReceiptVerified": { "type": "boolean" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "NOT_RUN" } } },
+      "then": {
+        "properties": {
+          "verifiedAt": { "type": "null" },
+          "filesystemType": { "type": "null" },
+          "checks": {
+            "properties": {
+              "configurationPreflight": { "const": false },
+              "ntfsVerified": { "const": false },
+              "sameVolumeVerified": { "const": false },
+              "boundedExactLimitUpload": { "const": false },
+              "limitPlusOneRejected": { "const": false },
+              "interruptedUploadCleaned": { "const": false },
+              "cleanSampleScanned": { "const": false },
+              "eicarFailedClosed": { "const": false },
+              "atomicMoveVerified": { "const": false },
+              "pathsRedacted": { "const": false },
+              "signedReceiptVerified": { "const": false }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "verifiedAt": { "type": "string", "format": "date-time" },
+          "filesystemType": { "const": "NTFS" },
+          "checks": {
+            "properties": {
+              "configurationPreflight": { "const": true },
+              "ntfsVerified": { "const": true },
+              "sameVolumeVerified": { "const": true },
+              "boundedExactLimitUpload": { "const": true },
+              "limitPlusOneRejected": { "const": true },
+              "interruptedUploadCleaned": { "const": true },
+              "cleanSampleScanned": { "const": true },
+              "eicarFailedClosed": { "const": true },
+              "atomicMoveVerified": { "const": true },
+              "pathsRedacted": { "const": true },
+              "signedReceiptVerified": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

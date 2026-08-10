@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-14",
+  "status": "NOT_RUN",
+  "verifiedAt": null,
+  "filesystemType": null,
+  "maxBytes": 104857600,
+  "bufferBytes": 65536,
+  "scannerProvider": "MICROSOFT_DEFENDER",
+  "checks": {
+    "configurationPreflight": false,
+    "ntfsVerified": false,
+    "sameVolumeVerified": false,
+    "boundedExactLimitUpload": false,
+    "limitPlusOneRejected": false,
+    "interruptedUploadCleaned": false,
+    "cleanSampleScanned": false,
+    "eicarFailedClosed": false,
+    "atomicMoveVerified": false,
+    "pathsRedacted": false,
+    "signedReceiptVerified": false
+  }
+}

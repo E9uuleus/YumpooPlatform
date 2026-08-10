@@ -407,6 +407,14 @@ components:
       summary: If-Match 与当前可见资源版本不一致
       externalValue: ../examples/errors/412-version-conflict.json
 
+    FileTooLarge:
+      summary: 上传内容超过冻结的服务端字节上限
+      externalValue: ../examples/errors/413-file-too-large.json
+
+    FileTypeNotAllowed:
+      summary: 文件名、声明类型或服务端识别类型不在允许策略内
+      externalValue: ../examples/errors/415-file-type-not-allowed.json
+
     ValidationFailed:
       summary: 请求格式正确但字段或业务规则不满足
       externalValue: ../examples/errors/422-validation-failed.json
@@ -519,6 +527,32 @@ components:
           examples:
             versionConflict:
               $ref: '#/components/examples/VersionConflict'
+
+    FileTooLarge:
+      description: 上传内容超过服务端允许的最大字节数。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            fileTooLarge:
+              $ref: '#/components/examples/FileTooLarge'
+
+    FileTypeNotAllowed:
+      description: 文件扩展名、声明 MIME 或服务端内容识别结果不符合允许策略。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            fileTypeNotAllowed:
+              $ref: '#/components/examples/FileTypeNotAllowed'
 
     ValidationFailed:
       description: 请求格式正确，但字段、必填项或业务规则不满足。
