@@ -2,7 +2,7 @@
 
 YumpooPlatform 一期采用单部署的模块化单体后端、共享 Vue SPA，以及只加载同一在线 SPA 的 Electron 桌面壳。
 
-## M0-09 API 契约底座
+## M0-10 乐观锁与幂等最小闭环
 
 ```text
 backend/                     Spring Boot 模块化单体
@@ -22,11 +22,11 @@ tools/verification/          契约生成、三端联合验证与桌面冒烟
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm verify:m0-09
+pnpm verify:m0-10
 pnpm smoke:desktop
 ```
 
-`verify:m0-09` 先验证 OpenAPI、生成客户端及生成物漂移，再执行后端 Maven Verify，以及 Node 工作区的 Lint、类型检查、边界负向测试、单元测试和生产构建。后端 Verify 会通过 Testcontainers 启动 `postgres:17.10-alpine`，Docker 不可用时直接失败，不使用 H2 或跳过真实库验收。`smoke:desktop` 在随机回环端口启动已构建的 Vue SPA，并让隐藏的 Electron 窗口完成一次真实加载后正常退出。
+`verify:m0-10` 先验证 OpenAPI、生成客户端及生成物漂移，再执行后端 Maven Verify，以及 Node 工作区的 Lint、类型检查、边界负向测试、单元测试和生产构建。后端 Verify 会通过 Testcontainers 启动 `postgres:17.10-alpine`，验证 Flyway V1/V2、乐观锁竞争和幂等记录闭环；Docker 不可用时直接失败，不使用 H2 或跳过真实库验收。`smoke:desktop` 在随机回环端口启动已构建的 Vue SPA，并让隐藏的 Electron 窗口完成一次真实加载后正常退出。
 
 也可以分别验证：
 
@@ -63,7 +63,7 @@ pnpm dev:desktop
 - `SPRING_DATASOURCE_USERNAME`
 - `SPRING_DATASOURCE_PASSWORD`
 
-共享和生产环境还必须设置独立迁移账号的 `SPRING_FLYWAY_URL`、`SPRING_FLYWAY_USER`、`SPRING_FLYWAY_PASSWORD`。所有密码都从外部配置注入，不进入仓库。M0-09 不新增生产业务端点，当前仍仅对外提供：
+共享和生产环境还必须设置独立迁移账号的 `SPRING_FLYWAY_URL`、`SPRING_FLYWAY_USER`、`SPRING_FLYWAY_PASSWORD`。所有密码都从外部配置注入，不进入仓库。M0-10 仍不新增生产业务端点，当前仅对外提供：
 
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
@@ -78,4 +78,6 @@ pnpm dev:desktop
 
 ## 当前与后续范围
 
-M0-09 已建立 `/api/v1` 静态 OpenAPI、统一错误体、requestId、分页类型和生成 TypeScript 客户端，但不新增业务表或生产业务 Controller，也不实现真实认证、乐观锁、幂等持久化、Outbox、结构化日志、登录交接、深链、通知、升级或安装器。这些按 M0-10 及后续步骤实施。完成 M0-09 也不代表完整 M0 里程碑退出。
+M0-10 在既有 `/api/v1` 契约底座上增加 `idempotency_record` 技术表、稳定请求哈希、条件写入守卫和事务型幂等命令执行器。相同幂等键与请求可重放已完成结果，不同请求复用同一键或读取到已存在的处理中记录时返回稳定冲突；PostgreSQL 集成测试证明同一版本并发写入只有一次成功。
+
+认领、业务回调和成功结果保存位于同一事务；回调失败会同时回滚业务事实与认领记录，重试可以重新执行。表中的 `lease_until` 和 `expires_at` 仅预留为一期崩溃恢复与清理元数据；M0-10 不读取这些字段来接管、自动清理或持久化失败状态。本切片也不创建业务表、正式业务 Controller 或 OpenAPI 路径；具体聚合的资源可见性复查、Repository 条件更新和 HTTP 端点由后续业务切片接入。M0-11 才实现 requestId 向领域事件和 Outbox 的贯穿；真实认证、客户端版本策略、结构化日志、登录交接、深链、通知、升级和安装器同样不在 M0-10 范围内。完成 M0-10 仍不代表完整 M0 里程碑退出。
