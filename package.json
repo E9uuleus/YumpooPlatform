@@ -25,6 +25,7 @@
     "verify:m0-07": "node tools/verification/verify-m0-07.mjs",
     "verify:m0-08": "pnpm run verify:m0-07",
     "verify:m0-09": "node tools/verification/verify-m0-09.mjs",
+    "verify:m0-10": "node tools/verification/verify-m0-10.mjs",
     "smoke:desktop": "node tools/verification/smoke-desktop.mjs"
   },
   "devDependencies": {

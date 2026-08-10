@@ -23,6 +23,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -91,21 +92,24 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void emptyDatabaseMigrationCreatesOnlyThePlatformSchemaBaseline() {
+    void emptyDatabaseMigrationCreatesThePlatformSchemaAndIdempotencyTable() {
         Configuration configuration = flyway.getConfiguration();
-        Integer migrationCount = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM yumpoo.flyway_schema_history WHERE version = '1' AND success",
-                Integer.class
+        List<String> successfulMigrationVersions = jdbcTemplate.queryForList(
+                "SELECT version FROM yumpoo.flyway_schema_history "
+                        + "WHERE success AND version IS NOT NULL ORDER BY installed_rank",
+                String.class
         );
         String schemaComment = jdbcTemplate.queryForObject(
                 "SELECT obj_description(oid, 'pg_namespace') "
                         + "FROM pg_namespace WHERE nspname = 'yumpoo'",
                 String.class
         );
-        Integer businessTableCount = jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM information_schema.tables "
-                        + "WHERE table_schema = 'yumpoo' AND table_name <> 'flyway_schema_history'",
-                Integer.class
+        List<String> applicationTableNames = jdbcTemplate.queryForList(
+                "SELECT table_name FROM information_schema.tables "
+                        + "WHERE table_schema = 'yumpoo' "
+                        + "AND table_name <> 'flyway_schema_history' "
+                        + "ORDER BY table_name",
+                String.class
         );
 
         assertThat(configuration.getDefaultSchema()).isEqualTo(PLATFORM_SCHEMA);
@@ -113,9 +117,9 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isValidateOnMigrate()).isTrue();
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
-        assertThat(migrationCount).isOne();
+        assertThat(successfulMigrationVersions).containsExactly("1", "2");
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
-        assertThat(businessTableCount).isZero();
+        assertThat(applicationTableNames).containsExactly("idempotency_record");
     }
 
     @Test
