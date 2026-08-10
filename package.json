@@ -28,6 +28,8 @@
     "verify:m0-09": "node tools/verification/verify-m0-09.mjs",
     "verify:m0-10": "node tools/verification/verify-m0-10.mjs",
     "verify:m0-11": "node tools/verification/verify-m0-11.mjs",
+    "verify:m0-12": "node tools/verification/verify-m0-12.mjs",
+    "verify:m0-12:live": "node tools/verification/verify-m0-12-live.mjs",
     "smoke:desktop": "node tools/verification/smoke-desktop.mjs"
   },
   "devDependencies": {
