@@ -76,6 +76,16 @@ class YumpooServerApplicationIT {
     }
 
     @Test
+    void m014AttachmentProbeRoutesAreAbsentWithoutTheExplicitTestProfile() throws Exception {
+        HttpResponse<String> response = get(
+                "/api/v1/__test/m0-14/attachments/"
+                        + "00000000-0000-0000-0000-000000000014"
+        );
+
+        assertThat(response.statusCode()).isEqualTo(404);
+    }
+
+    @Test
     void databaseUsesThePostgresql17Utf8UtcBaseline() throws IOException, InterruptedException {
         String version = jdbcTemplate.queryForObject("SHOW server_version", String.class);
         String versionNumber = jdbcTemplate.queryForObject("SHOW server_version_num", String.class);

@@ -1,5 +1,31 @@
 # YumpooPlatform
 
+## M0-14 安全附件工程验证
+
+M0-14 冻结的是可复用的文件安全技术核心，不是正式附件业务功能。生产代码提供固定缓冲流式接收、100 MiB（`104857600` bytes）硬上限、增量 SHA-256、文件名净化、Apache Tika 内容识别、ZIP/OOXML 区分、恶意内容扫描端口、Microsoft Defender `MpCmdRun` 适配器，以及隔离区到同卷内容寻址目录的 `ATOMIC_MOVE`。只有服务端识别类型与扩展名、声明 MIME 一致且扫描结果明确为 `CLEAN` 时，内容才可转为 `AVAILABLE`；超限、类型不符、威胁、扫描超时/未知结果和中断均失败关闭。
+
+本切片不新增生产 Attachment Flyway 表，也不发布正式 `/api/v1/attachments` OpenAPI path。PostgreSQL 表、父对象授权桩和 `/api/v1/__test/m0-14/attachments` 都只存在于测试源码，用来证明短事务、异步扫描、回滚孤儿安全、下载前再次授权和无权隐藏 404；正式元数据、业务授权、配额、删除/清理、调度及 Activity/Outbox 留给 M2。公共契约仅补齐既有 `FILE_TOO_LARGE`（413）与 `FILE_TYPE_NOT_ALLOWED`（415）的 golden response。
+
+```powershell
+pnpm verify:m0-14
+```
+
+该门禁会先校验证据文件，再以 `-Xmx96m` 点名执行 100 MiB 懒生成流探针，最后串联 `verify:m0-13` 的完整 OpenAPI、后端 PostgreSQL/Testcontainers、Node、桌面与前端回归。Docker 不可用时真实 PostgreSQL 验收会失败，不会回退到 H2。普通 PR 允许 `evidence/m0-14/live-verification.json` 保持 `NOT_RUN`，但 M0 退出前必须在受控 Windows/NTFS 环境把它跑到 `PASS`。
+
+真实环境验证必须确认允许使用 EICAR 测试串，并从外部注入以下变量；不要把路径、密钥或扫描器输出提交到仓库或工单：
+
+- `YUMPOO_M014_LIVE_ENABLED=true`
+- `YUMPOO_M014_ALLOW_EICAR=true`
+- `YUMPOO_M014_LIVE_ROOT`（已存在、空间充足的 NTFS 目录）
+- `YUMPOO_M014_DEFENDER_EXECUTABLE`（`MpCmdRun.exe` 的绝对路径）
+- `YUMPOO_M014_EVIDENCE_HMAC_KEY`（至少 32 个 UTF-8 字节且至少 8 种字符）
+
+```powershell
+pnpm verify:m0-14:live
+```
+
+live runner 只在配置目录下创建一次性 `m0-14-live-*` 子目录；它验证近上限干净样本、EICAR 失败关闭、NTFS 同卷原子移动和中断清理，校验短期 HMAC 收据后才原子更新脱敏证据，并始终删除短期收据。Defender 退出码 `2` 同时可能表示威胁或扫描错误，因此适配器保守映射为 `INDETERMINATE`，绝不解析本地化控制台文本来猜测“干净”。
+
 YumpooPlatform 一期采用单部署的模块化单体后端、共享 Vue SPA，以及只加载同一在线 SPA 的 Electron 桌面壳。
 
 ## M0-13 企微通讯录安全验证骨架

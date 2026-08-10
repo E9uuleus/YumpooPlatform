@@ -1,0 +1,8 @@
+{
+  "code": "FILE_TYPE_NOT_ALLOWED",
+  "message": "文件类型不允许",
+  "requestId": "aa643b8f-83a3-4301-8646-f7a1717e4a14",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

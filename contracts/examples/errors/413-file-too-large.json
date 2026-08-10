@@ -1,0 +1,8 @@
+{
+  "code": "FILE_TOO_LARGE",
+  "message": "文件超过允许大小",
+  "requestId": "98b7ad4a-9bee-4f86-9a54-c0dfd0c82a14",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

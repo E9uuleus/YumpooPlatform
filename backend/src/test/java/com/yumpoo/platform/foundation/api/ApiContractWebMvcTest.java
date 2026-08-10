@@ -111,6 +111,8 @@ class ApiContractWebMvcTest {
                 new ErrorCase(StandardErrorCode.INVALID_STATE_TRANSITION, 409, "409-invalid-state-transition.json"),
                 new ErrorCase(StandardErrorCode.WORKLOG_LOCKED, 409, "409-worklog-locked.json"),
                 new ErrorCase(StandardErrorCode.VERSION_CONFLICT, 412, "412-version-conflict.json"),
+                new ErrorCase(StandardErrorCode.FILE_TOO_LARGE, 413, "413-file-too-large.json"),
+                new ErrorCase(StandardErrorCode.FILE_TYPE_NOT_ALLOWED, 415, "415-file-type-not-allowed.json"),
                 new ErrorCase(StandardErrorCode.VALIDATION_FAILED, 422, "422-validation-failed.json"),
                 new ErrorCase(StandardErrorCode.CLIENT_UPGRADE_REQUIRED, 426, "426-client-upgrade-required.json"),
                 new ErrorCase(StandardErrorCode.PRECONDITION_REQUIRED, 428, "428-precondition-required.json"),
