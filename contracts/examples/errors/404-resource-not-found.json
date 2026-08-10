@@ -1,0 +1,8 @@
+{
+  "code": "RESOURCE_NOT_FOUND",
+  "message": "资源不存在或不可访问",
+  "requestId": "a9c58764-699d-4574-95a4-f59103134349",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

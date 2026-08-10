@@ -1,0 +1,8 @@
+{
+  "code": "IDEMPOTENCY_KEY_REUSED",
+  "message": "幂等键已用于不同的请求内容",
+  "requestId": "e121b85a-07ff-46b8-89eb-53cb9580b2bf",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

@@ -1,0 +1,8 @@
+{
+  "code": "ACCOUNT_DISABLED",
+  "message": "账号已停用，请联系管理员",
+  "requestId": "9f48d24d-718c-44cf-a5ce-ce23e37158e9",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

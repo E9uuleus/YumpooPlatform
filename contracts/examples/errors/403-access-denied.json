@@ -1,0 +1,8 @@
+{
+  "code": "ACCESS_DENIED",
+  "message": "无权执行此操作",
+  "requestId": "af0203a8-d7cf-44e4-ab51-01d7d8377745",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

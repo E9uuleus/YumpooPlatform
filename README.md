@@ -2,15 +2,18 @@
 
 YumpooPlatform 一期采用单部署的模块化单体后端、共享 Vue SPA，以及只加载同一在线 SPA 的 Electron 桌面壳。
 
-## M0-08 工程与数据库骨架
+## M0-09 API 契约底座
 
 ```text
 backend/                     Spring Boot 模块化单体
+contracts/openapi/           OpenAPI 3.0.3 唯一契约与错误样例
 frontend/web-app/            Vue 3 在线 SPA
 desktop/desktop-shell/       Electron main/preload 在线壳
+packages/api-client/         由 OpenAPI 生成的 TypeScript Fetch SDK
 packages/preload-contract/   Web 与 preload 共享的最小类型契约
 tools/architecture/          Node 工作区边界门禁
-tools/verification/          三端联合验证与桌面冒烟
+tools/openapi/               lint、生成漂移和兼容性检查工具
+tools/verification/          契约生成、三端联合验证与桌面冒烟
 ```
 
 本仓库使用 Java 21、Maven Wrapper 3.9.9、Node.js 24.14.0 和 pnpm 11.16.0。Node 工作区只有根目录一份 `pnpm-lock.yaml`，所有声明依赖均锁定精确版本。后端数据库基线是 PostgreSQL 17.10、Spring JDBC 和 Flyway，业务对象统一进入 `yumpoo` schema。
@@ -19,18 +22,24 @@ tools/verification/          三端联合验证与桌面冒烟
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm verify:m0-08
+pnpm verify:m0-09
 pnpm smoke:desktop
 ```
 
-`verify:m0-08` 依次执行后端 Maven Verify，以及 Node 工作区的 Lint、类型检查、边界负向测试、单元测试和生产构建。后端 Verify 会通过 Testcontainers 启动 `postgres:17.10-alpine`，Docker 不可用时直接失败，不使用 H2 或跳过真实库验收。`smoke:desktop` 在随机回环端口启动已构建的 Vue SPA，并让隐藏的 Electron 窗口完成一次真实加载后正常退出。
+`verify:m0-09` 先验证 OpenAPI、生成客户端及生成物漂移，再执行后端 Maven Verify，以及 Node 工作区的 Lint、类型检查、边界负向测试、单元测试和生产构建。后端 Verify 会通过 Testcontainers 启动 `postgres:17.10-alpine`，Docker 不可用时直接失败，不使用 H2 或跳过真实库验收。`smoke:desktop` 在随机回环端口启动已构建的 Vue SPA，并让隐藏的 Electron 窗口完成一次真实加载后正常退出。
 
 也可以分别验证：
 
 ```powershell
-backend\mvnw.cmd clean verify
+backend\mvnw.cmd -f backend\pom.xml clean verify
+pnpm check:openapi
+pnpm generate:api-client
+pnpm check:api-client
+pnpm check:openapi-compat -- <baseline-openapi-file>
 pnpm verify:node
 ```
+
+本次新增的契约在首次合入 `dev` 后即成为初始兼容性基线。`check:openapi-compat` 使用固定的 openapi-diff 2.1.6；传入历史 OpenAPI 文件后，任何不兼容变更都会失败，M0-18 再把基线提取和该命令接入 PR CI。
 
 ## 本地开发
 
@@ -54,7 +63,7 @@ pnpm dev:desktop
 - `SPRING_DATASOURCE_USERNAME`
 - `SPRING_DATASOURCE_PASSWORD`
 
-共享和生产环境还必须设置独立迁移账号的 `SPRING_FLYWAY_URL`、`SPRING_FLYWAY_USER`、`SPRING_FLYWAY_PASSWORD`。所有密码都从外部配置注入，不进入仓库。M0-08 仅对外提供：
+共享和生产环境还必须设置独立迁移账号的 `SPRING_FLYWAY_URL`、`SPRING_FLYWAY_USER`、`SPRING_FLYWAY_PASSWORD`。所有密码都从外部配置注入，不进入仓库。M0-09 不新增生产业务端点，当前仍仅对外提供：
 
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
@@ -62,10 +71,11 @@ pnpm dev:desktop
 ## 架构边界
 
 - 后端 13 个一级模块统一采用 `api/application/domain/infrastructure` 四层；ArchUnit 对层级方向、允许依赖矩阵、跨模块内部实现访问和循环依赖执行硬门禁。
-- Web/renderer 不得导入 Node、Electron 或 desktop-shell 实现，只能以 type-only 方式读取 `@yumpoo/preload-contract`。
+- Web/renderer 不得导入 Node、Electron 或 desktop-shell 实现；可运行时依赖浏览器 Fetch 边界的 `@yumpoo/api-client`，只能以 type-only 方式读取 `@yumpoo/preload-contract`。
+- OpenAPI 是请求、响应、错误、分页和客户端生成的唯一契约源；生成目录禁止手工修改，漂移由验证脚本阻止。
 - preload 不使用原始 IPC 或 Node built-in，只暴露冻结的 `window.yumpooDesktop` 客户端标识。
 - Electron main/preload/Web 分离编译；新窗口、权限请求和跨源导航默认拒绝。
 
 ## 当前与后续范围
 
-M0-08 已建立 PostgreSQL、Flyway 和 Testcontainers 真实库测试骨架，但不创建业务表，也不包含 `/api/v1`、OpenAPI、统一错误体、requestId、幂等、Outbox、结构化日志、登录交接、深链、通知、升级或安装器。这些分别在后续 M0 步骤实现。完成 M0-08 也不代表完整 M0 里程碑退出。
+M0-09 已建立 `/api/v1` 静态 OpenAPI、统一错误体、requestId、分页类型和生成 TypeScript 客户端，但不新增业务表或生产业务 Controller，也不实现真实认证、乐观锁、幂等持久化、Outbox、结构化日志、登录交接、深链、通知、升级或安装器。这些按 M0-10 及后续步骤实施。完成 M0-09 也不代表完整 M0 里程碑退出。

@@ -76,6 +76,19 @@ export default [
     },
   },
   {
+    files: ['packages/api-client/src/generated/**/*.ts'],
+    linterOptions: {
+      noInlineConfig: true,
+      reportUnusedDisableDirectives: 'off',
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/ban-ts-comment': 'off',
+      '@typescript-eslint/prefer-as-const': 'off',
+    },
+  },
+  {
     files: ['frontend/**/*.{ts,vue}'],
     rules: {
       'no-restricted-globals': [

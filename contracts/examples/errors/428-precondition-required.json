@@ -1,0 +1,8 @@
+{
+  "code": "PRECONDITION_REQUIRED",
+  "message": "缺少必要的 If-Match 请求头",
+  "requestId": "1e5ba488-96f7-4e44-83fd-d660d6e6375c",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

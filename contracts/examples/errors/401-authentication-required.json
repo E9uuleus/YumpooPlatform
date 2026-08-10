@@ -1,0 +1,8 @@
+{
+  "code": "AUTHENTICATION_REQUIRED",
+  "message": "登录状态无效，请重新登录",
+  "requestId": "a69d7d6c-2bcc-4f4f-8cd1-aa5570512ef0",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

@@ -1,0 +1,556 @@
+openapi: 3.0.3
+info:
+  title: Yumpoo API
+  version: 1.0.0
+  description: |
+    Yumpoo 一期 HTTP API 的唯一静态契约源。
+
+    所有业务 operation 都必须挂载在相对 server `/api/v1` 下。M0-09 只冻结公共
+    schema、header、parameter、response 和 golden example；业务 paths 在对应模块
+    实现时按兼容新增原则加入。
+servers:
+  - url: /api/v1
+    description: Yumpoo v1 business API
+paths: {}
+components:
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+      description: 不透明 UUID；客户端不得从值中推导业务语义。
+
+    Instant:
+      type: string
+      format: date-time
+      description: RFC 3339 UTC 时刻。
+      example: '2026-08-09T09:30:00.123Z'
+
+    LocalDate:
+      type: string
+      format: date
+      pattern: '^\d{4}-\d{2}-\d{2}$'
+      description: 不携带时区或零点时刻的自然日，格式为 YYYY-MM-DD。
+      example: '2026-08-09'
+
+    RequestId:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+      description: 服务端生成或从可信反向代理接收的不透明请求关联标识。
+
+    ErrorCode:
+      type: string
+      description: |
+        一期冻结的公共错误码。客户端只能使用 code 做程序判断，不能解析 message。
+      enum:
+        - MALFORMED_REQUEST
+        - AUTHENTICATION_REQUIRED
+        - ACCOUNT_DISABLED
+        - ACCESS_DENIED
+        - RESOURCE_NOT_FOUND
+        - IDEMPOTENCY_KEY_REUSED
+        - REQUEST_IN_PROGRESS
+        - INVALID_STATE_TRANSITION
+        - WORKLOG_LOCKED
+        - VERSION_CONFLICT
+        - FILE_TOO_LARGE
+        - FILE_TYPE_NOT_ALLOWED
+        - VALIDATION_FAILED
+        - CLIENT_UPGRADE_REQUIRED
+        - PRECONDITION_REQUIRED
+        - RATE_LIMITED
+        - INTERNAL_ERROR
+        - DEPENDENCY_UNAVAILABLE
+
+    FieldError:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - code
+        - message
+      properties:
+        field:
+          type: string
+          minLength: 1
+          description: 出错字段的稳定请求字段名。
+        code:
+          type: string
+          minLength: 1
+          description: 字段级稳定错误码。
+        message:
+          type: string
+          minLength: 1
+          description: 面向当前用户且不包含内部实现信息的说明。
+
+    ApiErrorBase:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - requestId
+        - retryable
+        - fieldErrors
+        - details
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+          minLength: 1
+          description: 面向当前用户的安全错误说明。
+        requestId:
+          $ref: '#/components/schemas/RequestId'
+        retryable:
+          type: boolean
+          description: 当前请求是否可在不改变业务意图的前提下自动重试。
+        fieldErrors:
+          type: array
+          description: 字段级错误；非字段校验错误固定为空数组。
+          items:
+            $ref: '#/components/schemas/FieldError'
+        details:
+          type: object
+          description: 错误专用详情；具体响应 schema 必须进一步收窄。
+
+    EmptyErrorDetails:
+      type: object
+      additionalProperties: false
+      description: |
+        M0-09 不公开任何错误详情字段。当前契约只接受严格空对象；未来新增详情时
+        必须先为对应错误定义明确 schema。
+
+    ErrorResponse:
+      description: ApiErrorBase 在 M0-09 使用严格空 details 的具体响应类型。
+      allOf:
+        - $ref: '#/components/schemas/ApiErrorBase'
+        - type: object
+          required:
+            - details
+          properties:
+            details:
+              $ref: '#/components/schemas/EmptyErrorDetails'
+
+    PageMetadata:
+      type: object
+      additionalProperties: false
+      description: |
+        普通分页的共享元数据约束。为兼容既定响应 JSON 形状，PageResponse 不增加
+        metadata 包装层，而是在顶层平铺并重复声明这里的四个字段。
+      required:
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        page:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 当前页号，从 0 开始。
+        size:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          description: 当前页容量；默认 20，硬上限 100。
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 在权限过滤后可见的元素总数。
+        totalPages:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 在权限过滤后可见的总页数。
+
+    CursorPageMetadata:
+      type: object
+      additionalProperties: false
+      description: |
+        cursor 分页的共享元数据约束。为兼容既定响应 JSON 形状，CursorPageResponse
+        不增加 metadata 包装层，而是在顶层平铺并重复声明 nextCursor。
+      required:
+        - nextCursor
+      properties:
+        nextCursor:
+          type: string
+          minLength: 1
+          nullable: true
+          description: 不透明续读游标；没有下一批时为 null。
+
+    PageResponse:
+      type: object
+      additionalProperties: false
+      description: |
+        固定扁平普通分页响应；page、size、totalElements、totalPages 与 PageMetadata
+        保持同一约束，不引入 metadata 包装对象。
+      required:
+        - items
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        items:
+          type: array
+          description: 当前页资源 DTO；具体 operation 必须收窄 item schema。
+          items:
+            type: object
+            additionalProperties: true
+        page:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 当前页号，从 0 开始。
+        size:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          description: 当前页容量；默认 20，硬上限 100。
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 在权限过滤后可见的元素总数。
+        totalPages:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 在权限过滤后可见的总页数。
+
+    CursorPageResponse:
+      type: object
+      additionalProperties: false
+      description: |
+        固定扁平 cursor 分页响应；nextCursor 与 CursorPageMetadata 保持同一约束，
+        不引入 metadata 包装对象。
+      required:
+        - items
+        - nextCursor
+      properties:
+        items:
+          type: array
+          description: 当前批次资源 DTO；具体 operation 必须收窄 item schema。
+          items:
+            type: object
+            additionalProperties: true
+        nextCursor:
+          type: string
+          minLength: 1
+          nullable: true
+          description: 不透明续读游标；没有下一批时为 null。
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      required: false
+      description: 页号，从 0 开始。
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        default: 0
+
+    Size:
+      name: size
+      in: query
+      required: false
+      description: 页容量，默认 20，最大 100。
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: 追加流使用的不透明续读游标，不得按 offset 解释。
+      schema:
+        type: string
+        minLength: 1
+
+    FromDate:
+      name: from
+      in: query
+      required: true
+      description: 统计范围起始自然日，首尾包含。
+      schema:
+        $ref: '#/components/schemas/LocalDate'
+
+    ToDate:
+      name: to
+      in: query
+      required: true
+      description: 统计范围结束自然日，首尾包含且范围最多 366 天。
+      schema:
+        $ref: '#/components/schemas/LocalDate'
+
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: |
+        单个强 ETag，格式为双引号包围的十进制 rowVersion。弱验证器、`*` 和多个
+        ETag 均不属于一期契约。
+      schema:
+        type: string
+        pattern: '^"[0-9]+"$'
+      example: '"5"'
+
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 客户端为单一业务意图生成并在重试时复用的 UUID。
+      schema:
+        type: string
+        format: uuid
+        maxLength: 64
+
+    ElectronClientType:
+      name: X-Client-Type
+      in: header
+      required: true
+      description: Electron 请求固定为 ELECTRON；该头不是认证凭据。
+      schema:
+        type: string
+        enum:
+          - ELECTRON
+
+    ElectronClientVersion:
+      name: X-Client-Version
+      in: header
+      required: true
+      description: Electron 应用版本；该头不是认证凭据。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+
+    ElectronProtocolVersion:
+      name: X-Client-Protocol-Version
+      in: header
+      required: true
+      description: Electron 与服务端约定的协议版本；该头不是认证凭据。
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+
+  headers:
+    XRequestId:
+      description: 请求关联标识；错误响应中必须与 body.requestId 完全一致。
+      schema:
+        $ref: '#/components/schemas/RequestId'
+
+    ETag:
+      description: 当前资源 rowVersion 对应的单个强 ETag。
+      schema:
+        type: string
+        pattern: '^"[0-9]+"$'
+      example: '"5"'
+
+    RetryAfter:
+      description: 允许再次尝试前应等待的秒数。
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+
+  examples:
+    MalformedRequest:
+      summary: JSON、类型、参数或 If-Match 格式无法解析
+      externalValue: ../examples/errors/400-malformed-request.json
+
+    AuthenticationRequired:
+      summary: 会话缺失、未知、过期、主动退出或登录回调统一失败
+      externalValue: ../examples/errors/401-authentication-required.json
+
+    AccountDisabled:
+      summary: 可识别会话因离职或账号禁用被撤销
+      externalValue: ../examples/errors/403-account-disabled.json
+
+    AccessDenied:
+      summary: 有效主体可见资源但没有动作权限
+      externalValue: ../examples/errors/403-access-denied.json
+
+    ResourceNotFound:
+      summary: 资源不存在或存在性对当前主体不可见
+      externalValue: ../examples/errors/404-resource-not-found.json
+
+    IdempotencyKeyReused:
+      summary: 相同幂等键被用于不同请求内容
+      externalValue: ../examples/errors/409-idempotency-key-reused.json
+
+    RequestInProgress:
+      summary: 相同幂等请求仍在处理中
+      externalValue: ../examples/errors/409-request-in-progress.json
+
+    InvalidStateTransition:
+      summary: 当前业务状态不允许目标命令
+      externalValue: ../examples/errors/409-invalid-state-transition.json
+
+    WorklogLocked:
+      summary: 已提交或批准工时不能普通修改
+      externalValue: ../examples/errors/409-worklog-locked.json
+
+    VersionConflict:
+      summary: If-Match 与当前可见资源版本不一致
+      externalValue: ../examples/errors/412-version-conflict.json
+
+    ValidationFailed:
+      summary: 请求格式正确但字段或业务规则不满足
+      externalValue: ../examples/errors/422-validation-failed.json
+
+    ClientUpgradeRequired:
+      summary: Electron 低于最低支持版本
+      externalValue: ../examples/errors/426-client-upgrade-required.json
+
+    PreconditionRequired:
+      summary: 条件写入缺少 If-Match
+      externalValue: ../examples/errors/428-precondition-required.json
+
+    EmptyPage:
+      summary: 空的普通分页响应
+      externalValue: ../examples/pagination/empty-page.json
+
+    EmptyCursorPage:
+      summary: 没有后续游标的空追加流响应
+      externalValue: ../examples/pagination/empty-cursor-page.json
+
+  responses:
+    MalformedRequest:
+      description: 请求 JSON、类型、参数格式或条件头无法解析。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            malformedRequest:
+              $ref: '#/components/examples/MalformedRequest'
+
+    AuthenticationRequired:
+      description: 未建立有效 CurrentActor。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            authenticationRequired:
+              $ref: '#/components/examples/AuthenticationRequired'
+
+    Forbidden:
+      description: 可识别账号已禁用，或有效主体缺少可见资源上的动作权限。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            accountDisabled:
+              $ref: '#/components/examples/AccountDisabled'
+            accessDenied:
+              $ref: '#/components/examples/AccessDenied'
+
+    ResourceNotFound:
+      description: 资源不存在，或资源存在性对当前主体不可见。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            resourceNotFound:
+              $ref: '#/components/examples/ResourceNotFound'
+
+    Conflict:
+      description: 幂等、处理中、状态迁移或工时锁定冲突。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            idempotencyKeyReused:
+              $ref: '#/components/examples/IdempotencyKeyReused'
+            requestInProgress:
+              $ref: '#/components/examples/RequestInProgress'
+            invalidStateTransition:
+              $ref: '#/components/examples/InvalidStateTransition'
+            worklogLocked:
+              $ref: '#/components/examples/WorklogLocked'
+
+    VersionConflict:
+      description: If-Match 与当前可见资源版本不一致。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            versionConflict:
+              $ref: '#/components/examples/VersionConflict'
+
+    ValidationFailed:
+      description: 请求格式正确，但字段、必填项或业务规则不满足。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            validationFailed:
+              $ref: '#/components/examples/ValidationFailed'
+
+    ClientUpgradeRequired:
+      description: Electron 客户端低于最低支持版本。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            clientUpgradeRequired:
+              $ref: '#/components/examples/ClientUpgradeRequired'
+
+    PreconditionRequired:
+      description: 条件写入缺少必需的 If-Match。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            preconditionRequired:
+              $ref: '#/components/examples/PreconditionRequired'

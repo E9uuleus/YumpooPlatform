@@ -1,0 +1,8 @@
+{
+  "code": "REQUEST_IN_PROGRESS",
+  "message": "请求正在处理中，请稍后重试",
+  "requestId": "6ce6e300-295b-4daa-a55f-eb734cc7dd65",
+  "retryable": true,
+  "fieldErrors": [],
+  "details": {}
+}

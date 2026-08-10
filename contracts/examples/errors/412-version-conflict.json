@@ -1,0 +1,8 @@
+{
+  "code": "VERSION_CONFLICT",
+  "message": "数据已被其他设备修改",
+  "requestId": "f53d4474-41bf-4d54-aebd-32d90c8b5e38",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}
