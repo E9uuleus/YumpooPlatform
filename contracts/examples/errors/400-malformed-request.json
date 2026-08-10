@@ -1,0 +1,8 @@
+{
+  "code": "MALFORMED_REQUEST",
+  "message": "请求格式不正确",
+  "requestId": "1f80ce2b-05ab-46a1-8d30-e14fcdb06a61",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

@@ -1,6 +1,9 @@
 spring:
   application:
     name: yumpoo-server
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
   datasource:
     hikari:
       connection-init-sql: SET TIME ZONE 'UTC'

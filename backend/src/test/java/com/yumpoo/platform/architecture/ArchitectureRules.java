@@ -3,7 +3,12 @@ package com.yumpoo.platform.architecture;
 import com.tngtech.archunit.core.domain.Dependency;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.domain.JavaMethod;
+import com.tngtech.archunit.core.domain.JavaParameter;
 import com.tngtech.archunit.lang.ArchRule;
+import com.yumpoo.platform.foundation.api.http.IfMatchParser;
+import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -156,6 +161,34 @@ final class ArchitectureRules {
                         "org.springframework.jdbc.."
                 )
                 .because("Controller 和 API 适配层不得直接访问 SQL 或 JDBC");
+    }
+
+    static List<String> requiredIfMatchHeaderViolations(JavaClasses classes) {
+        List<String> violations = new ArrayList<>();
+        for (JavaClass javaClass : classes) {
+            if (!javaClass.isAnnotatedWith(ApiV1Controller.class)) {
+                continue;
+            }
+            for (JavaMethod method : javaClass.getMethods()) {
+                for (JavaParameter parameter : method.getParameters()) {
+                    if (!parameter.isAnnotatedWith(RequestHeader.class)) {
+                        continue;
+                    }
+                    RequestHeader requestHeader = parameter.getAnnotationOfType(RequestHeader.class);
+                    String headerName = requestHeader.name().isBlank()
+                            ? requestHeader.value()
+                            : requestHeader.name();
+                    if (IfMatchParser.HEADER_NAME.equalsIgnoreCase(headerName)
+                            && requestHeader.required()) {
+                        violations.add(
+                                "If-Match 必须声明 required=false，并在资源可见性检查后交给 IfMatchParser: "
+                                        + method.getFullName() + " parameter[" + parameter.getIndex() + "]"
+                        );
+                    }
+                }
+            }
+        }
+        return List.copyOf(violations);
     }
 
     static List<String> moduleBoundaryViolations(JavaClasses classes, String rootPackage) {

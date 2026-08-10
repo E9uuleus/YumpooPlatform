@@ -51,4 +51,9 @@ class ModuleArchitectureTest {
     void apiDoesNotAccessPersistenceTechnology() {
         ArchitectureRules.apiDoesNotAccessPersistenceTechnology().check(PRODUCTION_CLASSES);
     }
+
+    @Test
+    void apiControllersDeferRequiredIfMatchChecksUntilAfterVisibleLookup() {
+        assertThat(ArchitectureRules.requiredIfMatchHeaderViolations(PRODUCTION_CLASSES)).isEmpty();
+    }
 }

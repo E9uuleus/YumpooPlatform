@@ -1,0 +1,8 @@
+{
+  "code": "WORKLOG_LOCKED",
+  "message": "工时已提交或批准，不能普通修改",
+  "requestId": "5cac56f4-2dc3-46da-83b8-cd07d987e722",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

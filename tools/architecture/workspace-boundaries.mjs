@@ -13,6 +13,7 @@ const PACKAGE_ROOTS = {
   web: path.join(REPOSITORY_ROOT, 'frontend', 'web-app'),
   desktop: path.join(REPOSITORY_ROOT, 'desktop', 'desktop-shell'),
   contract: path.join(REPOSITORY_ROOT, 'packages', 'preload-contract'),
+  apiClient: path.join(REPOSITORY_ROOT, 'packages', 'api-client'),
 }
 
 const DESKTOP_AREAS = {
@@ -28,6 +29,7 @@ const WORKSPACE_PACKAGES = new Map([
   ['@yumpoo/web-app', 'web'],
   ['@yumpoo/desktop-shell', 'desktop'],
   ['@yumpoo/preload-contract', 'contract'],
+  ['@yumpoo/api-client', 'apiClient'],
 ])
 
 const DECLARED_PACKAGES = Object.fromEntries(
@@ -124,7 +126,8 @@ function createRule() {
     meta: {
       type: 'problem',
       docs: {
-        description: 'enforce Yumpoo Web, Electron and preload-contract boundaries',
+        description:
+          'enforce Yumpoo Web, Electron, preload-contract and API client boundaries',
       },
       schema: [],
       messages: {
@@ -209,11 +212,28 @@ function createRule() {
           return
         }
 
+        if (owner === 'apiClient') {
+          if (nodeBuiltin || electron) {
+            report(node, specifier, 'API client 不得依赖 Node 或 Electron')
+          } else if (target && target !== 'apiClient') {
+            report(node, specifier, 'API client 不得依赖其他工作区包')
+          }
+          return
+        }
+
         if (owner === 'desktop' && area === 'preload') {
           if (nodeBuiltin) {
             report(node, specifier, 'preload 不得导入 Node built-in')
-          } else if (target === 'web' || target === 'desktop') {
-            report(node, specifier, 'preload 不得依赖 Web 或 desktop 运行时实现')
+          } else if (
+            target === 'web' ||
+            target === 'desktop' ||
+            target === 'apiClient'
+          ) {
+            report(
+              node,
+              specifier,
+              'preload 不得依赖 Web、desktop 或 API client 运行时实现',
+            )
           } else if (target === 'contract' && !typeOnly) {
             report(node, specifier, 'preload 只能以 type-only 方式依赖 preload-contract')
           } else if (electron && !isNamedContextBridgeImport(node)) {
@@ -223,8 +243,8 @@ function createRule() {
         }
 
         if (owner === 'desktop' && area === 'main') {
-          if (target === 'web') {
-            report(node, specifier, 'Electron main 不得导入 Web 源码')
+          if (target === 'web' || target === 'apiClient') {
+            report(node, specifier, 'Electron main 不得导入 Web 或 API client 源码')
           } else if (target === 'contract' && !typeOnly) {
             report(node, specifier, 'Electron main 只能以 type-only 方式依赖 preload-contract')
           }

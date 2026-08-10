@@ -64,4 +64,12 @@ class ArchitectureRulesContractTest {
         assertThatThrownBy(() -> ArchitectureRules.apiDoesNotAccessPersistenceTechnology().check(INVALID_FIXTURES))
                 .isInstanceOf(AssertionError.class);
     }
+
+    @Test
+    void controllerRuleRejectsDefaultAndExplicitRequiredIfMatchHeaders() {
+        assertThat(ArchitectureRules.requiredIfMatchHeaderViolations(INVALID_FIXTURES))
+                .anyMatch(message -> message.contains("defaultRequiredIfMatch"))
+                .anyMatch(message -> message.contains("explicitRequiredIfMatch"))
+                .noneMatch(message -> message.contains("optionalIfMatch"));
+    }
 }

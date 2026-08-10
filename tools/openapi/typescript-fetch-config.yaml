@@ -1,0 +1,9 @@
+additionalProperties:
+  npmName: '@yumpoo/api-client'
+  npmVersion: 0.0.0
+  supportsES6: true
+  useSingleRequestParameter: true
+  stringEnums: true
+  enumUnknownDefaultCase: true
+  withoutRuntimeChecks: false
+  hideGenerationTimestamp: true

@@ -1,0 +1,8 @@
+{
+  "code": "INVALID_STATE_TRANSITION",
+  "message": "当前状态不允许执行此操作",
+  "requestId": "54e175b9-5fbd-460c-9a74-025b471a1fa9",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

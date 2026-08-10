@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.yumpoo.platform.tools</groupId>
+  <artifactId>openapi-compatibility-check</artifactId>
+  <version>0.0.0</version>
+  <packaging>pom</packaging>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.openapitools.openapidiff</groupId>
+        <artifactId>openapi-diff-maven</artifactId>
+        <version>2.1.6</version>
+        <executions>
+          <execution>
+            <id>check-openapi-compatibility</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>diff</goal>
+            </goals>
+            <configuration>
+              <oldSpec>${openapi.oldSpec}</oldSpec>
+              <newSpec>${openapi.newSpec}</newSpec>
+              <failOnIncompatible>true</failOnIncompatible>
+              <failOnChanged>false</failOnChanged>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

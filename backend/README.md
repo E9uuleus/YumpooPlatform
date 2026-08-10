@@ -1,6 +1,6 @@
 # Yumpoo Server
 
-YumpooPlatform 一期 M0-08 的 Spring 后端与数据库骨架。当前产物是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway 和真实库测试基础，但不包含业务功能。
+YumpooPlatform 一期 M0-09 的 Spring 后端、数据库与 HTTP 契约骨架。当前产物是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误与 requestId 基础，但不包含业务功能。
 
 ## 环境
 
@@ -60,6 +60,8 @@ java -jar .\target\yumpoo-server.jar
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
 
+M0-09 不增加生产探针或业务 Controller。`/api/v1` 的统一错误、分页、条件头和客户端头以仓库根目录 `contracts/openapi/yumpoo-v1.yaml` 为唯一契约；九类错误通过 test-only Controller 验证，不进入生产 JAR。
+
 ## 模块
 
 | 设计名称 | Java 包 | 职责 |
@@ -92,4 +94,4 @@ ArchUnit 在 `verify` 阶段检查模块允许依赖图、循环依赖、层级�
 
 ## 当前边界
 
-本切片只建立 PostgreSQL、Flyway 和 Testcontainers 基础，不创建业务表，也不包含 `/api/v1`、OpenAPI、统一错误体、requestId、幂等、Outbox、结构化日志、企微集成或任何业务 Controller。它们按 M0-09 至 M1 的后续步骤实施。
+本切片不创建业务表，不实现真实认证/授权、客户端版本策略、条件更新、幂等记录、Outbox、结构化日志、企微集成或任何生产业务 Controller。M0-10 实现乐观锁与幂等最小闭环，M0-11 实现 requestId 向事件和 Outbox 的贯穿，身份与 426 的真实策略分别由后续阶段实现。

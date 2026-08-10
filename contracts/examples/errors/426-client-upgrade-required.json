@@ -1,0 +1,8 @@
+{
+  "code": "CLIENT_UPGRADE_REQUIRED",
+  "message": "客户端版本过低，请升级后重试",
+  "requestId": "d19fd6a0-2938-4727-89c4-b5f4ea4c3788",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {}
+}

@@ -8,24 +8,36 @@
     "pnpm": "11.16.x"
   },
   "scripts": {
-    "dev:web": "pnpm --filter @yumpoo/web-app dev",
+    "dev:web": "pnpm --filter @yumpoo/api-client build && pnpm --filter @yumpoo/web-app dev",
     "dev:desktop": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/desktop-shell start",
+    "lint:openapi": "node tools/openapi/lint-openapi.mjs",
+    "validate:openapi-examples": "node tools/openapi/validate-golden-examples.mjs",
+    "generate:api-client": "node tools/openapi/api-client-codegen.mjs generate",
+    "check:api-client": "node tools/openapi/api-client-codegen.mjs check",
+    "check:openapi": "pnpm run lint:openapi && pnpm run validate:openapi-examples && pnpm run check:api-client",
+    "check:openapi-compat": "node tools/openapi/check-openapi-compat.mjs",
     "lint": "eslint \"frontend/**/*.{ts,vue}\" \"desktop/**/*.ts\" \"packages/**/*.ts\"",
     "test:architecture": "node --test tools/architecture/workspace-boundaries.test.mjs",
-    "typecheck": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/web-app typecheck && pnpm --filter @yumpoo/desktop-shell typecheck",
-    "test": "pnpm --filter @yumpoo/web-app test && pnpm --filter @yumpoo/desktop-shell test",
-    "build": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/web-app build && pnpm --filter @yumpoo/desktop-shell build",
-    "verify:node": "pnpm run lint && pnpm run test:architecture && pnpm run typecheck && pnpm run test && pnpm run build",
+    "typecheck": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/api-client typecheck && pnpm --filter @yumpoo/api-client build && pnpm --filter @yumpoo/web-app typecheck && pnpm --filter @yumpoo/desktop-shell typecheck",
+    "test": "pnpm --filter @yumpoo/api-client test && pnpm --filter @yumpoo/web-app test && pnpm --filter @yumpoo/desktop-shell test",
+    "build": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/api-client build && pnpm --filter @yumpoo/web-app build && pnpm --filter @yumpoo/desktop-shell build",
+    "verify:node": "pnpm run check:openapi && pnpm run lint && pnpm run test:architecture && pnpm run typecheck && pnpm run test && pnpm run build",
     "verify:m0-07": "node tools/verification/verify-m0-07.mjs",
     "verify:m0-08": "pnpm run verify:m0-07",
+    "verify:m0-09": "node tools/verification/verify-m0-09.mjs",
     "smoke:desktop": "node tools/verification/smoke-desktop.mjs"
   },
   "devDependencies": {
+    "@openapitools/openapi-generator-cli": "2.40.1",
+    "@redocly/cli": "2.41.2",
     "@typescript-eslint/eslint-plugin": "8.66.0",
     "@typescript-eslint/parser": "8.66.0",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
     "eslint": "10.8.1",
     "eslint-plugin-vue": "10.10.0",
     "typescript": "5.9.3",
-    "vue-eslint-parser": "10.3.0"
+    "vue-eslint-parser": "10.3.0",
+    "yaml": "2.8.1"
   }
 }

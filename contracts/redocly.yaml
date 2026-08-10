@@ -1,0 +1,15 @@
+apis:
+  yumpoo-v1:
+    root: ./openapi/yumpoo-v1.yaml
+
+extends:
+  - recommended
+
+rules:
+  # M0-09 有意只冻结公共 components，业务 paths 在后续模块中兼容新增。
+  no-unused-components: off
+  # 内部静态契约不对外发布，因此不声明软件许可证。
+  info-license: off
+  no-unresolved-refs: error
+  operation-operationId: error
+  operation-4xx-response: error
