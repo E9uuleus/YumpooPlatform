@@ -1,0 +1,21 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000111",
+  "eventType": "foundation.probe_recorded",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-10T03:00:00Z",
+  "aggregateType": "M011Probe",
+  "aggregateId": "00000000-0000-4000-8000-000000000112",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000113",
+  "actor": {
+    "type": "USER",
+    "userId": "00000000-0000-4000-8000-000000000114"
+  },
+  "requestId": "m011-contract-example",
+  "correlationId": "m011-contract-example",
+  "causationId": null,
+  "payload": {
+    "probeId": "00000000-0000-4000-8000-000000000112",
+    "name": "contract-probe"
+  }
+}

@@ -1,0 +1,9 @@
+catalogVersion: 1
+events:
+  - eventType: foundation.probe_recorded
+    eventVersion: 1
+    schema: schemas/foundation.probe-recorded-v1.schema.json
+    validExamples:
+      - examples/foundation.probe-recorded-v1.json
+    invalidExamples:
+      - examples/foundation.probe-recorded-v1.invalid.json

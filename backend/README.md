@@ -1,6 +1,6 @@
 # Yumpoo Server
 
-YumpooPlatform 一期 M0-10 的 Spring 后端、数据库与 HTTP 契约骨架。当前产物是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、requestId、乐观锁守卫和持久化幂等命令基础，但不包含正式业务功能。
+YumpooPlatform 一期 M0-11 的 Spring 后端、数据库与内部事件契约骨架。当前产物是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox 和消费去重基础，但不包含正式业务功能。
 
 ## 环境
 
@@ -17,7 +17,7 @@ YumpooPlatform 一期 M0-10 的 Spring 后端、数据库与 HTTP 契约骨架�
 .\mvnw.cmd clean verify
 ```
 
-`clean verify` 会在 Failsafe 阶段运行 PostgreSQL 17.10 集成测试，验证空库 V1/V2 迁移、重复校验、checksum 变化拒绝、UTF-8、UTC、健康探针、同版本并发竞争和幂等记录闭环。
+`clean verify` 会在 Failsafe 阶段运行 PostgreSQL 17.10 集成测试，验证空库 V1～V3 迁移、重复校验、checksum 变化拒绝、UTF-8、UTC、健康探针、幂等事务、Outbox 原子写入、消费去重、租约接管、并发领取、聚合顺序和失败状态。
 
 ## 数据库配置与运行
 
@@ -44,6 +44,10 @@ $env:SPRING_FLYWAY_PASSWORD = '<migration-password>'
 
 M0-10 新增唯一的应用侧技术表 `idempotency_record`，不创建业务表。`IdempotentCommandExecutor.execute(command, callback)` 在单一 `REQUIRED` 事务中依次认领幂等键、执行业务回调并保存完成结果，记录状态仅为 `PROCESSING` 或 `COMPLETED`。相同键和请求哈希在完成后重放结果，不同哈希复用同一键返回 `IDEMPOTENCY_KEY_REUSED`，读取到已存在的处理中记录时返回 `REQUEST_IN_PROGRESS`。回调失败会回滚同一事务内的认领记录和业务事实，后续重试重新认领并执行。`lease_until` 和 `expires_at` 按一期基线预留崩溃恢复与清理元数据；M0-10 只写入元数据，不据此接管、自动删除或持久化失败状态。
 
+M0-11 新增 `outbox_event` 与 `outbox_consumer_receipt`。`TransactionalEventPort.append(EventDraft)` 使用 `MANDATORY` 事务传播，补齐 UUIDv4、UTC 时间和当前请求关联后，与业务事实及幂等结果同事务写入。dispatcher 默认启用，参数可通过 `YUMPOO_OUTBOX_ENABLED`、`YUMPOO_OUTBOX_POLL_DELAY`、`YUMPOO_OUTBOX_INITIAL_DELAY`、`YUMPOO_OUTBOX_BATCH_SIZE`、`YUMPOO_OUTBOX_CONCURRENCY`、`YUMPOO_OUTBOX_LEASE_DURATION` 覆盖；默认值依次为 `true`、`1s`、`1s`、`50`、`2`、`5m`。
+
+每次领取使用短事务、`FOR UPDATE SKIP LOCKED` 和 owner + lease token；到期重试及租约过期项均可领取。同聚合的低版本未完成或 `DEAD` 时高版本保持阻塞。消费者的数据库效果与 receipt 在独立新事务中提交，重复或并发投递只保留一份效果；多消费者中已成功者在后续重试时跳过。可恢复失败采用 1 分钟、5 分钟、30 分钟、2 小时、8 小时加正向抖动，第六次进入 `DEAD`；永久错误、无消费者和不支持版本首次即 `DEAD`。
+
 默认仅监听 `127.0.0.1:8080`。需要修改端口时设置 `YUMPOO_SERVER_PORT`：
 
 ```powershell
@@ -62,7 +66,7 @@ java -jar .\target\yumpoo-server.jar
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
 
-M0-10 不增加生产探针、正式业务 Controller 或 OpenAPI 路径。`/api/v1` 的统一错误、分页、条件头和客户端头以仓库根目录 `contracts/openapi/yumpoo-v1.yaml` 为唯一契约；契约错误和并发行为通过 test-only Controller 或 PostgreSQL probe 验证，不进入生产 JAR。
+M0-11 不增加生产探针、正式业务 Controller 或 OpenAPI 路径。`/api/v1` 的统一错误、分页、条件头和客户端头以仓库根目录 `contracts/openapi/yumpoo-v1.yaml` 为唯一 HTTP 契约；内部事件信封、目录、payload Schema 和样例位于 `contracts/events`。事务与消费行为通过 test-only Controller 或 PostgreSQL probe 验证，不进入生产 JAR。
 
 ## 模块
 
@@ -96,4 +100,4 @@ ArchUnit 在 `verify` 阶段检查模块允许依赖图、循环依赖、层级�
 
 ## 当前边界
 
-本切片实现乐观锁与幂等记录最小闭环，但不创建业务表，也不实现具体聚合的 Repository 条件更新、资源可见性复查或任何正式业务 Controller。真实业务端点接入留给后续业务切片；M0-11 实现 requestId 向领域事件和 Outbox 的贯穿。真实认证/授权、客户端版本策略、结构化日志、企微集成，以及身份与 426 的正式策略也均由后续阶段实现。
+本切片只登记探针事件并实现 foundation 的事件/Outbox/消费骨架，不创建正式业务表、Security Audit、Activity 投影，也不实现具体聚合 Repository 或正式业务 Controller。控制台已启用 Spring Boot 内建 Logstash JSON 结构化日志，请求与消费边界只记录受控的 requestId、correlationId、eventId、consumerName、attempt、outcome 和 errorCode；payload、异常原文、请求体、actor 原始 ID 与 Secret 不进入 Outbox 失败信息或消费日志。真实认证授权、业务事件、通知投递、人工重排、指标告警、数据清理、日志轮转和管理页面均由后续切片实现。

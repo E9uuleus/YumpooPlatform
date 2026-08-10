@@ -18,6 +18,25 @@ spring:
     validate-on-migrate: true
     clean-disabled: true
     baseline-on-migrate: false
+  task:
+    scheduling:
+      thread-name-prefix: yumpoo-outbox-scheduler-
+      pool:
+        size: 1
+
+yumpoo:
+  outbox:
+    enabled: true
+    poll-delay: 1s
+    initial-delay: 1s
+    batch-size: 50
+    concurrency: 2
+    lease-duration: 5m
+
+logging:
+  structured:
+    format:
+      console: logstash
 
 server:
   address: 127.0.0.1

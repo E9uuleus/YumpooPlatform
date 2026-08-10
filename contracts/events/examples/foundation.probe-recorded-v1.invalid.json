@@ -1,0 +1,20 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000121",
+  "eventType": "foundation.probe_recorded",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-10T03:00:00Z",
+  "aggregateType": "M011Probe",
+  "aggregateId": "00000000-0000-4000-8000-000000000122",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000123",
+  "actor": {
+    "type": "USER",
+    "userId": "00000000-0000-4000-8000-000000000124"
+  },
+  "correlationId": "m011-invalid-example",
+  "causationId": null,
+  "payload": {
+    "probeId": "00000000-0000-4000-8000-000000000122",
+    "name": "missing-request-id"
+  }
+}
