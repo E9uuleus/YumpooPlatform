@@ -113,7 +113,8 @@ class ApiContractWebMvcTest {
                 new ErrorCase(StandardErrorCode.VERSION_CONFLICT, 412, "412-version-conflict.json"),
                 new ErrorCase(StandardErrorCode.VALIDATION_FAILED, 422, "422-validation-failed.json"),
                 new ErrorCase(StandardErrorCode.CLIENT_UPGRADE_REQUIRED, 426, "426-client-upgrade-required.json"),
-                new ErrorCase(StandardErrorCode.PRECONDITION_REQUIRED, 428, "428-precondition-required.json")
+                new ErrorCase(StandardErrorCode.PRECONDITION_REQUIRED, 428, "428-precondition-required.json"),
+                new ErrorCase(StandardErrorCode.DEPENDENCY_UNAVAILABLE, 503, "503-dependency-unavailable.json")
         );
     }
 

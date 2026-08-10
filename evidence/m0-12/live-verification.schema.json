@@ -1,0 +1,181 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/evidence/m0-12/live-verification.schema.json",
+  "title": "M0-12 WeCom live verification evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "milestone",
+    "status",
+    "verifiedAt",
+    "corpFingerprint",
+    "memberFingerprint",
+    "receiptCount",
+    "checks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "milestone": {
+      "const": "M0-12"
+    },
+    "status": {
+      "enum": ["NOT_RUN", "PASS"]
+    },
+    "verifiedAt": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "corpFingerprint": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "memberFingerprint": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "receiptCount": {
+      "type": "integer",
+      "enum": [0, 2]
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configurationPreflight",
+        "twoSignedReceipts",
+        "stableFingerprints",
+        "forgedStateRejected",
+        "wrongNonceRejected",
+        "invalidCodeRejected",
+        "replayRejected"
+      ],
+      "properties": {
+        "configurationPreflight": {
+          "$ref": "#/definitions/checkStatus"
+        },
+        "twoSignedReceipts": {
+          "$ref": "#/definitions/checkStatus"
+        },
+        "stableFingerprints": {
+          "$ref": "#/definitions/checkStatus"
+        },
+        "forgedStateRejected": {
+          "$ref": "#/definitions/checkStatus"
+        },
+        "wrongNonceRejected": {
+          "$ref": "#/definitions/checkStatus"
+        },
+        "invalidCodeRejected": {
+          "$ref": "#/definitions/checkStatus"
+        },
+        "replayRejected": {
+          "$ref": "#/definitions/checkStatus"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "checkStatus": {
+      "enum": ["NOT_RUN", "PASS"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "NOT_RUN"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "verifiedAt": {
+            "type": "null"
+          },
+          "corpFingerprint": {
+            "type": "null"
+          },
+          "memberFingerprint": {
+            "type": "null"
+          },
+          "receiptCount": {
+            "const": 0
+          },
+          "checks": {
+            "properties": {
+              "configurationPreflight": {
+                "const": "NOT_RUN"
+              },
+              "twoSignedReceipts": {
+                "const": "NOT_RUN"
+              },
+              "stableFingerprints": {
+                "const": "NOT_RUN"
+              },
+              "forgedStateRejected": {
+                "const": "NOT_RUN"
+              },
+              "wrongNonceRejected": {
+                "const": "NOT_RUN"
+              },
+              "invalidCodeRejected": {
+                "const": "NOT_RUN"
+              },
+              "replayRejected": {
+                "const": "NOT_RUN"
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "corpFingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "memberFingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "receiptCount": {
+            "const": 2
+          },
+          "checks": {
+            "properties": {
+              "configurationPreflight": {
+                "const": "PASS"
+              },
+              "twoSignedReceipts": {
+                "const": "PASS"
+              },
+              "stableFingerprints": {
+                "const": "PASS"
+              },
+              "forgedStateRejected": {
+                "const": "PASS"
+              },
+              "wrongNonceRejected": {
+                "const": "PASS"
+              },
+              "invalidCodeRejected": {
+                "const": "PASS"
+              },
+              "replayRejected": {
+                "const": "PASS"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

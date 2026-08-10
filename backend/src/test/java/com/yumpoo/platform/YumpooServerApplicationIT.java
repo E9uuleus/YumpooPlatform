@@ -67,6 +67,15 @@ class YumpooServerApplicationIT {
     }
 
     @Test
+    void m012WeComProbeRoutesAreAbsentWithoutTheExplicitLiveProfile() throws Exception {
+        HttpResponse<String> authorize = get("/_m0/m0-12/wecom/authorize");
+        HttpResponse<String> callback = get("/_m0/m0-12/wecom/callback");
+
+        assertThat(authorize.statusCode()).isEqualTo(404);
+        assertThat(callback.statusCode()).isEqualTo(404);
+    }
+
+    @Test
     void databaseUsesThePostgresql17Utf8UtcBaseline() throws IOException, InterruptedException {
         String version = jdbcTemplate.queryForObject("SHOW server_version", String.class);
         String versionNumber = jdbcTemplate.queryForObject("SHOW server_version_num", String.class);
@@ -130,18 +139,37 @@ class YumpooServerApplicationIT {
                         + "AND tablename IN ('outbox_event', 'outbox_consumer_receipt')",
                 String.class
         );
+        List<String> oauthAttemptConstraintNames = jdbcTemplate.queryForList(
+                "SELECT constraint_record.conname "
+                        + "FROM pg_constraint constraint_record "
+                        + "JOIN pg_class table_record "
+                        + "ON table_record.oid = constraint_record.conrelid "
+                        + "JOIN pg_namespace schema_record "
+                        + "ON schema_record.oid = table_record.relnamespace "
+                        + "WHERE schema_record.nspname = 'yumpoo' "
+                        + "AND table_record.relname = 'wecom_oauth_attempt' "
+                        + "AND constraint_record.contype <> 'n'",
+                String.class
+        );
+        List<String> oauthAttemptIndexNames = jdbcTemplate.queryForList(
+                "SELECT indexname FROM pg_indexes "
+                        + "WHERE schemaname = 'yumpoo' "
+                        + "AND tablename = 'wecom_oauth_attempt'",
+                String.class
+        );
 
         assertThat(configuration.getDefaultSchema()).isEqualTo(PLATFORM_SCHEMA);
         assertThat(configuration.getSchemas()).containsExactly(PLATFORM_SCHEMA);
         assertThat(configuration.isValidateOnMigrate()).isTrue();
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
-        assertThat(successfulMigrationVersions).containsExactly("1", "2", "3");
+        assertThat(successfulMigrationVersions).containsExactly("1", "2", "3", "4");
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
                 "idempotency_record",
                 "outbox_consumer_receipt",
-                "outbox_event"
+                "outbox_event",
+                "wecom_oauth_attempt"
         );
         assertThat(outboxConstraintNames).containsExactlyInAnyOrder(
                 "outbox_event_pkey",
@@ -172,6 +200,20 @@ class YumpooServerApplicationIT {
                 "idx_outbox_event_aggregate_order",
                 "outbox_consumer_receipt_pkey",
                 "idx_outbox_consumer_receipt_event"
+        );
+        assertThat(oauthAttemptConstraintNames).containsExactlyInAnyOrder(
+                "wecom_oauth_attempt_pkey",
+                "uq_wecom_oauth_attempt_nonce_hash",
+                "ck_wecom_oauth_attempt_state_hash",
+                "ck_wecom_oauth_attempt_nonce_hash",
+                "ck_wecom_oauth_attempt_request_id",
+                "ck_wecom_oauth_attempt_expires_at",
+                "ck_wecom_oauth_attempt_consumed_at"
+        );
+        assertThat(oauthAttemptIndexNames).containsExactlyInAnyOrder(
+                "wecom_oauth_attempt_pkey",
+                "uq_wecom_oauth_attempt_nonce_hash",
+                "idx_wecom_oauth_attempt_expires_at"
         );
     }
 

@@ -1,0 +1,8 @@
+{
+  "code": "DEPENDENCY_UNAVAILABLE",
+  "message": "依赖服务暂时不可用",
+  "requestId": "9c495eb3-2361-4c7e-9471-da67e5df22ac",
+  "retryable": true,
+  "fieldErrors": [],
+  "details": {}
+}

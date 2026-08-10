@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-12",
+  "status": "NOT_RUN",
+  "verifiedAt": null,
+  "corpFingerprint": null,
+  "memberFingerprint": null,
+  "receiptCount": 0,
+  "checks": {
+    "configurationPreflight": "NOT_RUN",
+    "twoSignedReceipts": "NOT_RUN",
+    "stableFingerprints": "NOT_RUN",
+    "forgedStateRejected": "NOT_RUN",
+    "wrongNonceRejected": "NOT_RUN",
+    "invalidCodeRejected": "NOT_RUN",
+    "replayRejected": "NOT_RUN"
+  }
+}

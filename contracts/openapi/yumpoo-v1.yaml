@@ -419,6 +419,10 @@ components:
       summary: 条件写入缺少 If-Match
       externalValue: ../examples/errors/428-precondition-required.json
 
+    DependencyUnavailable:
+      summary: 外部依赖暂时不可用，可在稍后重试
+      externalValue: ../examples/errors/503-dependency-unavailable.json
+
     EmptyPage:
       summary: 空的普通分页响应
       externalValue: ../examples/pagination/empty-page.json
@@ -554,3 +558,16 @@ components:
           examples:
             preconditionRequired:
               $ref: '#/components/examples/PreconditionRequired'
+
+    DependencyUnavailable:
+      description: 完成请求所需的外部依赖暂时不可用。
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            dependencyUnavailable:
+              $ref: '#/components/examples/DependencyUnavailable'

@@ -32,6 +32,15 @@ yumpoo:
     batch-size: 50
     concurrency: 2
     lease-duration: 5m
+  m012:
+    evidence-hmac-key: ${YUMPOO_M012_EVIDENCE_HMAC_KEY:}
+    wecom:
+      enabled: ${YUMPOO_M012_WECOM_ENABLED:false}
+      corp-id: ${YUMPOO_M012_WECOM_CORP_ID:}
+      agent-id: ${YUMPOO_M012_WECOM_AGENT_ID:}
+      app-secret: ${YUMPOO_M012_WECOM_APP_SECRET:}
+      callback-uri: ${YUMPOO_M012_WECOM_CALLBACK_URI:}
+      allowed-member-ids: ${YUMPOO_M012_WECOM_ALLOWED_MEMBER_IDS:}
 
 logging:
   structured:
