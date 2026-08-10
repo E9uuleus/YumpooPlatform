@@ -92,7 +92,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void emptyDatabaseMigrationCreatesThePlatformSchemaAndIdempotencyTable() {
+    void emptyDatabaseMigrationCreatesThePlatformSchemaAndFoundationTables() {
         Configuration configuration = flyway.getConfiguration();
         List<String> successfulMigrationVersions = jdbcTemplate.queryForList(
                 "SELECT version FROM yumpoo.flyway_schema_history "
@@ -111,15 +111,68 @@ class YumpooServerApplicationIT {
                         + "ORDER BY table_name",
                 String.class
         );
+        List<String> outboxConstraintNames = jdbcTemplate.queryForList(
+                "SELECT constraint_record.conname "
+                        + "FROM pg_constraint constraint_record "
+                        + "JOIN pg_class table_record "
+                        + "ON table_record.oid = constraint_record.conrelid "
+                        + "JOIN pg_namespace schema_record "
+                        + "ON schema_record.oid = table_record.relnamespace "
+                        + "WHERE schema_record.nspname = 'yumpoo' "
+                        + "AND table_record.relname IN "
+                        + "('outbox_event', 'outbox_consumer_receipt') "
+                        + "AND constraint_record.contype <> 'n'",
+                String.class
+        );
+        List<String> outboxIndexNames = jdbcTemplate.queryForList(
+                "SELECT indexname FROM pg_indexes "
+                        + "WHERE schemaname = 'yumpoo' "
+                        + "AND tablename IN ('outbox_event', 'outbox_consumer_receipt')",
+                String.class
+        );
 
         assertThat(configuration.getDefaultSchema()).isEqualTo(PLATFORM_SCHEMA);
         assertThat(configuration.getSchemas()).containsExactly(PLATFORM_SCHEMA);
         assertThat(configuration.isValidateOnMigrate()).isTrue();
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
-        assertThat(successfulMigrationVersions).containsExactly("1", "2");
+        assertThat(successfulMigrationVersions).containsExactly("1", "2", "3");
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
-        assertThat(applicationTableNames).containsExactly("idempotency_record");
+        assertThat(applicationTableNames).containsExactly(
+                "idempotency_record",
+                "outbox_consumer_receipt",
+                "outbox_event"
+        );
+        assertThat(outboxConstraintNames).containsExactlyInAnyOrder(
+                "outbox_event_pkey",
+                "uq_outbox_event_aggregate_fact",
+                "ck_outbox_event_id_v4",
+                "ck_outbox_event_type",
+                "ck_outbox_event_version",
+                "ck_outbox_event_aggregate_type",
+                "ck_outbox_event_aggregate_version",
+                "ck_outbox_event_actor",
+                "ck_outbox_event_request_id",
+                "ck_outbox_event_correlation_id",
+                "ck_outbox_event_payload",
+                "ck_outbox_event_status",
+                "ck_outbox_event_attempt_count",
+                "ck_outbox_event_last_error",
+                "ck_outbox_event_lifecycle",
+                "ck_outbox_event_times",
+                "outbox_consumer_receipt_pkey",
+                "fk_outbox_consumer_receipt_event",
+                "ck_outbox_consumer_receipt_name"
+        );
+        assertThat(outboxIndexNames).containsExactlyInAnyOrder(
+                "outbox_event_pkey",
+                "uq_outbox_event_aggregate_fact",
+                "idx_outbox_event_available",
+                "idx_outbox_event_expired_lease",
+                "idx_outbox_event_aggregate_order",
+                "outbox_consumer_receipt_pkey",
+                "idx_outbox_consumer_receipt_event"
+        );
     }
 
     @Test

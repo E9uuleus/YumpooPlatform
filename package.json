@@ -15,6 +15,7 @@
     "generate:api-client": "node tools/openapi/api-client-codegen.mjs generate",
     "check:api-client": "node tools/openapi/api-client-codegen.mjs check",
     "check:openapi": "pnpm run lint:openapi && pnpm run validate:openapi-examples && pnpm run check:api-client",
+    "validate:event-contracts": "node tools/events/validate-event-contracts.mjs",
     "check:openapi-compat": "node tools/openapi/check-openapi-compat.mjs",
     "lint": "eslint \"frontend/**/*.{ts,vue}\" \"desktop/**/*.ts\" \"packages/**/*.ts\"",
     "test:architecture": "node --test tools/architecture/workspace-boundaries.test.mjs",
@@ -26,6 +27,7 @@
     "verify:m0-08": "pnpm run verify:m0-07",
     "verify:m0-09": "node tools/verification/verify-m0-09.mjs",
     "verify:m0-10": "node tools/verification/verify-m0-10.mjs",
+    "verify:m0-11": "node tools/verification/verify-m0-11.mjs",
     "smoke:desktop": "node tools/verification/smoke-desktop.mjs"
   },
   "devDependencies": {

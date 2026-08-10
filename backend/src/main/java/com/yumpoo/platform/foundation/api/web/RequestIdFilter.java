@@ -3,6 +3,9 @@ package com.yumpoo.platform.foundation.api.web;
 import com.yumpoo.platform.foundation.api.error.ApiErrorWriter;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import com.yumpoo.platform.foundation.application.logging.StructuredLoggingContext;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -17,8 +20,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
+import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * 最先建立 requestId，并为 DispatcherServlet 之前的未提交失败提供统一安全错误体。
@@ -26,10 +29,6 @@ import java.util.regex.Pattern;
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public final class RequestIdFilter extends OncePerRequestFilter {
-
-    private static final int MAX_REQUEST_ID_LENGTH = 64;
-    private static final Pattern SAFE_REQUEST_ID =
-            Pattern.compile("^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$");
 
     private final ApiErrorWriter apiErrorWriter;
 
@@ -50,22 +49,32 @@ public final class RequestIdFilter extends OncePerRequestFilter {
 
         request.setAttribute(RequestIdContext.ATTRIBUTE_NAME, requestId);
         response.setHeader(RequestIdContext.HEADER_NAME, requestId);
-        try {
-            filterChain.doFilter(request, response);
-        } catch (ApplicationException exception) {
-            if (response.isCommitted()) {
-                throw exception;
+        RequestCorrelation correlation = RequestCorrelation.root(requestId);
+        try (
+                RequestCorrelationContext.Scope ignoredCorrelation =
+                        RequestCorrelationContext.open(correlation);
+                StructuredLoggingContext.Scope ignoredLogging = StructuredLoggingContext.open(Map.of(
+                        StructuredLoggingContext.REQUEST_ID, requestId,
+                        StructuredLoggingContext.CORRELATION_ID, requestId
+                ))
+        ) {
+            try {
+                filterChain.doFilter(request, response);
+            } catch (ApplicationException exception) {
+                if (response.isCommitted()) {
+                    throw exception;
+                }
+                resetAndWrite(response, exception, requestId);
+            } catch (Exception exception) {
+                if (response.isCommitted()) {
+                    rethrow(exception);
+                }
+                resetAndWrite(
+                        response,
+                        new ApplicationException(StandardErrorCode.INTERNAL_ERROR),
+                        requestId
+                );
             }
-            resetAndWrite(response, exception, requestId);
-        } catch (Exception exception) {
-            if (response.isCommitted()) {
-                rethrow(exception);
-            }
-            resetAndWrite(
-                    response,
-                    new ApplicationException(StandardErrorCode.INTERNAL_ERROR),
-                    requestId
-            );
         }
     }
 
@@ -103,8 +112,7 @@ public final class RequestIdFilter extends OncePerRequestFilter {
         String value = values.nextElement();
         if (values.hasMoreElements()
                 || value == null
-                || value.length() > MAX_REQUEST_ID_LENGTH
-                || !SAFE_REQUEST_ID.matcher(value).matches()) {
+                || !RequestIdContext.isValid(value)) {
             return null;
         }
         return value;

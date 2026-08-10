@@ -13,6 +13,9 @@ import com.yumpoo.platform.foundation.api.web.RequestIdFilter;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import com.yumpoo.platform.foundation.application.logging.StructuredLoggingContext;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
 import jakarta.servlet.Filter;
 import jakarta.servlet.http.HttpServlet;
@@ -21,9 +24,15 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
@@ -51,6 +60,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -63,6 +73,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = ApiContractWebMvcTest.ContractProbeController.class)
+@ExtendWith(OutputCaptureExtension.class)
 @Import({
         ApiExceptionHandler.class,
         ApiErrorWriter.class,
@@ -73,6 +84,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class ApiContractWebMvcTest {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(ApiContractWebMvcTest.class);
     private static final String API = "/api/v1/contract";
 
     @Autowired
@@ -348,6 +360,72 @@ class ApiContractWebMvcTest {
     }
 
     @Test
+    void requestFilterScopesRootCorrelationAndMdcWithoutThreadLeakage() throws Exception {
+        String requestId = "proxy.filter-correlation";
+        MockHttpServletRequest request = loopbackRequest(requestId);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicReference<RequestCorrelation> observed = new AtomicReference<>();
+        AtomicReference<Map<String, String>> observedMdc = new AtomicReference<>();
+        Filter observingFilter = (filterRequest, filterResponse, chain) -> {
+            observed.set(RequestCorrelationContext.required());
+            observedMdc.set(MDC.getCopyOfContextMap());
+        };
+
+        requestIdFilter.doFilter(
+                request,
+                response,
+                new MockFilterChain(new HttpServlet() { }, observingFilter)
+        );
+
+        assertThat(observed.get()).isEqualTo(RequestCorrelation.root(requestId));
+        assertThat(observedMdc.get())
+                .containsEntry(StructuredLoggingContext.REQUEST_ID, requestId)
+                .containsEntry(StructuredLoggingContext.CORRELATION_ID, requestId);
+        assertThat(RequestCorrelationContext.current()).isEmpty();
+        assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
+    }
+
+    @Test
+    void structuredLogIsJsonWithControlledMdcAndWithoutExceptionMessage(
+            CapturedOutput output
+    ) throws Exception {
+        IllegalStateException failure = new IllegalStateException(
+                "payload=secret-do-not-log database-password=hidden"
+        );
+        try (StructuredLoggingContext.Scope ignored = StructuredLoggingContext.open(Map.of(
+                StructuredLoggingContext.REQUEST_ID, "m011-log-request",
+                StructuredLoggingContext.CORRELATION_ID, "m011-log-request",
+                StructuredLoggingContext.EVENT_ID, "00000000-0000-4000-8000-000000000011",
+                StructuredLoggingContext.CONSUMER_NAME, "audit.m011_probe_projection",
+                StructuredLoggingContext.ATTEMPT, 2,
+                StructuredLoggingContext.OUTCOME, "RETRY",
+                StructuredLoggingContext.ERROR_CODE, "M011_RETRYABLE_FAILURE"
+        ))) {
+            LOGGER.warn(
+                    "m011 structured logging probe; exceptionType={}",
+                    failure.getClass().getName()
+            );
+        }
+
+        String logLine = output.getOut().lines()
+                .filter(line -> line.contains("m011 structured logging probe"))
+                .reduce((first, second) -> second)
+                .orElseThrow();
+        JsonNode log = objectMapper.readTree(logLine);
+        assertThat(log.get("requestId").asString()).isEqualTo("m011-log-request");
+        assertThat(log.get("correlationId").asString()).isEqualTo("m011-log-request");
+        assertThat(log.get("consumerName").asString())
+                .isEqualTo("audit.m011_probe_projection");
+        assertThat(log.get("attempt").asString()).isEqualTo("2");
+        assertThat(log.get("outcome").asString()).isEqualTo("RETRY");
+        assertThat(log.get("errorCode").asString()).isEqualTo("M011_RETRYABLE_FAILURE");
+        assertThat(logLine)
+                .doesNotContain("secret-do-not-log")
+                .doesNotContain("database-password=hidden");
+        assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
+    }
+
+    @Test
     void earlyApplicationFailureUsesTheSameSafeErrorWriter() throws Exception {
         String requestId = "proxy.filter-application";
         MockHttpServletRequest request = loopbackRequest(requestId);
@@ -398,6 +476,8 @@ class ApiContractWebMvcTest {
                 .doesNotContain("partial-secret")
                 .doesNotContain("database-password")
                 .doesNotContain("IllegalStateException");
+        assertThat(RequestCorrelationContext.current()).isEmpty();
+        assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
     }
 
     @Test
@@ -414,6 +494,8 @@ class ApiContractWebMvcTest {
         assertThatThrownBy(() -> requestIdFilter.doFilter(request, response, chain))
                 .isSameAs(failure);
         assertThat(response.isCommitted()).isTrue();
+        assertThat(RequestCorrelationContext.current()).isEmpty();
+        assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
     }
 
     @Test

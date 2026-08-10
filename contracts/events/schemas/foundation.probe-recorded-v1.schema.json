@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/foundation.probe-recorded-v1.schema.json",
+  "title": "M0-11 transactional outbox probe event",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "foundation.probe_recorded" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "M011Probe" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["probeId", "name"],
+          "properties": {
+            "probeId": { "type": "string", "format": "uuid" },
+            "name": { "type": "string", "minLength": 1, "maxLength": 120 }
+          }
+        }
+      }
+    }
+  ]
+}

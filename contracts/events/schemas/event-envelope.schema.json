@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/event-envelope.schema.json",
+  "title": "Yumpoo domain event envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "occurredAt",
+    "aggregateType",
+    "aggregateId",
+    "aggregateVersion",
+    "companyId",
+    "actor",
+    "requestId",
+    "correlationId",
+    "causationId",
+    "payload"
+  ],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "eventType": {
+      "type": "string",
+      "maxLength": 120,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "eventVersion": { "type": "integer", "minimum": 1, "maximum": 32767 },
+    "occurredAt": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "aggregateType": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": ".*\\S.*"
+    },
+    "aggregateId": { "type": "string", "format": "uuid" },
+    "aggregateVersion": { "type": "integer", "minimum": 0 },
+    "companyId": { "type": "string", "format": "uuid" },
+    "actor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "userId"],
+          "properties": {
+            "type": { "const": "USER" },
+            "userId": { "type": "string", "format": "uuid" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "systemCode"],
+          "properties": {
+            "type": { "const": "SYSTEM" },
+            "systemCode": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[A-Z][A-Z0-9_.:-]*$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "userId", "reasonReference"],
+          "properties": {
+            "type": { "const": "ADMIN_OVERRIDE" },
+            "userId": { "type": "string", "format": "uuid" },
+            "reasonReference": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160,
+              "pattern": ".*\\S.*"
+            }
+          }
+        }
+      ]
+    },
+    "requestId": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"
+    },
+    "correlationId": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"
+    },
+    "causationId": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "payload": { "type": "object" }
+  }
+}

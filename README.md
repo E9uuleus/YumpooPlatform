@@ -2,17 +2,19 @@
 
 YumpooPlatform 一期采用单部署的模块化单体后端、共享 Vue SPA，以及只加载同一在线 SPA 的 Electron 桌面壳。
 
-## M0-10 乐观锁与幂等最小闭环
+## M0-11 事件信封、事务 Outbox 与消费幂等骨架
 
 ```text
 backend/                     Spring Boot 模块化单体
 contracts/openapi/           OpenAPI 3.0.3 唯一契约与错误样例
+contracts/events/            内部事件信封 Schema、事件目录与探针样例
 frontend/web-app/            Vue 3 在线 SPA
 desktop/desktop-shell/       Electron main/preload 在线壳
 packages/api-client/         由 OpenAPI 生成的 TypeScript Fetch SDK
 packages/preload-contract/   Web 与 preload 共享的最小类型契约
 tools/architecture/          Node 工作区边界门禁
 tools/openapi/               lint、生成漂移和兼容性检查工具
+tools/events/                事件目录、Schema 与正反样例校验工具
 tools/verification/          契约生成、三端联合验证与桌面冒烟
 ```
 
@@ -22,16 +24,17 @@ tools/verification/          契约生成、三端联合验证与桌面冒烟
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm verify:m0-10
+pnpm verify:m0-11
 pnpm smoke:desktop
 ```
 
-`verify:m0-10` 先验证 OpenAPI、生成客户端及生成物漂移，再执行后端 Maven Verify，以及 Node 工作区的 Lint、类型检查、边界负向测试、单元测试和生产构建。后端 Verify 会通过 Testcontainers 启动 `postgres:17.10-alpine`，验证 Flyway V1/V2、乐观锁竞争和幂等记录闭环；Docker 不可用时直接失败，不使用 H2 或跳过真实库验收。`smoke:desktop` 在随机回环端口启动已构建的 Vue SPA，并让隐藏的 Electron 窗口完成一次真实加载后正常退出。
+`verify:m0-11` 依次校验事件目录、JSON Schema 与正反样例，验证 OpenAPI、生成客户端及生成物漂移，再执行后端 Maven Verify，以及 Node 工作区的 Lint、类型检查、边界负向测试、单元测试和生产构建。后端 Verify 会通过 Testcontainers 启动 `postgres:17.10-alpine`，验证 Flyway V1～V3、事务 Outbox 原子性、消费去重、并发领取、租约接管、顺序阻塞和失败状态；Docker 不可用时直接失败，不使用 H2 或跳过真实库验收。`smoke:desktop` 在随机回环端口启动已构建的 Vue SPA，并让隐藏的 Electron 窗口完成一次真实加载后正常退出。
 
 也可以分别验证：
 
 ```powershell
 backend\mvnw.cmd -f backend\pom.xml clean verify
+pnpm validate:event-contracts
 pnpm check:openapi
 pnpm generate:api-client
 pnpm check:api-client
@@ -63,7 +66,7 @@ pnpm dev:desktop
 - `SPRING_DATASOURCE_USERNAME`
 - `SPRING_DATASOURCE_PASSWORD`
 
-共享和生产环境还必须设置独立迁移账号的 `SPRING_FLYWAY_URL`、`SPRING_FLYWAY_USER`、`SPRING_FLYWAY_PASSWORD`。所有密码都从外部配置注入，不进入仓库。M0-10 仍不新增生产业务端点，当前仅对外提供：
+共享和生产环境还必须设置独立迁移账号的 `SPRING_FLYWAY_URL`、`SPRING_FLYWAY_USER`、`SPRING_FLYWAY_PASSWORD`。所有密码都从外部配置注入，不进入仓库。M0-11 仍不新增生产业务端点，当前仅对外提供：
 
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
@@ -78,6 +81,8 @@ pnpm dev:desktop
 
 ## 当前与后续范围
 
-M0-10 在既有 `/api/v1` 契约底座上增加 `idempotency_record` 技术表、稳定请求哈希、条件写入守卫和事务型幂等命令执行器。相同幂等键与请求可重放已完成结果，不同请求复用同一键或读取到已存在的处理中记录时返回稳定冲突；PostgreSQL 集成测试证明同一版本并发写入只有一次成功。
+M0-11 在既有幂等事务底座上增加稳定内部事件信封、`outbox_event`、`outbox_consumer_receipt` 和可配置 dispatcher。`TransactionalEventPort` 只能加入现有事务，业务失败时事实、幂等记录与事件一并回滚；HTTP 根请求的 `requestId` 同时成为 `correlationId`，消费与派生事件继续继承关联链路。内部事件契约位于 `contracts/events`，本切片只登记测试探针事件，不增加正式 HTTP 路径或 OpenAPI operation。
 
-认领、业务回调和成功结果保存位于同一事务；回调失败会同时回滚业务事实与认领记录，重试可以重新执行。表中的 `lease_until` 和 `expires_at` 仅预留为一期崩溃恢复与清理元数据；M0-10 不读取这些字段来接管、自动清理或持久化失败状态。本切片也不创建业务表、正式业务 Controller 或 OpenAPI 路径；具体聚合的资源可见性复查、Repository 条件更新和 HTTP 端点由后续业务切片接入。M0-11 才实现 requestId 向领域事件和 Outbox 的贯穿；真实认证、客户端版本策略、结构化日志、登录交接、深链、通知、升级和安装器同样不在 M0-10 范围内。完成 M0-10 仍不代表完整 M0 里程碑退出。
+worker 默认每秒轮询，批量 50、并发 2、租约 5 分钟。领取覆盖到期的 `PENDING/RETRY` 与租约过期的 `PROCESSING`，并以 owner + token 防止旧 worker 回写；低版本未完成或 `DEAD` 会阻塞同聚合高版本。每个消费者的数据库效果与 receipt 在独立事务中提交，多消费者重试会跳过已完成者；五档退避后第六次失败进入 `DEAD`。控制台使用 Spring Boot 内建 Logstash JSON 日志，并在请求和消费边界写入受控关联字段。
+
+正式 Security Audit、Activity 投影、通知投递、人工重排、监控告警、Outbox 清理和管理页面仍留给后续切片。本切片不创建正式业务表或 Controller；完成 M0-11 也不代表完整 M0 里程碑退出。
