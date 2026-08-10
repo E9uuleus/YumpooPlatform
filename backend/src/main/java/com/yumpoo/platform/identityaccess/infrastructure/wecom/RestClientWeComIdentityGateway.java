@@ -12,9 +12,6 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.time.Clock;
-import java.time.DateTimeException;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -24,9 +21,7 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
 
     private static final String API_BASE_URL = "https://qyapi.weixin.qq.com";
     private static final String AUTHORIZE_ENDPOINT = "https://open.weixin.qq.com/connect/oauth2/authorize";
-    private static final String GET_TOKEN_PATH = "/cgi-bin/gettoken";
     private static final String GET_USER_INFO_PATH = "/cgi-bin/auth/getuserinfo";
-    private static final Duration TOKEN_REFRESH_SKEW = Duration.ofSeconds(60);
     private static final Set<Long> INVALID_AUTHORIZATION_CODE_ERRORS = Set.of(
             40029L,
             40163L,
@@ -40,9 +35,7 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
 
     private final RestClient restClient;
     private final M012WeComProperties properties;
-    private final Clock clock;
-    private final Object tokenMonitor = new Object();
-    private volatile CachedAccessToken cachedAccessToken;
+    private final WeComAccessTokenProvider accessTokenProvider;
 
     RestClientWeComIdentityGateway(
             RestClient.Builder restClientBuilder,
@@ -54,7 +47,12 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
                 .defaultHeader("Accept", MediaType.APPLICATION_JSON_VALUE)
                 .build();
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
-        this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.accessTokenProvider = new WeComAccessTokenProvider(
+                restClient,
+                properties.getCorpId(),
+                properties.getAppSecret(),
+                Objects.requireNonNull(clock, "clock must not be null")
+        );
     }
 
     @Override
@@ -126,56 +124,15 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
     }
 
     private String currentAccessToken() {
-        Instant now = clock.instant();
-        CachedAccessToken current = cachedAccessToken;
-        if (isFresh(current, now)) {
-            return current.value();
-        }
-
-        synchronized (tokenMonitor) {
-            now = clock.instant();
-            current = cachedAccessToken;
-            if (isFresh(current, now)) {
-                return current.value();
-            }
-            CachedAccessToken fetched = fetchAccessToken(now);
-            cachedAccessToken = fetched;
-            return fetched.value();
-        }
-    }
-
-    private CachedAccessToken fetchAccessToken(Instant fetchedAt) {
-        Map<String, Object> response = getJson(uriBuilder -> uriBuilder
-                .path(GET_TOKEN_PATH)
-                .queryParam("corpid", properties.getCorpId())
-                .queryParam("corpsecret", properties.getAppSecret())
-                .build());
-
-        if (errorCode(response) != 0) {
-            throw new WeComDependencyUnavailableException();
-        }
-
-        String value = optionalString(response, "access_token");
-        Long expiresInSeconds = optionalLong(response, "expires_in");
-        if (value == null || expiresInSeconds == null || expiresInSeconds <= 0) {
-            throw new WeComDependencyUnavailableException();
-        }
-
         try {
-            Instant refreshAt = fetchedAt.plusSeconds(expiresInSeconds).minus(TOKEN_REFRESH_SKEW);
-            return new CachedAccessToken(value, refreshAt);
-        } catch (ArithmeticException | DateTimeException exception) {
+            return accessTokenProvider.currentAccessToken();
+        } catch (WeComAccessTokenProvider.AccessTokenException exception) {
             throw new WeComDependencyUnavailableException();
         }
     }
 
     private void invalidateCachedAccessToken(String rejectedValue) {
-        synchronized (tokenMonitor) {
-            CachedAccessToken current = cachedAccessToken;
-            if (current != null && current.value().equals(rejectedValue)) {
-                cachedAccessToken = null;
-            }
-        }
+        accessTokenProvider.invalidate(rejectedValue);
     }
 
     private Map<String, Object> getJson(Function<org.springframework.web.util.UriBuilder, URI> uriFunction) {
@@ -195,10 +152,6 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
             // RestClient 异常可能含带 Secret/token/code 的请求 URI，禁止作为 cause 向上泄露。
             throw new WeComDependencyUnavailableException();
         }
-    }
-
-    private static boolean isFresh(CachedAccessToken token, Instant now) {
-        return token != null && now.isBefore(token.refreshAt());
     }
 
     private static long errorCode(Map<String, Object> response) {
@@ -232,8 +185,5 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
             }
         }
         return null;
-    }
-
-    private record CachedAccessToken(String value, Instant refreshAt) {
     }
 }

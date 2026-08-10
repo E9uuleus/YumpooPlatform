@@ -1,6 +1,6 @@
 # Yumpoo Server
 
-YumpooPlatform 一期 M0-12 的 Spring 后端、数据库、内部事件契约与企微 OAuth 验证骨架。当前产物是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重和默认关闭的企微诊断流程，但不包含正式登录业务功能。
+YumpooPlatform 一期 M0-13 的 Spring 后端、数据库、内部事件契约与企微 OAuth/通讯录验证骨架。当前产物是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重和默认关闭的企微诊断流程，但不包含正式登录或通讯录同步业务功能。
 
 ## 环境
 
@@ -17,7 +17,7 @@ YumpooPlatform 一期 M0-12 的 Spring 后端、数据库、内部事件契约�
 .\mvnw.cmd clean verify
 ```
 
-`clean verify` 会在 Failsafe 阶段运行 PostgreSQL 17.10 集成测试，验证空库迁移、重复校验、checksum 变化拒绝、UTF-8、UTC、健康探针、幂等事务、Outbox 以及 OAuth attempt 的过期、原子消费和重放拒绝行为。
+`clean verify` 会在 Failsafe 阶段运行 PostgreSQL 17.10 集成测试，验证空库迁移、重复校验、checksum 变化拒绝、UTF-8、UTC、健康探针、幂等事务、Outbox、OAuth attempt 的过期/原子消费/重放拒绝，以及 M0-13 通讯录分页、失败保护和幂等对账探针。
 
 ## 数据库配置与运行
 
@@ -63,6 +63,24 @@ callback URI 必须是固定、不带 query 的 HTTPS 地址；证据 HMAC 密�
 
 在 HTTPS 反向代理和后端均运行后，从仓库根目录执行 `pnpm verify:m0-12:live`。脚本先执行配置预检和四类统一 401 负向检查，再在不回显输入的情况下验证同一成员的两份 HMAC 签名成功收据。完整步骤、可选 `YUMPOO_M012_LIVE_BASE_URL` 和证据约束见仓库根 README。真实企业验证没有执行时，`evidence/m0-12/live-verification.json` 必须保持 `NOT_RUN`，不得手工改成 `PASS`。
 
+## M0-13 企微通讯录诊断流程
+
+M0-13 live runner 不是常驻 Controller，也不增加 HTTP 路径。运行前必须同时提供以下五个环境变量；profile 与 enabled 是双重门禁：
+
+- `SPRING_PROFILES_ACTIVE`（包含 `m0-13-live`）
+- `YUMPOO_M013_WECOM_ENABLED=true`
+- `YUMPOO_M013_WECOM_CORP_ID`
+- `YUMPOO_M013_WECOM_DIRECTORY_SECRET`
+- `YUMPOO_M013_EVIDENCE_HMAC_KEY`
+
+通讯录 Secret 只用于从 Java 直连企微时的可信出口 IP 访问；`HTTP_PROXY/HTTPS_PROXY` 环境变量不会自动改变本 live harness 的 Java 出口。证据 HMAC 密钥至少包含 32 个 UTF-8 字节和 8 种 Unicode code point，不得包含常见占位标记，也不得与该 Secret 相同。五项都只能从受控外部环境注入，测试、日志和 Maven 输出不得回显其值。
+
+从仓库根目录执行 `pnpm verify:m0-13:live`。Node runner 清理旧收据后，只运行 Maven 类 `M013WeComDirectoryLiveVerification`。Java 在任何 probe 对账前完成两次 `limit=1` 窄页扫描和一次 `limit=10000` 宽页扫描；两次窄页必须观察真实非空游标，三次必须以供应商省略终止游标结束，并得到完全一致的企业、快照和成员 HMAC。只有 test-only `M013OmittedCursorConfirmation` 能在这些条件同时成立时确认候选快照，主 collector 仍保持严格失败。全部安全场景通过后 Java 写入 `target/m0-13-live-receipt.json`；收据签名必须把 UTF-8 `receipt\0` 置于 canonical 正文之前，与 corp/member/snapshot 指纹执行域分离。Node 验签后才原子更新 `evidence/m0-13/live-verification.json`，并在 `finally` 删除收据。验证失败不会改写已有证据。当前 M0-12 证据状态只作为 `m012DependencyStatus` 记录，不作为 M0-13 live runner 的通过前提。
+
+收据和最终证据都禁止出现人数、页数、游标、原始企微成员 ID、个人资料、Secret、token 或完整企微响应。`providerPaginationObserved` 与 `providerTerminalCursorOmissionConfirmed` 分别记录真实分页和终止字段省略已完成交叉确认；人工诊断输出的通讯录或 userid 不进入仓库。正式 Company、User、ExternalIdentity、DirectorySyncRun、管理 API、调度和会话撤销仍属于 M1，不在本诊断流程中创建。
+
+通讯录读取的冻结外部契约为 `POST /cgi-bin/user/list_id`：`limit` 范围 1～10000，官方以空 `next_cursor` 表示结束；真实企业调用则观察到分页中的游标非空、终止页省略该字段。网关保留省略游标页的成员，主 `DirectorySnapshotCollector` 仍返回 `Incomplete(MISSING_CURSOR)`，仅 live 的三快照交叉确认可继续测试探针对账，不能直接成为 M1 生产同步语义。该接口只接受通讯录同步 Secret，且只返回成员 ID、不读取成员资料。`/cgi-bin/gettoken` 正常 token 生命周期为 7200 秒，适配器必须缓存并提前刷新。`-1`、`45009` 归为可退避重试；`40001`、`48002`、`60020` 归为凭据、权限或可信 IP 配置失败；`40014`、`42001` 只触发一次 token 缓存失效、刷新和重试。上述限制由 `externalLimitsRecorded` 检查锁定，最终证据不保存任何运行时数量或供应商正文。
+
 默认仅监听 `127.0.0.1:8080`。需要修改端口时设置 `YUMPOO_SERVER_PORT`：
 
 ```powershell
@@ -81,7 +99,7 @@ java -jar .\target\yumpoo-server.jar
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
 
-M0-12 不增加生产探针、正式业务 Controller 或 OpenAPI path；双门禁诊断路由只用于真实企微验证。`/api/v1` 的统一错误、分页、条件头和客户端头以仓库根目录 `contracts/openapi/yumpoo-v1.yaml` 为唯一 HTTP 契约；内部事件信封、目录、payload Schema 和样例位于 `contracts/events`。
+M0-12 与 M0-13 不增加生产探针、正式业务 Controller 或 OpenAPI path；双门禁诊断能力只用于真实企微验证。`/api/v1` 的统一错误、分页、条件头和客户端头以仓库根目录 `contracts/openapi/yumpoo-v1.yaml` 为唯一 HTTP 契约；内部事件信封、目录、payload Schema 和样例位于 `contracts/events`。
 
 ## 模块
 
@@ -115,4 +133,4 @@ ArchUnit 在 `verify` 阶段检查模块允许依赖图、循环依赖、层级�
 
 ## 当前边界
 
-本切片在 foundation 的事件/Outbox/消费骨架上增加 OAuth attempt 技术表、企微适配器和默认关闭的诊断 Controller，但不创建正式业务表、User、ExternalIdentity、LoginSession、Security Audit 或 Activity 投影。控制台结构化日志只记录受控关联字段；payload、异常原文、请求体、原始身份、授权 code、token 与 Secret 不进入持久化失败信息、证据或日志。正式身份绑定和会话、业务事件、通知投递、人工重排、指标告警、数据清理、日志轮转和管理页面均由后续切片实现。
+本切片在 foundation 的事件/Outbox/消费骨架上增加 OAuth attempt 技术表、企微身份与通讯录适配器，以及默认关闭的诊断 Controller/live runner，但不创建正式业务表、User、ExternalIdentity、DirectorySyncRun、LoginSession、Security Audit 或 Activity 投影。控制台结构化日志只记录受控关联字段；payload、异常原文、请求体、原始身份、成员清单、授权 code、token 与 Secret 不进入持久化失败信息、证据或日志。正式身份绑定和会话、同步批次、业务事件、通知投递、人工重排、指标告警、数据清理、日志轮转和管理页面均由后续切片实现。

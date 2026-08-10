@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-13",
+  "status": "NOT_RUN",
+  "verifiedAt": null,
+  "corpFingerprint": null,
+  "snapshotFingerprint": null,
+  "m012DependencyStatus": "NOT_RUN",
+  "checks": {
+    "configurationPreflight": false,
+    "realDirectoryRead": false,
+    "providerPaginationObserved": false,
+    "providerTerminalCursorOmissionConfirmed": false,
+    "rerunIdempotent": false,
+    "pageFailureSafe": false,
+    "itemFailurePartialSafe": false,
+    "syntheticDepartureDetected": false,
+    "syntheticReturnReused": false,
+    "secretsRedacted": false,
+    "externalLimitsRecorded": false,
+    "signedReceiptVerified": false
+  }
+}
