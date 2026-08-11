@@ -130,6 +130,56 @@ test('preload 拦截 main、Node、namespace Electron 与原始 ipcRenderer', as
   )
 })
 
+test('preload 入口仅允许固定认证 IPC 包装', async () => {
+  const file = 'desktop/desktop-shell/src/preload/index.ts'
+  assert.equal(
+    (
+      await boundaryMessages(
+        file,
+        "import { contextBridge, ipcRenderer } from 'electron'\n" +
+          "void ipcRenderer.invoke('yumpoo:auth:start')\n" +
+          "void ipcRenderer.on('yumpoo:auth:status', () => undefined)\n" +
+          "void ipcRenderer.removeListener('yumpoo:auth:status', () => undefined)\n" +
+          'void contextBridge\n',
+      )
+    ).length,
+    0,
+  )
+  assert.equal(
+    (
+      await boundaryMessages(
+        file,
+        "import { contextBridge, ipcRenderer } from 'electron'\n" +
+          "void ipcRenderer.send('yumpoo:auth:start')\n" +
+          'void contextBridge\n',
+      )
+    ).length,
+    1,
+  )
+  assert.equal(
+    (
+      await boundaryMessages(
+        file,
+        "import { contextBridge, ipcRenderer } from 'electron'\n" +
+          "const channel = 'yumpoo:auth:start'\n" +
+          'void ipcRenderer.invoke(channel)\n' +
+          'void contextBridge\n',
+      )
+    ).length,
+    1,
+  )
+  assert.equal(
+    (
+      await boundaryMessages(
+        file,
+        "import { contextBridge, ipcRenderer } from 'electron'\n" +
+          "contextBridge.exposeInMainWorld('raw', ipcRenderer)\n",
+      )
+    ).length,
+    1,
+  )
+})
+
 test('Electron main 不得直接依赖 API client', async () => {
   const messages = await boundaryMessages(
     'desktop/desktop-shell/src/main/illegal.ts',

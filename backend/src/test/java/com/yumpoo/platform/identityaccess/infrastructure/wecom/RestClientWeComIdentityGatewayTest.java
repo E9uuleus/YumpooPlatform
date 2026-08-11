@@ -36,6 +36,21 @@ class RestClientWeComIdentityGatewayTest {
     private static final Instant INITIAL_TIME = Instant.parse("2026-08-10T01:00:00Z");
 
     @Test
+    void clientSettingsNeverExposeAppSecretInToString() {
+        WeComOAuthClientSettings settings = new WeComOAuthClientSettings(
+                CORP_ID,
+                AGENT_ID,
+                APP_SECRET,
+                URI.create("https://login.example.test/_m0/m0-12/wecom/callback")
+        );
+
+        assertThat(settings.toString())
+                .contains("appSecret=REDACTED")
+                .doesNotContain(APP_SECRET)
+                .doesNotContain(CORP_ID);
+    }
+
+    @Test
     void buildsOfficialSnsapiBaseAuthorizationUriWithFixedCallback() {
         GatewayFixture fixture = fixture(new MutableClock(INITIAL_TIME));
 

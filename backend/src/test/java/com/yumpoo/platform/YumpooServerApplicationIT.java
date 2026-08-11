@@ -86,6 +86,17 @@ class YumpooServerApplicationIT {
     }
 
     @Test
+    void m015DesktopAuthProbeRoutesAreAbsentWithoutTheExplicitLiveProfile() throws Exception {
+        HttpResponse<String> authorize = get("/_m0/m0-15/electron/auth/authorize");
+        HttpResponse<String> callback = get("/_m0/m0-15/wecom/callback");
+        HttpResponse<String> exchange = get("/_m0/m0-15/electron/auth/exchange");
+
+        assertThat(authorize.statusCode()).isEqualTo(404);
+        assertThat(callback.statusCode()).isEqualTo(404);
+        assertThat(exchange.statusCode()).isEqualTo(404);
+    }
+
+    @Test
     void databaseUsesThePostgresql17Utf8UtcBaseline() throws IOException, InterruptedException {
         String version = jdbcTemplate.queryForObject("SHOW server_version", String.class);
         String versionNumber = jdbcTemplate.queryForObject("SHOW server_version_num", String.class);
@@ -167,15 +178,34 @@ class YumpooServerApplicationIT {
                         + "AND tablename = 'wecom_oauth_attempt'",
                 String.class
         );
+        List<String> desktopAttemptConstraintNames = jdbcTemplate.queryForList(
+                "SELECT constraint_record.conname "
+                        + "FROM pg_constraint constraint_record "
+                        + "JOIN pg_class table_record "
+                        + "ON table_record.oid = constraint_record.conrelid "
+                        + "JOIN pg_namespace schema_record "
+                        + "ON schema_record.oid = table_record.relnamespace "
+                        + "WHERE schema_record.nspname = 'yumpoo' "
+                        + "AND table_record.relname = 'desktop_auth_attempt' "
+                        + "AND constraint_record.contype <> 'n'",
+                String.class
+        );
+        List<String> desktopAttemptIndexNames = jdbcTemplate.queryForList(
+                "SELECT indexname FROM pg_indexes "
+                        + "WHERE schemaname = 'yumpoo' "
+                        + "AND tablename = 'desktop_auth_attempt'",
+                String.class
+        );
 
         assertThat(configuration.getDefaultSchema()).isEqualTo(PLATFORM_SCHEMA);
         assertThat(configuration.getSchemas()).containsExactly(PLATFORM_SCHEMA);
         assertThat(configuration.isValidateOnMigrate()).isTrue();
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
-        assertThat(successfulMigrationVersions).containsExactly("1", "2", "3", "4");
+        assertThat(successfulMigrationVersions).containsExactly("1", "2", "3", "4", "5");
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
+                "desktop_auth_attempt",
                 "idempotency_record",
                 "outbox_consumer_receipt",
                 "outbox_event",
@@ -224,6 +254,29 @@ class YumpooServerApplicationIT {
                 "wecom_oauth_attempt_pkey",
                 "uq_wecom_oauth_attempt_nonce_hash",
                 "idx_wecom_oauth_attempt_expires_at"
+        );
+        assertThat(desktopAttemptConstraintNames).containsExactlyInAnyOrder(
+                "desktop_auth_attempt_pkey",
+                "uq_desktop_auth_attempt_oauth_state_hash",
+                "uq_desktop_auth_attempt_handoff_code_hash",
+                "ck_desktop_auth_attempt_desktop_state_hash",
+                "ck_desktop_auth_attempt_oauth_state_hash",
+                "ck_desktop_auth_attempt_pkce_s256_challenge",
+                "ck_desktop_auth_attempt_request_id",
+                "ck_desktop_auth_attempt_authorize_window",
+                "ck_desktop_auth_attempt_handoff_code_hash",
+                "ck_desktop_auth_attempt_corp_fingerprint",
+                "ck_desktop_auth_attempt_member_fingerprint",
+                "ck_desktop_auth_attempt_handoff_lifecycle",
+                "ck_desktop_auth_attempt_handoff_window",
+                "ck_desktop_auth_attempt_consumed_at"
+        );
+        assertThat(desktopAttemptIndexNames).containsExactlyInAnyOrder(
+                "desktop_auth_attempt_pkey",
+                "uq_desktop_auth_attempt_oauth_state_hash",
+                "uq_desktop_auth_attempt_handoff_code_hash",
+                "idx_desktop_auth_attempt_authorize_expires_at",
+                "idx_desktop_auth_attempt_handoff_expires_at"
         );
     }
 

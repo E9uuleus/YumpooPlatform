@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-15",
+  "status": "NOT_RUN",
+  "verifiedAt": null,
+  "operatingSystem": null,
+  "architecture": null,
+  "electronVersion": null,
+  "protocolCallback": null,
+  "buildManifestSha256": null,
+  "checks": {
+    "configurationPreflight": false,
+    "windowsX64Verified": false,
+    "packagedAppLaunched": false,
+    "buildManifestVerified": false,
+    "productionHttpsOriginVerified": false,
+    "sharedRemoteSpaVerified": false,
+    "systemBrowserWeComLoginVerified": false,
+    "customProtocolCallbackVerified": false,
+    "handoffSingleUseVerified": false,
+    "handoffExpiryVerified": false,
+    "stateBindingVerified": false,
+    "pkceBindingVerified": false,
+    "rendererIsolationVerified": false,
+    "navigationPolicyVerified": false,
+    "dangerousIpcRejected": false,
+    "sensitiveDataRedacted": false,
+    "signedReceiptVerified": false
+  }
+}

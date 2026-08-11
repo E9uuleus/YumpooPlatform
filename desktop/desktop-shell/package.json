@@ -1,5 +1,6 @@
 {
   "name": "@yumpoo/desktop-shell",
+  "productName": "Yumpoo Desktop",
   "version": "0.0.0",
   "private": true,
   "type": "commonjs",
@@ -12,9 +13,11 @@
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "package:win": "pnpm run build && node package-m0-15.cjs"
   },
   "devDependencies": {
+    "@electron/asar": "4.2.1",
     "@types/node": "24.13.3",
     "@yumpoo/preload-contract": "workspace:*",
     "electron": "43.3.0",
