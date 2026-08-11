@@ -44,6 +44,9 @@ importers:
 
   desktop/desktop-shell:
     devDependencies:
+      '@electron/asar':
+        specifier: 4.2.1
+        version: 4.2.1
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -144,6 +147,11 @@ packages:
   '@electron-internal/extract-zip@1.0.5':
     resolution: {integrity: sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==}
     engines: {node: '>=22.12.0'}
+
+  '@electron/asar@4.2.1':
+    resolution: {integrity: sha512-rGyEe7iy52zxiWuihV/h/AqQrFkx7YnUUJKW1bdufVDHCzIMP/XDrDI/NOzv/LLtzt3NduAzNa475WRmRnmswQ==}
+    engines: {node: '>=22.12.0'}
+    hasBin: true
 
   '@electron/get@5.1.0':
     resolution: {integrity: sha512-3kSBtG8ObcTVfXanm5vVJ6UnBLEVmVsRk1M+vGqCuMBV+XLCbJYuWQful+yIy0GQDsSlK0kHEriEHn7SPk4EnA==}
@@ -1879,6 +1887,11 @@ snapshots:
   '@ctrl/tinycolor@4.2.0': {}
 
   '@electron-internal/extract-zip@1.0.5': {}
+
+  '@electron/asar@4.2.1':
+    dependencies:
+      glob: 13.0.6
+      minimatch: 10.2.6
 
   '@electron/get@5.1.0(supports-color@10.2.2)':
     dependencies:

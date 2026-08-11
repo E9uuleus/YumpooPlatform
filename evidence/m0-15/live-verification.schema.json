@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/evidence/m0-15/live-verification.schema.json",
+  "title": "M0-15 Electron browser handoff and secure shell live evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "milestone",
+    "status",
+    "verifiedAt",
+    "operatingSystem",
+    "architecture",
+    "electronVersion",
+    "protocolCallback",
+    "buildManifestSha256",
+    "checks"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "milestone": { "const": "M0-15" },
+    "status": { "enum": ["NOT_RUN", "PASS"] },
+    "verifiedAt": { "type": ["string", "null"], "format": "date-time" },
+    "operatingSystem": { "enum": [null, "WINDOWS"] },
+    "architecture": { "enum": [null, "x64"] },
+    "electronVersion": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "protocolCallback": { "enum": [null, "yumpoo://auth/callback"] },
+    "buildManifestSha256": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configurationPreflight",
+        "windowsX64Verified",
+        "packagedAppLaunched",
+        "buildManifestVerified",
+        "productionHttpsOriginVerified",
+        "sharedRemoteSpaVerified",
+        "systemBrowserWeComLoginVerified",
+        "customProtocolCallbackVerified",
+        "handoffSingleUseVerified",
+        "handoffExpiryVerified",
+        "stateBindingVerified",
+        "pkceBindingVerified",
+        "rendererIsolationVerified",
+        "navigationPolicyVerified",
+        "dangerousIpcRejected",
+        "sensitiveDataRedacted",
+        "signedReceiptVerified"
+      ],
+      "properties": {
+        "configurationPreflight": { "type": "boolean" },
+        "windowsX64Verified": { "type": "boolean" },
+        "packagedAppLaunched": { "type": "boolean" },
+        "buildManifestVerified": { "type": "boolean" },
+        "productionHttpsOriginVerified": { "type": "boolean" },
+        "sharedRemoteSpaVerified": { "type": "boolean" },
+        "systemBrowserWeComLoginVerified": { "type": "boolean" },
+        "customProtocolCallbackVerified": { "type": "boolean" },
+        "handoffSingleUseVerified": { "type": "boolean" },
+        "handoffExpiryVerified": { "type": "boolean" },
+        "stateBindingVerified": { "type": "boolean" },
+        "pkceBindingVerified": { "type": "boolean" },
+        "rendererIsolationVerified": { "type": "boolean" },
+        "navigationPolicyVerified": { "type": "boolean" },
+        "dangerousIpcRejected": { "type": "boolean" },
+        "sensitiveDataRedacted": { "type": "boolean" },
+        "signedReceiptVerified": { "type": "boolean" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "NOT_RUN" } } },
+      "then": {
+        "properties": {
+          "verifiedAt": { "type": "null" },
+          "operatingSystem": { "type": "null" },
+          "architecture": { "type": "null" },
+          "electronVersion": { "type": "null" },
+          "protocolCallback": { "type": "null" },
+          "buildManifestSha256": { "type": "null" },
+          "checks": {
+            "properties": {
+              "configurationPreflight": { "const": false },
+              "windowsX64Verified": { "const": false },
+              "packagedAppLaunched": { "const": false },
+              "buildManifestVerified": { "const": false },
+              "productionHttpsOriginVerified": { "const": false },
+              "sharedRemoteSpaVerified": { "const": false },
+              "systemBrowserWeComLoginVerified": { "const": false },
+              "customProtocolCallbackVerified": { "const": false },
+              "handoffSingleUseVerified": { "const": false },
+              "handoffExpiryVerified": { "const": false },
+              "stateBindingVerified": { "const": false },
+              "pkceBindingVerified": { "const": false },
+              "rendererIsolationVerified": { "const": false },
+              "navigationPolicyVerified": { "const": false },
+              "dangerousIpcRejected": { "const": false },
+              "sensitiveDataRedacted": { "const": false },
+              "signedReceiptVerified": { "const": false }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "verifiedAt": { "type": "string", "format": "date-time" },
+          "operatingSystem": { "const": "WINDOWS" },
+          "architecture": { "const": "x64" },
+          "electronVersion": {
+            "type": "string",
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+          },
+          "protocolCallback": { "const": "yumpoo://auth/callback" },
+          "buildManifestSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "checks": {
+            "properties": {
+              "configurationPreflight": { "const": true },
+              "windowsX64Verified": { "const": true },
+              "packagedAppLaunched": { "const": true },
+              "buildManifestVerified": { "const": true },
+              "productionHttpsOriginVerified": { "const": true },
+              "sharedRemoteSpaVerified": { "const": true },
+              "systemBrowserWeComLoginVerified": { "const": true },
+              "customProtocolCallbackVerified": { "const": true },
+              "handoffSingleUseVerified": { "const": true },
+              "handoffExpiryVerified": { "const": true },
+              "stateBindingVerified": { "const": true },
+              "pkceBindingVerified": { "const": true },
+              "rendererIsolationVerified": { "const": true },
+              "navigationPolicyVerified": { "const": true },
+              "dangerousIpcRejected": { "const": true },
+              "sensitiveDataRedacted": { "const": true },
+              "signedReceiptVerified": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

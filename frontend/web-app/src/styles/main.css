@@ -72,3 +72,26 @@ body {
   justify-content: space-between;
   font-weight: 600;
 }
+
+.desktop-auth-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid #b8c8d8;
+  border-radius: 4px;
+  background: #f7fafc;
+}
+
+.desktop-auth-panel p {
+  margin: 6px 0 0;
+}
+
+@media (max-width: 640px) {
+  .desktop-auth-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -1,5 +1,21 @@
 # Yumpoo Server
 
+## M0-15 Electron 登录交接诊断 PoC
+
+M0-15 在 M0-12 企微身份网关之上增加可复用的 desktop state/PKCE/handoff 技术闭环，但不创建正式用户或桌面会话。诊断 Controller 采用双重门禁：profile 必须包含 `m0-15-live`，且 `YUMPOO_M015_WECOM_ENABLED=true`；默认启动时三条路径均不注册：
+
+- `GET /_m0/m0-15/electron/auth/authorize`
+- `GET /_m0/m0-15/wecom/callback`
+- `POST /_m0/m0-15/electron/auth/exchange`
+
+启动真实诊断后端前，从外部注入 `YUMPOO_M015_WECOM_CORP_ID`、`YUMPOO_M015_WECOM_AGENT_ID`、`YUMPOO_M015_WECOM_APP_SECRET`、`YUMPOO_M015_WECOM_CALLBACK_URI`、`YUMPOO_M015_WECOM_ALLOWED_MEMBER_IDS` 和独立的 `YUMPOO_M015_EVIDENCE_HMAC_KEY`。callback 必须是同源 HTTPS 的 `/_m0/m0-15/wecom/callback` 且不带 query/fragment；证据密钥至少 32 个 UTF-8 字节和 8 种字符，不能包含常见占位值或复用企微 Secret。
+
+authorize 只接受随机 `state`、PKCE `codeChallenge` 与 `S256`，通过 Secure/HttpOnly/SameSite=Lax Cookie 绑定 OAuth nonce 和 desktop state。callback 成功后只向 `yumpoo://auth/callback` 发送短时 opaque code 与原 state；exchange 的 JSON 仅为 `code`、`state`、`codeVerifier`。明文 state、verifier、handoff code、企微身份和 Secret 不进入持久化或日志，handoff 采用哈希和条件更新原子消费，重复、过期、state/PKCE 不匹配均失败关闭。
+
+exchange 成功只返回一次短期 HMAC 收据；其中 requestId、企业/成员指纹和签名仅用于 live runner 即时验签，随后删除，不写入最终 M0-15 证据。正式 `/api/v1/electron/auth/attempts`、`/exchange`、logout、User/ExternalIdentity/LoginSession、账号状态编排和 Windows 凭据仍属于 M1/M4。
+
+从仓库根目录运行 `pnpm verify:m0-15`，完成证据校验、Windows x64 壳打包/内容扫描并串联 `verify:m0-14`。真实企微、HTTPS、packaged app 与协议唤起均就绪后，按根 README 注入短期收据和 manifest 路径，再运行 `pnpm verify:m0-15:live`。当前 live runner 只提供安全 preflight 和收据验证入口，不模拟企微或代签桌面结果；缺少自动串联、任何门禁或安全输入都会失败，`evidence/m0-15/live-verification.json` 保持 `NOT_RUN`。
+
 ## M0-14 file-security PoC
 
 `filestorage` 现包含固定 64 KiB 缓冲的隔离接收、100 MiB 精确上限、SHA-256 内容寻址、Tika 类型识别、ZIP/OOXML 判别、扫描端口、Defender 适配器和同卷原子发布。它们是后续正式附件功能可复用的技术核心；当前没有生产 Attachment 表、Controller 或正式 OpenAPI operation。

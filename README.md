@@ -1,5 +1,48 @@
 # YumpooPlatform
 
+## M0-15 Electron 浏览器登录交接与安全壳验证
+
+M0-15 严格验证 Electron 复用唯一远程 SPA、系统浏览器企微登录、PKCE、一次性 handoff、自定义协议回调和最小安全壳，不提前交付 M4 的正式桌面会话。后端诊断能力默认不存在；只有 profile 列表包含 `m0-15-live` 且 `YUMPOO_M015_WECOM_ENABLED` 严格等于 `true` 时才注册以下非 OpenAPI 路径：
+
+- `GET /_m0/m0-15/electron/auth/authorize`，接收 `state`、`codeChallenge` 和固定的 `codeChallengeMethod=S256`。
+- `GET /_m0/m0-15/wecom/callback`，完成企微成员检查后跳转 `yumpoo://auth/callback`。
+- `POST /_m0/m0-15/electron/auth/exchange`，只接收 `code`、`state`、`codeVerifier` 并返回短期 HMAC 签名的脱敏收据。
+
+真实后端从受控外部环境读取以下配置；不得把真实值写入仓库、日志、命令输出或工单：
+
+- `YUMPOO_M015_WECOM_CORP_ID`
+- `YUMPOO_M015_WECOM_AGENT_ID`
+- `YUMPOO_M015_WECOM_APP_SECRET`
+- `YUMPOO_M015_WECOM_CALLBACK_URI`（固定、不带 query/fragment 的同源 HTTPS callback）
+- `YUMPOO_M015_WECOM_ALLOWED_MEMBER_IDS`
+- `YUMPOO_M015_EVIDENCE_HMAC_KEY`（至少 32 个 UTF-8 字节、至少 8 种字符，独立于企微 Secret）
+- `YUMPOO_WEB_URL`（packaged app 加载的唯一公司 HTTPS SPA）
+
+自动门禁从仓库根目录运行：
+
+```powershell
+pnpm verify:m0-15
+```
+
+该命令先严格校验 `evidence/m0-15` 的 Schema、示例和当前证据，再调用 `package:m0-15:win` 生成 Windows x64 packaged app、扫描 ASAR 白名单，并为可运行目录中的每个文件生成和复核 SHA-256 manifest，最后串联最新的 `verify:m0-14`；不会从 M0-12 重复建立另一条回归链。普通实现和 PR 允许 `live-verification.json` 保持 `NOT_RUN`。
+
+真实验证只接受一次真实系统浏览器企微登录、公司 HTTPS SPA、packaged app 和 `yumpoo://auth/callback` 共同产生的短期收据。除上述后端变量外，还须由受控 live harness 提供：
+
+- `YUMPOO_M015_LIVE_BASE_URL`（与 callback、`YUMPOO_WEB_URL` 同源的 HTTPS origin）
+- `YUMPOO_M015_AUTH_RECEIPT_PATH`（本次 exchange 原始响应的短期文件）
+- `YUMPOO_M015_DESKTOP_RECEIPT_PATH`（绑定本次认证收据与构建 manifest 的 HMAC 桌面收据）
+- `YUMPOO_M015_BUILD_MANIFEST_PATH`（本次 packaged app 的 manifest）
+
+上述路径必须是绝对路径。证据 HMAC 密钥只进入受控后端/live harness，绝不传入 Electron 应用。准备完成后运行：
+
+```powershell
+pnpm verify:m0-15:live
+```
+
+当前 live runner 是安全 preflight 与收据验证入口，不模拟企微登录、不代签桌面收据。它只在 Windows x64、双门禁、同源 HTTPS、近期后端签名认证收据、近期域分离桌面收据和实际 manifest 摘要全部匹配时，才原子更新证据为 `PASS`；失败时不改原证据，并始终删除两份短期收据。最终证据只保存 Windows/架构、Electron 版本、固定协议回调、manifest SHA-256 和布尔检查，不保存 code、state、verifier、身份指纹、requestId、签名、路径、Cookie、token 或 Secret。自动 live harness 尚未串联或真实流程未执行时必须保持 `NOT_RUN`，不得手工改成 `PASS`。
+
+本切片不发布正式 `/api/v1/electron/auth/*`、不创建 User、ExternalIdentity、LoginSession 或可续期桌面凭据，也不实现 Windows 凭据存储、通知流、托盘业务、版本阻断、安装器、自动更新或离线业务能力；这些仍属于 M1/M4 或 M0 后续退出验证。
+
 ## M0-14 安全附件工程验证
 
 M0-14 冻结的是可复用的文件安全技术核心，不是正式附件业务功能。生产代码提供固定缓冲流式接收、100 MiB（`104857600` bytes）硬上限、增量 SHA-256、文件名净化、Apache Tika 内容识别、ZIP/OOXML 区分、恶意内容扫描端口、Microsoft Defender `MpCmdRun` 适配器，以及隔离区到同卷内容寻址目录的 `ATOMIC_MOVE`。只有服务端识别类型与扩展名、声明 MIME 一致且扫描结果明确为 `CLEAN` 时，内容才可转为 `AVAILABLE`；超限、类型不符、威胁、扫描超时/未知结果和中断均失败关闭。
@@ -150,7 +193,7 @@ pnpm dev:desktop
 - 后端 13 个一级模块统一采用 `api/application/domain/infrastructure` 四层；ArchUnit 对层级方向、允许依赖矩阵、跨模块内部实现访问和循环依赖执行硬门禁。
 - Web/renderer 不得导入 Node、Electron 或 desktop-shell 实现；可运行时依赖浏览器 Fetch 边界的 `@yumpoo/api-client`，只能以 type-only 方式读取 `@yumpoo/preload-contract`。
 - OpenAPI 是请求、响应、错误、分页和客户端生成的唯一契约源；生成目录禁止手工修改，漂移由验证脚本阻止。
-- preload 不使用原始 IPC 或 Node built-in，只暴露冻结的 `window.yumpooDesktop` 客户端标识。
+- preload 仅在唯一入口通过三个固定认证通道包装 `ipcRenderer`，不暴露原始 IPC 或 Node built-in；Renderer 只看到冻结的 `window.yumpooDesktop` 最小桥。
 - Electron main/preload/Web 分离编译；新窗口、权限请求和跨源导航默认拒绝。
 
 ## 当前与后续范围

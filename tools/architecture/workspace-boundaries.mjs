@@ -21,6 +21,13 @@ const DESKTOP_AREAS = {
   preload: path.join(PACKAGE_ROOTS.desktop, 'src', 'preload'),
 }
 
+const PRELOAD_ENTRY = path.join(DESKTOP_AREAS.preload, 'index.ts')
+const PRELOAD_IPC_CHANNELS = new Map([
+  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start'])],
+  ['on', new Set(['yumpoo:auth:status'])],
+  ['removeListener', new Set(['yumpoo:auth:status'])],
+])
+
 const NODE_MODULES = new Set(
   builtinModules.flatMap((moduleName) => [moduleName, `node:${moduleName}`]),
 )
@@ -109,14 +116,16 @@ function isTypeOnlyImport(node) {
   )
 }
 
-function isNamedContextBridgeImport(node) {
+function isAllowedPreloadElectronImport(node, filename) {
   return (
+    filename === PRELOAD_ENTRY &&
     node.type === 'ImportDeclaration' &&
     node.specifiers.length > 0 &&
     node.specifiers.every(
       (specifier) =>
         specifier.type === 'ImportSpecifier' &&
-        specifier.imported?.name === 'contextBridge',
+        ['contextBridge', 'ipcRenderer'].includes(specifier.imported?.name) &&
+        specifier.local?.name === specifier.imported?.name,
     )
   )
 }
@@ -236,8 +245,12 @@ function createRule() {
             )
           } else if (target === 'contract' && !typeOnly) {
             report(node, specifier, 'preload 只能以 type-only 方式依赖 preload-contract')
-          } else if (electron && !isNamedContextBridgeImport(node)) {
-            report(node, specifier, 'M0-07 preload 只允许命名导入 contextBridge')
+          } else if (electron && !isAllowedPreloadElectronImport(node, filename)) {
+            report(
+              node,
+              specifier,
+              'preload 仅允许入口命名导入 contextBridge 与受限 ipcRenderer',
+            )
           }
           return
         }
@@ -261,6 +274,41 @@ function createRule() {
         report(node, '<dynamic>', `${description} 必须使用可静态分析的字符串字面量`)
       }
 
+      function checkPreloadIpcCall(node) {
+        if (owner !== 'desktop' || area !== 'preload') {
+          return
+        }
+        const callee = node.callee
+        if (
+          callee?.type !== 'MemberExpression' ||
+          callee.object?.type !== 'Identifier' ||
+          callee.object.name !== 'ipcRenderer'
+        ) {
+          return
+        }
+        const method =
+          !callee.computed && callee.property?.type === 'Identifier'
+            ? callee.property.name
+            : undefined
+        const allowedChannels = method ? PRELOAD_IPC_CHANNELS.get(method) : undefined
+        const channel = node.arguments?.[0]
+        const channelName =
+          channel?.type === 'Literal' && typeof channel.value === 'string'
+            ? channel.value
+            : undefined
+        const expectedArguments = method === 'invoke' ? 1 : 2
+        if (
+          !allowedChannels?.has(channelName) ||
+          node.arguments.length !== expectedArguments
+        ) {
+          report(
+            node,
+            channelName ?? '<dynamic>',
+            'preload ipcRenderer 仅允许固定认证通道、固定方法与固定参数个数',
+          )
+        }
+      }
+
       return {
         ImportDeclaration: checkSource,
         ExportNamedDeclaration: checkSource,
@@ -273,6 +321,7 @@ function createRule() {
           }
         },
         CallExpression(node) {
+          checkPreloadIpcCall(node)
           if (node.callee?.type !== 'Identifier' || node.callee.name !== 'require') {
             return
           }
@@ -289,6 +338,30 @@ function createRule() {
             check(node, expression.value)
           } else {
             rejectDynamic(node, 'TypeScript import equals')
+          }
+        },
+        Identifier(node) {
+          if (
+            owner !== 'desktop' ||
+            area !== 'preload' ||
+            filename !== PRELOAD_ENTRY ||
+            node.name !== 'ipcRenderer'
+          ) {
+            return
+          }
+          const parent = node.parent
+          const importReference = parent?.type === 'ImportSpecifier'
+          const calledMemberReference =
+            parent?.type === 'MemberExpression' &&
+            parent.object === node &&
+            parent.parent?.type === 'CallExpression' &&
+            parent.parent.callee === parent
+          if (!importReference && !calledMemberReference) {
+            report(
+              node,
+              'ipcRenderer',
+              'preload 不得暴露、传递或保存原始 ipcRenderer',
+            )
           }
         },
       }

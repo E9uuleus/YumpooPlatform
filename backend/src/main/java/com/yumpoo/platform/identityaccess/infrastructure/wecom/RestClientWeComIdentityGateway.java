@@ -34,7 +34,7 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
             };
 
     private final RestClient restClient;
-    private final M012WeComProperties properties;
+    private final WeComOAuthClientSettings settings;
     private final WeComAccessTokenProvider accessTokenProvider;
 
     RestClientWeComIdentityGateway(
@@ -42,15 +42,23 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
             M012WeComProperties properties,
             Clock clock
     ) {
+        this(restClientBuilder, WeComOAuthClientSettings.from(properties), clock);
+    }
+
+    RestClientWeComIdentityGateway(
+            RestClient.Builder restClientBuilder,
+            WeComOAuthClientSettings settings,
+            Clock clock
+    ) {
         this.restClient = Objects.requireNonNull(restClientBuilder, "restClientBuilder must not be null")
                 .baseUrl(API_BASE_URL)
                 .defaultHeader("Accept", MediaType.APPLICATION_JSON_VALUE)
                 .build();
-        this.properties = Objects.requireNonNull(properties, "properties must not be null");
+        this.settings = Objects.requireNonNull(settings, "settings must not be null");
         this.accessTokenProvider = new WeComAccessTokenProvider(
                 restClient,
-                properties.getCorpId(),
-                properties.getAppSecret(),
+                settings.corpId(),
+                settings.appSecret(),
                 Objects.requireNonNull(clock, "clock must not be null")
         );
     }
@@ -70,10 +78,10 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
                 .fragment("wechat_redirect")
                 .encode()
                 .buildAndExpand(Map.of(
-                        "corpId", properties.getCorpId(),
-                        "redirectUri", properties.getCallbackUri().toASCIIString(),
+                        "corpId", settings.corpId(),
+                        "redirectUri", settings.callbackUri().toASCIIString(),
                         "state", state,
-                        "agentId", properties.getAgentId()
+                        "agentId", settings.agentId()
                 ))
                 .toUri();
     }
@@ -107,7 +115,7 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
 
         String memberId = optionalString(response, "userid", "UserId");
         if (memberId != null) {
-            return new WeComMemberIdentity(properties.getCorpId(), memberId);
+            return new WeComMemberIdentity(settings.corpId(), memberId);
         }
         if (optionalString(response, "openid", "OpenId") != null) {
             throw new WeComAuthenticationFailedException();

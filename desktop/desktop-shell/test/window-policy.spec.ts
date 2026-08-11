@@ -13,6 +13,12 @@ describe('BrowserWindow 安全配置', () => {
       webSecurity: true,
       webviewTag: false,
       allowRunningInsecureContent: false,
+      devTools: true,
     })
+  })
+
+  it('packaged 模式关闭开发者工具', () => {
+    const options = createWindowOptions('C:\\yumpoo\\preload.js', true)
+    expect(options.webPreferences?.devTools).toBe(false)
   })
 })

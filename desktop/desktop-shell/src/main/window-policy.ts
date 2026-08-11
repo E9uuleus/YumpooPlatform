@@ -2,6 +2,7 @@ import type { BrowserWindowConstructorOptions } from 'electron'
 
 export function createWindowOptions(
   preloadPath: string,
+  isPackaged = false,
 ): BrowserWindowConstructorOptions {
   return {
     width: 1280,
@@ -20,6 +21,7 @@ export function createWindowOptions(
       webSecurity: true,
       webviewTag: false,
       allowRunningInsecureContent: false,
+      devTools: !isPackaged,
     },
   }
 }

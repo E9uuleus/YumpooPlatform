@@ -34,6 +34,9 @@
     "verify:m0-13:live": "node tools/verification/verify-m0-13-live.mjs",
     "verify:m0-14": "node tools/verification/verify-m0-14.mjs",
     "verify:m0-14:live": "node tools/verification/verify-m0-14-live.mjs",
+    "package:m0-15:win": "node tools/verification/package-m0-15-win.mjs",
+    "verify:m0-15": "node tools/verification/verify-m0-15.mjs",
+    "verify:m0-15:live": "node tools/verification/verify-m0-15-live.mjs",
     "smoke:desktop": "node tools/verification/smoke-desktop.mjs"
   },
   "devDependencies": {

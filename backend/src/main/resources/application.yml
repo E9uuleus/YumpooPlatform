@@ -41,6 +41,15 @@ yumpoo:
       app-secret: ${YUMPOO_M012_WECOM_APP_SECRET:}
       callback-uri: ${YUMPOO_M012_WECOM_CALLBACK_URI:}
       allowed-member-ids: ${YUMPOO_M012_WECOM_ALLOWED_MEMBER_IDS:}
+  m015:
+    evidence-hmac-key: ${YUMPOO_M015_EVIDENCE_HMAC_KEY:}
+    wecom:
+      enabled: ${YUMPOO_M015_WECOM_ENABLED:false}
+      corp-id: ${YUMPOO_M015_WECOM_CORP_ID:}
+      agent-id: ${YUMPOO_M015_WECOM_AGENT_ID:}
+      app-secret: ${YUMPOO_M015_WECOM_APP_SECRET:}
+      callback-uri: ${YUMPOO_M015_WECOM_CALLBACK_URI:}
+      allowed-member-ids: ${YUMPOO_M015_WECOM_ALLOWED_MEMBER_IDS:}
 
 logging:
   structured:
