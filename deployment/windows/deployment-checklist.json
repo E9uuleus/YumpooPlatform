@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-16",
+  "mode": "DRY_RUN_ONLY",
+  "target": {
+    "operatingSystem": "Windows Server 2022",
+    "architecture": "x64",
+    "publicPort": 443,
+    "backendAddress": "127.0.0.1",
+    "backendPort": 8080
+  },
+  "requiredIisModules": ["URL Rewrite 2", "Application Request Routing 3"],
+  "checks": [
+    "cleanWindowsServer2022",
+    "trustedHttpsCertificate",
+    "only443Public",
+    "applicationAndDatabasePortsIsolated",
+    "dedicatedLowPrivilegeServiceAccount",
+    "interactiveLogonDenied",
+    "ntfsAclApplied",
+    "persistentDataSurvivesUpgrade",
+    "wholeMachineRestartRecovery",
+    "logsAndEvidenceRedacted"
+  ],
+  "orderedActions": {
+    "install": ["preflight", "createPersistentDirectories", "applyAcl", "deployRelease", "installWinSwWithPrompt", "configureIis", "startPostgreSql", "startYumpoo", "probeHealth"],
+    "upgrade": ["stageNewRelease", "stopYumpoo", "switchCurrentRelease", "startYumpoo", "probeHealth", "preservePersistentDirectories"],
+    "rollback": ["stopYumpoo", "switchPreviousRelease", "startYumpoo", "probeHealth", "preservePersistentDirectories"],
+    "restart": ["startPostgreSql", "waitDatabaseReady", "startYumpoo", "probeLiveness", "probeReadiness", "enableIisTraffic"]
+  }
+}

@@ -7,6 +7,13 @@ const repositoryRoot = path.resolve(
   '..',
   '..',
 )
+const outputRoot = path.join(
+  repositoryRoot,
+  'desktop',
+  'desktop-shell',
+  'out',
+  `.m0-15-verify-${process.pid}-${Date.now()}`,
+)
 
 runSync(
   process.execPath,
@@ -22,7 +29,13 @@ runSync(
   { cwd: repositoryRoot },
 )
 
-runPnpmSync(['run', 'package:m0-15:win'], { cwd: repositoryRoot })
+runPnpmSync(['run', 'package:m0-15:win'], {
+  cwd: repositoryRoot,
+  env: {
+    ...process.env,
+    YUMPOO_M015_OUTPUT_ROOT: outputRoot,
+  },
+})
 runSync(
   process.execPath,
   [
@@ -34,10 +47,7 @@ runSync(
     ),
     '--validate-manifest',
     path.join(
-      repositoryRoot,
-      'desktop',
-      'desktop-shell',
-      'out',
+      outputRoot,
       'm0-15-artifact-manifest.json',
     ),
   ],

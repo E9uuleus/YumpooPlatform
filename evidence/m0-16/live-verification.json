@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-16",
+  "status": "NOT_RUN",
+  "verifiedAt": null,
+  "operatingSystem": null,
+  "architecture": null,
+  "artifactZipSha256": null,
+  "checks": {
+    "cleanServer": false,
+    "trustedHttps": false,
+    "only443Public": false,
+    "portsIsolated": false,
+    "dedicatedLowPrivilegeAccount": false,
+    "interactiveLogonDenied": false,
+    "aclVerified": false,
+    "persistentDataPreservedOnUpgrade": false,
+    "wholeMachineRestartRecovered": false,
+    "healthSemanticsVerified": false,
+    "sensitiveDataRedacted": false,
+    "signedReceiptVerified": false
+  }
+}

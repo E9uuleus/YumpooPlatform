@@ -1,5 +1,31 @@
 # Yumpoo Server
 
+## M0-16 生产 profile 与部署健康检查
+
+`prod` profile 新增严格启动预检。生产进程必须使用 Java 21、精确绑定 `127.0.0.1` 和 1024～65535 端口；公开地址必须是无凭据、query、fragment 或业务路径的 HTTPS origin。应用与 Flyway 必须使用同一个本机 PostgreSQL 数据库，但账号和至少 16 个 Unicode 字符的密码必须彼此独立。
+
+外部配置接口为：
+
+- `yumpoo.deployment.public-base-url`
+- `yumpoo.deployment.release-root`
+- `yumpoo.deployment.config-root`
+- `yumpoo.deployment.secrets-root`
+- `yumpoo.deployment.attachment-root`
+- `yumpoo.deployment.upload-temp-root`
+- `yumpoo.deployment.log-root`
+
+所有目录必须是已存在的绝对真实路径，互不相同或嵌套；持久目录不得位于 release 下，附件与临时上传必须同卷。config、secrets、release 要求可读，附件、临时上传、日志要求可写。启动失败只记录稳定错误码和配置项名称，不回显路径、用户名或 Secret。
+
+Windows 服务从 `C:\ProgramData\Yumpoo\config` 和 `C:\ProgramData\Yumpoo\secrets` 依次加载普通配置和 Secret 覆盖层：
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = 'prod'
+$env:SPRING_CONFIG_ADDITIONAL_LOCATION = 'file:C:/ProgramData/Yumpoo/config/,file:C:/ProgramData/Yumpoo/secrets/'
+java -jar .\target\yumpoo-server.jar
+```
+
+readiness 组包含 `db` 与无详情的 `deploymentDirectories` 写探针；附件、临时上传、日志或数据库故障会使 readiness 返回 503/DOWN，liveness 继续返回 200/UP。响应仍严格只暴露 `status`。完整模板、WinSW 2.12.0 锁定信息和安装/升级/回滚顺序位于仓库根 `deployment/windows`。
+
 ## M0-15 Electron 登录交接诊断 PoC
 
 M0-15 在 M0-12 企微身份网关之上增加可复用的 desktop state/PKCE/handoff 技术闭环，但不创建正式用户或桌面会话。M0 开发门禁使用自动化测试验证交接协议与安全边界，不要求真实企微 OAuth 或扫码登录；真实企微、公司 HTTPS、packaged app 和协议唤起是 M4-14/M6 环境门禁。诊断 Controller 采用双重门禁：profile 必须包含 `m0-15-live`，且 `YUMPOO_M015_WECOM_ENABLED=true`；默认启动时三条路径均不注册：

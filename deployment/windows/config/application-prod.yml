@@ -1,0 +1,23 @@
+# M0-16 普通生产配置模板。复制到 C:\ProgramData\Yumpoo\config 后按目标机修改。
+# 密码不得写入本文件；secrets 目录必须由专用服务账号以 ACL 保护。
+server:
+  address: 127.0.0.1
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/yumpoo
+    username: yumpoo_app
+  flyway:
+    url: jdbc:postgresql://127.0.0.1:5432/yumpoo
+    user: yumpoo_migrator
+
+yumpoo:
+  deployment:
+    public-base-url: https://yumpoo.example.invalid
+    release-root: C:/Program Files/Yumpoo/releases/current
+    config-root: C:/ProgramData/Yumpoo/config
+    secrets-root: C:/ProgramData/Yumpoo/secrets
+    attachment-root: D:/Yumpoo/data/attachments
+    upload-temp-root: D:/Yumpoo/temp/uploads
+    log-root: D:/Yumpoo/logs

@@ -1,0 +1,22 @@
+server:
+  shutdown: graceful
+  forward-headers-strategy: none
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 45s
+
+management:
+  endpoint:
+    health:
+      group:
+        liveness:
+          include:
+            - livenessState
+        readiness:
+          include:
+            - readinessState
+            - db
+            - deploymentDirectories
+      show-components: never
+      show-details: never

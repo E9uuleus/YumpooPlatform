@@ -1,5 +1,22 @@
 # YumpooPlatform
 
+## M0-16 Windows 部署资产与本地运行门禁
+
+M0-16 交付可机审的 Windows Server 2022 x64 开发部署资产，以及完整的本地构建、运行和发布包复核门禁。它不会真实安装 IIS、注册 WinSW 服务、修改 ACL/防火墙，也不会把目标服务器证据写成 `PASS`。目标机验收和签名收据留给 M5-14/M6；当前 `evidence/m0-16/live-verification.json` 必须严格保持 `NOT_RUN`。
+
+```powershell
+pnpm verify:m0-16
+```
+
+门禁依次检查 Windows x64、Java 21、Docker 与工具链，校验 `deployment/windows` 和 M0-16 证据，执行完整 `verify:m0-15` 回归，组装发布 ZIP，点名启动 packaged JAR，最后重新解包复核白名单、逐文件哈希和 ZIP 哈希。输出位于：
+
+- `out/m0-16/yumpoo-windows-m0-16.zip`
+- `out/m0-16/yumpoo-windows-m0-16.zip.sha256`
+
+ZIP 包含后端 JAR、Vite 生产构建、普通配置与 Secret 占位模板、IIS/WinSW 模板、供应链锁定信息和运行清单；不包含真实 Secret、WinSW 二进制、source map 或源码绝对路径。`artifact-manifest.json` 列出除自身以外的全部包内载荷，路径排序并记录字节数与 SHA-256。
+
+生产 profile 固定只监听 `127.0.0.1`，关闭 forwarded-header 解析并启用 45 秒 graceful shutdown。readiness 同时反映数据库和附件/临时上传/日志目录写入状态；这些依赖故障时 readiness 为 503/DOWN，而 liveness 保持 200/UP。Windows 参数化模板和 dry-run 清单见 `deployment/windows/RUNBOOK.md`。
+
 ## M0 验收口径
 
 M0 将本地/CI 可重复的开发门禁与依赖外部条件的环境门禁分开：`pnpm verify:m0-*` 证明协议、持久化、安全边界、构建与证据格式；真实企业微信 OAuth、公司 HTTPS、真实 Defender/NTFS、干净 Windows Server、IIS、服务账号 ACL、仅 443 和整机重启必须在对应环境中另行证明。未执行时 live evidence 保持 `NOT_RUN`，不阻塞本地开发，也绝不等于 `PASS`。
