@@ -1,5 +1,13 @@
 # Yumpoo Server
 
+## M0-17 备份与隔离恢复测试原型
+
+`M017BackupRestoreIT` 使用两个独立的 PostgreSQL 17.10 Testcontainers 实例验证 custom-format `pg_dump`/`pg_restore`，并用 test-only 合成表关联 M0-14 内容寻址附件。备份集在 `.partial` 目录完成数据库、附件、普通配置、Secret 恢复描述和逐文件 SHA-256 manifest 后，才以同卷原子移动完成；恢复前必须完整验签并确认数据库和附件目标为空。
+
+测试层 `M017BackupSet` 拒绝危险/非规范路径、符号链接、Windows 大小写碰撞、缺件、额外文件、大小或摘要不符以及包含 Secret 值的恢复描述。恢复后测试核对 Flyway 版本、合成引用和附件真实字节，并只报告孤儿。`M017RetentionPlanner` 只生成 14 daily、8 weekly、6 monthly 的 dry-run 多标签计划，legal hold 阻止删除，但不会把失败集冒充成功代际。
+
+从仓库根运行 `pnpm verify:m0-17`。该命令先校验证据契约，再串联 `verify:m0-16`，最终只接受本次运行在 `out/m0-17` 产生且绑定当前 Git HEAD 的报告。Docker 不可用会直接失败，不使用 H2。以上类型均位于测试源码，不进入生产 JAR；正式任务调度、外部介质、告警、签名/加密和 RPO/RTO 演练留给 M5/M6。
+
 ## M0-16 生产 profile 与部署健康检查
 
 `prod` profile 新增严格启动预检。生产进程必须使用 Java 21、精确绑定 `127.0.0.1` 和 1024～65535 端口；公开地址必须是无凭据、query、fragment 或业务路径的 HTTPS origin。应用与 Flyway 必须使用同一个本机 PostgreSQL 数据库，但账号和至少 16 个 Unicode 字符的密码必须彼此独立。

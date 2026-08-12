@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-17",
+  "status": "PASS",
+  "startedAt": "2026-08-12T12:00:00Z",
+  "completedAt": "2026-08-12T12:05:00Z",
+  "sourceCommit": "0000000000000000000000000000000000000000",
+  "backupSetId": "00000000-0000-4000-8000-000000000017",
+  "restoredReferenceCount": 2,
+  "orphanCount": 1,
+  "checks": {
+    "postgresCustomDumpCreated": true,
+    "manifestExactCoverageVerified": true,
+    "payloadHashesVerified": true,
+    "secretValuesExcluded": true,
+    "emptyTargetsRequired": true,
+    "isolatedDatabaseRestored": true,
+    "flywayVersionMatched": true,
+    "attachmentReferencesMatched": true,
+    "attachmentBytesReadable": true,
+    "orphansReportedWithoutDeletion": true,
+    "retentionDryRunGenerated": true
+  }
+}

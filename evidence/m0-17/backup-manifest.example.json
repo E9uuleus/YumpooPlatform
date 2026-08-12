@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-17",
+  "backupSetId": "00000000-0000-4000-8000-000000000017",
+  "createdAt": "2026-08-12T12:00:00Z",
+  "companyTimeZone": "Asia/Shanghai",
+  "applicationVersion": "0.0.1-SNAPSHOT",
+  "sourceCommit": "0000000000000000000000000000000000000000",
+  "postgresVersion": "17.10",
+  "flywaySchemaVersion": "5",
+  "databaseDumpPath": "database/yumpoo.dump",
+  "restoreDescriptorPath": "recovery/secret-recovery.json",
+  "retention": {
+    "labels": ["daily"],
+    "legalHold": false
+  },
+  "files": [
+    {
+      "path": "attachments/sha256/aa/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "role": "ATTACHMENT_BLOB",
+      "bytes": 24,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "path": "configuration/application.yml",
+      "role": "CONFIGURATION",
+      "bytes": 48,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "path": "database/yumpoo.dump",
+      "role": "DATABASE_DUMP",
+      "bytes": 4096,
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "path": "recovery/secret-recovery.json",
+      "role": "RESTORE_DESCRIPTOR",
+      "bytes": 256,
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ]
+}
