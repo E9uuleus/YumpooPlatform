@@ -1,8 +1,14 @@
 # YumpooPlatform
 
-## M0-15 Electron 浏览器登录交接与安全壳验证
+## M0 验收口径
 
-M0-15 严格验证 Electron 复用唯一远程 SPA、系统浏览器企微登录、PKCE、一次性 handoff、自定义协议回调和最小安全壳，不提前交付 M4 的正式桌面会话。后端诊断能力默认不存在；只有 profile 列表包含 `m0-15-live` 且 `YUMPOO_M015_WECOM_ENABLED` 严格等于 `true` 时才注册以下非 OpenAPI 路径：
+M0 将本地/CI 可重复的开发门禁与依赖外部条件的环境门禁分开：`pnpm verify:m0-*` 证明协议、持久化、安全边界、构建与证据格式；真实企业微信 OAuth、公司 HTTPS、真实 Defender/NTFS、干净 Windows Server、IIS、服务账号 ACL、仅 443 和整机重启必须在对应环境中另行证明。未执行时 live evidence 保持 `NOT_RUN`，不阻塞本地开发，也绝不等于 `PASS`。
+
+M0 不实现正式企业微信扫码登录，不创建正式 User、ExternalIdentity、LoginSession 或可续期会话。正式 Web 身份与会话能力属于 M1，正式 Electron 认证与桌面会话属于 M4；两者的真实企微/公司 HTTPS E2E 与目标 Windows Server 部署恢复证据在 M5/M6 环境门禁完成。
+
+## M0-15 Electron 浏览器交接与安全壳验证
+
+M0-15 的开发门禁验证 Electron 复用唯一远程 SPA、系统浏览器交接协议、PKCE、一次性 handoff、自定义协议处理和最小安全壳，不提前交付 M4 的正式桌面会话，也不要求真实企微登录。真实系统浏览器企微 OAuth、公司 HTTPS SPA 与 `yumpoo://` 的端到端证据属于 M4-14/M6 环境门禁。后端诊断能力默认不存在；只有 profile 列表包含 `m0-15-live` 且 `YUMPOO_M015_WECOM_ENABLED` 严格等于 `true` 时才注册以下非 OpenAPI 路径：
 
 - `GET /_m0/m0-15/electron/auth/authorize`，接收 `state`、`codeChallenge` 和固定的 `codeChallengeMethod=S256`。
 - `GET /_m0/m0-15/wecom/callback`，完成企微成员检查后跳转 `yumpoo://auth/callback`。
@@ -53,7 +59,7 @@ M0-14 冻结的是可复用的文件安全技术核心，不是正式附件业�
 pnpm verify:m0-14
 ```
 
-该门禁会先校验证据文件，再以 `-Xmx96m` 点名执行 100 MiB 懒生成流探针，最后串联 `verify:m0-13` 的完整 OpenAPI、后端 PostgreSQL/Testcontainers、Node、桌面与前端回归。Docker 不可用时真实 PostgreSQL 验收会失败，不会回退到 H2。普通 PR 允许 `evidence/m0-14/live-verification.json` 保持 `NOT_RUN`，但 M0 退出前必须在受控 Windows/NTFS 环境把它跑到 `PASS`。
+该门禁会先校验证据文件，再以 `-Xmx96m` 点名执行 100 MiB 懒生成流探针，最后串联 `verify:m0-13` 的完整 OpenAPI、后端 PostgreSQL/Testcontainers、Node、桌面与前端回归。Docker 不可用时真实 PostgreSQL 验收会失败，不会回退到 H2。普通开发与 PR 允许 `evidence/m0-14/live-verification.json` 保持 `NOT_RUN`；真实 Defender/NTFS 证据在具备受控 Windows 环境后补验，并在 M5/M6 发布门禁前完成。
 
 真实环境验证必须确认允许使用 EICAR 测试串，并从外部注入以下变量；不要把路径、密钥或扫描器输出提交到仓库或工单：
 
@@ -115,9 +121,11 @@ pnpm verify:node
 
 本次新增的契约在首次合入 `dev` 后即成为初始兼容性基线。`check:openapi-compat` 使用固定的 openapi-diff 2.1.6；传入历史 OpenAPI 文件后，任何不兼容变更都会失败，M0-18 再把基线提取和该命令接入 PR CI。
 
-## M0-12 企微真实验证
+## M0-12 企微环境验证（延期门禁）
 
 M0-12 诊断路由默认不存在。只有同时设置 `SPRING_PROFILES_ACTIVE=m0-12-live` 和 `YUMPOO_M012_WECOM_ENABLED=true` 时，后端才注册以下路径：
+
+普通开发与 PR 只要求 `pnpm verify:m0-12` 通过。它使用可控测试边界验证 OAuth 参数、corp/member 映射、state/nonce、并发消费、伪造/重放拒绝、供应商失败映射和脱敏；不要求真实成员授权或扫码、公开域名和真实 HTTPS 回调。以下 live 流程在受控联调环境具备后执行，最迟在 M6 候选版本冻结前完成；此前证据保持 `NOT_RUN`。
 
 - `GET /_m0/m0-12/wecom/authorize`
 - `GET /_m0/m0-12/wecom/callback`
