@@ -10,7 +10,10 @@ const {
 } = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
 
-const outputRoot = path.resolve(__dirname, 'out')
+const desktopOutputRoot = path.resolve(__dirname, 'out')
+const outputRoot = process.env.YUMPOO_M015_OUTPUT_ROOT
+  ? path.resolve(process.env.YUMPOO_M015_OUTPUT_ROOT)
+  : desktopOutputRoot
 const packageDirectory = path.resolve(outputRoot, 'Yumpoo Desktop-win32-x64')
 const stagingPrefix = path.join(outputRoot, '.m0-15-app-')
 
@@ -103,6 +106,7 @@ async function packageApplication() {
 
 function assertSafeOutputPath() {
   if (
+    !(outputRoot === desktopOutputRoot || outputRoot.startsWith(`${desktopOutputRoot}${path.sep}`)) ||
     packageDirectory === outputRoot ||
     path.dirname(packageDirectory).toLowerCase() !== outputRoot.toLowerCase()
   ) {

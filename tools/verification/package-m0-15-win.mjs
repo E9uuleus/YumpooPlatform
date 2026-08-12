@@ -11,7 +11,13 @@ const repositoryRoot = path.resolve(
   '..',
 )
 const desktopRoot = path.join(repositoryRoot, 'desktop', 'desktop-shell')
-const outputRoot = path.join(desktopRoot, 'out')
+const desktopOutputRoot = path.join(desktopRoot, 'out')
+const outputRoot = process.env.YUMPOO_M015_OUTPUT_ROOT
+  ? path.resolve(process.env.YUMPOO_M015_OUTPUT_ROOT)
+  : path.join(
+      desktopOutputRoot,
+      `.m0-15-package-${process.pid}-${Date.now()}`,
+    )
 const packageJsonPath = path.join(desktopRoot, 'package.json')
 const asarModuleUrl = pathToFileURL(
   path.join(desktopRoot, 'node_modules', '@electron', 'asar', 'lib', 'asar.js'),
@@ -34,12 +40,22 @@ const EXPECTED_ASAR_ENTRIES = new Set([
 if (process.platform !== 'win32') {
   throw new Error('M0-15 Windows 产物只能在 Windows 上打包和扫描')
 }
+if (
+  outputRoot !== desktopOutputRoot &&
+  !outputRoot.startsWith(`${desktopOutputRoot}${path.sep}`)
+) {
+  throw new Error('M0-15 打包输出路径必须位于 desktop out 目录内')
+}
 
 const electronVersion = await readElectronVersion()
 const { listPackage } = await import(asarModuleUrl)
 
 runPnpmSync(['--filter', '@yumpoo/desktop-shell', 'run', 'package:win'], {
   cwd: repositoryRoot,
+  env: {
+    ...process.env,
+    YUMPOO_M015_OUTPUT_ROOT: outputRoot,
+  },
 })
 
 const packageDirectories = (await readdir(outputRoot, { withFileTypes: true }))
