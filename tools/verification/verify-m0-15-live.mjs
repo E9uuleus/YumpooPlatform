@@ -56,6 +56,7 @@ const manifestFields = [
   'schemaVersion',
   'milestone',
   'generatedAt',
+  'sourceCommit',
   'platform',
   'arch',
   'electronVersion',
@@ -353,6 +354,7 @@ function validateBuildManifest(manifestPath, electronVersion) {
       Number.isFinite(Date.parse(manifest.generatedAt)),
     'M0-15 构建 manifest generatedAt 不正确',
   )
+  assert(/^[0-9a-f]{40}$/u.test(manifest.sourceCommit), 'M0-15 构建 manifest sourceCommit 不正确')
   assert(manifest.platform === 'win32', 'M0-15 构建 manifest 未证明 Windows')
   assert(manifest.arch === 'x64', 'M0-15 构建 manifest 未证明 x64')
   assert(

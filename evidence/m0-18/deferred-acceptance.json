@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-18",
+  "updatedAt": "2026-08-13T00:00:00Z",
+  "liveVerifications": [
+    {
+      "id": "LIVE-M0-12",
+      "milestone": "M0-12",
+      "evidencePath": "evidence/m0-12/live-verification.json",
+      "status": "NOT_RUN",
+      "blocksM0DevelopmentExit": false,
+      "blocksReleaseIfIncomplete": true,
+      "targetGate": "M1-13",
+      "mustPassBy": "M6-01",
+      "acceptanceCommand": "pnpm verify:m0-12:live",
+      "ownerRole": "身份与安全负责人",
+      "prerequisites": [
+        "真实企业微信测试企业、白名单成员与稳定 corp/member 标识",
+        "受信 HTTPS callback 与受控企微 Secret/HMAC 证据密钥"
+      ],
+      "requiredChecks": [
+        "configurationPreflight",
+        "forgedStateRejected",
+        "invalidCodeRejected",
+        "replayRejected",
+        "stableFingerprints",
+        "twoSignedReceipts",
+        "wrongNonceRejected"
+      ]
+    },
+    {
+      "id": "LIVE-M0-14",
+      "milestone": "M0-14",
+      "evidencePath": "evidence/m0-14/live-verification.json",
+      "status": "NOT_RUN",
+      "blocksM0DevelopmentExit": false,
+      "blocksReleaseIfIncomplete": true,
+      "targetGate": "M5-14",
+      "mustPassBy": "M6-01",
+      "acceptanceCommand": "pnpm verify:m0-14:live",
+      "ownerRole": "文件安全与运维负责人",
+      "prerequisites": [
+        "空间充足的真实 Windows NTFS 同卷目录",
+        "Microsoft Defender、EICAR 测试授权与独立 HMAC 证据密钥"
+      ],
+      "requiredChecks": [
+        "atomicMoveVerified",
+        "boundedExactLimitUpload",
+        "cleanSampleScanned",
+        "configurationPreflight",
+        "eicarFailedClosed",
+        "interruptedUploadCleaned",
+        "limitPlusOneRejected",
+        "ntfsVerified",
+        "pathsRedacted",
+        "sameVolumeVerified",
+        "signedReceiptVerified"
+      ]
+    },
+    {
+      "id": "LIVE-M0-15",
+      "milestone": "M0-15",
+      "evidencePath": "evidence/m0-15/live-verification.json",
+      "status": "NOT_RUN",
+      "blocksM0DevelopmentExit": false,
+      "blocksReleaseIfIncomplete": true,
+      "targetGate": "M4-14",
+      "mustPassBy": "M6-01",
+      "acceptanceCommand": "pnpm verify:m0-15:live",
+      "ownerRole": "桌面与身份负责人",
+      "prerequisites": [
+        "Windows x64 packaged app、公司同源 HTTPS SPA 与 yumpoo 协议注册",
+        "真实系统浏览器企业微信登录及受控双收据 harness"
+      ],
+      "requiredChecks": [
+        "buildManifestVerified",
+        "configurationPreflight",
+        "customProtocolCallbackVerified",
+        "dangerousIpcRejected",
+        "handoffExpiryVerified",
+        "handoffSingleUseVerified",
+        "navigationPolicyVerified",
+        "packagedAppLaunched",
+        "pkceBindingVerified",
+        "productionHttpsOriginVerified",
+        "rendererIsolationVerified",
+        "sensitiveDataRedacted",
+        "sharedRemoteSpaVerified",
+        "signedReceiptVerified",
+        "stateBindingVerified",
+        "systemBrowserWeComLoginVerified",
+        "windowsX64Verified"
+      ]
+    },
+    {
+      "id": "LIVE-M0-16",
+      "milestone": "M0-16",
+      "evidencePath": "evidence/m0-16/live-verification.json",
+      "status": "NOT_RUN",
+      "blocksM0DevelopmentExit": false,
+      "blocksReleaseIfIncomplete": true,
+      "targetGate": "M5-14",
+      "mustPassBy": "M6-01",
+      "acceptanceCommand": null,
+      "ownerRole": "部署与运维负责人",
+      "prerequisites": [
+        "干净 Windows Server 2022、IIS Rewrite/ARR 与受信 HTTPS 证书",
+        "仅开放 443、低权限服务账号、目录 ACL 与整机重启验证环境"
+      ],
+      "requiredChecks": [
+        "aclVerified",
+        "cleanServer",
+        "dedicatedLowPrivilegeAccount",
+        "healthSemanticsVerified",
+        "interactiveLogonDenied",
+        "only443Public",
+        "persistentDataPreservedOnUpgrade",
+        "portsIsolated",
+        "sensitiveDataRedacted",
+        "signedReceiptVerified",
+        "trustedHttps",
+        "wholeMachineRestartRecovered"
+      ]
+    }
+  ],
+  "m017OperationalFollowUps": [
+    {
+      "id": "SCHEDULED_BACKUP",
+      "sourceMilestone": "M0-17",
+      "status": "DEFERRED",
+      "blocksM0DevelopmentExit": false,
+      "blocksM5ExitIfIncomplete": true,
+      "targetGate": "M5-15",
+      "mustCompleteBy": "M5-20",
+      "reverifyAt": null,
+      "ownerRole": "运维负责人",
+      "prerequisites": ["正式备份目录、低权限任务账号与 Windows 任务计划"],
+      "acceptanceCriteria": ["每日生成数据库与附件成套备份", "同一任务不得重叠且失败状态可观测"],
+      "completionEvidence": null
+    },
+    {
+      "id": "OFF_HOST_COPY",
+      "sourceMilestone": "M0-17",
+      "status": "DEFERRED",
+      "blocksM0DevelopmentExit": false,
+      "blocksM5ExitIfIncomplete": true,
+      "targetGate": "M5-15",
+      "mustCompleteBy": "M5-20",
+      "reverifyAt": null,
+      "ownerRole": "运维负责人",
+      "prerequisites": ["独立于应用主机的受控备份介质"],
+      "acceptanceCriteria": ["异机复制完成后重新校验 manifest 与 SHA-256", "只有远端副本确认成功后才允许本机保留策略清理"],
+      "completionEvidence": null
+    },
+    {
+      "id": "FAILURE_ALERTING",
+      "sourceMilestone": "M0-17",
+      "status": "DEFERRED",
+      "blocksM0DevelopmentExit": false,
+      "blocksM5ExitIfIncomplete": true,
+      "targetGate": "M5-15",
+      "mustCompleteBy": "M5-20",
+      "reverifyAt": null,
+      "ownerRole": "运维负责人",
+      "prerequisites": ["运行监控、告警接收人与通知通道"],
+      "acceptanceCriteria": ["区分任务失败、外部介质失败与超过 24 小时无成功备份", "告警具有 ACTIVE、ACKNOWLEDGED 与 RECOVERED 状态"],
+      "completionEvidence": null
+    },
+    {
+      "id": "INTEGRITY_AND_SECRET_RECOVERY",
+      "sourceMilestone": "M0-17",
+      "status": "DEFERRED",
+      "blocksM0DevelopmentExit": false,
+      "blocksM5ExitIfIncomplete": true,
+      "targetGate": "M5-15",
+      "mustCompleteBy": "M5-20",
+      "reverifyAt": null,
+      "ownerRole": "安全与运维负责人",
+      "prerequisites": ["M5-13 Secret 管理与轮换方案", "独立保存的恢复密钥或恢复流程"],
+      "acceptanceCriteria": ["备份集签名或等价完整性校验失败关闭", "Secret 可独立恢复且备份中不存在明文凭据"],
+      "completionEvidence": null
+    },
+    {
+      "id": "REAL_SCHEMA_RESTORE",
+      "sourceMilestone": "M0-17",
+      "status": "DEFERRED",
+      "blocksM0DevelopmentExit": false,
+      "blocksM5ExitIfIncomplete": true,
+      "targetGate": "M5-16",
+      "mustCompleteBy": "M5-20",
+      "reverifyAt": null,
+      "ownerRole": "后端与运维负责人",
+      "prerequisites": ["一期真实业务 schema 与隔离恢复环境"],
+      "acceptanceCriteria": ["隔离恢复用户、Work Item、附件、工时、Feedback、审计与 Activity", "抽样引用、附件可读性与核心 smoke 全部通过"],
+      "completionEvidence": null
+    },
+    {
+      "id": "RETENTION_CLEANUP",
+      "sourceMilestone": "M0-17",
+      "status": "DEFERRED",
+      "blocksM0DevelopmentExit": false,
+      "blocksM5ExitIfIncomplete": true,
+      "targetGate": "M5-17",
+      "mustCompleteBy": "M5-20",
+      "reverifyAt": null,
+      "ownerRole": "运维与合规负责人",
+      "prerequisites": ["正式备份目录、异机副本状态与 legal hold 数据"],
+      "acceptanceCriteria": ["保留 14 daily、8 weekly、6 monthly 且支持多标签与 legal hold", "只有存在已验证后继备份集时才可安全删除"],
+      "completionEvidence": null
+    },
+    {
+      "id": "RPO_RTO_DRILL",
+      "sourceMilestone": "M0-17",
+      "status": "DEFERRED",
+      "blocksM0DevelopmentExit": false,
+      "blocksM5ExitIfIncomplete": true,
+      "targetGate": "M5-16",
+      "mustCompleteBy": "M5-20",
+      "reverifyAt": "M6-07",
+      "ownerRole": "运维与测试负责人",
+      "prerequisites": ["正式业务备份、隔离恢复脚本与核心 smoke 清单"],
+      "acceptanceCriteria": ["实际 RPO 不超过 24 小时且 RTO 不超过 4 小时", "演练报告记录时间线、结果与改进项并在 M6 复验"],
+      "completionEvidence": null
+    }
+  ]
+}

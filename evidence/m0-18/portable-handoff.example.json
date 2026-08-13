@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-18",
+  "startedAt": "2026-08-12T23:40:00Z",
+  "generatedAt": "2026-08-13T00:00:00Z",
+  "sourceCommit": "0000000000000000000000000000000000000000",
+  "baseCommit": "1111111111111111111111111111111111111111",
+  "headCommit": "2222222222222222222222222222222222222222",
+  "testedCommit": "0000000000000000000000000000000000000000",
+  "baselineOpenApiSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "currentOpenApiSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "checks": {
+    "contracts": true,
+    "openApiCompatibility": true,
+    "buildMigrationArchitectureTests": true,
+    "backupRestore": true,
+    "sensitiveDataExcluded": true
+  },
+  "files": [
+    { "path": "server/yumpoo-server.jar", "role": "SERVER_JAR", "bytes": 1, "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
+    { "path": "web/index.html", "role": "WEB_ASSET", "bytes": 1, "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" }
+  ]
+}

@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs'
 import { lstat, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { gitHead } from './m0-18-utils.mjs'
 import { runPnpmSync } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(
@@ -101,6 +102,7 @@ const manifest = {
   schemaVersion: 1,
   milestone: 'M0-15',
   generatedAt: new Date().toISOString(),
+  sourceCommit: gitHead(repositoryRoot),
   platform: 'win32',
   arch: 'x64',
   electronVersion,

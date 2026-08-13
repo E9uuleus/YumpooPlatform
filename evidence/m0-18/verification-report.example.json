@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-18",
+  "status": "PASS",
+  "startedAt": "2026-08-13T00:00:00Z",
+  "completedAt": "2026-08-13T00:30:00Z",
+  "sourceCommit": "0000000000000000000000000000000000000000",
+  "baseCommit": "1111111111111111111111111111111111111111",
+  "headCommit": "2222222222222222222222222222222222222222",
+  "testedCommit": "0000000000000000000000000000000000000000",
+  "reproductionCommand": "pnpm verify:m0-18",
+  "validationMode": "WINDOWS_X64_FULL",
+  "environment": { "platform": "win32", "architecture": "x64", "javaMajor": 21, "nodeVersion": "24.14.0", "pnpmVersion": "11.16.0", "mavenVersion": "3.9.9", "postgresImage": "postgres:17.10-alpine", "companyTimeZone": "Asia/Shanghai" },
+  "gates": { "contracts": "PASS", "openApiCompatibility": "PASS", "buildMigrationArchitectureTests": "PASS", "desktopSmoke": "PASS", "serverSmoke": "PASS", "windowsPackaging": "PASS", "backupRestore": "PASS" },
+  "checks": { "contractsValidated": true, "liveNotRunExactSet": true, "m017FollowUpsComplete": true, "buildPassed": true, "migrationPassed": true, "architecturePassed": true, "openApiPassed": true, "openApiCompatibilityPassed": true, "automatedTestsPassed": true, "desktopPackagePassed": true, "desktopSmokePassed": true, "serverSmokePassed": true, "backupRestorePassed": true, "sensitiveDataExcluded": true },
+  "digests": { "baselineOpenApi": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "currentOpenApi": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "portableHandoff": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "m015Manifest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "m016Manifest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "m016Zip": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "m017BackupManifest": "1111111111111111111111111111111111111111111111111111111111111111", "m017RetentionPlan": "2222222222222222222222222222222222222222222222222222222222222222", "m017VerificationReport": "3333333333333333333333333333333333333333333333333333333333333333", "deferredAcceptance": "4444444444444444444444444444444444444444444444444444444444444444" },
+  "limitations": ["DEVELOPMENT_GATE_ONLY", "LIVE_EVIDENCE_NOT_IMPLIED", "PRODUCTION_BACKUP_AND_RPO_RTO_DEFERRED", "SYNTHETIC_BACKUP_DATA_ONLY"],
+  "ci": { "runId": null, "runAttempt": null, "handoffArtifactName": null, "handoffArtifactDigest": null }
+}

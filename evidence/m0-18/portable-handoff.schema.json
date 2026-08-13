@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/evidence/m0-18/portable-handoff.schema.json",
+  "title": "M0-18 portable to Windows handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "milestone", "startedAt", "generatedAt", "sourceCommit", "baseCommit", "headCommit", "testedCommit", "baselineOpenApiSha256", "currentOpenApiSha256", "checks", "files"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "milestone": { "const": "M0-18" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "baseCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "headCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "testedCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "baselineOpenApiSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "currentOpenApiSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contracts", "openApiCompatibility", "buildMigrationArchitectureTests", "backupRestore", "sensitiveDataExcluded"],
+      "properties": {
+        "contracts": { "const": true },
+        "openApiCompatibility": { "const": true },
+        "buildMigrationArchitectureTests": { "const": true },
+        "backupRestore": { "const": true },
+        "sensitiveDataExcluded": { "const": true }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role", "bytes", "sha256"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^(server/yumpoo-server\\.jar|web/.+)$" },
+          "role": { "enum": ["SERVER_JAR", "WEB_ASSET"] },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  }
+}

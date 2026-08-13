@@ -68,7 +68,7 @@ function validateGenerated(startedAt) {
   assert(manifest.sourceCommit === currentCommit, 'manifest sourceCommit 不是当前 HEAD')
   assert(report.sourceCommit === currentCommit, 'verification report sourceCommit 不是当前 HEAD')
   assert(report.backupSetId === manifest.backupSetId, '报告与 manifest 的 backupSetId 不一致')
-  assert(Date.parse(report.startedAt) >= startedAt - 120_000, '运行报告不是本次门禁生成')
+  assert(Date.parse(report.startedAt) >= startedAt - 5_000, '运行报告不是本次门禁生成')
   assert(Date.parse(report.completedAt) >= Date.parse(report.startedAt), '运行报告时间顺序无效')
   assert(Date.parse(report.completedAt) <= Date.now() + 120_000, '运行报告完成时间位于未来')
 
@@ -128,7 +128,12 @@ function ajvErrors(validate) {
 }
 
 validateContracts()
-if (process.argv.includes('--validate-generated')) {
+const validateAfterIndex = process.argv.indexOf('--validate-generated-after')
+if (validateAfterIndex >= 0) {
+  const startedAt = Number(process.argv[validateAfterIndex + 1])
+  assert(Number.isFinite(startedAt) && startedAt > 0, '--validate-generated-after 需要毫秒时间戳')
+  validateGenerated(startedAt)
+} else if (process.argv.includes('--validate-generated')) {
   const report = readJson(path.join(outputRoot, 'verification-report.json'), '运行 verification report')
   validateGenerated(Date.parse(report.startedAt) - 1_000)
 } else if (!process.argv.includes('--validate-contracts')) {

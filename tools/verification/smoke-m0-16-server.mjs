@@ -4,6 +4,7 @@ import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { assertM016 } from './m0-16-utils.mjs'
+import { writeServerSmokeReceipt } from './m0-18-server-smoke-receipt.mjs'
 import { stopProcessTree } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -15,7 +16,7 @@ const migrationPassword = 'M016-Migration-Only-2026!'
 let application
 let containerStarted = false
 
-assertM016(process.platform === 'win32', 'packaged JAR 冒烟仅支持 Windows')
+assertM016(process.platform === 'win32' && process.arch === 'x64', 'packaged JAR 冒烟仅支持 Windows x64')
 assertM016(fs.existsSync(jarPath), 'packaged JAR 不存在')
 
 try {
@@ -29,11 +30,19 @@ try {
     'postgres:17.10-alpine',
   ])
   containerStarted = true
-  await waitUntil(async () => runDockerQuiet(['exec', containerName, 'pg_isready', '-U', 'm016_migrator', '-d', 'yumpoo']), 60_000, 'PostgreSQL 未就绪')
+  await waitUntil(
+    async () =>
+      runDockerQuiet([
+        'exec', containerName, 'sh', '-ec',
+        'test "$(cat /proc/1/comm)" = postgres && pg_isready -U m016_migrator -d yumpoo',
+      ]),
+    60_000,
+    'PostgreSQL 最终实例未就绪',
+  )
   runDocker([
     'exec', containerName, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'm016_migrator', '-d', 'yumpoo',
     '-c', `CREATE ROLE m016_app LOGIN PASSWORD '${applicationPassword}';`,
-  ], { suppressFailureOutput: true })
+  ])
   const databasePort = postgresPort()
   const serverPort = await freePort()
   writeExternalConfiguration(databasePort, serverPort)
@@ -65,6 +74,9 @@ try {
   containerStarted = false
   await waitUntil(async () => healthMatches(`${baseUrl}/actuator/health/readiness`, 503, 'DOWN'), 30_000, '数据库故障未使 readiness DOWN')
   assertM016(await healthMatches(`${baseUrl}/actuator/health/liveness`, 200, 'UP'), '数据库故障时 liveness 必须保持 UP')
+  if (process.env.YUMPOO_M018_SERVER_SMOKE_RECEIPT) {
+    writeServerSmokeReceipt(repositoryRoot, jarPath, process.env.YUMPOO_M018_SERVER_SMOKE_RECEIPT)
+  }
   console.log('M0-16 packaged JAR 回环监听、外部配置、目录/数据库健康语义和脱敏拒启已通过')
 } finally {
   stopProcessTree(application)
@@ -181,11 +193,15 @@ async function waitUntil(probe, timeoutMilliseconds, failureMessage) {
   throw new Error(`M0-16 验证失败：${failureMessage}`)
 }
 
-function runDocker(args, options = {}) {
+function runDocker(args) {
   const result = spawnSync('docker', args, { encoding: 'utf8' })
   if (result.status !== 0) {
-    if (!options.suppressFailureOutput) {
-      process.stderr.write(result.stderr ?? '')
+    const diagnostic = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
+      .replaceAll(applicationPassword, '[REDACTED]')
+      .replaceAll(migrationPassword, '[REDACTED]')
+      .trim()
+    if (diagnostic) {
+      process.stderr.write(`${diagnostic}\n`)
     }
     throw new Error('M0-16 验证失败：Docker 命令执行失败')
   }

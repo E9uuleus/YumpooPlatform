@@ -11,10 +11,9 @@ const repositoryRoot = path.resolve(
 const baselineArgument = process.argv.slice(2).find((argument) => argument !== '--')
 
 if (!baselineArgument) {
-  console.log(
-    'M0-09 当前契约即初始基线；合入 dev 后请传入基线文件运行：pnpm run check:openapi-compat -- <baseline>',
+  throw new Error(
+    'OpenAPI 兼容性检查必须显式传入历史基线：pnpm run check:openapi-compat -- <baseline>',
   )
-  process.exit(0)
 }
 
 const baseline = path.resolve(repositoryRoot, baselineArgument)
