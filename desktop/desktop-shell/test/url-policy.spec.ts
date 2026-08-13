@@ -4,12 +4,12 @@ import { resolveWebAppUrl } from '../src/main/url-policy'
 describe('YUMPOO_WEB_URL 策略', () => {
   it('开发模式默认使用回环地址', () => {
     expect(resolveWebAppUrl({ isPackaged: false }).href).toBe(
-      'http://127.0.0.1:5173/',
+      'http://127.0.0.1:18173/',
     )
   })
 
   it.each([
-    'http://192.168.1.20:5173',
+    'http://192.168.1.20:18173',
     'https://example.com',
     'file:///tmp/index.html',
   ])('开发模式拒绝非回环 HTTP 地址：%s', (configuredUrl) => {

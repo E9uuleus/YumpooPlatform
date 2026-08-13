@@ -3,7 +3,7 @@ export interface WebUrlPolicyOptions {
   readonly isPackaged: boolean
 }
 
-const DEVELOPMENT_URL = 'http://127.0.0.1:5173'
+const DEVELOPMENT_URL = 'http://127.0.0.1:18173'
 const DEVELOPMENT_HOSTS = new Set(['127.0.0.1', 'localhost'])
 
 export function resolveWebAppUrl(options: WebUrlPolicyOptions): URL {

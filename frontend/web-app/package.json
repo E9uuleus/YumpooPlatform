@@ -7,8 +7,8 @@
     "node": "24.14.x"
   },
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
-    "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "dev": "vite",
+    "preview": "vite preview",
     "lint": "eslint \"src/**/*.{ts,vue}\" vite.config.ts",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "test": "vitest run",

@@ -14,7 +14,7 @@ pnpm verify:m0-18
 
 最终开发证据写入忽略目录 `out/m0-18/evidence-pack` 并由 CI 作为 30 天 artifact 上传。报告以 `validationMode` 区分 `WINDOWS_X64_FULL` 与 `WINDOWS_X64_CI_STAGE`；FULL 报告还必须消费绑定当前提交与 JAR 摘要的 server-smoke receipt。CI 分段报告必须把 `serverSmoke` 记为 `NOT_RUN`、使用 `pnpm verify:m0-18:windows` 作为复现命令，并带上 `WINDOWS_FULL_CHAIN_NOT_RUN` 限制，绝不冒充完整验证。包内只允许 verification report、延期清单、portable handoff manifest、M0-15/M0-16 manifest、ZIP 摘要和 M0-17 三份安全元数据；JAR、ZIP、附件、dump、日志、测试 XML、绝对路径、环境变量和任何凭据均被拒绝。动态 `PASS` 报告绑定实际测试提交，不进入 Git。
 
-`evidence/m0-18/deferred-acceptance.json` 与仓库内所有 live evidence 双向精确对账：当前 M0-12、M0-14、M0-15、M0-16 保持 `NOT_RUN`，M0-13 已 `PASS` 因而不得列入延期集合。真实企微、Defender/NTFS、系统浏览器、干净 Windows Server/IIS，以及 M0-17 的计划任务、异机复制、告警、Secret 恢复、真实 Schema 恢复、保留清理和 RPO/RTO 演练仍是 M4/M5/M6 环境或运维门禁；M0 开发门禁通过不代表这些 live 验收已经完成。
+`evidence/m0-18/deferred-acceptance.json` 与仓库内所有 live evidence 双向精确对账：当前 M0-12、M0-14、M0-15、M0-16 保持 `NOT_RUN`，M0-13 已 `PASS` 因而不得列入延期集合。真实企微 OAuth、扫码登录、系统浏览器交接与公司 HTTPS 统一在 M6-01 部署/发布环境门禁补验；Defender/NTFS、干净 Windows Server/IIS，以及 M0-17 的计划任务、异机复制、告警、Secret 恢复、真实 Schema 恢复、保留清理和 RPO/RTO 演练仍是 M5/M6 环境或运维门禁。M0 开发门禁通过不代表这些 live 验收已经完成。
 
 ## M0-17 数据库与附件成套备份/隔离恢复原型
 
@@ -49,11 +49,11 @@ ZIP 包含后端 JAR、Vite 生产构建、普通配置与 Secret 占位模板�
 
 M0 将本地/CI 可重复的开发门禁与依赖外部条件的环境门禁分开：`pnpm verify:m0-*` 证明协议、持久化、安全边界、构建与证据格式；真实企业微信 OAuth、公司 HTTPS、真实 Defender/NTFS、干净 Windows Server、IIS、服务账号 ACL、仅 443 和整机重启必须在对应环境中另行证明。未执行时 live evidence 保持 `NOT_RUN`，不阻塞本地开发，也绝不等于 `PASS`。
 
-M0 不实现正式企业微信扫码登录，不创建正式 User、ExternalIdentity、LoginSession 或可续期会话。正式 Web 身份与会话能力属于 M1，正式 Electron 认证与桌面会话属于 M4；两者的真实企微/公司 HTTPS E2E 与目标 Windows Server 部署恢复证据在 M5/M6 环境门禁完成。
+M0 不实现正式企业微信扫码登录，不创建正式 User、ExternalIdentity、LoginSession 或可续期会话。正式 Web 身份与会话能力属于 M1，正式 Electron 认证与桌面会话属于 M4；两者在本地使用仅限 local/test 的受控身份提供者验证，真实企微 OAuth、扫码、鉴权与公司 HTTPS E2E 统一在 M6-01 部署/发布环境门禁完成。
 
 ## M0-15 Electron 浏览器交接与安全壳验证
 
-M0-15 的开发门禁验证 Electron 复用唯一远程 SPA、系统浏览器交接协议、PKCE、一次性 handoff、自定义协议处理和最小安全壳，不提前交付 M4 的正式桌面会话，也不要求真实企微登录。真实系统浏览器企微 OAuth、公司 HTTPS SPA 与 `yumpoo://` 的端到端证据属于 M4-14/M6 环境门禁。后端诊断能力默认不存在；只有 profile 列表包含 `m0-15-live` 且 `YUMPOO_M015_WECOM_ENABLED` 严格等于 `true` 时才注册以下非 OpenAPI 路径：
+M0-15 的开发门禁验证 Electron 复用唯一远程 SPA、系统浏览器交接协议、PKCE、一次性 handoff、自定义协议处理和最小安全壳，不提前交付 M4 的正式桌面会话，也不要求真实企微登录。真实系统浏览器企微 OAuth、公司 HTTPS SPA 与 `yumpoo://` 的端到端证据统一属于 M6-01 部署/发布环境门禁；M4-14 只验证受控身份提供者下的本地桌面语义。后端诊断能力默认不存在；只有 profile 列表包含 `m0-15-live` 且 `YUMPOO_M015_WECOM_ENABLED` 严格等于 `true` 时才注册以下非 OpenAPI 路径：
 
 - `GET /_m0/m0-15/electron/auth/authorize`，接收 `state`、`codeChallenge` 和固定的 `codeChallengeMethod=S256`。
 - `GET /_m0/m0-15/wecom/callback`，完成企微成员检查后跳转 `yumpoo://auth/callback`。
@@ -216,6 +216,8 @@ M0-13 证据只保存企业与目录快照的不可逆 HMAC、运行时间、执
 
 ## 本地开发
 
+完整的数据库环境变量、端口表和启动顺序以 `docs/30-operations/local-development.md` 为本地开发基线。
+
 先启动在线 SPA：
 
 ```powershell
@@ -228,9 +230,9 @@ pnpm dev:web
 pnpm dev:desktop
 ```
 
-开发模式默认加载 `http://127.0.0.1:5173`。`YUMPOO_WEB_URL` 可以覆盖地址；开发环境只接受 `localhost` 或 `127.0.0.1` 的 HTTP 地址，生产环境必须提供无用户名密码的 HTTPS 地址。
+Web 开发服务器默认监听 `http://127.0.0.1:18173`，Vite Preview 默认监听 `http://127.0.0.1:18174`。Electron 开发模式复用同一个 Web SPA，默认加载 `http://127.0.0.1:18173`；`YUMPOO_WEB_URL` 可以覆盖地址。开发环境只接受 `localhost` 或 `127.0.0.1` 的 HTTP 地址，生产环境必须提供无用户名密码的 HTTPS 地址。
 
-后端默认监听 `127.0.0.1:8080`，可由 `YUMPOO_SERVER_PORT` 覆盖。运行后端还需通过环境变量提供应用数据库连接：
+后端程序的安全默认值仍为 `127.0.0.1:8080`，本项目本地开发基线通过 `YUMPOO_SERVER_PORT=8100` 覆盖。运行后端还需通过环境变量提供应用数据库连接：
 
 - `SPRING_DATASOURCE_URL`
 - `SPRING_DATASOURCE_USERNAME`
