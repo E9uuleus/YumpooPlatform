@@ -9,6 +9,9 @@ import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -43,6 +46,7 @@ final class DeploymentPreflight {
         validateBindAddress();
         validatePublicOrigin();
         validateDatabase();
+        validateSessionSecurity();
         return validatePaths();
     }
 
@@ -120,6 +124,54 @@ final class DeploymentPreflight {
             fail(SECRET_INVALID, propertyName);
         }
         return secret;
+    }
+
+    private void validateSessionSecurity() {
+        String currentVersion = requiredEnvironment(
+                "yumpoo.session.current-key-version",
+                SECRET_INVALID
+        );
+        if (!currentVersion.matches("[A-Za-z0-9._-]{1,32}")) {
+            fail(SECRET_INVALID, "yumpoo.session.current-key-version");
+        }
+        validateBase64Secret("yumpoo.session.current-key");
+
+        String previousVersion = optionalEnvironment("yumpoo.session.previous-key-version");
+        String previousKey = optionalEnvironment("yumpoo.session.previous-key");
+        String previousUntil = optionalEnvironment("yumpoo.session.previous-accept-until");
+        boolean any = !previousVersion.isBlank() || !previousKey.isBlank() || !previousUntil.isBlank();
+        if (!any) {
+            return;
+        }
+        if (!previousVersion.matches("[A-Za-z0-9._-]{1,32}")
+                || previousVersion.equals(currentVersion)
+                || previousKey.isBlank()
+                || previousUntil.isBlank()) {
+            fail(SECRET_INVALID, "yumpoo.session.previous-*");
+        }
+        validateBase64Secret("yumpoo.session.previous-key");
+        try {
+            Instant.parse(previousUntil);
+        } catch (DateTimeParseException exception) {
+            fail(SECRET_INVALID, "yumpoo.session.previous-accept-until");
+        }
+    }
+
+    private void validateBase64Secret(String propertyName) {
+        String encoded = requiredEnvironment(propertyName, SECRET_INVALID);
+        try {
+            byte[] decoded = Base64.getDecoder().decode(encoded);
+            if (decoded.length < 32) {
+                fail(SECRET_INVALID, propertyName);
+            }
+        } catch (IllegalArgumentException exception) {
+            fail(SECRET_INVALID, propertyName);
+        }
+    }
+
+    private String optionalEnvironment(String propertyName) {
+        String value = environment.getProperty(propertyName);
+        return value == null ? "" : value.trim();
     }
 
     private DeploymentPaths validatePaths() {

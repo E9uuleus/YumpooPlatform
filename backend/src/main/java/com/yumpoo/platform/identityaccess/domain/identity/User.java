@@ -19,6 +19,7 @@ public record User(
         Instant accountDisabledAt,
         UUID accountDisabledByUserId,
         String accountDisabledReason,
+        long authorizationVersion,
         long rowVersion,
         Instant createdAt,
         Instant updatedAt
@@ -36,8 +37,8 @@ public record User(
         Objects.requireNonNull(directorySyncedAt, "directorySyncedAt must not be null");
         Objects.requireNonNull(createdAt, "createdAt must not be null");
         Objects.requireNonNull(updatedAt, "updatedAt must not be null");
-        if (rowVersion < 0) {
-            throw new IllegalArgumentException("rowVersion must not be negative");
+        if (authorizationVersion < 0 || rowVersion < 0) {
+            throw new IllegalArgumentException("versions must not be negative");
         }
         if (updatedAt.isBefore(createdAt)
                 || directorySyncedAt.isBefore(createdAt)
@@ -70,6 +71,7 @@ public record User(
                 + ", companyId=" + companyId
                 + ", employmentStatus=" + employmentStatus
                 + ", accountStatus=" + accountStatus
+                + ", authorizationVersion=" + authorizationVersion
                 + ", rowVersion=" + rowVersion
                 + ", personalData=REDACTED]";
     }

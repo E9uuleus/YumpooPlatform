@@ -21,6 +21,7 @@ import com.yumpoo.platform.foundation.testing.M011ProbeApplicationService;
 import com.yumpoo.platform.foundation.testing.M011ProbeController;
 import com.yumpoo.platform.foundation.testing.M011SecondaryProbeConsumer;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.TestProbeSecurityConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +60,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Import({
         PostgreSqlTestContainerConfiguration.class,
+        TestProbeSecurityConfiguration.class,
         M011ProbeApplicationService.class,
         M011ProbeController.class,
         M011PrimaryProbeConsumer.class,

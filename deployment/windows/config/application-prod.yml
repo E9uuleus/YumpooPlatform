@@ -13,6 +13,13 @@ spring:
     user: yumpoo_migrator
 
 yumpoo:
+  session:
+    idle-timeout: 8h
+    absolute-timeout: 7d
+    revoked-retention: 24h
+    cleanup-delay: 1h
+    purge-batch-size: 500
+    purge-max-batches: 10
   deployment:
     public-base-url: https://yumpoo.example.invalid
     release-root: C:/Program Files/Yumpoo/releases/current

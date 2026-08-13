@@ -94,8 +94,8 @@ function prepareDirectories() {
 
 function writeExternalConfiguration(databasePort, serverPort) {
   const jdbc = `jdbc:postgresql://127.0.0.1:${databasePort}/yumpoo`
-  const ordinary = `server:\n  address: 127.0.0.1\n  port: ${serverPort}\nspring:\n  datasource:\n    url: ${jdbc}\n    username: m016_app\n    hikari:\n      connection-timeout: 1000\n  flyway:\n    url: ${jdbc}\n    user: m016_migrator\nyumpoo:\n  outbox:\n    enabled: false\n  deployment:\n    public-base-url: https://yumpoo.example.invalid\n    release-root: ${yamlPath('release')}\n    config-root: ${yamlPath('config')}\n    secrets-root: ${yamlPath('secrets')}\n    attachment-root: ${yamlPath('attachment')}\n    upload-temp-root: ${yamlPath('upload-temp')}\n    log-root: ${yamlPath('logs')}\n`
-  const secrets = `spring:\n  datasource:\n    password: ${applicationPassword}\n  flyway:\n    password: ${migrationPassword}\n`
+  const ordinary = `server:\n  address: 127.0.0.1\n  port: ${serverPort}\nspring:\n  datasource:\n    url: ${jdbc}\n    username: m016_app\n    hikari:\n      connection-timeout: 1000\n  flyway:\n    url: ${jdbc}\n    user: m016_migrator\nyumpoo:\n  session:\n    idle-timeout: 8h\n    absolute-timeout: 7d\n    revoked-retention: 24h\n  outbox:\n    enabled: false\n  deployment:\n    public-base-url: https://yumpoo.example.invalid\n    release-root: ${yamlPath('release')}\n    config-root: ${yamlPath('config')}\n    secrets-root: ${yamlPath('secrets')}\n    attachment-root: ${yamlPath('attachment')}\n    upload-temp-root: ${yamlPath('upload-temp')}\n    log-root: ${yamlPath('logs')}\n`
+  const secrets = `spring:\n  datasource:\n    password: ${applicationPassword}\n  flyway:\n    password: ${migrationPassword}\nyumpoo:\n  session:\n    current-key-version: prod-v1\n    current-key: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=\n`
   const invalid = 'yumpoo:\n  deployment:\n    public-base-url: http://invalid.example.test\n'
   fs.writeFileSync(path.join(smokeRoot, 'config', 'application-prod.yml'), ordinary, 'utf8')
   fs.writeFileSync(path.join(smokeRoot, 'secrets', 'application-prod.yml'), secrets, 'utf8')

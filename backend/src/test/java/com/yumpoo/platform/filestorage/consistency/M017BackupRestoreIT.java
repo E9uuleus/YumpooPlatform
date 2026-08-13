@@ -115,6 +115,7 @@ class M017BackupRestoreIT {
             assertThat(countSyntheticReferences(source)).isEqualTo(2);
             assertThat(readCompanyCalendarFact(target)).isEqualTo(readCompanyCalendarFact(source));
             assertThat(readIdentityBindingFact(target)).isEqualTo(readIdentityBindingFact(source));
+            assertThat(readSessionSecurityFact(target)).isEqualTo(readSessionSecurityFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -354,13 +355,14 @@ class M017BackupRestoreIT {
                     INSERT INTO yumpoo.identity_user (
                         id, company_id, employment_status, account_status,
                         display_name, email, mobile, department_summary,
-                        directory_synced_at, row_version, created_at, updated_at
+                        directory_synced_at, authorization_version,
+                        row_version, created_at, updated_at
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000102',
                         '00000000-0000-4000-8000-000000000001',
                         'ACTIVE', 'ENABLED', 'M1-02 Restore User',
                         'restore@example.test', '13800000102', 'Restore Team',
-                        ?, 4, ?, ?
+                        ?, 3, 4, ?, ?
                     )
                     """)) {
                 insertUser.setObject(1, observedAt);
@@ -387,6 +389,33 @@ class M017BackupRestoreIT {
                 insertIdentity.setObject(3, observedAt);
                 assertThat(insertIdentity.executeUpdate()).isOne();
             }
+            try (PreparedStatement insertSession = connection.prepareStatement("""
+                    INSERT INTO yumpoo.login_session (
+                        id, company_id, user_id, status,
+                        session_token_fingerprint, session_key_version,
+                        csrf_token_fingerprint, csrf_key_version,
+                        issued_authorization_version, client_type, client_version,
+                        issued_at, last_seen_at, idle_expires_at,
+                        absolute_expires_at, revoked_at, revoke_reason, purge_after
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000302',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000102', 'REVOKED',
+                        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+                        'current-v1',
+                        'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+                        'current-v1', 3, 'WEB', 'restore-test',
+                        ?, ?, ?, ?, ?, 'AUTHORIZATION_CHANGED', ?
+                    )
+                    """)) {
+                insertSession.setObject(1, observedAt);
+                insertSession.setObject(2, observedAt.plusHours(1));
+                insertSession.setObject(3, observedAt.plusHours(8));
+                insertSession.setObject(4, observedAt.plusDays(7));
+                insertSession.setObject(5, observedAt.plusHours(2));
+                insertSession.setObject(6, observedAt.plusDays(8));
+                assertThat(insertSession.executeUpdate()).isOne();
+            }
             connection.commit();
         }
     }
@@ -403,6 +432,7 @@ class M017BackupRestoreIT {
                          identity_user.employment_status,
                          identity_user.account_status,
                          identity_user.display_name,
+                         identity_user.authorization_version,
                          identity_user.row_version,
                          external_identity.id AS identity_id,
                          external_identity.provider,
@@ -421,11 +451,40 @@ class M017BackupRestoreIT {
                     result.getString("employment_status"),
                     result.getString("account_status"),
                     result.getString("display_name"),
+                    result.getLong("authorization_version"),
                     result.getLong("row_version"),
                     result.getObject("identity_id", UUID.class),
                     result.getString("provider"),
                     result.getString("external_user_id"),
                     result.getString("raw_profile_hash")
+            );
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
+    }
+
+    private static SessionSecurityFact readSessionSecurityFact(
+            PostgreSQLContainer container
+    ) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT status, session_token_fingerprint, session_key_version,
+                            csrf_token_fingerprint, csrf_key_version,
+                            issued_authorization_version, revoke_reason, purge_after
+                     FROM yumpoo.login_session
+                     WHERE id = '00000000-0000-4000-8000-000000000302'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            SessionSecurityFact fact = new SessionSecurityFact(
+                    result.getString("status"),
+                    result.getString("session_token_fingerprint"),
+                    result.getString("session_key_version"),
+                    result.getString("csrf_token_fingerprint"),
+                    result.getString("csrf_key_version"),
+                    result.getLong("issued_authorization_version"),
+                    result.getString("revoke_reason"),
+                    result.getObject("purge_after", OffsetDateTime.class)
             );
             assertThat(result.next()).isFalse();
             return fact;
@@ -467,11 +526,24 @@ class M017BackupRestoreIT {
             String employmentStatus,
             String accountStatus,
             String displayName,
+            long authorizationVersion,
             long rowVersion,
             UUID identityId,
             String provider,
             String externalUserId,
             String rawProfileHash
+    ) {
+    }
+
+    private record SessionSecurityFact(
+            String status,
+            String sessionFingerprint,
+            String sessionKeyVersion,
+            String csrfFingerprint,
+            String csrfKeyVersion,
+            long issuedAuthorizationVersion,
+            String revokeReason,
+            OffsetDateTime purgeAfter
     ) {
     }
 

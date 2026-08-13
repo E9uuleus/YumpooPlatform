@@ -11,6 +11,7 @@ import com.yumpoo.platform.filestorage.testing.M014ControllableMalwareScanner;
 import com.yumpoo.platform.filestorage.testing.M014ParentAccessResolver;
 import com.yumpoo.platform.filestorage.testing.M014StorageFixture;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.TestProbeSecurityConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Import({
         PostgreSqlTestContainerConfiguration.class,
+        TestProbeSecurityConfiguration.class,
         M014AttachmentProbeConfiguration.class,
         M014AttachmentProbeController.class
 })

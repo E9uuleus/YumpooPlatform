@@ -27,6 +27,18 @@ spring:
     timeout-per-shutdown-phase: 45s
 
 yumpoo:
+  session:
+    idle-timeout: ${YUMPOO_SESSION_IDLE_TIMEOUT:8h}
+    absolute-timeout: ${YUMPOO_SESSION_ABSOLUTE_TIMEOUT:7d}
+    revoked-retention: 24h
+    cleanup-delay: 1h
+    purge-batch-size: 500
+    purge-max-batches: 10
+    current-key-version: ${YUMPOO_SESSION_CURRENT_KEY_VERSION:local-v1}
+    current-key: ${YUMPOO_SESSION_CURRENT_KEY:}
+    previous-key-version: ${YUMPOO_SESSION_PREVIOUS_KEY_VERSION:}
+    previous-key: ${YUMPOO_SESSION_PREVIOUS_KEY:}
+    previous-accept-until: ${YUMPOO_SESSION_PREVIOUS_ACCEPT_UNTIL:}
   outbox:
     enabled: true
     poll-delay: 1s

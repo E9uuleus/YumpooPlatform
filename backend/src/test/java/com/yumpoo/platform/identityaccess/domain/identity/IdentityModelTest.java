@@ -112,6 +112,7 @@ class IdentityModelTest {
                 null,
                 null,
                 0,
+                0,
                 NOW,
                 NOW
         )).isInstanceOf(IllegalArgumentException.class)
@@ -132,6 +133,7 @@ class IdentityModelTest {
                 null,
                 null,
                 null,
+                0,
                 0,
                 NOW,
                 NOW
@@ -155,6 +157,7 @@ class IdentityModelTest {
                 null,
                 null,
                 null,
+                0,
                 0,
                 NOW,
                 NOW
