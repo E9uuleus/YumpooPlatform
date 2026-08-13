@@ -1,5 +1,13 @@
 # Yumpoo Server
 
+## M1-01 Company 与工作日历底座
+
+`organization` 模块拥有 Company 与 `company_calendar_day`。Flyway `V6` 创建并固定种下唯一 Company：ID 为 `00000000-0000-4000-8000-000000000001`，展示名 `Yumpoo`，时区 `Asia/Shanghai`，周起始日 `MONDAY`，默认工作日 480 分钟。数据库是运行期唯一配置真源；应用不会用环境变量覆盖种子，读取到缺失 Company、非法 IANA 时区或非周一起始配置时会失败关闭。
+
+`organization.api.CompanyConfigurationQuery` 和 `CompanyCalendarQuery` 是跨模块只读入口，不暴露 JDBC 仓储。日历缺省为周一至周五工作、周末休息，日期级覆盖优先；工作日空分钟继承 Company 默认值，非工作日固定为 0。日期与时刻运算使用 `Instant`、`LocalDate`、`ZoneId`，DST 缺口向后移动到首个有效时刻，重叠固定选择较早 offset。
+
+从仓库根运行 `pnpm verify:m1-01`，会执行后端 `clean verify` 和完整 Node 工作区门禁。本切片没有 REST/OpenAPI、前端或日历写命令。
+
 ## M0-17 备份与隔离恢复测试原型
 
 `M017BackupRestoreIT` 使用两个独立的 PostgreSQL 17.10 Testcontainers 实例验证 custom-format `pg_dump`/`pg_restore`，并用 test-only 合成表关联 M0-14 内容寻址附件。备份集在 `.partial` 目录完成数据库、附件、普通配置、Secret 恢复描述和逐文件 SHA-256 manifest 后，才以同卷原子移动完成；恢复前必须完整验签并确认数据库和附件目标为空。

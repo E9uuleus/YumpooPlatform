@@ -27,6 +27,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -70,6 +73,7 @@ class M017BackupRestoreIT {
             PublishedBlob second = publish(sourceStorage, "M0-17 synthetic attachment B\n");
             PublishedBlob orphan = publish(sourceStorage, "M0-17 unreferenced orphan\n");
             createSyntheticReferences(source, List.of(first, second));
+            createCompanyCalendarFact(source);
 
             Path dump = workRoot.resolve("yumpoo.dump");
             createDump(source, dump);
@@ -108,6 +112,7 @@ class M017BackupRestoreIT {
             assertThat(restoredReferences).containsExactlyInAnyOrder(first, second);
             assertThat(latestFlywayVersion(target)).isEqualTo(flywayVersion);
             assertThat(countSyntheticReferences(source)).isEqualTo(2);
+            assertThat(readCompanyCalendarFact(target)).isEqualTo(readCompanyCalendarFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -280,6 +285,62 @@ class M017BackupRestoreIT {
         }
     }
 
+    private static void createCompanyCalendarFact(PostgreSQLContainer container) throws SQLException {
+        try (Connection connection = connection(container);
+             PreparedStatement insert = connection.prepareStatement("""
+                     INSERT INTO yumpoo.company_calendar_day (
+                         company_id, calendar_date, day_type, standard_minutes,
+                         source, note, row_version, created_at, updated_at
+                     ) VALUES (
+                         '00000000-0000-4000-8000-000000000001',
+                         DATE '2026-10-10', 'WORKDAY', 420,
+                         'IMPORT', 'M0-17 restore probe', 3, ?, ?
+                     )
+                     """)) {
+            OffsetDateTime createdAt = OffsetDateTime.ofInstant(
+                    Instant.parse("2026-08-13T03:00:00Z"),
+                    ZoneOffset.UTC
+            );
+            insert.setObject(1, createdAt);
+            insert.setObject(2, createdAt);
+            assertThat(insert.executeUpdate()).isOne();
+        }
+    }
+
+    private static CompanyCalendarFact readCompanyCalendarFact(
+            PostgreSQLContainer container
+    ) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT
+                         company.timezone,
+                         company.week_start_day,
+                         company.default_workday_minutes,
+                         calendar.calendar_date,
+                         calendar.day_type,
+                         calendar.standard_minutes,
+                         calendar.row_version
+                     FROM yumpoo.company company
+                     JOIN yumpoo.company_calendar_day calendar
+                       ON calendar.company_id = company.id
+                     WHERE calendar.calendar_date = DATE '2026-10-10'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            CompanyCalendarFact fact = new CompanyCalendarFact(
+                    result.getString("timezone"),
+                    result.getString("week_start_day"),
+                    result.getInt("default_workday_minutes"),
+                    result.getObject("calendar_date", LocalDate.class),
+                    result.getString("day_type"),
+                    result.getInt("standard_minutes"),
+                    result.getLong("row_version")
+            );
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
+    }
+
     private static String postgresVersion(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
              Statement statement = connection.createStatement();
@@ -296,6 +357,17 @@ class M017BackupRestoreIT {
             result.next();
             return result.getInt(1);
         }
+    }
+
+    private record CompanyCalendarFact(
+            String timezone,
+            String weekStartDay,
+            int defaultWorkdayMinutes,
+            LocalDate calendarDate,
+            String dayType,
+            int standardMinutes,
+            long rowVersion
+    ) {
     }
 
     private static List<PublishedBlob> readSyntheticReferences(PostgreSQLContainer container) throws SQLException {

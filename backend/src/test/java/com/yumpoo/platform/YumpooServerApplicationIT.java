@@ -196,15 +196,42 @@ class YumpooServerApplicationIT {
                         + "AND tablename = 'desktop_auth_attempt'",
                 String.class
         );
+        List<String> organizationConstraintNames = jdbcTemplate.queryForList(
+                "SELECT constraint_record.conname "
+                        + "FROM pg_constraint constraint_record "
+                        + "JOIN pg_class table_record "
+                        + "ON table_record.oid = constraint_record.conrelid "
+                        + "JOIN pg_namespace schema_record "
+                        + "ON schema_record.oid = table_record.relnamespace "
+                        + "WHERE schema_record.nspname = 'yumpoo' "
+                        + "AND table_record.relname IN ('company', 'company_calendar_day') "
+                        + "AND constraint_record.contype <> 'n'",
+                String.class
+        );
+        List<String> organizationIndexNames = jdbcTemplate.queryForList(
+                "SELECT indexname FROM pg_indexes "
+                        + "WHERE schemaname = 'yumpoo' "
+                        + "AND tablename IN ('company', 'company_calendar_day')",
+                String.class
+        );
+        List<String> companySeeds = jdbcTemplate.queryForList(
+                "SELECT id::text || '|' || singleton_slot || '|' || display_name || '|' "
+                        + "|| timezone || '|' || week_start_day || '|' "
+                        + "|| default_workday_minutes || '|' || row_version "
+                        + "FROM yumpoo.company",
+                String.class
+        );
 
         assertThat(configuration.getDefaultSchema()).isEqualTo(PLATFORM_SCHEMA);
         assertThat(configuration.getSchemas()).containsExactly(PLATFORM_SCHEMA);
         assertThat(configuration.isValidateOnMigrate()).isTrue();
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
-        assertThat(successfulMigrationVersions).containsExactly("1", "2", "3", "4", "5");
+        assertThat(successfulMigrationVersions).containsExactly("1", "2", "3", "4", "5", "6");
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
+                "company",
+                "company_calendar_day",
                 "desktop_auth_attempt",
                 "idempotency_record",
                 "outbox_consumer_receipt",
@@ -277,6 +304,34 @@ class YumpooServerApplicationIT {
                 "uq_desktop_auth_attempt_handoff_code_hash",
                 "idx_desktop_auth_attempt_authorize_expires_at",
                 "idx_desktop_auth_attempt_handoff_expires_at"
+        );
+        assertThat(organizationConstraintNames).containsExactlyInAnyOrder(
+                "company_pkey",
+                "uq_company_singleton_slot",
+                "ck_company_id_v4",
+                "ck_company_singleton_slot",
+                "ck_company_display_name",
+                "ck_company_timezone",
+                "ck_company_week_start_day",
+                "ck_company_default_workday_minutes",
+                "ck_company_row_version",
+                "ck_company_timestamps",
+                "company_calendar_day_pkey",
+                "fk_company_calendar_day_company",
+                "ck_company_calendar_day_type",
+                "ck_company_calendar_day_minutes",
+                "ck_company_calendar_day_source",
+                "ck_company_calendar_day_note",
+                "ck_company_calendar_day_row_version",
+                "ck_company_calendar_day_timestamps"
+        );
+        assertThat(organizationIndexNames).containsExactlyInAnyOrder(
+                "company_pkey",
+                "uq_company_singleton_slot",
+                "company_calendar_day_pkey"
+        );
+        assertThat(companySeeds).containsExactly(
+                "00000000-0000-4000-8000-000000000001|1|Yumpoo|Asia/Shanghai|MONDAY|480|0"
         );
     }
 
