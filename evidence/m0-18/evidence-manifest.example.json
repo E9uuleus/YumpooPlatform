@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-18",
+  "generatedAt": "2026-08-13T00:30:00Z",
+  "sourceCommit": "0000000000000000000000000000000000000000",
+  "files": [
+    { "path": "deferred-acceptance.json", "role": "DEFERRED_ACCEPTANCE", "bytes": 1, "sha256": "1111111111111111111111111111111111111111111111111111111111111111" },
+    { "path": "m0-15/artifact-manifest.json", "role": "M015_MANIFEST", "bytes": 1, "sha256": "2222222222222222222222222222222222222222222222222222222222222222" },
+    { "path": "m0-16/artifact-manifest.json", "role": "M016_MANIFEST", "bytes": 1, "sha256": "3333333333333333333333333333333333333333333333333333333333333333" },
+    { "path": "m0-16/yumpoo-windows-m0-16.zip.sha256", "role": "M016_ZIP_DIGEST", "bytes": 1, "sha256": "4444444444444444444444444444444444444444444444444444444444444444" },
+    { "path": "m0-17/backup-manifest.json", "role": "M017_BACKUP_MANIFEST", "bytes": 1, "sha256": "5555555555555555555555555555555555555555555555555555555555555555" },
+    { "path": "m0-17/retention-plan.json", "role": "M017_RETENTION_PLAN", "bytes": 1, "sha256": "6666666666666666666666666666666666666666666666666666666666666666" },
+    { "path": "m0-17/verification-report.json", "role": "M017_VERIFICATION_REPORT", "bytes": 1, "sha256": "7777777777777777777777777777777777777777777777777777777777777777" },
+    { "path": "portable/portable-handoff.json", "role": "PORTABLE_HANDOFF", "bytes": 1, "sha256": "8888888888888888888888888888888888888888888888888888888888888888" },
+    { "path": "verification-report.json", "role": "VERIFICATION_REPORT", "bytes": 1, "sha256": "9999999999999999999999999999999999999999999999999999999999999999" }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/evidence/m0-18/verification-report.schema.json",
+  "title": "M0-18 development verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "milestone", "status", "startedAt", "completedAt", "sourceCommit", "baseCommit", "headCommit", "testedCommit", "reproductionCommand", "environment", "gates", "checks", "digests", "limitations", "ci"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "milestone": { "const": "M0-18" },
+    "status": { "const": "PASS" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "baseCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "headCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "testedCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "reproductionCommand": { "const": "pnpm verify:m0-18" },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "architecture", "javaMajor", "nodeVersion", "pnpmVersion", "mavenVersion", "postgresImage", "companyTimeZone"],
+      "properties": {
+        "platform": { "const": "win32" },
+        "architecture": { "const": "x64" },
+        "javaMajor": { "const": 21 },
+        "nodeVersion": { "const": "24.14.0" },
+        "pnpmVersion": { "const": "11.16.0" },
+        "mavenVersion": { "const": "3.9.9" },
+        "postgresImage": { "const": "postgres:17.10-alpine" },
+        "companyTimeZone": { "const": "Asia/Shanghai" }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contracts", "openApiCompatibility", "buildMigrationArchitectureTests", "desktopSmoke", "serverSmoke", "windowsPackaging", "backupRestore"],
+      "properties": {
+        "contracts": { "const": "PASS" },
+        "openApiCompatibility": { "const": "PASS" },
+        "buildMigrationArchitectureTests": { "const": "PASS" },
+        "desktopSmoke": { "const": "PASS" },
+        "serverSmoke": { "const": "PASS" },
+        "windowsPackaging": { "const": "PASS" },
+        "backupRestore": { "const": "PASS" }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractsValidated", "liveNotRunExactSet", "m017FollowUpsComplete", "buildPassed", "migrationPassed", "architecturePassed", "openApiPassed", "openApiCompatibilityPassed", "automatedTestsPassed", "desktopPackagePassed", "desktopSmokePassed", "backupRestorePassed", "sensitiveDataExcluded"],
+      "properties": {
+        "contractsValidated": { "const": true },
+        "liveNotRunExactSet": { "const": true },
+        "m017FollowUpsComplete": { "const": true },
+        "buildPassed": { "const": true },
+        "migrationPassed": { "const": true },
+        "architecturePassed": { "const": true },
+        "openApiPassed": { "const": true },
+        "openApiCompatibilityPassed": { "const": true },
+        "automatedTestsPassed": { "const": true },
+        "desktopPackagePassed": { "const": true },
+        "desktopSmokePassed": { "const": true },
+        "backupRestorePassed": { "const": true },
+        "sensitiveDataExcluded": { "const": true }
+      }
+    },
+    "digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baselineOpenApi", "currentOpenApi", "portableHandoff", "m015Manifest", "m016Manifest", "m016Zip", "m017BackupManifest", "m017RetentionPlan", "m017VerificationReport", "deferredAcceptance"],
+      "properties": {
+        "baselineOpenApi": { "$ref": "#/definitions/sha256" },
+        "currentOpenApi": { "$ref": "#/definitions/sha256" },
+        "portableHandoff": { "$ref": "#/definitions/sha256" },
+        "m015Manifest": { "$ref": "#/definitions/sha256" },
+        "m016Manifest": { "$ref": "#/definitions/sha256" },
+        "m016Zip": { "$ref": "#/definitions/sha256" },
+        "m017BackupManifest": { "$ref": "#/definitions/sha256" },
+        "m017RetentionPlan": { "$ref": "#/definitions/sha256" },
+        "m017VerificationReport": { "$ref": "#/definitions/sha256" },
+        "deferredAcceptance": { "$ref": "#/definitions/sha256" }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": { "enum": ["DEVELOPMENT_GATE_ONLY", "LIVE_EVIDENCE_NOT_IMPLIED", "SYNTHETIC_BACKUP_DATA_ONLY", "PRODUCTION_BACKUP_AND_RPO_RTO_DEFERRED"] }
+    },
+    "ci": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "runAttempt", "handoffArtifactName", "handoffArtifactDigest"],
+      "properties": {
+        "runId": { "type": ["string", "null"], "pattern": "^[0-9]+$" },
+        "runAttempt": { "type": ["string", "null"], "pattern": "^[0-9]+$" },
+        "handoffArtifactName": { "type": ["string", "null"], "minLength": 1 },
+        "handoffArtifactDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    }
+  },
+  "definitions": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

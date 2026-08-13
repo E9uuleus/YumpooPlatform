@@ -1,0 +1,123 @@
+name: M0-18 CI
+
+on:
+  pull_request:
+    branches:
+      - dev
+  push:
+    branches:
+      - dev
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m0-18-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: M0 Linux Gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      handoff-digest: ${{ steps.handoff_upload.outputs.artifact-digest }}
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.16.0
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Preflight Linux-container Docker
+        run: |
+          docker version
+          docker info
+          docker pull postgres:17.10-alpine
+      - name: Run portable M0 gate and desktop smoke
+        env:
+          YUMPOO_M018_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          YUMPOO_M018_HEAD_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          YUMPOO_M018_TESTED_COMMIT: ${{ github.sha }}
+        run: xvfb-run --auto-servernum --server-args='-screen 0 1280x720x24' pnpm verify:m0-18:portable
+      - name: Upload tested portable handoff
+        id: handoff_upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: m0-18-portable-${{ github.run_id }}-${{ github.run_attempt }}
+          path: out/m0-18/portable-handoff
+          if-no-files-found: error
+          retention-days: 1
+
+  windows:
+    name: M0 Windows Gate
+    needs:
+      - linux
+    if: ${{ always() }}
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Fail closed when Linux gate did not pass
+        shell: powershell
+        run: |
+          if ('${{ needs.linux.result }}' -ne 'success') {
+            throw 'M0 Linux Gate did not succeed; Windows gate fails closed.'
+          }
+      - name: Checkout the same tested commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: 11.16.0
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Set up Java
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Download exact portable handoff
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: m0-18-portable-${{ github.run_id }}-${{ github.run_attempt }}
+          path: out/m0-18/portable-handoff
+      - name: Run Windows packaging and evidence gate
+        env:
+          YUMPOO_M018_HANDOFF_ROOT: ${{ github.workspace }}\out\m0-18\portable-handoff
+          YUMPOO_M018_HANDOFF_ARTIFACT_NAME: m0-18-portable-${{ github.run_id }}-${{ github.run_attempt }}
+          YUMPOO_M018_HANDOFF_ARTIFACT_DIGEST: ${{ needs.linux.outputs.handoff-digest }}
+        run: pnpm verify:m0-18:windows
+      - name: Upload final M0-18 evidence pack
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: m0-18-evidence-${{ github.sha }}-${{ github.run_attempt }}
+          path: out/m0-18/evidence-pack
+          if-no-files-found: error
+          retention-days: 30

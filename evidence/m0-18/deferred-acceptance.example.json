@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-18",
+  "updatedAt": "2026-08-13T00:00:00Z",
+  "liveVerifications": [
+    {
+      "id": "LIVE-M0-12",
+      "milestone": "M0-12",
+      "evidencePath": "evidence/m0-12/live-verification.json",
+      "status": "NOT_RUN",
+      "blocksM0DevelopmentExit": false,
+      "blocksReleaseIfIncomplete": true,
+      "targetGate": "M1-13",
+      "mustPassBy": "M6-01",
+      "acceptanceCommand": "pnpm verify:m0-12:live",
+      "ownerRole": "身份与安全负责人",
+      "prerequisites": ["真实企业微信测试企业与受信 HTTPS callback"],
+      "requiredChecks": ["configurationPreflight"]
+    }
+  ],
+  "m017OperationalFollowUps": [
+    {
+      "id": "SCHEDULED_BACKUP",
+      "sourceMilestone": "M0-17",
+      "status": "DEFERRED",
+      "blocksM0DevelopmentExit": false,
+      "blocksM5ExitIfIncomplete": true,
+      "targetGate": "M5-15",
+      "mustCompleteBy": "M5-20",
+      "reverifyAt": null,
+      "ownerRole": "运维负责人",
+      "prerequisites": ["正式备份目录与任务账号"],
+      "acceptanceCriteria": ["每日成套备份可重复执行且阻止任务重叠"],
+      "completionEvidence": null
+    }
+  ]
+}

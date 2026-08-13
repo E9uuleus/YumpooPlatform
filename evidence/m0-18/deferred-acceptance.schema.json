@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/evidence/m0-18/deferred-acceptance.schema.json",
+  "title": "M0-18 deferred environment acceptance register",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "milestone", "updatedAt", "liveVerifications", "m017OperationalFollowUps"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "milestone": { "const": "M0-18" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "liveVerifications": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/liveVerification" }
+    },
+    "m017OperationalFollowUps": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/operationalFollowUp" }
+    }
+  },
+  "definitions": {
+    "stringList": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+    },
+    "liveVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "milestone", "evidencePath", "status", "blocksM0DevelopmentExit", "blocksReleaseIfIncomplete", "targetGate", "mustPassBy", "acceptanceCommand", "ownerRole", "prerequisites", "requiredChecks"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^LIVE-M0-[0-9]{2}$" },
+        "milestone": { "type": "string", "pattern": "^M0-[0-9]{2}$" },
+        "evidencePath": { "type": "string", "pattern": "^evidence/m0-[0-9]{2}/live-verification\\.json$" },
+        "status": { "const": "NOT_RUN" },
+        "blocksM0DevelopmentExit": { "const": false },
+        "blocksReleaseIfIncomplete": { "const": true },
+        "targetGate": { "type": "string", "pattern": "^M[1-6](?:[A-Z])?-[0-9]{2}$" },
+        "mustPassBy": { "type": "string", "pattern": "^M[1-6](?:[A-Z])?-[0-9]{2}$" },
+        "acceptanceCommand": { "type": ["string", "null"], "minLength": 1 },
+        "ownerRole": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "prerequisites": { "$ref": "#/definitions/stringList" },
+        "requiredChecks": { "$ref": "#/definitions/stringList" }
+      }
+    },
+    "operationalFollowUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sourceMilestone", "status", "blocksM0DevelopmentExit", "blocksM5ExitIfIncomplete", "targetGate", "mustCompleteBy", "reverifyAt", "ownerRole", "prerequisites", "acceptanceCriteria", "completionEvidence"],
+      "properties": {
+        "id": { "enum": ["SCHEDULED_BACKUP", "OFF_HOST_COPY", "FAILURE_ALERTING", "INTEGRITY_AND_SECRET_RECOVERY", "REAL_SCHEMA_RESTORE", "RETENTION_CLEANUP", "RPO_RTO_DRILL"] },
+        "sourceMilestone": { "const": "M0-17" },
+        "status": { "enum": ["DEFERRED", "PASS"] },
+        "blocksM0DevelopmentExit": { "const": false },
+        "blocksM5ExitIfIncomplete": { "const": true },
+        "targetGate": { "type": "string", "pattern": "^M[5-6]-[0-9]{2}$" },
+        "mustCompleteBy": { "type": "string", "pattern": "^M[5-6]-[0-9]{2}$" },
+        "reverifyAt": { "type": ["string", "null"], "pattern": "^M6-[0-9]{2}$" },
+        "ownerRole": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "prerequisites": { "$ref": "#/definitions/stringList" },
+        "acceptanceCriteria": { "$ref": "#/definitions/stringList" },
+        "completionEvidence": { "type": ["string", "null"], "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "PASS" } } },
+          "then": { "properties": { "completionEvidence": { "type": "string", "minLength": 1 } } },
+          "else": { "properties": { "completionEvidence": { "type": "null" } } }
+        }
+      ]
+    }
+  }
+}

@@ -9,8 +9,15 @@ const outputRoot = path.join(repositoryRoot, 'out', 'm0-16')
 const stagingRoot = path.join(outputRoot, 'staging')
 const zipPath = path.join(outputRoot, 'yumpoo-windows-m0-16.zip')
 const zipHashPath = `${zipPath}.sha256`
-const jarPath = path.join(repositoryRoot, 'backend', 'target', 'yumpoo-server.jar')
-const webRoot = path.join(repositoryRoot, 'frontend', 'web-app', 'dist')
+const portablePayloadRoot = process.env.YUMPOO_M016_PAYLOAD_ROOT
+  ? path.resolve(process.env.YUMPOO_M016_PAYLOAD_ROOT)
+  : undefined
+const jarPath = portablePayloadRoot
+  ? path.join(portablePayloadRoot, 'server', 'yumpoo-server.jar')
+  : path.join(repositoryRoot, 'backend', 'target', 'yumpoo-server.jar')
+const webRoot = portablePayloadRoot
+  ? path.join(portablePayloadRoot, 'web')
+  : path.join(repositoryRoot, 'frontend', 'web-app', 'dist')
 const deploymentRoot = path.join(repositoryRoot, 'deployment', 'windows')
 
 assertM016(process.platform === 'win32' && process.arch === 'x64', 'Windows 发布包只能在 Windows x64 上组装')
