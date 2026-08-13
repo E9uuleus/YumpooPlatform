@@ -12,7 +12,7 @@ pnpm verify:m0-18
 
 也可按 CI 边界分别运行 `pnpm verify:m0-18:portable` 与 `pnpm verify:m0-18:windows`，但二者是 CI 分段入口，不能替代 Windows x64 上的 `pnpm verify:m0-18`。`M0 Portable Gate` 在 Ubuntu 24.04 只执行可移植门禁：OpenAPI 兼容性、Maven Verify、Flyway/Testcontainers、ArchUnit、Node 构建与测试、100 MiB 探针和备份恢复；它随后用逐文件大小与 SHA-256 manifest 交付已测试的 JAR/Web 字节，不声明 Linux 运行时或生产等价性。`M0 Windows x64 Gate` 必须等待 portable 成功，复核同一提交和 handoff 精确文件集后，在 Windows 2022 执行真实 Electron smoke、Electron Windows 打包、ASAR 白名单、M0-16 ZIP 组装及复核。packaged-JAR、回环监听、外部配置、目录/数据库故障语义与脱敏拒启 smoke 只由完整 Windows x64 入口执行。
 
-最终开发证据写入忽略目录 `out/m0-18/evidence-pack` 并由 CI 作为 30 天 artifact 上传。报告以 `validationMode` 区分 `WINDOWS_X64_FULL` 与 `WINDOWS_X64_CI_STAGE`；CI 分段报告必须把 `serverSmoke` 记为 `NOT_RUN` 并带上 `WINDOWS_FULL_CHAIN_NOT_RUN` 限制，绝不冒充完整验证。包内只允许 verification report、延期清单、portable handoff manifest、M0-15/M0-16 manifest、ZIP 摘要和 M0-17 三份安全元数据；JAR、ZIP、附件、dump、日志、测试 XML、绝对路径、环境变量和任何凭据均被拒绝。动态 `PASS` 报告绑定实际测试提交，不进入 Git。
+最终开发证据写入忽略目录 `out/m0-18/evidence-pack` 并由 CI 作为 30 天 artifact 上传。报告以 `validationMode` 区分 `WINDOWS_X64_FULL` 与 `WINDOWS_X64_CI_STAGE`；FULL 报告还必须消费绑定当前提交与 JAR 摘要的 server-smoke receipt。CI 分段报告必须把 `serverSmoke` 记为 `NOT_RUN`、使用 `pnpm verify:m0-18:windows` 作为复现命令，并带上 `WINDOWS_FULL_CHAIN_NOT_RUN` 限制，绝不冒充完整验证。包内只允许 verification report、延期清单、portable handoff manifest、M0-15/M0-16 manifest、ZIP 摘要和 M0-17 三份安全元数据；JAR、ZIP、附件、dump、日志、测试 XML、绝对路径、环境变量和任何凭据均被拒绝。动态 `PASS` 报告绑定实际测试提交，不进入 Git。
 
 `evidence/m0-18/deferred-acceptance.json` 与仓库内所有 live evidence 双向精确对账：当前 M0-12、M0-14、M0-15、M0-16 保持 `NOT_RUN`，M0-13 已 `PASS` 因而不得列入延期集合。真实企微、Defender/NTFS、系统浏览器、干净 Windows Server/IIS，以及 M0-17 的计划任务、异机复制、告警、Secret 恢复、真实 Schema 恢复、保留清理和 RPO/RTO 演练仍是 M4/M5/M6 环境或运维门禁；M0 开发门禁通过不代表这些 live 验收已经完成。
 

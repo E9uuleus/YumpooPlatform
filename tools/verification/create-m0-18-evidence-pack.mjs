@@ -16,6 +16,7 @@ import {
   sha256Pattern,
 } from './m0-18-utils.mjs'
 import { verifyM018Handoff } from './verify-m0-18-handoff.mjs'
+import { verifyServerSmokeReceipt } from './m0-18-server-smoke-receipt.mjs'
 
 const fileRoles = new Map([
   ['deferred-acceptance.json', 'DEFERRED_ACCEPTANCE'],
@@ -105,12 +106,63 @@ export function verifyEvidencePack(repositoryRoot, outputRoot, expectedCommit = 
   assertM018(Date.parse(report.completedAt) >= Date.parse(report.startedAt), 'verification report 时间顺序无效')
   assertM018(Date.parse(report.completedAt) <= Date.now() + 120_000, 'verification report 完成时间位于未来')
 
+  const handoff = readJson(path.join(outputRoot, 'portable', 'portable-handoff.json'), 'portable handoff')
+  assertSchema(path.join(repositoryRoot, 'evidence', 'm0-18', 'portable-handoff.schema.json'), handoff, 'portable handoff')
+  assertM018(
+    handoff.sourceCommit === expectedCommit &&
+      handoff.testedCommit === expectedCommit &&
+      report.baseCommit === handoff.baseCommit &&
+      report.headCommit === handoff.headCommit,
+    'verification report 与 portable handoff 提交关系不一致',
+  )
+  assertEvidenceReportDigests(outputRoot, report, handoff)
+
+  const m015 = readJson(path.join(outputRoot, 'm0-15', 'artifact-manifest.json'))
+  const m016 = readJson(path.join(outputRoot, 'm0-16', 'artifact-manifest.json'))
+  assertM018(m015.sourceCommit === expectedCommit && m016.sourceCommit === expectedCommit, 'Windows manifest 未绑定当前 checkout')
+  for (const [file, schema] of [
+    ['backup-manifest.json', 'backup-manifest.schema.json'],
+    ['retention-plan.json', 'retention-plan.schema.json'],
+    ['verification-report.json', 'verification-report.schema.json'],
+  ]) {
+    assertSchema(
+      path.join(repositoryRoot, 'evidence', 'm0-17', schema),
+      readJson(path.join(outputRoot, 'm0-17', file)),
+      `M0-17 ${file}`,
+    )
+  }
+
   const actualFiles = collectRegularFiles(outputRoot).filter((file) => path.resolve(file) !== path.resolve(manifestPath))
   const records = fileRecords(outputRoot, actualFiles, (relativePath) => fileRoles.get(relativePath) ?? '')
   assertM018(JSON.stringify(records) === JSON.stringify(manifest.files), 'evidence manifest 与实际文件、角色、大小或 SHA-256 不一致')
   assertM018(records.length === fileRoles.size, '证据包文件数量不符合白名单')
   assertNoSensitiveMaterial(outputRoot, collectRegularFiles(outputRoot), repositoryRoot)
   return { manifest, report }
+}
+
+export function assertEvidenceReportDigests(outputRoot, report, handoff) {
+  const digestFiles = new Map([
+    ['portableHandoff', 'portable/portable-handoff.json'],
+    ['m015Manifest', 'm0-15/artifact-manifest.json'],
+    ['m016Manifest', 'm0-16/artifact-manifest.json'],
+    ['m017BackupManifest', 'm0-17/backup-manifest.json'],
+    ['m017RetentionPlan', 'm0-17/retention-plan.json'],
+    ['m017VerificationReport', 'm0-17/verification-report.json'],
+    ['deferredAcceptance', 'deferred-acceptance.json'],
+  ])
+  for (const [key, relativePath] of digestFiles) {
+    assertM018(
+      report.digests[key] === sha256File(path.join(outputRoot, ...relativePath.split('/'))),
+      `verification report 摘要与 ${relativePath} 不一致`,
+    )
+  }
+  assertM018(report.digests.baselineOpenApi === handoff.baselineOpenApiSha256, 'OpenAPI 基线摘要与 handoff 不一致')
+  assertM018(report.digests.currentOpenApi === handoff.currentOpenApiSha256, '当前 OpenAPI 摘要与 handoff 不一致')
+  const zipDigest = fs
+    .readFileSync(path.join(outputRoot, 'm0-16', 'yumpoo-windows-m0-16.zip.sha256'), 'utf8')
+    .trim()
+    .match(/^([0-9a-f]{64})  yumpoo-windows-m0-16\.zip$/u)?.[1]
+  assertM018(report.digests.m016Zip === zipDigest, 'verification report 摘要与 M0-16 ZIP 摘要不一致')
 }
 
 export function createEvidencePack(repositoryRoot, options = {}) {
@@ -224,6 +276,20 @@ function createVerificationReport(repositoryRoot, partialRoot, handoff, sourceCo
     'verification report 的 Windows 验证模式无效',
   )
   const fullWindowsChain = validationMode === 'WINDOWS_X64_FULL'
+  if (fullWindowsChain) {
+    const serverJar = handoff.files.find((file) => file.role === 'SERVER_JAR')
+    assertM018(serverJar, 'portable handoff 缺少 server JAR')
+    verifyServerSmokeReceipt(
+      repositoryRoot,
+      process.env.YUMPOO_M018_SERVER_SMOKE_RECEIPT,
+      {
+        expectedCommit: sourceCommit,
+        expectedJarSha256: serverJar.sha256,
+        notBefore: handoff.generatedAt,
+        consume: true,
+      },
+    )
+  }
   const versions = toolVersions(repositoryRoot)
   const zipDigest = fs
     .readFileSync(path.join(partialRoot, 'm0-16', 'yumpoo-windows-m0-16.zip.sha256'), 'utf8')
@@ -240,7 +306,7 @@ function createVerificationReport(repositoryRoot, partialRoot, handoff, sourceCo
     baseCommit: handoff.baseCommit,
     headCommit: handoff.headCommit,
     testedCommit: handoff.testedCommit,
-    reproductionCommand: 'pnpm verify:m0-18',
+    reproductionCommand: fullWindowsChain ? 'pnpm verify:m0-18' : 'pnpm verify:m0-18:windows',
     validationMode,
     environment: {
       platform: 'win32',

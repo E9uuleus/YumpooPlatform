@@ -15,7 +15,7 @@
     "baseCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "headCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "testedCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-    "reproductionCommand": { "const": "pnpm verify:m0-18" },
+    "reproductionCommand": { "enum": ["pnpm verify:m0-18", "pnpm verify:m0-18:windows"] },
     "validationMode": { "enum": ["WINDOWS_X64_FULL", "WINDOWS_X64_CI_STAGE"] },
     "environment": {
       "type": "object",
@@ -116,6 +116,7 @@
         "properties": {
           "gates": { "properties": { "serverSmoke": { "const": "PASS" } } },
           "checks": { "properties": { "serverSmokePassed": { "const": true } } },
+          "reproductionCommand": { "const": "pnpm verify:m0-18" },
           "limitations": { "not": { "contains": { "const": "WINDOWS_FULL_CHAIN_NOT_RUN" } } }
         }
       }
@@ -126,6 +127,7 @@
         "properties": {
           "gates": { "properties": { "serverSmoke": { "const": "NOT_RUN" } } },
           "checks": { "properties": { "serverSmokePassed": { "const": false } } },
+          "reproductionCommand": { "const": "pnpm verify:m0-18:windows" },
           "limitations": { "contains": { "const": "WINDOWS_FULL_CHAIN_NOT_RUN" } }
         }
       }

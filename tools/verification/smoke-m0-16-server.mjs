@@ -4,6 +4,7 @@ import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { assertM016 } from './m0-16-utils.mjs'
+import { writeServerSmokeReceipt } from './m0-18-server-smoke-receipt.mjs'
 import { stopProcessTree } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -73,6 +74,9 @@ try {
   containerStarted = false
   await waitUntil(async () => healthMatches(`${baseUrl}/actuator/health/readiness`, 503, 'DOWN'), 30_000, '数据库故障未使 readiness DOWN')
   assertM016(await healthMatches(`${baseUrl}/actuator/health/liveness`, 200, 'UP'), '数据库故障时 liveness 必须保持 UP')
+  if (process.env.YUMPOO_M018_SERVER_SMOKE_RECEIPT) {
+    writeServerSmokeReceipt(repositoryRoot, jarPath, process.env.YUMPOO_M018_SERVER_SMOKE_RECEIPT)
+  }
   console.log('M0-16 packaged JAR 回环监听、外部配置、目录/数据库健康语义和脱敏拒启已通过')
 } finally {
   stopProcessTree(application)

@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import YAML from 'yaml'
 import { extractOpenApiBaseline } from '../openapi/extract-openapi-baseline.mjs'
-import { assertNoSensitiveMaterial } from './create-m0-18-evidence-pack.mjs'
+import { assertEvidenceReportDigests, assertNoSensitiveMaterial } from './create-m0-18-evidence-pack.mjs'
+import { verifyServerSmokeReceipt } from './m0-18-server-smoke-receipt.mjs'
 import {
   loadLiveEvidence,
   validateDeferredAcceptance,
@@ -21,6 +22,7 @@ import {
   fileRecords,
   isSafeRelativePath,
   readJson,
+  sha256File,
   validateGitRef,
 } from './m0-18-utils.mjs'
 
@@ -128,6 +130,7 @@ test('strict schemas reject extra fields and malformed hashes', () => {
 
   const ciStage = structuredClone(example)
   ciStage.validationMode = 'WINDOWS_X64_CI_STAGE'
+  ciStage.reproductionCommand = 'pnpm verify:m0-18:windows'
   ciStage.gates.serverSmoke = 'NOT_RUN'
   ciStage.checks.serverSmokePassed = false
   ciStage.limitations.push('WINDOWS_FULL_CHAIN_NOT_RUN')
@@ -142,6 +145,80 @@ test('strict schemas reject extra fields and malformed hashes', () => {
     (item) => item !== 'LIVE_EVIDENCE_NOT_IMPLIED',
   )
   assert.throws(() => assertSchema(schema, missingBaseLimitation, 'missing base limitation'), /M0-18/u)
+
+  const wrongReproductionCommand = structuredClone(ciStage)
+  wrongReproductionCommand.reproductionCommand = 'pnpm verify:m0-18'
+  assert.throws(() => assertSchema(schema, wrongReproductionCommand, 'wrong reproduction command'), /M0-18/u)
+})
+
+test('full report requires a commit- and JAR-bound server smoke receipt', (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-m018-receipt-'))
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const receiptPath = path.join(root, 'receipt.json')
+  const expectedCommit = 'a'.repeat(40)
+  const expectedJarSha256 = 'b'.repeat(64)
+  const receipt = {
+    schemaVersion: 1,
+    milestone: 'M0-18',
+    check: 'M0-16_PACKAGED_JAR_SMOKE',
+    status: 'PASS',
+    sourceCommit: expectedCommit,
+    testedJarSha256: expectedJarSha256,
+    platform: 'win32',
+    architecture: 'x64',
+    completedAt: new Date().toISOString(),
+  }
+  fs.writeFileSync(receiptPath, `${JSON.stringify(receipt)}\n`, 'utf8')
+  const options = {
+    expectedCommit,
+    expectedJarSha256,
+    notBefore: new Date(Date.now() - 1_000).toISOString(),
+    allowExternalPathForTest: true,
+  }
+  assert.doesNotThrow(() => verifyServerSmokeReceipt(repositoryRoot, receiptPath, options))
+  receipt.testedJarSha256 = 'c'.repeat(64)
+  fs.writeFileSync(receiptPath, `${JSON.stringify(receipt)}\n`, 'utf8')
+  assert.throws(() => verifyServerSmokeReceipt(repositoryRoot, receiptPath, options), /JAR/u)
+  fs.rmSync(receiptPath)
+  assert.throws(() => verifyServerSmokeReceipt(repositoryRoot, receiptPath, options), /receipt/u)
+})
+
+test('verification report digests are cross-checked against evidence payloads', (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-m018-digests-'))
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const digestFiles = new Map([
+    ['portableHandoff', 'portable/portable-handoff.json'],
+    ['m015Manifest', 'm0-15/artifact-manifest.json'],
+    ['m016Manifest', 'm0-16/artifact-manifest.json'],
+    ['m017BackupManifest', 'm0-17/backup-manifest.json'],
+    ['m017RetentionPlan', 'm0-17/retention-plan.json'],
+    ['m017VerificationReport', 'm0-17/verification-report.json'],
+    ['deferredAcceptance', 'deferred-acceptance.json'],
+  ])
+  const digests = {
+    baselineOpenApi: 'a'.repeat(64),
+    currentOpenApi: 'b'.repeat(64),
+    m016Zip: 'c'.repeat(64),
+  }
+  for (const [key, relativePath] of digestFiles) {
+    const file = path.join(root, ...relativePath.split('/'))
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, `${key}\n`, 'utf8')
+    digests[key] = sha256File(file)
+  }
+  fs.writeFileSync(
+    path.join(root, 'm0-16', 'yumpoo-windows-m0-16.zip.sha256'),
+    `${digests.m016Zip}  yumpoo-windows-m0-16.zip\n`,
+    'utf8',
+  )
+  const report = { digests }
+  const handoff = {
+    baselineOpenApiSha256: digests.baselineOpenApi,
+    currentOpenApiSha256: digests.currentOpenApi,
+  }
+  assert.doesNotThrow(() => assertEvidenceReportDigests(root, report, handoff))
+  report.digests.deferredAcceptance = 'd'.repeat(64)
+  assert.throws(() => assertEvidenceReportDigests(root, report, handoff), /摘要/u)
 })
 
 test('portable handoff rejects tampering, missing and extra files', (context) => {
