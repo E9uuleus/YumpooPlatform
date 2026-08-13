@@ -291,7 +291,10 @@ public final class M017BackupSet {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-                if (Files.isSymbolicLink(file) || !attributes.isRegularFile()) {
+                if (Files.isSymbolicLink(file)) {
+                    throw new IOException("symbolic links are forbidden in backup sets");
+                }
+                if (!attributes.isRegularFile()) {
                     throw new IOException("backup set contains an unsupported file");
                 }
                 String relative = portable(root.relativize(file));
@@ -339,7 +342,10 @@ public final class M017BackupSet {
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-                if (Files.isSymbolicLink(file) || !attributes.isRegularFile()) {
+                if (Files.isSymbolicLink(file)) {
+                    throw new IOException("attachment source may not contain symbolic links");
+                }
+                if (!attributes.isRegularFile()) {
                     throw new IOException("attachment source contains an unsupported file");
                 }
                 copyRegularFile(file, targetRoot.resolve(realSource.relativize(file)));
