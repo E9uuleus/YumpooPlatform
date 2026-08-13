@@ -303,6 +303,7 @@ test('full M0-18 runtime chain is Windows x64 only', () => {
   const windows = fs.readFileSync(path.join(repositoryRoot, 'tools', 'verification', 'verify-m0-18-windows.mjs'), 'utf8')
   const evidencePack = fs.readFileSync(path.join(repositoryRoot, 'tools', 'verification', 'create-m0-18-evidence-pack.mjs'), 'utf8')
   const serverSmoke = fs.readFileSync(path.join(repositoryRoot, 'tools', 'verification', 'smoke-m0-16-server.mjs'), 'utf8')
+  const desktopSmoke = fs.readFileSync(path.join(repositoryRoot, 'tools', 'verification', 'smoke-desktop.mjs'), 'utf8')
   assert.match(full, /process\.platform === 'win32' && process\.arch === 'x64'/u)
   assert.match(full, /WINDOWS_X64_FULL/u)
   assert.doesNotMatch(full, /smoke:m0-16:server/u)
@@ -312,6 +313,14 @@ test('full M0-18 runtime chain is Windows x64 only', () => {
   assert.match(evidencePack, /YUMPOO_M017_OUTPUT_ROOT/u)
   assert.match(serverSmoke, /process\.platform === 'win32' && process\.arch === 'x64'/u)
   assert.doesNotMatch(serverSmoke, /\bss\b|parseSsListeners/u)
+  const desktopBuildOrder = [
+    '@yumpoo/preload-contract',
+    '@yumpoo/api-client',
+    '@yumpoo/web-app',
+    '@yumpoo/desktop-shell',
+  ].map((workspace) => desktopSmoke.indexOf(`'${workspace}'`))
+  assert(desktopBuildOrder.every((index) => index >= 0))
+  assert.deepEqual(desktopBuildOrder, [...desktopBuildOrder].sort((left, right) => left - right))
 })
 
 test('workflow locks triggers, two stable jobs, fail-closed dependency and immutable action SHAs', () => {

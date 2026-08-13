@@ -69,8 +69,9 @@ async function waitForExit(child, timeoutMs) {
   })
 }
 
-runPnpmSync(['--filter', '@yumpoo/web-app', 'build'])
 runPnpmSync(['--filter', '@yumpoo/preload-contract', 'build'])
+runPnpmSync(['--filter', '@yumpoo/api-client', 'build'])
+runPnpmSync(['--filter', '@yumpoo/web-app', 'build'])
 runPnpmSync(['--filter', '@yumpoo/desktop-shell', 'build'])
 
 const port = await availablePort()
