@@ -13,6 +13,7 @@ import {
   gitHead,
   readJson,
   requireCommit,
+  sha256GitTextFile,
   sha256File,
 } from './m0-18-utils.mjs'
 
@@ -69,7 +70,12 @@ const manifest = {
   headCommit,
   testedCommit,
   baselineOpenApiSha256: baseline.sha256,
-  currentOpenApiSha256: sha256File(currentOpenApiPath),
+  currentOpenApiSha256: sha256GitTextFile(
+    repositoryRoot,
+    sourceCommit,
+    'contracts/openapi/yumpoo-v1.yaml',
+    currentOpenApiPath,
+  ),
   checks: {
     contracts: true,
     openApiCompatibility: true,

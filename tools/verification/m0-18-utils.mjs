@@ -93,6 +93,17 @@ export function gitObject(repositoryRoot, commit, objectPath) {
   return runGit(repositoryRoot, ['show', `${commit}:${objectPath}`], `Git 基线缺少 ${objectPath}`)
 }
 
+export function sha256GitTextFile(repositoryRoot, commit, objectPath, workingFile) {
+  const committed = gitObject(repositoryRoot, commit, objectPath)
+  const working = fs.readFileSync(workingFile, 'utf8')
+  const normalizeLineEndings = (value) => value.replaceAll('\r\n', '\n')
+  assertM018(
+    normalizeLineEndings(working) === normalizeLineEndings(committed),
+    `${objectPath} 工作树内容与当前提交不一致`,
+  )
+  return sha256Buffer(committed)
+}
+
 export function sha256Buffer(value) {
   return createHash('sha256').update(value).digest('hex')
 }

@@ -22,7 +22,9 @@ import {
   fileRecords,
   isSafeRelativePath,
   readJson,
+  sha256Buffer,
   sha256File,
+  sha256GitTextFile,
   validateGitRef,
 } from './m0-18-utils.mjs'
 
@@ -55,6 +57,16 @@ test('OpenAPI baseline extraction is commit-bound and fails on empty or missing 
   assert.equal(fs.readFileSync(outputPath, 'utf8'), expected)
   assert.equal(metadata.baseCommit, goodCommit)
   assert.equal(readJson(metadataPath).sha256, metadata.sha256)
+  fs.writeFileSync(contractPath, expected.replaceAll('\n', '\r\n'), 'utf8')
+  assert.equal(
+    sha256GitTextFile(fixture, goodCommit, 'contracts/openapi/yumpoo-v1.yaml', contractPath),
+    sha256Buffer(expected),
+  )
+  fs.writeFileSync(contractPath, `${expected}# semantic drift\n`, 'utf8')
+  assert.throws(
+    () => sha256GitTextFile(fixture, goodCommit, 'contracts/openapi/yumpoo-v1.yaml', contractPath),
+    /M0-18/u,
+  )
   assert.throws(
     () => extractOpenApiBaseline({ repositoryRoot: fixture, reference: 'refs/heads/missing', outputPath, metadataPath }),
     /M0-18/u,

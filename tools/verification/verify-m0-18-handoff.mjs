@@ -7,7 +7,7 @@ import {
   assertSchema,
   gitHead,
   readJson,
-  sha256File,
+  sha256GitTextFile,
 } from './m0-18-utils.mjs'
 
 export function verifyM018Handoff(repositoryRoot, handoffRoot, options = {}) {
@@ -21,7 +21,16 @@ export function verifyM018Handoff(repositoryRoot, handoffRoot, options = {}) {
   )
   const expectedCommit = options.expectedCommit ?? gitHead(repositoryRoot)
   assertM018(manifest.testedCommit === expectedCommit, 'portable handoff testedCommit 与当前 checkout 不一致')
-  assertM018(manifest.currentOpenApiSha256 === sha256File(path.join(repositoryRoot, 'contracts', 'openapi', 'yumpoo-v1.yaml')), 'portable handoff 当前 OpenAPI 摘要不一致')
+  assertM018(
+    manifest.currentOpenApiSha256 ===
+      sha256GitTextFile(
+        repositoryRoot,
+        expectedCommit,
+        'contracts/openapi/yumpoo-v1.yaml',
+        path.join(repositoryRoot, 'contracts', 'openapi', 'yumpoo-v1.yaml'),
+      ),
+    'portable handoff 当前 OpenAPI 摘要不一致',
+  )
   assertExactPayload(handoffRoot, manifest, 'portable-handoff.json', expectedCommit)
   return manifest
 }
