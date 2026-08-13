@@ -8,7 +8,6 @@ import test from 'node:test'
 import YAML from 'yaml'
 import { extractOpenApiBaseline } from '../openapi/extract-openapi-baseline.mjs'
 import { assertNoSensitiveMaterial } from './create-m0-18-evidence-pack.mjs'
-import { parseSsListeners } from './listener-utils.mjs'
 import {
   loadLiveEvidence,
   validateDeferredAcceptance,
@@ -126,6 +125,23 @@ test('strict schemas reject extra fields and malformed hashes', () => {
   const badHash = structuredClone(example)
   badHash.digests.currentOpenApi = 'not-a-hash'
   assert.throws(() => assertSchema(schema, badHash, 'bad hash'), /M0-18/u)
+
+  const ciStage = structuredClone(example)
+  ciStage.validationMode = 'WINDOWS_X64_CI_STAGE'
+  ciStage.gates.serverSmoke = 'NOT_RUN'
+  ciStage.checks.serverSmokePassed = false
+  ciStage.limitations.push('WINDOWS_FULL_CHAIN_NOT_RUN')
+  assert.doesNotThrow(() => assertSchema(schema, ciStage, 'CI stage'))
+
+  const falseFullChain = structuredClone(ciStage)
+  falseFullChain.gates.serverSmoke = 'PASS'
+  assert.throws(() => assertSchema(schema, falseFullChain, 'false full chain'), /M0-18/u)
+
+  const missingBaseLimitation = structuredClone(ciStage)
+  missingBaseLimitation.limitations = missingBaseLimitation.limitations.filter(
+    (item) => item !== 'LIVE_EVIDENCE_NOT_IMPLIED',
+  )
+  assert.throws(() => assertSchema(schema, missingBaseLimitation, 'missing base limitation'), /M0-18/u)
 })
 
 test('portable handoff rejects tampering, missing and extra files', (context) => {
@@ -192,15 +208,19 @@ test('recursive output targets must stay inside the owned output directory', (co
   assert.throws(() => assertDirectoryTargetWithin(parent, path.dirname(parent), 'fixture'), /M0-18/u)
 })
 
-test('Linux listener parser binds loopback address, Java process and PID', () => {
-  const output = [
-    'State Recv-Q Send-Q Local Address:Port Peer Address:Port Process',
-    'LISTEN 0 100 127.0.0.1:18080 0.0.0.0:* users:(("java",pid=4321,fd=42))',
-    'LISTEN 0 100 0.0.0.0:19090 0.0.0.0:* users:(("other",pid=7,fd=8))',
-  ].join('\n')
-  assert.deepEqual(parseSsListeners(output, 18080), [
-    { localAddress: '127.0.0.1:18080', processName: 'java', pid: 4321 },
-  ])
+test('full M0-18 runtime chain is Windows x64 only', () => {
+  const full = fs.readFileSync(path.join(repositoryRoot, 'tools', 'verification', 'verify-m0-18.mjs'), 'utf8')
+  const portable = fs.readFileSync(path.join(repositoryRoot, 'tools', 'verification', 'verify-m0-18-portable.mjs'), 'utf8')
+  const windows = fs.readFileSync(path.join(repositoryRoot, 'tools', 'verification', 'verify-m0-18-windows.mjs'), 'utf8')
+  const serverSmoke = fs.readFileSync(path.join(repositoryRoot, 'tools', 'verification', 'smoke-m0-16-server.mjs'), 'utf8')
+  assert.match(full, /process\.platform === 'win32' && process\.arch === 'x64'/u)
+  assert.match(full, /WINDOWS_X64_FULL/u)
+  assert.doesNotMatch(full, /smoke:m0-16:server/u)
+  assert.doesNotMatch(portable, /smoke:m0-16:server|smoke:desktop/u)
+  assert.match(windows, /validationMode === 'WINDOWS_X64_FULL'[\s\S]+smoke:m0-16:server/u)
+  assert.match(windows, /smoke:desktop/u)
+  assert.match(serverSmoke, /process\.platform === 'win32' && process\.arch === 'x64'/u)
+  assert.doesNotMatch(serverSmoke, /\bss\b|parseSsListeners/u)
 })
 
 test('workflow locks triggers, two stable jobs, fail-closed dependency and immutable action SHAs', () => {
@@ -213,10 +233,10 @@ test('workflow locks triggers, two stable jobs, fail-closed dependency and immut
   assert.deepEqual(workflow.on.push.branches, ['dev'])
   assert.deepEqual(workflow.permissions, { contents: 'read' })
   assert.deepEqual(Object.keys(workflow.jobs).sort(), ['linux', 'windows'])
-  assert.equal(workflow.jobs.linux.name, 'M0 Linux Gate')
+  assert.equal(workflow.jobs.linux.name, 'M0 Portable Gate')
   assert.equal(workflow.jobs.linux['runs-on'], 'ubuntu-24.04')
   assert.equal(workflow.jobs.linux['timeout-minutes'], 60)
-  assert.equal(workflow.jobs.windows.name, 'M0 Windows Gate')
+  assert.equal(workflow.jobs.windows.name, 'M0 Windows x64 Gate')
   assert.equal(workflow.jobs.windows['runs-on'], 'windows-2022')
   assert.equal(workflow.jobs.windows['timeout-minutes'], 30)
   assert.deepEqual(workflow.jobs.windows.needs, ['linux'])
@@ -224,6 +244,8 @@ test('workflow locks triggers, two stable jobs, fail-closed dependency and immut
   assert.match(source, /needs\.linux\.result[^\n]+success/u)
   assert.doesNotMatch(source, /^\s*(?:paths|paths-ignore):/mu)
   assert.doesNotMatch(source, /pull_request_target|continue-on-error|workflow_dispatch/u)
+  assert.doesNotMatch(source, /xvfb-run|smoke:m0-16:server/u)
+  assert.match(source, /YUMPOO_M018_VALIDATION_MODE:\s+WINDOWS_X64_CI_STAGE/u)
   assert.doesNotMatch(source, /^\s*strategy:/mu)
   assert.match(source, /retention-days:\s+1/u)
   assert.match(source, /retention-days:\s+30/u)

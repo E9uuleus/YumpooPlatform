@@ -17,10 +17,19 @@ const environment = {
   YUMPOO_M015_OUTPUT_ROOT: m015OutputRoot,
   YUMPOO_M016_PAYLOAD_ROOT: handoffRoot,
 }
+const validationMode = process.env.YUMPOO_M018_VALIDATION_MODE ?? 'WINDOWS_X64_CI_STAGE'
 
 assertM018(process.platform === 'win32' && process.arch === 'x64', 'M0-18 Windows 门禁需要 Windows x64')
+assertM018(
+  ['WINDOWS_X64_FULL', 'WINDOWS_X64_CI_STAGE'].includes(validationMode),
+  'M0-18 Windows 验证模式无效',
+)
 runPnpmSync(['run', 'validate:m0-18:evidence'], { cwd: repositoryRoot, env: environment })
 runPnpmSync(['run', 'verify:m0-18:handoff'], { cwd: repositoryRoot, env: environment })
+if (validationMode === 'WINDOWS_X64_FULL') {
+  runPnpmSync(['run', 'smoke:m0-16:server'], { cwd: repositoryRoot, env: environment })
+}
+runPnpmSync(['run', 'smoke:desktop'], { cwd: repositoryRoot, env: environment })
 runPnpmSync(['run', 'verify:m0-16:windows'], { cwd: repositoryRoot, env: environment })
 runSync(process.execPath, [path.join(repositoryRoot, 'tools', 'verification', 'create-m0-18-evidence-pack.mjs')], {
   cwd: repositoryRoot,

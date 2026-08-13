@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   linux:
-    name: M0 Linux Gate
+    name: M0 Portable Gate
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     outputs:
@@ -51,12 +51,12 @@ jobs:
           docker version
           docker info
           docker pull postgres:17.10-alpine
-      - name: Run portable M0 gate and desktop smoke
+      - name: Run portable M0 gate
         env:
           YUMPOO_M018_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           YUMPOO_M018_HEAD_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           YUMPOO_M018_TESTED_COMMIT: ${{ github.sha }}
-        run: xvfb-run --auto-servernum --server-args='-screen 0 1280x720x24' pnpm verify:m0-18:portable
+        run: pnpm verify:m0-18:portable
       - name: Upload tested portable handoff
         id: handoff_upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -67,18 +67,18 @@ jobs:
           retention-days: 1
 
   windows:
-    name: M0 Windows Gate
+    name: M0 Windows x64 Gate
     needs:
       - linux
     if: ${{ always() }}
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
-      - name: Fail closed when Linux gate did not pass
+      - name: Fail closed when portable gate did not pass
         shell: powershell
         run: |
           if ('${{ needs.linux.result }}' -ne 'success') {
-            throw 'M0 Linux Gate did not succeed; Windows gate fails closed.'
+            throw 'M0 Portable Gate did not succeed; Windows x64 gate fails closed.'
           }
       - name: Checkout the same tested commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -113,6 +113,7 @@ jobs:
           YUMPOO_M018_HANDOFF_ROOT: ${{ github.workspace }}\out\m0-18\portable-handoff
           YUMPOO_M018_HANDOFF_ARTIFACT_NAME: m0-18-portable-${{ github.run_id }}-${{ github.run_attempt }}
           YUMPOO_M018_HANDOFF_ARTIFACT_DIGEST: ${{ needs.linux.outputs.handoff-digest }}
+          YUMPOO_M018_VALIDATION_MODE: WINDOWS_X64_CI_STAGE
         run: pnpm verify:m0-18:windows
       - name: Upload final M0-18 evidence pack
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

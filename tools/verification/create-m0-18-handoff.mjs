@@ -74,8 +74,6 @@ const manifest = {
     contracts: true,
     openApiCompatibility: true,
     buildMigrationArchitectureTests: true,
-    desktopSmoke: true,
-    serverSmoke: true,
     backupRestore: true,
     sensitiveDataExcluded: true,
   },

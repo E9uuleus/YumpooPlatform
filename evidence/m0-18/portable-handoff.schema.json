@@ -19,13 +19,11 @@
     "checks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contracts", "openApiCompatibility", "buildMigrationArchitectureTests", "desktopSmoke", "serverSmoke", "backupRestore", "sensitiveDataExcluded"],
+      "required": ["contracts", "openApiCompatibility", "buildMigrationArchitectureTests", "backupRestore", "sensitiveDataExcluded"],
       "properties": {
         "contracts": { "const": true },
         "openApiCompatibility": { "const": true },
         "buildMigrationArchitectureTests": { "const": true },
-        "desktopSmoke": { "const": true },
-        "serverSmoke": { "const": true },
         "backupRestore": { "const": true },
         "sensitiveDataExcluded": { "const": true }
       }

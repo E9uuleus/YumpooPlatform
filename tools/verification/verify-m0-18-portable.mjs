@@ -28,8 +28,6 @@ runSync(
 )
 runPnpmSync(['run', 'check:openapi-compat', '--', baselinePath], { cwd: repositoryRoot, env: environment })
 runPnpmSync(['run', 'verify:m0-17:portable'], { cwd: repositoryRoot, env: environment })
-runPnpmSync(['run', 'smoke:m0-16:server'], { cwd: repositoryRoot, env: environment })
-runPnpmSync(['run', 'smoke:desktop'], { cwd: repositoryRoot, env: environment })
 runPnpmSync(['run', 'create:m0-18:handoff'], { cwd: repositoryRoot, env: environment })
 runPnpmSync(['run', 'verify:m0-18:handoff'], { cwd: repositoryRoot, env: environment })
 

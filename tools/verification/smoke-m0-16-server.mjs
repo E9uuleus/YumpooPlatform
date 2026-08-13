@@ -4,7 +4,6 @@ import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { assertM016 } from './m0-16-utils.mjs'
-import { parseSsListeners } from './listener-utils.mjs'
 import { stopProcessTree } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -16,7 +15,7 @@ const migrationPassword = 'M016-Migration-Only-2026!'
 let application
 let containerStarted = false
 
-assertM016(['win32', 'linux'].includes(process.platform), 'packaged JAR 冒烟仅支持 Windows 或 Linux')
+assertM016(process.platform === 'win32' && process.arch === 'x64', 'packaged JAR 冒烟仅支持 Windows x64')
 assertM016(fs.existsSync(jarPath), 'packaged JAR 不存在')
 
 try {
@@ -154,29 +153,12 @@ function waitForExit(child, timeoutMilliseconds) {
 }
 
 function verifyLoopbackListener(pid, port) {
-  if (process.platform === 'win32') {
-    const command = `$m016Connections = @(Get-NetTCPConnection -State Listen -LocalPort ${port} | Select-Object LocalAddress,LocalPort,OwningProcess); ConvertTo-Json -InputObject $m016Connections -Compress`
-    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { encoding: 'utf8' })
-    assertM016(result.status === 0, '无法读取 packaged JAR 监听地址')
-    const connections = JSON.parse(result.stdout || '[]')
-    assertM016(connections.length > 0, 'packaged JAR 未建立监听')
-    assertM016(connections.every((item) => item.LocalAddress === '127.0.0.1' && item.LocalPort === port && item.OwningProcess === pid), 'packaged JAR 必须仅由目标 Java 进程监听 127.0.0.1')
-    return
-  }
-
-  const result = spawnSync('ss', ['-ltnp'], { encoding: 'utf8' })
-  assertM016(result.status === 0, '无法通过 ss 读取 packaged JAR 监听地址')
-  const listeners = parseSsListeners(result.stdout, port)
-  assertM016(listeners.length > 0, 'packaged JAR 未建立监听')
-  assertM016(
-    listeners.every(
-      (listener) =>
-        listener.localAddress === `127.0.0.1:${port}` &&
-        listener.pid === pid &&
-        listener.processName === 'java',
-    ),
-    'packaged JAR 必须仅由目标 Java 进程监听 127.0.0.1',
-  )
+  const command = `$m016Connections = @(Get-NetTCPConnection -State Listen -LocalPort ${port} | Select-Object LocalAddress,LocalPort,OwningProcess); ConvertTo-Json -InputObject $m016Connections -Compress`
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { encoding: 'utf8' })
+  assertM016(result.status === 0, '无法读取 packaged JAR 监听地址')
+  const connections = JSON.parse(result.stdout || '[]')
+  assertM016(connections.length > 0, 'packaged JAR 未建立监听')
+  assertM016(connections.every((item) => item.LocalAddress === '127.0.0.1' && item.LocalPort === port && item.OwningProcess === pid), 'packaged JAR 必须仅由目标 Java 进程监听 127.0.0.1')
 }
 
 async function healthMatches(url, expectedStatus, expectedHealth) {

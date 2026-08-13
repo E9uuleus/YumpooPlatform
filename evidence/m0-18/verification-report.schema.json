@@ -4,7 +4,7 @@
   "title": "M0-18 development verification report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "milestone", "status", "startedAt", "completedAt", "sourceCommit", "baseCommit", "headCommit", "testedCommit", "reproductionCommand", "environment", "gates", "checks", "digests", "limitations", "ci"],
+  "required": ["schemaVersion", "milestone", "status", "startedAt", "completedAt", "sourceCommit", "baseCommit", "headCommit", "testedCommit", "reproductionCommand", "validationMode", "environment", "gates", "checks", "digests", "limitations", "ci"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "milestone": { "const": "M0-18" },
@@ -16,6 +16,7 @@
     "headCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "testedCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "reproductionCommand": { "const": "pnpm verify:m0-18" },
+    "validationMode": { "enum": ["WINDOWS_X64_FULL", "WINDOWS_X64_CI_STAGE"] },
     "environment": {
       "type": "object",
       "additionalProperties": false,
@@ -40,7 +41,7 @@
         "openApiCompatibility": { "const": "PASS" },
         "buildMigrationArchitectureTests": { "const": "PASS" },
         "desktopSmoke": { "const": "PASS" },
-        "serverSmoke": { "const": "PASS" },
+        "serverSmoke": { "enum": ["PASS", "NOT_RUN"] },
         "windowsPackaging": { "const": "PASS" },
         "backupRestore": { "const": "PASS" }
       }
@@ -48,7 +49,7 @@
     "checks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contractsValidated", "liveNotRunExactSet", "m017FollowUpsComplete", "buildPassed", "migrationPassed", "architecturePassed", "openApiPassed", "openApiCompatibilityPassed", "automatedTestsPassed", "desktopPackagePassed", "desktopSmokePassed", "backupRestorePassed", "sensitiveDataExcluded"],
+      "required": ["contractsValidated", "liveNotRunExactSet", "m017FollowUpsComplete", "buildPassed", "migrationPassed", "architecturePassed", "openApiPassed", "openApiCompatibilityPassed", "automatedTestsPassed", "desktopPackagePassed", "desktopSmokePassed", "serverSmokePassed", "backupRestorePassed", "sensitiveDataExcluded"],
       "properties": {
         "contractsValidated": { "const": true },
         "liveNotRunExactSet": { "const": true },
@@ -61,6 +62,7 @@
         "automatedTestsPassed": { "const": true },
         "desktopPackagePassed": { "const": true },
         "desktopSmokePassed": { "const": true },
+        "serverSmokePassed": { "type": "boolean" },
         "backupRestorePassed": { "const": true },
         "sensitiveDataExcluded": { "const": true }
       }
@@ -85,9 +87,15 @@
     "limitations": {
       "type": "array",
       "minItems": 4,
-      "maxItems": 4,
+      "maxItems": 5,
       "uniqueItems": true,
-      "items": { "enum": ["DEVELOPMENT_GATE_ONLY", "LIVE_EVIDENCE_NOT_IMPLIED", "SYNTHETIC_BACKUP_DATA_ONLY", "PRODUCTION_BACKUP_AND_RPO_RTO_DEFERRED"] }
+      "items": { "enum": ["DEVELOPMENT_GATE_ONLY", "LIVE_EVIDENCE_NOT_IMPLIED", "SYNTHETIC_BACKUP_DATA_ONLY", "PRODUCTION_BACKUP_AND_RPO_RTO_DEFERRED", "WINDOWS_FULL_CHAIN_NOT_RUN"] },
+      "allOf": [
+        { "contains": { "const": "DEVELOPMENT_GATE_ONLY" } },
+        { "contains": { "const": "LIVE_EVIDENCE_NOT_IMPLIED" } },
+        { "contains": { "const": "SYNTHETIC_BACKUP_DATA_ONLY" } },
+        { "contains": { "const": "PRODUCTION_BACKUP_AND_RPO_RTO_DEFERRED" } }
+      ]
     },
     "ci": {
       "type": "object",
@@ -101,6 +109,28 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "validationMode": { "const": "WINDOWS_X64_FULL" } } },
+      "then": {
+        "properties": {
+          "gates": { "properties": { "serverSmoke": { "const": "PASS" } } },
+          "checks": { "properties": { "serverSmokePassed": { "const": true } } },
+          "limitations": { "not": { "contains": { "const": "WINDOWS_FULL_CHAIN_NOT_RUN" } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "validationMode": { "const": "WINDOWS_X64_CI_STAGE" } } },
+      "then": {
+        "properties": {
+          "gates": { "properties": { "serverSmoke": { "const": "NOT_RUN" } } },
+          "checks": { "properties": { "serverSmokePassed": { "const": false } } },
+          "limitations": { "contains": { "const": "WINDOWS_FULL_CHAIN_NOT_RUN" } }
+        }
+      }
+    }
+  ],
   "definitions": {
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
   }

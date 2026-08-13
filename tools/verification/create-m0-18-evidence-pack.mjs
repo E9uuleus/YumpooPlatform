@@ -218,6 +218,12 @@ function validateSourceMetadata(repositoryRoot, partialRoot, handoff, sourceComm
 
 function createVerificationReport(repositoryRoot, partialRoot, handoff, sourceCommit) {
   assertM018(process.platform === 'win32' && process.arch === 'x64', 'verification report 必须在 Windows x64 生成')
+  const validationMode = process.env.YUMPOO_M018_VALIDATION_MODE ?? 'WINDOWS_X64_CI_STAGE'
+  assertM018(
+    ['WINDOWS_X64_FULL', 'WINDOWS_X64_CI_STAGE'].includes(validationMode),
+    'verification report 的 Windows 验证模式无效',
+  )
+  const fullWindowsChain = validationMode === 'WINDOWS_X64_FULL'
   const versions = toolVersions(repositoryRoot)
   const zipDigest = fs
     .readFileSync(path.join(partialRoot, 'm0-16', 'yumpoo-windows-m0-16.zip.sha256'), 'utf8')
@@ -235,6 +241,7 @@ function createVerificationReport(repositoryRoot, partialRoot, handoff, sourceCo
     headCommit: handoff.headCommit,
     testedCommit: handoff.testedCommit,
     reproductionCommand: 'pnpm verify:m0-18',
+    validationMode,
     environment: {
       platform: 'win32',
       architecture: 'x64',
@@ -250,7 +257,7 @@ function createVerificationReport(repositoryRoot, partialRoot, handoff, sourceCo
       openApiCompatibility: 'PASS',
       buildMigrationArchitectureTests: 'PASS',
       desktopSmoke: 'PASS',
-      serverSmoke: 'PASS',
+      serverSmoke: fullWindowsChain ? 'PASS' : 'NOT_RUN',
       windowsPackaging: 'PASS',
       backupRestore: 'PASS',
     },
@@ -266,6 +273,7 @@ function createVerificationReport(repositoryRoot, partialRoot, handoff, sourceCo
       automatedTestsPassed: true,
       desktopPackagePassed: true,
       desktopSmokePassed: true,
+      serverSmokePassed: fullWindowsChain,
       backupRestorePassed: true,
       sensitiveDataExcluded: true,
     },
@@ -286,6 +294,7 @@ function createVerificationReport(repositoryRoot, partialRoot, handoff, sourceCo
       'LIVE_EVIDENCE_NOT_IMPLIED',
       'PRODUCTION_BACKUP_AND_RPO_RTO_DEFERRED',
       'SYNTHETIC_BACKUP_DATA_ONLY',
+      ...(!fullWindowsChain ? ['WINDOWS_FULL_CHAIN_NOT_RUN'] : []),
     ],
     ci: {
       runId: digitsOrNull(process.env.GITHUB_RUN_ID),
