@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M1-01 Company 与工作日历底座
+
+M1-01 在 `organization` 模块交付单 Company 与工作日历的后端底座。数据库迁移 `V6` 固定种子为 `Yumpoo`、`Asia/Shanghai`、周一周起始和 480 分钟默认工作日，并以数据库约束保证单 Company、日历日期唯一及工作日分钟语义。运行期只从数据库读取 Company 配置；缺失、非法 IANA 时区或非周一起始配置都会失败关闭。
+
+跨模块只通过 `organization.api` 的只读查询契约取得 Company 配置和解析后的日历快照。缺省规则为周一至周五工作、周末休息，显式覆盖优先；日期计算与本地时刻解析不依赖服务器默认时区，并固定处理 DST 缺口和重叠。本步不新增 REST/OpenAPI、前端或日历管理命令。
+
+```powershell
+pnpm verify:m1-01
+```
+
+该入口依次运行后端 `clean verify`（含 PostgreSQL 17/Flyway、架构、日历边界与备份恢复验证）和完整 Node 工作区门禁。
+
 ## M0-18 最小 CI 与开发证据包
 
 M0-18 只交付验证编排、GitHub Actions 门禁和开发证据治理，不新增业务 API、数据库迁移或前端 DTO。项目的完整验证链与生产等价运行时只覆盖 Windows x64，需要 Node.js 24.14.0、pnpm 11.16.0、Java 21、PowerShell，以及运行 Linux container 的 Docker；OpenAPI 默认从 `origin/dev` 提取历史契约，基线缺失、为空或不可解析时直接失败。
