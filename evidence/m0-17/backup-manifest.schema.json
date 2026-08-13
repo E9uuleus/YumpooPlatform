@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/evidence/m0-17/backup-manifest.schema.json",
+  "title": "M0-17 complete backup set manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "milestone", "backupSetId", "createdAt", "companyTimeZone", "applicationVersion", "sourceCommit", "postgresVersion", "flywaySchemaVersion", "databaseDumpPath", "restoreDescriptorPath", "retention", "files"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "milestone": { "const": "M0-17" },
+    "backupSetId": { "type": "string", "format": "uuid" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "companyTimeZone": { "const": "Asia/Shanghai" },
+    "applicationVersion": { "type": "string", "minLength": 1 },
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "postgresVersion": { "type": "string", "pattern": "^17\\." },
+    "flywaySchemaVersion": { "type": "string", "pattern": "^[0-9]+$" },
+    "databaseDumpPath": { "const": "database/yumpoo.dump" },
+    "restoreDescriptorPath": { "const": "recovery/secret-recovery.json" },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["labels", "legalHold"],
+      "properties": {
+        "labels": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["daily", "weekly", "monthly"] }
+        },
+        "legalHold": { "type": "boolean" }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "role", "bytes", "sha256"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(database/yumpoo\\.dump|configuration/application\\.yml|recovery/secret-recovery\\.json|attachments/sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64})$"
+          },
+          "role": { "enum": ["DATABASE_DUMP", "ATTACHMENT_BLOB", "CONFIGURATION", "RESTORE_DESCRIPTOR"] },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  }
+}

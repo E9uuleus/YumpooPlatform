@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/evidence/m0-17/verification-report.schema.json",
+  "title": "M0-17 local backup and isolated restore verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "milestone", "status", "startedAt", "completedAt", "sourceCommit", "backupSetId", "restoredReferenceCount", "orphanCount", "checks"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "milestone": { "const": "M0-17" },
+    "status": { "const": "PASS" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "backupSetId": { "type": "string", "format": "uuid" },
+    "restoredReferenceCount": { "type": "integer", "minimum": 2 },
+    "orphanCount": { "type": "integer", "minimum": 1 },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["postgresCustomDumpCreated", "manifestExactCoverageVerified", "payloadHashesVerified", "secretValuesExcluded", "emptyTargetsRequired", "isolatedDatabaseRestored", "flywayVersionMatched", "attachmentReferencesMatched", "attachmentBytesReadable", "orphansReportedWithoutDeletion", "retentionDryRunGenerated"],
+      "properties": {
+        "postgresCustomDumpCreated": { "const": true },
+        "manifestExactCoverageVerified": { "const": true },
+        "payloadHashesVerified": { "const": true },
+        "secretValuesExcluded": { "const": true },
+        "emptyTargetsRequired": { "const": true },
+        "isolatedDatabaseRestored": { "const": true },
+        "flywayVersionMatched": { "const": true },
+        "attachmentReferencesMatched": { "const": true },
+        "attachmentBytesReadable": { "const": true },
+        "orphansReportedWithoutDeletion": { "const": true },
+        "retentionDryRunGenerated": { "const": true }
+      }
+    }
+  }
+}

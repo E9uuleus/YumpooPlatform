@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M0-17",
+  "companyTimeZone": "Asia/Shanghai",
+  "decisions": [
+    {
+      "backupSetId": "00000000-0000-4000-8000-000000000017",
+      "verifiedAt": "2026-08-12T12:00:00Z",
+      "verified": true,
+      "labels": ["daily", "weekly", "monthly"],
+      "legalHold": false,
+      "deletionEligible": false
+    },
+    {
+      "backupSetId": "00000000-0000-4000-8000-000000000018",
+      "verifiedAt": "2026-08-11T12:00:00Z",
+      "verified": false,
+      "labels": [],
+      "legalHold": true,
+      "deletionEligible": false
+    }
+  ]
+}

@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M0-17 数据库与附件成套备份/隔离恢复原型
+
+M0-17 以测试与验证工具交付可重复的本地恢复闭环，不新增生产备份命令、业务表或 HTTP API。门禁使用两个独立的 `postgres:17.10-alpine` Testcontainers 实例，在源实例内执行 `pg_dump -Fc`，完整验证备份集后才向全新目标实例执行 `pg_restore`。合成引用表只存在于测试数据库；附件复用 M0-14 的 SHA-256 内容寻址目录并包含一个只报告、不删除的孤儿样本。
+
+```powershell
+pnpm verify:m0-17
+```
+
+备份集同时包含 PostgreSQL custom dump、正式附件 blob、普通配置恢复样例和不含 Secret 值的恢复描述。`manifest.json` 最后写入并精确覆盖全部载荷，记录应用/PostgreSQL/Flyway 版本、公司时区、源码提交、文件角色、字节数和 SHA-256；绝对路径、路径穿越、反斜杠、符号链接、Windows 大小写碰撞、缺件、额外文件和篡改都会失败关闭。恢复要求目标数据库无 `yumpoo` schema、附件目录为空，完成后复核 Flyway 版本、合成引用、大小、哈希和实际可读字节。
+
+`evidence/m0-17` 只跟踪 manifest、retention plan 和 verification report 的严格 JSON Schema 与合成示例。每次门禁的新鲜备份集和 `PASS` 报告写入忽略目录 `out/m0-17`，不提交环境绑定快照。保留规划仅 dry-run 选择 14 daily、8 weekly、6 monthly，支持多标签与 legal hold，绝不删除文件。外部介质、Windows 计划任务、失败告警、真实业务恢复以及 RPO 24 小时/RTO 4 小时演练仍属于 M5/M6。
+
 ## M0-16 Windows 部署资产与本地运行门禁
 
 M0-16 交付可机审的 Windows Server 2022 x64 开发部署资产，以及完整的本地构建、运行和发布包复核门禁。它不会真实安装 IIS、注册 WinSW 服务、修改 ACL/防火墙，也不会把目标服务器证据写成 `PASS`。目标机验收和签名收据留给 M5-14/M6；当前 `evidence/m0-16/live-verification.json` 必须严格保持 `NOT_RUN`。
