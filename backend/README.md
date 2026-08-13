@@ -36,7 +36,7 @@ readiness 组包含 `db` 与无详情的 `deploymentDirectories` 写探针；附
 
 ## M0-15 Electron 登录交接诊断 PoC
 
-M0-15 在 M0-12 企微身份网关之上增加可复用的 desktop state/PKCE/handoff 技术闭环，但不创建正式用户或桌面会话。M0 开发门禁使用自动化测试验证交接协议与安全边界，不要求真实企微 OAuth 或扫码登录；真实企微、公司 HTTPS、packaged app 和协议唤起是 M4-14/M6 环境门禁。诊断 Controller 采用双重门禁：profile 必须包含 `m0-15-live`，且 `YUMPOO_M015_WECOM_ENABLED=true`；默认启动时三条路径均不注册：
+M0-15 在 M0-12 企微身份网关之上增加可复用的 desktop state/PKCE/handoff 技术闭环，但不创建正式用户或桌面会话。M0 开发门禁使用自动化测试验证交接协议与安全边界，不要求真实企微 OAuth 或扫码登录；M4-14 使用受控身份提供者验证本地桌面语义，真实企微、公司 HTTPS、packaged app 和协议唤起统一在 M6-01 部署/发布环境门禁补验。诊断 Controller 采用双重门禁：profile 必须包含 `m0-15-live`，且 `YUMPOO_M015_WECOM_ENABLED=true`；默认启动时三条路径均不注册：
 
 - `GET /_m0/m0-15/electron/auth/authorize`
 - `GET /_m0/m0-15/wecom/callback`
