@@ -181,6 +181,11 @@ export function createEvidencePack(repositoryRoot, options = {}) {
       process.env.YUMPOO_M018_EVIDENCE_PACK_ROOT ??
       path.join(repositoryRoot, 'out', 'm0-18', 'evidence-pack'),
   )
+  const m017OutputRoot = path.resolve(
+    options.m017OutputRoot ??
+      process.env.YUMPOO_M017_OUTPUT_ROOT ??
+      path.join(repositoryRoot, 'out', 'm0-17'),
+  )
   const partialRoot = `${outputRoot}.partial-${process.pid}-${Date.now()}`
   assertDirectoryTargetWithin(path.join(repositoryRoot, 'out', 'm0-18'), outputRoot, 'M0-18 证据包输出目录')
   assertDirectoryTargetWithin(path.join(repositoryRoot, 'out', 'm0-18'), partialRoot, 'M0-18 证据包临时目录')
@@ -188,15 +193,14 @@ export function createEvidencePack(repositoryRoot, options = {}) {
   const handoff = verifyM018Handoff(repositoryRoot, handoffRoot, { expectedCommit: sourceCommit })
   const evidenceRoot = path.join(repositoryRoot, 'evidence')
   const outputM016Root = path.join(repositoryRoot, 'out', 'm0-16')
-  const outputM017Root = path.join(repositoryRoot, 'out', 'm0-17')
   const sources = [
     ['deferred-acceptance.json', path.join(evidenceRoot, 'm0-18', 'deferred-acceptance.json')],
     ['m0-15/artifact-manifest.json', path.join(m015OutputRoot, 'm0-15-artifact-manifest.json')],
     ['m0-16/artifact-manifest.json', path.join(outputM016Root, 'verified', 'artifact-manifest.json')],
     ['m0-16/yumpoo-windows-m0-16.zip.sha256', path.join(outputM016Root, 'yumpoo-windows-m0-16.zip.sha256')],
-    ['m0-17/backup-manifest.json', path.join(outputM017Root, 'backup-set', 'manifest.json')],
-    ['m0-17/retention-plan.json', path.join(outputM017Root, 'retention-plan.json')],
-    ['m0-17/verification-report.json', path.join(outputM017Root, 'verification-report.json')],
+    ['m0-17/backup-manifest.json', path.join(m017OutputRoot, 'backup-set', 'manifest.json')],
+    ['m0-17/retention-plan.json', path.join(m017OutputRoot, 'retention-plan.json')],
+    ['m0-17/verification-report.json', path.join(m017OutputRoot, 'verification-report.json')],
     ['portable/portable-handoff.json', path.join(handoffRoot, 'portable-handoff.json')],
   ]
 
