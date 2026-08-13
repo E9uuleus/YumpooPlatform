@@ -52,7 +52,8 @@
     "verify:m0-18:windows": "node tools/verification/verify-m0-18-windows.mjs",
     "verify:m0-18": "node tools/verification/verify-m0-18.mjs",
     "test:m0-18": "node --test --test-isolation=none tools/verification/m0-18.test.mjs",
-    "verify:m1-01": "node tools/verification/verify-m1-01.mjs"
+    "verify:m1-01": "node tools/verification/verify-m1-01.mjs",
+    "verify:m1-02": "node tools/verification/verify-m1-02.mjs"
   },
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "2.40.1",

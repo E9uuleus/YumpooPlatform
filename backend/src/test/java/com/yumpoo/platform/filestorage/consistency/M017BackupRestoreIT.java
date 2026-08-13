@@ -74,6 +74,7 @@ class M017BackupRestoreIT {
             PublishedBlob orphan = publish(sourceStorage, "M0-17 unreferenced orphan\n");
             createSyntheticReferences(source, List.of(first, second));
             createCompanyCalendarFact(source);
+            createIdentityBindingFact(source);
 
             Path dump = workRoot.resolve("yumpoo.dump");
             createDump(source, dump);
@@ -113,6 +114,7 @@ class M017BackupRestoreIT {
             assertThat(latestFlywayVersion(target)).isEqualTo(flywayVersion);
             assertThat(countSyntheticReferences(source)).isEqualTo(2);
             assertThat(readCompanyCalendarFact(target)).isEqualTo(readCompanyCalendarFact(source));
+            assertThat(readIdentityBindingFact(target)).isEqualTo(readIdentityBindingFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -341,6 +343,95 @@ class M017BackupRestoreIT {
         }
     }
 
+    private static void createIdentityBindingFact(PostgreSQLContainer container) throws SQLException {
+        OffsetDateTime observedAt = OffsetDateTime.ofInstant(
+                Instant.parse("2026-08-13T04:00:00Z"),
+                ZoneOffset.UTC
+        );
+        try (Connection connection = connection(container)) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement insertUser = connection.prepareStatement("""
+                    INSERT INTO yumpoo.identity_user (
+                        id, company_id, employment_status, account_status,
+                        display_name, email, mobile, department_summary,
+                        directory_synced_at, row_version, created_at, updated_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000102',
+                        '00000000-0000-4000-8000-000000000001',
+                        'ACTIVE', 'ENABLED', 'M1-02 Restore User',
+                        'restore@example.test', '13800000102', 'Restore Team',
+                        ?, 4, ?, ?
+                    )
+                    """)) {
+                insertUser.setObject(1, observedAt);
+                insertUser.setObject(2, observedAt);
+                insertUser.setObject(3, observedAt);
+                assertThat(insertUser.executeUpdate()).isOne();
+            }
+            try (PreparedStatement insertIdentity = connection.prepareStatement("""
+                    INSERT INTO yumpoo.external_identity (
+                        id, company_id, user_id, provider, external_user_id,
+                        provider_employment_status, raw_profile_hash,
+                        last_seen_at, created_at, updated_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000202',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000102',
+                        'WECOM', 'M1-02-Restore-Member', 'ACTIVE',
+                        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                        ?, ?, ?
+                    )
+                    """)) {
+                insertIdentity.setObject(1, observedAt);
+                insertIdentity.setObject(2, observedAt);
+                insertIdentity.setObject(3, observedAt);
+                assertThat(insertIdentity.executeUpdate()).isOne();
+            }
+            connection.commit();
+        }
+    }
+
+    private static IdentityBindingFact readIdentityBindingFact(
+            PostgreSQLContainer container
+    ) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT
+                         identity_user.id,
+                         identity_user.company_id,
+                         identity_user.employment_status,
+                         identity_user.account_status,
+                         identity_user.display_name,
+                         identity_user.row_version,
+                         external_identity.id AS identity_id,
+                         external_identity.provider,
+                         external_identity.external_user_id,
+                         external_identity.raw_profile_hash
+                     FROM yumpoo.identity_user identity_user
+                     JOIN yumpoo.external_identity external_identity
+                       ON external_identity.user_id = identity_user.id
+                      AND external_identity.company_id = identity_user.company_id
+                     WHERE identity_user.id = '00000000-0000-4000-8000-000000000102'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            IdentityBindingFact fact = new IdentityBindingFact(
+                    result.getObject("id", UUID.class),
+                    result.getObject("company_id", UUID.class),
+                    result.getString("employment_status"),
+                    result.getString("account_status"),
+                    result.getString("display_name"),
+                    result.getLong("row_version"),
+                    result.getObject("identity_id", UUID.class),
+                    result.getString("provider"),
+                    result.getString("external_user_id"),
+                    result.getString("raw_profile_hash")
+            );
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
+    }
+
     private static String postgresVersion(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
              Statement statement = connection.createStatement();
@@ -367,6 +458,20 @@ class M017BackupRestoreIT {
             String dayType,
             int standardMinutes,
             long rowVersion
+    ) {
+    }
+
+    private record IdentityBindingFact(
+            UUID userId,
+            UUID companyId,
+            String employmentStatus,
+            String accountStatus,
+            String displayName,
+            long rowVersion,
+            UUID identityId,
+            String provider,
+            String externalUserId,
+            String rawProfileHash
     ) {
     }
 

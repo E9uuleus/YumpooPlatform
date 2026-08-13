@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M1-02 User 与 ExternalIdentity 底座
+
+M1-02 在 `identityaccess` 模块建立正式 `identity_user` 与 `external_identity` 数据模型。WECOM 外部成员标识在 Company 内唯一，且一期与 User 严格一对一；姓名、邮箱和手机号仅为当前目录资料，变化时复用原 User，不参与身份合并。就业状态与账号状态分别持久化，目录资料刷新不会隐式改变任一状态。
+
+模块内部的 `DirectoryMemberProvisioningService` 使用唯一 Company 配置和 PostgreSQL 事务级 advisory lock 串行化同一外部身份的建立/刷新，避免并发首次同步产生重复绑定或孤儿 User。该切片不新增 REST/OpenAPI、前端、同步批次、会话、账号治理、角色或事件发布。
+
+```powershell
+pnpm verify:m1-02
+```
+
+该入口依次运行后端 `clean verify`（含 PostgreSQL 17/Flyway、并发建立、数据库约束及备份恢复验证）和完整 Node 工作区门禁。
+
 ## M1-01 Company 与工作日历底座
 
 M1-01 在 `organization` 模块交付单 Company 与工作日历的后端底座。数据库迁移 `V6` 固定种子为 `Yumpoo`、`Asia/Shanghai`、周一周起始和 480 分钟默认工作日，并以数据库约束保证单 Company、日历日期唯一及工作日分钟语义。运行期只从数据库读取 Company 配置；缺失、非法 IANA 时区或非周一起始配置都会失败关闭。

@@ -214,6 +214,24 @@ class YumpooServerApplicationIT {
                         + "AND tablename IN ('company', 'company_calendar_day')",
                 String.class
         );
+        List<String> identityConstraintNames = jdbcTemplate.queryForList(
+                "SELECT constraint_record.conname "
+                        + "FROM pg_constraint constraint_record "
+                        + "JOIN pg_class table_record "
+                        + "ON table_record.oid = constraint_record.conrelid "
+                        + "JOIN pg_namespace schema_record "
+                        + "ON schema_record.oid = table_record.relnamespace "
+                        + "WHERE schema_record.nspname = 'yumpoo' "
+                        + "AND table_record.relname IN ('identity_user', 'external_identity') "
+                        + "AND constraint_record.contype <> 'n'",
+                String.class
+        );
+        List<String> identityIndexNames = jdbcTemplate.queryForList(
+                "SELECT indexname FROM pg_indexes "
+                        + "WHERE schemaname = 'yumpoo' "
+                        + "AND tablename IN ('identity_user', 'external_identity')",
+                String.class
+        );
         List<String> companySeeds = jdbcTemplate.queryForList(
                 "SELECT id::text || '|' || singleton_slot || '|' || display_name || '|' "
                         + "|| timezone || '|' || week_start_day || '|' "
@@ -227,13 +245,17 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isValidateOnMigrate()).isTrue();
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
-        assertThat(successfulMigrationVersions).containsExactly("1", "2", "3", "4", "5", "6");
+        assertThat(successfulMigrationVersions).containsExactly(
+                "1", "2", "3", "4", "5", "6", "7"
+        );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
                 "company",
                 "company_calendar_day",
                 "desktop_auth_attempt",
+                "external_identity",
                 "idempotency_record",
+                "identity_user",
                 "outbox_consumer_receipt",
                 "outbox_event",
                 "wecom_oauth_attempt"
@@ -329,6 +351,41 @@ class YumpooServerApplicationIT {
                 "company_pkey",
                 "uq_company_singleton_slot",
                 "company_calendar_day_pkey"
+        );
+        assertThat(identityConstraintNames).containsExactlyInAnyOrder(
+                "identity_user_pkey",
+                "uq_identity_user_id_company",
+                "fk_identity_user_company",
+                "fk_identity_user_disabled_by",
+                "ck_identity_user_id_v4",
+                "ck_identity_user_employment_status",
+                "ck_identity_user_account_status",
+                "ck_identity_user_display_name",
+                "ck_identity_user_email",
+                "ck_identity_user_mobile",
+                "ck_identity_user_department_summary",
+                "ck_identity_user_left_facts",
+                "ck_identity_user_disabled_facts",
+                "ck_identity_user_row_version",
+                "ck_identity_user_timestamps",
+                "external_identity_pkey",
+                "fk_external_identity_user_company",
+                "uq_external_identity_provider_member",
+                "uq_external_identity_user_provider",
+                "ck_external_identity_id_v4",
+                "ck_external_identity_provider",
+                "ck_external_identity_external_user_id",
+                "ck_external_identity_employment_status",
+                "ck_external_identity_raw_profile_hash",
+                "ck_external_identity_timestamps"
+        );
+        assertThat(identityIndexNames).containsExactlyInAnyOrder(
+                "identity_user_pkey",
+                "uq_identity_user_id_company",
+                "idx_identity_user_company_status_created",
+                "external_identity_pkey",
+                "uq_external_identity_provider_member",
+                "uq_external_identity_user_provider"
         );
         assertThat(companySeeds).containsExactly(
                 "00000000-0000-4000-8000-000000000001|1|Yumpoo|Asia/Shanghai|MONDAY|480|0"
