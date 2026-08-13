@@ -1,5 +1,13 @@
 # Yumpoo Server
 
+## M1-02 User 与 ExternalIdentity 底座
+
+Flyway `V7` 创建 `identity_user` 与 `external_identity`。User 固定归属 M1-01 的唯一 Company，分别保存 `employment_status=ACTIVE/LEFT` 和 `account_status=ENABLED/DISABLED`；WECOM 外部身份由 `(company_id, provider, external_user_id)` 唯一定位，并通过 `(user_id, provider)` 唯一约束落实一期一对一绑定。个人资料字段不建立唯一索引，也不用于自动合并。
+
+`DirectoryMemberProvisioningService.provisionOrRefresh` 是供后续正式通讯录同步复用的模块内部事务入口。首次观察创建 `ACTIVE + ENABLED` User；后续同外部 ID 只刷新当前资料、hash 和观察时间，保持 User ID、就业状态、账号状态及既有历史事实。实现以派生 advisory lock 处理并发首次建立，含敏感数据的值对象和聚合输出均使用脱敏 `toString()`。
+
+从仓库根运行 `pnpm verify:m1-02`，会执行后端 `clean verify` 和完整 Node 工作区门禁。本切片不提供 REST/OpenAPI、同步批次、就业/账号状态命令、会话、角色或事件发布。
+
 ## M1-01 Company 与工作日历底座
 
 `organization` 模块拥有 Company 与 `company_calendar_day`。Flyway `V6` 创建并固定种下唯一 Company：ID 为 `00000000-0000-4000-8000-000000000001`，展示名 `Yumpoo`，时区 `Asia/Shanghai`，周起始日 `MONDAY`，默认工作日 480 分钟。数据库是运行期唯一配置真源；应用不会用环境变量覆盖种子，读取到缺失 Company、非法 IANA 时区或非周一起始配置时会失败关闭。
