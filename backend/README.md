@@ -1,5 +1,13 @@
 # Yumpoo Server
 
+## M1-03 会话与安全底座
+
+Flyway `V8` 为 `identity_user` 增加非负 `authorization_version`，并创建 `login_session`。会话令牌与 CSRF 令牌均为 32 字节随机凭据，持久化层只保存用途隔离的 HMAC-SHA-256 指纹和 keyVersion。活动会话按 8 小时空闲、7 天绝对期限续期，撤销或过期事实保留到绝对到期后 24 小时，再由每小时任务分批清理。
+
+Spring Security 链只匹配 `/api/v1/**`，禁用 HttpSession、表单登录、HTTP Basic 和持久化 SecurityContext。Session Cookie 为 `__Host-yumpoo-session`；CSRF Cookie 为可读的 `__Host-yumpoo-csrf`，写请求通过 `X-XSRF-TOKEN` 回传并与当前 Session 的数据库指纹核对。生产环境必须配置 current HMAC 版本与至少 32 字节 Base64 密钥；previous 版本、密钥和截止时刻只能成组配置。
+
+从仓库根运行 `pnpm verify:m1-03`。本切片仅提供会话/鉴权内核与 HTTP 安全基础，不提供正式 callback、logout、`/me` 或登录页面。
+
 ## M1-02 User 与 ExternalIdentity 底座
 
 Flyway `V7` 创建 `identity_user` 与 `external_identity`。User 固定归属 M1-01 的唯一 Company，分别保存 `employment_status=ACTIVE/LEFT` 和 `account_status=ENABLED/DISABLED`；WECOM 外部身份由 `(company_id, provider, external_user_id)` 唯一定位，并通过 `(user_id, provider)` 唯一约束落实一期一对一绑定。个人资料字段不建立唯一索引，也不用于自动合并。

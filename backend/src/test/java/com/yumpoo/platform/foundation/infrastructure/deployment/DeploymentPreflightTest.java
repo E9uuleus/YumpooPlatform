@@ -40,7 +40,12 @@ class DeploymentPreflightTest {
                 .withProperty("spring.datasource.password", "A1!yumpoo-app-2026")
                 .withProperty("spring.flyway.url", "jdbc:postgresql://127.0.0.1:5432/yumpoo")
                 .withProperty("spring.flyway.user", "yumpoo_migrator")
-                .withProperty("spring.flyway.password", "B2!yumpoo-ddl-2026");
+                .withProperty("spring.flyway.password", "B2!yumpoo-ddl-2026")
+                .withProperty("yumpoo.session.current-key-version", "prod-v1")
+                .withProperty(
+                        "yumpoo.session.current-key",
+                        "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE="
+                );
     }
 
     @Test

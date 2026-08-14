@@ -9,6 +9,7 @@ import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.testing.M010ProbeApplicationService;
 import com.yumpoo.platform.foundation.testing.M010ProbeController;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.testing.TestProbeSecurityConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +46,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Import({
         PostgreSqlTestContainerConfiguration.class,
+        TestProbeSecurityConfiguration.class,
         M010ProbeApplicationService.class,
         M010ProbeController.class
 })

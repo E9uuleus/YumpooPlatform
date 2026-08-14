@@ -1,5 +1,6 @@
 package com.yumpoo.platform;
 
+import com.yumpoo.platform.filestorage.testing.M014AttachmentProbeController;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.configuration.Configuration;
@@ -11,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -46,6 +48,9 @@ class YumpooServerApplicationIT {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
+    private ApplicationContext applicationContext;
+
+    @Autowired
     private PostgreSQLContainer postgresContainer;
 
     @Test
@@ -77,12 +82,8 @@ class YumpooServerApplicationIT {
 
     @Test
     void m014AttachmentProbeRoutesAreAbsentWithoutTheExplicitTestProfile() throws Exception {
-        HttpResponse<String> response = get(
-                "/api/v1/__test/m0-14/attachments/"
-                        + "00000000-0000-0000-0000-000000000014"
-        );
-
-        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(applicationContext.getBeansOfType(M014AttachmentProbeController.class))
+                .isEmpty();
     }
 
     @Test
@@ -232,6 +233,24 @@ class YumpooServerApplicationIT {
                         + "AND tablename IN ('identity_user', 'external_identity')",
                 String.class
         );
+        List<String> sessionConstraintNames = jdbcTemplate.queryForList(
+                "SELECT constraint_record.conname "
+                        + "FROM pg_constraint constraint_record "
+                        + "JOIN pg_class table_record "
+                        + "ON table_record.oid = constraint_record.conrelid "
+                        + "JOIN pg_namespace schema_record "
+                        + "ON schema_record.oid = table_record.relnamespace "
+                        + "WHERE schema_record.nspname = 'yumpoo' "
+                        + "AND table_record.relname = 'login_session' "
+                        + "AND constraint_record.contype <> 'n'",
+                String.class
+        );
+        List<String> sessionIndexNames = jdbcTemplate.queryForList(
+                "SELECT indexname FROM pg_indexes "
+                        + "WHERE schemaname = 'yumpoo' "
+                        + "AND tablename = 'login_session'",
+                String.class
+        );
         List<String> companySeeds = jdbcTemplate.queryForList(
                 "SELECT id::text || '|' || singleton_slot || '|' || display_name || '|' "
                         + "|| timezone || '|' || week_start_day || '|' "
@@ -246,7 +265,7 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7"
+                "1", "2", "3", "4", "5", "6", "7", "8"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
@@ -256,6 +275,7 @@ class YumpooServerApplicationIT {
                 "external_identity",
                 "idempotency_record",
                 "identity_user",
+                "login_session",
                 "outbox_consumer_receipt",
                 "outbox_event",
                 "wecom_oauth_attempt"
@@ -366,6 +386,7 @@ class YumpooServerApplicationIT {
                 "ck_identity_user_department_summary",
                 "ck_identity_user_left_facts",
                 "ck_identity_user_disabled_facts",
+                "ck_identity_user_authorization_version",
                 "ck_identity_user_row_version",
                 "ck_identity_user_timestamps",
                 "external_identity_pkey",
@@ -386,6 +407,26 @@ class YumpooServerApplicationIT {
                 "external_identity_pkey",
                 "uq_external_identity_provider_member",
                 "uq_external_identity_user_provider"
+        );
+        assertThat(sessionConstraintNames).containsExactlyInAnyOrder(
+                "login_session_pkey",
+                "fk_login_session_user_company",
+                "uq_login_session_token_fingerprint",
+                "ck_login_session_id_v4",
+                "ck_login_session_status",
+                "ck_login_session_token_fingerprint",
+                "ck_login_session_session_key_version",
+                "ck_login_session_csrf_fingerprint",
+                "ck_login_session_authorization_version",
+                "ck_login_session_client",
+                "ck_login_session_lifecycle",
+                "ck_login_session_revocation"
+        );
+        assertThat(sessionIndexNames).containsExactlyInAnyOrder(
+                "login_session_pkey",
+                "uq_login_session_token_fingerprint",
+                "idx_login_session_user_active",
+                "idx_login_session_purge_after"
         );
         assertThat(companySeeds).containsExactly(
                 "00000000-0000-4000-8000-000000000001|1|Yumpoo|Asia/Shanghai|MONDAY|480|0"

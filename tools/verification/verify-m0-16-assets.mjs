@@ -77,7 +77,19 @@ function validateConfigurationTemplates() {
       secrets.spring?.flyway?.password?.startsWith('change-me-'),
     'Secret 示例必须保持显式占位值',
   )
+  assertM016(
+    secrets.yumpoo?.session?.['current-key']?.startsWith('change-me-') &&
+      secrets.yumpoo?.session?.['current-key-version'] === 'prod-v1',
+    '会话 Secret 示例必须保持显式占位值和稳定 keyVersion',
+  )
   const deployment = ordinary.yumpoo?.deployment ?? {}
+  const session = ordinary.yumpoo?.session ?? {}
+  assertM016(
+    session['idle-timeout'] === '8h' &&
+      session['absolute-timeout'] === '7d' &&
+      session['revoked-retention'] === '24h',
+    '生产模板必须固定 M1-03 会话时限',
+  )
   const required = ['public-base-url', 'release-root', 'config-root', 'secrets-root', 'attachment-root', 'upload-temp-root', 'log-root']
   assertM016(required.every((name) => typeof deployment[name] === 'string'), '普通配置缺少 yumpoo.deployment 项')
   assertM016(!/password\s*:/iu.test(ordinaryRaw), '普通配置疑似包含密码项')

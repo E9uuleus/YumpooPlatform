@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M1-03 会话与安全底座
+
+M1-03 交付 PostgreSQL 不透明 Web 会话、User 授权版本、Spring Security 7 安全链和数据库绑定的 Cookie/CSRF 契约。Session 与 CSRF 原文只在签发时返回一次，数据库仅保存用途隔离的 HMAC-SHA-256 指纹；会话采用 8 小时空闲、7 天绝对过期和绝对到期后 24 小时的撤销事实保留期。
+
+`/api/v1/**` 默认要求 `__Host-yumpoo-session` 认证，写请求还需以 `X-XSRF-TOKEN` 回传可读的 `__Host-yumpoo-csrf` Cookie。两个 Cookie 均固定 `Secure`、`SameSite=Lax`、`Path=/` 且无 Domain，Session 额外启用 `HttpOnly`。本切片不新增 callback、logout、`/me` 或正式登录页面。
+
+```powershell
+pnpm verify:m1-03
+```
+
+该入口依次执行后端 `clean verify`（含 PostgreSQL 17/Flyway、会话并发、CSRF 与安全链集成测试）及完整 Node 工作区门禁。
+
 ## M1-02 User 与 ExternalIdentity 底座
 
 M1-02 在 `identityaccess` 模块建立正式 `identity_user` 与 `external_identity` 数据模型。WECOM 外部成员标识在 Company 内唯一，且一期与 User 严格一对一；姓名、邮箱和手机号仅为当前目录资料，变化时复用原 User，不参与身份合并。就业状态与账号状态分别持久化，目录资料刷新不会隐式改变任一状态。

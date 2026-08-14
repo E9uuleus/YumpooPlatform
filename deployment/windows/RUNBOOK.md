@@ -7,6 +7,7 @@
 - release：`C:\Program Files\Yumpoo\releases\<版本>`，`current` 指向当前发布内容。
 - 普通配置：`C:\ProgramData\Yumpoo\config\application-prod.yml`。
 - Secret：`C:\ProgramData\Yumpoo\secrets\application-secrets.yml`。
+- 会话密钥：`yumpoo.session.current-key` 使用至少 32 字节随机值的 Base64；轮换时同时配置 previous key/version/accept-until，窗口结束后清空 previous 三项。
 - 附件、临时上传和日志位于独立持久目录，不得放在 release 下；附件和临时上传必须同卷。
 - 服务环境变量 `SPRING_CONFIG_ADDITIONAL_LOCATION` 先加载 config，再加载 secrets，使 secrets 覆盖普通配置。
 

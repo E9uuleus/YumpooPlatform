@@ -46,6 +46,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                 identity_user.account_disabled_at,
                 identity_user.account_disabled_by_user_id,
                 identity_user.account_disabled_reason,
+                identity_user.authorization_version,
                 identity_user.row_version,
                 identity_user.created_at AS user_created_at,
                 identity_user.updated_at AS user_updated_at,
@@ -170,6 +171,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                         null,
                         null,
                         0,
+                        0,
                         now,
                         now
                 ),
@@ -254,6 +256,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                         user.accountDisabledAt(),
                         user.accountDisabledByUserId(),
                         user.accountDisabledReason(),
+                        user.authorizationVersion(),
                         user.rowVersion() + 1,
                         user.createdAt(),
                         now
@@ -292,6 +295,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                 nullableInstant(resultSet, "account_disabled_at"),
                 resultSet.getObject("account_disabled_by_user_id", UUID.class),
                 resultSet.getString("account_disabled_reason"),
+                resultSet.getLong("authorization_version"),
                 resultSet.getLong("row_version"),
                 instant(resultSet, "user_created_at"),
                 instant(resultSet, "user_updated_at")
