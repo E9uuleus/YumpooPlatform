@@ -1,5 +1,24 @@
 # Yumpoo Server
 
+## M1-08 平台角色读取与资源授权内核
+
+Flyway `V11` 创建 `platform_role_assignment`，只允许 `COMPANY_ADMIN + COMPANY` 与 `APP_MANAGER + PLATFORM`，两种作用域均以当前 Company ID 作为 `scope_id`。ACTIVE 赋权唯一，撤销保留原行，重新授予创建新行。授予 actor envelope 支持受控的 `USER` 或 `SYSTEM` 来源，为 M1-09 首管引导与 break-glass 预留事实表达，但 M1-08 不提供任何写端口；数据库也不种管理员。
+
+`PlatformRoleQuery` 只读取 ACTIVE 角色事实，不把 User 就业/账号状态混入查询。认证链先通过 Session/User 状态与授权版本校验，再读取角色并构造 `CurrentActor`；因此 LEFT/DISABLED User 的历史角色事实仍保留，但无法形成有效请求主体。`AuthorizationDecision`/`AuthorizationGuard` 统一实现 403 与隐藏 404，catalog 的纯策略和 `ProjectAccessSnapshotQuery` 则冻结 M2 的可见性边界，不注册 Project 查询实现。
+
+从仓库根目录运行完整门禁：
+
+```powershell
+pnpm verify:m1-08
+```
+
+仅运行不依赖 Docker 的后端测试：
+
+```powershell
+cd backend
+.\mvnw.cmd -DskipITs test
+```
+
 ## M1-07 账号状态与会话失效
 
 `AccountStatusUseCase` 是当前唯一的手工账号启停应用入口。调用方必须提供 Company、目标用户、操作者、目标状态、预期 `rowVersion`、幂等键、请求哈希和原因引用。命令、User 状态与版本、批量会话撤销、Outbox 事件及幂等结果在一个 PostgreSQL 事务中完成；任何事件或持久化失败都会整体回滚。

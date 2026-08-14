@@ -251,6 +251,24 @@ class YumpooServerApplicationIT {
                         + "AND tablename = 'login_session'",
                 String.class
         );
+        List<String> platformRoleConstraintNames = jdbcTemplate.queryForList(
+                "SELECT constraint_record.conname "
+                        + "FROM pg_constraint constraint_record "
+                        + "JOIN pg_class table_record "
+                        + "ON table_record.oid = constraint_record.conrelid "
+                        + "JOIN pg_namespace schema_record "
+                        + "ON schema_record.oid = table_record.relnamespace "
+                        + "WHERE schema_record.nspname = 'yumpoo' "
+                        + "AND table_record.relname = 'platform_role_assignment' "
+                        + "AND constraint_record.contype <> 'n'",
+                String.class
+        );
+        List<String> platformRoleIndexNames = jdbcTemplate.queryForList(
+                "SELECT indexname FROM pg_indexes "
+                        + "WHERE schemaname = 'yumpoo' "
+                        + "AND tablename = 'platform_role_assignment'",
+                String.class
+        );
         List<String> companySeeds = jdbcTemplate.queryForList(
                 "SELECT id::text || '|' || singleton_slot || '|' || display_name || '|' "
                         + "|| timezone || '|' || week_start_day || '|' "
@@ -265,7 +283,7 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
@@ -281,6 +299,7 @@ class YumpooServerApplicationIT {
                 "login_session",
                 "outbox_consumer_receipt",
                 "outbox_event",
+                "platform_role_assignment",
                 "wecom_oauth_attempt"
         );
         assertThat(outboxConstraintNames).containsExactlyInAnyOrder(
@@ -430,6 +449,27 @@ class YumpooServerApplicationIT {
                 "uq_login_session_token_fingerprint",
                 "idx_login_session_user_active",
                 "idx_login_session_purge_after"
+        );
+        assertThat(platformRoleConstraintNames).containsExactlyInAnyOrder(
+                "platform_role_assignment_pkey",
+                "fk_platform_role_assignment_company",
+                "fk_platform_role_assignment_user_company",
+                "fk_platform_role_assignment_grantor_company",
+                "fk_platform_role_assignment_revoker_company",
+                "ck_platform_role_assignment_id_v4",
+                "ck_platform_role_assignment_role_scope",
+                "ck_platform_role_assignment_scope_company",
+                "ck_platform_role_assignment_status",
+                "ck_platform_role_assignment_grant_actor",
+                "ck_platform_role_assignment_grant_reason",
+                "ck_platform_role_assignment_revocation",
+                "ck_platform_role_assignment_row_version",
+                "ck_platform_role_assignment_timestamps"
+        );
+        assertThat(platformRoleIndexNames).containsExactlyInAnyOrder(
+                "platform_role_assignment_pkey",
+                "uq_platform_role_assignment_active",
+                "idx_platform_role_assignment_user_status"
         );
         assertThat(companySeeds).containsExactly(
                 "00000000-0000-4000-8000-000000000001|1|Yumpoo|Asia/Shanghai|MONDAY|480|0"

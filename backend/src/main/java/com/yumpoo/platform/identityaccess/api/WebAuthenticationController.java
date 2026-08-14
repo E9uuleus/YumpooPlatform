@@ -120,9 +120,10 @@ public final class WebAuthenticationController {
 
     @GetMapping("/auth/me")
     CurrentAuthenticationResponse me(HttpServletRequest request) {
-        currentActorProvider.requiredActive();
+        CurrentActor actor = currentActorProvider.requiredActive();
         return CurrentAuthenticationResponse.from(
-                currentQuery.current(SessionRequestContext.required(request))
+                currentQuery.current(SessionRequestContext.required(request)),
+                actor.platformRoles()
         );
     }
 

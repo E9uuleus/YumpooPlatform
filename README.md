@@ -1,5 +1,19 @@
 # YumpooPlatform
 
+## M1-08 平台/企业角色与授权策略
+
+M1-08 新增只读的平台角色底座。`platform_role_assignment` 保存 `COMPANY_ADMIN` 与 `APP_MANAGER` 的作用域、授予/撤销事实和历史版本；`COMPANY_MEMBER` 继续由 `ACTIVE + ENABLED` User 派生，不入角色表。角色表不预置管理员，本切片也不开放授予/撤销命令、REST 或管理页面。正式写入口由后续 M1-09 在同一事务内递增 `authorization_version` 并撤销会话后再开放，业务代码和 fixture 之外不得直接写表。
+
+会话认证成功后按 Company/User 查询有效角色，并把角色集合与当前 `authorizationVersion` 一起固化进 `CurrentActor`。`/api/v1/auth/me` 固定按 `COMPANY_MEMBER → COMPANY_ADMIN → APP_MANAGER` 返回，Spring authorities 使用同一份快照。通用授权 guard 将可见拒绝映射为 403，将需隐藏的拒绝映射为 404。
+
+`catalog.api.ProjectAccessSnapshotQuery` 只冻结 M2 所需的最小只读契约，本轮没有 Project、membership、owner 表或生产实现。后续实现必须在 SQL 中同时按 Company 与可见范围过滤，禁止先无范围读取再在 Java 中隐藏。当前纯策略规定：成员可正常读写；非成员 `COMPANY_ADMIN` 只读、普通写 403；仅 `APP_MANAGER` 与普通非成员隐藏 404；角色兼任按能力并集处理；跨 Company 始终隐藏。
+
+```powershell
+pnpm verify:m1-08
+```
+
+完整验证需要 Docker Desktop Linux engine，以运行 PostgreSQL 17/Testcontainers 集成测试；无 Docker 时只能执行 `cd backend; .\mvnw.cmd -DskipITs test` 与 `pnpm verify:node`，不得视为完整通过。
+
 ## M1-07 账号启停与会话撤销闭环
 
 M1-07 交付后端内部的 `AccountStatusUseCase`：账号状态与就业状态严格独立，禁用和启用命令都要求预期行版本、持久化幂等键、请求哈希和 1～160 字符的原因引用。真实状态迁移会同时递增 `row_version` 与 `authorization_version`；禁用记录操作者和原因，启用保留最近一次禁用事实，LEFT 用户允许启用账号但仍不能登录。同键同请求重放已保存结果，同键异参、陈旧版本、重复状态和跨企业访问分别按统一语义拒绝。

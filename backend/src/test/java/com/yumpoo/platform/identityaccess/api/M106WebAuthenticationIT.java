@@ -86,6 +86,16 @@ class M106WebAuthenticationIT {
                 .param("userId", USER_ID)
                 .param("profileHash", "a".repeat(64))
                 .update();
+        insertRole(
+                UUID.fromString("60000000-0000-4000-8000-000000000108"),
+                "COMPANY_ADMIN",
+                "COMPANY"
+        );
+        insertRole(
+                UUID.fromString("60000000-0000-4000-8000-000000000109"),
+                "APP_MANAGER",
+                "PLATFORM"
+        );
     }
 
     @AfterEach
@@ -126,7 +136,8 @@ class M106WebAuthenticationIT {
         assertThat(me.statusCode()).isEqualTo(200);
         assertThat(me.body())
                 .contains(USER_ID.toString(), "M1-06 Web Member", "Yumpoo")
-                .contains("Asia/Shanghai", "MONDAY", "COMPANY_MEMBER")
+                .contains("Asia/Shanghai", "MONDAY")
+                .contains("\"roles\":[\"COMPANY_MEMBER\",\"COMPANY_ADMIN\",\"APP_MANAGER\"]")
                 .contains("WEB", "SUPPORTED");
 
         HttpResponse<String> firstLogout = logout(securityCookies, csrf);
@@ -303,6 +314,26 @@ class M106WebAuthenticationIT {
                 .single();
     }
 
+    private void insertRole(UUID id, String role, String scope) {
+        jdbcClient.sql("""
+                        INSERT INTO yumpoo.platform_role_assignment (
+                            id, company_id, user_id, role_code, scope_type, scope_id, status,
+                            granted_by_actor_type, granted_by_system_code, grant_reason,
+                            granted_at, row_version, created_at, updated_at
+                        ) VALUES (
+                            :id, :companyId, :userId, :role, :scope, :companyId, 'ACTIVE',
+                            'SYSTEM', 'M1_08_TEST', 'authentication fixture',
+                            transaction_timestamp(), 0, transaction_timestamp(), transaction_timestamp()
+                        )
+                        """)
+                .param("id", id)
+                .param("companyId", COMPANY_ID)
+                .param("userId", USER_ID)
+                .param("role", role)
+                .param("scope", scope)
+                .update();
+    }
+
     private void deleteFixture() {
         jdbcClient.sql("""
                         DELETE FROM yumpoo.outbox_event
@@ -317,6 +348,9 @@ class M106WebAuthenticationIT {
                 .param("userId", USER_ID.toString())
                 .update();
         jdbcClient.sql("DELETE FROM yumpoo.login_session WHERE user_id = :userId")
+                .param("userId", USER_ID)
+                .update();
+        jdbcClient.sql("DELETE FROM yumpoo.platform_role_assignment WHERE user_id = :userId")
                 .param("userId", USER_ID)
                 .update();
         jdbcClient.sql("DELETE FROM yumpoo.external_identity WHERE user_id = :userId")

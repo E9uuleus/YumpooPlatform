@@ -23,12 +23,15 @@ import java.util.Optional;
 final class SessionAuthenticationFilter extends OncePerRequestFilter {
 
     private final SessionService sessionService;
+    private final PlatformRoleQuery platformRoleQuery;
     private final ApiErrorWriter errorWriter;
     SessionAuthenticationFilter(
             SessionService sessionService,
+            PlatformRoleQuery platformRoleQuery,
             ApiErrorWriter errorWriter
     ) {
         this.sessionService = sessionService;
+        this.platformRoleQuery = platformRoleQuery;
         this.errorWriter = errorWriter;
     }
 
@@ -72,7 +75,11 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
             context.setAuthentication(new SessionAuthenticationToken(new CurrentActor(
                     authenticated.user().userId(),
                     authenticated.user().companyId(),
-                    authenticated.user().authorizationVersion()
+                    authenticated.user().authorizationVersion(),
+                    platformRoleQuery.findActiveRoleCodes(
+                            authenticated.user().companyId(),
+                            authenticated.user().userId()
+                    )
             )));
             SecurityContextHolder.setContext(context);
             filterChain.doFilter(request, response);
