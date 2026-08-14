@@ -54,7 +54,7 @@ final class ArchitectureRules {
     private static final Map<String, Set<String>> ALLOWED_MODULE_DEPENDENCIES = Map.ofEntries(
             Map.entry("foundation", Set.of()),
             Map.entry("organization", Set.of("foundation")),
-            Map.entry("identityaccess", Set.of("foundation", "organization")),
+            Map.entry("identityaccess", Set.of("foundation", "organization", "audit")),
             Map.entry("catalog", Set.of("foundation", "identityaccess")),
             Map.entry("templateworkflow", Set.of("foundation")),
             Map.entry("filestorage", Set.of("foundation")),
@@ -68,7 +68,7 @@ final class ArchitectureRules {
                     "foundation", "organization", "catalog", "workitem", "identityaccess"
             )),
             Map.entry("notification", Set.of("foundation", "identityaccess")),
-            Map.entry("audit", Set.of("foundation", "identityaccess")),
+            Map.entry("audit", Set.of("foundation")),
             Map.entry("reporting", Set.of(
                     "foundation", "organization", "identityaccess", "catalog", "templateworkflow",
                     "filestorage", "workitem", "productfeedback", "worklog", "notification", "audit"
