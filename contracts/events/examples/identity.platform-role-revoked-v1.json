@@ -1,0 +1,23 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000821",
+  "eventType": "identity.platform_role_revoked",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T08:10:00Z",
+  "aggregateType": "PlatformRoleAssignment",
+  "aggregateId": "00000000-0000-4000-8000-000000000822",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000823",
+  "actor": { "type": "ADMIN_OVERRIDE", "userId": "00000000-0000-4000-8000-000000000824", "reasonReference": "change-1043" },
+  "requestId": "m109-role-revoke",
+  "correlationId": "m109-role-revoke",
+  "causationId": null,
+  "payload": {
+    "assignmentId": "00000000-0000-4000-8000-000000000822",
+    "userId": "00000000-0000-4000-8000-000000000825",
+    "roleCode": "COMPANY_ADMIN",
+    "scopeType": "COMPANY",
+    "scopeId": "00000000-0000-4000-8000-000000000823",
+    "reasonReference": "change-1043",
+    "authorizationVersion": 3
+  }
+}

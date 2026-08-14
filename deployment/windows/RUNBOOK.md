@@ -29,3 +29,21 @@
 - 整机重启：PostgreSQL 可用后启动 Yumpoo；liveness 与 readiness 均通过后再恢复 IIS 流量。
 
 目标机验收项定义在 `deployment-checklist.json` 和 `evidence/m0-16`。M0-16 的当前证据必须保持 `NOT_RUN`；M5-14/M6 才采集并签名目标机收据。
+## M1-09 APP_MANAGER 首管与紧急恢复
+
+维护入口默认关闭，不得把 `YUMPOO_APP_MANAGER_MAINTENANCE_ENABLED=true` 写入 Windows 服务常驻配置，也不得新增 HTTP 映射。操作应由具备应用配置读取权限的受控服务器终端，以 Windows 服务账号或等价受控身份执行。
+
+1. 确认目标是内部 `identity_user.id`，且用户在职、账号启用；不要使用企微 userid、手机号或邮箱。
+2. 准备可追溯但不含个人资料的理由引用，长度 1～160 字符。
+3. 首次部署且历史上从未存在 APP_MANAGER 时使用 `BOOTSTRAP`；仅在系统已初始化且当前可用 APP_MANAGER 为零时使用 `BREAK_GLASS`。
+4. 执行脚本；脚本以非 Web 模式启动一次性进程、关闭 Outbox 调度，完成后清理临时环境变量并退出。
+
+```powershell
+& 'C:\Program Files\Yumpoo\current\deployment\windows\Invoke-AppManagerMaintenance.ps1' `
+  -Mode BREAK_GLASS `
+  -TargetUserId '00000000-0000-4000-8000-000000000000' `
+  -ReasonReference 'INC-2026-0042' `
+  -JarPath 'C:\Program Files\Yumpoo\current\yumpoo-server.jar'
+```
+
+`BOOTSTRAP` 成功后永久不能再次执行；数据库中的历史 Assignment 是不可逆哨兵。`BREAK_GLASS` 在已有可用管理员时会拒绝。不要绕过 Runner 直接修改 `platform_role_assignment` 或 `app_manager_governance_state`。操作后应确认进程退出码为 0，并由应用内角色查询核对结果；M1-10 上线后再同时核对 Security Audit。

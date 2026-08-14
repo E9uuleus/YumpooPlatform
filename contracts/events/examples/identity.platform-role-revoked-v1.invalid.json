@@ -1,0 +1,23 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000831",
+  "eventType": "identity.platform_role_revoked",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T08:10:00Z",
+  "aggregateType": "PlatformRoleAssignment",
+  "aggregateId": "00000000-0000-4000-8000-000000000832",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000833",
+  "actor": { "type": "ADMIN_OVERRIDE", "userId": "00000000-0000-4000-8000-000000000834", "reasonReference": "change-1044" },
+  "requestId": "m109-role-revoke-invalid",
+  "correlationId": "m109-role-revoke-invalid",
+  "causationId": null,
+  "payload": {
+    "assignmentId": "00000000-0000-4000-8000-000000000832",
+    "userId": "00000000-0000-4000-8000-000000000835",
+    "roleCode": "UNKNOWN_ROLE",
+    "scopeType": "COMPANY",
+    "scopeId": "00000000-0000-4000-8000-000000000833",
+    "reasonReference": "change-1044",
+    "authorizationVersion": 3
+  }
+}

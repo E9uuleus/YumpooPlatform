@@ -1,0 +1,21 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000871",
+  "eventType": "identity.app_manager_availability_restored",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T08:30:00Z",
+  "aggregateType": "AppManagerGovernanceState",
+  "aggregateId": "00000000-0000-4000-8000-000000000873",
+  "aggregateVersion": 3,
+  "companyId": "00000000-0000-4000-8000-000000000873",
+  "actor": { "type": "SYSTEM", "systemCode": "APP_MANAGER_BREAK_GLASS" },
+  "requestId": "m109-manager-restored-invalid",
+  "correlationId": "m109-manager-restored-invalid",
+  "causationId": null,
+  "payload": {
+    "previousAvailableCount": 0,
+    "currentAvailableCount": 0,
+    "triggerCode": "BREAK_GLASS",
+    "affectedUserId": "00000000-0000-4000-8000-000000000875",
+    "detectedAt": "2026-08-14T08:30:00Z"
+  }
+}

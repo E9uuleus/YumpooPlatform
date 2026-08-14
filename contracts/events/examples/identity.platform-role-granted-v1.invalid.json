@@ -1,0 +1,23 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000811",
+  "eventType": "identity.platform_role_granted",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T08:00:00Z",
+  "aggregateType": "PlatformRoleAssignment",
+  "aggregateId": "00000000-0000-4000-8000-000000000812",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000813",
+  "actor": { "type": "SYSTEM", "systemCode": "APP_MANAGER_BOOTSTRAP" },
+  "requestId": "m109-role-grant-invalid",
+  "correlationId": "m109-role-grant-invalid",
+  "causationId": null,
+  "payload": {
+    "assignmentId": "00000000-0000-4000-8000-000000000812",
+    "userId": "00000000-0000-4000-8000-000000000815",
+    "roleCode": "APP_MANAGER",
+    "scopeType": "COMPANY",
+    "scopeId": "00000000-0000-4000-8000-000000000813",
+    "reasonReference": "bootstrap-approval",
+    "authorizationVersion": 1
+  }
+}

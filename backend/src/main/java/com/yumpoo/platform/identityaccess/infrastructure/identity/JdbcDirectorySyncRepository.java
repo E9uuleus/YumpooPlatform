@@ -19,6 +19,8 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncRun
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncRunStatus;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncTriggerType;
 import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
+import com.yumpoo.platform.identityaccess.application.authorization.AppManagerAvailabilityCoordinator;
+import com.yumpoo.platform.identityaccess.application.authorization.AvailabilitySnapshot;
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationService;
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationTarget;
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
@@ -61,6 +63,7 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
     private final JdbcClient jdbcClient;
     private final TransactionalEventPort eventPort;
     private final SessionRevocationService sessionRevocationService;
+    private final AppManagerAvailabilityCoordinator availabilityCoordinator;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
@@ -68,6 +71,7 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
             JdbcClient jdbcClient,
             TransactionalEventPort eventPort,
             SessionRevocationService sessionRevocationService,
+            AppManagerAvailabilityCoordinator availabilityCoordinator,
             ObjectMapper objectMapper,
             Clock clock
     ) {
@@ -77,6 +81,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                 sessionRevocationService,
                 "sessionRevocationService must not be null"
         );
+        this.availabilityCoordinator = Objects.requireNonNull(
+                availabilityCoordinator, "availabilityCoordinator must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
@@ -656,6 +662,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
     public DirectorySyncRunSnapshot complete(UUID runId, UUID leaseToken, EventActor actor) {
         Instant now = clock.instant();
         assertLease(runId, leaseToken);
+        UUID companyId = find(runId).companyId();
+        AvailabilitySnapshot availabilityBefore = availabilityCoordinator.lock(companyId);
         requireLease(jdbcClient.sql("""
                         UPDATE yumpoo.directory_sync_run
                         SET phase = 'FINALIZING', updated_at = :now, row_version = row_version + 1
@@ -681,6 +689,12 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
             );
         }
         reconcileMissingMembers(runId, current.companyId(), actor, now);
+        availabilityCoordinator.reconcile(
+                availabilityBefore,
+                "EMPLOYMENT_LEFT",
+                null,
+                actor
+        );
         counts = itemCounts(runId);
         deleteStaging(runId);
         int updated = jdbcClient.sql("""

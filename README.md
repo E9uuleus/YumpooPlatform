@@ -348,3 +348,16 @@ M0-13 增加通讯录读取适配器和仅供验证的同步对账探针。真�
 worker 默认每秒轮询，批量 50、并发 2、租约 5 分钟。领取覆盖到期的 `PENDING/RETRY` 与租约过期的 `PROCESSING`，并以 owner + token 防止旧 worker 回写；低版本未完成或 `DEAD` 会阻塞同聚合高版本。每个消费者的数据库效果与 receipt 在独立事务中提交，多消费者重试会跳过已完成者；五档退避后第六次失败进入 `DEAD`。控制台使用 Spring Boot 内建 Logstash JSON 日志，并在请求和消费边界写入受控关联字段。
 
 正式身份绑定与会话、Security Audit、Activity 投影、通知投递、人工重排、监控告警、Outbox 清理和管理页面仍留给后续切片。完成 M0-13 也不代表完整 M0 里程碑退出。
+## M1-09 角色治理与管理员紧急恢复
+
+M1-09 在后端新增 `APP_MANAGER` 与 `COMPANY_ADMIN` 的分页查询、授予和撤销应用端口，但不注册正式 HTTP/OpenAPI。角色写入要求操作者是同公司的可用 `APP_MANAGER`，会话授权版本仍为当前值，且企微登录签发时间不早于命令执行前 15 分钟；过期后必须重新登录。角色变化、目标用户授权版本递增、Web/Electron 会话以 `AUTHORIZATION_CHANGED` 撤销、幂等结果和 Outbox 事件处于同一事务。
+
+公司级 `app_manager_governance_state` 既是一次性首管闩锁，也是所有角色变化、账号启停和目录离职/返聘的并发互斥点。主动撤销或禁用最后一名可用 `APP_MANAGER` 会被拒绝；企微目录离职不会被阻塞，人数从 1 降为 0 时产生持久缺失事件，administration 投影为 `GovernanceIssue`，恢复后保留已解决历史。
+
+首管引导和 break-glass 仅通过默认关闭的非 Web 维护 Runner 执行，不提供匿名或回环 HTTP。Windows 使用方式见 `deployment/windows/RUNBOOK.md` 与 `deployment/windows/Invoke-AppManagerMaintenance.ps1`。Security Audit、失败审计和角色写 HTTP 仍属于 M1-10，管理页面属于后续切片。
+
+从仓库根目录执行完整门禁：
+
+```powershell
+pnpm verify:m1-09
+```

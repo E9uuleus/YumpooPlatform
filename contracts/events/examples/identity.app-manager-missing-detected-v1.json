@@ -1,0 +1,21 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000841",
+  "eventType": "identity.app_manager_missing_detected",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T08:20:00Z",
+  "aggregateType": "AppManagerGovernanceState",
+  "aggregateId": "00000000-0000-4000-8000-000000000843",
+  "aggregateVersion": 2,
+  "companyId": "00000000-0000-4000-8000-000000000843",
+  "actor": { "type": "SYSTEM", "systemCode": "WECOM_DIRECTORY_SYNC" },
+  "requestId": "m109-manager-missing",
+  "correlationId": "m109-manager-missing",
+  "causationId": null,
+  "payload": {
+    "previousAvailableCount": 1,
+    "currentAvailableCount": 0,
+    "triggerCode": "EMPLOYMENT_LEFT",
+    "affectedUserId": null,
+    "detectedAt": "2026-08-14T08:20:00Z"
+  }
+}

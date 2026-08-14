@@ -34,7 +34,7 @@ public class DirectorySyncItemApplyService {
             EventActor actor,
             Duration leaseDuration
     ) {
-        DirectoryMemberProvisioningResult result = provisioningService.provisionOrRefresh(profile);
+        DirectoryMemberProvisioningResult result = provisioningService.provisionOrRefresh(profile, actor);
         repository.markApplied(runId, leaseToken, profile, result, actor, leaseDuration);
     }
 }
