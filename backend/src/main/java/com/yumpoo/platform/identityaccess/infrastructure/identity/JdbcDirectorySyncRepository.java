@@ -21,6 +21,8 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncTri
 import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
 import com.yumpoo.platform.identityaccess.application.authorization.AppManagerAvailabilityCoordinator;
 import com.yumpoo.platform.identityaccess.application.authorization.AvailabilitySnapshot;
+import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
+import com.yumpoo.platform.audit.api.SecurityAuditOutcome;
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationService;
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationTarget;
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
@@ -44,6 +46,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Set;
 
 @Repository
 public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
@@ -66,6 +69,7 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
     private final AppManagerAvailabilityCoordinator availabilityCoordinator;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final IdentitySecurityAuditRecorder auditRecorder;
 
     public JdbcDirectorySyncRepository(
             JdbcClient jdbcClient,
@@ -73,7 +77,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
             SessionRevocationService sessionRevocationService,
             AppManagerAvailabilityCoordinator availabilityCoordinator,
             ObjectMapper objectMapper,
-            Clock clock
+            Clock clock,
+            IdentitySecurityAuditRecorder auditRecorder
     ) {
         this.jdbcClient = Objects.requireNonNull(jdbcClient, "jdbcClient must not be null");
         this.eventPort = Objects.requireNonNull(eventPort, "eventPort must not be null");
@@ -85,6 +90,7 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                 availabilityCoordinator, "availabilityCoordinator must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder must not be null");
     }
 
     @Override
@@ -1068,6 +1074,24 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                 actor,
                 objectMapper.valueToTree(payload)
         ));
+        if (!"identity.directory_sync_started".equals(eventType)) {
+            SecurityAuditOutcome outcome = switch (run.status()) {
+                case SUCCEEDED -> SecurityAuditOutcome.SUCCEEDED;
+                case PARTIALLY_SUCCEEDED -> SecurityAuditOutcome.PARTIAL;
+                case FAILED -> SecurityAuditOutcome.FAILED;
+                case RUNNING -> throw new IllegalStateException("terminal directory audit requires terminal run");
+            };
+            auditRecorder.outcome(
+                    run.companyId(), "directory-run:" + run.runId() + ":" + run.rowVersion(),
+                    "DIRECTORY_SYNC_COMPLETED", outcome, actor, Set.of(),
+                    "DIRECTORY_SYNC_RUN", run.runId(), actor.reasonReference(), null,
+                    Map.of("status", run.status().name(), "createdCount", run.counts().created(),
+                            "updatedCount", run.counts().updated(), "unchangedCount", run.counts().unchanged(),
+                            "leftCount", run.counts().left(), "returnedCount", run.counts().returned(),
+                            "failedCount", run.counts().failed(),
+                            "notAppliedCount", run.counts().notApplied()),
+                    outcome == SecurityAuditOutcome.SUCCEEDED ? null : run.errorCode(), null, null);
+        }
     }
 
     private void publishEmployment(
@@ -1099,6 +1123,14 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                 actor,
                 objectMapper.valueToTree(payload)
         ));
+        auditRecorder.succeeded(
+                run.companyId(), "employment:" + userId + ":" + rowVersion,
+                "ACTIVE".equals(toStatus) ? "EMPLOYMENT_RETURNED" : "EMPLOYMENT_LEFT",
+                actor, Set.of(), "USER", userId, actor.reasonReference(),
+                Map.of("employmentStatus", fromStatus),
+                Map.of("employmentStatus", toStatus, "reasonCode", reasonCode,
+                        "authorizationVersion", authorizationVersion, "runId", runId),
+                runId, null, null);
     }
 
     private static DirectorySyncRunSnapshot mapSnapshot(ResultSet resultSet, int rowNumber)

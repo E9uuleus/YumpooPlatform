@@ -3,6 +3,8 @@ package com.yumpoo.platform.identityaccess.application.authentication;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventDraft;
 import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
+import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
 import com.yumpoo.platform.identityaccess.application.session.AuthenticatedSession;
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
@@ -14,6 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -26,15 +29,18 @@ public class AuthenticationEventService {
     private final TransactionalEventPort eventPort;
     private final CompanyConfigurationQuery companyQuery;
     private final ObjectMapper objectMapper;
+    private final IdentitySecurityAuditRecorder auditRecorder;
 
     public AuthenticationEventService(
             TransactionalEventPort eventPort,
             CompanyConfigurationQuery companyQuery,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            IdentitySecurityAuditRecorder auditRecorder
     ) {
         this.eventPort = eventPort;
         this.companyQuery = companyQuery;
         this.objectMapper = objectMapper;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -52,6 +58,10 @@ public class AuthenticationEventService {
                 EventActor.user(user.userId()),
                 objectMapper.valueToTree(payload)
         ));
+        auditRecorder.succeeded(
+                user.companyId(), "login:" + issuedSession.session().id(), "LOGIN_SUCCEEDED",
+                EventActor.user(user.userId()), Set.of(), "LOGIN_SESSION", issuedSession.session().id(),
+                null, null, Map.of("clientType", "WEB"), null, "WEB", null);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -71,6 +81,13 @@ public class AuthenticationEventService {
                 EventActor.system("WECOM_AUTH"),
                 objectMapper.valueToTree(payload)
         ));
+        String requestId = RequestCorrelationContext.required().requestId();
+        auditRecorder.outcome(
+                company.companyId(), "login-rejected:" + requestId + ":" + stage,
+                "LOGIN_REJECTED", com.yumpoo.platform.audit.api.SecurityAuditOutcome.FAILED,
+                EventActor.system("WECOM_AUTH"), Set.of(), "AUTHENTICATION_ATTEMPT", requestId,
+                null, null, Map.of("stage", stage, "clientType", "WEB"), outcomeCode,
+                "WEB", null);
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -90,5 +107,13 @@ public class AuthenticationEventService {
                 EventActor.user(authenticatedSession.user().userId()),
                 objectMapper.valueToTree(payload)
         ));
+        auditRecorder.succeeded(
+                authenticatedSession.user().companyId(),
+                "logout:" + authenticatedSession.session().id(), "LOGOUT_SUCCEEDED",
+                EventActor.user(authenticatedSession.user().userId()), Set.of(),
+                "LOGIN_SESSION", authenticatedSession.session().id(), null,
+                Map.of("status", "ACTIVE"), Map.of("status", "REVOKED"), null,
+                authenticatedSession.session().clientType().name(),
+                authenticatedSession.session().clientVersion());
     }
 }

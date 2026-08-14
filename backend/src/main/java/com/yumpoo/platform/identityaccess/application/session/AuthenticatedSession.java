@@ -18,4 +18,16 @@ public record AuthenticatedSession(
     public Instant absoluteExpiresAt() {
         return session.absoluteExpiresAt();
     }
+
+    public Instant authenticatedAt() {
+        return session.issuedAt();
+    }
+
+    public String clientTypeCode() {
+        return session.clientType().name();
+    }
+
+    public String clientVersion() {
+        return session.clientVersion();
+    }
 }

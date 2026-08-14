@@ -4,6 +4,7 @@ import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.identityaccess.application.account.AccountStatusChangeCommand;
+import com.yumpoo.platform.identityaccess.application.account.AccountStatusCommandActor;
 import com.yumpoo.platform.identityaccess.application.account.AccountStatusUseCase;
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
@@ -29,6 +30,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -86,6 +88,21 @@ class M103SessionSecurityIT {
                 .param("userId", USER_ID)
                 .param("companyId", COMPANY_ID)
                 .update();
+        jdbcClient.sql("""
+                        INSERT INTO yumpoo.platform_role_assignment (
+                            id, company_id, user_id, role_code, scope_type, scope_id, status,
+                            granted_by_actor_type, granted_by_system_code, grant_reason,
+                            granted_at, row_version, created_at, updated_at
+                        ) VALUES (
+                            :id, :companyId, :userId, 'COMPANY_ADMIN', 'COMPANY', :companyId, 'ACTIVE',
+                            'SYSTEM', 'M103_TEST', 'test-fixture', transaction_timestamp(), 0,
+                            transaction_timestamp(), transaction_timestamp()
+                        )
+                        """)
+                .param("id", UUID.randomUUID())
+                .param("companyId", COMPANY_ID)
+                .param("userId", USER_ID)
+                .update();
         issued = sessionService.issueWebSession(USER_ID, "web-security-it");
     }
 
@@ -95,6 +112,10 @@ class M103SessionSecurityIT {
     }
 
     private void deleteTestUser() {
+        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE actor_user_id = :userId OR target_id = :targetId")
+                .param("userId", USER_ID)
+                .param("targetId", USER_ID.toString())
+                .update();
         jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :userId")
                 .param("userId", USER_ID)
                 .update();
@@ -102,6 +123,9 @@ class M103SessionSecurityIT {
                 .param("userId", USER_ID)
                 .update();
         jdbcClient.sql("DELETE FROM yumpoo.outbox_event WHERE aggregate_id = :userId")
+                .param("userId", USER_ID)
+                .update();
+        jdbcClient.sql("DELETE FROM yumpoo.platform_role_assignment WHERE user_id = :userId")
                 .param("userId", USER_ID)
                 .update();
         jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id = :userId")
@@ -200,7 +224,7 @@ class M103SessionSecurityIT {
             accountStatusUseCase.change(new AccountStatusChangeCommand(
                     COMPANY_ID,
                     USER_ID,
-                    USER_ID,
+                    new AccountStatusCommandActor(USER_ID, 0, Instant.now()),
                     AccountStatus.DISABLED,
                     0,
                     UUID.randomUUID(),

@@ -16,6 +16,9 @@ import com.yumpoo.platform.identityaccess.application.authorization.Availability
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleGovernanceRepository;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleUserSnapshot;
+import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
+import com.yumpoo.platform.foundation.application.error.ApplicationException;
+import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
 import org.springframework.stereotype.Service;
@@ -25,9 +28,15 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.stream.Collectors;
 
 @Service
 public class AccountStatusService implements AccountStatusUseCase {
+
+    static final Duration RECENT_AUTHENTICATION_WINDOW = Duration.ofMinutes(15);
 
     public static final String DISABLE_ROUTE_KEY = "adminMemberAccountDisable";
     public static final String ENABLE_ROUTE_KEY = "adminMemberAccountEnable";
@@ -41,6 +50,8 @@ public class AccountStatusService implements AccountStatusUseCase {
     private final TransactionalEventPort eventPort;
     private final IdempotentCommandExecutor idempotentCommandExecutor;
     private final ObjectMapper objectMapper;
+    private final Clock clock;
+    private final IdentitySecurityAuditRecorder auditRecorder;
 
     public AccountStatusService(
             AccountStatusRepository repository,
@@ -49,7 +60,9 @@ public class AccountStatusService implements AccountStatusUseCase {
             SessionRevocationService sessionRevocationService,
             TransactionalEventPort eventPort,
             IdempotentCommandExecutor idempotentCommandExecutor,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            Clock clock,
+            IdentitySecurityAuditRecorder auditRecorder
     ) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.roleGovernanceRepository = Objects.requireNonNull(
@@ -66,6 +79,8 @@ public class AccountStatusService implements AccountStatusUseCase {
                 "idempotentCommandExecutor must not be null"
         );
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder must not be null");
     }
 
     @Override
@@ -76,7 +91,7 @@ public class AccountStatusService implements AccountStatusUseCase {
                 : ENABLE_ROUTE_KEY;
         IdempotencyCommand idempotencyCommand = new IdempotencyCommand(
                 new IdempotencyScope(
-                        command.actorUserId(),
+                        command.actor().userId(),
                         "POST",
                         routeKey,
                         command.idempotencyKey()
@@ -91,6 +106,7 @@ public class AccountStatusService implements AccountStatusUseCase {
 
     private StoredCommandResult executeChange(AccountStatusChangeCommand command) {
         AvailabilitySnapshot before = availabilityCoordinator.lock(command.companyId());
+        RoleUserSnapshot actorUser = requireAuthorizedActor(command);
         RoleUserSnapshot targetBefore = roleGovernanceRepository
                 .lockUser(command.companyId(), command.targetUserId())
                 .orElseThrow(() -> new com.yumpoo.platform.foundation.application.error.ApplicationException(
@@ -102,7 +118,7 @@ public class AccountStatusService implements AccountStatusUseCase {
                         && targetBefore.activeRoles().contains(ManagedPlatformRole.APP_MANAGER)
         );
         AccountStatusSnapshot changed = repository.change(command);
-        EventActor actor = EventActor.adminOverride(command.actorUserId(), command.reason());
+        EventActor actor = EventActor.adminOverride(command.actor().userId(), command.reason());
         publishAccountStatusChanged(changed, actor);
         sessionRevocationService.revokeActive(
                 new SessionRevocationTarget(
@@ -123,6 +139,21 @@ public class AccountStatusService implements AccountStatusUseCase {
                 command.targetUserId(),
                 actor
         );
+        auditRecorder.succeeded(
+                command.companyId(),
+                "account-status:" + changed.userId() + ":" + changed.rowVersion(),
+                changed.accountStatus() == AccountStatus.DISABLED
+                        ? "ACCOUNT_DISABLED" : "ACCOUNT_ENABLED",
+                actor,
+                actorUser.activeRoles().stream().map(Enum::name)
+                        .collect(Collectors.toUnmodifiableSet()),
+                "USER", changed.userId(), command.reason(),
+                Map.of("accountStatus", changed.accountStatus() == AccountStatus.DISABLED
+                        ? "ENABLED" : "DISABLED"),
+                Map.of("employmentStatus", changed.employmentStatus().name(),
+                        "accountStatus", changed.accountStatus().name(),
+                        "authorizationVersion", changed.authorizationVersion()),
+                command.idempotencyKey(), null, null);
 
         AccountStatusChangeResult result = new AccountStatusChangeResult(
                 changed.userId(),
@@ -167,5 +198,24 @@ public class AccountStatusService implements AccountStatusUseCase {
         } catch (JacksonException exception) {
             throw new IllegalStateException("account status result serialization failed", exception);
         }
+    }
+
+    private RoleUserSnapshot requireAuthorizedActor(AccountStatusChangeCommand command) {
+        Instant now = clock.instant();
+        AccountStatusCommandActor actor = command.actor();
+        if (actor.authenticatedAt().isBefore(now.minus(RECENT_AUTHENTICATION_WINDOW))
+                || actor.authenticatedAt().isAfter(now)) {
+            throw new ApplicationException(StandardErrorCode.ACCESS_DENIED,
+                    "最近认证已过期，请重新登录后再试");
+        }
+        RoleUserSnapshot user = roleGovernanceRepository
+                .lockUser(command.companyId(), actor.userId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.ACCESS_DENIED));
+        if (!user.available()
+                || user.authorizationVersion() != actor.sessionAuthorizationVersion()
+                || !user.activeRoles().contains(ManagedPlatformRole.COMPANY_ADMIN)) {
+            throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+        }
+        return user;
     }
 }

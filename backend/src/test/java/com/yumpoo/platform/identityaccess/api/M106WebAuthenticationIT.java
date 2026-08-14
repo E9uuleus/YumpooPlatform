@@ -335,6 +335,9 @@ class M106WebAuthenticationIT {
     }
 
     private void deleteFixture() {
+        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID)
+                .update();
         jdbcClient.sql("""
                         DELETE FROM yumpoo.outbox_event
                         WHERE event_type = 'identity.login_rejected'

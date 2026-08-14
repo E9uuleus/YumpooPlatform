@@ -13,6 +13,8 @@ import com.yumpoo.platform.identityaccess.application.oauth.WeComDependencyUnava
 import com.yumpoo.platform.identityaccess.application.oauth.WeComMemberIdentity;
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.time.Clock;
@@ -21,6 +23,8 @@ import java.time.Instant;
 import java.util.Objects;
 
 public final class WebAuthenticationService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(WebAuthenticationService.class);
 
     public static final Duration ATTEMPT_TTL = Duration.ofMinutes(5);
     private static final int MAX_AUTHORIZATION_CODE_LENGTH = 512;
@@ -193,7 +197,9 @@ public final class WebAuthenticationService {
     private void recordRejected(String stage, ApplicationException exception) {
         try {
             eventService.loginRejected(stage, exception.errorCode().name());
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException auditFailure) {
+            LOGGER.error("login rejection audit failed stage={} errorType={}",
+                    stage, auditFailure.getClass().getSimpleName());
             // 登录拒绝追踪是尽力记录；不得用记录失败覆盖原始 401/503。
         }
     }

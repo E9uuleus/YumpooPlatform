@@ -6,6 +6,7 @@ import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.identityaccess.application.account.AccountStatusChangeCommand;
+import com.yumpoo.platform.identityaccess.application.account.AccountStatusCommandActor;
 import com.yumpoo.platform.identityaccess.application.account.AccountStatusUseCase;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
@@ -19,6 +20,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -57,6 +59,7 @@ class M107AccountStatusIT {
         cleanUp();
         insertUser(ACTOR_ID, "Account Governance Actor");
         insertUser(TARGET_ID, "Account Governance Target");
+        insertCompanyAdmin(ACTOR_ID);
     }
 
     @AfterEach
@@ -226,7 +229,7 @@ class M107AccountStatusIT {
         assertError(new AccountStatusChangeCommand(
                 UUID.randomUUID(),
                 TARGET_ID,
-                ACTOR_ID,
+                new AccountStatusCommandActor(ACTOR_ID, 0, Instant.now()),
                 AccountStatus.ENABLED,
                 1,
                 UUID.randomUUID(),
@@ -349,7 +352,7 @@ class M107AccountStatusIT {
         return new AccountStatusChangeCommand(
                 COMPANY_ID,
                 TARGET_ID,
-                ACTOR_ID,
+                new AccountStatusCommandActor(ACTOR_ID, 0, Instant.now()),
                 status,
                 expectedVersion,
                 idempotencyKey,
@@ -481,7 +484,29 @@ class M107AccountStatusIT {
                 .update();
     }
 
+    private void insertCompanyAdmin(UUID userId) {
+        jdbcClient.sql("""
+                        INSERT INTO yumpoo.platform_role_assignment (
+                            id, company_id, user_id, role_code, scope_type, scope_id, status,
+                            granted_by_actor_type, granted_by_system_code, grant_reason,
+                            granted_at, row_version, created_at, updated_at
+                        ) VALUES (
+                            :id, :companyId, :userId, 'COMPANY_ADMIN', 'COMPANY', :companyId, 'ACTIVE',
+                            'SYSTEM', 'M107_TEST', 'test-fixture', transaction_timestamp(), 0,
+                            transaction_timestamp(), transaction_timestamp()
+                        )
+                        """)
+                .param("id", UUID.randomUUID())
+                .param("companyId", COMPANY_ID)
+                .param("userId", userId)
+                .update();
+    }
+
     private void cleanUp() {
+        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE actor_user_id = :actorId OR target_id = :targetId")
+                .param("actorId", ACTOR_ID)
+                .param("targetId", TARGET_ID.toString())
+                .update();
         jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :actorId")
                 .param("actorId", ACTOR_ID)
                 .update();
@@ -489,6 +514,10 @@ class M107AccountStatusIT {
                 .param("targetId", TARGET_ID)
                 .update();
         jdbcClient.sql("DELETE FROM yumpoo.outbox_event WHERE aggregate_id = :targetId")
+                .param("targetId", TARGET_ID)
+                .update();
+        jdbcClient.sql("DELETE FROM yumpoo.platform_role_assignment WHERE user_id IN (:actorId, :targetId)")
+                .param("actorId", ACTOR_ID)
                 .param("targetId", TARGET_ID)
                 .update();
         jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id IN (:actorId, :targetId)")

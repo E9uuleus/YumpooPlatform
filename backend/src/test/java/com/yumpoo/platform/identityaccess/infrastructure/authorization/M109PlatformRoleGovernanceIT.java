@@ -13,6 +13,7 @@ import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.identityaccess.application.account.AccountStatusChangeCommand;
+import com.yumpoo.platform.identityaccess.application.account.AccountStatusCommandActor;
 import com.yumpoo.platform.identityaccess.application.account.AccountStatusUseCase;
 import com.yumpoo.platform.identityaccess.application.authorization.AppManagerAvailabilityCoordinator;
 import com.yumpoo.platform.identityaccess.application.authorization.GrantPlatformRoleCommand;
@@ -142,7 +143,7 @@ class M109PlatformRoleGovernanceIT {
         assertThat(activeRoleCount(MEMBER)).isEqualTo(2);
 
         PlatformRoleMutationResult revoked = revokeResult(new RevokePlatformRoleCommand(
-                COMPANY_ID, appManager.assignmentId(), 0,
+                COMPANY_ID, appManager.assignmentId(), ManagedPlatformRole.APP_MANAGER, 0,
                 recentActor(MANAGER_A, manager.authorizationVersion()),
                 UUID.randomUUID(), new RequestHash("c".repeat(64)), "rotation-complete"));
         assertThat(revoked.status()).isEqualTo(RoleAssignmentStatus.REVOKED);
@@ -156,6 +157,38 @@ class M109PlatformRoleGovernanceIT {
         assertThat(historyCount(MEMBER, "APP_MANAGER")).isEqualTo(2);
         assertThat(eventCount("identity.platform_role_granted")).isEqualTo(4);
         assertThat(eventCount("identity.platform_role_revoked")).isOne();
+    }
+
+    @Test
+    void securityAuditFailureRollsBackRoleUserOutboxAndIdempotencyTogether() {
+        PlatformRoleMutationResult manager = bootstrapA();
+        UUID idempotencyKey = UUID.randomUUID();
+        jdbcClient.sql("""
+                CREATE FUNCTION yumpoo.m110_fail_role_audit() RETURNS trigger AS $$
+                BEGIN RAISE EXCEPTION 'injected role audit failure'; END;
+                $$ LANGUAGE plpgsql
+                """).update();
+        jdbcClient.sql("""
+                CREATE TRIGGER m110_fail_role_audit BEFORE INSERT ON yumpoo.security_audit_event
+                FOR EACH ROW EXECUTE FUNCTION yumpoo.m110_fail_role_audit()
+                """).update();
+
+        assertThatThrownBy(() -> execute("m110-role-audit-rollback", () ->
+                managementUseCase.grant(grantCommand(
+                        MEMBER, ManagedPlatformRole.COMPANY_ADMIN, 0, MANAGER_A,
+                        manager.authorizationVersion(), idempotencyKey, "9".repeat(64)))))
+                .isInstanceOf(RuntimeException.class);
+
+        assertThat(activeRoleCount(MEMBER)).isZero();
+        assertThat(userRowVersion(MEMBER)).isZero();
+        assertThat(eventCount("identity.platform_role_granted")).isOne();
+        assertThat(jdbcClient.sql("""
+                        SELECT count(*) FROM yumpoo.idempotency_record
+                        WHERE actor_user_id = :actorId AND idempotency_key = :key
+                        """)
+                .param("actorId", MANAGER_A)
+                .param("key", idempotencyKey)
+                .query(Integer.class).single()).isZero();
     }
 
     @Test
@@ -211,8 +244,11 @@ class M109PlatformRoleGovernanceIT {
         assertThat(availableManagerCount()).isOne();
         UUID remaining = activeRoleCount(MANAGER_A) == 1 ? MANAGER_A : MANAGER_B;
         long remainingVersion = userRowVersion(remaining);
+        insertDirectRole(MEMBER, "COMPANY_ADMIN", "COMPANY");
         assertError(() -> accountStatusUseCase.change(new AccountStatusChangeCommand(
-                        COMPANY_ID, remaining, MEMBER, AccountStatus.DISABLED, remainingVersion,
+                        COMPANY_ID, remaining,
+                        new AccountStatusCommandActor(MEMBER, 0, Instant.now()),
+                        AccountStatus.DISABLED, remainingVersion,
                         UUID.randomUUID(), new RequestHash("5".repeat(64)), "disable-last")),
                 StandardErrorCode.INVALID_STATE_TRANSITION);
         assertThat(availableManagerCount()).isOne();
@@ -305,7 +341,7 @@ class M109PlatformRoleGovernanceIT {
         start.await();
         try {
             revokeResult(new RevokePlatformRoleCommand(
-                    COMPANY_ID, assignmentId, 0,
+                    COMPANY_ID, assignmentId, ManagedPlatformRole.APP_MANAGER, 0,
                     recentActor(actorId, actorAuthorizationVersion), UUID.randomUUID(),
                     new RequestHash(hash), "concurrent-revoke"));
         } catch (ApplicationException exception) {
@@ -456,7 +492,11 @@ class M109PlatformRoleGovernanceIT {
     }
 
     private void cleanUp() {
+        jdbcClient.sql("DROP TRIGGER IF EXISTS m110_fail_role_audit ON yumpoo.security_audit_event").update();
+        jdbcClient.sql("DROP FUNCTION IF EXISTS yumpoo.m110_fail_role_audit()").update();
         jdbcClient.sql("DELETE FROM yumpoo.outbox_consumer_receipt").update();
+        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.governance_issue WHERE company_id = :companyId")
                 .param("companyId", COMPANY_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id IN (:a, :b, :m)")

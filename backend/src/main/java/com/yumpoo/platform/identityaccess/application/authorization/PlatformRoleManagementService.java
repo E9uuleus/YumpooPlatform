@@ -12,6 +12,7 @@ import com.yumpoo.platform.foundation.application.idempotency.IdempotencyScope;
 import com.yumpoo.platform.foundation.application.idempotency.IdempotentCommandExecutor;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationService;
+import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationTarget;
 import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class PlatformRoleManagementService
@@ -43,6 +46,7 @@ public class PlatformRoleManagementService
     private final IdempotentCommandExecutor idempotentCommandExecutor;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final IdentitySecurityAuditRecorder auditRecorder;
 
     public PlatformRoleManagementService(
             RoleGovernanceRepository repository,
@@ -51,7 +55,8 @@ public class PlatformRoleManagementService
             TransactionalEventPort eventPort,
             IdempotentCommandExecutor idempotentCommandExecutor,
             ObjectMapper objectMapper,
-            Clock clock
+            Clock clock,
+            IdentitySecurityAuditRecorder auditRecorder
     ) {
         this.repository = repository;
         this.availabilityCoordinator = availabilityCoordinator;
@@ -60,13 +65,14 @@ public class PlatformRoleManagementService
         this.idempotentCommandExecutor = idempotentCommandExecutor;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.auditRecorder = auditRecorder;
     }
 
     @Override
     public IdempotencyExecutionResult grant(GrantPlatformRoleCommand command) {
         IdempotencyCommand idempotency = new IdempotencyCommand(
                 new IdempotencyScope(
-                        command.actor().userId(), "COMMAND", GRANT_ROUTE_KEY,
+                        command.actor().userId(), "POST", grantRouteKey(command.role()),
                         command.idempotencyKey()),
                 command.requestHash()
         );
@@ -80,7 +86,7 @@ public class PlatformRoleManagementService
     public IdempotencyExecutionResult revoke(RevokePlatformRoleCommand command) {
         IdempotencyCommand idempotency = new IdempotencyCommand(
                 new IdempotencyScope(
-                        command.actor().userId(), "COMMAND", REVOKE_ROUTE_KEY,
+                        command.actor().userId(), "DELETE", revokeRouteKey(command.expectedRole()),
                         command.idempotencyKey()),
                 command.requestHash()
         );
@@ -132,6 +138,16 @@ public class PlatformRoleManagementService
             availabilityCoordinator.restoreAvailable(
                     before, "BREAK_GLASS", command.targetUserId(), actor);
         }
+        auditRecorder.succeeded(
+                command.companyId(), "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
+                command.mode() == MaintenanceRoleMode.BOOTSTRAP
+                        ? "APP_MANAGER_BOOTSTRAPPED" : "APP_MANAGER_BREAK_GLASS_GRANTED",
+                actor, Set.of(), "PLATFORM_ROLE_ASSIGNMENT", result.assignmentId(),
+                command.reasonReference(), null,
+                Map.of("userId", result.userId(), "role", result.role().name(),
+                        "status", result.status().name(),
+                        "authorizationVersion", result.authorizationVersion()),
+                result.assignmentId(), null, null);
         return result;
     }
 
@@ -155,6 +171,14 @@ public class PlatformRoleManagementService
         PlatformRoleMutationResult result = grantLocked(
                 command.companyId(), target, command.role(), "USER", actorUser.userId(), null,
                 command.reasonReference(), actor, clock.instant());
+        auditRecorder.succeeded(
+                command.companyId(), "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
+                "PLATFORM_ROLE_GRANTED", actor, roleNames(actorUser),
+                "PLATFORM_ROLE_ASSIGNMENT", result.assignmentId(), command.reasonReference(),
+                null, Map.of("userId", result.userId(), "role", result.role().name(),
+                        "status", result.status().name(),
+                        "authorizationVersion", result.authorizationVersion()),
+                command.idempotencyKey(), null, null);
         availabilityCoordinator.reconcile(before, "ROLE_GRANTED", target.userId(), actor);
         return result;
     }
@@ -163,7 +187,7 @@ public class PlatformRoleManagementService
         AvailabilitySnapshot before = availabilityCoordinator.lock(command.companyId());
         RoleUserSnapshot actorUser = requireAuthorizedActor(command.companyId(), command.actor());
         RoleAssignmentSnapshot assignment = repository.lockAssignment(
-                        command.companyId(), command.assignmentId())
+                        command.companyId(), command.assignmentId(), command.expectedRole())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         if (assignment.rowVersion() != command.expectedAssignmentRowVersion()) {
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
@@ -185,6 +209,15 @@ public class PlatformRoleManagementService
         PlatformRoleMutationResult result = result(revoked, changedUser, now);
         publishRoleEvent(ROLE_REVOKED_EVENT, result, command.reasonReference(), actor);
         revokeSessions(changedUser, actor);
+        auditRecorder.succeeded(
+                command.companyId(), "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
+                "PLATFORM_ROLE_REVOKED", actor, roleNames(actorUser),
+                "PLATFORM_ROLE_ASSIGNMENT", result.assignmentId(), command.reasonReference(),
+                Map.of("userId", result.userId(), "role", result.role().name(), "status", "ACTIVE"),
+                Map.of("userId", result.userId(), "role", result.role().name(),
+                        "status", result.status().name(),
+                        "authorizationVersion", result.authorizationVersion()),
+                command.idempotencyKey(), null, null);
         availabilityCoordinator.reconcile(before, "ROLE_REVOKED", target.userId(), actor);
         return result;
     }
@@ -287,5 +320,17 @@ public class PlatformRoleManagementService
         } catch (JacksonException exception) {
             throw new IllegalStateException("platform role result serialization failed", exception);
         }
+    }
+
+    private static String grantRouteKey(ManagedPlatformRole role) {
+        return GRANT_ROUTE_KEY + role.name();
+    }
+
+    private static String revokeRouteKey(ManagedPlatformRole role) {
+        return REVOKE_ROUTE_KEY + role.name();
+    }
+
+    private static Set<String> roleNames(RoleUserSnapshot user) {
+        return user.activeRoles().stream().map(Enum::name).collect(Collectors.toUnmodifiableSet());
     }
 }
