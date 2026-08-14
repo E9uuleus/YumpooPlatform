@@ -264,6 +264,15 @@ ArchUnit 在 `verify` 阶段检查模块允许依赖图、循环依赖、层级�
 ## 当前边界
 
 本切片在 foundation 的事件/Outbox/消费骨架上增加 OAuth attempt 技术表、企微身份与通讯录适配器，以及默认关闭的诊断 Controller/live runner，但不创建正式业务表、User、ExternalIdentity、DirectorySyncRun、LoginSession、Security Audit 或 Activity 投影。控制台结构化日志只记录受控关联字段；payload、异常原文、请求体、原始身份、成员清单、授权 code、token 与 Secret 不进入持久化失败信息、证据或日志。正式身份绑定和会话、同步批次、业务事件、通知投递、人工重排、指标告警、数据清理、日志轮转和管理页面均由后续切片实现。
+## M1-11 身份管理查询与同步触发边界
+
+- `/api/v1/company` 对有效登录用户开放只读公司配置；`/api/v1/admin/integrations/wecom/status`、成员目录和同步运行查询仅允许可用的 `APP_MANAGER` 或 `COMPANY_ADMIN`。
+- 只有 `COMPANY_ADMIN` 可调用手工同步和既有账号启停命令。成员查询按 Company 在 SQL 中隔离，并支持姓名包含、企微外部 ID 精确匹配、就业与账号状态筛选以及稳定的 0 基分页。
+- 同步认领明确区分 `NEW`、`REPLAY` 和 `ACTIVE_CONFLICT`。失败项只返回稳定错误码和脱敏成员引用；供应商原文、完整 Corp ID、Secret、token 与回调地址不得进入响应或日志。
+- 企微状态从外部配置属性和同步运行事实派生，不新建 Secret 表。生产 Secret 仍只能通过受控外部配置注入，管理 API 与页面没有写入口。
+
+从仓库根运行 `pnpm verify:m1-11`，串联事件契约、后端 `clean verify` 与完整 Node 门禁。
+
 ## M1-10 Security Audit 与治理 API 边界
 
 - Flyway `V14` 创建不可更新、不可删除的 `security_audit_event`；唯一事实键防止幂等重放产生同义记录，内部查询固定按 Company + requestId 隔离并以 `occurredAt DESC, id DESC` 分页，size 上限 100。

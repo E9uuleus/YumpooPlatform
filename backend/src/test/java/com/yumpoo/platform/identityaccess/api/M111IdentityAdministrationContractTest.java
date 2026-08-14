@@ -2,7 +2,10 @@ package com.yumpoo.platform.identityaccess.api;
 
 import com.yumpoo.platform.administration.api.CompanyController;
 import com.yumpoo.platform.identityaccess.application.administration.IdentityMemberView;
+import com.yumpoo.platform.identityaccess.application.administration.IdentityMemberQuery;
 import com.yumpoo.platform.identityaccess.application.administration.WeComConfigurationStatus;
+import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
+import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,6 +15,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class M111IdentityAdministrationContractTest {
 
@@ -57,6 +61,16 @@ class M111IdentityAdministrationContractTest {
         assertThat(componentNames(IdentityMemberView.class))
                 .contains("platformRoles", "authorizationVersion", "rowVersion", "etag")
                 .doesNotContain("password", "secret", "token");
+    }
+
+    @Test
+    void memberFiltersRejectValuesOutsideThePublishedEnums() {
+        assertThatThrownBy(() -> new IdentityMemberQuery(
+                null, null, "UNKNOWN", null, OffsetPageRequest.of(0, 20)))
+                .isInstanceOf(ApplicationException.class);
+        assertThatThrownBy(() -> new IdentityMemberQuery(
+                null, null, null, "LOCKED", OffsetPageRequest.of(0, 20)))
+                .isInstanceOf(ApplicationException.class);
     }
 
     private static List<String> componentNames(Class<?> recordType) {

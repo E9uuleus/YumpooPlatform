@@ -20,8 +20,6 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncCla
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncExecutionResult;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncRunStatus;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncTriggerType;
-import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
-import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
@@ -70,15 +68,15 @@ public final class IdentityAdministrationController {
     OffsetPageResponse<IdentityMemberView> members(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String externalUserId,
-            @RequestParam(required = false) EmploymentStatus employmentStatus,
-            @RequestParam(required = false) AccountStatus accountStatus,
+            @RequestParam(required = false) String employmentStatus,
+            @RequestParam(required = false) String accountStatus,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         CurrentActor actor = currentActorProvider.requiredActive();
         OffsetPageRequest pageRequest = OffsetPageRequest.of(page, size);
         var result = queryService.members(actor.companyId(), actor.userId(), new IdentityMemberQuery(
-                name, externalUserId, enumName(employmentStatus), enumName(accountStatus), pageRequest));
+                name, externalUserId, employmentStatus, accountStatus, pageRequest));
         return OffsetPageResponse.of(result.items(), pageRequest, result.total());
     }
 
