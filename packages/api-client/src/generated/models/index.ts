@@ -1,4 +1,6 @@
 /* tslint:disable */
+export * from './AccountStatus';
+export * from './AccountStatusChangeResult';
 export * from './ApiErrorBase';
 export * from './AuthenticationClientType';
 export * from './AuthenticationRole';
@@ -9,8 +11,17 @@ export * from './CurrentAuthenticationCompany';
 export * from './CurrentAuthenticationUser';
 export * from './CursorPageMetadata';
 export * from './CursorPageResponse';
+export * from './EmploymentStatus';
 export * from './ErrorCode';
 export * from './ErrorResponse';
 export * from './FieldError';
+export * from './GovernanceReasonRequest';
+export * from './GovernanceState';
+export * from './ManagedPlatformRole';
 export * from './PageMetadata';
 export * from './PageResponse';
+export * from './RoleAssignment';
+export * from './RoleAssignmentPage';
+export * from './RoleAssignmentStatus';
+export * from './RoleGrantRequest';
+export * from './RoleMutationResult';

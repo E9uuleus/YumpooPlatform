@@ -14,6 +14,8 @@ servers:
 tags:
   - name: Authentication
     description: Web 企微登录、会话退出与当前主体查询。
+  - name: IdentityGovernance
+    description: 身份治理快照、平台角色与账号状态管理。
 paths:
   /auth/wecom/authorize:
     get:
@@ -113,6 +115,207 @@ paths:
           $ref: '#/components/responses/AuthenticationRequired'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /admin/members/{userId}/governance-state:
+    get:
+      tags: [IdentityGovernance]
+      operationId: getMemberGovernanceState
+      summary: 查询成员最小治理快照
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: 成员治理快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GovernanceState' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
+  /admin/role-assignments:
+    get:
+      tags: [IdentityGovernance]
+      operationId: listRoleAssignments
+      summary: 分页查询平台角色分配
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - name: role
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/ManagedPlatformRole' }
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/RoleAssignmentStatus' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 角色分配分页。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoleAssignmentPage' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/company-admin-assignments:
+    post:
+      tags: [IdentityGovernance]
+      operationId: grantCompanyAdmin
+      summary: 授予 COMPANY_ADMIN
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleGrantRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/RoleGranted' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/company-admin-assignments/{assignmentId}:
+    delete:
+      tags: [IdentityGovernance]
+      operationId: revokeCompanyAdmin
+      summary: 撤销 COMPANY_ADMIN
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/AssignmentId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { $ref: '#/components/requestBodies/GovernanceReason' }
+      responses:
+        '200': { $ref: '#/components/responses/RoleChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/app-manager-assignments:
+    post:
+      tags: [IdentityGovernance]
+      operationId: grantAppManager
+      summary: 授予 APP_MANAGER
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleGrantRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/RoleGranted' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/app-manager-assignments/{assignmentId}:
+    delete:
+      tags: [IdentityGovernance]
+      operationId: revokeAppManager
+      summary: 撤销 APP_MANAGER
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/AssignmentId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { $ref: '#/components/requestBodies/GovernanceReason' }
+      responses:
+        '200': { $ref: '#/components/responses/RoleChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/members/{userId}/account-disable:
+    post:
+      tags: [IdentityGovernance]
+      operationId: disableMemberAccount
+      summary: 禁用成员账号
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { $ref: '#/components/requestBodies/GovernanceReason' }
+      responses:
+        '200': { $ref: '#/components/responses/AccountChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/members/{userId}/account-enable:
+    post:
+      tags: [IdentityGovernance]
+      operationId: enableMemberAccount
+      summary: 启用成员账号
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { $ref: '#/components/requestBodies/GovernanceReason' }
+      responses:
+        '200': { $ref: '#/components/responses/AccountChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -126,6 +329,117 @@ components:
       type: string
       format: uuid
       description: 不透明 UUID；客户端不得从值中推导业务语义。
+
+    ManagedPlatformRole:
+      type: string
+      enum: [COMPANY_ADMIN, APP_MANAGER]
+
+    RoleAssignmentStatus:
+      type: string
+      enum: [ACTIVE, REVOKED]
+
+    EmploymentStatus:
+      type: string
+      enum: [ACTIVE, LEFT]
+
+    AccountStatus:
+      type: string
+      enum: [ENABLED, DISABLED]
+
+    GovernanceReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 160
+
+    RoleGrantRequest:
+      type: object
+      additionalProperties: false
+      required: [userId, reason]
+      properties:
+        userId: { $ref: '#/components/schemas/Uuid' }
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 160
+
+    GovernanceState:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, employmentStatus, accountStatus, platformRoles, authorizationVersion, rowVersion]
+      properties:
+        userId: { $ref: '#/components/schemas/Uuid' }
+        displayName: { type: string, minLength: 1 }
+        employmentStatus: { $ref: '#/components/schemas/EmploymentStatus' }
+        accountStatus: { $ref: '#/components/schemas/AccountStatus' }
+        platformRoles:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ManagedPlatformRole' }
+        authorizationVersion: { type: integer, format: int64, minimum: 0 }
+        rowVersion: { type: integer, format: int64, minimum: 0 }
+
+    RoleAssignment:
+      type: object
+      additionalProperties: false
+      required: [assignmentId, userId, role, scopeType, scopeId, status, grantedAt, revokedAt, rowVersion, etag]
+      properties:
+        assignmentId: { $ref: '#/components/schemas/Uuid' }
+        userId: { $ref: '#/components/schemas/Uuid' }
+        role: { $ref: '#/components/schemas/ManagedPlatformRole' }
+        scopeType: { type: string, enum: [COMPANY, PLATFORM] }
+        scopeId: { $ref: '#/components/schemas/Uuid' }
+        status: { $ref: '#/components/schemas/RoleAssignmentStatus' }
+        grantedAt: { $ref: '#/components/schemas/Instant' }
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rowVersion: { type: integer, format: int64, minimum: 0 }
+        etag: { type: string, pattern: '^"[0-9]+"$' }
+
+    RoleAssignmentPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/RoleAssignment' }
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+
+    RoleMutationResult:
+      type: object
+      additionalProperties: false
+      required: [assignmentId, companyId, userId, role, status, assignmentRowVersion, userRowVersion, authorizationVersion, changedAt]
+      properties:
+        assignmentId: { $ref: '#/components/schemas/Uuid' }
+        companyId: { $ref: '#/components/schemas/Uuid' }
+        userId: { $ref: '#/components/schemas/Uuid' }
+        role: { $ref: '#/components/schemas/ManagedPlatformRole' }
+        status: { $ref: '#/components/schemas/RoleAssignmentStatus' }
+        assignmentRowVersion: { type: integer, format: int64, minimum: 0 }
+        userRowVersion: { type: integer, format: int64, minimum: 0 }
+        authorizationVersion: { type: integer, format: int64, minimum: 0 }
+        changedAt: { $ref: '#/components/schemas/Instant' }
+
+    AccountStatusChangeResult:
+      type: object
+      additionalProperties: false
+      required: [userId, employmentStatus, accountStatus, authorizationVersion, rowVersion]
+      properties:
+        userId: { $ref: '#/components/schemas/Uuid' }
+        employmentStatus: { $ref: '#/components/schemas/EmploymentStatus' }
+        accountStatus: { $ref: '#/components/schemas/AccountStatus' }
+        authorizationVersion: { type: integer, format: int64, minimum: 0 }
+        rowVersion: { type: integer, format: int64, minimum: 0 }
 
     Instant:
       type: string
@@ -431,7 +745,26 @@ components:
           nullable: true
           description: 不透明续读游标；没有下一批时为 null。
 
+  requestBodies:
+    GovernanceReason:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/GovernanceReasonRequest' }
+
   parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+
+    AssignmentId:
+      name: assignmentId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+
     XsrfToken:
       name: X-XSRF-TOKEN
       in: header
@@ -637,6 +970,10 @@ components:
       summary: 外部依赖暂时不可用，可在稍后重试
       externalValue: ../examples/errors/503-dependency-unavailable.json
 
+    InternalError:
+      summary: 高风险操作因审计不可写而失败关闭
+      externalValue: ../examples/errors/500-internal-error.json
+
     EmptyPage:
       summary: 空的普通分页响应
       externalValue: ../examples/pagination/empty-page.json
@@ -646,6 +983,41 @@ components:
       externalValue: ../examples/pagination/empty-cursor-page.json
 
   responses:
+    RoleGranted:
+      description: 角色授予成功。
+      headers:
+        Location: { $ref: '#/components/headers/Location' }
+        ETag: { $ref: '#/components/headers/ETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/RoleMutationResult' }
+
+    RoleChanged:
+      description: 角色撤销成功。
+      headers:
+        ETag: { $ref: '#/components/headers/ETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/RoleMutationResult' }
+
+    AccountChanged:
+      description: 账号状态变更成功。
+      headers:
+        ETag: { $ref: '#/components/headers/ETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AccountStatusChangeResult' }
+
+    InternalError:
+      description: 系统错误或高风险操作因 Security Audit 不可写而失败关闭。
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples:
+            internalError: { $ref: '#/components/examples/InternalError' }
+
     MalformedRequest:
       description: 请求 JSON、类型、参数格式或条件头无法解析。
       headers:

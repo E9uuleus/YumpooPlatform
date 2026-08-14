@@ -10,6 +10,7 @@ import java.util.UUID;
 public record RevokePlatformRoleCommand(
         UUID companyId,
         UUID assignmentId,
+        ManagedPlatformRole expectedRole,
         long expectedAssignmentRowVersion,
         RoleCommandActor actor,
         UUID idempotencyKey,
@@ -19,6 +20,7 @@ public record RevokePlatformRoleCommand(
     public RevokePlatformRoleCommand {
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(assignmentId, "assignmentId must not be null");
+        Objects.requireNonNull(expectedRole, "expectedRole must not be null");
         Objects.requireNonNull(actor, "actor must not be null");
         Objects.requireNonNull(idempotencyKey, "idempotencyKey must not be null");
         Objects.requireNonNull(requestHash, "requestHash must not be null");

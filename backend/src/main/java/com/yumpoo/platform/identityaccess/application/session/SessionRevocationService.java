@@ -4,6 +4,7 @@ import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventDraft;
 import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
 import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
+import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +14,7 @@ import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Service
 public class SessionRevocationService {
@@ -23,17 +25,20 @@ public class SessionRevocationService {
     private final TransactionalEventPort eventPort;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final IdentitySecurityAuditRecorder auditRecorder;
 
     public SessionRevocationService(
             SessionRepository repository,
             TransactionalEventPort eventPort,
             ObjectMapper objectMapper,
-            Clock clock
+            Clock clock,
+            IdentitySecurityAuditRecorder auditRecorder
     ) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.eventPort = Objects.requireNonNull(eventPort, "eventPort must not be null");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder must not be null");
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -69,6 +74,14 @@ public class SessionRevocationService {
                 actor,
                 objectMapper.valueToTree(payload)
         ));
+        auditRecorder.succeeded(
+                target.companyId(),
+                "session-revocation:" + target.userId() + ":" + reason + ":" + target.aggregateVersion(),
+                "SESSIONS_REVOKED", actor, Set.of(), "USER", target.userId(),
+                actor.reasonReference(), null,
+                Map.of("reasonCode", reason.name(), "revokedCount", revokedCount,
+                        "authorizationVersion", target.authorizationVersion()),
+                null, null, null);
         return revokedCount;
     }
 

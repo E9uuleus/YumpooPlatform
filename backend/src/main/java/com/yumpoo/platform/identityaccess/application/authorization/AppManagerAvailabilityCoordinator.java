@@ -5,6 +5,7 @@ import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventDraft;
 import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
+import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Set;
 
 @Service
 public class AppManagerAvailabilityCoordinator {
@@ -26,17 +28,20 @@ public class AppManagerAvailabilityCoordinator {
     private final TransactionalEventPort eventPort;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final IdentitySecurityAuditRecorder auditRecorder;
 
     public AppManagerAvailabilityCoordinator(
             RoleGovernanceRepository repository,
             TransactionalEventPort eventPort,
             ObjectMapper objectMapper,
-            Clock clock
+            Clock clock,
+            IdentitySecurityAuditRecorder auditRecorder
     ) {
         this.repository = repository;
         this.eventPort = eventPort;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.auditRecorder = auditRecorder;
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -124,5 +129,14 @@ public class AppManagerAvailabilityCoordinator {
                 actor,
                 objectMapper.valueToTree(payload)
         ));
+        auditRecorder.succeeded(
+                state.companyId(),
+                "app-manager-availability:" + state.eventVersion() + ":" + eventType,
+                eventType.equals(MISSING_EVENT)
+                        ? "APP_MANAGER_AVAILABILITY_MISSING" : "APP_MANAGER_AVAILABILITY_RESTORED",
+                actor, Set.of(), "COMPANY", state.companyId(), actor.reasonReference(),
+                Map.of("availableCount", previousCount),
+                Map.of("availableCount", currentCount, "triggerCode", triggerCode,
+                        "affectedUserId", affectedUserId), null, null, null);
     }
 }

@@ -1,0 +1,8 @@
+{
+  "code": "INTERNAL_ERROR",
+  "message": "系统暂时无法处理请求",
+  "requestId": "req-m1-10-audit-fail-001",
+  "fieldErrors": [],
+  "retryable": false,
+  "details": {}
+}

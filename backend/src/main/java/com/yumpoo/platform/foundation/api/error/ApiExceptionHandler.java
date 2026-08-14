@@ -32,12 +32,16 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 将 MVC 与应用层异常收敛为唯一的 Yumpoo 错误体。
  */
 @RestControllerAdvice
 public final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     private static final MediaType JSON_UTF8 = new MediaType(
             MediaType.APPLICATION_JSON,
@@ -58,7 +62,9 @@ public final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    ResponseEntity<Object> handleUnexpectedException(Exception ignored, WebRequest request) {
+    ResponseEntity<Object> handleUnexpectedException(Exception exception, WebRequest request) {
+        LOGGER.error("unexpected API failure requestId={} errorType={}",
+                requestId(request), exception.getClass().getSimpleName());
         return response(StandardErrorCode.INTERNAL_ERROR, HttpStatus.INTERNAL_SERVER_ERROR, request, List.of());
     }
 

@@ -87,15 +87,19 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
     }
 
     @Override
-    public Optional<RoleAssignmentSnapshot> lockAssignment(UUID companyId, UUID assignmentId) {
+    public Optional<RoleAssignmentSnapshot> lockAssignment(
+            UUID companyId, UUID assignmentId, ManagedPlatformRole expectedRole
+    ) {
         return jdbcClient.sql("""
                         SELECT id, company_id, user_id, role_code, status, row_version, granted_at
                         FROM yumpoo.platform_role_assignment
                         WHERE company_id = :companyId AND id = :assignmentId
+                          AND role_code = :roleCode
                         FOR UPDATE
                         """)
                 .param("companyId", companyId)
                 .param("assignmentId", assignmentId)
+                .param("roleCode", expectedRole.name())
                 .query(JdbcRoleGovernanceRepository::mapAssignment)
                 .optional();
     }

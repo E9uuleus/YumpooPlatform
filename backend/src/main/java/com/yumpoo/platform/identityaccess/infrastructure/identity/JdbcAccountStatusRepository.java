@@ -64,7 +64,7 @@ public class JdbcAccountStatusRepository implements AccountStatusRepository {
                           )
                         RETURNING %s
                         """.formatted(RESULT_COLUMNS))
-                .param("actorUserId", command.actorUserId())
+                .param("actorUserId", command.actor().userId())
                 .param("reason", command.reason())
                 .param("targetUserId", command.targetUserId())
                 .param("companyId", command.companyId())
@@ -92,7 +92,7 @@ public class JdbcAccountStatusRepository implements AccountStatusRepository {
                           )
                         RETURNING %s
                         """.formatted(RESULT_COLUMNS))
-                .param("actorUserId", command.actorUserId())
+                .param("actorUserId", command.actor().userId())
                 .param("targetUserId", command.targetUserId())
                 .param("companyId", command.companyId())
                 .param("expectedRowVersion", command.expectedRowVersion())
@@ -115,7 +115,7 @@ public class JdbcAccountStatusRepository implements AccountStatusRepository {
                         """)
                 .param("targetUserId", command.targetUserId())
                 .param("companyId", command.companyId())
-                .param("actorUserId", command.actorUserId())
+                .param("actorUserId", command.actor().userId())
                 .query((resultSet, rowNumber) -> new AccountState(
                         resultSet.getLong("row_version"),
                         AccountStatus.valueOf(resultSet.getString("account_status"))

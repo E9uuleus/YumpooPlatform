@@ -5,6 +5,8 @@ import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceR
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMaintenanceUseCase;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMutationResult;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -15,6 +17,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
+import java.util.UUID;
 
 @Component
 @ConditionalOnProperty(
@@ -45,6 +48,14 @@ public class MaintenanceRoleRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        String requestId = UUID.randomUUID().toString();
+        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
+                RequestCorrelation.root(requestId))) {
+            execute(requestId);
+        }
+    }
+
+    private void execute(String requestId) {
         MaintenanceRoleMode mode = MaintenanceRoleMode.valueOf(
                 requireText(properties.mode(), "maintenance mode").toUpperCase());
         PlatformRoleMutationResult result = maintenanceUseCase.execute(new MaintenanceRoleCommand(
@@ -54,7 +65,8 @@ public class MaintenanceRoleRunner implements ApplicationRunner {
                 requireText(properties.reasonReference(), "reasonReference")
         ));
         LOGGER.info(
-                "app-manager maintenance completed mode={} assignmentId={} outcome={}",
+                "app-manager maintenance completed requestId={} mode={} assignmentId={} outcome={}",
+                requestId,
                 mode,
                 result.assignmentId(),
                 result.status()

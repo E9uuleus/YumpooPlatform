@@ -11,7 +11,9 @@ public interface RoleGovernanceRepository {
 
     Optional<RoleUserSnapshot> findUser(UUID companyId, UUID userId);
 
-    Optional<RoleAssignmentSnapshot> lockAssignment(UUID companyId, UUID assignmentId);
+    Optional<RoleAssignmentSnapshot> lockAssignment(
+            UUID companyId, UUID assignmentId, ManagedPlatformRole expectedRole
+    );
 
     Optional<RoleAssignmentSnapshot> findActiveAssignment(
             UUID companyId, UUID userId, ManagedPlatformRole role

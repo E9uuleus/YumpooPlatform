@@ -361,3 +361,13 @@ M1-09 在后端新增 `APP_MANAGER` 与 `COMPANY_ADMIN` 的分页查询、授予
 ```powershell
 pnpm verify:m1-09
 ```
+
+## M1-10 Security Audit 与身份治理 HTTP
+
+M1-10 新增 append-only 的 `security_audit_event`，以 Company + fact key 去重，并提供 Company + requestId 的内部分页查询端口。登录、退出、批量会话撤销、目录同步/离职返聘、账号启停、角色变更、首管/break-glass 及 APP_MANAGER 缺失/恢复均写入最小脱敏审计摘要。高风险成功审计与 User、Session、Outbox 和幂等结果同事务；业务拒绝回滚后以独立事务记录 FAILED，审计不可写时失败关闭并返回安全的 `INTERNAL_ERROR`。
+
+正式 HTTP 已开放治理快照、角色查询/授予/撤销和成员账号启停，写请求统一要求 Session、CSRF、`Idempotency-Key`、`If-Match`、15 分钟近期认证及 1～160 字符理由。TypeScript 客户端由 OpenAPI 生成；本切片不开放审计查询 HTTP，也不包含管理页面、CapabilityAssignment、哈希链或 WORM 导出。
+
+```powershell
+pnpm verify:m1-10
+```
