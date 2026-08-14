@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.user-account-enabled-v1.schema.json",
+  "title": "User account enabled",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.user_account_enabled" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "User" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["userId", "fromStatus", "toStatus", "reasonCode", "authorizationVersion"],
+          "properties": {
+            "userId": { "type": "string", "format": "uuid" },
+            "fromStatus": { "const": "DISABLED" },
+            "toStatus": { "const": "ENABLED" },
+            "reasonCode": { "const": "ADMIN_ACCOUNT_ENABLED" },
+            "authorizationVersion": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    }
+  ]
+}

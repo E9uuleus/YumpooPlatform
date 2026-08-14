@@ -2,6 +2,7 @@ package com.yumpoo.platform.foundation.api.http;
 
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import org.springframework.stereotype.Component;
 
 import java.util.regex.Matcher;
@@ -40,9 +41,6 @@ public final class IfMatchParser {
     }
 
     public static String format(long rowVersion) {
-        if (rowVersion < 0) {
-            throw new IllegalArgumentException("rowVersion must not be negative");
-        }
-        return '"' + Long.toString(rowVersion) + '"';
+        return StrongEtag.format(rowVersion);
     }
 }

@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.user-sessions-revoked-v2.schema.json",
+  "title": "Identity user sessions revoked in bulk",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.user_sessions_revoked" },
+        "eventVersion": { "const": 2 },
+        "aggregateType": { "const": "User" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["userId", "reasonCode", "revokedCount", "authorizationVersion"],
+          "properties": {
+            "userId": { "type": "string", "format": "uuid" },
+            "reasonCode": {
+              "enum": [
+                "EMPLOYMENT_LEFT",
+                "ACCOUNT_DISABLED",
+                "AUTHORIZATION_CHANGED",
+                "ADMIN_FORCED"
+              ]
+            },
+            "revokedCount": { "type": "integer", "minimum": 1 },
+            "authorizationVersion": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    }
+  ]
+}

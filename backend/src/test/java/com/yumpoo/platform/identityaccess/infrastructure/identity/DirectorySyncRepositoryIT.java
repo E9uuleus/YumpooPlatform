@@ -1,6 +1,8 @@
 package com.yumpoo.platform.identityaccess.infrastructure.identity;
 
 import com.yumpoo.platform.foundation.application.event.EventActor;
+import com.yumpoo.platform.foundation.application.error.ApplicationException;
+import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryCanonicalHash;
@@ -16,6 +18,7 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncRun
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncTriggerType;
 import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
+import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +56,9 @@ class DirectorySyncRepositoryIT {
     private DirectorySyncItemApplyService itemApplyService;
 
     @Autowired
+    private SessionService sessionService;
+
+    @Autowired
     private JdbcClient jdbcClient;
 
     @BeforeEach
@@ -62,9 +68,11 @@ class DirectorySyncRepositoryIT {
                         DELETE FROM yumpoo.outbox_event
                         WHERE event_type LIKE 'identity.directory_sync_%'
                            OR event_type LIKE 'identity.user_employment_%'
+                           OR event_type = 'identity.user_sessions_revoked'
                         """)
                 .update();
         jdbcClient.sql("DELETE FROM yumpoo.directory_sync_run").update();
+        jdbcClient.sql("DELETE FROM yumpoo.login_session").update();
         jdbcClient.sql("DELETE FROM yumpoo.external_identity").update();
         jdbcClient.sql("DELETE FROM yumpoo.identity_user").update();
     }
@@ -239,12 +247,36 @@ class DirectorySyncRepositoryIT {
         WeComMemberProfile bob = profile("member-b", "Bob", "b");
         executeProfiles("m105-baseline", List.of(alice, bob));
         UUID bobUserId = userId("member-b");
+        var bobSession = sessionService.issueWebSession(bobUserId, "m107-directory");
 
         DirectorySyncRunSnapshot left = executeProfiles("m105-left", List.of(alice));
 
         assertThat(left.counts().left()).isOne();
         assertThat(memberState("member-b"))
                 .isEqualTo("LEFT|LEFT|ENABLED|1|DIRECTORY_SNAPSHOT_MISSING");
+        assertThatThrownBy(() -> sessionService.authenticate(bobSession.sessionCredential()))
+                .isInstanceOfSatisfying(ApplicationException.class, exception ->
+                        assertThat(exception.errorCode())
+                                .isEqualTo(StandardErrorCode.ACCOUNT_DISABLED));
+        assertThat(jdbcClient.sql("""
+                        SELECT status || '|' || revoke_reason
+                        FROM yumpoo.login_session
+                        WHERE id = :sessionId
+                        """)
+                .param("sessionId", bobSession.session().id())
+                .query(String.class)
+                .single()).isEqualTo("REVOKED|EMPLOYMENT_LEFT");
+        assertThat(jdbcClient.sql("""
+                        SELECT count(*)
+                        FROM yumpoo.outbox_event
+                        WHERE event_type = 'identity.user_sessions_revoked'
+                          AND event_version = 2
+                          AND aggregate_id = :userId
+                          AND payload_json ->> 'reasonCode' = 'EMPLOYMENT_LEFT'
+                        """)
+                .param("userId", bobUserId)
+                .query(Integer.class)
+                .single()).isOne();
 
         DirectorySyncRunSnapshot returned = executeProfiles(
                 "m105-returned",
@@ -255,6 +287,10 @@ class DirectorySyncRepositoryIT {
         assertThat(userId("member-b")).isEqualTo(bobUserId);
         assertThat(memberState("member-b"))
                 .isEqualTo("ACTIVE|ACTIVE|ENABLED|2|DIRECTORY_SNAPSHOT_MISSING");
+        assertThatThrownBy(() -> sessionService.authenticate(bobSession.sessionCredential()))
+                .isInstanceOfSatisfying(ApplicationException.class, exception ->
+                        assertThat(exception.errorCode())
+                                .isEqualTo(StandardErrorCode.ACCOUNT_DISABLED));
         assertThat(jdbcClient.sql("""
                         SELECT count(*)
                         FROM yumpoo.outbox_event

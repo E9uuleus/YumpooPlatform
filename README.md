@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M1-07 账号启停与会话撤销闭环
+
+M1-07 交付后端内部的 `AccountStatusUseCase`：账号状态与就业状态严格独立，禁用和启用命令都要求预期行版本、持久化幂等键、请求哈希和 1～160 字符的原因引用。真实状态迁移会同时递增 `row_version` 与 `authorization_version`；禁用记录操作者和原因，启用保留最近一次禁用事实，LEFT 用户允许启用账号但仍不能登录。同键同请求重放已保存结果，同键异参、陈旧版本、重复状态和跨企业访问分别按统一语义拒绝。
+
+完整目录同步将成员置为 LEFT、手工账号禁用或启用时，会在同一事务中撤销该用户所有尚未逻辑过期的 Web/Electron 活动会话。已过期但尚未落终态的会话不会被重分类，因而继续返回 401；以 `EMPLOYMENT_LEFT` 或 `ACCOUNT_DISABLED` 撤销且仍在保留期内的旧凭据返回 403。返聘或重新启用不会恢复任何旧会话，请求已通过过滤器后发生状态变化时，`CurrentActor` 的数据库复核仍会在业务代码执行前拒绝请求。
+
+事件契约新增 `identity.user_account_disabled` v1、`identity.user_account_enabled` v1 和用户级 `identity.user_sessions_revoked` v2；logout 使用的 v1 保持兼容。公共 payload 不包含自由文本原因，操作者与原因引用只进入 `ADMIN_OVERRIDE` actor envelope。本切片不新增数据库迁移、管理端 REST/OpenAPI、生成客户端或页面；角色、最后管理员保护、近期认证、Security Audit 与管理页面继续由 M1-08～M1-11 交付。
+
+```powershell
+pnpm verify:m1-07
+```
+
 ## M1-05 通讯录部分失败、对账、离职与返聘
 
 M1-05 在 M1-04 全量同步批次上增加成员级失败隔离和完整快照对账。完整扫描后的单成员资料或写入失败会记录稳定错误并继续处理其余成员，批次终态为 `PARTIALLY_SUCCEEDED`；任何部分失败都不会执行缺失成员离职对账。ID 扫描、部门字典、共享凭据、租约和持久化等全局故障仍将批次置为 `FAILED`。同一 trigger key 永久重放原批次，修复问题后必须以新 trigger key 发起新的全量同步。

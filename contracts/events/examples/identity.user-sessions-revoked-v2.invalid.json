@@ -1,0 +1,20 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000711",
+  "eventType": "identity.user_sessions_revoked",
+  "eventVersion": 2,
+  "occurredAt": "2026-08-14T07:00:00Z",
+  "aggregateType": "User",
+  "aggregateId": "00000000-0000-4000-8000-000000000712",
+  "aggregateVersion": 7,
+  "companyId": "00000000-0000-4000-8000-000000000713",
+  "actor": { "type": "SYSTEM", "systemCode": "DIRECTORY_SYNC" },
+  "requestId": "m107-bulk-revoke-invalid",
+  "correlationId": "m107-bulk-revoke-invalid",
+  "causationId": null,
+  "payload": {
+    "userId": "00000000-0000-4000-8000-000000000712",
+    "reasonCode": "USER_LOGOUT",
+    "revokedCount": 0,
+    "authorizationVersion": 4
+  }
+}

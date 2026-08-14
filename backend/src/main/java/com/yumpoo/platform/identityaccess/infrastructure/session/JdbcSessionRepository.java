@@ -192,6 +192,8 @@ public class JdbcSessionRepository implements SessionRepository {
                             revoke_reason = :reason
                         WHERE user_id = :userId
                           AND status = 'ACTIVE'
+                          AND idle_expires_at > :now
+                          AND absolute_expires_at > :now
                         """)
                 .param("now", utc(now))
                 .param("reason", reason.name())
