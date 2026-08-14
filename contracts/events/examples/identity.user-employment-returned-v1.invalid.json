@@ -1,0 +1,22 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000571",
+  "eventType": "identity.user_employment_returned",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T05:15:00Z",
+  "aggregateType": "User",
+  "aggregateId": "00000000-0000-4000-8000-000000000572",
+  "aggregateVersion": 7,
+  "companyId": "00000000-0000-4000-8000-000000000573",
+  "actor": { "type": "SYSTEM", "systemCode": "DIRECTORY_SYNC" },
+  "requestId": "m105-returned-invalid",
+  "correlationId": "m105-returned-invalid",
+  "causationId": null,
+  "payload": {
+    "userId": "00000000-0000-4000-8000-000000000572",
+    "runId": "00000000-0000-4000-8000-000000000574",
+    "fromStatus": "LEFT",
+    "toStatus": "ACTIVE",
+    "reasonCode": "DIRECTORY_MEMBER_REAPPEARED",
+    "authorizationVersion": 0
+  }
+}

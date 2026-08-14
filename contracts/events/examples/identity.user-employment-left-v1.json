@@ -1,0 +1,22 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000541",
+  "eventType": "identity.user_employment_left",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T05:10:00Z",
+  "aggregateType": "User",
+  "aggregateId": "00000000-0000-4000-8000-000000000542",
+  "aggregateVersion": 5,
+  "companyId": "00000000-0000-4000-8000-000000000543",
+  "actor": { "type": "SYSTEM", "systemCode": "DIRECTORY_SYNC" },
+  "requestId": "m105-left-example",
+  "correlationId": "m105-left-example",
+  "causationId": null,
+  "payload": {
+    "userId": "00000000-0000-4000-8000-000000000542",
+    "runId": "00000000-0000-4000-8000-000000000544",
+    "fromStatus": "ACTIVE",
+    "toStatus": "LEFT",
+    "reasonCode": "DIRECTORY_SNAPSHOT_MISSING",
+    "authorizationVersion": 1
+  }
+}

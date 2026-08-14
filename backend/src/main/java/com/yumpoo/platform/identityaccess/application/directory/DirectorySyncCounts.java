@@ -17,7 +17,7 @@ public record DirectorySyncCounts(
                 || notApplied < 0) {
             throw new IllegalArgumentException("directory sync counts must not be negative");
         }
-        long outcomeTotal = (long) created + updated + unchanged + failed + notApplied;
+        long outcomeTotal = (long) created + updated + unchanged + returned + failed + notApplied;
         if (staged > discovered || outcomeTotal > discovered) {
             throw new IllegalArgumentException("directory sync counts exceed the discovered total");
         }

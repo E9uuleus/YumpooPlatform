@@ -197,14 +197,18 @@ public class JdbcDirectoryMemberProvisioningRepository
             Instant now
     ) {
         User user = current.user();
+        boolean returned = user.employmentStatus() == EmploymentStatus.LEFT
+                || current.externalIdentity().providerEmploymentStatus() == EmploymentStatus.LEFT;
         OffsetDateTime databaseNow = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
         int updatedUsers = jdbcClient.sql("""
                         UPDATE yumpoo.identity_user
-                        SET display_name = :displayName,
+                        SET employment_status = 'ACTIVE',
+                            display_name = :displayName,
                             email = :email,
                             mobile = :mobile,
                             department_summary = :departmentSummary,
                             directory_synced_at = :now,
+                            authorization_version = authorization_version + :authorizationIncrement,
                             updated_at = :now,
                             row_version = row_version + 1
                         WHERE id = :id
@@ -215,6 +219,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                 .param("email", profile.email().applyTo(user.email()))
                 .param("mobile", profile.mobile().applyTo(user.mobile()))
                 .param("departmentSummary", profile.departmentSummary())
+                .param("authorizationIncrement", returned ? 1 : 0)
                 .param("now", databaseNow)
                 .param("id", user.id())
                 .param("companyId", user.companyId())
@@ -225,7 +230,8 @@ public class JdbcDirectoryMemberProvisioningRepository
         ExternalIdentity identity = current.externalIdentity();
         int updatedIdentities = jdbcClient.sql("""
                         UPDATE yumpoo.external_identity
-                        SET raw_profile_hash = :rawProfileHash,
+                        SET provider_employment_status = 'ACTIVE',
+                            raw_profile_hash = :rawProfileHash,
                             last_seen_at = :now,
                             updated_at = :now
                         WHERE id = :id
@@ -244,7 +250,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                 new User(
                         user.id(),
                         user.companyId(),
-                        user.employmentStatus(),
+                        EmploymentStatus.ACTIVE,
                         user.accountStatus(),
                         profile.displayName(),
                         profile.email().applyTo(user.email()),
@@ -256,7 +262,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                         user.accountDisabledAt(),
                         user.accountDisabledByUserId(),
                         user.accountDisabledReason(),
-                        user.authorizationVersion(),
+                        user.authorizationVersion() + (returned ? 1 : 0),
                         user.rowVersion() + 1,
                         user.createdAt(),
                         now
@@ -267,7 +273,7 @@ public class JdbcDirectoryMemberProvisioningRepository
                         identity.userId(),
                         identity.provider(),
                         identity.externalUserId(),
-                        identity.providerEmploymentStatus(),
+                        EmploymentStatus.ACTIVE,
                         profile.rawProfileHash(),
                         now,
                         identity.createdAt(),

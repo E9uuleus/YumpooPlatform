@@ -58,7 +58,11 @@ class DirectorySyncRepositoryIT {
     @BeforeEach
     @AfterEach
     void removeDirectoryFacts() {
-        jdbcClient.sql("DELETE FROM yumpoo.outbox_event WHERE event_type LIKE 'identity.directory_sync_%'")
+        jdbcClient.sql("""
+                        DELETE FROM yumpoo.outbox_event
+                        WHERE event_type LIKE 'identity.directory_sync_%'
+                           OR event_type LIKE 'identity.user_employment_%'
+                        """)
                 .update();
         jdbcClient.sql("DELETE FROM yumpoo.directory_sync_run").update();
         jdbcClient.sql("DELETE FROM yumpoo.external_identity").update();
@@ -229,20 +233,148 @@ class DirectorySyncRepositoryIT {
         }
     }
 
+    @Test
+    void successfulReconciliationMarksMissingMemberLeftAndReturnReusesIdentity() {
+        WeComMemberProfile alice = profile("member-a", "Alice", "a");
+        WeComMemberProfile bob = profile("member-b", "Bob", "b");
+        executeProfiles("m105-baseline", List.of(alice, bob));
+        UUID bobUserId = userId("member-b");
+
+        DirectorySyncRunSnapshot left = executeProfiles("m105-left", List.of(alice));
+
+        assertThat(left.counts().left()).isOne();
+        assertThat(memberState("member-b"))
+                .isEqualTo("LEFT|LEFT|ENABLED|1|DIRECTORY_SNAPSHOT_MISSING");
+
+        DirectorySyncRunSnapshot returned = executeProfiles(
+                "m105-returned",
+                List.of(alice, bob)
+        );
+
+        assertThat(returned.counts().returned()).isOne();
+        assertThat(userId("member-b")).isEqualTo(bobUserId);
+        assertThat(memberState("member-b"))
+                .isEqualTo("ACTIVE|ACTIVE|ENABLED|2|DIRECTORY_SNAPSHOT_MISSING");
+        assertThat(jdbcClient.sql("""
+                        SELECT count(*)
+                        FROM yumpoo.outbox_event
+                        WHERE event_type = 'identity.user_employment_left'
+                          AND aggregate_id = :userId
+                        """)
+                .param("userId", bobUserId)
+                .query(Integer.class)
+                .single()).isOne();
+        assertThat(jdbcClient.sql("""
+                        SELECT count(*)
+                        FROM yumpoo.outbox_event
+                        WHERE event_type = 'identity.user_employment_returned'
+                          AND aggregate_id = :userId
+                        """)
+                .param("userId", bobUserId)
+                .query(Integer.class)
+                .single()).isOne();
+    }
+
+    @Test
+    void partialRunKeepsSuccessfulItemsButSuppressesMissingMemberReconciliation() {
+        WeComMemberProfile alice = profile("member-a", "Alice", "a");
+        WeComMemberProfile bob = profile("member-b", "Bob", "b");
+        executeProfiles("m105-partial-baseline", List.of(alice, bob));
+
+        try (RequestCorrelationContext.Scope ignored = correlation("m105-partial")) {
+            DirectorySyncCommand command = command("m105-partial");
+            DirectorySyncClaim claim = repository.claim(COMPANY_ID, command, LEASE);
+            UUID runId = claim.snapshot().runId();
+            UUID leaseToken = claim.leaseToken();
+            WeComMemberProfile carol = profile("member-c", "Carol", "c");
+            List<WeComMemberProfile> profiles = List.of(alice, carol);
+            List<String> members = profiles.stream()
+                    .map(WeComMemberProfile::externalUserId)
+                    .toList();
+            confirm(runId, leaseToken, members);
+            profiles.forEach(profile -> repository.stageProfile(
+                    runId,
+                    leaseToken,
+                    profile,
+                    LEASE
+            ));
+            repository.beginApplying(runId, leaseToken, LEASE);
+            itemApplyService.apply(runId, leaseToken, alice, command.actor(), LEASE);
+            repository.markApplyFailed(runId, leaseToken, "member-c", LEASE);
+
+            DirectorySyncRunSnapshot partial = repository.completePartial(
+                    runId,
+                    leaseToken,
+                    command.actor()
+            );
+
+            assertThat(partial.status()).isEqualTo(DirectorySyncRunStatus.PARTIALLY_SUCCEEDED);
+            assertThat(partial.counts().failed()).isOne();
+            assertThat(partial.counts().left()).isZero();
+            assertThat(memberState("member-b")).startsWith("ACTIVE|ACTIVE|");
+            assertThat(count("directory_sync_staging_member")).isZero();
+        }
+    }
+
     private DirectorySyncRunSnapshot execute(
             String triggerKey,
             String displayName,
             DirectoryOptionalField email,
             String hashCharacter
     ) {
+        return executeProfiles(triggerKey, List.of(new WeComMemberProfile(
+                "member-a",
+                displayName,
+                email,
+                DirectoryOptionalField.present("13800000000"),
+                "研发部",
+                new ProfileHash(hashCharacter.repeat(64))
+        )));
+    }
+
+    private DirectorySyncRunSnapshot executeProfiles(
+            String triggerKey,
+            List<WeComMemberProfile> profiles
+    ) {
         try (RequestCorrelationContext.Scope ignored = correlation(triggerKey)) {
             DirectorySyncCommand command = command(triggerKey);
             DirectorySyncClaim claim = repository.claim(COMPANY_ID, command, LEASE);
             UUID runId = claim.snapshot().runId();
             UUID leaseToken = claim.leaseToken();
-            List<String> members = List.of("member-a");
-            repository.stageIdPage(runId, leaseToken, 1, 1, "", members, LEASE);
-            repository.confirmScan(
+            List<String> members = profiles.stream()
+                    .map(WeComMemberProfile::externalUserId)
+                    .toList();
+            confirm(runId, leaseToken, members);
+            profiles.forEach(profile -> repository.stageProfile(
+                    runId,
+                    leaseToken,
+                    profile,
+                    LEASE
+            ));
+            repository.beginApplying(runId, leaseToken, LEASE);
+            profiles.forEach(profile -> itemApplyService.apply(
+                    runId,
+                    leaseToken,
+                    profile,
+                    command.actor(),
+                    LEASE
+            ));
+            DirectorySyncRunSnapshot completed = repository.complete(
+                runId,
+                leaseToken,
+                command.actor()
+        );
+
+            DirectorySyncClaim replay = repository.claim(COMPANY_ID, command, LEASE);
+            assertThat(replay.executionOwner()).isFalse();
+            assertThat(replay.snapshot()).isEqualTo(completed);
+            return completed;
+        }
+    }
+
+    private void confirm(UUID runId, UUID leaseToken, List<String> members) {
+        repository.stageIdPage(runId, leaseToken, 1, 1, "", members, LEASE);
+        repository.confirmScan(
                 runId,
                 leaseToken,
                 new DirectoryScanResult(
@@ -256,28 +388,21 @@ class DirectorySyncRepositoryIT {
                 ),
                 LEASE
         );
-            WeComMemberProfile profile = new WeComMemberProfile(
-                "member-a",
+    }
+
+    private static WeComMemberProfile profile(
+            String externalUserId,
+            String displayName,
+            String hashCharacter
+    ) {
+        return new WeComMemberProfile(
+                externalUserId,
                 displayName,
-                email,
+                DirectoryOptionalField.present(displayName.toLowerCase() + "@example.test"),
                 DirectoryOptionalField.present("13800000000"),
                 "研发部",
                 new ProfileHash(hashCharacter.repeat(64))
         );
-            repository.stageProfile(runId, leaseToken, profile, LEASE);
-            repository.beginApplying(runId, leaseToken, LEASE);
-            itemApplyService.apply(runId, leaseToken, profile, LEASE);
-            DirectorySyncRunSnapshot completed = repository.complete(
-                runId,
-                leaseToken,
-                command.actor()
-        );
-
-            DirectorySyncClaim replay = repository.claim(COMPANY_ID, command, LEASE);
-            assertThat(replay.executionOwner()).isFalse();
-            assertThat(replay.snapshot()).isEqualTo(completed);
-            return completed;
-        }
     }
 
     private static DirectorySyncCommand command(String triggerKey) {
@@ -308,6 +433,34 @@ class DirectorySyncRepositoryIT {
     private UUID singleUserId() {
         return jdbcClient.sql("SELECT id FROM yumpoo.identity_user")
                 .query(UUID.class)
+                .single();
+    }
+
+    private UUID userId(String externalUserId) {
+        return jdbcClient.sql("""
+                        SELECT user_id
+                        FROM yumpoo.external_identity
+                        WHERE external_user_id = :externalUserId
+                        """)
+                .param("externalUserId", externalUserId)
+                .query(UUID.class)
+                .single();
+    }
+
+    private String memberState(String externalUserId) {
+        return jdbcClient.sql("""
+                        SELECT identity_user.employment_status || '|'
+                            || external_identity.provider_employment_status || '|'
+                            || identity_user.account_status || '|'
+                            || identity_user.authorization_version || '|'
+                            || COALESCE(identity_user.left_reason, '')
+                        FROM yumpoo.external_identity external_identity
+                        JOIN yumpoo.identity_user identity_user
+                          ON identity_user.id = external_identity.user_id
+                        WHERE external_identity.external_user_id = :externalUserId
+                        """)
+                .param("externalUserId", externalUserId)
+                .query(String.class)
                 .single();
     }
 

@@ -1,12 +1,8 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
-public enum DirectorySyncItemResult {
-    PENDING,
+public enum DirectoryMemberProvisioningOutcome {
     CREATED,
     UPDATED,
     UNCHANGED,
-    RETURNED,
-    LEFT,
-    FAILED,
-    NOT_APPLIED
+    RETURNED
 }

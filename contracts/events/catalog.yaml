@@ -21,6 +21,13 @@ events:
       - examples/identity.directory-sync-completed-v1.json
     invalidExamples:
       - examples/identity.directory-sync-completed-v1.invalid.json
+  - eventType: identity.directory_sync_completed
+    eventVersion: 2
+    schema: schemas/identity.directory-sync-completed-v2.schema.json
+    validExamples:
+      - examples/identity.directory-sync-completed-v2.json
+    invalidExamples:
+      - examples/identity.directory-sync-completed-v2.invalid.json
   - eventType: identity.directory_sync_failed
     eventVersion: 1
     schema: schemas/identity.directory-sync-failed-v1.schema.json
@@ -28,3 +35,17 @@ events:
       - examples/identity.directory-sync-failed-v1.json
     invalidExamples:
       - examples/identity.directory-sync-failed-v1.invalid.json
+  - eventType: identity.user_employment_left
+    eventVersion: 1
+    schema: schemas/identity.user-employment-left-v1.schema.json
+    validExamples:
+      - examples/identity.user-employment-left-v1.json
+    invalidExamples:
+      - examples/identity.user-employment-left-v1.invalid.json
+  - eventType: identity.user_employment_returned
+    eventVersion: 1
+    schema: schemas/identity.user-employment-returned-v1.schema.json
+    validExamples:
+      - examples/identity.user-employment-returned-v1.json
+    invalidExamples:
+      - examples/identity.user-employment-returned-v1.invalid.json

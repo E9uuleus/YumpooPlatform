@@ -149,11 +149,120 @@ class DirectorySyncServiceTest {
     }
 
     @Test
-    void stopsAtFirstItemFailureAndDoesNotApplyRemainingMembers() {
+    void rejectsEmptySnapshotWhenActiveDirectoryMembersExist() {
         DirectorySyncRunSnapshot running = snapshot(DirectorySyncRunStatus.RUNNING, null);
         DirectorySyncRunSnapshot failed = snapshot(
                 DirectorySyncRunStatus.FAILED,
-                "DIRECTORY_APPLY_FAILED"
+                "DIRECTORY_EMPTY_SNAPSHOT_REJECTED"
+        );
+        DirectoryScanResult scan = new DirectoryScanResult(
+                List.of(),
+                DirectoryScanResult.CursorTerminationMode.EXPLICIT_EMPTY,
+                1,
+                "a".repeat(64),
+                "b".repeat(64)
+        );
+        when(repository.claim(COMPANY_ID, command(), LEASE))
+                .thenReturn(new DirectorySyncClaim(running, LEASE_TOKEN, true));
+        when(collector.collect(any())).thenReturn(scan);
+        when(repository.hasActiveDirectoryMembers(COMPANY_ID)).thenReturn(true);
+        when(repository.fail(
+                RUN_ID,
+                LEASE_TOKEN,
+                "DIRECTORY_EMPTY_SNAPSHOT_REJECTED",
+                "An empty provider snapshot was rejected while active members exist",
+                command().actor()
+        )).thenReturn(failed);
+
+        DirectorySyncRunSnapshot result = service.execute(command());
+
+        assertThat(result).isEqualTo(failed);
+        verifyNoInteractions(profileGateway, itemApplyService);
+        verify(repository, never()).beginApplying(any(), any(), any());
+    }
+
+    @Test
+    void isolatesMemberProfileFailureAndAppliesRemainingProfiles() {
+        DirectorySyncRunSnapshot running = snapshot(DirectorySyncRunStatus.RUNNING, null);
+        DirectorySyncRunSnapshot partial = new DirectorySyncRunSnapshot(
+                RUN_ID,
+                COMPANY_ID,
+                DirectorySyncTriggerType.SCHEDULED,
+                DirectorySyncRunPhase.COMPLETED,
+                DirectorySyncRunStatus.PARTIALLY_SUCCEEDED,
+                DirectoryScanResult.CursorTerminationMode.EXPLICIT_EMPTY,
+                1,
+                true,
+                new DirectorySyncCounts(2, 1, 1, 0, 0, 0, 0, 1, 0),
+                "DIRECTORY_ITEMS_PARTIALLY_FAILED",
+                "m104-service-test",
+                1,
+                Instant.parse("2026-08-14T02:00:00Z"),
+                Instant.parse("2026-08-14T02:01:00Z")
+        );
+        List<String> memberIds = List.of("member-a", "member-b");
+        DirectoryScanResult scan = new DirectoryScanResult(
+                memberIds,
+                DirectoryScanResult.CursorTerminationMode.EXPLICIT_EMPTY,
+                1,
+                "a".repeat(64),
+                "b".repeat(64)
+        );
+        Map<Long, String> departments = Map.of(3L, "研发部");
+        WeComMemberProfile profileB = DirectoryProfileMapper.map(raw("member-b"), departments);
+        when(repository.claim(COMPANY_ID, command(), LEASE))
+                .thenReturn(new DirectorySyncClaim(running, LEASE_TOKEN, true));
+        when(collector.collect(any())).thenReturn(scan);
+        when(profileGateway.fetchDepartmentNames()).thenReturn(departments);
+        when(profileGateway.fetchMemberProfile("member-a")).thenThrow(new DirectorySyncException(
+                "DIRECTORY_PROFILE_NAME_UNAVAILABLE",
+                "The member profile application could not read a required display name",
+                DirectorySyncFailureScope.ITEM_ISOLATABLE
+        ));
+        when(profileGateway.fetchMemberProfile("member-b")).thenReturn(raw("member-b"));
+        when(repository.stagedProfiles(RUN_ID, LEASE_TOKEN)).thenReturn(List.of(profileB));
+        when(repository.hasItemFailures(RUN_ID, LEASE_TOKEN)).thenReturn(true);
+        when(repository.completePartial(RUN_ID, LEASE_TOKEN, command().actor()))
+                .thenReturn(partial);
+
+        DirectorySyncRunSnapshot result = service.execute(command());
+
+        assertThat(result).isEqualTo(partial);
+        verify(repository).markProfileFailed(
+                RUN_ID,
+                LEASE_TOKEN,
+                "member-a",
+                "DIRECTORY_PROFILE_NAME_UNAVAILABLE",
+                LEASE
+        );
+        verify(itemApplyService).apply(
+                RUN_ID,
+                LEASE_TOKEN,
+                profileB,
+                command().actor(),
+                LEASE
+        );
+        verify(repository, never()).complete(any(), any(), any());
+    }
+
+    @Test
+    void isolatesItemFailureContinuesAndCompletesPartialWithoutReconciliation() {
+        DirectorySyncRunSnapshot running = snapshot(DirectorySyncRunStatus.RUNNING, null);
+        DirectorySyncRunSnapshot partial = new DirectorySyncRunSnapshot(
+                RUN_ID,
+                COMPANY_ID,
+                DirectorySyncTriggerType.SCHEDULED,
+                DirectorySyncRunPhase.COMPLETED,
+                DirectorySyncRunStatus.PARTIALLY_SUCCEEDED,
+                DirectoryScanResult.CursorTerminationMode.EXPLICIT_EMPTY,
+                1,
+                true,
+                new DirectorySyncCounts(3, 3, 2, 0, 0, 0, 0, 1, 0),
+                "DIRECTORY_ITEMS_PARTIALLY_FAILED",
+                "m104-service-test",
+                1,
+                Instant.parse("2026-08-14T02:00:00Z"),
+                Instant.parse("2026-08-14T02:01:00Z")
         );
         List<String> memberIds = List.of("member-a", "member-b", "member-c");
         DirectoryScanResult scan = new DirectoryScanResult(
@@ -173,22 +282,21 @@ class DirectorySyncServiceTest {
         when(profileGateway.fetchDepartmentNames()).thenReturn(departments);
         memberIds.forEach(id -> when(profileGateway.fetchMemberProfile(id)).thenReturn(raw(id)));
         when(repository.stagedProfiles(RUN_ID, LEASE_TOKEN)).thenReturn(profiles);
-        doNothing().doThrow(new IllegalStateException("synthetic write failure"))
+        doNothing().doThrow(new IllegalStateException("synthetic write failure")).doNothing()
                 .when(itemApplyService)
-                .apply(eq(RUN_ID), eq(LEASE_TOKEN), any(), eq(LEASE));
-        when(repository.failDuringApply(
-                RUN_ID,
-                LEASE_TOKEN,
-                "member-b",
-                command().actor()
-        )).thenReturn(failed);
+                .apply(eq(RUN_ID), eq(LEASE_TOKEN), any(), eq(command().actor()), eq(LEASE));
+        when(repository.hasItemFailures(RUN_ID, LEASE_TOKEN)).thenReturn(true);
+        when(repository.completePartial(RUN_ID, LEASE_TOKEN, command().actor()))
+                .thenReturn(partial);
 
         DirectorySyncRunSnapshot result = service.execute(command());
 
-        assertThat(result).isEqualTo(failed);
-        verify(itemApplyService).apply(RUN_ID, LEASE_TOKEN, profiles.get(0), LEASE);
-        verify(itemApplyService).apply(RUN_ID, LEASE_TOKEN, profiles.get(1), LEASE);
-        verify(itemApplyService, never()).apply(RUN_ID, LEASE_TOKEN, profiles.get(2), LEASE);
+        assertThat(result).isEqualTo(partial);
+        verify(itemApplyService).apply(RUN_ID, LEASE_TOKEN, profiles.get(0), command().actor(), LEASE);
+        verify(itemApplyService).apply(RUN_ID, LEASE_TOKEN, profiles.get(1), command().actor(), LEASE);
+        verify(itemApplyService).apply(RUN_ID, LEASE_TOKEN, profiles.get(2), command().actor(), LEASE);
+        verify(repository).markApplyFailed(RUN_ID, LEASE_TOKEN, "member-b", LEASE);
+        verify(repository).completePartial(RUN_ID, LEASE_TOKEN, command().actor());
         verify(repository, never()).complete(any(), any(), any());
     }
 

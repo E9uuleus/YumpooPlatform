@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M1-05 通讯录部分失败、对账、离职与返聘
+
+M1-05 在 M1-04 全量同步批次上增加成员级失败隔离和完整快照对账。完整扫描后的单成员资料或写入失败会记录稳定错误并继续处理其余成员，批次终态为 `PARTIALLY_SUCCEEDED`；任何部分失败都不会执行缺失成员离职对账。ID 扫描、部门字典、共享凭据、租约和持久化等全局故障仍将批次置为 `FAILED`。同一 trigger key 永久重放原批次，修复问题后必须以新 trigger key 发起新的全量同步。
+
+只有扫描完整且全部发现成员成功时，最终事务才会把本次未出现的 ACTIVE WECOM 身份原子标记为 `LEFT`。若本地已有 ACTIVE 成员，供应商返回空目录会以 `DIRECTORY_EMPTY_SNAPSHOT_REJECTED` 失败关闭。相同 external ID 再次出现时复用原 User 并记为 `RETURNED`，保留禁用和最近离职事实，同时递增授权版本。事件契约新增 `identity.directory_sync_completed` v2 及就业 LEFT/RETURNED v1，payload 不包含姓名、联系方式或 external ID。
+
+```powershell
+pnpm verify:m1-05
+```
+
+该入口复核既有 M1-04 live evidence，随后执行后端 `clean verify` 和完整 Node 门禁。本切片仍为纯后端内部用例，不新增 REST/OpenAPI、页面、调度或企微离职回调；不批量修改 `login_session`，会话撤销及完整 401/403 语义留给 M1-07。
+
 ## M1-04 通讯录同步批次与全量导入
 
 M1-04 交付纯后端的 `DirectorySyncUseCase`：以 trigger key 幂等创建同步批次，按 Company 互斥并使用 5 分钟可续租约隔离旧 worker。Flyway `V9` 创建长期批次/成员结果和 RUNNING 期资料暂存；终态会删除暂存、清空原始游标与租约，只保留 external user ID、profile hash、动作、计数和稳定错误码。该切片不增加 REST/OpenAPI、页面、定时调度、离职/返聘、成员级重试或会话撤销。

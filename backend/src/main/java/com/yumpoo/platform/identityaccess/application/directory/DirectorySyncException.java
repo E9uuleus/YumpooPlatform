@@ -5,8 +5,17 @@ public final class DirectorySyncException extends RuntimeException {
 
     private final String errorCode;
     private final String safeSummary;
+    private final DirectorySyncFailureScope scope;
 
     public DirectorySyncException(String errorCode, String safeSummary) {
+        this(errorCode, safeSummary, DirectorySyncFailureScope.RUN_FATAL);
+    }
+
+    public DirectorySyncException(
+            String errorCode,
+            String safeSummary,
+            DirectorySyncFailureScope scope
+    ) {
         super(errorCode);
         if (errorCode == null || !errorCode.matches("^[A-Z][A-Z0-9_]{0,79}$")) {
             throw new IllegalArgumentException("errorCode is invalid");
@@ -16,6 +25,7 @@ public final class DirectorySyncException extends RuntimeException {
         }
         this.errorCode = errorCode;
         this.safeSummary = safeSummary.trim();
+        this.scope = java.util.Objects.requireNonNull(scope, "scope must not be null");
     }
 
     public String errorCode() {
@@ -24,6 +34,10 @@ public final class DirectorySyncException extends RuntimeException {
 
     public String safeSummary() {
         return safeSummary;
+    }
+
+    public DirectorySyncFailureScope scope() {
+        return scope;
     }
 
     @Override

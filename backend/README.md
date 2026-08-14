@@ -1,5 +1,13 @@
 # Yumpoo Server
 
+## M1-05 通讯录部分失败、对账、离职与返聘
+
+Flyway `V10` 扩展 M1-04 的同步结果约束：成员 outcome 支持 `RETURNED/LEFT`，离职明细使用 `MARK_LEFT`，`returned_count` 计入 discovered outcome 而 `left_count` 独立统计。完整扫描后的单成员资料、映射或写入失败会隔离为 item `FAILED` 并继续，其余成功项持久化，run 以 `PARTIALLY_SUCCEEDED` 完成且跳过缺失成员对账；批次级故障仍以 `FAILED` 结束。旧 run/item 不可恢复，同 trigger key 重放原快照，新 trigger key 才创建新的全量 run。
+
+全量成功收尾会在单一事务中锁定缺失的 ACTIVE WECOM 身份并按 external ID 排序，将 User 和 ExternalIdentity 同时置为 `LEFT`，递增 User 的授权版本，写入离职 item、就业事件、计数和 completed v2 Outbox。相同 external ID 返聘复用原 UUID、恢复双侧 ACTIVE 并优先记录 `RETURNED`；既有 `DISABLED`、离职时间和原因不被覆盖。存在 ACTIVE 基线时空快照会以 `DIRECTORY_EMPTY_SNAPSHOT_REJECTED` 失败关闭，不执行全员离职。
+
+从仓库根运行 `pnpm verify:m1-05`。该入口复核 M1-04 live evidence，并执行后端 `clean verify` 与完整 Node 门禁。本切片不新增 REST/OpenAPI、页面、调度、企微离职回调或失败项定向重试，也不批量撤销 `login_session`；会话撤销留给 M1-07。
+
 ## M1-04 通讯录同步批次与全量导入
 
 Flyway `V9` 创建 `directory_sync_run`、`directory_sync_item` 与 `directory_sync_staging_member`。`(company_id, trigger_key_hash)` 固定命令幂等，partial unique index 固定每个 Company 最多一个 RUNNING；活动 run 通过 lease token fencing，每页、每次成员资料暂存和每项落库后续租，过期租约由下一次触发原子关闭并清理暂存。长期 item 不保存姓名、联系方式或部门，RUNNING 期暂存会在 SUCCEEDED/FAILED 的同一事务删除。

@@ -11,9 +11,9 @@ public record DirectoryMemberProvisioningResult(
         UUID externalIdentityId,
         EmploymentStatus employmentStatus,
         AccountStatus accountStatus,
+        long authorizationVersion,
         long rowVersion,
-        boolean created,
-        boolean profileChanged
+        DirectoryMemberProvisioningOutcome outcome
 ) {
 
     public DirectoryMemberProvisioningResult {
@@ -21,8 +21,18 @@ public record DirectoryMemberProvisioningResult(
         Objects.requireNonNull(externalIdentityId, "externalIdentityId must not be null");
         Objects.requireNonNull(employmentStatus, "employmentStatus must not be null");
         Objects.requireNonNull(accountStatus, "accountStatus must not be null");
-        if (rowVersion < 0) {
-            throw new IllegalArgumentException("rowVersion must not be negative");
+        Objects.requireNonNull(outcome, "outcome must not be null");
+        if (authorizationVersion < 0 || rowVersion < 0) {
+            throw new IllegalArgumentException("versions must not be negative");
         }
+    }
+
+    public boolean created() {
+        return outcome == DirectoryMemberProvisioningOutcome.CREATED;
+    }
+
+    public boolean profileChanged() {
+        return outcome == DirectoryMemberProvisioningOutcome.CREATED
+                || outcome == DirectoryMemberProvisioningOutcome.UPDATED;
     }
 }

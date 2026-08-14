@@ -47,6 +47,14 @@ public record DirectorySyncRunSnapshot(
                 && (!scanComplete || errorCode != null)) {
             throw new IllegalArgumentException("successful sync snapshot is inconsistent");
         }
+        if (status == DirectorySyncRunStatus.PARTIALLY_SUCCEEDED
+                && (!scanComplete
+                || counts.failed() == 0
+                || counts.notApplied() != 0
+                || errorCode == null
+                || !errorCode.matches("^[A-Z][A-Z0-9_]{0,79}$"))) {
+            throw new IllegalArgumentException("partial sync snapshot is inconsistent");
+        }
         if (status == DirectorySyncRunStatus.FAILED
                 && (errorCode == null || !errorCode.matches("^[A-Z][A-Z0-9_]{0,79}$"))) {
             throw new IllegalArgumentException("failed sync snapshot requires a stable error code");

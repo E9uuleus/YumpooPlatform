@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.directory-sync-completed-v2.schema.json",
+  "title": "Directory synchronization completed or partially completed",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.directory_sync_completed" },
+        "eventVersion": { "const": 2 },
+        "aggregateType": { "const": "DirectorySyncRun" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runId", "triggerType", "status", "pageCount", "discoveredCount", "stagedCount", "createdCount", "updatedCount", "unchangedCount", "leftCount", "returnedCount", "failedCount", "notAppliedCount", "cursorTerminationMode", "errorCode"],
+          "properties": {
+            "runId": { "type": "string", "format": "uuid" },
+            "triggerType": { "enum": ["MANUAL", "SCHEDULED"] },
+            "status": { "enum": ["SUCCEEDED", "PARTIALLY_SUCCEEDED"] },
+            "pageCount": { "type": "integer", "minimum": 0 },
+            "discoveredCount": { "type": "integer", "minimum": 0 },
+            "stagedCount": { "type": "integer", "minimum": 0 },
+            "createdCount": { "type": "integer", "minimum": 0 },
+            "updatedCount": { "type": "integer", "minimum": 0 },
+            "unchangedCount": { "type": "integer", "minimum": 0 },
+            "leftCount": { "type": "integer", "minimum": 0 },
+            "returnedCount": { "type": "integer", "minimum": 0 },
+            "failedCount": { "type": "integer", "minimum": 0 },
+            "notAppliedCount": { "const": 0 },
+            "cursorTerminationMode": { "enum": ["EXPLICIT_EMPTY", "OMITTED_CONFIRMED"] },
+            "errorCode": { "type": ["string", "null"], "pattern": "^[A-Z][A-Z0-9_]{0,79}$" }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "status": { "const": "SUCCEEDED" } } },
+              "then": {
+                "properties": {
+                  "failedCount": { "const": 0 },
+                  "errorCode": { "type": "null" }
+                }
+              }
+            },
+            {
+              "if": { "properties": { "status": { "const": "PARTIALLY_SUCCEEDED" } } },
+              "then": {
+                "properties": {
+                  "leftCount": { "const": 0 },
+                  "failedCount": { "type": "integer", "minimum": 1 },
+                  "errorCode": { "const": "DIRECTORY_ITEMS_PARTIALLY_FAILED" }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
