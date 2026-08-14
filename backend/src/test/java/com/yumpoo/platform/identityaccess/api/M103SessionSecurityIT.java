@@ -1,7 +1,13 @@
 package com.yumpoo.platform.identityaccess.api;
 
+import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
+import com.yumpoo.platform.identityaccess.application.account.AccountStatusChangeCommand;
+import com.yumpoo.platform.identityaccess.application.account.AccountStatusUseCase;
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
+import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
@@ -53,6 +59,9 @@ class M103SessionSecurityIT {
     private SessionService sessionService;
 
     @Autowired
+    private AccountStatusUseCase accountStatusUseCase;
+
+    @Autowired
     private JdbcClient jdbcClient;
 
     @Autowired
@@ -86,7 +95,13 @@ class M103SessionSecurityIT {
     }
 
     private void deleteTestUser() {
+        jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :userId")
+                .param("userId", USER_ID)
+                .update();
         jdbcClient.sql("DELETE FROM yumpoo.login_session WHERE user_id = :userId")
+                .param("userId", USER_ID)
+                .update();
+        jdbcClient.sql("DELETE FROM yumpoo.outbox_event WHERE aggregate_id = :userId")
                 .param("userId", USER_ID)
                 .update();
         jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id = :userId")
@@ -179,16 +194,25 @@ class M103SessionSecurityIT {
         var pending = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString());
         assertThat(revocationGate.controllerEntered.await(10, TimeUnit.SECONDS)).isTrue();
 
-        sessionService.incrementAuthorizationVersion(
-                USER_ID,
-                com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason
-                        .AUTHORIZATION_CHANGED
-        );
+        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
+                RequestCorrelation.root("m107-current-actor-race")
+        )) {
+            accountStatusUseCase.change(new AccountStatusChangeCommand(
+                    COMPANY_ID,
+                    USER_ID,
+                    USER_ID,
+                    AccountStatus.DISABLED,
+                    0,
+                    UUID.randomUUID(),
+                    new RequestHash("7".repeat(64)),
+                    "current-actor-race"
+            ));
+        }
         revocationGate.continueController.countDown();
         HttpResponse<String> response = pending.get(10, TimeUnit.SECONDS);
 
-        assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(response.body()).contains("AUTHENTICATION_REQUIRED");
+        assertThat(response.statusCode()).isEqualTo(403);
+        assertThat(response.body()).contains("ACCOUNT_DISABLED");
         assertThat(revocationGate.businessCodeReached).isFalse();
     }
 

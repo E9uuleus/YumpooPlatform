@@ -1,0 +1,25 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000731",
+  "eventType": "identity.user_account_disabled",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T07:10:00Z",
+  "aggregateType": "User",
+  "aggregateId": "00000000-0000-4000-8000-000000000732",
+  "aggregateVersion": 3,
+  "companyId": "00000000-0000-4000-8000-000000000733",
+  "actor": {
+    "type": "ADMIN_OVERRIDE",
+    "userId": "00000000-0000-4000-8000-000000000734",
+    "reasonReference": "security-review-2026-08"
+  },
+  "requestId": "m107-account-disable-invalid",
+  "correlationId": "m107-account-disable-invalid",
+  "causationId": null,
+  "payload": {
+    "userId": "00000000-0000-4000-8000-000000000732",
+    "fromStatus": "DISABLED",
+    "toStatus": "DISABLED",
+    "reasonCode": "ADMIN_ACCOUNT_DISABLED",
+    "authorizationVersion": 2
+  }
+}

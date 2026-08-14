@@ -70,3 +70,24 @@ events:
       - examples/identity.user-sessions-revoked-v1.json
     invalidExamples:
       - examples/identity.user-sessions-revoked-v1.invalid.json
+  - eventType: identity.user_sessions_revoked
+    eventVersion: 2
+    schema: schemas/identity.user-sessions-revoked-v2.schema.json
+    validExamples:
+      - examples/identity.user-sessions-revoked-v2.json
+    invalidExamples:
+      - examples/identity.user-sessions-revoked-v2.invalid.json
+  - eventType: identity.user_account_disabled
+    eventVersion: 1
+    schema: schemas/identity.user-account-disabled-v1.schema.json
+    validExamples:
+      - examples/identity.user-account-disabled-v1.json
+    invalidExamples:
+      - examples/identity.user-account-disabled-v1.invalid.json
+  - eventType: identity.user_account_enabled
+    eventVersion: 1
+    schema: schemas/identity.user-account-enabled-v1.schema.json
+    validExamples:
+      - examples/identity.user-account-enabled-v1.json
+    invalidExamples:
+      - examples/identity.user-account-enabled-v1.invalid.json

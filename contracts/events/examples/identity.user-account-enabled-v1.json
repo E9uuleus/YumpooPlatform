@@ -1,0 +1,25 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000741",
+  "eventType": "identity.user_account_enabled",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T07:20:00Z",
+  "aggregateType": "User",
+  "aggregateId": "00000000-0000-4000-8000-000000000742",
+  "aggregateVersion": 4,
+  "companyId": "00000000-0000-4000-8000-000000000743",
+  "actor": {
+    "type": "ADMIN_OVERRIDE",
+    "userId": "00000000-0000-4000-8000-000000000744",
+    "reasonReference": "review-completed-2026-08"
+  },
+  "requestId": "m107-account-enable",
+  "correlationId": "m107-account-enable",
+  "causationId": null,
+  "payload": {
+    "userId": "00000000-0000-4000-8000-000000000742",
+    "fromStatus": "DISABLED",
+    "toStatus": "ENABLED",
+    "reasonCode": "ADMIN_ACCOUNT_ENABLED",
+    "authorizationVersion": 3
+  }
+}

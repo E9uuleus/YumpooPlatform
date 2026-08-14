@@ -1,5 +1,16 @@
 # Yumpoo Server
 
+## M1-07 账号状态与会话失效
+
+`AccountStatusUseCase` 是当前唯一的手工账号启停应用入口。调用方必须提供 Company、目标用户、操作者、目标状态、预期 `rowVersion`、幂等键、请求哈希和原因引用。命令、User 状态与版本、批量会话撤销、Outbox 事件及幂等结果在一个 PostgreSQL 事务中完成；任何事件或持久化失败都会整体回滚。
+
+`SessionRevocationService` 由账号状态命令和完整目录对账共享，只撤销 `status=ACTIVE` 且空闲、绝对有效期均未到期的会话。运行期不新增授权缓存，每个请求继续从数据库复核就业状态、账号状态和 `authorization_version`。该内部用例尚未暴露生产 Controller；管理端 HTTP 适配必须等待角色授权与 Security Audit 能力完成。
+
+```powershell
+cd backend
+.\mvnw.cmd clean verify
+```
+
 ## M1-05 通讯录部分失败、对账、离职与返聘
 
 Flyway `V10` 扩展 M1-04 的同步结果约束：成员 outcome 支持 `RETURNED/LEFT`，离职明细使用 `MARK_LEFT`，`returned_count` 计入 discovered outcome 而 `left_count` 独立统计。完整扫描后的单成员资料、映射或写入失败会隔离为 item `FAILED` 并继续，其余成功项持久化，run 以 `PARTIALLY_SUCCEEDED` 完成且跳过缺失成员对账；批次级故障仍以 `FAILED` 结束。旧 run/item 不可恢复，同 trigger key 重放原快照，新 trigger key 才创建新的全量 run。

@@ -19,7 +19,10 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncRun
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncRunStatus;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncTriggerType;
 import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
+import com.yumpoo.platform.identityaccess.application.session.SessionRevocationService;
+import com.yumpoo.platform.identityaccess.application.session.SessionRevocationTarget;
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
+import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
@@ -57,17 +60,23 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
 
     private final JdbcClient jdbcClient;
     private final TransactionalEventPort eventPort;
+    private final SessionRevocationService sessionRevocationService;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public JdbcDirectorySyncRepository(
             JdbcClient jdbcClient,
             TransactionalEventPort eventPort,
+            SessionRevocationService sessionRevocationService,
             ObjectMapper objectMapper,
             Clock clock
     ) {
         this.jdbcClient = Objects.requireNonNull(jdbcClient, "jdbcClient must not be null");
         this.eventPort = Objects.requireNonNull(eventPort, "eventPort must not be null");
+        this.sessionRevocationService = Objects.requireNonNull(
+                sessionRevocationService,
+                "sessionRevocationService must not be null"
+        );
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
@@ -820,6 +829,16 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                     "ACTIVE",
                     "LEFT",
                     "DIRECTORY_SNAPSHOT_MISSING",
+                    actor
+            );
+            sessionRevocationService.revokeActive(
+                    new SessionRevocationTarget(
+                            missing.userId(),
+                            companyId,
+                            version.authorizationVersion(),
+                            version.rowVersion()
+                    ),
+                    SessionRevocationReason.EMPLOYMENT_LEFT,
                     actor
             );
         }

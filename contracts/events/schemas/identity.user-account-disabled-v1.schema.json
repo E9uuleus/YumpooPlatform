@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.user-account-disabled-v1.schema.json",
+  "title": "User account disabled",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.user_account_disabled" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "User" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["userId", "fromStatus", "toStatus", "reasonCode", "authorizationVersion"],
+          "properties": {
+            "userId": { "type": "string", "format": "uuid" },
+            "fromStatus": { "const": "ENABLED" },
+            "toStatus": { "const": "DISABLED" },
+            "reasonCode": { "const": "ADMIN_ACCOUNT_DISABLED" },
+            "authorizationVersion": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    }
+  ]
+}
