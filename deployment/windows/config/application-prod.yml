@@ -13,6 +13,14 @@ spring:
     user: yumpoo_migrator
 
 yumpoo:
+  wecom:
+    directory:
+      enabled: false
+      corp-id: ww-replace-with-corp-id
+      page-size: 1000
+      lease-duration: 5m
+      connect-timeout: 5s
+      read-timeout: 20s
   session:
     idle-timeout: 8h
     absolute-timeout: 7d

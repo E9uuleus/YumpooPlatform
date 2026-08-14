@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M1-04",
+  "status": "ENV_PENDING",
+  "verifiedAt": null,
+  "corpFingerprint": null,
+  "snapshotFingerprint": null,
+  "checks": {
+    "configurationPreflight": false,
+    "directoryCredentialRead": false,
+    "snapshotTerminationConfirmed": false,
+    "profileCredentialRead": false,
+    "departmentDictionaryRead": false,
+    "requiredProfileVisible": false,
+    "optionalVisibilityCaptured": false,
+    "secretsRedacted": false,
+    "signedReceiptVerified": false
+  }
+}

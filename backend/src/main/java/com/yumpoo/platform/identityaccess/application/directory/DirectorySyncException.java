@@ -1,0 +1,33 @@
+package com.yumpoo.platform.identityaccess.application.directory;
+
+/** 仅携带稳定错误码与安全摘要的同步失败。 */
+public final class DirectorySyncException extends RuntimeException {
+
+    private final String errorCode;
+    private final String safeSummary;
+
+    public DirectorySyncException(String errorCode, String safeSummary) {
+        super(errorCode);
+        if (errorCode == null || !errorCode.matches("^[A-Z][A-Z0-9_]{0,79}$")) {
+            throw new IllegalArgumentException("errorCode is invalid");
+        }
+        if (safeSummary == null || safeSummary.isBlank() || safeSummary.length() > 500) {
+            throw new IllegalArgumentException("safeSummary is invalid");
+        }
+        this.errorCode = errorCode;
+        this.safeSummary = safeSummary.trim();
+    }
+
+    public String errorCode() {
+        return errorCode;
+    }
+
+    public String safeSummary() {
+        return safeSummary;
+    }
+
+    @Override
+    public String toString() {
+        return "DirectorySyncException[errorCode=" + errorCode + "]";
+    }
+}

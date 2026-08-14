@@ -1,0 +1,29 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000441",
+  "eventType": "identity.directory_sync_failed",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T03:02:00Z",
+  "aggregateType": "DirectorySyncRun",
+  "aggregateId": "00000000-0000-4000-8000-000000000442",
+  "aggregateVersion": 4,
+  "companyId": "00000000-0000-4000-8000-000000000443",
+  "actor": { "type": "SYSTEM", "systemCode": "DIRECTORY_SYNC" },
+  "requestId": "m104-failed-example",
+  "correlationId": "m104-failed-example",
+  "causationId": null,
+  "payload": {
+    "runId": "00000000-0000-4000-8000-000000000442",
+    "triggerType": "SCHEDULED",
+    "status": "FAILED",
+    "pageCount": 1,
+    "discoveredCount": 3,
+    "stagedCount": 3,
+    "createdCount": 1,
+    "updatedCount": 0,
+    "unchangedCount": 0,
+    "failedCount": 1,
+    "notAppliedCount": 1,
+    "cursorTerminationMode": "EXPLICIT_EMPTY",
+    "errorCode": "DIRECTORY_ITEM_APPLY_FAILED"
+  }
+}

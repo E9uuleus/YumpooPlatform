@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.directory-sync-failed-v1.schema.json",
+  "title": "Directory synchronization failed",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.directory_sync_failed" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "DirectorySyncRun" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runId", "triggerType", "status", "pageCount", "discoveredCount", "stagedCount", "createdCount", "updatedCount", "unchangedCount", "failedCount", "notAppliedCount", "cursorTerminationMode", "errorCode"],
+          "properties": {
+            "runId": { "type": "string", "format": "uuid" },
+            "triggerType": { "enum": ["MANUAL", "SCHEDULED"] },
+            "status": { "const": "FAILED" },
+            "pageCount": { "type": "integer", "minimum": 0 },
+            "discoveredCount": { "type": "integer", "minimum": 0 },
+            "stagedCount": { "type": "integer", "minimum": 0 },
+            "createdCount": { "type": "integer", "minimum": 0 },
+            "updatedCount": { "type": "integer", "minimum": 0 },
+            "unchangedCount": { "type": "integer", "minimum": 0 },
+            "failedCount": { "type": "integer", "minimum": 0 },
+            "notAppliedCount": { "type": "integer", "minimum": 0 },
+            "cursorTerminationMode": { "type": ["string", "null"], "enum": ["EXPLICIT_EMPTY", "OMITTED_CONFIRMED", null] },
+            "errorCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,79}$" }
+          }
+        }
+      }
+    }
+  ]
+}

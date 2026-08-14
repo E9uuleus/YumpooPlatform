@@ -7,8 +7,8 @@ import java.util.Objects;
 public record WeComMemberProfile(
         String externalUserId,
         String displayName,
-        String email,
-        String mobile,
+        DirectoryOptionalField email,
+        DirectoryOptionalField mobile,
         String departmentSummary,
         ProfileHash rawProfileHash
 ) {
@@ -16,8 +16,8 @@ public record WeComMemberProfile(
     public WeComMemberProfile {
         externalUserId = normalizeRequired(externalUserId, 256, "externalUserId");
         displayName = normalizeRequired(displayName, 200, "displayName");
-        email = normalizeOptional(email, 320, "email");
-        mobile = normalizeOptional(mobile, 64, "mobile");
+        email = normalizedField(email, 320, "email");
+        mobile = normalizedField(mobile, 64, "mobile");
         departmentSummary = normalizeOptional(
                 departmentSummary,
                 1000,
@@ -52,5 +52,21 @@ public record WeComMemberProfile(
             throw new IllegalArgumentException(field + " is invalid");
         }
         return normalized;
+    }
+
+    private static DirectoryOptionalField normalizedField(
+            DirectoryOptionalField field,
+            int maxLength,
+            String fieldName
+    ) {
+        Objects.requireNonNull(field, fieldName + " must not be null");
+        if (field.state() != DirectoryOptionalField.State.PRESENT) {
+            return field;
+        }
+        String normalized = normalizeOptional(field.value(), maxLength, fieldName);
+        if (normalized == null) {
+            throw new IllegalArgumentException(fieldName + " PRESENT value must not be blank");
+        }
+        return DirectoryOptionalField.present(normalized);
     }
 }
