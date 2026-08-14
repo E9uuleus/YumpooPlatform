@@ -264,6 +264,15 @@ ArchUnit 在 `verify` 阶段检查模块允许依赖图、循环依赖、层级�
 ## 当前边界
 
 本切片在 foundation 的事件/Outbox/消费骨架上增加 OAuth attempt 技术表、企微身份与通讯录适配器，以及默认关闭的诊断 Controller/live runner，但不创建正式业务表、User、ExternalIdentity、DirectorySyncRun、LoginSession、Security Audit 或 Activity 投影。控制台结构化日志只记录受控关联字段；payload、异常原文、请求体、原始身份、成员清单、授权 code、token 与 Secret 不进入持久化失败信息、证据或日志。正式身份绑定和会话、同步批次、业务事件、通知投递、人工重排、指标告警、数据清理、日志轮转和管理页面均由后续切片实现。
+## M1-10 Security Audit 与治理 API 边界
+
+- Flyway `V14` 创建不可更新、不可删除的 `security_audit_event`；唯一事实键防止幂等重放产生同义记录，内部查询固定按 Company + requestId 隔离并以 `occurredAt DESC, id DESC` 分页，size 上限 100。
+- `identityaccess` 只依赖 `audit.api` 追加/查询端口，审计模块只依赖 foundation。持久化内容仅含动作、结果、主体/角色快照、目标、理由引用、最小状态摘要及关联标识，不保存请求体、异常原文、Cookie、CSRF、企微凭据、联系方式或原始 IP。
+- 正式 `/api/v1/admin` 治理端点提供成员治理快照、角色读写与账号启停；角色写仅 APP_MANAGER，账号启停仅 COMPANY_ADMIN，读取允许两者。写模型不接受 actor、role、scope 或任何版本字段。
+- 审计 HTTP 查询、`SECURITY_AUDIT_READ`、查询自身审计、CapabilityAssignment、哈希链/WORM 及管理页面不在 M1-10 范围。
+
+从仓库根运行 `pnpm verify:m1-10`，串联事件契约、后端 `clean verify`、OpenAPI/生成客户端和完整 Node 门禁。PostgreSQL 集成测试要求 Docker Desktop Linux engine 可用。
+
 ## M1-09 角色治理边界
 
 - `PlatformRoleManagementUseCase` 提供 `APP_MANAGER`、`COMPANY_ADMIN` 授予/撤销，只有可用 `APP_MANAGER` 可以调用；`PlatformRoleAssignmentQueryUseCase` 允许 `APP_MANAGER` 与 `COMPANY_ADMIN` 查询同公司历史，普通结果不包含自由文本理由。
