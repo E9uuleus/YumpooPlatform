@@ -43,7 +43,7 @@ class SessionAuthenticationFilterTest {
         ));
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        new SessionAuthenticationFilter(sessionService, errorWriter)
+        new SessionAuthenticationFilter(sessionService, mock(PlatformRoleQuery.class), errorWriter)
                 .doFilterInternal(request, response, filterChain);
 
         assertThat(response.getStatus()).isEqualTo(503);

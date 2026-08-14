@@ -12,7 +12,18 @@ public record CurrentAuthenticationResponse(
         Client client
 ) {
 
-    static CurrentAuthenticationResponse from(CurrentAuthenticationView view) {
+    static CurrentAuthenticationResponse from(
+            CurrentAuthenticationView view,
+            java.util.Set<PlatformRoleCode> platformRoles
+    ) {
+        java.util.ArrayList<Role> roles = new java.util.ArrayList<>();
+        roles.add(Role.COMPANY_MEMBER);
+        if (platformRoles.contains(PlatformRoleCode.COMPANY_ADMIN)) {
+            roles.add(Role.COMPANY_ADMIN);
+        }
+        if (platformRoles.contains(PlatformRoleCode.APP_MANAGER)) {
+            roles.add(Role.APP_MANAGER);
+        }
         return new CurrentAuthenticationResponse(
                 new User(view.user().userId(), view.user().displayName()),
                 new Company(
@@ -21,7 +32,7 @@ public record CurrentAuthenticationResponse(
                         view.company().timezone().getId(),
                         view.company().weekStartDay().name()
                 ),
-                List.of(Role.COMPANY_MEMBER),
+                List.copyOf(roles),
                 new Client(ClientType.valueOf(view.clientType()), Compatibility.SUPPORTED)
         );
     }

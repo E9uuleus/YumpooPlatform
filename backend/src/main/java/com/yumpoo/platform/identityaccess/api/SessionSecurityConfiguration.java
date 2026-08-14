@@ -33,6 +33,7 @@ public class SessionSecurityConfiguration {
     SecurityFilterChain apiSecurityFilterChain(
             HttpSecurity http,
             SessionService sessionService,
+            PlatformRoleQuery platformRoleQuery,
             ApiErrorWriter errorWriter,
             Clock clock
     ) throws Exception {
@@ -67,7 +68,7 @@ public class SessionSecurityConfiguration {
                         ).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(
-                        new SessionAuthenticationFilter(sessionService, errorWriter),
+                        new SessionAuthenticationFilter(sessionService, platformRoleQuery, errorWriter),
                         CsrfFilter.class
                 );
         return http.build();
