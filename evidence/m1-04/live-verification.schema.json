@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/evidence/m1-04/live-verification.schema.json",
+  "title": "M1-04 WeCom full directory synchronization live evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "milestone", "status", "verifiedAt", "corpFingerprint", "snapshotFingerprint", "checks"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "milestone": { "const": "M1-04" },
+    "status": { "enum": ["ENV_PENDING", "PASS"] },
+    "verifiedAt": { "type": ["string", "null"], "format": "date-time" },
+    "corpFingerprint": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "snapshotFingerprint": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configurationPreflight", "directoryCredentialRead", "snapshotTerminationConfirmed", "profileCredentialRead", "departmentDictionaryRead", "requiredProfileVisible", "optionalVisibilityCaptured", "secretsRedacted", "signedReceiptVerified"],
+      "properties": {
+        "configurationPreflight": { "type": "boolean" },
+        "directoryCredentialRead": { "type": "boolean" },
+        "snapshotTerminationConfirmed": { "type": "boolean" },
+        "profileCredentialRead": { "type": "boolean" },
+        "departmentDictionaryRead": { "type": "boolean" },
+        "requiredProfileVisible": { "type": "boolean" },
+        "optionalVisibilityCaptured": { "type": "boolean" },
+        "secretsRedacted": { "type": "boolean" },
+        "signedReceiptVerified": { "type": "boolean" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "ENV_PENDING" } } },
+      "then": {
+        "properties": {
+          "verifiedAt": { "type": "null" },
+          "corpFingerprint": { "type": "null" },
+          "snapshotFingerprint": { "type": "null" },
+          "checks": {
+            "properties": {
+              "configurationPreflight": { "const": false },
+              "directoryCredentialRead": { "const": false },
+              "snapshotTerminationConfirmed": { "const": false },
+              "profileCredentialRead": { "const": false },
+              "departmentDictionaryRead": { "const": false },
+              "requiredProfileVisible": { "const": false },
+              "optionalVisibilityCaptured": { "const": false },
+              "secretsRedacted": { "const": false },
+              "signedReceiptVerified": { "const": false }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "verifiedAt": { "type": "string", "format": "date-time" },
+          "corpFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "snapshotFingerprint": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "checks": {
+            "properties": {
+              "configurationPreflight": { "const": true },
+              "directoryCredentialRead": { "const": true },
+              "snapshotTerminationConfirmed": { "const": true },
+              "profileCredentialRead": { "const": true },
+              "departmentDictionaryRead": { "const": true },
+              "requiredProfileVisible": { "const": true },
+              "optionalVisibilityCaptured": { "const": true },
+              "secretsRedacted": { "const": true },
+              "signedReceiptVerified": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

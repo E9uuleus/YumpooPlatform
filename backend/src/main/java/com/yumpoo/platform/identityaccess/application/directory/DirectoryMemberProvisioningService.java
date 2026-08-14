@@ -55,16 +55,32 @@ public class DirectoryMemberProvisioningService {
             WeComMemberProfile profile,
             Instant now
     ) {
+        String effectiveEmail = profile.email().applyTo(current.user().email());
+        String effectiveMobile = profile.mobile().applyTo(current.user().mobile());
+        WeComMemberProfile effectiveProfile = new WeComMemberProfile(
+                profile.externalUserId(),
+                profile.displayName(),
+                resolved(effectiveEmail),
+                resolved(effectiveMobile),
+                profile.departmentSummary(),
+                profile.rawProfileHash()
+        );
         boolean profileChanged = !current.user().displayName().equals(profile.displayName())
-                || !Objects.equals(current.user().email(), profile.email())
-                || !Objects.equals(current.user().mobile(), profile.mobile())
+                || !Objects.equals(current.user().email(), effectiveEmail)
+                || !Objects.equals(current.user().mobile(), effectiveMobile)
                 || !Objects.equals(
                         current.user().departmentSummary(),
                         profile.departmentSummary()
                 )
                 || !current.externalIdentity().rawProfileHash().equals(profile.rawProfileHash());
-        DirectoryMemberBinding refreshed = repository.refresh(current, profile, now);
+        DirectoryMemberBinding refreshed = repository.refresh(current, effectiveProfile, now);
         return result(refreshed, false, profileChanged);
+    }
+
+    private static DirectoryOptionalField resolved(String value) {
+        return value == null
+                ? DirectoryOptionalField.clear()
+                : DirectoryOptionalField.present(value);
     }
 
     private static DirectoryMemberProvisioningResult created(DirectoryMemberBinding binding) {

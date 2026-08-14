@@ -7,3 +7,24 @@ events:
       - examples/foundation.probe-recorded-v1.json
     invalidExamples:
       - examples/foundation.probe-recorded-v1.invalid.json
+  - eventType: identity.directory_sync_started
+    eventVersion: 1
+    schema: schemas/identity.directory-sync-started-v1.schema.json
+    validExamples:
+      - examples/identity.directory-sync-started-v1.json
+    invalidExamples:
+      - examples/identity.directory-sync-started-v1.invalid.json
+  - eventType: identity.directory_sync_completed
+    eventVersion: 1
+    schema: schemas/identity.directory-sync-completed-v1.schema.json
+    validExamples:
+      - examples/identity.directory-sync-completed-v1.json
+    invalidExamples:
+      - examples/identity.directory-sync-completed-v1.invalid.json
+  - eventType: identity.directory_sync_failed
+    eventVersion: 1
+    schema: schemas/identity.directory-sync-failed-v1.schema.json
+    validExamples:
+      - examples/identity.directory-sync-failed-v1.json
+    invalidExamples:
+      - examples/identity.directory-sync-failed-v1.invalid.json

@@ -1,6 +1,7 @@
 package com.yumpoo.platform.identityaccess.domain.identity;
 
 import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
+import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -19,16 +20,16 @@ class IdentityModelTest {
         WeComMemberProfile profile = new WeComMemberProfile(
                 " Member-A ",
                 " Alice ",
-                " alice@example.test ",
-                " 13800000000 ",
+                DirectoryOptionalField.present(" alice@example.test "),
+                DirectoryOptionalField.present(" 13800000000 "),
                 " Engineering ",
                 new ProfileHash(HASH)
         );
 
         assertThat(profile.externalUserId()).isEqualTo("Member-A");
         assertThat(profile.displayName()).isEqualTo("Alice");
-        assertThat(profile.email()).isEqualTo("alice@example.test");
-        assertThat(profile.mobile()).isEqualTo("13800000000");
+        assertThat(profile.email().value()).isEqualTo("alice@example.test");
+        assertThat(profile.mobile().value()).isEqualTo("13800000000");
         assertThat(profile.departmentSummary()).isEqualTo("Engineering");
     }
 
@@ -39,16 +40,16 @@ class IdentityModelTest {
         assertThatThrownBy(() -> new WeComMemberProfile(
                 "x".repeat(257),
                 "Alice",
-                null,
-                null,
+                DirectoryOptionalField.clear(),
+                DirectoryOptionalField.clear(),
                 null,
                 new ProfileHash(HASH)
         )).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new WeComMemberProfile(
                 "member-a",
                 " ",
-                null,
-                null,
+                DirectoryOptionalField.clear(),
+                DirectoryOptionalField.clear(),
                 null,
                 new ProfileHash(HASH)
         )).isInstanceOf(IllegalArgumentException.class);
@@ -74,8 +75,8 @@ class IdentityModelTest {
         WeComMemberProfile profile = new WeComMemberProfile(
                 "secret-member-id",
                 "Sensitive Name",
-                "sensitive@example.test",
-                "13800000000",
+                DirectoryOptionalField.present("sensitive@example.test"),
+                DirectoryOptionalField.present("13800000000"),
                 "Sensitive Department",
                 new ProfileHash(HASH)
         );

@@ -128,8 +128,8 @@ public class JdbcDirectoryMemberProvisioningRepository
                 .param("id", userId)
                 .param("companyId", companyId)
                 .param("displayName", profile.displayName())
-                .param("email", profile.email())
-                .param("mobile", profile.mobile())
+                .param("email", profile.email().applyTo(null))
+                .param("mobile", profile.mobile().applyTo(null))
                 .param("departmentSummary", profile.departmentSummary())
                 .param("now", databaseNow)
                 .update();
@@ -161,8 +161,8 @@ public class JdbcDirectoryMemberProvisioningRepository
                         EmploymentStatus.ACTIVE,
                         AccountStatus.ENABLED,
                         profile.displayName(),
-                        profile.email(),
-                        profile.mobile(),
+                        profile.email().applyTo(null),
+                        profile.mobile().applyTo(null),
                         profile.departmentSummary(),
                         now,
                         null,
@@ -212,8 +212,8 @@ public class JdbcDirectoryMemberProvisioningRepository
                           AND row_version = :rowVersion
                         """)
                 .param("displayName", profile.displayName())
-                .param("email", profile.email())
-                .param("mobile", profile.mobile())
+                .param("email", profile.email().applyTo(user.email()))
+                .param("mobile", profile.mobile().applyTo(user.mobile()))
                 .param("departmentSummary", profile.departmentSummary())
                 .param("now", databaseNow)
                 .param("id", user.id())
@@ -247,8 +247,8 @@ public class JdbcDirectoryMemberProvisioningRepository
                         user.employmentStatus(),
                         user.accountStatus(),
                         profile.displayName(),
-                        profile.email(),
-                        profile.mobile(),
+                        profile.email().applyTo(user.email()),
+                        profile.mobile().applyTo(user.mobile()),
                         profile.departmentSummary(),
                         now,
                         user.leftAt(),

@@ -1,0 +1,29 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000411",
+  "eventType": "identity.directory_sync_started",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T03:00:00Z",
+  "aggregateType": "DirectorySyncRun",
+  "aggregateId": "00000000-0000-4000-8000-000000000412",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000413",
+  "actor": { "type": "SYSTEM", "systemCode": "DIRECTORY_SYNC" },
+  "requestId": "m104-started-invalid",
+  "correlationId": "m104-started-invalid",
+  "causationId": null,
+  "payload": {
+    "runId": "00000000-0000-4000-8000-000000000412",
+    "triggerType": "SCHEDULED",
+    "status": "SUCCEEDED",
+    "pageCount": 0,
+    "discoveredCount": 0,
+    "stagedCount": 0,
+    "createdCount": 0,
+    "updatedCount": 0,
+    "unchangedCount": 0,
+    "failedCount": 0,
+    "notAppliedCount": 0,
+    "cursorTerminationMode": null,
+    "errorCode": null
+  }
+}

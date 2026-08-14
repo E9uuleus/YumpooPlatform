@@ -1,5 +1,15 @@
 # Yumpoo Server
 
+## M1-04 通讯录同步批次与全量导入
+
+Flyway `V9` 创建 `directory_sync_run`、`directory_sync_item` 与 `directory_sync_staging_member`。`(company_id, trigger_key_hash)` 固定命令幂等，partial unique index 固定每个 Company 最多一个 RUNNING；活动 run 通过 lease token fencing，每页、每次成员资料暂存和每项落库后续租，过期租约由下一次触发原子关闭并清理暂存。长期 item 不保存姓名、联系方式或部门，RUNNING 期暂存会在 SUCCEEDED/FAILED 的同一事务删除。
+
+模块内部入口为 `DirectorySyncUseCase.execute(DirectorySyncCommand)`，同步执行到终态；同 trigger key 返回既有 run，不同 key 遇活动 run 返回该 run 快照。ID 扫描复用 `/cgi-bin/user/list_id` 的安全适配，省略终止游标必须双扫描一致；独立资料凭据读取 `/cgi-bin/user/get` 与 `/cgi-bin/department/list`。资料全部暂存完成后才按 external user ID 稳定排序逐项短事务调用 M1-02 provisioning。手机号/邮箱使用 PRESENT、CLEAR、UNAVAILABLE 三态，canonical profile hash 使用固定字段顺序、UTF-8 和长度前缀。
+
+运行配置位于 `yumpoo.wecom.directory.*`：`enabled`、`corp-id`、`directory-secret`、`profile-secret`、`page-size`、`lease-duration`、`connect-timeout`、`read-timeout`。默认 page size 1000、租约 5 分钟、连接超时 5 秒、读取超时 20 秒；两个 Secret 必须不同，并只应放在外部 Secret 配置层。除 access token 失效后刷新一次外不自动重试。
+
+从仓库根运行 `pnpm verify:m1-04`。可选真实验证需设置 `SPRING_PROFILES_ACTIVE=m1-04-live`、`YUMPOO_M104_WECOM_ENABLED=true`、`YUMPOO_M104_WECOM_CORP_ID`、两项 `YUMPOO_M104_WECOM_*_SECRET` 和独立的 `YUMPOO_M104_EVIDENCE_HMAC_KEY`，再运行 `pnpm verify:m1-04:live`。该 live harness 不连接业务数据库，只验证生产适配器可读取真实 ID、成员资料和部门字典，并以短期 HMAC 收据把脱敏证据从 `ENV_PENDING` 更新为 `PASS`。
+
 ## M1-03 会话与安全底座
 
 Flyway `V8` 为 `identity_user` 增加非负 `authorization_version`，并创建 `login_session`。会话令牌与 CSRF 令牌均为 32 字节随机凭据，持久化层只保存用途隔离的 HMAC-SHA-256 指纹和 keyVersion。活动会话按 8 小时空闲、7 天绝对期限续期，撤销或过期事实保留到绝对到期后 24 小时，再由每小时任务分批清理。

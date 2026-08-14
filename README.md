@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M1-04 通讯录同步批次与全量导入
+
+M1-04 交付纯后端的 `DirectorySyncUseCase`：以 trigger key 幂等创建同步批次，按 Company 互斥并使用 5 分钟可续租约隔离旧 worker。Flyway `V9` 创建长期批次/成员结果和 RUNNING 期资料暂存；终态会删除暂存、清空原始游标与租约，只保留 external user ID、profile hash、动作、计数和稳定错误码。该切片不增加 REST/OpenAPI、页面、定时调度、离职/返聘、成员级重试或会话撤销。
+
+目录 ID 与成员资料使用两个独立企微 Secret。显式空 `next_cursor` 可单次确认完成；供应商省略终止游标时必须重复完整扫描，成员集合、页数和逐页摘要一致才继续。全部资料读取完成前不会修改 User；部门名按数字部门 ID 排序后以顿号汇总，手机号/邮箱缺失会保留旧值，显式空值才清除。生命周期通过 `identity.directory_sync_started/completed/failed` v1 事件发布，payload 不含个人资料、原始游标或凭据。
+
+```powershell
+pnpm verify:m1-04
+```
+
+该入口先校验 `evidence/m1-04`，再执行后端 `clean verify` 与完整 Node 门禁；PostgreSQL 集成测试要求 Docker Desktop Linux engine 可用。真实企微验证是独立的非自动门禁，证据默认保持 `ENV_PENDING`。准备两类受控 Secret、独立的至少 32 字节 HMAC 密钥，并启用 `m1-04-live` profile 与 `YUMPOO_M104_WECOM_ENABLED=true` 后，运行 `pnpm verify:m1-04:live`；runner 只提交 HMAC 指纹、布尔检查和经短期签名收据验证的 PASS 事实。
+
 ## M1-03 会话与安全底座
 
 M1-03 交付 PostgreSQL 不透明 Web 会话、User 授权版本、Spring Security 7 安全链和数据库绑定的 Cookie/CSRF 契约。Session 与 CSRF 原文只在签发时返回一次，数据库仅保存用途隔离的 HMAC-SHA-256 指纹；会话采用 8 小时空闲、7 天绝对过期和绝对到期后 24 小时的撤销事实保留期。

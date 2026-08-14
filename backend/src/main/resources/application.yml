@@ -27,6 +27,16 @@ spring:
     timeout-per-shutdown-phase: 45s
 
 yumpoo:
+  wecom:
+    directory:
+      enabled: ${YUMPOO_WECOM_DIRECTORY_ENABLED:false}
+      corp-id: ${YUMPOO_WECOM_CORP_ID:}
+      directory-secret: ${YUMPOO_WECOM_DIRECTORY_SECRET:}
+      profile-secret: ${YUMPOO_WECOM_PROFILE_SECRET:}
+      page-size: 1000
+      lease-duration: 5m
+      connect-timeout: 5s
+      read-timeout: 20s
   session:
     idle-timeout: ${YUMPOO_SESSION_IDLE_TIMEOUT:8h}
     absolute-timeout: ${YUMPOO_SESSION_ABSOLUTE_TIMEOUT:7d}

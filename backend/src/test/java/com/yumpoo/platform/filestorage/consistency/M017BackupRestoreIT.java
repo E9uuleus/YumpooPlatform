@@ -116,6 +116,7 @@ class M017BackupRestoreIT {
             assertThat(readCompanyCalendarFact(target)).isEqualTo(readCompanyCalendarFact(source));
             assertThat(readIdentityBindingFact(target)).isEqualTo(readIdentityBindingFact(source));
             assertThat(readSessionSecurityFact(target)).isEqualTo(readSessionSecurityFact(source));
+            assertThat(readDirectorySyncFact(target)).isEqualTo(readDirectorySyncFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -416,6 +417,47 @@ class M017BackupRestoreIT {
                 insertSession.setObject(6, observedAt.plusDays(8));
                 assertThat(insertSession.executeUpdate()).isOne();
             }
+            try (PreparedStatement insertRun = connection.prepareStatement("""
+                    INSERT INTO yumpoo.directory_sync_run (
+                        id, company_id, trigger_type, triggered_by_user_id,
+                        trigger_key_hash, phase, status, cursor_termination_mode,
+                        page_count, member_set_hash, page_trajectory_hash, scan_complete,
+                        discovered_count, staged_count, unchanged_count,
+                        request_id, row_version, started_at, finished_at, created_at, updated_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000402',
+                        '00000000-0000-4000-8000-000000000001',
+                        'MANUAL', '00000000-0000-4000-8000-000000000102',
+                        'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+                        'COMPLETED', 'SUCCEEDED', 'EXPLICIT_EMPTY',
+                        1,
+                        'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+                        'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+                        true, 1, 1, 1, 'm104-backup-restore', 4, ?, ?, ?, ?
+                    )
+                    """)) {
+                insertRun.setObject(1, observedAt);
+                insertRun.setObject(2, observedAt.plusMinutes(1));
+                insertRun.setObject(3, observedAt);
+                insertRun.setObject(4, observedAt.plusMinutes(1));
+                assertThat(insertRun.executeUpdate()).isOne();
+            }
+            try (PreparedStatement insertItem = connection.prepareStatement("""
+                    INSERT INTO yumpoo.directory_sync_item (
+                        run_id, external_user_id, profile_hash, user_id,
+                        action, result, created_at, updated_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000402',
+                        'M1-02-Restore-Member',
+                        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                        '00000000-0000-4000-8000-000000000102',
+                        'PROVISION', 'UNCHANGED', ?, ?
+                    )
+                    """)) {
+                insertItem.setObject(1, observedAt);
+                insertItem.setObject(2, observedAt.plusMinutes(1));
+                assertThat(insertItem.executeUpdate()).isOne();
+            }
             connection.commit();
         }
     }
@@ -491,6 +533,34 @@ class M017BackupRestoreIT {
         }
     }
 
+    private static DirectorySyncFact readDirectorySyncFact(
+            PostgreSQLContainer container
+    ) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT run.status, run.cursor_termination_mode,
+                            run.discovered_count, run.unchanged_count,
+                            item.external_user_id, item.result, item.profile_hash
+                     FROM yumpoo.directory_sync_run run
+                     JOIN yumpoo.directory_sync_item item ON item.run_id = run.id
+                     WHERE run.id = '00000000-0000-4000-8000-000000000402'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            DirectorySyncFact fact = new DirectorySyncFact(
+                    result.getString("status"),
+                    result.getString("cursor_termination_mode"),
+                    result.getInt("discovered_count"),
+                    result.getInt("unchanged_count"),
+                    result.getString("external_user_id"),
+                    result.getString("result"),
+                    result.getString("profile_hash")
+            );
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
+    }
+
     private static String postgresVersion(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
              Statement statement = connection.createStatement();
@@ -544,6 +614,17 @@ class M017BackupRestoreIT {
             long issuedAuthorizationVersion,
             String revokeReason,
             OffsetDateTime purgeAfter
+    ) {
+    }
+
+    private record DirectorySyncFact(
+            String status,
+            String terminationMode,
+            int discoveredCount,
+            int unchangedCount,
+            String externalUserId,
+            String result,
+            String profileHash
     ) {
     }
 

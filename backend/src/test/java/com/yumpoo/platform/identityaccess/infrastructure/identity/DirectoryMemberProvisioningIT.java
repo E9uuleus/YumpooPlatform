@@ -3,6 +3,7 @@ package com.yumpoo.platform.identityaccess.infrastructure.identity;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningResult;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningService;
 import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
+import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
@@ -264,8 +265,10 @@ class DirectoryMemberProvisioningIT {
         return new WeComMemberProfile(
                 externalUserId,
                 displayName,
-                displayName.toLowerCase().replace(' ', '.') + "@example.test",
-                mobile,
+                DirectoryOptionalField.present(displayName.toLowerCase().replace(' ', '.') + "@example.test"),
+                mobile == null
+                        ? DirectoryOptionalField.clear()
+                        : DirectoryOptionalField.present(mobile),
                 "Engineering",
                 new ProfileHash(hashCharacter.repeat(64))
         );

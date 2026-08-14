@@ -265,13 +265,16 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
                 "company",
                 "company_calendar_day",
                 "desktop_auth_attempt",
+                "directory_sync_item",
+                "directory_sync_run",
+                "directory_sync_staging_member",
                 "external_identity",
                 "idempotency_record",
                 "identity_user",
