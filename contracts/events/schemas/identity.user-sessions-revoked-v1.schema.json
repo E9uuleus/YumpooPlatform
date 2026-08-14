@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.user-sessions-revoked-v1.schema.json",
+  "title": "Identity user sessions revoked",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.user_sessions_revoked" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "LoginSession" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["userId", "reasonCode", "revokedCount", "clientType"],
+          "properties": {
+            "userId": { "type": "string", "format": "uuid" },
+            "reasonCode": { "const": "USER_LOGOUT" },
+            "revokedCount": { "type": "integer", "minimum": 1 },
+            "clientType": { "enum": ["WEB", "ELECTRON"] }
+          }
+        }
+      }
+    }
+  ]
+}

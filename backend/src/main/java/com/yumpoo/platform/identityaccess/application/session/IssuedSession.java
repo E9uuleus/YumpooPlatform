@@ -2,6 +2,7 @@ package com.yumpoo.platform.identityaccess.application.session;
 
 import com.yumpoo.platform.identityaccess.domain.session.LoginSession;
 
+import java.time.Instant;
 import java.util.Objects;
 
 public record IssuedSession(
@@ -19,5 +20,9 @@ public record IssuedSession(
     @Override
     public String toString() {
         return "IssuedSession[session=" + session.id() + ", credentials=REDACTED]";
+    }
+
+    public Instant absoluteExpiresAt() {
+        return session.absoluteExpiresAt();
     }
 }

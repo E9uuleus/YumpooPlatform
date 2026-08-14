@@ -11,8 +11,116 @@ info:
 servers:
   - url: /api/v1
     description: Yumpoo v1 business API
-paths: {}
+tags:
+  - name: Authentication
+    description: Web 企微登录、会话退出与当前主体查询。
+paths:
+  /auth/wecom/authorize:
+    get:
+      tags: [Authentication]
+      operationId: authorizeWeComLogin
+      summary: 发起企微 Web 登录
+      description: 创建一次性 OAuth state/nonce，并跳转到当前启用的身份提供者。
+      security: []
+      responses:
+        '302':
+          description: 跳转到身份提供者，并设置 HttpOnly nonce Cookie。
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Set-Cookie:
+              $ref: '#/components/headers/SetCookie'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /auth/wecom/callback:
+    get:
+      tags: [Authentication]
+      operationId: completeWeComLogin
+      summary: 完成企微 Web 登录
+      description: |
+        原子消费 OAuth attempt，解析已同步的企微身份并签发 Web Session。
+        成功固定跳转到 `/`；无论成功失败均清除 nonce Cookie。
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 43
+            maxLength: 43
+            pattern: '^[A-Za-z0-9_-]{43}$'
+      responses:
+        '302':
+          description: 登录成功，签发 Session/CSRF Cookie 并固定跳转到 `/`。
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Set-Cookie:
+              $ref: '#/components/headers/SetCookie'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logoutCurrentSession
+      summary: 退出当前会话
+      description: |
+        撤销当前 Session。已由 USER_LOGOUT 撤销的同一 Session 可携原 CSRF 幂等重试。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+      responses:
+        '204':
+          description: 当前 Session 已处于主动退出状态，并清除 Session/CSRF Cookie。
+          headers:
+            Set-Cookie:
+              $ref: '#/components/headers/SetCookie'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /auth/me:
+    get:
+      tags: [Authentication]
+      operationId: getCurrentAuthentication
+      summary: 查询当前登录主体
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: 当前 Web 登录主体、公司、角色及客户端兼容状态。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentAuthentication'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-yumpoo-session
+      description: 服务端签发的 HttpOnly、Secure、SameSite=Lax Web Session Cookie。
+
   schemas:
     Uuid:
       type: string
@@ -31,6 +139,84 @@ components:
       pattern: '^\d{4}-\d{2}-\d{2}$'
       description: 不携带时区或零点时刻的自然日，格式为 YYYY-MM-DD。
       example: '2026-08-09'
+
+    AuthenticationRole:
+      type: string
+      enum:
+        - COMPANY_MEMBER
+        - COMPANY_ADMIN
+        - APP_MANAGER
+
+    AuthenticationClientType:
+      type: string
+      enum:
+        - WEB
+        - ELECTRON
+
+    ClientCompatibility:
+      type: string
+      enum:
+        - SUPPORTED
+        - DEPRECATED
+        - BLOCKED
+
+    CurrentAuthenticationUser:
+      type: object
+      additionalProperties: false
+      required: [id, displayName]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        displayName:
+          type: string
+          minLength: 1
+
+    CurrentAuthenticationCompany:
+      type: object
+      additionalProperties: false
+      required: [id, displayName, timezone, weekStartDay]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        displayName:
+          type: string
+          minLength: 1
+        timezone:
+          type: string
+          minLength: 1
+          description: IANA 时区标识。
+          example: Asia/Shanghai
+        weekStartDay:
+          type: string
+          enum: [MONDAY]
+
+    CurrentAuthenticationClient:
+      type: object
+      additionalProperties: false
+      required: [type, compatibility]
+      properties:
+        type:
+          $ref: '#/components/schemas/AuthenticationClientType'
+        compatibility:
+          $ref: '#/components/schemas/ClientCompatibility'
+
+    CurrentAuthentication:
+      type: object
+      additionalProperties: false
+      required: [user, company, roles, client]
+      properties:
+        user:
+          $ref: '#/components/schemas/CurrentAuthenticationUser'
+        company:
+          $ref: '#/components/schemas/CurrentAuthenticationCompany'
+        roles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AuthenticationRole'
+        client:
+          $ref: '#/components/schemas/CurrentAuthenticationClient'
 
     RequestId:
       type: string
@@ -246,6 +432,15 @@ components:
           description: 不透明续读游标；没有下一批时为 null。
 
   parameters:
+    XsrfToken:
+      name: X-XSRF-TOKEN
+      in: header
+      required: true
+      description: 与当前 Session 绑定并由非 HttpOnly Cookie 回传的 CSRF 凭据。
+      schema:
+        type: string
+        minLength: 1
+
     Page:
       name: page
       in: query
@@ -347,6 +542,17 @@ components:
         minimum: 1
 
   headers:
+    Location:
+      description: 跳转目标 URI。
+      schema:
+        type: string
+        format: uri-reference
+
+    SetCookie:
+      description: 一个或多个安全 Cookie；客户端必须按 HTTP 多值头语义处理。
+      schema:
+        type: string
+
     XRequestId:
       description: 请求关联标识；错误响应中必须与 body.requestId 完全一致。
       schema:

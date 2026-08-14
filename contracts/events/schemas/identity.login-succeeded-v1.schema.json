@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.login-succeeded-v1.schema.json",
+  "title": "Identity login succeeded",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.login_succeeded" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "LoginSession" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["userId", "clientType"],
+          "properties": {
+            "userId": { "type": "string", "format": "uuid" },
+            "clientType": { "const": "WEB" }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -28,6 +28,17 @@ spring:
 
 yumpoo:
   wecom:
+    oauth:
+      enabled: ${YUMPOO_WECOM_OAUTH_ENABLED:false}
+      corp-id: ${YUMPOO_WECOM_OAUTH_CORP_ID:}
+      agent-id: ${YUMPOO_WECOM_OAUTH_AGENT_ID:}
+      app-secret: ${YUMPOO_WECOM_OAUTH_APP_SECRET:}
+      callback-uri: ${YUMPOO_WECOM_OAUTH_CALLBACK_URI:}
+      connect-timeout: 5s
+      read-timeout: 20s
+      cleanup-delay: 1h
+      purge-batch-size: 500
+      purge-max-batches: 10
     directory:
       enabled: ${YUMPOO_WECOM_DIRECTORY_ENABLED:false}
       corp-id: ${YUMPOO_WECOM_CORP_ID:}
@@ -37,6 +48,11 @@ yumpoo:
       lease-duration: 5m
       connect-timeout: 5s
       read-timeout: 20s
+  auth:
+    controlled:
+      enabled: ${YUMPOO_CONTROLLED_AUTH_ENABLED:false}
+      corp-id: ${YUMPOO_CONTROLLED_AUTH_CORP_ID:}
+      member-id: ${YUMPOO_CONTROLLED_AUTH_MEMBER_ID:}
   session:
     idle-timeout: ${YUMPOO_SESSION_IDLE_TIMEOUT:8h}
     absolute-timeout: ${YUMPOO_SESSION_ABSOLUTE_TIMEOUT:7d}

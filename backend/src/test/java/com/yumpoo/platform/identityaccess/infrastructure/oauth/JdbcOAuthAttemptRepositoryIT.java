@@ -231,6 +231,23 @@ class JdbcOAuthAttemptRepositoryIT {
         assertThat(storedNonce).isEqualTo(HASHER.hash(NONCE).value()).doesNotContain(NONCE.value());
     }
 
+    @Test
+    void expiredAttemptsArePurgedInBoundedBatches() {
+        OAuthAttemptToken secondState = token('M');
+        OAuthAttemptToken secondNonce = token('N');
+        OAuthAttemptToken activeState = token('O');
+        OAuthAttemptToken activeNonce = token('P');
+        attemptStore.create(attempt(STATE, NONCE, CREATED_AT.plusSeconds(1)));
+        attemptStore.create(attempt(secondState, secondNonce, CREATED_AT.plusSeconds(2)));
+        attemptStore.create(attempt(activeState, activeNonce, CREATED_AT.plusSeconds(20)));
+
+        assertThat(attemptStore.purgeExpired(CREATED_AT.plusSeconds(10), 1)).isOne();
+        assertThat(attemptStore.purgeExpired(CREATED_AT.plusSeconds(10), 10)).isOne();
+        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.wecom_oauth_attempt")
+                .query(Integer.class)
+                .single()).isOne();
+    }
+
     private WeComOAuthVerificationService service(WeComIdentityGateway gateway, Clock clock) {
         List<OAuthAttemptToken> generatedTokens = new ArrayList<>(List.of(STATE, NONCE));
         return new WeComOAuthVerificationService(
