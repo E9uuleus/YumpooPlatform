@@ -6,9 +6,14 @@ import { routes } from './router'
 
 afterEach(() => {
   Reflect.deleteProperty(window, 'yumpooDesktop')
+  vi.unstubAllGlobals()
 })
 
 async function mountApplication() {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', {
+    status: 401,
+    headers: { 'Content-Type': 'application/json' },
+  })))
   const router = createRouter({
     history: createMemoryHistory(),
     routes,
