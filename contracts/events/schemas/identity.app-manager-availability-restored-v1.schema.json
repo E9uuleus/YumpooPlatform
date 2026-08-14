@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.app-manager-availability-restored-v1.schema.json",
+  "title": "APP_MANAGER availability restored",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.app_manager_availability_restored" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "AppManagerGovernanceState" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["previousAvailableCount", "currentAvailableCount", "triggerCode", "affectedUserId", "detectedAt"],
+          "properties": {
+            "previousAvailableCount": { "const": 0 },
+            "currentAvailableCount": { "type": "integer", "minimum": 1 },
+            "triggerCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,79}$" },
+            "affectedUserId": { "type": ["string", "null"], "format": "uuid" },
+            "detectedAt": { "type": "string", "format": "date-time", "pattern": "Z$" }
+          }
+        }
+      }
+    }
+  ]
+}

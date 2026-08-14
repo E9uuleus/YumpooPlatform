@@ -264,3 +264,12 @@ ArchUnit 在 `verify` 阶段检查模块允许依赖图、循环依赖、层级�
 ## 当前边界
 
 本切片在 foundation 的事件/Outbox/消费骨架上增加 OAuth attempt 技术表、企微身份与通讯录适配器，以及默认关闭的诊断 Controller/live runner，但不创建正式业务表、User、ExternalIdentity、DirectorySyncRun、LoginSession、Security Audit 或 Activity 投影。控制台结构化日志只记录受控关联字段；payload、异常原文、请求体、原始身份、成员清单、授权 code、token 与 Secret 不进入持久化失败信息、证据或日志。正式身份绑定和会话、同步批次、业务事件、通知投递、人工重排、指标告警、数据清理、日志轮转和管理页面均由后续切片实现。
+## M1-09 角色治理边界
+
+- `PlatformRoleManagementUseCase` 提供 `APP_MANAGER`、`COMPANY_ADMIN` 授予/撤销，只有可用 `APP_MANAGER` 可以调用；`PlatformRoleAssignmentQueryUseCase` 允许 `APP_MANAGER` 与 `COMPANY_ADMIN` 查询同公司历史，普通结果不包含自由文本理由。
+- 用户角色命令固定使用 15 分钟最近认证窗口，并携带会话授权版本、目标 User 或 Assignment 并发版本、理由引用和幂等键。角色固定推导 `PLATFORM/COMPANY` scope，不接受调用方自定义 scope。
+- `app_manager_governance_state` 必须先于 User、Assignment、Session 加锁。最后可用 `APP_MANAGER` 的主动撤销和账号禁用返回 `INVALID_STATE_TRANSITION`；目录离职不受保护阻塞，但会产生缺失/恢复事件。
+- administration 只消费缺失/恢复事实并维护 `governance_issue`，不复制角色事实，也不参与授权判断。
+- 本切片没有角色管理 Controller 或 OpenAPI path。统一 Security Audit、失败审计及审计失败关闭由 M1-10 实现后，才能接通正式写 HTTP。
+
+维护 Runner 仅在 `yumpoo.maintenance.app-manager.enabled=true` 时注册。必须以 `spring.main.web-application-type=none` 运行，同时关闭 Outbox 调度，并提供 `BOOTSTRAP` 或 `BREAK_GLASS`、内部 `userId` 和 1～160 字符理由引用；成功或失败后进程结束。

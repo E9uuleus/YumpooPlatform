@@ -11,6 +11,11 @@ import com.yumpoo.platform.foundation.application.idempotency.IdempotentCommandE
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationService;
 import com.yumpoo.platform.identityaccess.application.session.SessionRevocationTarget;
+import com.yumpoo.platform.identityaccess.application.authorization.AppManagerAvailabilityCoordinator;
+import com.yumpoo.platform.identityaccess.application.authorization.AvailabilitySnapshot;
+import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
+import com.yumpoo.platform.identityaccess.application.authorization.RoleGovernanceRepository;
+import com.yumpoo.platform.identityaccess.application.authorization.RoleUserSnapshot;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.identityaccess.domain.session.SessionRevocationReason;
 import org.springframework.stereotype.Service;
@@ -30,6 +35,8 @@ public class AccountStatusService implements AccountStatusUseCase {
     public static final String USER_ACCOUNT_ENABLED = "identity.user_account_enabled";
 
     private final AccountStatusRepository repository;
+    private final RoleGovernanceRepository roleGovernanceRepository;
+    private final AppManagerAvailabilityCoordinator availabilityCoordinator;
     private final SessionRevocationService sessionRevocationService;
     private final TransactionalEventPort eventPort;
     private final IdempotentCommandExecutor idempotentCommandExecutor;
@@ -37,12 +44,18 @@ public class AccountStatusService implements AccountStatusUseCase {
 
     public AccountStatusService(
             AccountStatusRepository repository,
+            RoleGovernanceRepository roleGovernanceRepository,
+            AppManagerAvailabilityCoordinator availabilityCoordinator,
             SessionRevocationService sessionRevocationService,
             TransactionalEventPort eventPort,
             IdempotentCommandExecutor idempotentCommandExecutor,
             ObjectMapper objectMapper
     ) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
+        this.roleGovernanceRepository = Objects.requireNonNull(
+                roleGovernanceRepository, "roleGovernanceRepository must not be null");
+        this.availabilityCoordinator = Objects.requireNonNull(
+                availabilityCoordinator, "availabilityCoordinator must not be null");
         this.sessionRevocationService = Objects.requireNonNull(
                 sessionRevocationService,
                 "sessionRevocationService must not be null"
@@ -77,6 +90,17 @@ public class AccountStatusService implements AccountStatusUseCase {
     }
 
     private StoredCommandResult executeChange(AccountStatusChangeCommand command) {
+        AvailabilitySnapshot before = availabilityCoordinator.lock(command.companyId());
+        RoleUserSnapshot targetBefore = roleGovernanceRepository
+                .lockUser(command.companyId(), command.targetUserId())
+                .orElseThrow(() -> new com.yumpoo.platform.foundation.application.error.ApplicationException(
+                        com.yumpoo.platform.foundation.application.error.StandardErrorCode.RESOURCE_NOT_FOUND));
+        availabilityCoordinator.protectLastAvailable(
+                before,
+                command.desiredStatus() == AccountStatus.DISABLED
+                        && targetBefore.available()
+                        && targetBefore.activeRoles().contains(ManagedPlatformRole.APP_MANAGER)
+        );
         AccountStatusSnapshot changed = repository.change(command);
         EventActor actor = EventActor.adminOverride(command.actorUserId(), command.reason());
         publishAccountStatusChanged(changed, actor);
@@ -87,7 +111,16 @@ public class AccountStatusService implements AccountStatusUseCase {
                         changed.authorizationVersion(),
                         changed.rowVersion()
                 ),
-                SessionRevocationReason.ACCOUNT_DISABLED,
+                command.desiredStatus() == AccountStatus.DISABLED
+                        ? SessionRevocationReason.ACCOUNT_DISABLED
+                        : SessionRevocationReason.AUTHORIZATION_CHANGED,
+                actor
+        );
+        availabilityCoordinator.reconcile(
+                before,
+                command.desiredStatus() == AccountStatus.DISABLED
+                        ? "ACCOUNT_DISABLED" : "ACCOUNT_ENABLED",
+                command.targetUserId(),
                 actor
         );
 

@@ -91,3 +91,31 @@ events:
       - examples/identity.user-account-enabled-v1.json
     invalidExamples:
       - examples/identity.user-account-enabled-v1.invalid.json
+  - eventType: identity.platform_role_granted
+    eventVersion: 1
+    schema: schemas/identity.platform-role-granted-v1.schema.json
+    validExamples:
+      - examples/identity.platform-role-granted-v1.json
+    invalidExamples:
+      - examples/identity.platform-role-granted-v1.invalid.json
+  - eventType: identity.platform_role_revoked
+    eventVersion: 1
+    schema: schemas/identity.platform-role-revoked-v1.schema.json
+    validExamples:
+      - examples/identity.platform-role-revoked-v1.json
+    invalidExamples:
+      - examples/identity.platform-role-revoked-v1.invalid.json
+  - eventType: identity.app_manager_missing_detected
+    eventVersion: 1
+    schema: schemas/identity.app-manager-missing-detected-v1.schema.json
+    validExamples:
+      - examples/identity.app-manager-missing-detected-v1.json
+    invalidExamples:
+      - examples/identity.app-manager-missing-detected-v1.invalid.json
+  - eventType: identity.app_manager_availability_restored
+    eventVersion: 1
+    schema: schemas/identity.app-manager-availability-restored-v1.schema.json
+    validExamples:
+      - examples/identity.app-manager-availability-restored-v1.json
+    invalidExamples:
+      - examples/identity.app-manager-availability-restored-v1.invalid.json

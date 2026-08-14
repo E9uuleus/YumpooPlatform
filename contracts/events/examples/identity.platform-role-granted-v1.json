@@ -1,0 +1,23 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000801",
+  "eventType": "identity.platform_role_granted",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T08:00:00Z",
+  "aggregateType": "PlatformRoleAssignment",
+  "aggregateId": "00000000-0000-4000-8000-000000000802",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000803",
+  "actor": { "type": "ADMIN_OVERRIDE", "userId": "00000000-0000-4000-8000-000000000804", "reasonReference": "change-1042" },
+  "requestId": "m109-role-grant",
+  "correlationId": "m109-role-grant",
+  "causationId": null,
+  "payload": {
+    "assignmentId": "00000000-0000-4000-8000-000000000802",
+    "userId": "00000000-0000-4000-8000-000000000805",
+    "roleCode": "APP_MANAGER",
+    "scopeType": "PLATFORM",
+    "scopeId": "00000000-0000-4000-8000-000000000803",
+    "reasonReference": "change-1042",
+    "authorizationVersion": 2
+  }
+}
