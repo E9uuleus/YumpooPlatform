@@ -60,7 +60,12 @@ public class SessionSecurityConfiguration {
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationRequired())
                         .accessDeniedHandler(csrfDenied(errorWriter)))
-                .authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(
+                                WebAuthenticationPaths.AUTHORIZE,
+                                WebAuthenticationPaths.CALLBACK
+                        ).permitAll()
+                        .anyRequest().authenticated())
                 .addFilterBefore(
                         new SessionAuthenticationFilter(sessionService, errorWriter),
                         CsrfFilter.class

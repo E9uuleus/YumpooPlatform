@@ -13,3 +13,5 @@ rules:
   no-unresolved-refs: error
   operation-operationId: error
   operation-4xx-response: error
+  # authorize/callback 是只以 302 表示成功的浏览器导航，不存在 2xx 成功形态。
+  operation-2xx-response: off

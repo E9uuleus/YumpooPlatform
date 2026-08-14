@@ -13,6 +13,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -29,6 +31,8 @@ import java.util.UUID;
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public final class RequestIdFilter extends OncePerRequestFilter {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RequestIdFilter.class);
 
     private final ApiErrorWriter apiErrorWriter;
 
@@ -69,6 +73,12 @@ public final class RequestIdFilter extends OncePerRequestFilter {
                 if (response.isCommitted()) {
                     rethrow(exception);
                 }
+                LOGGER.error(
+                        "unexpected request failure; method={}, path={}, exceptionType={}",
+                        request.getMethod(),
+                        request.getRequestURI(),
+                        exception.getClass().getName()
+                );
                 resetAndWrite(
                         response,
                         new ApplicationException(StandardErrorCode.INTERNAL_ERROR),

@@ -1,0 +1,20 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000631",
+  "eventType": "identity.login_rejected",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T06:00:00Z",
+  "aggregateType": "AuthenticationAttempt",
+  "aggregateId": "00000000-0000-4000-8000-000000000633",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000633",
+  "actor": { "type": "SYSTEM", "systemCode": "WECOM_AUTH" },
+  "requestId": "m106-login-rejected-invalid",
+  "correlationId": "m106-login-rejected-invalid",
+  "causationId": null,
+  "payload": {
+    "stage": "CALLBACK",
+    "outcomeCode": "AUTHENTICATION_REQUIRED",
+    "clientType": "WEB",
+    "authorizationCode": "sensitive-code"
+  }
+}

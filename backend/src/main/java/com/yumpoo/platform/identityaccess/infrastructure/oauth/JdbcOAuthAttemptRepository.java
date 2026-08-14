@@ -42,6 +42,20 @@ public class JdbcOAuthAttemptRepository implements OAuthAttemptStore {
               AND expires_at > :consumedAt
             """;
 
+    private static final String PURGE_EXPIRED_ATTEMPTS = """
+            WITH expired AS (
+                SELECT state_hash
+                FROM yumpoo.wecom_oauth_attempt
+                WHERE expires_at <= :now
+                ORDER BY expires_at, state_hash
+                LIMIT :limit
+                FOR UPDATE SKIP LOCKED
+            )
+            DELETE FROM yumpoo.wecom_oauth_attempt attempt
+            USING expired
+            WHERE attempt.state_hash = expired.state_hash
+            """;
+
     private final JdbcClient jdbcClient;
 
     public JdbcOAuthAttemptRepository(JdbcClient jdbcClient) {
@@ -79,6 +93,19 @@ public class JdbcOAuthAttemptRepository implements OAuthAttemptStore {
                 .param("nonceHash", nonceHash.value())
                 .param("consumedAt", utc(consumedAt))
                 .update() == 1;
+    }
+
+    @Override
+    @Transactional
+    public int purgeExpired(Instant now, int limit) {
+        Objects.requireNonNull(now, "now must not be null");
+        if (limit <= 0) {
+            throw new IllegalArgumentException("limit must be positive");
+        }
+        return jdbcClient.sql(PURGE_EXPIRED_ATTEMPTS)
+                .param("now", utc(now))
+                .param("limit", limit)
+                .update();
     }
 
     private static OffsetDateTime utc(Instant instant) {

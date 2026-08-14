@@ -1,0 +1,20 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000651",
+  "eventType": "identity.user_sessions_revoked",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T06:00:00Z",
+  "aggregateType": "LoginSession",
+  "aggregateId": "00000000-0000-4000-8000-000000000652",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000653",
+  "actor": { "type": "USER", "userId": "00000000-0000-4000-8000-000000000652" },
+  "requestId": "m106-user-logout-invalid",
+  "correlationId": "m106-user-logout-invalid",
+  "causationId": null,
+  "payload": {
+    "userId": "00000000-0000-4000-8000-000000000652",
+    "reasonCode": "USER_LOGOUT",
+    "revokedCount": 0,
+    "clientType": "WEB"
+  }
+}

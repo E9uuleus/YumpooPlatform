@@ -100,6 +100,61 @@ public class SessionService {
     }
 
     @Transactional
+    public AuthenticatedSession authenticateForLogout(SessionCredential credential) {
+        Instant now = clock.instant();
+        LoginSession session = findSession(credential, now).orElseThrow(
+                SessionService::authenticationRequired
+        );
+        if (!now.isBefore(session.purgeAfter())) {
+            throw authenticationRequired();
+        }
+        UserAuthorizationRecord user = repository.findUser(session.userId()).orElseThrow(
+                SessionService::authenticationRequired
+        );
+        if (session.status() == SessionStatus.REVOKED
+                && session.revokeReason() == SessionRevocationReason.USER_LOGOUT) {
+            return new AuthenticatedSession(session, user);
+        }
+        requireAuthenticatable(session, user, now);
+        return new AuthenticatedSession(session, user);
+    }
+
+    @Transactional
+    public boolean logout(AuthenticatedSession authenticatedSession) {
+        Objects.requireNonNull(
+                authenticatedSession,
+                "authenticatedSession must not be null"
+        );
+        Instant now = clock.instant();
+        LoginSession locked = repository.lockById(authenticatedSession.session().id())
+                .orElseThrow(SessionService::authenticationRequired);
+        if (locked.status() == SessionStatus.REVOKED
+                && locked.revokeReason() == SessionRevocationReason.USER_LOGOUT) {
+            return false;
+        }
+        UserAuthorizationRecord user = repository.lockUser(locked.userId()).orElseThrow(
+                SessionService::authenticationRequired
+        );
+        requireAuthenticatable(locked, user, now);
+        if (repository.terminateIfActive(
+                locked.id(),
+                SessionStatus.REVOKED,
+                SessionRevocationReason.USER_LOGOUT,
+                now
+        )) {
+            return true;
+        }
+        LoginSession raced = repository.lockById(locked.id()).orElseThrow(
+                SessionService::authenticationRequired
+        );
+        if (raced.status() == SessionStatus.REVOKED
+                && raced.revokeReason() == SessionRevocationReason.USER_LOGOUT) {
+            return false;
+        }
+        throw authenticationRequired();
+    }
+
+    @Transactional
     public Optional<SessionCredential> replaceCsrf(
             AuthenticatedSession authenticatedSession
     ) {

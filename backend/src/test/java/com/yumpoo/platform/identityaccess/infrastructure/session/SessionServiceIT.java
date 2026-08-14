@@ -120,6 +120,26 @@ class SessionServiceIT {
     }
 
     @Test
+    void userLogoutCanBeRecognizedAndRetriedWithoutReactivatingTheSession() {
+        var issued = service.issueWebSession(USER_ID, null);
+        var authenticated = service.authenticateForLogout(issued.sessionCredential());
+
+        assertThat(service.logout(authenticated)).isTrue();
+        assertError(issued.sessionCredential(), StandardErrorCode.AUTHENTICATION_REQUIRED);
+
+        var retry = service.authenticateForLogout(issued.sessionCredential());
+        assertThat(service.logout(retry)).isFalse();
+        assertThat(jdbcClient.sql("""
+                        SELECT status || '|' || revoke_reason
+                        FROM yumpoo.login_session
+                        WHERE id = :sessionId
+                        """)
+                .param("sessionId", issued.session().id())
+                .query(String.class)
+                .single()).isEqualTo("REVOKED|USER_LOGOUT");
+    }
+
+    @Test
     void concurrentRotationAllowsExactlyOneSuccess() throws Exception {
         var issued = service.issueWebSession(USER_ID, "rotation-race");
         CountDownLatch ready = new CountDownLatch(2);

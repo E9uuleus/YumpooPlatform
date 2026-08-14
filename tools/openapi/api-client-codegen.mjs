@@ -132,10 +132,10 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
 
   for (const relative of listGeneratedSources(sourceRoot)) {
     const generatedPath = path.join(sourceRoot, ...relative.split('/'))
-    const generated = normalizeText(fs.readFileSync(generatedPath, 'utf8')).replace(
-      '/* eslint-disable */\n',
-      '',
-    )
+    const generated = normalizeText(fs.readFileSync(generatedPath, 'utf8'))
+      .replace('/* eslint-disable */\n', '')
+      .replace(/[ \t]+$/gm, '')
+      .replace(/\n+$/, '\n')
     fs.writeFileSync(generatedPath, generated, 'utf8')
   }
 }

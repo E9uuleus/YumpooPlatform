@@ -33,6 +33,13 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return WebAuthenticationPaths.AUTHORIZE.equals(path)
+                || WebAuthenticationPaths.CALLBACK.equals(path);
+    }
+
+    @Override
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
@@ -57,7 +64,9 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
         SecurityContext previous = SecurityContextHolder.getContext();
         try {
             SessionCredential credential = new SessionCredential(raw.get());
-            AuthenticatedSession authenticated = sessionService.authenticate(credential);
+            AuthenticatedSession authenticated = isLogout(request)
+                    ? sessionService.authenticateForLogout(credential)
+                    : sessionService.authenticate(credential);
             request.setAttribute(SessionRequestContext.ATTRIBUTE, authenticated);
             SecurityContext context = SecurityContextHolder.createEmptyContext();
             context.setAuthentication(new SessionAuthenticationToken(new CurrentActor(
@@ -84,6 +93,11 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
             request.removeAttribute(SessionRequestContext.ATTRIBUTE);
             SecurityContextHolder.setContext(previous);
         }
+    }
+
+    private static boolean isLogout(HttpServletRequest request) {
+        return "POST".equals(request.getMethod())
+                && WebAuthenticationPaths.LOGOUT.equals(request.getRequestURI());
     }
 
     private void reject(

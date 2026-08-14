@@ -49,3 +49,24 @@ events:
       - examples/identity.user-employment-returned-v1.json
     invalidExamples:
       - examples/identity.user-employment-returned-v1.invalid.json
+  - eventType: identity.login_succeeded
+    eventVersion: 1
+    schema: schemas/identity.login-succeeded-v1.schema.json
+    validExamples:
+      - examples/identity.login-succeeded-v1.json
+    invalidExamples:
+      - examples/identity.login-succeeded-v1.invalid.json
+  - eventType: identity.login_rejected
+    eventVersion: 1
+    schema: schemas/identity.login-rejected-v1.schema.json
+    validExamples:
+      - examples/identity.login-rejected-v1.json
+    invalidExamples:
+      - examples/identity.login-rejected-v1.invalid.json
+  - eventType: identity.user_sessions_revoked
+    eventVersion: 1
+    schema: schemas/identity.user-sessions-revoked-v1.schema.json
+    validExamples:
+      - examples/identity.user-sessions-revoked-v1.json
+    invalidExamples:
+      - examples/identity.user-sessions-revoked-v1.invalid.json

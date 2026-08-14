@@ -14,4 +14,8 @@ public interface OAuthAttemptStore {
             OAuthAttemptHash nonceHash,
             Instant consumedAt
     );
+
+    default int purgeExpired(Instant now, int limit) {
+        return 0;
+    }
 }

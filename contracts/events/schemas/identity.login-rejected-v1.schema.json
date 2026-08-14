@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.login-rejected-v1.schema.json",
+  "title": "Identity login rejected",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.login_rejected" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "AuthenticationAttempt" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stage", "outcomeCode", "clientType"],
+          "properties": {
+            "stage": { "enum": ["AUTHORIZE", "CALLBACK"] },
+            "outcomeCode": {
+              "enum": ["AUTHENTICATION_REQUIRED", "DEPENDENCY_UNAVAILABLE"]
+            },
+            "clientType": { "const": "WEB" }
+          }
+        }
+      }
+    }
+  ]
+}

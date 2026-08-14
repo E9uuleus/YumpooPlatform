@@ -1,0 +1,19 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000611",
+  "eventType": "identity.login_succeeded",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-14T06:00:00Z",
+  "aggregateType": "LoginSession",
+  "aggregateId": "00000000-0000-4000-8000-000000000612",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000613",
+  "actor": { "type": "USER", "userId": "00000000-0000-4000-8000-000000000612" },
+  "requestId": "m106-login-succeeded-invalid",
+  "correlationId": "m106-login-succeeded-invalid",
+  "causationId": null,
+  "payload": {
+    "userId": "00000000-0000-4000-8000-000000000612",
+    "clientType": "WEB",
+    "externalUserId": "sensitive-member-id"
+  }
+}

@@ -3,6 +3,7 @@ package com.yumpoo.platform.identityaccess.api;
 import com.yumpoo.platform.identityaccess.application.session.AuthenticatedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionCredential;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
+import com.yumpoo.platform.identityaccess.application.session.SecureSessionCredentialGenerator;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
@@ -20,6 +21,8 @@ final class SessionBoundCsrfTokenRepository implements CsrfTokenRepository {
 
     private final SessionService sessionService;
     private final Clock clock;
+    private final SecureSessionCredentialGenerator unboundTokenGenerator =
+            new SecureSessionCredentialGenerator();
 
     SessionBoundCsrfTokenRepository(SessionService sessionService, Clock clock) {
         this.sessionService = sessionService;
@@ -28,6 +31,9 @@ final class SessionBoundCsrfTokenRepository implements CsrfTokenRepository {
 
     @Override
     public CsrfToken generateToken(HttpServletRequest request) {
+        if (!SessionRequestContext.present(request)) {
+            return token(unboundTokenGenerator.generate().value());
+        }
         AuthenticatedSession authenticated = SessionRequestContext.required(request);
         SessionCredential credential = sessionService.replaceCsrf(authenticated)
                 .orElseThrow(() -> new IllegalStateException("CSRF rotation lost a race"));
@@ -40,6 +46,9 @@ final class SessionBoundCsrfTokenRepository implements CsrfTokenRepository {
             HttpServletRequest request,
             HttpServletResponse response
     ) {
+        if (!SessionRequestContext.present(request)) {
+            return;
+        }
         if (token == null) {
             response.addHeader(HttpHeaders.SET_COOKIE, SessionHttpCookies.clearCsrf().toString());
             return;
