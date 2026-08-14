@@ -38,23 +38,36 @@ public interface DirectorySyncRepository {
             Duration leaseDuration
     );
 
+    void markProfileFailed(
+            UUID runId,
+            UUID leaseToken,
+            String externalUserId,
+            String errorCode,
+            Duration leaseDuration
+    );
+
+    boolean hasActiveDirectoryMembers(UUID companyId);
+
     void beginApplying(UUID runId, UUID leaseToken, Duration leaseDuration);
 
     List<WeComMemberProfile> stagedProfiles(UUID runId, UUID leaseToken);
+
+    boolean hasItemFailures(UUID runId, UUID leaseToken);
 
     void markApplied(
             UUID runId,
             UUID leaseToken,
             WeComMemberProfile profile,
             DirectoryMemberProvisioningResult result,
+            EventActor actor,
             Duration leaseDuration
     );
 
-    DirectorySyncRunSnapshot failDuringApply(
+    void markApplyFailed(
             UUID runId,
             UUID leaseToken,
             String externalUserId,
-            EventActor actor
+            Duration leaseDuration
     );
 
     DirectorySyncRunSnapshot fail(
@@ -64,6 +77,8 @@ public interface DirectorySyncRepository {
             String safeSummary,
             EventActor actor
     );
+
+    DirectorySyncRunSnapshot completePartial(UUID runId, UUID leaseToken, EventActor actor);
 
     DirectorySyncRunSnapshot complete(UUID runId, UUID leaseToken, EventActor actor);
 

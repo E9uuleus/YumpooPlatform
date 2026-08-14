@@ -1,0 +1,31 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000521",
+  "eventType": "identity.directory_sync_completed",
+  "eventVersion": 2,
+  "occurredAt": "2026-08-14T05:05:00Z",
+  "aggregateType": "DirectorySyncRun",
+  "aggregateId": "00000000-0000-4000-8000-000000000522",
+  "aggregateVersion": 9,
+  "companyId": "00000000-0000-4000-8000-000000000523",
+  "actor": { "type": "SYSTEM", "systemCode": "DIRECTORY_SYNC" },
+  "requestId": "m105-completed-example",
+  "correlationId": "m105-completed-example",
+  "causationId": null,
+  "payload": {
+    "runId": "00000000-0000-4000-8000-000000000522",
+    "triggerType": "SCHEDULED",
+    "status": "PARTIALLY_SUCCEEDED",
+    "pageCount": 2,
+    "discoveredCount": 3,
+    "stagedCount": 2,
+    "createdCount": 1,
+    "updatedCount": 0,
+    "unchangedCount": 1,
+    "leftCount": 0,
+    "returnedCount": 0,
+    "failedCount": 1,
+    "notAppliedCount": 0,
+    "cursorTerminationMode": "OMITTED_CONFIRMED",
+    "errorCode": "DIRECTORY_ITEMS_PARTIALLY_FAILED"
+  }
+}

@@ -352,12 +352,68 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
 
     @Override
     @Transactional
+    public void markProfileFailed(
+            UUID runId,
+            UUID leaseToken,
+            String externalUserId,
+            String errorCode,
+            Duration leaseDuration
+    ) {
+        Instant now = clock.instant();
+        int updated = jdbcClient.sql("""
+                        UPDATE yumpoo.directory_sync_item
+                        SET result = 'FAILED', error_code = :errorCode, updated_at = :now
+                        WHERE run_id = :runId
+                          AND external_user_id = :externalUserId
+                          AND action = 'PROVISION'
+                          AND result = 'PENDING'
+                        """)
+                .param("errorCode", errorCode)
+                .param("now", databaseTime(now))
+                .param("runId", runId)
+                .param("externalUserId", externalUserId)
+                .update();
+        if (updated != 1) {
+            throw new IllegalStateException("Directory profile failure did not match a pending item");
+        }
+        requireLease(renewRun(runId, leaseToken, leaseDuration, now, null));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveDirectoryMembers(UUID companyId) {
+        return jdbcClient.sql("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM yumpoo.external_identity external_identity
+                            JOIN yumpoo.identity_user identity_user
+                              ON identity_user.id = external_identity.user_id
+                             AND identity_user.company_id = external_identity.company_id
+                            WHERE external_identity.company_id = :companyId
+                              AND external_identity.provider = 'WECOM'
+                              AND external_identity.provider_employment_status = 'ACTIVE'
+                              AND identity_user.employment_status = 'ACTIVE'
+                        )
+                        """)
+                .param("companyId", companyId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    @Override
+    @Transactional
     public void beginApplying(UUID runId, UUID leaseToken, Duration leaseDuration) {
         Instant now = clock.instant();
         Integer incomplete = jdbcClient.sql("""
                         SELECT count(*)
-                        FROM yumpoo.directory_sync_staging_member
-                        WHERE run_id = :runId AND profile_hash IS NULL
+                        FROM yumpoo.directory_sync_item item
+                        JOIN yumpoo.directory_sync_staging_member staging
+                          ON staging.run_id = item.run_id
+                         AND staging.external_user_id = item.external_user_id
+                        WHERE item.run_id = :runId
+                          AND item.action = 'PROVISION'
+                          AND item.result = 'PENDING'
+                          AND staging.profile_hash IS NULL
                         """)
                 .param("runId", runId)
                 .query(Integer.class)
@@ -383,12 +439,23 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
     public List<WeComMemberProfile> stagedProfiles(UUID runId, UUID leaseToken) {
         assertLease(runId, leaseToken);
         return jdbcClient.sql("""
-                        SELECT external_user_id, display_name,
-                               email_state, email, mobile_state, mobile,
-                               department_summary, profile_hash
-                        FROM yumpoo.directory_sync_staging_member
-                        WHERE run_id = :runId AND profile_hash IS NOT NULL
-                        ORDER BY external_user_id
+                        SELECT staging.external_user_id AS external_user_id,
+                               staging.display_name,
+                               staging.email_state,
+                               staging.email,
+                               staging.mobile_state,
+                               staging.mobile,
+                               staging.department_summary,
+                               staging.profile_hash
+                        FROM yumpoo.directory_sync_staging_member staging
+                        JOIN yumpoo.directory_sync_item item
+                          ON item.run_id = staging.run_id
+                         AND item.external_user_id = staging.external_user_id
+                        WHERE staging.run_id = :runId
+                          AND staging.profile_hash IS NOT NULL
+                          AND item.action = 'PROVISION'
+                          AND item.result = 'PENDING'
+                        ORDER BY staging.external_user_id
                         """)
                 .param("runId", runId)
                 .query((resultSet, rowNumber) -> new WeComMemberProfile(
@@ -403,19 +470,32 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public boolean hasItemFailures(UUID runId, UUID leaseToken) {
+        assertLease(runId, leaseToken);
+        return jdbcClient.sql("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM yumpoo.directory_sync_item
+                            WHERE run_id = :runId AND result = 'FAILED'
+                        )
+                        """)
+                .param("runId", runId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void markApplied(
             UUID runId,
             UUID leaseToken,
             WeComMemberProfile profile,
             DirectoryMemberProvisioningResult result,
+            EventActor actor,
             Duration leaseDuration
     ) {
-        DirectorySyncItemResult outcome = result.created()
-                ? DirectorySyncItemResult.CREATED
-                : result.profileChanged()
-                        ? DirectorySyncItemResult.UPDATED
-                        : DirectorySyncItemResult.UNCHANGED;
+        DirectorySyncItemResult outcome = DirectorySyncItemResult.valueOf(result.outcome().name());
         Instant now = clock.instant();
         int updated = jdbcClient.sql("""
                         UPDATE yumpoo.directory_sync_item
@@ -437,18 +517,31 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
             throw new IllegalStateException("Directory sync item outcome was not pending");
         }
         requireLease(renewRun(runId, leaseToken, leaseDuration, now, null));
+        if (outcome == DirectorySyncItemResult.RETURNED) {
+            publishEmployment(
+                    "identity.user_employment_returned",
+                    result.userId(),
+                    result.rowVersion(),
+                    result.authorizationVersion(),
+                    runId,
+                    "LEFT",
+                    "ACTIVE",
+                    "DIRECTORY_MEMBER_REAPPEARED",
+                    actor
+            );
+        }
     }
 
     @Override
     @Transactional
-    public DirectorySyncRunSnapshot failDuringApply(
+    public void markApplyFailed(
             UUID runId,
             UUID leaseToken,
             String externalUserId,
-            EventActor actor
+            Duration leaseDuration
     ) {
         Instant now = clock.instant();
-        jdbcClient.sql("""
+        int updated = jdbcClient.sql("""
                         UPDATE yumpoo.directory_sync_item
                         SET result = 'FAILED', error_code = 'DIRECTORY_APPLY_FAILED', updated_at = :now
                         WHERE run_id = :runId
@@ -459,17 +552,10 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                 .param("runId", runId)
                 .param("externalUserId", externalUserId)
                 .update();
-        markPendingNotApplied(runId, now);
-        DirectorySyncRunSnapshot failed = finishFailure(
-                runId,
-                leaseToken,
-                "DIRECTORY_APPLY_FAILED",
-                "A member write failed and the remaining members were not applied",
-                actor,
-                now
-        );
-        publish("identity.directory_sync_failed", failed, actor);
-        return failed;
+        if (updated != 1) {
+            throw new IllegalStateException("Directory apply failure did not match a pending item");
+        }
+        requireLease(renewRun(runId, leaseToken, leaseDuration, now, null));
     }
 
     @Override
@@ -497,12 +583,85 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
 
     @Override
     @Transactional
-    public DirectorySyncRunSnapshot complete(UUID runId, UUID leaseToken, EventActor actor) {
+    public DirectorySyncRunSnapshot completePartial(
+            UUID runId,
+            UUID leaseToken,
+            EventActor actor
+    ) {
         Instant now = clock.instant();
         assertLease(runId, leaseToken);
         ItemCounts counts = itemCounts(runId);
         DirectorySyncRunSnapshot current = find(runId);
-        int processed = counts.created + counts.updated + counts.unchanged;
+        int finalized = counts.created + counts.updated + counts.unchanged
+                + counts.returned + counts.failed;
+        if (!current.scanComplete()
+                || counts.failed == 0
+                || counts.notApplied != 0
+                || finalized != current.counts().discovered()) {
+            throw new DirectorySyncException(
+                    "DIRECTORY_PARTIAL_FINALIZATION_INVALID",
+                    "The partial directory outcomes did not match the confirmed snapshot"
+            );
+        }
+        deleteStaging(runId);
+        int updated = jdbcClient.sql("""
+                        UPDATE yumpoo.directory_sync_run
+                        SET phase = 'COMPLETED', status = 'PARTIALLY_SUCCEEDED',
+                            lease_token = NULL, lease_until = NULL, provider_cursor = NULL,
+                            staged_count = :stagedCount,
+                            created_count = :createdCount,
+                            updated_count = :updatedCount,
+                            unchanged_count = :unchangedCount,
+                            left_count = 0,
+                            returned_count = :returnedCount,
+                            failed_count = :failedCount,
+                            not_applied_count = 0,
+                            error_code = 'DIRECTORY_ITEMS_PARTIALLY_FAILED',
+                            error_summary = 'One or more directory members could not be synchronized',
+                            finished_at = :now,
+                            updated_at = :now,
+                            row_version = row_version + 1
+                        WHERE id = :runId
+                          AND status = 'RUNNING'
+                          AND lease_token = :leaseToken
+                          AND lease_until >= :now
+                        """)
+                .param("stagedCount", current.counts().staged())
+                .param("createdCount", counts.created)
+                .param("updatedCount", counts.updated)
+                .param("unchangedCount", counts.unchanged)
+                .param("returnedCount", counts.returned)
+                .param("failedCount", counts.failed)
+                .param("now", databaseTime(now))
+                .param("runId", runId)
+                .param("leaseToken", leaseToken)
+                .update();
+        requireLease(updated);
+        DirectorySyncRunSnapshot partial = find(runId);
+        publish("identity.directory_sync_completed", partial, actor);
+        return partial;
+    }
+
+    @Override
+    @Transactional
+    public DirectorySyncRunSnapshot complete(UUID runId, UUID leaseToken, EventActor actor) {
+        Instant now = clock.instant();
+        assertLease(runId, leaseToken);
+        requireLease(jdbcClient.sql("""
+                        UPDATE yumpoo.directory_sync_run
+                        SET phase = 'FINALIZING', updated_at = :now, row_version = row_version + 1
+                        WHERE id = :runId
+                          AND status = 'RUNNING'
+                          AND lease_token = :leaseToken
+                          AND lease_until >= :now
+                        """)
+                .param("now", databaseTime(now))
+                .param("runId", runId)
+                .param("leaseToken", leaseToken)
+                .update());
+        ItemCounts counts = itemCounts(runId);
+        DirectorySyncRunSnapshot current = find(runId);
+        int processed = counts.created + counts.updated + counts.unchanged + counts.returned;
         if (!current.scanComplete()
                 || counts.failed != 0
                 || counts.notApplied != 0
@@ -512,6 +671,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                     "The directory item outcomes did not match the confirmed snapshot"
             );
         }
+        reconcileMissingMembers(runId, current.companyId(), actor, now);
+        counts = itemCounts(runId);
         deleteStaging(runId);
         int updated = jdbcClient.sql("""
                         UPDATE yumpoo.directory_sync_run
@@ -521,6 +682,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                             created_count = :createdCount,
                             updated_count = :updatedCount,
                             unchanged_count = :unchangedCount,
+                            left_count = :leftCount,
+                            returned_count = :returnedCount,
                             failed_count = 0,
                             not_applied_count = 0,
                             finished_at = :now,
@@ -535,6 +698,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                 .param("createdCount", counts.created)
                 .param("updatedCount", counts.updated)
                 .param("unchangedCount", counts.unchanged)
+                .param("leftCount", counts.left)
+                .param("returnedCount", counts.returned)
                 .param("now", databaseTime(now))
                 .param("runId", runId)
                 .param("leaseToken", leaseToken)
@@ -543,6 +708,121 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
         DirectorySyncRunSnapshot completed = find(runId);
         publish("identity.directory_sync_completed", completed, actor);
         return completed;
+    }
+
+    private void reconcileMissingMembers(
+            UUID runId,
+            UUID companyId,
+            EventActor actor,
+            Instant now
+    ) {
+        List<MissingMember> missingMembers = jdbcClient.sql("""
+                        SELECT identity_user.id AS user_id,
+                               identity_user.row_version,
+                               external_identity.external_user_id,
+                               external_identity.raw_profile_hash
+                        FROM yumpoo.external_identity external_identity
+                        JOIN yumpoo.identity_user identity_user
+                          ON identity_user.id = external_identity.user_id
+                         AND identity_user.company_id = external_identity.company_id
+                        WHERE external_identity.company_id = :companyId
+                          AND external_identity.provider = 'WECOM'
+                          AND external_identity.provider_employment_status = 'ACTIVE'
+                          AND identity_user.employment_status = 'ACTIVE'
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM yumpoo.directory_sync_item item
+                              WHERE item.run_id = :runId
+                                AND item.action = 'PROVISION'
+                                AND item.external_user_id = external_identity.external_user_id
+                          )
+                        ORDER BY external_identity.external_user_id
+                        FOR UPDATE OF identity_user, external_identity
+                        """)
+                .param("companyId", companyId)
+                .param("runId", runId)
+                .query((resultSet, rowNumber) -> new MissingMember(
+                        resultSet.getObject("user_id", UUID.class),
+                        resultSet.getLong("row_version"),
+                        resultSet.getString("external_user_id"),
+                        resultSet.getString("raw_profile_hash")
+                ))
+                .list();
+        OffsetDateTime databaseNow = databaseTime(now);
+        for (MissingMember missing : missingMembers) {
+            EmploymentVersion version = jdbcClient.sql("""
+                            UPDATE yumpoo.identity_user
+                            SET employment_status = 'LEFT',
+                                left_at = :now,
+                                left_reason = 'DIRECTORY_SNAPSHOT_MISSING',
+                                authorization_version = authorization_version + 1,
+                                row_version = row_version + 1,
+                                updated_at = :now
+                            WHERE id = :userId
+                              AND company_id = :companyId
+                              AND employment_status = 'ACTIVE'
+                              AND row_version = :rowVersion
+                            RETURNING row_version, authorization_version
+                            """)
+                    .param("now", databaseNow)
+                    .param("userId", missing.userId())
+                    .param("companyId", companyId)
+                    .param("rowVersion", missing.rowVersion())
+                    .query((resultSet, rowNumber) -> new EmploymentVersion(
+                            resultSet.getLong("row_version"),
+                            resultSet.getLong("authorization_version")
+                    ))
+                    .optional()
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Directory reconciliation lost the User version"
+                    ));
+            int identityUpdated = jdbcClient.sql("""
+                            UPDATE yumpoo.external_identity
+                            SET provider_employment_status = 'LEFT', updated_at = :now
+                            WHERE company_id = :companyId
+                              AND user_id = :userId
+                              AND provider = 'WECOM'
+                              AND external_user_id = :externalUserId
+                              AND provider_employment_status = 'ACTIVE'
+                            """)
+                    .param("now", databaseNow)
+                    .param("companyId", companyId)
+                    .param("userId", missing.userId())
+                    .param("externalUserId", missing.externalUserId())
+                    .update();
+            if (identityUpdated != 1) {
+                throw new IllegalStateException("Directory reconciliation lost the external identity");
+            }
+            int itemInserted = jdbcClient.sql("""
+                            INSERT INTO yumpoo.directory_sync_item (
+                                run_id, external_user_id, profile_hash, user_id,
+                                action, result, created_at, updated_at
+                            ) VALUES (
+                                :runId, :externalUserId, :profileHash, :userId,
+                                'MARK_LEFT', 'LEFT', :now, :now
+                            )
+                            """)
+                    .param("runId", runId)
+                    .param("externalUserId", missing.externalUserId())
+                    .param("profileHash", missing.profileHash())
+                    .param("userId", missing.userId())
+                    .param("now", databaseNow)
+                    .update();
+            if (itemInserted != 1) {
+                throw new IllegalStateException("Directory reconciliation did not record LEFT");
+            }
+            publishEmployment(
+                    "identity.user_employment_left",
+                    missing.userId(),
+                    version.rowVersion(),
+                    version.authorizationVersion(),
+                    runId,
+                    "ACTIVE",
+                    "LEFT",
+                    "DIRECTORY_SNAPSHOT_MISSING",
+                    actor
+            );
+        }
     }
 
     @Override
@@ -649,6 +929,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                             created_count = :createdCount,
                             updated_count = :updatedCount,
                             unchanged_count = :unchangedCount,
+                            left_count = :leftCount,
+                            returned_count = :returnedCount,
                             failed_count = :failedCount,
                             not_applied_count = :notAppliedCount,
                             error_code = :errorCode,
@@ -663,6 +945,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                 .param("createdCount", counts.created)
                 .param("updatedCount", counts.updated)
                 .param("unchangedCount", counts.unchanged)
+                .param("leftCount", counts.left)
+                .param("returnedCount", counts.returned)
                 .param("failedCount", counts.failed)
                 .param("notAppliedCount", counts.notApplied)
                 .param("errorCode", errorCode)
@@ -698,6 +982,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                             count(*) FILTER (WHERE result = 'CREATED') AS created_count,
                             count(*) FILTER (WHERE result = 'UPDATED') AS updated_count,
                             count(*) FILTER (WHERE result = 'UNCHANGED') AS unchanged_count,
+                            count(*) FILTER (WHERE result = 'LEFT') AS left_count,
+                            count(*) FILTER (WHERE result = 'RETURNED') AS returned_count,
                             count(*) FILTER (WHERE result = 'FAILED') AS failed_count,
                             count(*) FILTER (WHERE result = 'NOT_APPLIED') AS not_applied_count
                         FROM yumpoo.directory_sync_item
@@ -708,6 +994,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                         resultSet.getInt("created_count"),
                         resultSet.getInt("updated_count"),
                         resultSet.getInt("unchanged_count"),
+                        resultSet.getInt("left_count"),
+                        resultSet.getInt("returned_count"),
                         resultSet.getInt("failed_count"),
                         resultSet.getInt("not_applied_count")
                 ))
@@ -725,6 +1013,11 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
         payload.put("createdCount", run.counts().created());
         payload.put("updatedCount", run.counts().updated());
         payload.put("unchangedCount", run.counts().unchanged());
+        boolean completed = "identity.directory_sync_completed".equals(eventType);
+        if (completed) {
+            payload.put("leftCount", run.counts().left());
+            payload.put("returnedCount", run.counts().returned());
+        }
         payload.put("failedCount", run.counts().failed());
         payload.put("notAppliedCount", run.counts().notApplied());
         payload.put(
@@ -734,10 +1027,41 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
         payload.put("errorCode", run.errorCode());
         eventPort.append(new EventDraft(
                 eventType,
-                1,
+                completed ? 2 : 1,
                 "DirectorySyncRun",
                 run.runId(),
                 run.rowVersion(),
+                run.companyId(),
+                actor,
+                objectMapper.valueToTree(payload)
+        ));
+    }
+
+    private void publishEmployment(
+            String eventType,
+            UUID userId,
+            long rowVersion,
+            long authorizationVersion,
+            UUID runId,
+            String fromStatus,
+            String toStatus,
+            String reasonCode,
+            EventActor actor
+    ) {
+        DirectorySyncRunSnapshot run = find(runId);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("userId", userId);
+        payload.put("runId", runId);
+        payload.put("fromStatus", fromStatus);
+        payload.put("toStatus", toStatus);
+        payload.put("reasonCode", reasonCode);
+        payload.put("authorizationVersion", authorizationVersion);
+        eventPort.append(new EventDraft(
+                eventType,
+                1,
+                "User",
+                userId,
+                rowVersion,
                 run.companyId(),
                 actor,
                 objectMapper.valueToTree(payload)
@@ -822,8 +1146,21 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
             int created,
             int updated,
             int unchanged,
+            int left,
+            int returned,
             int failed,
             int notApplied
     ) {
+    }
+
+    private record MissingMember(
+            UUID userId,
+            long rowVersion,
+            String externalUserId,
+            String profileHash
+    ) {
+    }
+
+    private record EmploymentVersion(long rowVersion, long authorizationVersion) {
     }
 }

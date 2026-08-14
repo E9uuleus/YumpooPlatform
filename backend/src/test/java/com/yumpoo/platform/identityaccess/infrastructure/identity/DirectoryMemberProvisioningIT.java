@@ -1,6 +1,7 @@
 package com.yumpoo.platform.identityaccess.infrastructure.identity;
 
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningResult;
+import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningOutcome;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningService;
 import com.yumpoo.platform.identityaccess.application.directory.WeComMemberProfile;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
@@ -109,7 +110,7 @@ class DirectoryMemberProvisioningIT {
     }
 
     @Test
-    void refreshPreservesEmploymentAndAccountStatusesAndTheirHistory() {
+    void returningMemberRestoresEmploymentButPreservesAccountDisableAndLeftHistory() {
         DirectoryMemberProvisioningResult created = service.provisionOrRefresh(profile(
                 "member-status",
                 "Before",
@@ -131,6 +132,14 @@ class DirectoryMemberProvisioningIT {
                         """)
                 .param("id", created.userId())
                 .update();
+        jdbcClient.sql("""
+                        UPDATE yumpoo.external_identity
+                        SET provider_employment_status = 'LEFT',
+                            updated_at = transaction_timestamp()
+                        WHERE user_id = :id
+                        """)
+                .param("id", created.userId())
+                .update();
 
         DirectoryMemberProvisioningResult refreshed = service.provisionOrRefresh(profile(
                 "member-status",
@@ -139,18 +148,25 @@ class DirectoryMemberProvisioningIT {
                 "b"
         ));
 
-        assertThat(refreshed.employmentStatus()).isEqualTo(EmploymentStatus.LEFT);
+        assertThat(refreshed.employmentStatus()).isEqualTo(EmploymentStatus.ACTIVE);
         assertThat(refreshed.accountStatus()).isEqualTo(AccountStatus.DISABLED);
+        assertThat(refreshed.outcome()).isEqualTo(DirectoryMemberProvisioningOutcome.RETURNED);
+        assertThat(refreshed.authorizationVersion()).isOne();
         assertThat(jdbcClient.sql("""
-                        SELECT employment_status || '|' || account_status || '|'
-                            || left_reason || '|' || account_disabled_reason
-                        FROM yumpoo.identity_user
-                        WHERE id = :id
+                        SELECT identity_user.employment_status || '|'
+                            || external_identity.provider_employment_status || '|'
+                            || identity_user.account_status || '|'
+                            || identity_user.left_reason || '|'
+                            || identity_user.account_disabled_reason
+                        FROM yumpoo.identity_user identity_user
+                        JOIN yumpoo.external_identity external_identity
+                          ON external_identity.user_id = identity_user.id
+                        WHERE identity_user.id = :id
                         """)
                 .param("id", created.userId())
                 .query(String.class)
                 .single()).isEqualTo(
-                        "LEFT|DISABLED|DIRECTORY_CONFIRMED|SECURITY_REVIEW"
+                        "ACTIVE|ACTIVE|DISABLED|DIRECTORY_CONFIRMED|SECURITY_REVIEW"
                 );
     }
 

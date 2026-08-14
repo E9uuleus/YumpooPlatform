@@ -90,6 +90,14 @@ public class DirectorySyncService implements DirectorySyncUseCase {
                 )
         );
         repository.confirmScan(runId, leaseToken, scan, settings.leaseDuration());
+        if (scan.externalUserIds().isEmpty() && repository.hasActiveDirectoryMembers(
+                companyQuery.current().companyId()
+        )) {
+            throw new DirectorySyncException(
+                    "DIRECTORY_EMPTY_SNAPSHOT_REJECTED",
+                    "An empty provider snapshot was rejected while active members exist"
+            );
+        }
 
         Map<Long, String> departments;
         try {
@@ -104,27 +112,43 @@ public class DirectorySyncService implements DirectorySyncUseCase {
         }
 
         for (String externalUserId : scan.externalUserIds()) {
-            WeComRawMemberProfile raw;
+            WeComMemberProfile profile;
             try {
-                raw = profileGateway.fetchMemberProfile(externalUserId);
+                WeComRawMemberProfile raw = profileGateway.fetchMemberProfile(externalUserId);
+                if (!externalUserId.equals(raw.externalUserId())) {
+                    throw new DirectorySyncException(
+                            "DIRECTORY_PROFILE_ID_MISMATCH",
+                            "A provider profile did not match the requested member identifier",
+                            DirectorySyncFailureScope.ITEM_ISOLATABLE
+                    );
+                }
+                profile = DirectoryProfileMapper.map(raw, departments);
             } catch (DirectorySyncException exception) {
-                throw exception;
+                if (exception.scope() == DirectorySyncFailureScope.RUN_FATAL) {
+                    throw exception;
+                }
+                repository.markProfileFailed(
+                        runId,
+                        leaseToken,
+                        externalUserId,
+                        exception.errorCode(),
+                        settings.leaseDuration()
+                );
+                continue;
             } catch (RuntimeException exception) {
-                throw new DirectorySyncException(
-                        "DIRECTORY_PROFILE_PROVIDER_FAILED",
-                        "A provider member profile could not be read"
+                repository.markProfileFailed(
+                        runId,
+                        leaseToken,
+                        externalUserId,
+                        "DIRECTORY_PROFILE_MAPPING_FAILED",
+                        settings.leaseDuration()
                 );
-            }
-            if (!externalUserId.equals(raw.externalUserId())) {
-                throw new DirectorySyncException(
-                        "DIRECTORY_PROFILE_ID_MISMATCH",
-                        "A provider profile did not match the requested member identifier"
-                );
+                continue;
             }
             repository.stageProfile(
                     runId,
                     leaseToken,
-                    DirectoryProfileMapper.map(raw, departments),
+                    profile,
                     settings.leaseDuration()
             );
         }
@@ -136,18 +160,22 @@ public class DirectorySyncService implements DirectorySyncUseCase {
                         runId,
                         leaseToken,
                         profile,
+                        command.actor(),
                         settings.leaseDuration()
                 );
             } catch (DirectorySyncLeaseLostException exception) {
                 throw exception;
             } catch (RuntimeException exception) {
-                return repository.failDuringApply(
+                repository.markApplyFailed(
                         runId,
                         leaseToken,
                         profile.externalUserId(),
-                        command.actor()
+                        settings.leaseDuration()
                 );
             }
+        }
+        if (repository.hasItemFailures(runId, leaseToken)) {
+            return repository.completePartial(runId, leaseToken, command.actor());
         }
         return repository.complete(runId, leaseToken, command.actor());
     }

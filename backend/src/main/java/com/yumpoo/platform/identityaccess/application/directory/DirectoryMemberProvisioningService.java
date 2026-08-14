@@ -1,6 +1,7 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
 import com.yumpoo.platform.identityaccess.domain.identity.ExternalIdentityProvider;
+import com.yumpoo.platform.identityaccess.domain.identity.EmploymentStatus;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,7 +48,10 @@ public class DirectoryMemberProvisioningService {
                         profile.externalUserId()
                 )
                 .map(current -> refresh(current, profile, now))
-                .orElseGet(() -> created(repository.create(companyId, profile, now)));
+                .orElseGet(() -> result(
+                        repository.create(companyId, profile, now),
+                        DirectoryMemberProvisioningOutcome.CREATED
+                ));
     }
 
     private DirectoryMemberProvisioningResult refresh(
@@ -73,8 +77,15 @@ public class DirectoryMemberProvisioningService {
                         profile.departmentSummary()
                 )
                 || !current.externalIdentity().rawProfileHash().equals(profile.rawProfileHash());
+        boolean returned = current.user().employmentStatus() == EmploymentStatus.LEFT
+                || current.externalIdentity().providerEmploymentStatus() == EmploymentStatus.LEFT;
         DirectoryMemberBinding refreshed = repository.refresh(current, effectiveProfile, now);
-        return result(refreshed, false, profileChanged);
+        DirectoryMemberProvisioningOutcome outcome = returned
+                ? DirectoryMemberProvisioningOutcome.RETURNED
+                : profileChanged
+                        ? DirectoryMemberProvisioningOutcome.UPDATED
+                        : DirectoryMemberProvisioningOutcome.UNCHANGED;
+        return result(refreshed, outcome);
     }
 
     private static DirectoryOptionalField resolved(String value) {
@@ -83,23 +94,18 @@ public class DirectoryMemberProvisioningService {
                 : DirectoryOptionalField.present(value);
     }
 
-    private static DirectoryMemberProvisioningResult created(DirectoryMemberBinding binding) {
-        return result(binding, true, true);
-    }
-
     private static DirectoryMemberProvisioningResult result(
             DirectoryMemberBinding binding,
-            boolean created,
-            boolean profileChanged
+            DirectoryMemberProvisioningOutcome outcome
     ) {
         return new DirectoryMemberProvisioningResult(
                 binding.user().id(),
                 binding.externalIdentity().id(),
                 binding.user().employmentStatus(),
                 binding.user().accountStatus(),
+                binding.user().authorizationVersion(),
                 binding.user().rowVersion(),
-                created,
-                profileChanged
+                outcome
         );
     }
 }

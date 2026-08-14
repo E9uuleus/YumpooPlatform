@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.user-employment-left-v1.schema.json",
+  "title": "User employment left",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.user_employment_left" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "User" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["userId", "runId", "fromStatus", "toStatus", "reasonCode", "authorizationVersion"],
+          "properties": {
+            "userId": { "type": "string", "format": "uuid" },
+            "runId": { "type": "string", "format": "uuid" },
+            "fromStatus": { "const": "ACTIVE" },
+            "toStatus": { "const": "LEFT" },
+            "reasonCode": { "const": "DIRECTORY_SNAPSHOT_MISSING" },
+            "authorizationVersion": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    }
+  ]
+}

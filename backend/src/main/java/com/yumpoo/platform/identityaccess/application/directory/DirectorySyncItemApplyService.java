@@ -1,5 +1,6 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
+import com.yumpoo.platform.foundation.application.event.EventActor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,9 +31,10 @@ public class DirectorySyncItemApplyService {
             UUID runId,
             UUID leaseToken,
             WeComMemberProfile profile,
+            EventActor actor,
             Duration leaseDuration
     ) {
         DirectoryMemberProvisioningResult result = provisioningService.provisionOrRefresh(profile);
-        repository.markApplied(runId, leaseToken, profile, result, leaseDuration);
+        repository.markApplied(runId, leaseToken, profile, result, actor, leaseDuration);
     }
 }

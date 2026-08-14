@@ -1,6 +1,7 @@
 package com.yumpoo.platform.identityaccess.infrastructure.wecom;
 
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
+import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncFailureScope;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncException;
 import com.yumpoo.platform.identityaccess.application.directory.WeComDirectoryProfileGateway;
 import com.yumpoo.platform.identityaccess.application.directory.WeComRawMemberProfile;
@@ -57,21 +58,21 @@ public final class RestClientWeComDirectoryProfileGateway
         Map<String, Object> response = authorizedGet(LIST_DEPARTMENTS_PATH, null);
         Object value = response.get("department");
         if (!(value instanceof List<?> departments)) {
-            throw malformed("DIRECTORY_DEPARTMENT_RESPONSE_MALFORMED");
+            throw malformed("DIRECTORY_DEPARTMENT_RESPONSE_MALFORMED", DirectorySyncFailureScope.RUN_FATAL);
         }
         Map<Long, String> result = new LinkedHashMap<>();
         for (Object raw : departments) {
             if (!(raw instanceof Map<?, ?> department)) {
-                throw malformed("DIRECTORY_DEPARTMENT_RESPONSE_MALFORMED");
+                throw malformed("DIRECTORY_DEPARTMENT_RESPONSE_MALFORMED", DirectorySyncFailureScope.RUN_FATAL);
             }
             Long id = longValue(department.get("id"));
             String name = stringValue(department.get("name"));
             if (id == null || id <= 0 || name == null || name.isBlank()) {
-                throw malformed("DIRECTORY_DEPARTMENT_RESPONSE_MALFORMED");
+                throw malformed("DIRECTORY_DEPARTMENT_RESPONSE_MALFORMED", DirectorySyncFailureScope.RUN_FATAL);
             }
             String previous = result.putIfAbsent(id, name.trim());
             if (previous != null && !previous.equals(name.trim())) {
-                throw malformed("DIRECTORY_DEPARTMENT_RESPONSE_MALFORMED");
+                throw malformed("DIRECTORY_DEPARTMENT_RESPONSE_MALFORMED", DirectorySyncFailureScope.RUN_FATAL);
             }
         }
         if (result.isEmpty()) {
@@ -94,21 +95,23 @@ public final class RestClientWeComDirectoryProfileGateway
         if (returnedId == null || displayName == null || displayName.isBlank()) {
             throw new DirectorySyncException(
                     "DIRECTORY_PROFILE_NAME_UNAVAILABLE",
-                    "The member profile application could not read a required display name"
+                    "The member profile application could not read a required display name",
+                    DirectorySyncFailureScope.ITEM_ISOLATABLE
             );
         }
         Object departmentValue = response.get("department");
         if (!(departmentValue instanceof List<?> rawDepartmentIds) || rawDepartmentIds.isEmpty()) {
             throw new DirectorySyncException(
                     "DIRECTORY_PROFILE_DEPARTMENT_UNAVAILABLE",
-                    "The member profile application could not read a required department"
+                    "The member profile application could not read a required department",
+                    DirectorySyncFailureScope.ITEM_ISOLATABLE
             );
         }
         LinkedHashSet<Long> departmentIds = new LinkedHashSet<>();
         for (Object rawDepartmentId : rawDepartmentIds) {
             Long departmentId = longValue(rawDepartmentId);
             if (departmentId == null || departmentId <= 0) {
-                throw malformed("DIRECTORY_PROFILE_RESPONSE_MALFORMED");
+                throw malformed("DIRECTORY_PROFILE_RESPONSE_MALFORMED", DirectorySyncFailureScope.ITEM_ISOLATABLE);
             }
             departmentIds.add(departmentId);
         }
@@ -135,7 +138,7 @@ public final class RestClientWeComDirectoryProfileGateway
             }
         }
         if (errorCode != 0) {
-            throw providerFailure(errorCode);
+            throw providerFailure(errorCode, memberId != null);
         }
         return response;
     }
@@ -165,13 +168,18 @@ public final class RestClientWeComDirectoryProfileGateway
                     .retrieve()
                     .body(JSON_OBJECT_TYPE);
             if (response == null) {
-                throw malformed("DIRECTORY_PROFILE_RESPONSE_MALFORMED");
+                throw malformed(
+                        "DIRECTORY_PROFILE_RESPONSE_MALFORMED",
+                        memberId == null
+                                ? DirectorySyncFailureScope.RUN_FATAL
+                                : DirectorySyncFailureScope.ITEM_ISOLATABLE
+                );
             }
             return response;
         } catch (DirectorySyncException exception) {
             throw exception;
         } catch (HttpMessageConversionException exception) {
-            throw malformed("DIRECTORY_PROFILE_RESPONSE_MALFORMED");
+            throw malformed("DIRECTORY_PROFILE_RESPONSE_MALFORMED", DirectorySyncFailureScope.ITEM_ISOLATABLE);
         } catch (RestClientException | IllegalArgumentException exception) {
             // Cause 可能含 token、userid 或响应正文，禁止保留。
             throw new DirectorySyncException(
@@ -190,7 +198,7 @@ public final class RestClientWeComDirectoryProfileGateway
         }
         Object value = response.get(key);
         if (!(value instanceof String stringValue)) {
-            throw malformed("DIRECTORY_PROFILE_RESPONSE_MALFORMED");
+            throw malformed("DIRECTORY_PROFILE_RESPONSE_MALFORMED", DirectorySyncFailureScope.ITEM_ISOLATABLE);
         }
         return stringValue.isBlank()
                 ? DirectoryOptionalField.clear()
@@ -200,12 +208,15 @@ public final class RestClientWeComDirectoryProfileGateway
     private static long requiredErrorCode(Map<String, Object> response) {
         Long value = longValue(response.get("errcode"));
         if (value == null) {
-            throw malformed("DIRECTORY_PROFILE_RESPONSE_MALFORMED");
+            throw malformed(
+                    "DIRECTORY_PROFILE_RESPONSE_MALFORMED",
+                    DirectorySyncFailureScope.RUN_FATAL
+            );
         }
         return value;
     }
 
-    private static DirectorySyncException providerFailure(long errorCode) {
+    private static DirectorySyncException providerFailure(long errorCode, boolean memberRequest) {
         String code = switch ((int) errorCode) {
             case -1 -> "DIRECTORY_PROFILE_SYSTEM_BUSY";
             case 40001 -> "DIRECTORY_PROFILE_INVALID_CREDENTIALS";
@@ -215,11 +226,32 @@ public final class RestClientWeComDirectoryProfileGateway
             case 60020 -> "DIRECTORY_PROFILE_UNTRUSTED_IP";
             default -> "DIRECTORY_PROFILE_PROVIDER_FAILED";
         };
-        return new DirectorySyncException(code, "The member profile provider rejected the request");
+        boolean sharedFailure = errorCode == -1
+                || errorCode == 40001
+                || errorCode == 40014
+                || errorCode == 42001
+                || errorCode == 45009
+                || errorCode == 48002
+                || errorCode == 60020;
+        DirectorySyncFailureScope scope = memberRequest && !sharedFailure
+                ? DirectorySyncFailureScope.ITEM_ISOLATABLE
+                : DirectorySyncFailureScope.RUN_FATAL;
+        return new DirectorySyncException(
+                code,
+                "The member profile provider rejected the request",
+                scope
+        );
     }
 
-    private static DirectorySyncException malformed(String code) {
-        return new DirectorySyncException(code, "The member profile provider returned malformed data");
+    private static DirectorySyncException malformed(
+            String code,
+            DirectorySyncFailureScope scope
+    ) {
+        return new DirectorySyncException(
+                code,
+                "The member profile provider returned malformed data",
+                scope
+        );
     }
 
     private static Long longValue(Object value) {
