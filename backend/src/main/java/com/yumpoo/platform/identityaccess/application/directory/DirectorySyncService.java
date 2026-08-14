@@ -12,7 +12,7 @@ import java.util.UUID;
 
 @Service
 @ConditionalOnProperty(prefix = "yumpoo.wecom.directory", name = "enabled", havingValue = "true")
-public class DirectorySyncService implements DirectorySyncUseCase {
+public class DirectorySyncService implements DirectorySyncUseCase, DirectorySyncAdministrationUseCase {
 
     private final CompanyConfigurationQuery companyQuery;
     private final DirectorySyncRepository repository;
@@ -42,6 +42,11 @@ public class DirectorySyncService implements DirectorySyncUseCase {
 
     @Override
     public DirectorySyncRunSnapshot execute(DirectorySyncCommand command) {
+        return executeWithDisposition(command).snapshot();
+    }
+
+    @Override
+    public DirectorySyncExecutionResult executeWithDisposition(DirectorySyncCommand command) {
         Objects.requireNonNull(command, "command must not be null");
         try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
                 RequestCorrelation.root(command.requestId())
@@ -49,18 +54,18 @@ public class DirectorySyncService implements DirectorySyncUseCase {
             UUID companyId = companyQuery.current().companyId();
             DirectorySyncClaim claim = repository.claim(companyId, command, settings.leaseDuration());
             if (!claim.executionOwner()) {
-                return claim.snapshot();
+                return new DirectorySyncExecutionResult(claim.snapshot(), claim.disposition());
             }
             UUID runId = claim.snapshot().runId();
             UUID leaseToken = claim.leaseToken();
             try {
-                return executeOwned(command, runId, leaseToken);
+                return created(executeOwned(command, runId, leaseToken));
             } catch (DirectorySyncLeaseLostException exception) {
-                return repository.find(runId);
+                return created(repository.find(runId));
             } catch (DirectorySyncException exception) {
-                return safeFail(runId, leaseToken, exception, command);
+                return created(safeFail(runId, leaseToken, exception, command));
             } catch (RuntimeException exception) {
-                return safeFail(
+                return created(safeFail(
                         runId,
                         leaseToken,
                         new DirectorySyncException(
@@ -68,9 +73,13 @@ public class DirectorySyncService implements DirectorySyncUseCase {
                                 "The directory synchronization failed closed"
                         ),
                         command
-                );
+                ));
             }
         }
+    }
+
+    private static DirectorySyncExecutionResult created(DirectorySyncRunSnapshot snapshot) {
+        return new DirectorySyncExecutionResult(snapshot, DirectorySyncClaimDisposition.NEW);
     }
 
     private DirectorySyncRunSnapshot executeOwned(

@@ -20,6 +20,7 @@ import java.time.Clock;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({
         WebOAuthProperties.class,
+        DirectorySyncWeComProperties.class,
         ControlledAuthenticationProperties.class
 })
 public class WebAuthenticationConfiguration {

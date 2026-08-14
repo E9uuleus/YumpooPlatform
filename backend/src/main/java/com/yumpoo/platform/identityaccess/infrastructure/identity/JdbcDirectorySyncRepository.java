@@ -8,6 +8,7 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberP
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryScanResult;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncClaim;
+import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncClaimDisposition;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncCommand;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncCounts;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncException;
@@ -110,7 +111,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
 
         Optional<DirectorySyncRunSnapshot> replay = findByTrigger(companyId, triggerHash);
         if (replay.isPresent()) {
-            return new DirectorySyncClaim(replay.orElseThrow(), null, false);
+            return new DirectorySyncClaim(
+                    replay.orElseThrow(), null, DirectorySyncClaimDisposition.REPLAY);
         }
 
         Instant now = clock.instant();
@@ -118,7 +120,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
         if (active.isPresent()) {
             ActiveRun current = active.orElseThrow();
             if (current.leaseUntil().isAfter(now)) {
-                return new DirectorySyncClaim(find(current.runId()), null, false);
+                return new DirectorySyncClaim(
+                        find(current.runId()), null, DirectorySyncClaimDisposition.ACTIVE_CONFLICT);
             }
             DirectorySyncRunSnapshot expired = finishFailure(
                     current.runId(),
@@ -165,17 +168,19 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
         if (inserted == null) {
             replay = findByTrigger(companyId, triggerHash);
             if (replay.isPresent()) {
-                return new DirectorySyncClaim(replay.orElseThrow(), null, false);
+                return new DirectorySyncClaim(
+                        replay.orElseThrow(), null, DirectorySyncClaimDisposition.REPLAY);
             }
             ActiveRun concurrent = activeForUpdate(companyId).orElseThrow(
                     () -> new IllegalStateException("Directory sync claim conflict had no owner")
             );
-            return new DirectorySyncClaim(find(concurrent.runId()), null, false);
+            return new DirectorySyncClaim(
+                    find(concurrent.runId()), null, DirectorySyncClaimDisposition.ACTIVE_CONFLICT);
         }
 
         DirectorySyncRunSnapshot started = find(runId);
         publish("identity.directory_sync_started", started, command.actor());
-        return new DirectorySyncClaim(started, leaseToken, true);
+        return new DirectorySyncClaim(started, leaseToken, DirectorySyncClaimDisposition.NEW);
     }
 
     @Override
