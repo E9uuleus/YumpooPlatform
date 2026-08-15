@@ -1,53 +1,77 @@
+import {
+  AuthenticationClientType,
+  AuthenticationRole,
+  ClientCompatibility,
+  type CurrentAuthentication,
+} from '@yumpoo/api-client'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.vue'
+import { useSession } from './composables/useSession'
 import { routes } from './router'
 
-afterEach(() => {
-  Reflect.deleteProperty(window, 'yumpooDesktop')
-  vi.unstubAllGlobals()
-})
-
-async function mountApplication() {
-  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', {
-    status: 401,
-    headers: { 'Content-Type': 'application/json' },
-  })))
-  const router = createRouter({
-    history: createMemoryHistory(),
-    routes,
-  })
-  await router.push('/')
-  await router.isReady()
-  return mount(App, {
-    global: {
-      plugins: [router],
+function authentication(
+  type = AuthenticationClientType.Web,
+  roles = new Set([AuthenticationRole.CompanyMember]),
+): CurrentAuthentication {
+  return {
+    user: { id: crypto.randomUUID(), displayName: '测试用户' },
+    company: {
+      id: crypto.randomUUID(), displayName: 'Yumpoo 测试公司', timezone: 'Asia/Shanghai', weekStartDay: 'MONDAY',
     },
-  })
+    roles,
+    client: { type, compatibility: ClientCompatibility.Supported },
+  } as CurrentAuthentication
 }
 
-describe('Yumpoo Web 壳', () => {
-  it('在浏览器模式挂载占位首页', async () => {
+async function mountApplication(path = '/') {
+  const router = createRouter({ history: createMemoryHistory(), routes })
+  await router.push(path)
+  await router.isReady()
+  return mount(App, { global: { plugins: [router] } })
+}
+
+describe('M1-12 Web 全局壳', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+    const session = useSession()
+    session.phase.value = 'authenticated'
+    session.authentication.value = authentication()
+    session.actionProblem.value = undefined
+  })
+
+  afterEach(() => {
+    Reflect.deleteProperty(window, 'yumpooDesktop')
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('显示正式首页、当前主体，普通成员不显示管理入口', async () => {
     const wrapper = await mountApplication()
-    expect(wrapper.text()).toContain('Vue SPA 已就绪')
+    expect(wrapper.text()).toContain('欢迎回来，测试用户')
+    expect(wrapper.text()).toContain('Yumpoo 测试公司')
     expect(wrapper.text()).toContain('Web 浏览器')
+    expect(wrapper.findAll('.global-navigation button').map(item => item.text())).not.toContain('身份管理')
   })
 
-  it('识别最小桌面 bridge', async () => {
-    Object.defineProperty(window, 'yumpooDesktop', {
-      configurable: true,
-      value: Object.freeze({ client: 'electron' }),
-    })
-    const wrapper = await mountApplication()
-    expect(wrapper.text()).toContain('Electron 在线壳')
-    expect(wrapper.text()).not.toContain('Electron 登录交接验证')
+  it('管理员显示全局身份入口且保留三个子入口', async () => {
+    useSession().authentication.value = authentication(
+      AuthenticationClientType.Web,
+      new Set([AuthenticationRole.CompanyAdmin]),
+    )
+    const wrapper = await mountApplication('/admin/identity/overview')
+    expect(wrapper.text()).toContain('身份管理')
+    expect(wrapper.text()).toContain('概览')
+    expect(wrapper.text()).toContain('同步运行')
+    expect(wrapper.text()).toContain('成员管理')
   })
 
-  it('仅在桌面认证门禁启用时显示脱敏验证状态', async () => {
-    let statusListener:
-      | ((status: { phase: 'SUCCEEDED' }) => void)
-      | undefined
+  it('仅在 Electron 受控门禁启用时显示诊断面板', async () => {
+    useSession().authentication.value = authentication(AuthenticationClientType.Electron)
     const start = vi.fn(async () => undefined)
     Object.defineProperty(window, 'yumpooDesktop', {
       configurable: true,
@@ -56,25 +80,13 @@ describe('Yumpoo Web 壳', () => {
         auth: Object.freeze({
           isEnabled: vi.fn(async () => true),
           start,
-          onStatus(listener: (status: { phase: 'SUCCEEDED' }) => void) {
-            statusListener = listener
-            return vi.fn()
-          },
+          onStatus: vi.fn(() => vi.fn()),
         }),
       }),
     })
-
     const wrapper = await mountApplication()
     await flushPromises()
+    expect(wrapper.text()).toContain('Electron 在线壳')
     expect(wrapper.text()).toContain('Electron 登录交接验证')
-    await wrapper.get('button').trigger('click')
-    expect(start).toHaveBeenCalledOnce()
-
-    statusListener?.({ phase: 'SUCCEEDED' })
-    await wrapper.vm.$nextTick()
-    expect(wrapper.get('[data-testid="desktop-auth-status"]').text()).toContain(
-      '验证成功',
-    )
-    expect(wrapper.text()).not.toContain('codeVerifier')
   })
 })

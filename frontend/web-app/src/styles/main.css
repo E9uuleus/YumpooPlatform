@@ -27,9 +27,59 @@ body {
   justify-content: space-between;
   height: auto;
   min-height: 88px;
-  padding: 20px clamp(24px, 5vw, 72px);
+  padding: 16px clamp(20px, 4vw, 48px);
   color: #ffffff;
   background: #12395b;
+}
+
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.mobile-nav-toggle {
+  display: none;
+}
+
+.app-body {
+  min-height: calc(100vh - 88px);
+}
+
+.app-aside {
+  padding: 28px 16px;
+  border-right: 1px solid #d8e0e7;
+  background: #fff;
+}
+
+.global-navigation {
+  display: grid;
+  gap: 6px;
+}
+
+.global-navigation button {
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 6px;
+  color: #314454;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.global-navigation button:hover,
+.global-navigation button:focus-visible {
+  background: #edf5fb;
+  outline: 2px solid #2b7eae;
+  outline-offset: 1px;
+}
+
+.global-navigation button.active {
+  color: #0f527c;
+  background: #dceef9;
+  font-weight: 650;
 }
 
 .app-header h1,
@@ -54,6 +104,30 @@ body {
   width: min(1240px, 100%);
   margin: 0 auto;
   padding: clamp(32px, 6vw, 72px) 24px;
+}
+
+.home-page h2,
+.welcome-banner p {
+  margin: 0;
+}
+
+.welcome-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.welcome-banner h2 {
+  margin: 4px 0 8px;
+  font-size: clamp(26px, 4vw, 38px);
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .header-actions,
@@ -162,6 +236,23 @@ body {
 }
 
 @media (max-width: 900px) {
+  .app-aside {
+    display: none;
+  }
+
+  .mobile-nav-toggle {
+    display: inline-flex;
+  }
+
+  .app-header {
+    min-height: 76px;
+  }
+
+  .header-actions .el-tag,
+  .current-user {
+    display: none;
+  }
+
   .overview-grid {
     grid-template-columns: 1fr;
   }
@@ -205,8 +296,34 @@ body {
 }
 
 @media (max-width: 640px) {
+  .app-header {
+    padding: 12px 14px;
+  }
+
+  .app-header h1 {
+    max-width: 130px;
+    overflow: hidden;
+    font-size: 17px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-kicker {
+    display: none;
+  }
+
+  .app-main {
+    padding: 24px 14px;
+  }
+
+  .welcome-banner,
   .desktop-auth-panel {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .home-grid,
+  .member-filters {
+    grid-template-columns: 1fr;
   }
 }

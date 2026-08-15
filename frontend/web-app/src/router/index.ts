@@ -1,45 +1,154 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { AuthenticationRole } from '@yumpoo/api-client'
+import { watch } from 'vue'
+import {
+  createRouter,
+  createWebHistory,
+  type RouteLocationNormalized,
+  type RouteRecordRaw,
+} from 'vue-router'
+import { beginAuthentication, consumeReturnPath } from '../auth/navigation'
+import AppShell from '../components/AppShell.vue'
+import { useSession } from '../composables/useSession'
+import ForbiddenView from '../views/ForbiddenView.vue'
 import HomeView from '../views/HomeView.vue'
+import NotFoundView from '../views/NotFoundView.vue'
+import SessionStatusView from '../views/SessionStatusView.vue'
 import IdentityAdminLayout from '../views/admin/IdentityAdminLayout.vue'
+import IdentityMembersView from '../views/admin/IdentityMembersView.vue'
 import IdentityOverviewView from '../views/admin/IdentityOverviewView.vue'
 import IdentitySyncRunsView from '../views/admin/IdentitySyncRunsView.vue'
-import IdentityMembersView from '../views/admin/IdentityMembersView.vue'
 
-export const routes = [
+export const routes: RouteRecordRaw[] = [
   {
-    path: '/',
-    name: 'home',
-    component: HomeView,
+    path: '/status/account-disabled',
+    name: 'account-disabled',
+    component: SessionStatusView,
+    meta: { sessionStatus: 'accountDisabled' },
   },
   {
-    path: '/admin/identity',
-    component: IdentityAdminLayout,
-    redirect: '/admin/identity/overview',
+    path: '/status/upgrade-required',
+    name: 'upgrade-required',
+    component: SessionStatusView,
+    meta: { sessionStatus: 'upgradeRequired' },
+  },
+  {
+    path: '/status/unavailable',
+    name: 'unavailable',
+    component: SessionStatusView,
+    meta: { sessionStatus: 'failure' },
+  },
+  {
+    path: '/',
+    component: AppShell,
     children: [
       {
-        path: 'overview',
-        name: 'identity-overview',
-        component: IdentityOverviewView,
+        path: '',
+        name: 'home',
+        component: HomeView,
       },
       {
-        path: 'sync-runs',
-        name: 'identity-sync-runs',
-        component: IdentitySyncRunsView,
+        path: 'admin/identity',
+        component: IdentityAdminLayout,
+        redirect: '/admin/identity/overview',
+        meta: {
+          requiredRoles: [
+            AuthenticationRole.AppManager,
+            AuthenticationRole.CompanyAdmin,
+          ],
+        },
+        children: [
+          {
+            path: 'overview',
+            name: 'identity-overview',
+            component: IdentityOverviewView,
+          },
+          {
+            path: 'sync-runs',
+            name: 'identity-sync-runs',
+            component: IdentitySyncRunsView,
+          },
+          {
+            path: 'members',
+            name: 'identity-members',
+            component: IdentityMembersView,
+          },
+        ],
       },
       {
-        path: 'members',
-        name: 'identity-members',
-        component: IdentityMembersView,
+        path: 'forbidden',
+        name: 'forbidden',
+        component: ForbiddenView,
+      },
+      {
+        path: ':pathMatch(.*)*',
+        name: 'not-found',
+        component: NotFoundView,
       },
     ],
   },
-  {
-    path: '/:pathMatch(.*)*',
-    redirect: '/',
-  },
 ]
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(),
   routes,
 })
+
+router.beforeEach(async (to) => {
+  const session = useSession()
+  await session.ensureAuthentication()
+  return sessionDestination(to)
+})
+
+watch(useSession().phase, (next) => {
+  const current = router.currentRoute.value
+  if (next === 'anonymous') {
+    beginAuthentication(current.fullPath)
+  } else if (next === 'accountDisabled' && current.name !== 'account-disabled') {
+    void router.replace({ name: 'account-disabled' })
+  } else if (next === 'upgradeRequired' && current.name !== 'upgrade-required') {
+    void router.replace({ name: 'upgrade-required' })
+  } else if (next === 'failure' && current.name !== 'unavailable') {
+    void router.replace({ name: 'unavailable' })
+  } else if (next === 'authenticated' && current.meta.sessionStatus) {
+    void router.replace(consumeReturnPath())
+  }
+})
+
+function sessionDestination(to: RouteLocationNormalized) {
+  const session = useSession()
+  if (session.phase.value === 'anonymous') {
+    beginAuthentication(to.fullPath)
+    return false
+  }
+  const statusRoute = routeForPhase(session.phase.value)
+  if (statusRoute) {
+    return to.name === statusRoute ? true : { name: statusRoute }
+  }
+  if (session.phase.value !== 'authenticated' || !session.authentication.value) {
+    return to.name === 'unavailable' ? true : { name: 'unavailable' }
+  }
+  if (to.meta.sessionStatus) {
+    return consumeReturnPath()
+  }
+  const requiredRoles = to.meta.requiredRoles
+  if (requiredRoles?.length
+    && !requiredRoles.some(role => session.authentication.value?.roles.has(role))) {
+    return to.name === 'forbidden' ? true : { name: 'forbidden' }
+  }
+  if (to.name === 'home') {
+    const returnPath = consumeReturnPath()
+    if (returnPath !== '/') {
+      return returnPath
+    }
+  }
+  return true
+}
+
+function routeForPhase(phase: import('../composables/useSession').SessionPhase) {
+  if (phase === 'accountDisabled') return 'account-disabled'
+  if (phase === 'upgradeRequired') return 'upgrade-required'
+  if (phase === 'failure') return 'unavailable'
+  return undefined
+}
+
+export default router
