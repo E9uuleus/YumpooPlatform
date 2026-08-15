@@ -26,6 +26,39 @@ let application
 let preview
 let containerStarted = false
 
+class CookieJar {
+  #values = new Map()
+
+  absorb(setCookies) {
+    for (const raw of setCookies) {
+      const first = raw.split(';', 1)[0]
+      const separator = first.indexOf('=')
+      if (separator < 1) continue
+      const name = first.slice(0, separator)
+      const value = first.slice(separator + 1)
+      if (!value || /(?:^|;)\s*Max-Age=0(?:;|$)/iu.test(raw)) {
+        this.#values.delete(name)
+      } else {
+        this.#values.set(name, value)
+      }
+    }
+  }
+
+  has(name) {
+    return this.#values.has(name)
+  }
+
+  required(name) {
+    const value = this.#values.get(name)
+    assert(value, `required security cookie is missing: ${name}`)
+    return value
+  }
+
+  header() {
+    return [...this.#values.entries()].map(([name, value]) => `${name}=${value}`).join('; ')
+  }
+}
+
 fs.mkdirSync(outputRoot, { recursive: true })
 fs.rmSync(reportPath, { force: true })
 assert(fs.existsSync(jarPath), 'packaged backend JAR is missing')
@@ -83,16 +116,6 @@ try {
   assert(self.response.status === 200, 'controlled member detail is unavailable')
   const selfEtag = self.response.headers.get('etag')
   assert(selfEtag, 'controlled member detail omitted ETag')
-  const deniedRole = await request('/api/v1/admin/app-manager-assignments', {
-    method: 'POST',
-    jar: firstSession,
-    headers: writeHeaders(firstSession, selfEtag),
-    body: JSON.stringify({
-      userId: current.user.id,
-      reason: 'M1-13 role boundary verification',
-    }),
-  })
-  assert(deniedRole.response.status === 403 && deniedRole.text.includes('ACCESS_DENIED'), 'COMPANY_ADMIN crossed the APP_MANAGER role boundary')
 
   const retiredCookies = firstSession.header()
   const logout = await request('/api/v1/auth/logout', {
@@ -103,6 +126,23 @@ try {
   assert(logout.response.status === 204, 'logout did not return 204')
   const loggedOut = await request('/api/v1/auth/me', { cookieHeader: retiredCookies })
   assert(loggedOut.response.status === 401, 'logged-out session remained usable')
+
+  const roleBoundarySession = new CookieJar()
+  await login(roleBoundarySession, true)
+  const roleMe = parseJson((await request('/api/v1/auth/me', { jar: roleBoundarySession })).text, 'role-boundary /auth/me')
+  const roleSelf = await request(`/api/v1/admin/members/${roleMe.user.id}`, { jar: roleBoundarySession })
+  const roleSelfEtag = roleSelf.response.headers.get('etag')
+  assert(roleSelf.response.status === 200 && roleSelfEtag, 'role-boundary session could not read its member ETag')
+  const deniedRole = await request('/api/v1/admin/app-manager-assignments', {
+    method: 'POST',
+    jar: roleBoundarySession,
+    headers: writeHeaders(roleBoundarySession, roleSelfEtag),
+    body: JSON.stringify({
+      userId: roleMe.user.id,
+      reason: 'M1-13 role boundary verification',
+    }),
+  })
+  assert(deniedRole.response.status === 403 && deniedRole.text.includes('ACCESS_DENIED'), 'COMPANY_ADMIN crossed the APP_MANAGER role boundary')
 
   const secondSession = new CookieJar()
   await login(secondSession, true)
@@ -264,39 +304,6 @@ async function request(pathOrUrl, {
   return { response, text: await response.text(), setCookies }
 }
 
-class CookieJar {
-  #values = new Map()
-
-  absorb(setCookies) {
-    for (const raw of setCookies) {
-      const first = raw.split(';', 1)[0]
-      const separator = first.indexOf('=')
-      if (separator < 1) continue
-      const name = first.slice(0, separator)
-      const value = first.slice(separator + 1)
-      if (!value || /(?:^|;)\s*Max-Age=0(?:;|$)/iu.test(raw)) {
-        this.#values.delete(name)
-      } else {
-        this.#values.set(name, value)
-      }
-    }
-  }
-
-  has(name) {
-    return this.#values.has(name)
-  }
-
-  required(name) {
-    const value = this.#values.get(name)
-    assert(value, `required security cookie is missing: ${name}`)
-    return value
-  }
-
-  header() {
-    return [...this.#values.entries()].map(([name, value]) => `${name}=${value}`).join('; ')
-  }
-}
-
 function assertSecurityCookies(setCookies, requiredNames) {
   for (const name of requiredNames) {
     const cookie = setCookies.find((value) => value.startsWith(`${name}=`))
@@ -309,7 +316,7 @@ function assertSecurityCookies(setCookies, requiredNames) {
 }
 
 function verifyDatabaseState() {
-  const flywayVersion = psql("SELECT max(version) FROM yumpoo.flyway_schema_history WHERE success = true")
+  const flywayVersion = psql("SELECT max(version::integer) FROM yumpoo.flyway_schema_history WHERE success = true")
   assert(flywayVersion === '14', `unexpected Flyway version: ${flywayVersion}`)
   const forbiddenTables = Number(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'yumpoo' AND lower(table_name) ~ '(project|product|membership|owner)'"))
   assert(forbiddenTables === 0, 'clean M1 database contains project/product/membership/owner facts')
