@@ -7,18 +7,20 @@ import {
   type MemberPage,
 } from '@yumpoo/api-client'
 import {
-  ElAlert, ElButton, ElDescriptions, ElDescriptionsItem, ElDrawer, ElEmpty,
+  ElButton, ElDescriptions, ElDescriptionsItem, ElDrawer, ElEmpty,
   ElMessage, ElMessageBox, ElPagination,
   ElTable, ElTableColumn, ElTag,
 } from 'element-plus'
 import { onMounted, ref } from 'vue'
 import { identityAdministrationApi, identityGovernanceApi } from '../../api/client'
-import { toUiError, useIdentityAdmin, type UiError } from '../../composables/useIdentityAdmin'
+import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
+import InlineProblem from '../../components/InlineProblem.vue'
+import { useIdentityAdmin } from '../../composables/useIdentityAdmin'
 
 const { canWrite } = useIdentityAdmin()
 const result = ref<MemberPage>()
 const loading = ref(false)
-const error = ref<UiError>()
+const error = ref<ApiProblem>()
 const name = ref('')
 const externalUserId = ref('')
 const employmentStatus = ref<EmploymentStatus>()
@@ -50,7 +52,7 @@ async function load(): Promise<void> {
       size: size.value,
     })
   } catch (reason) {
-    error.value = await toUiError(reason)
+    error.value = await toApiProblem(reason)
   } finally {
     loading.value = false
   }
@@ -62,7 +64,7 @@ async function openMember(userId: string): Promise<void> {
     selected.value = await identityAdministrationApi.getMember({ userId })
     drawerOpen.value = true
   } catch (reason) {
-    error.value = await toUiError(reason)
+    error.value = await toApiProblem(reason)
   }
 }
 
@@ -98,7 +100,7 @@ async function changeAccount(member: Member): Promise<void> {
 
   const csrf = readCsrfToken()
   if (!csrf) {
-    error.value = { message: '缺少 CSRF 凭据，请刷新页面后重试。' }
+    error.value = localProblem('缺少 CSRF 凭据，请刷新页面后重试。')
     return
   }
 
@@ -121,14 +123,33 @@ async function changeAccount(member: Member): Promise<void> {
     await load()
     if (drawerOpen.value) await openMember(member.userId)
   } catch (failure) {
-    const uiError = await toUiError(failure)
-    error.value = uiError
-    if (uiError.status === 412) {
-      await load()
-      if (drawerOpen.value) await openMember(member.userId)
+    const problem = await toApiProblem(failure)
+    if (isProblemStatus(problem, 412)) {
+      await refreshAfterConflict(member.userId, problem)
+    } else {
+      error.value = problem
     }
   } finally {
     changingUserId.value = undefined
+  }
+}
+
+async function refreshAfterConflict(userId: string, conflict: ApiProblem): Promise<void> {
+  try {
+    result.value = await identityAdministrationApi.listMembers({
+      ...(name.value.trim() ? { name: name.value.trim() } : {}),
+      ...(externalUserId.value.trim() ? { externalUserId: externalUserId.value.trim() } : {}),
+      ...(employmentStatus.value ? { employmentStatus: employmentStatus.value } : {}),
+      ...(accountStatus.value ? { accountStatus: accountStatus.value } : {}),
+      page: page.value,
+      size: size.value,
+    })
+    if (drawerOpen.value) {
+      selected.value = await identityAdministrationApi.getMember({ userId })
+    }
+    error.value = conflict
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
   }
 }
 
@@ -143,46 +164,130 @@ onMounted(load)
 <template>
   <section>
     <div class="member-filters">
-      <input v-model="name" class="native-control" placeholder="姓名包含" @keyup.enter="applyFilters">
-      <input v-model="externalUserId" class="native-control" placeholder="企微外部 ID（精确）" @keyup.enter="applyFilters">
-      <select v-model="employmentStatus" class="native-control" aria-label="就业状态">
-        <option :value="undefined">全部就业状态</option>
-        <option v-for="value in EmploymentStatus" :key="value" :value="value">{{ value }}</option>
+      <input
+        v-model="name"
+        class="native-control"
+        placeholder="姓名包含"
+        @keyup.enter="applyFilters"
+      >
+      <input
+        v-model="externalUserId"
+        class="native-control"
+        placeholder="企微外部 ID（精确）"
+        @keyup.enter="applyFilters"
+      >
+      <select
+        v-model="employmentStatus"
+        class="native-control"
+        aria-label="就业状态"
+      >
+        <option :value="undefined">
+          全部就业状态
+        </option>
+        <option
+          v-for="value in EmploymentStatus"
+          :key="value"
+          :value="value"
+        >
+          {{ value }}
+        </option>
       </select>
-      <select v-model="accountStatus" class="native-control" aria-label="账号状态">
-        <option :value="undefined">全部账号状态</option>
-        <option v-for="value in AccountStatus" :key="value" :value="value">{{ value }}</option>
+      <select
+        v-model="accountStatus"
+        class="native-control"
+        aria-label="账号状态"
+      >
+        <option :value="undefined">
+          全部账号状态
+        </option>
+        <option
+          v-for="value in AccountStatus"
+          :key="value"
+          :value="value"
+        >
+          {{ value }}
+        </option>
       </select>
-      <el-button type="primary" @click="applyFilters">查询</el-button>
+      <el-button
+        type="primary"
+        @click="applyFilters"
+      >
+        查询
+      </el-button>
     </div>
 
-    <el-alert
+    <inline-problem
       v-if="error"
       class="inline-error"
-      type="error"
-      :closable="false"
-      :title="error.message"
-      :description="error.requestId ? `requestId: ${error.requestId}` : ''"
-      show-icon
+      :problem="error"
     />
 
-    <el-table v-if="result?.items.length" v-loading="loading" :data="result.items" stripe>
-      <el-table-column prop="displayName" label="姓名" min-width="150" />
-      <el-table-column prop="externalUserId" label="企微外部 ID" min-width="180" />
-      <el-table-column prop="departmentSummary" label="部门" min-width="180" />
-      <el-table-column prop="employmentStatus" label="就业" width="100" />
-      <el-table-column prop="accountStatus" label="账号" width="110">
-        <template #default="scope"><el-tag :type="accountType(scope.row.accountStatus)">{{ scope.row.accountStatus }}</el-tag></template>
-      </el-table-column>
-      <el-table-column label="角色" min-width="180">
+    <el-table
+      v-if="result?.items.length"
+      v-loading="loading"
+      :data="result.items"
+      stripe
+    >
+      <el-table-column
+        prop="displayName"
+        label="姓名"
+        min-width="150"
+      />
+      <el-table-column
+        prop="externalUserId"
+        label="企微外部 ID"
+        min-width="180"
+      />
+      <el-table-column
+        prop="departmentSummary"
+        label="部门"
+        min-width="180"
+      />
+      <el-table-column
+        prop="employmentStatus"
+        label="就业"
+        width="100"
+      />
+      <el-table-column
+        prop="accountStatus"
+        label="账号"
+        width="110"
+      >
         <template #default="scope">
-          <el-tag v-for="role in scope.row.platformRoles" :key="role" class="role-tag" effect="plain">{{ role }}</el-tag>
+          <el-tag :type="accountType(scope.row.accountStatus)">
+            {{ scope.row.accountStatus }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="角色"
+        min-width="180"
+      >
+        <template #default="scope">
+          <el-tag
+            v-for="role in scope.row.platformRoles"
+            :key="role"
+            class="role-tag"
+            effect="plain"
+          >
+            {{ role }}
+          </el-tag>
           <span v-if="scope.row.platformRoles.length === 0">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="170" fixed="right">
+      <el-table-column
+        label="操作"
+        width="170"
+        fixed="right"
+      >
         <template #default="scope">
-          <el-button link type="primary" @click="openMember(scope.row.userId)">详情</el-button>
+          <el-button
+            link
+            type="primary"
+            @click="openMember(scope.row.userId)"
+          >
+            详情
+          </el-button>
           <el-button
             v-if="canWrite"
             link
@@ -195,7 +300,10 @@ onMounted(load)
         </template>
       </el-table-column>
     </el-table>
-    <el-empty v-else-if="!loading" description="没有符合条件的成员" />
+    <el-empty
+      v-else-if="!loading"
+      description="没有符合条件的成员"
+    />
 
     <el-pagination
       v-if="result && result.totalElements > 0"
@@ -209,17 +317,45 @@ onMounted(load)
       @update:page-size="value => { size = value; page = 0; load() }"
     />
 
-    <el-drawer v-model="drawerOpen" title="成员详情" size="560px">
-      <el-descriptions v-if="selected" :column="1" border>
-        <el-descriptions-item label="姓名">{{ selected.displayName }}</el-descriptions-item>
-        <el-descriptions-item label="企微外部 ID">{{ selected.externalUserId }}</el-descriptions-item>
-        <el-descriptions-item label="部门">{{ selected.departmentSummary ?? '—' }}</el-descriptions-item>
-        <el-descriptions-item label="邮箱">{{ selected.email ?? '—' }}</el-descriptions-item>
-        <el-descriptions-item label="手机">{{ selected.mobile ?? '—' }}</el-descriptions-item>
-        <el-descriptions-item label="就业状态">{{ selected.employmentStatus }}</el-descriptions-item>
-        <el-descriptions-item label="账号状态"><el-tag :type="accountType(selected.accountStatus)">{{ selected.accountStatus }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="最近同步">{{ formatTime(selected.directorySyncedAt) }}</el-descriptions-item>
-        <el-descriptions-item label="角色">{{ Array.from(selected.platformRoles).join('、') || '无平台管理角色' }}</el-descriptions-item>
+    <el-drawer
+      v-model="drawerOpen"
+      title="成员详情"
+      size="560px"
+    >
+      <el-descriptions
+        v-if="selected"
+        :column="1"
+        border
+      >
+        <el-descriptions-item label="姓名">
+          {{ selected.displayName }}
+        </el-descriptions-item>
+        <el-descriptions-item label="企微外部 ID">
+          {{ selected.externalUserId }}
+        </el-descriptions-item>
+        <el-descriptions-item label="部门">
+          {{ selected.departmentSummary ?? '—' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="邮箱">
+          {{ selected.email ?? '—' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="手机">
+          {{ selected.mobile ?? '—' }}
+        </el-descriptions-item>
+        <el-descriptions-item label="就业状态">
+          {{ selected.employmentStatus }}
+        </el-descriptions-item>
+        <el-descriptions-item label="账号状态">
+          <el-tag :type="accountType(selected.accountStatus)">
+            {{ selected.accountStatus }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="最近同步">
+          {{ formatTime(selected.directorySyncedAt) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="角色">
+          {{ Array.from(selected.platformRoles).join('、') || '无平台管理角色' }}
+        </el-descriptions-item>
       </el-descriptions>
       <el-button
         v-if="selected && canWrite"
