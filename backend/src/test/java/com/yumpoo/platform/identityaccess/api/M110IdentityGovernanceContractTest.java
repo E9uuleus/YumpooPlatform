@@ -35,6 +35,20 @@ class M110IdentityGovernanceContractTest {
     }
 
     @Test
+    void publicRoleCommandPortCarriesOnlyStableApiTypes() {
+        assertThat(componentNames(PlatformRoleGrantCommand.class)).containsExactly(
+                "companyId", "targetUserId", "role", "expectedTargetRowVersion",
+                "actor", "idempotencyKey", "requestHash", "reasonReference");
+        assertThat(componentNames(PlatformRoleRevokeCommand.class)).containsExactly(
+                "companyId", "assignmentId", "expectedRole", "expectedAssignmentRowVersion",
+                "actor", "idempotencyKey", "requestHash", "reasonReference");
+        assertThat(componentNames(PlatformRoleCommandReceipt.class))
+                .containsExactly("mutation", "replayed");
+        assertThat(PlatformRoleCode.values())
+                .containsExactly(PlatformRoleCode.COMPANY_ADMIN, PlatformRoleCode.APP_MANAGER);
+    }
+
+    @Test
     void controllerPublishesOnlyApprovedGovernancePaths() {
         List<String> getPaths = Arrays.stream(IdentityGovernanceController.class.getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(GetMapping.class))
