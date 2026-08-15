@@ -64,7 +64,10 @@
     "verify:m1-09": "node tools/verification/verify-m1-09.mjs",
     "verify:m1-10": "node tools/verification/verify-m1-10.mjs",
     "verify:m1-11": "node tools/verification/verify-m1-11.mjs",
-    "verify:m1-12": "node tools/verification/verify-m1-12.mjs"
+    "verify:m1-12": "node tools/verification/verify-m1-12.mjs",
+    "validate:m1-13:evidence": "node tools/verification/verify-m1-13-evidence.mjs",
+    "verify:m1-13:http": "node tools/verification/verify-m1-13-http.mjs",
+    "verify:m1-13": "node tools/verification/verify-m1-13.mjs"
   },
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "2.40.1",

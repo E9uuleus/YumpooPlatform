@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/evidence/m1-13/verification-report.schema.json",
+  "title": "M1-13 external HTTP verification report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "milestone", "status", "gitSha", "startedAt", "completedAt", "mode", "provider", "springProfiles", "flywayVersion", "liveEvidence", "checks"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "milestone": { "const": "M1-13" },
+    "status": { "const": "PASS" },
+    "gitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "mode": { "const": "EXTERNAL_HTTP" },
+    "provider": { "const": "CONTROLLED" },
+    "springProfiles": { "const": ["local", "m1-13-e2e"] },
+    "flywayVersion": { "const": "14" },
+    "liveEvidence": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["milestone", "status", "targetGate"],
+        "properties": {
+          "milestone": { "enum": ["M0-12", "M0-15", "M1-04"] },
+          "status": { "enum": ["NOT_RUN", "ENV_PENDING", "PASS"] },
+          "targetGate": { "const": "M6-01" }
+        }
+      }
+    },
+    "checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["portsAvailable", "freshPostgres", "packagedJarReady", "cleanMigrations", "noProjectFacts", "fixtureViaServices", "spaPreview", "controlledLogin", "roleBoundary", "logoutInvalidation", "accountDisableInvalidation", "disabledReloginRejected", "secretsRedacted"],
+      "properties": {
+        "portsAvailable": { "const": true },
+        "freshPostgres": { "const": true },
+        "packagedJarReady": { "const": true },
+        "cleanMigrations": { "const": true },
+        "noProjectFacts": { "const": true },
+        "fixtureViaServices": { "const": true },
+        "spaPreview": { "const": true },
+        "controlledLogin": { "const": true },
+        "roleBoundary": { "const": true },
+        "logoutInvalidation": { "const": true },
+        "accountDisableInvalidation": { "const": true },
+        "disabledReloginRejected": { "const": true },
+        "secretsRedacted": { "const": true }
+      }
+    }
+  }
+}

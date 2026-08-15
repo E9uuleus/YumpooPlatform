@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M1-13",
+  "status": "PASS",
+  "gitSha": "0000000000000000000000000000000000000000",
+  "startedAt": "2026-08-15T00:00:00.000Z",
+  "completedAt": "2026-08-15T00:01:00.000Z",
+  "mode": "EXTERNAL_HTTP",
+  "provider": "CONTROLLED",
+  "springProfiles": ["local", "m1-13-e2e"],
+  "flywayVersion": "14",
+  "liveEvidence": [
+    { "milestone": "M0-12", "status": "NOT_RUN", "targetGate": "M6-01" },
+    { "milestone": "M0-15", "status": "NOT_RUN", "targetGate": "M6-01" },
+    { "milestone": "M1-04", "status": "ENV_PENDING", "targetGate": "M6-01" }
+  ],
+  "checks": {
+    "portsAvailable": true,
+    "freshPostgres": true,
+    "packagedJarReady": true,
+    "cleanMigrations": true,
+    "noProjectFacts": true,
+    "fixtureViaServices": true,
+    "spaPreview": true,
+    "controlledLogin": true,
+    "roleBoundary": true,
+    "logoutInvalidation": true,
+    "accountDisableInvalidation": true,
+    "disabledReloginRejected": true,
+    "secretsRedacted": true
+  }
+}
