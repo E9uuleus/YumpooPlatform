@@ -1,4 +1,4 @@
-name: M0-18 CI
+name: M1-13 CI
 
 on:
   pull_request:
@@ -12,12 +12,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: m0-18-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: m1-13-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   linux:
-    name: M0 Portable Gate
+    name: M1 Identity Acceptance Gate
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     outputs:
@@ -51,12 +51,19 @@ jobs:
           docker version
           docker info
           docker pull postgres:17.10-alpine
-      - name: Run portable M0 gate
+      - name: Run M1 identity acceptance gate
         env:
           YUMPOO_M018_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           YUMPOO_M018_HEAD_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           YUMPOO_M018_TESTED_COMMIT: ${{ github.sha }}
-        run: pnpm verify:m0-18:portable
+        run: pnpm verify:m1-13
+      - name: Upload M1-13 verification report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: m1-13-verification-${{ github.sha }}-${{ github.run_attempt }}
+          path: out/m1-13/verification-report.json
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload tested portable handoff
         id: handoff_upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -82,7 +89,7 @@ jobs:
         shell: powershell
         run: |
           if ('${{ needs.linux.result }}' -ne 'success') {
-            throw 'M0 Portable Gate did not succeed; Windows x64 gate fails closed.'
+            throw 'M1 Identity Acceptance Gate did not succeed; Windows x64 gate fails closed.'
           }
       - name: Checkout the same tested commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
