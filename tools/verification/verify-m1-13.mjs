@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { m113PortableEnvironment } from './m1-13-environment.mjs'
 import { runPnpmSync } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -14,7 +15,7 @@ runPnpmSync(['run', 'validate:m1-13:evidence'], {
 })
 runPnpmSync(['run', 'verify:m0-18:portable'], {
   cwd: repositoryRoot,
-  env: environment,
+  env: m113PortableEnvironment(environment),
 })
 runPnpmSync(['run', 'verify:m1-13:http'], {
   cwd: repositoryRoot,

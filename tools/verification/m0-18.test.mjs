@@ -9,6 +9,7 @@ import YAML from 'yaml'
 import { extractOpenApiBaseline } from '../openapi/extract-openapi-baseline.mjs'
 import { assertEvidenceReportDigests, assertNoSensitiveMaterial } from './create-m0-18-evidence-pack.mjs'
 import { verifyServerSmokeReceipt } from './m0-18-server-smoke-receipt.mjs'
+import { m113PortableEnvironment } from './m1-13-environment.mjs'
 import {
   loadLiveEvidence,
   validateDeferredAcceptance,
@@ -321,6 +322,27 @@ test('full M0-18 runtime chain is Windows x64 only', () => {
   ].map((workspace) => desktopSmoke.indexOf(`'${workspace}'`))
   assert(desktopBuildOrder.every((index) => index >= 0))
   assert.deepEqual(desktopBuildOrder, [...desktopBuildOrder].sort((left, right) => left - right))
+})
+
+test('M1-13 portable phase clears controlled fixture environment overrides', () => {
+  const inherited = {
+    YUMPOO_CONTROLLED_AUTH_ENABLED: 'true',
+    YUMPOO_CONTROLLED_AUTH_CORP_ID: 'inherited-corp',
+    YUMPOO_CONTROLLED_AUTH_MEMBER_ID: 'inherited-member',
+    YUMPOO_M113_FIXTURE_ENABLED: 'true',
+    YUMPOO_M113_BACKUP_MEMBER_ID: 'inherited-backup',
+    UNRELATED_SETTING: 'preserved',
+  }
+
+  const portable = m113PortableEnvironment(inherited)
+
+  assert.equal(portable.YUMPOO_CONTROLLED_AUTH_ENABLED, 'false')
+  assert.equal(portable.YUMPOO_CONTROLLED_AUTH_CORP_ID, '')
+  assert.equal(portable.YUMPOO_CONTROLLED_AUTH_MEMBER_ID, '')
+  assert.equal(portable.YUMPOO_M113_FIXTURE_ENABLED, 'false')
+  assert.equal(portable.YUMPOO_M113_BACKUP_MEMBER_ID, '')
+  assert.equal(portable.UNRELATED_SETTING, 'preserved')
+  assert.equal(inherited.YUMPOO_CONTROLLED_AUTH_ENABLED, 'true')
 })
 
 test('workflow locks M1-13 Linux gate, M0 handoff, fail-closed dependency and immutable action SHAs', () => {
