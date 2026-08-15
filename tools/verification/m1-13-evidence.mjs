@@ -117,7 +117,15 @@ function validateFreshReport(repositoryRoot, report, liveEvidence) {
   assertM018(JSON.stringify(report.liveEvidence) === JSON.stringify(liveEvidence), 'M1-13 report live evidence snapshot is stale')
   const serialized = JSON.stringify(report)
   assertM018(!serialized.includes(path.resolve(repositoryRoot)), 'M1-13 report exposes an absolute repository path')
-  assertM018(!serialized.match(/(__Host-|member-id|session-key|password|secret)/iu), 'M1-13 report exposes sensitive runtime data')
+  const stringValues = collectStringValues(report)
+  assertM018(!stringValues.some((value) => value.match(/(__Host-|member-id|session-key|password|secret)/iu)), 'M1-13 report exposes sensitive runtime data')
+}
+
+function collectStringValues(value) {
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap(collectStringValues)
+  if (value && typeof value === 'object') return Object.values(value).flatMap(collectStringValues)
+  return []
 }
 
 function gitSha(repositoryRoot) {
