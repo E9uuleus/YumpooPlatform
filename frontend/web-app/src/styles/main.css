@@ -51,9 +51,124 @@ body {
 }
 
 .app-main {
-  width: min(1040px, 100%);
+  width: min(1240px, 100%);
   margin: 0 auto;
   padding: clamp(32px, 6vw, 72px) 24px;
+}
+
+.header-actions,
+.toolbar,
+.filters,
+.page-title {
+  display: flex;
+  align-items: center;
+}
+
+.header-actions,
+.filters {
+  gap: 12px;
+}
+
+.header-actions a {
+  text-decoration: none;
+}
+
+.identity-admin {
+  min-height: 560px;
+}
+
+.page-title {
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.page-title h2,
+.page-title p {
+  margin: 0;
+}
+
+.page-title h2 {
+  margin: 4px 0 8px;
+  font-size: 28px;
+}
+
+.eyebrow {
+  color: #1c6ca1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.actor-label {
+  color: #52606b;
+}
+
+.identity-tabs {
+  margin-bottom: 20px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.security-note {
+  grid-column: 1 / -1;
+}
+
+.toolbar {
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.native-control {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #c6d0d9;
+  border-radius: 4px;
+  color: #182027;
+  background: #fff;
+}
+
+.filters .native-control {
+  width: 180px;
+}
+
+.member-filters {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.2fr) 150px 150px auto;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.inline-error {
+  margin-bottom: 18px;
+}
+
+.page-control {
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.role-tag {
+  margin-right: 6px;
+}
+
+.drawer-action {
+  margin-top: 24px;
+}
+
+@media (max-width: 900px) {
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .member-filters {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .skeleton-card {

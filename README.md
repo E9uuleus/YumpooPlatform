@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M1-11 公司、企微、同步运行与成员管理
+
+M1-11 发布只读公司与企微概览、通讯录同步运行诊断和成员管理页面。`APP_MANAGER` 与 `COMPANY_ADMIN` 均可读取管理数据；仅 `COMPANY_ADMIN` 可触发同步或启停账号。角色仅展示，页面不提供授予或撤销入口。
+
+正式接口覆盖 `/api/v1/company`、企微状态、成员分页/详情、同步运行分页/详情/失败项以及手工同步触发。手工同步沿用同步执行模型：新意图返回 `201`，同键重放返回 `200`，不同键命中活动批次返回带 `Location` 的 `409`。成员启停继续要求 CSRF、幂等键、`If-Match` 和 1～160 字理由。
+
+企微 Secret 仅由受控外部配置注入，生产环境不提供 API 或页面写入口。页面/API 只返回启用状态、配置完整性、脱敏 Corp ID 与凭据是否配置，不返回 Secret、token 或回调地址。
+
+```powershell
+pnpm verify:m1-11
+```
+
 ## M1-08 平台/企业角色与授权策略
 
 M1-08 新增只读的平台角色底座。`platform_role_assignment` 保存 `COMPANY_ADMIN` 与 `APP_MANAGER` 的作用域、授予/撤销事实和历史版本；`COMPANY_MEMBER` 继续由 `ACTIVE + ENABLED` User 派生，不入角色表。角色表不预置管理员，本切片也不开放授予/撤销命令、REST 或管理页面。正式写入口由后续 M1-09 在同一事务内递增 `authorization_version` 并撤销会话后再开放，业务代码和 fixture 之外不得直接写表。

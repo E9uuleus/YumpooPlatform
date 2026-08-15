@@ -5,10 +5,15 @@ import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
+import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
+import com.yumpoo.platform.identityaccess.application.administration.DirectoryRunQuery;
+import com.yumpoo.platform.identityaccess.application.administration.IdentityAdministrationRepository;
+import com.yumpoo.platform.identityaccess.application.administration.IdentityMemberQuery;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryCanonicalHash;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryScanResult;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncClaim;
+import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncClaimDisposition;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncCommand;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncItemApplyService;
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncLeaseLostException;
@@ -51,6 +56,9 @@ class DirectorySyncRepositoryIT {
 
     @Autowired
     private DirectorySyncRepository repository;
+
+    @Autowired
+    private IdentityAdministrationRepository administrationRepository;
 
     @Autowired
     private DirectorySyncItemApplyService itemApplyService;
@@ -136,6 +144,65 @@ class DirectorySyncRepositoryIT {
     }
 
     @Test
+    void administrationProjectionFiltersPagesAndMasksFailureReferences() {
+        DirectorySyncRunSnapshot run = executeProfiles(
+                "m111-administration-projection",
+                List.of(new WeComMemberProfile(
+                        "m111-external-member-secret",
+                        "Alice Admin Projection",
+                        DirectoryOptionalField.present("alice.admin@example.test"),
+                        DirectoryOptionalField.present("13800000000"),
+                        "研发部",
+                        new ProfileHash("a".repeat(64))))
+        );
+        OffsetPageRequest firstPage = OffsetPageRequest.of(0, 20);
+
+        var members = administrationRepository.findMembers(
+                COMPANY_ID,
+                new IdentityMemberQuery(
+                        "admin", "m111-external-member-secret",
+                        "ACTIVE", "ENABLED", firstPage)
+        );
+        var runs = administrationRepository.findRuns(
+                COMPANY_ID,
+                new DirectoryRunQuery("SUCCEEDED", "SCHEDULED", firstPage)
+        );
+        jdbcClient.sql("""
+                        INSERT INTO yumpoo.directory_sync_item (
+                            run_id, external_user_id, profile_hash, user_id,
+                            action, result, error_code, created_at, updated_at
+                        ) VALUES (
+                            :runId, :externalUserId, NULL, NULL,
+                            'PROVISION', 'FAILED', 'DIRECTORY_PROFILE_REJECTED',
+                            transaction_timestamp(), transaction_timestamp()
+                        )
+                        """)
+                .param("runId", run.runId())
+                .param("externalUserId", "m111-sensitive-member-reference")
+                .update();
+        var failures = administrationRepository.findFailures(
+                COMPANY_ID, run.runId(), firstPage);
+
+        assertThat(members.total()).isOne();
+        assertThat(members.items()).singleElement().satisfies(member -> {
+            assertThat(member.displayName()).isEqualTo("Alice Admin Projection");
+            assertThat(member.externalUserId()).isEqualTo("m111-external-member-secret");
+            assertThat(member.platformRoles()).isEmpty();
+            assertThat(member.etag()).isEqualTo("\"0\"");
+        });
+        assertThat(runs.items()).extracting("runId").contains(run.runId());
+        assertThat(administrationRepository.findRun(COMPANY_ID, run.runId())).isPresent();
+        assertThat(administrationRepository.runtimeStatus(COMPANY_ID).lastSuccessfulRunAt())
+                .isNotNull();
+        assertThat(failures.items()).singleElement().satisfies(failure -> {
+            assertThat(failure.maskedMemberReference())
+                    .contains("***")
+                    .doesNotContain("m111-sensitive-member-reference");
+            assertThat(failure.errorCode()).isEqualTo("DIRECTORY_PROFILE_REJECTED");
+        });
+    }
+
+    @Test
     void replaysSameTriggerAndReturnsActiveRunForDifferentTrigger() {
         try (RequestCorrelationContext.Scope ignored = correlation("m104-active-context")) {
             DirectorySyncCommand first = command("m104-active-a");
@@ -151,6 +218,10 @@ class DirectorySyncRepositoryIT {
             assertThat(owner.executionOwner()).isTrue();
             assertThat(replay.executionOwner()).isFalse();
             assertThat(different.executionOwner()).isFalse();
+            assertThat(owner.disposition()).isEqualTo(DirectorySyncClaimDisposition.NEW);
+            assertThat(replay.disposition()).isEqualTo(DirectorySyncClaimDisposition.REPLAY);
+            assertThat(different.disposition())
+                    .isEqualTo(DirectorySyncClaimDisposition.ACTIVE_CONFLICT);
             assertThat(replay.snapshot().runId()).isEqualTo(owner.snapshot().runId());
             assertThat(different.snapshot().runId()).isEqualTo(owner.snapshot().runId());
             repository.fail(

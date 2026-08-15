@@ -3,7 +3,10 @@ import {
   ErrorCode,
   ErrorCodeFromJSON,
 } from '../src/generated/models/ErrorCode.js'
-import { createYumpooApiClient } from '../src/yumpoo-api-client.js'
+import {
+  createYumpooApiClient,
+  readCsrfToken,
+} from '../src/yumpoo-api-client.js'
 
 describe('createYumpooApiClient', () => {
   afterEach(() => {
@@ -79,5 +82,12 @@ describe('createYumpooApiClient', () => {
     expect(ErrorCodeFromJSON('FUTURE_SERVER_ERROR')).toBe(
       ErrorCode.UnknownDefaultOpenApi,
     )
+  })
+  it('向生成客户端公开同一 CSRF Cookie 读取结果', () => {
+    vi.stubGlobal('document', {
+      cookie: 'theme=light; __Host-yumpoo-csrf=token%20value',
+    })
+
+    expect(readCsrfToken()).toBe('token value')
   })
 })

@@ -16,7 +16,196 @@ tags:
     description: Web 企微登录、会话退出与当前主体查询。
   - name: IdentityGovernance
     description: 身份治理快照、平台角色与账号状态管理。
+  - name: IdentityAdministration
+    description: 公司、企微配置状态、通讯录同步运行与成员目录只读管理。
 paths:
+  /company:
+    get:
+      tags: [IdentityAdministration]
+      operationId: getCompany
+      summary: 查询当前公司配置
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 当前公司的只读配置。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/integrations/wecom/status:
+    get:
+      tags: [IdentityAdministration]
+      operationId: getWeComIntegrationStatus
+      summary: 查询企微集成配置与运行状态
+      description: 只返回配置布尔状态和脱敏 Corp ID，绝不返回 Secret、token 或回调地址。
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 企微集成只读状态。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WeComIntegrationStatus' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/members:
+    get:
+      tags: [IdentityAdministration]
+      operationId: listMembers
+      summary: 分页查询成员目录
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: name
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: externalUserId
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: employmentStatus
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/EmploymentStatus' }
+        - name: accountStatus
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/AccountStatus' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 成员分页。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemberPage' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/members/{userId}:
+    get:
+      tags: [IdentityAdministration]
+      operationId: getMember
+      summary: 查询成员目录详情
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: 成员详情。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Member' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
+  /admin/directory-sync-runs:
+    get:
+      tags: [IdentityAdministration]
+      operationId: listDirectorySyncRuns
+      summary: 分页查询通讯录同步运行
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/DirectorySyncRunStatus' }
+        - name: triggerType
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/DirectorySyncTriggerType' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 同步运行分页。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectorySyncRunPage' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [IdentityAdministration]
+      operationId: triggerDirectorySync
+      summary: 同步执行一次完整通讯录对账
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: 新同步运行已执行并返回终态。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectorySyncRun' }
+        '200':
+          description: 同一幂等键的运行结果重放。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectorySyncRun' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: 另一业务意图的运行仍处于活动状态，Location 指向该运行。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /admin/directory-sync-runs/{runId}:
+    get:
+      tags: [IdentityAdministration]
+      operationId: getDirectorySyncRun
+      summary: 查询同步运行详情
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: 同步运行详情。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectorySyncRun' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
+  /admin/directory-sync-runs/{runId}/failures:
+    get:
+      tags: [IdentityAdministration]
+      operationId: listDirectorySyncFailures
+      summary: 分页查询同步失败项
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 仅包含稳定错误码和脱敏成员引用的失败项分页。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectorySyncFailurePage' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
   /auth/wecom/authorize:
     get:
       tags: [Authentication]
@@ -345,6 +534,167 @@ components:
     AccountStatus:
       type: string
       enum: [ENABLED, DISABLED]
+
+    Company:
+      type: object
+      additionalProperties: false
+      required: [id, displayName, timezone, weekStartDay, defaultWorkdayMinutes, rowVersion]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+        timezone: { type: string, minLength: 1, example: Asia/Shanghai }
+        weekStartDay: { type: string, enum: [MONDAY] }
+        defaultWorkdayMinutes: { type: integer, format: int32, minimum: 1, maximum: 720 }
+        rowVersion: { type: integer, format: int64, minimum: 0 }
+
+    WeComOAuthStatus:
+      type: object
+      additionalProperties: false
+      required: [enabled, configured, corpIdMasked, agentIdConfigured, appSecretConfigured, callbackConfigured]
+      properties:
+        enabled: { type: boolean }
+        configured: { type: boolean }
+        corpIdMasked: { type: string, nullable: true }
+        agentIdConfigured: { type: boolean }
+        appSecretConfigured: { type: boolean }
+        callbackConfigured: { type: boolean }
+
+    WeComDirectoryStatus:
+      type: object
+      additionalProperties: false
+      required: [enabled, configured, corpIdMasked, directorySecretConfigured, profileSecretConfigured]
+      properties:
+        enabled: { type: boolean }
+        configured: { type: boolean }
+        corpIdMasked: { type: string, nullable: true }
+        directorySecretConfigured: { type: boolean }
+        profileSecretConfigured: { type: boolean }
+
+    WeComIntegrationStatus:
+      type: object
+      additionalProperties: false
+      required: [oauth, directory, corpIdConsistent, activeRunId, lastSuccessfulRunAt, lastProblemAt, lastProblemCode]
+      properties:
+        oauth: { $ref: '#/components/schemas/WeComOAuthStatus' }
+        directory: { $ref: '#/components/schemas/WeComDirectoryStatus' }
+        corpIdConsistent: { type: boolean }
+        activeRunId: { type: string, format: uuid, nullable: true }
+        lastSuccessfulRunAt: { type: string, format: date-time, nullable: true }
+        lastProblemAt: { type: string, format: date-time, nullable: true }
+        lastProblemCode: { type: string, nullable: true }
+
+    Member:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, externalUserId, email, mobile, departmentSummary, employmentStatus, accountStatus, directorySyncedAt, leftAt, accountDisabledAt, accountDisabledByUserId, platformRoles, authorizationVersion, rowVersion, etag]
+      properties:
+        userId: { $ref: '#/components/schemas/Uuid' }
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+        externalUserId: { type: string, minLength: 1, maxLength: 256 }
+        email: { type: string, nullable: true }
+        mobile: { type: string, nullable: true }
+        departmentSummary: { type: string, nullable: true }
+        employmentStatus: { $ref: '#/components/schemas/EmploymentStatus' }
+        accountStatus: { $ref: '#/components/schemas/AccountStatus' }
+        directorySyncedAt: { $ref: '#/components/schemas/Instant' }
+        leftAt: { type: string, format: date-time, nullable: true }
+        accountDisabledAt: { type: string, format: date-time, nullable: true }
+        accountDisabledByUserId: { type: string, format: uuid, nullable: true }
+        platformRoles:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ManagedPlatformRole' }
+        authorizationVersion: { type: integer, format: int64, minimum: 0 }
+        rowVersion: { type: integer, format: int64, minimum: 0 }
+        etag: { type: string, pattern: '^"[0-9]+"$' }
+
+    MemberPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Member' } }
+        page: { type: integer, format: int32, minimum: 0 }
+        size: { type: integer, format: int32, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, format: int32, minimum: 0 }
+
+    DirectorySyncRunStatus:
+      type: string
+      enum: [RUNNING, SUCCEEDED, PARTIALLY_SUCCEEDED, FAILED]
+
+    DirectorySyncTriggerType:
+      type: string
+      enum: [MANUAL, SCHEDULED]
+
+    DirectorySyncCounts:
+      type: object
+      additionalProperties: false
+      required: [discovered, staged, created, updated, unchanged, left, returned, failed, notApplied]
+      properties:
+        discovered: { type: integer, format: int32, minimum: 0 }
+        staged: { type: integer, format: int32, minimum: 0 }
+        created: { type: integer, format: int32, minimum: 0 }
+        updated: { type: integer, format: int32, minimum: 0 }
+        unchanged: { type: integer, format: int32, minimum: 0 }
+        left: { type: integer, format: int32, minimum: 0 }
+        returned: { type: integer, format: int32, minimum: 0 }
+        failed: { type: integer, format: int32, minimum: 0 }
+        notApplied: { type: integer, format: int32, minimum: 0 }
+
+    DirectorySyncRun:
+      type: object
+      additionalProperties: false
+      required: [runId, triggerType, triggeredByUserId, triggeredByDisplayName, phase, status, cursorTerminationMode, pageCount, scanComplete, counts, errorCode, errorSummary, requestId, rowVersion, startedAt, finishedAt]
+      properties:
+        runId: { $ref: '#/components/schemas/Uuid' }
+        triggerType: { $ref: '#/components/schemas/DirectorySyncTriggerType' }
+        triggeredByUserId: { type: string, format: uuid, nullable: true }
+        triggeredByDisplayName: { type: string, nullable: true }
+        phase: { type: string, enum: [COLLECTING_IDS, COLLECTING_PROFILES, APPLYING, FINALIZING, COMPLETED] }
+        status: { $ref: '#/components/schemas/DirectorySyncRunStatus' }
+        cursorTerminationMode: { type: string, nullable: true, enum: [EXPLICIT_EMPTY, OMITTED_CONFIRMED] }
+        pageCount: { type: integer, format: int32, minimum: 0 }
+        scanComplete: { type: boolean }
+        counts: { $ref: '#/components/schemas/DirectorySyncCounts' }
+        errorCode: { type: string, nullable: true }
+        errorSummary: { type: string, nullable: true }
+        requestId: { $ref: '#/components/schemas/RequestId' }
+        rowVersion: { type: integer, format: int64, minimum: 0 }
+        startedAt: { $ref: '#/components/schemas/Instant' }
+        finishedAt: { type: string, format: date-time, nullable: true }
+
+    DirectorySyncRunPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/DirectorySyncRun' } }
+        page: { type: integer, format: int32, minimum: 0 }
+        size: { type: integer, format: int32, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, format: int32, minimum: 0 }
+
+    DirectorySyncFailure:
+      type: object
+      additionalProperties: false
+      required: [maskedMemberReference, action, result, errorCode]
+      properties:
+        maskedMemberReference: { type: string, minLength: 1 }
+        action: { type: string, enum: [PROVISION] }
+        result: { type: string, enum: [FAILED, NOT_APPLIED] }
+        errorCode: { type: string, minLength: 1 }
+
+    DirectorySyncFailurePage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/DirectorySyncFailure' } }
+        page: { type: integer, format: int32, minimum: 0 }
+        size: { type: integer, format: int32, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, format: int32, minimum: 0 }
 
     GovernanceReasonRequest:
       type: object
@@ -761,6 +1111,12 @@ components:
 
     AssignmentId:
       name: assignmentId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+
+    RunId:
+      name: runId
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Uuid' }

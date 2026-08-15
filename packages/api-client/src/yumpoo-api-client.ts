@@ -8,6 +8,13 @@ const csrfCookieName = '__Host-yumpoo-csrf'
 const csrfHeaderName = 'X-XSRF-TOKEN'
 const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE'])
 
+export function readCsrfToken(): string | undefined {
+  if (typeof document === 'undefined') {
+    return undefined
+  }
+  return readCookie(csrfCookieName)
+}
+
 export function createYumpooApiClient(
   parameters: ConfigurationParameters = {},
 ): Configuration {
@@ -26,7 +33,7 @@ function csrfFetch(delegate?: FetchAPI): FetchAPI {
     const method = (init.method ?? (requestInput ? input.method : 'GET'))
       .toUpperCase()
     if (!safeMethods.has(method) && isBrowserSameOrigin(input)) {
-      const token = readCookie(csrfCookieName)
+      const token = readCsrfToken()
       if (token) {
         const headers = new Headers(
           init.headers ?? (requestInput ? input.headers : undefined),
