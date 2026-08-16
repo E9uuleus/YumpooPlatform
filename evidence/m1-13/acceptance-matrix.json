@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M1-13",
+  "requirements": {
+    "iam": [
+      "IAM-001", "IAM-002", "IAM-003", "IAM-004", "IAM-005", "IAM-006", "IAM-007",
+      "IAM-008", "IAM-009", "IAM-010", "IAM-011", "IAM-012", "IAM-013", "IAM-014"
+    ],
+    "acl": ["ACL-001", "ACL-009", "ACL-010", "ACL-011", "ACL-013", "ACL-014"],
+    "api": ["API-001", "API-002", "API-003", "API-004"]
+  },
+  "coverage": [
+    {
+      "evidencePath": "backend/src/test/java/com/yumpoo/platform/identityaccess/api/M106WebAuthenticationIT.java",
+      "requirementIds": ["IAM-002", "IAM-005", "IAM-006", "IAM-009"]
+    },
+    {
+      "evidencePath": "backend/src/test/java/com/yumpoo/platform/identityaccess/api/M111IdentityAdministrationContractTest.java",
+      "requirementIds": ["IAM-010", "IAM-012"]
+    },
+    {
+      "evidencePath": "backend/src/test/java/com/yumpoo/platform/identityaccess/api/M113PermissionMatrixIT.java",
+      "requirementIds": ["IAM-001", "IAM-002", "IAM-005", "IAM-006", "IAM-010", "ACL-001", "ACL-009", "ACL-010", "ACL-011", "ACL-014"]
+    },
+    {
+      "evidencePath": "backend/src/test/java/com/yumpoo/platform/identityaccess/api/M113PlatformRoleCommandAdapterTest.java",
+      "requirementIds": ["ACL-013", "API-004"]
+    },
+    {
+      "evidencePath": "backend/src/test/java/com/yumpoo/platform/identityaccess/consistency/M013DirectoryReconciliationIT.java",
+      "requirementIds": ["IAM-007", "IAM-008", "IAM-011", "IAM-013"]
+    },
+    {
+      "evidencePath": "backend/src/test/java/com/yumpoo/platform/identityaccess/infrastructure/authorization/M109PlatformRoleGovernanceIT.java",
+      "requirementIds": ["ACL-009", "ACL-010", "ACL-011", "ACL-014"]
+    },
+    {
+      "evidencePath": "backend/src/test/java/com/yumpoo/platform/identityaccess/infrastructure/identity/DirectoryMemberProvisioningIT.java",
+      "requirementIds": ["IAM-003", "IAM-004", "IAM-014"]
+    },
+    {
+      "evidencePath": "backend/src/test/java/com/yumpoo/platform/foundation/api/ApiContractWebMvcTest.java",
+      "requirementIds": ["API-002", "API-003", "API-004"]
+    },
+    {
+      "evidencePath": "backend/src/test/java/com/yumpoo/platform/identityaccess/infrastructure/wecom/PropertiesWeComConfigurationStatusProviderTest.java",
+      "requirementIds": ["IAM-012"]
+    },
+    {
+      "evidencePath": "tools/verification/verify-m0-18-portable.mjs",
+      "requirementIds": ["API-001"]
+    },
+    {
+      "evidencePath": "tools/verification/verify-m1-13-http.mjs",
+      "requirementIds": ["IAM-001", "IAM-002", "IAM-005", "IAM-006", "ACL-001", "ACL-009", "ACL-010", "ACL-011"]
+    }
+  ],
+  "deferred": {
+    "m2Acl": ["ACL-002", "ACL-003", "ACL-004", "ACL-005", "ACL-006", "ACL-007", "ACL-008", "ACL-012"],
+    "liveVerifications": [
+      {
+        "milestone": "M0-12",
+        "evidencePath": "evidence/m0-12/live-verification.json",
+        "targetGate": "M6-01"
+      },
+      {
+        "milestone": "M0-15",
+        "evidencePath": "evidence/m0-15/live-verification.json",
+        "targetGate": "M6-01"
+      },
+      {
+        "milestone": "M1-04",
+        "evidencePath": "evidence/m1-04/live-verification.json",
+        "targetGate": "M6-01"
+      }
+    ]
+  }
+}

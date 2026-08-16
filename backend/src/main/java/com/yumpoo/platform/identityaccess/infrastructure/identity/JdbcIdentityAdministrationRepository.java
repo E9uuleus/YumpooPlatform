@@ -51,10 +51,10 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
 
     private static final String MEMBER_FILTER = """
             WHERE u.company_id = :companyId
-              AND (:name IS NULL OR position(lower(CAST(:name AS varchar)) in lower(u.display_name)) > 0)
-              AND (:externalUserId IS NULL OR e.external_user_id = CAST(:externalUserId AS varchar))
-              AND (:employmentStatus IS NULL OR u.employment_status = CAST(:employmentStatus AS varchar))
-              AND (:accountStatus IS NULL OR u.account_status = CAST(:accountStatus AS varchar))
+              AND (CAST(:name AS varchar) IS NULL OR position(lower(CAST(:name AS varchar)) in lower(u.display_name)) > 0)
+              AND (CAST(:externalUserId AS varchar) IS NULL OR e.external_user_id = CAST(:externalUserId AS varchar))
+              AND (CAST(:employmentStatus AS varchar) IS NULL OR u.employment_status = CAST(:employmentStatus AS varchar))
+              AND (CAST(:accountStatus AS varchar) IS NULL OR u.account_status = CAST(:accountStatus AS varchar))
             """;
 
     private static final String RUN_COLUMNS = """

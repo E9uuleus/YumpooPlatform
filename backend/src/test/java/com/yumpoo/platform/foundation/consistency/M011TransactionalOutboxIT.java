@@ -700,13 +700,14 @@ class M011TransactionalOutboxIT {
     }
 
     private void makeRetryDue(UUID eventId) {
-        jdbcClient.sql("""
+        int updated = jdbcClient.sql("""
                         UPDATE yumpoo.outbox_event
-                        SET next_attempt_at = CURRENT_TIMESTAMP
+                        SET next_attempt_at = occurred_at
                         WHERE event_id = :eventId AND status = 'RETRY'
                         """)
                 .param("eventId", eventId)
                 .update();
+        assertThat(updated).isOne();
     }
 
     private static <T> T withRoot(String requestId, Supplier<T> callback) {

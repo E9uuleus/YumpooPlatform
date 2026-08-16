@@ -78,6 +78,10 @@ yumpoo:
       mode: ${YUMPOO_APP_MANAGER_MAINTENANCE_MODE:}
       target-user-id: ${YUMPOO_APP_MANAGER_MAINTENANCE_TARGET_USER_ID:}
       reason-reference: ${YUMPOO_APP_MANAGER_MAINTENANCE_REASON_REFERENCE:}
+  verification:
+    m1-13:
+      fixture-enabled: ${YUMPOO_M113_FIXTURE_ENABLED:false}
+      backup-member-id: ${YUMPOO_M113_BACKUP_MEMBER_ID:}
   m012:
     evidence-hmac-key: ${YUMPOO_M012_EVIDENCE_HMAC_KEY:}
     wecom:

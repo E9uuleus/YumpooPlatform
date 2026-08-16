@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M1-13 身份基础阶段验收门禁
+
+M1-13 把空库 Flyway 迁移、身份与平台角色授权、生产构建 SPA、外部 Spring Boot JAR 和全新 PostgreSQL 串成同一条可重复验收链。门禁通过真实 HTTP Session/Cookie 覆盖匿名、普通成员、`APP_MANAGER`、`COMPANY_ADMIN`、双角色、离职、禁用、退出、隐藏 404 与授权版本失效；页面组件渲染仍由现有 Vitest/happy-dom 覆盖，不引入浏览器自动化框架。
+
+```powershell
+pnpm verify:m1-13
+```
+
+`verify:m1-13` 先校验 `evidence/m1-13`，再执行既有 `verify:m0-18:portable`，随后仅使用已构建的 JAR 与 Web 产物运行外部 HTTP 门禁，并复核绑定当前 Git SHA 的新鲜报告。门禁固定占用本机 8100、18174；任一端口被占用时直接失败且不会终止无关进程。完整验证需要 Java 21、Node 24.14、pnpm 11.16、Docker Linux engine 和 `postgres:17.10-alpine`。
+
+受控夹具只有在 `local` 或 `test`、`m1-13-e2e` 与 `YUMPOO_M113_FIXTURE_ENABLED=true` 同时满足时才注册；混入 `prod`、身份表非空或配置不完整都会拒绝启动。夹具不开放 HTTP 写入口，只经目录成员服务、维护用例和公共平台角色命令端口创建两个固定测试成员。Project ACL 真实资源留到 M2；真实企微 OAuth、扫码与公司 HTTPS 证据留到 M6-01，现有 `ENV_PENDING/NOT_RUN` 不会被本门禁提升为 `PASS`。
+
 ## M1-12 Web 全局壳、登录态与统一错误体验
 
 M1-12 发布正式的 Web 应用壳和集中会话状态。已认证用户可在响应式顶栏与侧栏中查看当前公司、用户和客户端类型；首页展示主体摘要，身份管理入口按生成的角色枚举显示，并保留概览、同步运行、成员管理三个直达地址。普通成员访问管理地址会进入权限拒绝页，未知地址进入真实 404 页面。

@@ -9,6 +9,7 @@ import YAML from 'yaml'
 import { extractOpenApiBaseline } from '../openapi/extract-openapi-baseline.mjs'
 import { assertEvidenceReportDigests, assertNoSensitiveMaterial } from './create-m0-18-evidence-pack.mjs'
 import { verifyServerSmokeReceipt } from './m0-18-server-smoke-receipt.mjs'
+import { m113PortableEnvironment } from './m1-13-environment.mjs'
 import {
   loadLiveEvidence,
   validateDeferredAcceptance,
@@ -323,11 +324,32 @@ test('full M0-18 runtime chain is Windows x64 only', () => {
   assert.deepEqual(desktopBuildOrder, [...desktopBuildOrder].sort((left, right) => left - right))
 })
 
-test('workflow locks triggers, two stable jobs, fail-closed dependency and immutable action SHAs', () => {
+test('M1-13 portable phase clears controlled fixture environment overrides', () => {
+  const inherited = {
+    YUMPOO_CONTROLLED_AUTH_ENABLED: 'true',
+    YUMPOO_CONTROLLED_AUTH_CORP_ID: 'inherited-corp',
+    YUMPOO_CONTROLLED_AUTH_MEMBER_ID: 'inherited-member',
+    YUMPOO_M113_FIXTURE_ENABLED: 'true',
+    YUMPOO_M113_BACKUP_MEMBER_ID: 'inherited-backup',
+    UNRELATED_SETTING: 'preserved',
+  }
+
+  const portable = m113PortableEnvironment(inherited)
+
+  assert.equal(portable.YUMPOO_CONTROLLED_AUTH_ENABLED, 'false')
+  assert.equal(portable.YUMPOO_CONTROLLED_AUTH_CORP_ID, '')
+  assert.equal(portable.YUMPOO_CONTROLLED_AUTH_MEMBER_ID, '')
+  assert.equal(portable.YUMPOO_M113_FIXTURE_ENABLED, 'false')
+  assert.equal(portable.YUMPOO_M113_BACKUP_MEMBER_ID, '')
+  assert.equal(portable.UNRELATED_SETTING, 'preserved')
+  assert.equal(inherited.YUMPOO_CONTROLLED_AUTH_ENABLED, 'true')
+})
+
+test('workflow locks M1-13 Linux gate, M0 handoff, fail-closed dependency and immutable action SHAs', () => {
   const workflowPath = path.join(repositoryRoot, '.github', 'workflows', 'm0-18-ci.yml')
   const source = fs.readFileSync(workflowPath, 'utf8')
   const workflow = YAML.parse(source)
-  assert.equal(workflow.name, 'M0-18 CI')
+  assert.equal(workflow.name, 'M1-13 CI')
   assert.deepEqual(Object.keys(workflow.on).sort(), ['pull_request', 'push'])
   assert.deepEqual(workflow.on.pull_request.branches, ['dev'])
   assert.deepEqual(workflow.on.push.branches, ['dev'])
@@ -345,6 +367,8 @@ test('workflow locks triggers, two stable jobs, fail-closed dependency and immut
   assert.doesNotMatch(source, /^\s*(?:paths|paths-ignore):/mu)
   assert.doesNotMatch(source, /pull_request_target|continue-on-error|workflow_dispatch/u)
   assert.doesNotMatch(source, /xvfb-run|smoke:m0-16:server/u)
+  assert.match(source, /run:\s+pnpm verify:m1-13/u)
+  assert.match(source, /path:\s+out\/m1-13\/verification-report\.json/u)
   assert.match(source, /YUMPOO_M018_VALIDATION_MODE:\s+WINDOWS_X64_CI_STAGE/u)
   assert.match(source, /out\/m0-17\/backup-set\/manifest\.json/u)
   assert.match(source, /out\/m0-17\/retention-plan\.json/u)
@@ -354,10 +378,10 @@ test('workflow locks triggers, two stable jobs, fail-closed dependency and immut
   assert.doesNotMatch(source, /^\s*strategy:/mu)
   assert.match(source, /retention-days:\s+1/u)
   assert.match(source, /retention-days:\s+30/u)
-  assert.equal((source.match(/if-no-files-found:\s+error/gu) ?? []).length, 2)
+  assert.equal((source.match(/if-no-files-found:\s+error/gu) ?? []).length, 3)
 
   const uses = [...source.matchAll(/uses:\s+([^@\s]+)@([^\s]+)/gu)]
-  assert.equal(uses.length, 11)
+  assert.equal(uses.length, 12)
   assert(uses.every((match) => /^[0-9a-f]{40}$/u.test(match[2])))
   for (const sha of [
     '3d3c42e5aac5ba805825da76410c181273ba90b1',

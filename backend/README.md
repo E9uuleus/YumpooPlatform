@@ -1,5 +1,19 @@
 # Yumpoo Server
 
+## M1-13 身份基础阶段验收门禁
+
+`identityaccess.api.PlatformRoleCommandPort` 是平台角色授予与撤销的稳定跨模块命令入口。公共命令要求企业、目标用户或分配、预期版本、操作者、幂等键、64 位小写 SHA-256 请求摘要和治理理由，返回不泄露 application 类型的角色变更回执；适配器继续复用既有最近认证、末位 `APP_MANAGER`、审计、Outbox、会话失效和幂等回放语义。
+
+受控门禁夹具由 `M113FixtureRunner` 启动，只在 `local|test + m1-13-e2e + yumpoo.verification.m1-13.fixture-enabled=true` 下可用。任何 `prod` profile、身份事实非空、受控身份提供者关闭或夹具标识缺失都会拒绝启动；它不提供测试 Controller，也不直接 SQL 写业务表。所需环境变量为 `YUMPOO_M113_FIXTURE_ENABLED=true`、`YUMPOO_M113_BACKUP_MEMBER_ID`，以及既有受控登录的 Corp ID/Member ID 配置。
+
+从仓库根目录运行：
+
+```powershell
+pnpm verify:m1-13
+```
+
+该入口要求 Docker Linux engine 可运行 `postgres:17.10-alpine`，并要求本机 8100、18174 端口空闲。它验证 PostgreSQL 权限矩阵后，以外部 JAR 和 Vite production preview 完成受控登录、Cookie/CSRF、角色边界、退出与自禁用链路，最终在忽略目录 `out/m1-13/verification-report.json` 生成绑定当前 HEAD 的脱敏报告。Docker 或端口条件不满足时必须失败，不能用单元测试结果替代完整门禁。
+
 ## M1-08 平台角色读取与资源授权内核
 
 Flyway `V11` 创建 `platform_role_assignment`，只允许 `COMPANY_ADMIN + COMPANY` 与 `APP_MANAGER + PLATFORM`，两种作用域均以当前 Company ID 作为 `scope_id`。ACTIVE 赋权唯一，撤销保留原行，重新授予创建新行。授予 actor envelope 支持受控的 `USER` 或 `SYSTEM` 来源，为 M1-09 首管引导与 break-glass 预留事实表达，但 M1-08 不提供任何写端口；数据库也不种管理员。

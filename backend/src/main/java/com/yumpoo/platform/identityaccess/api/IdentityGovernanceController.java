@@ -15,16 +15,12 @@ import com.yumpoo.platform.identityaccess.application.account.AccountStatusUseCa
 import com.yumpoo.platform.identityaccess.application.audit.IdentitySecurityAuditRecorder;
 import com.yumpoo.platform.identityaccess.application.authorization.GovernanceMemberState;
 import com.yumpoo.platform.identityaccess.application.authorization.GovernanceStateQueryService;
-import com.yumpoo.platform.identityaccess.application.authorization.GrantPlatformRoleCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleAssignmentQueryUseCase;
-import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleManagementUseCase;
-import com.yumpoo.platform.identityaccess.application.authorization.RevokePlatformRoleCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignmentPage;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignmentQuery;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignmentSnapshot;
 import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignmentStatus;
-import com.yumpoo.platform.identityaccess.application.authorization.RoleCommandActor;
 import com.yumpoo.platform.identityaccess.application.session.AuthenticatedSession;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -57,7 +53,7 @@ public final class IdentityGovernanceController {
     private final CurrentActorProvider currentActorProvider;
     private final GovernanceStateQueryService stateQuery;
     private final PlatformRoleAssignmentQueryUseCase roleQuery;
-    private final PlatformRoleManagementUseCase roleManagement;
+    private final PlatformRoleCommandPort roleCommands;
     private final AccountStatusUseCase accountStatusUseCase;
     private final IfMatchParser ifMatchParser;
     private final IdempotencyKeyParser idempotencyKeyParser;
@@ -69,7 +65,7 @@ public final class IdentityGovernanceController {
             CurrentActorProvider currentActorProvider,
             GovernanceStateQueryService stateQuery,
             PlatformRoleAssignmentQueryUseCase roleQuery,
-            PlatformRoleManagementUseCase roleManagement,
+            PlatformRoleCommandPort roleCommands,
             AccountStatusUseCase accountStatusUseCase,
             IfMatchParser ifMatchParser,
             IdempotencyKeyParser idempotencyKeyParser,
@@ -80,7 +76,7 @@ public final class IdentityGovernanceController {
         this.currentActorProvider = currentActorProvider;
         this.stateQuery = stateQuery;
         this.roleQuery = roleQuery;
-        this.roleManagement = roleManagement;
+        this.roleCommands = roleCommands;
         this.accountStatusUseCase = accountStatusUseCase;
         this.ifMatchParser = ifMatchParser;
         this.idempotencyKeyParser = idempotencyKeyParser;
@@ -120,7 +116,7 @@ public final class IdentityGovernanceController {
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyKey,
             HttpServletRequest request
     ) {
-        return grant(ManagedPlatformRole.COMPANY_ADMIN, body, ifMatch, idempotencyKey, request);
+        return grant(PlatformRoleCode.COMPANY_ADMIN, body, ifMatch, idempotencyKey, request);
     }
 
     @PostMapping("/admin/app-manager-assignments")
@@ -130,7 +126,7 @@ public final class IdentityGovernanceController {
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyKey,
             HttpServletRequest request
     ) {
-        return grant(ManagedPlatformRole.APP_MANAGER, body, ifMatch, idempotencyKey, request);
+        return grant(PlatformRoleCode.APP_MANAGER, body, ifMatch, idempotencyKey, request);
     }
 
     @DeleteMapping("/admin/company-admin-assignments/{assignmentId}")
@@ -141,7 +137,7 @@ public final class IdentityGovernanceController {
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyKey,
             HttpServletRequest request
     ) {
-        return revoke(ManagedPlatformRole.COMPANY_ADMIN, assignmentId, body,
+        return revoke(PlatformRoleCode.COMPANY_ADMIN, assignmentId, body,
                 ifMatch, idempotencyKey, request);
     }
 
@@ -153,7 +149,7 @@ public final class IdentityGovernanceController {
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyKey,
             HttpServletRequest request
     ) {
-        return revoke(ManagedPlatformRole.APP_MANAGER, assignmentId, body,
+        return revoke(PlatformRoleCode.APP_MANAGER, assignmentId, body,
                 ifMatch, idempotencyKey, request);
     }
 
@@ -180,7 +176,7 @@ public final class IdentityGovernanceController {
     }
 
     private ResponseEntity<String> grant(
-            ManagedPlatformRole role,
+            PlatformRoleCode role,
             RoleGrantRequest body,
             String ifMatch,
             String idempotencyHeader,
@@ -188,24 +184,25 @@ public final class IdentityGovernanceController {
     ) {
         CurrentActor actor = currentActorProvider.requiredActive();
         UUID idempotencyKey = idempotencyKeyParser.parseRequired(idempotencyHeader);
-        String operation = role == ManagedPlatformRole.APP_MANAGER
+        String operation = role == PlatformRoleCode.APP_MANAGER
                 ? "grantAppManager" : "grantCompanyAdmin";
         try {
             GovernanceMemberState visible = stateQuery.findMember(
                     actor.companyId(), actor.userId(), body.userId());
             long expectedVersion = ifMatchParser.parseForVisibleResource(true, ifMatch);
-            IdempotencyExecutionResult result = roleManagement.grant(new GrantPlatformRoleCommand(
+            PlatformRoleCommandReceipt result = roleCommands.grant(new PlatformRoleGrantCommand(
                     actor.companyId(), visible.userId(), role, expectedVersion,
                     roleActor(actor, request), idempotencyKey,
                     requestHasher.hash(operation,
                             Map.of("userId", visible.userId().toString(),
                                     "ifMatch", Long.toString(expectedVersion)),
-                            objectMapper.valueToTree(body)),
+                            objectMapper.valueToTree(body)).value(),
                     body.reason()));
-            String base = role == ManagedPlatformRole.APP_MANAGER
+            String base = role == PlatformRoleCode.APP_MANAGER
                     ? "/api/v1/admin/app-manager-assignments/"
                     : "/api/v1/admin/company-admin-assignments/";
-            return stored(result.result(), URI.create(base + result.result().resourceId()));
+            return roleResponse(result, HttpStatus.CREATED,
+                    URI.create(base + result.mutation().assignmentId()));
         } catch (RuntimeException exception) {
             failClosed(actor, idempotencyKey, operation, "USER", body.userId(),
                     body.reason(), request, exception);
@@ -214,7 +211,7 @@ public final class IdentityGovernanceController {
     }
 
     private ResponseEntity<String> revoke(
-            ManagedPlatformRole role,
+            PlatformRoleCode role,
             UUID assignmentId,
             GovernanceReasonRequest body,
             String ifMatch,
@@ -223,21 +220,22 @@ public final class IdentityGovernanceController {
     ) {
         CurrentActor actor = currentActorProvider.requiredActive();
         UUID idempotencyKey = idempotencyKeyParser.parseRequired(idempotencyHeader);
-        String operation = role == ManagedPlatformRole.APP_MANAGER
+        String operation = role == PlatformRoleCode.APP_MANAGER
                 ? "revokeAppManager" : "revokeCompanyAdmin";
         try {
+            ManagedPlatformRole managedRole = ManagedPlatformRole.valueOf(role.name());
             RoleAssignmentSnapshot visible = stateQuery.findAssignment(
-                    actor.companyId(), actor.userId(), assignmentId, role);
+                    actor.companyId(), actor.userId(), assignmentId, managedRole);
             long expectedVersion = ifMatchParser.parseForVisibleResource(true, ifMatch);
-            IdempotencyExecutionResult result = roleManagement.revoke(new RevokePlatformRoleCommand(
+            PlatformRoleCommandReceipt result = roleCommands.revoke(new PlatformRoleRevokeCommand(
                     actor.companyId(), visible.assignmentId(), role, expectedVersion,
                     roleActor(actor, request), idempotencyKey,
                     requestHasher.hash(operation,
                             Map.of("assignmentId", assignmentId.toString(),
                                     "ifMatch", Long.toString(expectedVersion)),
-                            objectMapper.valueToTree(body)),
+                            objectMapper.valueToTree(body)).value(),
                     body.reason()));
-            return stored(result.result(), null);
+            return roleResponse(result, HttpStatus.OK, null);
         } catch (RuntimeException exception) {
             failClosed(actor, idempotencyKey, operation, "PLATFORM_ROLE_ASSIGNMENT",
                     assignmentId, body.reason(), request, exception);
@@ -328,9 +326,13 @@ public final class IdentityGovernanceController {
         return reason.strip();
     }
 
-    private static RoleCommandActor roleActor(CurrentActor actor, HttpServletRequest request) {
+    private static PlatformRoleCommandActor roleActor(
+            CurrentActor actor,
+            HttpServletRequest request
+    ) {
         AuthenticatedSession session = SessionRequestContext.required(request);
-        return new RoleCommandActor(actor.userId(), actor.authorizationVersion(), session.authenticatedAt());
+        return new PlatformRoleCommandActor(
+                actor.userId(), actor.authorizationVersion(), session.authenticatedAt());
     }
 
     private static AccountStatusCommandActor accountActor(CurrentActor actor, HttpServletRequest request) {
@@ -353,5 +355,27 @@ public final class IdentityGovernanceController {
             headers.setLocation(location);
         }
         return new ResponseEntity<>(stored.responseJson(), headers, HttpStatus.valueOf(stored.httpStatus()));
+    }
+
+    private ResponseEntity<String> roleResponse(
+            PlatformRoleCommandReceipt receipt,
+            HttpStatus status,
+            URI location
+    ) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setETag('"' + Long.toString(receipt.mutation().assignmentRowVersion()) + '"');
+            if (location != null) {
+                headers.setLocation(location);
+            }
+            return new ResponseEntity<>(
+                    objectMapper.writeValueAsString(receipt.mutation()),
+                    headers,
+                    status
+            );
+        } catch (tools.jackson.core.JacksonException exception) {
+            throw new IllegalStateException("platform role response serialization failed", exception);
+        }
     }
 }
