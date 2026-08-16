@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   linux:
-    name: M1 Identity Acceptance Gate
+    name: M0 Portable Gate
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     outputs:
