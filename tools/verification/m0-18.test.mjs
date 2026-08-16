@@ -355,7 +355,7 @@ test('workflow locks M1-13 Linux gate, M0 handoff, fail-closed dependency and im
   assert.deepEqual(workflow.on.push.branches, ['dev'])
   assert.deepEqual(workflow.permissions, { contents: 'read' })
   assert.deepEqual(Object.keys(workflow.jobs).sort(), ['linux', 'windows'])
-  assert.equal(workflow.jobs.linux.name, 'M1 Identity Acceptance Gate')
+  assert.equal(workflow.jobs.linux.name, 'M0 Portable Gate')
   assert.equal(workflow.jobs.linux['runs-on'], 'ubuntu-24.04')
   assert.equal(workflow.jobs.linux['timeout-minutes'], 60)
   assert.equal(workflow.jobs.windows.name, 'M0 Windows x64 Gate')

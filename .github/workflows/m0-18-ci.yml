@@ -89,7 +89,7 @@ jobs:
         shell: powershell
         run: |
           if ('${{ needs.linux.result }}' -ne 'success') {
-            throw 'M1 Identity Acceptance Gate did not succeed; Windows x64 gate fails closed.'
+            throw 'M0 Portable Gate did not succeed; Windows x64 gate fails closed.'
           }
       - name: Checkout the same tested commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
