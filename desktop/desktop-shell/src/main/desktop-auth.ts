@@ -4,8 +4,8 @@ import type {
   DesktopAuthStatus,
 } from '@yumpoo/preload-contract'
 
-const AUTHORIZATION_PATH = '/_m0/m0-15/electron/auth/authorize'
-const EXCHANGE_PATH = '/_m0/m0-15/electron/auth/exchange'
+const AUTHORIZATION_PATH = '/api/v1/electron/auth/attempts'
+const EXCHANGE_PATH = '/api/v1/electron/auth/exchange'
 const ATTEMPT_TTL_MS = 5 * 60 * 1_000
 const EXCHANGE_TIMEOUT_MS = 15_000
 
@@ -24,9 +24,20 @@ export interface DesktopAuthExchangeInput extends DesktopAuthCallback {
   readonly codeVerifier: string
 }
 
+export interface DesktopAuthorizationResponse {
+  readonly authorizationUrl: string
+  readonly expiresAt: string
+}
+
+export interface DesktopSessionBundle {
+  readonly sessionCredential: string
+  readonly csrfCredential: string
+  readonly absoluteExpiresAt: string
+}
+
 export interface DesktopAuthControllerOptions {
   readonly enabled: boolean
-  readonly webOrigin: string
+  readonly authorize: (attempt: DesktopPkceAttempt) => Promise<DesktopAuthorizationResponse>
   readonly openExternal: (url: string) => Promise<unknown>
   readonly exchange: (input: DesktopAuthExchangeInput) => Promise<void>
   readonly publishStatus: (status: DesktopAuthStatus) => void
@@ -39,6 +50,8 @@ export interface DesktopAuthExchangeOptions {
   readonly clientVersion: string
   readonly fetchImplementation?: typeof fetch
 }
+
+export type DesktopAuthAuthorizationOptions = DesktopAuthExchangeOptions
 
 interface PendingDesktopAuthAttempt extends DesktopPkceAttempt {
   readonly expiresAt: number
@@ -53,17 +66,6 @@ export function createDesktopPkceAttempt(): DesktopPkceAttempt {
   const verifier = base64Url(randomBytes(32))
   const challenge = createHash('sha256').update(verifier, 'ascii').digest('base64url')
   return Object.freeze({ state, verifier, challenge })
-}
-
-export function buildDesktopAuthorizationUrl(
-  webOrigin: string,
-  attempt: Pick<DesktopPkceAttempt, 'state' | 'challenge'>,
-): URL {
-  const url = new URL(AUTHORIZATION_PATH, `${new URL(webOrigin).origin}/`)
-  url.searchParams.set('state', attempt.state)
-  url.searchParams.set('codeChallenge', attempt.challenge)
-  url.searchParams.set('codeChallengeMethod', 'S256')
-  return url
 }
 
 function sameState(actual: string, expected: string): boolean {
@@ -109,27 +111,36 @@ export class DesktopAuthController {
     }
 
     const attempt = this.createAttempt()
-    const pendingAttempt = Object.freeze({
+    const localPending = Object.freeze({
       ...attempt,
       expiresAt: this.now() + ATTEMPT_TTL_MS,
     })
-    this.pending = pendingAttempt
+    this.pending = localPending
     this.options.publishStatus(status('OPENING_BROWSER'))
 
     try {
-      await this.options.openExternal(
-        buildDesktopAuthorizationUrl(this.options.webOrigin, attempt).href,
-      )
-    } catch {
-      if (this.pending === pendingAttempt) {
-        this.pending = undefined
-        this.fail('BROWSER_OPEN_FAILED')
+      const authorization = await this.options.authorize(attempt)
+      const serverExpiry = Date.parse(authorization.expiresAt)
+      const pendingAttempt = Object.freeze({
+        ...attempt,
+        expiresAt: Number.isFinite(serverExpiry)
+          ? Math.min(serverExpiry, this.now() + ATTEMPT_TTL_MS)
+          : this.now() + ATTEMPT_TTL_MS,
+      })
+      if (this.pending !== localPending) {
+        return
       }
+      this.pending = pendingAttempt
+      await this.options.openExternal(authorization.authorizationUrl)
+      if (this.pending === pendingAttempt) {
+        this.options.publishStatus(status('WAITING_FOR_CALLBACK'))
+      }
+    } catch {
+      if (this.pending === localPending || this.pending?.state === attempt.state) {
+        this.pending = undefined
+      }
+      this.fail('BROWSER_OPEN_FAILED')
       return
-    }
-
-    if (this.pending === pendingAttempt) {
-      this.options.publishStatus(status('WAITING_FOR_CALLBACK'))
     }
   }
 
@@ -181,13 +192,57 @@ export class DesktopAuthController {
   }
 }
 
+export async function requestDesktopAuthorization(
+  attempt: DesktopPkceAttempt,
+  options: DesktopAuthAuthorizationOptions,
+): Promise<DesktopAuthorizationResponse> {
+  const response = await desktopAuthFetch(AUTHORIZATION_PATH, options, {
+    state: attempt.state,
+    codeChallenge: attempt.challenge,
+    codeChallengeMethod: 'S256',
+  })
+  const body = await response.json() as Partial<DesktopAuthorizationResponse>
+  if (typeof body.authorizationUrl !== 'string' || typeof body.expiresAt !== 'string') {
+    throw new Error('Desktop authorization response is invalid')
+  }
+  const url = new URL(body.authorizationUrl)
+  if (url.protocol !== 'https:' || url.hostname !== 'open.work.weixin.qq.com') {
+    throw new Error('Desktop authorization URL is not allowlisted')
+  }
+  return Object.freeze({ authorizationUrl: url.href, expiresAt: body.expiresAt })
+}
+
 export async function exchangeDesktopAuthCode(
   input: DesktopAuthExchangeInput,
   options: DesktopAuthExchangeOptions,
-): Promise<void> {
+): Promise<DesktopSessionBundle> {
+  const response = await desktopAuthFetch(EXCHANGE_PATH, options, {
+    handoffCode: input.code,
+    state: input.state,
+    codeVerifier: input.codeVerifier,
+  })
+  const body = await response.json() as Partial<DesktopSessionBundle>
+  if (!validOpaqueCredential(body.sessionCredential)
+    || !validOpaqueCredential(body.csrfCredential)
+    || typeof body.absoluteExpiresAt !== 'string'
+    || !Number.isFinite(Date.parse(body.absoluteExpiresAt))) {
+    throw new Error('Desktop auth exchange response is invalid')
+  }
+  return Object.freeze({
+    sessionCredential: body.sessionCredential,
+    csrfCredential: body.csrfCredential,
+    absoluteExpiresAt: body.absoluteExpiresAt,
+  })
+}
+
+async function desktopAuthFetch(
+  path: string,
+  options: DesktopAuthExchangeOptions,
+  body: object,
+): Promise<Response> {
   const fetchImplementation = options.fetchImplementation ?? fetch
-  const exchangeUrl = new URL(EXCHANGE_PATH, `${new URL(options.webOrigin).origin}/`)
-  const response = await fetchImplementation(exchangeUrl, {
+  const url = new URL(path, `${new URL(options.webOrigin).origin}/`)
+  const response = await fetchImplementation(url, {
     method: 'POST',
     redirect: 'error',
     headers: {
@@ -196,11 +251,7 @@ export async function exchangeDesktopAuthCode(
       'X-Client-Version': options.clientVersion,
       'X-Client-Protocol-Version': '1',
     },
-    body: JSON.stringify({
-      code: input.code,
-      state: input.state,
-      codeVerifier: input.codeVerifier,
-    }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS),
   })
 
@@ -208,5 +259,12 @@ export async function exchangeDesktopAuthCode(
     await response.body?.cancel().catch(() => undefined)
     throw new Error('Desktop auth exchange failed')
   }
-  await response.body?.cancel().catch(() => undefined)
+  return response
+}
+
+function validOpaqueCredential(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length >= 43
+    && value.length <= 256
+    && /^[A-Za-z0-9._~-]+$/.test(value)
 }

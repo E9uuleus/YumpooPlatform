@@ -58,6 +58,9 @@ const desktopAuth = Object.freeze({
   start: async (): Promise<void> => {
     await ipcRenderer.invoke('yumpoo:auth:start')
   },
+  clear: async (): Promise<void> => {
+    await ipcRenderer.invoke('yumpoo:auth:clear')
+  },
   onStatus(listener: (status: DesktopAuthStatus) => void): () => void {
     if (typeof listener !== 'function') {
       throw new TypeError('Desktop auth status listener must be a function')

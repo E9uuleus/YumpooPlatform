@@ -23,7 +23,7 @@ const DESKTOP_AREAS = {
 
 const PRELOAD_ENTRY = path.join(DESKTOP_AREAS.preload, 'index.ts')
 const PRELOAD_IPC_CHANNELS = new Map([
-  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start'])],
+  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start', 'yumpoo:auth:clear'])],
   ['on', new Set(['yumpoo:auth:status'])],
   ['removeListener', new Set(['yumpoo:auth:status'])],
 ])

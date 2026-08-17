@@ -2,6 +2,7 @@ import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
 import {
   AUTH_IS_ENABLED_CHANNEL,
+  AUTH_CLEAR_CHANNEL,
   AUTH_START_CHANNEL,
   installAuthIpc,
   isTrustedAuthIpcSender,
@@ -64,11 +65,13 @@ describe('Electron 认证 IPC 门禁', () => {
       getMainWindow: () => fixture.mainWindow,
       allowedOrigin: 'https://yumpoo.example.com',
       controller,
+      clearSession: vi.fn(async () => undefined),
     })
 
     expect(handlers.get(AUTH_IS_ENABLED_CHANNEL)?.(fixture.event)).toBe(true)
     await handlers.get(AUTH_START_CHANNEL)?.(fixture.event)
     expect(controller.start).toHaveBeenCalledOnce()
+    await handlers.get(AUTH_CLEAR_CHANNEL)?.(fixture.event)
 
     const forgedEvent = {
       ...fixture.event,

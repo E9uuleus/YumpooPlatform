@@ -1,11 +1,17 @@
 import path from 'node:path'
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron'
 import type { DesktopAuthStatus } from '@yumpoo/preload-contract'
 import { AUTH_STATUS_CHANNEL, installAuthIpc } from './auth-ipc'
 import {
   DesktopAuthController,
   exchangeDesktopAuthCode,
+  requestDesktopAuthorization,
 } from './desktop-auth'
+import {
+  clearSessionCookies,
+  DesktopCredentialStore,
+  installSessionCookies,
+} from './credential-store'
 import {
   ProtocolLaunchDispatcher,
   registerYumpooProtocolClient,
@@ -23,6 +29,7 @@ const protocolDispatcher = new ProtocolLaunchDispatcher()
 
 let mainWindow: BrowserWindow | null = null
 let webAppUrl: URL | undefined
+let credentialStore: DesktopCredentialStore | undefined
 
 function failStartup(): never {
   console.error('[YUMPOO_DESKTOP_STARTUP_FAILED]')
@@ -31,7 +38,15 @@ function failStartup(): never {
 }
 
 function electronAuthEnabled(): boolean {
-  return process.env.YUMPOO_M015_WECOM_ENABLED?.trim().toLowerCase() === 'true'
+  const configured = process.env.YUMPOO_ELECTRON_AUTH_ENABLED?.trim().toLowerCase()
+  return configured === undefined ? app.isPackaged : configured === 'true'
+}
+
+async function clearDesktopSession(): Promise<void> {
+  await credentialStore?.clear()
+  if (mainWindow && !mainWindow.isDestroyed() && webAppUrl) {
+    await clearSessionCookies(mainWindow.webContents.session.cookies, webAppUrl.origin)
+  }
 }
 
 function publishAuthStatus(authStatus: DesktopAuthStatus): void {
@@ -76,6 +91,10 @@ async function createMainWindow(): Promise<void> {
 
   mainWindow = new BrowserWindow(createWindowOptions(preloadPath, app.isPackaged))
   installSecurityGuards(mainWindow.webContents, webAppUrl.origin)
+  const restored = await credentialStore?.load(webAppUrl.origin)
+  if (restored) {
+    await installSessionCookies(mainWindow.webContents.session.cookies, webAppUrl.origin, restored)
+  }
 
   if (smokeTest) {
     const timeout = setTimeout(failStartup, SMOKE_TEST_TIMEOUT_MS)
@@ -128,15 +147,26 @@ async function startApplication(): Promise<void> {
   }
 
   installAppSecurityGuards(app)
+  credentialStore = new DesktopCredentialStore(app.getPath('userData'), safeStorage)
   const controller = new DesktopAuthController({
     enabled: electronAuthEnabled(),
-    webOrigin: webAppUrl.origin,
+    authorize: (attempt) => requestDesktopAuthorization(attempt, {
+      webOrigin: webAppUrl?.origin ?? '',
+      clientVersion: app.getVersion(),
+    }),
     openExternal: (url) => shell.openExternal(url, { activate: true }),
-    exchange: (input) =>
-      exchangeDesktopAuthCode(input, {
+    exchange: async (input) => {
+      const bundle = await exchangeDesktopAuthCode(input, {
         webOrigin: webAppUrl?.origin ?? '',
         clientVersion: app.getVersion(),
-      }),
+      })
+      await credentialStore?.save(bundle, webAppUrl?.origin ?? '')
+      if (!mainWindow || mainWindow.isDestroyed() || !webAppUrl) {
+        throw new Error('Main window is unavailable')
+      }
+      await installSessionCookies(mainWindow.webContents.session.cookies, webAppUrl.origin, bundle)
+      await mainWindow.loadURL(webAppUrl.href)
+    },
     publishStatus: publishAuthStatus,
   })
   protocolDispatcher.setHandler((callback) => {
@@ -147,6 +177,7 @@ async function startApplication(): Promise<void> {
     getMainWindow: () => mainWindow,
     allowedOrigin: webAppUrl.origin,
     controller,
+    clearSession: clearDesktopSession,
   })
   await createMainWindow()
 }
