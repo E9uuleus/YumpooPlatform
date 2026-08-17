@@ -1,5 +1,16 @@
 # YumpooPlatform
 
+## M1-14 PC Chrome / Electron 企业微信扫码登录
+
+PC Chrome 现在由 `/login` 的显式按钮进入企微官方 `qrConnect`；Electron 0.1.0 使用系统默认浏览器、PKCE S256、60 秒一次性 handoff 和 Windows safeStorage 建立正式 `ELECTRON` 会话。当前步骤只生成服务器与 Windows x64 桌面 PILOT 包，不自动更新开发服务器，真实扫码证据保持 `ENV_PENDING`。
+
+```powershell
+pnpm verify:m1-14
+pnpm verify:m1-14:deployment
+```
+
+产物位于忽略目录 `out/m1-14`，包含服务器/桌面 ZIP、SHA-256、`artifact-manifest.json` 和 `verification-report.json`。当前部署入口见 `deployment/windows/RUNBOOK.md`，M1-13 手册保留为 `RUNBOOK-M1-13.md`。
+
 ## M1-13 身份基础阶段验收门禁
 
 M1-13 把空库 Flyway 迁移、身份与平台角色授权、生产构建 SPA、外部 Spring Boot JAR 和全新 PostgreSQL 串成同一条可重复验收链。门禁通过真实 HTTP Session/Cookie 覆盖匿名、普通成员、`APP_MANAGER`、`COMPANY_ADMIN`、双角色、离职、禁用、退出、隐藏 404 与授权版本失效；页面组件渲染仍由现有 Vitest/happy-dom 覆盖，不引入浏览器自动化框架。
