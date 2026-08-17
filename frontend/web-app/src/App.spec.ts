@@ -70,8 +70,7 @@ describe('M1-12 Web 全局壳', () => {
     expect(wrapper.text()).toContain('成员管理')
   })
 
-  it('仅在 Electron 受控门禁启用时显示诊断面板', async () => {
-    useSession().authentication.value = authentication(AuthenticationClientType.Electron)
+  it('Electron 匿名登录页仅通过受控桥打开系统浏览器', async () => {
     const start = vi.fn(async () => undefined)
     Object.defineProperty(window, 'yumpooDesktop', {
       configurable: true,
@@ -80,13 +79,15 @@ describe('M1-12 Web 全局壳', () => {
         auth: Object.freeze({
           isEnabled: vi.fn(async () => true),
           start,
+          clear: vi.fn(async () => undefined),
           onStatus: vi.fn(() => vi.fn()),
         }),
       }),
     })
-    const wrapper = await mountApplication()
+    const wrapper = await mountApplication('/login')
     await flushPromises()
-    expect(wrapper.text()).toContain('Electron 在线壳')
-    expect(wrapper.text()).toContain('Electron 登录交接验证')
+    expect(wrapper.text()).toContain('在系统默认浏览器中完成')
+    await wrapper.get('button').trigger('click')
+    expect(start).toHaveBeenCalledOnce()
   })
 })

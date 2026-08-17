@@ -104,6 +104,7 @@ export async function logout(): Promise<boolean> {
   logoutLoading.value = true
   try {
     await authenticationApi.logoutCurrentSession({ xXSRFTOKEN: csrf })
+    await window.yumpooDesktop?.auth.clear().catch(() => undefined)
     setAnonymous()
     return true
   } catch (reason) {
@@ -145,6 +146,7 @@ function applyGlobalProblem(problem: ApiProblem): boolean {
 }
 
 function setAnonymous(): void {
+  void window.yumpooDesktop?.auth.clear().catch(() => undefined)
   authentication.value = undefined
   blockingProblem.value = undefined
   phase.value = 'anonymous'

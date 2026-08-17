@@ -27,6 +27,7 @@ const EXPECTED_ASAR_ENTRIES = new Set([
   'dist',
   'dist/main',
   'dist/main/auth-ipc.js',
+  'dist/main/credential-store.js',
   'dist/main/desktop-auth.js',
   'dist/main/index.js',
   'dist/main/protocol-client.js',

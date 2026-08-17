@@ -101,6 +101,9 @@ class WebAuthenticationConfigurationTest {
         properties.setCallbackUri(
                 URI.create("https://app.example.test/api/v1/auth/wecom/callback")
         );
+        properties.setElectronCallbackUri(
+                URI.create("https://app.example.test/api/v1/electron/auth/wecom/callback")
+        );
         return properties;
     }
 

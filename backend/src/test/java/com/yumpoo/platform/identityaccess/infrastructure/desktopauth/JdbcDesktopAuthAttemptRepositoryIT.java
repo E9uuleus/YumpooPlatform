@@ -9,6 +9,8 @@ import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthTok
 import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopIdentityFingerprint;
 import com.yumpoo.platform.identityaccess.application.desktopauth.PkceS256Challenge;
 import com.yumpoo.platform.identityaccess.application.desktopauth.PkceVerifier;
+import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktopAuthAttempt;
+import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktopAuthExchange;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -45,6 +48,8 @@ class JdbcDesktopAuthAttemptRepositoryIT {
             "b".repeat(64)
     );
     private static final DesktopAuthTokenHasher HASHER = new DesktopAuthTokenHasher();
+    private static final UUID USER_ID = UUID.fromString("70000000-0000-4000-8000-000000000114");
+    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
 
     @Autowired
     private DesktopAuthAttemptStore attemptStore;
@@ -55,6 +60,23 @@ class JdbcDesktopAuthAttemptRepositoryIT {
     @BeforeEach
     void resetAttempts() {
         jdbcClient.sql("TRUNCATE TABLE yumpoo.desktop_auth_attempt").update();
+        jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id = :userId")
+                .param("userId", USER_ID)
+                .update();
+        jdbcClient.sql("""
+                        INSERT INTO yumpoo.identity_user (
+                            id, company_id, employment_status, account_status,
+                            display_name, directory_synced_at,
+                            authorization_version, row_version, created_at, updated_at
+                        ) VALUES (
+                            :userId, :companyId, 'ACTIVE', 'ENABLED',
+                            'M1-14 Electron Member', transaction_timestamp(),
+                            0, 0, transaction_timestamp(), transaction_timestamp()
+                        )
+                        """)
+                .param("userId", USER_ID)
+                .param("companyId", COMPANY_ID)
+                .update();
     }
 
     @Test
@@ -153,6 +175,44 @@ class JdbcDesktopAuthAttemptRepositoryIT {
     }
 
     @Test
+    void productAttemptClaimsOnceAndConsumesPkceHandoffOnce() {
+        attemptStore.createProduct(new ProductDesktopAuthAttempt(
+                hash(DESKTOP_STATE), VERIFIER.challenge(), "m114.persistence-1",
+                "0.1.0", "1", CREATED_AT, CREATED_AT.plusSeconds(300)
+        ));
+
+        assertThat(attemptStore.claimProductAuthorization(
+                hash(DESKTOP_STATE), CREATED_AT.plusSeconds(1)
+        )).isTrue();
+        assertThat(attemptStore.claimProductAuthorization(
+                hash(DESKTOP_STATE), CREATED_AT.plusSeconds(1)
+        )).isFalse();
+        assertThat(attemptStore.issueProductHandoff(
+                hash(DESKTOP_STATE), hash(HANDOFF_CODE), USER_ID,
+                CREATED_AT.plusSeconds(2), CREATED_AT.plusSeconds(62)
+        )).isTrue();
+        assertThat(attemptStore.consumeProduct(
+                hash(DESKTOP_STATE), hash(HANDOFF_CODE), WRONG_VERIFIER.challenge(),
+                CREATED_AT.plusSeconds(3)
+        )).isEmpty();
+
+        Optional<ProductDesktopAuthExchange> exchange = attemptStore.consumeProduct(
+                hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(),
+                CREATED_AT.plusSeconds(3)
+        );
+
+        assertThat(exchange).hasValueSatisfying(value -> {
+            assertThat(value.userId()).isEqualTo(USER_ID);
+            assertThat(value.clientVersion()).isEqualTo("0.1.0");
+            assertThat(value.clientProtocolVersion()).isEqualTo("1");
+        });
+        assertThat(attemptStore.consumeProduct(
+                hash(DESKTOP_STATE), hash(HANDOFF_CODE), VERIFIER.challenge(),
+                CREATED_AT.plusSeconds(4)
+        )).isEmpty();
+    }
+
+    @Test
     void databasePersistsOnlyHashesPkceAndHmacFingerprints() {
         createAndIssue();
 
@@ -194,7 +254,11 @@ class JdbcDesktopAuthAttemptRepositoryIT {
                 "member_fingerprint",
                 "handoff_issued_at",
                 "handoff_expires_at",
-                "consumed_at"
+                "consumed_at",
+                "authorization_claimed_at",
+                "authenticated_user_id",
+                "client_version",
+                "client_protocol_version"
         );
         assertThat(stored.desktopStateHash()).isEqualTo(hash(DESKTOP_STATE).value());
         assertThat(stored.oauthStateHash()).isEqualTo(hash(OAUTH_STATE).value());

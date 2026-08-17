@@ -20,7 +20,8 @@ import java.util.function.Function;
 final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
 
     private static final String API_BASE_URL = "https://qyapi.weixin.qq.com";
-    private static final String AUTHORIZE_ENDPOINT = "https://open.weixin.qq.com/connect/oauth2/authorize";
+    private static final String MOBILE_AUTHORIZE_ENDPOINT = "https://open.weixin.qq.com/connect/oauth2/authorize";
+    private static final String QR_AUTHORIZE_ENDPOINT = "https://open.work.weixin.qq.com/wwopen/sso/qrConnect";
     private static final String GET_USER_INFO_PATH = "/cgi-bin/auth/getuserinfo";
     private static final Set<Long> INVALID_AUTHORIZATION_CODE_ERRORS = Set.of(
             40029L,
@@ -65,10 +66,8 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
 
     @Override
     public URI buildAuthorizationUri(String state) {
-        if (state == null || state.isBlank()) {
-            throw new IllegalArgumentException("state must not be blank");
-        }
-        return UriComponentsBuilder.fromUriString(AUTHORIZE_ENDPOINT)
+        requireAuthorizationInput(state, settings.callbackUri());
+        return UriComponentsBuilder.fromUriString(MOBILE_AUTHORIZE_ENDPOINT)
                 .queryParam("appid", "{corpId}")
                 .queryParam("redirect_uri", "{redirectUri}")
                 .queryParam("response_type", "code")
@@ -77,13 +76,36 @@ final class RestClientWeComIdentityGateway implements WeComIdentityGateway {
                 .queryParam("agentid", "{agentId}")
                 .fragment("wechat_redirect")
                 .encode()
-                .buildAndExpand(Map.of(
-                        "corpId", settings.corpId(),
-                        "redirectUri", settings.callbackUri().toASCIIString(),
-                        "state", state,
-                        "agentId", settings.agentId()
-                ))
+                .buildAndExpand(authorizationParameters(state, settings.callbackUri()))
                 .toUri();
+    }
+
+    URI buildQrAuthorizationUri(String state, URI callbackUri) {
+        requireAuthorizationInput(state, callbackUri);
+        return UriComponentsBuilder.fromUriString(QR_AUTHORIZE_ENDPOINT)
+                .queryParam("appid", "{corpId}")
+                .queryParam("redirect_uri", "{redirectUri}")
+                .queryParam("state", "{state}")
+                .queryParam("agentid", "{agentId}")
+                .encode()
+                .buildAndExpand(authorizationParameters(state, callbackUri))
+                .toUri();
+    }
+
+    private Map<String, String> authorizationParameters(String state, URI callbackUri) {
+        return Map.of(
+                "corpId", settings.corpId(),
+                "redirectUri", callbackUri.toASCIIString(),
+                "state", state,
+                "agentId", settings.agentId()
+        );
+    }
+
+    private static void requireAuthorizationInput(String state, URI callbackUri) {
+        if (state == null || state.isBlank()) {
+            throw new IllegalArgumentException("state must not be blank");
+        }
+        Objects.requireNonNull(callbackUri, "callbackUri must not be null");
     }
 
     @Override

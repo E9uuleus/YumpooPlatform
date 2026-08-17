@@ -1,5 +1,15 @@
 # Yumpoo Server
 
+## M1-14 企业微信 PC 扫码与 Electron 会话
+
+Web `/api/v1/auth/wecom/authorize` 使用企微官方 `qrConnect`。Electron 新增 attempt、HTTPS callback、PKCE handoff exchange 三个接口，并在同一事务内消费 handoff、变更 attempt 状态和签发 `ELECTRON` Session；V15 迁移在既有 `desktop_auth_attempt` 上增加用户、客户端版本和协议版本绑定。
+
+```powershell
+pnpm verify:m1-14
+```
+
+真实 Secret、Cookie、企微 code、state、handoff 和 verifier 不得进入日志、审计正文或验证报告。
+
 ## M1-13 身份基础阶段验收门禁
 
 `identityaccess.api.PlatformRoleCommandPort` 是平台角色授予与撤销的稳定跨模块命令入口。公共命令要求企业、目标用户或分配、预期版本、操作者、幂等键、64 位小写 SHA-256 请求摘要和治理理由，返回不泄露 application 类型的角色变更回执；适配器继续复用既有最近认证、末位 `APP_MANAGER`、审计、Outbox、会话失效和幂等回放语义。

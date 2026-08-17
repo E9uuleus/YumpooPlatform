@@ -25,6 +25,7 @@ export interface DesktopAuthStatus {
 export interface DesktopAuthBridge {
   isEnabled(): Promise<boolean>
   start(): Promise<void>
+  clear(): Promise<void>
   onStatus(listener: (status: DesktopAuthStatus) => void): () => void
 }
 

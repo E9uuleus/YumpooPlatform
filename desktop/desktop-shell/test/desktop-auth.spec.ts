@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  buildDesktopAuthorizationUrl,
   createDesktopPkceAttempt,
   DesktopAuthController,
   exchangeDesktopAuthCode,
+  requestDesktopAuthorization,
 } from '../src/main/desktop-auth'
 
 const STATE = 's'.repeat(43)
@@ -14,6 +14,13 @@ const CODE = 'c'.repeat(43)
 
 function fixedAttempt() {
   return { state: STATE, verifier: VERIFIER, challenge: CHALLENGE }
+}
+
+function authorization() {
+  return {
+    authorizationUrl: 'https://open.work.weixin.qq.com/wwopen/sso/qrConnect?state=test',
+    expiresAt: new Date(Date.now() + 5 * 60 * 1_000).toISOString(),
+  }
 }
 
 describe('Electron PKCE 与浏览器登录交接', () => {
@@ -26,16 +33,19 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     )
   })
 
-  it('授权地址始终从配置 origin 和固定路径构造', () => {
-    const url = buildDesktopAuthorizationUrl(
-      'https://yumpoo.example.com/nested/app',
-      fixedAttempt(),
-    )
-    expect(url.origin).toBe('https://yumpoo.example.com')
-    expect(url.pathname).toBe('/_m0/m0-15/electron/auth/authorize')
-    expect(url.searchParams.get('state')).toBe(STATE)
-    expect(url.searchParams.get('codeChallenge')).toBe(CHALLENGE)
-    expect(url.searchParams.get('codeChallengeMethod')).toBe('S256')
+  it('通过同源 POST 创建 attempt 且只接受企微官方扫码地址', async () => {
+    const fetchImplementation = vi.fn(async () => new Response(JSON.stringify(authorization()), {
+      status: 201, headers: { 'Content-Type': 'application/json' },
+    }))
+    const result = await requestDesktopAuthorization(fixedAttempt(), {
+      webOrigin: 'https://yumpoo.example.com/nested/app', clientVersion: '0.1.0', fetchImplementation,
+    })
+    expect(result.authorizationUrl).toContain('https://open.work.weixin.qq.com/wwopen/sso/qrConnect')
+    const [url, request] = fetchImplementation.mock.calls[0] ?? []
+    expect((url as URL).pathname).toBe('/api/v1/electron/auth/attempts')
+    expect(JSON.parse(String(request?.body))).toEqual({
+      state: STATE, codeChallenge: CHALLENGE, codeChallengeMethod: 'S256',
+    })
   })
 
   it('只允许一个 pending attempt，并在匹配后先本地消费再兑换', async () => {
@@ -44,7 +54,7 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     const statuses: unknown[] = []
     const controller = new DesktopAuthController({
       enabled: true,
-      webOrigin: 'https://yumpoo.example.com',
+      authorize: async () => authorization(),
       createAttempt: fixedAttempt,
       openExternal: async (url) => {
         openedUrls.push(url)
@@ -83,7 +93,7 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     const statuses: unknown[] = []
     const controller = new DesktopAuthController({
       enabled: true,
-      webOrigin: 'https://yumpoo.example.com',
+      authorize: async () => authorization(),
       now: () => now,
       createAttempt: fixedAttempt,
       openExternal: async () => undefined,
@@ -116,7 +126,7 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     const statuses: unknown[] = []
     const controller = new DesktopAuthController({
       enabled: true,
-      webOrigin: 'https://yumpoo.example.com',
+      authorize: async () => authorization(),
       createAttempt: fixedAttempt,
       openExternal: () =>
         new Promise<void>((resolve) => {
@@ -138,20 +148,26 @@ describe('Electron PKCE 与浏览器登录交接', () => {
   })
 
   it('同源 POST 兑换并发送固定 Electron 客户端头', async () => {
-    const fetchImplementation = vi.fn(async () => new Response(null, { status: 204 }))
-    await exchangeDesktopAuthCode(
+    const bundle = {
+      sessionCredential: 'a'.repeat(43), csrfCredential: 'b'.repeat(43),
+      absoluteExpiresAt: '2026-08-18T00:00:00Z',
+    }
+    const fetchImplementation = vi.fn(async () => new Response(JSON.stringify(bundle), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }))
+    expect(await exchangeDesktopAuthCode(
       { code: CODE, state: STATE, codeVerifier: VERIFIER },
       {
         webOrigin: 'https://yumpoo.example.com/application',
-        clientVersion: '0.0.0',
+        clientVersion: '0.1.0',
         fetchImplementation,
       },
-    )
+    )).toEqual(bundle)
 
     const [url, request] = fetchImplementation.mock.calls[0] ?? []
     expect(url).toBeInstanceOf(URL)
     expect((url as URL).href).toBe(
-      'https://yumpoo.example.com/_m0/m0-15/electron/auth/exchange',
+      'https://yumpoo.example.com/api/v1/electron/auth/exchange',
     )
     expect(request).toMatchObject({
       method: 'POST',
@@ -159,12 +175,12 @@ describe('Electron PKCE 与浏览器登录交接', () => {
       headers: {
         'Content-Type': 'application/json',
         'X-Client-Type': 'ELECTRON',
-        'X-Client-Version': '0.0.0',
+        'X-Client-Version': '0.1.0',
         'X-Client-Protocol-Version': '1',
       },
     })
     expect(JSON.parse(String(request?.body))).toEqual({
-      code: CODE,
+      handoffCode: CODE,
       state: STATE,
       codeVerifier: VERIFIER,
     })

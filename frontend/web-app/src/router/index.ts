@@ -6,11 +6,12 @@ import {
   type RouteLocationNormalized,
   type RouteRecordRaw,
 } from 'vue-router'
-import { beginAuthentication, consumeReturnPath } from '../auth/navigation'
+import { consumeReturnPath, rememberReturnPath } from '../auth/navigation'
 import AppShell from '../components/AppShell.vue'
 import { useSession } from '../composables/useSession'
 import ForbiddenView from '../views/ForbiddenView.vue'
 import HomeView from '../views/HomeView.vue'
+import LoginView from '../views/LoginView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 import SessionStatusView from '../views/SessionStatusView.vue'
 import IdentityAdminLayout from '../views/admin/IdentityAdminLayout.vue'
@@ -19,6 +20,11 @@ import IdentityOverviewView from '../views/admin/IdentityOverviewView.vue'
 import IdentitySyncRunsView from '../views/admin/IdentitySyncRunsView.vue'
 
 export const routes: RouteRecordRaw[] = [
+  {
+    path: '/login',
+    name: 'login',
+    component: LoginView,
+  },
   {
     path: '/status/account-disabled',
     name: 'account-disabled',
@@ -102,14 +108,17 @@ router.beforeEach(async (to) => {
 watch(useSession().phase, (next) => {
   const current = router.currentRoute.value
   if (next === 'anonymous') {
-    beginAuthentication(current.fullPath)
+    if (current.name !== 'login') {
+      rememberReturnPath(current.fullPath)
+      void router.replace({ name: 'login' })
+    }
   } else if (next === 'accountDisabled' && current.name !== 'account-disabled') {
     void router.replace({ name: 'account-disabled' })
   } else if (next === 'upgradeRequired' && current.name !== 'upgrade-required') {
     void router.replace({ name: 'upgrade-required' })
   } else if (next === 'failure' && current.name !== 'unavailable') {
     void router.replace({ name: 'unavailable' })
-  } else if (next === 'authenticated' && current.meta.sessionStatus) {
+  } else if (next === 'authenticated' && (current.meta.sessionStatus || current.name === 'login')) {
     void router.replace(consumeReturnPath())
   }
 })
@@ -117,8 +126,9 @@ watch(useSession().phase, (next) => {
 function sessionDestination(to: RouteLocationNormalized) {
   const session = useSession()
   if (session.phase.value === 'anonymous') {
-    beginAuthentication(to.fullPath)
-    return false
+    if (to.name === 'login') return true
+    rememberReturnPath(to.fullPath)
+    return { name: 'login' }
   }
   const statusRoute = routeForPhase(session.phase.value)
   if (statusRoute) {
@@ -128,6 +138,9 @@ function sessionDestination(to: RouteLocationNormalized) {
     return to.name === 'unavailable' ? true : { name: 'unavailable' }
   }
   if (to.meta.sessionStatus) {
+    return consumeReturnPath()
+  }
+  if (to.name === 'login') {
     return consumeReturnPath()
   }
   const requiredRoles = to.meta.requiredRoles

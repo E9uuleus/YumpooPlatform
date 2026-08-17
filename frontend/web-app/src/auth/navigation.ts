@@ -10,13 +10,17 @@ interface StoredReturnPath {
   expiresAt: number
 }
 
-export function beginAuthentication(path: string): void {
+export function beginAuthentication(path?: string): void {
   if (authorizationStarted) {
     return
   }
-  saveReturnPath(path)
+  if (path) saveReturnPath(path)
   authorizationStarted = true
   window.location.assign(AUTHORIZE_PATH)
+}
+
+export function rememberReturnPath(path: string): void {
+  saveReturnPath(path)
 }
 
 export function consumeReturnPath(now = Date.now()): string {

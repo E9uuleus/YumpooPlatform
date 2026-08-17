@@ -168,7 +168,7 @@ class M106WebAuthenticationIT {
                 callback,
                 WebAuthenticationController.OAUTH_NONCE_COOKIE + "=" + "x".repeat(43)
         );
-        assertThat(invalid.statusCode()).isEqualTo(401);
+        assertLoginFailure(invalid);
 
         HttpResponse<String> success = get(
                 callback,
@@ -179,7 +179,7 @@ class M106WebAuthenticationIT {
                 WebAuthenticationController.OAUTH_NONCE_COOKIE + "=" + nonce
         );
         assertThat(success.statusCode()).isEqualTo(302);
-        assertThat(replay.statusCode()).isEqualTo(401);
+        assertLoginFailure(replay);
         assertThat(jdbcClient.sql("""
                         SELECT count(*) FROM yumpoo.login_session WHERE user_id = :userId
                         """)
@@ -202,8 +202,7 @@ class M106WebAuthenticationIT {
                 WebAuthenticationController.OAUTH_NONCE_COOKIE + "=" + nonce
         );
 
-        assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(response.body()).contains("AUTHENTICATION_REQUIRED");
+        assertLoginFailure(response);
         assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.login_session WHERE user_id = :id")
                 .param("id", USER_ID)
                 .query(Integer.class)
@@ -226,10 +225,10 @@ class M106WebAuthenticationIT {
                         """)
                 .param("identityId", IDENTITY_ID)
                 .update();
-        assertThat(get(
+        assertLoginFailure(get(
                 leftAuthorize.headers().firstValue("location").orElseThrow(),
                 WebAuthenticationController.OAUTH_NONCE_COOKIE + "=" + leftNonce
-        ).statusCode()).isEqualTo(401);
+        ));
 
         jdbcClient.sql("""
                         UPDATE yumpoo.external_identity
@@ -255,10 +254,10 @@ class M106WebAuthenticationIT {
                         """)
                 .param("userId", USER_ID)
                 .update();
-        assertThat(get(
+        assertLoginFailure(get(
                 disabledAuthorize.headers().firstValue("location").orElseThrow(),
                 WebAuthenticationController.OAUTH_NONCE_COOKIE + "=" + disabledNonce
-        ).statusCode()).isEqualTo(401);
+        ));
         assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.login_session WHERE user_id = :id")
                 .param("id", USER_ID)
                 .query(Integer.class)
@@ -271,6 +270,13 @@ class M106WebAuthenticationIT {
             request.header("Cookie", cookies);
         }
         return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static void assertLoginFailure(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(302);
+        assertThat(response.headers().firstValue("location"))
+                .hasValue("/login?reason=authentication");
+        assertThat(response.body()).isEmpty();
     }
 
     private HttpResponse<String> logout(String cookies, String csrf) throws Exception {

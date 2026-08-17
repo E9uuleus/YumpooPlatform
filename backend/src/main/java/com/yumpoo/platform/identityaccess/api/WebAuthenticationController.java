@@ -68,7 +68,13 @@ public final class WebAuthenticationController {
                     nonceCookie(authorization.nonce().value()).toString()
             );
         } catch (ApplicationException exception) {
-            errorWriter.write(response, exception, requestId);
+            response.setStatus(HttpStatus.FOUND.value());
+            response.setHeader(
+                    HttpHeaders.LOCATION,
+                    exception.errorCode() == com.yumpoo.platform.foundation.application.error.StandardErrorCode.DEPENDENCY_UNAVAILABLE
+                            ? "/login?reason=unavailable"
+                            : "/login?reason=authentication"
+            );
         }
     }
 
@@ -106,7 +112,13 @@ public final class WebAuthenticationController {
             response.setStatus(HttpStatus.FOUND.value());
             response.setHeader(HttpHeaders.LOCATION, "/");
         } catch (ApplicationException exception) {
-            errorWriter.write(response, exception, requestId);
+            response.setStatus(HttpStatus.FOUND.value());
+            response.setHeader(
+                    HttpHeaders.LOCATION,
+                    exception.errorCode() == com.yumpoo.platform.foundation.application.error.StandardErrorCode.DEPENDENCY_UNAVAILABLE
+                            ? "/login?reason=unavailable"
+                            : "/login?reason=authentication"
+            );
         }
     }
 

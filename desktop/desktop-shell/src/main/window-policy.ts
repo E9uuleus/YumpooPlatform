@@ -22,6 +22,7 @@ export function createWindowOptions(
       webviewTag: false,
       allowRunningInsecureContent: false,
       devTools: !isPackaged,
+      partition: 'yumpoo-authenticated',
     },
   }
 }

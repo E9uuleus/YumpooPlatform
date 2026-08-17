@@ -64,7 +64,10 @@ public class SessionSecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
                                 WebAuthenticationPaths.AUTHORIZE,
-                                WebAuthenticationPaths.CALLBACK
+                                WebAuthenticationPaths.CALLBACK,
+                                DesktopAuthenticationPaths.ATTEMPTS,
+                                DesktopAuthenticationPaths.CALLBACK,
+                                DesktopAuthenticationPaths.EXCHANGE
                         ).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(
