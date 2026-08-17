@@ -10,6 +10,8 @@ pnpm verify:m1-13
 
 `verify:m1-13` 先校验 `evidence/m1-13`，再执行既有 `verify:m0-18:portable`，随后仅使用已构建的 JAR 与 Web 产物运行外部 HTTP 门禁，并复核绑定当前 Git SHA 的新鲜报告。门禁固定占用本机 8100、18174；任一端口被占用时直接失败且不会终止无关进程。完整验证需要 Java 21、Node 24.14、pnpm 11.16、Docker Linux engine 和 `postgres:17.10-alpine`。
 
+Windows 云服务器手工部署使用独立入口 `pnpm verify:m1-13:deployment`。它在完整 M1-13 门禁通过后生成 `out/m1-13/yumpoo-windows-m1-13.zip`，包内只保留当前 JAR/Web、Nginx、C 盘配置、PostgreSQL 初始化 SQL 与运行手册；本次验证不包含 Windows 服务包装器或 IIS。服务器以 `MANUAL_JAVA_CONSOLE` 运行，公网仅开放 443，内部固定使用 SPA 18173、后端 8100 和 PostgreSQL 5432。
+
 受控夹具只有在 `local` 或 `test`、`m1-13-e2e` 与 `YUMPOO_M113_FIXTURE_ENABLED=true` 同时满足时才注册；混入 `prod`、身份表非空或配置不完整都会拒绝启动。夹具不开放 HTTP 写入口，只经目录成员服务、维护用例和公共平台角色命令端口创建两个固定测试成员。Project ACL 真实资源留到 M2；真实企微 OAuth、扫码与公司 HTTPS 证据留到 M6-01，现有 `ENV_PENDING/NOT_RUN` 不会被本门禁提升为 `PASS`。
 
 ## M1-12 Web 全局壳、登录态与统一错误体验
@@ -154,7 +156,7 @@ pnpm verify:m0-17
 
 ## M0-16 Windows 部署资产与本地运行门禁
 
-M0-16 交付可机审的 Windows Server 2022 x64 开发部署资产，以及完整的本地构建、运行和发布包复核门禁。它不会真实安装 IIS、注册 WinSW 服务、修改 ACL/防火墙，也不会把目标服务器证据写成 `PASS`。目标机验收和签名收据留给 M5-14/M6；当前 `evidence/m0-16/live-verification.json` 必须严格保持 `NOT_RUN`。
+M0-16 交付可机审的 Windows Server 2022 x64 开发部署资产，以及完整的本地构建、运行和发布包复核门禁。它不会真实配置 Nginx、注册 WinSW 服务、修改 ACL/防火墙，也不会把目标服务器证据写成 `PASS`。目标机验收和签名收据留给 M5-14/M6；当前 `evidence/m0-16/live-verification.json` 必须严格保持 `NOT_RUN`。
 
 ```powershell
 pnpm verify:m0-16
@@ -165,13 +167,13 @@ pnpm verify:m0-16
 - `out/m0-16/yumpoo-windows-m0-16.zip`
 - `out/m0-16/yumpoo-windows-m0-16.zip.sha256`
 
-ZIP 包含后端 JAR、Vite 生产构建、普通配置与 Secret 占位模板、IIS/WinSW 模板、供应链锁定信息和运行清单；不包含真实 Secret、WinSW 二进制、source map 或源码绝对路径。`artifact-manifest.json` 列出除自身以外的全部包内载荷，路径排序并记录字节数与 SHA-256。
+ZIP 包含后端 JAR、Vite 生产构建、普通配置与 Secret 占位模板、Nginx/WinSW 模板、历史 IIS 回退模板、供应链锁定信息和运行清单；不包含真实 Secret、WinSW 二进制、source map 或源码绝对路径。`artifact-manifest.json` 列出除自身以外的全部包内载荷，路径排序并记录字节数与 SHA-256。
 
-生产 profile 固定只监听 `127.0.0.1`，关闭 forwarded-header 解析并启用 45 秒 graceful shutdown。readiness 同时反映数据库和附件/临时上传/日志目录写入状态；这些依赖故障时 readiness 为 503/DOWN，而 liveness 保持 200/UP。Windows 参数化模板和 dry-run 清单见 `deployment/windows/RUNBOOK.md`。
+生产 profile 固定只监听 `127.0.0.1:8100`，Nginx 的静态 SPA listener 固定为 `127.0.0.1:18173`，公网 virtual server 仅通过 443 暴露 `wecom-dev.yumpoo.com`。后端关闭 forwarded-header 解析并启用 45 秒 graceful shutdown。readiness 同时反映数据库和附件/临时上传/日志目录写入状态；这些依赖故障时 readiness 为 503/DOWN，而 liveness 保持 200/UP。Windows 参数化模板和 dry-run 清单见 `deployment/windows/RUNBOOK.md`。
 
 ## M0 验收口径
 
-M0 将本地/CI 可重复的开发门禁与依赖外部条件的环境门禁分开：`pnpm verify:m0-*` 证明协议、持久化、安全边界、构建与证据格式；真实企业微信 OAuth、公司 HTTPS、真实 Defender/NTFS、干净 Windows Server、IIS、服务账号 ACL、仅 443 和整机重启必须在对应环境中另行证明。未执行时 live evidence 保持 `NOT_RUN`，不阻塞本地开发，也绝不等于 `PASS`。
+M0 将本地/CI 可重复的开发门禁与依赖外部条件的环境门禁分开：`pnpm verify:m0-*` 证明协议、持久化、安全边界、构建与证据格式；真实企业微信 OAuth、公司 HTTPS、真实 Defender/NTFS、干净 Windows Server、Nginx、服务账号 ACL、仅 443 和整机重启必须在对应环境中另行证明。未执行时 live evidence 保持 `NOT_RUN`，不阻塞本地开发，也绝不等于 `PASS`。
 
 M0 不实现正式企业微信扫码登录，不创建正式 User、ExternalIdentity、LoginSession 或可续期会话。正式 Web 身份与会话能力属于 M1，正式 Electron 认证与桌面会话属于 M4；两者在本地使用仅限 local/test 的受控身份提供者验证，真实企微 OAuth、扫码、鉴权与公司 HTTPS E2E 统一在 M6-01 部署/发布环境门禁完成。
 
@@ -356,7 +358,7 @@ pnpm dev:desktop
 
 Web 开发服务器默认监听 `http://127.0.0.1:18173`，Vite Preview 默认监听 `http://127.0.0.1:18174`。Electron 开发模式复用同一个 Web SPA，默认加载 `http://127.0.0.1:18173`；`YUMPOO_WEB_URL` 可以覆盖地址。开发环境只接受 `localhost` 或 `127.0.0.1` 的 HTTP 地址，生产环境必须提供无用户名密码的 HTTPS 地址。
 
-后端程序的安全默认值仍为 `127.0.0.1:8080`，本项目本地开发基线通过 `YUMPOO_SERVER_PORT=8100` 覆盖。运行后端还需通过环境变量提供应用数据库连接：
+后端程序和 Windows 生产模板的安全默认值均为 `127.0.0.1:8100`，需要其他本机端口时可通过 `YUMPOO_SERVER_PORT` 覆盖。运行后端还需通过环境变量提供应用数据库连接：
 
 - `SPRING_DATASOURCE_URL`
 - `SPRING_DATASOURCE_USERNAME`

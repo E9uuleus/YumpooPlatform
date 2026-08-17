@@ -28,7 +28,8 @@ const expectedEvidenceChecks = [
 
 validateEvidence()
 validateConfigurationTemplates()
-validateIis()
+validateNginx()
+validateIisFallback()
 validateWinSw()
 validateChecklistAndRunbook()
 validateNoBinary()
@@ -70,7 +71,7 @@ function validateConfigurationTemplates() {
   const ordinary = YAML.parse(ordinaryRaw)
   const secrets = YAML.parse(secretsRaw)
   assertM016(ordinary.server?.address === '127.0.0.1', '生产模板必须只绑定 127.0.0.1')
-  assertM016(Number.isInteger(ordinary.server?.port), '生产模板必须固定整数端口')
+  assertM016(ordinary.server?.port === 8100, '生产模板必须固定监听 8100')
   assertM016(!ordinary.spring?.datasource?.password && !ordinary.spring?.flyway?.password, '普通配置不得包含密码')
   assertM016(
     secrets.spring?.datasource?.password?.startsWith('change-me-') &&
@@ -82,6 +83,18 @@ function validateConfigurationTemplates() {
       secrets.yumpoo?.session?.['current-key-version'] === 'prod-v1',
     '会话 Secret 示例必须保持显式占位值和稳定 keyVersion',
   )
+  assertM016(
+    ordinary.yumpoo?.wecom?.oauth?.enabled === false &&
+      ordinary.yumpoo?.wecom?.oauth?.['callback-uri'] === 'https://wecom-dev.yumpoo.com/api/v1/auth/wecom/callback' &&
+      ordinary.yumpoo?.wecom?.directory?.enabled === false,
+    '生产模板必须包含默认关闭且回调域名固定的企微 OAuth/通讯录配置',
+  )
+  assertM016(
+    secrets.yumpoo?.wecom?.oauth?.['app-secret']?.startsWith('change-me-') &&
+      secrets.yumpoo?.wecom?.directory?.['directory-secret']?.startsWith('change-me-') &&
+      secrets.yumpoo?.wecom?.directory?.['profile-secret']?.startsWith('change-me-'),
+    '企微 Secret 示例必须保持显式占位值',
+  )
   const deployment = ordinary.yumpoo?.deployment ?? {}
   const session = ordinary.yumpoo?.session ?? {}
   assertM016(
@@ -92,12 +105,40 @@ function validateConfigurationTemplates() {
   )
   const required = ['public-base-url', 'release-root', 'config-root', 'secrets-root', 'attachment-root', 'upload-temp-root', 'log-root']
   assertM016(required.every((name) => typeof deployment[name] === 'string'), '普通配置缺少 yumpoo.deployment 项')
+  assertM016(required.slice(1).every((name) => /^C:\//u.test(deployment[name])), 'Windows 部署路径必须全部位于 C 盘')
   assertM016(!/password\s*:/iu.test(ordinaryRaw), '普通配置疑似包含密码项')
 }
 
-function validateIis() {
+function validateNginx() {
+  const nginx = readText('nginx/yumpoo-wecom.conf')
+  const requiredFragments = [
+    'listen 127.0.0.1:18173 default_server;',
+    'server_name wecom-dev.yumpoo.com;',
+    'listen 443 ssl;',
+    'proxy_pass http://127.0.0.1:8100;',
+    'proxy_pass http://127.0.0.1:18173;',
+    'location = /api',
+    'location /api/',
+    'location ~ ^/(actuator|_m0)(/|$)',
+    'proxy_set_header X-Forwarded-For $remote_addr;',
+    'proxy_set_header X-Forwarded-Proto https;',
+    'proxy_set_header X-Request-Id $request_id;',
+    'Content-Security-Policy',
+    'Strict-Transport-Security',
+    'X-Frame-Options',
+    'X-Content-Type-Options',
+    'Referrer-Policy',
+    'Permissions-Policy',
+  ]
+  assertM016(requiredFragments.every((fragment) => nginx.includes(fragment)), 'Nginx 安全、监听或路由规则不完整')
+  assertM016(!/^\s*listen\s+18173/mu.test(nginx), '前端 18173 必须显式绑定 127.0.0.1')
+  assertM016(!nginx.includes('listen 8100'), 'Nginx 不得监听 Spring Boot 的 8100 端口')
+  assertM016(nginx.indexOf('location ~ ^/(actuator|_m0)') < nginx.indexOf('location /api/'), '内部端点拒绝规则必须先于 API 代理')
+}
+
+function validateIisFallback() {
   const xml = readText('iis/web.config')
-  parseXml(path.join(deploymentRoot, 'iis', 'web.config'), 'IIS web.config')
+  parseXml(path.join(deploymentRoot, 'iis', 'web.config'), 'IIS 回退 web.config')
   const requiredFragments = [
     'maxAllowedContentLength="115343360"',
     '^(actuator|_m0)(/.*)?$',
@@ -105,7 +146,7 @@ function validateIis() {
     'value=""',
     'HTTP_X_FORWARDED_PROTO',
     'value="https"',
-    'http://127.0.0.1:8080/',
+    'http://127.0.0.1:8100/',
     '^/(api|actuator|_m0)(/|$)',
     'Content-Security-Policy',
     'Strict-Transport-Security',
@@ -114,7 +155,7 @@ function validateIis() {
     'Referrer-Policy',
     'Permissions-Policy',
   ]
-  assertM016(requiredFragments.every((fragment) => xml.includes(fragment)), 'IIS 安全或路由规则不完整')
+  assertM016(requiredFragments.every((fragment) => xml.includes(fragment)), 'IIS 回退模板的安全或路由规则不完整')
   assertM016(xml.indexOf('Deny internal endpoints') < xml.indexOf('Proxy API to loopback'), '内部端点拒绝规则必须先于 API 代理')
   assertM016(xml.indexOf('Proxy API to loopback') < xml.indexOf('SPA fallback'), 'API 代理必须先于 SPA fallback')
 }
@@ -126,13 +167,14 @@ function validateWinSw() {
   assertM016(lock.bytes === 18243033, 'WinSW x64 文件大小不匹配')
   assertM016(lock.sha256 === '05b82d46ad331cc16bdc00de5c6332c1ef818df8ceefcd49c726553209b3a0da', 'WinSW x64 SHA-256 不匹配')
 
-  const xml = readText('service/yumpoo-server.xml')
-  parseXml(path.join(deploymentRoot, 'service', 'yumpoo-server.xml'), 'WinSW XML')
+  const xml = readText('service/yumpoo-service.xml')
+  parseXml(path.join(deploymentRoot, 'service', 'yumpoo-service.xml'), 'WinSW XML')
   const requiredFragments = [
     '<delayedAutoStart />',
     '<depend>postgresql-x64-17</depend>',
     '-Dfile.encoding=UTF-8',
-    'file:C:/ProgramData/Yumpoo/config/,file:C:/ProgramData/Yumpoo/secrets/',
+    'file:C:/ProgramData/Yumpoo/config/,file:C:/ProgramData/Yumpoo/secrets/application-secrets.yml',
+    '<env name="YUMPOO_SERVER_PORT" value="8100" />',
     '<stoptimeout>60 sec</stoptimeout>',
     'action="restart" delay="10 sec"',
     'action="restart" delay="30 sec"',
@@ -149,15 +191,26 @@ function validateChecklistAndRunbook() {
   assertM016(checklist.mode === 'DRY_RUN_ONLY', '部署清单只能为 DRY_RUN_ONLY')
   assertM016(checklist.target?.operatingSystem === 'Windows Server 2022', '目标系统必须为 Windows Server 2022')
   assertM016(checklist.target?.publicPort === 443, '公开端口必须仅为 443')
+  assertM016(
+    checklist.target?.frontendAddress === '127.0.0.1' && checklist.target?.frontendPort === 18173 &&
+      checklist.target?.backendAddress === '127.0.0.1' && checklist.target?.backendPort === 8100,
+    '前端与后端必须固定使用回环 18173/8100',
+  )
+  assertM016(
+    checklist.reverseProxy?.product === 'NGINX' &&
+      checklist.reverseProxy?.configuration === 'nginx/yumpoo-wecom.conf' &&
+      checklist.reverseProxy?.publicServerName === 'wecom-dev.yumpoo.com',
+    '部署清单必须引用专用 Nginx virtual server',
+  )
   const expectedChecks = [
     'cleanWindowsServer2022', 'trustedHttpsCertificate', 'only443Public',
-    'applicationAndDatabasePortsIsolated', 'dedicatedLowPrivilegeServiceAccount',
+    'frontendBackendAndDatabasePortsIsolated', 'dedicatedLowPrivilegeServiceAccount',
     'interactiveLogonDenied', 'ntfsAclApplied', 'persistentDataSurvivesUpgrade',
     'wholeMachineRestartRecovery', 'logsAndEvidenceRedacted',
   ]
   assertM016(expectedChecks.every((item) => checklist.checks.includes(item)), '目标机检查项不完整')
   const runbook = readText('RUNBOOK.md')
-  for (const fragment of ['install /p', 'URL Rewrite', 'Application Request Routing', '只公开受信任证书的 443', '不得回滚或删除持久数据', 'NOT_RUN']) {
+  for (const fragment of ['verify:m1-13:deployment', 'MANUAL_JAVA_CONSOLE', 'nginx.exe -t', '127.0.0.1:18173', '127.0.0.1:8100', '仅公开 443', '不得随 release 删除', 'BLOCKED']) {
     assertM016(runbook.includes(fragment), `运行清单缺少：${fragment}`)
   }
 }

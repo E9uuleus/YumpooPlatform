@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M1-13",
+  "mode": "TARGET_SERVER_VALIDATION",
+  "target": {
+    "operatingSystem": "Windows Server 2022",
+    "architecture": "x64",
+    "storageVolume": "C:",
+    "publicHost": "wecom-dev.yumpoo.com",
+    "publicIp": "1.15.24.215",
+    "publicPort": 443,
+    "frontendAddress": "127.0.0.1",
+    "frontendPort": 18173,
+    "backendAddress": "127.0.0.1",
+    "backendPort": 8100,
+    "databaseAddress": "127.0.0.1",
+    "databasePort": 5432
+  },
+  "runtime": {
+    "mode": "MANUAL_JAVA_CONSOLE",
+    "windowsServiceWrapper": false,
+    "automaticRestart": false
+  },
+  "reverseProxy": {
+    "product": "NGINX",
+    "configuration": "nginx/yumpoo-wecom.conf"
+  },
+  "checks": [
+    "dnsResolvesToTargetIp",
+    "trustedHttpsCertificate",
+    "only443Public",
+    "frontendBackendAndDatabasePortsLoopbackOnly",
+    "allPersistentPathsOnCDrive",
+    "databaseRolesSeparated",
+    "flywaySchemaCurrent",
+    "nginxConfigurationValid",
+    "oauthRedirectsToWeCom",
+    "directoryMergeVerified",
+    "logsAndEvidenceRedacted"
+  ],
+  "orderedActions": {
+    "prepare": ["createCDriveDirectories", "initializePostgreSql", "deployM113Release", "configureSecrets", "configureNginx"],
+    "start": ["startPostgreSql", "startYumpooInConsole", "probeLiveness", "probeReadiness", "reloadNginx"],
+    "validate": ["validateNetworkBoundary", "validateWeComLogin", "validateDirectoryMerge", "validateSessionRevocation"],
+    "stop": ["stopYumpooConsoleProcess"]
+  }
+}

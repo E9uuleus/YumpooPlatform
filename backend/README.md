@@ -114,11 +114,11 @@ Windows 服务从 `C:\ProgramData\Yumpoo\config` 和 `C:\ProgramData\Yumpoo\secr
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE = 'prod'
-$env:SPRING_CONFIG_ADDITIONAL_LOCATION = 'file:C:/ProgramData/Yumpoo/config/,file:C:/ProgramData/Yumpoo/secrets/'
+$env:SPRING_CONFIG_ADDITIONAL_LOCATION = 'file:C:/ProgramData/Yumpoo/config/,file:C:/ProgramData/Yumpoo/secrets/application-secrets.yml'
 java -jar .\target\yumpoo-server.jar
 ```
 
-readiness 组包含 `db` 与无详情的 `deploymentDirectories` 写探针；附件、临时上传、日志或数据库故障会使 readiness 返回 503/DOWN，liveness 继续返回 200/UP。响应仍严格只暴露 `status`。完整模板、WinSW 2.12.0 锁定信息和安装/升级/回滚顺序位于仓库根 `deployment/windows`。
+readiness 组包含 `db` 与无详情的 `deploymentDirectories` 写探针；附件、临时上传、日志或数据库故障会使 readiness 返回 503/DOWN，liveness 继续返回 200/UP。响应仍严格只暴露 `status`。当前 M1-13 云服务器验证使用全 C 盘和手工 Java 控制台；完整模板、PostgreSQL 初始化与 Nginx 步骤位于仓库根 `deployment/windows`，历史 M0 服务包装资产不进入 M1-13 ZIP。
 
 ## M0-15 Electron 登录交接诊断 PoC
 
@@ -225,10 +225,10 @@ M0-13 live runner 不是常驻 Controller，也不增加 HTTP 路径。运行前
 
 通讯录读取的冻结外部契约为 `POST /cgi-bin/user/list_id`：`limit` 范围 1～10000，官方以空 `next_cursor` 表示结束；真实企业调用则观察到分页中的游标非空、终止页省略该字段。网关保留省略游标页的成员，主 `DirectorySnapshotCollector` 仍返回 `Incomplete(MISSING_CURSOR)`，仅 live 的三快照交叉确认可继续测试探针对账，不能直接成为 M1 生产同步语义。该接口只接受通讯录同步 Secret，且只返回成员 ID、不读取成员资料。`/cgi-bin/gettoken` 正常 token 生命周期为 7200 秒，适配器必须缓存并提前刷新。`-1`、`45009` 归为可退避重试；`40001`、`48002`、`60020` 归为凭据、权限或可信 IP 配置失败；`40014`、`42001` 只触发一次 token 缓存失效、刷新和重试。上述限制由 `externalLimitsRecorded` 检查锁定，最终证据不保存任何运行时数量或供应商正文。
 
-默认仅监听 `127.0.0.1:8080`。需要修改端口时设置 `YUMPOO_SERVER_PORT`：
+默认仅监听 `127.0.0.1:8100`。需要修改端口时设置 `YUMPOO_SERVER_PORT`：
 
 ```powershell
-$env:YUMPOO_SERVER_PORT = '18080'
+$env:YUMPOO_SERVER_PORT = '8100'
 .\mvnw.cmd spring-boot:run
 ```
 
