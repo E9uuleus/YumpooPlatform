@@ -13,6 +13,7 @@ public final class WebOAuthProperties {
     private String agentId;
     private String appSecret;
     private URI callbackUri;
+    private URI electronCallbackUri;
     private Duration connectTimeout = Duration.ofSeconds(5);
     private Duration readTimeout = Duration.ofSeconds(20);
     private Duration cleanupDelay = Duration.ofHours(1);
@@ -57,6 +58,14 @@ public final class WebOAuthProperties {
 
     public void setCallbackUri(URI callbackUri) {
         this.callbackUri = callbackUri;
+    }
+
+    public URI getElectronCallbackUri() {
+        return electronCallbackUri;
+    }
+
+    public void setElectronCallbackUri(URI electronCallbackUri) {
+        this.electronCallbackUri = electronCallbackUri;
     }
 
     public Duration getConnectTimeout() {
@@ -108,6 +117,8 @@ public final class WebOAuthProperties {
                 || !agentId.chars().allMatch(Character::isDigit)
                 || isBlank(appSecret)
                 || !secureCallback(callbackUri)
+                || !secureElectronCallback(electronCallbackUri)
+                || !sameOrigin(callbackUri, electronCallbackUri)
                 || invalid(connectTimeout)
                 || invalid(readTimeout)) {
             throw new IllegalStateException("WeCom Web OAuth configuration is invalid");
@@ -130,6 +141,29 @@ public final class WebOAuthProperties {
                 && uri.getUserInfo() == null
                 && uri.getRawQuery() == null
                 && uri.getFragment() == null;
+    }
+
+    private static boolean secureElectronCallback(URI uri) {
+        return secureCallback(uri, "/api/v1/electron/auth/wecom/callback");
+    }
+
+    private static boolean secureCallback(URI uri, String expectedPath) {
+        return uri != null
+                && uri.isAbsolute()
+                && "https".equalsIgnoreCase(uri.getScheme())
+                && uri.getHost() != null
+                && !uri.getHost().isBlank()
+                && expectedPath.equals(uri.getPath())
+                && uri.getUserInfo() == null
+                && uri.getRawQuery() == null
+                && uri.getFragment() == null;
+    }
+
+    private static boolean sameOrigin(URI left, URI right) {
+        return left != null && right != null
+                && left.getScheme().equalsIgnoreCase(right.getScheme())
+                && left.getHost().equalsIgnoreCase(right.getHost())
+                && left.getPort() == right.getPort();
     }
 
     private static boolean invalidIdentifier(String value) {

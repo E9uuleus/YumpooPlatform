@@ -10,6 +10,7 @@ import java.time.Clock;
 final class RestClientWebIdentityProvider implements WebIdentityProvider {
 
     private final String corpId;
+    private final WebOAuthProperties properties;
     private final RestClientWeComIdentityGateway delegate;
 
     RestClientWebIdentityProvider(
@@ -18,6 +19,7 @@ final class RestClientWebIdentityProvider implements WebIdentityProvider {
             Clock clock
     ) {
         this.corpId = properties.getCorpId();
+        this.properties = properties;
         this.delegate = new RestClientWeComIdentityGateway(
                 builder,
                 new WeComOAuthClientSettings(
@@ -37,7 +39,12 @@ final class RestClientWebIdentityProvider implements WebIdentityProvider {
 
     @Override
     public URI buildAuthorizationUri(String state) {
-        return delegate.buildAuthorizationUri(state);
+        return delegate.buildQrAuthorizationUri(state, properties.getCallbackUri());
+    }
+
+    @Override
+    public URI buildElectronAuthorizationUri(String state) {
+        return delegate.buildQrAuthorizationUri(state, properties.getElectronCallbackUri());
     }
 
     @Override

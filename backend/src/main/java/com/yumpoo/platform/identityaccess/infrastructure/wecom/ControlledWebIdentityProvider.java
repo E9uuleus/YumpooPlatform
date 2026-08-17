@@ -42,6 +42,15 @@ final class ControlledWebIdentityProvider implements WebIdentityProvider {
 
     @Override
     public URI buildAuthorizationUri(String state) {
+        return buildAuthorizationUri(state, "/api/v1/auth/wecom/callback");
+    }
+
+    @Override
+    public URI buildElectronAuthorizationUri(String state) {
+        return buildAuthorizationUri(state, "/api/v1/electron/auth/wecom/callback");
+    }
+
+    private URI buildAuthorizationUri(String state, String callbackPath) {
         if (state == null || state.isBlank()) {
             throw new IllegalArgumentException("state must not be blank");
         }
@@ -52,7 +61,7 @@ final class ControlledWebIdentityProvider implements WebIdentityProvider {
         do {
             code = newCode();
         } while (codes.putIfAbsent(code, expiresAt) != null);
-        return UriComponentsBuilder.fromPath("/api/v1/auth/wecom/callback")
+        return UriComponentsBuilder.fromPath(callbackPath)
                 .queryParam("code", code)
                 .queryParam("state", state)
                 .build()

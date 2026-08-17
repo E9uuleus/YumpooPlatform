@@ -45,9 +45,10 @@ public class AuthenticationEventService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void loginSucceeded(AuthenticationUser user, IssuedSession issuedSession) {
+        String clientType = issuedSession.session().clientType().name();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("userId", user.userId());
-        payload.put("clientType", "WEB");
+        payload.put("clientType", clientType);
         eventPort.append(new EventDraft(
                 LOGIN_SUCCEEDED,
                 1,
@@ -61,16 +62,22 @@ public class AuthenticationEventService {
         auditRecorder.succeeded(
                 user.companyId(), "login:" + issuedSession.session().id(), "LOGIN_SUCCEEDED",
                 EventActor.user(user.userId()), Set.of(), "LOGIN_SESSION", issuedSession.session().id(),
-                null, null, Map.of("clientType", "WEB"), null, "WEB", null);
+                null, null, Map.of("clientType", clientType), null, clientType,
+                issuedSession.session().clientVersion());
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void loginRejected(String stage, String outcomeCode) {
+        loginRejected(stage, outcomeCode, "WEB");
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void loginRejected(String stage, String outcomeCode, String clientType) {
         CompanyConfigurationSnapshot company = companyQuery.current();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("stage", stage);
         payload.put("outcomeCode", outcomeCode);
-        payload.put("clientType", "WEB");
+        payload.put("clientType", clientType);
         eventPort.append(new EventDraft(
                 LOGIN_REJECTED,
                 1,
@@ -86,8 +93,8 @@ public class AuthenticationEventService {
                 company.companyId(), "login-rejected:" + requestId + ":" + stage,
                 "LOGIN_REJECTED", com.yumpoo.platform.audit.api.SecurityAuditOutcome.FAILED,
                 EventActor.system("WECOM_AUTH"), Set.of(), "AUTHENTICATION_ATTEMPT", requestId,
-                null, null, Map.of("stage", stage, "clientType", "WEB"), outcomeCode,
-                "WEB", null);
+                null, null, Map.of("stage", stage, "clientType", clientType), outcomeCode,
+                clientType, null);
     }
 
     @Transactional(propagation = Propagation.MANDATORY)

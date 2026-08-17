@@ -15,18 +15,49 @@
 import * as runtime from '../runtime';
 import type {
   CurrentAuthentication,
+  ElectronAuthAttemptRequest,
+  ElectronAuthAttemptResponse,
+  ElectronAuthExchangeRequest,
+  ElectronAuthExchangeResponse,
   ErrorResponse,
 } from '../models/index';
 import {
     CurrentAuthenticationFromJSON,
     CurrentAuthenticationToJSON,
+    ElectronAuthAttemptRequestFromJSON,
+    ElectronAuthAttemptRequestToJSON,
+    ElectronAuthAttemptResponseFromJSON,
+    ElectronAuthAttemptResponseToJSON,
+    ElectronAuthExchangeRequestFromJSON,
+    ElectronAuthExchangeRequestToJSON,
+    ElectronAuthExchangeResponseFromJSON,
+    ElectronAuthExchangeResponseToJSON,
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
 } from '../models/index';
 
+export interface CompleteElectronWeComLoginRequest {
+    code?: string;
+    state?: string;
+}
+
 export interface CompleteWeComLoginRequest {
     code?: string;
     state?: string;
+}
+
+export interface CreateElectronAuthAttemptRequest {
+    xClientType: CreateElectronAuthAttemptXClientTypeEnum;
+    xClientVersion: string;
+    xClientProtocolVersion: CreateElectronAuthAttemptXClientProtocolVersionEnum;
+    electronAuthAttemptRequest: ElectronAuthAttemptRequest;
+}
+
+export interface ExchangeElectronAuthHandoffRequest {
+    xClientType: ExchangeElectronAuthHandoffXClientTypeEnum;
+    xClientVersion: string;
+    xClientProtocolVersion: ExchangeElectronAuthHandoffXClientProtocolVersionEnum;
+    electronAuthExchangeRequest: ElectronAuthExchangeRequest;
 }
 
 export interface LogoutCurrentSessionRequest {
@@ -69,6 +100,42 @@ export class AuthenticationApi extends runtime.BaseAPI {
     }
 
     /**
+     * 完成 Electron 企微扫码授权
+     */
+    async completeElectronWeComLoginRaw(requestParameters: CompleteElectronWeComLoginRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+        const queryParameters: any = {};
+
+        if (requestParameters['code'] != null) {
+            queryParameters['code'] = requestParameters['code'];
+        }
+
+        if (requestParameters['state'] != null) {
+            queryParameters['state'] = requestParameters['state'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/electron/auth/wecom/callback`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     * 完成 Electron 企微扫码授权
+     */
+    async completeElectronWeComLogin(requestParameters: CompleteElectronWeComLoginRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
+        await this.completeElectronWeComLoginRaw(requestParameters, initOverrides);
+    }
+
+    /**
      * 原子消费 OAuth attempt，解析已同步的企微身份并签发 Web Session。 成功固定跳转到 `/`；无论成功失败均清除 nonce Cookie。
      * 完成企微 Web 登录
      */
@@ -104,6 +171,152 @@ export class AuthenticationApi extends runtime.BaseAPI {
      */
     async completeWeComLogin(requestParameters: CompleteWeComLoginRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
         await this.completeWeComLoginRaw(requestParameters, initOverrides);
+    }
+
+    /**
+     * 绑定 Electron state、PKCE S256 challenge 与客户端版本并返回企微官方扫码地址。
+     * 创建 Electron 系统浏览器登录请求
+     */
+    async createElectronAuthAttemptRaw(requestParameters: CreateElectronAuthAttemptRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ElectronAuthAttemptResponse>> {
+        if (requestParameters['xClientType'] == null) {
+            throw new runtime.RequiredError(
+                'xClientType',
+                'Required parameter "xClientType" was null or undefined when calling createElectronAuthAttempt().'
+            );
+        }
+
+        if (requestParameters['xClientVersion'] == null) {
+            throw new runtime.RequiredError(
+                'xClientVersion',
+                'Required parameter "xClientVersion" was null or undefined when calling createElectronAuthAttempt().'
+            );
+        }
+
+        if (requestParameters['xClientProtocolVersion'] == null) {
+            throw new runtime.RequiredError(
+                'xClientProtocolVersion',
+                'Required parameter "xClientProtocolVersion" was null or undefined when calling createElectronAuthAttempt().'
+            );
+        }
+
+        if (requestParameters['electronAuthAttemptRequest'] == null) {
+            throw new runtime.RequiredError(
+                'electronAuthAttemptRequest',
+                'Required parameter "electronAuthAttemptRequest" was null or undefined when calling createElectronAuthAttempt().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xClientType'] != null) {
+            headerParameters['X-Client-Type'] = String(requestParameters['xClientType']);
+        }
+
+        if (requestParameters['xClientVersion'] != null) {
+            headerParameters['X-Client-Version'] = String(requestParameters['xClientVersion']);
+        }
+
+        if (requestParameters['xClientProtocolVersion'] != null) {
+            headerParameters['X-Client-Protocol-Version'] = String(requestParameters['xClientProtocolVersion']);
+        }
+
+
+        let urlPath = `/electron/auth/attempts`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ElectronAuthAttemptRequestToJSON(requestParameters['electronAuthAttemptRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ElectronAuthAttemptResponseFromJSON(jsonValue));
+    }
+
+    /**
+     * 绑定 Electron state、PKCE S256 challenge 与客户端版本并返回企微官方扫码地址。
+     * 创建 Electron 系统浏览器登录请求
+     */
+    async createElectronAuthAttempt(requestParameters: CreateElectronAuthAttemptRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ElectronAuthAttemptResponse> {
+        const response = await this.createElectronAuthAttemptRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 兑换一次性 Electron 登录交接码
+     */
+    async exchangeElectronAuthHandoffRaw(requestParameters: ExchangeElectronAuthHandoffRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ElectronAuthExchangeResponse>> {
+        if (requestParameters['xClientType'] == null) {
+            throw new runtime.RequiredError(
+                'xClientType',
+                'Required parameter "xClientType" was null or undefined when calling exchangeElectronAuthHandoff().'
+            );
+        }
+
+        if (requestParameters['xClientVersion'] == null) {
+            throw new runtime.RequiredError(
+                'xClientVersion',
+                'Required parameter "xClientVersion" was null or undefined when calling exchangeElectronAuthHandoff().'
+            );
+        }
+
+        if (requestParameters['xClientProtocolVersion'] == null) {
+            throw new runtime.RequiredError(
+                'xClientProtocolVersion',
+                'Required parameter "xClientProtocolVersion" was null or undefined when calling exchangeElectronAuthHandoff().'
+            );
+        }
+
+        if (requestParameters['electronAuthExchangeRequest'] == null) {
+            throw new runtime.RequiredError(
+                'electronAuthExchangeRequest',
+                'Required parameter "electronAuthExchangeRequest" was null or undefined when calling exchangeElectronAuthHandoff().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xClientType'] != null) {
+            headerParameters['X-Client-Type'] = String(requestParameters['xClientType']);
+        }
+
+        if (requestParameters['xClientVersion'] != null) {
+            headerParameters['X-Client-Version'] = String(requestParameters['xClientVersion']);
+        }
+
+        if (requestParameters['xClientProtocolVersion'] != null) {
+            headerParameters['X-Client-Protocol-Version'] = String(requestParameters['xClientProtocolVersion']);
+        }
+
+
+        let urlPath = `/electron/auth/exchange`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ElectronAuthExchangeRequestToJSON(requestParameters['electronAuthExchangeRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ElectronAuthExchangeResponseFromJSON(jsonValue));
+    }
+
+    /**
+     * 兑换一次性 Electron 登录交接码
+     */
+    async exchangeElectronAuthHandoff(requestParameters: ExchangeElectronAuthHandoffRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ElectronAuthExchangeResponse> {
+        const response = await this.exchangeElectronAuthHandoffRaw(requestParameters, initOverrides);
+        return await response.value();
     }
 
     /**
@@ -176,4 +389,37 @@ export class AuthenticationApi extends runtime.BaseAPI {
         await this.logoutCurrentSessionRaw(requestParameters, initOverrides);
     }
 
+}
+
+/**
+  * @export
+  * @enum {string}
+  */
+export enum CreateElectronAuthAttemptXClientTypeEnum {
+    Electron = 'ELECTRON',
+    UnknownDefaultOpenApi = '11184809'
+}
+/**
+  * @export
+  * @enum {string}
+  */
+export enum CreateElectronAuthAttemptXClientProtocolVersionEnum {
+    _1 = '1',
+    UnknownDefaultOpenApi = '11184809'
+}
+/**
+  * @export
+  * @enum {string}
+  */
+export enum ExchangeElectronAuthHandoffXClientTypeEnum {
+    Electron = 'ELECTRON',
+    UnknownDefaultOpenApi = '11184809'
+}
+/**
+  * @export
+  * @enum {string}
+  */
+export enum ExchangeElectronAuthHandoffXClientProtocolVersionEnum {
+    _1 = '1',
+    UnknownDefaultOpenApi = '11184809'
 }

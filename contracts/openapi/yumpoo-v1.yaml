@@ -264,6 +264,79 @@ paths:
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
 
+  /electron/auth/attempts:
+    post:
+      tags: [Authentication]
+      operationId: createElectronAuthAttempt
+      summary: 创建 Electron 系统浏览器登录请求
+      description: 绑定 Electron state、PKCE S256 challenge 与客户端版本并返回企微官方扫码地址。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ElectronClientType'
+        - $ref: '#/components/parameters/ElectronClientVersion'
+        - $ref: '#/components/parameters/ElectronProtocolVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ElectronAuthAttemptRequest' }
+      responses:
+        '201':
+          description: 已创建五分钟有效的登录请求。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ElectronAuthAttemptResponse' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /electron/auth/wecom/callback:
+    get:
+      tags: [Authentication]
+      operationId: completeElectronWeComLogin
+      summary: 完成 Electron 企微扫码授权
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 512 }
+        - name: state
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/OpaqueDesktopToken' }
+      responses:
+        '302':
+          description: 成功时跳转受限 yumpoo 协议；失败时跳转脱敏登录页。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+
+  /electron/auth/exchange:
+    post:
+      tags: [Authentication]
+      operationId: exchangeElectronAuthHandoff
+      summary: 兑换一次性 Electron 登录交接码
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ElectronClientType'
+        - $ref: '#/components/parameters/ElectronClientVersion'
+        - $ref: '#/components/parameters/ElectronProtocolVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ElectronAuthExchangeRequest' }
+      responses:
+        '200':
+          description: 正式 ELECTRON 会话材料；响应禁止缓存。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ElectronAuthExchangeResponse' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
   /auth/logout:
     post:
       tags: [Authentication]
@@ -817,6 +890,57 @@ components:
         - WEB
         - ELECTRON
 
+    OpaqueDesktopToken:
+      type: string
+      minLength: 43
+      maxLength: 43
+      pattern: '^[A-Za-z0-9_-]{43}$'
+
+    ElectronAuthAttemptRequest:
+      type: object
+      additionalProperties: false
+      required: [state, codeChallenge, codeChallengeMethod]
+      properties:
+        state: { $ref: '#/components/schemas/OpaqueDesktopToken' }
+        codeChallenge:
+          type: string
+          minLength: 43
+          maxLength: 43
+          pattern: '^[A-Za-z0-9_-]{43}$'
+        codeChallengeMethod:
+          type: string
+          enum: [S256]
+
+    ElectronAuthAttemptResponse:
+      type: object
+      additionalProperties: false
+      required: [authorizationUrl, expiresAt]
+      properties:
+        authorizationUrl: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+
+    ElectronAuthExchangeRequest:
+      type: object
+      additionalProperties: false
+      required: [state, handoffCode, codeVerifier]
+      properties:
+        state: { $ref: '#/components/schemas/OpaqueDesktopToken' }
+        handoffCode: { $ref: '#/components/schemas/OpaqueDesktopToken' }
+        codeVerifier:
+          type: string
+          minLength: 43
+          maxLength: 128
+          pattern: '^[A-Za-z0-9._~-]{43,128}$'
+
+    ElectronAuthExchangeResponse:
+      type: object
+      additionalProperties: false
+      required: [sessionCredential, csrfCredential, absoluteExpiresAt]
+      properties:
+        sessionCredential: { type: string, minLength: 43, maxLength: 256, writeOnly: true }
+        csrfCredential: { type: string, minLength: 43, maxLength: 256, writeOnly: true }
+        absoluteExpiresAt: { type: string, format: date-time }
+
     ClientCompatibility:
       type: string
       enum:
@@ -1226,9 +1350,8 @@ components:
       required: true
       description: Electron 与服务端约定的协议版本；该头不是认证凭据。
       schema:
-        type: integer
-        format: int32
-        minimum: 1
+        type: string
+        enum: ['1']
 
   headers:
     Location:

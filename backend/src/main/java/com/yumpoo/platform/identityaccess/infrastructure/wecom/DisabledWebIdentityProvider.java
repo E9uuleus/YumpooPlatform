@@ -19,6 +19,11 @@ final class DisabledWebIdentityProvider implements WebIdentityProvider {
     }
 
     @Override
+    public URI buildElectronAuthorizationUri(String state) {
+        throw new WeComDependencyUnavailableException();
+    }
+
+    @Override
     public WeComMemberIdentity exchangeCode(String code) {
         throw new WeComDependencyUnavailableException();
     }

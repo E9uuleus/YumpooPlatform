@@ -4,6 +4,12 @@ import com.yumpoo.platform.identityaccess.application.authentication.Authenticat
 import com.yumpoo.platform.identityaccess.application.authentication.WebAuthenticationService;
 import com.yumpoo.platform.identityaccess.application.authentication.WebIdentityProvider;
 import com.yumpoo.platform.identityaccess.application.authentication.WebLoginCompletionService;
+import com.yumpoo.platform.identityaccess.application.authentication.AuthenticationUserRepository;
+import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthAttemptStore;
+import com.yumpoo.platform.identityaccess.application.desktopauth.DesktopAuthTokenHasher;
+import com.yumpoo.platform.identityaccess.application.desktopauth.ProductDesktopAuthenticationService;
+import com.yumpoo.platform.identityaccess.application.desktopauth.SecureDesktopAuthTokenGenerator;
+import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.oauth.OAuthAttemptHasher;
 import com.yumpoo.platform.identityaccess.application.oauth.OAuthAttemptStore;
 import com.yumpoo.platform.identityaccess.application.oauth.SecureOAuthAttemptTokenGenerator;
@@ -14,6 +20,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 
 import java.time.Clock;
 
@@ -76,6 +83,29 @@ public class WebAuthenticationConfiguration {
                 new SecureOAuthAttemptTokenGenerator(),
                 new OAuthAttemptHasher(),
                 completionService,
+                eventService,
+                clock
+        );
+    }
+
+    @Bean
+    ProductDesktopAuthenticationService productDesktopAuthenticationService(
+            DesktopAuthAttemptStore attemptStore,
+            WebIdentityProvider identityProvider,
+            AuthenticationUserRepository userRepository,
+            CompanyConfigurationQuery companyQuery,
+            SessionService sessionService,
+            AuthenticationEventService eventService,
+            Clock clock
+    ) {
+        return new ProductDesktopAuthenticationService(
+                attemptStore,
+                new SecureDesktopAuthTokenGenerator(),
+                new DesktopAuthTokenHasher(),
+                identityProvider,
+                userRepository,
+                companyQuery,
+                sessionService,
                 eventService,
                 clock
         );

@@ -51,22 +51,34 @@ class RestClientWeComIdentityGatewayTest {
     }
 
     @Test
-    void buildsOfficialSnsapiBaseAuthorizationUriWithFixedCallback() {
+    void buildsOfficialQrConnectAuthorizationUriWithFixedCallback() {
         GatewayFixture fixture = fixture(new MutableClock(INITIAL_TIME));
 
-        URI authorizationUri = fixture.gateway().buildAuthorizationUri("state-123");
+        URI authorizationUri = fixture.gateway().buildQrAuthorizationUri(
+                "state-123", URI.create("https://login.example.test/_m0/m0-12/wecom/callback")
+        );
 
         assertThat(authorizationUri.getScheme()).isEqualTo("https");
-        assertThat(authorizationUri.getHost()).isEqualTo("open.weixin.qq.com");
-        assertThat(authorizationUri.getPath()).isEqualTo("/connect/oauth2/authorize");
-        assertThat(authorizationUri.getFragment()).isEqualTo("wechat_redirect");
+        assertThat(authorizationUri.getHost()).isEqualTo("open.work.weixin.qq.com");
+        assertThat(authorizationUri.getPath()).isEqualTo("/wwopen/sso/qrConnect");
+        assertThat(authorizationUri.getFragment()).isNull();
         assertThat(authorizationUri.getRawQuery())
                 .contains("appid=" + CORP_ID)
                 .contains("redirect_uri=https%3A%2F%2Flogin.example.test%2F_m0%2Fm0-12%2Fwecom%2Fcallback")
-                .contains("response_type=code")
-                .contains("scope=snsapi_base")
                 .contains("state=state-123")
-                .contains("agentid=" + AGENT_ID);
+                .contains("agentid=" + AGENT_ID)
+                .doesNotContain("response_type", "scope");
+    }
+
+    @Test
+    void preservesMobileAuthorizationForM0DiagnosticCompatibility() {
+        URI authorizationUri = fixture(new MutableClock(INITIAL_TIME))
+                .gateway().buildAuthorizationUri("state-123");
+
+        assertThat(authorizationUri.toASCIIString())
+                .startsWith("https://open.weixin.qq.com/connect/oauth2/authorize?")
+                .contains("response_type=code", "scope=snsapi_base", "agentid=" + AGENT_ID)
+                .endsWith("#wechat_redirect");
     }
 
     @Test

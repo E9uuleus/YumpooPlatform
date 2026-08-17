@@ -34,6 +34,7 @@ yumpoo:
       agent-id: ${YUMPOO_WECOM_OAUTH_AGENT_ID:}
       app-secret: ${YUMPOO_WECOM_OAUTH_APP_SECRET:}
       callback-uri: ${YUMPOO_WECOM_OAUTH_CALLBACK_URI:}
+      electron-callback-uri: ${YUMPOO_WECOM_ELECTRON_CALLBACK_URI:}
       connect-timeout: 5s
       read-timeout: 20s
       cleanup-delay: 1h

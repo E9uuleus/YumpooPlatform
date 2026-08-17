@@ -60,6 +60,17 @@ public class SessionService {
     }
 
     @Transactional
+    public IssuedSession issueElectronSession(UUID userId, String clientVersion) {
+        UserAuthorizationRecord user = repository.lockUser(userId).orElseThrow(
+                SessionService::authenticationRequired
+        );
+        if (!user.activeAndEnabled()) {
+            throw authenticationRequired();
+        }
+        return insertSession(user, SessionClientType.ELECTRON, clientVersion, clock.instant());
+    }
+
+    @Transactional
     public IssuedSession rotate(SessionCredential oldCredential) {
         Instant now = clock.instant();
         LoginSession observed = findSession(oldCredential, now).orElseThrow(

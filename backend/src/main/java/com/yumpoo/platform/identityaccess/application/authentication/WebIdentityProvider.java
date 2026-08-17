@@ -11,5 +11,9 @@ public interface WebIdentityProvider {
 
     URI buildAuthorizationUri(String state);
 
+    default URI buildElectronAuthorizationUri(String state) {
+        return buildAuthorizationUri(state);
+    }
+
     WeComMemberIdentity exchangeCode(String code);
 }

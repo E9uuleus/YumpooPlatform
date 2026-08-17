@@ -283,7 +283,7 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
@@ -361,6 +361,9 @@ class YumpooServerApplicationIT {
                 "ck_desktop_auth_attempt_handoff_code_hash",
                 "ck_desktop_auth_attempt_corp_fingerprint",
                 "ck_desktop_auth_attempt_member_fingerprint",
+                "fk_desktop_auth_attempt_authenticated_user",
+                "ck_desktop_auth_attempt_client_binding",
+                "ck_desktop_auth_attempt_authorization_claim",
                 "ck_desktop_auth_attempt_handoff_lifecycle",
                 "ck_desktop_auth_attempt_handoff_window",
                 "ck_desktop_auth_attempt_consumed_at"
@@ -370,7 +373,8 @@ class YumpooServerApplicationIT {
                 "uq_desktop_auth_attempt_oauth_state_hash",
                 "uq_desktop_auth_attempt_handoff_code_hash",
                 "idx_desktop_auth_attempt_authorize_expires_at",
-                "idx_desktop_auth_attempt_handoff_expires_at"
+                "idx_desktop_auth_attempt_handoff_expires_at",
+                "idx_desktop_auth_attempt_authenticated_user"
         );
         assertThat(organizationConstraintNames).containsExactlyInAnyOrder(
                 "company_pkey",
