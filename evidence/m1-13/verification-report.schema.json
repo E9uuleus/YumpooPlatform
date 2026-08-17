@@ -15,7 +15,10 @@
     "mode": { "const": "EXTERNAL_HTTP" },
     "provider": { "const": "CONTROLLED" },
     "springProfiles": { "const": ["local", "m1-13-e2e"] },
-    "flywayVersion": { "const": "14" },
+    "flywayVersion": {
+      "type": "string",
+      "pattern": "^(?:1[4-9]|[2-9][0-9]|[1-9][0-9]{2,})$"
+    },
     "liveEvidence": {
       "type": "array",
       "minItems": 3,

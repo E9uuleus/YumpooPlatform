@@ -4,6 +4,7 @@ import { runPnpmSync, runSync } from './process-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
+runPnpmSync(['run', 'verify:m1-13'], { cwd: repositoryRoot })
 runPnpmSync(['run', 'verify:m0-15'], { cwd: repositoryRoot })
 runPnpmSync(['run', 'verify:m1-06'], { cwd: repositoryRoot })
 runSync(process.execPath, [path.join(repositoryRoot, 'tools', 'verification', 'verify-m1-14-assets.mjs')], {

@@ -15,6 +15,7 @@ const windowPolicy = read('desktop/desktop-shell/src/main/window-policy.ts')
 const credentialStore = read('desktop/desktop-shell/src/main/credential-store.ts')
 const openapi = read('contracts/openapi/yumpoo-v1.yaml')
 const login = read('frontend/web-app/src/views/LoginView.vue')
+const verificationGate = read('tools/verification/verify-m1-14.mjs')
 
 for (const fragment of ['open.work.weixin.qq.com', '/wwopen/sso/qrConnect', 'appid', 'agentid', 'redirect_uri', 'state']) {
   assert(gateway.includes(fragment), `Web 扫码授权缺少契约：${fragment}`)
@@ -44,6 +45,7 @@ for (const fragment of ['encryptString', 'decryptString', '__Host-yumpoo-session
   assert(credentialStore.includes(fragment), `Electron 凭据存储缺少：${fragment}`)
 }
 assert(login.includes('beginAuthentication') && login.includes('yumpooDesktop?.auth.start') && login.includes('@click="login"'), '登录页必须由用户点击触发 Web/Electron 授权')
+assert(verificationGate.includes("['run', 'verify:m1-13']"), 'M1-14 本地门禁必须回归 M1-13')
 
 const trackedText = [gateway, webProvider, electronService, electronController, migration, desktopMain, windowPolicy, credentialStore, openapi, login].join('\n')
 assert(!/wwb496fdc488200f8f|BEGIN (RSA |EC )?PRIVATE KEY|wecom-secret\s*[:=]\s*[^${]/iu.test(trackedText), 'M1-14 源码包含真实标识或 Secret')

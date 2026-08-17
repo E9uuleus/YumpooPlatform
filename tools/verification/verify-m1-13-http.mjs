@@ -264,7 +264,11 @@ async function login(jar, expectSuccess) {
   assert(callback?.startsWith('/api/v1/auth/wecom/callback?'), 'controlled authorize returned an unsafe callback')
   const completed = await request(callback, { jar })
   if (!expectSuccess) {
-    assert(completed.response.status === 401 && completed.text.includes('AUTHENTICATION_REQUIRED'), 'disabled controlled login was not uniformly rejected')
+    assert(
+      completed.response.status === 302
+        && completed.response.headers.get('location') === '/login?reason=authentication',
+      'disabled controlled login did not return the sanitized login redirect',
+    )
     return
   }
   assert(completed.response.status === 302 && completed.response.headers.get('location') === '/', 'controlled callback did not complete with a same-origin redirect')
@@ -317,7 +321,9 @@ function assertSecurityCookies(setCookies, requiredNames) {
 
 function verifyDatabaseState() {
   const flywayVersion = psql("SELECT max(version::integer) FROM yumpoo.flyway_schema_history WHERE success = true")
-  assert(flywayVersion === '14', `unexpected Flyway version: ${flywayVersion}`)
+  const missingM113Migrations = Number(psql("SELECT count(*) FROM generate_series(1, 14) AS required(version) WHERE NOT EXISTS (SELECT 1 FROM yumpoo.flyway_schema_history AS history WHERE history.success = true AND history.version::integer = required.version)"))
+  assert(missingM113Migrations === 0, `required M1-13 migrations are missing: ${missingM113Migrations}`)
+  assert(/^\d+$/u.test(flywayVersion) && Number(flywayVersion) >= 14, `unexpected Flyway version: ${flywayVersion}`)
   const forbiddenTables = Number(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'yumpoo' AND lower(table_name) ~ '(project|product|membership|owner)'"))
   assert(forbiddenTables === 0, 'clean M1 database contains project/product/membership/owner facts')
   const counts = psql("SELECT (SELECT count(*) FROM yumpoo.identity_user) || '|' || (SELECT count(*) FROM yumpoo.external_identity) || '|' || (SELECT count(*) FROM yumpoo.platform_role_assignment)")

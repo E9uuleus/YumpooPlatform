@@ -110,6 +110,22 @@ test('M0-18 evidence contracts match the live NOT_RUN exact set', () => {
   assert.equal(result.liveEvidence.find((item) => item.milestone === 'M0-13')?.status, 'PASS')
 })
 
+test('M1-13 verification report accepts later Flyway versions and rejects earlier schemas', () => {
+  const schemaPath = path.join(repositoryRoot, 'evidence', 'm1-13', 'verification-report.schema.json')
+  const example = readJson(path.join(repositoryRoot, 'evidence', 'm1-13', 'verification-report.example.json'))
+
+  assert.doesNotThrow(() => assertSchema(
+    schemaPath,
+    { ...example, flywayVersion: '15' },
+    'M1-13 verification report with a later Flyway version',
+  ))
+  assert.throws(() => assertSchema(
+    schemaPath,
+    { ...example, flywayVersion: '13' },
+    'M1-13 verification report with an earlier Flyway version',
+  ), /M0-18/u)
+})
+
 test('deferred acceptance rejects omissions, listed PASS evidence and incomplete required checks', () => {
   const deferred = readJson(path.join(repositoryRoot, 'evidence', 'm0-18', 'deferred-acceptance.json'))
   const liveEvidence = loadLiveEvidence(path.join(repositoryRoot, 'evidence'))
