@@ -7,7 +7,8 @@
   <arguments>-Dfile.encoding=UTF-8 -jar "%YUMPOO_RELEASE_ROOT%\server\yumpoo-server.jar"</arguments>
   <workingdirectory>%YUMPOO_RELEASE_ROOT%</workingdirectory>
   <env name="SPRING_PROFILES_ACTIVE" value="prod" />
-  <env name="SPRING_CONFIG_ADDITIONAL_LOCATION" value="file:C:/ProgramData/Yumpoo/config/,file:C:/ProgramData/Yumpoo/secrets/" />
+  <env name="SPRING_CONFIG_ADDITIONAL_LOCATION" value="file:C:/ProgramData/Yumpoo/config/,file:C:/ProgramData/Yumpoo/secrets/application-secrets.yml" />
+  <env name="YUMPOO_SERVER_PORT" value="8100" />
   <startmode>Automatic</startmode>
   <delayedAutoStart />
   <depend>postgresql-x64-17</depend>
@@ -16,7 +17,7 @@
   <onfailure action="restart" delay="30 sec" />
   <onfailure action="none" />
   <resetfailure>1 hour</resetfailure>
-  <logpath>D:\Yumpoo\logs</logpath>
+  <logpath>C:\ProgramData\Yumpoo\logs</logpath>
   <log mode="roll-by-size">
     <sizeThreshold>10240</sizeThreshold>
     <keepFiles>8</keepFiles>

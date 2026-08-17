@@ -2,7 +2,7 @@
 # 密码不得写入本文件；secrets 目录必须由专用服务账号以 ACL 保护。
 server:
   address: 127.0.0.1
-  port: 8080
+  port: 8100
 
 spring:
   datasource:
@@ -14,6 +14,13 @@ spring:
 
 yumpoo:
   wecom:
+    oauth:
+      enabled: false
+      corp-id: ww-replace-with-corp-id
+      agent-id: replace-with-agent-id
+      callback-uri: https://wecom-dev.yumpoo.com/api/v1/auth/wecom/callback
+      connect-timeout: 5s
+      read-timeout: 20s
     directory:
       enabled: false
       corp-id: ww-replace-with-corp-id
@@ -29,10 +36,10 @@ yumpoo:
     purge-batch-size: 500
     purge-max-batches: 10
   deployment:
-    public-base-url: https://yumpoo.example.invalid
+    public-base-url: https://wecom-dev.yumpoo.com
     release-root: C:/Program Files/Yumpoo/releases/current
     config-root: C:/ProgramData/Yumpoo/config
     secrets-root: C:/ProgramData/Yumpoo/secrets
-    attachment-root: D:/Yumpoo/data/attachments
-    upload-temp-root: D:/Yumpoo/temp/uploads
-    log-root: D:/Yumpoo/logs
+    attachment-root: C:/ProgramData/Yumpoo/data/attachments
+    upload-temp-root: C:/ProgramData/Yumpoo/temp/uploads
+    log-root: C:/ProgramData/Yumpoo/logs

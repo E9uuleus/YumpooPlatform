@@ -6,15 +6,21 @@
     "operatingSystem": "Windows Server 2022",
     "architecture": "x64",
     "publicPort": 443,
+    "frontendAddress": "127.0.0.1",
+    "frontendPort": 18173,
     "backendAddress": "127.0.0.1",
-    "backendPort": 8080
+    "backendPort": 8100
   },
-  "requiredIisModules": ["URL Rewrite 2", "Application Request Routing 3"],
+  "reverseProxy": {
+    "product": "NGINX",
+    "configuration": "nginx/yumpoo-wecom.conf",
+    "publicServerName": "wecom-dev.yumpoo.com"
+  },
   "checks": [
     "cleanWindowsServer2022",
     "trustedHttpsCertificate",
     "only443Public",
-    "applicationAndDatabasePortsIsolated",
+    "frontendBackendAndDatabasePortsIsolated",
     "dedicatedLowPrivilegeServiceAccount",
     "interactiveLogonDenied",
     "ntfsAclApplied",
@@ -23,9 +29,9 @@
     "logsAndEvidenceRedacted"
   ],
   "orderedActions": {
-    "install": ["preflight", "createPersistentDirectories", "applyAcl", "deployRelease", "installWinSwWithPrompt", "configureIis", "startPostgreSql", "startYumpoo", "probeHealth"],
+    "install": ["preflight", "createPersistentDirectories", "applyAcl", "deployRelease", "installWinSwWithPrompt", "configureNginx", "startPostgreSql", "startYumpoo", "probeHealth"],
     "upgrade": ["stageNewRelease", "stopYumpoo", "switchCurrentRelease", "startYumpoo", "probeHealth", "preservePersistentDirectories"],
     "rollback": ["stopYumpoo", "switchPreviousRelease", "startYumpoo", "probeHealth", "preservePersistentDirectories"],
-    "restart": ["startPostgreSql", "waitDatabaseReady", "startYumpoo", "probeLiveness", "probeReadiness", "enableIisTraffic"]
+    "restart": ["startPostgreSql", "waitDatabaseReady", "startYumpoo", "probeLiveness", "probeReadiness", "enableNginxTraffic"]
   }
 }

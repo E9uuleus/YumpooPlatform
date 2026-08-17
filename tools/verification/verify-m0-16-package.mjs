@@ -43,7 +43,17 @@ for (const item of manifest.files) {
 }
 assertM016(manifest.files.some((item) => item.path === 'server/yumpoo-server.jar'), 'ZIP 缺少后端 JAR')
 assertM016(manifest.files.some((item) => item.path === 'web/index.html'), 'ZIP 缺少 Vite index.html')
-assertM016(manifest.files.some((item) => item.path === 'windows/iis/web.config'), 'ZIP 缺少 IIS 模板')
+const requiredWindowsAssets = [
+  'windows/config/application-prod.yml',
+  'windows/secrets/application-secrets.yml',
+  'windows/nginx/yumpoo-wecom.conf',
+  'windows/service/yumpoo-service.xml',
+  'windows/Invoke-AppManagerMaintenance.ps1',
+  'windows/iis/web.config',
+]
+for (const requiredAsset of requiredWindowsAssets) {
+  assertM016(manifest.files.some((item) => item.path === requiredAsset), `ZIP 缺少 Windows 资产：${requiredAsset}`)
+}
 
 const actualZipHash = await sha256(zipPath)
 const hashText = fs.readFileSync(zipHashPath, 'utf8').trim()
