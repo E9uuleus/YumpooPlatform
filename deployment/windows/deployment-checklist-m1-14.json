@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M1-14",
+  "mode": "PACKAGE_ONLY",
+  "target": {
+    "operatingSystem": "Windows Server 2022",
+    "architecture": "x64",
+    "publicHost": "wecom-dev.yumpoo.com",
+    "publicPort": 443,
+    "desktopVersion": "0.1.0",
+    "desktopProtocolVersion": "1"
+  },
+  "weCom": {
+    "webAuthorizationDomain": "wecom-dev.yumpoo.com",
+    "webCallback": "https://wecom-dev.yumpoo.com/api/v1/auth/wecom/callback",
+    "electronCallback": "https://wecom-dev.yumpoo.com/api/v1/electron/auth/wecom/callback",
+    "qrEndpoint": "https://open.work.weixin.qq.com/wwopen/sso/qrConnect"
+  },
+  "localChecks": [
+    "chromeRequiresExplicitLoginClick",
+    "electronUsesSystemBrowserAndPkce",
+    "handoffIsSixtySecondSingleUse",
+    "electronSessionTypeIsElectron",
+    "safeStorageEncryptedAtRest",
+    "desktopContainsNoBusinessSpa",
+    "artifactsAndLogsContainNoCredentials"
+  ],
+  "liveChecks": [
+    { "id": "chromeRealWeComQr", "status": "ENV_PENDING", "owner": "M6-01" },
+    { "id": "electronRealWeComQrAndProtocolCallback", "status": "ENV_PENDING", "owner": "M6-01" },
+    { "id": "targetServerHttpsAndCertificate", "status": "ENV_PENDING", "owner": "M6-01" }
+  ],
+  "deploymentAuthorized": false
+}

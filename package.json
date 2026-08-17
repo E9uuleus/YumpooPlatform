@@ -70,7 +70,11 @@
     "verify:m1-13": "node tools/verification/verify-m1-13.mjs",
     "package:m1-13:win": "node tools/verification/package-m1-13-win.mjs",
     "verify:m1-13:package": "node tools/verification/verify-m1-13-package.mjs",
-    "verify:m1-13:deployment": "node tools/verification/verify-m1-13-deployment.mjs"
+    "verify:m1-13:deployment": "node tools/verification/verify-m1-13-deployment.mjs",
+    "verify:m1-14": "node tools/verification/verify-m1-14.mjs",
+    "package:m1-14:win": "node tools/verification/package-m1-14-win.mjs",
+    "verify:m1-14:package": "node tools/verification/verify-m1-14-package.mjs",
+    "verify:m1-14:deployment": "node tools/verification/verify-m1-14-deployment.mjs"
   },
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "2.40.1",

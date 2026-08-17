@@ -1,4 +1,4 @@
-# M0-16 普通生产配置模板。复制到 C:\ProgramData\Yumpoo\config 后按目标机修改。
+# M1-14 普通生产配置模板。复制到 C:\ProgramData\Yumpoo\config 后按目标机修改。
 # 密码不得写入本文件；secrets 目录必须由专用服务账号以 ACL 保护。
 server:
   address: 127.0.0.1
@@ -19,6 +19,7 @@ yumpoo:
       corp-id: ww-replace-with-corp-id
       agent-id: replace-with-agent-id
       callback-uri: https://wecom-dev.yumpoo.com/api/v1/auth/wecom/callback
+      electron-callback-uri: https://wecom-dev.yumpoo.com/api/v1/electron/auth/wecom/callback
       connect-timeout: 5s
       read-timeout: 20s
     directory:
