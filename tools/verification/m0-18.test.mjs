@@ -386,6 +386,7 @@ test('workflow locks M1-15 gates, M0 handoff, fail-closed dependency and immutab
   assert.match(source, /run:\s+pnpm verify:m1-13/u)
   assert.match(source, /verify-m1-15-assets\.mjs/u)
   assert.match(source, /verify-m1-15-powershell\.mjs/u)
+  assert.match(source, /mvnw\.cmd -q -f \.\\backend\\pom\.xml -DskipTests package/u)
   assert.match(source, /pnpm package:m1-15:win/u)
   assert.match(source, /pnpm verify:m1-15:package/u)
   assert.match(source, /path:\s+out\/m1-13\/verification-report\.json/u)

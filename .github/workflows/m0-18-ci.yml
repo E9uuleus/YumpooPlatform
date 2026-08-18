@@ -137,7 +137,7 @@ jobs:
         shell: powershell
         run: |
           pnpm build
-          & .\backend\mvnw.cmd -q -DskipTests package
+          & .\backend\mvnw.cmd -q -f .\backend\pom.xml -DskipTests package
           if ($LASTEXITCODE -ne 0) { throw 'M1-15 backend package failed' }
           pnpm package:m1-15:win
           pnpm verify:m1-15:package
