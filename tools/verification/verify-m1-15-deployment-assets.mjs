@@ -13,6 +13,7 @@ const script = fs.readFileSync(path.join(deployment, 'Invoke-InitialIdentityBoot
 
 assert(historicalM113.startsWith('# M1-13 '), 'M1-13 RUNBOOK 历史快照缺失')
 assert(historicalM114.startsWith('# M1-14 '), 'M1-14 RUNBOOK 历史快照缺失')
+assert(historicalM114.includes('verify:m1-14:deployment'), 'M1-14 RUNBOOK 历史命令缺失')
 assert(runbook.startsWith('# M1-15 '), '当前 RUNBOOK 不是 M1-15')
 assert(checklist.milestone === 'M1-15' && checklist.mode === 'PACKAGE_ONLY', 'M1-15 checklist 模式错误')
 assert(checklist.deploymentAuthorized === false, 'M1-15 不得自动授权部署')

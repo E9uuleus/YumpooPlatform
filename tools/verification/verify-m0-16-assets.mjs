@@ -210,7 +210,9 @@ function validateChecklistAndRunbook() {
   ]
   assertM016(expectedChecks.every((item) => checklist.checks.includes(item)), '目标机检查项不完整')
   const currentRunbook = readText('RUNBOOK.md')
-  assertM016(currentRunbook.includes('verify:m1-14:deployment'), '当前运行清单缺少：verify:m1-14:deployment')
+  assertM016(currentRunbook.includes('verify:m1-15:deployment'), '当前运行清单缺少：verify:m1-15:deployment')
+  const historicalM114Runbook = readText('RUNBOOK-M1-14.md')
+  assertM016(historicalM114Runbook.includes('verify:m1-14:deployment'), 'M1-14 历史运行清单缺少：verify:m1-14:deployment')
   const historicalRunbook = readText('RUNBOOK-M1-13.md')
   for (const fragment of ['verify:m1-13:deployment', 'MANUAL_JAVA_CONSOLE', 'nginx.exe -t', '127.0.0.1:18173', '127.0.0.1:8100', '仅公开 443', '不得随 release 删除', 'BLOCKED']) {
     assertM016(historicalRunbook.includes(fragment), `M1-13 历史运行清单缺少：${fragment}`)
