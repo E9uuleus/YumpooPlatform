@@ -78,7 +78,9 @@
     "verify:m1-15": "node tools/verification/verify-m1-15.mjs",
     "package:m1-15:win": "node tools/verification/package-m1-15-win.mjs",
     "verify:m1-15:package": "node tools/verification/verify-m1-15-package.mjs",
-    "verify:m1-15:deployment": "node tools/verification/verify-m1-15-deployment.mjs"
+    "verify:m1-15:deployment": "node tools/verification/verify-m1-15-deployment.mjs",
+    "verify:m2-01:assets": "node tools/verification/verify-m2-01-assets.mjs",
+    "verify:m2-01": "node tools/verification/verify-m2-01.mjs"
   },
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "2.40.1",

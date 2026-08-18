@@ -18,6 +18,10 @@ tags:
     description: 身份治理快照、平台角色与账号状态管理。
   - name: IdentityAdministration
     description: 公司、企微配置状态、通讯录同步运行与成员目录只读管理。
+  - name: ProjectTemplates
+    description: 固定 Project 模板、Content blueprint 与工作流版本目录。
+  - name: ProjectTemplateAdministration
+    description: COMPANY_ADMIN 对固定模板版本执行发布与停用治理。
 paths:
   /company:
     get:
@@ -578,6 +582,93 @@ paths:
         '428': { $ref: '#/components/responses/PreconditionRequired' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /project-templates:
+    get:
+      tags: [ProjectTemplates]
+      operationId: listProjectTemplates
+      summary: 查询已发布的固定 Project 模板版本
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 当前可用于新 Project 的全部 PUBLISHED 模板版本。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectTemplateList' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/project-templates/{templateKey}/versions/{version}:
+    get:
+      tags: [ProjectTemplateAdministration]
+      operationId: getProjectTemplateVersion
+      summary: 查询任意状态的模板版本治理详情
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TemplateKey'
+        - $ref: '#/components/parameters/TemplateVersion'
+      responses:
+        '200':
+          description: 模板版本完整详情。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectTemplateVersion' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
+  /admin/project-templates/{templateKey}/versions/{version}/publish:
+    post:
+      tags: [ProjectTemplateAdministration]
+      operationId: publishProjectTemplateVersion
+      summary: 发布 DRAFT 模板版本
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TemplateKey'
+        - $ref: '#/components/parameters/TemplateVersion'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { $ref: '#/components/requestBodies/GovernanceReason' }
+      responses:
+        '200': { $ref: '#/components/responses/ProjectTemplateChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /admin/project-templates/{templateKey}/versions/{version}/retire:
+    post:
+      tags: [ProjectTemplateAdministration]
+      operationId: retireProjectTemplateVersion
+      summary: 停用 PUBLISHED 模板版本
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TemplateKey'
+        - $ref: '#/components/parameters/TemplateVersion'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { $ref: '#/components/requestBodies/GovernanceReason' }
+      responses:
+        '200': { $ref: '#/components/responses/ProjectTemplateChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -607,6 +698,118 @@ components:
     AccountStatus:
       type: string
       enum: [ENABLED, DISABLED]
+
+    ProjectTemplateKey:
+      type: string
+      enum: [RND, PRE_SALES, IMPLEMENTATION, HYPERCARE]
+
+    ProjectType:
+      type: string
+      enum: [PRODUCT_DEVELOPMENT, PRE_SALES, IMPLEMENTATION, HYPERCARE]
+
+    ProjectTemplateVersionStatus:
+      type: string
+      enum: [DRAFT, PUBLISHED, RETIRED]
+
+    WorkItemType:
+      type: string
+      enum: [REQUIREMENT, TASK, DEFECT]
+
+    ProjectTemplateViewType:
+      type: string
+      enum: [TABLE]
+
+    WorkflowStatusCategory:
+      type: string
+      enum: [TODO, IN_PROGRESS, DONE, CANCELED]
+
+    WorkflowRequiredPermission:
+      type: string
+      enum: [MEMBER]
+
+    ProjectTemplateContentBlueprint:
+      type: object
+      additionalProperties: false
+      required: [contentCode, displayName, workItemType, defaultViewType, sortOrder]
+      properties:
+        contentCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        workItemType: { $ref: '#/components/schemas/WorkItemType' }
+        defaultViewType: { $ref: '#/components/schemas/ProjectTemplateViewType' }
+        sortOrder: { type: integer, format: int32, minimum: 1 }
+
+    WorkflowStatusDefinition:
+      type: object
+      additionalProperties: false
+      required: [statusCode, displayName, statusCategory, sortOrder, initial, terminal]
+      properties:
+        statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        statusCategory: { $ref: '#/components/schemas/WorkflowStatusCategory' }
+        sortOrder: { type: integer, format: int32, minimum: 1 }
+        initial: { type: boolean }
+        terminal: { type: boolean }
+
+    WorkflowTransitionDefinition:
+      type: object
+      additionalProperties: false
+      required: [fromStatus, toStatus, requiredPermission, requiresResolution]
+      properties:
+        fromStatus: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        toStatus: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        requiredPermission: { $ref: '#/components/schemas/WorkflowRequiredPermission' }
+        requiresResolution: { type: boolean }
+
+    ProjectTemplateVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - templateVersionId
+        - templateKey
+        - version
+        - versionCode
+        - projectType
+        - displayName
+        - lifecycleStatus
+        - rowVersion
+        - publishedAt
+        - retiredAt
+        - contentBlueprints
+        - statuses
+        - transitions
+      properties:
+        templateVersionId: { $ref: '#/components/schemas/Uuid' }
+        templateKey: { $ref: '#/components/schemas/ProjectTemplateKey' }
+        version: { type: integer, format: int32, minimum: 1 }
+        versionCode: { type: string, pattern: '^[A-Z][A-Z0-9_]*_V[1-9][0-9]*$' }
+        projectType: { $ref: '#/components/schemas/ProjectType' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        lifecycleStatus: { $ref: '#/components/schemas/ProjectTemplateVersionStatus' }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        publishedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+        retiredAt: { type: string, format: date-time, nullable: true, readOnly: true }
+        contentBlueprints:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items: { $ref: '#/components/schemas/ProjectTemplateContentBlueprint' }
+        statuses:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/WorkflowStatusDefinition' }
+        transitions:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/WorkflowTransitionDefinition' }
+
+    ProjectTemplateList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectTemplateVersion' }
 
     Company:
       type: object
@@ -1239,6 +1442,21 @@ components:
       required: true
       schema: { $ref: '#/components/schemas/Uuid' }
 
+    TemplateKey:
+      name: templateKey
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/ProjectTemplateKey' }
+
+    TemplateVersion:
+      name: version
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+
     RunId:
       name: runId
       in: path
@@ -1462,6 +1680,14 @@ components:
       externalValue: ../examples/pagination/empty-cursor-page.json
 
   responses:
+    ProjectTemplateChanged:
+      description: 模板版本状态已改变，或返回同一幂等命令的既有成功结果。
+      headers:
+        ETag: { $ref: '#/components/headers/ETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ProjectTemplateVersion' }
+
     RoleGranted:
       description: 角色授予成功。
       headers:

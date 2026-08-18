@@ -1,0 +1,28 @@
+{
+  "eventId": "21000000-0000-4000-8000-000000000011",
+  "eventType": "templateworkflow.project_template_published",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-18T08:00:00Z",
+  "aggregateType": "ProjectTemplateVersion",
+  "aggregateId": "21000000-0000-4000-8000-000000000012",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": {
+    "type": "ADMIN_OVERRIDE",
+    "userId": "21000000-0000-4000-8000-000000000013",
+    "reasonReference": "release-m2-template-v2"
+  },
+  "requestId": "m2-01-template-publish-invalid",
+  "correlationId": "m2-01-template-publish-invalid",
+  "causationId": null,
+  "payload": {
+    "templateVersionId": "21000000-0000-4000-8000-000000000012",
+    "templateKey": "RND",
+    "version": 2,
+    "versionCode": "RND_V2",
+    "projectType": "PRODUCT_DEVELOPMENT",
+    "fromStatus": "PUBLISHED",
+    "toStatus": "PUBLISHED",
+    "reasonReference": "release-m2-template-v2"
+  }
+}

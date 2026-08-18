@@ -117,6 +117,8 @@ class M017BackupRestoreIT {
             assertThat(readIdentityBindingFact(target)).isEqualTo(readIdentityBindingFact(source));
             assertThat(readSessionSecurityFact(target)).isEqualTo(readSessionSecurityFact(source));
             assertThat(readDirectorySyncFact(target)).isEqualTo(readDirectorySyncFact(source));
+            assertThat(readProjectTemplateCatalogFact(target))
+                    .isEqualTo(readProjectTemplateCatalogFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -283,6 +285,40 @@ class M017BackupRestoreIT {
                      SELECT version FROM yumpoo.flyway_schema_history
                      WHERE success AND version IS NOT NULL
                      ORDER BY installed_rank DESC LIMIT 1
+                     """)) {
+            assertThat(result.next()).isTrue();
+            return result.getString(1);
+        }
+    }
+
+    private static String readProjectTemplateCatalogFact(PostgreSQLContainer container) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT string_agg(fact, E'\n' ORDER BY fact)
+                     FROM (
+                         SELECT 'T|' || template_key || '|' || template_version || '|'
+                                || version_code || '|' || project_type || '|' || lifecycle_status AS fact
+                           FROM yumpoo.project_template_definition
+                         UNION ALL
+                         SELECT 'B|' || template.version_code || '|' || blueprint.content_code || '|'
+                                || blueprint.work_item_type || '|' || blueprint.default_view_type || '|'
+                                || blueprint.sort_order
+                           FROM yumpoo.project_template_content_blueprint blueprint
+                           JOIN yumpoo.project_template_definition template ON template.id = blueprint.template_id
+                         UNION ALL
+                         SELECT 'S|' || template.version_code || '|' || status.status_code || '|'
+                                || status.status_category || '|' || status.sort_order || '|'
+                                || status.is_initial || '|' || status.is_terminal
+                           FROM yumpoo.workflow_status_definition status
+                           JOIN yumpoo.project_template_definition template ON template.id = status.template_id
+                         UNION ALL
+                         SELECT 'E|' || template.version_code || '|' || transition.from_status || '|'
+                                || transition.to_status || '|' || transition.required_permission || '|'
+                                || transition.requires_resolution
+                           FROM yumpoo.workflow_transition_definition transition
+                           JOIN yumpoo.project_template_definition template ON template.id = transition.template_id
+                     ) catalog
                      """)) {
             assertThat(result.next()).isTrue();
             return result.getString(1);

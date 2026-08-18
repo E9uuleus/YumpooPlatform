@@ -119,3 +119,17 @@ events:
       - examples/identity.app-manager-availability-restored-v1.json
     invalidExamples:
       - examples/identity.app-manager-availability-restored-v1.invalid.json
+  - eventType: templateworkflow.project_template_published
+    eventVersion: 1
+    schema: schemas/templateworkflow.project-template-published-v1.schema.json
+    validExamples:
+      - examples/templateworkflow.project-template-published-v1.json
+    invalidExamples:
+      - examples/templateworkflow.project-template-published-v1.invalid.json
+  - eventType: templateworkflow.project_template_retired
+    eventVersion: 1
+    schema: schemas/templateworkflow.project-template-retired-v1.schema.json
+    validExamples:
+      - examples/templateworkflow.project-template-retired-v1.json
+    invalidExamples:
+      - examples/templateworkflow.project-template-retired-v1.invalid.json

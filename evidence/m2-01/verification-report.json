@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-01",
+  "status": "PASS",
+  "startedAt": "2026-08-18T15:06:08Z",
+  "completedAt": "2026-08-18T15:07:52Z",
+  "command": "pnpm verify:m2-01",
+  "flywayVersion": "16",
+  "catalogCounts": {
+    "templateVersions": 4,
+    "contentBlueprints": 12,
+    "workflowStatuses": 23,
+    "workflowTransitions": 29
+  },
+  "checks": {
+    "eventContracts": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "backupRestoreCatalog": true,
+    "nodeGate": true
+  }
+}
