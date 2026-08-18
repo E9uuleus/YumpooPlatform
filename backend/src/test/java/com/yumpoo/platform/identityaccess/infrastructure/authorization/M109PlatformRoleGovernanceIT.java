@@ -17,6 +17,8 @@ import com.yumpoo.platform.identityaccess.application.account.AccountStatusComma
 import com.yumpoo.platform.identityaccess.application.account.AccountStatusUseCase;
 import com.yumpoo.platform.identityaccess.application.authorization.AppManagerAvailabilityCoordinator;
 import com.yumpoo.platform.identityaccess.application.authorization.GrantPlatformRoleCommand;
+import com.yumpoo.platform.identityaccess.application.authorization.InitialRoleBootstrapCommand;
+import com.yumpoo.platform.identityaccess.application.authorization.InitialRoleBootstrapResult;
 import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleMode;
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
@@ -121,6 +123,71 @@ class M109PlatformRoleGovernanceIT {
         assertThat(state()).isEqualTo("AVAILABLE|3");
         assertThat(eventCount("identity.app_manager_missing_detected")).isOne();
         assertThat(eventCount("identity.app_manager_availability_restored")).isOne();
+    }
+
+    @Test
+    void initialIdentityBootstrapAtomicallyGrantsDistinctPlatformAndCompanyAdministrators() {
+        UUID directoryRunId = UUID.randomUUID();
+        InitialRoleBootstrapResult result = execute("m115-initial-roles", () ->
+                maintenanceUseCase.bootstrapInitialRoles(new InitialRoleBootstrapCommand(
+                        COMPANY_ID,
+                        MANAGER_A,
+                        MANAGER_B,
+                        directoryRunId,
+                        "approved production initialization"
+                )));
+
+        assertThat(activeRoleCount(MANAGER_A)).isOne();
+        assertThat(activeRoleCount(MANAGER_B)).isOne();
+        assertThat(systemActor(result.appManagerAssignmentId()))
+                .isEqualTo("INITIAL_IDENTITY_BOOTSTRAP");
+        assertThat(systemActor(result.companyAdminAssignmentId()))
+                .isEqualTo("INITIAL_IDENTITY_BOOTSTRAP");
+        assertThat(state()).isEqualTo("AVAILABLE|1");
+        assertThat(userRowVersion(MANAGER_A)).isEqualTo(1);
+        assertThat(userRowVersion(MANAGER_B)).isEqualTo(1);
+        assertThat(auditActionCount("APP_MANAGER_BOOTSTRAPPED")).isOne();
+        assertThat(auditActionCount("COMPANY_ADMIN_BOOTSTRAPPED")).isOne();
+        assertThat(auditActionCount("INITIAL_IDENTITY_BOOTSTRAP_SUCCEEDED")).isOne();
+        assertThat(bootstrapAuditSensitiveKeyCount()).isZero();
+
+        assertError(() -> maintenanceUseCase.bootstrapInitialRoles(
+                        new InitialRoleBootstrapCommand(
+                                COMPANY_ID,
+                                MANAGER_A,
+                                MANAGER_B,
+                                UUID.randomUUID(),
+                                "repeat"
+                        )),
+                StandardErrorCode.INVALID_STATE_TRANSITION);
+    }
+
+    @Test
+    void initialIdentityBootstrapRollsBackBothRolesWhenAuditFails() {
+        jdbcClient.sql("""
+                CREATE FUNCTION yumpoo.m110_fail_role_audit() RETURNS trigger AS $$
+                BEGIN RAISE EXCEPTION 'injected role audit failure'; END;
+                $$ LANGUAGE plpgsql
+                """).update();
+        jdbcClient.sql("""
+                CREATE TRIGGER m110_fail_role_audit BEFORE INSERT ON yumpoo.security_audit_event
+                FOR EACH ROW EXECUTE FUNCTION yumpoo.m110_fail_role_audit()
+                """).update();
+
+        assertThatThrownBy(() -> execute("m115-initial-roles-rollback", () ->
+                maintenanceUseCase.bootstrapInitialRoles(new InitialRoleBootstrapCommand(
+                        COMPANY_ID,
+                        MANAGER_A,
+                        MANAGER_B,
+                        UUID.randomUUID(),
+                        "approved production initialization"
+                )))).isInstanceOf(RuntimeException.class);
+
+        assertThat(activeRoleCount(MANAGER_A)).isZero();
+        assertThat(activeRoleCount(MANAGER_B)).isZero();
+        assertThat(userRowVersion(MANAGER_A)).isZero();
+        assertThat(userRowVersion(MANAGER_B)).isZero();
+        assertThat(state()).isEqualTo("UNINITIALIZED|0");
     }
 
     @Test
@@ -457,6 +524,40 @@ class M109PlatformRoleGovernanceIT {
     private int eventCount(String eventType) {
         return jdbcClient.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE event_type = :eventType")
                 .param("eventType", eventType).query(Integer.class).single();
+    }
+
+    private int auditActionCount(String action) {
+        return jdbcClient.sql("""
+                        SELECT count(*) FROM yumpoo.security_audit_event
+                        WHERE company_id = :companyId AND action = :action
+                        """)
+                .param("companyId", COMPANY_ID)
+                .param("action", action)
+                .query(Integer.class)
+                .single();
+    }
+
+    private int bootstrapAuditSensitiveKeyCount() {
+        return jdbcClient.sql("""
+                        SELECT count(*)
+                        FROM yumpoo.security_audit_event event
+                        WHERE event.company_id = :companyId
+                          AND event.action IN (
+                            'APP_MANAGER_BOOTSTRAPPED',
+                            'COMPANY_ADMIN_BOOTSTRAPPED',
+                            'INITIAL_IDENTITY_BOOTSTRAP_SUCCEEDED'
+                          )
+                          AND EXISTS (
+                            SELECT 1
+                            FROM jsonb_object_keys(event.after_summary) AS summary(key)
+                            WHERE summary.key IN (
+                              'userId', 'externalUserId', 'name', 'authorizationVersion'
+                            )
+                          )
+                        """)
+                .param("companyId", COMPANY_ID)
+                .query(Integer.class)
+                .single();
     }
 
     private int activeRoleCount(UUID userId) {
