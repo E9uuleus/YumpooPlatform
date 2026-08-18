@@ -21,6 +21,8 @@ public interface RoleGovernanceRepository {
 
     boolean hasAppManagerHistory(UUID companyId);
 
+    boolean hasAnyRoleHistory(UUID companyId);
+
     int countAvailableAppManagers(UUID companyId);
 
     RoleAssignmentSnapshot grant(

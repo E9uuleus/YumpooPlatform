@@ -137,6 +137,19 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
     }
 
     @Override
+    public boolean hasAnyRoleHistory(UUID companyId) {
+        return Boolean.TRUE.equals(jdbcClient.sql("""
+                        SELECT EXISTS (
+                            SELECT 1 FROM yumpoo.platform_role_assignment
+                            WHERE company_id = :companyId
+                        )
+                        """)
+                .param("companyId", companyId)
+                .query(Boolean.class)
+                .single());
+    }
+
+    @Override
     public int countAvailableAppManagers(UUID companyId) {
         return jdbcClient.sql("""
                         SELECT count(*)

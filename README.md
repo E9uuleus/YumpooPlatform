@@ -1,5 +1,16 @@
 # YumpooPlatform
 
+## M1-15 生产环境首次身份引导
+
+M1-15 为尚未初始化平台角色的生产环境提供一次性、停服终端引导：使用同一生产 JAR 完成真实企微通讯录全量同步，并把两个不同的在职、启用成员原子授予首个 `APP_MANAGER` 与首个 `COMPANY_ADMIN`。入口默认关闭，不新增本地账号、HTTP/OpenAPI 接口或数据库迁移；成功后治理闩锁永久关闭，失败则保留输入文件供修正重试。
+
+```powershell
+pnpm verify:m1-15
+pnpm verify:m1-15:deployment
+```
+
+Windows x64 服务器产物位于忽略目录 `out/m1-15`；Electron 不重新打包，继续使用 M1-14 `0.1.0` PILOT。当前部署入口见 `deployment/windows/RUNBOOK.md`，历史 M1-14 手册保留为 `RUNBOOK-M1-14.md`。真实 UserID、Secret、Cookie 和扫码参数不得进入仓库、日志、审计正文或验证报告，目标环境证据保持 `ENV_PENDING`。
+
 ## M1-14 PC Chrome / Electron 企业微信扫码登录
 
 PC Chrome 现在由 `/login` 的显式按钮进入企微官方 `qrConnect`；Electron 0.1.0 使用系统默认浏览器、PKCE S256、60 秒一次性 handoff 和 Windows safeStorage 建立正式 `ELECTRON` 会话。当前步骤只生成服务器与 Windows x64 桌面 PILOT 包，不自动更新开发服务器，真实扫码证据保持 `ENV_PENDING`。

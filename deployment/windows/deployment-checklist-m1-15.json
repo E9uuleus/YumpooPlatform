@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M1-15",
+  "mode": "PACKAGE_ONLY",
+  "target": {
+    "operatingSystem": "Windows Server 2022",
+    "architecture": "x64",
+    "publicHost": "wecom-dev.yumpoo.com",
+    "publicPort": 443,
+    "serverArtifactOnly": true,
+    "desktopReuseMilestone": "M1-14",
+    "desktopVersion": "0.1.0"
+  },
+  "bootstrap": {
+    "transport": "SERVER_TERMINAL_ONLY",
+    "input": "ACL_PROTECTED_FILE",
+    "requiresDistinctRoleHolders": true,
+    "successDeletesInput": true,
+    "databaseMigrationAdded": false,
+    "publicApiChanged": false
+  },
+  "localChecks": [
+    "fullDirectorySyncRequired",
+    "partialAndEmptyDirectoryRejected",
+    "distinctEligibleWeComMembersRequired",
+    "dualRoleGrantIsAtomic",
+    "appManagerBootstrapClosesPermanently",
+    "webModeAndBroadAclFailClosed",
+    "artifactsAndLogsContainNoSensitiveIdentityValues"
+  ],
+  "liveChecks": [
+    { "id": "targetDatabaseBackup", "status": "ENV_PENDING", "owner": "M6-01" },
+    { "id": "realWeComDirectoryBootstrap", "status": "ENV_PENDING", "owner": "M6-01" },
+    { "id": "distinctAdminQrLogin", "status": "ENV_PENDING", "owner": "M6-01" },
+    { "id": "companyAdminFollowUpDirectorySync", "status": "ENV_PENDING", "owner": "M6-01" }
+  ],
+  "deploymentAuthorized": false
+}

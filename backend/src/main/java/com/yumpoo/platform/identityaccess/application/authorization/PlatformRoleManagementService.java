@@ -38,6 +38,7 @@ public class PlatformRoleManagementService
     public static final String ROLE_REVOKED_EVENT = "identity.platform_role_revoked";
     private static final String GRANT_ROUTE_KEY = "platformRoleGrant";
     private static final String REVOKE_ROUTE_KEY = "platformRoleRevoke";
+    private static final String INITIAL_BOOTSTRAP_SYSTEM = "INITIAL_IDENTITY_BOOTSTRAP";
 
     private final RoleGovernanceRepository repository;
     private final AppManagerAvailabilityCoordinator availabilityCoordinator;
@@ -149,6 +150,105 @@ public class PlatformRoleManagementService
                         "authorizationVersion", result.authorizationVersion()),
                 result.assignmentId(), null, null);
         return result;
+    }
+
+    @Override
+    @Transactional
+    public void requireInitialIdentityBootstrapOpen(UUID companyId) {
+        AvailabilitySnapshot state = availabilityCoordinator.lock(companyId);
+        requireInitialBootstrapOpen(state, companyId);
+    }
+
+    @Override
+    @Transactional
+    public InitialRoleBootstrapResult bootstrapInitialRoles(InitialRoleBootstrapCommand command) {
+        AvailabilitySnapshot state = availabilityCoordinator.lock(command.companyId());
+        requireInitialBootstrapOpen(state, command.companyId());
+
+        RoleUserSnapshot appManager = requireTarget(command.companyId(), command.appManagerUserId());
+        RoleUserSnapshot companyAdmin = requireTarget(command.companyId(), command.companyAdminUserId());
+        if (!appManager.available() || !companyAdmin.available()) {
+            throw new ApplicationException(
+                    StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "首次引导目标必须是在职且启用的用户"
+            );
+        }
+
+        Instant now = clock.instant();
+        EventActor actor = EventActor.system(INITIAL_BOOTSTRAP_SYSTEM);
+        PlatformRoleMutationResult appManagerResult = grantLocked(
+                command.companyId(), appManager, ManagedPlatformRole.APP_MANAGER,
+                "SYSTEM", null, INITIAL_BOOTSTRAP_SYSTEM,
+                command.reasonReference(), actor, now);
+        PlatformRoleMutationResult companyAdminResult = grantLocked(
+                command.companyId(), companyAdmin, ManagedPlatformRole.COMPANY_ADMIN,
+                "SYSTEM", null, INITIAL_BOOTSTRAP_SYSTEM,
+                command.reasonReference(), actor, now);
+        availabilityCoordinator.initializeAvailable(command.companyId());
+
+        recordInitialRoleBootstrap(appManagerResult, command.reasonReference(), actor);
+        recordInitialRoleBootstrap(companyAdminResult, command.reasonReference(), actor);
+
+        auditRecorder.succeeded(
+                command.companyId(),
+                "initial-identity-bootstrap:" + command.directoryRunId(),
+                "INITIAL_IDENTITY_BOOTSTRAP_SUCCEEDED",
+                actor,
+                Set.of(),
+                "DIRECTORY_SYNC_RUN",
+                command.directoryRunId(),
+                command.reasonReference(),
+                null,
+                Map.of(
+                        "directoryRunId", command.directoryRunId(),
+                        "appManagerAssignmentId", appManagerResult.assignmentId(),
+                        "companyAdminAssignmentId", companyAdminResult.assignmentId()
+                ),
+                command.directoryRunId(),
+                null,
+                null
+        );
+        return new InitialRoleBootstrapResult(
+                appManagerResult.assignmentId(),
+                companyAdminResult.assignmentId()
+        );
+    }
+
+    private void recordInitialRoleBootstrap(
+            PlatformRoleMutationResult result,
+            String reasonReference,
+            EventActor actor
+    ) {
+        auditRecorder.succeeded(
+                result.companyId(),
+                "role:" + result.assignmentId() + ":" + result.assignmentRowVersion(),
+                result.role() == ManagedPlatformRole.APP_MANAGER
+                        ? "APP_MANAGER_BOOTSTRAPPED" : "COMPANY_ADMIN_BOOTSTRAPPED",
+                actor,
+                Set.of(),
+                "PLATFORM_ROLE_ASSIGNMENT",
+                result.assignmentId(),
+                reasonReference,
+                null,
+                Map.of(
+                        "role", result.role().name(),
+                        "assignmentId", result.assignmentId()
+                ),
+                result.assignmentId(),
+                null,
+                null
+        );
+    }
+
+    private void requireInitialBootstrapOpen(AvailabilitySnapshot state, UUID companyId) {
+        if (state.state().lifecycleStatus() != GovernanceLifecycleStatus.UNINITIALIZED
+                || repository.hasAppManagerHistory(companyId)
+                || repository.hasAnyRoleHistory(companyId)) {
+            throw new ApplicationException(
+                    StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "首次身份引导已永久关闭"
+            );
+        }
     }
 
     private PlatformRoleMutationResult executeGrant(GrantPlatformRoleCommand command) {
