@@ -1,6 +1,5 @@
 package com.yumpoo.platform.identityaccess.infrastructure.bootstrap;
 
-import com.yumpoo.platform.foundation.infrastructure.deployment.DeploymentProperties;
 import com.yumpoo.platform.identityaccess.application.bootstrap.InitialIdentityBootstrapException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -97,9 +96,8 @@ class InitialIdentityBootstrapInputReaderTest {
     }
 
     private InitialIdentityBootstrapInputReader reader(Path secrets) {
-        DeploymentProperties properties = new DeploymentProperties();
-        properties.setSecretsRoot(secrets.toAbsolutePath().toString());
-        return new InitialIdentityBootstrapInputReader(new ObjectMapper(), properties);
+        return new InitialIdentityBootstrapInputReader(
+                new ObjectMapper(), secrets.toAbsolutePath().toString());
     }
 
     private static void assertCode(

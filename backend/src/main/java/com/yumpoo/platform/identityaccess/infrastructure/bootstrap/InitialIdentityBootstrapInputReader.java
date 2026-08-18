@@ -1,9 +1,9 @@
 package com.yumpoo.platform.identityaccess.infrastructure.bootstrap;
 
-import com.yumpoo.platform.foundation.infrastructure.deployment.DeploymentProperties;
 import com.yumpoo.platform.identityaccess.application.bootstrap.InitialIdentityBootstrapException;
 import com.yumpoo.platform.identityaccess.application.bootstrap.InitialIdentityBootstrapInput;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -39,14 +39,14 @@ public class InitialIdentityBootstrapInputReader {
     );
 
     private final ObjectMapper objectMapper;
-    private final DeploymentProperties deploymentProperties;
+    private final String secretsRoot;
 
     public InitialIdentityBootstrapInputReader(
             ObjectMapper objectMapper,
-            DeploymentProperties deploymentProperties
+            @Value("${yumpoo.deployment.secrets-root}") String secretsRoot
     ) {
         this.objectMapper = objectMapper;
-        this.deploymentProperties = deploymentProperties;
+        this.secretsRoot = secretsRoot;
     }
 
     public InitialIdentityBootstrapInput read(Path configuredPath) {
@@ -88,14 +88,14 @@ public class InitialIdentityBootstrapInputReader {
             throw invalid("INITIAL_IDENTITY_BOOTSTRAP_INPUT_PATH_INVALID");
         }
         try {
-            Path secretsRoot = Path.of(deploymentProperties.getSecretsRoot()).toRealPath();
+            Path resolvedSecretsRoot = Path.of(secretsRoot).toRealPath();
             Path normalized = configuredPath.normalize();
             if (Files.isSymbolicLink(normalized)
                     || !Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) {
                 throw invalid("INITIAL_IDENTITY_BOOTSTRAP_INPUT_PATH_INVALID");
             }
             Path realInput = normalized.toRealPath();
-            if (!realInput.startsWith(secretsRoot)) {
+            if (!realInput.startsWith(resolvedSecretsRoot)) {
                 throw invalid("INITIAL_IDENTITY_BOOTSTRAP_INPUT_PATH_INVALID");
             }
             rejectBroadReadAcl(realInput);
