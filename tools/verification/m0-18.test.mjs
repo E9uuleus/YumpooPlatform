@@ -361,11 +361,11 @@ test('M1-13 portable phase clears controlled fixture environment overrides', () 
   assert.equal(inherited.YUMPOO_CONTROLLED_AUTH_ENABLED, 'true')
 })
 
-test('workflow locks M1-13 Linux gate, M0 handoff, fail-closed dependency and immutable action SHAs', () => {
+test('workflow locks M1-15 gates, M0 handoff, fail-closed dependency and immutable action SHAs', () => {
   const workflowPath = path.join(repositoryRoot, '.github', 'workflows', 'm0-18-ci.yml')
   const source = fs.readFileSync(workflowPath, 'utf8')
   const workflow = YAML.parse(source)
-  assert.equal(workflow.name, 'M1-13 CI')
+  assert.equal(workflow.name, 'M1-15 CI')
   assert.deepEqual(Object.keys(workflow.on).sort(), ['pull_request', 'push'])
   assert.deepEqual(workflow.on.pull_request.branches, ['dev'])
   assert.deepEqual(workflow.on.push.branches, ['dev'])
@@ -376,7 +376,7 @@ test('workflow locks M1-13 Linux gate, M0 handoff, fail-closed dependency and im
   assert.equal(workflow.jobs.linux['timeout-minutes'], 60)
   assert.equal(workflow.jobs.windows.name, 'M0 Windows x64 Gate')
   assert.equal(workflow.jobs.windows['runs-on'], 'windows-2022')
-  assert.equal(workflow.jobs.windows['timeout-minutes'], 30)
+  assert.equal(workflow.jobs.windows['timeout-minutes'], 45)
   assert.deepEqual(workflow.jobs.windows.needs, ['linux'])
   assert.equal(workflow.jobs.windows.if, '${{ always() }}')
   assert.match(source, /needs\.linux\.result[^\n]+success/u)
@@ -384,6 +384,10 @@ test('workflow locks M1-13 Linux gate, M0 handoff, fail-closed dependency and im
   assert.doesNotMatch(source, /pull_request_target|continue-on-error|workflow_dispatch/u)
   assert.doesNotMatch(source, /xvfb-run|smoke:m0-16:server/u)
   assert.match(source, /run:\s+pnpm verify:m1-13/u)
+  assert.match(source, /verify-m1-15-assets\.mjs/u)
+  assert.match(source, /verify-m1-15-powershell\.mjs/u)
+  assert.match(source, /pnpm package:m1-15:win/u)
+  assert.match(source, /pnpm verify:m1-15:package/u)
   assert.match(source, /path:\s+out\/m1-13\/verification-report\.json/u)
   assert.match(source, /YUMPOO_M018_VALIDATION_MODE:\s+WINDOWS_X64_CI_STAGE/u)
   assert.match(source, /out\/m0-17\/backup-set\/manifest\.json/u)
@@ -394,10 +398,10 @@ test('workflow locks M1-13 Linux gate, M0 handoff, fail-closed dependency and im
   assert.doesNotMatch(source, /^\s*strategy:/mu)
   assert.match(source, /retention-days:\s+1/u)
   assert.match(source, /retention-days:\s+30/u)
-  assert.equal((source.match(/if-no-files-found:\s+error/gu) ?? []).length, 3)
+  assert.equal((source.match(/if-no-files-found:\s+error/gu) ?? []).length, 4)
 
   const uses = [...source.matchAll(/uses:\s+([^@\s]+)@([^\s]+)/gu)]
-  assert.equal(uses.length, 12)
+  assert.equal(uses.length, 13)
   assert(uses.every((match) => /^[0-9a-f]{40}$/u.test(match[2])))
   for (const sha of [
     '3d3c42e5aac5ba805825da76410c181273ba90b1',
