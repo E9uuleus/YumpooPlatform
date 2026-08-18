@@ -1,5 +1,15 @@
 # Yumpoo Server
 
+## M1-15 生产首次身份引导
+
+默认关闭的 `yumpoo.maintenance.initial-identity.enabled` Runner 仅允许在 `prod + spring.main.web-application-type=none` 下运行。它从部署 secrets 根目录内的受限 JSON 文件读取预期 CorpID 和两个不同企微成员标识，调用现有完整目录同步；只有同步 `SUCCEEDED` 且成员非空、两名目标均属于同一企业并处于 `ACTIVE + ENABLED` 时，才在同一事务内授予首个 `APP_MANAGER` 与首个 `COMPANY_ADMIN`、递增授权版本、写角色事件和 Security Audit，并把 APP_MANAGER 治理状态置为 `AVAILABLE`。
+
+```powershell
+pnpm verify:m1-15
+```
+
+该入口不新增 Flyway 或 HTTP/OpenAPI。APP_MANAGER 与 COMPANY_ADMIN 必须由不同用户承担；同步失败、部分成功、空快照、配置冲突或角色事务失败均不会留下单边角色。命令、DTO、异常、日志和报告不记录企微 UserID 或凭据。
+
 ## M1-14 企业微信 PC 扫码与 Electron 会话
 
 Web `/api/v1/auth/wecom/authorize` 使用企微官方 `qrConnect`。Electron 新增 attempt、HTTPS callback、PKCE handoff exchange 三个接口，并在同一事务内消费 handoff、变更 attempt 状态和签发 `ELECTRON` Session；V15 迁移在既有 `desktop_auth_attempt` 上增加用户、客户端版本和协议版本绑定。
