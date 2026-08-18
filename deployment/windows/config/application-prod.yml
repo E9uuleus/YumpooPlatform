@@ -36,6 +36,9 @@ yumpoo:
     cleanup-delay: 1h
     purge-batch-size: 500
     purge-max-batches: 10
+  maintenance:
+    initial-identity:
+      enabled: false
   deployment:
     public-base-url: https://wecom-dev.yumpoo.com
     release-root: C:/Program Files/Yumpoo/releases/current
