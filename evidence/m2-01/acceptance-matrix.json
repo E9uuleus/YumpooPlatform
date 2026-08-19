@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-01",
+  "verifiedRequirements": [
+    {
+      "requirementId": "PPM-005",
+      "evidence": [
+        "backend/src/main/resources/db/migration/templateworkflow/V16__create_project_template_catalog.sql",
+        "backend/src/test/java/com/yumpoo/platform/templateworkflow/infrastructure/ProjectTemplateCatalogIT.java",
+        "tools/verification/verify-m2-01.mjs"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    {
+      "requirementId": "PPM-006",
+      "targetMilestone": "M2-04",
+      "scope": "Project、owner 与 Content 的原子初始化"
+    }
+  ]
+}

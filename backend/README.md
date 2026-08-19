@@ -162,7 +162,11 @@ exchange 成功只返回一次短期 HMAC 收据；其中 requestId、企业/成
 
 从仓库根目录运行 `pnpm verify:m0-14`。该命令额外在 `-Xmx96m` 下点名运行 `M014BoundedHeapVerification`，并通过 test-only HTTP/PostgreSQL 探针覆盖断流、并发完成、扫描事务边界、授权撤销、413/415、隐藏 404 和最终事务回滚。真实 Defender/NTFS 验证及所需变量见仓库根 README；受控 Windows 环境具备后运行 `pnpm verify:m0-14:live` 并取得签名 `PASS` 证据，未执行前保持 `NOT_RUN`，不阻塞 M0 本地开发门禁。
 
-YumpooPlatform 一期 M0-13 的 Spring 后端、数据库、内部事件契约与企微 OAuth/通讯录验证骨架。当前产物是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重和默认关闭的企微诊断流程，但不包含正式登录或通讯录同步业务功能。
+YumpooPlatform Spring 后端是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重、身份治理，以及 M2-01 固定 Project 模板目录与版本治理。
+
+## M2-01 模板目录
+
+Flyway V16 在 `templateworkflow` owner 目录创建模板版本、Content blueprint、状态和迁移四张表，并预置四个 PUBLISHED V1。跨模块只能使用 `templateworkflow.api` 的已发布查询、任意版本查询和发布/停用命令端口；HTTP Controller 与审计/Outbox/幂等事务编排归 `administration`。完整验收从仓库根目录运行 `pnpm verify:m2-01`，Project 实例初始化仍属于 M2-04。
 
 ## 环境
 

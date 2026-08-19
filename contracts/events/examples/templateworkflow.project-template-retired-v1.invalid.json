@@ -1,0 +1,28 @@
+{
+  "eventId": "21000000-0000-4000-8000-000000000031",
+  "eventType": "templateworkflow.project_template_retired",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-18T09:00:00Z",
+  "aggregateType": "ProjectTemplateVersion",
+  "aggregateId": "21000000-0000-4000-8000-000000000032",
+  "aggregateVersion": 2,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": {
+    "type": "ADMIN_OVERRIDE",
+    "userId": "21000000-0000-4000-8000-000000000033",
+    "reasonReference": "retire-m2-template-v1"
+  },
+  "requestId": "m2-01-template-retire-invalid",
+  "correlationId": "m2-01-template-retire-invalid",
+  "causationId": null,
+  "payload": {
+    "templateVersionId": "21000000-0000-4000-8000-000000000032",
+    "templateKey": "RND",
+    "version": 1,
+    "versionCode": "RND_V1",
+    "projectType": "PRODUCT_DEVELOPMENT",
+    "fromStatus": "PUBLISHED",
+    "toStatus": "DRAFT",
+    "reasonReference": "retire-m2-template-v1"
+  }
+}

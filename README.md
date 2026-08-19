@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M2-01 固定模板目录与版本治理
+
+M2-01 交付 `RND_V1`、`PRE_SALES_V1`、`IMPLEMENTATION_V1`、`HYPERCARE_V1` 四个已发布模板版本，以及每套固定的需求、任务、缺陷 Content blueprint 和完整状态迁移目录。模板以 `templateKey + version` 标识并使用稳定 UUID 聚合事件；PUBLISHED/RETIRED 结构由 PostgreSQL 触发器保护，只允许 `DRAFT → PUBLISHED → RETIRED`。
+
+登录成员可读取已发布可选版本，`COMPANY_ADMIN` 可带强 ETag、UUID 幂等键及理由发布/停用版本。治理事务原子写入模板状态、幂等结果、Security Audit 和 Outbox，并同步冻结 OpenAPI、生成 TypeScript 客户端及两类 v1 事件契约。本步不创建 Project/Content 实例；PPM-006 的 Project、owner membership 和初始 Content 原子初始化仍由 M2-04 交付。
+
+```powershell
+pnpm verify:m2-01
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M1-15 生产环境首次身份引导
 
 M1-15 为尚未初始化平台角色的生产环境提供一次性、停服终端引导：使用同一生产 JAR 完成真实企微通讯录全量同步，并把两个不同的在职、启用成员原子授予首个 `APP_MANAGER` 与首个 `COMPANY_ADMIN`。入口默认关闭，不新增本地账号、HTTP/OpenAPI 接口或数据库迁移；成功后治理闩锁永久关闭，失败则保留输入文件供修正重试。

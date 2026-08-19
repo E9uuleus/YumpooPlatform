@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/templateworkflow.project-template-published-v1.schema.json",
+  "title": "Project template version published",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "templateworkflow.project_template_published" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "ProjectTemplateVersion" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["templateVersionId", "templateKey", "version", "versionCode", "projectType", "fromStatus", "toStatus", "reasonReference"],
+          "properties": {
+            "templateVersionId": { "type": "string", "format": "uuid" },
+            "templateKey": { "enum": ["RND", "PRE_SALES", "IMPLEMENTATION", "HYPERCARE"] },
+            "version": { "type": "integer", "minimum": 1 },
+            "versionCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*_V[1-9][0-9]*$" },
+            "projectType": { "enum": ["PRODUCT_DEVELOPMENT", "PRE_SALES", "IMPLEMENTATION", "HYPERCARE"] },
+            "fromStatus": { "const": "DRAFT" },
+            "toStatus": { "const": "PUBLISHED" },
+            "reasonReference": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": ".*\\S.*" }
+          }
+        }
+      }
+    }
+  ]
+}

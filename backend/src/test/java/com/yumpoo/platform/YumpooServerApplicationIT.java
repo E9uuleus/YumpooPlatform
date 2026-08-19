@@ -283,7 +283,7 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
@@ -302,8 +302,12 @@ class YumpooServerApplicationIT {
                 "outbox_consumer_receipt",
                 "outbox_event",
                 "platform_role_assignment",
+                "project_template_content_blueprint",
+                "project_template_definition",
                 "security_audit_event",
-                "wecom_oauth_attempt"
+                "wecom_oauth_attempt",
+                "workflow_status_definition",
+                "workflow_transition_definition"
         );
         assertThat(outboxConstraintNames).containsExactlyInAnyOrder(
                 "outbox_event_pkey",
