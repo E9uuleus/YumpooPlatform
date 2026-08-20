@@ -186,3 +186,13 @@ events:
     schema: schemas/catalog.product-owner-reassigned-v1.schema.json
     validExamples: [examples/catalog.product-owner-reassigned-v1.json]
     invalidExamples: [examples/catalog.product-owner-reassigned-v1.invalid.json]
+  - eventType: catalog.project_created
+    eventVersion: 1
+    schema: schemas/catalog.project-created-v1.schema.json
+    validExamples: [examples/catalog.project-created-v1.json]
+    invalidExamples: [examples/catalog.project-created-v1.invalid.json]
+  - eventType: catalog.project_template_applied
+    eventVersion: 1
+    schema: schemas/catalog.project-template-applied-v1.schema.json
+    validExamples: [examples/catalog.project-template-applied-v1.json]
+    invalidExamples: [examples/catalog.project-template-applied-v1.invalid.json]

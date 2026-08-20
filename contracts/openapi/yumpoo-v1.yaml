@@ -26,6 +26,8 @@ tags:
     description: Company 下只承担导航归类、不形成授权边界的 Workspace 生命周期。
   - name: Products
     description: Company 下长期存在的 Product 主数据、唯一负责人和生命周期。
+  - name: Projects
+    description: Company 下的 Project 原子创建、模板固化与初始协作结构。
 paths:
   /company:
     get:
@@ -897,6 +899,37 @@ paths:
         '428': { $ref: '#/components/responses/PreconditionRequired' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /projects:
+    post:
+      tags: [Projects]
+      operationId: createProject
+      summary: 原子创建 DRAFT Project
+      description: 同一事务创建 Project、ACTIVE owner membership 和模板定义的全部初始 Content。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectCreateRequest' }
+      responses:
+        '201':
+          description: Project 已原子创建，或返回同一幂等命令的既有成功结果。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /project-templates:
     get:
       tags: [ProjectTemplates]
@@ -1152,6 +1185,79 @@ components:
     ProjectType:
       type: string
       enum: [PRODUCT_DEVELOPMENT, PRE_SALES, IMPLEMENTATION, HYPERCARE]
+
+    ProjectLifecycle:
+      type: string
+      enum: [DRAFT, ACTIVE, ARCHIVED]
+
+    Project:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - workspaceId
+        - code
+        - name
+        - description
+        - projectType
+        - lifecycle
+        - ownerUserId
+        - templateKey
+        - templateVersion
+        - customerName
+        - customerReference
+        - deliverySite
+        - contactNote
+        - rowVersion
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        workspaceId: { $ref: '#/components/schemas/Uuid' }
+        code:
+          type: string
+          minLength: 2
+          maxLength: 32
+          pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500, nullable: true }
+        projectType: { $ref: '#/components/schemas/ProjectType' }
+        lifecycle: { $ref: '#/components/schemas/ProjectLifecycle' }
+        ownerUserId: { $ref: '#/components/schemas/Uuid' }
+        templateKey: { $ref: '#/components/schemas/ProjectTemplateKey' }
+        templateVersion: { type: integer, format: int32, minimum: 1 }
+        customerName: { type: string, maxLength: 160, nullable: true }
+        customerReference: { type: string, maxLength: 80, nullable: true }
+        deliverySite: { type: string, maxLength: 160, nullable: true }
+        contactNote: { type: string, maxLength: 500, nullable: true }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+
+    ProjectCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - workspaceId
+        - code
+        - name
+        - projectType
+        - ownerUserId
+        - templateKey
+        - templateVersion
+      properties:
+        workspaceId: { $ref: '#/components/schemas/Uuid' }
+        code:
+          type: string
+          minLength: 2
+          maxLength: 32
+          pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500, nullable: true }
+        projectType: { $ref: '#/components/schemas/ProjectType' }
+        ownerUserId: { $ref: '#/components/schemas/Uuid' }
+        templateKey: { $ref: '#/components/schemas/ProjectTemplateKey' }
+        templateVersion: { type: integer, format: int32, minimum: 1 }
+        customerName: { type: string, maxLength: 160, nullable: true }
+        customerReference: { type: string, maxLength: 80, nullable: true }
+        deliverySite: { type: string, maxLength: 160, nullable: true }
+        contactNote: { type: string, maxLength: 500, nullable: true }
 
     ProjectTemplateVersionStatus:
       type: string

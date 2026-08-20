@@ -1,0 +1,21 @@
+{
+  "eventId": "24000000-0000-4000-8000-000000000021",
+  "eventType": "catalog.project_template_applied",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-20T10:00:00Z",
+  "aggregateType": "Project",
+  "aggregateId": "24000000-0000-4000-8000-000000000022",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "24000000-0000-4000-8000-000000000023" },
+  "requestId": "m2-04-template-apply",
+  "correlationId": "m2-04-template-apply",
+  "causationId": null,
+  "payload": {
+    "projectId": "24000000-0000-4000-8000-000000000022",
+    "templateKey": "RND",
+    "templateVersion": 1,
+    "initializedContentCount": 3,
+    "contentCodes": ["REQUIREMENTS", "TASKS", "DEFECTS"]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "eventId": "24000000-0000-4000-8000-000000000011",
+  "eventType": "catalog.project_created",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-20T10:00:00Z",
+  "aggregateType": "Project",
+  "aggregateId": "24000000-0000-4000-8000-000000000012",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "24000000-0000-4000-8000-000000000013" },
+  "requestId": "m2-04-project-invalid",
+  "correlationId": "m2-04-project-invalid",
+  "causationId": null,
+  "payload": {
+    "projectId": "24000000-0000-4000-8000-000000000012",
+    "workspaceId": "24000000-0000-4000-8000-000000000014",
+    "code": "invalid-code",
+    "name": "Invalid",
+    "projectType": "PRODUCT_DEVELOPMENT",
+    "lifecycle": "ACTIVE",
+    "ownerUserId": "24000000-0000-4000-8000-000000000015",
+    "templateKey": "RND",
+    "templateVersion": 1,
+    "initializedContentCount": 0,
+    "customerName": "不应进入事件"
+  }
+}

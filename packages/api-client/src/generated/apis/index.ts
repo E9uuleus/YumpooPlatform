@@ -5,4 +5,5 @@ export * from './IdentityGovernanceApi';
 export * from './ProductsApi';
 export * from './ProjectTemplateAdministrationApi';
 export * from './ProjectTemplatesApi';
+export * from './ProjectsApi';
 export * from './WorkspacesApi';
