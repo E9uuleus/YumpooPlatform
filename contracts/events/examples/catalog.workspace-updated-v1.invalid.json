@@ -1,0 +1,24 @@
+{
+  "eventId": "22000000-0000-4000-8000-000000000031",
+  "eventType": "catalog.workspace_updated",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-20T08:10:00Z",
+  "aggregateType": "Workspace",
+  "aggregateId": "22000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "22000000-0000-4000-8000-000000000003" },
+  "requestId": "m2-02-workspace-update-invalid",
+  "correlationId": "m2-02-workspace-update-invalid",
+  "causationId": null,
+  "payload": {
+    "workspaceId": "22000000-0000-4000-8000-000000000002",
+    "code": "PRODUCT_RND",
+    "changedFields": [],
+    "oldName": "产品研发",
+    "newName": "产品研发",
+    "oldSortOrder": 10,
+    "newSortOrder": 10,
+    "descriptionChanged": false
+  }
+}

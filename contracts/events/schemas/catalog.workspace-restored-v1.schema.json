@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/catalog.workspace-restored-v1.schema.json",
+  "title": "Workspace restored",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "catalog.workspace_restored" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Workspace" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workspaceId", "code", "fromStatus", "toStatus"],
+          "properties": {
+            "workspaceId": { "type": "string", "format": "uuid" },
+            "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
+            "fromStatus": { "const": "ARCHIVED" },
+            "toStatus": { "const": "ACTIVE" }
+          }
+        }
+      }
+    }
+  ]
+}

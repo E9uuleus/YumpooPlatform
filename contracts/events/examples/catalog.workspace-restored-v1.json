@@ -1,0 +1,20 @@
+{
+  "eventId": "22000000-0000-4000-8000-000000000061",
+  "eventType": "catalog.workspace_restored",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-20T08:30:00Z",
+  "aggregateType": "Workspace",
+  "aggregateId": "22000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 3,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "22000000-0000-4000-8000-000000000003" },
+  "requestId": "m2-02-workspace-restore",
+  "correlationId": "m2-02-workspace-restore",
+  "causationId": null,
+  "payload": {
+    "workspaceId": "22000000-0000-4000-8000-000000000002",
+    "code": "PRODUCT_RND",
+    "fromStatus": "ARCHIVED",
+    "toStatus": "ACTIVE"
+  }
+}

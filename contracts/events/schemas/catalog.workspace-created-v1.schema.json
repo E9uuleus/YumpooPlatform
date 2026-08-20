@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/catalog.workspace-created-v1.schema.json",
+  "title": "Workspace created",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "catalog.workspace_created" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Workspace" },
+        "aggregateVersion": { "const": 0 },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workspaceId", "code", "name", "sortOrder", "status"],
+          "properties": {
+            "workspaceId": { "type": "string", "format": "uuid" },
+            "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
+            "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "sortOrder": { "type": "integer", "minimum": 0 },
+            "status": { "const": "ACTIVE" }
+          }
+        }
+      }
+    }
+  ]
+}

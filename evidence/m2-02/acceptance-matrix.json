@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-02",
+  "verifiedSlices": [
+    {
+      "requirementId": "PPM-001",
+      "scope": "Company 可包含多个 Workspace，以及 Workspace 的创建、查询、更新、归档与恢复生命周期",
+      "evidence": [
+        "backend/src/main/resources/db/migration/catalog/V17__create_workspace_catalog.sql",
+        "backend/src/test/java/com/yumpoo/platform/catalog/infrastructure/workspace/WorkspaceCatalogIT.java",
+        "backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java",
+        "tools/verification/verify-m2-02.mjs"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    {
+      "requirementId": "PPM-001",
+      "targetMilestone": "M2-04",
+      "scope": "Project 必须归属一个 Workspace，创建时通过 ACTIVE Workspace 快照校验"
+    },
+    {
+      "requirementId": "PPM-002",
+      "targetMilestone": "M2-24",
+      "scope": "按真实 Project 权限过滤 Workspace 项目列表和 visibleProjectCount；基础 ACL 查询在 M2-06 接入"
+    },
+    {
+      "requirementId": "PPM-016",
+      "targetMilestone": "M2-08",
+      "scope": "Project 在 Workspace 之间迁移且不扩大权限，以及已有项目占用归档检查"
+    },
+    {
+      "requirementId": "PPM-AT-001",
+      "targetMilestone": "M2-24",
+      "scope": "两个真实 Project 同属 Workspace 时，按成员权限过滤并避免泄露不可见项目"
+    }
+  ]
+}

@@ -22,6 +22,8 @@ tags:
     description: 固定 Project 模板、Content blueprint 与工作流版本目录。
   - name: ProjectTemplateAdministration
     description: COMPANY_ADMIN 对固定模板版本执行发布与停用治理。
+  - name: Workspaces
+    description: Company 下只承担导航归类、不形成授权边界的 Workspace 生命周期。
 paths:
   /company:
     get:
@@ -582,6 +584,147 @@ paths:
         '428': { $ref: '#/components/responses/PreconditionRequired' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /workspaces:
+    get:
+      tags: [Workspaces]
+      operationId: listWorkspaces
+      summary: 查询当前公司的 Workspace 导航目录
+      description: 默认只返回 ACTIVE；ARCHIVED/ALL 筛选仅 COMPANY_ADMIN 可用。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/WorkspaceStatusFilter'
+            default: ACTIVE
+      responses:
+        '200':
+          description: 按 sortOrder、name、id 稳定排序的 Workspace。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkspaceList' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Workspaces]
+      operationId: createWorkspace
+      summary: 创建 Workspace
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceCreateRequest' }
+      responses:
+        '201':
+          description: Workspace 已创建，或返回同一幂等命令的既有成功结果。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /workspaces/{workspaceId}:
+    get:
+      tags: [Workspaces]
+      operationId: getWorkspace
+      summary: 查询 Workspace 详情
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+      responses:
+        '200':
+          description: 当前可见的 Workspace；ARCHIVED 仅 COMPANY_ADMIN 可见。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+    patch:
+      tags: [Workspaces]
+      operationId: updateWorkspace
+      summary: 替换 Workspace 的完整可变字段快照
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceUpdateRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/WorkspaceChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /workspaces/{workspaceId}/archive:
+    post:
+      tags: [Workspaces]
+      operationId: archiveWorkspace
+      summary: 归档 ACTIVE Workspace
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200': { $ref: '#/components/responses/WorkspaceChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /workspaces/{workspaceId}/restore:
+    post:
+      tags: [Workspaces]
+      operationId: restoreWorkspace
+      summary: 恢复 ARCHIVED Workspace
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200': { $ref: '#/components/responses/WorkspaceChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /project-templates:
     get:
       tags: [ProjectTemplates]
@@ -698,6 +841,69 @@ components:
     AccountStatus:
       type: string
       enum: [ENABLED, DISABLED]
+
+    WorkspaceStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+
+    WorkspaceStatusFilter:
+      type: string
+      enum: [ACTIVE, ARCHIVED, ALL]
+
+    Workspace:
+      type: object
+      additionalProperties: false
+      required: [id, code, name, description, sortOrder, status, visibleProjectCount, rowVersion]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        code:
+          type: string
+          minLength: 2
+          maxLength: 32
+          pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+        status: { $ref: '#/components/schemas/WorkspaceStatus' }
+        visibleProjectCount:
+          type: integer
+          format: int64
+          minimum: 0
+          readOnly: true
+          description: M2-02 固定为 0；M2-06 接入真实 Project 权限过滤计数。
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+
+    WorkspaceList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Workspace' }
+
+    WorkspaceCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, sortOrder]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 32
+          pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+
+    WorkspaceUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, description, sortOrder]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
 
     ProjectTemplateKey:
       type: string
@@ -1457,6 +1663,12 @@ components:
         format: int32
         minimum: 1
 
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+
     RunId:
       name: runId
       in: path
@@ -1680,6 +1892,14 @@ components:
       externalValue: ../examples/pagination/empty-cursor-page.json
 
   responses:
+    WorkspaceChanged:
+      description: Workspace 已更新，或返回同一幂等命令的既有成功结果。
+      headers:
+        ETag: { $ref: '#/components/headers/ETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Workspace' }
+
     ProjectTemplateChanged:
       description: 模板版本状态已改变，或返回同一幂等命令的既有成功结果。
       headers:
