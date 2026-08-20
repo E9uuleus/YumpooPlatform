@@ -75,6 +75,7 @@ class M017BackupRestoreIT {
             createSyntheticReferences(source, List.of(first, second));
             createCompanyCalendarFact(source);
             createIdentityBindingFact(source);
+            createWorkspaceFact(source);
 
             Path dump = workRoot.resolve("yumpoo.dump");
             createDump(source, dump);
@@ -119,6 +120,7 @@ class M017BackupRestoreIT {
             assertThat(readDirectorySyncFact(target)).isEqualTo(readDirectorySyncFact(source));
             assertThat(readProjectTemplateCatalogFact(target))
                     .isEqualTo(readProjectTemplateCatalogFact(source));
+            assertThat(readWorkspaceFact(target)).isEqualTo(readWorkspaceFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -541,6 +543,58 @@ class M017BackupRestoreIT {
         }
     }
 
+    private static void createWorkspaceFact(PostgreSQLContainer container) throws SQLException {
+        try (Connection connection = connection(container);
+             PreparedStatement insert = connection.prepareStatement("""
+                     INSERT INTO yumpoo.workspace (
+                         id, company_id, code, name, description, sort_order,
+                         status, row_version, created_at, created_by_user_id,
+                         updated_at, updated_by_user_id
+                     ) VALUES (
+                         '00000000-0000-4000-8000-000000000502',
+                         '00000000-0000-4000-8000-000000000001',
+                         'RESTORE_PROBE', 'M2-02 Restore Workspace',
+                         'Workspace lifecycle backup restore probe', 12,
+                         'ARCHIVED', 3, ?,
+                         '00000000-0000-4000-8000-000000000102', ?,
+                         '00000000-0000-4000-8000-000000000102'
+                     )
+                     """)) {
+            OffsetDateTime observedAt = OffsetDateTime.ofInstant(
+                    Instant.parse("2026-08-20T05:00:00Z"), ZoneOffset.UTC);
+            insert.setObject(1, observedAt);
+            insert.setObject(2, observedAt.plusHours(1));
+            assertThat(insert.executeUpdate()).isOne();
+        }
+    }
+
+    private static WorkspaceFact readWorkspaceFact(PostgreSQLContainer container) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT id, company_id, code, name, description, sort_order,
+                            status, row_version, created_by_user_id, updated_by_user_id
+                     FROM yumpoo.workspace
+                     WHERE id = '00000000-0000-4000-8000-000000000502'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            WorkspaceFact fact = new WorkspaceFact(
+                    result.getObject("id", UUID.class),
+                    result.getObject("company_id", UUID.class),
+                    result.getString("code"),
+                    result.getString("name"),
+                    result.getString("description"),
+                    result.getInt("sort_order"),
+                    result.getString("status"),
+                    result.getLong("row_version"),
+                    result.getObject("created_by_user_id", UUID.class),
+                    result.getObject("updated_by_user_id", UUID.class)
+            );
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
+    }
+
     private static SessionSecurityFact readSessionSecurityFact(
             PostgreSQLContainer container
     ) throws SQLException {
@@ -638,6 +692,20 @@ class M017BackupRestoreIT {
             String provider,
             String externalUserId,
             String rawProfileHash
+    ) {
+    }
+
+    private record WorkspaceFact(
+            UUID id,
+            UUID companyId,
+            String code,
+            String name,
+            String description,
+            int sortOrder,
+            String status,
+            long rowVersion,
+            UUID createdByUserId,
+            UUID updatedByUserId
     ) {
     }
 

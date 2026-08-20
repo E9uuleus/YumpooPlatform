@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-02",
+  "status": "PASS",
+  "startedAt": "2026-08-20T06:09:31Z",
+  "completedAt": "2026-08-20T06:11:24Z",
+  "command": "pnpm verify:m2-02",
+  "flywayVersion": "17",
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "workspacePostgresIntegration": true,
+    "backupRestoreWorkspace": true,
+    "nodeGate": true
+  }
+}

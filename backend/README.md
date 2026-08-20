@@ -162,7 +162,11 @@ exchange 成功只返回一次短期 HMAC 收据；其中 requestId、企业/成
 
 从仓库根目录运行 `pnpm verify:m0-14`。该命令额外在 `-Xmx96m` 下点名运行 `M014BoundedHeapVerification`，并通过 test-only HTTP/PostgreSQL 探针覆盖断流、并发完成、扫描事务边界、授权撤销、413/415、隐藏 404 和最终事务回滚。真实 Defender/NTFS 验证及所需变量见仓库根 README；受控 Windows 环境具备后运行 `pnpm verify:m0-14:live` 并取得签名 `PASS` 证据，未执行前保持 `NOT_RUN`，不阻塞 M0 本地开发门禁。
 
-YumpooPlatform Spring 后端是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重、身份治理，以及 M2-01 固定 Project 模板目录与版本治理。
+YumpooPlatform Spring 后端是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重、身份治理、固定 Project 模板目录，以及 M2-02 Workspace 生命周期。
+
+## M2-02 Workspace 生命周期
+
+Flyway V17 在 `catalog` owner 目录创建 `workspace` 表。`WorkspaceService` 负责 Company 隔离、COMPANY_ADMIN 治理、条件更新、幂等创建/归档/恢复与事务 Outbox；`WorkspaceSnapshotQuery` 只向其他模块暴露同 Company 的 ACTIVE 最小快照。HTTP 契约包含列表、详情、创建、完整可变快照 PATCH、归档与恢复，响应中的 `visibleProjectCount` 在 Project 真源交付前固定为 `0`。完整验收从仓库根目录运行 `pnpm verify:m2-02`。
 
 ## M2-01 模板目录
 

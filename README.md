@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M2-02 Workspace 生命周期
+
+M2-02 在 `catalog` 中交付 Company 内 Workspace 的 V17 数据模型、稳定调用方 code、查询/详情、完整可变快照 PATCH，以及带强 ETag 和持久化幂等的归档/恢复命令。普通有效成员只读取 ACTIVE 导航项，COMPANY_ADMIN 可查询和治理 ARCHIVED 项；Workspace 不保存成员、角色或授权事实。
+
+OpenAPI、生成 TypeScript 客户端和四类 v1 领域事件随实现冻结。Project 尚未交付，因此 `visibleProjectCount` 暂时固定为 `0`，真实项目权限过滤和计数留给 M2-06/M2-24；后续 Project 创建通过 `WorkspaceSnapshotQuery` 校验同 Company 的 ACTIVE Workspace。
+
+```powershell
+pnpm verify:m2-02
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-01 固定模板目录与版本治理
 
 M2-01 交付 `RND_V1`、`PRE_SALES_V1`、`IMPLEMENTATION_V1`、`HYPERCARE_V1` 四个已发布模板版本，以及每套固定的需求、任务、缺陷 Content blueprint 和完整状态迁移目录。模板以 `templateKey + version` 标识并使用稳定 UUID 聚合事件；PUBLISHED/RETIRED 结构由 PostgreSQL 触发器保护，只允许 `DRAFT → PUBLISHED → RETIRED`。
