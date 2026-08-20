@@ -235,6 +235,18 @@ body {
   margin-top: 24px;
 }
 
+.project-page { min-height: 560px; }
+.project-tabs { display: flex; gap: 4px; margin: 12px 0 22px; border-bottom: 1px solid #d8e0e7; }
+.project-tabs button { padding: 10px 18px; border: 0; border-bottom: 3px solid transparent; background: transparent; cursor: pointer; }
+.project-tabs button.active { color: #0f527c; border-bottom-color: #0f527c; font-weight: 650; }
+.page-title.compact { margin-top: 10px; }
+.project-filters { display: grid; grid-template-columns: repeat(3, minmax(160px, 1fr)) auto; gap: 12px; margin-bottom: 18px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.settings-form { max-width: 760px; }
+.candidate-panel { margin-bottom: 18px; padding: 14px; border: 1px solid #d8e0e7; background: #fff; }
+.candidate-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid #edf0f2; }
+.candidate-row:last-child { border-bottom: 0; }
+
 @media (max-width: 900px) {
   .app-aside {
     display: none;
@@ -260,6 +272,7 @@ body {
   .member-filters {
     grid-template-columns: 1fr 1fr;
   }
+  .project-filters { grid-template-columns: 1fr 1fr; }
 }
 
 .skeleton-card {
@@ -323,7 +336,9 @@ body {
   }
 
   .home-grid,
-  .member-filters {
+  .member-filters,
+  .project-filters,
+  .form-grid {
     grid-template-columns: 1fr;
   }
 }

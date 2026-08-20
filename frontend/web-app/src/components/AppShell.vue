@@ -25,9 +25,10 @@ const clientLabel = computed(() => session.authentication.value?.client.type ===
   : 'Web 浏览器')
 const activeSection = computed(() => route.path.startsWith('/admin/identity')
   ? 'identity'
+  : route.path.startsWith('/projects') ? 'projects'
   : 'home')
 
-function navigate(name: 'home' | 'identity-overview'): void {
+function navigate(name: 'home' | 'projects' | 'identity-overview'): void {
   mobileNavigationOpen.value = false
   void router.push({ name })
 }
@@ -91,6 +92,14 @@ async function signOut(): Promise<void> {
             首页
           </button>
           <button
+            type="button"
+            :aria-current="activeSection === 'projects' ? 'page' : undefined"
+            :class="{ active: activeSection === 'projects' }"
+            @click="navigate('projects')"
+          >
+            项目工作台
+          </button>
+          <button
             v-if="session.isIdentityReader.value"
             type="button"
             :aria-current="activeSection === 'identity' ? 'page' : undefined"
@@ -127,6 +136,14 @@ async function signOut(): Promise<void> {
           @click="navigate('home')"
         >
           首页
+        </button>
+        <button
+          type="button"
+          :aria-current="activeSection === 'projects' ? 'page' : undefined"
+          :class="{ active: activeSection === 'projects' }"
+          @click="navigate('projects')"
+        >
+          项目工作台
         </button>
         <button
           v-if="session.isIdentityReader.value"
