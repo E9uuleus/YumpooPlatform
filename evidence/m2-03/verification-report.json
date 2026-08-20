@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-03",
+  "status": "PASS",
+  "startedAt": "2026-08-20T07:00:00Z",
+  "completedAt": "2026-08-20T08:00:00Z",
+  "command": "pnpm verify:m2-03",
+  "flywayVersion": "20",
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "productPostgresIntegration": true,
+    "productHttpIntegration": true,
+    "ownerMissingProjection": true,
+    "ownerReassignmentAtomicity": true,
+    "backupRestoreProductGovernance": true,
+    "nodeGate": true
+  }
+}

@@ -71,6 +71,8 @@ jobs:
         run: pnpm verify:m2-01:assets
       - name: Verify M2-02 Workspace lifecycle assets
         run: pnpm verify:m2-02:assets
+      - name: Verify M2-03 Product lifecycle assets
+        run: pnpm verify:m2-03:assets
       - name: Upload M1-13 verification report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

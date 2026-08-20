@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M2-03 Product 生命周期与负责人治理
+
+M2-03 在 `catalog` 中交付 V18 Product 主数据、SQL 权限分页、详情与资料更新，在 `administration` 中交付归档、恢复和唯一负责人重指派。负责人只保存在 `product.owner_user_id`；离职或禁用通过 `OWNER_MISSING` 治理投影逐 Product 打开问题，不改变生命周期、不自动提升其他成员。
+
+OpenAPI、生成的 TypeScript `ProductsApi` 和五类 v1 事件已同步冻结。当前没有 ProductProjectLink/Feedback 真源，因此不制造空 blocker 或覆盖归档入口；项目成员可见性、真实 PPM-015 blocker 与覆盖治理分别由 M2-07/M2-24 和 M3B 接入。
+
+```powershell
+pnpm verify:m2-03
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-02 Workspace 生命周期
 
 M2-02 在 `catalog` 中交付 Company 内 Workspace 的 V17 数据模型、稳定调用方 code、查询/详情、完整可变快照 PATCH，以及带强 ETag 和持久化幂等的归档/恢复命令。普通有效成员只读取 ACTIVE 导航项，COMPANY_ADMIN 可查询和治理 ARCHIVED 项；Workspace 不保存成员、角色或授权事实。

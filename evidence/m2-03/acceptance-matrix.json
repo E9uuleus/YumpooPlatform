@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-03",
+  "verifiedSlices": [
+    {
+      "requirementId": "PPM-003",
+      "scope": "Product 唯一编码、名称、描述、状态、唯一负责人，以及创建、资料更新、归档、恢复生命周期",
+      "evidence": [
+        "backend/src/main/resources/db/migration/catalog/V18__create_product_catalog.sql",
+        "backend/src/test/java/com/yumpoo/platform/catalog/infrastructure/product/ProductCatalogIT.java",
+        "backend/src/test/java/com/yumpoo/platform/catalog/api/ProductHttpIT.java"
+      ]
+    },
+    {
+      "requirementId": "ACL-002",
+      "scope": "Product 使用单一 owner_user_id 负责人真源，identityaccess 不产生 PRODUCT_OWNER 角色行",
+      "evidence": [
+        "backend/src/main/resources/db/migration/catalog/V18__create_product_catalog.sql",
+        "backend/src/test/java/com/yumpoo/platform/catalog/infrastructure/product/ProductCatalogIT.java"
+      ]
+    },
+    {
+      "requirementId": "ACL-004",
+      "scope": "COMPANY_ADMIN 创建、恢复、重指派和全量治理；ProductOwner 更新及正常归档自己的 Product",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/administration/application/ProductGovernanceService.java",
+        "backend/src/test/java/com/yumpoo/platform/catalog/api/ProductHttpIT.java"
+      ]
+    },
+    {
+      "requirementId": "ACL-012",
+      "scope": "负责人离职或禁用逐 Product 派生 OWNER_MISSING，双状态恢复、重指派或归档后解析且不自动提升成员",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/administration/infrastructure/governance/JdbcProductOwnerGovernanceProjection.java",
+        "backend/src/test/java/com/yumpoo/platform/catalog/infrastructure/product/ProductCatalogIT.java"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    {
+      "requirementId": "PPM-002",
+      "targetMilestone": "M2-24",
+      "scope": "接入真实 Product–Project 与 Project membership 后扩展项目成员 Product 可见范围"
+    },
+    {
+      "requirementId": "PPM-015",
+      "targetMilestone": "M2-24",
+      "scope": "基于真实 ACTIVE 研发/支持 Project 与未关闭 Feedback 阻止 Product 正常归档"
+    },
+    {
+      "requirementId": "PPM-015",
+      "targetMilestone": "M3B",
+      "scope": "为有权限管理员提供带理由和完整审计的覆盖归档入口"
+    },
+    {
+      "requirementId": "PPM-004",
+      "targetMilestone": "M2-07",
+      "scope": "建立 Product–Project 多对多关系真源及其权限语义"
+    },
+    {
+      "requirementId": "ACTIVITY-PRODUCT",
+      "targetMilestone": "M2-20",
+      "scope": "消费 Product 生命周期与负责人事件形成 Activity 投影"
+    }
+  ]
+}

@@ -76,6 +76,7 @@ class M017BackupRestoreIT {
             createCompanyCalendarFact(source);
             createIdentityBindingFact(source);
             createWorkspaceFact(source);
+            createProductGovernanceFact(source);
 
             Path dump = workRoot.resolve("yumpoo.dump");
             createDump(source, dump);
@@ -121,6 +122,8 @@ class M017BackupRestoreIT {
             assertThat(readProjectTemplateCatalogFact(target))
                     .isEqualTo(readProjectTemplateCatalogFact(source));
             assertThat(readWorkspaceFact(target)).isEqualTo(readWorkspaceFact(source));
+            assertThat(readProductGovernanceFact(target))
+                    .isEqualTo(readProductGovernanceFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -595,6 +598,84 @@ class M017BackupRestoreIT {
         }
     }
 
+    private static void createProductGovernanceFact(PostgreSQLContainer container) throws SQLException {
+        OffsetDateTime createdAt = OffsetDateTime.ofInstant(
+                Instant.parse("2026-08-20T06:00:00Z"), ZoneOffset.UTC);
+        try (Connection connection = connection(container)) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement product = connection.prepareStatement("""
+                    INSERT INTO yumpoo.product (
+                        id, company_id, product_code, name, description, status, owner_user_id,
+                        row_version, created_at, created_by_user_id, updated_at, updated_by_user_id,
+                        archived_at, archived_by_user_id
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000602',
+                        '00000000-0000-4000-8000-000000000001',
+                        'M2_03_RESTORE', 'M2-03 Restore Product', 'Product lifecycle restore probe',
+                        'ARCHIVED', '00000000-0000-4000-8000-000000000102', 3, ?,
+                        '00000000-0000-4000-8000-000000000102', ?,
+                        '00000000-0000-4000-8000-000000000102', ?,
+                        '00000000-0000-4000-8000-000000000102'
+                    )
+                    """)) {
+                product.setObject(1, createdAt);
+                product.setObject(2, createdAt.plusHours(2));
+                product.setObject(3, createdAt.plusHours(2));
+                assertThat(product.executeUpdate()).isOne();
+            }
+            try (PreparedStatement issue = connection.prepareStatement("""
+                    INSERT INTO yumpoo.governance_issue (
+                        id, company_id, issue_type, target_type, target_id, status,
+                        safe_summary_code, detected_event_id, detected_at,
+                        resolved_event_id, resolved_at, resolution_code,
+                        row_version, created_at, updated_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000702',
+                        '00000000-0000-4000-8000-000000000001',
+                        'OWNER_MISSING', 'PRODUCT',
+                        '00000000-0000-4000-8000-000000000602', 'RESOLVED',
+                        'PRODUCT_OWNER_MISSING',
+                        '00000000-0000-4000-8000-000000000703', ?,
+                        '00000000-0000-4000-8000-000000000704', ?,
+                        'PRODUCT_OWNER_GOVERNED', 1, ?, ?
+                    )
+                    """)) {
+                issue.setObject(1, createdAt.plusHours(1));
+                issue.setObject(2, createdAt.plusHours(2));
+                issue.setObject(3, createdAt.plusHours(1));
+                issue.setObject(4, createdAt.plusHours(2));
+                assertThat(issue.executeUpdate()).isOne();
+            }
+            connection.commit();
+        }
+    }
+
+    private static ProductGovernanceFact readProductGovernanceFact(
+            PostgreSQLContainer container
+    ) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT product.id, product.product_code, product.status,
+                            product.owner_user_id, product.row_version,
+                            issue.issue_type, issue.target_type, issue.target_id,
+                            issue.status AS issue_status, issue.resolution_code
+                     FROM yumpoo.product product
+                     JOIN yumpoo.governance_issue issue ON issue.target_id = product.id
+                     WHERE product.id = '00000000-0000-4000-8000-000000000602'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            ProductGovernanceFact fact = new ProductGovernanceFact(
+                    result.getObject("id", UUID.class), result.getString("product_code"),
+                    result.getString("status"), result.getObject("owner_user_id", UUID.class),
+                    result.getLong("row_version"), result.getString("issue_type"),
+                    result.getString("target_type"), result.getObject("target_id", UUID.class),
+                    result.getString("issue_status"), result.getString("resolution_code"));
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
+    }
+
     private static SessionSecurityFact readSessionSecurityFact(
             PostgreSQLContainer container
     ) throws SQLException {
@@ -706,6 +787,20 @@ class M017BackupRestoreIT {
             long rowVersion,
             UUID createdByUserId,
             UUID updatedByUserId
+    ) {
+    }
+
+    private record ProductGovernanceFact(
+            UUID productId,
+            String code,
+            String productStatus,
+            UUID ownerUserId,
+            long rowVersion,
+            String issueType,
+            String targetType,
+            UUID targetId,
+            String issueStatus,
+            String resolutionCode
     ) {
     }
 
