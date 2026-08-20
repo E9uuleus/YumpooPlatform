@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+.agents/notes/**/*.md text eol=lf
+.agents/notes/**/*.json text eol=lf

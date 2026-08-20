@@ -17,6 +17,11 @@
     "check:openapi": "pnpm run lint:openapi && pnpm run validate:openapi-examples && pnpm run check:api-client",
     "validate:event-contracts": "node tools/events/validate-event-contracts.mjs",
     "check:openapi-compat": "node tools/openapi/check-openapi-compat.mjs",
+    "verify-md-links": "tsx scripts/verify-md-links.ts",
+    "verify-agent-notes": "tsx scripts/verify-agent-notes.ts",
+    "verify-archived-agent-notes": "tsx scripts/verify-archived-agent-notes.ts",
+    "test:agent-notes": "vitest run scripts/verify-agent-notes.spec.ts scripts/archived-agent-notes.spec.ts",
+    "doc-sync": "pnpm run verify-md-links && pnpm run verify-agent-notes && pnpm run verify-archived-agent-notes",
     "lint": "eslint \"frontend/**/*.{ts,vue}\" \"desktop/**/*.ts\" \"packages/**/*.ts\"",
     "test:architecture": "node --test tools/architecture/workspace-boundaries.test.mjs",
     "typecheck": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/api-client typecheck && pnpm --filter @yumpoo/api-client build && pnpm --filter @yumpoo/web-app typecheck && pnpm --filter @yumpoo/desktop-shell typecheck",
@@ -91,7 +96,10 @@
     "ajv-formats": "3.0.1",
     "eslint": "10.8.1",
     "eslint-plugin-vue": "10.10.0",
+    "mdast-util-from-markdown": "2.0.3",
+    "tsx": "4.22.4",
     "typescript": "5.9.3",
+    "vitest": "4.1.10",
     "vue-eslint-parser": "10.3.0",
     "yaml": "2.8.1"
   }

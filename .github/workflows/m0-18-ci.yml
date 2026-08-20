@@ -46,6 +46,12 @@ jobs:
           cache: maven
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify Agent Notes and documentation
+        env:
+          AGENT_NOTE_ARCHIVE_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          pnpm run doc-sync
+          pnpm run test:agent-notes
       - name: Preflight Linux-container Docker
         run: |
           docker version
