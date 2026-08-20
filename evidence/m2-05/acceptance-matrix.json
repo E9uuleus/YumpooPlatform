@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-05",
+  "verifiedSlices": [
+    {
+      "requirementId": "ACL-002",
+      "scope": "Project.owner_user_id 与 ACTIVE membership 是唯一负责人事实，重指派不创建 scoped role",
+      "evidence": ["backend/src/main/resources/db/migration/catalog/V21__create_project_catalog.sql", "backend/src/test/java/com/yumpoo/platform/administration/application/ProjectMembershipGovernanceIT.java"]
+    },
+    {
+      "requirementId": "ACL-004",
+      "scope": "Owner 与 COMPANY_ADMIN 按明确理由规则维护成员，只有 COMPANY_ADMIN 可原子重指派负责人",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/administration/application/ProjectMembershipGovernanceService.java", "contracts/openapi/yumpoo-v1.yaml"]
+    },
+    {
+      "requirementId": "ACL-006",
+      "scope": "ACTIVE 成员可读成员分页，Owner 可维护成员，候选查询限制为 Owner 或管理员",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/infrastructure/project/JdbcProjectMembershipRepository.java", "backend/src/main/java/com/yumpoo/platform/catalog/application/project/ProjectMembershipService.java"]
+    },
+    {
+      "requirementId": "ACL-011",
+      "scope": "离职或禁用成员不再进入有效候选；membership 历史保留",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/identityaccess/infrastructure/identity/JdbcMinimalUserQueryRepository.java"]
+    },
+    {
+      "requirementId": "ACL-012",
+      "scope": "负责人离职或禁用派生 PROJECT OWNER_MISSING，双状态恢复或重指派后重算，不改变生命周期或自动提升",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/administration/infrastructure/governance/JdbcProjectOwnerGovernanceProjection.java", "backend/src/main/resources/db/migration/administration/V25__extend_owner_missing_governance_to_project.sql"]
+    },
+    {
+      "requirementId": "ACL-013",
+      "scope": "成员与负责人成功动作同事务审计，进入命令处理后的失败动作独立审计且审计失败关闭",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/administration/application/ProjectMembershipGovernanceService.java"]
+    }
+  ],
+  "deferredRequirements": [
+    {"requirementId":"PROJECT-QUERY-LIFECYCLE","targetMilestone":"M2-06","scope":"Project 列表、详情、PATCH、激活与 Workspace visibleProjectCount"},
+    {"requirementId":"PROJECT-ARCHIVE-GOVERNANCE","targetMilestone":"M2-08","scope":"归档阻塞项、覆盖治理及归档 OWNER_MISSING 关闭"},
+    {"requirementId":"ACTIVITY-PROJECT-MEMBERSHIP","targetMilestone":"M2-20","scope":"消费成员和负责人事件形成 Activity 投影"},
+    {"requirementId":"WORKLOG-APPROVER-REASSIGNMENT","targetMilestone":"M3A-09","scope":"负责人变更时的工时审批人迁移"},
+    {"requirementId":"PROJECT-MEMBERSHIP-UI","targetMilestone":"M2-06","scope":"Vue 页面在独立前端切片实现"}
+  ]
+}

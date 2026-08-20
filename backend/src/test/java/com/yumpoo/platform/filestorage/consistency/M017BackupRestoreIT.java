@@ -396,6 +396,17 @@ class M017BackupRestoreIT {
         );
         try (Connection connection = connection(container)) {
             connection.setAutoCommit(false);
+            try (PreparedStatement user = connection.prepareStatement("""
+                    INSERT INTO yumpoo.identity_user (
+                        id, company_id, employment_status, account_status, display_name,
+                        directory_synced_at, authorization_version, row_version, created_at, updated_at
+                    ) VALUES ('00000000-0000-4000-8000-000000000103',
+                        '00000000-0000-4000-8000-000000000001','ACTIVE','ENABLED',
+                        'M2-05 Removed Restore User',?,0,0,?,?)
+                    """)) {
+                user.setObject(1, observedAt); user.setObject(2, observedAt); user.setObject(3, observedAt);
+                assertThat(user.executeUpdate()).isOne();
+            }
             try (PreparedStatement insertUser = connection.prepareStatement("""
                     INSERT INTO yumpoo.identity_user (
                         id, company_id, employment_status, account_status,
@@ -721,6 +732,33 @@ class M017BackupRestoreIT {
                 membership.setObject(1, createdAt);
                 assertThat(membership.executeUpdate()).isOne();
             }
+            try (PreparedStatement membership = connection.prepareStatement("""
+                    INSERT INTO yumpoo.project_membership (
+                        id, company_id, project_id, user_id, status, joined_at, joined_by_user_id,
+                        removed_at, removed_by_user_id, remove_reason, row_version
+                    ) VALUES ('00000000-0000-4000-8000-000000000807',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000802',
+                        '00000000-0000-4000-8000-000000000103','REMOVED',?,
+                        '00000000-0000-4000-8000-000000000102',?,
+                        '00000000-0000-4000-8000-000000000102',NULL,7)
+                    """)) {
+                membership.setObject(1, createdAt);
+                membership.setObject(2, createdAt.plusHours(1));
+                assertThat(membership.executeUpdate()).isOne();
+            }
+            try (PreparedStatement issue = connection.prepareStatement("""
+                    INSERT INTO yumpoo.governance_issue (
+                        id,company_id,issue_type,target_type,target_id,status,safe_summary_code,
+                        detected_event_id,detected_at,row_version,created_at,updated_at)
+                    VALUES ('00000000-0000-4000-8000-000000000808',
+                        '00000000-0000-4000-8000-000000000001','OWNER_MISSING','PROJECT',
+                        '00000000-0000-4000-8000-000000000802','OPEN','PROJECT_OWNER_MISSING',
+                        '00000000-0000-4000-8000-000000000809',?,2,?,?)
+                    """)) {
+                issue.setObject(1,createdAt); issue.setObject(2,createdAt); issue.setObject(3,createdAt);
+                assertThat(issue.executeUpdate()).isOne();
+            }
             try (PreparedStatement content = connection.prepareStatement("""
                     INSERT INTO yumpoo.content (
                         id, company_id, project_id, code, name, work_item_type, status,
@@ -764,6 +802,11 @@ class M017BackupRestoreIT {
                      SELECT project.id, project.project_code, project.lifecycle,
                             project.owner_user_id, project.template_key, project.template_version,
                             membership.status AS membership_status,
+                            (SELECT string_agg(m.user_id || ':' || m.status || ':' || m.row_version,
+                                ',' ORDER BY m.user_id) FROM yumpoo.project_membership m
+                                WHERE m.project_id=project.id) AS membership_facts,
+                            issue.issue_type, issue.target_type, issue.status AS issue_status,
+                            issue.row_version AS issue_version,
                             string_agg(content.code || ':' || content.work_item_type || ':'
                                 || content.status || ':' || content.default_view_type || ':'
                                 || content.applied_template_key || ':'
@@ -774,17 +817,23 @@ class M017BackupRestoreIT {
                          ON membership.project_id = project.id
                         AND membership.user_id = project.owner_user_id
                        JOIN yumpoo.content content ON content.project_id = project.id
+                       JOIN yumpoo.governance_issue issue ON issue.target_id=project.id
+                         AND issue.target_type='PROJECT'
                       WHERE project.id = '00000000-0000-4000-8000-000000000802'
                       GROUP BY project.id, project.project_code, project.lifecycle,
                                project.owner_user_id, project.template_key, project.template_version,
-                               membership.status
+                               membership.status, issue.issue_type, issue.target_type,
+                               issue.status, issue.row_version
                      """)) {
             assertThat(result.next()).isTrue();
             ProjectContentFact fact = new ProjectContentFact(
                     result.getObject("id", UUID.class), result.getString("project_code"),
                     result.getString("lifecycle"), result.getObject("owner_user_id", UUID.class),
                     result.getString("template_key"), result.getInt("template_version"),
-                    result.getString("membership_status"), result.getString("contents"));
+                    result.getString("membership_status"), result.getString("membership_facts"),
+                    result.getString("issue_type"), result.getString("target_type"),
+                    result.getString("issue_status"), result.getLong("issue_version"),
+                    result.getString("contents"));
             assertThat(result.next()).isFalse();
             return fact;
         }
@@ -926,6 +975,11 @@ class M017BackupRestoreIT {
             String templateKey,
             int templateVersion,
             String membershipStatus,
+            String membershipFacts,
+            String issueType,
+            String issueTargetType,
+            String issueStatus,
+            long issueVersion,
             String contents
     ) {
     }

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-05",
+  "status": "PASS",
+  "startedAt": "2026-08-20T13:45:00Z",
+  "completedAt": "2026-08-20T14:10:00Z",
+  "command": "pnpm verify:m2-05",
+  "flywayVersion": "25",
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "membershipStateMachine": true,
+    "sqlVisibilityAndCandidateBatching": true,
+    "projectThenMembershipLocking": true,
+    "idempotentByteReplay": true,
+    "concurrencySingleWinner": true,
+    "auditOutboxAtomicRollback": true,
+    "projectOwnerMissingProjection": true,
+    "backupRestoreMembershipAndGovernance": true,
+    "nodeGate": true
+  }
+}

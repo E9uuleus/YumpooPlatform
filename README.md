@@ -1,5 +1,11 @@
 # YumpooPlatform
 
+## M2-05 Project 成员与唯一负责人治理
+
+M2-05 交付 Project 成员分页与候选搜索、加入/移除/重激活、唯一负责人原子重指派、Security Audit、三类 v1 Outbox 与 PROJECT OWNER_MISSING 投影。成员写固定按 Project → membership 加锁，负责人重指派先确保新负责人 ACTIVE membership，旧负责人保留为普通成员；V21 延迟约束继续保证提交时唯一 owner 有效。
+
+OpenAPI、生成 TypeScript `ProjectsApi`、V24/V25 迁移、备份恢复与 `pnpm verify:m2-05` 已同步。本步不实现 Vue 页面、Project 列表/详情/PATCH/激活、归档治理、Activity 或 Worklog 审批人迁移。
+
 ## M2-04 Project 原子创建与初始 Content
 
 M2-04 交付 `POST /api/v1/projects`：COMPANY_ADMIN 显式选择已发布模板版本，在单一事务内创建 DRAFT Project、ACTIVE owner membership、模板定义的三类初始 Content、Security Audit、两类 Outbox 和可字节级重放的幂等响应。Project 类型、Workspace 和模板引用创建后固化，非研发客户名的必填检查保留到 M2-06 激活。
