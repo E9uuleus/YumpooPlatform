@@ -1,0 +1,4 @@
+interface:
+  display_name: "Archive Agent Notes"
+  short_description: "Audit and freeze durable Agent Note history"
+  default_prompt: "Use $archive-agent-notes to audit supersession, archive low-future-value implemented records, and prune obsolete rejected records."
