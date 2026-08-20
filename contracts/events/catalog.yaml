@@ -133,3 +133,31 @@ events:
       - examples/templateworkflow.project-template-retired-v1.json
     invalidExamples:
       - examples/templateworkflow.project-template-retired-v1.invalid.json
+  - eventType: catalog.workspace_created
+    eventVersion: 1
+    schema: schemas/catalog.workspace-created-v1.schema.json
+    validExamples:
+      - examples/catalog.workspace-created-v1.json
+    invalidExamples:
+      - examples/catalog.workspace-created-v1.invalid.json
+  - eventType: catalog.workspace_updated
+    eventVersion: 1
+    schema: schemas/catalog.workspace-updated-v1.schema.json
+    validExamples:
+      - examples/catalog.workspace-updated-v1.json
+    invalidExamples:
+      - examples/catalog.workspace-updated-v1.invalid.json
+  - eventType: catalog.workspace_archived
+    eventVersion: 1
+    schema: schemas/catalog.workspace-archived-v1.schema.json
+    validExamples:
+      - examples/catalog.workspace-archived-v1.json
+    invalidExamples:
+      - examples/catalog.workspace-archived-v1.invalid.json
+  - eventType: catalog.workspace_restored
+    eventVersion: 1
+    schema: schemas/catalog.workspace-restored-v1.schema.json
+    validExamples:
+      - examples/catalog.workspace-restored-v1.json
+    invalidExamples:
+      - examples/catalog.workspace-restored-v1.invalid.json

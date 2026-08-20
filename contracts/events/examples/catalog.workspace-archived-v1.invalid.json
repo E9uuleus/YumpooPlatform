@@ -1,0 +1,20 @@
+{
+  "eventId": "22000000-0000-4000-8000-000000000051",
+  "eventType": "catalog.workspace_archived",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-20T08:20:00Z",
+  "aggregateType": "Workspace",
+  "aggregateId": "22000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 2,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "22000000-0000-4000-8000-000000000003" },
+  "requestId": "m2-02-workspace-archive-invalid",
+  "correlationId": "m2-02-workspace-archive-invalid",
+  "causationId": null,
+  "payload": {
+    "workspaceId": "22000000-0000-4000-8000-000000000002",
+    "code": "PRODUCT_RND",
+    "fromStatus": "ARCHIVED",
+    "toStatus": "ARCHIVED"
+  }
+}
