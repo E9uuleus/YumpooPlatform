@@ -48,6 +48,33 @@ class ProjectTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void membershipRemovalAndReactivationReuseIdentityAndAdvanceVersion() {
+        ProjectMembership active = ProjectMembership.activeMember(UUID.randomUUID(), COMPANY_ID,
+                UUID.randomUUID(), UUID.randomUUID(), OWNER_ID, NOW);
+        ProjectMembership removed = active.remove(OWNER_ID, null, NOW.plusSeconds(10));
+        ProjectMembership reactivated = removed.reactivate(OWNER_ID, NOW.plusSeconds(20));
+
+        assertThat(removed.status()).isEqualTo(ProjectMembershipStatus.REMOVED);
+        assertThat(removed.removeReason()).isNull();
+        assertThat(reactivated.id()).isEqualTo(active.id());
+        assertThat(reactivated.status()).isEqualTo(ProjectMembershipStatus.ACTIVE);
+        assertThat(reactivated.rowVersion()).isEqualTo(2);
+        assertThat(reactivated.removedAt()).isNull();
+    }
+
+    @Test
+    void archivedProjectCannotReassignOwner() {
+        Project draft = create(ProjectType.PRODUCT_DEVELOPMENT, "RND", null, null, null);
+        Project archived = new Project(draft.id(), draft.companyId(), draft.workspaceId(), draft.code(),
+                draft.name(), draft.description(), draft.projectType(), ProjectLifecycle.ARCHIVED,
+                draft.ownerUserId(), draft.templateKey(), draft.templateVersion(), draft.customerName(),
+                draft.customerReference(), draft.deliverySite(), draft.contactNote(), 2, draft.createdAt(),
+                draft.createdByUserId(), NOW.plusSeconds(20), OWNER_ID, NOW.plusSeconds(10), NOW.plusSeconds(20));
+        assertThatThrownBy(() -> archived.reassignOwner(UUID.randomUUID(), OWNER_ID, NOW.plusSeconds(30)))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     private static Project create(
             ProjectType type,
             String templateKey,
