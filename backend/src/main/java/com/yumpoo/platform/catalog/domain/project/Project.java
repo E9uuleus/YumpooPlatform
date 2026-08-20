@@ -89,6 +89,22 @@ public record Project(
                 now, actorUserId, now, actorUserId, null, null);
     }
 
+    public Project reassignOwner(UUID newOwnerUserId, UUID actorUserId, Instant now) {
+        Objects.requireNonNull(newOwnerUserId, "newOwnerUserId must not be null");
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (lifecycle == ProjectLifecycle.ARCHIVED) {
+            throw new IllegalStateException("archived project cannot change owner");
+        }
+        if (ownerUserId.equals(newOwnerUserId)) {
+            throw new IllegalStateException("new owner must differ from current owner");
+        }
+        return new Project(id, companyId, workspaceId, code, name, description, projectType,
+                lifecycle, newOwnerUserId, templateKey, templateVersion, customerName,
+                customerReference, deliverySite, contactNote, rowVersion + 1, createdAt,
+                createdByUserId, now, actorUserId, activatedAt, archivedAt);
+    }
+
     private static String requireCode(String value) {
         Objects.requireNonNull(value, "code must not be null");
         if (!CODE.matcher(value).matches()) {

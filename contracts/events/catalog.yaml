@@ -196,3 +196,18 @@ events:
     schema: schemas/catalog.project-template-applied-v1.schema.json
     validExamples: [examples/catalog.project-template-applied-v1.json]
     invalidExamples: [examples/catalog.project-template-applied-v1.invalid.json]
+  - eventType: catalog.project_member_added
+    eventVersion: 1
+    schema: schemas/catalog.project-member-added-v1.schema.json
+    validExamples: [examples/catalog.project-member-added-v1.json]
+    invalidExamples: [examples/catalog.project-member-added-v1.invalid.json]
+  - eventType: catalog.project_member_removed
+    eventVersion: 1
+    schema: schemas/catalog.project-member-removed-v1.schema.json
+    validExamples: [examples/catalog.project-member-removed-v1.json]
+    invalidExamples: [examples/catalog.project-member-removed-v1.invalid.json]
+  - eventType: catalog.project_owner_reassigned
+    eventVersion: 1
+    schema: schemas/catalog.project-owner-reassigned-v1.schema.json
+    validExamples: [examples/catalog.project-owner-reassigned-v1.json]
+    invalidExamples: [examples/catalog.project-owner-reassigned-v1.invalid.json]

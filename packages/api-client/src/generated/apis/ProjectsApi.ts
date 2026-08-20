@@ -17,6 +17,13 @@ import type {
   ErrorResponse,
   Project,
   ProjectCreateRequest,
+  ProjectMember,
+  ProjectMemberAddRequest,
+  ProjectMemberCandidatePage,
+  ProjectMemberPage,
+  ProjectMemberRemoveRequest,
+  ProjectMembershipStatusFilter,
+  ProjectOwnerReassignmentRequest,
 } from '../models/index';
 import {
     ErrorResponseFromJSON,
@@ -25,7 +32,29 @@ import {
     ProjectToJSON,
     ProjectCreateRequestFromJSON,
     ProjectCreateRequestToJSON,
+    ProjectMemberFromJSON,
+    ProjectMemberToJSON,
+    ProjectMemberAddRequestFromJSON,
+    ProjectMemberAddRequestToJSON,
+    ProjectMemberCandidatePageFromJSON,
+    ProjectMemberCandidatePageToJSON,
+    ProjectMemberPageFromJSON,
+    ProjectMemberPageToJSON,
+    ProjectMemberRemoveRequestFromJSON,
+    ProjectMemberRemoveRequestToJSON,
+    ProjectMembershipStatusFilterFromJSON,
+    ProjectMembershipStatusFilterToJSON,
+    ProjectOwnerReassignmentRequestFromJSON,
+    ProjectOwnerReassignmentRequestToJSON,
 } from '../models/index';
+
+export interface AddProjectMemberRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    projectMemberAddRequest: ProjectMemberAddRequest;
+    ifMatch?: string;
+}
 
 export interface CreateProjectRequest {
     xXSRFTOKEN: string;
@@ -33,10 +62,114 @@ export interface CreateProjectRequest {
     projectCreateRequest: ProjectCreateRequest;
 }
 
+export interface ListProjectMemberCandidatesRequest {
+    projectId: string;
+    name: string;
+    page?: number;
+    size?: number;
+}
+
+export interface ListProjectMembersRequest {
+    projectId: string;
+    status?: ProjectMembershipStatusFilter;
+    page?: number;
+    size?: number;
+}
+
+export interface ReassignProjectOwnerRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+    projectOwnerReassignmentRequest: ProjectOwnerReassignmentRequest;
+}
+
+export interface RemoveProjectMemberRequest {
+    projectId: string;
+    userId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+    projectMemberRemoveRequest?: ProjectMemberRemoveRequest;
+}
+
 /**
  *
  */
 export class ProjectsApi extends runtime.BaseAPI {
+
+    /**
+     * 加入或重激活 Project 成员
+     */
+    async addProjectMemberRaw(requestParameters: AddProjectMemberRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectMember>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling addProjectMember().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling addProjectMember().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling addProjectMember().'
+            );
+        }
+
+        if (requestParameters['projectMemberAddRequest'] == null) {
+            throw new runtime.RequiredError(
+                'projectMemberAddRequest',
+                'Required parameter "projectMemberAddRequest" was null or undefined when calling addProjectMember().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/members`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectMemberAddRequestToJSON(requestParameters['projectMemberAddRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectMemberFromJSON(jsonValue));
+    }
+
+    /**
+     * 加入或重激活 Project 成员
+     */
+    async addProjectMember(requestParameters: AddProjectMemberRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectMember> {
+        const response = await this.addProjectMemberRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * 同一事务创建 Project、ACTIVE owner membership 和模板定义的全部初始 Content。
@@ -98,6 +231,272 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async createProject(requestParameters: CreateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
         const response = await this.createProjectRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 搜索同企业有效 Project 成员候选人
+     */
+    async listProjectMemberCandidatesRaw(requestParameters: ListProjectMemberCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectMemberCandidatePage>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listProjectMemberCandidates().'
+            );
+        }
+
+        if (requestParameters['name'] == null) {
+            throw new runtime.RequiredError(
+                'name',
+                'Required parameter "name" was null or undefined when calling listProjectMemberCandidates().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['name'] != null) {
+            queryParameters['name'] = requestParameters['name'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/member-candidates`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectMemberCandidatePageFromJSON(jsonValue));
+    }
+
+    /**
+     * 搜索同企业有效 Project 成员候选人
+     */
+    async listProjectMemberCandidates(requestParameters: ListProjectMemberCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectMemberCandidatePage> {
+        const response = await this.listProjectMemberCandidatesRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 查询 Project 成员
+     */
+    async listProjectMembersRaw(requestParameters: ListProjectMembersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectMemberPage>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listProjectMembers().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['status'] != null) {
+            queryParameters['status'] = requestParameters['status'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/members`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectMemberPageFromJSON(jsonValue));
+    }
+
+    /**
+     * 查询 Project 成员
+     */
+    async listProjectMembers(requestParameters: ListProjectMembersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectMemberPage> {
+        const response = await this.listProjectMembersRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 原子重指派 Project 唯一负责人
+     */
+    async reassignProjectOwnerRaw(requestParameters: ReassignProjectOwnerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling reassignProjectOwner().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling reassignProjectOwner().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling reassignProjectOwner().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling reassignProjectOwner().'
+            );
+        }
+
+        if (requestParameters['projectOwnerReassignmentRequest'] == null) {
+            throw new runtime.RequiredError(
+                'projectOwnerReassignmentRequest',
+                'Required parameter "projectOwnerReassignmentRequest" was null or undefined when calling reassignProjectOwner().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/owner-reassignments`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectOwnerReassignmentRequestToJSON(requestParameters['projectOwnerReassignmentRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectFromJSON(jsonValue));
+    }
+
+    /**
+     * 原子重指派 Project 唯一负责人
+     */
+    async reassignProjectOwner(requestParameters: ReassignProjectOwnerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
+        const response = await this.reassignProjectOwnerRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 移除 Project 成员
+     */
+    async removeProjectMemberRaw(requestParameters: RemoveProjectMemberRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectMember>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling removeProjectMember().'
+            );
+        }
+
+        if (requestParameters['userId'] == null) {
+            throw new runtime.RequiredError(
+                'userId',
+                'Required parameter "userId" was null or undefined when calling removeProjectMember().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling removeProjectMember().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling removeProjectMember().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling removeProjectMember().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/members/{userId}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"userId"}}`, encodeURIComponent(String(requestParameters['userId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectMemberRemoveRequestToJSON(requestParameters['projectMemberRemoveRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectMemberFromJSON(jsonValue));
+    }
+
+    /**
+     * 移除 Project 成员
+     */
+    async removeProjectMember(requestParameters: RemoveProjectMemberRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectMember> {
+        const response = await this.removeProjectMemberRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
