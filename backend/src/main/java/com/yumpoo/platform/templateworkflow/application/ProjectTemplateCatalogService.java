@@ -36,6 +36,13 @@ public class ProjectTemplateCatalogService {
                 .map(ProjectTemplateCatalogService::view);
     }
 
+    @Transactional
+    public Optional<ProjectTemplateView> findPublishedForCreation(String templateKey, int version) {
+        return repository.findForShare(templateKey, version)
+                .filter(definition -> definition.lifecycle() == ProjectTemplateDefinition.Lifecycle.PUBLISHED)
+                .map(ProjectTemplateCatalogService::view);
+    }
+
     @Transactional(readOnly = true)
     public Optional<ProjectTemplateView> findAny(String templateKey, int version) {
         return repository.find(templateKey, version, false).map(ProjectTemplateCatalogService::view);

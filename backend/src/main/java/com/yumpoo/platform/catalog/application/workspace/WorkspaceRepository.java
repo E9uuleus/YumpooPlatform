@@ -15,6 +15,8 @@ public interface WorkspaceRepository {
 
     Optional<Workspace> findActiveById(UUID companyId, UUID workspaceId);
 
+    Optional<Workspace> findActiveByIdForShare(UUID companyId, UUID workspaceId);
+
     boolean insert(Workspace workspace);
 
     Optional<Workspace> updateDetails(Workspace workspace, long expectedRowVersion);

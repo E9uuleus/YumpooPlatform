@@ -11,6 +11,8 @@ public interface ProjectTemplateRepository {
 
     Optional<ProjectTemplateDefinition> find(String templateKey, int version, boolean lock);
 
+    Optional<ProjectTemplateDefinition> findForShare(String templateKey, int version);
+
     List<ProjectTemplateDefinition> findPublished();
 
     boolean publish(UUID id, long expectedRowVersion, UUID actorUserId, Instant changedAt);

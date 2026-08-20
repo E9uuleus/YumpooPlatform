@@ -30,6 +30,12 @@ public class ProjectTemplateCatalogAdapter implements
     }
 
     @Override
+    public Optional<ProjectTemplateSnapshot> findPublishedForCreation(String templateKey, int version) {
+        return service.findPublishedForCreation(templateKey, version)
+                .map(ProjectTemplateCatalogAdapter::snapshot);
+    }
+
+    @Override
     public Optional<ProjectTemplateSnapshot> findAny(String templateKey, int version) {
         return service.findAny(templateKey, version).map(ProjectTemplateCatalogAdapter::snapshot);
     }

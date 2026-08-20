@@ -119,6 +119,15 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
     }
 
     @Override
+    public Optional<Workspace> findActiveByIdForShare(UUID companyId, UUID workspaceId) {
+        return jdbcClient.sql(FIND_BY_ID + " AND status = 'ACTIVE' FOR SHARE")
+                .param("companyId", companyId)
+                .param("workspaceId", workspaceId)
+                .query(JdbcWorkspaceRepository::map)
+                .optional();
+    }
+
+    @Override
     public boolean insert(Workspace workspace) {
         return bindWorkspace(jdbcClient.sql(INSERT), workspace).update() == 1;
     }
