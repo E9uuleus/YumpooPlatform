@@ -1,0 +1,7 @@
+{
+  "eventId": "23000000-0000-4000-8000-000000000052", "eventType": "catalog.product_owner_reassigned", "eventVersion": 1,
+  "occurredAt": "2026-08-20T09:40:00Z", "aggregateType": "Product", "aggregateId": "23000000-0000-4000-8000-000000000002", "aggregateVersion": 4,
+  "companyId": "00000000-0000-4000-8000-000000000001", "actor": { "type": "USER", "userId": "23000000-0000-4000-8000-000000000003" },
+  "requestId": "m2-03-product-owner-reassign-invalid", "correlationId": "m2-03-product-owner-reassign-invalid", "causationId": null,
+  "payload": { "productId": "23000000-0000-4000-8000-000000000002", "code": "YUMPOO", "name": "Yumpoo", "status": "ACTIVE", "ownerUserId": "23000000-0000-4000-8000-000000000005", "previousOwnerUserId": "not-a-uuid", "newOwnerUserId": "23000000-0000-4000-8000-000000000005" }
+}

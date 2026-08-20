@@ -161,3 +161,28 @@ events:
       - examples/catalog.workspace-restored-v1.json
     invalidExamples:
       - examples/catalog.workspace-restored-v1.invalid.json
+  - eventType: catalog.product_created
+    eventVersion: 1
+    schema: schemas/catalog.product-created-v1.schema.json
+    validExamples: [examples/catalog.product-created-v1.json]
+    invalidExamples: [examples/catalog.product-created-v1.invalid.json]
+  - eventType: catalog.product_updated
+    eventVersion: 1
+    schema: schemas/catalog.product-updated-v1.schema.json
+    validExamples: [examples/catalog.product-updated-v1.json]
+    invalidExamples: [examples/catalog.product-updated-v1.invalid.json]
+  - eventType: catalog.product_archived
+    eventVersion: 1
+    schema: schemas/catalog.product-archived-v1.schema.json
+    validExamples: [examples/catalog.product-archived-v1.json]
+    invalidExamples: [examples/catalog.product-archived-v1.invalid.json]
+  - eventType: catalog.product_restored
+    eventVersion: 1
+    schema: schemas/catalog.product-restored-v1.schema.json
+    validExamples: [examples/catalog.product-restored-v1.json]
+    invalidExamples: [examples/catalog.product-restored-v1.invalid.json]
+  - eventType: catalog.product_owner_reassigned
+    eventVersion: 1
+    schema: schemas/catalog.product-owner-reassigned-v1.schema.json
+    validExamples: [examples/catalog.product-owner-reassigned-v1.json]
+    invalidExamples: [examples/catalog.product-owner-reassigned-v1.invalid.json]

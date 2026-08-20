@@ -24,6 +24,8 @@ tags:
     description: COMPANY_ADMIN 对固定模板版本执行发布与停用治理。
   - name: Workspaces
     description: Company 下只承担导航归类、不形成授权边界的 Workspace 生命周期。
+  - name: Products
+    description: Company 下长期存在的 Product 主数据、唯一负责人和生命周期。
 paths:
   /company:
     get:
@@ -725,6 +727,176 @@ paths:
         '428': { $ref: '#/components/responses/PreconditionRequired' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /products:
+    get:
+      tags: [Products]
+      operationId: listProducts
+      summary: 分页查询当前主体可见的 Product
+      description: COMPANY_ADMIN 可见全部；ProductOwner 仅可见自己负责的 Product；其他成员返回空分页。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ProductStatusFilter'
+            default: ACTIVE
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 先按权限裁剪，再按 name、code、id 稳定排序的 Product 分页。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductPage' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+    post:
+      tags: [Products]
+      operationId: createProduct
+      summary: 创建 Product
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductCreateRequest' }
+      responses:
+        '201':
+          description: Product 已创建，或返回同一幂等命令的既有成功结果。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /products/{productId}:
+    get:
+      tags: [Products]
+      operationId: getProduct
+      summary: 查询权限裁剪后的 Product 详情
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '200':
+          description: 当前主体可见的 Product。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+    patch:
+      tags: [Products]
+      operationId: updateProduct
+      summary: 替换 Product 的完整可变字段快照
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductUpdateRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ProductChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /products/{productId}/archive:
+    post:
+      tags: [Products]
+      operationId: archiveProduct
+      summary: 归档 ACTIVE Product
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200': { $ref: '#/components/responses/ProductChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /products/{productId}/restore:
+    post:
+      tags: [Products]
+      operationId: restoreProduct
+      summary: 恢复 ARCHIVED Product 并重新校验当前负责人
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200': { $ref: '#/components/responses/ProductChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /products/{productId}/owner-reassignments:
+    post:
+      tags: [Products]
+      operationId: reassignProductOwner
+      summary: 重指派 Product 唯一负责人
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProductId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductOwnerReassignmentRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ProductChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /project-templates:
     get:
       tags: [ProjectTemplates]
@@ -904,6 +1076,74 @@ components:
         name: { type: string, minLength: 1, maxLength: 80 }
         description: { type: string, minLength: 1, maxLength: 500, nullable: true }
         sortOrder: { type: integer, format: int32, minimum: 0 }
+
+    ProductStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+
+    ProductStatusFilter:
+      type: string
+      enum: [ACTIVE, ARCHIVED, ALL]
+
+    Product:
+      type: object
+      additionalProperties: false
+      required: [id, code, name, description, status, ownerUserId, rowVersion]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        code:
+          type: string
+          minLength: 2
+          maxLength: 32
+          pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500, nullable: true }
+        status: { $ref: '#/components/schemas/ProductStatus' }
+        ownerUserId: { $ref: '#/components/schemas/Uuid' }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+
+    ProductPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+        page: { type: integer, format: int32, minimum: 0 }
+        size: { type: integer, format: int32, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, format: int32, minimum: 0 }
+
+    ProductCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, ownerUserId]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 32
+          pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500, nullable: true }
+        ownerUserId: { $ref: '#/components/schemas/Uuid' }
+
+    ProductUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, description]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500, nullable: true }
+
+    ProductOwnerReassignmentRequest:
+      type: object
+      additionalProperties: false
+      required: [newOwnerUserId, reason]
+      properties:
+        newOwnerUserId: { $ref: '#/components/schemas/Uuid' }
+        reason: { type: string, minLength: 10, maxLength: 500 }
 
     ProjectTemplateKey:
       type: string
@@ -1502,11 +1742,14 @@ components:
       type: object
       additionalProperties: false
       description: |
-        M0-09 不公开任何错误详情字段。当前契约只接受严格空对象；未来新增详情时
-        必须先为对应错误定义明确 schema。
+        通用错误详情默认为空；需要稳定机器可读原因的业务冲突可返回 reason。
+      properties:
+        reason:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]{1,63}$'
 
     ErrorResponse:
-      description: ApiErrorBase 在 M0-09 使用严格空 details 的具体响应类型。
+      description: ApiErrorBase 的具体响应类型；details 默认为空，特定冲突可带稳定 reason。
       allOf:
         - $ref: '#/components/schemas/ApiErrorBase'
         - type: object
@@ -1665,6 +1908,12 @@ components:
 
     WorkspaceId:
       name: workspaceId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+
+    ProductId:
+      name: productId
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Uuid' }
@@ -1892,6 +2141,14 @@ components:
       externalValue: ../examples/pagination/empty-cursor-page.json
 
   responses:
+    ProductChanged:
+      description: Product 已更新，或返回同一幂等命令的既有成功结果。
+      headers:
+        ETag: { $ref: '#/components/headers/ETag' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Product' }
+
     WorkspaceChanged:
       description: Workspace 已更新，或返回同一幂等命令的既有成功结果。
       headers:

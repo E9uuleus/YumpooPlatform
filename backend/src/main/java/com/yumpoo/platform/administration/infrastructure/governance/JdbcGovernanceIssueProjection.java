@@ -62,7 +62,7 @@ public class JdbcGovernanceIssueProjection implements OutboxEventConsumer {
                               AND issue_type = 'APP_MANAGER_MISSING'
                               AND status = 'OPEN'
                         )
-                        ON CONFLICT (detected_event_id) DO NOTHING
+                        ON CONFLICT (detected_event_id, issue_type, target_type, target_id) DO NOTHING
                         """)
                 .param("id", UUID.randomUUID())
                 .param("companyId", event.companyId())

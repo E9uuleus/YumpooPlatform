@@ -116,17 +116,14 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
 
   const errorResponsePath = path.join(sourceRoot, 'models', 'ErrorResponse.ts')
   let errorResponse = normalizeText(fs.readFileSync(errorResponsePath, 'utf8'))
-  errorResponse = replaceExactlyOnce(
-    errorResponse,
-    '    details: object;',
-    '    details: Record<string, never>;',
-    'ErrorResponse.details 严格空对象',
-  )
+  if (!errorResponse.includes('    details: EmptyErrorDetails;')) {
+    throw new Error('生成的 ErrorResponse.details 未引用 EmptyErrorDetails')
+  }
   errorResponse = replaceExactlyOnce(
     errorResponse,
     '/* eslint-disable */',
-    '/* eslint-disable */\n/* EmptyErrorDetails is represented as Record<string, never>. */',
-    'ErrorResponse 空 details 标记',
+    '/* eslint-disable */\n/* Error details use the explicit EmptyErrorDetails contract. */',
+    'ErrorResponse details 契约标记',
   )
   fs.writeFileSync(errorResponsePath, errorResponse, 'utf8')
 

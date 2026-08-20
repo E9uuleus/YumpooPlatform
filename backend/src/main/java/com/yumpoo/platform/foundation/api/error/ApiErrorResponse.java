@@ -9,7 +9,7 @@ public record ApiErrorResponse(
         String requestId,
         boolean retryable,
         List<ApiFieldError> fieldErrors,
-        EmptyErrorDetails details
+        ApiErrorDetails details
 ) {
 
     public ApiErrorResponse {

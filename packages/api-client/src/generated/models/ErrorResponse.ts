@@ -1,5 +1,5 @@
 /* tslint:disable */
-/* EmptyErrorDetails is represented as Record<string, never>. */
+/* Error details use the explicit EmptyErrorDetails contract. */
 /**
  * Yumpoo API
  * Yumpoo 一期 HTTP API 的唯一静态契约源。  所有业务 operation 都必须挂载在相对 server `/api/v1` 下。M0-09 只冻结公共 schema、header、parameter、response 和 golden example；业务 paths 在对应模块 实现时按兼容新增原则加入。
@@ -13,6 +13,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { EmptyErrorDetails } from './EmptyErrorDetails';
+import {
+    EmptyErrorDetailsFromJSON,
+    EmptyErrorDetailsFromJSONTyped,
+    EmptyErrorDetailsToJSON,
+    EmptyErrorDetailsToJSONTyped,
+} from './EmptyErrorDetails';
 import type { FieldError } from './FieldError';
 import {
     FieldErrorFromJSON,
@@ -29,7 +36,7 @@ import {
 } from './ErrorCode';
 
 /**
- * ApiErrorBase 在 M0-09 使用严格空 details 的具体响应类型。
+ * ApiErrorBase 的具体响应类型；details 默认为空，特定冲突可带稳定 reason。
  * @export
  * @interface ErrorResponse
  */
@@ -65,13 +72,11 @@ export interface ErrorResponse {
      */
     fieldErrors: Array<FieldError>;
     /**
-     * M0-09 不公开任何错误详情字段。当前契约只接受严格空对象；未来新增详情时
-     * 必须先为对应错误定义明确 schema。
      *
-     * @type {object}
+     * @type {EmptyErrorDetails}
      * @memberof ErrorResponse
      */
-    details: Record<string, never>;
+    details: EmptyErrorDetails;
 }
 
 
@@ -104,7 +109,7 @@ export function ErrorResponseFromJSONTyped(json: any, ignoreDiscriminator: boole
         'requestId': json['requestId'],
         'retryable': json['retryable'],
         'fieldErrors': ((json['fieldErrors'] as Array<any>).map(FieldErrorFromJSON)),
-        'details': json['details'],
+        'details': EmptyErrorDetailsFromJSON(json['details']),
     };
 }
 
@@ -124,6 +129,6 @@ export function ErrorResponseToJSONTyped(value?: ErrorResponse | null, ignoreDis
         'requestId': value['requestId'],
         'retryable': value['retryable'],
         'fieldErrors': ((value['fieldErrors'] as Array<any>).map(FieldErrorToJSON)),
-        'details': value['details'],
+        'details': EmptyErrorDetailsToJSON(value['details']),
     };
 }
