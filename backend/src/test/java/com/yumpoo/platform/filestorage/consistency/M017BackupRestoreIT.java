@@ -700,21 +700,23 @@ class M017BackupRestoreIT {
                         id, company_id, workspace_id, project_code, name, description,
                         project_type, lifecycle, owner_user_id, template_key, template_version,
                         customer_name, customer_reference, delivery_site, contact_note,
-                        row_version, created_at, created_by_user_id, updated_at, updated_by_user_id
+                        row_version, created_at, created_by_user_id, updated_at, updated_by_user_id,
+                        activated_at
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000802',
                         '00000000-0000-4000-8000-000000000001',
                         '00000000-0000-4000-8000-000000000502',
                         'M2_04_RESTORE', 'M2-04 Restore Project', 'Project restore probe',
-                        'PRODUCT_DEVELOPMENT', 'DRAFT',
+                        'PRODUCT_DEVELOPMENT', 'ACTIVE',
                         '00000000-0000-4000-8000-000000000102', 'RND', 1,
                         'Restore Customer', 'RESTORE-01', 'Shanghai', 'Private restore note',
-                        0, ?, '00000000-0000-4000-8000-000000000102', ?,
-                        '00000000-0000-4000-8000-000000000102'
+                        3, ?, '00000000-0000-4000-8000-000000000102', ?,
+                        '00000000-0000-4000-8000-000000000102', ?
                     )
                     """)) {
                 project.setObject(1, createdAt);
-                project.setObject(2, createdAt);
+                project.setObject(2, createdAt.plusHours(2));
+                project.setObject(3, createdAt.plusHours(2));
                 assertThat(project.executeUpdate()).isOne();
             }
             try (PreparedStatement membership = connection.prepareStatement("""
@@ -800,6 +802,7 @@ class M017BackupRestoreIT {
              Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery("""
                      SELECT project.id, project.project_code, project.lifecycle,
+                            project.row_version, project.activated_at,
                             project.owner_user_id, project.template_key, project.template_version,
                             membership.status AS membership_status,
                             (SELECT string_agg(m.user_id || ':' || m.status || ':' || m.row_version,
@@ -821,6 +824,7 @@ class M017BackupRestoreIT {
                          AND issue.target_type='PROJECT'
                       WHERE project.id = '00000000-0000-4000-8000-000000000802'
                       GROUP BY project.id, project.project_code, project.lifecycle,
+                               project.row_version, project.activated_at,
                                project.owner_user_id, project.template_key, project.template_version,
                                membership.status, issue.issue_type, issue.target_type,
                                issue.status, issue.row_version
@@ -828,7 +832,9 @@ class M017BackupRestoreIT {
             assertThat(result.next()).isTrue();
             ProjectContentFact fact = new ProjectContentFact(
                     result.getObject("id", UUID.class), result.getString("project_code"),
-                    result.getString("lifecycle"), result.getObject("owner_user_id", UUID.class),
+                    result.getString("lifecycle"), result.getLong("row_version"),
+                    result.getObject("activated_at", OffsetDateTime.class),
+                    result.getObject("owner_user_id", UUID.class),
                     result.getString("template_key"), result.getInt("template_version"),
                     result.getString("membership_status"), result.getString("membership_facts"),
                     result.getString("issue_type"), result.getString("target_type"),
@@ -971,6 +977,8 @@ class M017BackupRestoreIT {
             UUID projectId,
             String projectCode,
             String lifecycle,
+            long rowVersion,
+            OffsetDateTime activatedAt,
             UUID ownerUserId,
             String templateKey,
             int templateVersion,

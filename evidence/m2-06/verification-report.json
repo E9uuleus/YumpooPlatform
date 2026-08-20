@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-06",
+  "status": "PASS",
+  "startedAt": "2026-08-20T15:10:00Z",
+  "completedAt": "2026-08-20T15:50:00Z",
+  "command": "pnpm verify:m2-06",
+  "flywayVersion": "26",
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "sqlVisibilityAndStablePagination": true,
+    "workspaceGroupedVisibleCounts": true,
+    "projectPatchAndNoOp": true,
+    "activationReadinessAndRetiredTemplate": true,
+    "idempotentReplayAndAtomicRollback": true,
+    "backupRestoreActiveProject": true,
+    "vueWorkbench": true,
+    "nodeGate": true
+  }
+}

@@ -75,6 +75,31 @@ class ProjectTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void updateNormalizesFullSnapshotAndNoChangeCanBeDetected() {
+        Project draft = create(ProjectType.PRE_SALES, "PRE_SALES", null, null, null);
+        Project updated = draft.updateDetails("  新名称  ", "  描述  ", "  客户  ",
+                " ", " 上海 ", " 联系备注 ", OWNER_ID, NOW.plusSeconds(10));
+
+        assertThat(updated.name()).isEqualTo("新名称");
+        assertThat(updated.customerReference()).isNull();
+        assertThat(updated.rowVersion()).isOne();
+        assertThat(updated.hasSameDetails("新名称", "描述", "客户", null,
+                "上海", "联系备注")).isTrue();
+    }
+
+    @Test
+    void activationOnlyAllowsDraftAndCapturesLifecycleTimestamp() {
+        Project draft = create(ProjectType.PRODUCT_DEVELOPMENT, "RND", null, null, null);
+        Project active = draft.activate(OWNER_ID, NOW.plusSeconds(10));
+
+        assertThat(active.lifecycle()).isEqualTo(ProjectLifecycle.ACTIVE);
+        assertThat(active.activatedAt()).isEqualTo(NOW.plusSeconds(10));
+        assertThat(active.rowVersion()).isOne();
+        assertThatThrownBy(() -> active.activate(OWNER_ID, NOW.plusSeconds(20)))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     private static Project create(
             ProjectType type,
             String templateKey,
