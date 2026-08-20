@@ -1,5 +1,6 @@
 package com.yumpoo.platform.administration.application.governance;
 
 public enum GovernanceIssueType {
-    APP_MANAGER_MISSING
+    APP_MANAGER_MISSING,
+    OWNER_MISSING
 }

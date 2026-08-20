@@ -162,7 +162,11 @@ exchange 成功只返回一次短期 HMAC 收据；其中 requestId、企业/成
 
 从仓库根目录运行 `pnpm verify:m0-14`。该命令额外在 `-Xmx96m` 下点名运行 `M014BoundedHeapVerification`，并通过 test-only HTTP/PostgreSQL 探针覆盖断流、并发完成、扫描事务边界、授权撤销、413/415、隐藏 404 和最终事务回滚。真实 Defender/NTFS 验证及所需变量见仓库根 README；受控 Windows 环境具备后运行 `pnpm verify:m0-14:live` 并取得签名 `PASS` 证据，未执行前保持 `NOT_RUN`，不阻塞 M0 本地开发门禁。
 
-YumpooPlatform Spring 后端是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重、身份治理、固定 Project 模板目录，以及 M2-02 Workspace 生命周期。
+YumpooPlatform Spring 后端是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重、身份治理、固定 Project 模板目录，以及 Workspace 与 Product 生命周期。
+
+## M2-03 Product 生命周期与负责人治理
+
+Flyway V18 创建 Company 范围 Product 主数据，V19 扩展 `governance_issue` 支持每个 Product 独立的 `OWNER_MISSING`，V20 将负责人重指派 Security Audit 的理由上限同步到 500 字符。Catalog 负责 SQL 可见范围、资料条件更新和最小跨模块端口；Administration 负责归档、恢复、负责人重指派及其 Audit/Outbox/幂等原子事务。完整验收从仓库根目录运行 `pnpm verify:m2-03`。
 
 ## M2-02 Workspace 生命周期
 

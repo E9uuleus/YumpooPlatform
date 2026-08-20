@@ -32,7 +32,7 @@ public record SecurityAuditDraft(
         targetType = requireText(targetType, "targetType", 64);
         targetId = requireText(targetId, "targetId", 128);
         if (reasonReference != null) {
-            reasonReference = requireText(reasonReference, "reasonReference", 160);
+            reasonReference = requireText(reasonReference, "reasonReference", 500);
         }
         if (outcome == SecurityAuditOutcome.SUCCEEDED && errorCode != null) {
             throw new IllegalArgumentException("successful audit must not contain errorCode");

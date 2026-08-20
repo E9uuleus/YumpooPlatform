@@ -6,6 +6,7 @@ import com.yumpoo.platform.organization.api.CompanyCalendarQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationSnapshot;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -50,8 +51,7 @@ class OrganizationQueriesIT {
 
     @BeforeEach
     void resetCompanyAndCalendar() {
-        jdbcClient.sql("DELETE FROM yumpoo.company_calendar_day").update();
-        jdbcClient.sql("DELETE FROM yumpoo.company").update();
+        jdbcClient.sql("TRUNCATE TABLE yumpoo.company CASCADE").update();
         jdbcClient.sql("""
                         INSERT INTO yumpoo.company (
                             id, singleton_slot, display_name, timezone, week_start_day,
@@ -64,6 +64,11 @@ class OrganizationQueriesIT {
                 .param("id", COMPANY_ID)
                 .param("now", OffsetDateTime.ofInstant(NOW, ZoneOffset.UTC))
                 .update();
+    }
+
+    @AfterEach
+    void restoreCompanyFixture() {
+        resetCompanyAndCalendar();
     }
 
     @Test

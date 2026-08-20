@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/catalog.product-updated-v1.schema.json",
+  "title": "Product profile updated",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "catalog.product_updated" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Product" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["productId", "code", "name", "status", "ownerUserId", "changedFields"],
+          "properties": {
+            "productId": { "type": "string", "format": "uuid" },
+            "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
+            "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "status": { "enum": ["ACTIVE", "ARCHIVED"] },
+            "ownerUserId": { "type": "string", "format": "uuid" },
+            "changedFields": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["name", "description"] } }
+          }
+        }
+      }
+    }
+  ]
+}

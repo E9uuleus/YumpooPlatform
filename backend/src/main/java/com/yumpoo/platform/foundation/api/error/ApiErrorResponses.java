@@ -17,7 +17,8 @@ final class ApiErrorResponses {
                 exception.errorCode(),
                 exception.getMessage(),
                 requestId,
-                exception.fieldViolations().stream().map(ApiErrorResponses::from).toList()
+                exception.fieldViolations().stream().map(ApiErrorResponses::from).toList(),
+                exception.reason()
         );
     }
 
@@ -26,6 +27,16 @@ final class ApiErrorResponses {
             String message,
             String requestId,
             List<ApiFieldError> fieldErrors
+    ) {
+        return create(code, message, requestId, fieldErrors, null);
+    }
+
+    static ApiErrorResponse create(
+            StandardErrorCode code,
+            String message,
+            String requestId,
+            List<ApiFieldError> fieldErrors,
+            String reason
     ) {
         List<ApiFieldError> stableFieldErrors = fieldErrors.stream()
                 .sorted(Comparator.comparing(ApiFieldError::field).thenComparing(ApiFieldError::code))
@@ -36,7 +47,7 @@ final class ApiErrorResponses {
                 requestId,
                 code.retryable(),
                 stableFieldErrors,
-                EmptyErrorDetails.INSTANCE
+                reason == null ? ApiErrorDetails.EMPTY : new ApiErrorDetails(reason)
         );
     }
 

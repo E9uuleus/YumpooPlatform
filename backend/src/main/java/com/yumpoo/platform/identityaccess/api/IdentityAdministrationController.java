@@ -1,7 +1,7 @@
 package com.yumpoo.platform.identityaccess.api;
 
 import com.yumpoo.platform.foundation.api.error.ApiErrorResponse;
-import com.yumpoo.platform.foundation.api.error.EmptyErrorDetails;
+import com.yumpoo.platform.foundation.api.error.ApiErrorDetails;
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageResponse;
@@ -144,7 +144,7 @@ public final class IdentityAdministrationController {
                     .location(location)
                     .body(new ApiErrorResponse(
                             error.name(), error.defaultMessage(), requestId, error.retryable(),
-                            List.of(), EmptyErrorDetails.INSTANCE));
+                            List.of(), ApiErrorDetails.EMPTY));
         }
 
         DirectorySyncRunView body = queryService.run(

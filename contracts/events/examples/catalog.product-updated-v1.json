@@ -1,0 +1,15 @@
+{
+  "eventId": "23000000-0000-4000-8000-000000000021",
+  "eventType": "catalog.product_updated",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-20T09:10:00Z",
+  "aggregateType": "Product",
+  "aggregateId": "23000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "23000000-0000-4000-8000-000000000004" },
+  "requestId": "m2-03-product-update",
+  "correlationId": "m2-03-product-update",
+  "causationId": null,
+  "payload": { "productId": "23000000-0000-4000-8000-000000000002", "code": "YUMPOO", "name": "Yumpoo Platform", "status": "ACTIVE", "ownerUserId": "23000000-0000-4000-8000-000000000004", "changedFields": ["name", "description"] }
+}

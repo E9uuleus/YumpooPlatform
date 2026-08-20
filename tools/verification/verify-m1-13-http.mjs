@@ -324,8 +324,17 @@ function verifyDatabaseState() {
   const missingM113Migrations = Number(psql("SELECT count(*) FROM generate_series(1, 14) AS required(version) WHERE NOT EXISTS (SELECT 1 FROM yumpoo.flyway_schema_history AS history WHERE history.success = true AND history.version::integer = required.version)"))
   assert(missingM113Migrations === 0, `required M1-13 migrations are missing: ${missingM113Migrations}`)
   assert(/^\d+$/u.test(flywayVersion) && Number(flywayVersion) >= 14, `unexpected Flyway version: ${flywayVersion}`)
-  const forbiddenTables = Number(psql("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'yumpoo' AND lower(table_name) ~ '(project|product|membership|owner)' AND table_name NOT IN ('project_template_definition', 'project_template_content_blueprint')"))
-  assert(forbiddenTables === 0, 'clean M1 database contains project/product/membership/owner instance facts')
+  const outOfScopeTables = psql("SELECT table_name FROM information_schema.tables WHERE table_schema = 'yumpoo' AND lower(table_name) ~ '(project|product|membership|owner)' AND table_name NOT IN ('project_template_definition', 'project_template_content_blueprint') ORDER BY table_name")
+    .split(/\r?\n/u)
+    .filter(Boolean)
+  const outOfScopeFacts = outOfScopeTables.flatMap((tableName) => {
+    assert(/^[a-z_][a-z0-9_]*$/u.test(tableName), `unsafe database table name: ${tableName}`)
+    const count = Number(psql(`SELECT count(*) FROM yumpoo.${tableName}`))
+    assert(Number.isSafeInteger(count) && count >= 0, `invalid ${tableName} fact count: ${count}`)
+    return count === 0 ? [] : [`${tableName}=${count}`]
+  })
+  assert(outOfScopeFacts.length === 0,
+    `clean M1 fixture created project/product/membership/owner instance facts: ${outOfScopeFacts.join(', ')}`)
   const counts = psql("SELECT (SELECT count(*) FROM yumpoo.identity_user) || '|' || (SELECT count(*) FROM yumpoo.external_identity) || '|' || (SELECT count(*) FROM yumpoo.platform_role_assignment)")
   assert(counts === '2|2|2', `M1-13 service fixture counts are incorrect: ${counts}`)
   const roles = psql("SELECT string_agg(role_code || ':' || status, ',' ORDER BY role_code) FROM yumpoo.platform_role_assignment")

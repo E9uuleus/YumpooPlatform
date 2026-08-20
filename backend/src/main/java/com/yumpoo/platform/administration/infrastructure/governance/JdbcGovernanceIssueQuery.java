@@ -38,7 +38,8 @@ public class JdbcGovernanceIssueQuery implements GovernanceIssueQueryUseCase {
         long total = countStatement.query(Long.class).single();
 
         JdbcClient.StatementSpec pageStatement = jdbcClient.sql("""
-                        SELECT id, company_id, issue_type, status, safe_summary_code,
+                        SELECT id, company_id, issue_type, target_type, target_id,
+                               status, safe_summary_code,
                                detected_event_id, detected_at, resolved_event_id, resolved_at,
                                row_version
                         FROM yumpoo.governance_issue
@@ -75,6 +76,8 @@ public class JdbcGovernanceIssueQuery implements GovernanceIssueQueryUseCase {
                 resultSet.getObject("id", UUID.class),
                 resultSet.getObject("company_id", UUID.class),
                 GovernanceIssueType.valueOf(resultSet.getString("issue_type")),
+                resultSet.getString("target_type"),
+                resultSet.getObject("target_id", UUID.class),
                 GovernanceIssueStatus.valueOf(resultSet.getString("status")),
                 resultSet.getString("safe_summary_code"),
                 resultSet.getObject("detected_event_id", UUID.class),

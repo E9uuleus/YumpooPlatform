@@ -7,6 +7,8 @@ public record GovernanceIssueView(
         UUID issueId,
         UUID companyId,
         GovernanceIssueType issueType,
+        String targetType,
+        UUID targetId,
         GovernanceIssueStatus status,
         String safeSummaryCode,
         UUID detectedEventId,
