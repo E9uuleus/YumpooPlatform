@@ -77,6 +77,7 @@ class M017BackupRestoreIT {
             createIdentityBindingFact(source);
             createWorkspaceFact(source);
             createProductGovernanceFact(source);
+            createProjectContentFact(source);
 
             Path dump = workRoot.resolve("yumpoo.dump");
             createDump(source, dump);
@@ -124,6 +125,8 @@ class M017BackupRestoreIT {
             assertThat(readWorkspaceFact(target)).isEqualTo(readWorkspaceFact(source));
             assertThat(readProductGovernanceFact(target))
                     .isEqualTo(readProductGovernanceFact(source));
+            assertThat(readProjectContentFact(target))
+                    .isEqualTo(readProjectContentFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -676,6 +679,117 @@ class M017BackupRestoreIT {
         }
     }
 
+    private static void createProjectContentFact(PostgreSQLContainer container) throws SQLException {
+        OffsetDateTime createdAt = OffsetDateTime.ofInstant(
+                Instant.parse("2026-08-20T07:00:00Z"), ZoneOffset.UTC);
+        try (Connection connection = connection(container)) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement project = connection.prepareStatement("""
+                    INSERT INTO yumpoo.project (
+                        id, company_id, workspace_id, project_code, name, description,
+                        project_type, lifecycle, owner_user_id, template_key, template_version,
+                        customer_name, customer_reference, delivery_site, contact_note,
+                        row_version, created_at, created_by_user_id, updated_at, updated_by_user_id
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000802',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000502',
+                        'M2_04_RESTORE', 'M2-04 Restore Project', 'Project restore probe',
+                        'PRODUCT_DEVELOPMENT', 'DRAFT',
+                        '00000000-0000-4000-8000-000000000102', 'RND', 1,
+                        'Restore Customer', 'RESTORE-01', 'Shanghai', 'Private restore note',
+                        0, ?, '00000000-0000-4000-8000-000000000102', ?,
+                        '00000000-0000-4000-8000-000000000102'
+                    )
+                    """)) {
+                project.setObject(1, createdAt);
+                project.setObject(2, createdAt);
+                assertThat(project.executeUpdate()).isOne();
+            }
+            try (PreparedStatement membership = connection.prepareStatement("""
+                    INSERT INTO yumpoo.project_membership (
+                        id, company_id, project_id, user_id, status, joined_at,
+                        joined_by_user_id, row_version
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000803',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000802',
+                        '00000000-0000-4000-8000-000000000102',
+                        'ACTIVE', ?, '00000000-0000-4000-8000-000000000102', 0
+                    )
+                    """)) {
+                membership.setObject(1, createdAt);
+                assertThat(membership.executeUpdate()).isOne();
+            }
+            try (PreparedStatement content = connection.prepareStatement("""
+                    INSERT INTO yumpoo.content (
+                        id, company_id, project_id, code, name, work_item_type, status,
+                        default_view_type, view_config, applied_template_key,
+                        applied_template_version, applied_blueprint_code, row_version,
+                        created_at, created_by_user_id, updated_at, updated_by_user_id
+                    ) VALUES (?,
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000802', ?, ?, ?, 'ACTIVE',
+                        'TABLE', '{}'::jsonb, 'RND', 1, ?, 0, ?,
+                        '00000000-0000-4000-8000-000000000102', ?,
+                        '00000000-0000-4000-8000-000000000102')
+                    """)) {
+                String[][] blueprints = {
+                        {"00000000-0000-4000-8000-000000000804", "REQUIREMENTS", "需求", "REQUIREMENT"},
+                        {"00000000-0000-4000-8000-000000000805", "TASKS", "任务", "TASK"},
+                        {"00000000-0000-4000-8000-000000000806", "DEFECTS", "缺陷", "DEFECT"}
+                };
+                for (String[] blueprint : blueprints) {
+                    content.setObject(1, UUID.fromString(blueprint[0]));
+                    content.setString(2, blueprint[1]);
+                    content.setString(3, blueprint[2]);
+                    content.setString(4, blueprint[3]);
+                    content.setString(5, blueprint[1]);
+                    content.setObject(6, createdAt);
+                    content.setObject(7, createdAt);
+                    content.addBatch();
+                }
+                assertThat(content.executeBatch()).hasSize(3);
+            }
+            connection.commit();
+        }
+    }
+
+    private static ProjectContentFact readProjectContentFact(
+            PostgreSQLContainer container
+    ) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT project.id, project.project_code, project.lifecycle,
+                            project.owner_user_id, project.template_key, project.template_version,
+                            membership.status AS membership_status,
+                            string_agg(content.code || ':' || content.work_item_type || ':'
+                                || content.status || ':' || content.default_view_type || ':'
+                                || content.applied_template_key || ':'
+                                || content.applied_template_version || ':'
+                                || content.applied_blueprint_code, ',' ORDER BY content.code) AS contents
+                       FROM yumpoo.project project
+                       JOIN yumpoo.project_membership membership
+                         ON membership.project_id = project.id
+                        AND membership.user_id = project.owner_user_id
+                       JOIN yumpoo.content content ON content.project_id = project.id
+                      WHERE project.id = '00000000-0000-4000-8000-000000000802'
+                      GROUP BY project.id, project.project_code, project.lifecycle,
+                               project.owner_user_id, project.template_key, project.template_version,
+                               membership.status
+                     """)) {
+            assertThat(result.next()).isTrue();
+            ProjectContentFact fact = new ProjectContentFact(
+                    result.getObject("id", UUID.class), result.getString("project_code"),
+                    result.getString("lifecycle"), result.getObject("owner_user_id", UUID.class),
+                    result.getString("template_key"), result.getInt("template_version"),
+                    result.getString("membership_status"), result.getString("contents"));
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
+    }
+
     private static SessionSecurityFact readSessionSecurityFact(
             PostgreSQLContainer container
     ) throws SQLException {
@@ -801,6 +915,18 @@ class M017BackupRestoreIT {
             UUID targetId,
             String issueStatus,
             String resolutionCode
+    ) {
+    }
+
+    private record ProjectContentFact(
+            UUID projectId,
+            String projectCode,
+            String lifecycle,
+            UUID ownerUserId,
+            String templateKey,
+            int templateVersion,
+            String membershipStatus,
+            String contents
     ) {
     }
 

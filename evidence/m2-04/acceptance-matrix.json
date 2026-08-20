@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-04",
+  "verifiedSlices": [
+    {
+      "requirementId": "PPM-004",
+      "scope": "Project 保存 Company 内唯一编码、名称、四类类型、DRAFT 生命周期、ACTIVE Workspace、唯一负责人和固化模板引用",
+      "evidence": [
+        "backend/src/main/resources/db/migration/catalog/V21__create_project_catalog.sql",
+        "backend/src/test/java/com/yumpoo/platform/administration/application/ProjectCreationIT.java",
+        "backend/src/test/java/com/yumpoo/platform/administration/api/ProjectCreationHttpIT.java"
+      ]
+    },
+    {
+      "requirementId": "PPM-005",
+      "scope": "四种固定 Project 类型与 RND/PRE_SALES/IMPLEMENTATION/HYPERCARE 模板 key 一一映射",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/catalog/domain/project/ProjectType.java",
+        "backend/src/test/java/com/yumpoo/platform/catalog/domain/project/ProjectTest.java"
+      ]
+    },
+    {
+      "requirementId": "PPM-006",
+      "scope": "共享锁读取 PUBLISHED 模板，Project、owner membership、全部 blueprint Content、Audit、两类 Outbox 和幂等结果原子提交或回滚",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/administration/application/ProjectCreationOrchestrator.java",
+        "backend/src/main/resources/db/migration/workitem/V22__create_content_catalog.sql",
+        "backend/src/test/java/com/yumpoo/platform/administration/application/ProjectCreationIT.java"
+      ]
+    },
+    {
+      "requirementId": "PPM-008",
+      "scope": "客户字段只保存在 Project，进行空白归一化且不复制到事件和审计安全摘要",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/catalog/domain/project/Project.java",
+        "backend/src/main/java/com/yumpoo/platform/administration/application/ProjectCreationOrchestrator.java"
+      ]
+    },
+    {
+      "requirementId": "ACL-002",
+      "scope": "Project owner 以 catalog owner_user_id 与 ACTIVE membership 为唯一真源，不产生 PROJECT_OWNER 平台角色行",
+      "evidence": [
+        "backend/src/main/resources/db/migration/catalog/V21__create_project_catalog.sql",
+        "backend/src/test/java/com/yumpoo/platform/administration/application/ProjectCreationIT.java"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    {
+      "requirementId": "PPM-007",
+      "targetMilestone": "M2-06",
+      "scope": "PRE_SALES、IMPLEMENTATION、HYPERCARE 进入 ACTIVE 前校验 customerName；DRAFT 创建允许缺失"
+    },
+    {
+      "requirementId": "PROJECT-MEMBERSHIP",
+      "targetMilestone": "M2-05",
+      "scope": "成员维护、负责人重指派、最后负责人保护和 OWNER_MISSING 治理"
+    },
+    {
+      "requirementId": "PROJECT-QUERY-LIFECYCLE",
+      "targetMilestone": "M2-06",
+      "scope": "Project 列表、详情、PATCH、激活、真实可见性和 Workspace visibleProjectCount"
+    },
+    {
+      "requirementId": "CONTENT-API",
+      "targetMilestone": "M2-09",
+      "scope": "Content CRUD、归档恢复与 View Config"
+    },
+    {
+      "requirementId": "ACTIVITY-PROJECT",
+      "targetMilestone": "M2-20",
+      "scope": "消费 Project 创建与模板应用事件形成 Activity 投影"
+    }
+  ]
+}

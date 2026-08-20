@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M2-04 Project 原子创建与初始 Content
+
+M2-04 交付 `POST /api/v1/projects`：COMPANY_ADMIN 显式选择已发布模板版本，在单一事务内创建 DRAFT Project、ACTIVE owner membership、模板定义的三类初始 Content、Security Audit、两类 Outbox 和可字节级重放的幂等响应。Project 类型、Workspace 和模板引用创建后固化，非研发客户名的必填检查保留到 M2-06 激活。
+
+OpenAPI、生成的 TypeScript `ProjectsApi`、两类 v1 事件与备份恢复覆盖已同步。列表/详情/PATCH、激活、成员管理、Content API/View Config 和 Activity 投影分别留给 M2-05、M2-06、M2-09 与 M2-20。
+
+```powershell
+pnpm verify:m2-04
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-03 Product 生命周期与负责人治理
 
 M2-03 在 `catalog` 中交付 V18 Product 主数据、SQL 权限分页、详情与资料更新，在 `administration` 中交付归档、恢复和唯一负责人重指派。负责人只保存在 `product.owner_user_id`；离职或禁用通过 `OWNER_MISSING` 治理投影逐 Product 打开问题，不改变生命周期、不自动提升其他成员。

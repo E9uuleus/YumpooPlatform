@@ -162,7 +162,11 @@ exchange 成功只返回一次短期 HMAC 收据；其中 requestId、企业/成
 
 从仓库根目录运行 `pnpm verify:m0-14`。该命令额外在 `-Xmx96m` 下点名运行 `M014BoundedHeapVerification`，并通过 test-only HTTP/PostgreSQL 探针覆盖断流、并发完成、扫描事务边界、授权撤销、413/415、隐藏 404 和最终事务回滚。真实 Defender/NTFS 验证及所需变量见仓库根 README；受控 Windows 环境具备后运行 `pnpm verify:m0-14:live` 并取得签名 `PASS` 证据，未执行前保持 `NOT_RUN`，不阻塞 M0 本地开发门禁。
 
-YumpooPlatform Spring 后端是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重、身份治理、固定 Project 模板目录，以及 Workspace 与 Product 生命周期。
+YumpooPlatform Spring 后端是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重、身份治理、固定 Project 模板目录，以及 Workspace、Product 与 Project 真源。
+
+## M2-04 Project 原子创建与初始 Content
+
+Flyway V21 创建 Project 与 ProjectMembership 真源及延迟 owner-membership 约束，V22 创建带模板 provenance 的 Content 真源，V23 为持久化幂等补充原始响应文本以保证字节级重放。`administration.application` 通过 Catalog、TemplateWorkflow、Workitem 公共端口持有原子创建事务；HTTP、PostgreSQL 故障注入、并发锁和备份恢复验收由 `pnpm verify:m2-04` 统一执行。
 
 ## M2-03 Product 生命周期与负责人治理
 

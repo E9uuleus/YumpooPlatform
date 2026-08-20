@@ -283,13 +283,14 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
                 "app_manager_governance_state",
                 "company",
                 "company_calendar_day",
+                "content",
                 "desktop_auth_attempt",
                 "directory_sync_item",
                 "directory_sync_run",
@@ -303,6 +304,8 @@ class YumpooServerApplicationIT {
                 "outbox_event",
                 "platform_role_assignment",
                 "product",
+                "project",
+                "project_membership",
                 "project_template_content_blueprint",
                 "project_template_definition",
                 "security_audit_event",
