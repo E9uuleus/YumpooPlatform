@@ -1,0 +1,20 @@
+{
+  "eventId": "26000000-0000-4000-8000-000000000001",
+  "eventType": "catalog.project_updated",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-20T12:00:00Z",
+  "aggregateType": "Project",
+  "aggregateId": "26000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "26000000-0000-4000-8000-000000000003" },
+  "requestId": "m2-06-project-update",
+  "correlationId": "m2-06-project-update",
+  "causationId": null,
+  "payload": {
+    "projectId": "26000000-0000-4000-8000-000000000002",
+    "code": "DELIVERY_01",
+    "lifecycle": "DRAFT",
+    "changedFields": ["name", "customerName"]
+  }
+}

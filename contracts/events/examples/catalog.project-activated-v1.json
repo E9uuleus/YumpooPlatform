@@ -1,0 +1,24 @@
+{
+  "eventId": "26000000-0000-4000-8000-000000000021",
+  "eventType": "catalog.project_activated",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-20T12:30:00Z",
+  "aggregateType": "Project",
+  "aggregateId": "26000000-0000-4000-8000-000000000022",
+  "aggregateVersion": 2,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "26000000-0000-4000-8000-000000000023" },
+  "requestId": "m2-06-project-activate",
+  "correlationId": "m2-06-project-activate",
+  "causationId": null,
+  "payload": {
+    "projectId": "26000000-0000-4000-8000-000000000022",
+    "code": "DELIVERY_01",
+    "fromLifecycle": "DRAFT",
+    "toLifecycle": "ACTIVE",
+    "ownerUserId": "26000000-0000-4000-8000-000000000023",
+    "templateKey": "IMPLEMENTATION",
+    "templateVersion": 2,
+    "rowVersion": 2
+  }
+}

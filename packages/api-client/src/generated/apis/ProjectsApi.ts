@@ -17,6 +17,8 @@ import type {
   ErrorResponse,
   Project,
   ProjectCreateRequest,
+  ProjectDetail,
+  ProjectLifecycleFilter,
   ProjectMember,
   ProjectMemberAddRequest,
   ProjectMemberCandidatePage,
@@ -24,6 +26,9 @@ import type {
   ProjectMemberRemoveRequest,
   ProjectMembershipStatusFilter,
   ProjectOwnerReassignmentRequest,
+  ProjectPage,
+  ProjectType,
+  ProjectUpdateRequest,
 } from '../models/index';
 import {
     ErrorResponseFromJSON,
@@ -32,6 +37,10 @@ import {
     ProjectToJSON,
     ProjectCreateRequestFromJSON,
     ProjectCreateRequestToJSON,
+    ProjectDetailFromJSON,
+    ProjectDetailToJSON,
+    ProjectLifecycleFilterFromJSON,
+    ProjectLifecycleFilterToJSON,
     ProjectMemberFromJSON,
     ProjectMemberToJSON,
     ProjectMemberAddRequestFromJSON,
@@ -46,7 +55,20 @@ import {
     ProjectMembershipStatusFilterToJSON,
     ProjectOwnerReassignmentRequestFromJSON,
     ProjectOwnerReassignmentRequestToJSON,
+    ProjectPageFromJSON,
+    ProjectPageToJSON,
+    ProjectTypeFromJSON,
+    ProjectTypeToJSON,
+    ProjectUpdateRequestFromJSON,
+    ProjectUpdateRequestToJSON,
 } from '../models/index';
+
+export interface ActivateProjectRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+}
 
 export interface AddProjectMemberRequest {
     projectId: string;
@@ -62,6 +84,10 @@ export interface CreateProjectRequest {
     projectCreateRequest: ProjectCreateRequest;
 }
 
+export interface GetProjectRequest {
+    projectId: string;
+}
+
 export interface ListProjectMemberCandidatesRequest {
     projectId: string;
     name: string;
@@ -72,6 +98,14 @@ export interface ListProjectMemberCandidatesRequest {
 export interface ListProjectMembersRequest {
     projectId: string;
     status?: ProjectMembershipStatusFilter;
+    page?: number;
+    size?: number;
+}
+
+export interface ListProjectsRequest {
+    workspaceId?: string;
+    projectType?: ProjectType;
+    lifecycle?: ProjectLifecycleFilter;
     page?: number;
     size?: number;
 }
@@ -93,10 +127,89 @@ export interface RemoveProjectMemberRequest {
     projectMemberRemoveRequest?: ProjectMemberRemoveRequest;
 }
 
+export interface UpdateProjectRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    projectUpdateRequest: ProjectUpdateRequest;
+}
+
 /**
  *
  */
 export class ProjectsApi extends runtime.BaseAPI {
+
+    /**
+     * 锁内重验 Owner、模板版本、Content provenance 及客户字段后执行 DRAFT 到 ACTIVE。
+     * Owner 原子激活 DRAFT Project
+     */
+    async activateProjectRaw(requestParameters: ActivateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling activateProject().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling activateProject().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling activateProject().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling activateProject().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/activate`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectFromJSON(jsonValue));
+    }
+
+    /**
+     * 锁内重验 Owner、模板版本、Content provenance 及客户字段后执行 DRAFT 到 ACTIVE。
+     * Owner 原子激活 DRAFT Project
+     */
+    async activateProject(requestParameters: ActivateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
+        const response = await this.activateProjectRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * 加入或重激活 Project 成员
@@ -235,6 +348,43 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * 查询可见 Project 完整详情
+     */
+    async getProjectRaw(requestParameters: GetProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectDetail>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling getProject().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 查询可见 Project 完整详情
+     */
+    async getProject(requestParameters: GetProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectDetail> {
+        const response = await this.getProjectRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * 搜索同企业有效 Project 成员候选人
      */
     async listProjectMemberCandidatesRaw(requestParameters: ListProjectMemberCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectMemberCandidatePage>> {
@@ -336,6 +486,57 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async listProjectMembers(requestParameters: ListProjectMembersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectMemberPage> {
         const response = await this.listProjectMembersRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * lifecycle 省略时返回 DRAFT 与 ACTIVE；分页和总数使用相同权限及筛选谓词。
+     * 查询调用人可见的 Project
+     */
+    async listProjectsRaw(requestParameters: ListProjectsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectPage>> {
+        const queryParameters: any = {};
+
+        if (requestParameters['workspaceId'] != null) {
+            queryParameters['workspaceId'] = requestParameters['workspaceId'];
+        }
+
+        if (requestParameters['projectType'] != null) {
+            queryParameters['projectType'] = requestParameters['projectType'];
+        }
+
+        if (requestParameters['lifecycle'] != null) {
+            queryParameters['lifecycle'] = requestParameters['lifecycle'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectPageFromJSON(jsonValue));
+    }
+
+    /**
+     * lifecycle 省略时返回 DRAFT 与 ACTIVE；分页和总数使用相同权限及筛选谓词。
+     * 查询调用人可见的 Project
+     */
+    async listProjects(requestParameters: ListProjectsRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectPage> {
+        const response = await this.listProjectsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -497,6 +698,75 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async removeProjectMember(requestParameters: RemoveProjectMemberRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectMember> {
         const response = await this.removeProjectMemberRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Owner 替换 Project 可变配置完整快照
+     */
+    async updateProjectRaw(requestParameters: UpdateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectDetail>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateProject().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateProject().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateProject().'
+            );
+        }
+
+        if (requestParameters['projectUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'projectUpdateRequest',
+                'Required parameter "projectUpdateRequest" was null or undefined when calling updateProject().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectUpdateRequestToJSON(requestParameters['projectUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * Owner 替换 Project 可变配置完整快照
+     */
+    async updateProject(requestParameters: UpdateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectDetail> {
+        const response = await this.updateProjectRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
