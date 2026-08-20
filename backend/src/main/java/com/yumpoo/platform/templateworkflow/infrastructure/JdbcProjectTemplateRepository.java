@@ -52,6 +52,19 @@ public class JdbcProjectTemplateRepository implements ProjectTemplateRepository 
     }
 
     @Override
+    public Optional<ProjectTemplateDefinition> findForShare(String templateKey, int version) {
+        return jdbcClient.sql(HEADER_SELECT + """
+                        WHERE template_key = :templateKey AND template_version = :version
+                        FOR SHARE
+                        """)
+                .param("templateKey", templateKey)
+                .param("version", version)
+                .query(this::mapHeader)
+                .optional()
+                .map(this::loadChildren);
+    }
+
+    @Override
     public List<ProjectTemplateDefinition> findPublished() {
         return jdbcClient.sql(HEADER_SELECT + """
                         WHERE lifecycle_status = 'PUBLISHED'

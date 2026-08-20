@@ -8,4 +8,6 @@ public interface PublishedProjectTemplateQuery {
     List<ProjectTemplateSnapshot> findAllPublished();
 
     Optional<ProjectTemplateSnapshot> findPublished(String templateKey, int version);
+
+    Optional<ProjectTemplateSnapshot> findPublishedForCreation(String templateKey, int version);
 }

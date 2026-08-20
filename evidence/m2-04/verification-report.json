@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-04",
+  "status": "PASS",
+  "startedAt": "2026-08-20T08:30:00Z",
+  "completedAt": "2026-08-20T09:30:00Z",
+  "command": "pnpm verify:m2-04",
+  "flywayVersion": "23",
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "projectDomainAndDatabase": true,
+    "projectPostgresAtomicity": true,
+    "projectConcurrency": true,
+    "projectHttpIntegration": true,
+    "idempotentByteReplay": true,
+    "backupRestoreProjectMembershipContent": true,
+    "nodeGate": true
+  }
+}

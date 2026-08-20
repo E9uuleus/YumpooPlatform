@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/catalog.project-created-v1.schema.json",
+  "title": "Project created",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "catalog.project_created" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Project" },
+        "aggregateVersion": { "const": 0 },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "projectId", "workspaceId", "code", "name", "projectType", "lifecycle",
+            "ownerUserId", "templateKey", "templateVersion", "initializedContentCount"
+          ],
+          "properties": {
+            "projectId": { "type": "string", "format": "uuid" },
+            "workspaceId": { "type": "string", "format": "uuid" },
+            "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
+            "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "projectType": {
+              "enum": ["PRODUCT_DEVELOPMENT", "PRE_SALES", "IMPLEMENTATION", "HYPERCARE"]
+            },
+            "lifecycle": { "const": "DRAFT" },
+            "ownerUserId": { "type": "string", "format": "uuid" },
+            "templateKey": { "enum": ["RND", "PRE_SALES", "IMPLEMENTATION", "HYPERCARE"] },
+            "templateVersion": { "type": "integer", "minimum": 1 },
+            "initializedContentCount": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    }
+  ]
+}
