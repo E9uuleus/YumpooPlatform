@@ -105,6 +105,56 @@ public record Project(
                 createdByUserId, now, actorUserId, activatedAt, archivedAt);
     }
 
+    public boolean hasSameDetails(
+            String nextName,
+            String nextDescription,
+            String nextCustomerName,
+            String nextCustomerReference,
+            String nextDeliverySite,
+            String nextContactNote
+    ) {
+        return name.equals(normalizeRequired(nextName, 80, "name"))
+                && Objects.equals(description, normalizeOptional(nextDescription, 500, "description"))
+                && Objects.equals(customerName, normalizeOptional(nextCustomerName, 160, "customerName"))
+                && Objects.equals(customerReference,
+                normalizeOptional(nextCustomerReference, 80, "customerReference"))
+                && Objects.equals(deliverySite, normalizeOptional(nextDeliverySite, 160, "deliverySite"))
+                && Objects.equals(contactNote, normalizeOptional(nextContactNote, 500, "contactNote"));
+    }
+
+    public Project updateDetails(
+            String nextName,
+            String nextDescription,
+            String nextCustomerName,
+            String nextCustomerReference,
+            String nextDeliverySite,
+            String nextContactNote,
+            UUID actorUserId,
+            Instant now
+    ) {
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (lifecycle == ProjectLifecycle.ARCHIVED) {
+            throw new IllegalStateException("archived project cannot change settings");
+        }
+        return new Project(id, companyId, workspaceId, code, nextName, nextDescription, projectType,
+                lifecycle, ownerUserId, templateKey, templateVersion, nextCustomerName,
+                nextCustomerReference, nextDeliverySite, nextContactNote, rowVersion + 1,
+                createdAt, createdByUserId, now, actorUserId, activatedAt, archivedAt);
+    }
+
+    public Project activate(UUID actorUserId, Instant now) {
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (lifecycle != ProjectLifecycle.DRAFT) {
+            throw new IllegalStateException("only draft project can be activated");
+        }
+        return new Project(id, companyId, workspaceId, code, name, description, projectType,
+                ProjectLifecycle.ACTIVE, ownerUserId, templateKey, templateVersion, customerName,
+                customerReference, deliverySite, contactNote, rowVersion + 1, createdAt,
+                createdByUserId, now, actorUserId, now, null);
+    }
+
     private static String requireCode(String value) {
         Objects.requireNonNull(value, "code must not be null");
         if (!CODE.matcher(value).matches()) {
