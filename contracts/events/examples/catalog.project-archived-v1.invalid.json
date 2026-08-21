@@ -1,0 +1,23 @@
+{
+  "eventId": "28000000-0000-4000-8000-000000000011",
+  "eventType": "catalog.project_archived",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-21T12:00:00Z",
+  "aggregateType": "Project",
+  "aggregateId": "28000000-0000-4000-8000-000000000012",
+  "aggregateVersion": 4,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "28000000-0000-4000-8000-000000000013" },
+  "requestId": "m2-08-project-archive-invalid",
+  "correlationId": "m2-08-project-archive-invalid",
+  "causationId": null,
+  "payload": {
+    "projectId": "28000000-0000-4000-8000-000000000012",
+    "code": "DELIVERY_01",
+    "fromLifecycle": "ACTIVE",
+    "toLifecycle": "ARCHIVED",
+    "rowVersion": 4,
+    "mode": "GOVERNANCE_OVERRIDE",
+    "blockers": [{ "code": "OPEN_WORK_ITEMS", "count": 3, "itemIds": ["secret"] }]
+  }
+}

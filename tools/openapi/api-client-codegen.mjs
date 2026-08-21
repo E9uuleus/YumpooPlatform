@@ -127,6 +127,16 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   )
   fs.writeFileSync(errorResponsePath, errorResponse, 'utf8')
 
+  const emptyDetailsPath = path.join(sourceRoot, 'models', 'EmptyErrorDetails.ts')
+  let emptyDetails = normalizeText(fs.readFileSync(emptyDetailsPath, 'utf8'))
+  emptyDetails = replaceExactlyOnce(
+    emptyDetails,
+    "        'blockers': json['blockers'] == null ? undefined : ((json['blockers'] as Array<any>).map(SafeBlockerFromJSON)),",
+    "        ...(json['blockers'] == null ? {} : { 'blockers': ((json['blockers'] as Array<any>).map(SafeBlockerFromJSON)) }),",
+    'EmptyErrorDetails 可选 blocker 精确属性兼容',
+  )
+  fs.writeFileSync(emptyDetailsPath, emptyDetails, 'utf8')
+
   for (const relative of listGeneratedSources(sourceRoot)) {
     const generatedPath = path.join(sourceRoot, ...relative.split('/'))
     const generated = normalizeText(fs.readFileSync(generatedPath, 'utf8'))

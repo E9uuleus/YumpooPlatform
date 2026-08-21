@@ -18,7 +18,8 @@
             "workspaceId": { "type": "string", "format": "uuid" },
             "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
             "fromStatus": { "const": "ACTIVE" },
-            "toStatus": { "const": "ARCHIVED" }
+            "toStatus": { "const": "ARCHIVED" },
+            "mode": { "enum": ["NORMAL", "GOVERNANCE_OVERRIDE"] }
           }
         }
       }

@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { SafeBlocker } from './SafeBlocker';
+import {
+    SafeBlockerFromJSON,
+    SafeBlockerFromJSONTyped,
+    SafeBlockerToJSON,
+    SafeBlockerToJSONTyped,
+} from './SafeBlocker';
+
 /**
  * 通用错误详情默认为空；需要稳定机器可读原因的业务冲突可返回 reason。
  *
@@ -20,11 +28,17 @@ import { mapValues } from '../runtime';
  */
 export interface EmptyErrorDetails {
     /**
-     *
+     * M2-08 生命周期治理稳定原因；其他业务域可继续使用各自稳定原因。
      * @type {string}
      * @memberof EmptyErrorDetails
      */
     reason?: string;
+    /**
+     * 仅包含稳定分类 code 与非负聚合 count，不含对象标识或业务正文。
+     * @type {Array<SafeBlocker>}
+     * @memberof EmptyErrorDetails
+     */
+    blockers?: Array<SafeBlocker>;
 }
 
 /**
@@ -45,6 +59,7 @@ export function EmptyErrorDetailsFromJSONTyped(json: any, ignoreDiscriminator: b
     return {
 
         'reason': json['reason'] == null ? undefined : json['reason'],
+        ...(json['blockers'] == null ? {} : { 'blockers': ((json['blockers'] as Array<any>).map(SafeBlockerFromJSON)) }),
     };
 }
 
@@ -60,5 +75,6 @@ export function EmptyErrorDetailsToJSONTyped(value?: EmptyErrorDetails | null, i
     return {
 
         'reason': value['reason'],
+        'blockers': value['blockers'] == null ? undefined : ((value['blockers'] as Array<any>).map(SafeBlockerToJSON)),
     };
 }

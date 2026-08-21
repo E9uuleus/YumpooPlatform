@@ -1,0 +1,15 @@
+{
+  "eventId": "28000000-0000-4000-8000-000000000031",
+  "eventType": "catalog.project_reopened",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-21T12:10:00Z",
+  "aggregateType": "Project",
+  "aggregateId": "28000000-0000-4000-8000-000000000032",
+  "aggregateVersion": 5,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "28000000-0000-4000-8000-000000000033" },
+  "requestId": "m2-08-project-reopen-invalid",
+  "correlationId": "m2-08-project-reopen-invalid",
+  "causationId": null,
+  "payload": { "projectId": "28000000-0000-4000-8000-000000000032", "code": "DELIVERY_01", "fromLifecycle": "ARCHIVED", "toLifecycle": "DRAFT", "rowVersion": 5 }
+}

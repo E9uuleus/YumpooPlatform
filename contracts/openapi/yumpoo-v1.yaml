@@ -1018,6 +1018,124 @@ paths:
         '428': { $ref: '#/components/responses/PreconditionRequired' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /projects/{projectId}/archive:
+    post:
+      tags: [Projects]
+      operationId: archiveProject
+      summary: Owner 普通归档 ACTIVE Project
+      description: 锁定 Project 后按声明的真实 provider 顺序收集 blocker；存在 blocker 时安全返回分类计数。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/ProjectChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /projects/{projectId}/restore:
+    post:
+      tags: [Projects]
+      operationId: restoreProject
+      summary: CompanyAdmin 恢复 ARCHIVED Project
+      description: 锁内重验 Owner、ACTIVE membership、用户状态、模板可解释性和 ACTIVE Workspace。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/ProjectChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/workspace-moves:
+    post:
+      tags: [Projects]
+      operationId: moveProjectWorkspace
+      summary: CompanyAdmin 迁移 DRAFT 或 ACTIVE Project 到 ACTIVE Workspace
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectWorkspaceMoveRequest' } } }
+      responses:
+        '200': { $ref: '#/components/responses/ProjectChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /admin/governance-overrides:
+    post:
+      tags: [Administration]
+      operationId: createGovernanceOverride
+      summary: CompanyAdmin 执行显式生命周期治理覆盖
+      description: 稳定 4xx 失败与同一幂等结果一并固化；503/500 不固化并允许原键重试。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/GovernanceOverrideRequest' } } }
+      responses:
+        '200':
+          description: 覆盖成功后的目标安全快照。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { type: object } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    get:
+      tags: [Administration]
+      operationId: listGovernanceOverrides
+      summary: CompanyAdmin 分页查询本企业治理覆盖历史
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: action, in: query, required: false, schema: { $ref: '#/components/schemas/GovernanceOverrideAction' } }
+        - { name: targetType, in: query, required: false, schema: { $ref: '#/components/schemas/GovernanceTargetType' } }
+        - { name: targetId, in: query, required: false, schema: { $ref: '#/components/schemas/Uuid' } }
+        - { name: result, in: query, required: false, schema: { $ref: '#/components/schemas/GovernanceOverrideResult' } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: size, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Company 隔离的稳定倒序分页。
+          content: { application/json: { schema: { $ref: '#/components/schemas/GovernanceOverridePage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
   /projects/{projectId}/products:
     get:
       tags: [Projects]
@@ -1526,13 +1644,82 @@ components:
     ProjectCapabilities:
       type: object
       additionalProperties: false
-      required: [canUpdateSettings, canActivate, canManageMembers, canReassignOwner, canManageProductLinks]
+      required: [canUpdateSettings, canActivate, canManageMembers, canReassignOwner,
+        canManageProductLinks, canArchive, canRestore, canMoveWorkspace, canOverrideArchive]
       properties:
         canUpdateSettings: { type: boolean, readOnly: true }
         canActivate: { type: boolean, readOnly: true }
         canManageMembers: { type: boolean, readOnly: true }
         canReassignOwner: { type: boolean, readOnly: true }
         canManageProductLinks: { type: boolean, readOnly: true }
+        canArchive: { type: boolean, readOnly: true }
+        canRestore: { type: boolean, readOnly: true }
+        canMoveWorkspace: { type: boolean, readOnly: true }
+        canOverrideArchive: { type: boolean, readOnly: true }
+
+    ProjectWorkspaceMoveRequest:
+      type: object
+      additionalProperties: false
+      required: [targetWorkspaceId, reason]
+      properties:
+        targetWorkspaceId: { $ref: '#/components/schemas/Uuid' }
+        reason: { type: string, minLength: 10, maxLength: 500 }
+
+    GovernanceOverrideAction:
+      type: string
+      enum: [PROJECT_ARCHIVE_WITH_OPEN_ITEMS, WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS]
+
+    GovernanceTargetType:
+      type: string
+      enum: [PROJECT, WORKSPACE]
+
+    GovernanceOverrideResult:
+      type: string
+      enum: [SUCCEEDED, FAILED]
+
+    GovernanceOverrideRequest:
+      type: object
+      additionalProperties: false
+      required: [action, targetType, targetId, reason]
+      properties:
+        action: { $ref: '#/components/schemas/GovernanceOverrideAction' }
+        targetType: { $ref: '#/components/schemas/GovernanceTargetType' }
+        targetId: { $ref: '#/components/schemas/Uuid' }
+        reason: { type: string, minLength: 10, maxLength: 500 }
+
+    GovernanceOverrideRecord:
+      type: object
+      additionalProperties: false
+      required: [id, companyId, action, targetType, targetId, reason, requestHash,
+        idempotencyKey, actorUserId, beforeSnapshot, blockerCounts, result, occurredAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        companyId: { $ref: '#/components/schemas/Uuid' }
+        action: { $ref: '#/components/schemas/GovernanceOverrideAction' }
+        targetType: { $ref: '#/components/schemas/GovernanceTargetType' }
+        targetId: { $ref: '#/components/schemas/Uuid' }
+        reason: { type: string, minLength: 10, maxLength: 500 }
+        requestHash: { type: string, pattern: '^[0-9a-f]{64}$' }
+        idempotencyKey: { $ref: '#/components/schemas/Uuid' }
+        actorUserId: { $ref: '#/components/schemas/Uuid' }
+        beforeSnapshot: { type: object, additionalProperties: true }
+        afterSnapshot: { type: object, additionalProperties: true, nullable: true }
+        blockerCounts:
+          type: array
+          items: { $ref: '#/components/schemas/SafeBlocker' }
+        result: { $ref: '#/components/schemas/GovernanceOverrideResult' }
+        errorCode: { type: string, nullable: true }
+        occurredAt: { type: string, format: date-time }
+
+    GovernanceOverridePage:
+      type: object
+      additionalProperties: false
+      required: [items, offset, size, totalElements]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/GovernanceOverrideRecord' } }
+        offset: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
 
     ProjectProductRelationType:
       type: string
@@ -2437,6 +2624,25 @@ components:
         reason:
           type: string
           pattern: '^[A-Z][A-Z0-9_]{1,63}$'
+          description: M2-08 生命周期治理稳定原因；其他业务域可继续使用各自稳定原因。
+          x-stable-values:
+            - PROJECT_ARCHIVE_BLOCKED
+            - WORKSPACE_ARCHIVE_BLOCKED
+            - WORKSPACE_UNCHANGED
+        blockers:
+          type: array
+          description: 仅包含稳定分类 code 与非负聚合 count，不含对象标识或业务正文。
+          items: { $ref: '#/components/schemas/SafeBlocker' }
+
+    SafeBlocker:
+      type: object
+      additionalProperties: false
+      required: [code, count]
+      properties:
+        code:
+          type: string
+          enum: [OPEN_WORK_ITEMS, PENDING_WORKLOG_APPROVALS, OPEN_PRODUCT_FEEDBACK, CURRENT_PROJECTS]
+        count: { type: integer, format: int64, minimum: 0 }
 
     ErrorResponse:
       description: ApiErrorBase 的具体响应类型；details 默认为空，特定冲突可带稳定 reason。
