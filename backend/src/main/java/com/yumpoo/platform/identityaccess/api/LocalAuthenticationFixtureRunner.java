@@ -2,10 +2,8 @@ package com.yumpoo.platform.identityaccess.api;
 
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
-import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleCommand;
-import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleMode;
+import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleActor;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMaintenanceUseCase;
-import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMutationResult;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningResult;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
@@ -116,21 +114,13 @@ public final class LocalAuthenticationFixtureRunner implements ApplicationRunner
             );
         } else if (adminRoles.contains(PlatformRoleCode.APP_MANAGER)) {
             actor = new ActorState(localAdmin.userId(), localAdmin.authorizationVersion());
-        } else if (adminRoles.isEmpty() && backupRoles.isEmpty()) {
-            PlatformRoleMutationResult manager = maintenanceUseCase.execute(
-                    new MaintenanceRoleCommand(
-                            companyId,
-                            backupManager.userId(),
-                            MaintenanceRoleMode.BOOTSTRAP,
-                            REASON
-                    )
+        } else {
+            MaintenanceRoleActor manager = maintenanceUseCase.ensureAvailableAppManager(
+                    companyId,
+                    backupManager.userId(),
+                    REASON
             );
             actor = new ActorState(manager.userId(), manager.authorizationVersion());
-        } else {
-            throw new IllegalStateException(
-                    "Local authentication fixture cannot find its governed APP_MANAGER; "
-                            + "use a clean local database or restore the configured fixture roles"
-            );
         }
 
         long targetRowVersion = localAdmin.rowVersion();

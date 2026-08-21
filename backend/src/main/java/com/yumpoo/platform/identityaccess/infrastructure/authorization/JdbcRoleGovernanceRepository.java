@@ -87,6 +87,29 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
     }
 
     @Override
+    public Optional<RoleUserSnapshot> findAvailableAppManager(UUID companyId) {
+        return jdbcClient.sql("""
+                        SELECT member.id, member.company_id, member.employment_status,
+                               member.account_status, member.authorization_version,
+                               member.row_version
+                        FROM yumpoo.identity_user member
+                        JOIN yumpoo.platform_role_assignment assignment
+                          ON assignment.company_id = member.company_id
+                         AND assignment.user_id = member.id
+                         AND assignment.role_code = 'APP_MANAGER'
+                         AND assignment.status = 'ACTIVE'
+                        WHERE member.company_id = :companyId
+                          AND member.employment_status = 'ACTIVE'
+                          AND member.account_status = 'ENABLED'
+                        ORDER BY assignment.granted_at, assignment.id
+                        LIMIT 1
+                        """)
+                .param("companyId", companyId)
+                .query((resultSet, rowNumber) -> mapUser(resultSet))
+                .optional();
+    }
+
+    @Override
     public Optional<RoleAssignmentSnapshot> lockAssignment(
             UUID companyId, UUID assignmentId, ManagedPlatformRole expectedRole
     ) {

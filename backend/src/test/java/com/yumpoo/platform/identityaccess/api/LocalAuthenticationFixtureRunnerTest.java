@@ -1,10 +1,8 @@
 package com.yumpoo.platform.identityaccess.api;
 
-import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleCommand;
+import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleActor;
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMaintenanceUseCase;
-import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMutationResult;
-import com.yumpoo.platform.identityaccess.application.authorization.RoleAssignmentStatus;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningOutcome;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningResult;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
@@ -105,19 +103,8 @@ class LocalAuthenticationFixtureRunnerTest {
                 .thenReturn(member(backupId));
         when(roleQuery.findActiveRoleCodes(companyId, adminId)).thenReturn(Set.of());
         when(roleQuery.findActiveRoleCodes(companyId, backupId)).thenReturn(Set.of());
-        when(maintenance.execute(any(MaintenanceRoleCommand.class))).thenReturn(
-                new PlatformRoleMutationResult(
-                        UUID.randomUUID(),
-                        companyId,
-                        backupId,
-                        ManagedPlatformRole.APP_MANAGER,
-                        RoleAssignmentStatus.ACTIVE,
-                        0,
-                        1,
-                        1,
-                        NOW
-                )
-        );
+        when(maintenance.ensureAvailableAppManager(companyId, backupId, REASON))
+                .thenReturn(new MaintenanceRoleActor(backupId, 1));
         when(roleCommands.grant(any())).thenAnswer(invocation -> {
             PlatformRoleGrantCommand command = invocation.getArgument(0);
             long nextVersion = command.role() == PlatformRoleCode.COMPANY_ADMIN ? 1 : 2;
@@ -149,9 +136,11 @@ class LocalAuthenticationFixtureRunnerTest {
                 "本地备份管理员",
                 "Local Development"
         );
-        verify(maintenance).execute(any(MaintenanceRoleCommand.class));
+        verify(maintenance).ensureAvailableAppManager(companyId, backupId, REASON);
         verify(roleCommands, org.mockito.Mockito.times(2)).grant(any());
     }
+
+    private static final String REASON = "Local development identity fixture";
 
     private static LocalAuthenticationFixtureRunner runner(
             MockEnvironment environment,

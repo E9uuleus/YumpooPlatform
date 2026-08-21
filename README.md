@@ -439,7 +439,7 @@ $env:SPRING_PROFILES_ACTIVE = 'local'
 $env:YUMPOO_LOCAL_AUTH_ENABLED = 'true'
 ```
 
-默认登录成员为 `local-company-admin`，显示名为“本地测试管理员”。需要固定其他身份时可设置 `YUMPOO_LOCAL_AUTH_MEMBER_ID`、`YUMPOO_LOCAL_AUTH_DISPLAY_NAME`、`YUMPOO_LOCAL_AUTH_BACKUP_MEMBER_ID` 与 `YUMPOO_LOCAL_AUTH_BACKUP_DISPLAY_NAME`。该模式默认关闭，只允许 `local` profile、`127.0.0.1`/`localhost`/IPv6 loopback，并拒绝与 `prod`、企微 OAuth、企微通讯录或受控身份提供者同时启用；已有但不兼容的本地角色治理数据会使启动失败，不会被静默覆盖。恢复正常认证时移除上述两个变量并清理浏览器本地 Cookie。
+默认登录成员为 `local-company-admin`，显示名为“本地测试管理员”。需要固定其他身份时可设置 `YUMPOO_LOCAL_AUTH_MEMBER_ID`、`YUMPOO_LOCAL_AUTH_DISPLAY_NAME`、`YUMPOO_LOCAL_AUTH_BACKUP_MEMBER_ID` 与 `YUMPOO_LOCAL_AUTH_BACKUP_DISPLAY_NAME`。该模式默认关闭，只允许 `local` profile、`127.0.0.1`/`localhost`/IPv6 loopback，并拒绝与 `prod`、企微 OAuth、企微通讯录或受控身份提供者同时启用；已有治理数据会复用当前可用 APP_MANAGER，只有没有可用管理员时才按状态执行首管引导或紧急恢复。恢复正常认证时移除上述两个变量并清理浏览器本地 Cookie。
 
 先启动在线 SPA：
 
