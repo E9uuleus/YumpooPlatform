@@ -35,7 +35,17 @@ const run = {
   phase: 'COMPLETED',
   startedAt: new Date(),
   finishedAt: new Date(),
-  counts: { discovered: 1, succeeded: 1, failed: 0 },
+  counts: {
+    discovered: 1,
+    staged: 1,
+    created: 1,
+    updated: 0,
+    unchanged: 0,
+    left: 0,
+    returned: 0,
+    failed: 0,
+    notApplied: 0,
+  },
   requestId: 'req-run',
 } as unknown as DirectorySyncRun
 const emptyFailures = { items: [], page: 0, size: 20, totalElements: 0, totalPages: 0 } as DirectorySyncFailurePage
@@ -65,7 +75,7 @@ describe('同步运行冲突恢复', () => {
     api.triggerDirectorySync.mockRejectedValue(conflict(`/api/v1/admin/directory-sync-runs/${runId}`))
     const wrapper = mount(IdentitySyncRunsView)
     await flushPromises()
-    await wrapper.get('.toolbar .el-button').trigger('click')
+    await wrapper.get('.yp-filter-bar__actions .el-button').trigger('click')
     await flushPromises()
     expect(api.getDirectorySyncRun).toHaveBeenCalledWith({ runId })
     expect(api.triggerDirectorySync).toHaveBeenCalledOnce()
@@ -76,7 +86,7 @@ describe('同步运行冲突恢复', () => {
     api.triggerDirectorySync.mockRejectedValue(conflict(`https://evil.example/api/v1/admin/directory-sync-runs/${runId}`))
     const wrapper = mount(IdentitySyncRunsView)
     await flushPromises()
-    await wrapper.get('.toolbar .el-button').trigger('click')
+    await wrapper.get('.yp-filter-bar__actions .el-button').trigger('click')
     await flushPromises()
     expect(api.getDirectorySyncRun).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('已有同步运行')

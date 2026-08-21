@@ -70,6 +70,22 @@ describe('M1-12 Web 全局壳', () => {
     expect(wrapper.text()).toContain('成员管理')
   })
 
+  it('项目目录仅显示真实入口，选中项目后显示详情导航并正确高亮', async () => {
+    const catalog = await mountApplication('/projects')
+    await flushPromises()
+    const catalogItems = catalog.findAll('.context-navigation > .global-navigation button')
+    expect(catalogItems.map(item => item.text())).toEqual(['项目目录'])
+    expect(catalogItems[0]?.attributes('aria-current')).toBe('page')
+    catalog.unmount()
+
+    const details = await mountApplication('/projects/project-42/members')
+    await flushPromises()
+    const detailItems = details.findAll('.context-navigation > .global-navigation button')
+    expect(detailItems.map(item => item.text())).toEqual(['项目目录', '概览', '成员', '设置'])
+    expect(detailItems.find(item => item.text() === '成员')?.attributes('aria-current')).toBe('page')
+    details.unmount()
+  })
+
   it('Electron 匿名登录页仅通过受控桥打开系统浏览器', async () => {
     const start = vi.fn(async () => undefined)
     Object.defineProperty(window, 'yumpooDesktop', {
@@ -87,7 +103,7 @@ describe('M1-12 Web 全局壳', () => {
     const wrapper = await mountApplication('/login')
     await flushPromises()
     expect(wrapper.text()).toContain('在系统默认浏览器中完成')
-    await wrapper.get('button').trigger('click')
+    await wrapper.get('.login-action').trigger('click')
     expect(start).toHaveBeenCalledOnce()
   })
 })

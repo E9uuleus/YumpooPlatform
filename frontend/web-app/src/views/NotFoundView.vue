@@ -6,18 +6,20 @@ const router = useRouter()
 </script>
 
 <template>
-  <el-result
-    icon="info"
-    title="页面不存在"
-    sub-title="请检查地址，或返回 Yumpoo 首页。"
-  >
-    <template #extra>
-      <el-button
-        type="primary"
-        @click="router.push({ name: 'home' })"
-      >
-        返回首页
-      </el-button>
-    </template>
-  </el-result>
+  <main class="result-page">
+    <el-result
+      icon="info"
+      title="页面不存在"
+      sub-title="请检查地址，或返回 YumpooPlatform 工作台。"
+    >
+      <template #extra>
+        <el-button
+          type="primary"
+          @click="router.push({ name: 'home' })"
+        >
+          返回工作台
+        </el-button>
+      </template>
+    </el-result>
+  </main>
 </template>

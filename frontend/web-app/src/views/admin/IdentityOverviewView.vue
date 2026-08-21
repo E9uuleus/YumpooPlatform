@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import type { Company, WeComIntegrationStatus } from '@yumpoo/api-client'
-import { ElAlert, ElCard, ElDescriptions, ElDescriptionsItem, ElSkeleton, ElTag } from 'element-plus'
+import {
+  ElAlert,
+  ElCard,
+  ElDescriptions,
+  ElDescriptionsItem,
+  ElSkeleton,
+} from 'element-plus'
 import { onMounted, ref } from 'vue'
 import { identityAdministrationApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
+import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 
 const company = ref<Company>()
 const status = ref<WeComIntegrationStatus>()
 const loading = ref(true)
 const error = ref<ApiProblem>()
-
-function stateType(value: boolean): 'success' | 'info' {
-  return value ? 'success' : 'info'
-}
 
 function formatTime(value?: Date | null): string {
   return value ? value.toLocaleString('zh-CN') : '暂无'
@@ -90,14 +93,18 @@ onMounted(load)
         border
       >
         <el-descriptions-item label="运行开关">
-          <el-tag :type="stateType(status.oauth.enabled)">
-            {{ status.oauth.enabled ? '已启用' : '未启用' }}
-          </el-tag>
+          <yp-status-tag
+            domain="integration"
+            :status="status.oauth.enabled ? 'ENABLED' : 'DISABLED'"
+            effect="soft"
+          />
         </el-descriptions-item>
-        <el-descriptions-item label="配置完整">
-          <el-tag :type="stateType(status.oauth.configured)">
-            {{ status.oauth.configured ? '是' : '否' }}
-          </el-tag>
+        <el-descriptions-item label="配置状态">
+          <yp-status-tag
+            domain="integration"
+            :status="status.oauth.configured ? 'CONFIGURED' : 'INCOMPLETE'"
+            effect="soft"
+          />
         </el-descriptions-item>
         <el-descriptions-item label="Corp ID">
           {{ status.oauth.corpIdMasked ?? '未配置' }}
@@ -120,14 +127,18 @@ onMounted(load)
         border
       >
         <el-descriptions-item label="运行开关">
-          <el-tag :type="stateType(status.directory.enabled)">
-            {{ status.directory.enabled ? '已启用' : '未启用' }}
-          </el-tag>
+          <yp-status-tag
+            domain="integration"
+            :status="status.directory.enabled ? 'ENABLED' : 'DISABLED'"
+            effect="soft"
+          />
         </el-descriptions-item>
-        <el-descriptions-item label="配置完整">
-          <el-tag :type="stateType(status.directory.configured)">
-            {{ status.directory.configured ? '是' : '否' }}
-          </el-tag>
+        <el-descriptions-item label="配置状态">
+          <yp-status-tag
+            domain="integration"
+            :status="status.directory.configured ? 'CONFIGURED' : 'INCOMPLETE'"
+            effect="soft"
+          />
         </el-descriptions-item>
         <el-descriptions-item label="Corp ID">
           {{ status.directory.corpIdMasked ?? '未配置' }}
@@ -135,17 +146,11 @@ onMounted(load)
         <el-descriptions-item label="目录凭据">
           {{ status.directory.directorySecretConfigured ? '已安全注入' : '未配置' }}
         </el-descriptions-item>
-        <el-descriptions-item label="资料凭据">
-          {{ status.directory.profileSecretConfigured ? '已安全注入' : '未配置' }}
-        </el-descriptions-item>
         <el-descriptions-item label="最近成功">
           {{ formatTime(status.lastSuccessfulRunAt) }}
         </el-descriptions-item>
         <el-descriptions-item label="最近异常">
           {{ formatTime(status.lastProblemAt) }}
-        </el-descriptions-item>
-        <el-descriptions-item label="异常码">
-          {{ status.lastProblemCode ?? '无' }}
         </el-descriptions-item>
       </el-descriptions>
     </el-card>
