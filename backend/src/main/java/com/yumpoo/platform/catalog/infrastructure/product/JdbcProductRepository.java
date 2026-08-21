@@ -31,13 +31,29 @@ public class JdbcProductRepository implements ProductRepository {
             """;
 
     private static final String VISIBLE_PREDICATE = """
-            company_id = :companyId
-              AND (:administrator OR owner_user_id = :actorUserId)
+            p.company_id = :companyId
+              AND (:administrator OR p.owner_user_id = :actorUserId OR EXISTS (
+                    SELECT 1
+                    FROM yumpoo.project_product_link ppl
+                    JOIN yumpoo.project_membership pm
+                      ON pm.company_id = ppl.company_id
+                     AND pm.project_id = ppl.project_id
+                     AND pm.user_id = :actorUserId
+                     AND pm.status = 'ACTIVE'
+                    WHERE ppl.company_id = p.company_id
+                      AND ppl.product_id = p.id
+                      AND ppl.removed_at IS NULL
+              ))
             """;
 
     private static final String STATUS_PREDICATE = """
-              AND ((:includeActive AND status = 'ACTIVE')
-                   OR (:includeArchived AND status = 'ARCHIVED'))
+              AND ((:includeActive AND p.status = 'ACTIVE')
+                   OR (:includeArchived AND p.status = 'ARCHIVED'))
+            """;
+
+    private static final String SEARCH_PREDICATE = """
+              AND (:allProducts OR p.product_code LIKE :codePrefix ESCAPE '\\'
+                   OR lower(p.name) LIKE :namePrefix ESCAPE '\\')
             """;
 
     private static final String FIND_BY_ID = "SELECT " + COLUMNS + " FROM yumpoo.product "
@@ -106,16 +122,19 @@ public class JdbcProductRepository implements ProductRepository {
     public ProductPageResult findVisible(
             CurrentActor actor,
             ProductListStatus status,
+            String query,
             OffsetPageRequest page
     ) {
         boolean administrator = actor.hasRole(PlatformRoleCode.COMPANY_ADMIN);
-        long total = bindVisibility(jdbcClient.sql("SELECT count(*) FROM yumpoo.product WHERE "
-                        + VISIBLE_PREDICATE + STATUS_PREDICATE), actor, administrator, status)
+        long total = bindVisibility(jdbcClient.sql("SELECT count(*) FROM yumpoo.product p WHERE "
+                        + VISIBLE_PREDICATE + STATUS_PREDICATE + SEARCH_PREDICATE), actor,
+                        administrator, status, query)
                 .query(Long.class).single();
-        List<Product> items = bindVisibility(jdbcClient.sql("SELECT " + COLUMNS
-                                + " FROM yumpoo.product WHERE " + VISIBLE_PREDICATE + STATUS_PREDICATE
-                                + " ORDER BY name, product_code, id LIMIT :limit OFFSET :offset"),
-                        actor, administrator, status)
+        List<Product> items = bindVisibility(jdbcClient.sql("SELECT p.*"
+                                + " FROM yumpoo.product p WHERE " + VISIBLE_PREDICATE
+                                + STATUS_PREDICATE + SEARCH_PREDICATE
+                                + " ORDER BY p.name, p.product_code, p.id LIMIT :limit OFFSET :offset"),
+                        actor, administrator, status, query)
                 .param("limit", page.size())
                 .param("offset", (long) page.page() * page.size())
                 .query(JdbcProductRepository::map)
@@ -125,7 +144,7 @@ public class JdbcProductRepository implements ProductRepository {
 
     @Override
     public Optional<Product> findVisibleById(CurrentActor actor, UUID productId) {
-        return jdbcClient.sql("SELECT " + COLUMNS + " FROM yumpoo.product WHERE "
+        return jdbcClient.sql("SELECT p.* FROM yumpoo.product p WHERE "
                         + VISIBLE_PREDICATE + " AND id = :productId")
                 .param("companyId", actor.companyId())
                 .param("administrator", actor.hasRole(PlatformRoleCode.COMPANY_ADMIN))
@@ -215,14 +234,23 @@ public class JdbcProductRepository implements ProductRepository {
             JdbcClient.StatementSpec statement,
             CurrentActor actor,
             boolean administrator,
-            ProductListStatus status
+            ProductListStatus status,
+            String query
     ) {
+        String escaped = query == null ? "" : escapeLike(query);
         return statement
                 .param("companyId", actor.companyId())
                 .param("administrator", administrator)
                 .param("actorUserId", actor.userId())
                 .param("includeActive", status.includeActive())
-                .param("includeArchived", status.includeArchived());
+                .param("includeArchived", status.includeArchived())
+                .param("allProducts", query == null)
+                .param("codePrefix", escaped.toUpperCase(java.util.Locale.ROOT) + "%")
+                .param("namePrefix", escaped.toLowerCase(java.util.Locale.ROOT) + "%");
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     private static JdbcClient.StatementSpec bind(JdbcClient.StatementSpec statement, Product product) {

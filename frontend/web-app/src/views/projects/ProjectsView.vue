@@ -6,11 +6,13 @@ import {
   ProjectLifecycle,
   ProjectLifecycleFilter,
   ProjectType,
+  ProductStatusFilter,
   readCsrfToken,
   type Member,
   type ProjectPage,
   type ProjectSummary,
   type ProjectTemplateVersion,
+  type Product,
   type Workspace,
 } from '@yumpoo/api-client'
 import {
@@ -32,7 +34,7 @@ import {
 } from 'element-plus'
 import { computed, onMounted, reactive, ref, type DefineComponent } from 'vue'
 import { useRouter } from 'vue-router'
-import { identityAdministrationApi, projectsApi, projectTemplatesApi, workspacesApi } from '../../api/client'
+import { identityAdministrationApi, productsApi, projectsApi, projectTemplatesApi, workspacesApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
@@ -57,6 +59,9 @@ const owners = ref<Member[]>([])
 const workspaceId = ref<string>()
 const projectType = ref<ProjectType>()
 const lifecycle = ref<ProjectLifecycleFilter>()
+const productId = ref<string>()
+const products = ref<Product[]>([])
+const productSearching = ref(false)
 const page = ref(0)
 const size = ref(20)
 const loading = ref(false)
@@ -105,6 +110,13 @@ const activeFilters = computed<ActiveFilter[]>(() => [
         valueLabel: lifecycle.value === ProjectLifecycleFilter.All
           ? '全部'
           : getStatusPresentation('project-lifecycle', lifecycle.value).label,
+      }]
+    : []),
+  ...(productId.value
+    ? [{
+        key: 'product',
+        label: 'Product',
+        valueLabel: products.value.find(item => item.id === productId.value)?.name ?? productId.value,
       }]
     : []),
 ])
@@ -163,6 +175,7 @@ async function load(): Promise<void> {
       ...(workspaceId.value ? { workspaceId: workspaceId.value } : {}),
       ...(projectType.value ? { projectType: projectType.value } : {}),
       ...(lifecycle.value ? { lifecycle: lifecycle.value } : {}),
+      ...(productId.value ? { productId: productId.value } : {}),
       page: page.value,
       size: size.value,
     })
@@ -170,6 +183,27 @@ async function load(): Promise<void> {
     error.value = await toApiProblem(reason)
   } finally {
     loading.value = false
+  }
+}
+
+async function searchProducts(query: string): Promise<void> {
+  const normalized = query.trim()
+  if (!normalized) {
+    if (!productId.value) products.value = []
+    return
+  }
+  productSearching.value = true
+  try {
+    products.value = (await productsApi.listProducts({
+      status: ProductStatusFilter.Active,
+      query: normalized,
+      page: 0,
+      size: 20,
+    })).items
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  } finally {
+    productSearching.value = false
   }
 }
 
@@ -203,6 +237,7 @@ function removeFilter(key: string): void {
   if (key === 'workspace') workspaceId.value = undefined
   if (key === 'type') projectType.value = undefined
   if (key === 'lifecycle') lifecycle.value = undefined
+  if (key === 'product') productId.value = undefined
   applyFilters()
 }
 
@@ -210,6 +245,7 @@ function clearFilters(): void {
   workspaceId.value = undefined
   projectType.value = undefined
   lifecycle.value = undefined
+  productId.value = undefined
   applyFilters()
 }
 
@@ -393,6 +429,23 @@ onMounted(async () => {
             <el-option
               label="全部"
               :value="ProjectLifecycleFilter.All"
+            />
+          </el-select>
+          <el-select
+            v-model="productId"
+            clearable
+            filterable
+            remote
+            :remote-method="searchProducts"
+            :loading="productSearching"
+            placeholder="按 Product 筛选"
+            aria-label="Product"
+          >
+            <el-option
+              v-for="product in products"
+              :key="product.id"
+              :label="`${product.name} (${product.code})`"
+              :value="product.id"
             />
           </el-select>
           <el-button

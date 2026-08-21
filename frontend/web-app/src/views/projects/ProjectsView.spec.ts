@@ -31,6 +31,7 @@ const api = vi.hoisted(() => ({
   listWorkspaces: vi.fn(),
   listProjectTemplates: vi.fn(),
   listMembers: vi.fn(),
+  listProducts: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -41,6 +42,7 @@ vi.mock('../../api/client', () => ({
   workspacesApi: { listWorkspaces: api.listWorkspaces },
   projectTemplatesApi: { listProjectTemplates: api.listProjectTemplates },
   identityAdministrationApi: { listMembers: api.listMembers },
+  productsApi: { listProducts: api.listProducts },
 }))
 vi.mock('@yumpoo/api-client', async (importOriginal) => ({
   ...await importOriginal<typeof import('@yumpoo/api-client')>(),
@@ -62,6 +64,7 @@ const summary: ProjectSummary = {
   ownerUserId: 'owner-1', ownerDisplayName: '负责人甲', actorAccess: ProjectActorAccess.Owner,
   capabilities: {
     canUpdateSettings: true, canActivate: false, canManageMembers: true, canReassignOwner: true,
+    canManageProductLinks: true,
   },
   rowVersion: 1, etag: '"v1"',
 }
@@ -113,6 +116,7 @@ describe('项目目录 Workspace 式重构', () => {
     api.listProjectTemplates.mockResolvedValue({ items: [template] })
     api.listMembers.mockResolvedValue({ items: [owner], page: 0, size: 100, totalElements: 1, totalPages: 1 })
     api.createProject.mockResolvedValue({ id: 'project-created' } as Project)
+    api.listProducts.mockResolvedValue({ items: [], page: 0, size: 20, totalElements: 0, totalPages: 0 })
   })
 
   it('保留分页与筛选参数，并展示摘要接口已有字段', async () => {

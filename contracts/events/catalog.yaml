@@ -221,3 +221,18 @@ events:
     schema: schemas/catalog.project-owner-reassigned-v1.schema.json
     validExamples: [examples/catalog.project-owner-reassigned-v1.json]
     invalidExamples: [examples/catalog.project-owner-reassigned-v1.invalid.json]
+  - eventType: catalog.product_linked_to_project
+    eventVersion: 1
+    schema: schemas/catalog.product-linked-to-project-v1.schema.json
+    validExamples: [examples/catalog.product-linked-to-project-v1.json]
+    invalidExamples: [examples/catalog.product-linked-to-project-v1.invalid.json]
+  - eventType: catalog.project_product_link_updated
+    eventVersion: 1
+    schema: schemas/catalog.project-product-link-updated-v1.schema.json
+    validExamples: [examples/catalog.project-product-link-updated-v1.json]
+    invalidExamples: [examples/catalog.project-product-link-updated-v1.invalid.json]
+  - eventType: catalog.product_unlinked_from_project
+    eventVersion: 1
+    schema: schemas/catalog.product-unlinked-from-project-v1.schema.json
+    validExamples: [examples/catalog.product-unlinked-from-project-v1.json]
+    invalidExamples: [examples/catalog.product-unlinked-from-project-v1.invalid.json]

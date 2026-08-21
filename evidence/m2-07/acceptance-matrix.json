@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-07",
+  "verifiedSlices": [
+    {
+      "requirementId": "PPM-002",
+      "scope": "Project 列表按有效 Product 关系筛选，权限、总数与稳定分页使用同一 SQL 口径",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/infrastructure/project/JdbcProjectRepository.java", "backend/src/test/java/com/yumpoo/platform/catalog/infrastructure/project/ProjectProductLinkIT.java"]
+    },
+    {
+      "requirementId": "PPM-008",
+      "scope": "同一 Product 可按四种类型关联，单个 Project 最多一个有效主 Product",
+      "evidence": ["backend/src/main/resources/db/migration/catalog/V27__create_project_product_link.sql", "backend/src/test/java/com/yumpoo/platform/catalog/infrastructure/project/ProjectProductLinkIT.java"]
+    },
+    {
+      "requirementId": "PPM-009",
+      "scope": "Owner 可管理 DRAFT/ACTIVE Project 关系，成员与非成员管理员只读，ARCHIVED 拒绝写入",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/application/project/ProjectProductLinkService.java", "contracts/openapi/yumpoo-v1.yaml"]
+    },
+    {
+      "requirementId": "PPM-010",
+      "scope": "关系使用独立强 ETag、软移除、可选理由和重新关联新 ID，不增加 Project 版本",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/domain/project/ProjectProductLink.java", "frontend/web-app/src/views/projects/ProjectProductsView.vue"]
+    },
+    {
+      "requirementId": "ACL-UI-M2-07",
+      "scope": "项目关联产品页、只读能力、候选搜索、重复类型禁用、两步切主和远程 Product 筛选",
+      "evidence": ["frontend/web-app/src/views/projects/ProjectProductsView.vue", "frontend/web-app/src/views/projects/ProjectProductsView.spec.ts"]
+    }
+  ],
+  "deferredRequirements": [
+    {"requirementId":"PPM-AT-010-FEEDBACK-BLOCKER","targetMilestone":"M3B/M2-24","scope":"真实 Feedback 引用存在时阻断解绑或 Product 归档"},
+    {"requirementId":"PROJECT-ARCHIVE-MOVE","targetMilestone":"M2-08","scope":"Project 归档、恢复与 Workspace 移动"},
+    {"requirementId":"PROJECT-ACTIVITY","targetMilestone":"M2-20","scope":"Project Activity 投影"}
+  ]
+}

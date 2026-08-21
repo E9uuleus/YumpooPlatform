@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FolderOpened, MoreFilled, User } from '@element-plus/icons-vue'
+import { Box, FolderOpened, MoreFilled, User } from '@element-plus/icons-vue'
 import type { ProjectDetail } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -14,7 +14,7 @@ import { useRouter } from 'vue-router'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 
-type ProjectSection = 'catalog' | 'overview' | 'members' | 'settings'
+type ProjectSection = 'catalog' | 'overview' | 'members' | 'products' | 'settings'
 
 const props = withDefaults(defineProps<{
   section: ProjectSection
@@ -34,6 +34,7 @@ const supportingText = computed(() => props.project?.description
   || (props.project ? `${props.project.workspaceName} 中的项目空间` : props.description))
 const moreRoutes = computed(() => [
   ...(props.section !== 'overview' ? [{ command: 'project-overview', label: '概览' }] : []),
+  ...(props.section !== 'products' ? [{ command: 'project-products', label: '关联产品' }] : []),
   ...(props.section !== 'settings' ? [{ command: 'project-settings', label: '设置' }] : []),
 ])
 
@@ -97,6 +98,15 @@ function navigate(routeName: string): void {
           <user />
         </el-icon>
         成员
+      </el-button>
+      <el-button
+        v-if="project && section !== 'products'"
+        @click="navigate('project-products')"
+      >
+        <el-icon aria-hidden="true">
+          <box />
+        </el-icon>
+        产品
       </el-button>
       <slot name="primary-action" />
       <el-tooltip

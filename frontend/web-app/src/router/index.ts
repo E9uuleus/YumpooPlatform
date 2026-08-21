@@ -22,6 +22,7 @@ import ProjectsView from '../views/projects/ProjectsView.vue'
 import ProjectLayout from '../views/projects/ProjectLayout.vue'
 import ProjectOverviewView from '../views/projects/ProjectOverviewView.vue'
 import ProjectMembersView from '../views/projects/ProjectMembersView.vue'
+import ProjectProductsView from '../views/projects/ProjectProductsView.vue'
 import ProjectSettingsView from '../views/projects/ProjectSettingsView.vue'
 
 export const routes: RouteRecordRaw[] = [
@@ -72,6 +73,7 @@ export const routes: RouteRecordRaw[] = [
         children: [
           { path: 'overview', name: 'project-overview', component: ProjectOverviewView },
           { path: 'members', name: 'project-members', component: ProjectMembersView },
+          { path: 'products', name: 'project-products', component: ProjectProductsView },
           { path: 'settings', name: 'project-settings', component: ProjectSettingsView },
         ],
       },

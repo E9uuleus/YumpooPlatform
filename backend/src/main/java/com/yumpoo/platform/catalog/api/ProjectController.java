@@ -43,11 +43,12 @@ public final class ProjectController {
             @RequestParam(required = false) UUID workspaceId,
             @RequestParam(required = false) ProjectTypeFilter projectType,
             @RequestParam(required = false) ProjectLifecycleFilter lifecycle,
+            @RequestParam(required = false) UUID productId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentActor actor = actorProvider.requiredActive();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(service.findAll(actor, workspaceId, projectType, lifecycle,
+                .body(service.findAll(actor, workspaceId, projectType, lifecycle, productId,
                         OffsetPageRequest.of(page, size)));
     }
 

@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M2-07 Product–Project 关系
+
+M2-07 已交付 V27 关系小聚合、四类关系、单一可选主 Product、关系强 ETag、持久化幂等、软移除与重新关联新 ID。关系写入锁定 Project 但不增加 Project 版本；Owner 可写，成员和非成员 CompanyAdmin 只读。Product 读取范围现包含关联 Project 的 ACTIVE member，Product 写权限仍显式限制为 ProductOwner 或 CompanyAdmin；项目目录支持远程 Product 筛选。
+
+OpenAPI、生成 TypeScript SDK、三类 v1 事件、Vue 关联产品页、PostgreSQL 并发/回滚测试和备份恢复事实已同步。真实 Feedback 引用的解绑 blocker 继续由 M3B/M2-24 建立，不在尚无 Feedback 真源时伪造已验证结论。
+
+```powershell
+pnpm verify:m2-07
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-06 Project 范围查询、激活与工作台
 
 M2-06 已交付 Project 权限过滤目录、完整详情、Owner 配置 PATCH 与 DRAFT 激活，并将 Workspace 的 `visibleProjectCount` 接入调用人可见的 DRAFT+ACTIVE Project 分组计数。激活在同一事务中重验 Owner、固化模板版本与 ACTIVE Content provenance；PUBLISHED 和 RETIRED 模板均可解释既有草稿，非研发类型在激活前必须补齐客户名称。

@@ -183,9 +183,13 @@ public class JdbcProjectRepository implements ProjectRepository {
     @Override
     public ProjectPageResult findVisible(CurrentActor actor, UUID workspaceId,
                                          ProjectType projectType, ProjectLifecycleFilter lifecycle,
+                                         UUID productId,
                                          OffsetPageRequest page) {
         String predicate = " AND (:allWorkspaces OR p.workspace_id=:workspaceId) "
                 + "AND (:allTypes OR p.project_type=:projectType) "
+                + "AND (:allProducts OR EXISTS (SELECT 1 FROM yumpoo.project_product_link ppl "
+                + "WHERE ppl.company_id=p.company_id AND ppl.project_id=p.id "
+                + "AND ppl.product_id=:productId AND ppl.removed_at IS NULL)) "
                 + "AND ((:draft AND p.lifecycle='DRAFT') OR (:active AND p.lifecycle='ACTIVE') "
                 + "OR (:archived AND p.lifecycle='ARCHIVED')) ";
         JdbcClient.StatementSpec items = visible(jdbcClient.sql("SELECT p.*, w.code AS workspace_code, "
@@ -193,11 +197,11 @@ public class JdbcProjectRepository implements ProjectRepository {
                 + "WHEN m.id IS NOT NULL THEN 'MEMBER' ELSE 'COMPANY_ADMIN_READ_ONLY' END actor_access "
                 + VISIBLE_FROM + predicate
                 + "ORDER BY p.name, p.project_code, p.id LIMIT :limit OFFSET :offset"), actor);
-        items = filters(items, workspaceId, projectType, lifecycle)
+        items = filters(items, workspaceId, projectType, lifecycle, productId)
                 .param("limit", page.size()).param("offset", (long) page.page() * page.size());
         JdbcClient.StatementSpec count = filters(visible(jdbcClient.sql(
                 "SELECT count(*) " + VISIBLE_FROM + predicate), actor),
-                workspaceId, projectType, lifecycle);
+                workspaceId, projectType, lifecycle, productId);
         return new ProjectPageResult(items.query(JdbcProjectRepository::mapQueryRow).list(),
                 count.query(Long.class).single());
     }
@@ -260,12 +264,15 @@ public class JdbcProjectRepository implements ProjectRepository {
     }
 
     private static JdbcClient.StatementSpec filters(JdbcClient.StatementSpec statement,
-            UUID workspaceId, ProjectType projectType, ProjectLifecycleFilter lifecycle) {
+            UUID workspaceId, ProjectType projectType, ProjectLifecycleFilter lifecycle,
+            UUID productId) {
         boolean current = lifecycle == null;
         return statement.param("allWorkspaces", workspaceId == null)
                 .param("workspaceId", workspaceId == null ? new UUID(0, 0) : workspaceId)
                 .param("allTypes", projectType == null)
                 .param("projectType", projectType == null ? "SOFTWARE_DEVELOPMENT" : projectType.name())
+                .param("allProducts", productId == null)
+                .param("productId", productId == null ? new UUID(0, 0) : productId)
                 .param("draft", current || lifecycle == ProjectLifecycleFilter.DRAFT
                         || lifecycle == ProjectLifecycleFilter.ALL)
                 .param("active", current || lifecycle == ProjectLifecycleFilter.ACTIVE

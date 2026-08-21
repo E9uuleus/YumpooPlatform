@@ -15,6 +15,10 @@ const labels: Record<string, string> = {
   APPLYING: '应用变更',
   FINALIZING: '收尾',
   COMPLETED: '已完成',
+  DEVELOPMENT: '研发',
+  DELIVERY: '交付',
+  SUPPORT: '支持',
+  USED_BY: '使用方',
 }
 
 export function businessLabel(value: string | null | undefined): string {

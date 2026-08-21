@@ -69,9 +69,25 @@ public class ProductService {
             ProductListStatus status,
             OffsetPageRequest page
     ) {
+        return findAll(actor, status, null, page);
+    }
+
+    @Transactional(readOnly = true)
+    public OffsetPageResponse<ProductView> findAll(
+            CurrentActor actor,
+            ProductListStatus status,
+            String query,
+            OffsetPageRequest page
+    ) {
         requireActiveActor(actor);
         Objects.requireNonNull(status, "status must not be null");
-        ProductPageResult result = repository.findVisible(actor, status, page);
+        String normalized = query == null ? null : query.strip();
+        if (normalized != null && normalized.length() > 80) {
+            throw ApplicationException.validation(new FieldViolation(
+                    "query", "INVALID_LENGTH", "Product 搜索关键字最多 80 个字符"));
+        }
+        if (normalized != null && normalized.isEmpty()) normalized = null;
+        ProductPageResult result = repository.findVisible(actor, status, normalized, page);
         return OffsetPageResponse.of(result.items().stream().map(ProductView::from).toList(),
                 page, result.totalElements());
     }
@@ -126,6 +142,10 @@ public class ProductService {
     @Transactional
     public ProductView update(ProductUpdateCommand command) {
         Product before = requiredVisible(command.actor(), command.productId());
+        if (!before.ownerUserId().equals(command.actor().userId())
+                && !command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN)) {
+            throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+        }
         requireVersion(before, command.expectedRowVersion());
         if (before.status() != ProductStatus.ACTIVE) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);

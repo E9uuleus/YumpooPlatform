@@ -10,7 +10,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ProductRepository {
-    ProductPageResult findVisible(CurrentActor actor, ProductListStatus status, OffsetPageRequest page);
+    ProductPageResult findVisible(CurrentActor actor, ProductListStatus status, String query,
+                                  OffsetPageRequest page);
     Optional<Product> findVisibleById(CurrentActor actor, UUID productId);
     Optional<Product> findById(UUID companyId, UUID productId);
     List<Product> findByOwner(UUID companyId, UUID ownerUserId, ProductStatus status);

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-07",
+  "status": "PASS",
+  "startedAt": "2026-08-21T13:30:00Z",
+  "completedAt": "2026-08-21T14:10:00Z",
+  "command": "pnpm verify:m2-07",
+  "flywayVersion": "27",
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "postgresRelationInvariants": true,
+    "authorizationAndVisibility": true,
+    "projectFilterStablePaging": true,
+    "outboxAtomicRollback": true,
+    "backupRestoreRelations": true,
+    "vueRelationsAndProductFilter": true,
+    "nodeGate": true
+  }
+}

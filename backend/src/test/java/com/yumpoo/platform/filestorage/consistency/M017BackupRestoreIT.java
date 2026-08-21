@@ -761,6 +761,33 @@ class M017BackupRestoreIT {
                 issue.setObject(1,createdAt); issue.setObject(2,createdAt); issue.setObject(3,createdAt);
                 assertThat(issue.executeUpdate()).isOne();
             }
+            try (PreparedStatement link = connection.prepareStatement("""
+                    INSERT INTO yumpoo.project_product_link (
+                        id,company_id,project_id,product_id,relation_type,is_primary,
+                        linked_at,linked_by_user_id,updated_at,updated_by_user_id,
+                        removed_at,removed_by_user_id,remove_reason,row_version
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000810',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000802',
+                        '00000000-0000-4000-8000-000000000602','DEVELOPMENT',true,
+                        ?,'00000000-0000-4000-8000-000000000102',?,
+                        '00000000-0000-4000-8000-000000000102',NULL,NULL,NULL,0),(
+                        '00000000-0000-4000-8000-000000000811',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000802',
+                        '00000000-0000-4000-8000-000000000602','SUPPORT',false,
+                        ?,'00000000-0000-4000-8000-000000000102',?,
+                        '00000000-0000-4000-8000-000000000102',?,
+                        '00000000-0000-4000-8000-000000000102','历史支持关系结束',4)
+                    """)) {
+                link.setObject(1, createdAt);
+                link.setObject(2, createdAt.plusHours(1));
+                link.setObject(3, createdAt);
+                link.setObject(4, createdAt.plusHours(2));
+                link.setObject(5, createdAt.plusHours(2));
+                assertThat(link.executeUpdate()).isEqualTo(2);
+            }
             try (PreparedStatement content = connection.prepareStatement("""
                     INSERT INTO yumpoo.content (
                         id, company_id, project_id, code, name, work_item_type, status,
@@ -808,6 +835,11 @@ class M017BackupRestoreIT {
                             (SELECT string_agg(m.user_id || ':' || m.status || ':' || m.row_version,
                                 ',' ORDER BY m.user_id) FROM yumpoo.project_membership m
                                 WHERE m.project_id=project.id) AS membership_facts,
+                            (SELECT string_agg(l.product_id || ':' || l.relation_type || ':'
+                                || l.is_primary || ':' || COALESCE(l.remove_reason,'-') || ':'
+                                || l.row_version || ':' || (l.removed_at IS NULL), ',' ORDER BY l.id)
+                                FROM yumpoo.project_product_link l
+                                WHERE l.project_id=project.id) AS product_link_facts,
                             issue.issue_type, issue.target_type, issue.status AS issue_status,
                             issue.row_version AS issue_version,
                             string_agg(content.code || ':' || content.work_item_type || ':'
@@ -837,6 +869,7 @@ class M017BackupRestoreIT {
                     result.getObject("owner_user_id", UUID.class),
                     result.getString("template_key"), result.getInt("template_version"),
                     result.getString("membership_status"), result.getString("membership_facts"),
+                    result.getString("product_link_facts"),
                     result.getString("issue_type"), result.getString("target_type"),
                     result.getString("issue_status"), result.getLong("issue_version"),
                     result.getString("contents"));
@@ -984,6 +1017,7 @@ class M017BackupRestoreIT {
             int templateVersion,
             String membershipStatus,
             String membershipFacts,
+            String productLinkFacts,
             String issueType,
             String issueTargetType,
             String issueStatus,

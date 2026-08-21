@@ -58,6 +58,7 @@ export interface GetProductRequest {
 
 export interface ListProductsRequest {
     status?: ProductStatusFilter;
+    query?: string;
     page?: number;
     size?: number;
 }
@@ -258,7 +259,7 @@ export class ProductsApi extends runtime.BaseAPI {
     }
 
     /**
-     * COMPANY_ADMIN 可见全部；ProductOwner 仅可见自己负责的 Product；其他成员返回空分页。
+     * COMPANY_ADMIN 可见全部；ProductOwner 可见自己负责的 Product；Project ACTIVE 成员可见其项目有效关联的 Product。query 对 code 或 name 执行前缀搜索。
      * 分页查询当前主体可见的 Product
      */
     async listProductsRaw(requestParameters: ListProductsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProductPage>> {
@@ -266,6 +267,10 @@ export class ProductsApi extends runtime.BaseAPI {
 
         if (requestParameters['status'] != null) {
             queryParameters['status'] = requestParameters['status'];
+        }
+
+        if (requestParameters['query'] != null) {
+            queryParameters['query'] = requestParameters['query'];
         }
 
         if (requestParameters['page'] != null) {
@@ -292,7 +297,7 @@ export class ProductsApi extends runtime.BaseAPI {
     }
 
     /**
-     * COMPANY_ADMIN 可见全部；ProductOwner 仅可见自己负责的 Product；其他成员返回空分页。
+     * COMPANY_ADMIN 可见全部；ProductOwner 可见自己负责的 Product；Project ACTIVE 成员可见其项目有效关联的 Product。query 对 code 或 name 执行前缀搜索。
      * 分页查询当前主体可见的 Product
      */
     async listProducts(requestParameters: ListProductsRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProductPage> {
