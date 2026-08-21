@@ -56,16 +56,19 @@ export const routes: RouteRecordRaw[] = [
         path: '',
         name: 'home',
         component: HomeView,
+        meta: { shellSection: 'work' },
       },
       {
         path: 'projects',
         name: 'projects',
         component: ProjectsView,
+        meta: { shellSection: 'projects' },
       },
       {
         path: 'projects/:projectId',
         component: ProjectLayout,
         redirect: route => ({ name: 'project-overview', params: route.params }),
+        meta: { shellSection: 'projects' },
         children: [
           { path: 'overview', name: 'project-overview', component: ProjectOverviewView },
           { path: 'members', name: 'project-members', component: ProjectMembersView },
@@ -77,6 +80,7 @@ export const routes: RouteRecordRaw[] = [
         component: IdentityAdminLayout,
         redirect: '/admin/identity/overview',
         meta: {
+          shellSection: 'identity',
           requiredRoles: [
             AuthenticationRole.AppManager,
             AuthenticationRole.CompanyAdmin,
@@ -104,11 +108,13 @@ export const routes: RouteRecordRaw[] = [
         path: 'forbidden',
         name: 'forbidden',
         component: ForbiddenView,
+        meta: { shellSection: 'work' },
       },
       {
         path: ':pathMatch(.*)*',
         name: 'not-found',
         component: NotFoundView,
+        meta: { shellSection: 'work' },
       },
     ],
   },

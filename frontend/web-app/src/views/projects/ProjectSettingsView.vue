@@ -1,60 +1,218 @@
 <script setup lang="ts">
 import { readCsrfToken, type ProjectDetail, type ProjectUpdateRequest } from '@yumpoo/api-client'
-import { ElButton, ElForm, ElFormItem, ElInput, ElMessage } from 'element-plus'
-import { onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import {
+  ElButton,
+  ElForm,
+  ElFormItem,
+  ElInput,
+  ElMessage,
+  ElMessageBox,
+  type FormInstance,
+  type FormRules,
+} from 'element-plus'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { projectsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
+import ProjectWorkspaceHeader from './ProjectWorkspaceHeader.vue'
 
 const route = useRoute()
 const projectId = String(route.params.projectId)
 const project = ref<ProjectDetail>()
 const error = ref<ApiProblem>()
 const saving = ref(false)
-const form = reactive({ name: '', description: '', customerName: '', customerReference: '', deliverySite: '', contactNote: '' })
+const formRef = ref<FormInstance>()
+const baseline = ref('')
+const form = reactive({
+  name: '',
+  description: '',
+  customerName: '',
+  customerReference: '',
+  deliverySite: '',
+  contactNote: '',
+})
+const rules: FormRules = {
+  name: [{ required: true, whitespace: true, message: '请输入项目名称', trigger: 'blur' }],
+}
+const dirty = computed(() => Boolean(baseline.value && JSON.stringify(form) !== baseline.value))
 
 function fill(next: ProjectDetail): void {
-  form.name = next.name; form.description = next.description ?? ''; form.customerName = next.customerName ?? ''
-  form.customerReference = next.customerReference ?? ''; form.deliverySite = next.deliverySite ?? ''
+  form.name = next.name
+  form.description = next.description ?? ''
+  form.customerName = next.customerName ?? ''
+  form.customerReference = next.customerReference ?? ''
+  form.deliverySite = next.deliverySite ?? ''
   form.contactNote = next.contactNote ?? ''
+  baseline.value = JSON.stringify(form)
 }
+
 async function load(replaceDraft = true): Promise<void> {
-  try { const next = await projectsApi.getProject({ projectId }); project.value = next; if (replaceDraft) fill(next) }
-  catch (reason) { error.value = await toApiProblem(reason) }
+  error.value = undefined
+  try {
+    const next = await projectsApi.getProject({ projectId })
+    project.value = next
+    if (replaceDraft) fill(next)
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  }
 }
+
 async function save(): Promise<void> {
   if (!project.value?.capabilities.canUpdateSettings) return
-  const csrf = readCsrfToken()
-  if (!csrf) { error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
-  const snapshot: ProjectUpdateRequest = { name: form.name.trim(), description: form.description.trim() || null,
-    customerName: form.customerName.trim() || null, customerReference: form.customerReference.trim() || null,
-    deliverySite: form.deliverySite.trim() || null, contactNote: form.contactNote.trim() || null }
-  saving.value = true
   try {
-    project.value = await projectsApi.updateProject({ projectId, xXSRFTOKEN: csrf,
-      ifMatch: project.value.etag, projectUpdateRequest: snapshot })
-    fill(project.value); ElMessage.success('项目设置已保存')
+    await formRef.value?.validate()
+  } catch {
+    return
+  }
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
+    return
+  }
+  const snapshot: ProjectUpdateRequest = {
+    name: form.name.trim(),
+    description: form.description.trim() || null,
+    customerName: form.customerName.trim() || null,
+    customerReference: form.customerReference.trim() || null,
+    deliverySite: form.deliverySite.trim() || null,
+    contactNote: form.contactNote.trim() || null,
+  }
+  saving.value = true
+  error.value = undefined
+  try {
+    project.value = await projectsApi.updateProject({
+      projectId,
+      xXSRFTOKEN: csrf,
+      ifMatch: project.value.etag,
+      projectUpdateRequest: snapshot,
+    })
+    fill(project.value)
+    ElMessage.success('项目设置已保存')
   } catch (reason) {
-    const problem = await toApiProblem(reason); error.value = problem
+    const problem = await toApiProblem(reason)
+    error.value = problem
     if (isProblemStatus(problem, 412)) await load(false)
-  } finally { saving.value = false }
+  } finally {
+    saving.value = false
+  }
 }
+
+onBeforeRouteLeave(async () => {
+  if (!dirty.value || saving.value) return true
+  try {
+    await ElMessageBox.confirm('项目设置仍有未保存的更改。', '离开此页面？', {
+      confirmButtonText: '放弃更改',
+      cancelButtonText: '继续编辑',
+      type: 'warning',
+    })
+    return true
+  } catch {
+    return false
+  }
+})
+
 onMounted(load)
 </script>
 
 <template>
-  <div>
-    <div class="page-title compact"><div><p class="eyebrow">PROJECT SETTINGS</p><h2>项目设置</h2><p>保存时发送完整可变字段快照。</p></div></div>
-    <inline-problem v-if="error" class="inline-error" :problem="error" />
-    <el-form label-position="top" class="settings-form" :model="form">
-      <el-form-item label="项目名称"><el-input v-model="form.name" maxlength="80" /></el-form-item>
-      <el-form-item label="描述"><el-input v-model="form.description" type="textarea" maxlength="500" show-word-limit /></el-form-item>
-      <div class="form-grid"><el-form-item label="客户名称"><el-input v-model="form.customerName" maxlength="160" /></el-form-item><el-form-item label="客户参考号"><el-input v-model="form.customerReference" maxlength="80" /></el-form-item></div>
-      <el-form-item label="交付地点"><el-input v-model="form.deliverySite" maxlength="160" /></el-form-item>
-      <el-form-item label="联系备注"><el-input v-model="form.contactNote" type="textarea" maxlength="500" show-word-limit /></el-form-item>
-      <p v-if="project && !project.capabilities.canUpdateSettings" class="actor-label">当前访问模式不可修改项目设置。</p>
-      <el-button type="primary" :disabled="!project?.capabilities.canUpdateSettings" :loading="saving" @click="save">保存设置</el-button>
-    </el-form>
+  <div class="project-view-stack">
+    <project-workspace-header
+      section="settings"
+      :project="project"
+      title="项目设置"
+      description="保存时发送完整可变字段快照；权限和并发版本由服务端校验。"
+    />
+    <inline-problem
+      v-if="error"
+      :problem="error"
+    />
+    <section class="project-settings-surface">
+      <div class="project-section-heading">
+        <div>
+          <h2>设置</h2>
+          <p>维护项目名称、说明和交付上下文。</p>
+        </div>
+      </div>
+      <el-form
+        ref="formRef"
+        class="settings-form"
+        label-position="top"
+        :model="form"
+        :rules="rules"
+      >
+        <section class="form-section">
+          <h2>基本信息</h2>
+          <el-form-item
+            label="项目名称"
+            prop="name"
+          >
+            <el-input
+              v-model="form.name"
+              maxlength="80"
+            />
+          </el-form-item>
+          <el-form-item label="描述">
+            <el-input
+              v-model="form.description"
+              type="textarea"
+              maxlength="500"
+              show-word-limit
+            />
+          </el-form-item>
+        </section>
+        <section class="form-section">
+          <h2>交付上下文</h2>
+          <div class="form-grid">
+            <el-form-item label="客户名称">
+              <el-input
+                v-model="form.customerName"
+                maxlength="160"
+              />
+            </el-form-item>
+            <el-form-item label="客户参考号">
+              <el-input
+                v-model="form.customerReference"
+                maxlength="80"
+              />
+            </el-form-item>
+          </div>
+          <el-form-item label="交付地点">
+            <el-input
+              v-model="form.deliverySite"
+              maxlength="160"
+            />
+          </el-form-item>
+          <el-form-item label="联系备注">
+            <el-input
+              v-model="form.contactNote"
+              type="textarea"
+              maxlength="500"
+              show-word-limit
+            />
+          </el-form-item>
+        </section>
+        <p
+          v-if="project && !project.capabilities.canUpdateSettings"
+          class="actor-label"
+        >
+          当前访问模式不可修改项目设置。
+        </p>
+        <div class="action-row">
+          <span
+            v-if="dirty"
+            class="muted-text"
+          >存在未保存的更改</span>
+          <el-button
+            type="primary"
+            :disabled="!project?.capabilities.canUpdateSettings || !dirty"
+            :loading="saving"
+            @click="save"
+          >
+            保存设置
+          </el-button>
+        </div>
+      </el-form>
+    </section>
   </div>
 </template>

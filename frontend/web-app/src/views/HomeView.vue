@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { ElButton, ElCard, ElDescriptions, ElDescriptionsItem, ElTag } from 'element-plus'
+import { ElButton, ElCard, ElTag } from 'element-plus'
 import { useRouter } from 'vue-router'
+import YpAssignee from '../components/yp/YpAssignee.vue'
+import YpPageHeader from '../components/yp/YpPageHeader.vue'
+import { businessLabel } from '../design-system/labels'
 import { useSession } from '../composables/useSession'
 
 const router = useRouter()
@@ -9,60 +12,66 @@ const session = useSession()
 
 <template>
   <section class="home-page">
-    <header class="welcome-banner">
-      <div>
-        <p class="eyebrow">
-          工作台
-        </p>
-        <h2>欢迎回来，{{ session.authentication.value?.user.displayName }}</h2>
-        <p>在这里进入已授权的 Yumpoo 平台功能。</p>
-      </div>
-      <el-button
-        v-if="session.isIdentityReader.value"
-        type="primary"
-        @click="router.push({ name: 'identity-overview' })"
-      >
-        进入身份管理
-      </el-button>
-    </header>
+    <yp-page-header
+      eyebrow="工作台"
+      :title="`欢迎回来，${session.authentication.value?.user.displayName ?? ''}`"
+      description="从这里进入当前账号已获授权的 YumpooPlatform 功能。"
+    >
+      <template #actions>
+        <el-button
+          v-if="session.isIdentityReader.value"
+          type="primary"
+          @click="router.push({ name: 'identity-overview' })"
+        >
+          进入身份管理
+        </el-button>
+      </template>
+    </yp-page-header>
 
     <div class="home-grid">
       <el-card shadow="never">
         <template #header>
           <strong>当前身份</strong>
         </template>
-        <el-descriptions
-          :column="1"
-          border
-        >
-          <el-descriptions-item label="用户">
-            {{ session.authentication.value?.user.displayName }}
-          </el-descriptions-item>
-          <el-descriptions-item label="公司">
-            {{ session.authentication.value?.company.displayName }}
-          </el-descriptions-item>
-          <el-descriptions-item label="角色">
-            <el-tag
-              v-for="role in session.authentication.value?.roles"
-              :key="role"
-              class="role-tag"
-              effect="plain"
-            >
-              {{ role }}
-            </el-tag>
-          </el-descriptions-item>
-        </el-descriptions>
+        <div class="page-stack">
+          <yp-assignee
+            :user-id="session.authentication.value?.user.id"
+            :display-name="session.authentication.value?.user.displayName"
+            size="detail"
+          />
+          <div>
+            <span class="muted-text">所属企业</span>
+            <p>{{ session.authentication.value?.company.displayName }}</p>
+          </div>
+          <div>
+            <span class="muted-text">当前角色</span>
+            <div class="role-list">
+              <el-tag
+                v-for="role in session.authentication.value?.roles"
+                :key="role"
+                effect="plain"
+              >
+                {{ businessLabel(role) }}
+              </el-tag>
+            </div>
+          </div>
+        </div>
       </el-card>
       <el-card shadow="never">
         <template #header>
           <strong>可用功能</strong>
         </template>
         <p v-if="session.isIdentityReader.value">
-          你可以查看身份与组织状态、同步运行和成员账号。
+          项目、身份与组织管理。
         </p>
         <p v-else>
-          你的登录状态有效；当前没有额外管理入口。
+          查看当前账号可见的项目。
         </p>
+        <div class="action-row">
+          <el-button @click="router.push({ name: 'projects' })">
+            打开项目工作台
+          </el-button>
+        </div>
       </el-card>
     </div>
   </section>
