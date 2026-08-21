@@ -432,6 +432,15 @@ M0-13 证据只保存企业与目录快照的不可逆 HMAC、运行时间、执
 
 完整的数据库环境变量、端口表和启动顺序以 `docs/30-operations/local-development.md` 为本地开发基线。
 
+本机无法使用企业微信 OAuth 与通讯录同步时，可显式启用回环地址限定的本地免登录身份。后端会通过现有身份、角色与会话服务预置“本地测试管理员”，授予 `COMPANY_ADMIN + APP_MANAGER`，并在首次 `/api/v1/auth/me` 请求签发正常的 Session/CSRF Cookie；SPA 因而不会先进入 `/login`，后续读写仍执行正式鉴权与 CSRF 校验。
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = 'local'
+$env:YUMPOO_LOCAL_AUTH_ENABLED = 'true'
+```
+
+默认登录成员为 `local-company-admin`，显示名为“本地测试管理员”。需要固定其他身份时可设置 `YUMPOO_LOCAL_AUTH_MEMBER_ID`、`YUMPOO_LOCAL_AUTH_DISPLAY_NAME`、`YUMPOO_LOCAL_AUTH_BACKUP_MEMBER_ID` 与 `YUMPOO_LOCAL_AUTH_BACKUP_DISPLAY_NAME`。该模式默认关闭，只允许 `local` profile、`127.0.0.1`/`localhost`/IPv6 loopback，并拒绝与 `prod`、企微 OAuth、企微通讯录或受控身份提供者同时启用；已有但不兼容的本地角色治理数据会使启动失败，不会被静默覆盖。恢复正常认证时移除上述两个变量并清理浏览器本地 Cookie。
+
 先启动在线 SPA：
 
 ```powershell

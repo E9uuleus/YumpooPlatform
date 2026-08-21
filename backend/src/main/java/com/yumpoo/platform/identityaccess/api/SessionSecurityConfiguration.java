@@ -4,12 +4,14 @@ import com.yumpoo.platform.foundation.api.error.ApiErrorWriter;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
+import com.yumpoo.platform.identityaccess.application.authentication.WebLoginCompletionService;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -27,6 +29,7 @@ import java.time.Clock;
 
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+@EnableConfigurationProperties(LocalAuthenticationProperties.class)
 public class SessionSecurityConfiguration {
 
     @Bean
@@ -35,6 +38,8 @@ public class SessionSecurityConfiguration {
             SessionService sessionService,
             PlatformRoleQuery platformRoleQuery,
             ApiErrorWriter errorWriter,
+            LocalAuthenticationProperties localAuthentication,
+            WebLoginCompletionService webLoginCompletionService,
             Clock clock
     ) throws Exception {
         SessionBoundCsrfTokenRepository csrfRepository =
@@ -71,7 +76,16 @@ public class SessionSecurityConfiguration {
                         ).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(
-                        new SessionAuthenticationFilter(sessionService, platformRoleQuery, errorWriter),
+                        new SessionAuthenticationFilter(
+                                sessionService,
+                                platformRoleQuery,
+                                errorWriter,
+                                new LocalSessionIssuer(
+                                        localAuthentication,
+                                        webLoginCompletionService
+                                ),
+                                clock
+                        ),
                         CsrfFilter.class
                 );
         return http.build();

@@ -50,6 +50,12 @@ yumpoo:
       connect-timeout: 5s
       read-timeout: 20s
   auth:
+    local:
+      enabled: ${YUMPOO_LOCAL_AUTH_ENABLED:false}
+      member-id: ${YUMPOO_LOCAL_AUTH_MEMBER_ID:local-company-admin}
+      display-name: ${YUMPOO_LOCAL_AUTH_DISPLAY_NAME:本地测试管理员}
+      backup-member-id: ${YUMPOO_LOCAL_AUTH_BACKUP_MEMBER_ID:local-app-manager}
+      backup-display-name: ${YUMPOO_LOCAL_AUTH_BACKUP_DISPLAY_NAME:本地测试应用管理员}
     controlled:
       enabled: ${YUMPOO_CONTROLLED_AUTH_ENABLED:false}
       corp-id: ${YUMPOO_CONTROLLED_AUTH_CORP_ID:}
