@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-08",
+  "verifiedSlices": [
+    {
+      "requirementId": "PPM-001-MOVE",
+      "scope": "DRAFT/ACTIVE Project 可在同 Company 的 ACTIVE Workspace 间迁移；归档 Workspace 与创建、迁入、恢复共享同一锁协议",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/application/project/ProjectLifecycleService.java", "backend/src/main/java/com/yumpoo/platform/catalog/application/workspace/WorkspaceService.java"]
+    },
+    {
+      "requirementId": "PPM-011-LIFECYCLE",
+      "scope": "ACTIVE 到 ARCHIVED 与 ARCHIVED 到 ACTIVE 的严格迁移、时间戳和版本不变量",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/domain/project/Project.java", "backend/src/test/java/com/yumpoo/platform/catalog/domain/project/ProjectTest.java"]
+    },
+    {
+      "requirementId": "PPM-013-READONLY-SLICE",
+      "scope": "ARCHIVED Project 的现有设置、成员、产品关系和公开未来事实守卫拒绝写入",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/application/project/ProjectLifecycleService.java", "contracts/openapi/yumpoo-v1.yaml"]
+    },
+    {
+      "requirementId": "PPM-016-MOVE-CORE",
+      "scope": "迁移只改变 workspace_id、Project 版本和审计时间，不复制 membership、Content 或关系",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/infrastructure/project/JdbcProjectRepository.java", "backend/src/test/java/com/yumpoo/platform/catalog/domain/project/ProjectTest.java"]
+    },
+    {
+      "requirementId": "GOVERNANCE-M2-08",
+      "scope": "普通 Owner 归档、CompanyAdmin 覆盖/恢复/迁移、V28 安全记录、幂等与事件契约",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/administration/application/GovernanceOverrideService.java", "frontend/web-app/src/views/projects/ProjectLifecycleActions.spec.ts"]
+    }
+  ],
+  "deferredRequirements": [
+    {"requirementId":"PPM-014-REAL-BLOCKERS","targetMilestone":"M2-24","scope":"Work Item、Worklog、Product Feedback 三类权威 provider 与真实数据全量验收"},
+    {"requirementId":"PPM-016-ACTIVITY","targetMilestone":"M2-20","scope":"Project 归档、恢复和迁移事件的 Activity 安全投影"},
+    {"requirementId":"PROJECT-CLOSE-COMMAND","targetMilestone":"M2-24","scope":"归档前收尾命令与全模板 E2E"}
+  ]
+}

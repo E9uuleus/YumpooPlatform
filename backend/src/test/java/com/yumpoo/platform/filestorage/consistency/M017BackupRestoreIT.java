@@ -127,6 +127,8 @@ class M017BackupRestoreIT {
                     .isEqualTo(readProductGovernanceFact(source));
             assertThat(readProjectContentFact(target))
                     .isEqualTo(readProjectContentFact(source));
+            assertThat(readAdminOverrideFact(target))
+                    .isEqualTo(readAdminOverrideFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -701,22 +703,23 @@ class M017BackupRestoreIT {
                         project_type, lifecycle, owner_user_id, template_key, template_version,
                         customer_name, customer_reference, delivery_site, contact_note,
                         row_version, created_at, created_by_user_id, updated_at, updated_by_user_id,
-                        activated_at
+                        activated_at, archived_at
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000802',
                         '00000000-0000-4000-8000-000000000001',
                         '00000000-0000-4000-8000-000000000502',
                         'M2_04_RESTORE', 'M2-04 Restore Project', 'Project restore probe',
-                        'PRODUCT_DEVELOPMENT', 'ACTIVE',
+                        'PRODUCT_DEVELOPMENT', 'ARCHIVED',
                         '00000000-0000-4000-8000-000000000102', 'RND', 1,
                         'Restore Customer', 'RESTORE-01', 'Shanghai', 'Private restore note',
-                        3, ?, '00000000-0000-4000-8000-000000000102', ?,
-                        '00000000-0000-4000-8000-000000000102', ?
+                        4, ?, '00000000-0000-4000-8000-000000000102', ?,
+                        '00000000-0000-4000-8000-000000000102', ?, ?
                     )
                     """)) {
                 project.setObject(1, createdAt);
-                project.setObject(2, createdAt.plusHours(2));
+                project.setObject(2, createdAt.plusHours(3));
                 project.setObject(3, createdAt.plusHours(2));
+                project.setObject(4, createdAt.plusHours(3));
                 assertThat(project.executeUpdate()).isOne();
             }
             try (PreparedStatement membership = connection.prepareStatement("""
@@ -818,6 +821,29 @@ class M017BackupRestoreIT {
                 }
                 assertThat(content.executeBatch()).hasSize(3);
             }
+            try (PreparedStatement override = connection.prepareStatement("""
+                    INSERT INTO yumpoo.admin_override (
+                        id, company_id, action, target_type, target_id, reason, request_hash,
+                        idempotency_key, actor_user_id, before_snapshot, after_snapshot,
+                        blocker_counts, result, error_code, occurred_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000812',
+                        '00000000-0000-4000-8000-000000000001',
+                        'PROJECT_ARCHIVE_WITH_OPEN_ITEMS', 'PROJECT',
+                        '00000000-0000-4000-8000-000000000802',
+                        '备份恢复必须保留治理覆盖理由和安全快照', ?,
+                        '00000000-0000-4000-8000-000000000813',
+                        '00000000-0000-4000-8000-000000000102',
+                        '{"projectId":"00000000-0000-4000-8000-000000000802","lifecycle":"ACTIVE","rowVersion":3}'::jsonb,
+                        '{"projectId":"00000000-0000-4000-8000-000000000802","lifecycle":"ARCHIVED","rowVersion":4}'::jsonb,
+                        '[{"code":"OPEN_WORK_ITEMS","count":2}]'::jsonb,
+                        'SUCCEEDED', NULL, ?
+                    )
+                    """)) {
+                override.setString(1, "a".repeat(64));
+                override.setObject(2, createdAt.plusHours(3));
+                assertThat(override.executeUpdate()).isOne();
+            }
             connection.commit();
         }
     }
@@ -829,7 +855,7 @@ class M017BackupRestoreIT {
              Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery("""
                      SELECT project.id, project.project_code, project.lifecycle,
-                            project.row_version, project.activated_at,
+                            project.row_version, project.activated_at, project.archived_at,
                             project.owner_user_id, project.template_key, project.template_version,
                             membership.status AS membership_status,
                             (SELECT string_agg(m.user_id || ':' || m.status || ':' || m.row_version,
@@ -856,7 +882,7 @@ class M017BackupRestoreIT {
                          AND issue.target_type='PROJECT'
                       WHERE project.id = '00000000-0000-4000-8000-000000000802'
                       GROUP BY project.id, project.project_code, project.lifecycle,
-                               project.row_version, project.activated_at,
+                               project.row_version, project.activated_at, project.archived_at,
                                project.owner_user_id, project.template_key, project.template_version,
                                membership.status, issue.issue_type, issue.target_type,
                                issue.status, issue.row_version
@@ -866,6 +892,7 @@ class M017BackupRestoreIT {
                     result.getObject("id", UUID.class), result.getString("project_code"),
                     result.getString("lifecycle"), result.getLong("row_version"),
                     result.getObject("activated_at", OffsetDateTime.class),
+                    result.getObject("archived_at", OffsetDateTime.class),
                     result.getObject("owner_user_id", UUID.class),
                     result.getString("template_key"), result.getInt("template_version"),
                     result.getString("membership_status"), result.getString("membership_facts"),
@@ -873,6 +900,23 @@ class M017BackupRestoreIT {
                     result.getString("issue_type"), result.getString("target_type"),
                     result.getString("issue_status"), result.getLong("issue_version"),
                     result.getString("contents"));
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
+    }
+
+    private static String readAdminOverrideFact(PostgreSQLContainer container) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT action || ':' || target_type || ':' || target_id || ':' || reason || ':'
+                            || result || ':' || blocker_counts::text || ':' || before_snapshot::text
+                            || ':' || after_snapshot::text AS fact
+                     FROM yumpoo.admin_override
+                     WHERE id = '00000000-0000-4000-8000-000000000812'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            String fact = result.getString("fact");
             assertThat(result.next()).isFalse();
             return fact;
         }
@@ -1012,6 +1056,7 @@ class M017BackupRestoreIT {
             String lifecycle,
             long rowVersion,
             OffsetDateTime activatedAt,
+            OffsetDateTime archivedAt,
             UUID ownerUserId,
             String templateKey,
             int templateVersion,
