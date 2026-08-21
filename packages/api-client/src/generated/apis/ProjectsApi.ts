@@ -27,6 +27,12 @@ import type {
   ProjectMembershipStatusFilter,
   ProjectOwnerReassignmentRequest,
   ProjectPage,
+  ProjectProductCandidatePage,
+  ProjectProductLink,
+  ProjectProductLinkCreateRequest,
+  ProjectProductLinkList,
+  ProjectProductLinkRemoveRequest,
+  ProjectProductLinkUpdateRequest,
   ProjectType,
   ProjectUpdateRequest,
 } from '../models/index';
@@ -57,6 +63,18 @@ import {
     ProjectOwnerReassignmentRequestToJSON,
     ProjectPageFromJSON,
     ProjectPageToJSON,
+    ProjectProductCandidatePageFromJSON,
+    ProjectProductCandidatePageToJSON,
+    ProjectProductLinkFromJSON,
+    ProjectProductLinkToJSON,
+    ProjectProductLinkCreateRequestFromJSON,
+    ProjectProductLinkCreateRequestToJSON,
+    ProjectProductLinkListFromJSON,
+    ProjectProductLinkListToJSON,
+    ProjectProductLinkRemoveRequestFromJSON,
+    ProjectProductLinkRemoveRequestToJSON,
+    ProjectProductLinkUpdateRequestFromJSON,
+    ProjectProductLinkUpdateRequestToJSON,
     ProjectTypeFromJSON,
     ProjectTypeToJSON,
     ProjectUpdateRequestFromJSON,
@@ -84,6 +102,13 @@ export interface CreateProjectRequest {
     projectCreateRequest: ProjectCreateRequest;
 }
 
+export interface CreateProjectProductLinkRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    projectProductLinkCreateRequest: ProjectProductLinkCreateRequest;
+}
+
 export interface GetProjectRequest {
     projectId: string;
 }
@@ -102,10 +127,22 @@ export interface ListProjectMembersRequest {
     size?: number;
 }
 
+export interface ListProjectProductCandidatesRequest {
+    projectId: string;
+    query: string;
+    page?: number;
+    size?: number;
+}
+
+export interface ListProjectProductsRequest {
+    projectId: string;
+}
+
 export interface ListProjectsRequest {
     workspaceId?: string;
     projectType?: ProjectType;
     lifecycle?: ProjectLifecycleFilter;
+    productId?: string;
     page?: number;
     size?: number;
 }
@@ -127,11 +164,28 @@ export interface RemoveProjectMemberRequest {
     projectMemberRemoveRequest?: ProjectMemberRemoveRequest;
 }
 
+export interface RemoveProjectProductLinkRequest {
+    projectId: string;
+    linkId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    projectProductLinkRemoveRequest?: ProjectProductLinkRemoveRequest;
+}
+
 export interface UpdateProjectRequest {
     projectId: string;
     xXSRFTOKEN: string;
     ifMatch: string;
     projectUpdateRequest: ProjectUpdateRequest;
+}
+
+export interface UpdateProjectProductLinkRequest {
+    projectId: string;
+    linkId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    projectProductLinkUpdateRequest: ProjectProductLinkUpdateRequest;
 }
 
 /**
@@ -348,6 +402,75 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Owner 为 DRAFT 或 ACTIVE Project 新增 Product 关系
+     */
+    async createProjectProductLinkRaw(requestParameters: CreateProjectProductLinkRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectProductLink>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling createProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling createProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling createProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['projectProductLinkCreateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'projectProductLinkCreateRequest',
+                'Required parameter "projectProductLinkCreateRequest" was null or undefined when calling createProjectProductLink().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/products`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectProductLinkCreateRequestToJSON(requestParameters['projectProductLinkCreateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectProductLinkFromJSON(jsonValue));
+    }
+
+    /**
+     * Owner 为 DRAFT 或 ACTIVE Project 新增 Product 关系
+     */
+    async createProjectProductLink(requestParameters: CreateProjectProductLinkRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectProductLink> {
+        const response = await this.createProjectProductLinkRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * 查询可见 Project 完整详情
      */
     async getProjectRaw(requestParameters: GetProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectDetail>> {
@@ -490,6 +613,99 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Owner 或 CompanyAdmin 搜索本企业 ACTIVE Product 候选
+     */
+    async listProjectProductCandidatesRaw(requestParameters: ListProjectProductCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectProductCandidatePage>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listProjectProductCandidates().'
+            );
+        }
+
+        if (requestParameters['query'] == null) {
+            throw new runtime.RequiredError(
+                'query',
+                'Required parameter "query" was null or undefined when calling listProjectProductCandidates().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['query'] != null) {
+            queryParameters['query'] = requestParameters['query'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/product-candidates`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectProductCandidatePageFromJSON(jsonValue));
+    }
+
+    /**
+     * Owner 或 CompanyAdmin 搜索本企业 ACTIVE Product 候选
+     */
+    async listProjectProductCandidates(requestParameters: ListProjectProductCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectProductCandidatePage> {
+        const response = await this.listProjectProductCandidatesRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 查询 Project 当前有效 Product 关系
+     */
+    async listProjectProductsRaw(requestParameters: ListProjectProductsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectProductLinkList>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listProjectProducts().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/products`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectProductLinkListFromJSON(jsonValue));
+    }
+
+    /**
+     * 查询 Project 当前有效 Product 关系
+     */
+    async listProjectProducts(requestParameters: ListProjectProductsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectProductLinkList> {
+        const response = await this.listProjectProductsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * lifecycle 省略时返回 DRAFT 与 ACTIVE；分页和总数使用相同权限及筛选谓词。
      * 查询调用人可见的 Project
      */
@@ -506,6 +722,10 @@ export class ProjectsApi extends runtime.BaseAPI {
 
         if (requestParameters['lifecycle'] != null) {
             queryParameters['lifecycle'] = requestParameters['lifecycle'];
+        }
+
+        if (requestParameters['productId'] != null) {
+            queryParameters['productId'] = requestParameters['productId'];
         }
 
         if (requestParameters['page'] != null) {
@@ -702,6 +922,87 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * Owner 软移除 Product 关系
+     */
+    async removeProjectProductLinkRaw(requestParameters: RemoveProjectProductLinkRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectProductLink>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling removeProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['linkId'] == null) {
+            throw new runtime.RequiredError(
+                'linkId',
+                'Required parameter "linkId" was null or undefined when calling removeProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling removeProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling removeProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling removeProjectProductLink().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/products/{linkId}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"linkId"}}`, encodeURIComponent(String(requestParameters['linkId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectProductLinkRemoveRequestToJSON(requestParameters['projectProductLinkRemoveRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectProductLinkFromJSON(jsonValue));
+    }
+
+    /**
+     * Owner 软移除 Product 关系
+     */
+    async removeProjectProductLink(requestParameters: RemoveProjectProductLinkRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectProductLink> {
+        const response = await this.removeProjectProductLinkRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Owner 替换 Project 可变配置完整快照
      */
     async updateProjectRaw(requestParameters: UpdateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectDetail>> {
@@ -767,6 +1068,83 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async updateProject(requestParameters: UpdateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectDetail> {
         const response = await this.updateProjectRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Owner 修改关系的主关系标记
+     */
+    async updateProjectProductLinkRaw(requestParameters: UpdateProjectProductLinkRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectProductLink>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['linkId'] == null) {
+            throw new runtime.RequiredError(
+                'linkId',
+                'Required parameter "linkId" was null or undefined when calling updateProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateProjectProductLink().'
+            );
+        }
+
+        if (requestParameters['projectProductLinkUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'projectProductLinkUpdateRequest',
+                'Required parameter "projectProductLinkUpdateRequest" was null or undefined when calling updateProjectProductLink().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/products/{linkId}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"linkId"}}`, encodeURIComponent(String(requestParameters['linkId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectProductLinkUpdateRequestToJSON(requestParameters['projectProductLinkUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectProductLinkFromJSON(jsonValue));
+    }
+
+    /**
+     * Owner 修改关系的主关系标记
+     */
+    async updateProjectProductLink(requestParameters: UpdateProjectProductLinkRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectProductLink> {
+        const response = await this.updateProjectProductLinkRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

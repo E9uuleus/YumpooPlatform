@@ -42,6 +42,12 @@ export interface ProjectCapabilities {
      * @memberof ProjectCapabilities
      */
     readonly canReassignOwner: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof ProjectCapabilities
+     */
+    readonly canManageProductLinks: boolean;
 }
 
 /**
@@ -52,6 +58,7 @@ export function instanceOfProjectCapabilities(value: object): value is ProjectCa
     if (!('canActivate' in value) || value['canActivate'] === undefined) return false;
     if (!('canManageMembers' in value) || value['canManageMembers'] === undefined) return false;
     if (!('canReassignOwner' in value) || value['canReassignOwner'] === undefined) return false;
+    if (!('canManageProductLinks' in value) || value['canManageProductLinks'] === undefined) return false;
     return true;
 }
 
@@ -69,6 +76,7 @@ export function ProjectCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator:
         'canActivate': json['canActivate'],
         'canManageMembers': json['canManageMembers'],
         'canReassignOwner': json['canReassignOwner'],
+        'canManageProductLinks': json['canManageProductLinks'],
     };
 }
 
@@ -76,7 +84,7 @@ export function ProjectCapabilitiesToJSON(json: any): ProjectCapabilities {
     return ProjectCapabilitiesToJSONTyped(json, false);
 }
 
-export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canActivate'|'canManageMembers'|'canReassignOwner'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canActivate'|'canManageMembers'|'canReassignOwner'|'canManageProductLinks'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
