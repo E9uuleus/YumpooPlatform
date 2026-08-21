@@ -64,7 +64,8 @@ const summary: ProjectSummary = {
   ownerUserId: 'owner-1', ownerDisplayName: '负责人甲', actorAccess: ProjectActorAccess.Owner,
   capabilities: {
     canUpdateSettings: true, canActivate: false, canManageMembers: true, canReassignOwner: true,
-    canManageProductLinks: true,
+    canManageProductLinks: true, canArchive: true, canRestore: false,
+    canMoveWorkspace: true, canOverrideArchive: true,
   },
   rowVersion: 1, etag: '"v1"',
 }

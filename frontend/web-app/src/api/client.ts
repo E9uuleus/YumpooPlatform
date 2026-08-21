@@ -1,5 +1,6 @@
 import {
   AuthenticationApi,
+  AdministrationApi,
   IdentityAdministrationApi,
   IdentityGovernanceApi,
   ProjectsApi,
@@ -14,6 +15,7 @@ export const yumpooApiClient = createYumpooApiClient({
   middleware: [globalProblemMiddleware],
 })
 export const authenticationApi = new AuthenticationApi(yumpooApiClient)
+export const administrationApi = new AdministrationApi(yumpooApiClient)
 export const identityAdministrationApi = new IdentityAdministrationApi(yumpooApiClient)
 export const identityGovernanceApi = new IdentityGovernanceApi(yumpooApiClient)
 export const projectsApi = new ProjectsApi(yumpooApiClient)
