@@ -1,0 +1,41 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..','..')
+const read=(relative)=>fs.readFileSync(path.join(root,relative),'utf8')
+const migration=read('backend/src/main/resources/db/migration/catalog/V27__create_project_product_link.sql')
+const service=read('backend/src/main/java/com/yumpoo/platform/catalog/application/project/ProjectProductLinkService.java')
+const productRepository=read('backend/src/main/java/com/yumpoo/platform/catalog/infrastructure/product/JdbcProductRepository.java')
+const projectRepository=read('backend/src/main/java/com/yumpoo/platform/catalog/infrastructure/project/JdbcProjectRepository.java')
+const relationQuery=read('backend/src/main/java/com/yumpoo/platform/catalog/api/ProductProjectRelationQuery.java')
+const integration=read('backend/src/test/java/com/yumpoo/platform/catalog/infrastructure/project/ProjectProductLinkIT.java')
+const backup=read('backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java')
+const openapi=read('contracts/openapi/yumpoo-v1.yaml')
+const events=read('contracts/events/catalog.yaml')
+const sdk=read('packages/api-client/src/generated/apis/ProjectsApi.ts')
+const page=read('frontend/web-app/src/views/projects/ProjectProductsView.vue')
+const catalog=read('frontend/web-app/src/views/projects/ProjectsView.vue')
+const note=read('.agents/notes/implemented/product/2026-08-21-product-project-relation-contract.md')
+const report=JSON.parse(read('evidence/m2-07/verification-report.json'))
+const acceptance=JSON.parse(read('evidence/m2-07/acceptance-matrix.json'))
+
+for(const fragment of ['uq_project_product_link_active_relation','uq_project_product_link_active_primary','removed_at IS NULL','remove_reason']) assert(migration.includes(fragment),`V27 缺少 ${fragment}`)
+for(const fragment of ['lockById','PRIMARY_PRODUCT_ALREADY_EXISTS','catalog.product_linked_to_project','catalog.product_unlinked_from_project']) assert(service.includes(fragment),`关系服务缺少 ${fragment}`)
+for(const fragment of ['project_product_link','project_membership','ppl.removed_at IS NULL']) assert(productRepository.includes(fragment),`Product 可见性缺少 ${fragment}`)
+for(const fragment of [':allProducts','project_product_link','ppl.product_id=:productId']) assert(projectRepository.includes(fragment),`Project Product 筛选缺少 ${fragment}`)
+assert(relationQuery.includes('hasActiveRelation')&&relationQuery.includes('allowedTypes'),'内部关系查询端口缺失')
+for(const fragment of ['concurrentPrimaryCreationHasOneWinner','outbox failure','ProjectProductRelation.USED_BY']) assert(integration.includes(fragment),`PostgreSQL 验收缺少 ${fragment}`)
+for(const fragment of ['project_product_link','product_link_facts','历史支持关系结束']) assert(backup.includes(fragment),`备份恢复缺少 ${fragment}`)
+for(const fragment of ['/projects/{projectId}/products:','/projects/{projectId}/product-candidates:','ProjectProductRelationType:','canManageProductLinks']) assert(openapi.includes(fragment),`OpenAPI 缺少 ${fragment}`)
+for(const fragment of ['catalog.product_linked_to_project','catalog.project_product_link_updated','catalog.product_unlinked_from_project']) assert(events.includes(fragment),`事件目录缺少 ${fragment}`)
+for(const fragment of ['listProjectProducts','listProjectProductCandidates','createProjectProductLink','removeProjectProductLink']) assert(sdk.includes(fragment),`生成 SDK 缺少 ${fragment}`)
+for(const fragment of ['两步提交','removeProjectProductLink','duplicateSelectedType']) assert(page.includes(fragment),`关联产品页缺少 ${fragment}`)
+assert(catalog.includes('productId')&&catalog.includes('productsApi.listProducts'),'项目目录 Product 筛选缺失')
+assert(note.includes('Status: implemented')&&note.includes('不创建 Feedback 表'),'Agent Note 状态或诚实边界缺失')
+assert(report.milestone==='M2-07'&&report.status==='PASS'&&report.flywayVersion==='27','验证报告无效')
+for(const id of ['PPM-002','PPM-008','PPM-009','PPM-010']) assert(acceptance.verifiedSlices.some(item=>item.requirementId===id),`验收矩阵缺少 ${id}`)
+assert(acceptance.deferredRequirements.some(item=>item.requirementId==='PPM-AT-010-FEEDBACK-BLOCKER'),'真实 Feedback blocker 未明确延期')
+
+console.log('M2-07 数据模型、权限查询、契约、Web、测试、备份恢复和诚实范围资产有效。')
+function assert(condition,message){if(!condition)throw new Error(`M2-07 资产验证失败：${message}`)}
