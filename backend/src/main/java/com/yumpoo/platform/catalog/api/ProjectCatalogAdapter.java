@@ -150,6 +150,14 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     }
 
     @Override
+    public ProjectSnapshot lockForWorkspaceMove(ProjectWorkspaceMoveMutation mutation) {
+        return snapshot(lifecycleService.lockForWorkspaceMove(
+                new com.yumpoo.platform.catalog.application.project.ProjectWorkspaceMoveCommand(
+                mutation.companyId(), mutation.projectId(), mutation.targetWorkspaceId(),
+                mutation.expectedRowVersion(), mutation.actorUserId())));
+    }
+
+    @Override
     public ProjectSnapshot lockForNewFact(java.util.UUID companyId, java.util.UUID projectId) {
         return snapshot(lifecycleService.lockForNewFact(companyId, projectId));
     }

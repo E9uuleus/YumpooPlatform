@@ -11,13 +11,14 @@ public final class ApplicationException extends RuntimeException {
     private final StandardErrorCode errorCode;
     private final List<FieldViolation> fieldViolations;
     private final String reason;
+    private final List<SafeBlocker> blockers;
 
     public ApplicationException(StandardErrorCode errorCode) {
-        this(errorCode, errorCode.defaultMessage(), List.of(), null);
+        this(errorCode, errorCode.defaultMessage(), List.of(), null, List.of());
     }
 
     public ApplicationException(StandardErrorCode errorCode, String safeMessage) {
-        this(errorCode, safeMessage, List.of(), null);
+        this(errorCode, safeMessage, List.of(), null, List.of());
     }
 
     public ApplicationException(
@@ -25,7 +26,7 @@ public final class ApplicationException extends RuntimeException {
             String safeMessage,
             List<FieldViolation> fieldViolations
     ) {
-        this(errorCode, safeMessage, fieldViolations, null);
+        this(errorCode, safeMessage, fieldViolations, null, List.of());
     }
 
     public ApplicationException(
@@ -34,10 +35,17 @@ public final class ApplicationException extends RuntimeException {
             List<FieldViolation> fieldViolations,
             String reason
     ) {
+        this(errorCode, safeMessage, fieldViolations, reason, List.of());
+    }
+
+    public ApplicationException(StandardErrorCode errorCode, String safeMessage,
+            List<FieldViolation> fieldViolations, String reason, List<SafeBlocker> blockers) {
         super(requireSafeMessage(safeMessage));
         this.errorCode = Objects.requireNonNull(errorCode, "errorCode must not be null");
         this.fieldViolations = List.copyOf(fieldViolations);
         this.reason = normalizeReason(reason);
+        this.blockers = List.copyOf(blockers).stream()
+                .sorted(java.util.Comparator.comparing(SafeBlocker::code)).toList();
     }
 
     public StandardErrorCode errorCode() {
@@ -52,8 +60,17 @@ public final class ApplicationException extends RuntimeException {
         return reason;
     }
 
+    public List<SafeBlocker> blockers() {
+        return blockers;
+    }
+
     public static ApplicationException withReason(StandardErrorCode errorCode, String reason) {
         return new ApplicationException(errorCode, errorCode.defaultMessage(), List.of(), reason);
+    }
+
+    public static ApplicationException withBlockers(StandardErrorCode errorCode, String reason,
+            List<SafeBlocker> blockers) {
+        return new ApplicationException(errorCode, errorCode.defaultMessage(), List.of(), reason, blockers);
     }
 
     public static ApplicationException validation(FieldViolation... violations) {

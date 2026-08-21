@@ -130,6 +130,16 @@ public class ProjectLifecycleService {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
+    public ProjectApplicationSnapshot lockForWorkspaceMove(ProjectWorkspaceMoveCommand command) {
+        Project project = requiredLocked(command.companyId(), command.projectId());
+        requireVersion(project, command.expectedRowVersion());
+        if (project.lifecycle() == ProjectLifecycle.ARCHIVED) {
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
+        }
+        return snapshot(project);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
     public ProjectApplicationSnapshot lockForNewFact(java.util.UUID companyId,
                                                       java.util.UUID projectId) {
         Project project = projects.lockByIdForShare(companyId, projectId)
