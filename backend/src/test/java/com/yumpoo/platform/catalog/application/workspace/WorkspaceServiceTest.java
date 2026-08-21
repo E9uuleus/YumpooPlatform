@@ -138,7 +138,7 @@ class WorkspaceServiceTest {
     void archiveChecksLifecycleAndPublishesTransition() {
         Workspace before = workspace(WorkspaceStatus.ACTIVE, 0);
         Workspace after = before.changeStatus(WorkspaceStatus.ARCHIVED, ACTOR_ID, NOW);
-        when(repository.findById(COMPANY_ID, WORKSPACE_ID)).thenReturn(Optional.of(before));
+        when(repository.lockById(COMPANY_ID, WORKSPACE_ID)).thenReturn(Optional.of(before));
         when(repository.changeStatus(any(), any(), any(Long.class))).thenReturn(Optional.of(after));
         executeCallbacks();
 
@@ -151,6 +151,24 @@ class WorkspaceServiceTest {
         assertThat(event.getValue().eventType()).isEqualTo("catalog.workspace_archived");
         assertThat(event.getValue().payload().get("fromStatus").stringValue()).isEqualTo("ACTIVE");
         assertThat(event.getValue().payload().get("toStatus").stringValue()).isEqualTo("ARCHIVED");
+    }
+
+    @Test
+    void archiveLocksWorkspaceAndRejectsCurrentProjects() {
+        Workspace before = workspace(WorkspaceStatus.ACTIVE, 4);
+        when(repository.lockById(COMPANY_ID, WORKSPACE_ID)).thenReturn(Optional.of(before));
+        when(projectRepository.countCurrentByWorkspace(COMPANY_ID, WORKSPACE_ID)).thenReturn(2L);
+        executeCallbacks();
+
+        assertThatThrownBy(() -> service.archive(new WorkspaceLifecycleCommand(
+                admin(), WORKSPACE_ID, 4, UUID.randomUUID(), requestHash())))
+                .isInstanceOfSatisfying(ApplicationException.class, error -> {
+                    assertThat(error.errorCode()).isEqualTo(StandardErrorCode.INVALID_STATE_TRANSITION);
+                    assertThat(error.reason()).isEqualTo("WORKSPACE_ARCHIVE_BLOCKED");
+                });
+
+        verify(repository, never()).changeStatus(any(), any(), any(Long.class));
+        verify(eventPort, never()).append(any());
     }
 
     @Test

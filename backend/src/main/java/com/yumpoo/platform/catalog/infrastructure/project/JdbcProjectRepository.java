@@ -110,6 +110,14 @@ public class JdbcProjectRepository implements ProjectRepository {
     }
 
     @Override
+    public Optional<Project> lockByIdForShare(UUID companyId, UUID projectId) {
+        return jdbcClient.sql("SELECT " + COLUMNS + " FROM yumpoo.project "
+                        + "WHERE company_id = :companyId AND id = :projectId FOR SHARE")
+                .param("companyId", companyId).param("projectId", projectId)
+                .query(JdbcProjectRepository::map).optional();
+    }
+
+    @Override
     public Optional<Project> reassignOwner(Project project, long expectedVersion) {
         return jdbcClient.sql("""
                 UPDATE yumpoo.project SET owner_user_id = :ownerUserId,
@@ -167,6 +175,70 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .param("companyId", project.companyId()).param("id", project.id())
                 .param("expectedVersion", expectedVersion)
                 .query(JdbcProjectRepository::map).optional();
+    }
+
+    @Override
+    public Optional<Project> archive(Project project, long expectedVersion) {
+        return jdbcClient.sql("""
+                UPDATE yumpoo.project SET lifecycle='ARCHIVED', archived_at=:archivedAt,
+                    row_version=row_version+1, updated_at=:updatedAt,
+                    updated_by_user_id=:updatedByUserId
+                WHERE company_id=:companyId AND id=:id AND lifecycle='ACTIVE'
+                  AND row_version=:expectedVersion
+                RETURNING %s
+                """.formatted(COLUMNS))
+                .param("archivedAt", OffsetDateTime.ofInstant(project.archivedAt(), ZoneOffset.UTC))
+                .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
+                .param("updatedByUserId", project.updatedByUserId())
+                .param("companyId", project.companyId()).param("id", project.id())
+                .param("expectedVersion", expectedVersion)
+                .query(JdbcProjectRepository::map).optional();
+    }
+
+    @Override
+    public Optional<Project> reopen(Project project, long expectedVersion) {
+        return jdbcClient.sql("""
+                UPDATE yumpoo.project SET lifecycle='ACTIVE', archived_at=NULL,
+                    row_version=row_version+1, updated_at=:updatedAt,
+                    updated_by_user_id=:updatedByUserId
+                WHERE company_id=:companyId AND id=:id AND lifecycle='ARCHIVED'
+                  AND row_version=:expectedVersion
+                RETURNING %s
+                """.formatted(COLUMNS))
+                .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
+                .param("updatedByUserId", project.updatedByUserId())
+                .param("companyId", project.companyId()).param("id", project.id())
+                .param("expectedVersion", expectedVersion)
+                .query(JdbcProjectRepository::map).optional();
+    }
+
+    @Override
+    public Optional<Project> moveWorkspace(Project project, long expectedVersion) {
+        return jdbcClient.sql("""
+                UPDATE yumpoo.project SET workspace_id=:workspaceId,
+                    row_version=row_version+1, updated_at=:updatedAt,
+                    updated_by_user_id=:updatedByUserId
+                WHERE company_id=:companyId AND id=:id AND lifecycle IN ('DRAFT','ACTIVE')
+                  AND row_version=:expectedVersion
+                RETURNING %s
+                """.formatted(COLUMNS))
+                .param("workspaceId", project.workspaceId())
+                .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
+                .param("updatedByUserId", project.updatedByUserId())
+                .param("companyId", project.companyId()).param("id", project.id())
+                .param("expectedVersion", expectedVersion)
+                .query(JdbcProjectRepository::map).optional();
+    }
+
+    @Override
+    public long countCurrentByWorkspace(UUID companyId, UUID workspaceId) {
+        return jdbcClient.sql("""
+                SELECT count(*) FROM yumpoo.project
+                 WHERE company_id=:companyId AND workspace_id=:workspaceId
+                   AND lifecycle IN ('DRAFT','ACTIVE')
+                """)
+                .param("companyId", companyId).param("workspaceId", workspaceId)
+                .query(Long.class).single();
     }
 
     @Override

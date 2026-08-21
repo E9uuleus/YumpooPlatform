@@ -166,10 +166,18 @@ public class WorkspaceService {
                 command.requestHash()
         );
         return idempotentCommandExecutor.execute(idempotency, () -> {
-            Workspace before = required(command.actor().companyId(), command.workspaceId());
+            Workspace before = repository.lockById(command.actor().companyId(), command.workspaceId())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             requireVersion(before, command.expectedRowVersion());
             if (before.status() != expectedStatus) {
                 throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
+            }
+            if (targetStatus == WorkspaceStatus.ARCHIVED
+                    && projectRepository.countCurrentByWorkspace(
+                            command.actor().companyId(), before.id()) > 0) {
+                throw ApplicationException.withReason(
+                        StandardErrorCode.INVALID_STATE_TRANSITION,
+                        "WORKSPACE_ARCHIVE_BLOCKED");
             }
             Workspace candidate = before.changeStatus(
                     targetStatus, command.actor().userId(), clock.instant());

@@ -180,7 +180,11 @@ public class ProjectService {
         boolean mutable = project.lifecycle() != ProjectLifecycle.ARCHIVED;
         return new ProjectCapabilities(owner && mutable,
                 owner && project.lifecycle() == ProjectLifecycle.DRAFT,
-                (owner || admin) && mutable, admin && mutable, owner && mutable);
+                (owner || admin) && mutable, admin && mutable, owner && mutable,
+                owner && project.lifecycle() == ProjectLifecycle.ACTIVE,
+                admin && project.lifecycle() == ProjectLifecycle.ARCHIVED,
+                admin && mutable,
+                admin && project.lifecycle() == ProjectLifecycle.ACTIVE);
     }
 
     private static void requireVersion(Project project, long version) {
