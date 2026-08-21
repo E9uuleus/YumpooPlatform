@@ -14,9 +14,9 @@ Workspace 编码由调用方显式提供，采用 Company 内唯一的 2–32 �
 
 列表默认只返回 ACTIVE Workspace，供同 Company 的有效成员作为导航目录使用。`ARCHIVED` 和 `ALL` 筛选仅对 COMPANY_ADMIN 开放。详情 GET 对同 Company 成员公开 ACTIVE 资源；ARCHIVED 详情仅 COMPANY_ADMIN 可见，其他成员得到隐藏式 404。详情和所有写响应返回基于 `rowVersion` 的强 ETag。
 
-归档和恢复是独立的幂等命令，分别只允许 `ACTIVE -> ARCHIVED` 和 `ARCHIVED -> ACTIVE`。它们要求 `If-Match` 与 `Idempotency-Key`，不要求 reason，也不级联修改其他业务事实。
+归档和恢复是独立的幂等命令，分别只允许 `ACTIVE -> ARCHIVED` 和 `ARCHIVED -> ACTIVE`。它们要求 `If-Match` 与 `Idempotency-Key`。普通归档不要求 reason，但必须先锁定 Workspace，再确认同 Company 不存在 DRAFT/ACTIVE Project；存在时以 `WORKSPACE_ARCHIVE_BLOCKED` 和 `CURRENT_PROJECTS` 聚合计数拒绝。CompanyAdmin 若确需归档仍有当前项目的 Workspace，必须经 administration 的显式覆盖命令提交 10–500 字理由并形成安全审计与 `admin_override` 记录。
 
-Workspace 响应从 M2-02 起包含 `visibleProjectCount`。在 Project 真源与项目权限过滤交付前，该字段固定为 `0`；真实可见项目计数由 M2-06/M2-24 接管。`WorkspaceSnapshotQuery` 只向其他后端模块暴露同 Company、ACTIVE Workspace 的最小快照，以便后续 Project 创建编排拒绝归档目标。
+Workspace 响应包含 `visibleProjectCount`，并从 M2-06 起读取真实 Project 可见范围。Project 创建、迁入和恢复都对目标 ACTIVE Workspace 获取共享锁；Workspace 归档获取排他锁并统计当前 Project。因此并发结果只能是 Project 事实先完成并阻断归档，或归档先完成且后续 Project 写入失败。
 
 ## Alternatives considered
 
@@ -29,8 +29,8 @@ Workspace 响应从 M2-02 起包含 `visibleProjectCount`。在 Project 真源�
 
 ## Consequences
 
-调用方必须在创建时选择长期稳定的 code，并保存返回的资源 ID 与 ETag。管理员客户端必须发送完整的 `name`、`description` 和 `sortOrder` 快照；清空描述时显式发送 `null`。
+调用方必须在创建时选择长期稳定的 code，并保存返回的资源 ID 与 ETag。管理员客户端必须发送完整的 `name`、`description` 和 `sortOrder` 快照；清空描述时显式发送 `null`。调用方不得假设普通归档会级联迁移或归档 Project；应先迁移/归档当前 Project，或使用带理由且可审计的显式治理覆盖。
 
-列表保持无分页并按 `sortOrder,name,id` 稳定排序。若未来规模要求分页，需要单独作兼容契约决策。Project 创建在接入 `WorkspaceSnapshotQuery` 后必须拒绝 ARCHIVED Workspace；已有项目占用检查、跨 Workspace 移动和真实项目可见性仍分别由 M2-08、M2-24 交付。
+列表保持无分页并按 `sortOrder,name,id` 稳定排序。若未来规模要求分页，需要单独作兼容契约决策。任何新增会建立 Workspace 当前占用的事实，都必须复用同一共享生命周期守卫，不能先写事实再异步补偿归档竞态。
 
 创建、更新、归档和恢复均产生不含完整描述正文的 v1 领域事件。普通 Workspace 导航治理不写 Security Audit；Activity 投影在 M2-20 消费这些事件。

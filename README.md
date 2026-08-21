@@ -4,6 +4,8 @@
 
 M2-07 已交付 V27 关系小聚合、四类关系、单一可选主 Product、关系强 ETag、持久化幂等、软移除与重新关联新 ID。关系写入锁定 Project 但不增加 Project 版本；Owner 可写，成员和非成员 CompanyAdmin 只读。Product 读取范围现包含关联 Project 的 ACTIVE member，Product 写权限仍显式限制为 ProductOwner 或 CompanyAdmin；项目目录支持远程 Product 筛选。
 
+M2-08 已交付 Project 普通归档、治理覆盖归档、恢复、Workspace 迁移和 Workspace 占用保护。OpenAPI、生成 SDK、三类生命周期事件、`admin_override`、项目端操作闭环与安全 blocker 计数已同步；Work Item、Worklog、Feedback 三类真实 provider 继续由 M2-24 接入，不制造零值 blocker 或虚假 Verified 结论。详见 [M2-08 说明](docs/01-delivery/M2-08-project-lifecycle-governance.md)。
+
 OpenAPI、生成 TypeScript SDK、三类 v1 事件、Vue 关联产品页、PostgreSQL 并发/回滚测试和备份恢复事实已同步。真实 Feedback 引用的解绑 blocker 继续由 M3B/M2-24 建立，不在尚无 Feedback 真源时伪造已验证结论。
 
 ```powershell
