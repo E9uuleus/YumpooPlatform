@@ -99,6 +99,41 @@ public class PlatformRoleManagementService
 
     @Override
     @Transactional
+    public MaintenanceRoleActor ensureAvailableAppManager(
+            UUID companyId,
+            UUID preferredTargetUserId,
+            String reasonReference
+    ) {
+        AvailabilitySnapshot before = availabilityCoordinator.lock(companyId);
+        if (before.availableCount() > 0) {
+            RoleUserSnapshot existing = repository.findAvailableAppManager(companyId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "APP_MANAGER availability count is inconsistent"
+                    ));
+            return new MaintenanceRoleActor(
+                    existing.userId(),
+                    existing.authorizationVersion()
+            );
+        }
+
+        MaintenanceRoleMode mode = before.state().lifecycleStatus()
+                == GovernanceLifecycleStatus.UNINITIALIZED
+                ? MaintenanceRoleMode.BOOTSTRAP
+                : MaintenanceRoleMode.BREAK_GLASS;
+        PlatformRoleMutationResult restored = execute(new MaintenanceRoleCommand(
+                companyId,
+                preferredTargetUserId,
+                mode,
+                reasonReference
+        ));
+        return new MaintenanceRoleActor(
+                restored.userId(),
+                restored.authorizationVersion()
+        );
+    }
+
+    @Override
+    @Transactional
     public PlatformRoleMutationResult execute(MaintenanceRoleCommand command) {
         AvailabilitySnapshot before = availabilityCoordinator.lock(command.companyId());
         RoleUserSnapshot target = requireTarget(command.companyId(), command.targetUserId());

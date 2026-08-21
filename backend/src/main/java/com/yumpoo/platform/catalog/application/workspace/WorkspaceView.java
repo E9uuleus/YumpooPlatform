@@ -17,8 +17,12 @@ public record WorkspaceView(
 ) {
 
     public static WorkspaceView from(Workspace workspace) {
+        return from(workspace, 0);
+    }
+
+    public static WorkspaceView from(Workspace workspace, long visibleProjectCount) {
         return new WorkspaceView(
                 workspace.id(), workspace.code(), workspace.name(), workspace.description(),
-                workspace.sortOrder(), workspace.status(), 0, workspace.rowVersion());
+                workspace.sortOrder(), workspace.status(), visibleProjectCount, workspace.rowVersion());
     }
 }

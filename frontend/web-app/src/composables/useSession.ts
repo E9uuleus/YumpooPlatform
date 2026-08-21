@@ -42,6 +42,9 @@ export function useSession() {
   const canManageIdentity = computed(() => authentication.value?.roles.has(
     AuthenticationRole.CompanyAdmin,
   ) ?? false)
+  const isCompanyAdmin = computed(() => authentication.value?.roles.has(
+    AuthenticationRole.CompanyAdmin,
+  ) ?? false)
 
   return {
     phase,
@@ -51,6 +54,7 @@ export function useSession() {
     logoutLoading,
     isIdentityReader,
     canManageIdentity,
+    isCompanyAdmin,
     ensureAuthentication,
     logout,
     clearActionProblem,

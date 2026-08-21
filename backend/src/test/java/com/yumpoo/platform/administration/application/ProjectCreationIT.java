@@ -45,6 +45,9 @@ class ProjectCreationIT {
     private static final UUID WORKSPACE_ID = UUID.fromString("24000000-0000-4000-8000-000000000103");
 
     @Autowired private ProjectCreationOrchestrator orchestrator;
+    @Autowired private ProjectActivationOrchestrator activationOrchestrator;
+    @Autowired private com.yumpoo.platform.catalog.application.project.ProjectService projectService;
+    @Autowired private com.yumpoo.platform.catalog.application.workspace.WorkspaceService workspaceService;
     @Autowired private JdbcClient jdbcClient;
     @Autowired private DataSource dataSource;
     @Autowired private PlatformTransactionManager transactionManager;
@@ -108,6 +111,90 @@ class ProjectCreationIT {
                          WHERE event_type IN ('catalog.project_created', 'catalog.project_template_applied')
                         """).query(String.class).single();
         assertThat(payloads).doesNotContain("description", "customerName", "contactNote");
+    }
+
+    @Test
+    void queryAndWorkspaceCountsUseTheSameDatabaseVisibilityPredicateAndPatchIsNoOpAware() {
+        UUID first = create("QUERY_ALPHA", "PRODUCT_DEVELOPMENT", "RND", null, "7")
+                .result().resourceId();
+        create("QUERY_BETA", "PRE_SALES", "PRE_SALES", "客户", "8");
+
+        var ownerPage = projectService.findAll(owner(), null, null, null,
+                com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest.of(0, 20));
+        var appManagerPage = projectService.findAll(new CurrentActor(UUID.randomUUID(), COMPANY_ID, 0,
+                        Set.of(PlatformRoleCode.APP_MANAGER)), null, null, null,
+                com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest.of(0, 20));
+        var workspace = workspaceService.findAll(owner(),
+                com.yumpoo.platform.catalog.application.workspace.WorkspaceListStatus.ACTIVE).getFirst();
+
+        assertThat(ownerPage.items()).extracting("code")
+                .containsExactly("QUERY_ALPHA", "QUERY_BETA");
+        assertThat(appManagerPage.totalElements()).isZero();
+        assertThat(workspace.visibleProjectCount()).isEqualTo(ownerPage.totalElements());
+
+        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
+                RequestCorrelation.root("m206-project-update"))) {
+            var updated = projectService.update(new com.yumpoo.platform.catalog.application.project.ProjectUpdateCommand(
+                    owner(), first, 0, "Query Alpha Updated", "private description", null,
+                    null, null, "private contact"));
+            var noOp = projectService.update(new com.yumpoo.platform.catalog.application.project.ProjectUpdateCommand(
+                    owner(), first, 1, updated.name(), updated.description(), updated.customerName(),
+                    updated.customerReference(), updated.deliverySite(), updated.contactNote()));
+            assertThat(updated.rowVersion()).isOne();
+            assertThat(noOp.rowVersion()).isOne();
+        }
+        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE event_type='catalog.project_updated' AND aggregate_id=:id")
+                .param("id", first).query(Integer.class).single()).isOne();
+        assertThat(jdbcClient.sql("SELECT payload_json::text FROM yumpoo.outbox_event WHERE event_type='catalog.project_updated' AND aggregate_id=:id")
+                .param("id", first).query(String.class).single())
+                .doesNotContain("private description", "private contact");
+    }
+
+    @Test
+    void activatesAllFourTypesAndRequiresCustomerOnlyOutsideProductDevelopment() {
+        List<IdempotencyExecutionResult> created = List.of(
+                create("ACT_RND", "PRODUCT_DEVELOPMENT", "RND", null, "1"),
+                create("ACT_PRE", "PRE_SALES", "PRE_SALES", "客户", "2"),
+                create("ACT_IMPL", "IMPLEMENTATION", "IMPLEMENTATION", "客户", "3"),
+                create("ACT_HYPER", "HYPERCARE", "HYPERCARE", "客户", "4"));
+
+        for (IdempotencyExecutionResult item : created) {
+            IdempotencyExecutionResult activated = activate(item.result().resourceId(), 0);
+            assertThat(activated.result().httpStatus()).isEqualTo(200);
+            assertThat(activated.result().etag()).isEqualTo("\"1\"");
+        }
+        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.project WHERE lifecycle='ACTIVE' AND activated_at IS NOT NULL")
+                .query(Integer.class).single()).isEqualTo(4);
+
+        UUID missingCustomer = create("ACT_BLOCKED", "PRE_SALES", "PRE_SALES", null, "5")
+                .result().resourceId();
+        assertThatThrownBy(() -> activate(missingCustomer, 0))
+                .isInstanceOfSatisfying(ApplicationException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED);
+                    assertThat(exception.fieldViolations()).extracting("field")
+                            .containsExactly("customerName");
+                });
+        assertThat(jdbcClient.sql("SELECT lifecycle FROM yumpoo.project WHERE id=:id")
+                .param("id", missingCustomer).query(String.class).single()).isEqualTo("DRAFT");
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional
+    void retiredFrozenTemplateRemainsActivatableAndSensitiveFieldsStayOutOfEvent() {
+        UUID projectId = create("ACT_RETIRED", "PRODUCT_DEVELOPMENT", "RND", null, "6")
+                .result().resourceId();
+        jdbcClient.sql("""
+                UPDATE yumpoo.project_template_definition
+                   SET lifecycle_status='RETIRED', retired_at=transaction_timestamp(),
+                       retired_by_user_id=:adminId, retire_reason='M2-06 activation verification'
+                       , row_version=row_version+1, updated_at=transaction_timestamp()
+                 WHERE template_key='RND' AND template_version=1
+                """).param("adminId", ADMIN_ID).update();
+        activate(projectId, 0);
+        String payload = jdbcClient.sql("SELECT payload_json::text FROM yumpoo.outbox_event WHERE event_type='catalog.project_activated' AND aggregate_id=:id")
+                .param("id", projectId).query(String.class).single();
+        assertThat(payload).contains("fromLifecycle", "toLifecycle")
+                .doesNotContain("customerName", "description", "contactNote");
     }
 
     @Test
@@ -268,6 +355,16 @@ class ProjectCreationIT {
         }
     }
 
+    private IdempotencyExecutionResult activate(UUID projectId, long version) {
+        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
+                RequestCorrelation.root("m206-activate-" + projectId))) {
+            return activationOrchestrator.activate(new ProjectActivationCommand(
+                    owner(), projectId, version, UUID.randomUUID(),
+                    new RequestHash(UUID.randomUUID().toString().replace("-", "").repeat(2)),
+                    "WEB", "m2-06-test"));
+        }
+    }
+
     private void installFailureTrigger(FailurePoint point) {
         dropFailureTrigger();
         jdbcClient.sql("""
@@ -323,12 +420,18 @@ class ProjectCreationIT {
                 .param("companyId", COMPANY_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :adminId AND route_key = 'createProject'")
                 .param("adminId", ADMIN_ID).update();
+        jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :ownerId AND route_key = 'activateProject'")
+                .param("ownerId", OWNER_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id IN (:adminId, :ownerId)")
                 .param("adminId", ADMIN_ID).param("ownerId", OWNER_ID).update();
     }
 
     private static CurrentActor admin() {
         return new CurrentActor(ADMIN_ID, COMPANY_ID, 0, Set.of(PlatformRoleCode.COMPANY_ADMIN));
+    }
+
+    private static CurrentActor owner() {
+        return new CurrentActor(OWNER_ID, COMPANY_ID, 0, Set.of());
     }
 
     private enum FailurePoint {

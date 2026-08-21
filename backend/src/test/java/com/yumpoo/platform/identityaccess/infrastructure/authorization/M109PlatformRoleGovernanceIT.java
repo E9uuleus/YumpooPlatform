@@ -20,6 +20,7 @@ import com.yumpoo.platform.identityaccess.application.authorization.GrantPlatfor
 import com.yumpoo.platform.identityaccess.application.authorization.InitialRoleBootstrapCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.InitialRoleBootstrapResult;
 import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleCommand;
+import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleActor;
 import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleMode;
 import com.yumpoo.platform.identityaccess.application.authorization.ManagedPlatformRole;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleAssignmentQueryUseCase;
@@ -123,6 +124,28 @@ class M109PlatformRoleGovernanceIT {
         assertThat(state()).isEqualTo("AVAILABLE|3");
         assertThat(eventCount("identity.app_manager_missing_detected")).isOne();
         assertThat(eventCount("identity.app_manager_availability_restored")).isOne();
+    }
+
+    @Test
+    void maintenanceActorReusesExistingManagerAndRecoversOnlyWhenNoneRemain() {
+        MaintenanceRoleActor bootstrapped = execute("m109-actor-bootstrap", () ->
+                maintenanceUseCase.ensureAvailableAppManager(
+                        COMPANY_ID, MANAGER_A, "local fixture"));
+        assertThat(bootstrapped.userId()).isEqualTo(MANAGER_A);
+
+        MaintenanceRoleActor reused = execute("m109-actor-reuse", () ->
+                maintenanceUseCase.ensureAvailableAppManager(
+                        COMPANY_ID, MANAGER_B, "local fixture"));
+        assertThat(reused).isEqualTo(bootstrapped);
+        assertThat(activeRoleCount(MANAGER_B)).isZero();
+
+        markManagerLeftAndReconcile(MANAGER_A);
+        MaintenanceRoleActor recovered = execute("m109-actor-recovery", () ->
+                maintenanceUseCase.ensureAvailableAppManager(
+                        COMPANY_ID, MANAGER_B, "local fixture"));
+        assertThat(recovered.userId()).isEqualTo(MANAGER_B);
+        assertThat(activeRoleCount(MANAGER_B)).isOne();
+        assertThat(state()).isEqualTo("AVAILABLE|3");
     }
 
     @Test

@@ -42,6 +42,7 @@ class WorkspaceServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-20T04:00:00Z");
 
     private WorkspaceRepository repository;
+    private com.yumpoo.platform.catalog.application.project.ProjectRepository projectRepository;
     private IdempotentCommandExecutor executor;
     private TransactionalEventPort eventPort;
     private WorkspaceService service;
@@ -49,10 +50,12 @@ class WorkspaceServiceTest {
     @BeforeEach
     void setUp() {
         repository = mock(WorkspaceRepository.class);
+        projectRepository = mock(com.yumpoo.platform.catalog.application.project.ProjectRepository.class);
+        when(projectRepository.countVisibleCurrentByWorkspace(any(), any())).thenReturn(java.util.Map.of());
         executor = mock(IdempotentCommandExecutor.class);
         eventPort = mock(TransactionalEventPort.class);
         service = new WorkspaceService(
-                repository, executor, eventPort, new ObjectMapper(),
+                repository, projectRepository, executor, eventPort, new ObjectMapper(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

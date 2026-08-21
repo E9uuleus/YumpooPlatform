@@ -13,11 +13,14 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
 
     private final ProjectCreationService service;
     private final com.yumpoo.platform.catalog.application.project.ProjectMembershipService membershipService;
+    private final com.yumpoo.platform.catalog.application.project.ProjectLifecycleService lifecycleService;
 
     public ProjectCatalogAdapter(ProjectCreationService service,
-            com.yumpoo.platform.catalog.application.project.ProjectMembershipService membershipService) {
+            com.yumpoo.platform.catalog.application.project.ProjectMembershipService membershipService,
+            com.yumpoo.platform.catalog.application.project.ProjectLifecycleService lifecycleService) {
         this.service = service;
         this.membershipService = membershipService;
+        this.lifecycleService = lifecycleService;
     }
 
     @Override
@@ -98,6 +101,24 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
                 mutation.templateKey(), mutation.templateVersion(), mutation.customerName(),
                 mutation.customerReference(), mutation.deliverySite(), mutation.contactNote(),
                 mutation.actorUserId())));
+    }
+
+    @Override
+    public ProjectActivationSnapshot lockForActivation(ProjectActivationMutation mutation) {
+        var state = lifecycleService.lockForActivation(activationCommand(mutation));
+        return new ProjectActivationSnapshot(snapshot(state.project()), state.ownerMembershipActive());
+    }
+
+    @Override
+    public ProjectSnapshot activate(ProjectActivationMutation mutation) {
+        return snapshot(lifecycleService.activate(activationCommand(mutation)));
+    }
+
+    private static com.yumpoo.platform.catalog.application.project.ProjectActivationCommand activationCommand(
+            ProjectActivationMutation mutation) {
+        return new com.yumpoo.platform.catalog.application.project.ProjectActivationCommand(
+                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(),
+                mutation.actorUserId());
     }
 
     private static ProjectSnapshot snapshot(ProjectApplicationSnapshot project) {

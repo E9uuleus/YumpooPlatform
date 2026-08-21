@@ -2,6 +2,7 @@ package com.yumpoo.platform.catalog.application.workspace;
 
 import com.yumpoo.platform.catalog.domain.workspace.Workspace;
 import com.yumpoo.platform.catalog.domain.workspace.WorkspaceStatus;
+import com.yumpoo.platform.catalog.application.project.ProjectRepository;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
@@ -40,6 +41,7 @@ public class WorkspaceService {
     private static final String RESTORED_EVENT = "catalog.workspace_restored";
 
     private final WorkspaceRepository repository;
+    private final ProjectRepository projectRepository;
     private final IdempotentCommandExecutor idempotentCommandExecutor;
     private final TransactionalEventPort eventPort;
     private final ObjectMapper objectMapper;
@@ -47,12 +49,14 @@ public class WorkspaceService {
 
     public WorkspaceService(
             WorkspaceRepository repository,
+            ProjectRepository projectRepository,
             IdempotentCommandExecutor idempotentCommandExecutor,
             TransactionalEventPort eventPort,
             ObjectMapper objectMapper,
             Clock clock
     ) {
         this.repository = repository;
+        this.projectRepository = projectRepository;
         this.idempotentCommandExecutor = idempotentCommandExecutor;
         this.eventPort = eventPort;
         this.objectMapper = objectMapper;
@@ -66,9 +70,11 @@ public class WorkspaceService {
         if (status.includeArchived()) {
             requireCompanyAdmin(actor);
         }
-        return repository.findAll(actor.companyId(), status).stream()
-                .map(WorkspaceView::from)
-                .toList();
+        List<Workspace> workspaces = repository.findAll(actor.companyId(), status);
+        Map<UUID, Long> counts = projectRepository.countVisibleCurrentByWorkspace(actor,
+                workspaces.stream().map(Workspace::id).toList());
+        return workspaces.stream().map(workspace -> WorkspaceView.from(workspace,
+                counts.getOrDefault(workspace.id(), 0L))).toList();
     }
 
     @Transactional(readOnly = true)
@@ -79,13 +85,14 @@ public class WorkspaceService {
                 && !actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)) {
             throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
         }
-        return WorkspaceView.from(workspace);
+        return WorkspaceView.from(workspace, visibleProjectCount(actor, workspace.id()));
     }
 
     @Transactional(readOnly = true)
     public WorkspaceView findForAdministration(CurrentActor actor, UUID workspaceId) {
         requireCompanyAdmin(actor);
-        return WorkspaceView.from(required(actor.companyId(), workspaceId));
+        Workspace workspace = required(actor.companyId(), workspaceId);
+        return WorkspaceView.from(workspace, visibleProjectCount(actor, workspace.id()));
     }
 
     @Transactional(readOnly = true)
@@ -258,6 +265,11 @@ public class WorkspaceService {
         Objects.requireNonNull(workspaceId, "workspaceId must not be null");
         return repository.findById(companyId, workspaceId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    private long visibleProjectCount(CurrentActor actor, UUID workspaceId) {
+        return projectRepository.countVisibleCurrentByWorkspace(actor, List.of(workspaceId))
+                .getOrDefault(workspaceId, 0L);
     }
 
     private RuntimeException conditionalFailure(UUID companyId, UUID workspaceId, long expectedVersion) {

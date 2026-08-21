@@ -9,6 +9,7 @@ import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.UUID;
 
 @Repository
 public class JdbcContentRepository implements ContentRepository {
@@ -65,6 +66,21 @@ public class JdbcContentRepository implements ContentRepository {
             inserted += statement.update();
         }
         return inserted;
+    }
+
+    @Override
+    public boolean hasActiveForTemplate(UUID companyId, UUID projectId, String templateKey,
+                                        int templateVersion) {
+        return jdbcClient.sql("""
+                SELECT EXISTS (
+                    SELECT 1 FROM yumpoo.content
+                    WHERE company_id=:companyId AND project_id=:projectId AND status='ACTIVE'
+                      AND applied_template_key=:templateKey
+                      AND applied_template_version=:templateVersion
+                )
+                """).param("companyId", companyId).param("projectId", projectId)
+                .param("templateKey", templateKey).param("templateVersion", templateVersion)
+                .query(Boolean.class).single();
     }
 
     private static JdbcClient.StatementSpec nullable(

@@ -18,6 +18,11 @@ import IdentityAdminLayout from '../views/admin/IdentityAdminLayout.vue'
 import IdentityMembersView from '../views/admin/IdentityMembersView.vue'
 import IdentityOverviewView from '../views/admin/IdentityOverviewView.vue'
 import IdentitySyncRunsView from '../views/admin/IdentitySyncRunsView.vue'
+import ProjectsView from '../views/projects/ProjectsView.vue'
+import ProjectLayout from '../views/projects/ProjectLayout.vue'
+import ProjectOverviewView from '../views/projects/ProjectOverviewView.vue'
+import ProjectMembersView from '../views/projects/ProjectMembersView.vue'
+import ProjectSettingsView from '../views/projects/ProjectSettingsView.vue'
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -51,6 +56,21 @@ export const routes: RouteRecordRaw[] = [
         path: '',
         name: 'home',
         component: HomeView,
+      },
+      {
+        path: 'projects',
+        name: 'projects',
+        component: ProjectsView,
+      },
+      {
+        path: 'projects/:projectId',
+        component: ProjectLayout,
+        redirect: route => ({ name: 'project-overview', params: route.params }),
+        children: [
+          { path: 'overview', name: 'project-overview', component: ProjectOverviewView },
+          { path: 'members', name: 'project-members', component: ProjectMembersView },
+          { path: 'settings', name: 'project-settings', component: ProjectSettingsView },
+        ],
       },
       {
         path: 'admin/identity',

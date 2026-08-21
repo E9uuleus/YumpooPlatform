@@ -5,11 +5,21 @@ import com.yumpoo.platform.catalog.domain.project.Project;
 import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
+import com.yumpoo.platform.identityaccess.api.CurrentActor;
+import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
+import com.yumpoo.platform.catalog.domain.project.ProjectType;
 
 public interface ProjectRepository {
     boolean insert(Project project);
     Optional<Project> findById(UUID companyId, UUID projectId);
     Optional<Project> lockById(UUID companyId, UUID projectId);
     Optional<Project> reassignOwner(Project project, long expectedVersion);
+    Optional<Project> updateDetails(Project project, long expectedVersion);
+    Optional<Project> activate(Project project, long expectedVersion);
+    Optional<ProjectQueryRow> findVisibleById(CurrentActor actor, UUID projectId);
+    ProjectPageResult findVisible(CurrentActor actor, UUID workspaceId, ProjectType projectType,
+                                  ProjectLifecycleFilter lifecycle, OffsetPageRequest page);
+    java.util.Map<UUID, Long> countVisibleCurrentByWorkspace(CurrentActor actor,
+                                                             java.util.Collection<UUID> workspaceIds);
     List<Project> findGovernedByOwner(UUID companyId, UUID ownerUserId);
 }

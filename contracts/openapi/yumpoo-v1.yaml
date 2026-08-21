@@ -900,6 +900,24 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
 
   /projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      summary: 查询调用人可见的 Project
+      description: lifecycle 省略时返回 DRAFT 与 ACTIVE；分页和总数使用相同权限及筛选谓词。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: workspaceId, in: query, schema: { $ref: '#/components/schemas/Uuid' } }
+        - { name: projectType, in: query, schema: { $ref: '#/components/schemas/ProjectType' } }
+        - { name: lifecycle, in: query, schema: { $ref: '#/components/schemas/ProjectLifecycleFilter' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: 按 name、code、id 稳定排序的权限过滤分页。
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
     post:
       tags: [Projects]
       operationId: createProject
@@ -928,6 +946,71 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /projects/{projectId}:
+    get:
+      tags: [Projects]
+      operationId: getProject
+      summary: 查询可见 Project 完整详情
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Project 详情、调用人访问模式与能力摘要。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectDetail' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+    patch:
+      tags: [Projects]
+      operationId: updateProject
+      summary: Owner 替换 Project 可变配置完整快照
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectUpdateRequest' } } }
+      responses:
+        '200':
+          description: 更新后的完整详情；无变化时 ETag 保持不变。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/activate:
+    post:
+      tags: [Projects]
+      operationId: activateProject
+      summary: Owner 原子激活 DRAFT Project
+      description: 锁内重验 Owner、模板版本、Content provenance 及客户字段后执行 DRAFT 到 ACTIVE。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': { $ref: '#/components/responses/ProjectChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /projects/{projectId}/members:
@@ -1196,7 +1279,7 @@ components:
           format: int64
           minimum: 0
           readOnly: true
-          description: M2-02 固定为 0；M2-06 接入真实 Project 权限过滤计数。
+          description: 调用人可见的 DRAFT 与 ACTIVE Project 数量；管理员统计全公司，普通用户统计 ACTIVE membership。
         rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
 
     WorkspaceList:
@@ -1311,6 +1394,24 @@ components:
       type: string
       enum: [DRAFT, ACTIVE, ARCHIVED]
 
+    ProjectLifecycleFilter:
+      type: string
+      enum: [DRAFT, ACTIVE, ARCHIVED, ALL]
+
+    ProjectActorAccess:
+      type: string
+      enum: [OWNER, MEMBER, COMPANY_ADMIN]
+
+    ProjectCapabilities:
+      type: object
+      additionalProperties: false
+      required: [canUpdateSettings, canActivate, canManageMembers, canReassignOwner]
+      properties:
+        canUpdateSettings: { type: boolean, readOnly: true }
+        canActivate: { type: boolean, readOnly: true }
+        canManageMembers: { type: boolean, readOnly: true }
+        canReassignOwner: { type: boolean, readOnly: true }
+
     Project:
       type: object
       additionalProperties: false
@@ -1375,6 +1476,69 @@ components:
         ownerUserId: { $ref: '#/components/schemas/Uuid' }
         templateKey: { $ref: '#/components/schemas/ProjectTemplateKey' }
         templateVersion: { type: integer, format: int32, minimum: 1 }
+        customerName: { type: string, maxLength: 160, nullable: true }
+        customerReference: { type: string, maxLength: 80, nullable: true }
+        deliverySite: { type: string, maxLength: 160, nullable: true }
+        contactNote: { type: string, maxLength: 500, nullable: true }
+
+    ProjectSummary:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, workspaceCode, workspaceName, code, name, projectType,
+        lifecycle, ownerUserId, ownerDisplayName, actorAccess, capabilities, rowVersion, etag]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        workspaceId: { $ref: '#/components/schemas/Uuid' }
+        workspaceCode: { type: string, minLength: 2, maxLength: 32 }
+        workspaceName: { type: string, minLength: 1, maxLength: 80 }
+        code: { type: string, minLength: 2, maxLength: 32, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        projectType: { $ref: '#/components/schemas/ProjectType' }
+        lifecycle: { $ref: '#/components/schemas/ProjectLifecycle' }
+        ownerUserId: { $ref: '#/components/schemas/Uuid' }
+        ownerDisplayName: { type: string, minLength: 1, maxLength: 200 }
+        actorAccess: { $ref: '#/components/schemas/ProjectActorAccess' }
+        capabilities: { $ref: '#/components/schemas/ProjectCapabilities' }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+
+    ProjectPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ProjectSummary' } }
+        page: { type: integer, format: int32, minimum: 0 }
+        size: { type: integer, format: int32, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, format: int32, minimum: 0 }
+
+    ProjectDetail:
+      allOf:
+        - $ref: '#/components/schemas/Project'
+        - type: object
+          additionalProperties: false
+          required: [workspaceCode, workspaceName, ownerDisplayName, actorAccess, capabilities,
+            etag, createdAt, updatedAt, activatedAt, archivedAt]
+          properties:
+            workspaceCode: { type: string, minLength: 2, maxLength: 32 }
+            workspaceName: { type: string, minLength: 1, maxLength: 80 }
+            ownerDisplayName: { type: string, minLength: 1, maxLength: 200 }
+            actorAccess: { $ref: '#/components/schemas/ProjectActorAccess' }
+            capabilities: { $ref: '#/components/schemas/ProjectCapabilities' }
+            etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+            createdAt: { type: string, format: date-time, readOnly: true }
+            updatedAt: { type: string, format: date-time, readOnly: true }
+            activatedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+            archivedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+
+    ProjectUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, description, customerName, customerReference, deliverySite, contactNote]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, maxLength: 500, nullable: true }
         customerName: { type: string, maxLength: 160, nullable: true }
         customerReference: { type: string, maxLength: 80, nullable: true }
         deliverySite: { type: string, maxLength: 160, nullable: true }

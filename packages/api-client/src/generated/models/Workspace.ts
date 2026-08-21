@@ -63,7 +63,7 @@ export interface Workspace {
      */
     status: WorkspaceStatus;
     /**
-     * M2-02 固定为 0；M2-06 接入真实 Project 权限过滤计数。
+     * 调用人可见的 DRAFT 与 ACTIVE Project 数量；管理员统计全公司，普通用户统计 ACTIVE membership。
      * @type {number}
      * @memberof Workspace
      */

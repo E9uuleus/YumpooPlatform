@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M2-06 Project 范围查询、激活与工作台
+
+M2-06 已交付 Project 权限过滤目录、完整详情、Owner 配置 PATCH 与 DRAFT 激活，并将 Workspace 的 `visibleProjectCount` 接入调用人可见的 DRAFT+ACTIVE Project 分组计数。激活在同一事务中重验 Owner、固化模板版本与 ACTIVE Content provenance；PUBLISHED 和 RETIRED 模板均可解释既有草稿，非研发类型在激活前必须补齐客户名称。
+
+OpenAPI、生成的 TypeScript `ProjectsApi`、Project update/activation v1 事件、Vue 项目工作台与备份恢复覆盖已同步。Project 归档、Product–Project 关系、Content CRUD/View Config 和 Activity 投影分别留给 M2-08、M2-07、M2-09 与 M2-20。
+
+```powershell
+pnpm verify:m2-06
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-05 Project 成员与唯一负责人治理
 
 M2-05 交付 Project 成员分页与候选搜索、加入/移除/重激活、唯一负责人原子重指派、Security Audit、三类 v1 Outbox 与 PROJECT OWNER_MISSING 投影。成员写固定按 Project → membership 加锁，负责人重指派先确保新负责人 ACTIVE membership，旧负责人保留为普通成员；V21 延迟约束继续保证提交时唯一 owner 有效。
@@ -34,7 +46,7 @@ pnpm verify:m2-03
 
 M2-02 在 `catalog` 中交付 Company 内 Workspace 的 V17 数据模型、稳定调用方 code、查询/详情、完整可变快照 PATCH，以及带强 ETag 和持久化幂等的归档/恢复命令。普通有效成员只读取 ACTIVE 导航项，COMPANY_ADMIN 可查询和治理 ARCHIVED 项；Workspace 不保存成员、角色或授权事实。
 
-OpenAPI、生成 TypeScript 客户端和四类 v1 领域事件随实现冻结。Project 尚未交付，因此 `visibleProjectCount` 暂时固定为 `0`，真实项目权限过滤和计数留给 M2-06/M2-24；后续 Project 创建通过 `WorkspaceSnapshotQuery` 校验同 Company 的 ACTIVE Workspace。
+OpenAPI、生成 TypeScript 客户端和领域事件随实现冻结。`visibleProjectCount` 已按 Project SQL 可见性谓词实时分组统计；Project 创建继续通过 `WorkspaceSnapshotQuery` 校验同 Company 的 ACTIVE Workspace。
 
 ```powershell
 pnpm verify:m2-02
@@ -419,6 +431,15 @@ M0-13 证据只保存企业与目录快照的不可逆 HMAC、运行时间、执
 ## 本地开发
 
 完整的数据库环境变量、端口表和启动顺序以 `docs/30-operations/local-development.md` 为本地开发基线。
+
+本机无法使用企业微信 OAuth 与通讯录同步时，可显式启用回环地址限定的本地免登录身份。后端会通过现有身份、角色与会话服务预置“本地测试管理员”，授予 `COMPANY_ADMIN + APP_MANAGER`，并在首次 `/api/v1/auth/me` 请求签发正常的 Session/CSRF Cookie；SPA 因而不会先进入 `/login`，后续读写仍执行正式鉴权与 CSRF 校验。
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = 'local'
+$env:YUMPOO_LOCAL_AUTH_ENABLED = 'true'
+```
+
+默认登录成员为 `local-company-admin`，显示名为“本地测试管理员”。需要固定其他身份时可设置 `YUMPOO_LOCAL_AUTH_MEMBER_ID`、`YUMPOO_LOCAL_AUTH_DISPLAY_NAME`、`YUMPOO_LOCAL_AUTH_BACKUP_MEMBER_ID` 与 `YUMPOO_LOCAL_AUTH_BACKUP_DISPLAY_NAME`。该模式默认关闭，只允许 `local` profile、`127.0.0.1`/`localhost`/IPv6 loopback，并拒绝与 `prod`、企微 OAuth、企微通讯录或受控身份提供者同时启用；已有治理数据会复用当前可用 APP_MANAGER，只有没有可用管理员时才按状态执行首管引导或紧急恢复。恢复正常认证时移除上述两个变量并清理浏览器本地 Cookie。
 
 先启动在线 SPA：
 

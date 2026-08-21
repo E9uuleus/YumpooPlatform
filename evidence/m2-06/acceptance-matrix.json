@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-06",
+  "verifiedSlices": [
+    {
+      "requirementId": "PPM-002",
+      "scope": "Project 列表、详情、分页总数和 Workspace 计数在 SQL 中按 ACTIVE membership/COMPANY_ADMIN 过滤",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/infrastructure/project/JdbcProjectRepository.java", "backend/src/test/java/com/yumpoo/platform/administration/application/ProjectCreationIT.java"]
+    },
+    {
+      "requirementId": "PPM-004",
+      "scope": "Project 完整详情和 Owner 可变配置快照使用强 ETag，无变化不增版本",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/application/project/ProjectService.java", "contracts/openapi/yumpoo-v1.yaml"]
+    },
+    {
+      "requirementId": "PPM-007",
+      "scope": "三类非研发 Project 激活前必须填写客户名称，研发 Project 允许为空",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/administration/application/ProjectActivationOrchestrator.java", "backend/src/test/java/com/yumpoo/platform/administration/application/ProjectCreationIT.java"]
+    },
+    {
+      "requirementId": "PPM-011",
+      "scope": "DRAFT Project 通过 Owner、模板和 Content readiness 后原子转为 ACTIVE",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/application/project/ProjectLifecycleService.java", "contracts/events/schemas/catalog.project-activated-v1.schema.json"]
+    },
+    {
+      "requirementId": "PPM-012",
+      "scope": "工作台呈现 DRAFT/ACTIVE 生命周期与激活前置，并对命令重新鉴权",
+      "evidence": ["frontend/web-app/src/views/projects/ProjectOverviewView.vue", "frontend/web-app/src/views/projects/ProjectSettingsView.vue"]
+    },
+    {
+      "requirementId": "ACL-UI-M2-06",
+      "scope": "Project 创建、成员治理、设置冲突保草稿与权限化动作在统一 AppShell 内交付",
+      "evidence": ["frontend/web-app/src/views/projects/ProjectsView.vue", "frontend/web-app/src/views/projects/ProjectMembersView.vue"]
+    }
+  ],
+  "deferredRequirements": [
+    {"requirementId":"PRODUCT-PROJECT-RELATION","targetMilestone":"M2-07","scope":"productId 筛选与 Product–Project 关系"},
+    {"requirementId":"PROJECT-ARCHIVE-MOVE","targetMilestone":"M2-08","scope":"Project 归档、恢复与 Workspace 移动"},
+    {"requirementId":"CONTENT-CRUD","targetMilestone":"M2-09","scope":"Content CRUD 与 View Config"},
+    {"requirementId":"PROJECT-ACTIVITY","targetMilestone":"M2-20","scope":"Project Activity 投影"}
+  ]
+}

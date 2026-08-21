@@ -28,12 +28,20 @@ public class IdentityAcceptanceFixtureProvisioner {
     }
 
     public DirectoryMemberProvisioningResult provision(String memberId, String displayName) {
+        return provision(memberId, displayName, "M1-13 Verification");
+    }
+
+    public DirectoryMemberProvisioningResult provision(
+            String memberId,
+            String displayName,
+            String departmentSummary
+    ) {
         return provisioningService.provisionOrRefresh(new WeComMemberProfile(
                 memberId,
                 displayName,
                 DirectoryOptionalField.unavailable(),
                 DirectoryOptionalField.unavailable(),
-                "M1-13 Verification",
+                departmentSummary,
                 new ProfileHash(sha256("profile:" + memberId))
         ));
     }
