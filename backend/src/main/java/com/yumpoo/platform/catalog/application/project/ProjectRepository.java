@@ -18,7 +18,8 @@ public interface ProjectRepository {
     Optional<Project> activate(Project project, long expectedVersion);
     Optional<ProjectQueryRow> findVisibleById(CurrentActor actor, UUID projectId);
     ProjectPageResult findVisible(CurrentActor actor, UUID workspaceId, ProjectType projectType,
-                                  ProjectLifecycleFilter lifecycle, OffsetPageRequest page);
+                                  ProjectLifecycleFilter lifecycle, UUID productId,
+                                  OffsetPageRequest page);
     java.util.Map<UUID, Long> countVisibleCurrentByWorkspace(CurrentActor actor,
                                                              java.util.Collection<UUID> workspaceIds);
     List<Project> findGovernedByOwner(UUID companyId, UUID ownerUserId);

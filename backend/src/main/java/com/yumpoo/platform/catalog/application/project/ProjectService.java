@@ -48,9 +48,16 @@ public class ProjectService {
     @Transactional(readOnly = true)
     public OffsetPageResponse<ProjectSummary> findAll(CurrentActor actor, UUID workspaceId,
             ProjectTypeFilter projectType, ProjectLifecycleFilter lifecycle, OffsetPageRequest page) {
+        return findAll(actor, workspaceId, projectType, lifecycle, null, page);
+    }
+
+    @Transactional(readOnly = true)
+    public OffsetPageResponse<ProjectSummary> findAll(CurrentActor actor, UUID workspaceId,
+            ProjectTypeFilter projectType, ProjectLifecycleFilter lifecycle, UUID productId,
+            OffsetPageRequest page) {
         requireActor(actor);
         ProjectPageResult result = repository.findVisible(actor, workspaceId,
-                projectType == null ? null : projectType.toDomain(), lifecycle, page);
+                projectType == null ? null : projectType.toDomain(), lifecycle, productId, page);
         Map<UUID, MinimalUserSnapshot> owners = userQuery.findByUserIds(actor.companyId(),
                 result.items().stream().map(row -> row.project().ownerUserId()).distinct().toList());
         List<ProjectSummary> items = result.items().stream()
@@ -173,7 +180,7 @@ public class ProjectService {
         boolean mutable = project.lifecycle() != ProjectLifecycle.ARCHIVED;
         return new ProjectCapabilities(owner && mutable,
                 owner && project.lifecycle() == ProjectLifecycle.DRAFT,
-                (owner || admin) && mutable, admin && mutable);
+                (owner || admin) && mutable, admin && mutable, owner && mutable);
     }
 
     private static void requireVersion(Project project, long version) {

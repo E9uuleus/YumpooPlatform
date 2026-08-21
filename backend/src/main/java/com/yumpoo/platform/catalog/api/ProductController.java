@@ -64,13 +64,14 @@ public final class ProductController {
     @GetMapping("/products")
     ResponseEntity<OffsetPageResponse<ProductView>> list(
             @RequestParam(defaultValue = "ACTIVE") ProductListStatus status,
+            @RequestParam(required = false) String query,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         CurrentActor actor = currentActorProvider.requiredActive();
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .body(service.findAll(actor, status, OffsetPageRequest.of(page, size)));
+                .body(service.findAll(actor, status, query, OffsetPageRequest.of(page, size)));
     }
 
     @GetMapping("/products/{productId}")
