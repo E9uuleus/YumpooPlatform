@@ -821,6 +821,31 @@ class M017BackupRestoreIT {
                 }
                 assertThat(content.executeBatch()).hasSize(3);
             }
+            try (PreparedStatement archivedContent = connection.prepareStatement("""
+                    INSERT INTO yumpoo.content (
+                        id, company_id, project_id, code, name, description, work_item_type,
+                        status, default_view_type, view_config, applied_template_key,
+                        applied_template_version, applied_blueprint_code, row_version,
+                        created_at, created_by_user_id, updated_at, updated_by_user_id,
+                        archived_at, archived_by_user_id
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000814',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000802',
+                        'ARCHIVED_REQ', '已归档需求', '包含非空视图配置的恢复探针', 'REQUIREMENT',
+                        'ARCHIVED', 'KANBAN',
+                        '{"table":{"columns":["TITLE","STATUS","PRIORITY"],"hiddenColumns":["PRIORITY"],"sorts":[],"filters":{}},"kanban":{"groups":[{"name":"待开始","statuses":["TODO"]},{"name":"进行中","statuses":["IN_PROGRESS"]},{"name":"已完成","statuses":["DONE"]}]}}'::jsonb,
+                        'RND', 1, 'REQUIREMENTS', 2, ?,
+                        '00000000-0000-4000-8000-000000000102', ?,
+                        '00000000-0000-4000-8000-000000000102', ?,
+                        '00000000-0000-4000-8000-000000000102'
+                    )
+                    """)) {
+                archivedContent.setObject(1, createdAt);
+                archivedContent.setObject(2, createdAt.plusHours(2));
+                archivedContent.setObject(3, createdAt.plusHours(2));
+                assertThat(archivedContent.executeUpdate()).isOne();
+            }
             try (PreparedStatement override = connection.prepareStatement("""
                     INSERT INTO yumpoo.admin_override (
                         id, company_id, action, target_type, target_id, reason, request_hash,
@@ -870,6 +895,8 @@ class M017BackupRestoreIT {
                             issue.row_version AS issue_version,
                             string_agg(content.code || ':' || content.work_item_type || ':'
                                 || content.status || ':' || content.default_view_type || ':'
+                                || content.row_version || ':' || content.view_config::text || ':'
+                                || (content.archived_at IS NOT NULL) || ':'
                                 || content.applied_template_key || ':'
                                 || content.applied_template_version || ':'
                                 || content.applied_blueprint_code, ',' ORDER BY content.code) AS contents

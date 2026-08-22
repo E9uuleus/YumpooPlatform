@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-09",
+  "status": "PASS",
+  "startedAt": "2026-08-22T02:38:00Z",
+  "completedAt": "2026-08-22T02:43:10Z",
+  "command": "pnpm verify:m2-09",
+  "flywayVersion": "28",
+  "testCounts": {
+    "backendUnit": 371,
+    "backendIntegration": 177,
+    "nodeArchitecture": 9,
+    "apiClient": 7,
+    "web": 112,
+    "desktop": 24
+  },
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "contentDomainAndViewConfig": true,
+    "projectThenContentLockOrder": true,
+    "contentIdempotencyAndEtag": true,
+    "safeContentEvents": true,
+    "backupRestoreContentConfig": true,
+    "vueContentWorkspace": true,
+    "nodeGate": true
+  }
+}

@@ -11,7 +11,8 @@ public final class ProjectMembershipModels {
     public enum ListStatus { ACTIVE, REMOVED, ALL }
     public enum ActorAccess { MEMBER, OWNER, COMPANY_ADMIN_READ_ONLY }
     public record Access(UUID projectId, UUID companyId, String lifecycle,
-                         ActorAccess actorAccess, long projectVersion,
+                         ActorAccess actorAccess, String templateKey, int templateVersion,
+                         long projectVersion,
                          OptionalLong membershipVersion) {}
     public record Member(UUID membershipId, UUID projectId, UUID userId, String displayName,
                          String employmentStatus, String accountStatus, String membershipStatus,

@@ -48,11 +48,14 @@ public record Content(
         if (appliedTemplateVersion < 1 || rowVersion < 0 || updatedAt.isBefore(createdAt)) {
             throw new IllegalArgumentException("content template, version or timestamps are invalid");
         }
-        if (!"{}".equals(viewConfigJson)) {
-            throw new IllegalArgumentException("M2-04 initial view config must be empty");
-        }
+        description = normalizeDescription(description);
+        if (viewConfigJson == null || viewConfigJson.isBlank())
+            throw new IllegalArgumentException("viewConfigJson must not be blank");
         if (status == ContentStatus.ACTIVE && (archivedAt != null || archivedByUserId != null)) {
             throw new IllegalArgumentException("active content must not contain archive facts");
+        }
+        if (status == ContentStatus.ARCHIVED && (archivedAt == null || archivedByUserId == null)) {
+            throw new IllegalArgumentException("archived content must contain archive facts");
         }
     }
 
@@ -75,6 +78,41 @@ public record Content(
                 blueprintCode, 0, now, actorUserId, now, actorUserId, null, null);
     }
 
+    public static Content create(UUID id, UUID companyId, UUID projectId, String code,
+            String name, String description, ContentWorkItemType workItemType,
+            ContentViewType defaultViewType, String viewConfigJson, String templateKey,
+            int templateVersion, String blueprintCode, UUID actorUserId, Instant now) {
+        return new Content(id, companyId, projectId, code, name, description, workItemType,
+                ContentStatus.ACTIVE, defaultViewType, viewConfigJson, templateKey,
+                templateVersion, blueprintCode, 0, now, actorUserId, now, actorUserId,
+                null, null);
+    }
+
+    public Content update(String nextName, String nextDescription, ContentViewType nextViewType,
+            String nextViewConfigJson, UUID actorUserId, Instant now) {
+        if (status != ContentStatus.ACTIVE) throw new IllegalStateException("archived content is read only");
+        return new Content(id, companyId, projectId, code, nextName, nextDescription, workItemType,
+                status, nextViewType, nextViewConfigJson, appliedTemplateKey,
+                appliedTemplateVersion, appliedBlueprintCode, rowVersion + 1, createdAt,
+                createdByUserId, now, actorUserId, null, null);
+    }
+
+    public Content archive(UUID actorUserId, Instant now) {
+        if (status != ContentStatus.ACTIVE) throw new IllegalStateException("content is not active");
+        return new Content(id, companyId, projectId, code, name, description, workItemType,
+                ContentStatus.ARCHIVED, defaultViewType, viewConfigJson, appliedTemplateKey,
+                appliedTemplateVersion, appliedBlueprintCode, rowVersion + 1, createdAt,
+                createdByUserId, now, actorUserId, now, actorUserId);
+    }
+
+    public Content restore(UUID actorUserId, Instant now) {
+        if (status != ContentStatus.ARCHIVED) throw new IllegalStateException("content is not archived");
+        return new Content(id, companyId, projectId, code, name, description, workItemType,
+                ContentStatus.ACTIVE, defaultViewType, viewConfigJson, appliedTemplateKey,
+                appliedTemplateVersion, appliedBlueprintCode, rowVersion + 1, createdAt,
+                createdByUserId, now, actorUserId, null, null);
+    }
+
     private static String requireCode(String value, String field) {
         Objects.requireNonNull(value, field + " must not be null");
         if (!STABLE_CODE.matcher(value).matches()) {
@@ -89,6 +127,14 @@ public record Content(
         if (normalized.isEmpty() || normalized.length() > 80) {
             throw new IllegalArgumentException("name length is invalid");
         }
+        return normalized;
+    }
+
+    private static String normalizeDescription(String value) {
+        if (value == null) return null;
+        String normalized = value.strip();
+        if (normalized.isEmpty() || normalized.length() > 500)
+            throw new IllegalArgumentException("description length is invalid");
         return normalized;
     }
 }

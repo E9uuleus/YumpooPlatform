@@ -2,6 +2,7 @@ export type StatusDomain =
   | 'project-lifecycle'
   | 'project-membership'
   | 'product-status'
+  | 'content-status'
   | 'account'
   | 'employment'
   | 'directory-sync'
@@ -26,6 +27,10 @@ const statusMappings: Record<StatusDomain, Record<string, StatusPresentation>> =
   },
   'product-status': {
     ACTIVE: { label: '活跃', tone: 'green' },
+    ARCHIVED: { label: '已归档', tone: 'gray' },
+  },
+  'content-status': {
+    ACTIVE: { label: '使用中', tone: 'green' },
     ARCHIVED: { label: '已归档', tone: 'gray' },
   },
   account: {

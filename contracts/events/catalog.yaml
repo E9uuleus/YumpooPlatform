@@ -251,3 +251,23 @@ events:
     schema: schemas/catalog.product-unlinked-from-project-v1.schema.json
     validExamples: [examples/catalog.product-unlinked-from-project-v1.json]
     invalidExamples: [examples/catalog.product-unlinked-from-project-v1.invalid.json]
+  - eventType: workitem.content_created
+    eventVersion: 1
+    schema: schemas/workitem.content-created-v1.schema.json
+    validExamples: [examples/workitem.content-created-v1.json]
+    invalidExamples: [examples/workitem.content-created-v1.invalid.json]
+  - eventType: workitem.content_updated
+    eventVersion: 1
+    schema: schemas/workitem.content-updated-v1.schema.json
+    validExamples: [examples/workitem.content-updated-v1.json]
+    invalidExamples: [examples/workitem.content-updated-v1.invalid.json]
+  - eventType: workitem.content_archived
+    eventVersion: 1
+    schema: schemas/workitem.content-archived-v1.schema.json
+    validExamples: [examples/workitem.content-archived-v1.json]
+    invalidExamples: [examples/workitem.content-archived-v1.invalid.json]
+  - eventType: workitem.content_restored
+    eventVersion: 1
+    schema: schemas/workitem.content-restored-v1.schema.json
+    validExamples: [examples/workitem.content-restored-v1.json]
+    invalidExamples: [examples/workitem.content-restored-v1.invalid.json]
