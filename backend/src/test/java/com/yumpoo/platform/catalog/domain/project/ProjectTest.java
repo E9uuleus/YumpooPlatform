@@ -100,6 +100,57 @@ class ProjectTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void archiveAndReopenPreserveActivationTimeAndAdvanceVersion() {
+        Project active = create(ProjectType.PRODUCT_DEVELOPMENT, "RND", null, null, null)
+                .activate(OWNER_ID, NOW.plusSeconds(10));
+
+        Project archived = active.archive(OWNER_ID, NOW.plusSeconds(20));
+        Project reopened = archived.reopen(OWNER_ID, NOW.plusSeconds(30));
+
+        assertThat(archived.lifecycle()).isEqualTo(ProjectLifecycle.ARCHIVED);
+        assertThat(archived.archivedAt()).isEqualTo(NOW.plusSeconds(20));
+        assertThat(reopened.lifecycle()).isEqualTo(ProjectLifecycle.ACTIVE);
+        assertThat(reopened.activatedAt()).isEqualTo(active.activatedAt());
+        assertThat(reopened.archivedAt()).isNull();
+        assertThat(reopened.rowVersion()).isEqualTo(3);
+    }
+
+    @Test
+    void archiveRestoreAndMoveRejectInvalidLifecycleOrUnchangedWorkspace() {
+        Project draft = create(ProjectType.PRODUCT_DEVELOPMENT, "RND", null, null, null);
+        Project active = draft.activate(OWNER_ID, NOW.plusSeconds(10));
+        Project archived = active.archive(OWNER_ID, NOW.plusSeconds(20));
+
+        assertThatThrownBy(() -> draft.archive(OWNER_ID, NOW.plusSeconds(5)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> active.reopen(OWNER_ID, NOW.plusSeconds(20)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> archived.moveToWorkspace(UUID.randomUUID(), OWNER_ID,
+                NOW.plusSeconds(30))).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> active.moveToWorkspace(WORKSPACE_ID, OWNER_ID,
+                NOW.plusSeconds(30))).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void workspaceMoveChangesOnlyWorkspaceAndAuditFields() {
+        Project active = create(ProjectType.PRE_SALES, "PRE_SALES", "描述", "客户", "C-1")
+                .activate(OWNER_ID, NOW.plusSeconds(10));
+        UUID targetWorkspaceId = UUID.randomUUID();
+
+        Project moved = active.moveToWorkspace(targetWorkspaceId, OWNER_ID, NOW.plusSeconds(20));
+
+        assertThat(moved.workspaceId()).isEqualTo(targetWorkspaceId);
+        assertThat(moved.id()).isEqualTo(active.id());
+        assertThat(moved.companyId()).isEqualTo(active.companyId());
+        assertThat(moved.code()).isEqualTo(active.code());
+        assertThat(moved.lifecycle()).isEqualTo(active.lifecycle());
+        assertThat(moved.ownerUserId()).isEqualTo(active.ownerUserId());
+        assertThat(moved.templateKey()).isEqualTo(active.templateKey());
+        assertThat(moved.rowVersion()).isEqualTo(active.rowVersion() + 1);
+        assertThat(moved.updatedAt()).isEqualTo(NOW.plusSeconds(20));
+    }
+
     private static Project create(
             ProjectType type,
             String templateKey,

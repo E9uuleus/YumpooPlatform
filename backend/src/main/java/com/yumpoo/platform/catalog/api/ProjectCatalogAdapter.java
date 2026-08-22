@@ -114,6 +114,54 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         return snapshot(lifecycleService.activate(activationCommand(mutation)));
     }
 
+    @Override
+    public ProjectSnapshot lockForArchive(ProjectArchiveMutation mutation) {
+        return snapshot(lifecycleService.lockForArchive(new com.yumpoo.platform.catalog.application.project.ProjectArchiveCommand(
+                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(),
+                mutation.actorUserId(), mutation.ownerRequired())));
+    }
+
+    @Override
+    public ProjectSnapshot archive(ProjectArchiveMutation mutation) {
+        return snapshot(lifecycleService.archive(new com.yumpoo.platform.catalog.application.project.ProjectArchiveCommand(
+                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(),
+                mutation.actorUserId(), mutation.ownerRequired())));
+    }
+
+    @Override
+    public ProjectRestoreSnapshot lockForRestore(ProjectRestoreMutation mutation) {
+        var state = lifecycleService.lockForRestore(new com.yumpoo.platform.catalog.application.project.ProjectRestoreCommand(
+                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(), mutation.actorUserId()));
+        return new ProjectRestoreSnapshot(snapshot(state.project()), state.ownerMembershipActive());
+    }
+
+    @Override
+    public ProjectSnapshot reopen(ProjectRestoreMutation mutation) {
+        return snapshot(lifecycleService.reopen(new com.yumpoo.platform.catalog.application.project.ProjectRestoreCommand(
+                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(), mutation.actorUserId())));
+    }
+
+    @Override
+    public ProjectSnapshot moveWorkspace(ProjectWorkspaceMoveMutation mutation) {
+        return snapshot(lifecycleService.moveWorkspace(
+                new com.yumpoo.platform.catalog.application.project.ProjectWorkspaceMoveCommand(
+                        mutation.companyId(), mutation.projectId(), mutation.targetWorkspaceId(),
+                        mutation.expectedRowVersion(), mutation.actorUserId())));
+    }
+
+    @Override
+    public ProjectSnapshot lockForWorkspaceMove(ProjectWorkspaceMoveMutation mutation) {
+        return snapshot(lifecycleService.lockForWorkspaceMove(
+                new com.yumpoo.platform.catalog.application.project.ProjectWorkspaceMoveCommand(
+                mutation.companyId(), mutation.projectId(), mutation.targetWorkspaceId(),
+                mutation.expectedRowVersion(), mutation.actorUserId())));
+    }
+
+    @Override
+    public ProjectSnapshot lockForNewFact(java.util.UUID companyId, java.util.UUID projectId) {
+        return snapshot(lifecycleService.lockForNewFact(companyId, projectId));
+    }
+
     private static com.yumpoo.platform.catalog.application.project.ProjectActivationCommand activationCommand(
             ProjectActivationMutation mutation) {
         return new com.yumpoo.platform.catalog.application.project.ProjectActivationCommand(

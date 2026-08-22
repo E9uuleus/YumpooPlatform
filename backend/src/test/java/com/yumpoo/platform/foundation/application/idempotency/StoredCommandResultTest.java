@@ -24,6 +24,14 @@ class StoredCommandResultTest {
         assertThat(result(maximumLengthLeadingZeroEtag).etag()).hasSize(128);
     }
 
+    @Test
+    void acceptsStableClientFailureForReplayButRejectsServerFailure() {
+        assertThat(new StoredCommandResult(409, "{}", UUID.randomUUID(), null).httpStatus())
+                .isEqualTo(409);
+        assertThatThrownBy(() -> new StoredCommandResult(503, "{}", UUID.randomUUID(), null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     @ParameterizedTest
     @MethodSource("unsafeEtags")
     void rejectsEtagsThatAreNotBoundedStrongDecimalValidators(String etag) {

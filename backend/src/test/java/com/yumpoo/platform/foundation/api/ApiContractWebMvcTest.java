@@ -13,6 +13,7 @@ import com.yumpoo.platform.foundation.api.web.RequestIdFilter;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import com.yumpoo.platform.foundation.application.error.SafeBlocker;
 import com.yumpoo.platform.foundation.application.logging.StructuredLoggingContext;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
@@ -180,6 +181,19 @@ class ApiContractWebMvcTest {
         mockMvc.perform(get(API + "/errors/{code}", StandardErrorCode.IDEMPOTENCY_KEY_REUSED))
                 .andExpect(status().isConflict())
                 .andExpect(header().doesNotExist(HttpHeaders.RETRY_AFTER));
+    }
+
+    @Test
+    void blockerConflictExposesOnlyStableSortedCodesAndCounts() throws Exception {
+        mockMvc.perform(get(API + "/blocker-error"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.details.reason").value("PROJECT_ARCHIVE_BLOCKED"))
+                .andExpect(jsonPath("$.details.blockers[0].code").value("OPEN_WORK_ITEMS"))
+                .andExpect(jsonPath("$.details.blockers[0].count").value(3))
+                .andExpect(jsonPath("$.details.blockers[1].code")
+                        .value("PENDING_WORKLOG_APPROVALS"))
+                .andExpect(jsonPath("$.details.blockers[1].count").value(2))
+                .andExpect(jsonPath("$.details.blockers[0].id").doesNotExist());
     }
 
     @Test
@@ -625,6 +639,14 @@ class ApiContractWebMvcTest {
                     "requestId",
                     (String) request.getAttribute(RequestIdContext.ATTRIBUTE_NAME)
             );
+        }
+
+        @GetMapping("/contract/blocker-error")
+        void blockerError() {
+            throw ApplicationException.withBlockers(StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "PROJECT_ARCHIVE_BLOCKED", List.of(
+                            new SafeBlocker("PENDING_WORKLOG_APPROVALS", 2),
+                            new SafeBlocker("OPEN_WORK_ITEMS", 3)));
         }
 
         @PostMapping("/contract/body")

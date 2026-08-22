@@ -201,6 +201,21 @@ events:
     schema: schemas/catalog.project-activated-v1.schema.json
     validExamples: [examples/catalog.project-activated-v1.json]
     invalidExamples: [examples/catalog.project-activated-v1.invalid.json]
+  - eventType: catalog.project_archived
+    eventVersion: 1
+    schema: schemas/catalog.project-archived-v1.schema.json
+    validExamples: [examples/catalog.project-archived-v1.json]
+    invalidExamples: [examples/catalog.project-archived-v1.invalid.json]
+  - eventType: catalog.project_reopened
+    eventVersion: 1
+    schema: schemas/catalog.project-reopened-v1.schema.json
+    validExamples: [examples/catalog.project-reopened-v1.json]
+    invalidExamples: [examples/catalog.project-reopened-v1.invalid.json]
+  - eventType: catalog.project_moved_to_workspace
+    eventVersion: 1
+    schema: schemas/catalog.project-moved-to-workspace-v1.schema.json
+    validExamples: [examples/catalog.project-moved-to-workspace-v1.json]
+    invalidExamples: [examples/catalog.project-moved-to-workspace-v1.invalid.json]
   - eventType: catalog.project_template_applied
     eventVersion: 1
     schema: schemas/catalog.project-template-applied-v1.schema.json

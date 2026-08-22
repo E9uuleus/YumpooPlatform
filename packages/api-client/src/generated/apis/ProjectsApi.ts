@@ -35,6 +35,7 @@ import type {
   ProjectProductLinkUpdateRequest,
   ProjectType,
   ProjectUpdateRequest,
+  ProjectWorkspaceMoveRequest,
 } from '../models/index';
 import {
     ErrorResponseFromJSON,
@@ -79,6 +80,8 @@ import {
     ProjectTypeToJSON,
     ProjectUpdateRequestFromJSON,
     ProjectUpdateRequestToJSON,
+    ProjectWorkspaceMoveRequestFromJSON,
+    ProjectWorkspaceMoveRequestToJSON,
 } from '../models/index';
 
 export interface ActivateProjectRequest {
@@ -94,6 +97,13 @@ export interface AddProjectMemberRequest {
     idempotencyKey: string;
     projectMemberAddRequest: ProjectMemberAddRequest;
     ifMatch?: string;
+}
+
+export interface ArchiveProjectRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
 }
 
 export interface CreateProjectRequest {
@@ -147,6 +157,14 @@ export interface ListProjectsRequest {
     size?: number;
 }
 
+export interface MoveProjectWorkspaceRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    projectWorkspaceMoveRequest: ProjectWorkspaceMoveRequest;
+}
+
 export interface ReassignProjectOwnerRequest {
     projectId: string;
     xXSRFTOKEN: string;
@@ -171,6 +189,13 @@ export interface RemoveProjectProductLinkRequest {
     ifMatch: string;
     idempotencyKey: string;
     projectProductLinkRemoveRequest?: ProjectProductLinkRemoveRequest;
+}
+
+export interface RestoreProjectRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
 }
 
 export interface UpdateProjectRequest {
@@ -335,6 +360,78 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async addProjectMember(requestParameters: AddProjectMemberRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectMember> {
         const response = await this.addProjectMemberRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 锁定 Project 后按声明的真实 provider 顺序收集 blocker；存在 blocker 时安全返回分类计数。
+     * Owner 普通归档 ACTIVE Project
+     */
+    async archiveProjectRaw(requestParameters: ArchiveProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling archiveProject().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling archiveProject().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling archiveProject().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling archiveProject().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/archive`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectFromJSON(jsonValue));
+    }
+
+    /**
+     * 锁定 Project 后按声明的真实 provider 顺序收集 blocker；存在 blocker 时安全返回分类计数。
+     * Owner 普通归档 ACTIVE Project
+     */
+    async archiveProject(requestParameters: ArchiveProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
+        const response = await this.archiveProjectRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -761,6 +858,86 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * CompanyAdmin 迁移 DRAFT 或 ACTIVE Project 到 ACTIVE Workspace
+     */
+    async moveProjectWorkspaceRaw(requestParameters: MoveProjectWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling moveProjectWorkspace().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling moveProjectWorkspace().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling moveProjectWorkspace().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling moveProjectWorkspace().'
+            );
+        }
+
+        if (requestParameters['projectWorkspaceMoveRequest'] == null) {
+            throw new runtime.RequiredError(
+                'projectWorkspaceMoveRequest',
+                'Required parameter "projectWorkspaceMoveRequest" was null or undefined when calling moveProjectWorkspace().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/workspace-moves`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectWorkspaceMoveRequestToJSON(requestParameters['projectWorkspaceMoveRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectFromJSON(jsonValue));
+    }
+
+    /**
+     * CompanyAdmin 迁移 DRAFT 或 ACTIVE Project 到 ACTIVE Workspace
+     */
+    async moveProjectWorkspace(requestParameters: MoveProjectWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
+        const response = await this.moveProjectWorkspaceRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * 原子重指派 Project 唯一负责人
      */
     async reassignProjectOwnerRaw(requestParameters: ReassignProjectOwnerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
@@ -999,6 +1176,78 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async removeProjectProductLink(requestParameters: RemoveProjectProductLinkRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectProductLink> {
         const response = await this.removeProjectProductLinkRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 锁内重验 Owner、ACTIVE membership、用户状态、模板可解释性和 ACTIVE Workspace。
+     * CompanyAdmin 恢复 ARCHIVED Project
+     */
+    async restoreProjectRaw(requestParameters: RestoreProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling restoreProject().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling restoreProject().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling restoreProject().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling restoreProject().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/restore`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectFromJSON(jsonValue));
+    }
+
+    /**
+     * 锁内重验 Owner、ACTIVE membership、用户状态、模板可解释性和 ACTIVE Workspace。
+     * CompanyAdmin 恢复 ARCHIVED Project
+     */
+    async restoreProject(requestParameters: RestoreProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
+        const response = await this.restoreProjectRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

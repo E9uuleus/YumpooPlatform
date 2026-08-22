@@ -7,6 +7,7 @@ import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
+import com.yumpoo.platform.foundation.application.error.SafeBlocker;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventDraft;
 import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
@@ -19,6 +20,7 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
@@ -152,6 +154,35 @@ public class WorkspaceService {
         return changeStatus(command, WorkspaceStatus.ARCHIVED, WorkspaceStatus.ACTIVE, RESTORED_EVENT);
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public WorkspaceGovernanceState lockForArchiveOverride(UUID companyId, UUID workspaceId,
+            long expectedRowVersion) {
+        Workspace workspace = repository.lockById(companyId, workspaceId)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(workspace, expectedRowVersion);
+        if (workspace.status() != WorkspaceStatus.ACTIVE) {
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
+        }
+        return governanceSnapshot(workspace,
+                projectRepository.countCurrentByWorkspace(companyId, workspaceId));
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public WorkspaceGovernanceState archiveOverride(UUID companyId, UUID workspaceId,
+            long expectedRowVersion, UUID actorUserId) {
+        Workspace before = repository.lockById(companyId, workspaceId)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(before, expectedRowVersion);
+        if (before.status() != WorkspaceStatus.ACTIVE) {
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
+        }
+        long count = projectRepository.countCurrentByWorkspace(companyId, workspaceId);
+        Workspace after = repository.changeStatus(before.changeStatus(WorkspaceStatus.ARCHIVED,
+                        actorUserId, clock.instant()), WorkspaceStatus.ACTIVE, expectedRowVersion)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        return governanceSnapshot(after, count);
+    }
+
     private IdempotencyExecutionResult changeStatus(
             WorkspaceLifecycleCommand command,
             WorkspaceStatus expectedStatus,
@@ -166,10 +197,19 @@ public class WorkspaceService {
                 command.requestHash()
         );
         return idempotentCommandExecutor.execute(idempotency, () -> {
-            Workspace before = required(command.actor().companyId(), command.workspaceId());
+            Workspace before = repository.lockById(command.actor().companyId(), command.workspaceId())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             requireVersion(before, command.expectedRowVersion());
             if (before.status() != expectedStatus) {
                 throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
+            }
+            long currentProjectCount = targetStatus == WorkspaceStatus.ARCHIVED
+                    ? projectRepository.countCurrentByWorkspace(command.actor().companyId(), before.id()) : 0;
+            if (currentProjectCount > 0) {
+                throw ApplicationException.withBlockers(
+                        StandardErrorCode.INVALID_STATE_TRANSITION,
+                        "WORKSPACE_ARCHIVE_BLOCKED",
+                        List.of(new SafeBlocker("CURRENT_PROJECTS", currentProjectCount)));
             }
             Workspace candidate = before.changeStatus(
                     targetStatus, command.actor().userId(), clock.instant());
@@ -296,6 +336,12 @@ public class WorkspaceService {
         if (workspace.rowVersion() != expectedVersion) {
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
         }
+    }
+
+    private static WorkspaceGovernanceState governanceSnapshot(Workspace workspace,
+            long currentProjectCount) {
+        return new WorkspaceGovernanceState(workspace.id(), workspace.companyId(), workspace.code(),
+                workspace.status().name(), currentProjectCount, workspace.rowVersion());
     }
 
     private static void requireActiveActor(CurrentActor actor) {

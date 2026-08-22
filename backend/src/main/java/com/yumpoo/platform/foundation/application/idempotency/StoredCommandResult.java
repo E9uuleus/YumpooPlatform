@@ -4,9 +4,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-/**
- * 允许安全持久化和重放的成功响应。
- */
+/** 允许安全持久化和重放的成功响应或稳定客户端拒绝。 */
 public record StoredCommandResult(
         int httpStatus,
         String responseJson,
@@ -18,8 +16,8 @@ public record StoredCommandResult(
     private static final Pattern STRONG_DECIMAL_ETAG = Pattern.compile("^\"[0-9]+\"$");
 
     public StoredCommandResult {
-        if (httpStatus < 200 || httpStatus > 299) {
-            throw new IllegalArgumentException("httpStatus must be a successful 2xx status");
+        if (httpStatus < 200 || httpStatus > 499) {
+            throw new IllegalArgumentException("httpStatus must be 2xx or stable 4xx");
         }
         Objects.requireNonNull(responseJson, "responseJson must not be null");
         if (responseJson.isBlank()) {

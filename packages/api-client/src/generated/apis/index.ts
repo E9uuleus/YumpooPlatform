@@ -1,4 +1,5 @@
 /* tslint:disable */
+export * from './AdministrationApi';
 export * from './AuthenticationApi';
 export * from './IdentityAdministrationApi';
 export * from './IdentityGovernanceApi';

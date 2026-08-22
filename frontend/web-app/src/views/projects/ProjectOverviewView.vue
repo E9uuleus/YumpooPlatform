@@ -12,6 +12,7 @@ import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import { businessLabel } from '../../design-system/labels'
 import ProjectWorkspaceHeader from './ProjectWorkspaceHeader.vue'
+import ProjectLifecycleActions from './ProjectLifecycleActions.vue'
 
 const route = useRoute()
 const project = ref<ProjectDetail>()
@@ -34,6 +35,10 @@ async function load(): Promise<void> {
   } finally {
     loading.value = false
   }
+}
+
+function showProblem(problem: ApiProblem): void {
+  error.value = problem
 }
 
 async function activate(): Promise<void> {
@@ -100,6 +105,11 @@ onMounted(load)
       </project-workspace-header>
 
       <section class="project-overview-surface">
+        <project-lifecycle-actions
+          :project="project"
+          @changed="load"
+          @problem="showProblem"
+        />
         <div class="project-section-heading">
           <div>
             <h2>概览</h2>

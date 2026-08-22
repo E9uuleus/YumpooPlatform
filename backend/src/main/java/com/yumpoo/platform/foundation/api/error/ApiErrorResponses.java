@@ -18,7 +18,10 @@ final class ApiErrorResponses {
                 exception.getMessage(),
                 requestId,
                 exception.fieldViolations().stream().map(ApiErrorResponses::from).toList(),
-                exception.reason()
+                exception.reason(),
+                exception.blockers().stream()
+                        .map(blocker -> new ApiErrorDetails.ApiBlocker(blocker.code(), blocker.count()))
+                        .toList()
         );
     }
 
@@ -28,7 +31,7 @@ final class ApiErrorResponses {
             String requestId,
             List<ApiFieldError> fieldErrors
     ) {
-        return create(code, message, requestId, fieldErrors, null);
+        return create(code, message, requestId, fieldErrors, null, List.of());
     }
 
     static ApiErrorResponse create(
@@ -38,6 +41,12 @@ final class ApiErrorResponses {
             List<ApiFieldError> fieldErrors,
             String reason
     ) {
+        return create(code, message, requestId, fieldErrors, reason, List.of());
+    }
+
+    static ApiErrorResponse create(StandardErrorCode code, String message, String requestId,
+            List<ApiFieldError> fieldErrors, String reason,
+            List<ApiErrorDetails.ApiBlocker> blockers) {
         List<ApiFieldError> stableFieldErrors = fieldErrors.stream()
                 .sorted(Comparator.comparing(ApiFieldError::field).thenComparing(ApiFieldError::code))
                 .toList();
@@ -47,7 +56,8 @@ final class ApiErrorResponses {
                 requestId,
                 code.retryable(),
                 stableFieldErrors,
-                reason == null ? ApiErrorDetails.EMPTY : new ApiErrorDetails(reason)
+                reason == null && blockers.isEmpty()
+                        ? ApiErrorDetails.EMPTY : new ApiErrorDetails(reason, List.copyOf(blockers))
         );
     }
 

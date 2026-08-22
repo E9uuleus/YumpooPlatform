@@ -1,0 +1,20 @@
+{
+  "eventId": "28000000-0000-4000-8000-000000000051",
+  "eventType": "catalog.project_moved_to_workspace",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-21T12:20:00Z",
+  "aggregateType": "Project",
+  "aggregateId": "28000000-0000-4000-8000-000000000052",
+  "aggregateVersion": 6,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "28000000-0000-4000-8000-000000000053" },
+  "requestId": "m2-08-project-move-invalid",
+  "correlationId": "m2-08-project-move-invalid",
+  "causationId": null,
+  "payload": {
+    "projectId": "28000000-0000-4000-8000-000000000052", "code": "DELIVERY_01",
+    "fromLifecycle": "ARCHIVED", "toLifecycle": "ARCHIVED", "rowVersion": 6,
+    "fromWorkspaceId": "28000000-0000-4000-8000-000000000054",
+    "toWorkspaceId": "28000000-0000-4000-8000-000000000055"
+  }
+}
