@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-09",
+  "verifiedSlices": [
+    {
+      "requirementId": "CONTENT-CRUD",
+      "scope": "基于 Project 固定模板创建 Content，并支持可见性查询、完整配置更新、归档和恢复",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/workitem/application/ContentService.java", "backend/src/test/java/com/yumpoo/platform/workitem/domain/ContentTest.java"]
+    },
+    {
+      "requirementId": "CONTENT-VIEW-CONFIG",
+      "scope": "递归关闭、16 KiB 上限、表格字段与筛选约束及 Kanban 状态完整分区的强类型配置",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/workitem/application/ContentViewConfigCodec.java", "contracts/openapi/yumpoo-v1.yaml"]
+    },
+    {
+      "requirementId": "CONTENT-CONCURRENCY",
+      "scope": "Project FOR SHARE 后 Content FOR UPDATE 的固定锁顺序、强 ETag、幂等与规范化无变化更新",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/catalog/api/ProjectFactWriteGuard.java", "backend/src/main/java/com/yumpoo/platform/workitem/infrastructure/JdbcContentRepository.java"]
+    },
+    {
+      "requirementId": "CONTENT-CONTRACTS",
+      "scope": "REST/OpenAPI、生成式 ContentsApi 与四类最小化 v1 Outbox 事件",
+      "evidence": ["contracts/openapi/yumpoo-v1.yaml", "contracts/events/catalog.yaml", "packages/api-client/src/generated/apis/ContentsApi.ts"]
+    },
+    {
+      "requirementId": "CONTENT-WEB",
+      "scope": "Owner 可写目录、蓝图创建、抽屉配置、归档恢复、只读原因与 412 显式冲突恢复",
+      "evidence": ["frontend/web-app/src/views/projects/ProjectContentsView.vue", "frontend/web-app/src/views/projects/ProjectContentsView.spec.ts"]
+    },
+    {
+      "requirementId": "CONTENT-BACKUP",
+      "scope": "备份恢复保留非空 View Config、归档状态、归档事实、版本与模板来源",
+      "evidence": ["backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java"]
+    }
+  ],
+  "deferredRequirements": [
+    {"requirementId":"PPM-014-OPEN-WORK-ITEMS","targetMilestone":"M2-10","scope":"Work Item 真源与 OPEN_WORK_ITEMS blocker provider 同步交付"},
+    {"requirementId":"PPM-016-ACTIVITY","targetMilestone":"M2-20","scope":"Content 事件的 Activity 安全投影"},
+    {"requirementId":"CONTENT-WORK-ITEM-VIEWS","targetMilestone":"M2-10","scope":"真实 Table/Kanban 工作项数据和操作页面"}
+  ]
+}
