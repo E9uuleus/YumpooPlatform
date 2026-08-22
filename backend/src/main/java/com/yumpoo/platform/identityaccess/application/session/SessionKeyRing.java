@@ -1,5 +1,7 @@
 package com.yumpoo.platform.identityaccess.application.session;
 
+import com.yumpoo.platform.identityaccess.domain.session.LoginSession;
+
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
@@ -7,6 +9,7 @@ import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
@@ -15,6 +18,7 @@ import java.util.Optional;
 public final class SessionKeyRing {
 
     private static final String ALGORITHM = "HmacSHA256";
+    private static final String CSRF_REPAIR_PREFIX = "yumpoo:csrf-repair:v1:";
     private final Key current;
     private final Key previous;
 
@@ -31,6 +35,18 @@ public final class SessionKeyRing {
             SessionCredential credential
     ) {
         return fingerprint(current, purpose, credential);
+    }
+
+    public SessionCredential deriveCurrentCsrfRepairCredential(LoginSession session) {
+        Objects.requireNonNull(session, "session must not be null");
+        String material = CSRF_REPAIR_PREFIX
+                + current.version() + ":"
+                + session.id() + ":"
+                + session.sessionKeyVersion() + ":"
+                + session.sessionTokenFingerprint();
+        return new SessionCredential(
+                Base64.getUrlEncoder().withoutPadding().encodeToString(hmac(current, material))
+        );
     }
 
     public Optional<CredentialFingerprint> fingerprint(
@@ -79,13 +95,15 @@ public final class SessionKeyRing {
             CredentialPurpose purpose,
             SessionCredential credential
     ) {
+        byte[] digest = hmac(key, purpose.prefix() + credential.value());
+        return new CredentialFingerprint(key.version(), HexFormat.of().formatHex(digest));
+    }
+
+    private static byte[] hmac(Key key, String material) {
         try {
             Mac mac = Mac.getInstance(ALGORITHM);
             mac.init(new SecretKeySpec(key.secret(), ALGORITHM));
-            byte[] digest = mac.doFinal(
-                    (purpose.prefix() + credential.value()).getBytes(StandardCharsets.US_ASCII)
-            );
-            return new CredentialFingerprint(key.version(), HexFormat.of().formatHex(digest));
+            return mac.doFinal(material.getBytes(StandardCharsets.US_ASCII));
         } catch (NoSuchAlgorithmException | InvalidKeyException exception) {
             throw new IllegalStateException("HMAC-SHA-256 is unavailable", exception);
         }

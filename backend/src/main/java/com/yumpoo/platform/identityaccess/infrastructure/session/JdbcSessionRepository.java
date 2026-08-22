@@ -202,7 +202,7 @@ public class JdbcSessionRepository implements SessionRepository {
     }
 
     @Override
-    public boolean replaceCsrf(
+    public boolean convergeCsrf(
             UUID sessionId,
             String expectedKeyVersion,
             String expectedFingerprint,
@@ -214,8 +214,16 @@ public class JdbcSessionRepository implements SessionRepository {
                             csrf_token_fingerprint = :replacementFingerprint
                         WHERE id = :sessionId
                           AND status = 'ACTIVE'
-                          AND csrf_key_version = :expectedKeyVersion
-                          AND csrf_token_fingerprint = :expectedFingerprint
+                          AND (
+                              (
+                                  csrf_key_version = :expectedKeyVersion
+                                  AND csrf_token_fingerprint = :expectedFingerprint
+                              )
+                              OR (
+                                  csrf_key_version = :replacementKeyVersion
+                                  AND csrf_token_fingerprint = :replacementFingerprint
+                              )
+                          )
                         """)
                 .param("replacementKeyVersion", replacement.keyVersion())
                 .param("replacementFingerprint", replacement.value())

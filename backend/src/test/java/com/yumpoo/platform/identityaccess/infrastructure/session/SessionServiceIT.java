@@ -14,13 +14,17 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.UUID;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -89,6 +93,46 @@ class SessionServiceIT {
                 .param("userId", USER_ID)
                 .query(Long.class)
                 .single()).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentCsrfRepairConvergesOnOneSessionBoundCredential() throws Exception {
+        var issued = service.issueWebSession(USER_ID, "csrf-repair-it");
+        var authenticated = service.authenticate(issued.sessionCredential());
+        int concurrency = 12;
+        CountDownLatch ready = new CountDownLatch(concurrency);
+        CountDownLatch start = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(concurrency);
+        List<Future<String>> repairs = new ArrayList<>();
+        try {
+            for (int index = 0; index < concurrency; index++) {
+                repairs.add(executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    return service.repairCsrf(authenticated).value();
+                }));
+            }
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            Set<String> credentials = new HashSet<>();
+            for (Future<String> repair : repairs) {
+                credentials.add(repair.get(10, TimeUnit.SECONDS));
+            }
+
+            assertThat(credentials).hasSize(1);
+            var repaired = new com.yumpoo.platform.identityaccess.application.session.SessionCredential(
+                    credentials.iterator().next()
+            );
+            assertThat(service.verifyCsrf(
+                    service.authenticate(issued.sessionCredential()),
+                    repaired
+            )).isTrue();
+            assertThat(databaseCredentialMaterial()).doesNotContain(repaired.value());
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
     }
 
     @Test

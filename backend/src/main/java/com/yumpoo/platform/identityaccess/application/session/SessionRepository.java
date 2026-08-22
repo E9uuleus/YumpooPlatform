@@ -35,7 +35,7 @@ public interface SessionRepository {
             Instant now
     );
 
-    boolean replaceCsrf(
+    boolean convergeCsrf(
             UUID sessionId,
             String expectedKeyVersion,
             String expectedFingerprint,
