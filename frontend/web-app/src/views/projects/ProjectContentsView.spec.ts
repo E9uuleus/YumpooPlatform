@@ -21,10 +21,11 @@ const api = vi.hoisted(() => ({
   getProject: vi.fn(), listProjectContents: vi.fn(), createContent: vi.fn(),
   getContent: vi.fn(), updateContent: vi.fn(), archiveContent: vi.fn(), restoreContent: vi.fn(),
 }))
+const routerPush = vi.hoisted(() => vi.fn())
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { projectId: 'project-1' } }),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: routerPush }),
 }))
 vi.mock('../../api/client', () => ({
   projectsApi: { getProject: api.getProject },
@@ -90,6 +91,7 @@ describe('M2-09 Content 管理页', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     Object.values(api).forEach(mock => mock.mockReset())
+    routerPush.mockReset()
     api.getProject.mockResolvedValue(project)
     api.listProjectContents.mockResolvedValue(catalog())
     api.createContent.mockResolvedValue(content())
@@ -109,6 +111,16 @@ describe('M2-09 Content 管理页', () => {
       },
     }))
     expect(api.createContent.mock.calls[0]?.[0].contentCreateRequest).not.toHaveProperty('workItemType')
+    wrapper.unmount()
+  })
+
+  it('Content 名称进入工作项深链，配置操作仍留在目录页', async () => {
+    const wrapper = mountView(); await flushPromises()
+    await wrapper.find('.content-name-button').trigger('click')
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-work-items', params: { projectId: 'project-1', contentId: 'content-1' },
+    })
+    expect(wrapper.text()).toContain('配置')
     wrapper.unmount()
   })
 
