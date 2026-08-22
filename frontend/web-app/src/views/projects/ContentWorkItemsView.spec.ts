@@ -227,7 +227,7 @@ describe('M2-10 Content 工作项工作区', () => {
     wrapper.unmount()
   })
 
-  it('详情抽屉在文本域中安全呈现描述和备注', async () => {
+  it('详情抽屉在文本域中安全纯文本呈现描述和备注', async () => {
     const unsafe = '<img src=x onerror=alert(1)>'
     api.getWorkItem.mockResolvedValue(detail(unsafe))
     const wrapper = mountView(); await flushPromises()
