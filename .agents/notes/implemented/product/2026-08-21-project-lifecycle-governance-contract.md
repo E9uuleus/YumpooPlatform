@@ -26,6 +26,6 @@ Project 只允许 `ACTIVE -> ARCHIVED` 和 `ARCHIVED -> ACTIVE`。DRAFT 不可�
 
 ## Consequences
 
-未来 Work Item、Worklog、Product Feedback 模块接入 Project 写入时承担双重义务：使用公开共享生命周期守卫，并提供真实完整的 blocker 报告；任一缺失都会被视为覆盖不完整而关闭失败。M2-08 只能证明当前真实生命周期、Workspace 占用互斥和 blocker 协议，不能证明 PPM-014 的三类数据场景。
+未来 Work Item、Worklog、Product Feedback 模块接入 Project 写入时必须使用公开共享生命周期守卫；当模块具备可形成 blocker 的业务记录真源时，还必须在同一变更中提供真实完整的 blocker 报告。M2-09 的 Content 目录只是工作项容器元数据，尚不存在 OPEN_WORK_ITEMS 真源，因此只接入共享写守卫且不注册固定零 provider；M2-10 首次交付 Work Item 写入时同时承担 provider 义务。已声明 provider 任一缺失都会被视为覆盖不完整而关闭失败。M2-08 只能证明当前真实生命周期、Workspace 占用互斥和 blocker 协议，不能证明 PPM-014 的三类数据场景。
 
 Activity 在 M2-20 消费 `catalog.project_archived`、`catalog.project_reopened` 和 `catalog.project_moved_to_workspace`；三类真实 provider 与全量 PPM-014 验收在 M2-24 完成。治理历史 API 已交付，但 M2-08 不增加独立历史页面或 Workspace 管理台。
