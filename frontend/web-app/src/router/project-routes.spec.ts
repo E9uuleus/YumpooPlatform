@@ -9,6 +9,7 @@ describe('M2-07 Project 工作台路由', () => {
     expect(shell?.children?.some(route => route.path === 'projects')).toBe(true)
     expect(detail?.children?.map(route => route.path)).toEqual([
       'overview',
+      'contents',
       'members',
       'products',
       'settings',

@@ -7,6 +7,7 @@ import {
   ProductsApi,
   WorkspacesApi,
   ProjectTemplatesApi,
+  ContentsApi,
   createYumpooApiClient,
 } from '@yumpoo/api-client'
 import { globalProblemMiddleware } from './problems'
@@ -22,3 +23,4 @@ export const projectsApi = new ProjectsApi(yumpooApiClient)
 export const productsApi = new ProductsApi(yumpooApiClient)
 export const workspacesApi = new WorkspacesApi(yumpooApiClient)
 export const projectTemplatesApi = new ProjectTemplatesApi(yumpooApiClient)
+export const contentsApi = new ContentsApi(yumpooApiClient)
