@@ -846,6 +846,45 @@ class M017BackupRestoreIT {
                 archivedContent.setObject(3, createdAt.plusHours(2));
                 assertThat(archivedContent.executeUpdate()).isOne();
             }
+            try (PreparedStatement counter = connection.prepareStatement("""
+                    INSERT INTO yumpoo.work_item_project_counter (project_id, company_id, last_sequence)
+                    VALUES ('00000000-0000-4000-8000-000000000802',
+                        '00000000-0000-4000-8000-000000000001', 2)
+                    """)) {
+                assertThat(counter.executeUpdate()).isOne();
+            }
+            try (PreparedStatement workItem = connection.prepareStatement("""
+                    INSERT INTO yumpoo.work_item (
+                        id, company_id, project_id, content_id, item_sequence, item_no, type,
+                        title, status_code, status_category, priority, reporter_user_id,
+                        description, notes, row_version, created_at, created_by_user_id,
+                        updated_at, updated_by_user_id
+                    ) VALUES (?, '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000802',
+                        '00000000-0000-4000-8000-000000000805', ?, ?, 'TASK', ?, ?, ?, ?,
+                        '00000000-0000-4000-8000-000000000102', ?, ?, ?, ?,
+                        '00000000-0000-4000-8000-000000000102', ?,
+                        '00000000-0000-4000-8000-000000000102')
+                    """)) {
+                Object[][] facts = {
+                        {UUID.fromString("00000000-0000-4000-8000-000000000815"), 1L,
+                                "M2_04_RESTORE-1", "恢复工作项一", "BACKLOG", "TODO", "MEDIUM",
+                                "保留纯文本描述", "保留纯文本备注", 0L},
+                        {UUID.fromString("00000000-0000-4000-8000-000000000816"), 2L,
+                                "M2_04_RESTORE-2", "恢复工作项二", "IN_PROGRESS", "IN_PROGRESS", "HIGH",
+                                "第二项描述", null, 3L}
+                };
+                for (Object[] fact : facts) {
+                    workItem.setObject(1, fact[0]); workItem.setObject(2, fact[1]);
+                    workItem.setObject(3, fact[2]); workItem.setObject(4, fact[3]);
+                    workItem.setObject(5, fact[4]); workItem.setObject(6, fact[5]);
+                    workItem.setObject(7, fact[6]); workItem.setObject(8, fact[7]);
+                    workItem.setObject(9, fact[8]); workItem.setObject(10, fact[9]);
+                    workItem.setObject(11, createdAt); workItem.setObject(12, createdAt.plusHours(1));
+                    workItem.addBatch();
+                }
+                assertThat(workItem.executeBatch()).hasSize(2);
+            }
             try (PreparedStatement override = connection.prepareStatement("""
                     INSERT INTO yumpoo.admin_override (
                         id, company_id, action, target_type, target_id, reason, request_hash,
@@ -893,6 +932,16 @@ class M017BackupRestoreIT {
                                 WHERE l.project_id=project.id) AS product_link_facts,
                             issue.issue_type, issue.target_type, issue.status AS issue_status,
                             issue.row_version AS issue_version,
+                            (SELECT counter.last_sequence FROM yumpoo.work_item_project_counter counter
+                              WHERE counter.project_id=project.id) AS work_item_sequence,
+                            (SELECT string_agg(item.item_no || ':' || item.type || ':' || item.title
+                                || ':' || item.status_code || ':' || item.status_category || ':'
+                                || item.priority || ':' || COALESCE(item.description,'-') || ':'
+                                || COALESCE(item.notes,'-') || ':' || item.row_version || ':'
+                                || item.reporter_user_id || ':' || item.created_by_user_id || ':'
+                                || item.updated_by_user_id, ',' ORDER BY item.item_sequence)
+                               FROM yumpoo.work_item item WHERE item.project_id=project.id)
+                                AS work_items,
                             string_agg(content.code || ':' || content.work_item_type || ':'
                                 || content.status || ':' || content.default_view_type || ':'
                                 || content.row_version || ':' || content.view_config::text || ':'
@@ -926,6 +975,7 @@ class M017BackupRestoreIT {
                     result.getString("product_link_facts"),
                     result.getString("issue_type"), result.getString("target_type"),
                     result.getString("issue_status"), result.getLong("issue_version"),
+                    result.getLong("work_item_sequence"), result.getString("work_items"),
                     result.getString("contents"));
             assertThat(result.next()).isFalse();
             return fact;
@@ -1094,6 +1144,8 @@ class M017BackupRestoreIT {
             String issueTargetType,
             String issueStatus,
             long issueVersion,
+            long workItemSequence,
+            String workItems,
             String contents
     ) {
     }

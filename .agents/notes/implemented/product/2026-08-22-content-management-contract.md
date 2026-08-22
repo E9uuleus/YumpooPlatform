@@ -14,7 +14,7 @@ Content 写事务先通过 catalog 的 `ProjectFactWriteGuard` 获取 Project `F
 
 `ContentViewConfig` 是递归关闭的强类型 wire 契约，顶层只允许 `table` 和 `kanban`，规范化 JSON 上限为 16 KiB。历史 `{}` 在读取时展开为稳定默认值；列缺项按默认顺序补齐，TITLE 不可隐藏，排序字段不重复且最多三个，状态筛选必须属于固定模板。显式 Kanban 分组必须且只能覆盖模板全部状态一次。PATCH 完整替换可变详情并在比较前规范化。
 
-创建、归档和恢复使用 UUID 幂等键；PATCH、归档和恢复使用强 ETag。四类 `workitem.content_*` 事件只携带 Content 标识、Project、代码、名称、类型、状态、默认视图、蓝图、版本和变更字段，不携带描述或完整视图配置。Content 容器本身不构成 `OPEN_WORK_ITEMS` blocker；真实 Work Item 在 M2-10 交付时同时注册真实 provider。
+创建、归档和恢复使用 UUID 幂等键；PATCH、归档和恢复使用强 ETag。四类 `workitem.content_*` 事件只携带 Content 标识、Project、代码、名称、类型、状态、默认视图、蓝图、版本和变更字段，不携带描述或完整视图配置。Content 容器本身不构成 `OPEN_WORK_ITEMS` blocker；M2-10 的真实 Work Item 计数已同时阻止 Content 与 Project 归档。
 
 ## Alternatives considered
 
@@ -25,6 +25,6 @@ Content 写事务先通过 catalog 的 `ProjectFactWriteGuard` 获取 Project `F
 
 ## Consequences
 
-模板蓝图、工作项类型和 Content 来源成为服务端权威；客户端只消费目录给出的蓝图和状态选项。未来增加列、筛选器或看板配置时必须以兼容新增方式扩展 OpenAPI、Java 规范化器和生成 SDK，未知字段仍被旧服务端拒绝。M2-10 必须沿用 `ProjectFactWriteGuard` 的锁顺序，并在同一变更中把 OPEN_WORK_ITEMS provider 接到 Project 归档治理。
+模板蓝图、工作项类型和 Content 来源成为服务端权威；客户端只消费目录给出的蓝图和状态选项。未来增加列、筛选器或看板配置时必须以兼容新增方式扩展 OpenAPI、Java 规范化器和生成 SDK，未知字段仍被旧服务端拒绝。M2-10 已沿用 `ProjectFactWriteGuard` 的锁顺序，并把真实 OPEN_WORK_ITEMS provider 接到 Project 归档治理；Content 归档在持有 Content 排他锁时检查同一真源。
 
 Web 工作台复用现有 `--yp-*` 令牌、Element Plus 模态框/抽屉以及 Light、Dark、Night 与双密度机制；桌面使用连续语义表格，窄屏重组为卡片。412 冲突保留本地草稿并加载最新基线，只有用户明确选择后才可基于新 ETag 重提。

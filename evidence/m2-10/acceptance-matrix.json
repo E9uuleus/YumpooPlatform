@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-10",
+  "verifiedSlices": [
+    {
+      "requirementId": "PPM-014-OPEN-WORK-ITEMS",
+      "scope": "未删除且状态类别为 TODO/IN_PROGRESS 的真实 Work Item 阻止 Project 与 Content 普通归档，治理覆盖记录同一安全聚合数量",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/workitem/infrastructure/JdbcWorkItemRepository.java",
+        "backend/src/main/java/com/yumpoo/platform/administration/infrastructure/WorkItemArchiveBlockerProvider.java",
+        "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    {
+      "requirementId": "PPM-014-WORKLOG-AND-FEEDBACK",
+      "targetMilestone": "M2-24",
+      "scope": "Worklog、Product Feedback provider 与完整 PPM-014 三类 blocker 验收"
+    },
+    {
+      "requirementId": "WORK-ITEM-COLLABORATION-FIELDS",
+      "targetMilestone": "M2-11",
+      "scope": "处理人、自然日、PATCH 与强 ETag"
+    },
+    {
+      "requirementId": "WORK-ITEM-STATUS-TRANSITIONS",
+      "targetMilestone": "M2-12",
+      "scope": "状态迁移命令、权限与并发语义"
+    },
+    {
+      "requirementId": "WORK-ITEM-ADVANCED-QUERY",
+      "targetMilestone": "M2-13",
+      "scope": "保存的高级筛选与排序生效"
+    },
+    {
+      "requirementId": "WORK-ITEM-KANBAN-RANK",
+      "targetMilestone": "M2-14",
+      "scope": "rank、拖拽与跨列迁移"
+    }
+  ]
+}

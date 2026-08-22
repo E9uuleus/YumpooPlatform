@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-10",
+  "status": "PASS",
+  "startedAt": "2026-08-22T03:30:00Z",
+  "completedAt": "2026-08-22T04:10:00Z",
+  "command": "pnpm verify:m2-10",
+  "flywayVersion": "29",
+  "testCounts": {
+    "backendUnit": 373,
+    "backendIntegration": 180,
+    "nodeArchitecture": 9,
+    "apiClient": 7,
+    "web": 121,
+    "desktop": 24
+  },
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "workItemNumberingAndIdempotency": true,
+    "projectThenContentLockOrder": true,
+    "realOpenWorkItemBlocker": true,
+    "safeWorkItemCreatedEvent": true,
+    "backupRestoreWorkItemFacts": true,
+    "vueTableAndReadOnlyKanban": true,
+    "nodeGate": true
+  }
+}
