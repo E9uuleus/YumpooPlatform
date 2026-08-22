@@ -29,7 +29,7 @@ import {
   ElTableColumn,
 } from 'element-plus'
 import { computed, onMounted, ref, type DefineComponent } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { contentsApi, projectsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
@@ -41,6 +41,7 @@ import ProjectWorkspaceHeader from './ProjectWorkspaceHeader.vue'
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 const route = useRoute()
+const router = useRouter()
 const projectId = String(route.params.projectId)
 const project = ref<ProjectDetail>()
 const catalog = ref<ProjectContentCatalog>()
@@ -136,6 +137,13 @@ function openDrawer(content: Content): void {
   draftViewType.value = content.defaultViewType
   draftConfig.value = cloneConfig(content.viewConfig)
   drawerOpen.value = true
+}
+
+function openWorkspace(content: Content): void {
+  void router.push({
+    name: 'content-work-items',
+    params: { projectId, contentId: content.id },
+  })
 }
 
 function cloneConfig(value: ContentViewConfig): ContentViewConfig {
@@ -284,7 +292,7 @@ onMounted(load)
       <el-table v-if="visibleItems.length" class="content-table" :data="visibleItems" row-key="id">
         <el-table-column label="Content" min-width="280" fixed="left">
           <template #default="scope">
-            <button class="content-name-button" type="button" @click="openDrawer(contentRow(scope.row))">
+            <button class="content-name-button" type="button" @click="openWorkspace(contentRow(scope.row))">
               <strong>{{ scope.row.name }}</strong><span>{{ scope.row.code }}</span>
             </button>
           </template>
@@ -315,7 +323,7 @@ onMounted(load)
 
       <div v-if="visibleItems.length" class="content-cards">
         <article v-for="item in visibleItems" :key="item.id" class="content-card">
-          <button type="button" @click="openDrawer(item)"><strong>{{ item.name }}</strong><span>{{ item.code }}</span></button>
+          <button type="button" @click="openWorkspace(item)"><strong>{{ item.name }}</strong><span>{{ item.code }}</span></button>
           <yp-status-tag domain="content-status" :status="item.status" effect="soft" />
           <dl><dt>工作项</dt><dd>{{ workItemLabel(item.workItemType) }}</dd><dt>视图</dt><dd>{{ item.defaultViewType }}</dd></dl>
         </article>

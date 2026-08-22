@@ -1,0 +1,27 @@
+{
+  "eventId": "2a000000-0000-4000-8000-000000000011",
+  "eventType": "workitem.work_item_created",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-22T10:00:00Z",
+  "aggregateType": "WorkItem",
+  "aggregateId": "2a000000-0000-4000-8000-000000000012",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2a000000-0000-4000-8000-000000000013" },
+  "requestId": "m2-10-work-item-invalid",
+  "correlationId": "m2-10-work-item-invalid",
+  "causationId": null,
+  "payload": {
+    "workItemId": "2a000000-0000-4000-8000-000000000012",
+    "projectId": "2a000000-0000-4000-8000-000000000014",
+    "contentId": "2a000000-0000-4000-8000-000000000015",
+    "itemNo": "INVALID",
+    "title": "无效编号",
+    "workItemType": "TASK",
+    "statusCode": "BACKLOG",
+    "statusCategory": "TODO",
+    "priority": "HIGH",
+    "reporterUserId": "2a000000-0000-4000-8000-000000000013",
+    "rowVersion": 0
+  }
+}

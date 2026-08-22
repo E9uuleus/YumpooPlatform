@@ -1,0 +1,27 @@
+{
+  "eventId": "2a000000-0000-4000-8000-000000000001",
+  "eventType": "workitem.work_item_created",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-22T10:00:00Z",
+  "aggregateType": "WorkItem",
+  "aggregateId": "2a000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2a000000-0000-4000-8000-000000000003" },
+  "requestId": "m2-10-work-item-create",
+  "correlationId": "m2-10-work-item-create",
+  "causationId": null,
+  "payload": {
+    "workItemId": "2a000000-0000-4000-8000-000000000002",
+    "projectId": "2a000000-0000-4000-8000-000000000004",
+    "contentId": "2a000000-0000-4000-8000-000000000005",
+    "itemNo": "PROJECT_CORE-1",
+    "title": "建立工作项核心闭环",
+    "workItemType": "TASK",
+    "statusCode": "BACKLOG",
+    "statusCategory": "TODO",
+    "priority": "HIGH",
+    "reporterUserId": "2a000000-0000-4000-8000-000000000003",
+    "rowVersion": 0
+  }
+}

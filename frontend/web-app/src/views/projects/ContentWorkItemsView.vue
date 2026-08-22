@@ -1,0 +1,692 @@
+<script setup lang="ts">
+import { ArrowLeft, Plus } from '@element-plus/icons-vue'
+import {
+  ContentStatus,
+  ContentTableColumn,
+  ContentViewType,
+  ProjectActorAccess,
+  ProjectLifecycle,
+  WorkItemPriority,
+  readCsrfToken,
+  type Content,
+  type ContentStatusGroup,
+  type ProjectContentCatalog,
+  type ProjectDetail,
+  type WorkItemDetail,
+  type WorkItemPage,
+  type WorkItemSummary,
+} from '@yumpoo/api-client'
+import {
+  ElButton,
+  ElDialog,
+  ElDrawer,
+  ElForm,
+  ElFormItem,
+  ElInput,
+  ElMessage,
+  ElOption as ElOptionRaw,
+  ElPagination,
+  ElSelect as ElSelectRaw,
+  ElTable,
+  ElTableColumn,
+} from 'element-plus'
+import { computed, onMounted, reactive, ref, type DefineComponent } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
+import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
+import InlineProblem from '../../components/InlineProblem.vue'
+import YpAssignee from '../../components/yp/YpAssignee.vue'
+import YpEmptyState from '../../components/yp/YpEmptyState.vue'
+import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
+import ProjectWorkspaceHeader from './ProjectWorkspaceHeader.vue'
+
+interface TableColumnDefinition {
+  code: ContentTableColumn
+  label: string
+  minWidth: number
+}
+
+interface KanbanColumnState {
+  items: WorkItemSummary[]
+  page: number
+  totalElements: number
+  totalPages: number
+  loading: boolean
+  error?: ApiProblem
+}
+
+const route = useRoute()
+const router = useRouter()
+const ElOption = ElOptionRaw as unknown as DefineComponent
+const ElSelect = ElSelectRaw as unknown as DefineComponent
+const projectId = String(route.params.projectId)
+const contentId = String(route.params.contentId)
+const project = ref<ProjectDetail>()
+const catalog = ref<ProjectContentCatalog>()
+const content = ref<Content>()
+const loading = ref(false)
+const tableLoading = ref(false)
+const error = ref<ApiProblem>()
+const selectedView = ref<ContentViewType>(ContentViewType.Table)
+const tablePage = ref<WorkItemPage>({ items: [], page: 0, size: 20, totalElements: 0, totalPages: 0 })
+const createOpen = ref(false)
+const creating = ref(false)
+const createForm = reactive({
+  title: '',
+  priority: WorkItemPriority.Medium,
+  description: '',
+  notes: '',
+})
+const detailOpen = ref(false)
+const detailLoading = ref(false)
+const detail = ref<WorkItemDetail>()
+const kanbanStates = reactive<Record<string, KanbanColumnState>>({})
+const kanbanInitialized = ref(false)
+
+const supportedColumns: Record<string, TableColumnDefinition> = {
+  [ContentTableColumn.ItemNo]: { code: ContentTableColumn.ItemNo, label: '事项编号', minWidth: 130 },
+  [ContentTableColumn.Title]: { code: ContentTableColumn.Title, label: '标题', minWidth: 250 },
+  [ContentTableColumn.Status]: { code: ContentTableColumn.Status, label: '状态', minWidth: 120 },
+  [ContentTableColumn.Priority]: { code: ContentTableColumn.Priority, label: '优先级', minWidth: 100 },
+  [ContentTableColumn.Reporter]: { code: ContentTableColumn.Reporter, label: '报告人', minWidth: 160 },
+  [ContentTableColumn.UpdatedAt]: { code: ContentTableColumn.UpdatedAt, label: '更新时间', minWidth: 180 },
+}
+
+const tableColumns = computed(() => {
+  if (!content.value) return []
+  const hidden = content.value.viewConfig.table.hiddenColumns
+  return Array.from(content.value.viewConfig.table.columnOrder)
+    .filter(code => !hidden.has(code))
+    .map(code => supportedColumns[code])
+    .filter((column): column is TableColumnDefinition => Boolean(column))
+})
+const kanbanGroups = computed(() => content.value?.viewConfig.kanban.statusGroups ?? [])
+const canCreate = computed(() => Boolean(project.value && content.value
+  && project.value.lifecycle !== ProjectLifecycle.Archived
+  && content.value.status === ContentStatus.Active
+  && (project.value.actorAccess === ProjectActorAccess.Owner
+    || project.value.actorAccess === ProjectActorAccess.Member)))
+const readOnlyReason = computed(() => {
+  if (project.value?.lifecycle === ProjectLifecycle.Archived) return 'Project 已归档，工作项仅可查看。'
+  if (content.value?.status === ContentStatus.Archived) return 'Content 已归档，不能创建工作项。'
+  if (project.value?.actorAccess === ProjectActorAccess.CompanyAdmin) return 'Company Admin 在 Project 工作区中保持只读。'
+  if (!canCreate.value) return '当前角色没有创建工作项的权限。'
+  return undefined
+})
+
+function groupKey(group: ContentStatusGroup, index: number): string {
+  return `${index}:${group.name}:${Array.from(group.statusCodes).join(',')}`
+}
+
+function kanbanState(group: ContentStatusGroup, index: number): KanbanColumnState {
+  const key = groupKey(group, index)
+  if (!kanbanStates[key]) {
+    kanbanStates[key] = { items: [], page: 0, totalElements: 0, totalPages: 0, loading: false }
+  }
+  return kanbanStates[key]
+}
+
+function statusOption(statusCode: string) {
+  return catalog.value?.workflowStatusOptions.find(item => item.statusCode === statusCode)
+}
+
+function statusLabel(statusCode: string): string {
+  return statusOption(statusCode)?.displayName ?? statusCode
+}
+
+function statusTone(statusCode: string): string {
+  const category = statusOption(statusCode)?.statusCategory
+  if (category === 'DONE') return 'green'
+  if (category === 'IN_PROGRESS') return 'blue'
+  if (category === 'CANCELED') return 'gray'
+  return 'yellow'
+}
+
+function typeLabel(type: string): string {
+  return ({ TASK: '任务', DEFECT: '缺陷', REQUIREMENT: '需求' } as Record<string, string>)[type] ?? type
+}
+
+function formatDate(value: Date): string {
+  return value.toLocaleString('zh-CN')
+}
+
+function workItemRow(row: unknown): WorkItemSummary {
+  return row as WorkItemSummary
+}
+
+async function loadWorkspace(): Promise<void> {
+  loading.value = true
+  error.value = undefined
+  try {
+    const [nextProject, nextCatalog] = await Promise.all([
+      projectsApi.getProject({ projectId }),
+      contentsApi.listProjectContents({ projectId }),
+    ])
+    const nextContent = nextCatalog.items.find(item => item.id === contentId)
+    if (!nextContent) {
+      error.value = localProblem('当前 Project 中不存在该 Content，或当前账号无权查看。')
+      return
+    }
+    project.value = nextProject
+    catalog.value = nextCatalog
+    content.value = nextContent
+    selectedView.value = nextContent.defaultViewType
+    if (selectedView.value === ContentViewType.Kanban) await loadKanban()
+    else await loadTable(0)
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadTable(page: number): Promise<void> {
+  tableLoading.value = true
+  error.value = undefined
+  try {
+    tablePage.value = await workItemsApi.listContentWorkItems({
+      contentId,
+      page,
+      size: tablePage.value.size,
+    })
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  } finally {
+    tableLoading.value = false
+  }
+}
+
+async function loadKanban(): Promise<void> {
+  if (kanbanInitialized.value) return
+  kanbanInitialized.value = true
+  await Promise.all(kanbanGroups.value.map((group, index) => loadKanbanGroup(group, index, 0)))
+}
+
+async function loadKanbanGroup(group: ContentStatusGroup, index: number, page: number): Promise<void> {
+  const key = groupKey(group, index)
+  const state = kanbanStates[key] ?? {
+    items: [], page: 0, totalElements: 0, totalPages: 0, loading: false,
+  }
+  kanbanStates[key] = state
+  state.loading = true
+  delete state.error
+  try {
+    const result = await workItemsApi.listContentWorkItems({
+      contentId,
+      page,
+      size: 20,
+      status: group.statusCodes,
+    })
+    state.items = page === 0 ? result.items : [...state.items, ...result.items]
+    state.page = result.page
+    state.totalElements = result.totalElements
+    state.totalPages = result.totalPages
+  } catch (reason) {
+    state.error = await toApiProblem(reason)
+  } finally {
+    state.loading = false
+  }
+}
+
+async function changeView(view: ContentViewType): Promise<void> {
+  selectedView.value = view
+  if (view === ContentViewType.Kanban) await loadKanban()
+  else if (!tablePage.value.items.length && tablePage.value.totalElements === 0) await loadTable(0)
+}
+
+function openCreate(): void {
+  createForm.title = ''
+  createForm.priority = WorkItemPriority.Medium
+  createForm.description = ''
+  createForm.notes = ''
+  createOpen.value = true
+}
+
+async function createWorkItem(): Promise<void> {
+  if (!createForm.title.trim()) {
+    error.value = localProblem('请输入工作项标题。')
+    return
+  }
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
+    return
+  }
+  creating.value = true
+  error.value = undefined
+  try {
+    const created = await workItemsApi.createWorkItem({
+      contentId,
+      xXSRFTOKEN: csrf,
+      idempotencyKey: globalThis.crypto.randomUUID(),
+      workItemCreateRequest: {
+        title: createForm.title.trim(),
+        priority: createForm.priority,
+        description: createForm.description.trim() || null,
+        notes: createForm.notes.trim() || null,
+      },
+    })
+    createOpen.value = false
+    await loadTable(0)
+    kanbanInitialized.value = false
+    Object.keys(kanbanStates).forEach(key => delete kanbanStates[key])
+    if (selectedView.value === ContentViewType.Kanban) await loadKanban()
+    ElMessage.success(`已创建 ${created.itemNo}`)
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  } finally {
+    creating.value = false
+  }
+}
+
+async function openDetail(item: WorkItemSummary): Promise<void> {
+  detailOpen.value = true
+  detailLoading.value = true
+  detail.value = undefined
+  try {
+    detail.value = await workItemsApi.getWorkItem({ workItemId: item.id })
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+    detailOpen.value = false
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+onMounted(loadWorkspace)
+</script>
+
+<template>
+  <section
+    v-loading="loading"
+    class="work-items-page"
+  >
+    <project-workspace-header
+      section="contents"
+      :project="project"
+      :title="content?.name ?? 'Content 工作区'"
+      :description="content?.description ?? '查看和创建工作项。'"
+    >
+      <template #primary-action>
+        <el-button @click="router.push({ name: 'project-contents', params: { projectId } })">
+          <arrow-left /> Content 目录
+        </el-button>
+        <el-button
+          v-if="canCreate"
+          type="primary"
+          @click="openCreate"
+        >
+          <plus /> 创建工作项
+        </el-button>
+      </template>
+    </project-workspace-header>
+
+    <inline-problem
+      v-if="error"
+      :problem="error"
+    />
+
+    <template v-if="content">
+      <div class="workspace-toolbar">
+        <div>
+          <div class="content-heading">
+            <h2>{{ content.name }}</h2>
+            <span>{{ content.code }}</span>
+            <span>{{ typeLabel(content.workItemType) }}</span>
+          </div>
+          <p
+            v-if="readOnlyReason"
+            class="read-only-reason"
+          >
+            {{ readOnlyReason }}
+          </p>
+          <p
+            v-else
+            class="workspace-hint"
+          >
+            创建范围仅包含标题、优先级、描述与备注。
+          </p>
+        </div>
+        <div
+          class="view-switch"
+          role="group"
+          aria-label="工作项视图"
+        >
+          <el-button
+            :type="selectedView === ContentViewType.Table ? 'primary' : 'default'"
+            @click="changeView(ContentViewType.Table)"
+          >
+            表格
+          </el-button>
+          <el-button
+            :type="selectedView === ContentViewType.Kanban ? 'primary' : 'default'"
+            @click="changeView(ContentViewType.Kanban)"
+          >
+            看板
+          </el-button>
+        </div>
+      </div>
+
+      <div
+        v-if="selectedView === ContentViewType.Table"
+        class="table-surface"
+      >
+        <el-table
+          v-loading="tableLoading"
+          :data="tablePage.items"
+          row-key="id"
+          empty-text="暂无工作项"
+          @row-click="openDetail"
+        >
+          <el-table-column
+            v-for="column in tableColumns"
+            :key="column.code"
+            :label="column.label"
+            :min-width="column.minWidth"
+          >
+            <template #default="scope">
+              <button
+                v-if="column.code === ContentTableColumn.Title"
+                class="item-title"
+                type="button"
+                @click.stop="openDetail(workItemRow(scope.row))"
+              >
+                {{ scope.row.title }}
+              </button>
+              <span
+                v-else-if="column.code === ContentTableColumn.ItemNo"
+                class="item-no"
+              >{{ scope.row.itemNo }}</span>
+              <span
+                v-else-if="column.code === ContentTableColumn.Status"
+                class="status-pill"
+                :class="`status-pill--${statusTone(scope.row.statusCode)}`"
+              >
+                {{ statusLabel(scope.row.statusCode) }}
+              </span>
+              <yp-priority-badge
+                v-else-if="column.code === ContentTableColumn.Priority"
+                :priority="scope.row.priority"
+              />
+              <yp-assignee
+                v-else-if="column.code === ContentTableColumn.Reporter"
+                :user-id="scope.row.reporterUserId"
+                :display-name="scope.row.reporterDisplayName"
+                size="table"
+              />
+              <span v-else-if="column.code === ContentTableColumn.UpdatedAt">{{ formatDate(scope.row.updatedAt) }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <yp-empty-state
+          v-if="!tableLoading && tablePage.items.length === 0"
+          compact
+          title="还没有工作项"
+          :description="canCreate ? '创建第一条工作项，开始推进这个 Content。' : '当前 Content 中暂无可显示的工作项。'"
+        >
+          <template
+            v-if="canCreate"
+            #action
+          >
+            <el-button
+              type="primary"
+              @click="openCreate"
+            >
+              创建工作项
+            </el-button>
+          </template>
+        </yp-empty-state>
+        <el-pagination
+          v-if="tablePage.totalElements > 0"
+          class="table-pagination"
+          background
+          layout="total, prev, pager, next"
+          :current-page="tablePage.page + 1"
+          :page-size="tablePage.size"
+          :total="tablePage.totalElements"
+          @current-change="page => loadTable(page - 1)"
+        />
+      </div>
+
+      <div
+        v-else
+        class="kanban-board"
+        aria-label="只读工作项看板"
+      >
+        <section
+          v-for="(group, index) in kanbanGroups"
+          :key="groupKey(group, index)"
+          class="kanban-column"
+          :aria-label="group.name"
+        >
+          <header>
+            <h3>{{ group.name }}</h3>
+            <span>{{ kanbanState(group, index).totalElements }}</span>
+          </header>
+          <inline-problem
+            v-if="kanbanState(group, index).error"
+            :problem="kanbanState(group, index).error!"
+          />
+          <div
+            v-loading="kanbanState(group, index).loading"
+            class="kanban-cards"
+          >
+            <button
+              v-for="item in kanbanState(group, index).items"
+              :key="item.id"
+              class="work-item-card"
+              type="button"
+              @click="openDetail(item)"
+            >
+              <span class="work-item-card__meta"><strong>{{ item.itemNo }}</strong>{{ typeLabel(item.type) }}</span>
+              <span class="work-item-card__title">{{ item.title }}</span>
+              <span
+                class="work-item-card__status status-pill"
+                :class="`status-pill--${statusTone(item.statusCode)}`"
+              >
+                {{ statusLabel(item.statusCode) }}
+              </span>
+              <span class="work-item-card__footer">
+                <yp-priority-badge :priority="item.priority" />
+                <yp-assignee
+                  :user-id="item.reporterUserId"
+                  :display-name="item.reporterDisplayName"
+                  size="table"
+                  :show-name="false"
+                />
+              </span>
+            </button>
+            <yp-empty-state
+              v-if="!kanbanState(group, index).loading && !kanbanState(group, index).items.length"
+              compact
+              title="此列为空"
+              description="当前没有处于这些状态的工作项。"
+            />
+          </div>
+          <el-button
+            v-if="kanbanState(group, index).page + 1 < kanbanState(group, index).totalPages"
+            class="load-more"
+            :loading="kanbanState(group, index).loading"
+            @click="loadKanbanGroup(group, index, kanbanState(group, index).page + 1)"
+          >
+            加载更多
+          </el-button>
+        </section>
+      </div>
+    </template>
+
+    <el-dialog
+      v-model="createOpen"
+      title="创建工作项"
+      width="min(560px, calc(100vw - 32px))"
+    >
+      <el-form
+        label-position="top"
+        @submit.prevent="createWorkItem"
+      >
+        <el-form-item
+          label="标题"
+          required
+        >
+          <el-input
+            v-model="createForm.title"
+            maxlength="300"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item
+          label="优先级"
+          required
+        >
+          <el-select v-model="createForm.priority">
+            <el-option
+              label="低"
+              :value="WorkItemPriority.Low"
+            />
+            <el-option
+              label="中"
+              :value="WorkItemPriority.Medium"
+            />
+            <el-option
+              label="高"
+              :value="WorkItemPriority.High"
+            />
+            <el-option
+              label="紧急"
+              :value="WorkItemPriority.Urgent"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input
+            v-model="createForm.description"
+            type="textarea"
+            :rows="4"
+            maxlength="16384"
+          />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input
+            v-model="createForm.notes"
+            type="textarea"
+            :rows="3"
+            maxlength="16384"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createOpen = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="creating"
+          @click="createWorkItem"
+        >
+          创建
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-drawer
+      v-model="detailOpen"
+      title="工作项详情"
+      size="min(560px, 100vw)"
+    >
+      <div
+        v-loading="detailLoading"
+        class="detail-panel"
+      >
+        <template v-if="detail">
+          <div class="detail-panel__eyebrow">
+            {{ detail.itemNo }} · {{ typeLabel(detail.type) }}
+          </div>
+          <h2>{{ detail.title }}</h2>
+          <div class="detail-panel__badges">
+            <span
+              class="status-pill"
+              :class="`status-pill--${statusTone(detail.statusCode)}`"
+            >{{ statusLabel(detail.statusCode) }}</span>
+            <yp-priority-badge :priority="detail.priority" />
+          </div>
+          <dl>
+            <div>
+              <dt>报告人</dt><dd>
+                <yp-assignee
+                  :user-id="detail.reporterUserId"
+                  :display-name="detail.reporterDisplayName"
+                />
+              </dd>
+            </div>
+            <div><dt>创建时间</dt><dd>{{ formatDate(detail.createdAt) }}</dd></div>
+            <div><dt>更新时间</dt><dd>{{ formatDate(detail.updatedAt) }}</dd></div>
+          </dl>
+          <section>
+            <h3>描述</h3><p class="plain-text">
+              {{ detail.description || '暂无描述' }}
+            </p>
+          </section>
+          <section>
+            <h3>备注</h3><p class="plain-text">
+              {{ detail.notes || '暂无备注' }}
+            </p>
+          </section>
+        </template>
+      </div>
+    </el-drawer>
+  </section>
+</template>
+
+<style scoped>
+.work-items-page { display: grid; gap: var(--yp-space-5); }
+.workspace-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--yp-space-4); padding: var(--yp-space-4) var(--yp-space-5); border: 1px solid var(--yp-border-subtle); background: var(--yp-bg-surface); }
+.content-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--yp-space-2); }
+.content-heading h2 { margin: 0; font-size: var(--yp-type-section-title-size); }
+.content-heading span { padding: 2px var(--yp-space-2); border-radius: var(--yp-radius-sm); color: var(--yp-text-muted); background: var(--yp-bg-sunken); font-size: var(--yp-type-caption-size); }
+.read-only-reason, .workspace-hint { margin: var(--yp-space-1) 0 0; color: var(--yp-text-secondary); }
+.view-switch { display: flex; }
+.view-switch :deep(.el-button + .el-button) { margin-left: 0; }
+.table-surface { overflow: hidden; border: 1px solid var(--yp-border-subtle); background: var(--yp-bg-surface); }
+.table-surface :deep(.el-table__row) { cursor: pointer; }
+.item-title { padding: 0; border: 0; color: var(--yp-link); background: transparent; font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.item-title:hover, .item-title:focus-visible { text-decoration: underline; }
+.item-no { color: var(--yp-text-secondary); font-variant-numeric: tabular-nums; }
+.table-pagination { justify-content: flex-end; padding: var(--yp-space-4); border-top: 1px solid var(--yp-border-subtle); }
+.status-pill { display: inline-flex; align-items: center; min-height: 24px; padding: 2px var(--yp-space-2); border-radius: var(--yp-radius-sm); color: var(--yp-text-primary); background: var(--yp-bg-sunken); font-size: var(--yp-type-caption-size); font-weight: 700; }
+.status-pill--blue { color: var(--yp-status-blue-foreground); background: var(--yp-status-blue); }
+.status-pill--green { color: var(--yp-status-green-foreground); background: var(--yp-status-green); }
+.status-pill--yellow { color: var(--yp-status-yellow-foreground); background: var(--yp-status-yellow); }
+.status-pill--gray { color: var(--yp-status-gray-foreground); background: var(--yp-status-gray); }
+.kanban-board { display: grid; grid-auto-columns: minmax(280px, 340px); grid-auto-flow: column; gap: var(--yp-space-4); overflow-x: auto; padding-bottom: var(--yp-space-3); }
+.kanban-column { display: flex; min-height: 420px; flex-direction: column; border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-sunken); }
+.kanban-column > header { display: flex; align-items: center; justify-content: space-between; padding: var(--yp-space-3) var(--yp-space-4); border-bottom: 1px solid var(--yp-border-subtle); }
+.kanban-column h3 { margin: 0; font-size: var(--yp-type-card-title-size); }
+.kanban-column > header span { display: grid; min-width: 24px; height: 24px; place-items: center; border-radius: 12px; color: var(--yp-text-secondary); background: var(--yp-bg-surface); font-size: var(--yp-type-caption-size); }
+.kanban-cards { display: grid; align-content: start; gap: var(--yp-space-3); min-height: 180px; padding: var(--yp-space-3); }
+.work-item-card { display: grid; gap: var(--yp-space-3); width: 100%; min-height: 132px; padding: var(--yp-space-4); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); color: var(--yp-text-primary); background: var(--yp-bg-surface); box-shadow: var(--yp-shadow-card); cursor: pointer; text-align: left; transition: border-color 120ms ease, transform 120ms ease; }
+.work-item-card:hover { border-color: var(--yp-border-strong); transform: translateY(-1px); }
+.work-item-card:focus-visible { outline: 2px solid var(--yp-focus-ring); outline-offset: 2px; }
+.work-item-card__meta, .work-item-card__footer { display: flex; align-items: center; justify-content: space-between; gap: var(--yp-space-2); color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
+.work-item-card__meta strong { color: var(--yp-text-secondary); }
+.work-item-card__title { font-weight: 650; line-height: 1.45; }
+.work-item-card__status { justify-self: start; }
+.load-more { margin: auto var(--yp-space-3) var(--yp-space-3); }
+.detail-panel { min-height: 240px; }
+.detail-panel__eyebrow { color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
+.detail-panel h2 { margin: var(--yp-space-2) 0 var(--yp-space-4); }
+.detail-panel__badges { display: flex; align-items: center; gap: var(--yp-space-3); }
+.detail-panel dl { display: grid; gap: var(--yp-space-3); margin: var(--yp-space-6) 0; }
+.detail-panel dl div { display: grid; grid-template-columns: 96px 1fr; align-items: center; }
+.detail-panel dt { color: var(--yp-text-muted); }
+.detail-panel dd { margin: 0; }
+.detail-panel section { padding: var(--yp-space-4) 0; border-top: 1px solid var(--yp-border-subtle); }
+.detail-panel section h3 { margin: 0 0 var(--yp-space-2); font-size: var(--yp-type-card-title-size); }
+.plain-text { margin: 0; color: var(--yp-text-secondary); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .workspace-toolbar { flex-direction: column; padding: var(--yp-space-4); }
+  .view-switch { width: 100%; }
+  .view-switch :deep(.el-button) { min-height: 44px; flex: 1; }
+  .table-surface :deep(.el-table) { display: block; overflow-x: auto; }
+  .kanban-board { grid-auto-columns: minmax(86vw, 86vw); }
+}
+</style>

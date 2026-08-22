@@ -41,7 +41,7 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         membershipService.requireVisible(actor, projectId);
         ProjectSnapshot project = snapshot(lifecycleService.lockForNewFact(actor.companyId(), projectId));
         ProjectAccessSnapshot access = access(membershipService.requireVisible(actor, projectId));
-        return new ProjectFactWriteSnapshot(project.projectId(), project.companyId(),
+        return new ProjectFactWriteSnapshot(project.projectId(), project.companyId(), project.code(),
                 ProjectFactWriteSnapshot.ProjectLifecycle.valueOf(project.lifecycle()),
                 ProjectFactWriteSnapshot.ActorProjectAccess.valueOf(access.actorAccess().name()),
                 project.templateKey(), project.templateVersion());

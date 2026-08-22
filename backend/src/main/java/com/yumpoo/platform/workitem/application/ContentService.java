@@ -7,6 +7,7 @@ import com.yumpoo.platform.catalog.api.ProjectFactWriteSnapshot;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
+import com.yumpoo.platform.foundation.application.error.SafeBlocker;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventDraft;
@@ -46,6 +47,7 @@ public class ContentService {
     private static final String RESTORED = "workitem.content_restored";
 
     private final ContentRepository contents;
+    private final WorkItemRepository workItems;
     private final ProjectAccessSnapshotQuery access;
     private final ProjectFactWriteGuard writeGuard;
     private final ProjectTemplateVersionQuery templates;
@@ -55,11 +57,12 @@ public class ContentService {
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
-    public ContentService(ContentRepository contents, ProjectAccessSnapshotQuery access,
+    public ContentService(ContentRepository contents, WorkItemRepository workItems,
+            ProjectAccessSnapshotQuery access,
             ProjectFactWriteGuard writeGuard, ProjectTemplateVersionQuery templates,
             ContentViewConfigCodec configs, IdempotentCommandExecutor idempotency,
             TransactionalEventPort events, ObjectMapper objectMapper, Clock clock) {
-        this.contents = contents; this.access = access; this.writeGuard = writeGuard;
+        this.contents = contents; this.workItems = workItems; this.access = access; this.writeGuard = writeGuard;
         this.templates = templates; this.configs = configs; this.idempotency = idempotency;
         this.events = events; this.objectMapper = objectMapper; this.clock = clock;
     }
@@ -152,6 +155,12 @@ public class ContentService {
         Content before = locked(project, command.contentId());
         requireVersion(before, command.expectedVersion());
         requireStatus(before, expectedStatus);
+        if (nextStatus == ContentStatus.ARCHIVED) {
+            long open = workItems.countOpenByContent(project.companyId(), project.projectId(), before.id());
+            if (open > 0) throw ApplicationException.withBlockers(
+                    StandardErrorCode.INVALID_STATE_TRANSITION, "CONTENT_ARCHIVE_BLOCKED",
+                    List.of(new SafeBlocker("OPEN_WORK_ITEMS", open)));
+        }
         Content candidate = nextStatus == ContentStatus.ARCHIVED
                 ? before.archive(command.actor().userId(), clock.instant())
                 : before.restore(command.actor().userId(), clock.instant());

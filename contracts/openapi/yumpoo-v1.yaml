@@ -30,6 +30,8 @@ tags:
     description: Company 下的 Project 原子创建、模板固化与初始协作结构。
   - name: Contents
     description: Project 下固定工作项类型容器的目录、配置与归档生命周期。
+  - name: WorkItems
+    description: Content 下真实工作项的创建、详情与分页只读视图。
 paths:
   /company:
     get:
@@ -1517,6 +1519,88 @@ paths:
         '412': { $ref: '#/components/responses/VersionConflict' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /contents/{contentId}/work-items:
+    get:
+      tags: [WorkItems]
+      operationId: listContentWorkItems
+      summary: 分页查询 Content 的真实 Work Item
+      description: status 可重复；Table 不传，Kanban 按共享状态分组分别加载。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: contentId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - name: page
+          in: query
+          schema: { type: integer, format: int32, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, format: int32, minimum: 1, maximum: 100, default: 20 }
+        - name: status
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+      responses:
+        '200':
+          description: 已按权限过滤的稳定序号倒序分页。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      tags: [WorkItems]
+      operationId: createWorkItem
+      summary: 在 ACTIVE Content 中创建 Work Item
+      description: Project、Content、type、报告人和模板初始状态均由服务端派生。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: contentId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemCreateRequest' } } }
+      responses:
+        '201':
+          description: Work Item 已创建或幂等重放。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /work-items/{workItemId}:
+    get:
+      tags: [WorkItems]
+      operationId: getWorkItem
+      summary: 查询 Work Item 只读详情
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: 当前项目成员或 CompanyAdmin 可见的工作项详情。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
   /project-templates:
     get:
       tags: [ProjectTemplates]
@@ -2199,6 +2283,73 @@ components:
     WorkItemPriority:
       type: string
       enum: [LOW, MEDIUM, HIGH, URGENT]
+
+    WorkItemStatusCategory:
+      type: string
+      enum: [TODO, IN_PROGRESS, DONE, CANCELED]
+
+    WorkItemSummary:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, contentId, itemNo, type, title, statusCode,
+        statusCategory, priority, reporterUserId, reporterDisplayName, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        projectId: { $ref: '#/components/schemas/Uuid' }
+        contentId: { $ref: '#/components/schemas/Uuid' }
+        itemNo: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$' }
+        type: { $ref: '#/components/schemas/WorkItemType' }
+        title: { type: string, minLength: 1, maxLength: 300 }
+        statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
+        priority: { $ref: '#/components/schemas/WorkItemPriority' }
+        reporterUserId: { $ref: '#/components/schemas/Uuid' }
+        reporterDisplayName: { type: string, minLength: 1 }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+
+    WorkItemDetail:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, contentId, itemNo, type, title, statusCode,
+        statusCategory, priority, reporterUserId, reporterDisplayName, description,
+        notes, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        projectId: { $ref: '#/components/schemas/Uuid' }
+        contentId: { $ref: '#/components/schemas/Uuid' }
+        itemNo: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$' }
+        type: { $ref: '#/components/schemas/WorkItemType' }
+        title: { type: string, minLength: 1, maxLength: 300 }
+        statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
+        priority: { $ref: '#/components/schemas/WorkItemPriority' }
+        reporterUserId: { $ref: '#/components/schemas/Uuid' }
+        reporterDisplayName: { type: string, minLength: 1 }
+        description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+
+    WorkItemPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/WorkItemSummary' } }
+        page: { type: integer, format: int32, minimum: 0 }
+        size: { type: integer, format: int32, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, format: int32, minimum: 0 }
+
+    WorkItemCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [title, priority, description, notes]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 300 }
+        priority: { $ref: '#/components/schemas/WorkItemPriority' }
+        description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
 
     ContentViewSort:
       type: object

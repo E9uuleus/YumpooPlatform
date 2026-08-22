@@ -283,7 +283,7 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
@@ -312,6 +312,8 @@ class YumpooServerApplicationIT {
                 "project_template_definition",
                 "security_audit_event",
                 "wecom_oauth_attempt",
+                "work_item",
+                "work_item_project_counter",
                 "workflow_status_definition",
                 "workflow_transition_definition",
                 "workspace"

@@ -14,8 +14,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ProjectArchiveBlockerCollectorTest {
 
     @Test
-    void productionCoverageDoesNotInventZeroCountProviders() {
-        assertThat(new ProjectArchiveBlockerCollector(List.of()).collect(
+    void productionCoverageIncludesRealWorkItemZeroCountProvider() {
+        assertThat(new ProjectArchiveBlockerCollector(List.of(
+                provider(ProjectArchiveBlockerSource.WORKITEM, 0, true))).collect(
                 UUID.randomUUID(), UUID.randomUUID())).isEmpty();
     }
 

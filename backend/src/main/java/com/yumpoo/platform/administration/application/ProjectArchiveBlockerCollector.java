@@ -15,8 +15,8 @@ import java.util.UUID;
 @Component
 public final class ProjectArchiveBlockerCollector {
 
-    // M2-08 does not declare providers without an authoritative fact source.
-    private static final Set<ProjectArchiveBlockerSource> DECLARED_SOURCES = Set.of();
+    private static final Set<ProjectArchiveBlockerSource> DECLARED_SOURCES =
+            Set.of(ProjectArchiveBlockerSource.WORKITEM);
     private final Map<ProjectArchiveBlockerSource, ProjectArchiveBlockerProvider> providers;
     private final Set<ProjectArchiveBlockerSource> declaredSources;
 
