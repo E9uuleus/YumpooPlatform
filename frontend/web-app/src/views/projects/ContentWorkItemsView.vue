@@ -38,7 +38,7 @@ import InlineProblem from '../../components/InlineProblem.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
-import ProjectWorkspaceHeader from './ProjectWorkspaceHeader.vue'
+import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 
 interface TableColumnDefinition {
   code: ContentTableColumn

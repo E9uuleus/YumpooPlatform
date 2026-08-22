@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ElButton, ElResult } from 'element-plus'
 import { computed } from 'vue'
-import { useSession } from '../composables/useSession'
-import InlineProblem from '../components/InlineProblem.vue'
+import InlineProblem from '../../components/InlineProblem.vue'
+import { useSession } from '../../composables/useSession'
 
 const session = useSession()
 
