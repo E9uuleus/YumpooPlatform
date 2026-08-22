@@ -4,6 +4,8 @@ import {
   ContentViewType,
   ProjectActorAccess,
   ProjectLifecycle,
+  ProjectMembershipStatus,
+  ProjectMembershipStatusFilter,
   WorkItemPriority,
   WorkItemStatusCategory,
   WorkItemType,
@@ -21,10 +23,12 @@ import ContentWorkItemsView from './ContentWorkItemsView.vue'
 
 const api = vi.hoisted(() => ({
   getProject: vi.fn(),
+  listProjectMembers: vi.fn(),
   listProjectContents: vi.fn(),
   listContentWorkItems: vi.fn(),
   createWorkItem: vi.fn(),
   getWorkItem: vi.fn(),
+  updateWorkItem: vi.fn(),
 }))
 const routerPush = vi.hoisted(() => vi.fn())
 
@@ -33,12 +37,13 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPush }),
 }))
 vi.mock('../../api/client', () => ({
-  projectsApi: { getProject: api.getProject },
+  projectsApi: { getProject: api.getProject, listProjectMembers: api.listProjectMembers },
   contentsApi: { listProjectContents: api.listProjectContents },
   workItemsApi: {
     listContentWorkItems: api.listContentWorkItems,
     createWorkItem: api.createWorkItem,
     getWorkItem: api.getWorkItem,
+    updateWorkItem: api.updateWorkItem,
   },
 }))
 vi.mock('@yumpoo/api-client', async (importOriginal) => ({
@@ -67,10 +72,11 @@ function content(defaultViewType = ContentViewType.Table): Content {
       table: {
         columnOrder: new Set([
           ContentTableColumn.ItemNo, ContentTableColumn.Title, ContentTableColumn.Status,
-          ContentTableColumn.Priority, ContentTableColumn.Reporter,
-          ContentTableColumn.Description, ContentTableColumn.UpdatedAt,
+          ContentTableColumn.Priority, ContentTableColumn.Assignee, ContentTableColumn.Reporter,
+          ContentTableColumn.Description, ContentTableColumn.Notes, ContentTableColumn.Timeline,
+          ContentTableColumn.DueDate, ContentTableColumn.UpdatedAt,
         ]),
-        hiddenColumns: new Set([ContentTableColumn.Description]),
+        hiddenColumns: new Set(),
         sort: [],
         filters: { query: null, statusCodes: new Set(), priorities: new Set(),
           assigneeUserIds: new Set(), dueFrom: null, dueTo: null, updatedAfter: null },
@@ -104,6 +110,10 @@ function summary(id = 'work-item-1', statusCode = 'BACKLOG', title = '实现核�
     type: WorkItemType.Task, title, statusCode,
     statusCategory: statusCode === 'BACKLOG' ? WorkItemStatusCategory.Todo : WorkItemStatusCategory.InProgress,
     priority: WorkItemPriority.Medium, reporterUserId: 'member-1', reporterDisplayName: '项目成员',
+    assigneeUserId: 'owner-1', assigneeDisplayName: '负责人', description: '列表描述', notes: '列表备注',
+    timelineStartDate: new Date('2026-08-22T00:00:00.000Z'),
+    timelineEndDate: new Date('2026-08-29T00:00:00.000Z'),
+    dueDate: new Date('2026-08-30T00:00:00.000Z'),
     updatedAt: new Date('2026-08-22T02:00:00Z'),
   }
 }
@@ -111,6 +121,7 @@ function summary(id = 'work-item-1', statusCode = 'BACKLOG', title = '实现核�
 function detail(description = '安全纯文本'): WorkItemDetail {
   return {
     ...summary(), description, notes: null,
+    rowVersion: 0, etag: '"0"', capabilities: { canEditFields: true },
     createdAt: new Date('2026-08-22T01:00:00Z'),
   }
 }
@@ -129,43 +140,71 @@ describe('M2-10 Content 工作项工作区', () => {
     Object.values(api).forEach(mock => mock.mockReset())
     routerPush.mockReset()
     api.getProject.mockResolvedValue(project)
+    api.listProjectMembers.mockResolvedValue({
+      items: [{ membershipId: 'membership-1', projectId: 'project-1', userId: 'owner-1',
+        displayName: '负责人', employmentStatus: 'ACTIVE', accountStatus: 'ENABLED',
+        membershipStatus: ProjectMembershipStatus.Active, owner: true,
+        joinedAt: new Date(), joinedByUserId: 'owner-1', removedAt: null,
+        removedByUserId: null, rowVersion: 0, etag: '"0"' }],
+      page: 0, size: 100, totalElements: 1, totalPages: 1,
+    })
     api.listProjectContents.mockResolvedValue(catalog())
     api.listContentWorkItems.mockResolvedValue(page([summary()]))
     api.createWorkItem.mockResolvedValue(detail())
     api.getWorkItem.mockResolvedValue(detail())
+    api.updateWorkItem.mockResolvedValue({ ...detail(), rowVersion: 1, etag: '"1"' })
   })
 
-  it('使用服务端分页并按共享配置决定表格列顺序和显隐', async () => {
+  it('使用服务端分页并呈现全部协作字段列', async () => {
     const wrapper = mountView(); await flushPromises()
     expect(api.listContentWorkItems).toHaveBeenCalledWith({ contentId: 'content-1', page: 0, size: 20 })
+    expect(api.listProjectMembers).toHaveBeenCalledWith({ projectId: 'project-1',
+      status: ProjectMembershipStatusFilter.Active, page: 0, size: 100 })
     const text = wrapper.text()
     expect(text).toContain('事项编号')
     expect(text).toContain('标题')
+    expect(text).toContain('处理人')
     expect(text).toContain('报告人')
-    expect(text).not.toContain('描述安全纯文本')
+    expect(text).toContain('描述')
+    expect(text).toContain('备注')
+    expect(text).toContain('计划时间')
+    expect(text).toContain('截止日')
+    expect(text).toContain('列表描述')
+    expect(text).toContain('2026-08-22 → 2026-08-29')
     expect(text).toContain('PROJECT_1-1')
     wrapper.unmount()
   })
 
-  it('创建请求仅提交 M2-10 字段并明确提交默认中优先级', async () => {
+  it('创建请求提交完整八字段快照并用 UTC 保持自然日', async () => {
     const wrapper = mountView(); await flushPromises()
     const vm = wrapper.vm as unknown as {
-      createForm: { title: string; priority: WorkItemPriority; description: string; notes: string }
+      createForm: { title: string; priority: WorkItemPriority; assigneeUserId: string;
+        description: string; notes: string; timelineStartDate: string;
+        timelineEndDate: string; dueDate: string }
       createWorkItem: () => Promise<void>
     }
     vm.createForm.title = '  新任务  '
     vm.createForm.description = '  描述  '
     vm.createForm.notes = ''
+    vm.createForm.assigneeUserId = 'owner-1'
+    vm.createForm.timelineStartDate = '2026-08-22'
+    vm.createForm.timelineEndDate = '2026-08-29'
+    vm.createForm.dueDate = '2026-08-30'
     await vm.createWorkItem()
     const request = api.createWorkItem.mock.calls[0]?.[0]
     expect(request).toEqual({
       contentId: 'content-1', xXSRFTOKEN: 'csrf-token', idempotencyKey: expect.any(String),
       workItemCreateRequest: {
-        title: '新任务', priority: WorkItemPriority.Medium, description: '描述', notes: null,
+        title: '新任务', priority: WorkItemPriority.Medium, assigneeUserId: 'owner-1',
+        description: '描述', notes: null,
+        timelineStartDate: new Date('2026-08-22T00:00:00.000Z'),
+        timelineEndDate: new Date('2026-08-29T00:00:00.000Z'),
+        dueDate: new Date('2026-08-30T00:00:00.000Z'),
       },
     })
     expect(Object.keys(request.workItemCreateRequest).sort())
-      .toEqual(['description', 'notes', 'priority', 'title'])
+      .toEqual(['assigneeUserId', 'description', 'dueDate', 'notes', 'priority', 'timelineEndDate',
+        'timelineStartDate', 'title'])
     wrapper.unmount()
   })
 
@@ -188,14 +227,83 @@ describe('M2-10 Content 工作项工作区', () => {
     wrapper.unmount()
   })
 
-  it('详情抽屉按纯文本呈现描述和备注', async () => {
+  it('详情抽屉在文本域中安全呈现描述和备注', async () => {
     const unsafe = '<img src=x onerror=alert(1)>'
     api.getWorkItem.mockResolvedValue(detail(unsafe))
     const wrapper = mountView(); await flushPromises()
     const vm = wrapper.vm as unknown as { openDetail: (item: WorkItemSummary) => Promise<void> }
     await vm.openDetail(summary()); await flushPromises()
-    expect(wrapper.find('.plain-text').text()).toBe(unsafe)
-    expect(wrapper.find('.plain-text img').exists()).toBe(false)
+    expect((wrapper.findAll('textarea')[0]?.element as HTMLTextAreaElement).value).toBe(unsafe)
+    expect(wrapper.find('.detail-panel img').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('详情保存提交完整快照、强 ETag 并刷新当前真源', async () => {
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      detailDraft: { title: string; priority: WorkItemPriority; assigneeUserId: string;
+        description: string; notes: string; timelineStartDate: string;
+        timelineEndDate: string; dueDate: string }
+      openDetail: (item: WorkItemSummary) => Promise<void>
+      saveWorkItem: () => Promise<void>
+    }
+    await vm.openDetail(summary())
+    vm.detailDraft.title = '  已编辑  '
+    vm.detailDraft.assigneeUserId = ''
+    vm.detailDraft.timelineStartDate = '2026-08-22'
+    vm.detailDraft.timelineEndDate = '2026-08-23'
+    vm.detailDraft.dueDate = ''
+    await vm.saveWorkItem()
+    expect(api.updateWorkItem).toHaveBeenCalledWith({
+      workItemId: 'work-item-1', xXSRFTOKEN: 'csrf-token', ifMatch: '"0"',
+      workItemUpdateRequest: {
+        title: '已编辑', priority: WorkItemPriority.Medium, assigneeUserId: null,
+        description: '安全纯文本', notes: null,
+        timelineStartDate: new Date('2026-08-22T00:00:00.000Z'),
+        timelineEndDate: new Date('2026-08-23T00:00:00.000Z'), dueDate: null,
+      },
+    })
+    expect(api.listContentWorkItems).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('412 保留本地草稿并提供载入最新或明确重提', async () => {
+    const latest = { ...detail(), title: '服务器新版本', rowVersion: 1, etag: '"1"' }
+    api.getWorkItem.mockResolvedValueOnce(detail()).mockResolvedValueOnce(latest)
+    api.updateWorkItem.mockRejectedValueOnce({ kind: 'response', status: 412,
+      error: { code: 'VERSION_CONFLICT', message: '版本冲突', requestId: 'request-1',
+        retryable: false, fieldErrors: [] } })
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      detailDraft: { title: string }
+      latestConflict?: WorkItemDetail
+      openDetail: (item: WorkItemSummary) => Promise<void>
+      saveWorkItem: (etag?: string) => Promise<void>
+    }
+    await vm.openDetail(summary())
+    vm.detailDraft.title = '本地草稿'
+    await vm.saveWorkItem(); await flushPromises()
+    expect(vm.detailDraft.title).toBe('本地草稿')
+    expect(vm.latestConflict?.title).toBe('服务器新版本')
+    expect(wrapper.text()).toContain('服务器版本已更新，本地草稿仍保留')
+    expect(wrapper.text()).toContain('载入最新版本')
+    expect(wrapper.text()).toContain('基于最新版本重新提交')
+    wrapper.unmount()
+  })
+
+  it('自然日倒置在客户端阻止提交', async () => {
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      detailDraft: { timelineStartDate: string; timelineEndDate: string }
+      openDetail: (item: WorkItemSummary) => Promise<void>
+      saveWorkItem: () => Promise<void>
+    }
+    await vm.openDetail(summary())
+    vm.detailDraft.timelineStartDate = '2026-08-29'
+    vm.detailDraft.timelineEndDate = '2026-08-28'
+    await vm.saveWorkItem()
+    expect(api.updateWorkItem).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('计划结束日不得早于计划开始日')
     wrapper.unmount()
   })
 
