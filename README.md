@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M2-12 Work Item 独立状态迁移
+
+M2-12 新增 `POST /api/v1/work-items/{workItemId}/transitions`，由服务端按 Project 固化模板版本校验精确迁移边并计算 `capabilities.availableTransitions`。命令必须携带 XSRF、强 `If-Match` 和幂等键；状态/类别、新版本、一条 `workitem.work_item_status_changed` v1 Outbox 和幂等结果原子提交。迁移不改变 rank 或任何协作字段；CompanyAdmin 保持只读，归档、终态、非法边与并发版本冲突均按固定问题语义拒绝。Flyway 仍停在 V29。
+
+Web 仅在 Work Item 详情抽屉展示服务端返回的合法目标。说明最长 500 字，迁移边可要求必填；传输失败的显式重试复用原幂等键。成功后刷新详情与当前 Table/Kanban，保留未保存字段草稿；412 沿用冲突面板且不自动重试。M2-13 查询、M2-14 rank/拖拽、M2-15 删除恢复、M2-20 Activity、M2-23 最终事件冻结和 M2-24 总验收继续延期。
+
+```powershell
+pnpm verify:m2-12
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-11 Work Item 协作字段与乐观锁
 
 M2-11 在既有 Work Item 真源上开放标题、优先级、处理人、描述、备注、计划起止日和截止日的完整快照更新。GET、POST 与 PATCH 返回强 ETag；PATCH 要求 XSRF 与 `If-Match`，无变化不增版、不改审计时间、不发事件，陈旧版本固定返回 412 且不覆盖先写结果。处理人只允许选择同 Project 的 ACTIVE membership，自然日以 `YYYY-MM-DD` 存取；Flyway 继续停在 V29。

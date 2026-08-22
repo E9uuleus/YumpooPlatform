@@ -127,6 +127,8 @@ class M017BackupRestoreIT {
                     .isEqualTo(readProductGovernanceFact(source));
             assertThat(readProjectContentFact(target))
                     .isEqualTo(readProjectContentFact(source));
+            assertThat(readWorkItemStatusEventFact(target))
+                    .isEqualTo(readWorkItemStatusEventFact(source));
             assertThat(readAdminOverrideFact(target))
                     .isEqualTo(readAdminOverrideFact(source));
 
@@ -874,9 +876,9 @@ class M017BackupRestoreIT {
                                 "保留纯文本描述", "保留纯文本备注", LocalDate.parse("2026-08-20"),
                                 LocalDate.parse("2026-08-22"), LocalDate.parse("2026-08-23"), 0L},
                         {UUID.fromString("00000000-0000-4000-8000-000000000816"), 2L,
-                                "M2_04_RESTORE-2", "恢复工作项二", "IN_PROGRESS", "IN_PROGRESS", "HIGH",
+                                "M2_04_RESTORE-2", "恢复工作项二", "DONE", "DONE", "HIGH",
                                 null, "第二项描述", null, null, null,
-                                LocalDate.parse("2026-08-24"), 3L}
+                                LocalDate.parse("2026-08-24"), 4L}
                 };
                 for (Object[] fact : facts) {
                     workItem.setObject(1, fact[0]); workItem.setObject(2, fact[1]);
@@ -890,6 +892,35 @@ class M017BackupRestoreIT {
                     workItem.addBatch();
                 }
                 assertThat(workItem.executeBatch()).hasSize(2);
+            }
+            try (PreparedStatement event = connection.prepareStatement("""
+                    INSERT INTO yumpoo.outbox_event (
+                        event_id, event_type, event_version, aggregate_type, aggregate_id,
+                        aggregate_version, company_id, actor_type, actor_user_id, occurred_at,
+                        request_id, correlation_id, payload_json, status, attempt_count,
+                        next_attempt_at, created_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000817',
+                        'workitem.work_item_status_changed', 1, 'WorkItem',
+                        '00000000-0000-4000-8000-000000000816', 4,
+                        '00000000-0000-4000-8000-000000000001', 'USER',
+                        '00000000-0000-4000-8000-000000000102', ?,
+                        'm2-12-backup-restore', 'm2-12-backup-restore',
+                        ('{"workItemId":"00000000-0000-4000-8000-000000000816",'
+                        || '"projectId":"00000000-0000-4000-8000-000000000802",'
+                        || '"contentId":"00000000-0000-4000-8000-000000000805",'
+                        || '"itemNo":"M2_04_RESTORE-2","title":"恢复工作项二",'
+                        || '"workItemType":"TASK","fromStatus":"IN_PROGRESS",'
+                        || '"toStatus":"DONE","fromStatusCategory":"IN_PROGRESS",'
+                        || '"toStatusCategory":"DONE","resolution":"验收通过",'
+                        || '"rowVersion":4}')::jsonb,
+                        'PENDING', 0, ?, ?
+                    )
+                    """)) {
+                event.setObject(1, createdAt.plusHours(1));
+                event.setObject(2, createdAt.plusHours(1));
+                event.setObject(3, createdAt.plusHours(1));
+                assertThat(event.executeUpdate()).isOne();
             }
             try (PreparedStatement override = connection.prepareStatement("""
                     INSERT INTO yumpoo.admin_override (
@@ -1002,6 +1033,25 @@ class M017BackupRestoreIT {
                             || ':' || after_snapshot::text AS fact
                      FROM yumpoo.admin_override
                      WHERE id = '00000000-0000-4000-8000-000000000812'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            String fact = result.getString("fact");
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
+    }
+
+    private static String readWorkItemStatusEventFact(
+            PostgreSQLContainer container
+    ) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT event_type || ':' || event_version || ':' || aggregate_type || ':'
+                            || aggregate_id || ':' || aggregate_version || ':' || payload_json::text
+                            || ':' || status || ':' || attempt_count AS fact
+                     FROM yumpoo.outbox_event
+                     WHERE event_id = '00000000-0000-4000-8000-000000000817'
                      """)) {
             assertThat(result.next()).isTrue();
             String fact = result.getString("fact");
