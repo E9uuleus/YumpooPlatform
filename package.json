@@ -103,7 +103,9 @@
     "verify:m2-09:assets": "node tools/verification/verify-m2-09-assets.mjs",
     "verify:m2-09": "node tools/verification/verify-m2-09.mjs",
     "verify:m2-10:assets": "node tools/verification/verify-m2-10-assets.mjs",
-    "verify:m2-10": "node tools/verification/verify-m2-10.mjs"
+    "verify:m2-10": "node tools/verification/verify-m2-10.mjs",
+    "verify:m2-11:assets": "node tools/verification/verify-m2-11-assets.mjs",
+    "verify:m2-11": "node tools/verification/verify-m2-11.mjs"
   },
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "2.40.1",

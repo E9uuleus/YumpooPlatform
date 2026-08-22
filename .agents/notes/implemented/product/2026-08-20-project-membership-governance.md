@@ -18,6 +18,8 @@ Project membership、唯一负责人、企业管理员治理、身份有效状�
 
 公开事件固定为 `catalog.project_member_added`、`catalog.project_member_removed`、`catalog.project_owner_reassigned` v1。重指派需要创建或重激活 membership 时额外发出 `changeSource=OWNER_REASSIGNMENT` 的 member-added；事件不携带 reason、客户字段或目录资料。
 
+catalog 对其他业务模块只公开按 Company、Project、User 判断 ACTIVE membership 的只读端口。Work Item 处理人资格复用该端口，不直接读取 `catalog.project_membership` 表；调用方必须先按自身事实锁协议锁定 Project 和上级资源，再查询处理人资格，避免把 membership 仓储变成跨模块共享表接口。
+
 OWNER_MISSING 是 administration 投影，不是 Project 生命周期。负责人离职或禁用会为其 DRAFT/ACTIVE Project 幂等打开告警；返聘或启用后仅在就业和账号双状态都恢复时解决；重指派后按当前新负责人状态重算。系统不自动提升成员，也不改变 Project lifecycle。
 
 M2-05 不实现 Project 列表、详情、PATCH、激活、Workspace 可见计数、Vue 页面、Activity 投影、归档治理或 Worklog 审批人迁移；这些边界保留给 M2-06、M2-08、M2-20 与 M3A-09。
@@ -32,4 +34,4 @@ M2-05 不实现 Project 列表、详情、PATCH、激活、Workspace 可见计�
 
 ## Consequences
 
-客户端必须区分新加入与重激活，并为重激活、移除和重指派分别携带 membership/Project 强 ETag。成员历史的业务解释来自 Audit/Outbox，而不是 membership 行的多版本副本。后续 Project API、Activity 和 Worklog 治理必须复用这些事实与事件，不得引入第二份 owner/membership 状态。
+客户端必须区分新加入与重激活，并为重激活、移除和重指派分别携带 membership/Project 强 ETag。成员历史的业务解释来自 Audit/Outbox，而不是 membership 行的多版本副本。后续 Project API、Work Item assignee、Activity 和 Worklog 治理必须复用这些事实、公开查询端口与事件，不得引入第二份 owner/membership 状态或跨模块直读 catalog 表。

@@ -1,13 +1,13 @@
 # YumpooPlatform
 
-## M2-10 Work Item 核心闭环
+## M2-11 Work Item 协作字段与乐观锁
 
-M2-10 已交付 Project 级单调编号的 Work Item 真源、严格幂等创建、详情与固定倒序分页，并把真实 `OPEN_WORK_ITEMS` 计数接入 Project 和 Content 归档。Owner 与 ACTIVE Member 可在 DRAFT/ACTIVE Project 的 ACTIVE Content 中创建；CompanyAdmin 保持只读，不可见资源继续隐藏为 404。创建事件不携带描述或备注。
+M2-11 在既有 Work Item 真源上开放标题、优先级、处理人、描述、备注、计划起止日和截止日的完整快照更新。GET、POST 与 PATCH 返回强 ETag；PATCH 要求 XSRF 与 `If-Match`，无变化不增版、不改审计时间、不发事件，陈旧版本固定返回 412 且不覆盖先写结果。处理人只允许选择同 Project 的 ACTIVE membership，自然日以 `YYYY-MM-DD` 存取；Flyway 继续停在 V29。
 
-Web 新增 `/projects/:projectId/contents/:contentId` 深链，Table 复用 Content 列配置并服务端分页，Kanban 按状态组独立分页且保持只读。处理人、自然日、PATCH/ETag、状态迁移、高级筛选排序和 rank/拖拽分别留给 M2-11 至 M2-14。
+Web 创建与详情表单复用 ACTIVE Project 成员分页，Table 呈现全部固定协作列，保存后刷新当前 Table/Kanban 真源。发生 412 时保留本地草稿并读取服务器最新版，只允许用户选择载入最新版或基于最新 ETag 明确重提；CompanyAdmin 与归档资源继续只读。状态迁移、高级查询、rank/拖拽、删除恢复和 Activity 投影分别留给 M2-12、M2-13、M2-14、M2-15 与 M2-20。
 
 ```powershell
-pnpm verify:m2-10
+pnpm verify:m2-11
 ```
 
 完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
