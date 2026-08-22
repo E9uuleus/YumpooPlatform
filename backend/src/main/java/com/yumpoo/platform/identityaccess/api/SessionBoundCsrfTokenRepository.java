@@ -35,8 +35,7 @@ final class SessionBoundCsrfTokenRepository implements CsrfTokenRepository {
             return token(unboundTokenGenerator.generate().value());
         }
         AuthenticatedSession authenticated = SessionRequestContext.required(request);
-        SessionCredential credential = sessionService.replaceCsrf(authenticated)
-                .orElseThrow(() -> new IllegalStateException("CSRF rotation lost a race"));
+        SessionCredential credential = sessionService.repairCsrf(authenticated);
         return token(credential.value());
     }
 

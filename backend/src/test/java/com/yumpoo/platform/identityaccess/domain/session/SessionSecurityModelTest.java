@@ -52,6 +52,34 @@ class SessionSecurityModelTest {
     }
 
     @Test
+    void csrfRepairCredentialIsStablePerSessionAndCurrentKey() {
+        SessionKeyRing keyRing = new SessionKeyRing(
+                new SessionKeyRing.Key("current-v1", filled(1), null),
+                null
+        );
+        LoginSession first = session(
+                UUID.fromString("30000000-0000-4000-8000-000000000031")
+        );
+        LoginSession second = session(
+                UUID.fromString("30000000-0000-4000-8000-000000000032")
+        );
+
+        var firstRepair = keyRing.deriveCurrentCsrfRepairCredential(first);
+        var repeatedRepair = keyRing.deriveCurrentCsrfRepairCredential(first);
+        var secondRepair = keyRing.deriveCurrentCsrfRepairCredential(second);
+        var rotatedKeyRepair = new SessionKeyRing(
+                new SessionKeyRing.Key("current-v2", filled(2), null),
+                null
+        ).deriveCurrentCsrfRepairCredential(first);
+
+        assertThat(firstRepair.value()).matches("[A-Za-z0-9_-]{43}");
+        assertThat(repeatedRepair).isEqualTo(firstRepair);
+        assertThat(secondRepair).isNotEqualTo(firstRepair);
+        assertThat(rotatedKeyRepair).isNotEqualTo(firstRepair);
+        assertThat(firstRepair.toString()).doesNotContain(firstRepair.value());
+    }
+
+    @Test
     void expirationBoundariesAndTerminalFactsAreExact() {
         LoginSession active = session(
                 SessionStatus.ACTIVE,
@@ -103,6 +131,29 @@ class SessionSecurityModelTest {
                 revokedAt,
                 reason,
                 absoluteExpiry.plusSeconds(86_400)
+        );
+    }
+
+    private static LoginSession session(UUID sessionId) {
+        return new LoginSession(
+                sessionId,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                SessionStatus.ACTIVE,
+                FINGERPRINT,
+                "current",
+                "b".repeat(64),
+                "current",
+                0,
+                SessionClientType.WEB,
+                null,
+                ISSUED_AT,
+                ISSUED_AT,
+                ISSUED_AT.plusSeconds(60),
+                ISSUED_AT.plusSeconds(120),
+                null,
+                null,
+                ISSUED_AT.plusSeconds(120 + 86_400)
         );
     }
 

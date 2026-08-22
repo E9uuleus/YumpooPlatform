@@ -31,8 +31,14 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -170,6 +176,55 @@ class M103SessionSecurityIT {
     }
 
     @Test
+    void concurrentSafeRequestsRepairMissingCsrfWithoutRandomFailures() throws Exception {
+        assertConcurrentCsrfRepair(null);
+    }
+
+    @Test
+    void concurrentSafeRequestsRepairInvalidCsrfWithoutRandomFailures() throws Exception {
+        assertConcurrentCsrfRepair("z".repeat(43));
+    }
+
+    private void assertConcurrentCsrfRepair(String csrfCookieValue) throws Exception {
+        int concurrency = 12;
+        CountDownLatch ready = new CountDownLatch(concurrency);
+        CountDownLatch start = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(concurrency);
+        List<Future<HttpResponse<String>>> requests = new ArrayList<>();
+        try {
+            for (int index = 0; index < concurrency; index++) {
+                requests.add(executor.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    return send(
+                            "GET",
+                            issued.sessionCredential().value(),
+                            csrfCookieValue,
+                            null
+                    );
+                }));
+            }
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            Set<String> repairedTokens = new HashSet<>();
+            for (Future<HttpResponse<String>> pending : requests) {
+                HttpResponse<String> response = pending.get(10, TimeUnit.SECONDS);
+                assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+                repairedTokens.add(cookie(response, SessionHttpCookies.CSRF_COOKIE));
+            }
+
+            assertThat(repairedTokens).hasSize(1);
+            String repaired = repairedTokens.iterator().next();
+            assertThat(send("POST", issued.sessionCredential().value(), repaired, repaired).statusCode())
+                    .isEqualTo(204);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void unsafeRequestRequiresSessionBoundCookieAndHeader() throws Exception {
         String session = issued.sessionCredential().value();
         String csrf = issued.csrfCredential().value();
@@ -276,6 +331,16 @@ class M103SessionSecurityIT {
             request.header(SessionBoundCsrfTokenRepository.HEADER_NAME, csrfHeaderValue);
         }
         return request;
+    }
+
+    private static String cookie(HttpResponse<String> response, String name) {
+        String prefix = name + "=";
+        return response.headers().allValues("set-cookie").stream()
+                .filter(value -> value.startsWith(prefix))
+                .map(value -> value.substring(prefix.length(), value.indexOf(';')))
+                .filter(value -> !value.isEmpty())
+                .findFirst()
+                .orElseThrow();
     }
 
     @TestConfiguration(proxyBeanMethods = false)

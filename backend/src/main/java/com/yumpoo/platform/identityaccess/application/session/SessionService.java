@@ -166,25 +166,28 @@ public class SessionService {
     }
 
     @Transactional
-    public Optional<SessionCredential> replaceCsrf(
+    public SessionCredential repairCsrf(
             AuthenticatedSession authenticatedSession
     ) {
         LoginSession session = authenticatedSession.session();
         if (session.csrfKeyVersion() == null || session.csrfTokenFingerprint() == null) {
-            return Optional.empty();
+            throw authenticationRequired();
         }
-        SessionCredential replacement = credentialGenerator.generate();
+        SessionCredential replacement = keyRing.deriveCurrentCsrfRepairCredential(session);
         CredentialFingerprint fingerprint = keyRing.fingerprintCurrent(
                 CredentialPurpose.CSRF,
                 replacement
         );
-        boolean changed = repository.replaceCsrf(
+        boolean converged = repository.convergeCsrf(
                 session.id(),
                 session.csrfKeyVersion(),
                 session.csrfTokenFingerprint(),
                 fingerprint
         );
-        return changed ? Optional.of(replacement) : Optional.empty();
+        if (!converged) {
+            throw authenticationRequired();
+        }
+        return replacement;
     }
 
     @Transactional(readOnly = true)
