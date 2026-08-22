@@ -9,7 +9,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, ProjectMembershipQuery,
-        ProjectMembershipCommandPort, ProjectAccessSnapshotQuery, ProjectOwnerScopeQuery {
+        ProjectMembershipCommandPort, ProjectAccessSnapshotQuery, ProjectOwnerScopeQuery,
+        ProjectFactWriteGuard {
 
     private final ProjectCreationService service;
     private final com.yumpoo.platform.catalog.application.project.ProjectMembershipService membershipService;
@@ -32,6 +33,18 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
                 return java.util.Optional.empty();
             throw exception;
         }
+    }
+
+    @Override
+    public ProjectFactWriteSnapshot lockForFactWrite(
+            com.yumpoo.platform.identityaccess.api.CurrentActor actor, java.util.UUID projectId) {
+        membershipService.requireVisible(actor, projectId);
+        ProjectSnapshot project = snapshot(lifecycleService.lockForNewFact(actor.companyId(), projectId));
+        ProjectAccessSnapshot access = access(membershipService.requireVisible(actor, projectId));
+        return new ProjectFactWriteSnapshot(project.projectId(), project.companyId(),
+                ProjectFactWriteSnapshot.ProjectLifecycle.valueOf(project.lifecycle()),
+                ProjectFactWriteSnapshot.ActorProjectAccess.valueOf(access.actorAccess().name()),
+                project.templateKey(), project.templateVersion());
     }
 
     @Override
@@ -193,6 +206,7 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         return new ProjectAccessSnapshot(access.projectId(),access.companyId(),
                 ProjectAccessSnapshot.ProjectLifecycle.valueOf(access.lifecycle()),
                 ProjectAccessSnapshot.ActorProjectAccess.valueOf(access.actorAccess().name()),
+                access.templateKey(),access.templateVersion(),
                 access.projectVersion(),access.membershipVersion());
     }
 }

@@ -147,7 +147,8 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
     public Optional<Access> findVisible(CurrentActor actor, UUID projectId) {
         boolean admin = actor.hasRole(PlatformRoleCode.COMPANY_ADMIN);
         return jdbcClient.sql("""
-                SELECT p.id, p.company_id, p.lifecycle, p.row_version AS project_version,
+                SELECT p.id, p.company_id, p.lifecycle, p.template_key, p.template_version,
+                       p.row_version AS project_version,
                        m.row_version AS membership_version,
                        CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER'
                             WHEN m.id IS NOT NULL THEN 'MEMBER'
@@ -161,6 +162,7 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
                 .query((rs, row) -> new Access(
                         rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
                         rs.getString("lifecycle"), ActorAccess.valueOf(rs.getString("actor_access")),
+                        rs.getString("template_key"), rs.getInt("template_version"),
                         rs.getLong("project_version"), rs.getObject("membership_version") == null
                                 ? OptionalLong.empty() : OptionalLong.of(rs.getLong("membership_version"))))
                 .optional();

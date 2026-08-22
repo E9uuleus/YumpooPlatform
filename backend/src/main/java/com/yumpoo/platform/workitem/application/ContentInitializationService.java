@@ -33,10 +33,9 @@ public class ContentInitializationService {
             throw new ApplicationException(StandardErrorCode.VALIDATION_FAILED);
         }
         Set<String> codes = new HashSet<>();
-        Set<String> types = new HashSet<>();
         Instant now = clock.instant();
         List<Content> contents = initialization.blueprints().stream().map(blueprint -> {
-            if (!codes.add(blueprint.contentCode()) || !types.add(blueprint.workItemType())) {
+            if (!codes.add(blueprint.contentCode())) {
                 throw new ApplicationException(StandardErrorCode.VALIDATION_FAILED);
             }
             return Content.initial(UUID.randomUUID(), initialization.companyId(),
