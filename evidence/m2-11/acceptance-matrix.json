@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-11",
+  "verifiedSlices": [
+    {
+      "requirementId": "WORK-ITEM-COLLABORATION-FIELDS",
+      "scope": "工作项八字段创建与完整 PATCH、ACTIVE membership 处理人资格、强 ETag 乐观锁、无变化语义、安全领域事件和 Web 冲突处理",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemService.java",
+        "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java",
+        "contracts/openapi/yumpoo-v1.yaml",
+        "contracts/events/catalog.yaml",
+        "frontend/web-app/src/views/projects/ContentWorkItemsView.spec.ts"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    {
+      "requirementId": "WORK-ITEM-STATUS-TRANSITIONS",
+      "targetMilestone": "M2-12",
+      "scope": "状态迁移命令、权限、并发与迁移事件"
+    },
+    {
+      "requirementId": "WORK-ITEM-ADVANCED-QUERY",
+      "targetMilestone": "M2-13",
+      "scope": "保存的高级筛选、排序与查询生效"
+    },
+    {
+      "requirementId": "WORK-ITEM-KANBAN-RANK",
+      "targetMilestone": "M2-14",
+      "scope": "rank、拖拽与跨列迁移"
+    },
+    {
+      "requirementId": "WORK-ITEM-DELETE-RESTORE",
+      "targetMilestone": "M2-15",
+      "scope": "删除、恢复、保留与并发语义"
+    },
+    {
+      "requirementId": "WORK-ITEM-ACTIVITY-PROJECTION",
+      "targetMilestone": "M2-20",
+      "scope": "Activity 投影与面向用户的变更时间线"
+    },
+    {
+      "requirementId": "PPM-014-WORKLOG-AND-FEEDBACK",
+      "targetMilestone": "M2-24",
+      "scope": "Worklog、Product Feedback provider 与完整 PPM-014 三类 blocker 验收"
+    }
+  ]
+}

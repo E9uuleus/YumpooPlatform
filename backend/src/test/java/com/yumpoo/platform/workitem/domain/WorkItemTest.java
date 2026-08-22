@@ -3,6 +3,7 @@ package com.yumpoo.platform.workitem.domain;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,7 +17,8 @@ class WorkItemTest {
         WorkItem item = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), 7, "PROJECT_1-7", ContentWorkItemType.TASK,
                 "  修复登录失败  ", "BACKLOG", WorkItemStatusCategory.TODO,
-                WorkItemPriority.MEDIUM, "  仅显示纯文本  ", "   ", reporter, Instant.EPOCH);
+                WorkItemPriority.MEDIUM, null, "  仅显示纯文本  ", "   ",
+                null, null, null, reporter, Instant.EPOCH);
 
         assertThat(item.title()).isEqualTo("修复登录失败");
         assertThat(item.description()).isEqualTo("仅显示纯文本");
@@ -32,15 +34,51 @@ class WorkItemTest {
         assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), UUID.randomUUID(), 1, "bad-1", ContentWorkItemType.DEFECT,
                 "缺陷", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
-                null, null, UUID.randomUUID(), Instant.EPOCH))
+                null, null, null, null, null, null, UUID.randomUUID(), Instant.EPOCH))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("itemNo");
 
         assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1", ContentWorkItemType.DEFECT,
                 "缺陷", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
-                "x".repeat(16_385), null, UUID.randomUUID(), Instant.EPOCH))
+                null, "x".repeat(16_385), null, null, null, null,
+                UUID.randomUUID(), Instant.EPOCH))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("description");
+    }
+
+    @Test
+    void fieldUpdateNormalizesBodiesAndKeepsOwnershipFactsImmutable() {
+        UUID reporter = UUID.randomUUID();
+        UUID assignee = UUID.randomUUID();
+        WorkItem before = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), 9, "PROJECT_1-9", ContentWorkItemType.TASK,
+                "原始标题", "BACKLOG", WorkItemStatusCategory.TODO, WorkItemPriority.LOW,
+                null, null, null, null, null, null, reporter, Instant.EPOCH);
+
+        WorkItem after = before.updateFields("  新标题  ", WorkItemPriority.URGENT,
+                assignee, "  描述  ", "   ", LocalDate.parse("2026-08-22"),
+                LocalDate.parse("2026-08-23"), LocalDate.parse("2026-08-24"),
+                reporter, Instant.EPOCH.plusSeconds(1));
+
+        assertThat(after.title()).isEqualTo("新标题");
+        assertThat(after.notes()).isNull();
+        assertThat(after.assigneeUserId()).isEqualTo(assignee);
+        assertThat(after.id()).isEqualTo(before.id());
+        assertThat(after.projectId()).isEqualTo(before.projectId());
+        assertThat(after.contentId()).isEqualTo(before.contentId());
+        assertThat(after.statusCode()).isEqualTo(before.statusCode());
+        assertThat(after.rowVersion()).isEqualTo(before.rowVersion());
+    }
+
+    @Test
+    void rejectsInvertedTimelineOnCreateAndUpdate() {
+        assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1", ContentWorkItemType.TASK,
+                "任务", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.MEDIUM,
+                null, null, null, LocalDate.parse("2026-08-23"),
+                LocalDate.parse("2026-08-22"), null, UUID.randomUUID(), Instant.EPOCH))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("timeline end");
     }
 }

@@ -137,6 +137,24 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   )
   fs.writeFileSync(emptyDetailsPath, emptyDetails, 'utf8')
 
+  const workItemCreatePath = path.join(sourceRoot, 'models', 'WorkItemCreateRequest.ts')
+  let workItemCreate = normalizeText(fs.readFileSync(workItemCreatePath, 'utf8'))
+  workItemCreate = replaceExactlyOnce(
+    workItemCreate,
+    "        'assigneeUserId': json['assigneeUserId'] == null ? undefined : json['assigneeUserId'],",
+    "        ...(json['assigneeUserId'] === undefined ? {} : { 'assigneeUserId': json['assigneeUserId'] }),",
+    'WorkItemCreateRequest 可选处理人精确属性兼容',
+  )
+  for (const field of ['timelineStartDate', 'timelineEndDate', 'dueDate']) {
+    workItemCreate = replaceExactlyOnce(
+      workItemCreate,
+      `        '${field}': json['${field}'] == null ? undefined : (new Date(json['${field}'])),`,
+      `        ...(json['${field}'] === undefined ? {} : { '${field}': json['${field}'] === null ? null : new Date(json['${field}']) }),`,
+      `WorkItemCreateRequest 可选自然日 ${field} 精确属性兼容`,
+    )
+  }
+  fs.writeFileSync(workItemCreatePath, workItemCreate, 'utf8')
+
   for (const relative of listGeneratedSources(sourceRoot)) {
     const generatedPath = path.join(sourceRoot, ...relative.split('/'))
     const generated = normalizeText(fs.readFileSync(generatedPath, 'utf8'))

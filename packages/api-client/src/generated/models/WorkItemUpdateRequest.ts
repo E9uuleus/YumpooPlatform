@@ -23,77 +23,81 @@ import {
 /**
  *
  * @export
- * @interface WorkItemCreateRequest
+ * @interface WorkItemUpdateRequest
  */
-export interface WorkItemCreateRequest {
+export interface WorkItemUpdateRequest {
     /**
      *
      * @type {string}
-     * @memberof WorkItemCreateRequest
+     * @memberof WorkItemUpdateRequest
      */
     title: string;
     /**
      *
      * @type {WorkItemPriority}
-     * @memberof WorkItemCreateRequest
+     * @memberof WorkItemUpdateRequest
      */
     priority: WorkItemPriority;
     /**
      *
      * @type {string}
-     * @memberof WorkItemCreateRequest
+     * @memberof WorkItemUpdateRequest
      */
-    assigneeUserId?: string | null;
+    assigneeUserId: string | null;
     /**
      *
      * @type {string}
-     * @memberof WorkItemCreateRequest
+     * @memberof WorkItemUpdateRequest
      */
     description: string | null;
     /**
      *
      * @type {string}
-     * @memberof WorkItemCreateRequest
+     * @memberof WorkItemUpdateRequest
      */
     notes: string | null;
     /**
      *
      * @type {Date}
-     * @memberof WorkItemCreateRequest
+     * @memberof WorkItemUpdateRequest
      */
-    timelineStartDate?: Date | null;
+    timelineStartDate: Date | null;
     /**
      *
      * @type {Date}
-     * @memberof WorkItemCreateRequest
+     * @memberof WorkItemUpdateRequest
      */
-    timelineEndDate?: Date | null;
+    timelineEndDate: Date | null;
     /**
      *
      * @type {Date}
-     * @memberof WorkItemCreateRequest
+     * @memberof WorkItemUpdateRequest
      */
-    dueDate?: Date | null;
+    dueDate: Date | null;
 }
 
 
 
 /**
- * Check if a given object implements the WorkItemCreateRequest interface.
+ * Check if a given object implements the WorkItemUpdateRequest interface.
  */
-export function instanceOfWorkItemCreateRequest(value: object): value is WorkItemCreateRequest {
+export function instanceOfWorkItemUpdateRequest(value: object): value is WorkItemUpdateRequest {
     if (!('title' in value) || value['title'] === undefined) return false;
     if (!('priority' in value) || value['priority'] === undefined) return false;
+    if (!('assigneeUserId' in value) || value['assigneeUserId'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('notes' in value) || value['notes'] === undefined) return false;
+    if (!('timelineStartDate' in value) || value['timelineStartDate'] === undefined) return false;
+    if (!('timelineEndDate' in value) || value['timelineEndDate'] === undefined) return false;
+    if (!('dueDate' in value) || value['dueDate'] === undefined) return false;
     return true;
 }
 
-export function WorkItemCreateRequestFromJSON(json: any): WorkItemCreateRequest {
-    return WorkItemCreateRequestFromJSONTyped(json, false);
+export function WorkItemUpdateRequestFromJSON(json: any): WorkItemUpdateRequest {
+    return WorkItemUpdateRequestFromJSONTyped(json, false);
 }
 
-export function WorkItemCreateRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): WorkItemCreateRequest {
+export function WorkItemUpdateRequestFromJSONTyped(json: any, ignoreDiscriminator: boolean): WorkItemUpdateRequest {
     if (json == null) {
         return json;
     }
@@ -101,20 +105,20 @@ export function WorkItemCreateRequestFromJSONTyped(json: any, ignoreDiscriminato
 
         'title': json['title'],
         'priority': WorkItemPriorityFromJSON(json['priority']),
-        ...(json['assigneeUserId'] === undefined ? {} : { 'assigneeUserId': json['assigneeUserId'] }),
+        'assigneeUserId': json['assigneeUserId'],
         'description': json['description'],
         'notes': json['notes'],
-        ...(json['timelineStartDate'] === undefined ? {} : { 'timelineStartDate': json['timelineStartDate'] === null ? null : new Date(json['timelineStartDate']) }),
-        ...(json['timelineEndDate'] === undefined ? {} : { 'timelineEndDate': json['timelineEndDate'] === null ? null : new Date(json['timelineEndDate']) }),
-        ...(json['dueDate'] === undefined ? {} : { 'dueDate': json['dueDate'] === null ? null : new Date(json['dueDate']) }),
+        'timelineStartDate': (json['timelineStartDate'] == null ? null : new Date(json['timelineStartDate'])),
+        'timelineEndDate': (json['timelineEndDate'] == null ? null : new Date(json['timelineEndDate'])),
+        'dueDate': (json['dueDate'] == null ? null : new Date(json['dueDate'])),
     };
 }
 
-export function WorkItemCreateRequestToJSON(json: any): WorkItemCreateRequest {
-    return WorkItemCreateRequestToJSONTyped(json, false);
+export function WorkItemUpdateRequestToJSON(json: any): WorkItemUpdateRequest {
+    return WorkItemUpdateRequestToJSONTyped(json, false);
 }
 
-export function WorkItemCreateRequestToJSONTyped(value?: WorkItemCreateRequest | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemUpdateRequestToJSONTyped(value?: WorkItemUpdateRequest | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

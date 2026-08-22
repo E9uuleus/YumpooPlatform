@@ -121,10 +121,11 @@ class WorkItemHttpIT {
         assertThat(get(collection, admin).statusCode()).isEqualTo(200);
 
         UUID key = UUID.randomUUID();
-        String firstBody = workItemBody("  第一项  ", "MEDIUM", "  纯文本描述  ", "   ");
+        String firstBody = workItemBody("  第一项  ", "MEDIUM", member.userId(),
+                "  纯文本描述  ", "   ", "2026-08-22", "2026-08-29", "2026-08-30");
         HttpResponse<String> created = mutate("POST", collection, member, firstBody, null, key);
         assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
-        assertThat(created.headers().firstValue("etag")).isEmpty();
+        assertThat(created.headers().firstValue("etag")).contains("\"0\"");
         assertThat(created.headers().firstValue("location")).isPresent();
         JsonNode first = json.readTree(created.body());
         assertThat(first.path("itemNo").asText()).isEqualTo("M2_10_ACTIVE-1");
@@ -134,6 +135,14 @@ class WorkItemHttpIT {
         assertThat(first.path("statusCategory").asText()).isEqualTo("TODO");
         assertThat(first.path("description").asText()).isEqualTo("纯文本描述");
         assertThat(first.path("notes").isNull()).isTrue();
+        assertThat(first.path("assigneeUserId").asText()).isEqualTo(member.userId().toString());
+        assertThat(first.path("assigneeDisplayName").asText()).isEqualTo("M2-10 Member");
+        assertThat(first.path("timelineStartDate").asText()).isEqualTo("2026-08-22");
+        assertThat(first.path("timelineEndDate").asText()).isEqualTo("2026-08-29");
+        assertThat(first.path("dueDate").asText()).isEqualTo("2026-08-30");
+        assertThat(first.path("rowVersion").asLong()).isZero();
+        assertThat(first.path("etag").asText()).isEqualTo("\"0\"");
+        assertThat(first.path("capabilities").path("canEditFields").asBoolean()).isTrue();
 
         HttpResponse<String> replay = mutate("POST", collection, member, firstBody, null, key);
         assertThat(replay.statusCode()).isEqualTo(201);
@@ -150,6 +159,11 @@ class WorkItemHttpIT {
         assertThat(page.path("items").get(0).path("itemNo").asText()).isEqualTo("M2_10_ACTIVE-2");
         JsonNode grouped = json.readTree(get(collection + "?status=BACKLOG&status=DONE", member).body());
         assertThat(grouped.path("totalElements").asLong()).isEqualTo(2);
+        JsonNode fullPage = json.readTree(get(collection + "?page=0&size=20", member).body());
+        JsonNode firstSummary = fullPage.path("items").get(1);
+        assertThat(firstSummary.path("assigneeDisplayName").asText()).isEqualTo("M2-10 Member");
+        assertThat(firstSummary.path("description").asText()).isEqualTo("纯文本描述");
+        assertThat(firstSummary.path("timelineStartDate").asText()).isEqualTo("2026-08-22");
         assertThat(get(collection + "?status=NOT_A_STATUS", member).statusCode()).isEqualTo(422);
         assertThat(get(created.headers().firstValue("location").orElseThrow(), member).body())
                 .contains("纯文本描述", "M2_10_ACTIVE-1");
@@ -167,6 +181,8 @@ class WorkItemHttpIT {
             assertThat(event.has("notes")).isFalse();
             assertThat(event.has("workItemId")).isTrue();
             assertThat(event.has("reporterUserId")).isTrue();
+            assertThat(event.has("assigneeUserId")).isTrue();
+            assertThat(event.has("timelineStartDate")).isTrue();
         }
     }
 
@@ -204,6 +220,145 @@ class WorkItemHttpIT {
                  WHERE target_id=:projectId AND result='SUCCEEDED'
                 """).param("projectId", PROJECT_ID).query(String.class).single())
                 .contains("OPEN_WORK_ITEMS", "\"count\": 1");
+    }
+
+    @Test
+    void fullSnapshotPatchEnforcesEtagMembershipDatesNoopAndSafeEvents() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        HttpResponse<String> created = mutate("POST", collection, member,
+                workItemBody("待协作", "LOW", member.userId(), "初始描述", "初始备注",
+                        "2026-08-22", "2026-08-23", null), null, UUID.randomUUID());
+        assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
+        String location = created.headers().firstValue("location").orElseThrow();
+
+        HttpResponse<String> detail = get(location, member);
+        assertThat(detail.headers().firstValue("etag")).contains("\"0\"");
+        assertThat(json.readTree(get(location, admin).body()).path("capabilities")
+                .path("canEditFields").asBoolean()).isFalse();
+        assertThat(get(location, outsider).statusCode()).isEqualTo(404);
+
+        String updateBody = workItemBody("  协作更新  ", "URGENT", owner.userId(),
+                "  更新描述  ", "  更新备注  ", "2026-08-24", "2026-08-29", "2026-08-30");
+        HttpResponse<String> updated = mutate("PATCH", location, member, updateBody, "\"0\"", null);
+        assertThat(updated.statusCode()).as(updated.body()).isEqualTo(200);
+        assertThat(updated.headers().firstValue("etag")).contains("\"1\"");
+        JsonNode updatedJson = json.readTree(updated.body());
+        assertThat(updatedJson.path("title").asText()).isEqualTo("协作更新");
+        assertThat(updatedJson.path("priority").asText()).isEqualTo("URGENT");
+        assertThat(updatedJson.path("assigneeUserId").asText()).isEqualTo(owner.userId().toString());
+        assertThat(updatedJson.path("assigneeDisplayName").asText()).isEqualTo("M2-10 Owner");
+        assertThat(updatedJson.path("timelineStartDate").asText()).isEqualTo("2026-08-24");
+        assertThat(updatedJson.path("rowVersion").asLong()).isEqualTo(1);
+        String updatedAt = updatedJson.path("updatedAt").asText();
+
+        long eventCount = workItemEventCount();
+        HttpResponse<String> noop = mutate("PATCH", location, member, updateBody, "\"1\"", null);
+        assertThat(noop.statusCode()).as(noop.body()).isEqualTo(200);
+        assertThat(noop.headers().firstValue("etag")).contains("\"1\"");
+        assertThat(json.readTree(noop.body()).path("updatedAt").asText()).isEqualTo(updatedAt);
+        assertThat(workItemEventCount()).isEqualTo(eventCount);
+
+        HttpResponse<String> stale = mutate("PATCH", location, member,
+                workItemBody("不应覆盖", "LOW", null, null, null, null, null, null),
+                "\"0\"", null);
+        assertThat(stale.statusCode()).isEqualTo(412);
+        assertThat(json.readTree(get(location, member).body()).path("title").asText()).isEqualTo("协作更新");
+        assertThat(workItemEventCount()).isEqualTo(eventCount);
+
+        assertThat(mutate("PATCH", location, member, updateBody, null, null).statusCode()).isEqualTo(428);
+        for (String invalid : List.of("W/\"1\"", "*", "\"1\",\"2\"")) {
+            assertThat(mutate("PATCH", location, member, updateBody, invalid, null).statusCode())
+                    .isEqualTo(400);
+        }
+
+        var forbidden = (tools.jackson.databind.node.ObjectNode) json.readTree(updateBody);
+        forbidden.put("status", "DONE");
+        assertThat(mutate("PATCH", location, member, json.writeValueAsString(forbidden),
+                "\"1\"", null).statusCode()).isEqualTo(400);
+        forbidden.remove("status");
+        forbidden.remove("dueDate");
+        assertThat(mutate("PATCH", location, member, json.writeValueAsString(forbidden),
+                "\"1\"", null).statusCode()).isEqualTo(400);
+
+        assertThat(mutate("PATCH", location, member,
+                workItemBody("非法处理人", "LOW", outsider.userId(), null, null, null, null, null),
+                "\"1\"", null).statusCode()).isEqualTo(422);
+        assertThat(mutate("PATCH", location, member,
+                workItemBody("倒置日期", "LOW", null, null, null,
+                        "2026-08-29", "2026-08-28", null), "\"1\"", null).statusCode())
+                .isEqualTo(422);
+        assertThat(mutate("PATCH", location, admin, updateBody, "\"1\"", null).statusCode())
+                .isEqualTo(403);
+        assertThat(workItemEventCount()).isEqualTo(eventCount);
+
+        String unassignBody = workItemBody("协作更新", "URGENT", null,
+                "更新描述", "更新备注", "2026-08-24", "2026-08-29", "2026-08-30");
+        HttpResponse<String> unassigned = mutate("PATCH", location, owner,
+                unassignBody, "\"1\"", null);
+        assertThat(unassigned.statusCode()).as(unassigned.body()).isEqualTo(200);
+        assertThat(json.readTree(unassigned.body()).path("assigneeUserId").isNull()).isTrue();
+        assertThat(workItemEventCount()).isEqualTo(eventCount + 2);
+
+        List<String> eventTypes = jdbc.sql("""
+                SELECT event_type FROM yumpoo.outbox_event
+                 WHERE aggregate_id=:workItemId ORDER BY aggregate_version, occurred_at, event_id
+                """).param("workItemId", UUID.fromString(updatedJson.path("id").asText()))
+                .query(String.class).list();
+        assertThat(eventTypes).containsExactly("workitem.work_item_created",
+                "workitem.work_item_fields_changed", "workitem.work_item_assigned",
+                "workitem.work_item_fields_changed", "workitem.work_item_unassigned");
+        List<String> changedPayloads = jdbc.sql("""
+                SELECT payload_json::text FROM yumpoo.outbox_event
+                 WHERE aggregate_id=:workItemId AND event_type='workitem.work_item_fields_changed'
+                 ORDER BY aggregate_version
+                """).param("workItemId", UUID.fromString(updatedJson.path("id").asText()))
+                .query(String.class).list();
+        assertThat(changedPayloads).hasSize(2);
+        for (String payload : changedPayloads) {
+            JsonNode event = json.readTree(payload);
+            assertThat(event.has("description")).isFalse();
+            assertThat(event.has("notes")).isFalse();
+            assertThat(event.path("changedFields").isArray()).isTrue();
+        }
+    }
+
+    @Test
+    void concurrentFieldUpdatesHaveOneWinnerAndArchivedContentRejectsWrites() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        HttpResponse<String> created = mutate("POST", collection, member,
+                workItemBody("并发更新", "MEDIUM", null, null, null, null, null, null),
+                null, UUID.randomUUID());
+        String location = created.headers().firstValue("location").orElseThrow();
+        CountDownLatch start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Future<HttpResponse<String>> first = pool.submit(() -> {
+                start.await();
+                return mutate("PATCH", location, member,
+                        workItemBody("先写候选 A", "HIGH", owner.userId(), null, null,
+                                null, null, null), "\"0\"", null);
+            });
+            Future<HttpResponse<String>> second = pool.submit(() -> {
+                start.await();
+                return mutate("PATCH", location, member,
+                        workItemBody("先写候选 B", "URGENT", member.userId(), null, null,
+                                null, null, null), "\"0\"", null);
+            });
+            start.countDown();
+            assertThat(List.of(first.get(20, TimeUnit.SECONDS).statusCode(),
+                    second.get(20, TimeUnit.SECONDS).statusCode()))
+                    .containsExactlyInAnyOrder(200, 412);
+        }
+        JsonNode winner = json.readTree(get(location, member).body());
+        assertThat(winner.path("rowVersion").asLong()).isEqualTo(1);
+        assertThat(winner.path("title").asText()).isIn("先写候选 A", "先写候选 B");
+
+        jdbc.sql("UPDATE yumpoo.content SET status='ARCHIVED', archived_at=transaction_timestamp(), "
+                        + "archived_by_user_id=:actor, updated_at=transaction_timestamp(), "
+                        + "updated_by_user_id=:actor, row_version=row_version+1 WHERE id=:id")
+                .param("actor", owner.userId()).param("id", contentId).update();
+        assertThat(mutate("PATCH", location, member,
+                workItemBody("归档后拒绝", "LOW", null, null, null, null, null, null),
+                "\"1\"", null).statusCode()).isEqualTo(409);
     }
 
     @Test
@@ -286,6 +441,12 @@ class WorkItemHttpIT {
         return URI.create("http://127.0.0.1:" + port + path);
     }
 
+    private long workItemEventCount() {
+        return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
+                        + "WHERE event_type LIKE 'workitem.work_item_%'")
+                .query(Long.class).single();
+    }
+
     private JsonNode createContent(String code, String name) throws Exception {
         var body = json.createObjectNode();
         body.put("code", code); body.put("name", name); body.putNull("description");
@@ -297,10 +458,23 @@ class WorkItemHttpIT {
     }
 
     private String workItemBody(String title, String priority, String description, String notes) throws Exception {
+        return workItemBody(title, priority, null, description, notes, null, null, null);
+    }
+
+    private String workItemBody(String title, String priority, UUID assigneeUserId,
+            String description, String notes, String timelineStartDate,
+            String timelineEndDate, String dueDate) throws Exception {
         var body = json.createObjectNode();
         body.put("title", title); body.put("priority", priority);
+        if (assigneeUserId == null) body.putNull("assigneeUserId");
+        else body.put("assigneeUserId", assigneeUserId.toString());
         if (description == null) body.putNull("description"); else body.put("description", description);
         if (notes == null) body.putNull("notes"); else body.put("notes", notes);
+        if (timelineStartDate == null) body.putNull("timelineStartDate");
+        else body.put("timelineStartDate", timelineStartDate);
+        if (timelineEndDate == null) body.putNull("timelineEndDate");
+        else body.put("timelineEndDate", timelineEndDate);
+        if (dueDate == null) body.putNull("dueDate"); else body.put("dueDate", dueDate);
         return json.writeValueAsString(body);
     }
 

@@ -144,6 +144,15 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
     }
 
     @Override
+    public boolean existsActive(UUID companyId, UUID projectId, UUID userId) {
+        return jdbcClient.sql("SELECT EXISTS (SELECT 1 FROM yumpoo.project_membership "
+                        + "WHERE company_id=:companyId AND project_id=:projectId "
+                        + "AND user_id=:userId AND status='ACTIVE')")
+                .param("companyId", companyId).param("projectId", projectId)
+                .param("userId", userId).query(Boolean.class).single();
+    }
+
+    @Override
     public Optional<Access> findVisible(CurrentActor actor, UUID projectId) {
         boolean admin = actor.hasRole(PlatformRoleCode.COMPANY_ADMIN);
         return jdbcClient.sql("""

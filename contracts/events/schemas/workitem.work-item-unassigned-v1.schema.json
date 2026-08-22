@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-unassigned-v1.schema.json",
+  "title": "Work Item unassigned",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    { "type": "object", "properties": {
+      "eventType": { "const": "workitem.work_item_unassigned" },
+      "eventVersion": { "const": 1 },
+      "aggregateType": { "const": "WorkItem" },
+      "aggregateVersion": { "type": "integer", "minimum": 1 },
+      "payload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workItemId", "projectId", "contentId", "itemNo", "previousAssigneeUserId", "assigneeUserId", "rowVersion"],
+        "properties": {
+          "workItemId": { "type": "string", "format": "uuid" },
+          "projectId": { "type": "string", "format": "uuid" },
+          "contentId": { "type": "string", "format": "uuid" },
+          "itemNo": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$" },
+          "previousAssigneeUserId": { "type": "string", "format": "uuid" },
+          "assigneeUserId": { "type": "null" },
+          "rowVersion": { "type": "integer", "minimum": 1 }
+        }
+      }
+    } }
+  ]
+}

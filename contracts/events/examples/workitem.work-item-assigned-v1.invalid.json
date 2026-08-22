@@ -1,0 +1,23 @@
+{
+  "eventId": "2c000000-0000-4000-8000-000000000011",
+  "eventType": "workitem.work_item_assigned",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-22T11:05:00Z",
+  "aggregateType": "WorkItem",
+  "aggregateId": "2c000000-0000-4000-8000-000000000012",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2c000000-0000-4000-8000-000000000013" },
+  "requestId": "m2-11-work-item-assigned-invalid",
+  "correlationId": "m2-11-work-item-assigned-invalid",
+  "causationId": null,
+  "payload": {
+    "workItemId": "2c000000-0000-4000-8000-000000000012",
+    "projectId": "2c000000-0000-4000-8000-000000000014",
+    "contentId": "2c000000-0000-4000-8000-000000000015",
+    "itemNo": "PROJECT_CORE-4",
+    "previousAssigneeUserId": null,
+    "assigneeUserId": null,
+    "rowVersion": 1
+  }
+}
