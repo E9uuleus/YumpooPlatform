@@ -1,6 +1,7 @@
 package com.yumpoo.platform.workitem.application;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -11,12 +12,20 @@ public final class WorkItemModels {
 
     public record WorkItemSummary(UUID id, UUID projectId, UUID contentId, String itemNo,
             String type, String title, String statusCode, String statusCategory, String priority,
-            UUID reporterUserId, String reporterDisplayName, Instant updatedAt) {}
+            UUID assigneeUserId, String assigneeDisplayName, UUID reporterUserId,
+            String reporterDisplayName, String description, String notes,
+            LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
+            Instant updatedAt) {}
 
     public record WorkItemDetail(UUID id, UUID projectId, UUID contentId, String itemNo,
             String type, String title, String statusCode, String statusCategory, String priority,
-            UUID reporterUserId, String reporterDisplayName, String description, String notes,
+            UUID assigneeUserId, String assigneeDisplayName, UUID reporterUserId,
+            String reporterDisplayName, String description, String notes,
+            LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
+            long rowVersion, String etag, WorkItemCapabilities capabilities,
             Instant createdAt, Instant updatedAt) {}
+
+    public record WorkItemCapabilities(boolean canEditFields) {}
 
     public record WorkItemPage(List<WorkItemSummary> items, int page, int size,
             long totalElements, int totalPages) {

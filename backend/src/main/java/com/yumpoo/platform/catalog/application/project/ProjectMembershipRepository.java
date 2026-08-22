@@ -23,5 +23,6 @@ public interface ProjectMembershipRepository {
     long count(UUID companyId, UUID projectId, ListStatus status);
     Map<UUID, ProjectMembership> findByUsers(UUID companyId, UUID projectId,
                                              Collection<UUID> userIds);
+    boolean existsActive(UUID companyId, UUID projectId, UUID userId);
     Optional<Access> findVisible(CurrentActor actor, UUID projectId);
 }

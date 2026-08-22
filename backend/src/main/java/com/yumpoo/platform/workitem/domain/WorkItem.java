@@ -54,11 +54,26 @@ public record WorkItem(
     public static WorkItem create(UUID id, UUID companyId, UUID projectId, UUID contentId,
             long itemSequence, String itemNo, ContentWorkItemType type, String title,
             String statusCode, WorkItemStatusCategory statusCategory, WorkItemPriority priority,
-            String description, String notes, UUID reporterUserId, Instant now) {
+            UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
+            LocalDate timelineEndDate, LocalDate dueDate, UUID reporterUserId, Instant now) {
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
-                title, statusCode, statusCategory, priority, null, reporterUserId,
-                description, notes, null, null, null, null, 0, now, reporterUserId,
+                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                description, notes, timelineStartDate, timelineEndDate, dueDate, null, 0, now, reporterUserId,
                 now, reporterUserId, null, null, null);
+    }
+
+    public WorkItem updateFields(String nextTitle, WorkItemPriority nextPriority,
+            UUID nextAssigneeUserId, String nextDescription, String nextNotes,
+            LocalDate nextTimelineStartDate, LocalDate nextTimelineEndDate,
+            LocalDate nextDueDate, UUID actorUserId, Instant now) {
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+                nextTitle, statusCode, statusCategory, nextPriority, nextAssigneeUserId,
+                reporterUserId, nextDescription, nextNotes, nextTimelineStartDate,
+                nextTimelineEndDate, nextDueDate, rank, rowVersion, createdAt,
+                createdByUserId, now, actorUserId, deletedAt, deletedByUserId, deleteReason);
     }
 
     private static String normalizeRequired(String value, int maximum, String field) {

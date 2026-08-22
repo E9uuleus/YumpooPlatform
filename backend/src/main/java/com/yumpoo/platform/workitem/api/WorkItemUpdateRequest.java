@@ -8,14 +8,14 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.UUID;
 
-public record WorkItemCreateRequest(
+public record WorkItemUpdateRequest(
         @JsonProperty(required = true) @NotBlank @Size(max = 300) String title,
         @JsonProperty(required = true) @NotBlank
         @Pattern(regexp = "LOW|MEDIUM|HIGH|URGENT") String priority,
-        UUID assigneeUserId,
+        @JsonProperty(required = true) UUID assigneeUserId,
         @JsonProperty(required = true) @Size(max = 16384) String description,
         @JsonProperty(required = true) @Size(max = 16384) String notes,
-        LocalDate timelineStartDate,
-        LocalDate timelineEndDate,
-        LocalDate dueDate
+        @JsonProperty(required = true) LocalDate timelineStartDate,
+        @JsonProperty(required = true) LocalDate timelineEndDate,
+        @JsonProperty(required = true) LocalDate dueDate
 ) {}

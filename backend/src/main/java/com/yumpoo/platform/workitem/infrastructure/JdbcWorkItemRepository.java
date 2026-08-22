@@ -106,9 +106,46 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     @Override
     public Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId, UUID workItemId) {
+        return find(companyId, projectId, contentId, workItemId, false);
+    }
+
+    @Override
+    public Optional<WorkItem> lock(UUID companyId, UUID projectId, UUID contentId, UUID workItemId) {
+        return find(companyId, projectId, contentId, workItemId, true);
+    }
+
+    @Override
+    public Optional<WorkItem> update(WorkItem item, long expectedVersion) {
+        JdbcClient.StatementSpec statement = jdbc.sql("""
+                UPDATE yumpoo.work_item SET title=:title, priority=:priority,
+                    assignee_user_id=:assigneeUserId, description=:description, notes=:notes,
+                    timeline_start_date=:timelineStartDate, timeline_end_date=:timelineEndDate,
+                    due_date=:dueDate, row_version=row_version+1, updated_at=:updatedAt,
+                    updated_by_user_id=:updatedByUserId
+                WHERE company_id=:companyId AND project_id=:projectId AND content_id=:contentId
+                  AND id=:id AND deleted_at IS NULL AND row_version=:expectedVersion
+                RETURNING %s
+                """.formatted(COLUMNS)).param("title", item.title())
+                .param("priority", item.priority().name())
+                .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
+                .param("updatedByUserId", item.updatedByUserId())
+                .param("companyId", item.companyId()).param("projectId", item.projectId())
+                .param("contentId", item.contentId()).param("id", item.id())
+                .param("expectedVersion", expectedVersion);
+        statement = nullable(statement, "assigneeUserId", item.assigneeUserId(), Types.OTHER);
+        statement = nullable(statement, "description", item.description(), Types.VARCHAR);
+        statement = nullable(statement, "notes", item.notes(), Types.VARCHAR);
+        statement = nullable(statement, "timelineStartDate", item.timelineStartDate(), Types.DATE);
+        statement = nullable(statement, "timelineEndDate", item.timelineEndDate(), Types.DATE);
+        statement = nullable(statement, "dueDate", item.dueDate(), Types.DATE);
+        return statement.query(JdbcWorkItemRepository::map).optional();
+    }
+
+    private Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId,
+            UUID workItemId, boolean lock) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item WHERE company_id=:companyId "
                         + "AND project_id=:projectId AND content_id=:contentId AND id=:workItemId "
-                        + "AND deleted_at IS NULL")
+                        + "AND deleted_at IS NULL" + (lock ? " FOR UPDATE" : ""))
                 .param("companyId", companyId).param("projectId", projectId)
                 .param("contentId", contentId).param("workItemId", workItemId)
                 .query(JdbcWorkItemRepository::map).optional();

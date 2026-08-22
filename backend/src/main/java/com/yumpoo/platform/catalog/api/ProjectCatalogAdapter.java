@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, ProjectMembershipQuery,
         ProjectMembershipCommandPort, ProjectAccessSnapshotQuery, ProjectOwnerScopeQuery,
-        ProjectFactWriteGuard {
+        ProjectFactWriteGuard, ProjectActiveMembershipQuery {
 
     private final ProjectCreationService service;
     private final com.yumpoo.platform.catalog.application.project.ProjectMembershipService membershipService;
@@ -45,6 +45,12 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
                 ProjectFactWriteSnapshot.ProjectLifecycle.valueOf(project.lifecycle()),
                 ProjectFactWriteSnapshot.ActorProjectAccess.valueOf(access.actorAccess().name()),
                 project.templateKey(), project.templateVersion());
+    }
+
+    @Override
+    public boolean isActiveMember(java.util.UUID companyId, java.util.UUID projectId,
+            java.util.UUID userId) {
+        return membershipService.isActiveMember(companyId, projectId, userId);
     }
 
     @Override

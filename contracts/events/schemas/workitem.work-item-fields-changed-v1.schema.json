@@ -1,18 +1,18 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-created-v1.schema.json",
-  "title": "Work Item created",
+  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-fields-changed-v1.schema.json",
+  "title": "Work Item fields changed",
   "allOf": [
     { "$ref": "event-envelope.schema.json" },
     { "type": "object", "properties": {
-      "eventType": { "const": "workitem.work_item_created" },
+      "eventType": { "const": "workitem.work_item_fields_changed" },
       "eventVersion": { "const": 1 },
       "aggregateType": { "const": "WorkItem" },
-      "aggregateVersion": { "type": "integer", "minimum": 0 },
+      "aggregateVersion": { "type": "integer", "minimum": 1 },
       "payload": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["workItemId", "projectId", "contentId", "itemNo", "title", "workItemType", "statusCode", "statusCategory", "priority", "reporterUserId", "rowVersion"],
+        "required": ["workItemId", "projectId", "contentId", "itemNo", "title", "workItemType", "statusCode", "statusCategory", "priority", "assigneeUserId", "timelineStartDate", "timelineEndDate", "dueDate", "rowVersion", "changedFields"],
         "properties": {
           "workItemId": { "type": "string", "format": "uuid" },
           "projectId": { "type": "string", "format": "uuid" },
@@ -27,8 +27,13 @@
           "timelineStartDate": { "type": ["string", "null"], "format": "date" },
           "timelineEndDate": { "type": ["string", "null"], "format": "date" },
           "dueDate": { "type": ["string", "null"], "format": "date" },
-          "reporterUserId": { "type": "string", "format": "uuid" },
-          "rowVersion": { "type": "integer", "minimum": 0 }
+          "rowVersion": { "type": "integer", "minimum": 1 },
+          "changedFields": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["title", "priority", "assigneeUserId", "description", "notes", "timelineStartDate", "timelineEndDate", "dueDate"] }
+          }
         }
       }
     } }

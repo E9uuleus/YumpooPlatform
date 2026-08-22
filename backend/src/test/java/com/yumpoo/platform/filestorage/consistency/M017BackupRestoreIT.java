@@ -856,23 +856,27 @@ class M017BackupRestoreIT {
             try (PreparedStatement workItem = connection.prepareStatement("""
                     INSERT INTO yumpoo.work_item (
                         id, company_id, project_id, content_id, item_sequence, item_no, type,
-                        title, status_code, status_category, priority, reporter_user_id,
-                        description, notes, row_version, created_at, created_by_user_id,
-                        updated_at, updated_by_user_id
+                        title, status_code, status_category, priority, assignee_user_id,
+                        reporter_user_id, description, notes, timeline_start_date,
+                        timeline_end_date, due_date, row_version, created_at,
+                        created_by_user_id, updated_at, updated_by_user_id
                     ) VALUES (?, '00000000-0000-4000-8000-000000000001',
                         '00000000-0000-4000-8000-000000000802',
                         '00000000-0000-4000-8000-000000000805', ?, ?, 'TASK', ?, ?, ?, ?,
-                        '00000000-0000-4000-8000-000000000102', ?, ?, ?, ?,
+                        ?, '00000000-0000-4000-8000-000000000102', ?, ?, ?, ?, ?, ?, ?,
                         '00000000-0000-4000-8000-000000000102', ?,
                         '00000000-0000-4000-8000-000000000102')
                     """)) {
                 Object[][] facts = {
                         {UUID.fromString("00000000-0000-4000-8000-000000000815"), 1L,
                                 "M2_04_RESTORE-1", "恢复工作项一", "BACKLOG", "TODO", "MEDIUM",
-                                "保留纯文本描述", "保留纯文本备注", 0L},
+                                UUID.fromString("00000000-0000-4000-8000-000000000102"),
+                                "保留纯文本描述", "保留纯文本备注", LocalDate.parse("2026-08-20"),
+                                LocalDate.parse("2026-08-22"), LocalDate.parse("2026-08-23"), 0L},
                         {UUID.fromString("00000000-0000-4000-8000-000000000816"), 2L,
                                 "M2_04_RESTORE-2", "恢复工作项二", "IN_PROGRESS", "IN_PROGRESS", "HIGH",
-                                "第二项描述", null, 3L}
+                                null, "第二项描述", null, null, null,
+                                LocalDate.parse("2026-08-24"), 3L}
                 };
                 for (Object[] fact : facts) {
                     workItem.setObject(1, fact[0]); workItem.setObject(2, fact[1]);
@@ -880,7 +884,9 @@ class M017BackupRestoreIT {
                     workItem.setObject(5, fact[4]); workItem.setObject(6, fact[5]);
                     workItem.setObject(7, fact[6]); workItem.setObject(8, fact[7]);
                     workItem.setObject(9, fact[8]); workItem.setObject(10, fact[9]);
-                    workItem.setObject(11, createdAt); workItem.setObject(12, createdAt.plusHours(1));
+                    workItem.setObject(11, fact[10]); workItem.setObject(12, fact[11]);
+                    workItem.setObject(13, fact[12]); workItem.setObject(14, fact[13]);
+                    workItem.setObject(15, createdAt); workItem.setObject(16, createdAt.plusHours(1));
                     workItem.addBatch();
                 }
                 assertThat(workItem.executeBatch()).hasSize(2);
@@ -937,9 +943,14 @@ class M017BackupRestoreIT {
                             (SELECT string_agg(item.item_no || ':' || item.type || ':' || item.title
                                 || ':' || item.status_code || ':' || item.status_category || ':'
                                 || item.priority || ':' || COALESCE(item.description,'-') || ':'
-                                || COALESCE(item.notes,'-') || ':' || item.row_version || ':'
+                                || COALESCE(item.notes,'-') || ':'
+                                || COALESCE(item.assignee_user_id::text,'-') || ':'
+                                || COALESCE(item.timeline_start_date::text,'-') || ':'
+                                || COALESCE(item.timeline_end_date::text,'-') || ':'
+                                || COALESCE(item.due_date::text,'-') || ':' || item.row_version || ':'
                                 || item.reporter_user_id || ':' || item.created_by_user_id || ':'
-                                || item.updated_by_user_id, ',' ORDER BY item.item_sequence)
+                                || item.updated_by_user_id || ':' || item.created_at || ':'
+                                || item.updated_at, ',' ORDER BY item.item_sequence)
                                FROM yumpoo.work_item item WHERE item.project_id=project.id)
                                 AS work_items,
                             string_agg(content.code || ':' || content.work_item_type || ':'

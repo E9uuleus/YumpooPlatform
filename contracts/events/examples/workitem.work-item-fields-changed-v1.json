@@ -1,0 +1,31 @@
+{
+  "eventId": "2b000000-0000-4000-8000-000000000001",
+  "eventType": "workitem.work_item_fields_changed",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-22T11:00:00Z",
+  "aggregateType": "WorkItem",
+  "aggregateId": "2b000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2b000000-0000-4000-8000-000000000003" },
+  "requestId": "m2-11-work-item-fields",
+  "correlationId": "m2-11-work-item-fields",
+  "causationId": null,
+  "payload": {
+    "workItemId": "2b000000-0000-4000-8000-000000000002",
+    "projectId": "2b000000-0000-4000-8000-000000000004",
+    "contentId": "2b000000-0000-4000-8000-000000000005",
+    "itemNo": "PROJECT_CORE-1",
+    "title": "完成协作字段",
+    "workItemType": "TASK",
+    "statusCode": "BACKLOG",
+    "statusCategory": "TODO",
+    "priority": "URGENT",
+    "assigneeUserId": "2b000000-0000-4000-8000-000000000006",
+    "timelineStartDate": "2026-08-22",
+    "timelineEndDate": "2026-08-29",
+    "dueDate": null,
+    "rowVersion": 1,
+    "changedFields": ["title", "priority", "assigneeUserId", "description"]
+  }
+}

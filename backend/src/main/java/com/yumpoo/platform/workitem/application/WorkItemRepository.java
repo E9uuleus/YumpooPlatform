@@ -13,6 +13,8 @@ public interface WorkItemRepository {
     boolean insert(WorkItem workItem);
     Optional<WorkItemModels.WorkItemLocator> findLocator(UUID companyId, UUID workItemId);
     Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId, UUID workItemId);
+    Optional<WorkItem> lock(UUID companyId, UUID projectId, UUID contentId, UUID workItemId);
+    Optional<WorkItem> update(WorkItem workItem, long expectedVersion);
     List<WorkItem> findPage(UUID companyId, UUID projectId, UUID contentId,
             Set<String> statuses, OffsetPageRequest page);
     long countPage(UUID companyId, UUID projectId, UUID contentId, Set<String> statuses);

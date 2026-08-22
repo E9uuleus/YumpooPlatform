@@ -21,6 +21,10 @@
     "statusCode": "BACKLOG",
     "statusCategory": "TODO",
     "priority": "HIGH",
+    "assigneeUserId": "2a000000-0000-4000-8000-000000000003",
+    "timelineStartDate": "2026-08-22",
+    "timelineEndDate": "2026-08-29",
+    "dueDate": "2026-08-30",
     "reporterUserId": "2a000000-0000-4000-8000-000000000003",
     "rowVersion": 0
   }

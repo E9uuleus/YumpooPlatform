@@ -2,6 +2,7 @@ import { WorkItemPriority } from '../src/generated/models/index.js'
 import type {
   CreateWorkItemRequest,
   ListContentWorkItemsRequest,
+  UpdateWorkItemRequest,
 } from '../src/generated/apis/WorkItemsApi.js'
 
 const create: CreateWorkItemRequest = {
@@ -23,14 +24,37 @@ const groupedPage: ListContentWorkItemsRequest = {
   status: new Set(['BACKLOG', 'IN_PROGRESS']),
 }
 
-// @ts-expect-error M2-10 创建不开放处理人。
 create.workItemCreateRequest.assigneeUserId = '2a000000-0000-4000-8000-000000000403'
+
+const update: UpdateWorkItemRequest = {
+  workItemId: '2a000000-0000-4000-8000-000000000404',
+  xXSRFTOKEN: 'csrf-token',
+  ifMatch: '"0"',
+  workItemUpdateRequest: {
+    title: '实现 M2-11',
+    priority: WorkItemPriority.High,
+    assigneeUserId: null,
+    description: null,
+    notes: null,
+    timelineStartDate: null,
+    timelineEndDate: null,
+    dueDate: null,
+  },
+}
 
 // @ts-expect-error API 要求客户端明确提交优先级。
 const missingPriorityBody: CreateWorkItemRequest['workItemCreateRequest'] = {
   title: '缺少优先级', description: null, notes: null,
 }
 
+// @ts-expect-error M2-11 PATCH 要求客户端提交完整字段快照。
+const missingDueDateBody: UpdateWorkItemRequest['workItemUpdateRequest'] = {
+  title: '缺少截止日', priority: WorkItemPriority.Medium, assigneeUserId: null,
+  description: null, notes: null, timelineStartDate: null, timelineEndDate: null,
+}
+
 void create
 void groupedPage
+void update
 void missingPriorityBody
+void missingDueDateBody

@@ -19,6 +19,13 @@ import {
     WorkItemPriorityToJSON,
     WorkItemPriorityToJSONTyped,
 } from './WorkItemPriority';
+import type { WorkItemCapabilities } from './WorkItemCapabilities';
+import {
+    WorkItemCapabilitiesFromJSON,
+    WorkItemCapabilitiesFromJSONTyped,
+    WorkItemCapabilitiesToJSON,
+    WorkItemCapabilitiesToJSONTyped,
+} from './WorkItemCapabilities';
 import type { WorkItemStatusCategory } from './WorkItemStatusCategory';
 import {
     WorkItemStatusCategoryFromJSON,
@@ -95,6 +102,18 @@ export interface WorkItemDetail {
      */
     priority: WorkItemPriority;
     /**
+     *
+     * @type {string}
+     * @memberof WorkItemDetail
+     */
+    assigneeUserId: string | null;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemDetail
+     */
+    assigneeDisplayName: string | null;
+    /**
      * 不透明 UUID；客户端不得从值中推导业务语义。
      * @type {string}
      * @memberof WorkItemDetail
@@ -118,6 +137,42 @@ export interface WorkItemDetail {
      * @memberof WorkItemDetail
      */
     notes: string | null;
+    /**
+     *
+     * @type {Date}
+     * @memberof WorkItemDetail
+     */
+    timelineStartDate: Date | null;
+    /**
+     *
+     * @type {Date}
+     * @memberof WorkItemDetail
+     */
+    timelineEndDate: Date | null;
+    /**
+     *
+     * @type {Date}
+     * @memberof WorkItemDetail
+     */
+    dueDate: Date | null;
+    /**
+     *
+     * @type {number}
+     * @memberof WorkItemDetail
+     */
+    readonly rowVersion: number;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemDetail
+     */
+    readonly etag: string;
+    /**
+     *
+     * @type {WorkItemCapabilities}
+     * @memberof WorkItemDetail
+     */
+    capabilities: WorkItemCapabilities;
     /**
      *
      * @type {Date}
@@ -147,10 +202,18 @@ export function instanceOfWorkItemDetail(value: object): value is WorkItemDetail
     if (!('statusCode' in value) || value['statusCode'] === undefined) return false;
     if (!('statusCategory' in value) || value['statusCategory'] === undefined) return false;
     if (!('priority' in value) || value['priority'] === undefined) return false;
+    if (!('assigneeUserId' in value) || value['assigneeUserId'] === undefined) return false;
+    if (!('assigneeDisplayName' in value) || value['assigneeDisplayName'] === undefined) return false;
     if (!('reporterUserId' in value) || value['reporterUserId'] === undefined) return false;
     if (!('reporterDisplayName' in value) || value['reporterDisplayName'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
     if (!('notes' in value) || value['notes'] === undefined) return false;
+    if (!('timelineStartDate' in value) || value['timelineStartDate'] === undefined) return false;
+    if (!('timelineEndDate' in value) || value['timelineEndDate'] === undefined) return false;
+    if (!('dueDate' in value) || value['dueDate'] === undefined) return false;
+    if (!('rowVersion' in value) || value['rowVersion'] === undefined) return false;
+    if (!('etag' in value) || value['etag'] === undefined) return false;
+    if (!('capabilities' in value) || value['capabilities'] === undefined) return false;
     if (!('createdAt' in value) || value['createdAt'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
     return true;
@@ -175,10 +238,18 @@ export function WorkItemDetailFromJSONTyped(json: any, ignoreDiscriminator: bool
         'statusCode': json['statusCode'],
         'statusCategory': WorkItemStatusCategoryFromJSON(json['statusCategory']),
         'priority': WorkItemPriorityFromJSON(json['priority']),
+        'assigneeUserId': json['assigneeUserId'],
+        'assigneeDisplayName': json['assigneeDisplayName'],
         'reporterUserId': json['reporterUserId'],
         'reporterDisplayName': json['reporterDisplayName'],
         'description': json['description'],
         'notes': json['notes'],
+        'timelineStartDate': (json['timelineStartDate'] == null ? null : new Date(json['timelineStartDate'])),
+        'timelineEndDate': (json['timelineEndDate'] == null ? null : new Date(json['timelineEndDate'])),
+        'dueDate': (json['dueDate'] == null ? null : new Date(json['dueDate'])),
+        'rowVersion': json['rowVersion'],
+        'etag': json['etag'],
+        'capabilities': WorkItemCapabilitiesFromJSON(json['capabilities']),
         'createdAt': (new Date(json['createdAt'])),
         'updatedAt': (new Date(json['updatedAt'])),
     };
@@ -188,7 +259,7 @@ export function WorkItemDetailToJSON(json: any): WorkItemDetail {
     return WorkItemDetailToJSONTyped(json, false);
 }
 
-export function WorkItemDetailToJSONTyped(value?: Omit<WorkItemDetail, 'createdAt'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemDetailToJSONTyped(value?: Omit<WorkItemDetail, 'rowVersion'|'etag'|'createdAt'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -204,9 +275,15 @@ export function WorkItemDetailToJSONTyped(value?: Omit<WorkItemDetail, 'createdA
         'statusCode': value['statusCode'],
         'statusCategory': WorkItemStatusCategoryToJSON(value['statusCategory']),
         'priority': WorkItemPriorityToJSON(value['priority']),
+        'assigneeUserId': value['assigneeUserId'],
+        'assigneeDisplayName': value['assigneeDisplayName'],
         'reporterUserId': value['reporterUserId'],
         'reporterDisplayName': value['reporterDisplayName'],
         'description': value['description'],
         'notes': value['notes'],
+        'timelineStartDate': value['timelineStartDate'] == null ? value['timelineStartDate'] : value['timelineStartDate'].toISOString().substring(0,10),
+        'timelineEndDate': value['timelineEndDate'] == null ? value['timelineEndDate'] : value['timelineEndDate'].toISOString().substring(0,10),
+        'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),
+        'capabilities': WorkItemCapabilitiesToJSON(value['capabilities']),
     };
 }

@@ -18,6 +18,7 @@ import type {
   WorkItemCreateRequest,
   WorkItemDetail,
   WorkItemPage,
+  WorkItemUpdateRequest,
 } from '../models/index';
 import {
     ErrorResponseFromJSON,
@@ -28,6 +29,8 @@ import {
     WorkItemDetailToJSON,
     WorkItemPageFromJSON,
     WorkItemPageToJSON,
+    WorkItemUpdateRequestFromJSON,
+    WorkItemUpdateRequestToJSON,
 } from '../models/index';
 
 export interface CreateWorkItemRequest {
@@ -48,13 +51,20 @@ export interface ListContentWorkItemsRequest {
     status?: Set<string>;
 }
 
+export interface UpdateWorkItemRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    workItemUpdateRequest: WorkItemUpdateRequest;
+}
+
 /**
  *
  */
 export class WorkItemsApi extends runtime.BaseAPI {
 
     /**
-     * Project、Content、type、报告人和模板初始状态均由服务端派生。
+     * Project、Content、type、报告人和模板初始状态均由服务端派生；处理人必须是 ACTIVE Project 成员。
      * 在 ACTIVE Content 中创建 Work Item
      */
     async createWorkItemRaw(requestParameters: CreateWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
@@ -116,7 +126,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * Project、Content、type、报告人和模板初始状态均由服务端派生。
+     * Project、Content、type、报告人和模板初始状态均由服务端派生；处理人必须是 ACTIVE Project 成员。
      * 在 ACTIVE Content 中创建 Work Item
      */
     async createWorkItem(requestParameters: CreateWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
@@ -125,7 +135,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 查询 Work Item 只读详情
+     * 查询 Work Item 详情
      */
     async getWorkItemRaw(requestParameters: GetWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
         if (requestParameters['workItemId'] == null) {
@@ -154,7 +164,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 查询 Work Item 只读详情
+     * 查询 Work Item 详情
      */
     async getWorkItem(requestParameters: GetWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.getWorkItemRaw(requestParameters, initOverrides);
@@ -209,6 +219,77 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async listContentWorkItems(requestParameters: ListContentWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemPage> {
         const response = await this.listContentWorkItemsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 提交全部八个可编辑字段的完整快照；null 显式清空可空字段，无变化时不递增版本。
+     * 更新 Work Item 协作字段
+     */
+    async updateWorkItemRaw(requestParameters: UpdateWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling updateWorkItem().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateWorkItem().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateWorkItem().'
+            );
+        }
+
+        if (requestParameters['workItemUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemUpdateRequest',
+                'Required parameter "workItemUpdateRequest" was null or undefined when calling updateWorkItem().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemUpdateRequestToJSON(requestParameters['workItemUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 提交全部八个可编辑字段的完整快照；null 显式清空可空字段，无变化时不递增版本。
+     * 更新 Work Item 协作字段
+     */
+    async updateWorkItem(requestParameters: UpdateWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.updateWorkItemRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

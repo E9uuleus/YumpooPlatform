@@ -56,6 +56,11 @@ public class ProjectMembershipService {
     }
 
     @Transactional(readOnly = true)
+    public boolean isActiveMember(UUID companyId, UUID projectId, UUID userId) {
+        return membershipRepository.existsActive(companyId, projectId, userId);
+    }
+
+    @Transactional(readOnly = true)
     public MemberPage findMembers(CurrentActor actor, UUID projectId, ListStatus status,
                                          OffsetPageRequest page) {
         Access access = requireVisible(actor, projectId);
