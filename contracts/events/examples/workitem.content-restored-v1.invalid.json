@@ -1,0 +1,7 @@
+{
+  "eventId": "29000000-0000-4000-8000-000000000071", "eventType": "workitem.content_restored", "eventVersion": 1,
+  "occurredAt": "2026-08-22T09:30:00Z", "aggregateType": "Content", "aggregateId": "29000000-0000-4000-8000-000000000072", "aggregateVersion": 3,
+  "companyId": "00000000-0000-4000-8000-000000000001", "actor": { "type": "USER", "userId": "29000000-0000-4000-8000-000000000073" },
+  "requestId": "m2-09-invalid", "correlationId": "m2-09-invalid", "causationId": null,
+  "payload": { "contentId": "29000000-0000-4000-8000-000000000072", "projectId": "29000000-0000-4000-8000-000000000074", "code": "REQ_CORE", "name": "产品需求", "workItemType": "REQUIREMENT", "status": "ACTIVE", "defaultViewType": "KANBAN", "blueprintCode": "REQUIREMENT", "rowVersion": -1, "changedFields": ["status"] }
+}

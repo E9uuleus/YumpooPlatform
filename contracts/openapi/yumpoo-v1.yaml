@@ -28,6 +28,8 @@ tags:
     description: Company 下长期存在的 Product 主数据、唯一负责人和生命周期。
   - name: Projects
     description: Company 下的 Project 原子创建、模板固化与初始协作结构。
+  - name: Contents
+    description: Project 下固定工作项类型容器的目录、配置与归档生命周期。
 paths:
   /company:
     get:
@@ -1373,6 +1375,148 @@ paths:
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /projects/{projectId}/contents:
+    get:
+      tags: [Contents]
+      operationId: listProjectContents
+      summary: 查询 Project Content 目录与固定模板选项
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 当前主体可见的 Content 目录。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectContentCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+    post:
+      tags: [Contents]
+      operationId: createContent
+      summary: 从 Project 固定模板蓝图创建 Content
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ContentCreateRequest' } } }
+      responses:
+        '201':
+          description: Content 已创建。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Location: { $ref: '#/components/headers/Location' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /contents/{contentId}:
+    get:
+      tags: [Contents]
+      operationId: getContent
+      summary: 查询 Content 详情与规范化视图配置
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: contentId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: Content 详情。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+    patch:
+      tags: [Contents]
+      operationId: updateContent
+      summary: 完整替换 Content 可变详情与视图配置
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: contentId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ContentUpdateRequest' } } }
+      responses:
+        '200':
+          description: Content 已更新；等价配置不会推进版本。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /contents/{contentId}/archive:
+    post:
+      tags: [Contents]
+      operationId: archiveContent
+      summary: 归档 ACTIVE Content
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: contentId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Content 已归档或幂等重放。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /contents/{contentId}/restore:
+    post:
+      tags: [Contents]
+      operationId: restoreContent
+      summary: 恢复 ARCHIVED Content
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: contentId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Content 已恢复或幂等重放。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /project-templates:
     get:
       tags: [ProjectTemplates]
@@ -2029,6 +2173,192 @@ components:
       properties:
         newOwnerUserId: { $ref: '#/components/schemas/Uuid' }
         reason: { type: string, minLength: 10, maxLength: 500 }
+
+    ContentStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+
+    ContentViewType:
+      type: string
+      enum: [TABLE, KANBAN]
+
+    ContentTableColumn:
+      type: string
+      enum: [ITEM_NO, TITLE, STATUS, PRIORITY, ASSIGNEE, REPORTER, DESCRIPTION, NOTES,
+        TIMELINE, DUE_DATE, UPDATED_AT]
+
+    ContentSortField:
+      type: string
+      enum: [ITEM_NO, TITLE, STATUS, PRIORITY, ASSIGNEE, REPORTER,
+        TIMELINE_START_DATE, TIMELINE_END_DATE, DUE_DATE, UPDATED_AT]
+
+    ContentSortDirection:
+      type: string
+      enum: [ASC, DESC]
+
+    WorkItemPriority:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, URGENT]
+
+    ContentViewSort:
+      type: object
+      additionalProperties: false
+      required: [field, direction]
+      properties:
+        field: { $ref: '#/components/schemas/ContentSortField' }
+        direction: { $ref: '#/components/schemas/ContentSortDirection' }
+
+    ContentViewFilters:
+      type: object
+      additionalProperties: false
+      required: [query, statusCodes, priorities, assigneeUserIds, dueFrom, dueTo, updatedAfter]
+      properties:
+        query: { type: string, nullable: true }
+        statusCodes:
+          type: array
+          uniqueItems: true
+          items: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        priorities:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/WorkItemPriority' }
+        assigneeUserIds:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Uuid' }
+        dueFrom: { type: string, format: date, nullable: true }
+        dueTo: { type: string, format: date, nullable: true }
+        updatedAfter: { type: string, format: date-time, nullable: true }
+
+    ContentTableViewConfig:
+      type: object
+      additionalProperties: false
+      required: [columnOrder, hiddenColumns, sort, filters]
+      properties:
+        columnOrder:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ContentTableColumn' }
+        hiddenColumns:
+          type: array
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ContentTableColumn' }
+        sort:
+          type: array
+          maxItems: 3
+          items: { $ref: '#/components/schemas/ContentViewSort' }
+        filters: { $ref: '#/components/schemas/ContentViewFilters' }
+
+    ContentStatusGroup:
+      type: object
+      additionalProperties: false
+      required: [name, statusCodes]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        statusCodes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+
+    ContentKanbanViewConfig:
+      type: object
+      additionalProperties: false
+      required: [statusGroups]
+      properties:
+        statusGroups:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/ContentStatusGroup' }
+
+    ContentViewConfig:
+      type: object
+      additionalProperties: false
+      required: [table, kanban]
+      properties:
+        table: { $ref: '#/components/schemas/ContentTableViewConfig' }
+        kanban: { $ref: '#/components/schemas/ContentKanbanViewConfig' }
+
+    Content:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, code, name, description, workItemType, status, defaultViewType,
+        viewConfig, appliedTemplateKey, appliedTemplateVersion, appliedBlueprintCode,
+        rowVersion, etag, createdAt, createdByUserId, updatedAt, updatedByUserId,
+        archivedAt, archivedByUserId]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        projectId: { $ref: '#/components/schemas/Uuid' }
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
+        workItemType: { $ref: '#/components/schemas/WorkItemType' }
+        status: { $ref: '#/components/schemas/ContentStatus' }
+        defaultViewType: { $ref: '#/components/schemas/ContentViewType' }
+        viewConfig: { $ref: '#/components/schemas/ContentViewConfig' }
+        appliedTemplateKey: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        appliedTemplateVersion: { type: integer, format: int32, minimum: 1 }
+        appliedBlueprintCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        createdByUserId: { $ref: '#/components/schemas/Uuid' }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+        updatedByUserId: { $ref: '#/components/schemas/Uuid' }
+        archivedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+        archivedByUserId: { type: string, format: uuid, nullable: true, readOnly: true }
+
+    ContentBlueprintOption:
+      type: object
+      additionalProperties: false
+      required: [blueprintCode, displayName, workItemType, defaultViewType]
+      properties:
+        blueprintCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        workItemType: { $ref: '#/components/schemas/WorkItemType' }
+        defaultViewType: { $ref: '#/components/schemas/ContentViewType' }
+
+    ContentWorkflowStatusOption:
+      type: object
+      additionalProperties: false
+      required: [statusCode, displayName, statusCategory, sortOrder, initial, terminal]
+      properties:
+        statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        statusCategory: { $ref: '#/components/schemas/WorkflowStatusCategory' }
+        sortOrder: { type: integer, format: int32, minimum: 1 }
+        initial: { type: boolean }
+        terminal: { type: boolean }
+
+    ProjectContentCatalog:
+      type: object
+      additionalProperties: false
+      required: [items, blueprintOptions, workflowStatusOptions, canCreate]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Content' } }
+        blueprintOptions: { type: array, items: { $ref: '#/components/schemas/ContentBlueprintOption' } }
+        workflowStatusOptions: { type: array, items: { $ref: '#/components/schemas/ContentWorkflowStatusOption' } }
+        canCreate: { type: boolean }
+
+    ContentCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, description, blueprintCode]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
+        blueprintCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+
+    ContentUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, description, defaultViewType, viewConfig]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
+        defaultViewType: { $ref: '#/components/schemas/ContentViewType' }
+        viewConfig: { $ref: '#/components/schemas/ContentViewConfig' }
 
     ProjectTemplateVersionStatus:
       type: string

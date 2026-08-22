@@ -1,0 +1,15 @@
+{
+  "eventId": "29000000-0000-4000-8000-000000000001",
+  "eventType": "workitem.content_created",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-22T09:00:00Z",
+  "aggregateType": "Content",
+  "aggregateId": "29000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "29000000-0000-4000-8000-000000000003" },
+  "requestId": "m2-09-content-create",
+  "correlationId": "m2-09-content-create",
+  "causationId": null,
+  "payload": { "contentId": "29000000-0000-4000-8000-000000000002", "projectId": "29000000-0000-4000-8000-000000000004", "code": "REQ_CORE", "name": "核心需求", "workItemType": "REQUIREMENT", "status": "ACTIVE", "defaultViewType": "TABLE", "blueprintCode": "REQUIREMENT", "rowVersion": 0, "changedFields": [] }
+}
