@@ -276,6 +276,11 @@ events:
     schema: schemas/workitem.work-item-unassigned-v1.schema.json
     validExamples: [examples/workitem.work-item-unassigned-v1.json]
     invalidExamples: [examples/workitem.work-item-unassigned-v1.invalid.json]
+  - eventType: workitem.work_item_status_changed
+    eventVersion: 1
+    schema: schemas/workitem.work-item-status-changed-v1.schema.json
+    validExamples: [examples/workitem.work-item-status-changed-v1.json]
+    invalidExamples: [examples/workitem.work-item-status-changed-v1.invalid.json]
   - eventType: workitem.content_updated
     eventVersion: 1
     schema: schemas/workitem.content-updated-v1.schema.json

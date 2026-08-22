@@ -25,7 +25,13 @@ public final class WorkItemModels {
             long rowVersion, String etag, WorkItemCapabilities capabilities,
             Instant createdAt, Instant updatedAt) {}
 
-    public record WorkItemCapabilities(boolean canEditFields) {}
+    public record WorkItemTransitionOption(String toStatus, String displayName,
+            String statusCategory, boolean requiresResolution) {}
+
+    public record WorkItemCapabilities(boolean canEditFields,
+            List<WorkItemTransitionOption> availableTransitions) {
+        public WorkItemCapabilities { availableTransitions = List.copyOf(availableTransitions); }
+    }
 
     public record WorkItemPage(List<WorkItemSummary> items, int page, int size,
             long totalElements, int totalPages) {

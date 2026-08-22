@@ -18,4 +18,7 @@ public final class WorkItemCommands {
             String title, String priority, UUID assigneeUserId, String description,
             String notes, LocalDate timelineStartDate, LocalDate timelineEndDate,
             LocalDate dueDate) {}
+
+    public record Transition(CurrentActor actor, UUID workItemId, long expectedVersion,
+            String toStatus, String resolution, UUID idempotencyKey, RequestHash requestHash) {}
 }

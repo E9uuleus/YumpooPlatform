@@ -15,6 +15,7 @@ public interface WorkItemRepository {
     Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId, UUID workItemId);
     Optional<WorkItem> lock(UUID companyId, UUID projectId, UUID contentId, UUID workItemId);
     Optional<WorkItem> update(WorkItem workItem, long expectedVersion);
+    Optional<WorkItem> transition(WorkItem workItem, long expectedVersion);
     List<WorkItem> findPage(UUID companyId, UUID projectId, UUID contentId,
             Set<String> statuses, OffsetPageRequest page);
     long countPage(UUID companyId, UUID projectId, UUID contentId, Set<String> statuses);

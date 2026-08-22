@@ -18,6 +18,7 @@ import type {
   WorkItemCreateRequest,
   WorkItemDetail,
   WorkItemPage,
+  WorkItemTransitionRequest,
   WorkItemUpdateRequest,
 } from '../models/index';
 import {
@@ -29,6 +30,8 @@ import {
     WorkItemDetailToJSON,
     WorkItemPageFromJSON,
     WorkItemPageToJSON,
+    WorkItemTransitionRequestFromJSON,
+    WorkItemTransitionRequestToJSON,
     WorkItemUpdateRequestFromJSON,
     WorkItemUpdateRequestToJSON,
 } from '../models/index';
@@ -49,6 +52,14 @@ export interface ListContentWorkItemsRequest {
     page?: number;
     size?: number;
     status?: Set<string>;
+}
+
+export interface TransitionWorkItemRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    workItemTransitionRequest: WorkItemTransitionRequest;
 }
 
 export interface UpdateWorkItemRequest {
@@ -219,6 +230,88 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async listContentWorkItems(requestParameters: ListContentWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemPage> {
         const response = await this.listContentWorkItemsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 服务端验证当前状态到目标状态的精确模板边；状态类别只能由目标状态派生。
+     * 按 Project 固化模板迁移 Work Item 状态
+     */
+    async transitionWorkItemRaw(requestParameters: TransitionWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling transitionWorkItem().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling transitionWorkItem().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling transitionWorkItem().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling transitionWorkItem().'
+            );
+        }
+
+        if (requestParameters['workItemTransitionRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemTransitionRequest',
+                'Required parameter "workItemTransitionRequest" was null or undefined when calling transitionWorkItem().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/transitions`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemTransitionRequestToJSON(requestParameters['workItemTransitionRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 服务端验证当前状态到目标状态的精确模板边；状态类别只能由目标状态派生。
+     * 按 Project 固化模板迁移 Work Item 状态
+     */
+    async transitionWorkItem(requestParameters: TransitionWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.transitionWorkItemRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

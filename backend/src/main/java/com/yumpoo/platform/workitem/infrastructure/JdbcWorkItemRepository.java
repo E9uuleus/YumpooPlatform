@@ -141,6 +141,27 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return statement.query(JdbcWorkItemRepository::map).optional();
     }
 
+    @Override
+    public Optional<WorkItem> transition(WorkItem item, long expectedVersion) {
+        return jdbc.sql("""
+                UPDATE yumpoo.work_item
+                   SET status_code=:statusCode, status_category=:statusCategory,
+                       row_version=row_version+1, updated_at=:updatedAt,
+                       updated_by_user_id=:updatedByUserId
+                 WHERE company_id=:companyId AND project_id=:projectId AND content_id=:contentId
+                   AND id=:id AND deleted_at IS NULL AND row_version=:expectedVersion
+                RETURNING %s
+                """.formatted(COLUMNS))
+                .param("statusCode", item.statusCode())
+                .param("statusCategory", item.statusCategory().name())
+                .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
+                .param("updatedByUserId", item.updatedByUserId())
+                .param("companyId", item.companyId()).param("projectId", item.projectId())
+                .param("contentId", item.contentId()).param("id", item.id())
+                .param("expectedVersion", expectedVersion)
+                .query(JdbcWorkItemRepository::map).optional();
+    }
+
     private Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId,
             UUID workItemId, boolean lock) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item WHERE company_id=:companyId "

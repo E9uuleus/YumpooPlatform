@@ -81,4 +81,43 @@ class WorkItemTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("timeline end");
     }
+
+    @Test
+    void statusTransitionChangesOnlyWorkflowAndAuditFacts() {
+        UUID reporter = UUID.randomUUID();
+        UUID actor = UUID.randomUUID();
+        WorkItem before = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), 11, "PROJECT_1-11", ContentWorkItemType.DEFECT,
+                "修复并验证", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
+                reporter, "描述", "备注", LocalDate.parse("2026-08-23"),
+                LocalDate.parse("2026-08-24"), LocalDate.parse("2026-08-25"),
+                reporter, Instant.EPOCH);
+
+        WorkItem after = before.transitionStatus("DIAGNOSING",
+                WorkItemStatusCategory.IN_PROGRESS, actor, Instant.EPOCH.plusSeconds(1));
+
+        assertThat(after.statusCode()).isEqualTo("DIAGNOSING");
+        assertThat(after.statusCategory()).isEqualTo(WorkItemStatusCategory.IN_PROGRESS);
+        assertThat(after.updatedByUserId()).isEqualTo(actor);
+        assertThat(after.updatedAt()).isEqualTo(Instant.EPOCH.plusSeconds(1));
+        assertThat(after.title()).isEqualTo(before.title());
+        assertThat(after.description()).isEqualTo(before.description());
+        assertThat(after.notes()).isEqualTo(before.notes());
+        assertThat(after.assigneeUserId()).isEqualTo(before.assigneeUserId());
+        assertThat(after.rank()).isEqualTo(before.rank());
+        assertThat(after.rowVersion()).isEqualTo(before.rowVersion());
+    }
+
+    @Test
+    void statusTransitionRejectsSameEndpoint() {
+        WorkItem item = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), 12, "PROJECT_1-12", ContentWorkItemType.TASK,
+                "保持状态", "BACKLOG", WorkItemStatusCategory.TODO, WorkItemPriority.MEDIUM,
+                null, null, null, null, null, null, UUID.randomUUID(), Instant.EPOCH);
+
+        assertThatThrownBy(() -> item.transitionStatus("BACKLOG", WorkItemStatusCategory.TODO,
+                UUID.randomUUID(), Instant.EPOCH.plusSeconds(1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("endpoints");
+    }
 }

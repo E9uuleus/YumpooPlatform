@@ -9,6 +9,7 @@ import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResul
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Update;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemDetail;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemPage;
@@ -99,5 +100,30 @@ public final class WorkItemController {
                 body.notes(), body.timelineStartDate(), body.timelineEndDate(), body.dueDate()));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .eTag(Long.toString(detail.rowVersion())).body(detail);
+    }
+
+    @PostMapping("/work-items/{workItemId}/transitions")
+    ResponseEntity<String> transition(@PathVariable UUID workItemId,
+            @Valid @RequestBody WorkItemTransitionRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
+            String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
+            String idempotencyHeader) {
+        CurrentActor actor = actors.requiredActive();
+        service.find(actor, workItemId);
+        long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        UUID key = keys.parseRequired(idempotencyHeader);
+        StoredCommandResult stored = service.transition(new Transition(actor, workItemId,
+                expectedVersion, body.toStatus(), body.resolution(), key,
+                hasher.hash("transitionWorkItem", Map.of(
+                                "workItemId", workItemId.toString(),
+                                "ifMatch", Long.toString(expectedVersion)),
+                        objectMapper.valueToTree(body)))).result();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setCacheControl(CacheControl.noStore());
+        headers.setETag(stored.etag());
+        return new ResponseEntity<>(stored.responseJson(), headers,
+                HttpStatus.valueOf(stored.httpStatus()));
     }
 }

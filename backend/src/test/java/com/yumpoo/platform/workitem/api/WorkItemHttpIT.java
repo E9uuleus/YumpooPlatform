@@ -187,6 +187,170 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void statusTransitionIsExplicitIdempotentAndCapabilityDriven() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        HttpResponse<String> created = mutate("POST", collection, member,
+                workItemBody("状态迁移", "HIGH", member.userId(), "保留描述", "保留备注",
+                        "2026-08-23", "2026-08-24", "2026-08-25"),
+                null, UUID.randomUUID());
+        JsonNode createdJson = json.readTree(created.body());
+        UUID workItemId = UUID.fromString(createdJson.path("id").asText());
+        String transitionPath = created.headers().firstValue("location").orElseThrow()
+                + "/transitions";
+        assertThat(transitionTargets(createdJson)).containsExactly("READY", "CANCELED");
+
+        long eventsBefore = statusEventCount(workItemId);
+        HttpResponse<String> illegal = mutate("POST", transitionPath, member,
+                transitionBody("IN_REVIEW", null), "\"0\"", UUID.randomUUID());
+        assertThat(illegal.statusCode()).as(illegal.body()).isEqualTo(409);
+        assertThat(statusEventCount(workItemId)).isEqualTo(eventsBefore);
+        assertThat(json.readTree(get("/api/v1/work-items/" + workItemId, member).body())
+                .path("statusCode").asText()).isEqualTo("BACKLOG");
+
+        UUID replayKey = UUID.randomUUID();
+        String readyBody = transitionBody("READY", "  需求已澄清  ");
+        HttpResponse<String> ready = mutate("POST", transitionPath, member,
+                readyBody, "\"0\"", replayKey);
+        assertThat(ready.statusCode()).as(ready.body()).isEqualTo(200);
+        assertThat(ready.headers().firstValue("etag")).contains("\"1\"");
+        JsonNode readyJson = json.readTree(ready.body());
+        assertThat(readyJson.path("statusCode").asText()).isEqualTo("READY");
+        assertThat(readyJson.path("statusCategory").asText()).isEqualTo("TODO");
+        assertThat(readyJson.path("description").asText()).isEqualTo("保留描述");
+        assertThat(readyJson.path("notes").asText()).isEqualTo("保留备注");
+        assertThat(transitionTargets(readyJson)).containsExactly("IN_PROGRESS", "CANCELED");
+
+        HttpResponse<String> replay = mutate("POST", transitionPath, member,
+                readyBody, "\"0\"", replayKey);
+        assertThat(replay.statusCode()).isEqualTo(200);
+        assertThat(replay.body()).isEqualTo(ready.body());
+        assertThat(statusEventCount(workItemId)).isEqualTo(eventsBefore + 1);
+        JsonNode event = json.readTree(jdbc.sql("""
+                SELECT payload_json::text FROM yumpoo.outbox_event
+                 WHERE aggregate_id=:id AND event_type='workitem.work_item_status_changed'
+                """).param("id", workItemId).query(String.class).single());
+        assertThat(event.path("fromStatus").asText()).isEqualTo("BACKLOG");
+        assertThat(event.path("toStatus").asText()).isEqualTo("READY");
+        assertThat(event.path("resolution").asText()).isEqualTo("需求已澄清");
+        assertThat(event.has("description")).isFalse();
+        assertThat(event.has("notes")).isFalse();
+
+        assertThat(mutate("POST", transitionPath, member,
+                transitionBody("CANCELED", null), "\"0\"", UUID.randomUUID()).statusCode())
+                .isEqualTo(412);
+        assertThat(mutate("POST", transitionPath, member,
+                transitionBody("IN_PROGRESS", null), null, UUID.randomUUID()).statusCode())
+                .isEqualTo(428);
+        assertThat(mutate("POST", transitionPath, member,
+                transitionBody("IN_PROGRESS", null), "\"1\"", null).statusCode())
+                .isEqualTo(400);
+        assertThat(mutate("POST", transitionPath, admin,
+                transitionBody("IN_PROGRESS", null), "\"1\"", UUID.randomUUID()).statusCode())
+                .isEqualTo(403);
+        assertThat(mutate("POST", transitionPath, outsider,
+                transitionBody("IN_PROGRESS", null), "\"1\"", UUID.randomUUID()).statusCode())
+                .isEqualTo(404);
+
+        HttpResponse<String> inProgress = mutate("POST", transitionPath, member,
+                transitionBody("IN_PROGRESS", null), "\"1\"", UUID.randomUUID());
+        HttpResponse<String> inReview = mutate("POST", transitionPath, member,
+                transitionBody("IN_REVIEW", null), "\"2\"", UUID.randomUUID());
+        HttpResponse<String> done = mutate("POST", transitionPath, member,
+                transitionBody("DONE", null), "\"3\"", UUID.randomUUID());
+        assertThat(List.of(inProgress.statusCode(), inReview.statusCode(), done.statusCode()))
+                .containsOnly(200);
+        JsonNode doneJson = json.readTree(done.body());
+        assertThat(doneJson.path("statusCategory").asText()).isEqualTo("DONE");
+        assertThat(doneJson.path("rowVersion").asLong()).isEqualTo(4);
+        assertThat(doneJson.path("capabilities").path("availableTransitions").isEmpty()).isTrue();
+        assertThat(mutate("POST", "/api/v1/contents/" + contentId + "/archive",
+                owner, "", contentEtag, UUID.randomUUID()).statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void allFixedTemplatesExposeAndExecuteTheirInitialTransition() throws Exception {
+        List<TemplateCase> cases = List.of(
+                new TemplateCase("M212_RND", "PRODUCT_DEVELOPMENT", "RND", "BACKLOG", "READY", "TODO"),
+                new TemplateCase("M212_PRE", "PRE_SALES", "PRE_SALES", "TO_ASSESS", "PREPARING", "IN_PROGRESS"),
+                new TemplateCase("M212_IMPL", "IMPLEMENTATION", "IMPLEMENTATION", "PLANNED", "IN_PROGRESS", "IN_PROGRESS"),
+                new TemplateCase("M212_HYPER", "HYPERCARE", "HYPERCARE", "OPEN", "DIAGNOSING", "IN_PROGRESS")
+        );
+
+        for (TemplateCase fixture : cases) {
+            UUID projectId = createProjectFixture(fixture.code(), fixture.projectType(), fixture.templateKey());
+            JsonNode createdContent = createContent(projectId, "TASKS_MAIN", fixture.code());
+            UUID nextContentId = UUID.fromString(createdContent.path("id").asText());
+            HttpResponse<String> created = mutate("POST",
+                    "/api/v1/contents/" + nextContentId + "/work-items", member,
+                    workItemBody(fixture.code(), "MEDIUM", null, null), null, UUID.randomUUID());
+            JsonNode before = json.readTree(created.body());
+            assertThat(before.path("statusCode").asText()).isEqualTo(fixture.initialStatus());
+            assertThat(transitionTargets(before)).contains(fixture.nextStatus());
+
+            HttpResponse<String> transitioned = mutate("POST",
+                    created.headers().firstValue("location").orElseThrow() + "/transitions",
+                    member, transitionBody(fixture.nextStatus(), null), "\"0\"", UUID.randomUUID());
+            assertThat(transitioned.statusCode()).as(transitioned.body()).isEqualTo(200);
+            JsonNode after = json.readTree(transitioned.body());
+            assertThat(after.path("statusCode").asText()).isEqualTo(fixture.nextStatus());
+            assertThat(after.path("statusCategory").asText()).isEqualTo(fixture.nextCategory());
+        }
+    }
+
+    @Test
+    void concurrentTransitionsHaveOneWinnerAndSameKeyProducesOneEvent() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        HttpResponse<String> created = mutate("POST", collection, member,
+                workItemBody("并发迁移", "MEDIUM", null, null), null, UUID.randomUUID());
+        UUID firstId = UUID.fromString(json.readTree(created.body()).path("id").asText());
+        String firstPath = created.headers().firstValue("location").orElseThrow() + "/transitions";
+        CountDownLatch start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Future<HttpResponse<String>> ready = pool.submit(() -> {
+                start.await();
+                return mutate("POST", firstPath, member, transitionBody("READY", null),
+                        "\"0\"", UUID.randomUUID());
+            });
+            Future<HttpResponse<String>> canceled = pool.submit(() -> {
+                start.await();
+                return mutate("POST", firstPath, member, transitionBody("CANCELED", null),
+                        "\"0\"", UUID.randomUUID());
+            });
+            start.countDown();
+            assertThat(List.of(ready.get(20, TimeUnit.SECONDS).statusCode(),
+                    canceled.get(20, TimeUnit.SECONDS).statusCode()))
+                    .containsExactlyInAnyOrder(200, 412);
+        }
+        assertThat(statusEventCount(firstId)).isEqualTo(1);
+        assertThat(json.readTree(get("/api/v1/work-items/" + firstId, member).body())
+                .path("rowVersion").asLong()).isEqualTo(1);
+
+        HttpResponse<String> second = mutate("POST", collection, member,
+                workItemBody("同键迁移", "LOW", null, null), null, UUID.randomUUID());
+        UUID secondId = UUID.fromString(json.readTree(second.body()).path("id").asText());
+        String secondPath = second.headers().firstValue("location").orElseThrow() + "/transitions";
+        UUID key = UUID.randomUUID();
+        CountDownLatch sameKeyStart = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Future<HttpResponse<String>> one = pool.submit(() -> {
+                sameKeyStart.await();
+                return mutate("POST", secondPath, member, transitionBody("READY", null), "\"0\"", key);
+            });
+            Future<HttpResponse<String>> two = pool.submit(() -> {
+                sameKeyStart.await();
+                return mutate("POST", secondPath, member, transitionBody("READY", null), "\"0\"", key);
+            });
+            sameKeyStart.countDown();
+            HttpResponse<String> first = one.get(20, TimeUnit.SECONDS);
+            HttpResponse<String> replay = two.get(20, TimeUnit.SECONDS);
+            assertThat(first.statusCode()).isEqualTo(200);
+            assertThat(replay.statusCode()).isEqualTo(200);
+            assertThat(replay.body()).isEqualTo(first.body());
+        }
+        assertThat(statusEventCount(secondId)).isEqualTo(1);
+    }
+
+    @Test
     void permissionsAndRealOpenItemArchiveBlockersAreEnforced() throws Exception {
         String collection = "/api/v1/contents/" + contentId + "/work-items";
         String body = workItemBody("阻塞归档", "URGENT", null, null);
@@ -447,11 +611,28 @@ class WorkItemHttpIT {
                 .query(Long.class).single();
     }
 
+    private long statusEventCount(UUID workItemId) {
+        return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
+                        + "WHERE aggregate_id=:id AND event_type='workitem.work_item_status_changed'")
+                .param("id", workItemId).query(Long.class).single();
+    }
+
+    private static List<String> transitionTargets(JsonNode detail) {
+        List<String> targets = new java.util.ArrayList<>();
+        detail.path("capabilities").path("availableTransitions")
+                .forEach(node -> targets.add(node.path("toStatus").asText()));
+        return List.copyOf(targets);
+    }
+
     private JsonNode createContent(String code, String name) throws Exception {
+        return createContent(PROJECT_ID, code, name);
+    }
+
+    private JsonNode createContent(UUID projectId, String code, String name) throws Exception {
         var body = json.createObjectNode();
         body.put("code", code); body.put("name", name); body.putNull("description");
         body.put("blueprintCode", "TASKS");
-        HttpResponse<String> response = mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/contents",
+        HttpResponse<String> response = mutate("POST", "/api/v1/projects/" + projectId + "/contents",
                 owner, json.writeValueAsString(body), null, UUID.randomUUID());
         assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
         return json.readTree(response.body());
@@ -475,6 +656,13 @@ class WorkItemHttpIT {
         if (timelineEndDate == null) body.putNull("timelineEndDate");
         else body.put("timelineEndDate", timelineEndDate);
         if (dueDate == null) body.putNull("dueDate"); else body.put("dueDate", dueDate);
+        return json.writeValueAsString(body);
+    }
+
+    private String transitionBody(String toStatus, String resolution) throws Exception {
+        var body = json.createObjectNode();
+        body.put("toStatus", toStatus);
+        if (resolution != null) body.put("resolution", resolution);
         return json.writeValueAsString(body);
     }
 
@@ -513,6 +701,36 @@ class WorkItemHttpIT {
         });
     }
 
+    private UUID createProjectFixture(String code, String projectType, String templateKey) {
+        UUID projectId = UUID.randomUUID();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            jdbc.sql("""
+                INSERT INTO yumpoo.project (id, company_id, workspace_id, project_code, name,
+                    project_type, lifecycle, owner_user_id, template_key, template_version,
+                    row_version, created_at, created_by_user_id, updated_at, updated_by_user_id, activated_at)
+                VALUES (:id, :companyId, :workspaceId, :code, :name,
+                    :projectType, 'ACTIVE', :ownerId, :templateKey, 1, 0,
+                    transaction_timestamp(), :ownerId, transaction_timestamp(), :ownerId,
+                    transaction_timestamp())
+                """).param("id", projectId).param("companyId", COMPANY_ID)
+                    .param("workspaceId", WORKSPACE_ID).param("code", code).param("name", code)
+                    .param("projectType", projectType).param("templateKey", templateKey)
+                    .param("ownerId", owner.userId()).update();
+            jdbc.sql("""
+                INSERT INTO yumpoo.project_membership (id, company_id, project_id, user_id,
+                    status, joined_at, joined_by_user_id, row_version)
+                VALUES (:ownerMembership, :companyId, :projectId, :ownerId, 'ACTIVE',
+                    transaction_timestamp(), :ownerId, 0),
+                    (:memberMembership, :companyId, :projectId, :memberId, 'ACTIVE',
+                    transaction_timestamp(), :ownerId, 0)
+                """).param("ownerMembership", UUID.randomUUID())
+                    .param("memberMembership", UUID.randomUUID()).param("companyId", COMPANY_ID)
+                    .param("projectId", projectId).param("ownerId", owner.userId())
+                    .param("memberId", member.userId()).update();
+        });
+        return projectId;
+    }
+
     private static String cookies(ActorFixture actor) {
         return SESSION_COOKIE + "=" + actor.session().sessionCredential().value()
                 + "; " + CSRF_COOKIE + "=" + actor.session().csrfCredential().value();
@@ -546,6 +764,9 @@ class WorkItemHttpIT {
                  WHERE company_id=:id
                 """).param("id", COMPANY_ID).update();
     }
+
+    private record TemplateCase(String code, String projectType, String templateKey,
+            String initialStatus, String nextStatus, String nextCategory) {}
 
     private record ActorFixture(UUID userId, IssuedSession session) {}
 }

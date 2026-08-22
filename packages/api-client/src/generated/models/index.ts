@@ -117,6 +117,8 @@ export * from './WorkItemPage';
 export * from './WorkItemPriority';
 export * from './WorkItemStatusCategory';
 export * from './WorkItemSummary';
+export * from './WorkItemTransitionOption';
+export * from './WorkItemTransitionRequest';
 export * from './WorkItemType';
 export * from './WorkItemUpdateRequest';
 export * from './WorkflowRequiredPermission';

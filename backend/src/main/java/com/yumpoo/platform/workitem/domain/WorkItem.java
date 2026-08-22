@@ -76,6 +76,22 @@ public record WorkItem(
                 createdByUserId, now, actorUserId, deletedAt, deletedByUserId, deleteReason);
     }
 
+    public WorkItem transitionStatus(String nextStatusCode,
+            WorkItemStatusCategory nextStatusCategory, UUID actorUserId, Instant now) {
+        Objects.requireNonNull(nextStatusCategory, "nextStatusCategory must not be null");
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (deletedAt != null) throw new IllegalStateException("deleted work item cannot transition");
+        if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
+        if (Objects.equals(statusCode, nextStatusCode))
+            throw new IllegalArgumentException("status transition endpoints must differ");
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+                title, nextStatusCode, nextStatusCategory, priority, assigneeUserId,
+                reporterUserId, description, notes, timelineStartDate, timelineEndDate,
+                dueDate, rank, rowVersion, createdAt, createdByUserId, now, actorUserId,
+                deletedAt, deletedByUserId, deleteReason);
+    }
+
     private static String normalizeRequired(String value, int maximum, String field) {
         Objects.requireNonNull(value, field + " must not be null");
         String normalized = value.strip();
