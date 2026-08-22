@@ -117,6 +117,14 @@ public class JdbcContentRepository implements ContentRepository {
     }
 
     @Override
+    public Optional<Content> lockForShare(UUID companyId, UUID projectId, UUID contentId) {
+        return jdbcClient.sql("SELECT " + COLUMNS + " FROM yumpoo.content "
+                        + "WHERE company_id=:companyId AND project_id=:projectId AND id=:contentId FOR SHARE")
+                .param("companyId", companyId).param("projectId", projectId)
+                .param("contentId", contentId).query(JdbcContentRepository::map).optional();
+    }
+
+    @Override
     public Optional<Content> update(Content content, long expectedVersion) {
         JdbcClient.StatementSpec statement = jdbcClient.sql("""
                 UPDATE yumpoo.content SET name=:name, description=:description,

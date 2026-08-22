@@ -15,6 +15,7 @@ public interface ContentRepository {
     Optional<ContentLocator> findLocator(UUID companyId, UUID contentId);
     Optional<Content> find(UUID companyId, UUID projectId, UUID contentId);
     Optional<Content> lock(UUID companyId, UUID projectId, UUID contentId);
+    Optional<Content> lockForShare(UUID companyId, UUID projectId, UUID contentId);
     Optional<Content> update(Content content, long expectedVersion);
     boolean hasActiveForTemplate(UUID companyId, UUID projectId, String templateKey,
                                  int templateVersion);
