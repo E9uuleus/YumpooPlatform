@@ -16,6 +16,7 @@ import {
   type WorkItemDetail,
   type WorkItemPage,
   type WorkItemSummary,
+  type WorkItemTransitionOption,
 } from '@yumpoo/api-client'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -29,6 +30,7 @@ const api = vi.hoisted(() => ({
   createWorkItem: vi.fn(),
   getWorkItem: vi.fn(),
   updateWorkItem: vi.fn(),
+  transitionWorkItem: vi.fn(),
 }))
 const routerPush = vi.hoisted(() => vi.fn())
 
@@ -44,6 +46,7 @@ vi.mock('../../api/client', () => ({
     createWorkItem: api.createWorkItem,
     getWorkItem: api.getWorkItem,
     updateWorkItem: api.updateWorkItem,
+    transitionWorkItem: api.transitionWorkItem,
   },
 }))
 vi.mock('@yumpoo/api-client', async (importOriginal) => ({
@@ -100,6 +103,10 @@ function catalog(item = content()): ProjectContentCatalog {
         sortOrder: 10, initial: true, terminal: false },
       { statusCode: 'IN_PROGRESS', displayName: '进行中', statusCategory: WorkflowStatusCategory.InProgress,
         sortOrder: 20, initial: false, terminal: false },
+      { statusCode: 'READY', displayName: '就绪', statusCategory: WorkflowStatusCategory.InProgress,
+        sortOrder: 30, initial: false, terminal: false },
+      { statusCode: 'DONE', displayName: '已完成', statusCategory: WorkflowStatusCategory.Done,
+        sortOrder: 40, initial: false, terminal: true },
     ],
   }
 }
@@ -118,10 +125,20 @@ function summary(id = 'work-item-1', statusCode = 'BACKLOG', title = '实现核�
   }
 }
 
-function detail(description = '安全纯文本'): WorkItemDetail {
+const defaultTransitions: WorkItemTransitionOption[] = [
+  { toStatus: 'READY', displayName: '就绪', statusCategory: WorkItemStatusCategory.InProgress,
+    requiresResolution: false },
+  { toStatus: 'DONE', displayName: '已完成', statusCategory: WorkItemStatusCategory.Done,
+    requiresResolution: true },
+]
+
+function detail(
+  description = '安全纯文本',
+  availableTransitions: WorkItemTransitionOption[] = defaultTransitions,
+): WorkItemDetail {
   return {
     ...summary(), description, notes: null,
-    rowVersion: 0, etag: '"0"', capabilities: { canEditFields: true },
+    rowVersion: 0, etag: '"0"', capabilities: { canEditFields: true, availableTransitions },
     createdAt: new Date('2026-08-22T01:00:00Z'),
   }
 }
@@ -153,6 +170,10 @@ describe('M2-10 Content 工作项工作区', () => {
     api.createWorkItem.mockResolvedValue(detail())
     api.getWorkItem.mockResolvedValue(detail())
     api.updateWorkItem.mockResolvedValue({ ...detail(), rowVersion: 1, etag: '"1"' })
+    api.transitionWorkItem.mockResolvedValue({
+      ...detail(), statusCode: 'READY', statusCategory: WorkItemStatusCategory.InProgress,
+      rowVersion: 1, etag: '"1"', capabilities: { canEditFields: true, availableTransitions: [] },
+    })
   })
 
   it('使用服务端分页并呈现全部协作字段列', async () => {
@@ -288,6 +309,89 @@ describe('M2-10 Content 工作项工作区', () => {
     expect(wrapper.text()).toContain('服务器版本已更新，本地草稿仍保留')
     expect(wrapper.text()).toContain('载入最新版本')
     expect(wrapper.text()).toContain('基于最新版本重新提交')
+    wrapper.unmount()
+  })
+
+  it('详情状态迁移只提交服务端选项并保留未存字段草稿', async () => {
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      detailDraft: { title: string }
+      transitionToStatus: string
+      transitionResolution: string
+      openDetail: (item: WorkItemSummary) => Promise<void>
+      openTransition: () => void
+      transitionWorkItem: () => Promise<void>
+    }
+    await vm.openDetail(summary())
+    vm.detailDraft.title = '未保存的标题草稿'
+    vm.openTransition()
+    expect(vm.transitionToStatus).toBe('READY')
+    vm.transitionResolution = '  已完成验证  '
+    await vm.transitionWorkItem()
+    expect(api.transitionWorkItem).toHaveBeenCalledWith({
+      workItemId: 'work-item-1', xXSRFTOKEN: 'csrf-token', ifMatch: '"0"',
+      idempotencyKey: expect.any(String),
+      workItemTransitionRequest: { toStatus: 'READY', resolution: '已完成验证' },
+    })
+    expect(vm.detailDraft.title).toBe('未保存的标题草稿')
+    expect(api.listContentWorkItems).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('需要说明的状态边在客户端阻止空说明提交', async () => {
+    api.getWorkItem.mockResolvedValue(detail('安全纯文本', [defaultTransitions[1]!]))
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      transitionResolution: string
+      openDetail: (item: WorkItemSummary) => Promise<void>
+      openTransition: () => void
+      transitionWorkItem: () => Promise<void>
+    }
+    await vm.openDetail(summary())
+    vm.openTransition()
+    await vm.transitionWorkItem()
+    expect(api.transitionWorkItem).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('该状态迁移必须填写说明')
+    vm.transitionResolution = '验收通过'
+    await vm.transitionWorkItem()
+    expect(api.transitionWorkItem).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('状态迁移 412 载入服务器最新版本但不自动重试且保留草稿', async () => {
+    const latest = { ...detail(), title: '服务器新版本', rowVersion: 1, etag: '"1"' }
+    api.getWorkItem.mockResolvedValueOnce(detail()).mockResolvedValueOnce(latest)
+    api.transitionWorkItem.mockRejectedValueOnce({ kind: 'response', status: 412,
+      error: { code: 'VERSION_CONFLICT', message: '版本冲突', requestId: 'request-1',
+        retryable: false, fieldErrors: [] } })
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      detailDraft: { title: string }
+      latestConflict?: WorkItemDetail
+      openDetail: (item: WorkItemSummary) => Promise<void>
+      openTransition: () => void
+      transitionWorkItem: () => Promise<void>
+    }
+    await vm.openDetail(summary())
+    vm.detailDraft.title = '本地未保存草稿'
+    vm.openTransition()
+    await vm.transitionWorkItem(); await flushPromises()
+    expect(api.transitionWorkItem).toHaveBeenCalledTimes(1)
+    expect(vm.detailDraft.title).toBe('本地未保存草稿')
+    expect(vm.latestConflict?.title).toBe('服务器新版本')
+    expect(wrapper.text()).toContain('服务器版本已更新，本地草稿仍保留')
+    wrapper.unmount()
+  })
+
+  it('终态或只读详情不显示状态迁移入口', async () => {
+    api.getWorkItem.mockResolvedValue({
+      ...detail('安全纯文本', []),
+      capabilities: { canEditFields: false, availableTransitions: [] },
+    })
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as { openDetail: (item: WorkItemSummary) => Promise<void> }
+    await vm.openDetail(summary()); await flushPromises()
+    expect(wrapper.findAll('button').some(button => button.text().includes('变更状态'))).toBe(false)
     wrapper.unmount()
   })
 
