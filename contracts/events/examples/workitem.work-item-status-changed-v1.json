@@ -1,0 +1,28 @@
+{
+  "eventId": "2c000000-0000-4000-8000-000000000001",
+  "eventType": "workitem.work_item_status_changed",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-23T08:00:00Z",
+  "aggregateType": "WorkItem",
+  "aggregateId": "2c000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2c000000-0000-4000-8000-000000000003" },
+  "requestId": "m2-12-work-item-transition",
+  "correlationId": "m2-12-work-item-transition",
+  "causationId": null,
+  "payload": {
+    "workItemId": "2c000000-0000-4000-8000-000000000002",
+    "projectId": "2c000000-0000-4000-8000-000000000004",
+    "contentId": "2c000000-0000-4000-8000-000000000005",
+    "itemNo": "PROJECT_CORE-1",
+    "title": "完成状态迁移闭环",
+    "workItemType": "TASK",
+    "fromStatus": "BACKLOG",
+    "toStatus": "READY",
+    "fromStatusCategory": "TODO",
+    "toStatusCategory": "TODO",
+    "resolution": "需求已完成澄清",
+    "rowVersion": 1
+  }
+}

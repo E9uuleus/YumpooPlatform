@@ -17,6 +17,7 @@ import {
   type WorkItemDetail,
   type WorkItemPage,
   type WorkItemSummary,
+  type WorkItemTransitionOption,
 } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -105,6 +106,11 @@ const detailDraft = reactive<WorkItemFieldsDraft>({
 })
 const detailSaving = ref(false)
 const latestConflict = ref<WorkItemDetail>()
+const transitionOpen = ref(false)
+const transitionSaving = ref(false)
+const transitionToStatus = ref('')
+const transitionResolution = ref('')
+const transitionIdempotencyKey = ref<string>()
 const kanbanStates = reactive<Record<string, KanbanColumnState>>({})
 const kanbanInitialized = ref(false)
 
@@ -144,6 +150,9 @@ const readOnlyReason = computed(() => {
   return undefined
 })
 const canEditDetail = computed(() => detail.value?.capabilities.canEditFields === true)
+const availableTransitions = computed(() => detail.value?.capabilities.availableTransitions ?? [])
+const selectedTransition = computed<WorkItemTransitionOption | undefined>(() =>
+  availableTransitions.value.find(item => item.toStatus === transitionToStatus.value))
 
 function groupKey(group: ContentStatusGroup, index: number): string {
   return `${index}:${group.name}:${Array.from(group.statusCodes).join(',')}`
@@ -384,6 +393,7 @@ async function openDetail(item: WorkItemSummary): Promise<void> {
   detailLoading.value = true
   detail.value = undefined
   latestConflict.value = undefined
+  resetTransition()
   try {
     detail.value = await workItemsApi.getWorkItem({ workItemId: item.id })
     assignDraft(detailDraft, detail.value)
@@ -448,6 +458,83 @@ function loadLatestDetail(): void {
   detail.value = latestConflict.value
   latestConflict.value = undefined
   assignDraft(detailDraft, detail.value)
+  resetTransition()
+}
+
+function openTransition(): void {
+  const first = availableTransitions.value[0]
+  if (!first || latestConflict.value) return
+  transitionToStatus.value = first.toStatus
+  transitionResolution.value = ''
+  transitionIdempotencyKey.value = globalThis.crypto.randomUUID()
+  transitionOpen.value = true
+}
+
+function changeTransitionTarget(): void {
+  transitionResolution.value = ''
+  transitionIdempotencyKey.value = globalThis.crypto.randomUUID()
+}
+
+function resetTransition(): void {
+  transitionOpen.value = false
+  transitionSaving.value = false
+  transitionToStatus.value = ''
+  transitionResolution.value = ''
+  transitionIdempotencyKey.value = undefined
+}
+
+async function transitionWorkItem(): Promise<void> {
+  if (!detail.value || !selectedTransition.value || !transitionIdempotencyKey.value) return
+  const resolution = transitionResolution.value.trim()
+  if (selectedTransition.value.requiresResolution && !resolution) {
+    error.value = localProblem('该状态迁移必须填写说明。')
+    return
+  }
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
+    return
+  }
+  transitionSaving.value = true
+  error.value = undefined
+  try {
+    const updated = await workItemsApi.transitionWorkItem({
+      workItemId: detail.value.id,
+      xXSRFTOKEN: csrf,
+      ifMatch: detail.value.etag,
+      idempotencyKey: transitionIdempotencyKey.value,
+      workItemTransitionRequest: {
+        toStatus: selectedTransition.value.toStatus,
+        resolution: resolution || null,
+      },
+    })
+    detail.value = updated
+    latestConflict.value = undefined
+    resetTransition()
+    await refreshCurrentView()
+    ElMessage.success(`已将 ${updated.itemNo} 迁移到${statusLabel(updated.statusCode)}`)
+  } catch (reason) {
+    const problem = await toApiProblem(reason)
+    error.value = problem
+    if (isProblemStatus(problem, 412)) {
+      try {
+        latestConflict.value = await workItemsApi.getWorkItem({ workItemId: detail.value.id })
+        resetTransition()
+      } catch (latestReason) {
+        error.value = await toApiProblem(latestReason)
+      }
+    } else if (isProblemStatus(problem, 409) || isProblemStatus(problem, 403)) {
+      try {
+        detail.value = await workItemsApi.getWorkItem({ workItemId: detail.value.id })
+        resetTransition()
+        await refreshCurrentView()
+      } catch (latestReason) {
+        error.value = await toApiProblem(latestReason)
+      }
+    }
+  } finally {
+    transitionSaving.value = false
+  }
 }
 
 onMounted(loadWorkspace)
@@ -987,6 +1074,14 @@ onMounted(loadWorkspace)
             关闭
           </el-button>
           <el-button
+            v-if="availableTransitions.length"
+            type="success"
+            :disabled="Boolean(latestConflict)"
+            @click="openTransition"
+          >
+            变更状态
+          </el-button>
+          <el-button
             v-if="canEditDetail"
             type="primary"
             :loading="detailSaving"
@@ -998,6 +1093,62 @@ onMounted(loadWorkspace)
         </div>
       </template>
     </el-drawer>
+
+    <el-dialog
+      v-model="transitionOpen"
+      title="变更工作项状态"
+      width="min(480px, 92vw)"
+      :close-on-click-modal="!transitionSaving"
+      :close-on-press-escape="!transitionSaving"
+    >
+      <el-form
+        v-if="detail"
+        label-position="top"
+        @submit.prevent="transitionWorkItem"
+      >
+        <div class="transition-route">
+          <span class="status-pill" :class="`status-pill--${statusTone(detail.statusCode)}`">
+            {{ statusLabel(detail.statusCode) }}
+          </span>
+          <span aria-hidden="true">→</span>
+          <strong>{{ selectedTransition?.displayName ?? '请选择目标状态' }}</strong>
+        </div>
+        <el-form-item label="目标状态" required>
+          <el-select
+            v-model="transitionToStatus"
+            :disabled="transitionSaving"
+            @change="changeTransitionTarget"
+          >
+            <el-option
+              v-for="option in availableTransitions"
+              :key="option.toStatus"
+              :label="option.displayName"
+              :value="option.toStatus"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item
+          :label="selectedTransition?.requiresResolution ? '迁移说明（必填）' : '迁移说明（可选）'"
+          :required="selectedTransition?.requiresResolution === true"
+        >
+          <el-input
+            v-model="transitionResolution"
+            type="textarea"
+            :rows="4"
+            maxlength="500"
+            show-word-limit
+            :disabled="transitionSaving"
+          />
+        </el-form-item>
+        <p class="transition-note">状态迁移独立保存，不会自动提交当前字段草稿。</p>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="transitionSaving" @click="resetTransition">取消</el-button>
+        <el-button type="primary" :loading="transitionSaving" @click="transitionWorkItem">
+          确认迁移
+        </el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -1054,6 +1205,8 @@ onMounted(loadWorkspace)
 .work-item-conflict { display: grid; gap: var(--yp-space-2); margin-bottom: var(--yp-space-4); padding: var(--yp-space-4); border: 1px solid var(--yp-status-yellow); border-radius: var(--yp-radius-md); background: var(--yp-bg-selected); }
 .drawer-footer { display: flex; align-items: center; justify-content: flex-end; gap: var(--yp-space-3); }
 .drawer-footer > span { flex: 1; color: var(--yp-text-secondary); text-align: left; }
+.transition-route { display: flex; align-items: center; gap: var(--yp-space-3); margin-bottom: var(--yp-space-4); padding: var(--yp-space-3); border-radius: var(--yp-radius-md); background: var(--yp-bg-sunken); }
+.transition-note { margin: 0; color: var(--yp-text-secondary); font-size: var(--yp-type-caption-size); }
 @media (max-width: 720px) {
   .workspace-toolbar { flex-direction: column; padding: var(--yp-space-4); }
   .view-switch { width: 100%; }

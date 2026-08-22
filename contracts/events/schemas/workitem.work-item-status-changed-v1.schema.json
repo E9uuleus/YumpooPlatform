@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-status-changed-v1.schema.json",
+  "title": "Work Item status changed",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    { "type": "object", "properties": {
+      "eventType": { "const": "workitem.work_item_status_changed" },
+      "eventVersion": { "const": 1 },
+      "aggregateType": { "const": "WorkItem" },
+      "aggregateVersion": { "type": "integer", "minimum": 1 },
+      "payload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workItemId", "projectId", "contentId", "itemNo", "title", "workItemType", "fromStatus", "toStatus", "fromStatusCategory", "toStatusCategory", "resolution", "rowVersion"],
+        "properties": {
+          "workItemId": { "type": "string", "format": "uuid" },
+          "projectId": { "type": "string", "format": "uuid" },
+          "contentId": { "type": "string", "format": "uuid" },
+          "itemNo": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "workItemType": { "enum": ["REQUIREMENT", "TASK", "DEFECT"] },
+          "fromStatus": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
+          "toStatus": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
+          "fromStatusCategory": { "enum": ["TODO", "IN_PROGRESS", "DONE", "CANCELED"] },
+          "toStatusCategory": { "enum": ["TODO", "IN_PROGRESS", "DONE", "CANCELED"] },
+          "resolution": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 },
+          "rowVersion": { "type": "integer", "minimum": 1 }
+        }
+      }
+    } }
+  ]
+}

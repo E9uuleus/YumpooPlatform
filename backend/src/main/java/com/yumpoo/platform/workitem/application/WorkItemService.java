@@ -38,6 +38,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -47,6 +48,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
+import static com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Update;
 import static com.yumpoo.platform.workitem.application.WorkItemModels.*;
 
@@ -56,6 +58,7 @@ public class WorkItemService {
     private static final String FIELDS_CHANGED = "workitem.work_item_fields_changed";
     private static final String ASSIGNED = "workitem.work_item_assigned";
     private static final String UNASSIGNED = "workitem.work_item_unassigned";
+    private static final String STATUS_CHANGED = "workitem.work_item_status_changed";
 
     private final WorkItemRepository workItems;
     private final ContentRepository contents;
@@ -116,7 +119,8 @@ public class WorkItemService {
         WorkItem item = workItems.find(project.companyId(), project.projectId(),
                         locator.contentId(), workItemId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        return detail(item, people(project.companyId(), List.of(item)), canEdit(project, content));
+        return detail(item, people(project.companyId(), List.of(item)), canEdit(project, content),
+                template(project.templateKey(), project.templateVersion()));
     }
 
     public IdempotencyExecutionResult create(Create command) {
@@ -156,7 +160,7 @@ public class WorkItemService {
             }
             if (!workItems.insert(item)) throw new IllegalStateException("work item insert failed");
             appendCreated(item, command.actor());
-            return stored(detail(item, people(project.companyId(), List.of(item)), true));
+            return stored(201, detail(item, people(project.companyId(), List.of(item)), true, template));
         });
     }
 
@@ -170,6 +174,7 @@ public class WorkItemService {
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireActiveContent(content);
+        ProjectTemplateSnapshot template = template(project.templateKey(), project.templateVersion());
         WorkItem before = workItems.lock(project.companyId(), project.projectId(),
                         locator.contentId(), command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
@@ -187,13 +192,70 @@ public class WorkItemService {
         }
         List<String> changedFields = changed(before, candidate);
         if (changedFields.isEmpty()) {
-            return detail(before, people(project.companyId(), List.of(before)), true);
+            return detail(before, people(project.companyId(), List.of(before)), true, template);
         }
         WorkItem after = workItems.update(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         appendFieldsChanged(after, command.actor(), changedFields);
         appendAssignmentChange(before, after, command.actor());
-        return detail(after, people(project.companyId(), List.of(after)), true);
+        return detail(after, people(project.companyId(), List.of(after)), true, template);
+    }
+
+    public IdempotencyExecutionResult transition(Transition command) {
+        requireActor(command.actor());
+        WorkItemLocator locator = workItems.findLocator(command.actor().companyId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        ProjectAccessSnapshot project = visible(command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
+                command.actor().userId(), "POST", "transitionWorkItem", command.idempotencyKey()),
+                command.requestHash()), () -> transition(command, locator));
+    }
+
+    private StoredCommandResult transition(Transition command, WorkItemLocator locator) {
+        ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
+                command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireActiveContent(content);
+        WorkItem before = workItems.lock(project.companyId(), project.projectId(),
+                        locator.contentId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(before, command.expectedVersion());
+        ProjectTemplateSnapshot template = template(project.templateKey(), project.templateVersion());
+        ProjectTemplateSnapshot.WorkflowTransition edge = template.transitions().stream()
+                .filter(value -> value.fromStatus().equals(before.statusCode())
+                        && value.toStatus().equals(command.toStatus()))
+                .findFirst().orElseThrow(() -> ApplicationException.withReason(
+                        StandardErrorCode.INVALID_STATE_TRANSITION,
+                        "WORK_ITEM_TRANSITION_NOT_ALLOWED"));
+        if (!"MEMBER".equals(edge.requiredPermission())) {
+            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "WORK_ITEM_TRANSITION_PERMISSION_UNSUPPORTED");
+        }
+        ProjectTemplateSnapshot.WorkflowStatus target = template.statuses().stream()
+                .filter(value -> value.statusCode().equals(edge.toStatus())).findFirst()
+                .orElseThrow(() -> ApplicationException.withReason(
+                        StandardErrorCode.INVALID_STATE_TRANSITION,
+                        "WORK_ITEM_TARGET_STATUS_MISSING"));
+        String resolution = normalizeResolution(command.resolution());
+        if (edge.requiresResolution() && resolution == null) {
+            throw validation("resolution", "REQUIRED", "该状态迁移必须填写说明");
+        }
+        WorkItem candidate;
+        try {
+            candidate = before.transitionStatus(target.statusCode(),
+                    WorkItemStatusCategory.valueOf(target.statusCategory()),
+                    command.actor().userId(), clock.instant());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "WORK_ITEM_TRANSITION_REJECTED");
+        }
+        WorkItem after = workItems.transition(candidate, command.expectedVersion())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        appendStatusChanged(before, after, command.actor(), resolution);
+        return stored(200, detail(after, people(project.companyId(), List.of(after)), true, template));
     }
 
     private VisibleContent visibleContent(CurrentActor actor, UUID contentId) {
@@ -250,14 +312,34 @@ public class WorkItemService {
     }
 
     private static WorkItemDetail detail(WorkItem item,
-            Map<UUID, MinimalUserSnapshot> people, boolean canEditFields) {
+            Map<UUID, MinimalUserSnapshot> people, boolean canEditFields,
+            ProjectTemplateSnapshot template) {
         return new WorkItemDetail(item.id(), item.projectId(), item.contentId(), item.itemNo(),
                 item.type().name(), item.title(), item.statusCode(), item.statusCategory().name(),
                 item.priority().name(), item.assigneeUserId(), assigneeDisplayName(item, people),
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
                 item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
-                new WorkItemCapabilities(canEditFields), item.createdAt(), item.updatedAt());
+                new WorkItemCapabilities(canEditFields,
+                        availableTransitions(item, canEditFields, template)),
+                item.createdAt(), item.updatedAt());
+    }
+
+    private static List<WorkItemTransitionOption> availableTransitions(WorkItem item,
+            boolean canTransition, ProjectTemplateSnapshot template) {
+        if (!canTransition) return List.of();
+        Map<String, ProjectTemplateSnapshot.WorkflowStatus> statuses = new LinkedHashMap<>();
+        template.statuses().forEach(status -> statuses.put(status.statusCode(), status));
+        return template.transitions().stream()
+                .filter(edge -> edge.fromStatus().equals(item.statusCode()))
+                .filter(edge -> "MEMBER".equals(edge.requiredPermission()))
+                .map(edge -> Map.entry(edge, statuses.get(edge.toStatus())))
+                .filter(entry -> entry.getValue() != null)
+                .sorted(Comparator.comparingInt(entry -> entry.getValue().sortOrder()))
+                .map(entry -> new WorkItemTransitionOption(entry.getKey().toStatus(),
+                        entry.getValue().displayName(), entry.getValue().statusCategory(),
+                        entry.getKey().requiresResolution()))
+                .toList();
     }
 
     private static String assigneeDisplayName(WorkItem item,
@@ -295,6 +377,24 @@ public class WorkItemService {
         append(after.assigneeUserId() == null ? UNASSIGNED : ASSIGNED, after, actor, payload);
     }
 
+    private void appendStatusChanged(WorkItem before, WorkItem after,
+            CurrentActor actor, String resolution) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("workItemId", after.id());
+        payload.put("projectId", after.projectId());
+        payload.put("contentId", after.contentId());
+        payload.put("itemNo", after.itemNo());
+        payload.put("title", after.title());
+        payload.put("workItemType", after.type().name());
+        payload.put("fromStatus", before.statusCode());
+        payload.put("toStatus", after.statusCode());
+        payload.put("fromStatusCategory", before.statusCategory().name());
+        payload.put("toStatusCategory", after.statusCategory().name());
+        payload.put("resolution", resolution);
+        payload.put("rowVersion", after.rowVersion());
+        append(STATUS_CHANGED, after, actor, payload);
+    }
+
     private static Map<String, Object> commonEventPayload(WorkItem item) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("workItemId", item.id());
@@ -320,9 +420,9 @@ public class WorkItemService {
                 item.companyId(), EventActor.user(actor.userId()), objectMapper.valueToTree(payload)));
     }
 
-    private StoredCommandResult stored(WorkItemDetail view) {
+    private StoredCommandResult stored(int status, WorkItemDetail view) {
         try {
-            return new StoredCommandResult(201, objectMapper.writeValueAsString(view),
+            return new StoredCommandResult(status, objectMapper.writeValueAsString(view),
                     view.id(), view.etag());
         } catch (JacksonException exception) {
             throw new IllegalStateException("work item response serialization failed", exception);
@@ -371,6 +471,15 @@ public class WorkItemService {
         if (start != null && end != null && end.isBefore(start)) {
             throw validation("timelineEndDate", "INVALID_RANGE", "计划结束日不得早于计划开始日");
         }
+    }
+
+    private static String normalizeResolution(String value) {
+        if (value == null) return null;
+        String normalized = value.strip();
+        if (normalized.isEmpty()) return null;
+        if (normalized.length() > 500)
+            throw validation("resolution", "INVALID_LENGTH", "迁移说明不能超过 500 字符");
+        return normalized;
     }
 
     private static void requireActiveContent(Content content) {

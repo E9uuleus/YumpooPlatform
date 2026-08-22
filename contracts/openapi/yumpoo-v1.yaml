@@ -1635,6 +1635,40 @@ paths:
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /work-items/{workItemId}/transitions:
+    post:
+      tags: [WorkItems]
+      operationId: transitionWorkItem
+      summary: 按 Project 固化模板迁移 Work Item 状态
+      description: 服务端验证当前状态到目标状态的精确模板边；状态类别只能由目标状态派生。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemTransitionRequest' } } }
+      responses:
+        '200':
+          description: 状态已迁移，或返回同一幂等命令保存的结果。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /project-templates:
     get:
       tags: [ProjectTemplates]
@@ -2385,9 +2419,23 @@ components:
     WorkItemCapabilities:
       type: object
       additionalProperties: false
-      required: [canEditFields]
+      required: [canEditFields, availableTransitions]
       properties:
         canEditFields: { type: boolean, readOnly: true }
+        availableTransitions:
+          type: array
+          readOnly: true
+          items: { $ref: '#/components/schemas/WorkItemTransitionOption' }
+
+    WorkItemTransitionOption:
+      type: object
+      additionalProperties: false
+      required: [toStatus, displayName, statusCategory, requiresResolution]
+      properties:
+        toStatus: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
+        requiresResolution: { type: boolean }
 
     WorkItemPage:
       type: object
@@ -2428,6 +2476,14 @@ components:
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+
+    WorkItemTransitionRequest:
+      type: object
+      additionalProperties: false
+      required: [toStatus]
+      properties:
+        toStatus: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        resolution: { type: string, minLength: 1, maxLength: 500, nullable: true }
 
     ContentViewSort:
       type: object

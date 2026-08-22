@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemTransitionOption } from './WorkItemTransitionOption';
+import {
+    WorkItemTransitionOptionFromJSON,
+    WorkItemTransitionOptionFromJSONTyped,
+    WorkItemTransitionOptionToJSON,
+    WorkItemTransitionOptionToJSONTyped,
+} from './WorkItemTransitionOption';
+
 /**
  *
  * @export
@@ -24,6 +32,12 @@ export interface WorkItemCapabilities {
      * @memberof WorkItemCapabilities
      */
     readonly canEditFields: boolean;
+    /**
+     *
+     * @type {Array<WorkItemTransitionOption>}
+     * @memberof WorkItemCapabilities
+     */
+    readonly availableTransitions: Array<WorkItemTransitionOption>;
 }
 
 /**
@@ -31,6 +45,7 @@ export interface WorkItemCapabilities {
  */
 export function instanceOfWorkItemCapabilities(value: object): value is WorkItemCapabilities {
     if (!('canEditFields' in value) || value['canEditFields'] === undefined) return false;
+    if (!('availableTransitions' in value) || value['availableTransitions'] === undefined) return false;
     return true;
 }
 
@@ -45,6 +60,7 @@ export function WorkItemCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator
     return {
 
         'canEditFields': json['canEditFields'],
+        'availableTransitions': ((json['availableTransitions'] as Array<any>).map(WorkItemTransitionOptionFromJSON)),
     };
 }
 
@@ -52,7 +68,7 @@ export function WorkItemCapabilitiesToJSON(json: any): WorkItemCapabilities {
     return WorkItemCapabilitiesToJSONTyped(json, false);
 }
 
-export function WorkItemCapabilitiesToJSONTyped(value?: Omit<WorkItemCapabilities, 'canEditFields'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemCapabilitiesToJSONTyped(value?: Omit<WorkItemCapabilities, 'canEditFields'|'availableTransitions'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
