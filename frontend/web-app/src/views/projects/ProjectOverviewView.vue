@@ -11,8 +11,8 @@ import { projectsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import { businessLabel } from '../../design-system/labels'
-import ProjectWorkspaceHeader from './ProjectWorkspaceHeader.vue'
-import ProjectLifecycleActions from './ProjectLifecycleActions.vue'
+import ProjectLifecycleActions from '../../components/projects/ProjectLifecycleActions.vue'
+import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 
 const route = useRoute()
 const project = ref<ProjectDetail>()

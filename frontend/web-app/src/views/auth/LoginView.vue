@@ -7,10 +7,10 @@ import {
   beginAuthentication,
   consumeReturnPath,
   resetAuthenticationNavigation,
-} from '../auth/navigation'
-import YpThemeSwitcher from '../components/yp/YpThemeSwitcher.vue'
-import { useAppearance } from '../composables/useAppearance'
-import { ensureAuthentication } from '../composables/useSession'
+} from '../../auth/navigation'
+import YpThemeSwitcher from '../../components/yp/YpThemeSwitcher.vue'
+import { useAppearance } from '../../composables/useAppearance'
+import { ensureAuthentication } from '../../composables/useSession'
 
 const route = useRoute()
 const router = useRouter()

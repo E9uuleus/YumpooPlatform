@@ -15,7 +15,7 @@ import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { projectsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
-import ProjectWorkspaceHeader from './ProjectWorkspaceHeader.vue'
+import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 
 const route = useRoute()
 const projectId = String(route.params.projectId)

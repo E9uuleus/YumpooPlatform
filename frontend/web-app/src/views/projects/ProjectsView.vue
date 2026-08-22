@@ -45,7 +45,7 @@ import { useSession } from '../../composables/useSession'
 import { businessLabel } from '../../design-system/labels'
 import { getStatusPresentation } from '../../design-system/status'
 import type { ActiveFilter } from '../../design-system/types'
-import ProjectWorkspaceHeader from './ProjectWorkspaceHeader.vue'
+import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent

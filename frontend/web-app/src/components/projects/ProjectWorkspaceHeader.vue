@@ -11,8 +11,8 @@ import {
 } from 'element-plus'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import YpAssignee from '../../components/yp/YpAssignee.vue'
-import YpStatusTag from '../../components/yp/YpStatusTag.vue'
+import YpAssignee from '../yp/YpAssignee.vue'
+import YpStatusTag from '../yp/YpStatusTag.vue'
 
 type ProjectSection = 'catalog' | 'overview' | 'contents' | 'members' | 'products' | 'settings'
 

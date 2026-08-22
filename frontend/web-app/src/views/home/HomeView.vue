@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ElButton, ElCard, ElTag } from 'element-plus'
 import { useRouter } from 'vue-router'
-import YpAssignee from '../components/yp/YpAssignee.vue'
-import YpPageHeader from '../components/yp/YpPageHeader.vue'
-import { businessLabel } from '../design-system/labels'
-import { useSession } from '../composables/useSession'
+import YpAssignee from '../../components/yp/YpAssignee.vue'
+import YpPageHeader from '../../components/yp/YpPageHeader.vue'
+import { useSession } from '../../composables/useSession'
+import { businessLabel } from '../../design-system/labels'
 
 const router = useRouter()
 const session = useSession()

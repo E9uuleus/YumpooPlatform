@@ -36,7 +36,7 @@ import InlineProblem from '../../components/InlineProblem.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import YpFilterBar from '../../components/yp/YpFilterBar.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
-import ProjectWorkspaceHeader from './ProjectWorkspaceHeader.vue'
+import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
