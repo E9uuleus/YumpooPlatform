@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Plus } from '@element-plus/icons-vue'
+import { ArrowLeft, MoreFilled, Plus, Rank } from '@element-plus/icons-vue'
 import {
   ContentStatus,
   ContentTableColumn,
@@ -9,6 +9,7 @@ import {
   ProjectMembershipStatus,
   ProjectMembershipStatusFilter,
   WorkItemPriority,
+  WorkItemRankPlacement,
   readCsrfToken,
   type Content,
   type ContentStatusGroup,
@@ -28,6 +29,9 @@ import {
   ElForm,
   ElFormItem,
   ElInput,
+  ElDropdown,
+  ElDropdownItem,
+  ElDropdownMenu,
   ElMessage,
   ElOption as ElOptionRaw,
   ElPagination,
@@ -35,7 +39,7 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, onMounted, reactive, ref, watch, type DefineComponent } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type DefineComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
@@ -61,13 +65,35 @@ interface TableColumnDefinition {
   minWidth: number
 }
 
-interface KanbanColumnState {
+interface KanbanLaneState {
   items: WorkItemSummary[]
   page: number
   totalElements: number
   totalPages: number
   loading: boolean
   error?: ApiProblem
+}
+
+interface KanbanMoveIntent {
+  item: WorkItemSummary
+  sourceStatus: string
+  targetStatus: string
+  placement: WorkItemRankPlacement
+  anchorWorkItemId?: string
+  resolution?: string
+  idempotencyKey: string
+}
+
+interface PointerDragState {
+  pointerId: number
+  item: WorkItemSummary
+  sourceStatus: string
+  startX: number
+  startY: number
+  active: boolean
+  targetStatus: string | undefined
+  placement: WorkItemRankPlacement | undefined
+  anchorWorkItemId: string | undefined
 }
 
 interface WorkItemFieldsDraft {
@@ -131,8 +157,16 @@ const transitionSaving = ref(false)
 const transitionToStatus = ref('')
 const transitionResolution = ref('')
 const transitionIdempotencyKey = ref<string>()
-const kanbanStates = reactive<Record<string, KanbanColumnState>>({})
+const kanbanStates = reactive<Record<string, KanbanLaneState>>({})
 const kanbanInitialized = ref(false)
+const kanbanBoard = ref<HTMLElement>()
+const movingWorkItemId = ref<string>()
+const failedMove = ref<KanbanMoveIntent>()
+const moveResolutionOpen = ref(false)
+const moveResolution = ref('')
+const awaitingResolution = ref<KanbanMoveIntent>()
+const pointerDrag = ref<PointerDragState>()
+let moveAttempt = 0
 
 const supportedColumns: Record<string, TableColumnDefinition> = {
   [ContentTableColumn.ItemNo]: { code: ContentTableColumn.ItemNo, label: '事项编号', minWidth: 130 },
@@ -157,6 +191,9 @@ const tableColumns = computed(() => {
     .filter((column): column is TableColumnDefinition => Boolean(column))
 })
 const kanbanGroups = computed(() => content.value?.viewConfig.kanban.statusGroups ?? [])
+const configuredKanbanStatuses = computed(() => new Set(
+  kanbanGroups.value.flatMap(group => Array.from(group.statusCodes)),
+))
 const canCreate = computed(() => Boolean(project.value && content.value
   && project.value.lifecycle !== ProjectLifecycle.Archived
   && content.value.status === ContentStatus.Active
@@ -182,12 +219,27 @@ function groupKey(group: ContentStatusGroup, index: number): string {
   return `${index}:${group.name}:${Array.from(group.statusCodes).join(',')}`
 }
 
-function kanbanState(group: ContentStatusGroup, index: number): KanbanColumnState {
-  const key = groupKey(group, index)
-  if (!kanbanStates[key]) {
-    kanbanStates[key] = { items: [], page: 0, totalElements: 0, totalPages: 0, loading: false }
+function kanbanState(statusCode: string): KanbanLaneState {
+  if (!kanbanStates[statusCode]) {
+    kanbanStates[statusCode] = { items: [], page: 0, totalElements: 0, totalPages: 0, loading: false }
   }
-  return kanbanStates[key]
+  return kanbanStates[statusCode]
+}
+
+function groupTotal(group: ContentStatusGroup): number {
+  return Array.from(group.statusCodes).reduce((total, status) => total + kanbanState(status).totalElements, 0)
+}
+
+function statusVisible(statusCode: string): boolean {
+  const selected = tableQuery.value.filters.statusCodes
+  return !selected.size || selected.has(statusCode)
+}
+
+function canDrop(item: WorkItemSummary, statusCode: string): boolean {
+  return configuredKanbanStatuses.value.has(statusCode) && statusVisible(statusCode)
+    && item.capabilities.canMoveInKanban
+    && (statusCode === item.statusCode
+      || item.capabilities.availableTransitions.some(option => option.toStatus === statusCode))
 }
 
 function statusOption(statusCode: string) {
@@ -339,20 +391,16 @@ async function loadTable(page: number): Promise<void> {
 async function loadKanban(): Promise<void> {
   if (kanbanInitialized.value) return
   kanbanInitialized.value = true
-  await Promise.all(kanbanGroups.value.map((group, index) => loadKanbanGroup(group, index, 0)))
+  const statuses = kanbanGroups.value.flatMap(group => Array.from(group.statusCodes))
+  await Promise.all(statuses.map(status => loadKanbanLane(status, 0)))
 }
 
-async function loadKanbanGroup(group: ContentStatusGroup, index: number, page: number): Promise<void> {
+async function loadKanbanLane(statusCode: string, page: number): Promise<void> {
   const revision = queryRevision
-  const key = groupKey(group, index)
-  const state = kanbanStates[key] ?? {
-    items: [], page: 0, totalElements: 0, totalPages: 0, loading: false,
-  }
-  kanbanStates[key] = state
+  const state = kanbanState(statusCode)
   state.loading = true
   delete state.error
-  const statuses = intersectStatuses(group.statusCodes)
-  if (!statuses.size) {
+  if (!statusVisible(statusCode)) {
     state.items = []
     state.page = 0
     state.totalElements = 0
@@ -363,10 +411,11 @@ async function loadKanbanGroup(group: ContentStatusGroup, index: number, page: n
   try {
     const result = await workItemsApi.listContentWorkItems({
       contentId,
+      view: ContentViewType.Kanban,
       page,
       size: 20,
       ...queryRequest(false),
-      status: statuses,
+      status: new Set([statusCode]),
     })
     if (revision !== queryRevision) return
     state.items = page === 0 ? result.items : [...state.items, ...result.items]
@@ -378,6 +427,227 @@ async function loadKanbanGroup(group: ContentStatusGroup, index: number, page: n
   } finally {
     if (revision === queryRevision) state.loading = false
   }
+}
+
+function moveIntent(item: WorkItemSummary, sourceStatus: string, targetStatus: string,
+  placement: WorkItemRankPlacement, anchorWorkItemId?: string): KanbanMoveIntent {
+  return {
+    item,
+    sourceStatus,
+    targetStatus,
+    placement,
+    ...(anchorWorkItemId ? { anchorWorkItemId } : {}),
+    idempotencyKey: globalThis.crypto.randomUUID(),
+  }
+}
+
+function transitionFor(item: WorkItemSummary, statusCode: string): WorkItemTransitionOption | undefined {
+  return item.capabilities.availableTransitions.find(option => option.toStatus === statusCode)
+}
+
+async function requestKanbanMove(intent: KanbanMoveIntent): Promise<void> {
+  const transition = intent.sourceStatus === intent.targetStatus
+    ? undefined : transitionFor(intent.item, intent.targetStatus)
+  if (transition?.requiresResolution && !intent.resolution) {
+    awaitingResolution.value = intent
+    moveResolution.value = ''
+    moveResolutionOpen.value = true
+    return
+  }
+  await performKanbanMove(intent)
+}
+
+function confirmMoveResolution(): void {
+  const intent = awaitingResolution.value
+  const resolution = moveResolution.value.trim()
+  if (!intent || !resolution) {
+    error.value = localProblem('该状态迁移必须填写说明。')
+    return
+  }
+  moveResolutionOpen.value = false
+  awaitingResolution.value = undefined
+  void performKanbanMove({ ...intent, resolution })
+}
+
+function cancelMoveResolution(): void {
+  moveResolutionOpen.value = false
+  awaitingResolution.value = undefined
+  moveResolution.value = ''
+  focusMoveHandle()
+}
+
+function snapshotLanes(): Record<string, { items: WorkItemSummary[], totalElements: number }> {
+  return Object.fromEntries(Object.entries(kanbanStates).map(([status, state]) => [status, {
+    items: [...state.items], totalElements: state.totalElements,
+  }]))
+}
+
+function restoreLanes(snapshot: Record<string, { items: WorkItemSummary[], totalElements: number }>): void {
+  for (const [status, value] of Object.entries(snapshot)) {
+    const state = kanbanState(status)
+    state.items = value.items
+    state.totalElements = value.totalElements
+  }
+}
+
+function applyOptimisticMove(intent: KanbanMoveIntent): void {
+  const source = kanbanState(intent.sourceStatus)
+  const target = kanbanState(intent.targetStatus)
+  const sourceIndex = source.items.findIndex(item => item.id === intent.item.id)
+  if (sourceIndex >= 0) source.items.splice(sourceIndex, 1)
+  const moved = { ...intent.item, statusCode: intent.targetStatus }
+  let targetIndex = target.items.length
+  if (intent.placement === WorkItemRankPlacement.Start) targetIndex = 0
+  if (intent.anchorWorkItemId) {
+    const anchorIndex = target.items.findIndex(item => item.id === intent.anchorWorkItemId)
+    if (anchorIndex >= 0) targetIndex = anchorIndex
+      + (intent.placement === WorkItemRankPlacement.After ? 1 : 0)
+  }
+  target.items.splice(targetIndex, 0, moved)
+  if (intent.sourceStatus !== intent.targetStatus) {
+    source.totalElements = Math.max(0, source.totalElements - 1)
+    target.totalElements += 1
+  }
+}
+
+async function refreshMoveFacts(intent: KanbanMoveIntent): Promise<void> {
+  await Promise.all([
+    loadKanbanLane(intent.sourceStatus, 0),
+    ...(intent.targetStatus === intent.sourceStatus ? [] : [loadKanbanLane(intent.targetStatus, 0)]),
+    loadTable(tablePage.value.page),
+  ])
+}
+
+async function performKanbanMove(intent: KanbanMoveIntent): Promise<void> {
+  if (movingWorkItemId.value) return
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
+    return
+  }
+  const snapshot = snapshotLanes()
+  const attempt = ++moveAttempt
+  movingWorkItemId.value = intent.item.id
+  failedMove.value = undefined
+  error.value = undefined
+  applyOptimisticMove(intent)
+  try {
+    await workItemsApi.rankMoveWorkItem({
+      workItemId: intent.item.id,
+      xXSRFTOKEN: csrf,
+      ifMatch: intent.item.etag,
+      idempotencyKey: intent.idempotencyKey,
+      workItemRankMoveRequest: {
+        toStatus: intent.targetStatus,
+        placement: intent.placement,
+        anchorWorkItemId: intent.anchorWorkItemId ?? null,
+        resolution: intent.resolution ?? null,
+      },
+    })
+    if (attempt !== moveAttempt) return
+    await refreshMoveFacts(intent)
+    ElMessage.success(`已移动 ${intent.item.itemNo}`)
+  } catch (reason) {
+    if (attempt !== moveAttempt) return
+    restoreLanes(snapshot)
+    const problem = await toApiProblem(reason)
+    error.value = problem
+    if (problem.kind === 'fallback') failedMove.value = intent
+    if (isProblemStatus(problem, 409) || isProblemStatus(problem, 412)) {
+      await refreshMoveFacts(intent)
+    }
+  } finally {
+    if (attempt === moveAttempt) movingWorkItemId.value = undefined
+    focusMoveHandle(intent.item.id)
+  }
+}
+
+async function retryKanbanMove(): Promise<void> {
+  if (failedMove.value) await performKanbanMove(failedMove.value)
+}
+
+function handleMoveCommand(item: WorkItemSummary, sourceStatus: string, command: string): void {
+  if (movingWorkItemId.value || !item.capabilities.canMoveInKanban) return
+  const state = kanbanState(sourceStatus)
+  const index = state.items.findIndex(candidate => candidate.id === item.id)
+  if (command === 'TOP') void requestKanbanMove(moveIntent(item, sourceStatus, sourceStatus,
+    WorkItemRankPlacement.Start))
+  else if (command === 'BOTTOM') void requestKanbanMove(moveIntent(item, sourceStatus, sourceStatus,
+    WorkItemRankPlacement.End))
+  else if (command === 'UP' && index > 0) void requestKanbanMove(moveIntent(item, sourceStatus,
+    sourceStatus, WorkItemRankPlacement.Before, state.items[index - 1]?.id))
+  else if (command === 'DOWN' && index >= 0 && index + 1 < state.items.length) {
+    void requestKanbanMove(moveIntent(item, sourceStatus, sourceStatus,
+      WorkItemRankPlacement.After, state.items[index + 1]?.id))
+  } else if (command.startsWith('STATUS:')) {
+    const targetStatus = command.slice('STATUS:'.length)
+    if (canDrop(item, targetStatus)) void requestKanbanMove(moveIntent(item, sourceStatus,
+      targetStatus, WorkItemRankPlacement.Start))
+  }
+}
+
+function pointerDown(event: PointerEvent, item: WorkItemSummary, sourceStatus: string): void {
+  if (event.button !== 0 || movingWorkItemId.value || !item.capabilities.canMoveInKanban) return
+  ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
+  pointerDrag.value = {
+    pointerId: event.pointerId, item, sourceStatus, startX: event.clientX, startY: event.clientY,
+    active: false, targetStatus: undefined, placement: undefined, anchorWorkItemId: undefined,
+  }
+}
+
+function pointerMove(event: PointerEvent): void {
+  const drag = pointerDrag.value
+  if (!drag || drag.pointerId !== event.pointerId) return
+  if (!drag.active && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 8) return
+  drag.active = true
+  event.preventDefault()
+  const element = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null
+  const lane = element?.closest<HTMLElement>('[data-kanban-lane]')
+  const status = lane?.dataset.kanbanLane
+  if (!status || !canDrop(drag.item, status)) {
+    drag.targetStatus = undefined
+    return
+  }
+  const card = element?.closest<HTMLElement>('[data-work-item-id]')
+  drag.targetStatus = status
+  if (card && card.dataset.workItemId !== drag.item.id) {
+    const rect = card.getBoundingClientRect()
+    drag.placement = event.clientY < rect.top + rect.height / 2
+      ? WorkItemRankPlacement.Before : WorkItemRankPlacement.After
+    drag.anchorWorkItemId = card.dataset.workItemId
+  } else {
+    drag.placement = WorkItemRankPlacement.End
+    drag.anchorWorkItemId = undefined
+  }
+  const board = kanbanBoard.value
+  if (board) {
+    const rect = board.getBoundingClientRect()
+    if (event.clientX < rect.left + 48) board.scrollLeft -= 18
+    else if (event.clientX > rect.right - 48) board.scrollLeft += 18
+  }
+}
+
+function pointerEnd(event: PointerEvent): void {
+  const drag = pointerDrag.value
+  if (!drag || drag.pointerId !== event.pointerId) return
+  pointerDrag.value = undefined
+  if (drag.active && drag.targetStatus && drag.placement) {
+    void requestKanbanMove(moveIntent(drag.item, drag.sourceStatus, drag.targetStatus,
+      drag.placement, drag.anchorWorkItemId))
+  }
+}
+
+function cancelPointerDrag(): void {
+  pointerDrag.value = undefined
+}
+
+function escapeDrag(event: KeyboardEvent): void {
+  if (event.key === 'Escape') cancelPointerDrag()
+}
+
+function focusMoveHandle(itemId = awaitingResolution.value?.item.id): void {
+  if (!itemId) return
+  void nextTick(() => document.querySelector<HTMLElement>(`[data-drag-handle="${itemId}"]`)?.focus())
 }
 
 function queryRequest(includeSort: boolean) {
@@ -402,12 +672,6 @@ function queryRequest(includeSort: boolean) {
   if (value.filters.updatedAfter) request.updatedAfter = value.filters.updatedAfter
   if (includeSort) request.sort = value.sort.map(item => `${item.field},${item.direction}`)
   return request
-}
-
-function intersectStatuses(groupStatuses: Set<string>): Set<string> {
-  const selected = tableQuery.value.filters.statusCodes
-  if (!selected.size) return new Set(groupStatuses)
-  return new Set(Array.from(groupStatuses).filter(status => selected.has(status)))
 }
 
 async function applyTableQuery(value: ContentTableQuery, replace: boolean): Promise<void> {
@@ -695,7 +959,14 @@ watch(() => route.query, async () => {
   await refreshCurrentView(true)
 }, { deep: true })
 
-onMounted(loadWorkspace)
+onMounted(() => {
+  window.addEventListener('keydown', escapeDrag)
+  void loadWorkspace()
+})
+onBeforeUnmount(() => {
+  moveAttempt += 1
+  window.removeEventListener('keydown', escapeDrag)
+})
 </script>
 
 <template>
@@ -888,67 +1159,141 @@ onMounted(loadWorkspace)
 
       <div
         v-else
+        ref="kanbanBoard"
         class="kanban-board"
-        aria-label="只读工作项看板"
+        aria-label="工作项看板"
       >
+        <div
+          v-if="failedMove"
+          class="move-retry"
+          role="alert"
+        >
+          <span>移动未送达，卡片已恢复原位。重试会复用同一个幂等键。</span>
+          <el-button
+            :disabled="Boolean(movingWorkItemId)"
+            @click="retryKanbanMove"
+          >重试移动</el-button>
+        </div>
         <section
           v-for="(group, index) in kanbanGroups"
           :key="groupKey(group, index)"
-          class="kanban-column"
+          class="kanban-group"
           :aria-label="group.name"
         >
           <header>
             <h3>{{ group.name }}</h3>
-            <span>{{ kanbanState(group, index).totalElements }}</span>
+            <span>{{ groupTotal(group) }}</span>
           </header>
-          <inline-problem
-            v-if="kanbanState(group, index).error"
-            :problem="kanbanState(group, index).error!"
-          />
-          <div
-            v-loading="kanbanState(group, index).loading"
-            class="kanban-cards"
-          >
-            <button
-              v-for="item in kanbanState(group, index).items"
-              :key="item.id"
-              class="work-item-card"
-              type="button"
-              @click="openDetail(item)"
+          <div class="kanban-group__lanes">
+            <section
+              v-for="status in group.statusCodes"
+              :key="status"
+              class="kanban-lane"
+              :class="{
+                'kanban-lane--filtered': !statusVisible(status),
+                'kanban-lane--drop': pointerDrag?.targetStatus === status,
+              }"
+              :data-kanban-lane="status"
+              :aria-label="statusLabel(status)"
             >
-              <span class="work-item-card__meta"><strong>{{ item.itemNo }}</strong>{{ typeLabel(item.type) }}</span>
-              <span class="work-item-card__title">{{ item.title }}</span>
-              <span
-                class="work-item-card__status status-pill"
-                :class="`status-pill--${statusTone(item.statusCode)}`"
+              <header class="kanban-lane__header">
+                <span
+                  class="status-pill"
+                  :class="`status-pill--${statusTone(status)}`"
+                >{{ statusLabel(status) }}</span>
+                <span>{{ kanbanState(status).totalElements }}</span>
+              </header>
+              <inline-problem
+                v-if="kanbanState(status).error"
+                :problem="kanbanState(status).error!"
+              />
+              <div
+                v-loading="kanbanState(status).loading"
+                class="kanban-cards"
               >
-                {{ statusLabel(item.statusCode) }}
-              </span>
-              <span class="work-item-card__footer">
-                <yp-priority-badge :priority="item.priority" />
-                <yp-assignee
-                  :user-id="item.assigneeUserId"
-                  :display-name="item.assigneeDisplayName"
-                  size="table"
-                  :show-name="false"
+                <article
+                  v-for="item in kanbanState(status).items"
+                  :key="item.id"
+                  class="work-item-card"
+                  :class="{
+                    'work-item-card--pending': movingWorkItemId === item.id,
+                    'work-item-card--dragging': pointerDrag?.active && pointerDrag.item.id === item.id,
+                  }"
+                  :data-work-item-id="item.id"
+                >
+                  <div class="work-item-card__actions">
+                    <button
+                      class="drag-handle"
+                      type="button"
+                      :data-drag-handle="item.id"
+                      :disabled="!item.capabilities.canMoveInKanban || Boolean(movingWorkItemId)"
+                      :aria-label="`拖动 ${item.itemNo}`"
+                      @pointerdown="pointerDown($event, item, status)"
+                      @pointermove="pointerMove"
+                      @pointerup="pointerEnd"
+                      @pointercancel="cancelPointerDrag"
+                    >
+                      <el-icon><Rank /></el-icon>
+                    </button>
+                    <el-dropdown
+                      trigger="click"
+                      :disabled="!item.capabilities.canMoveInKanban || Boolean(movingWorkItemId)"
+                      @command="command => handleMoveCommand(item, status, String(command))"
+                    >
+                      <button
+                        class="move-menu"
+                        type="button"
+                        :aria-label="`${item.itemNo} 移动菜单`"
+                      ><el-icon><MoreFilled /></el-icon></button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="UP" :disabled="kanbanState(status).items[0]?.id === item.id">上移</el-dropdown-item>
+                          <el-dropdown-item command="DOWN" :disabled="kanbanState(status).items.at(-1)?.id === item.id">下移</el-dropdown-item>
+                          <el-dropdown-item command="TOP">移到顶部</el-dropdown-item>
+                          <el-dropdown-item command="BOTTOM">移到底部</el-dropdown-item>
+                          <el-dropdown-item
+                            v-for="option in item.capabilities.availableTransitions.filter(candidate => statusVisible(candidate.toStatus))"
+                            :key="option.toStatus"
+                            :command="`STATUS:${option.toStatus}`"
+                            divided
+                          >移动到{{ option.displayName }}</el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </div>
+                  <button
+                    class="work-item-card__body"
+                    type="button"
+                    @click="openDetail(item)"
+                  >
+                    <span class="work-item-card__meta"><strong>{{ item.itemNo }}</strong>{{ typeLabel(item.type) }}</span>
+                    <span class="work-item-card__title">{{ item.title }}</span>
+                    <span class="work-item-card__footer">
+                      <yp-priority-badge :priority="item.priority" />
+                      <yp-assignee
+                        :user-id="item.assigneeUserId"
+                        :display-name="item.assigneeDisplayName"
+                        size="table"
+                        :show-name="false"
+                      />
+                    </span>
+                  </button>
+                </article>
+                <yp-empty-state
+                  v-if="!kanbanState(status).loading && !kanbanState(status).items.length"
+                  compact
+                  :title="statusVisible(status) ? '此泳道为空' : '泳道已被筛选排除'"
+                  :description="statusVisible(status) ? '当前没有处于此状态的工作项。' : '清除状态筛选后可查看和投放。'"
                 />
-              </span>
-            </button>
-            <yp-empty-state
-              v-if="!kanbanState(group, index).loading && !kanbanState(group, index).items.length"
-              compact
-              title="此列为空"
-              description="当前没有处于这些状态的工作项。"
-            />
+              </div>
+              <el-button
+                v-if="kanbanState(status).page + 1 < kanbanState(status).totalPages"
+                class="load-more"
+                :loading="kanbanState(status).loading"
+                @click="loadKanbanLane(status, kanbanState(status).page + 1)"
+              >加载更多</el-button>
+            </section>
           </div>
-          <el-button
-            v-if="kanbanState(group, index).page + 1 < kanbanState(group, index).totalPages"
-            class="load-more"
-            :loading="kanbanState(group, index).loading"
-            @click="loadKanbanGroup(group, index, kanbanState(group, index).page + 1)"
-          >
-            加载更多
-          </el-button>
         </section>
       </div>
     </template>
@@ -1325,6 +1670,27 @@ onMounted(loadWorkspace)
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="moveResolutionOpen"
+      title="填写移动说明"
+      width="min(480px, 92vw)"
+      @closed="cancelMoveResolution"
+    >
+      <p class="transition-note">目标状态要求提供说明；取消后卡片保持原位。</p>
+      <el-input
+        v-model="moveResolution"
+        type="textarea"
+        :rows="4"
+        maxlength="500"
+        show-word-limit
+        autofocus
+      />
+      <template #footer>
+        <el-button @click="cancelMoveResolution">取消</el-button>
+        <el-button type="primary" @click="confirmMoveResolution">确认移动</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -1353,15 +1719,28 @@ onMounted(loadWorkspace)
 .status-pill--green { color: var(--yp-status-green-foreground); background: var(--yp-status-green); }
 .status-pill--yellow { color: var(--yp-status-yellow-foreground); background: var(--yp-status-yellow); }
 .status-pill--gray { color: var(--yp-status-gray-foreground); background: var(--yp-status-gray); }
-.kanban-board { display: grid; grid-auto-columns: minmax(280px, 340px); grid-auto-flow: column; gap: var(--yp-space-4); overflow-x: auto; padding-bottom: var(--yp-space-3); }
-.kanban-column { display: flex; min-height: 420px; flex-direction: column; border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-sunken); }
-.kanban-column > header { display: flex; align-items: center; justify-content: space-between; padding: var(--yp-space-3) var(--yp-space-4); border-bottom: 1px solid var(--yp-border-subtle); }
-.kanban-column h3 { margin: 0; font-size: var(--yp-type-card-title-size); }
-.kanban-column > header span { display: grid; min-width: 24px; height: 24px; place-items: center; border-radius: 12px; color: var(--yp-text-secondary); background: var(--yp-bg-surface); font-size: var(--yp-type-caption-size); }
+.kanban-board { display: flex; align-items: flex-start; gap: var(--yp-space-4); overflow-x: auto; padding-bottom: var(--yp-space-3); }
+.move-retry { position: sticky; z-index: 3; left: 0; display: flex; min-width: 300px; align-items: center; justify-content: space-between; gap: var(--yp-space-3); padding: var(--yp-space-3); border: 1px solid var(--yp-status-yellow); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.kanban-group { display: grid; min-width: max-content; gap: var(--yp-space-2); padding: var(--yp-space-2); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-sunken); }
+.kanban-group > header { display: flex; align-items: center; justify-content: space-between; padding: var(--yp-space-2); }
+.kanban-group > header h3 { margin: 0; font-size: var(--yp-type-card-title-size); }
+.kanban-group > header > span, .kanban-lane__header > span:last-child { display: grid; min-width: 24px; height: 24px; place-items: center; border-radius: 12px; color: var(--yp-text-secondary); background: var(--yp-bg-surface); font-size: var(--yp-type-caption-size); }
+.kanban-group__lanes { display: flex; align-items: stretch; gap: var(--yp-space-3); }
+.kanban-lane { display: flex; width: 300px; min-height: 420px; flex-direction: column; border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-sunken); transition: border-color 120ms ease, background-color 120ms ease; }
+.kanban-lane--filtered { opacity: .58; }
+.kanban-lane--drop { border-color: var(--yp-focus-ring); background: var(--yp-bg-selected); }
+.kanban-lane__header { display: flex; align-items: center; justify-content: space-between; padding: var(--yp-space-3); border-bottom: 1px solid var(--yp-border-subtle); }
 .kanban-cards { display: grid; align-content: start; gap: var(--yp-space-3); min-height: 180px; padding: var(--yp-space-3); }
-.work-item-card { display: grid; gap: var(--yp-space-3); width: 100%; min-height: 132px; padding: var(--yp-space-4); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); color: var(--yp-text-primary); background: var(--yp-bg-surface); box-shadow: var(--yp-shadow-card); cursor: pointer; text-align: left; transition: border-color 120ms ease, transform 120ms ease; }
+.work-item-card { position: relative; display: grid; width: 100%; min-height: 132px; border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); color: var(--yp-text-primary); background: var(--yp-bg-surface); box-shadow: var(--yp-shadow-card); transition: border-color 120ms ease, transform 120ms ease, opacity 120ms ease; }
 .work-item-card:hover { border-color: var(--yp-border-strong); transform: translateY(-1px); }
-.work-item-card:focus-visible { outline: 2px solid var(--yp-focus-ring); outline-offset: 2px; }
+.work-item-card--pending { opacity: .58; pointer-events: none; }
+.work-item-card--dragging { opacity: .45; }
+.work-item-card__actions { position: absolute; z-index: 1; top: var(--yp-space-2); right: var(--yp-space-2); display: flex; gap: 2px; }
+.drag-handle, .move-menu { display: grid; width: 30px; height: 30px; place-items: center; padding: 0; border: 0; border-radius: var(--yp-radius-sm); color: var(--yp-text-muted); background: var(--yp-bg-sunken); cursor: pointer; }
+.drag-handle { touch-action: none; }
+.drag-handle:focus-visible, .move-menu:focus-visible, .work-item-card__body:focus-visible { outline: 2px solid var(--yp-focus-ring); outline-offset: 2px; }
+.drag-handle:disabled, .move-menu:disabled { cursor: not-allowed; opacity: .45; }
+.work-item-card__body { display: grid; gap: var(--yp-space-3); width: 100%; min-height: 132px; padding: var(--yp-space-4); padding-top: calc(var(--yp-space-4) + 22px); border: 0; color: inherit; background: transparent; cursor: pointer; text-align: left; }
 .work-item-card__meta, .work-item-card__footer { display: flex; align-items: center; justify-content: space-between; gap: var(--yp-space-2); color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
 .work-item-card__meta strong { color: var(--yp-text-secondary); }
 .work-item-card__title { font-weight: 650; line-height: 1.45; }
@@ -1393,7 +1772,10 @@ onMounted(loadWorkspace)
   .view-switch :deep(.el-button) { min-height: 44px; flex: 1; }
   .query-toolbar__actions, .query-conflict { align-items: stretch; flex-direction: column; }
   .table-surface :deep(.el-table) { display: block; overflow-x: auto; }
-  .kanban-board { grid-auto-columns: minmax(86vw, 86vw); }
+  .kanban-lane { width: 86vw; }
   .editor-grid, .date-fields { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .work-item-card, .kanban-lane { transition: none; }
 }
 </style>
