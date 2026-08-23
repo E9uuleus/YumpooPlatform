@@ -1,10 +1,22 @@
 # YumpooPlatform
 
+## M2-13 Table 高级查询与共享视图
+
+M2-13 扩展 `GET /api/v1/contents/{contentId}/work-items`，支持标题关键字、模板状态、优先级、处理人、截止区间、严格更新时间下界和最多三层白名单排序。服务端先校验 Project/Content 可见性，再校验查询；同字段 OR、不同字段 AND，计数与分页复用同一谓词并追加 `id ASC`。状态按模板顺序、优先级按领域顺序、人员按当前显示名排序，未知历史人员和空值置后；旧客户端未传条件时仍按事项序号倒序。V30 为更新时间、处理人和截止日查询增加部分索引。
+
+Web 的 Content 配置页与工作项工作区复用同一高级查询编辑器。无 `custom=1` 时从 Content 共享默认初始化；临时修改完整同步 URL，搜索 300ms 防抖并替换历史，其他筛选/排序形成浏览历史。Table 显式提交完整查询；Kanban 复用非排序筛选并与共享状态组取交集。Owner 可保存共享默认，Member 与 CompanyAdmin 仅临时查询；412 保留临时条件，并只把 filters/sort 合并进最新 Content 后供用户明确重提。
+
+```powershell
+pnpm verify:m2-13
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-12 Work Item 独立状态迁移
 
 M2-12 新增 `POST /api/v1/work-items/{workItemId}/transitions`，由服务端按 Project 固化模板版本校验精确迁移边并计算 `capabilities.availableTransitions`。命令必须携带 XSRF、强 `If-Match` 和幂等键；状态/类别、新版本、一条 `workitem.work_item_status_changed` v1 Outbox 和幂等结果原子提交。迁移不改变 rank 或任何协作字段；CompanyAdmin 保持只读，归档、终态、非法边与并发版本冲突均按固定问题语义拒绝。Flyway 仍停在 V29。
 
-Web 仅在 Work Item 详情抽屉展示服务端返回的合法目标。说明最长 500 字，迁移边可要求必填；传输失败的显式重试复用原幂等键。成功后刷新详情与当前 Table/Kanban，保留未保存字段草稿；412 沿用冲突面板且不自动重试。M2-13 查询、M2-14 rank/拖拽、M2-15 删除恢复、M2-20 Activity、M2-23 最终事件冻结和 M2-24 总验收继续延期。
+Web 仅在 Work Item 详情抽屉展示服务端返回的合法目标。说明最长 500 字，迁移边可要求必填；传输失败的显式重试复用原幂等键。成功后刷新详情与当前 Table/Kanban，保留未保存字段草稿；412 沿用冲突面板且不自动重试。M2-13 已交付高级查询；M2-14 rank/拖拽、M2-15 删除恢复、M2-20 Activity、M2-23 最终事件冻结和 M2-24 总验收继续延期。
 
 ```powershell
 pnpm verify:m2-12
