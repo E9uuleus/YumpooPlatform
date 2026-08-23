@@ -1524,7 +1524,10 @@ paths:
       tags: [WorkItems]
       operationId: listContentWorkItems
       summary: 分页查询 Content 的真实 Work Item
-      description: status 可重复；Table 不传，Kanban 按共享状态分组分别加载。
+      description: >-
+        所有条件显式传递；未传筛选和排序时保持事项序号倒序。status、priority、
+        assigneeUserId 与 sort 可重复，sort 按出现顺序组成最多三层排序；Kanban
+        按共享状态分组分别加载，并与其余筛选条件取交集。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: contentId
@@ -1545,9 +1548,47 @@ paths:
             type: array
             uniqueItems: true
             items: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: priority
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items: { $ref: '#/components/schemas/WorkItemPriority' }
+        - name: assigneeUserId
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items: { $ref: '#/components/schemas/Uuid' }
+        - name: dueFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dueTo
+          in: query
+          schema: { type: string, format: date }
+        - name: updatedAfter
+          in: query
+          schema: { type: string, format: date-time }
+        - name: sort
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 3
+            items:
+              type: string
+              pattern: '^(ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
       responses:
         '200':
-          description: 已按权限过滤的稳定序号倒序分页。
+          description: 已先按权限与筛选条件裁剪，再按白名单字段和 id 稳定分页。
           headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
           content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemPage' } } }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
