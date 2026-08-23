@@ -37,7 +37,6 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -93,14 +92,20 @@ public class WorkItemService {
 
     @Transactional(readOnly = true)
     public WorkItemPage list(CurrentActor actor, UUID contentId,
-            Collection<String> requestedStatuses, OffsetPageRequest page) {
+            WorkItemQuery.Request request, OffsetPageRequest page) {
         VisibleContent visible = visibleContent(actor, contentId);
-        Set<String> statuses = statuses(requestedStatuses,
-                template(visible.project().templateKey(), visible.project().templateVersion()));
+        ProjectTemplateSnapshot template = template(visible.project().templateKey(),
+                visible.project().templateVersion());
+        Set<String> allowedStatuses = template.statuses().stream()
+                .map(ProjectTemplateSnapshot.WorkflowStatus::statusCode)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        WorkItemQuery query = WorkItemQuery.parse(request, allowedStatuses);
+        WorkItemSortRanks ranks = sortRanks(visible.project().companyId(),
+                visible.project().projectId(), contentId, query, template);
         List<WorkItem> rows = workItems.findPage(visible.project().companyId(),
-                visible.project().projectId(), contentId, statuses, page);
+                visible.project().projectId(), contentId, query, ranks, page);
         long total = workItems.countPage(visible.project().companyId(),
-                visible.project().projectId(), contentId, statuses);
+                visible.project().projectId(), contentId, query);
         Map<UUID, MinimalUserSnapshot> people = people(visible.project().companyId(), rows);
         OffsetPageResponse<WorkItemSummary> response = OffsetPageResponse.of(rows.stream()
                 .map(item -> summary(item, people)).toList(), page, total);
@@ -278,20 +283,6 @@ public class WorkItemService {
                 StandardErrorCode.INVALID_STATE_TRANSITION, "TEMPLATE_UNAVAILABLE"));
     }
 
-    private static Set<String> statuses(Collection<String> requested,
-            ProjectTemplateSnapshot template) {
-        if (requested == null || requested.isEmpty()) return Set.of();
-        Set<String> normalized = new LinkedHashSet<>(requested);
-        Set<String> allowed = template.statuses().stream()
-                .map(ProjectTemplateSnapshot.WorkflowStatus::statusCode)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        for (String status : normalized) {
-            if (status == null || !allowed.contains(status))
-                throw validation("status", "UNKNOWN_STATUS", "状态必须属于 Project 固定模板");
-        }
-        return Set.copyOf(normalized);
-    }
-
     private Map<UUID, MinimalUserSnapshot> people(UUID companyId, List<WorkItem> rows) {
         Set<UUID> userIds = new LinkedHashSet<>();
         for (WorkItem item : rows) {
@@ -299,6 +290,32 @@ public class WorkItemService {
             if (item.assigneeUserId() != null) userIds.add(item.assigneeUserId());
         }
         return users.findByUserIds(companyId, userIds);
+    }
+
+    private WorkItemSortRanks sortRanks(UUID companyId, UUID projectId, UUID contentId,
+            WorkItemQuery query, ProjectTemplateSnapshot template) {
+        Map<String, Integer> statusRanks = new LinkedHashMap<>();
+        template.statuses().stream()
+                .sorted(Comparator.comparingInt(ProjectTemplateSnapshot.WorkflowStatus::sortOrder))
+                .forEach(status -> statusRanks.put(status.statusCode(), statusRanks.size()));
+        boolean assigneeSort = query.sorts().stream()
+                .anyMatch(sort -> sort.field() == ContentViewConfig.SortField.ASSIGNEE);
+        boolean reporterSort = query.sorts().stream()
+                .anyMatch(sort -> sort.field() == ContentViewConfig.SortField.REPORTER);
+        if (!assigneeSort && !reporterSort)
+            return new WorkItemSortRanks(statusRanks, Map.of(), Map.of());
+        Set<UUID> participantIds = workItems.findParticipantUserIds(companyId, projectId, contentId);
+        Map<UUID, MinimalUserSnapshot> snapshots = users.findByUserIds(companyId, participantIds);
+        List<MinimalUserSnapshot> ordered = snapshots.values().stream()
+                .sorted(Comparator.comparing(MinimalUserSnapshot::displayName,
+                                String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(MinimalUserSnapshot::displayName)
+                        .thenComparing(snapshot -> snapshot.userId().toString()))
+                .toList();
+        Map<UUID, Integer> personRanks = new LinkedHashMap<>();
+        ordered.forEach(snapshot -> personRanks.put(snapshot.userId(), personRanks.size()));
+        return new WorkItemSortRanks(statusRanks,
+                assigneeSort ? personRanks : Map.of(), reporterSort ? personRanks : Map.of());
     }
 
     private static WorkItemSummary summary(WorkItem item,

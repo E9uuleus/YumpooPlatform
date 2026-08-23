@@ -18,6 +18,7 @@ import type {
   WorkItemCreateRequest,
   WorkItemDetail,
   WorkItemPage,
+  WorkItemPriority,
   WorkItemTransitionRequest,
   WorkItemUpdateRequest,
 } from '../models/index';
@@ -30,6 +31,8 @@ import {
     WorkItemDetailToJSON,
     WorkItemPageFromJSON,
     WorkItemPageToJSON,
+    WorkItemPriorityFromJSON,
+    WorkItemPriorityToJSON,
     WorkItemTransitionRequestFromJSON,
     WorkItemTransitionRequestToJSON,
     WorkItemUpdateRequestFromJSON,
@@ -52,6 +55,13 @@ export interface ListContentWorkItemsRequest {
     page?: number;
     size?: number;
     status?: Set<string>;
+    q?: string;
+    priority?: Set<WorkItemPriority>;
+    assigneeUserId?: Set<string>;
+    dueFrom?: Date;
+    dueTo?: Date;
+    updatedAfter?: Date;
+    sort?: Array<string>;
 }
 
 export interface TransitionWorkItemRequest {
@@ -183,7 +193,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * status 可重复；Table 不传，Kanban 按共享状态分组分别加载。
+     * 所有条件显式传递；未传筛选和排序时保持事项序号倒序。status、priority、 assigneeUserId 与 sort 可重复，sort 按出现顺序组成最多三层排序；Kanban 按共享状态分组分别加载，并与其余筛选条件取交集。
      * 分页查询 Content 的真实 Work Item
      */
     async listContentWorkItemsRaw(requestParameters: ListContentWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemPage>> {
@@ -208,6 +218,34 @@ export class WorkItemsApi extends runtime.BaseAPI {
             queryParameters['status'] = requestParameters['status'];
         }
 
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['priority'] != null) {
+            queryParameters['priority'] = requestParameters['priority'];
+        }
+
+        if (requestParameters['assigneeUserId'] != null) {
+            queryParameters['assigneeUserId'] = requestParameters['assigneeUserId'];
+        }
+
+        if (requestParameters['dueFrom'] != null) {
+            queryParameters['dueFrom'] = (requestParameters['dueFrom'] as any).toISOString().substring(0,10);
+        }
+
+        if (requestParameters['dueTo'] != null) {
+            queryParameters['dueTo'] = (requestParameters['dueTo'] as any).toISOString().substring(0,10);
+        }
+
+        if (requestParameters['updatedAfter'] != null) {
+            queryParameters['updatedAfter'] = (requestParameters['updatedAfter'] as any).toISOString();
+        }
+
+        if (requestParameters['sort'] != null) {
+            queryParameters['sort'] = requestParameters['sort'];
+        }
+
         const headerParameters: runtime.HTTPHeaders = {};
 
 
@@ -225,7 +263,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * status 可重复；Table 不传，Kanban 按共享状态分组分别加载。
+     * 所有条件显式传递；未传筛选和排序时保持事项序号倒序。status、priority、 assigneeUserId 与 sort 可重复，sort 按出现顺序组成最多三层排序；Kanban 按共享状态分组分别加载，并与其余筛选条件取交集。
      * 分页查询 Content 的真实 Work Item
      */
     async listContentWorkItems(requestParameters: ListContentWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemPage> {

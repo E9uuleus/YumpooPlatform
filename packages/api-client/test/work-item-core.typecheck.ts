@@ -1,4 +1,8 @@
-import { WorkItemPriority } from '../src/generated/models/index.js'
+import {
+  ContentSortDirection,
+  ContentSortField,
+  WorkItemPriority,
+} from '../src/generated/models/index.js'
 import type {
   CreateWorkItemRequest,
   ListContentWorkItemsRequest,
@@ -23,6 +27,23 @@ const groupedPage: ListContentWorkItemsRequest = {
   page: 0,
   size: 20,
   status: new Set(['BACKLOG', 'IN_PROGRESS']),
+}
+
+const advancedPage: ListContentWorkItemsRequest = {
+  contentId: create.contentId,
+  page: 1,
+  size: 20,
+  q: '稳定分页',
+  status: new Set(['BACKLOG']),
+  priority: new Set([WorkItemPriority.High, WorkItemPriority.Urgent]),
+  assigneeUserId: new Set(['2a000000-0000-4000-8000-000000000403']),
+  dueFrom: new Date('2026-08-01T00:00:00.000Z'),
+  dueTo: new Date('2026-08-31T00:00:00.000Z'),
+  updatedAfter: new Date('2026-08-01T00:00:00.000Z'),
+  sort: [
+    `${ContentSortField.Priority},${ContentSortDirection.Desc}`,
+    `${ContentSortField.UpdatedAt},${ContentSortDirection.Desc}`,
+  ],
 }
 
 create.workItemCreateRequest.assigneeUserId = '2a000000-0000-4000-8000-000000000403'
@@ -72,6 +93,7 @@ const missingDueDateBody: UpdateWorkItemRequest['workItemUpdateRequest'] = {
 
 void create
 void groupedPage
+void advancedPage
 void update
 void transition
 void missingTarget

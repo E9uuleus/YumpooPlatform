@@ -5,12 +5,14 @@ import {
   ContentTableColumn,
   ContentViewType,
   ProjectLifecycle,
+  ProjectMembershipStatusFilter,
   readCsrfToken,
   type Content,
   type ContentBlueprintOption,
   type ContentViewConfig,
   type ProjectContentCatalog,
   type ProjectDetail,
+  type ProjectMember,
 } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -37,6 +39,8 @@ import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import YpFilterBar from '../../components/yp/YpFilterBar.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
+import ContentTableQueryEditor from '../../components/projects/ContentTableQueryEditor.vue'
+import type { ContentTableQuery } from '../../components/projects/contentTableQuery'
 
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
@@ -61,6 +65,7 @@ const draftName = ref('')
 const draftDescription = ref('')
 const draftViewType = ref(ContentViewType.Table)
 const draftConfig = ref<ContentViewConfig>()
+const members = ref<ProjectMember[]>([])
 
 const items = computed(() => catalog.value?.items ?? [])
 const canWrite = computed(() => catalog.value?.canCreate === true)
@@ -93,11 +98,27 @@ async function load(): Promise<void> {
     ])
     project.value = detail
     catalog.value = nextCatalog
+    await loadMembers()
   } catch (reason) {
     error.value = await toApiProblem(reason)
   } finally {
     loading.value = false
   }
+}
+
+async function loadMembers(): Promise<void> {
+  const loaded: ProjectMember[] = []
+  let page = 0
+  let totalPages = 1
+  while (page < totalPages) {
+    const result = await projectsApi.listProjectMembers({
+      projectId, status: ProjectMembershipStatusFilter.All, page, size: 100,
+    })
+    loaded.push(...result.items)
+    totalPages = result.totalPages
+    page += 1
+  }
+  members.value = loaded
 }
 
 function openCreate(): void {
@@ -159,6 +180,12 @@ function cloneConfig(value: ContentViewConfig): ContentViewConfig {
   }
 }
 
+function updateDraftQuery(value: ContentTableQuery): void {
+  if (!draftConfig.value) return
+  draftConfig.value.table.filters = value.filters
+  draftConfig.value.table.sort = value.sort
+}
+
 async function save(etag = selected.value?.etag): Promise<void> {
   if (!selected.value || !draftConfig.value || !etag) return
   const csrf = readCsrfToken()
@@ -186,6 +213,22 @@ async function save(etag = selected.value?.etag): Promise<void> {
 function loadLatest(): void {
   if (!latestConflict.value) return
   openDrawer(latestConflict.value)
+}
+
+async function retryQueryMerge(): Promise<void> {
+  if (!latestConflict.value || !draftConfig.value) return
+  const filters = draftConfig.value.table.filters
+  const sort = draftConfig.value.table.sort
+  const latest = latestConflict.value
+  selected.value = latest
+  draftName.value = latest.name
+  draftDescription.value = latest.description ?? ''
+  draftViewType.value = latest.defaultViewType
+  draftConfig.value = cloneConfig(latest.viewConfig)
+  draftConfig.value.table.filters = filters
+  draftConfig.value.table.sort = sort
+  latestConflict.value = undefined
+  await save(latest.etag)
 }
 
 async function transition(content: Content): Promise<void> {
@@ -352,8 +395,8 @@ onMounted(load)
       <template v-if="selected && draftConfig">
         <div v-if="latestConflict" class="content-conflict" role="alert">
           <strong>服务器版本已更新，本地草稿仍保留。</strong>
-          <span>请载入最新版本，或明确基于最新 ETag 再次提交当前草稿。</span>
-          <div><el-button @click="loadLatest">载入最新版本</el-button><el-button type="warning" @click="save(latestConflict.etag)">基于最新版本重新提交</el-button></div>
+          <span>可载入最新版本，或仅把当前筛选/排序合并进最新版；后者不会覆盖并发列配置或 Kanban 分组。</span>
+          <div><el-button @click="loadLatest">载入最新版本</el-button><el-button type="warning" @click="retryQueryMerge">基于最新版本重新提交查询</el-button></div>
         </div>
         <section class="drawer-section content-provenance">
           <h3>身份与来源</h3>
@@ -381,10 +424,11 @@ onMounted(load)
             </li>
           </ul>
           <h4>默认筛选</h4>
-          <el-input v-model="draftConfig.table.filters.query" placeholder="标题关键字（可选）" :disabled="!canWrite" />
-          <el-select v-model="draftConfig.table.filters.statusCodes" multiple clearable placeholder="状态" :disabled="!canWrite">
-            <el-option v-for="status in workflowStatuses" :key="status.statusCode" :label="status.displayName" :value="status.statusCode" />
-          </el-select>
+          <content-table-query-editor
+            :model-value="{ filters: draftConfig.table.filters, sort: draftConfig.table.sort }"
+            :statuses="workflowStatuses" :members="members"
+            :disabled="!canWrite || selected.status === 'ARCHIVED'"
+            @update:model-value="updateDraftQuery" />
         </section>
         <section class="drawer-section">
           <div class="drawer-section__heading"><div><h3>Kanban 分组</h3><p>每个模板状态必须且只能出现一次。</p></div>

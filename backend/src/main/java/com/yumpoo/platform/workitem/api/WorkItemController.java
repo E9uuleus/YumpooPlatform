@@ -13,8 +13,10 @@ import com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Update;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemDetail;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemPage;
+import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemService;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -30,6 +32,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -52,11 +56,21 @@ public final class WorkItemController {
 
     @GetMapping("/contents/{contentId}/work-items")
     ResponseEntity<WorkItemPage> list(@PathVariable UUID contentId,
+            @RequestParam(required = false) String q,
             @RequestParam(name = "status", required = false) List<String> statuses,
+            @RequestParam(name = "priority", required = false) List<String> priorities,
+            @RequestParam(name = "assigneeUserId", required = false) List<UUID> assigneeUserIds,
+            @RequestParam(required = false) LocalDate dueFrom,
+            @RequestParam(required = false) LocalDate dueTo,
+            @RequestParam(required = false) Instant updatedAfter,
             @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
+            @RequestParam(required = false) Integer size,
+            HttpServletRequest httpRequest) {
+        String[] sorts = httpRequest.getParameterValues("sort");
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(service.list(actors.requiredActive(), contentId, statuses,
+                .body(service.list(actors.requiredActive(), contentId,
+                        new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds,
+                                dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts)),
                         OffsetPageRequest.of(page, size)));
     }
 
