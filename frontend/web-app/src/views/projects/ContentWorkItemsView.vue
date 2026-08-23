@@ -6,6 +6,7 @@ import {
   ContentViewType,
   ProjectActorAccess,
   ProjectLifecycle,
+  ProjectMembershipStatus,
   ProjectMembershipStatusFilter,
   WorkItemPriority,
   readCsrfToken,
@@ -34,7 +35,7 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, onMounted, reactive, ref, type DefineComponent } from 'vue'
+import { computed, onMounted, reactive, ref, watch, type DefineComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
@@ -43,6 +44,16 @@ import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
+import ContentTableQueryEditor from '../../components/projects/ContentTableQueryEditor.vue'
+import {
+  cloneTableQuery,
+  encodeTableQuery,
+  hasCustomTableQuery,
+  parseTableQuery,
+  sharedTableQuery,
+  withoutTableQuery,
+  type ContentTableQuery,
+} from '../../components/projects/contentTableQuery'
 
 interface TableColumnDefinition {
   code: ContentTableColumn
@@ -80,6 +91,15 @@ const project = ref<ProjectDetail>()
 const catalog = ref<ProjectContentCatalog>()
 const content = ref<Content>()
 const members = ref<ProjectMember[]>([])
+const tableQuery = ref<ContentTableQuery>({
+  filters: { query: null, statusCodes: new Set(), priorities: new Set(),
+    assigneeUserIds: new Set(), dueFrom: null, dueTo: null, updatedAfter: null },
+  sort: [],
+})
+const sharedQueryConflict = ref<Content>()
+const savingSharedQuery = ref(false)
+let queryRevision = 0
+let syncingRoute = false
 const loading = ref(false)
 const tableLoading = ref(false)
 const error = ref<ApiProblem>()
@@ -150,6 +170,10 @@ const readOnlyReason = computed(() => {
   return undefined
 })
 const canEditDetail = computed(() => detail.value?.capabilities.canEditFields === true)
+const activeMembers = computed(() => members.value.filter(member =>
+  member.membershipStatus === ProjectMembershipStatus.Active))
+const canSaveSharedQuery = computed(() => project.value?.actorAccess === ProjectActorAccess.Owner
+  && content.value?.status === ContentStatus.Active)
 const availableTransitions = computed(() => detail.value?.capabilities.availableTransitions ?? [])
 const selectedTransition = computed<WorkItemTransitionOption | undefined>(() =>
   availableTransitions.value.find(item => item.toStatus === transitionToStatus.value))
@@ -261,7 +285,10 @@ async function loadWorkspace(): Promise<void> {
     project.value = nextProject
     catalog.value = nextCatalog
     content.value = nextContent
-    await loadActiveMembers()
+    await loadMembers()
+    tableQuery.value = hasCustomTableQuery(route.query)
+      ? parseTableQuery(route.query)
+      : sharedTableQuery(nextContent.viewConfig.table.filters, nextContent.viewConfig.table.sort)
     selectedView.value = nextContent.defaultViewType
     if (selectedView.value === ContentViewType.Kanban) await loadKanban()
     else await loadTable(0)
@@ -272,14 +299,14 @@ async function loadWorkspace(): Promise<void> {
   }
 }
 
-async function loadActiveMembers(): Promise<void> {
+async function loadMembers(): Promise<void> {
   const loaded: ProjectMember[] = []
   let page = 0
   let totalPages = 1
   while (page < totalPages) {
     const result = await projectsApi.listProjectMembers({
       projectId,
-      status: ProjectMembershipStatusFilter.Active,
+      status: ProjectMembershipStatusFilter.All,
       page,
       size: 100,
     })
@@ -291,18 +318,21 @@ async function loadActiveMembers(): Promise<void> {
 }
 
 async function loadTable(page: number): Promise<void> {
+  const revision = queryRevision
   tableLoading.value = true
   error.value = undefined
   try {
-    tablePage.value = await workItemsApi.listContentWorkItems({
+    const result = await workItemsApi.listContentWorkItems({
       contentId,
       page,
       size: tablePage.value.size,
+      ...queryRequest(true),
     })
+    if (revision === queryRevision) tablePage.value = result
   } catch (reason) {
-    error.value = await toApiProblem(reason)
+    if (revision === queryRevision) error.value = await toApiProblem(reason)
   } finally {
-    tableLoading.value = false
+    if (revision === queryRevision) tableLoading.value = false
   }
 }
 
@@ -313,6 +343,7 @@ async function loadKanban(): Promise<void> {
 }
 
 async function loadKanbanGroup(group: ContentStatusGroup, index: number, page: number): Promise<void> {
+  const revision = queryRevision
   const key = groupKey(group, index)
   const state = kanbanStates[key] ?? {
     items: [], page: 0, totalElements: 0, totalPages: 0, loading: false,
@@ -320,22 +351,129 @@ async function loadKanbanGroup(group: ContentStatusGroup, index: number, page: n
   kanbanStates[key] = state
   state.loading = true
   delete state.error
+  const statuses = intersectStatuses(group.statusCodes)
+  if (!statuses.size) {
+    state.items = []
+    state.page = 0
+    state.totalElements = 0
+    state.totalPages = 0
+    state.loading = false
+    return
+  }
   try {
     const result = await workItemsApi.listContentWorkItems({
       contentId,
       page,
       size: 20,
-      status: group.statusCodes,
+      ...queryRequest(false),
+      status: statuses,
     })
+    if (revision !== queryRevision) return
     state.items = page === 0 ? result.items : [...state.items, ...result.items]
     state.page = result.page
     state.totalElements = result.totalElements
     state.totalPages = result.totalPages
   } catch (reason) {
-    state.error = await toApiProblem(reason)
+    if (revision === queryRevision) state.error = await toApiProblem(reason)
   } finally {
-    state.loading = false
+    if (revision === queryRevision) state.loading = false
   }
+}
+
+function queryRequest(includeSort: boolean) {
+  const value = tableQuery.value
+  return {
+    q: value.filters.query ?? '',
+    status: new Set(value.filters.statusCodes),
+    priority: new Set(value.filters.priorities),
+    assigneeUserId: new Set(value.filters.assigneeUserIds),
+    dueFrom: value.filters.dueFrom ?? undefined,
+    dueTo: value.filters.dueTo ?? undefined,
+    updatedAfter: value.filters.updatedAfter ?? undefined,
+    sort: includeSort ? value.sort.map(item => `${item.field},${item.direction}`) : undefined,
+  }
+}
+
+function intersectStatuses(groupStatuses: Set<string>): Set<string> {
+  const selected = tableQuery.value.filters.statusCodes
+  if (!selected.size) return new Set(groupStatuses)
+  return new Set(Array.from(groupStatuses).filter(status => selected.has(status)))
+}
+
+async function applyTableQuery(value: ContentTableQuery, replace: boolean): Promise<void> {
+  tableQuery.value = cloneTableQuery(value)
+  queryRevision += 1
+  sharedQueryConflict.value = undefined
+  syncingRoute = true
+  try {
+    const location = { name: route.name, params: route.params,
+      query: encodeTableQuery(value, route.query) }
+    if (replace) await router.replace(location)
+    else await router.push(location)
+  } finally {
+    syncingRoute = false
+  }
+  await refreshCurrentView(true)
+}
+
+async function resetSharedQuery(): Promise<void> {
+  if (!content.value) return
+  tableQuery.value = sharedTableQuery(content.value.viewConfig.table.filters,
+    content.value.viewConfig.table.sort)
+  queryRevision += 1
+  sharedQueryConflict.value = undefined
+  syncingRoute = true
+  try {
+    await router.replace({ name: route.name, params: route.params,
+      query: withoutTableQuery(route.query) })
+  } finally {
+    syncingRoute = false
+  }
+  await refreshCurrentView(true)
+}
+
+async function saveSharedQuery(base = content.value): Promise<void> {
+  if (!base || !canSaveSharedQuery.value) return
+  const csrf = readCsrfToken()
+  if (!csrf) { error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
+  savingSharedQuery.value = true
+  error.value = undefined
+  try {
+    const updated = await contentsApi.updateContent({
+      contentId: base.id, xXSRFTOKEN: csrf, ifMatch: base.etag,
+      contentUpdateRequest: {
+        name: base.name, description: base.description, defaultViewType: base.defaultViewType,
+        viewConfig: {
+          table: {
+            ...base.viewConfig.table,
+            filters: cloneTableQuery(tableQuery.value).filters,
+            sort: cloneTableQuery(tableQuery.value).sort,
+          },
+          kanban: base.viewConfig.kanban,
+        },
+      },
+    })
+    content.value = updated
+    sharedQueryConflict.value = undefined
+    ElMessage.success('当前查询已保存为 Content 共享默认')
+    await resetSharedQuery()
+  } catch (reason) {
+    const problem = await toApiProblem(reason)
+    error.value = problem
+    if (isProblemStatus(problem, 412)) {
+      try { sharedQueryConflict.value = await contentsApi.getContent({ contentId }) }
+      catch (latestReason) { error.value = await toApiProblem(latestReason) }
+    }
+  } finally {
+    savingSharedQuery.value = false
+  }
+}
+
+async function retrySharedQuery(): Promise<void> {
+  const latest = sharedQueryConflict.value
+  if (!latest) return
+  sharedQueryConflict.value = undefined
+  await saveSharedQuery(latest)
 }
 
 async function changeView(view: ContentViewType): Promise<void> {
@@ -537,6 +675,16 @@ async function transitionWorkItem(): Promise<void> {
   }
 }
 
+watch(() => route.query, async () => {
+  if (syncingRoute || !content.value) return
+  tableQuery.value = hasCustomTableQuery(route.query)
+    ? parseTableQuery(route.query)
+    : sharedTableQuery(content.value.viewConfig.table.filters, content.value.viewConfig.table.sort)
+  queryRevision += 1
+  sharedQueryConflict.value = undefined
+  await refreshCurrentView(true)
+}, { deep: true })
+
 onMounted(loadWorkspace)
 </script>
 
@@ -608,6 +756,24 @@ onMounted(loadWorkspace)
           >
             看板
           </el-button>
+        </div>
+      </div>
+
+      <div v-if="sharedQueryConflict" class="query-conflict" role="alert">
+        <strong>共享默认已被其他人更新，当前临时查询仍保留。</strong>
+        <span>重新提交时只合并当前筛选与排序，不覆盖最新版列配置和 Kanban 分组。</span>
+        <el-button type="warning" :loading="savingSharedQuery" @click="retrySharedQuery">合并到最新版并重提</el-button>
+      </div>
+      <div class="query-toolbar">
+        <content-table-query-editor :model-value="tableQuery"
+          :statuses="catalog?.workflowStatusOptions ?? []" :members="members"
+          @update:model-value="tableQuery = $event" @search="applyTableQuery($event, true)"
+          @change="applyTableQuery($event, false)" />
+        <div class="query-toolbar__actions">
+          <span>{{ hasCustomTableQuery(route.query) ? '临时查询（已同步 URL）' : 'Content 共享默认' }}</span>
+          <el-button @click="resetSharedQuery">重置共享默认</el-button>
+          <el-button v-if="canSaveSharedQuery" type="primary" :loading="savingSharedQuery"
+            @click="saveSharedQuery()">保存为共享默认</el-button>
         </div>
       </div>
 
@@ -827,7 +993,7 @@ onMounted(loadWorkspace)
             placeholder="未指派"
           >
             <el-option
-              v-for="memberOption in members"
+              v-for="memberOption in activeMembers"
               :key="memberOption.userId"
               :label="memberOption.displayName"
               :value="memberOption.userId"
@@ -1161,6 +1327,10 @@ onMounted(loadWorkspace)
 .read-only-reason, .workspace-hint { margin: var(--yp-space-1) 0 0; color: var(--yp-text-secondary); }
 .view-switch { display: flex; }
 .view-switch :deep(.el-button + .el-button) { margin-left: 0; }
+.query-toolbar { display: grid; gap: var(--yp-space-2); }
+.query-toolbar__actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--yp-space-2); color: var(--yp-text-secondary); }
+.query-conflict { display: flex; align-items: center; gap: var(--yp-space-3); padding: var(--yp-space-3); border: 1px solid var(--yp-status-yellow); border-radius: var(--yp-radius-md); background: var(--yp-bg-selected); }
+.query-conflict span { flex: 1; color: var(--yp-text-secondary); }
 .table-surface { overflow: hidden; border: 1px solid var(--yp-border-subtle); background: var(--yp-bg-surface); }
 .table-surface :deep(.el-table__row) { cursor: pointer; }
 .item-title { padding: 0; border: 0; color: var(--yp-link); background: transparent; font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
@@ -1211,6 +1381,7 @@ onMounted(loadWorkspace)
   .workspace-toolbar { flex-direction: column; padding: var(--yp-space-4); }
   .view-switch { width: 100%; }
   .view-switch :deep(.el-button) { min-height: 44px; flex: 1; }
+  .query-toolbar__actions, .query-conflict { align-items: stretch; flex-direction: column; }
   .table-surface :deep(.el-table) { display: block; overflow-x: auto; }
   .kanban-board { grid-auto-columns: minmax(86vw, 86vw); }
   .editor-grid, .date-fields { grid-template-columns: 1fr; }
