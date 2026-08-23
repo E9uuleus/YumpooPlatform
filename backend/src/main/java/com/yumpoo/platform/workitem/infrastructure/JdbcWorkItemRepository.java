@@ -2,7 +2,9 @@ package com.yumpoo.platform.workitem.infrastructure;
 
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemLocator;
+import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemRepository;
+import com.yumpoo.platform.workitem.application.WorkItemSortRanks;
 import com.yumpoo.platform.workitem.domain.ContentWorkItemType;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemPriority;
@@ -15,7 +17,12 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -173,30 +180,42 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
-    public List<WorkItem> findPage(UUID companyId, UUID projectId, UUID contentId,
-            Set<String> statuses, OffsetPageRequest page) {
-        JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
-                        + " FROM yumpoo.work_item WHERE company_id=:companyId AND project_id=:projectId "
-                        + "AND content_id=:contentId AND deleted_at IS NULL"
-                        + (statuses.isEmpty() ? "" : " AND status_code IN (:statuses)")
-                        + " ORDER BY item_sequence DESC, id DESC LIMIT :limit OFFSET :offset")
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("contentId", contentId).param("limit", page.size())
-                .param("offset", Math.multiplyExact(page.page(), page.size()));
-        if (!statuses.isEmpty()) statement = statement.param("statuses", statuses);
-        return statement.query(JdbcWorkItemRepository::map).list();
+    public Set<UUID> findParticipantUserIds(UUID companyId, UUID projectId, UUID contentId) {
+        return new LinkedHashSet<>(jdbc.sql("""
+                SELECT reporter_user_id AS user_id
+                  FROM yumpoo.work_item
+                 WHERE company_id=:companyId AND project_id=:projectId
+                   AND content_id=:contentId AND deleted_at IS NULL
+                UNION
+                SELECT assignee_user_id AS user_id
+                  FROM yumpoo.work_item
+                 WHERE company_id=:companyId AND project_id=:projectId
+                   AND content_id=:contentId AND deleted_at IS NULL
+                   AND assignee_user_id IS NOT NULL
+                """).param("companyId", companyId).param("projectId", projectId)
+                .param("contentId", contentId).query(UUID.class).list());
     }
 
     @Override
-    public long countPage(UUID companyId, UUID projectId, UUID contentId, Set<String> statuses) {
-        JdbcClient.StatementSpec statement = jdbc.sql("SELECT count(*) FROM yumpoo.work_item "
-                        + "WHERE company_id=:companyId AND project_id=:projectId "
-                        + "AND content_id=:contentId AND deleted_at IS NULL"
-                        + (statuses.isEmpty() ? "" : " AND status_code IN (:statuses)"))
-                .param("companyId", companyId).param("projectId", projectId)
-                .param("contentId", contentId);
-        if (!statuses.isEmpty()) statement = statement.param("statuses", statuses);
-        return statement.query(Long.class).single();
+    public List<WorkItem> findPage(UUID companyId, UUID projectId, UUID contentId,
+            WorkItemQuery query, WorkItemSortRanks ranks, OffsetPageRequest page) {
+        Map<String, Object> parameters = baseParameters(companyId, projectId, contentId);
+        String where = where(query, parameters);
+        String orderBy = orderBy(query, ranks, parameters);
+        parameters.put("limit", page.size());
+        parameters.put("offset", Math.multiplyExact(page.page(), page.size()));
+        JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
+                + " FROM yumpoo.work_item" + where + " ORDER BY " + orderBy
+                + " LIMIT :limit OFFSET :offset");
+        return bind(statement, parameters).query(JdbcWorkItemRepository::map).list();
+    }
+
+    @Override
+    public long countPage(UUID companyId, UUID projectId, UUID contentId, WorkItemQuery query) {
+        Map<String, Object> parameters = baseParameters(companyId, projectId, contentId);
+        JdbcClient.StatementSpec statement = jdbc.sql("SELECT count(*) FROM yumpoo.work_item"
+                + where(query, parameters));
+        return bind(statement, parameters).query(Long.class).single();
     }
 
     @Override
@@ -215,6 +234,137 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                         + "AND status_category IN ('TODO','IN_PROGRESS')")
                 .param("companyId", companyId).param("projectId", projectId)
                 .param("contentId", contentId).query(Long.class).single();
+    }
+
+    private static Map<String, Object> baseParameters(UUID companyId, UUID projectId,
+            UUID contentId) {
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("companyId", companyId);
+        parameters.put("projectId", projectId);
+        parameters.put("contentId", contentId);
+        return parameters;
+    }
+
+    private static String where(WorkItemQuery query, Map<String, Object> parameters) {
+        StringBuilder sql = new StringBuilder(" WHERE company_id=:companyId")
+                .append(" AND project_id=:projectId AND content_id=:contentId")
+                .append(" AND deleted_at IS NULL");
+        if (query.query() != null) {
+            sql.append(" AND lower(title) LIKE :titleQuery ESCAPE '\\'");
+            parameters.put("titleQuery", "%" + escapeLike(query.query().toLowerCase(Locale.ROOT)) + "%");
+        }
+        if (!query.statuses().isEmpty()) {
+            sql.append(" AND status_code IN (:statuses)");
+            parameters.put("statuses", query.statuses());
+        }
+        if (!query.priorities().isEmpty()) {
+            sql.append(" AND priority IN (:priorities)");
+            parameters.put("priorities", query.priorities().stream().map(Enum::name).toList());
+        }
+        if (!query.assigneeUserIds().isEmpty()) {
+            sql.append(" AND assignee_user_id IN (:assigneeUserIds)");
+            parameters.put("assigneeUserIds", query.assigneeUserIds());
+        }
+        if (query.dueFrom() != null) {
+            sql.append(" AND due_date >= :dueFrom");
+            parameters.put("dueFrom", query.dueFrom());
+        }
+        if (query.dueTo() != null) {
+            sql.append(" AND due_date <= :dueTo");
+            parameters.put("dueTo", query.dueTo());
+        }
+        if (query.updatedAfter() != null) {
+            sql.append(" AND updated_at > :updatedAfter");
+            parameters.put("updatedAfter",
+                    OffsetDateTime.ofInstant(query.updatedAfter(), ZoneOffset.UTC));
+        }
+        return sql.toString();
+    }
+
+    private static String orderBy(WorkItemQuery query, WorkItemSortRanks ranks,
+            Map<String, Object> parameters) {
+        List<String> order = new ArrayList<>();
+        int index = 0;
+        for (WorkItemQuery.Sort sort : query.sorts()) {
+            String direction = sort.direction().name();
+            switch (sort.field()) {
+                case ITEM_NO -> order.add("item_sequence " + direction);
+                case TITLE -> order.add("lower(title) " + direction);
+                case STATUS -> addRankedTextOrder(order, parameters, "status_code",
+                        "status", ranks.statuses(), direction, index);
+                case PRIORITY -> order.add("CASE priority WHEN 'LOW' THEN 0 WHEN 'MEDIUM' THEN 1 "
+                        + "WHEN 'HIGH' THEN 2 WHEN 'URGENT' THEN 3 ELSE 4 END " + direction);
+                case ASSIGNEE -> addRankedUserOrder(order, parameters, "assignee_user_id",
+                        "assignee", ranks.assignees(), direction, index);
+                case REPORTER -> addRankedUserOrder(order, parameters, "reporter_user_id",
+                        "reporter", ranks.reporters(), direction, index);
+                case TIMELINE_START_DATE -> order.add("timeline_start_date " + direction + " NULLS LAST");
+                case TIMELINE_END_DATE -> order.add("timeline_end_date " + direction + " NULLS LAST");
+                case DUE_DATE -> order.add("due_date " + direction + " NULLS LAST");
+                case UPDATED_AT -> order.add("updated_at " + direction + " NULLS LAST");
+            }
+            index++;
+        }
+        order.add("id ASC");
+        return String.join(", ", order);
+    }
+
+    private static void addRankedTextOrder(List<String> order, Map<String, Object> parameters,
+            String column, String prefix, Map<String, Integer> ranks, String direction, int index) {
+        List<Map.Entry<String, Integer>> entries = ranks.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue()).toList();
+        if (entries.isEmpty()) {
+            order.add(column + " ASC");
+            return;
+        }
+        String known = prefix + "Known" + index;
+        parameters.put(known, entries.stream().map(Map.Entry::getKey).toList());
+        order.add("CASE WHEN " + column + " IN (:" + known + ") THEN 0 ELSE 1 END ASC");
+        StringBuilder rank = new StringBuilder("CASE ").append(column);
+        for (int i = 0; i < entries.size(); i++) {
+            String parameter = prefix + "Rank" + index + "_" + i;
+            parameters.put(parameter, entries.get(i).getKey());
+            rank.append(" WHEN :").append(parameter).append(" THEN ").append(i);
+        }
+        order.add(rank.append(" ELSE ").append(entries.size()).append(" END ")
+                .append(direction).toString());
+        order.add(column + " ASC");
+    }
+
+    private static void addRankedUserOrder(List<String> order, Map<String, Object> parameters,
+            String column, String prefix, Map<UUID, Integer> ranks, String direction, int index) {
+        List<Map.Entry<UUID, Integer>> entries = ranks.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue()).toList();
+        if (entries.isEmpty()) {
+            order.add("CASE WHEN " + column + " IS NULL THEN 1 ELSE 0 END ASC");
+            order.add(column + " ASC NULLS LAST");
+            return;
+        }
+        String known = prefix + "Known" + index;
+        parameters.put(known, entries.stream().map(Map.Entry::getKey).toList());
+        order.add("CASE WHEN " + column + " IN (:" + known + ") THEN 0 WHEN " + column
+                + " IS NULL THEN 2 ELSE 1 END ASC");
+        StringBuilder rank = new StringBuilder("CASE ").append(column);
+        for (int i = 0; i < entries.size(); i++) {
+            String parameter = prefix + "Rank" + index + "_" + i;
+            parameters.put(parameter, entries.get(i).getKey());
+            rank.append(" WHEN :").append(parameter).append(" THEN ").append(i);
+        }
+        order.add(rank.append(" ELSE ").append(entries.size()).append(" END ")
+                .append(direction).toString());
+        order.add(column + " ASC NULLS LAST");
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    private static JdbcClient.StatementSpec bind(JdbcClient.StatementSpec statement,
+            Map<String, Object> parameters) {
+        JdbcClient.StatementSpec bound = statement;
+        for (Map.Entry<String, Object> parameter : parameters.entrySet())
+            bound = bound.param(parameter.getKey(), parameter.getValue());
+        return bound;
     }
 
     private static WorkItem map(ResultSet rs, int row) throws SQLException {

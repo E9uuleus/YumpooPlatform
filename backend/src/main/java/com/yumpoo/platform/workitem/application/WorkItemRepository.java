@@ -16,9 +16,10 @@ public interface WorkItemRepository {
     Optional<WorkItem> lock(UUID companyId, UUID projectId, UUID contentId, UUID workItemId);
     Optional<WorkItem> update(WorkItem workItem, long expectedVersion);
     Optional<WorkItem> transition(WorkItem workItem, long expectedVersion);
+    Set<UUID> findParticipantUserIds(UUID companyId, UUID projectId, UUID contentId);
     List<WorkItem> findPage(UUID companyId, UUID projectId, UUID contentId,
-            Set<String> statuses, OffsetPageRequest page);
-    long countPage(UUID companyId, UUID projectId, UUID contentId, Set<String> statuses);
+            WorkItemQuery query, WorkItemSortRanks ranks, OffsetPageRequest page);
+    long countPage(UUID companyId, UUID projectId, UUID contentId, WorkItemQuery query);
     long countOpenByProject(UUID companyId, UUID projectId);
     long countOpenByContent(UUID companyId, UUID projectId, UUID contentId);
 }
