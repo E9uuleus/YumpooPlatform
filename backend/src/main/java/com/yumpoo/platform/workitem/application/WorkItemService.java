@@ -99,7 +99,7 @@ public class WorkItemService {
 
     @Transactional(readOnly = true)
     public WorkItemPage list(CurrentActor actor, UUID contentId,
-            WorkItemQuery.Request request, ContentViewType view, OffsetPageRequest page) {
+            WorkItemQuery.Request request, String view, OffsetPageRequest page) {
         VisibleContent visible = visibleContent(actor, contentId);
         ProjectTemplateSnapshot template = template(visible.project().templateKey(),
                 visible.project().templateVersion());
@@ -107,7 +107,7 @@ public class WorkItemService {
                 .map(ProjectTemplateSnapshot.WorkflowStatus::statusCode)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         WorkItemQuery query = WorkItemQuery.parse(request, allowedStatuses);
-        ContentViewType effectiveView = view == null ? ContentViewType.TABLE : view;
+        ContentViewType effectiveView = view(view);
         if (effectiveView == ContentViewType.KANBAN) {
             if (query.statuses().size() != 1)
                 throw validation("status", "KANBAN_REQUIRES_ONE_STATUS",
@@ -672,6 +672,15 @@ public class WorkItemService {
             return WorkItemPriority.valueOf(value);
         } catch (RuntimeException exception) {
             throw validation("priority", "INVALID_VALUE", "优先级无效");
+        }
+    }
+
+    private static ContentViewType view(String value) {
+        if (value == null || value.isBlank()) return ContentViewType.TABLE;
+        try {
+            return ContentViewType.valueOf(value);
+        } catch (RuntimeException exception) {
+            throw validation("view", "INVALID_VALUE", "工作项视图类型无效");
         }
     }
 

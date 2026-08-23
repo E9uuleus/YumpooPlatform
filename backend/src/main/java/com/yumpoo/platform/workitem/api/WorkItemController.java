@@ -16,7 +16,6 @@ import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemDetail;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemPage;
 import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemService;
-import com.yumpoo.platform.workitem.domain.ContentViewType;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.CacheControl;
@@ -65,7 +64,7 @@ public final class WorkItemController {
             @RequestParam(required = false) LocalDate dueFrom,
             @RequestParam(required = false) LocalDate dueTo,
             @RequestParam(required = false) Instant updatedAfter,
-            @RequestParam(required = false) ContentViewType view,
+            @RequestParam(required = false) String view,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             HttpServletRequest httpRequest) {
@@ -156,7 +155,7 @@ public final class WorkItemController {
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         UUID key = keys.parseRequired(idempotencyHeader);
         StoredCommandResult stored = service.rankMove(new RankMove(actor, workItemId,
-                expectedVersion, body.toStatus(), body.placement().name(), body.anchorWorkItemId(),
+                expectedVersion, body.toStatus(), body.placement(), body.anchorWorkItemId(),
                 body.resolution(), key, hasher.hash("rankMoveWorkItem", Map.of(
                                 "workItemId", workItemId.toString(),
                                 "ifMatch", Long.toString(expectedVersion)),

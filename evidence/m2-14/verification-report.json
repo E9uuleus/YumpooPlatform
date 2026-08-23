@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-14",
+  "status": "PASS",
+  "startedAt": "2026-08-23T05:41:36Z",
+  "completedAt": "2026-08-23T05:44:36Z",
+  "command": "pnpm verify:m2-14",
+  "flywayVersion": "31",
+  "testCounts": {
+    "backendUnit": 383,
+    "backendIntegration": 193,
+    "nodeArchitecture": 9,
+    "apiClient": 7,
+    "web": 141,
+    "desktop": 24
+  },
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "v31CleanAndUpgradeMigration": true,
+    "rankBackfillAndConstraints": true,
+    "fixedLaneLockOrder": true,
+    "midpointAndRebalance": true,
+    "kanbanStablePaging": true,
+    "rankMovePlacementsAndAnchors": true,
+    "noopAndIdempotencyReplay": true,
+    "sameCardConcurrency": true,
+    "statusLaneRendering": true,
+    "pointerAndMenuControls": true,
+    "rollbackRetryAndLateResponseProtection": true,
+    "backupRestore": true,
+    "nodeGate": true
+  }
+}

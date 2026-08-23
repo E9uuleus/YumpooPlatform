@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-14",
+  "verifiedSlices": [
+    {
+      "requirementId": "WORK-ITEM-KANBAN-RANK",
+      "scope": "持久化 rank、单状态稳定分页、受控同/跨状态移动、lane 并发锁、Pointer 拖动、键盘触控菜单、回滚与幂等重试",
+      "evidence": [
+        "backend/src/main/resources/db/migration/workitem/V31__add_work_item_kanban_rank.sql",
+        "backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemService.java",
+        "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java",
+        "contracts/openapi/yumpoo-v1.yaml",
+        "contracts/events/schemas/workitem.work-item-rank-changed-v1.schema.json",
+        "frontend/web-app/src/views/projects/ContentWorkItemsView.spec.ts"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    { "requirementId": "WORK-ITEM-DELETE-RESTORE", "targetMilestone": "M2-15", "scope": "删除、恢复、保留与并发语义" },
+    { "requirementId": "WORK-ITEM-ACTIVITY-PROJECTION", "targetMilestone": "M2-20", "scope": "Activity 投影与面向用户的变更时间线" },
+    { "requirementId": "WORK-ITEM-EVENT-FREEZE", "targetMilestone": "M2-23", "scope": "Work Item 领域事件最终盘点与兼容冻结" },
+    { "requirementId": "PPM-014-FINAL-ACCEPTANCE", "targetMilestone": "M2-24", "scope": "Worklog、Feedback provider 与完整 PPM-014 总验收" }
+  ]
+}
