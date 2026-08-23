@@ -16,6 +16,8 @@ Content 写事务先通过 catalog 的 `ProjectFactWriteGuard` 获取 Project `F
 
 M2-13 继续复用 `ContentViewConfig.table.filters/sort` 作为 Content 共享默认，不新增私人视图或新的 wire/event 版本。所有可读用户都可在 URL 中临时使用完整筛选与排序；只有 Project Owner 可通过现有 Content PATCH 保存共享默认，Member 和 CompanyAdmin 保持只读。共享默认写入继续发布现有 `workitem.content_updated`，普通查询不发布事件。
 
+M2-14 保留 `kanban.statusGroups` 的配置语义，但每个分组在工作区中拆成单状态子泳道。分组数量展示所属泳道数量之和；rank、分页、锁和投放能力始终以单一状态为边界。状态筛选排除的子泳道保留结构提示但不可投放，避免把隐藏状态误当成合并泳道。
+
 创建、归档和恢复使用 UUID 幂等键；PATCH、归档和恢复使用强 ETag。四类 `workitem.content_*` 事件只携带 Content 标识、Project、代码、名称、类型、状态、默认视图、蓝图、版本和变更字段，不携带描述或完整视图配置。Content 容器本身不构成 `OPEN_WORK_ITEMS` blocker；M2-10 的真实 Work Item 计数已同时阻止 Content 与 Project 归档。
 
 ## Alternatives considered

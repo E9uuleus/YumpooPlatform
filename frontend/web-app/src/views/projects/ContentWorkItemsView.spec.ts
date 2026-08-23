@@ -9,6 +9,7 @@ import {
   ProjectMembershipStatus,
   ProjectMembershipStatusFilter,
   WorkItemPriority,
+  WorkItemRankPlacement,
   WorkItemStatusCategory,
   WorkItemType,
   WorkflowStatusCategory,
@@ -36,6 +37,7 @@ const api = vi.hoisted(() => ({
   getWorkItem: vi.fn(),
   updateWorkItem: vi.fn(),
   transitionWorkItem: vi.fn(),
+  rankMoveWorkItem: vi.fn(),
 }))
 const routing = vi.hoisted(() => ({
   route: { name: 'content-work-items', params: { projectId: 'project-1', contentId: 'content-1' },
@@ -57,6 +59,7 @@ vi.mock('../../api/client', () => ({
     getWorkItem: api.getWorkItem,
     updateWorkItem: api.updateWorkItem,
     transitionWorkItem: api.transitionWorkItem,
+    rankMoveWorkItem: api.rankMoveWorkItem,
   },
 }))
 vi.mock('@yumpoo/api-client', async (importOriginal) => ({
@@ -131,6 +134,8 @@ function summary(id = 'work-item-1', statusCode = 'BACKLOG', title = '实现核�
     timelineStartDate: new Date('2026-08-22T00:00:00.000Z'),
     timelineEndDate: new Date('2026-08-29T00:00:00.000Z'),
     dueDate: new Date('2026-08-30T00:00:00.000Z'),
+    rowVersion: 0, etag: '"0"',
+    capabilities: { canEditFields: true, canMoveInKanban: true, availableTransitions: defaultTransitions },
     updatedAt: new Date('2026-08-22T02:00:00Z'),
   }
 }
@@ -148,7 +153,7 @@ function detail(
 ): WorkItemDetail {
   return {
     ...summary(), description, notes: null,
-    rowVersion: 0, etag: '"0"', capabilities: { canEditFields: true, availableTransitions },
+    rowVersion: 0, etag: '"0"', capabilities: { canEditFields: true, canMoveInKanban: true, availableTransitions },
     createdAt: new Date('2026-08-22T01:00:00Z'),
   }
 }
@@ -184,8 +189,9 @@ describe('M2-10 Content 工作项工作区', () => {
     api.updateWorkItem.mockResolvedValue({ ...detail(), rowVersion: 1, etag: '"1"' })
     api.transitionWorkItem.mockResolvedValue({
       ...detail(), statusCode: 'READY', statusCategory: WorkItemStatusCategory.InProgress,
-      rowVersion: 1, etag: '"1"', capabilities: { canEditFields: true, availableTransitions: [] },
+      rowVersion: 1, etag: '"1"', capabilities: { canEditFields: true, canMoveInKanban: true, availableTransitions: [] },
     })
+    api.rankMoveWorkItem.mockResolvedValue(detail())
   })
 
   it('使用服务端分页并呈现全部协作字段列', async () => {
@@ -329,7 +335,7 @@ describe('M2-10 Content 工作项工作区', () => {
     wrapper.unmount()
   })
 
-  it('只读 Kanban 按状态组独立请求并展示同一真源卡片', async () => {
+  it('Kanban 按单一状态泳道独立分页并展示同一真源卡片', async () => {
     api.listProjectContents.mockResolvedValue(catalog(content(ContentViewType.Kanban)))
     api.listContentWorkItems.mockImplementation(({ status }: { status?: Set<string> }) => {
       if (status?.has('IN_PROGRESS')) return Promise.resolve(page([summary('work-item-2', 'IN_PROGRESS', '开发中')]))
@@ -340,12 +346,114 @@ describe('M2-10 Content 工作项工作区', () => {
     expect(calls).toHaveLength(2)
     expect(calls.some(status => status.has('BACKLOG'))).toBe(true)
     expect(calls.some(status => status.has('IN_PROGRESS'))).toBe(true)
+    expect(api.listContentWorkItems.mock.calls.every(call => call[0].status.size === 1)).toBe(true)
+    expect(api.listContentWorkItems.mock.calls.every(call => call[0].view === ContentViewType.Kanban)).toBe(true)
     expect(api.listContentWorkItems.mock.calls.every(call => call[0].sort === undefined)).toBe(true)
     expect(wrapper.text()).toContain('待办')
     expect(wrapper.text()).toContain('进行中')
     expect(wrapper.text()).toContain('实现核心闭环')
     expect(wrapper.text()).toContain('开发中')
     expect(wrapper.text()).not.toContain('拖拽')
+    wrapper.unmount()
+  })
+
+  it('保留多状态分组并在组内渲染独立状态泳道', async () => {
+    const grouped = content(ContentViewType.Kanban)
+    grouped.viewConfig.kanban.statusGroups = [{
+      name: '交付中', statusCodes: new Set(['BACKLOG', 'IN_PROGRESS']),
+    }]
+    api.listProjectContents.mockResolvedValue(catalog(grouped))
+    api.listContentWorkItems.mockImplementation(({ status }: { status?: Set<string> }) =>
+      Promise.resolve(page(status?.has('IN_PROGRESS')
+        ? [summary('work-item-2', 'IN_PROGRESS', '开发中')] : [summary()])))
+
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.findAll('.kanban-group')).toHaveLength(1)
+    expect(wrapper.findAll('.kanban-lane')).toHaveLength(2)
+    expect(wrapper.text()).toContain('交付中')
+    wrapper.unmount()
+  })
+
+  it('键盘触控菜单提交同状态定位并刷新 Kanban 与 Table 真源', async () => {
+    api.listProjectContents.mockResolvedValue(catalog(content(ContentViewType.Kanban)))
+    const item = summary()
+    api.listContentWorkItems.mockImplementation(({ status }: { status?: Set<string> }) =>
+      Promise.resolve(page(status?.has('BACKLOG') ? [item, summary('work-item-2')] : [])))
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      handleMoveCommand: (item: WorkItemSummary, status: string, command: string) => void
+    }
+
+    vm.handleMoveCommand(item, 'BACKLOG', 'BOTTOM')
+    await flushPromises()
+    expect(api.rankMoveWorkItem).toHaveBeenCalledWith({
+      workItemId: item.id,
+      xXSRFTOKEN: 'csrf-token',
+      ifMatch: '"0"',
+      idempotencyKey: expect.any(String),
+      workItemRankMoveRequest: {
+        toStatus: 'BACKLOG', placement: WorkItemRankPlacement.End,
+        anchorWorkItemId: null, resolution: null,
+      },
+    })
+    expect(api.listContentWorkItems.mock.calls.some(call => call[0].view === undefined)).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('传输失败回滚并用原幂等键显式重试', async () => {
+    api.listProjectContents.mockResolvedValue(catalog(content(ContentViewType.Kanban)))
+    const item = summary()
+    api.listContentWorkItems.mockImplementation(({ status }: { status?: Set<string> }) =>
+      Promise.resolve(page(status?.has('BACKLOG') ? [item, summary('work-item-2')] : [])))
+    api.rankMoveWorkItem.mockRejectedValueOnce({ kind: 'fallback', message: '网络连接异常' })
+      .mockResolvedValueOnce(detail())
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      failedMove?: unknown
+      handleMoveCommand: (item: WorkItemSummary, status: string, command: string) => void
+      retryKanbanMove: () => Promise<void>
+    }
+
+    vm.handleMoveCommand(item, 'BACKLOG', 'BOTTOM')
+    await flushPromises()
+    expect(vm.failedMove).toBeTruthy()
+    expect(wrapper.text()).toContain('卡片已恢复原位')
+    const originalKey = api.rankMoveWorkItem.mock.calls[0]?.[0].idempotencyKey
+    await vm.retryKanbanMove(); await flushPromises()
+    expect(api.rankMoveWorkItem.mock.calls[1]?.[0].idempotencyKey).toBe(originalKey)
+    wrapper.unmount()
+  })
+
+  it('跨状态菜单遇到必填说明先对话确认，取消不发送', async () => {
+    const configured = content(ContentViewType.Kanban)
+    api.listProjectContents.mockResolvedValue(catalog(configured))
+    const required: WorkItemTransitionOption = {
+      toStatus: 'IN_PROGRESS', displayName: '进行中',
+      statusCategory: WorkItemStatusCategory.InProgress, requiresResolution: true,
+    }
+    const item = { ...summary(), capabilities: {
+      canEditFields: true, canMoveInKanban: true, availableTransitions: [required],
+    } }
+    api.listContentWorkItems.mockImplementation(({ status }: { status?: Set<string> }) =>
+      Promise.resolve(page(status?.has('BACKLOG') ? [item] : [])))
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      moveResolutionOpen: boolean
+      moveResolution: string
+      handleMoveCommand: (item: WorkItemSummary, status: string, command: string) => void
+      cancelMoveResolution: () => void
+      confirmMoveResolution: () => void
+    }
+    vm.handleMoveCommand(item, 'BACKLOG', 'STATUS:IN_PROGRESS')
+    expect(vm.moveResolutionOpen).toBe(true)
+    vm.cancelMoveResolution()
+    expect(api.rankMoveWorkItem).not.toHaveBeenCalled()
+    vm.handleMoveCommand(item, 'BACKLOG', 'STATUS:IN_PROGRESS')
+    vm.moveResolution = '风险已确认'
+    vm.confirmMoveResolution()
+    await flushPromises()
+    expect(api.rankMoveWorkItem.mock.calls[0]?.[0].workItemRankMoveRequest.resolution)
+      .toBe('风险已确认')
     wrapper.unmount()
   })
 
@@ -487,7 +595,7 @@ describe('M2-10 Content 工作项工作区', () => {
   it('终态或只读详情不显示状态迁移入口', async () => {
     api.getWorkItem.mockResolvedValue({
       ...detail('安全纯文本', []),
-      capabilities: { canEditFields: false, availableTransitions: [] },
+      capabilities: { canEditFields: false, canMoveInKanban: false, availableTransitions: [] },
     })
     const wrapper = mountView(); await flushPromises()
     const vm = wrapper.vm as unknown as { openDetail: (item: WorkItemSummary) => Promise<void> }

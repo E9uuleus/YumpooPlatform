@@ -8,7 +8,7 @@ Work Item 是跨 Content、Project 生命周期与归档治理的长期事实。
 
 ## Decision
 
-`work_item` 保存完整领域列。创建与 M2-11 字段更新使用标题、明确优先级、处理人、描述、备注、计划起止日和截止日的快照；PATCH 的可空字段必须显式传 `null` 才清空。描述与备注规范化为最多 16 KiB 的纯文本；自然日使用 `LocalDate`/`YYYY-MM-DD`，不经过服务器或浏览器本地时区换算。既有 v1 创建契约继续允许旧客户端省略新增处理人和日期，初始值按空处理；新 Web 固定提交完整八字段。rank/拖拽和删除恢复仍不在本契约中。
+`work_item` 保存完整领域列。创建与 M2-11 字段更新使用标题、明确优先级、处理人、描述、备注、计划起止日和截止日的快照；PATCH 的可空字段必须显式传 `null` 才清空。描述与备注规范化为最多 16 KiB 的纯文本；自然日使用 `LocalDate`/`YYYY-MM-DD`，不经过服务器或浏览器本地时区换算。既有 v1 创建契约继续允许旧客户端省略新增处理人和日期，初始值按空处理；新 Web 固定提交完整八字段。删除恢复仍不在本契约中。
 
 事项编号按 Project 独立计数器原子递增，固化为 `PROJECT_CODE-sequence`。编号不复用，Project 改名或后续代码策略变化都不改写既有编号。幂等记录包住编号分配、Work Item 插入和 Outbox；同键同请求重放存储的 201 响应，不再次推进计数器或发布事件。
 
@@ -16,7 +16,7 @@ Work Item 是跨 Content、Project 生命周期与归档治理的长期事实。
 
 字段更新事务固定按 Project `FOR SHARE`、Content `FOR SHARE`、Work Item `FOR UPDATE` 加锁，再校验调用人、预期版本、ACTIVE assignee membership 与字段约束，最后执行带 `row_version` 条件的更新。Owner 与 ACTIVE Member 只可编辑 DRAFT/ACTIVE Project 的 ACTIVE Content；非成员 CompanyAdmin 为 403，不可见资源为 404，归档资源为 409。强 ETag 由 `rowVersion` 派生；无实际变化返回原资源和 ETag，不改变版本、审计时间或 Outbox；旧 ETag 返回 412，绝不自动重放。
 
-M2-12 状态命令固定按 Project → Content → Work Item 加锁，先校验 Work Item 版本，再根据 Project 固化的 `templateKey + templateVersion` 读取精确迁移边。迁移只允许边上的 `MEMBER` 权限，目标类别从模板目标状态派生；说明去除首尾空白、最长 500 字，要求说明的边缺失时返回 422。专用条件更新只改变 `status_code/status_category`、更新审计字段和 `row_version`，所有协作字段及 rank 保持不变。
+M2-12 状态命令根据 Project 固化的 `templateKey + templateVersion` 读取精确迁移边。迁移只允许边上的 `MEMBER` 权限，目标类别从模板目标状态派生；说明去除首尾空白、最长 500 字，要求说明的边缺失时返回 422。M2-14 起状态命令按 Project → Content → 排序后的源/目标 lane → Work Item 加锁，专用条件更新改变 `status_code/status_category/rank`、更新审计字段和 `row_version`，并把事项放到目标状态顶部；所有协作字段保持不变。
 
 `WorkItemCapabilities.availableTransitions` 是服务端按模板状态顺序计算的唯一客户端选项源；只读、归档、终态、无权限或无合法边时为空。迁移要求 XSRF、强 `If-Match` 与持久化幂等键；同键同请求精确重放原 200 响应，同键异参冲突。状态、一条 Outbox 事件与幂等完成记录在同一事务提交；重放、非法边和并发失败不发新事件。
 
@@ -24,9 +24,15 @@ M2-13 列表查询先完成 Project/Content 可见性校验，再按固定模板
 
 人员排序不跨模块 JOIN。workitem 只从已经判定可见的 Content 提取报告人和处理人 ID，再通过 identityaccess 的公开 `MinimalUserSnapshotQuery` 获取当前显示名，并在分页 SQL 中注入确定性秩；无法解析的历史人员和未指派值始终置后，不允许分页后内存重排。行查询与计数由同一个 SQL 谓词构建器生成。V30 仅增加 Content 范围的更新时间、处理人和截止日部分索引，不启用 `pg_trgm`。
 
+M2-14 的 rank 只在单一 `(content_id, status_code)` lane 内有意义。V31 将活动事项按升级前 `item_sequence DESC, id ASC` 顺序回填为 39 位定长十进制字符串，保留首尾哨兵空间，并用活动 lane 唯一约束和 Kanban 分页索引守住事实。每个 Content/状态都有可延迟创建、随 Content 级联删除的锁记录，空泳道也能串行化创建与迁移；多 lane 永远按状态码排序获取。新事项和普通迁移置顶，普通字段更新不改 rank。
+
+rank move 支持 `START/BEFORE/AFTER/END`。相对定位锚点必须是同 Content、同目标状态且不是自身；因此分页或筛选场景可只用可见锚点定位，未加载/隐藏事项保持原相对顺序。服务端移除移动项后计算相邻整数中点；无间隙时在 lane 锁内等距重平衡全泳道。重平衡不推进其他事项版本、不改审计时间、不发事件。同位置请求返回原 ETag，形成无版本、无事件 no-op。
+
+`GET /contents/{contentId}/work-items?view=KANBAN` 必须恰好指定一个状态，拒绝 Table sort，并固定按 `rank ASC, id ASC` 分页。摘要公开 `rowVersion`、`etag` 与 `canMoveInKanban`。`POST /work-items/{id}/rank-moves` 要求 XSRF、强 If-Match 和幂等键；同事项竞争由版本产生一个成功与一个 412，不同事项由 lane 锁串行化。同状态有效排序发布 `workitem.work_item_rank_changed` v1，事件仅描述目标状态和定位意图、不暴露内部 rank；跨状态只发布既有 status-changed，避免重复 Activity 语义。
+
 workitem 通过公开只读端口向 administration 报告 `OPEN_WORK_ITEMS`，直接统计未删除且状态类别为 `TODO/IN_PROGRESS` 的真源行。普通 Project 归档显示安全聚合数量，治理覆盖沿用同一数量写入 `admin_override`。已声明 provider 缺失、异常或不完整时关闭失败。
 
-`workitem.work_item_created` v1 兼容增加可选处理人和自然日。每次有效 PATCH 发布 `workitem.work_item_fields_changed`；分配、改派与取消分配另发 assigned/unassigned v1。每次有效状态迁移发布 `workitem.work_item_status_changed` v1，载荷只含 Work Item/Project/Content 引用、编号、标题、类型、前后状态及类别、说明和新版本，不携带 description/notes 正文。普通成员迁移不额外写 Security Audit，Activity 投影仍由 M2-20 交付。普通查询不发布事件。Table 使用 Content 的列顺序和显隐及当前查询；只读 Kanban 复用非排序筛选、与配置状态组取交集并保持事项序号排序，不保存第二份卡片数据，也不表达 rank。
+`workitem.work_item_created` v1 兼容增加可选处理人和自然日。每次有效 PATCH 发布 `workitem.work_item_fields_changed`；分配、改派与取消分配另发 assigned/unassigned v1。每次有效状态迁移发布 `workitem.work_item_status_changed` v1，载荷只含 Work Item/Project/Content 引用、编号、标题、类型、前后状态及类别、说明和新版本，不携带 description/notes 正文。普通成员迁移不额外写 Security Audit，Activity 投影仍由 M2-20 交付。普通查询不发布事件。Table 使用 Content 的列顺序和显隐及当前查询；Kanban 保留配置分组但按单状态子泳道分页，不保存第二份卡片数据。
 
 ## Alternatives considered
 
@@ -38,9 +44,10 @@ workitem 通过公开只读端口向 administration 报告 `OPEN_WORK_ITEMS`，�
 - 在 M2-10 同时开放拖拽和状态迁移：拒绝。没有 rank 与迁移命令的并发/权限契约时，视觉交互会承诺尚不存在的写语义。
 - 为每个用户创建私人视图：拒绝。当前产品只需要 Content 共享默认与 URL 临时查询，新增持久化真源会引入未要求的权限、同步和清理语义。
 - 直接 JOIN identityaccess 用户表或分页后按显示名重排：拒绝。前者破坏模块边界，后者破坏跨页稳定性和计数语义。
+- 用连续整数位置或每次移动改写所有事项版本：拒绝。前者在并发插入时频繁全列更新，后者制造无业务意义的审计与事件噪声；稀疏中点和无间隙重平衡把内部维护与业务版本分开。
 
 ## Consequences
 
 备份恢复必须共同保留 Work Item、Project 计数器、固化编号、状态类别、处理人、自然日、正文、更新审计字段和 rowVersion。任何新增 Work Item 写入口都必须复用相同 Project→Content→Work Item 锁顺序；任何改变“开放”定义的状态语义都必须同步修改 blocker、索引、治理证据和兼容测试。
 
-Web 不得把当前固定序号排序解释为 Kanban 排名。状态迁移只在详情抽屉开放；迁移成功更新详情 ETag 和当前 Table/Kanban 真源，但不覆盖未保存字段草稿。查询条件改变时回到第 0 页，URL 前进后退恢复临时查询，迟到响应不得覆盖较新修订。412 读取服务器最新版本并沿用冲突面板，不自动重试状态命令；共享默认冲突只允许把当前 filters/sort 合并到最新配置后明确重提。409/权限变化只刷新能力与页面。rank/拖拽、删除恢复和 Activity 投影继续由 M2-14、M2-15 与 M2-20 交付；最终事件冻结与总验收留给 M2-23/M2-24。完整 PPM-014 仍依赖 Worklog 和 Feedback provider；当前确认 `PPM-014-OPEN-WORK-ITEMS`、M2-11 协作字段、M2-12 状态迁移与 M2-13 高级查询切片。
+Web 只从拖动手柄启动 Pointer 交互，并提供等价的键盘/触控菜单；状态筛选排除的泳道不可投放。要求说明的跨状态移动先确认，取消不产生乐观位移。提交期间只允许一个移动；成功刷新源/目标泳道与 Table 真源，失败恢复快照。传输失败的明确重试复用原幂等键；409/412 只刷新事实与能力，不自动重提；迟到响应不得覆盖新事实。删除恢复和 Activity 投影继续由 M2-15 与 M2-20 交付；最终事件冻结与总验收留给 M2-23/M2-24。完整 PPM-014 仍依赖 Worklog 和 Feedback provider；当前确认 `PPM-014-OPEN-WORK-ITEMS`、M2-11 协作字段、M2-12 状态迁移、M2-13 高级查询与 `WORK-ITEM-KANBAN-RANK` 切片。

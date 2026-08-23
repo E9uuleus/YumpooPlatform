@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M2-14 Kanban rank 与受控拖动
+
+M2-14 以 V31 为 Work Item 增加状态泳道内持久化 rank。升级按既有 `item_sequence DESC, id ASC` 回填 39 位定长十进制位置；创建与普通状态迁移置于目标状态顶部，同状态移动支持 `START/BEFORE/AFTER/END`，间隙耗尽时在 Content/状态 lane 锁内保持相对顺序重平衡。Kanban 查询要求恰好一个状态、拒绝 Table sort，并固定按 `rank ASC, id ASC` 稳定分页；移动命令要求 XSRF、强 `If-Match` 与幂等键。
+
+Web 保留 Content 的多状态分组，并在每组内渲染独立状态泳道。鼠标和触控只从 Pointer 拖动手柄启动，提供阈值、取消、合法投放与边缘滚动；键盘/触控菜单覆盖上下移、顶底定位和合法跨状态。要求说明的跨状态移动先确认；提交期间显示 pending，失败恢复快照，传输失败的明确重试复用原幂等键，409/412 只刷新服务端事实与能力。M2-15 删除恢复、M2-20 Activity、M2-23 事件冻结和 M2-24 总验收继续延期。
+
+```powershell
+pnpm verify:m2-14
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-13 Table 高级查询与共享视图
 
 M2-13 扩展 `GET /api/v1/contents/{contentId}/work-items`，支持标题关键字、模板状态、优先级、处理人、截止区间、严格更新时间下界和最多三层白名单排序。服务端先校验 Project/Content 可见性，再校验查询；同字段 OR、不同字段 AND，计数与分页复用同一谓词并追加 `id ASC`。状态按模板顺序、优先级按领域顺序、人员按当前显示名排序，未知历史人员和空值置后；旧客户端未传条件时仍按事项序号倒序。V30 为更新时间、处理人和截止日查询增加部分索引。
@@ -16,7 +28,7 @@ pnpm verify:m2-13
 
 M2-12 新增 `POST /api/v1/work-items/{workItemId}/transitions`，由服务端按 Project 固化模板版本校验精确迁移边并计算 `capabilities.availableTransitions`。命令必须携带 XSRF、强 `If-Match` 和幂等键；状态/类别、新版本、一条 `workitem.work_item_status_changed` v1 Outbox 和幂等结果原子提交。迁移不改变 rank 或任何协作字段；CompanyAdmin 保持只读，归档、终态、非法边与并发版本冲突均按固定问题语义拒绝。Flyway 仍停在 V29。
 
-Web 仅在 Work Item 详情抽屉展示服务端返回的合法目标。说明最长 500 字，迁移边可要求必填；传输失败的显式重试复用原幂等键。成功后刷新详情与当前 Table/Kanban，保留未保存字段草稿；412 沿用冲突面板且不自动重试。M2-13 已交付高级查询；M2-14 rank/拖拽、M2-15 删除恢复、M2-20 Activity、M2-23 最终事件冻结和 M2-24 总验收继续延期。
+Web 仅在 Work Item 详情抽屉展示服务端返回的合法目标。说明最长 500 字，迁移边可要求必填；传输失败的显式重试复用原幂等键。成功后刷新详情与当前 Table/Kanban，保留未保存字段草稿；412 沿用冲突面板且不自动重试。M2-13 已交付高级查询，M2-14 已交付 rank/拖动；M2-15 删除恢复、M2-20 Activity、M2-23 最终事件冻结和 M2-24 总验收继续延期。
 
 ```powershell
 pnpm verify:m2-12
@@ -28,7 +40,7 @@ pnpm verify:m2-12
 
 M2-11 在既有 Work Item 真源上开放标题、优先级、处理人、描述、备注、计划起止日和截止日的完整快照更新。GET、POST 与 PATCH 返回强 ETag；PATCH 要求 XSRF 与 `If-Match`，无变化不增版、不改审计时间、不发事件，陈旧版本固定返回 412 且不覆盖先写结果。处理人只允许选择同 Project 的 ACTIVE membership，自然日以 `YYYY-MM-DD` 存取；Flyway 继续停在 V29。
 
-Web 创建与详情表单复用 ACTIVE Project 成员分页，Table 呈现全部固定协作列，保存后刷新当前 Table/Kanban 真源。发生 412 时保留本地草稿并读取服务器最新版，只允许用户选择载入最新版或基于最新 ETag 明确重提；CompanyAdmin 与归档资源继续只读。状态迁移、高级查询、rank/拖拽、删除恢复和 Activity 投影分别留给 M2-12、M2-13、M2-14、M2-15 与 M2-20。
+Web 创建与详情表单复用 ACTIVE Project 成员分页，Table 呈现全部固定协作列，保存后刷新当前 Table/Kanban 真源。发生 412 时保留本地草稿并读取服务器最新版，只允许用户选择载入最新版或基于最新 ETag 明确重提；CompanyAdmin 与归档资源继续只读。状态迁移、高级查询与 rank/拖动已由 M2-12 至 M2-14 交付；删除恢复和 Activity 投影分别留给 M2-15 与 M2-20。
 
 ```powershell
 pnpm verify:m2-11

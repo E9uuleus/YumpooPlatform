@@ -11,6 +11,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class WorkItemTest {
 
+    private static final String RANK = KanbanRank.evenlySpaced(1, 1);
+
     @Test
     void creationNormalizesPlainTextAndKeepsFutureFieldsClosed() {
         UUID reporter = UUID.randomUUID();
@@ -18,14 +20,14 @@ class WorkItemTest {
                 UUID.randomUUID(), 7, "PROJECT_1-7", ContentWorkItemType.TASK,
                 "  修复登录失败  ", "BACKLOG", WorkItemStatusCategory.TODO,
                 WorkItemPriority.MEDIUM, null, "  仅显示纯文本  ", "   ",
-                null, null, null, reporter, Instant.EPOCH);
+                null, null, null, RANK, reporter, Instant.EPOCH);
 
         assertThat(item.title()).isEqualTo("修复登录失败");
         assertThat(item.description()).isEqualTo("仅显示纯文本");
         assertThat(item.notes()).isNull();
         assertThat(item.assigneeUserId()).isNull();
         assertThat(item.timelineStartDate()).isNull();
-        assertThat(item.rank()).isNull();
+        assertThat(item.rank()).isEqualTo(RANK);
         assertThat(item.rowVersion()).isZero();
     }
 
@@ -34,14 +36,14 @@ class WorkItemTest {
         assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), UUID.randomUUID(), 1, "bad-1", ContentWorkItemType.DEFECT,
                 "缺陷", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
-                null, null, null, null, null, null, UUID.randomUUID(), Instant.EPOCH))
+                null, null, null, null, null, null, RANK, UUID.randomUUID(), Instant.EPOCH))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("itemNo");
 
         assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1", ContentWorkItemType.DEFECT,
                 "缺陷", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
-                null, "x".repeat(16_385), null, null, null, null,
+                null, "x".repeat(16_385), null, null, null, null, RANK,
                 UUID.randomUUID(), Instant.EPOCH))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("description");
@@ -54,7 +56,7 @@ class WorkItemTest {
         WorkItem before = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), 9, "PROJECT_1-9", ContentWorkItemType.TASK,
                 "原始标题", "BACKLOG", WorkItemStatusCategory.TODO, WorkItemPriority.LOW,
-                null, null, null, null, null, null, reporter, Instant.EPOCH);
+                null, null, null, null, null, null, RANK, reporter, Instant.EPOCH);
 
         WorkItem after = before.updateFields("  新标题  ", WorkItemPriority.URGENT,
                 assignee, "  描述  ", "   ", LocalDate.parse("2026-08-22"),
@@ -77,7 +79,7 @@ class WorkItemTest {
                 UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1", ContentWorkItemType.TASK,
                 "任务", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.MEDIUM,
                 null, null, null, LocalDate.parse("2026-08-23"),
-                LocalDate.parse("2026-08-22"), null, UUID.randomUUID(), Instant.EPOCH))
+                LocalDate.parse("2026-08-22"), null, RANK, UUID.randomUUID(), Instant.EPOCH))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("timeline end");
     }
@@ -91,10 +93,11 @@ class WorkItemTest {
                 "修复并验证", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
                 reporter, "描述", "备注", LocalDate.parse("2026-08-23"),
                 LocalDate.parse("2026-08-24"), LocalDate.parse("2026-08-25"),
-                reporter, Instant.EPOCH);
+                RANK, reporter, Instant.EPOCH);
 
-        WorkItem after = before.transitionStatus("DIAGNOSING",
-                WorkItemStatusCategory.IN_PROGRESS, actor, Instant.EPOCH.plusSeconds(1));
+        String nextRank = KanbanRank.evenlySpaced(2, 2);
+        WorkItem after = before.move("DIAGNOSING",
+                WorkItemStatusCategory.IN_PROGRESS, nextRank, actor, Instant.EPOCH.plusSeconds(1));
 
         assertThat(after.statusCode()).isEqualTo("DIAGNOSING");
         assertThat(after.statusCategory()).isEqualTo(WorkItemStatusCategory.IN_PROGRESS);
@@ -104,7 +107,7 @@ class WorkItemTest {
         assertThat(after.description()).isEqualTo(before.description());
         assertThat(after.notes()).isEqualTo(before.notes());
         assertThat(after.assigneeUserId()).isEqualTo(before.assigneeUserId());
-        assertThat(after.rank()).isEqualTo(before.rank());
+        assertThat(after.rank()).isEqualTo(nextRank);
         assertThat(after.rowVersion()).isEqualTo(before.rowVersion());
     }
 
@@ -113,9 +116,9 @@ class WorkItemTest {
         WorkItem item = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), 12, "PROJECT_1-12", ContentWorkItemType.TASK,
                 "保持状态", "BACKLOG", WorkItemStatusCategory.TODO, WorkItemPriority.MEDIUM,
-                null, null, null, null, null, null, UUID.randomUUID(), Instant.EPOCH);
+                null, null, null, null, null, null, RANK, UUID.randomUUID(), Instant.EPOCH);
 
-        assertThatThrownBy(() -> item.transitionStatus("BACKLOG", WorkItemStatusCategory.TODO,
+        assertThatThrownBy(() -> item.move("BACKLOG", WorkItemStatusCategory.TODO, RANK,
                 UUID.randomUUID(), Instant.EPOCH.plusSeconds(1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("endpoints");

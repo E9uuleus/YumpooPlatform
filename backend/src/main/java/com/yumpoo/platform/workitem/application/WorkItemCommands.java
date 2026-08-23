@@ -21,4 +21,8 @@ public final class WorkItemCommands {
 
     public record Transition(CurrentActor actor, UUID workItemId, long expectedVersion,
             String toStatus, String resolution, UUID idempotencyKey, RequestHash requestHash) {}
+
+    public record RankMove(CurrentActor actor, UUID workItemId, long expectedVersion,
+            String toStatus, String placement, UUID anchorWorkItemId, String resolution,
+            UUID idempotencyKey, RequestHash requestHash) {}
 }

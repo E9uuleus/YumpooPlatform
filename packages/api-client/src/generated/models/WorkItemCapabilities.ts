@@ -34,6 +34,12 @@ export interface WorkItemCapabilities {
     readonly canEditFields: boolean;
     /**
      *
+     * @type {boolean}
+     * @memberof WorkItemCapabilities
+     */
+    readonly canMoveInKanban: boolean;
+    /**
+     *
      * @type {Array<WorkItemTransitionOption>}
      * @memberof WorkItemCapabilities
      */
@@ -45,6 +51,7 @@ export interface WorkItemCapabilities {
  */
 export function instanceOfWorkItemCapabilities(value: object): value is WorkItemCapabilities {
     if (!('canEditFields' in value) || value['canEditFields'] === undefined) return false;
+    if (!('canMoveInKanban' in value) || value['canMoveInKanban'] === undefined) return false;
     if (!('availableTransitions' in value) || value['availableTransitions'] === undefined) return false;
     return true;
 }
@@ -60,6 +67,7 @@ export function WorkItemCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator
     return {
 
         'canEditFields': json['canEditFields'],
+        'canMoveInKanban': json['canMoveInKanban'],
         'availableTransitions': ((json['availableTransitions'] as Array<any>).map(WorkItemTransitionOptionFromJSON)),
     };
 }
@@ -68,7 +76,7 @@ export function WorkItemCapabilitiesToJSON(json: any): WorkItemCapabilities {
     return WorkItemCapabilitiesToJSONTyped(json, false);
 }
 
-export function WorkItemCapabilitiesToJSONTyped(value?: Omit<WorkItemCapabilities, 'canEditFields'|'availableTransitions'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemCapabilitiesToJSONTyped(value?: Omit<WorkItemCapabilities, 'canEditFields'|'canMoveInKanban'|'availableTransitions'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

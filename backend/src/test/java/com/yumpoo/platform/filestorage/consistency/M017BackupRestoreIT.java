@@ -855,28 +855,38 @@ class M017BackupRestoreIT {
                     """)) {
                 assertThat(counter.executeUpdate()).isOne();
             }
+            try (PreparedStatement lanes = connection.prepareStatement("""
+                    INSERT INTO yumpoo.work_item_rank_lane (content_id, status_code)
+                    VALUES
+                        ('00000000-0000-4000-8000-000000000805', 'BACKLOG'),
+                        ('00000000-0000-4000-8000-000000000805', 'DONE')
+                    """)) {
+                assertThat(lanes.executeUpdate()).isEqualTo(2);
+            }
             try (PreparedStatement workItem = connection.prepareStatement("""
                     INSERT INTO yumpoo.work_item (
                         id, company_id, project_id, content_id, item_sequence, item_no, type,
-                        title, status_code, status_category, priority, assignee_user_id,
+                        title, status_code, status_category, rank, priority, assignee_user_id,
                         reporter_user_id, description, notes, timeline_start_date,
                         timeline_end_date, due_date, row_version, created_at,
                         created_by_user_id, updated_at, updated_by_user_id
                     ) VALUES (?, '00000000-0000-4000-8000-000000000001',
                         '00000000-0000-4000-8000-000000000802',
-                        '00000000-0000-4000-8000-000000000805', ?, ?, 'TASK', ?, ?, ?, ?,
+                        '00000000-0000-4000-8000-000000000805', ?, ?, 'TASK', ?, ?, ?, ?, ?,
                         ?, '00000000-0000-4000-8000-000000000102', ?, ?, ?, ?, ?, ?, ?,
                         '00000000-0000-4000-8000-000000000102', ?,
                         '00000000-0000-4000-8000-000000000102')
                     """)) {
                 Object[][] facts = {
                         {UUID.fromString("00000000-0000-4000-8000-000000000815"), 1L,
-                                "M2_04_RESTORE-1", "恢复工作项一", "BACKLOG", "TODO", "MEDIUM",
+                                "M2_04_RESTORE-1", "恢复工作项一", "BACKLOG", "TODO",
+                                "500000000000000000000000000000000000000", "MEDIUM",
                                 UUID.fromString("00000000-0000-4000-8000-000000000102"),
                                 "保留纯文本描述", "保留纯文本备注", LocalDate.parse("2026-08-20"),
                                 LocalDate.parse("2026-08-22"), LocalDate.parse("2026-08-23"), 0L},
                         {UUID.fromString("00000000-0000-4000-8000-000000000816"), 2L,
-                                "M2_04_RESTORE-2", "恢复工作项二", "DONE", "DONE", "HIGH",
+                                "M2_04_RESTORE-2", "恢复工作项二", "DONE", "DONE",
+                                "500000000000000000000000000000000000000", "HIGH",
                                 null, "第二项描述", null, null, null,
                                 LocalDate.parse("2026-08-24"), 4L}
                 };
@@ -888,7 +898,8 @@ class M017BackupRestoreIT {
                     workItem.setObject(9, fact[8]); workItem.setObject(10, fact[9]);
                     workItem.setObject(11, fact[10]); workItem.setObject(12, fact[11]);
                     workItem.setObject(13, fact[12]); workItem.setObject(14, fact[13]);
-                    workItem.setObject(15, createdAt); workItem.setObject(16, createdAt.plusHours(1));
+                    workItem.setObject(15, fact[14]); workItem.setObject(16, createdAt);
+                    workItem.setObject(17, createdAt.plusHours(1));
                     workItem.addBatch();
                 }
                 assertThat(workItem.executeBatch()).hasSize(2);
@@ -971,9 +982,15 @@ class M017BackupRestoreIT {
                             issue.row_version AS issue_version,
                             (SELECT counter.last_sequence FROM yumpoo.work_item_project_counter counter
                               WHERE counter.project_id=project.id) AS work_item_sequence,
+                            (SELECT string_agg(lane.status_code, ',' ORDER BY lane.status_code)
+                               FROM yumpoo.work_item_rank_lane lane
+                              WHERE lane.content_id IN (
+                                  SELECT lane_content.id FROM yumpoo.content lane_content
+                                   WHERE lane_content.project_id=project.id)) AS rank_lanes,
                             (SELECT string_agg(item.item_no || ':' || item.type || ':' || item.title
                                 || ':' || item.status_code || ':' || item.status_category || ':'
-                                || item.priority || ':' || COALESCE(item.description,'-') || ':'
+                                || item.rank || ':' || item.priority || ':'
+                                || COALESCE(item.description,'-') || ':'
                                 || COALESCE(item.notes,'-') || ':'
                                 || COALESCE(item.assignee_user_id::text,'-') || ':'
                                 || COALESCE(item.timeline_start_date::text,'-') || ':'
@@ -1017,8 +1034,8 @@ class M017BackupRestoreIT {
                     result.getString("product_link_facts"),
                     result.getString("issue_type"), result.getString("target_type"),
                     result.getString("issue_status"), result.getLong("issue_version"),
-                    result.getLong("work_item_sequence"), result.getString("work_items"),
-                    result.getString("contents"));
+                    result.getLong("work_item_sequence"), result.getString("rank_lanes"),
+                    result.getString("work_items"), result.getString("contents"));
             assertThat(result.next()).isFalse();
             return fact;
         }
@@ -1206,6 +1223,7 @@ class M017BackupRestoreIT {
             String issueStatus,
             long issueVersion,
             long workItemSequence,
+            String rankLanes,
             String workItems,
             String contents
     ) {

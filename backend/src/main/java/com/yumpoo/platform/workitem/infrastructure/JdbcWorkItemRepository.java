@@ -6,6 +6,7 @@ import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemRepository;
 import com.yumpoo.platform.workitem.application.WorkItemSortRanks;
 import com.yumpoo.platform.workitem.domain.ContentWorkItemType;
+import com.yumpoo.platform.workitem.domain.ContentViewType;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemPriority;
 import com.yumpoo.platform.workitem.domain.WorkItemStatusCategory;
@@ -18,6 +19,7 @@ import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -152,7 +154,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     public Optional<WorkItem> transition(WorkItem item, long expectedVersion) {
         return jdbc.sql("""
                 UPDATE yumpoo.work_item
-                   SET status_code=:statusCode, status_category=:statusCategory,
+                   SET status_code=:statusCode, status_category=:statusCategory, rank=:rank,
                        row_version=row_version+1, updated_at=:updatedAt,
                        updated_by_user_id=:updatedByUserId
                  WHERE company_id=:companyId AND project_id=:projectId AND content_id=:contentId
@@ -161,12 +163,67 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 """.formatted(COLUMNS))
                 .param("statusCode", item.statusCode())
                 .param("statusCategory", item.statusCategory().name())
+                .param("rank", item.rank())
                 .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", item.updatedByUserId())
                 .param("companyId", item.companyId()).param("projectId", item.projectId())
                 .param("contentId", item.contentId()).param("id", item.id())
                 .param("expectedVersion", expectedVersion)
                 .query(JdbcWorkItemRepository::map).optional();
+    }
+
+    @Override
+    public void lockRankLanes(UUID contentId, Collection<String> statuses) {
+        List<String> ordered = statuses.stream().distinct().sorted().toList();
+        for (String status : ordered) {
+            jdbc.sql("INSERT INTO yumpoo.work_item_rank_lane (content_id, status_code) "
+                            + "VALUES (:contentId, :statusCode) ON CONFLICT DO NOTHING")
+                    .param("contentId", contentId).param("statusCode", status).update();
+        }
+        jdbc.sql("SELECT status_code FROM yumpoo.work_item_rank_lane "
+                        + "WHERE content_id=:contentId AND status_code IN (:statuses) "
+                        + "ORDER BY status_code FOR UPDATE")
+                .param("contentId", contentId).param("statuses", ordered)
+                .query(String.class).list();
+    }
+
+    @Override
+    public List<RankedWorkItem> findRankOrder(UUID companyId, UUID projectId, UUID contentId,
+            String statusCode) {
+        return jdbc.sql("SELECT id, rank FROM yumpoo.work_item WHERE company_id=:companyId "
+                        + "AND project_id=:projectId AND content_id=:contentId "
+                        + "AND status_code=:statusCode AND deleted_at IS NULL ORDER BY rank ASC, id ASC")
+                .param("companyId", companyId).param("projectId", projectId)
+                .param("contentId", contentId).param("statusCode", statusCode)
+                .query((rs, row) -> new RankedWorkItem(rs.getObject("id", UUID.class),
+                        rs.getString("rank"))).list();
+    }
+
+    @Override
+    public void rewriteRanks(UUID companyId, UUID projectId, UUID contentId, String statusCode,
+            Map<UUID, String> ranks) {
+        if (ranks.isEmpty()) return;
+        StringBuilder cases = new StringBuilder("CASE id");
+        Map<String, Object> parameters = baseParameters(companyId, projectId, contentId);
+        List<UUID> ids = new ArrayList<>();
+        int index = 0;
+        for (Map.Entry<UUID, String> entry : ranks.entrySet()) {
+            String id = "rankId" + index;
+            String rank = "rankValue" + index;
+            cases.append(" WHEN :").append(id).append(" THEN :").append(rank);
+            parameters.put(id, entry.getKey());
+            parameters.put(rank, entry.getValue());
+            ids.add(entry.getKey());
+            index++;
+        }
+        parameters.put("statusCode", statusCode);
+        parameters.put("rankIds", ids);
+        JdbcClient.StatementSpec statement = jdbc.sql("UPDATE yumpoo.work_item SET rank="
+                + cases.append(" ELSE rank END").toString()
+                + " WHERE company_id=:companyId AND project_id=:projectId AND content_id=:contentId"
+                + " AND status_code=:statusCode AND deleted_at IS NULL AND id IN (:rankIds)");
+        int updated = bind(statement, parameters).update();
+        if (updated != ranks.size()) throw new IllegalStateException("Kanban rank rebalance lost rows");
     }
 
     private Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId,
@@ -198,10 +255,12 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     @Override
     public List<WorkItem> findPage(UUID companyId, UUID projectId, UUID contentId,
-            WorkItemQuery query, WorkItemSortRanks ranks, OffsetPageRequest page) {
+            WorkItemQuery query, WorkItemSortRanks ranks, ContentViewType view,
+            OffsetPageRequest page) {
         Map<String, Object> parameters = baseParameters(companyId, projectId, contentId);
         String where = where(query, parameters);
-        String orderBy = orderBy(query, ranks, parameters);
+        String orderBy = view == ContentViewType.KANBAN
+                ? "rank ASC, id ASC" : orderBy(query, ranks, parameters);
         parameters.put("limit", page.size());
         parameters.put("offset", Math.multiplyExact(page.page(), page.size()));
         JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS

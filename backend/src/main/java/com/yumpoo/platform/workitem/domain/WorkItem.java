@@ -45,7 +45,7 @@ public record WorkItem(
         if (timelineStartDate != null && timelineEndDate != null
                 && timelineEndDate.isBefore(timelineStartDate))
             throw new IllegalArgumentException("timeline end must not precede start");
-        rank = normalizeOptional(rank, 128, "rank");
+        rank = KanbanRank.require(rank);
         boolean deleted = deletedAt != null || deletedByUserId != null || deleteReason != null;
         if (deleted && (deletedAt == null || deletedByUserId == null || deleteReason == null))
             throw new IllegalArgumentException("deleted work item must contain complete delete facts");
@@ -55,10 +55,11 @@ public record WorkItem(
             long itemSequence, String itemNo, ContentWorkItemType type, String title,
             String statusCode, WorkItemStatusCategory statusCategory, WorkItemPriority priority,
             UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
-            LocalDate timelineEndDate, LocalDate dueDate, UUID reporterUserId, Instant now) {
+            LocalDate timelineEndDate, LocalDate dueDate, String rank,
+            UUID reporterUserId, Instant now) {
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
-                description, notes, timelineStartDate, timelineEndDate, dueDate, null, 0, now, reporterUserId,
+                description, notes, timelineStartDate, timelineEndDate, dueDate, rank, 0, now, reporterUserId,
                 now, reporterUserId, null, null, null);
     }
 
@@ -76,8 +77,8 @@ public record WorkItem(
                 createdByUserId, now, actorUserId, deletedAt, deletedByUserId, deleteReason);
     }
 
-    public WorkItem transitionStatus(String nextStatusCode,
-            WorkItemStatusCategory nextStatusCategory, UUID actorUserId, Instant now) {
+    public WorkItem move(String nextStatusCode, WorkItemStatusCategory nextStatusCategory,
+            String nextRank, UUID actorUserId, Instant now) {
         Objects.requireNonNull(nextStatusCategory, "nextStatusCategory must not be null");
         Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         Objects.requireNonNull(now, "now must not be null");
@@ -88,8 +89,20 @@ public record WorkItem(
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
                 title, nextStatusCode, nextStatusCategory, priority, assigneeUserId,
                 reporterUserId, description, notes, timelineStartDate, timelineEndDate,
-                dueDate, rank, rowVersion, createdAt, createdByUserId, now, actorUserId,
+                dueDate, nextRank, rowVersion, createdAt, createdByUserId, now, actorUserId,
                 deletedAt, deletedByUserId, deleteReason);
+    }
+
+    public WorkItem reorder(String nextRank, UUID actorUserId, Instant now) {
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (deletedAt != null) throw new IllegalStateException("deleted work item cannot move");
+        if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                description, notes, timelineStartDate, timelineEndDate, dueDate, nextRank,
+                rowVersion, createdAt, createdByUserId, now, actorUserId, deletedAt,
+                deletedByUserId, deleteReason);
     }
 
     private static String normalizeRequired(String value, int maximum, String field) {

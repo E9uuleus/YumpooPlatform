@@ -1,11 +1,14 @@
 import {
+  ContentViewType,
   ContentSortDirection,
   ContentSortField,
   WorkItemPriority,
+  WorkItemRankPlacement,
 } from '../src/generated/models/index.js'
 import type {
   CreateWorkItemRequest,
   ListContentWorkItemsRequest,
+  RankMoveWorkItemRequest,
   TransitionWorkItemRequest,
   UpdateWorkItemRequest,
 } from '../src/generated/apis/WorkItemsApi.js'
@@ -24,9 +27,18 @@ const create: CreateWorkItemRequest = {
 
 const groupedPage: ListContentWorkItemsRequest = {
   contentId: create.contentId,
+  view: ContentViewType.Table,
   page: 0,
   size: 20,
   status: new Set(['BACKLOG', 'IN_PROGRESS']),
+}
+
+const kanbanPage: ListContentWorkItemsRequest = {
+  contentId: create.contentId,
+  view: ContentViewType.Kanban,
+  page: 0,
+  size: 20,
+  status: new Set(['BACKLOG']),
 }
 
 const advancedPage: ListContentWorkItemsRequest = {
@@ -75,6 +87,24 @@ const transition: TransitionWorkItemRequest = {
   },
 }
 
+const rankMove: RankMoveWorkItemRequest = {
+  workItemId: update.workItemId,
+  xXSRFTOKEN: 'csrf-token',
+  ifMatch: '"0"',
+  idempotencyKey: '2a000000-0000-4000-8000-000000000406',
+  workItemRankMoveRequest: {
+    toStatus: 'READY',
+    placement: WorkItemRankPlacement.Before,
+    anchorWorkItemId: '2a000000-0000-4000-8000-000000000407',
+    resolution: null,
+  },
+}
+
+// @ts-expect-error M2-14 rank move 必须明确目标状态与定位方式。
+const missingPlacement: RankMoveWorkItemRequest['workItemRankMoveRequest'] = {
+  toStatus: 'READY',
+}
+
 // @ts-expect-error M2-12 状态迁移必须明确提交目标状态。
 const missingTarget: TransitionWorkItemRequest['workItemTransitionRequest'] = {
   resolution: null,
@@ -93,9 +123,12 @@ const missingDueDateBody: UpdateWorkItemRequest['workItemUpdateRequest'] = {
 
 void create
 void groupedPage
+void kanbanPage
 void advancedPage
 void update
 void transition
+void rankMove
+void missingPlacement
 void missingTarget
 void missingPriorityBody
 void missingDueDateBody

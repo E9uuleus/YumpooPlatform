@@ -26,8 +26,11 @@ import com.yumpoo.platform.templateworkflow.api.ProjectTemplateSnapshot;
 import com.yumpoo.platform.templateworkflow.api.ProjectTemplateVersionQuery;
 import com.yumpoo.platform.workitem.domain.Content;
 import com.yumpoo.platform.workitem.domain.ContentStatus;
+import com.yumpoo.platform.workitem.domain.ContentViewType;
+import com.yumpoo.platform.workitem.domain.KanbanRank;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemPriority;
+import com.yumpoo.platform.workitem.domain.WorkItemRankPlacement;
 import com.yumpoo.platform.workitem.domain.WorkItemStatusCategory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,13 +46,16 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
+import static com.yumpoo.platform.workitem.application.WorkItemCommands.RankMove;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Update;
 import static com.yumpoo.platform.workitem.application.WorkItemModels.*;
+import static com.yumpoo.platform.workitem.application.WorkItemRepository.RankedWorkItem;
 
 @Service
 public class WorkItemService {
@@ -58,6 +64,7 @@ public class WorkItemService {
     private static final String ASSIGNED = "workitem.work_item_assigned";
     private static final String UNASSIGNED = "workitem.work_item_unassigned";
     private static final String STATUS_CHANGED = "workitem.work_item_status_changed";
+    private static final String RANK_CHANGED = "workitem.work_item_rank_changed";
 
     private final WorkItemRepository workItems;
     private final ContentRepository contents;
@@ -92,7 +99,7 @@ public class WorkItemService {
 
     @Transactional(readOnly = true)
     public WorkItemPage list(CurrentActor actor, UUID contentId,
-            WorkItemQuery.Request request, OffsetPageRequest page) {
+            WorkItemQuery.Request request, String view, OffsetPageRequest page) {
         VisibleContent visible = visibleContent(actor, contentId);
         ProjectTemplateSnapshot template = template(visible.project().templateKey(),
                 visible.project().templateVersion());
@@ -100,15 +107,24 @@ public class WorkItemService {
                 .map(ProjectTemplateSnapshot.WorkflowStatus::statusCode)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         WorkItemQuery query = WorkItemQuery.parse(request, allowedStatuses);
+        ContentViewType effectiveView = view(view);
+        if (effectiveView == ContentViewType.KANBAN) {
+            if (query.statuses().size() != 1)
+                throw validation("status", "KANBAN_REQUIRES_ONE_STATUS",
+                        "Kanban 泳道查询必须且只能指定一个状态");
+            if (request.sorts() != null && !request.sorts().isEmpty())
+                throw validation("sort", "KANBAN_SORT_FIXED", "Kanban 固定按 rank 排序");
+        }
         WorkItemSortRanks ranks = sortRanks(visible.project().companyId(),
                 visible.project().projectId(), contentId, query, template);
         List<WorkItem> rows = workItems.findPage(visible.project().companyId(),
-                visible.project().projectId(), contentId, query, ranks, page);
+                visible.project().projectId(), contentId, query, ranks, effectiveView, page);
         long total = workItems.countPage(visible.project().companyId(),
                 visible.project().projectId(), contentId, query);
         Map<UUID, MinimalUserSnapshot> people = people(visible.project().companyId(), rows);
         OffsetPageResponse<WorkItemSummary> response = OffsetPageResponse.of(rows.stream()
-                .map(item -> summary(item, people)).toList(), page, total);
+                .map(item -> summary(item, people, canEdit(visible.project(), visible.content()),
+                        template)).toList(), page, total);
         return new WorkItemPage(response.items(), response.page(), response.size(),
                 response.totalElements(), response.totalPages());
     }
@@ -150,6 +166,9 @@ public class WorkItemService {
                     .orElseThrow(() -> ApplicationException.withReason(
                             StandardErrorCode.INVALID_STATE_TRANSITION,
                             "TEMPLATE_INITIAL_STATUS_MISSING"));
+            workItems.lockRankLanes(content.id(), List.of(initial.statusCode()));
+            String rank = allocateRank(project.companyId(), project.projectId(), content.id(),
+                    initial.statusCode(), WorkItemRankPlacement.START, null, null).rank();
             long sequence = workItems.nextSequence(project.companyId(), project.projectId());
             WorkItem item;
             try {
@@ -158,7 +177,7 @@ public class WorkItemService {
                         content.workItemType(), command.title(), initial.statusCode(),
                         WorkItemStatusCategory.valueOf(initial.statusCategory()), priority,
                         command.assigneeUserId(), command.description(), command.notes(),
-                        command.timelineStartDate(), command.timelineEndDate(), command.dueDate(),
+                        command.timelineStartDate(), command.timelineEndDate(), command.dueDate(), rank,
                         command.actor().userId(), clock.instant());
             } catch (IllegalArgumentException exception) {
                 throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
@@ -224,34 +243,30 @@ public class WorkItemService {
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireActiveContent(content);
-        WorkItem before = workItems.lock(project.companyId(), project.projectId(),
+        WorkItem snapshot = workItems.find(project.companyId(), project.projectId(),
                         locator.contentId(), command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        requireVersion(before, command.expectedVersion());
+        requireVersion(snapshot, command.expectedVersion());
         ProjectTemplateSnapshot template = template(project.templateKey(), project.templateVersion());
-        ProjectTemplateSnapshot.WorkflowTransition edge = template.transitions().stream()
-                .filter(value -> value.fromStatus().equals(before.statusCode())
-                        && value.toStatus().equals(command.toStatus()))
-                .findFirst().orElseThrow(() -> ApplicationException.withReason(
-                        StandardErrorCode.INVALID_STATE_TRANSITION,
-                        "WORK_ITEM_TRANSITION_NOT_ALLOWED"));
-        if (!"MEMBER".equals(edge.requiredPermission())) {
-            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "WORK_ITEM_TRANSITION_PERMISSION_UNSUPPORTED");
-        }
-        ProjectTemplateSnapshot.WorkflowStatus target = template.statuses().stream()
-                .filter(value -> value.statusCode().equals(edge.toStatus())).findFirst()
-                .orElseThrow(() -> ApplicationException.withReason(
-                        StandardErrorCode.INVALID_STATE_TRANSITION,
-                        "WORK_ITEM_TARGET_STATUS_MISSING"));
+        ProjectTemplateSnapshot.WorkflowTransition edge = transitionEdge(template,
+                snapshot.statusCode(), command.toStatus());
+        ProjectTemplateSnapshot.WorkflowStatus target = targetStatus(template, edge.toStatus());
         String resolution = normalizeResolution(command.resolution());
         if (edge.requiresResolution() && resolution == null) {
             throw validation("resolution", "REQUIRED", "该状态迁移必须填写说明");
         }
+        workItems.lockRankLanes(content.id(), List.of(snapshot.statusCode(), target.statusCode()));
+        WorkItem before = workItems.lock(project.companyId(), project.projectId(),
+                        locator.contentId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(before, command.expectedVersion());
+        transitionEdge(template, before.statusCode(), command.toStatus());
+        String rank = allocateRank(project.companyId(), project.projectId(), content.id(),
+                target.statusCode(), WorkItemRankPlacement.START, null, before.id()).rank();
         WorkItem candidate;
         try {
-            candidate = before.transitionStatus(target.statusCode(),
-                    WorkItemStatusCategory.valueOf(target.statusCategory()),
+            candidate = before.move(target.statusCode(),
+                    WorkItemStatusCategory.valueOf(target.statusCategory()), rank,
                     command.actor().userId(), clock.instant());
         } catch (IllegalArgumentException | IllegalStateException exception) {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
@@ -260,6 +275,74 @@ public class WorkItemService {
         WorkItem after = workItems.transition(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         appendStatusChanged(before, after, command.actor(), resolution);
+        return stored(200, detail(after, people(project.companyId(), List.of(after)), true, template));
+    }
+
+    public IdempotencyExecutionResult rankMove(RankMove command) {
+        requireActor(command.actor());
+        WorkItemLocator locator = workItems.findLocator(command.actor().companyId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        ProjectAccessSnapshot project = visible(command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
+                command.actor().userId(), "POST", "rankMoveWorkItem", command.idempotencyKey()),
+                command.requestHash()), () -> rankMove(command, locator));
+    }
+
+    private StoredCommandResult rankMove(RankMove command, WorkItemLocator locator) {
+        WorkItemRankPlacement placement = placement(command.placement(), command.anchorWorkItemId());
+        ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
+                command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireActiveContent(content);
+        ProjectTemplateSnapshot template = template(project.templateKey(), project.templateVersion());
+        WorkItem snapshot = workItems.find(project.companyId(), project.projectId(), content.id(),
+                        command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(snapshot, command.expectedVersion());
+        ProjectTemplateSnapshot.WorkflowStatus target = targetStatus(template, command.toStatus());
+        ProjectTemplateSnapshot.WorkflowTransition edge = null;
+        String resolution = normalizeResolution(command.resolution());
+        if (!snapshot.statusCode().equals(target.statusCode())) {
+            edge = transitionEdge(template, snapshot.statusCode(), target.statusCode());
+            if (edge.requiresResolution() && resolution == null)
+                throw validation("resolution", "REQUIRED", "该状态迁移必须填写说明");
+        } else if (resolution != null) {
+            throw validation("resolution", "NOT_ALLOWED", "同状态排序不接受迁移说明");
+        }
+        workItems.lockRankLanes(content.id(), List.of(snapshot.statusCode(), target.statusCode()));
+        WorkItem before = workItems.lock(project.companyId(), project.projectId(), content.id(),
+                        command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(before, command.expectedVersion());
+        if (!before.statusCode().equals(snapshot.statusCode()))
+            throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+        if (!before.statusCode().equals(target.statusCode()))
+            transitionEdge(template, before.statusCode(), target.statusCode());
+        RankAllocation allocation = allocateRank(project.companyId(), project.projectId(),
+                content.id(), target.statusCode(), placement, command.anchorWorkItemId(), before.id());
+        if (allocation.noOp())
+            return stored(200, detail(before, people(project.companyId(), List.of(before)), true, template));
+        WorkItem candidate;
+        try {
+            candidate = before.statusCode().equals(target.statusCode())
+                    ? before.reorder(allocation.rank(), command.actor().userId(), clock.instant())
+                    : before.move(target.statusCode(),
+                            WorkItemStatusCategory.valueOf(target.statusCategory()), allocation.rank(),
+                            command.actor().userId(), clock.instant());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "WORK_ITEM_RANK_MOVE_REJECTED");
+        }
+        WorkItem after = workItems.transition(candidate, command.expectedVersion())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        if (before.statusCode().equals(after.statusCode())) {
+            appendRankChanged(after, command.actor(), placement, command.anchorWorkItemId());
+        } else {
+            appendStatusChanged(before, after, command.actor(), resolution);
+        }
         return stored(200, detail(after, people(project.companyId(), List.of(after)), true, template));
     }
 
@@ -319,13 +402,16 @@ public class WorkItemService {
     }
 
     private static WorkItemSummary summary(WorkItem item,
-            Map<UUID, MinimalUserSnapshot> people) {
+            Map<UUID, MinimalUserSnapshot> people, boolean canEditFields,
+            ProjectTemplateSnapshot template) {
         return new WorkItemSummary(item.id(), item.projectId(), item.contentId(), item.itemNo(),
                 item.type().name(), item.title(), item.statusCode(), item.statusCategory().name(),
                 item.priority().name(), item.assigneeUserId(), assigneeDisplayName(item, people),
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
-                item.dueDate(), item.updatedAt());
+                item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
+                new WorkItemCapabilities(canEditFields, canEditFields,
+                        availableTransitions(item, canEditFields, template)), item.updatedAt());
     }
 
     private static WorkItemDetail detail(WorkItem item,
@@ -337,7 +423,7 @@ public class WorkItemService {
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
                 item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
-                new WorkItemCapabilities(canEditFields,
+                new WorkItemCapabilities(canEditFields, canEditFields,
                         availableTransitions(item, canEditFields, template)),
                 item.createdAt(), item.updatedAt());
     }
@@ -357,6 +443,97 @@ public class WorkItemService {
                         entry.getValue().displayName(), entry.getValue().statusCategory(),
                         entry.getKey().requiresResolution()))
                 .toList();
+    }
+
+    private RankAllocation allocateRank(UUID companyId, UUID projectId, UUID contentId,
+            String statusCode, WorkItemRankPlacement placement, UUID anchorWorkItemId,
+            UUID movingWorkItemId) {
+        List<RankedWorkItem> lane = workItems.findRankOrder(companyId, projectId, contentId, statusCode);
+        List<UUID> original = lane.stream().map(RankedWorkItem::id).toList();
+        List<RankedWorkItem> available = lane.stream()
+                .filter(item -> !item.id().equals(movingWorkItemId)).toList();
+        int targetIndex = targetIndex(available, placement, anchorWorkItemId, movingWorkItemId);
+        if (movingWorkItemId != null && original.contains(movingWorkItemId)) {
+            List<UUID> desired = new ArrayList<>(available.stream().map(RankedWorkItem::id).toList());
+            desired.add(targetIndex, movingWorkItemId);
+            if (desired.equals(original)) {
+                String current = lane.stream().filter(item -> item.id().equals(movingWorkItemId))
+                        .findFirst().orElseThrow().rank();
+                return new RankAllocation(current, true);
+            }
+        }
+        Optional<String> candidate = KanbanRank.between(
+                targetIndex == 0 ? null : available.get(targetIndex - 1).rank(),
+                targetIndex == available.size() ? null : available.get(targetIndex).rank());
+        if (candidate.isEmpty()) {
+            Map<UUID, String> rebalanced = new LinkedHashMap<>();
+            for (int index = 0; index < lane.size(); index++)
+                rebalanced.put(lane.get(index).id(), KanbanRank.evenlySpaced(index + 1, lane.size()));
+            workItems.rewriteRanks(companyId, projectId, contentId, statusCode, rebalanced);
+            lane = workItems.findRankOrder(companyId, projectId, contentId, statusCode);
+            available = lane.stream().filter(item -> !item.id().equals(movingWorkItemId)).toList();
+            targetIndex = targetIndex(available, placement, anchorWorkItemId, movingWorkItemId);
+            candidate = KanbanRank.between(
+                    targetIndex == 0 ? null : available.get(targetIndex - 1).rank(),
+                    targetIndex == available.size() ? null : available.get(targetIndex).rank());
+        }
+        return new RankAllocation(candidate.orElseThrow(
+                () -> new IllegalStateException("Kanban rank rebalance left no position")), false);
+    }
+
+    private static int targetIndex(List<RankedWorkItem> available,
+            WorkItemRankPlacement placement, UUID anchorWorkItemId, UUID movingWorkItemId) {
+        if (placement == WorkItemRankPlacement.START) return 0;
+        if (placement == WorkItemRankPlacement.END) return available.size();
+        if (Objects.equals(anchorWorkItemId, movingWorkItemId))
+            throw invalidRankAnchor();
+        for (int index = 0; index < available.size(); index++) {
+            if (available.get(index).id().equals(anchorWorkItemId))
+                return placement == WorkItemRankPlacement.BEFORE ? index : index + 1;
+        }
+        throw invalidRankAnchor();
+    }
+
+    private static WorkItemRankPlacement placement(String value, UUID anchorWorkItemId) {
+        WorkItemRankPlacement placement;
+        try {
+            placement = WorkItemRankPlacement.valueOf(value);
+        } catch (RuntimeException exception) {
+            throw validation("placement", "INVALID_VALUE", "Kanban 定位方式无效");
+        }
+        boolean relative = placement == WorkItemRankPlacement.BEFORE
+                || placement == WorkItemRankPlacement.AFTER;
+        if (relative != (anchorWorkItemId != null))
+            throw validation("anchorWorkItemId", "INVALID_COMBINATION",
+                    "BEFORE/AFTER 必须且只能携带锚点工作项");
+        return placement;
+    }
+
+    private static ProjectTemplateSnapshot.WorkflowTransition transitionEdge(
+            ProjectTemplateSnapshot template, String fromStatus, String toStatus) {
+        ProjectTemplateSnapshot.WorkflowTransition edge = template.transitions().stream()
+                .filter(value -> value.fromStatus().equals(fromStatus)
+                        && value.toStatus().equals(toStatus))
+                .findFirst().orElseThrow(() -> ApplicationException.withReason(
+                        StandardErrorCode.INVALID_STATE_TRANSITION,
+                        "WORK_ITEM_TRANSITION_NOT_ALLOWED"));
+        if (!"MEMBER".equals(edge.requiredPermission()))
+            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "WORK_ITEM_TRANSITION_PERMISSION_UNSUPPORTED");
+        return edge;
+    }
+
+    private static ProjectTemplateSnapshot.WorkflowStatus targetStatus(
+            ProjectTemplateSnapshot template, String statusCode) {
+        return template.statuses().stream().filter(value -> value.statusCode().equals(statusCode))
+                .findFirst().orElseThrow(() -> ApplicationException.withReason(
+                        StandardErrorCode.INVALID_STATE_TRANSITION,
+                        "WORK_ITEM_TARGET_STATUS_MISSING"));
+    }
+
+    private static ApplicationException invalidRankAnchor() {
+        return ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
+                "WORK_ITEM_RANK_ANCHOR_INVALID");
     }
 
     private static String assigneeDisplayName(WorkItem item,
@@ -410,6 +587,20 @@ public class WorkItemService {
         payload.put("resolution", resolution);
         payload.put("rowVersion", after.rowVersion());
         append(STATUS_CHANGED, after, actor, payload);
+    }
+
+    private void appendRankChanged(WorkItem item, CurrentActor actor,
+            WorkItemRankPlacement placement, UUID anchorWorkItemId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("workItemId", item.id());
+        payload.put("projectId", item.projectId());
+        payload.put("contentId", item.contentId());
+        payload.put("itemNo", item.itemNo());
+        payload.put("statusCode", item.statusCode());
+        payload.put("placement", placement.name());
+        payload.put("anchorWorkItemId", anchorWorkItemId);
+        payload.put("rowVersion", item.rowVersion());
+        append(RANK_CHANGED, item, actor, payload);
     }
 
     private static Map<String, Object> commonEventPayload(WorkItem item) {
@@ -484,6 +675,15 @@ public class WorkItemService {
         }
     }
 
+    private static ContentViewType view(String value) {
+        if (value == null || value.isBlank()) return ContentViewType.TABLE;
+        try {
+            return ContentViewType.valueOf(value);
+        } catch (RuntimeException exception) {
+            throw validation("view", "INVALID_VALUE", "工作项视图类型无效");
+        }
+    }
+
     private static void requireDateRange(LocalDate start, LocalDate end) {
         if (start != null && end != null && end.isBefore(start)) {
             throw validation("timelineEndDate", "INVALID_RANGE", "计划结束日不得早于计划开始日");
@@ -530,5 +730,6 @@ public class WorkItemService {
         return ApplicationException.validation(new FieldViolation(field, code, message));
     }
 
+    private record RankAllocation(String rank, boolean noOp) {}
     private record VisibleContent(ProjectAccessSnapshot project, Content content) {}
 }
