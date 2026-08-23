@@ -1,5 +1,7 @@
 import {
   ContentStatus,
+  ContentSortDirection,
+  ContentSortField,
   ContentTableColumn,
   ContentViewType,
   ProjectActorAccess,
@@ -18,6 +20,7 @@ import {
   type WorkItemSummary,
   type WorkItemTransitionOption,
 } from '@yumpoo/api-client'
+import type { ContentTableQuery } from '../../components/projects/contentTableQuery'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ContentWorkItemsView from './ContentWorkItemsView.vue'
@@ -26,21 +29,28 @@ const api = vi.hoisted(() => ({
   getProject: vi.fn(),
   listProjectMembers: vi.fn(),
   listProjectContents: vi.fn(),
+  getContent: vi.fn(),
+  updateContent: vi.fn(),
   listContentWorkItems: vi.fn(),
   createWorkItem: vi.fn(),
   getWorkItem: vi.fn(),
   updateWorkItem: vi.fn(),
   transitionWorkItem: vi.fn(),
 }))
-const routerPush = vi.hoisted(() => vi.fn())
+const routing = vi.hoisted(() => ({
+  route: { name: 'content-work-items', params: { projectId: 'project-1', contentId: 'content-1' },
+    query: {} as Record<string, string | string[]> },
+  push: vi.fn(), replace: vi.fn(),
+}))
 
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { projectId: 'project-1', contentId: 'content-1' } }),
-  useRouter: () => ({ push: routerPush }),
+  useRoute: () => routing.route,
+  useRouter: () => ({ push: routing.push, replace: routing.replace }),
 }))
 vi.mock('../../api/client', () => ({
   projectsApi: { getProject: api.getProject, listProjectMembers: api.listProjectMembers },
-  contentsApi: { listProjectContents: api.listProjectContents },
+  contentsApi: { listProjectContents: api.listProjectContents,
+    getContent: api.getContent, updateContent: api.updateContent },
   workItemsApi: {
     listContentWorkItems: api.listContentWorkItems,
     createWorkItem: api.createWorkItem,
@@ -155,7 +165,7 @@ describe('M2-10 Content 工作项工作区', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     Object.values(api).forEach(mock => mock.mockReset())
-    routerPush.mockReset()
+    routing.push.mockReset(); routing.replace.mockReset(); routing.route.query = {}
     api.getProject.mockResolvedValue(project)
     api.listProjectMembers.mockResolvedValue({
       items: [{ membershipId: 'membership-1', projectId: 'project-1', userId: 'owner-1',
@@ -166,6 +176,8 @@ describe('M2-10 Content 工作项工作区', () => {
       page: 0, size: 100, totalElements: 1, totalPages: 1,
     })
     api.listProjectContents.mockResolvedValue(catalog())
+    api.getContent.mockResolvedValue(content())
+    api.updateContent.mockResolvedValue(content())
     api.listContentWorkItems.mockResolvedValue(page([summary()]))
     api.createWorkItem.mockResolvedValue(detail())
     api.getWorkItem.mockResolvedValue(detail())
@@ -178,9 +190,13 @@ describe('M2-10 Content 工作项工作区', () => {
 
   it('使用服务端分页并呈现全部协作字段列', async () => {
     const wrapper = mountView(); await flushPromises()
-    expect(api.listContentWorkItems).toHaveBeenCalledWith({ contentId: 'content-1', page: 0, size: 20 })
+    expect(api.listContentWorkItems).toHaveBeenCalledWith({
+      contentId: 'content-1', page: 0, size: 20, q: '', status: new Set(),
+      priority: new Set(), assigneeUserId: new Set(), dueFrom: undefined,
+      dueTo: undefined, updatedAfter: undefined, sort: [],
+    })
     expect(api.listProjectMembers).toHaveBeenCalledWith({ projectId: 'project-1',
-      status: ProjectMembershipStatusFilter.Active, page: 0, size: 100 })
+      status: ProjectMembershipStatusFilter.All, page: 0, size: 100 })
     const text = wrapper.text()
     expect(text).toContain('事项编号')
     expect(text).toContain('标题')
@@ -193,6 +209,90 @@ describe('M2-10 Content 工作项工作区', () => {
     expect(text).toContain('列表描述')
     expect(text).toContain('2026-08-22 → 2026-08-29')
     expect(text).toContain('PROJECT_1-1')
+    wrapper.unmount()
+  })
+
+  it('无 URL 自定义时使用共享默认，custom 查询完整覆盖并显式提交', async () => {
+    const shared = content()
+    shared.viewConfig.table.filters.query = '共享条件'
+    shared.viewConfig.table.filters.statusCodes = new Set(['BACKLOG'])
+    shared.viewConfig.table.sort = [{ field: ContentSortField.Status,
+      direction: ContentSortDirection.Asc }]
+    api.listProjectContents.mockResolvedValue(catalog(shared))
+    const sharedWrapper = mountView(); await flushPromises()
+    expect(api.listContentWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({
+      q: '共享条件', status: new Set(['BACKLOG']), sort: ['STATUS,ASC'], page: 0,
+    }))
+    sharedWrapper.unmount()
+
+    api.listContentWorkItems.mockClear()
+    routing.route.query = { custom: '1', q: 'URL 条件', priority: ['HIGH'],
+      sort: ['UPDATED_AT,DESC'] }
+    const customWrapper = mountView(); await flushPromises()
+    expect(api.listContentWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({
+      q: 'URL 条件', status: new Set(), priority: new Set([WorkItemPriority.High]),
+      sort: ['UPDATED_AT,DESC'], page: 0,
+    }))
+    customWrapper.unmount()
+  }, 10_000)
+
+  it('筛选与排序写入浏览历史、回到第 0 页并忽略迟到响应', async () => {
+    let resolveOld!: (value: WorkItemPage) => void
+    const oldResult = new Promise<WorkItemPage>(resolve => { resolveOld = resolve })
+    api.listContentWorkItems.mockImplementationOnce(() => oldResult)
+      .mockResolvedValueOnce(page([summary('work-item-2', 'BACKLOG', '新查询结果')]))
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      tableQuery: ContentTableQuery
+      tablePage: WorkItemPage
+      applyTableQuery: (value: ContentTableQuery, replace: boolean) => Promise<void>
+    }
+    const changed: ContentTableQuery = {
+      filters: { ...vm.tableQuery.filters, query: '新查询', statusCodes: new Set(['BACKLOG']),
+        priorities: new Set(), assigneeUserIds: new Set() },
+      sort: [{ field: ContentSortField.Priority, direction: ContentSortDirection.Desc }],
+    }
+    await vm.applyTableQuery(changed, false)
+    expect(routing.push).toHaveBeenCalledWith(expect.objectContaining({ query: expect.objectContaining({
+      custom: '1', q: '新查询', status: ['BACKLOG'], sort: ['PRIORITY,DESC'],
+    }) }))
+    expect(api.listContentWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({ page: 0 }))
+    resolveOld(page([summary('work-item-1', 'BACKLOG', '迟到旧结果')]))
+    await flushPromises()
+    expect(vm.tablePage.items[0]?.title).toBe('新查询结果')
+    wrapper.unmount()
+  })
+
+  it('Owner 保存共享默认，412 后仅向最新版合并 filters/sort 并明确重提', async () => {
+    const conflict = { kind: 'response', status: 412, error: { code: 'VERSION_CONFLICT',
+      message: '冲突', requestId: 'request-query', retryable: false, fieldErrors: [] } }
+    const latest = { ...content(), etag: '"2"' }
+    latest.viewConfig.table.hiddenColumns = new Set([ContentTableColumn.Notes])
+    latest.viewConfig.kanban.statusGroups = [{ name: '最新版分组', statusCodes: new Set(['BACKLOG']) }]
+    api.updateContent.mockRejectedValueOnce(conflict).mockResolvedValueOnce(latest)
+    api.getContent.mockResolvedValue(latest)
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      tableQuery: ContentTableQuery
+      sharedQueryConflict?: Content
+      saveSharedQuery: (base?: Content) => Promise<void>
+      retrySharedQuery: () => Promise<void>
+    }
+    vm.tableQuery = {
+      filters: { ...vm.tableQuery.filters, query: '保留的临时条件',
+        statusCodes: new Set(['BACKLOG']), priorities: new Set(), assigneeUserIds: new Set() },
+      sort: [{ field: ContentSortField.Title, direction: ContentSortDirection.Asc }],
+    }
+    await vm.saveSharedQuery(); await flushPromises()
+    expect(vm.sharedQueryConflict?.etag).toBe('"2"')
+    expect(wrapper.text()).toContain('当前临时查询仍保留')
+    await vm.retrySharedQuery()
+    const retried = api.updateContent.mock.calls[1]?.[0]
+    expect(retried.ifMatch).toBe('"2"')
+    expect(retried.contentUpdateRequest.viewConfig.table.filters.query).toBe('保留的临时条件')
+    expect(retried.contentUpdateRequest.viewConfig.table.hiddenColumns)
+      .toEqual(new Set([ContentTableColumn.Notes]))
+    expect(retried.contentUpdateRequest.viewConfig.kanban.statusGroups[0]?.name).toBe('最新版分组')
     wrapper.unmount()
   })
 
@@ -240,6 +340,7 @@ describe('M2-10 Content 工作项工作区', () => {
     expect(calls).toHaveLength(2)
     expect(calls.some(status => status.has('BACKLOG'))).toBe(true)
     expect(calls.some(status => status.has('IN_PROGRESS'))).toBe(true)
+    expect(api.listContentWorkItems.mock.calls.every(call => call[0].sort === undefined)).toBe(true)
     expect(wrapper.text()).toContain('待办')
     expect(wrapper.text()).toContain('进行中')
     expect(wrapper.text()).toContain('实现核心闭环')
@@ -417,6 +518,7 @@ describe('M2-10 Content 工作项工作区', () => {
     const wrapper = mountView(); await flushPromises()
     expect(wrapper.text()).toContain('Company Admin 在 Project 工作区中保持只读')
     expect(wrapper.text()).not.toContain('创建第一条工作项')
+    expect(wrapper.text()).not.toContain('保存为共享默认')
     expect(wrapper.findAll('button').some(button => button.text().includes('创建工作项'))).toBe(false)
     wrapper.unmount()
   })

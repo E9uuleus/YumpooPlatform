@@ -27,7 +27,7 @@ const readme=read('README.md')
 const report=JSON.parse(read('evidence/m2-12/verification-report.json'))
 const acceptance=JSON.parse(read('evidence/m2-12/acceptance-matrix.json'))
 
-assert(Math.max(...versions)===29,'M2-12 不得新增 Flyway 迁移')
+assert(versions.includes(29),'M2-12 依赖的 V29 迁移不可缺失')
 for(const fragment of ['transitionStatus','statusCode','statusCategory','rank']) assert(domain.includes(fragment),`Work Item 领域缺少 ${fragment}`)
 assert(transitionService.indexOf('lockForFactWrite')<transitionService.indexOf('lockForShare'),'迁移必须先锁 Project 再锁 Content')
 assert(transitionService.indexOf('lockForShare')<transitionService.indexOf('workItems.lock'),'迁移必须先锁 Content 再锁 Work Item')

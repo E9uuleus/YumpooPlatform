@@ -16,6 +16,7 @@ import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemPage;
 import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemService;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -62,13 +63,14 @@ public final class WorkItemController {
             @RequestParam(required = false) LocalDate dueFrom,
             @RequestParam(required = false) LocalDate dueTo,
             @RequestParam(required = false) Instant updatedAfter,
-            @RequestParam(name = "sort", required = false) List<String> sorts,
             @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
+            @RequestParam(required = false) Integer size,
+            HttpServletRequest httpRequest) {
+        String[] sorts = httpRequest.getParameterValues("sort");
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(service.list(actors.requiredActive(), contentId,
                         new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds,
-                                dueFrom, dueTo, updatedAfter, sorts),
+                                dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts)),
                         OffsetPageRequest.of(page, size)));
     }
 

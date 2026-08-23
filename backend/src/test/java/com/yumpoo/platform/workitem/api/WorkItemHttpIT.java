@@ -30,10 +30,13 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Clock;
+import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -184,6 +187,77 @@ class WorkItemHttpIT {
             assertThat(event.has("assigneeUserId")).isTrue();
             assertThat(event.has("timelineStartDate")).isTrue();
         }
+    }
+
+    @Test
+    void advancedQueryCombinesEscapesSortsAndKeepsStablePages() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        JsonNode literal = createWorkItem(collection, "Alpha_100%", "LOW", owner.userId(),
+                "2026-08-20");
+        JsonNode wildcard = createWorkItem(collection, "alphaX100Y", "LOW", member.userId(),
+                "2026-08-21");
+        JsonNode beta = createWorkItem(collection, "Beta", "HIGH", member.userId(),
+                "2026-08-22");
+        JsonNode noDue = createWorkItem(collection, "Gamma", "URGENT", null, null);
+        jdbc.sql("UPDATE yumpoo.work_item SET status_code='IN_PROGRESS', "
+                        + "status_category='IN_PROGRESS' WHERE id=:id")
+                .param("id", UUID.fromString(beta.path("id").asText())).update();
+        jdbc.sql("UPDATE yumpoo.work_item SET updated_at=created_at + interval '1 hour' WHERE id=:id")
+                .param("id", UUID.fromString(literal.path("id").asText())).update();
+        jdbc.sql("UPDATE yumpoo.work_item SET updated_at=created_at + interval '2 hours' WHERE id=:id")
+                .param("id", UUID.fromString(wildcard.path("id").asText())).update();
+        Instant literalUpdatedAt = jdbc.sql("SELECT updated_at FROM yumpoo.work_item WHERE id=:id")
+                .param("id", UUID.fromString(literal.path("id").asText()))
+                .query(Instant.class).single();
+
+        JsonNode legacy = body(get(collection + "?page=0&size=20", member));
+        assertThat(legacy.path("items").get(0).path("id").asText())
+                .isEqualTo(noDue.path("id").asText());
+        JsonNode caseInsensitive = body(get(collection + "?q=ALPHA", member));
+        assertThat(caseInsensitive.path("totalElements").asLong()).isEqualTo(2);
+        String escaped = URLEncoder.encode("ALPHA_100%", StandardCharsets.UTF_8);
+        JsonNode literalOnly = body(get(collection + "?q=" + escaped, member));
+        assertThat(literalOnly.path("totalElements").asLong()).isEqualTo(1);
+        assertThat(literalOnly.path("items").get(0).path("id").asText())
+                .isEqualTo(literal.path("id").asText());
+
+        JsonNode combined = body(get(collection + "?status=BACKLOG&priority=LOW&priority=MEDIUM"
+                + "&assigneeUserId=" + owner.userId()
+                + "&dueFrom=2026-08-20&dueTo=2026-08-20", member));
+        assertThat(combined.path("totalElements").asLong()).isEqualTo(1);
+        assertThat(combined.path("items").get(0).path("id").asText())
+                .isEqualTo(literal.path("id").asText());
+        JsonNode updatedStrictlyAfter = body(get(collection + "?updatedAfter="
+                + URLEncoder.encode(literalUpdatedAt.toString(), StandardCharsets.UTF_8), member));
+        assertThat(ids(updatedStrictlyAfter)).contains(wildcard.path("id").asText())
+                .doesNotContain(literal.path("id").asText());
+
+        JsonNode priority = body(get(collection + "?sort=PRIORITY,ASC&sort=TITLE,ASC", member));
+        assertThat(titles(priority)).containsExactly("Alpha_100%", "alphaX100Y", "Beta", "Gamma");
+        JsonNode status = body(get(collection + "?sort=STATUS,ASC&sort=PRIORITY,DESC", member));
+        assertThat(titles(status).getFirst()).isEqualTo("Gamma");
+        assertThat(titles(status).subList(1, 3)).containsExactlyInAnyOrder("alphaX100Y", "Alpha_100%");
+        assertThat(titles(status).getLast()).isEqualTo("Beta");
+        JsonNode assignee = body(get(collection + "?sort=ASSIGNEE,ASC", member));
+        assertThat(titles(assignee).subList(0, 2)).containsExactlyInAnyOrder("alphaX100Y", "Beta");
+        assertThat(titles(assignee).subList(2, 4)).containsExactly("Alpha_100%", "Gamma");
+        JsonNode dueDesc = body(get(collection + "?sort=DUE_DATE,DESC", member));
+        assertThat(titles(dueDesc)).containsExactly("Beta", "alphaX100Y", "Alpha_100%", "Gamma");
+
+        List<String> stableIds = List.of(literal.path("id").asText(), wildcard.path("id").asText())
+                .stream().sorted().toList();
+        JsonNode firstPage = body(get(collection + "?priority=LOW&sort=PRIORITY,ASC&page=0&size=1", member));
+        JsonNode secondPage = body(get(collection + "?priority=LOW&sort=PRIORITY,ASC&page=1&size=1", member));
+        assertThat(firstPage.path("totalElements").asLong()).isEqualTo(2);
+        assertThat(List.of(firstPage.path("items").get(0).path("id").asText(),
+                secondPage.path("items").get(0).path("id").asText())).isEqualTo(stableIds);
+
+        for (String query : List.of("sort=NOPE,ASC", "sort=TITLE", "sort=TITLE,ASC&sort=TITLE,DESC",
+                "sort=TITLE,ASC&sort=STATUS,ASC&sort=PRIORITY,ASC&sort=DUE_DATE,ASC"))
+            assertThat(get(collection + "?" + query, member).statusCode()).isEqualTo(422);
+        assertThat(get(collection + "?sort=NOPE,ASC", outsider).statusCode()).isEqualTo(404);
+        assertThat(get(collection + "?q=alpha&sort=TITLE,ASC", admin).statusCode()).isEqualTo(200);
+        assertThat(workItemEventCount()).isEqualTo(4L);
     }
 
     @Test
@@ -580,6 +654,32 @@ class WorkItemHttpIT {
 
     private ActorFixture actor(UUID userId) {
         return new ActorFixture(userId, sessions.issueWebSession(userId, "m210-http"));
+    }
+
+    private JsonNode createWorkItem(String collection, String title, String priority,
+            UUID assigneeUserId, String dueDate) throws Exception {
+        HttpResponse<String> response = mutate("POST", collection, member,
+                workItemBody(title, priority, assigneeUserId, null, null,
+                        null, null, dueDate), null, UUID.randomUUID());
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+        return json.readTree(response.body());
+    }
+
+    private JsonNode body(HttpResponse<String> response) throws Exception {
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        return json.readTree(response.body());
+    }
+
+    private static List<String> titles(JsonNode page) {
+        List<String> values = new java.util.ArrayList<>();
+        page.path("items").forEach(item -> values.add(item.path("title").asText()));
+        return List.copyOf(values);
+    }
+
+    private static List<String> ids(JsonNode page) {
+        List<String> values = new java.util.ArrayList<>();
+        page.path("items").forEach(item -> values.add(item.path("id").asText()));
+        return List.copyOf(values);
     }
 
     private HttpResponse<String> get(String path, ActorFixture actor) throws Exception {

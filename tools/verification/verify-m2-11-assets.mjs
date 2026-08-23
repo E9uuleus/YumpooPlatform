@@ -32,7 +32,7 @@ const readme=read('README.md')
 const report=JSON.parse(read('evidence/m2-11/verification-report.json'))
 const acceptance=JSON.parse(read('evidence/m2-11/acceptance-matrix.json'))
 
-assert(Math.max(...versions)===29,'M2-11 不得新增 V30 迁移')
+assert(versions.includes(29),'M2-11 的 V29 迁移不可缺失')
 for(const fragment of ['assignee_user_id','timeline_start_date','timeline_end_date','due_date','row_version']) assert(migration.includes(fragment),`V29 缺少 ${fragment}`)
 for(const fragment of ['MAX_BODY_LENGTH = 16_384','updateFields','timelineStartDate','timelineEndDate','dueDate']) assert(domain.includes(fragment),`Work Item 领域缺少 ${fragment}`)
 assert(updateService.indexOf('lockForFactWrite')<updateService.indexOf('lockForShare'),'更新必须先锁 Project 再锁 Content')

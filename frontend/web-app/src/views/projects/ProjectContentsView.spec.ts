@@ -19,6 +19,7 @@ import ProjectContentsView from './ProjectContentsView.vue'
 
 const api = vi.hoisted(() => ({
   getProject: vi.fn(), listProjectContents: vi.fn(), createContent: vi.fn(),
+  listProjectMembers: vi.fn(),
   getContent: vi.fn(), updateContent: vi.fn(), archiveContent: vi.fn(), restoreContent: vi.fn(),
 }))
 const routerPush = vi.hoisted(() => vi.fn())
@@ -28,7 +29,7 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPush }),
 }))
 vi.mock('../../api/client', () => ({
-  projectsApi: { getProject: api.getProject },
+  projectsApi: { getProject: api.getProject, listProjectMembers: api.listProjectMembers },
   contentsApi: {
     listProjectContents: api.listProjectContents, createContent: api.createContent,
     getContent: api.getContent, updateContent: api.updateContent,
@@ -94,6 +95,9 @@ describe('M2-09 Content 管理页', () => {
     routerPush.mockReset()
     api.getProject.mockResolvedValue(project)
     api.listProjectContents.mockResolvedValue(catalog())
+    api.listProjectMembers.mockResolvedValue({
+      items: [], page: 0, size: 100, totalElements: 0, totalPages: 0,
+    })
     api.createContent.mockResolvedValue(content())
     api.updateContent.mockResolvedValue(content('"1"'))
     api.getContent.mockResolvedValue(content('"1"'))

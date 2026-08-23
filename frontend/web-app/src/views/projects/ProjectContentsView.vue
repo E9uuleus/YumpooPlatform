@@ -396,7 +396,7 @@ onMounted(load)
         <div v-if="latestConflict" class="content-conflict" role="alert">
           <strong>服务器版本已更新，本地草稿仍保留。</strong>
           <span>可载入最新版本，或仅把当前筛选/排序合并进最新版；后者不会覆盖并发列配置或 Kanban 分组。</span>
-          <div><el-button @click="loadLatest">载入最新版本</el-button><el-button type="warning" @click="retryQueryMerge">合并查询并重新提交</el-button></div>
+          <div><el-button @click="loadLatest">载入最新版本</el-button><el-button type="warning" @click="retryQueryMerge">基于最新版本重新提交查询</el-button></div>
         </div>
         <section class="drawer-section content-provenance">
           <h3>身份与来源</h3>

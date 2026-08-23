@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-13",
+  "status": "PASS",
+  "startedAt": "2026-08-23T01:04:28Z",
+  "completedAt": "2026-08-23T01:07:00Z",
+  "command": "pnpm verify:m2-13",
+  "flywayVersion": "30",
+  "testCounts": {
+    "backendUnit": 380,
+    "backendIntegration": 191,
+    "nodeArchitecture": 9,
+    "apiClient": 7,
+    "web": 137,
+    "desktop": 24
+  },
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "visibilityBeforeValidation": true,
+    "sharedSqlPredicates": true,
+    "escapedCaseInsensitiveTitleSearch": true,
+    "semanticAndStableSorting": true,
+    "companyAdminReadOnlyQuery": true,
+    "v30CleanAndUpgradeMigration": true,
+    "backupRestoreAndIndexAssets": true,
+    "sharedDefaultAndUrlHistory": true,
+    "kanbanFilterIntersection": true,
+    "lateResponseProtection": true,
+    "ownerSaveAndConflictMerge": true,
+    "nodeGate": true
+  }
+}

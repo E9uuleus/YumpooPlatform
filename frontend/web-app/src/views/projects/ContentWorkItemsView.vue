@@ -382,16 +382,26 @@ async function loadKanbanGroup(group: ContentStatusGroup, index: number, page: n
 
 function queryRequest(includeSort: boolean) {
   const value = tableQuery.value
-  return {
+  const request: {
+    q: string
+    status: Set<string>
+    priority: Set<WorkItemPriority>
+    assigneeUserId: Set<string>
+    dueFrom?: Date
+    dueTo?: Date
+    updatedAfter?: Date
+    sort?: string[]
+  } = {
     q: value.filters.query ?? '',
     status: new Set(value.filters.statusCodes),
     priority: new Set(value.filters.priorities),
     assigneeUserId: new Set(value.filters.assigneeUserIds),
-    dueFrom: value.filters.dueFrom ?? undefined,
-    dueTo: value.filters.dueTo ?? undefined,
-    updatedAfter: value.filters.updatedAfter ?? undefined,
-    sort: includeSort ? value.sort.map(item => `${item.field},${item.direction}`) : undefined,
   }
+  if (value.filters.dueFrom) request.dueFrom = value.filters.dueFrom
+  if (value.filters.dueTo) request.dueTo = value.filters.dueTo
+  if (value.filters.updatedAfter) request.updatedAfter = value.filters.updatedAfter
+  if (includeSort) request.sort = value.sort.map(item => `${item.field},${item.direction}`)
+  return request
 }
 
 function intersectStatuses(groupStatuses: Set<string>): Set<string> {
