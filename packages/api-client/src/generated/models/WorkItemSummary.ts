@@ -19,6 +19,13 @@ import {
     WorkItemPriorityToJSON,
     WorkItemPriorityToJSONTyped,
 } from './WorkItemPriority';
+import type { WorkItemCapabilities } from './WorkItemCapabilities';
+import {
+    WorkItemCapabilitiesFromJSON,
+    WorkItemCapabilitiesFromJSONTyped,
+    WorkItemCapabilitiesToJSON,
+    WorkItemCapabilitiesToJSONTyped,
+} from './WorkItemCapabilities';
 import type { WorkItemStatusCategory } from './WorkItemStatusCategory';
 import {
     WorkItemStatusCategoryFromJSON,
@@ -150,6 +157,24 @@ export interface WorkItemSummary {
     dueDate: Date | null;
     /**
      *
+     * @type {number}
+     * @memberof WorkItemSummary
+     */
+    readonly rowVersion: number;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemSummary
+     */
+    readonly etag: string;
+    /**
+     *
+     * @type {WorkItemCapabilities}
+     * @memberof WorkItemSummary
+     */
+    capabilities: WorkItemCapabilities;
+    /**
+     *
      * @type {Date}
      * @memberof WorkItemSummary
      */
@@ -180,6 +205,9 @@ export function instanceOfWorkItemSummary(value: object): value is WorkItemSumma
     if (!('timelineStartDate' in value) || value['timelineStartDate'] === undefined) return false;
     if (!('timelineEndDate' in value) || value['timelineEndDate'] === undefined) return false;
     if (!('dueDate' in value) || value['dueDate'] === undefined) return false;
+    if (!('rowVersion' in value) || value['rowVersion'] === undefined) return false;
+    if (!('etag' in value) || value['etag'] === undefined) return false;
+    if (!('capabilities' in value) || value['capabilities'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
     return true;
 }
@@ -212,6 +240,9 @@ export function WorkItemSummaryFromJSONTyped(json: any, ignoreDiscriminator: boo
         'timelineStartDate': (json['timelineStartDate'] == null ? null : new Date(json['timelineStartDate'])),
         'timelineEndDate': (json['timelineEndDate'] == null ? null : new Date(json['timelineEndDate'])),
         'dueDate': (json['dueDate'] == null ? null : new Date(json['dueDate'])),
+        'rowVersion': json['rowVersion'],
+        'etag': json['etag'],
+        'capabilities': WorkItemCapabilitiesFromJSON(json['capabilities']),
         'updatedAt': (new Date(json['updatedAt'])),
     };
 }
@@ -220,7 +251,7 @@ export function WorkItemSummaryToJSON(json: any): WorkItemSummary {
     return WorkItemSummaryToJSONTyped(json, false);
 }
 
-export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'rowVersion'|'etag'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -245,5 +276,6 @@ export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'update
         'timelineStartDate': value['timelineStartDate'] == null ? value['timelineStartDate'] : value['timelineStartDate'].toISOString().substring(0,10),
         'timelineEndDate': value['timelineEndDate'] == null ? value['timelineEndDate'] : value['timelineEndDate'].toISOString().substring(0,10),
         'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),
+        'capabilities': WorkItemCapabilitiesToJSON(value['capabilities']),
     };
 }

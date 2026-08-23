@@ -15,7 +15,7 @@ public final class WorkItemModels {
             UUID assigneeUserId, String assigneeDisplayName, UUID reporterUserId,
             String reporterDisplayName, String description, String notes,
             LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
-            Instant updatedAt) {}
+            long rowVersion, String etag, WorkItemCapabilities capabilities, Instant updatedAt) {}
 
     public record WorkItemDetail(UUID id, UUID projectId, UUID contentId, String itemNo,
             String type, String title, String statusCode, String statusCategory, String priority,
@@ -28,7 +28,7 @@ public final class WorkItemModels {
     public record WorkItemTransitionOption(String toStatus, String displayName,
             String statusCategory, boolean requiresResolution) {}
 
-    public record WorkItemCapabilities(boolean canEditFields,
+    public record WorkItemCapabilities(boolean canEditFields, boolean canMoveInKanban,
             List<WorkItemTransitionOption> availableTransitions) {
         public WorkItemCapabilities { availableTransitions = List.copyOf(availableTransitions); }
     }

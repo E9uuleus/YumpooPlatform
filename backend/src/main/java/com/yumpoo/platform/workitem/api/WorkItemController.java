@@ -9,12 +9,14 @@ import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResul
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.RankMove;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Update;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemDetail;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemPage;
 import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemService;
+import com.yumpoo.platform.workitem.domain.ContentViewType;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.CacheControl;
@@ -63,6 +65,7 @@ public final class WorkItemController {
             @RequestParam(required = false) LocalDate dueFrom,
             @RequestParam(required = false) LocalDate dueTo,
             @RequestParam(required = false) Instant updatedAfter,
+            @RequestParam(required = false) ContentViewType view,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             HttpServletRequest httpRequest) {
@@ -71,7 +74,7 @@ public final class WorkItemController {
                 .body(service.list(actors.requiredActive(), contentId,
                         new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds,
                                 dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts)),
-                        OffsetPageRequest.of(page, size)));
+                        view, OffsetPageRequest.of(page, size)));
     }
 
     @PostMapping("/contents/{contentId}/work-items")
@@ -130,6 +133,31 @@ public final class WorkItemController {
         StoredCommandResult stored = service.transition(new Transition(actor, workItemId,
                 expectedVersion, body.toStatus(), body.resolution(), key,
                 hasher.hash("transitionWorkItem", Map.of(
+                                "workItemId", workItemId.toString(),
+                                "ifMatch", Long.toString(expectedVersion)),
+                        objectMapper.valueToTree(body)))).result();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setCacheControl(CacheControl.noStore());
+        headers.setETag(stored.etag());
+        return new ResponseEntity<>(stored.responseJson(), headers,
+                HttpStatus.valueOf(stored.httpStatus()));
+    }
+
+    @PostMapping("/work-items/{workItemId}/rank-moves")
+    ResponseEntity<String> rankMove(@PathVariable UUID workItemId,
+            @Valid @RequestBody WorkItemRankMoveRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
+            String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
+            String idempotencyHeader) {
+        CurrentActor actor = actors.requiredActive();
+        service.find(actor, workItemId);
+        long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        UUID key = keys.parseRequired(idempotencyHeader);
+        StoredCommandResult stored = service.rankMove(new RankMove(actor, workItemId,
+                expectedVersion, body.toStatus(), body.placement().name(), body.anchorWorkItemId(),
+                body.resolution(), key, hasher.hash("rankMoveWorkItem", Map.of(
                                 "workItemId", workItemId.toString(),
                                 "ifMatch", Long.toString(expectedVersion)),
                         objectMapper.valueToTree(body)))).result();

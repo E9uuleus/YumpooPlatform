@@ -425,6 +425,113 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void kanbanPagingRankPlacementsNoopReplayAndCrossStatusMoveStayConsistent() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        JsonNode first = createWorkItem(collection, "第一张", "LOW", null, null);
+        JsonNode second = createWorkItem(collection, "第二张", "MEDIUM", null, null);
+        JsonNode third = createWorkItem(collection, "第三张", "HIGH", null, null);
+
+        assertThat(get(collection + "?view=KANBAN", member).statusCode()).isEqualTo(422);
+        assertThat(get(collection + "?view=KANBAN&status=BACKLOG&status=READY", member).statusCode())
+                .isEqualTo(422);
+        assertThat(get(collection + "?view=KANBAN&status=BACKLOG&sort=TITLE,ASC", member).statusCode())
+                .isEqualTo(422);
+        JsonNode firstPage = json.readTree(get(
+                collection + "?view=KANBAN&status=BACKLOG&page=0&size=2", member).body());
+        JsonNode secondPage = json.readTree(get(
+                collection + "?view=KANBAN&status=BACKLOG&page=1&size=2", member).body());
+        assertThat(titles(firstPage)).containsExactly("第三张", "第二张");
+        assertThat(titles(secondPage)).containsExactly("第一张");
+        assertThat(firstPage.path("items").get(0).path("etag").asText()).isEqualTo("\"0\"");
+        assertThat(firstPage.path("items").get(0).path("capabilities")
+                .path("canMoveInKanban").asBoolean()).isTrue();
+
+        UUID firstId = UUID.fromString(first.path("id").asText());
+        String firstMovePath = "/api/v1/work-items/" + firstId + "/rank-moves";
+        UUID key = UUID.randomUUID();
+        String startBody = rankMoveBody("BACKLOG", "START", null, null);
+        HttpResponse<String> moved = mutate("POST", firstMovePath, member,
+                startBody, "\"0\"", key);
+        assertThat(moved.statusCode()).as(moved.body()).isEqualTo(200);
+        assertThat(moved.headers().firstValue("etag")).contains("\"1\"");
+        HttpResponse<String> replay = mutate("POST", firstMovePath, member,
+                startBody, "\"0\"", key);
+        assertThat(replay.statusCode()).isEqualTo(200);
+        assertThat(replay.body()).isEqualTo(moved.body());
+        assertThat(rankEventCount(firstId)).isEqualTo(1);
+        assertThat(titles(json.readTree(get(
+                collection + "?view=KANBAN&status=BACKLOG", member).body())))
+                .containsExactly("第一张", "第三张", "第二张");
+
+        long eventsBeforeNoop = workItemEventCount();
+        HttpResponse<String> noop = mutate("POST", firstMovePath, member,
+                startBody, "\"1\"", UUID.randomUUID());
+        assertThat(noop.statusCode()).as(noop.body()).isEqualTo(200);
+        assertThat(json.readTree(noop.body()).path("rowVersion").asLong()).isEqualTo(1);
+        assertThat(workItemEventCount()).isEqualTo(eventsBeforeNoop);
+
+        assertThat(mutate("POST", firstMovePath, member,
+                rankMoveBody("BACKLOG", "START", UUID.fromString(second.path("id").asText()), null),
+                "\"1\"", UUID.randomUUID()).statusCode()).isEqualTo(422);
+        assertThat(mutate("POST", firstMovePath, member,
+                rankMoveBody("BACKLOG", "BEFORE", UUID.randomUUID(), null),
+                "\"1\"", UUID.randomUUID()).statusCode()).isEqualTo(409);
+        assertThat(mutate("POST", firstMovePath, member, startBody,
+                null, UUID.randomUUID()).statusCode()).isEqualTo(428);
+
+        UUID secondId = UUID.fromString(second.path("id").asText());
+        HttpResponse<String> cross = mutate("POST",
+                "/api/v1/work-items/" + secondId + "/rank-moves", member,
+                rankMoveBody("READY", "START", null, "已澄清"), "\"0\"", UUID.randomUUID());
+        assertThat(cross.statusCode()).as(cross.body()).isEqualTo(200);
+        JsonNode crossJson = json.readTree(cross.body());
+        assertThat(crossJson.path("statusCode").asText()).isEqualTo("READY");
+        assertThat(statusEventCount(secondId)).isEqualTo(1);
+        assertThat(rankEventCount(secondId)).isZero();
+        assertThat(titles(json.readTree(get(
+                collection + "?view=KANBAN&status=READY", member).body())))
+                .containsExactly("第二张");
+
+        String rankPayload = jdbc.sql("SELECT payload_json::text FROM yumpoo.outbox_event "
+                        + "WHERE aggregate_id=:id AND event_type='workitem.work_item_rank_changed'")
+                .param("id", firstId).query(String.class).single();
+        assertThat(rankPayload).doesNotContain("\"rank\"");
+    }
+
+    @Test
+    void concurrentRankMovesOnOneCardHaveOneWinner() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        createWorkItem(collection, "下方锚点", "LOW", null, null);
+        JsonNode first = createWorkItem(collection, "并发卡片", "LOW", null, null);
+        createWorkItem(collection, "上方锚点", "MEDIUM", null, null);
+        UUID firstId = UUID.fromString(first.path("id").asText());
+        String path = "/api/v1/work-items/" + firstId + "/rank-moves";
+        CountDownLatch start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Future<HttpResponse<String>> top = pool.submit(() -> {
+                start.await();
+                return mutate("POST", path, member,
+                        rankMoveBody("BACKLOG", "START", null, null),
+                        "\"0\"", UUID.randomUUID());
+            });
+            Future<HttpResponse<String>> bottom = pool.submit(() -> {
+                start.await();
+                return mutate("POST", path, member,
+                        rankMoveBody("BACKLOG", "END", null, null),
+                        "\"0\"", UUID.randomUUID());
+            });
+            start.countDown();
+            assertThat(List.of(top.get(20, TimeUnit.SECONDS).statusCode(),
+                    bottom.get(20, TimeUnit.SECONDS).statusCode()))
+                    .containsExactlyInAnyOrder(200, 412);
+        }
+        assertThat(rankEventCount(firstId)).isEqualTo(1);
+        assertThat(jdbc.sql("SELECT count(DISTINCT rank) = count(*) FROM yumpoo.work_item "
+                        + "WHERE content_id=:id AND status_code='BACKLOG' AND deleted_at IS NULL")
+                .param("id", contentId).query(Boolean.class).single()).isTrue();
+    }
+
+    @Test
     void permissionsAndRealOpenItemArchiveBlockersAreEnforced() throws Exception {
         String collection = "/api/v1/contents/" + contentId + "/work-items";
         String body = workItemBody("阻塞归档", "URGENT", null, null);
@@ -717,6 +824,12 @@ class WorkItemHttpIT {
                 .param("id", workItemId).query(Long.class).single();
     }
 
+    private long rankEventCount(UUID workItemId) {
+        return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
+                        + "WHERE aggregate_id=:id AND event_type='workitem.work_item_rank_changed'")
+                .param("id", workItemId).query(Long.class).single();
+    }
+
     private static List<String> transitionTargets(JsonNode detail) {
         List<String> targets = new java.util.ArrayList<>();
         detail.path("capabilities").path("availableTransitions")
@@ -763,6 +876,18 @@ class WorkItemHttpIT {
         var body = json.createObjectNode();
         body.put("toStatus", toStatus);
         if (resolution != null) body.put("resolution", resolution);
+        return json.writeValueAsString(body);
+    }
+
+    private String rankMoveBody(String toStatus, String placement, UUID anchorWorkItemId,
+            String resolution) throws Exception {
+        var body = json.createObjectNode();
+        body.put("toStatus", toStatus);
+        body.put("placement", placement);
+        if (anchorWorkItemId == null) body.putNull("anchorWorkItemId");
+        else body.put("anchorWorkItemId", anchorWorkItemId.toString());
+        if (resolution == null) body.putNull("resolution");
+        else body.put("resolution", resolution);
         return json.writeValueAsString(body);
     }
 

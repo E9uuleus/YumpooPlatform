@@ -1540,6 +1540,10 @@ paths:
         - name: size
           in: query
           schema: { type: integer, format: int32, minimum: 1, maximum: 100, default: 20 }
+        - name: view
+          in: query
+          description: TABLE 保持白名单排序；KANBAN 要求单一 status 且固定按持久化 rank 排序。
+          schema: { $ref: '#/components/schemas/ContentViewType' }
         - name: status
           in: query
           style: form
@@ -1697,6 +1701,42 @@ paths:
       responses:
         '200':
           description: 状态已迁移，或返回同一幂等命令保存的结果。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-items/{workItemId}/rank-moves:
+    post:
+      tags: [WorkItems]
+      operationId: rankMoveWorkItem
+      summary: 在 Kanban 状态泳道内或合法状态之间移动 Work Item
+      description: >-
+        服务端只接受相对锚点或泳道首尾意图；rank 为内部实现，不由客户端读取或写入。
+        跨状态移动复用 Project 固化模板迁移边，同状态移动只改变排序。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemRankMoveRequest' } } }
+      responses:
+        '200':
+          description: 排序或状态已移动、位置无变化，或返回同一幂等命令保存的结果。
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
             Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
@@ -2403,7 +2443,7 @@ components:
       required: [id, projectId, contentId, itemNo, type, title, statusCode,
         statusCategory, priority, assigneeUserId, assigneeDisplayName, reporterUserId,
         reporterDisplayName, description, notes, timelineStartDate, timelineEndDate,
-        dueDate, updatedAt]
+        dueDate, rowVersion, etag, capabilities, updatedAt]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
@@ -2423,6 +2463,9 @@ components:
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+        capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
         updatedAt: { type: string, format: date-time, readOnly: true }
 
     WorkItemDetail:
@@ -2460,9 +2503,10 @@ components:
     WorkItemCapabilities:
       type: object
       additionalProperties: false
-      required: [canEditFields, availableTransitions]
+      required: [canEditFields, canMoveInKanban, availableTransitions]
       properties:
         canEditFields: { type: boolean, readOnly: true }
+        canMoveInKanban: { type: boolean, readOnly: true }
         availableTransitions:
           type: array
           readOnly: true
@@ -2524,6 +2568,20 @@ components:
       required: [toStatus]
       properties:
         toStatus: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        resolution: { type: string, minLength: 1, maxLength: 500, nullable: true }
+
+    WorkItemRankPlacement:
+      type: string
+      enum: [START, BEFORE, AFTER, END]
+
+    WorkItemRankMoveRequest:
+      type: object
+      additionalProperties: false
+      required: [toStatus, placement]
+      properties:
+        toStatus: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        placement: { $ref: '#/components/schemas/WorkItemRankPlacement' }
+        anchorWorkItemId: { type: string, format: uuid, nullable: true }
         resolution: { type: string, minLength: 1, maxLength: 500, nullable: true }
 
     ContentViewSort:

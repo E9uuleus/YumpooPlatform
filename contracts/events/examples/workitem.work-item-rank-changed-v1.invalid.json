@@ -1,0 +1,24 @@
+{
+  "eventId": "2d000000-0000-4000-8000-000000000011",
+  "eventType": "workitem.work_item_rank_changed",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-23T09:00:00Z",
+  "aggregateType": "WorkItem",
+  "aggregateId": "2d000000-0000-4000-8000-000000000012",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2d000000-0000-4000-8000-000000000013" },
+  "requestId": "m2-14-work-item-rank-invalid",
+  "correlationId": "m2-14-work-item-rank-invalid",
+  "causationId": null,
+  "payload": {
+    "workItemId": "2d000000-0000-4000-8000-000000000012",
+    "projectId": "2d000000-0000-4000-8000-000000000014",
+    "contentId": "2d000000-0000-4000-8000-000000000015",
+    "itemNo": "bad",
+    "statusCode": "IN_PROGRESS",
+    "placement": "MIDDLE",
+    "anchorWorkItemId": null,
+    "rowVersion": 0
+  }
+}

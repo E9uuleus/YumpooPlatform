@@ -115,6 +115,8 @@ export * from './WorkItemCreateRequest';
 export * from './WorkItemDetail';
 export * from './WorkItemPage';
 export * from './WorkItemPriority';
+export * from './WorkItemRankMoveRequest';
+export * from './WorkItemRankPlacement';
 export * from './WorkItemStatusCategory';
 export * from './WorkItemSummary';
 export * from './WorkItemTransitionOption';

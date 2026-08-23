@@ -293,7 +293,7 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
@@ -324,6 +324,7 @@ class YumpooServerApplicationIT {
                 "wecom_oauth_attempt",
                 "work_item",
                 "work_item_project_counter",
+                "work_item_rank_lane",
                 "workflow_status_definition",
                 "workflow_transition_definition",
                 "workspace"
@@ -528,7 +529,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v29DatabaseUpgradesToV30WithOnlyTheQueryIndexes() throws Exception {
+    void v29DatabaseUpgradesThroughV31WithQueryAndKanbanIndexes() throws Exception {
         String database = "yumpoo_m213_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -545,14 +546,15 @@ class YumpooServerApplicationIT {
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
             MigrateResult upgraded = latest.migrate();
-            assertThat(upgraded.migrationsExecuted).isOne();
-            assertThat(upgraded.targetSchemaVersion).hasToString("30");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(2);
+            assertThat(upgraded.targetSchemaVersion).hasToString("31");
             assertThat(workItemIndexes(jdbcUrl)).contains(
                     "idx_work_item_content_page",
                     "idx_work_item_content_status_page",
                     "idx_work_item_content_updated_page",
                     "idx_work_item_content_assignee",
-                    "idx_work_item_content_due_date");
+                    "idx_work_item_content_due_date",
+                    "idx_work_item_content_status_rank_page");
         } finally {
             Container.ExecResult dropped = postgresContainer.execInContainer(
                     "dropdb", "--force", "-U", postgresContainer.getUsername(), database);
