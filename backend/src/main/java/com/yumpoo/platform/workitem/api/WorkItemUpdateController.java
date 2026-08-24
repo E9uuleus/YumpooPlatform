@@ -2,12 +2,16 @@ package com.yumpoo.platform.workitem.api;
 
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
 import com.yumpoo.platform.foundation.api.http.IdempotencyRequestHasher;
+import com.yumpoo.platform.foundation.api.http.IfMatchParser;
 import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.workitem.application.WorkItemUpdateCommands.Publish;
+import com.yumpoo.platform.workitem.application.WorkItemUpdateCommands.Edit;
+import com.yumpoo.platform.workitem.application.WorkItemUpdateCommands.Delete;
 import com.yumpoo.platform.workitem.application.WorkItemUpdateModels.WorkItemUpdatePage;
+import com.yumpoo.platform.workitem.application.WorkItemUpdateModels.WorkItemUpdateView;
 import com.yumpoo.platform.workitem.application.WorkItemUpdateService;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
@@ -16,6 +20,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -33,15 +39,25 @@ public final class WorkItemUpdateController {
     private final WorkItemUpdateService service;
     private final IdempotencyKeyParser keys;
     private final IdempotencyRequestHasher hasher;
+    private final IfMatchParser ifMatch;
     private final ObjectMapper objectMapper;
 
     public WorkItemUpdateController(CurrentActorProvider actors, WorkItemUpdateService service,
-            IdempotencyKeyParser keys, IdempotencyRequestHasher hasher, ObjectMapper objectMapper) {
+            IdempotencyKeyParser keys, IdempotencyRequestHasher hasher, IfMatchParser ifMatch,
+            ObjectMapper objectMapper) {
         this.actors = actors;
         this.service = service;
         this.keys = keys;
         this.hasher = hasher;
+        this.ifMatch = ifMatch;
         this.objectMapper = objectMapper;
+    }
+
+    @GetMapping("/work-item-updates/{updateId}")
+    ResponseEntity<WorkItemUpdateView> find(@PathVariable UUID updateId) {
+        WorkItemUpdateView view = service.find(actors.requiredActive(), updateId);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(view.rowVersion())).body(view);
     }
 
     @GetMapping("/work-items/{workItemId}/updates")
@@ -68,5 +84,39 @@ public final class WorkItemUpdateController {
         headers.setETag(stored.etag());
         headers.setLocation(URI.create("/api/v1/work-item-updates/" + stored.resourceId()));
         return new ResponseEntity<>(stored.responseJson(), headers, HttpStatus.CREATED);
+    }
+
+    @PatchMapping("/work-item-updates/{updateId}")
+    ResponseEntity<WorkItemUpdateView> edit(@PathVariable UUID updateId,
+            @Valid @RequestBody WorkItemUpdateEditRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
+            String ifMatchHeader) {
+        CurrentActor actor = actors.requiredActive();
+        service.find(actor, updateId);
+        long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        WorkItemUpdateView view = service.edit(new Edit(actor, updateId, expectedVersion, body.bodyHtml()));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .eTag(Long.toString(view.rowVersion())).body(view);
+    }
+
+    @DeleteMapping("/work-item-updates/{updateId}")
+    ResponseEntity<WorkItemUpdateView> delete(@PathVariable UUID updateId,
+            @Valid @RequestBody WorkItemUpdateDeleteRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
+            String ifMatchHeader) {
+        CurrentActor actor = actors.requiredActive();
+        try {
+            service.find(actor, updateId);
+            long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+            WorkItemUpdateView view = service.delete(new Delete(actor, updateId,
+                    expectedVersion, body.reason()));
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                    .eTag(Long.toString(view.rowVersion())).body(view);
+        } catch (RuntimeException failure) {
+            if (body.reason() != null) {
+                service.recordModerationFailure(actor, updateId, body.reason(), failure);
+            }
+            throw failure;
+        }
     }
 }

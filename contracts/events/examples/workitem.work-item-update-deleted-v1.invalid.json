@@ -1,0 +1,29 @@
+{
+  "eventId": "36000000-0000-4000-8000-000000000031",
+  "eventType": "workitem.work_item_update_deleted",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-24T10:20:00Z",
+  "aggregateType": "WorkItemUpdate",
+  "aggregateId": "36000000-0000-4000-8000-000000000032",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "36000000-0000-4000-8000-000000000033" },
+  "requestId": "m2-17-update-delete-invalid",
+  "correlationId": "m2-17-update-delete-invalid",
+  "causationId": null,
+  "payload": {
+    "updateId": "36000000-0000-4000-8000-000000000032",
+    "workItemId": "36000000-0000-4000-8000-000000000034",
+    "projectId": "36000000-0000-4000-8000-000000000035",
+    "contentId": "36000000-0000-4000-8000-000000000036",
+    "itemNo": "PROJECT_CORE-17",
+    "title": "自删不能携带理由",
+    "authorUserId": "36000000-0000-4000-8000-000000000033",
+    "deletedByUserId": "36000000-0000-4000-8000-000000000033",
+    "deletionMode": "SELF",
+    "deleteReason": "不合法理由",
+    "previousStatus": "PUBLISHED",
+    "previousRowVersion": 0,
+    "rowVersion": 1
+  }
+}

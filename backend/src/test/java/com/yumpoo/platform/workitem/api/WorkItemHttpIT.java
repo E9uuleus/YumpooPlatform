@@ -1064,6 +1064,134 @@ class WorkItemHttpIT {
                 UUID.randomUUID()).statusCode()).isEqualTo(409);
     }
 
+    @Test
+    void workItemUpdateEditUsesStrongEtagReplacesMentionsAndKeepsParentStable() throws Exception {
+        JsonNode created = createWorkItem("/api/v1/contents/" + contentId + "/work-items",
+                "编辑讨论", "MEDIUM", member.userId(), null);
+        UUID workItemId = UUID.fromString(created.path("id").asText());
+        String collection = "/api/v1/work-items/" + workItemId + "/updates";
+        String withMention = "<p>初稿 <span data-type=\"mention\" data-mention-user-id=\""
+                + owner.userId() + "\">@伪造</span></p>";
+        JsonNode published = json.readTree(mutate("POST", collection, member,
+                updateBody(withMention), null, UUID.randomUUID()).body());
+        UUID updateId = UUID.fromString(published.path("id").asText());
+        String resource = "/api/v1/work-item-updates/" + updateId;
+        JsonNode parentBefore = json.readTree(get("/api/v1/work-items/" + workItemId, member).body());
+
+        JsonNode ownerView = json.readTree(get(resource, owner).body());
+        assertThat(ownerView.path("capabilities").path("canModerateDelete").asBoolean()).isTrue();
+        assertThat(ownerView.path("capabilities").path("canEdit").asBoolean()).isFalse();
+        assertThat(mutate("PATCH", resource, member, updateBody("<p>缺少版本</p>"), null, null)
+                .statusCode()).isEqualTo(428);
+
+        HttpResponse<String> editedResponse = mutate("PATCH", resource, member,
+                updateBody("<p onclick=\"bad()\">更新正文</p>"), "\"0\"", null);
+        assertThat(editedResponse.statusCode()).as(editedResponse.body()).isEqualTo(200);
+        JsonNode edited = json.readTree(editedResponse.body());
+        assertThat(edited.path("status").asText()).isEqualTo("EDITED");
+        assertThat(edited.path("rowVersion").asLong()).isOne();
+        assertThat(edited.path("bodyHtml").asText()).isEqualTo("<p>更新正文</p>");
+        assertThat(edited.path("capabilities").path("canEdit").asBoolean()).isTrue();
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_update_mention WHERE update_id=:id")
+                .param("id", updateId).query(Long.class).single()).isZero();
+        JsonNode parentAfter = json.readTree(get("/api/v1/work-items/" + workItemId, member).body());
+        assertThat(parentAfter.path("rowVersion").asLong()).isEqualTo(parentBefore.path("rowVersion").asLong());
+        assertThat(parentAfter.path("updatedAt").asText()).isEqualTo(parentBefore.path("updatedAt").asText());
+
+        String event = jdbc.sql("SELECT payload_json::text FROM yumpoo.outbox_event "
+                        + "WHERE aggregate_id=:id AND event_type='workitem.work_item_update_edited'")
+                .param("id", updateId).query(String.class).single();
+        assertThat(event).contains("removedMentionedUserIds", owner.userId().toString())
+                .doesNotContain("bodyHtml", "bodyText\"", "更新正文");
+        assertThat(mutate("PATCH", resource, owner, updateBody("<p>Owner 不能改写</p>"),
+                "\"1\"", null).statusCode()).isEqualTo(403);
+        assertThat(mutate("PATCH", resource, member, updateBody("<p>旧版本</p>"),
+                "\"0\"", null).statusCode()).isEqualTo(412);
+
+        JsonNode expiring = json.readTree(mutate("POST", collection, member,
+                updateBody("<p>即将超窗</p>"), null, UUID.randomUUID()).body());
+        UUID expiringId = UUID.fromString(expiring.path("id").asText());
+        jdbc.sql("UPDATE yumpoo.work_item_update SET "
+                        + "created_at=transaction_timestamp()-interval '15 minutes', "
+                        + "edit_deadline_at=transaction_timestamp() WHERE id=:id")
+                .param("id", expiringId).update();
+        assertThat(mutate("PATCH", "/api/v1/work-item-updates/" + expiringId, member,
+                updateBody("<p>截止时刻</p>"), "\"0\"", null).statusCode()).isEqualTo(409);
+    }
+
+    @Test
+    void workItemUpdateSelfDeleteAndArchivedOwnerModerationKeepTombstonesAndAudit() throws Exception {
+        JsonNode created = createWorkItem("/api/v1/contents/" + contentId + "/work-items",
+                "删除讨论", "LOW", null, null);
+        UUID workItemId = UUID.fromString(created.path("id").asText());
+        String collection = "/api/v1/work-items/" + workItemId + "/updates";
+        String mention = "<p>自删 <span data-type=\"mention\" data-mention-user-id=\""
+                + owner.userId() + "\">@Owner</span></p>";
+        JsonNode selfPublished = json.readTree(mutate("POST", collection, member,
+                updateBody(mention), null, UUID.randomUUID()).body());
+        UUID selfId = UUID.fromString(selfPublished.path("id").asText());
+        String selfResource = "/api/v1/work-item-updates/" + selfId;
+
+        HttpResponse<String> selfDeletedResponse = mutate("DELETE", selfResource, member,
+                "{}", "\"0\"", null);
+        assertThat(selfDeletedResponse.statusCode()).as(selfDeletedResponse.body()).isEqualTo(200);
+        JsonNode selfDeleted = json.readTree(selfDeletedResponse.body());
+        assertThat(selfDeleted.path("status").asText()).isEqualTo("DELETED");
+        assertThat(selfDeleted.path("bodyHtml").isNull()).isTrue();
+        assertThat(selfDeleted.path("deleteReason").isNull()).isTrue();
+        assertThat(selfDeleted.path("capabilities").path("canEdit").asBoolean()).isFalse();
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_update_mention WHERE update_id=:id")
+                .param("id", selfId).query(Long.class).single()).isOne();
+        assertThat(json.readTree(get(collection, owner).body()).path("items").toString())
+                .contains(selfId.toString(), "DELETED").doesNotContain("自删");
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.security_audit_event "
+                        + "WHERE target_id=:id AND action='WORK_ITEM_UPDATE_SELF_DELETED'")
+                .param("id", selfId.toString()).query(Long.class).single()).isOne();
+        String selfEvent = jdbc.sql("SELECT payload_json::text FROM yumpoo.outbox_event "
+                        + "WHERE aggregate_id=:id AND event_type='workitem.work_item_update_deleted'")
+                .param("id", selfId).query(String.class).single();
+        assertThat(selfEvent).contains("\"deletionMode\": \"SELF\"")
+                .doesNotContain("bodyHtml", "bodyText", "自删");
+        assertThat(mutate("DELETE", selfResource, member, "{}", "\"0\"", null).statusCode())
+                .isEqualTo(412);
+        assertThat(mutate("DELETE", selfResource, member, "{}", "\"1\"", null).statusCode())
+                .isEqualTo(409);
+
+        JsonNode moderatedPublished = json.readTree(mutate("POST", collection, member,
+                updateBody("<p>需要治理</p>"), null, UUID.randomUUID()).body());
+        JsonNode archivedPublished = json.readTree(mutate("POST", collection, member,
+                updateBody("<p>归档治理</p>"), null, UUID.randomUUID()).body());
+        UUID moderatedId = UUID.fromString(moderatedPublished.path("id").asText());
+        UUID archivedId = UUID.fromString(archivedPublished.path("id").asText());
+        String moderatedResource = "/api/v1/work-item-updates/" + moderatedId;
+        assertThat(mutate("DELETE", moderatedResource, member, "{\"reason\":\"越权治理\"}",
+                "\"0\"", null).statusCode()).isEqualTo(403);
+        assertThat(mutate("DELETE", moderatedResource, admin, "{\"reason\":\"管理员治理\"}",
+                "\"0\"", null).statusCode()).isEqualTo(403);
+
+        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED', archived_at=transaction_timestamp(), "
+                        + "updated_at=transaction_timestamp(), updated_by_user_id=:actor, "
+                        + "row_version=row_version+1 WHERE id=:id")
+                .param("actor", owner.userId()).param("id", PROJECT_ID).update();
+        assertThat(mutate("DELETE", moderatedResource, member, "{}", "\"0\"", null).statusCode())
+                .isEqualTo(409);
+        HttpResponse<String> moderatedResponse = mutate("DELETE",
+                "/api/v1/work-item-updates/" + archivedId, owner,
+                "{\"reason\":\"  归档后仍需清理  \"}", "\"0\"", null);
+        assertThat(moderatedResponse.statusCode()).as(moderatedResponse.body()).isEqualTo(200);
+        JsonNode moderated = json.readTree(moderatedResponse.body());
+        assertThat(moderated.path("deleteReason").asText()).isEqualTo("归档后仍需清理");
+        assertThat(moderated.path("bodyHtml").isNull()).isTrue();
+        assertThat(jdbc.sql("SELECT reason_reference FROM yumpoo.security_audit_event "
+                        + "WHERE target_id=:id AND action='WORK_ITEM_UPDATE_MODERATED'")
+                .param("id", archivedId.toString()).query(String.class).single())
+                .isEqualTo("归档后仍需清理");
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.security_audit_event "
+                        + "WHERE action='WORK_ITEM_UPDATE_MODERATION_FAILED' "
+                        + "AND target_id=:id AND outcome='FAILED'")
+                .param("id", moderatedId.toString()).query(Long.class).single()).isEqualTo(2);
+    }
+
     private ActorFixture actor(UUID userId) {
         return new ActorFixture(userId, sessions.issueWebSession(userId, "m210-http"));
     }

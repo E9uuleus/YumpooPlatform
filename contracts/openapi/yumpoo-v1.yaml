@@ -1842,6 +1842,90 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
+  /work-item-updates/{updateId}:
+    get:
+      tags: [WorkItemUpdates]
+      operationId: getWorkItemUpdate
+      summary: 查询单条 Work Item 讨论
+      description: 返回当前调用人的操作能力；删除记录仅返回占位事实，不返回原正文。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+      responses:
+        '200':
+          description: 当前可见 Update。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemUpdate' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+    patch:
+      tags: [WorkItemUpdates]
+      operationId: editWorkItemUpdate
+      summary: 编辑 Work Item 讨论
+      description: 仅作者可在服务端 15 分钟窗口内编辑；正文和 Mention 重新净化并原子替换。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemUpdateEditRequest' } } }
+      responses:
+        '200':
+          description: Update 已编辑，或净化后的正文没有变化。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemUpdate' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+    delete:
+      tags: [WorkItemUpdates]
+      operationId: deleteWorkItemUpdate
+      summary: 删除或治理删除 Work Item 讨论
+      description: 无 reason 表示作者窗口内自删；提供 reason 表示当前 ProjectOwner 治理删除，包括归档历史。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemUpdateDeleteRequest' } } }
+      responses:
+        '200':
+          description: Update 已转为不可恢复的删除占位。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemUpdate' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /work-items/{workItemId}/transitions:
     post:
       tags: [WorkItems]
@@ -2735,7 +2819,7 @@ components:
       additionalProperties: false
       required: [id, projectId, contentId, workItemId, authorUserId, authorDisplayName,
         bodyHtml, bodyText, status, editDeadlineAt, rowVersion, etag, createdAt,
-        editedAt, editedByUserId, deletedAt, deletedByUserId, deleteReason]
+        editedAt, editedByUserId, deletedAt, deletedByUserId, deleteReason, capabilities]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
@@ -2755,6 +2839,16 @@ components:
         deletedAt: { type: string, format: date-time, nullable: true, readOnly: true }
         deletedByUserId: { type: string, format: uuid, nullable: true, readOnly: true }
         deleteReason: { type: string, minLength: 1, maxLength: 500, nullable: true, readOnly: true }
+        capabilities: { $ref: '#/components/schemas/WorkItemUpdateCapabilities' }
+
+    WorkItemUpdateCapabilities:
+      type: object
+      additionalProperties: false
+      required: [canEdit, canSelfDelete, canModerateDelete]
+      properties:
+        canEdit: { type: boolean, readOnly: true }
+        canSelfDelete: { type: boolean, readOnly: true }
+        canModerateDelete: { type: boolean, readOnly: true }
 
     WorkItemUpdatePage:
       type: object
@@ -2774,6 +2868,25 @@ components:
         bodyHtml:
           type: string
           description: 未受信任的协作富文本；限制应用于服务端净化后的 HTML 与纯文本。
+
+    WorkItemUpdateEditRequest:
+      type: object
+      additionalProperties: false
+      required: [bodyHtml]
+      properties:
+        bodyHtml:
+          type: string
+          description: 未受信任的编辑正文；服务端重新净化并从正文解析 Mention。
+
+    WorkItemUpdateDeleteRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: 提供时表示 ProjectOwner 治理删除；省略时表示作者窗口内自删。
 
     WorkItemCreateRequest:
       type: object

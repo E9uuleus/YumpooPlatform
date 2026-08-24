@@ -19,6 +19,13 @@ import {
     WorkItemUpdateStatusToJSON,
     WorkItemUpdateStatusToJSONTyped,
 } from './WorkItemUpdateStatus';
+import type { WorkItemUpdateCapabilities } from './WorkItemUpdateCapabilities';
+import {
+    WorkItemUpdateCapabilitiesFromJSON,
+    WorkItemUpdateCapabilitiesFromJSONTyped,
+    WorkItemUpdateCapabilitiesToJSON,
+    WorkItemUpdateCapabilitiesToJSONTyped,
+} from './WorkItemUpdateCapabilities';
 
 /**
  *
@@ -134,6 +141,12 @@ export interface WorkItemUpdate {
      * @memberof WorkItemUpdate
      */
     readonly deleteReason: string | null;
+    /**
+     *
+     * @type {WorkItemUpdateCapabilities}
+     * @memberof WorkItemUpdate
+     */
+    capabilities: WorkItemUpdateCapabilities;
 }
 
 
@@ -160,6 +173,7 @@ export function instanceOfWorkItemUpdate(value: object): value is WorkItemUpdate
     if (!('deletedAt' in value) || value['deletedAt'] === undefined) return false;
     if (!('deletedByUserId' in value) || value['deletedByUserId'] === undefined) return false;
     if (!('deleteReason' in value) || value['deleteReason'] === undefined) return false;
+    if (!('capabilities' in value) || value['capabilities'] === undefined) return false;
     return true;
 }
 
@@ -191,6 +205,7 @@ export function WorkItemUpdateFromJSONTyped(json: any, ignoreDiscriminator: bool
         'deletedAt': (json['deletedAt'] == null ? null : new Date(json['deletedAt'])),
         'deletedByUserId': json['deletedByUserId'],
         'deleteReason': json['deleteReason'],
+        'capabilities': WorkItemUpdateCapabilitiesFromJSON(json['capabilities']),
     };
 }
 
@@ -214,5 +229,6 @@ export function WorkItemUpdateToJSONTyped(value?: Omit<WorkItemUpdate, 'editDead
         'bodyHtml': value['bodyHtml'],
         'bodyText': value['bodyText'],
         'status': WorkItemUpdateStatusToJSON(value['status']),
+        'capabilities': WorkItemUpdateCapabilitiesToJSON(value['capabilities']),
     };
 }
