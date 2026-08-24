@@ -12,6 +12,7 @@ withDefaults(defineProps<{
   popoverClass?: string
   popoverWidth?: number
   inlineSearch?: boolean
+  showTags?: boolean
 }>(), {
   filters: () => [],
   resultCount: null,
@@ -20,6 +21,7 @@ withDefaults(defineProps<{
   popoverClass: '',
   popoverWidth: 720,
   inlineSearch: false,
+  showTags: true,
 })
 
 defineEmits<{
@@ -123,14 +125,15 @@ async function toggleSearch(): Promise<void> {
           <div class="yp-filter-panel">
             <div class="yp-filter-panel__header">
               <strong>筛选</strong>
-              <el-button
+              <button
                 v-if="filters.length"
-                link
-                type="primary"
+                class="yp-filter-panel__clear-btn"
+                type="button"
+                aria-label="清除全部筛选"
                 @click="$emit('clear')"
               >
                 清除全部
-              </el-button>
+              </button>
             </div>
             <div class="yp-filter-panel__controls">
               <slot name="filters" />
@@ -140,7 +143,7 @@ async function toggleSearch(): Promise<void> {
         </el-popover>
       </div>
       <div
-        v-if="filters.length || resultCount !== null"
+        v-if="(showTags && filters.length) || resultCount !== null"
         class="yp-filter-bar__summary"
       >
         <span
@@ -149,15 +152,17 @@ async function toggleSearch(): Promise<void> {
         >
           {{ loading ? '正在更新…' : `${resultCount} 条` }}
         </span>
-        <el-tag
-          v-for="filter in filters"
-          :key="filter.key"
-          closable
-          effect="plain"
-          @close="$emit('remove', filter.key)"
-        >
-          {{ filter.valueLabel }}
-        </el-tag>
+        <template v-if="showTags">
+          <el-tag
+            v-for="filter in filters"
+            :key="filter.key"
+            closable
+            effect="plain"
+            @close="$emit('remove', filter.key)"
+          >
+            {{ filter.valueLabel }}
+          </el-tag>
+        </template>
       </div>
       <div
         v-if="$slots.actions"
@@ -243,10 +248,20 @@ async function toggleSearch(): Promise<void> {
   gap: var(--yp-space-2);
 }
 
-.yp-filter-bar__tool:hover,
-.yp-filter-bar__tool.active {
+.yp-filter-bar__tool:hover {
   color: var(--yp-text-primary);
   background: var(--yp-bg-sunken);
+}
+
+.yp-filter-bar__tool.active {
+  color: var(--yp-action-primary);
+  background: color-mix(in srgb, var(--yp-action-primary) 18%, var(--yp-bg-surface));
+  font-weight: 500;
+}
+
+.yp-filter-bar__tool.active:hover {
+  color: var(--yp-action-primary);
+  background: color-mix(in srgb, var(--yp-action-primary) 24%, var(--yp-bg-surface));
 }
 
 .yp-filter-bar__tool .el-icon {
@@ -297,16 +312,47 @@ async function toggleSearch(): Promise<void> {
 }
 
 .yp-filter-panel {
-  padding: var(--yp-space-5);
+  padding: var(--yp-space-4);
 }
 
 .yp-filter-panel__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--yp-space-4);
-  padding-bottom: var(--yp-space-3);
+  margin-bottom: var(--yp-space-3);
+  padding-bottom: var(--yp-space-2);
   border-bottom: 1px solid var(--yp-border-subtle);
+  font-size: 13px;
+}
+
+.yp-filter-panel__header strong {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--yp-text-primary);
+}
+
+.yp-filter-panel__clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--yp-radius-xs);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-sunken);
+  cursor: pointer;
+  line-height: 1;
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard),
+              color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.yp-filter-panel__clear-btn:hover {
+  background: var(--yp-bg-hover);
+  color: var(--yp-action-primary);
 }
 
 .yp-filter-panel__controls {

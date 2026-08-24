@@ -286,7 +286,7 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
 
       <yp-filter-bar
         :filters="activeFilters" :result-count="visibleResultCount" :loading="loading"
-        :popover-width="1180" inline-search labeled-tools popover-class="project-filter-popover"
+        :popover-width="780" :show-tags="false" inline-search labeled-tools popover-class="project-filter-popover"
         @remove="removeFilter" @clear="clearFilters"
       >
         <template #search>
@@ -297,29 +297,71 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
           <div class="project-filter-grid">
             <section class="project-filter-group">
               <h3>最后修改时间</h3>
-              <button v-for="option in modifiedOptions" :key="option.value" type="button" class="project-filter-option"
-                :class="{ selected: modifiedPreset === option.value }" :aria-pressed="modifiedPreset === option.value"
-                @click="selectModified(option.value)">{{ option.label }}</button>
+              <el-tooltip
+                v-for="option in modifiedOptions"
+                :key="option.value"
+                :content="option.label"
+                placement="top"
+                :show-after="350"
+              >
+                <button
+                  type="button"
+                  class="project-filter-option"
+                  :class="{ selected: modifiedPreset === option.value }"
+                  :aria-pressed="modifiedPreset === option.value"
+                  @click="selectModified(option.value)"
+                >
+                  {{ option.label }}
+                </button>
+              </el-tooltip>
             </section>
             <section class="project-filter-group">
               <h3>项目类型</h3>
               <el-checkbox-group v-model="projectTypes" @change="refreshForFilters">
-                <el-checkbox v-for="value in projectTypeOptions" :key="value" :value="value">{{ businessLabel(value) }}</el-checkbox>
+                <el-tooltip
+                  v-for="value in projectTypeOptions"
+                  :key="value"
+                  :content="businessLabel(value)"
+                  placement="top"
+                  :show-after="350"
+                >
+                  <el-checkbox :value="value">
+                    {{ businessLabel(value) }}
+                  </el-checkbox>
+                </el-tooltip>
               </el-checkbox-group>
             </section>
             <section class="project-filter-group">
               <h3>负责人</h3>
               <el-checkbox-group v-model="ownerUserIds" @change="refreshForFilters">
-                <el-checkbox v-for="owner in ownerOptions" :key="owner.userId" :value="owner.userId">
-                  <yp-assignee :user-id="owner.userId" :display-name="owner.displayName" size="table" />
-                </el-checkbox>
+                <el-tooltip
+                  v-for="owner in ownerOptions"
+                  :key="owner.userId"
+                  :content="owner.displayName"
+                  placement="top"
+                  :show-after="350"
+                >
+                  <el-checkbox :value="owner.userId">
+                    <yp-assignee :user-id="owner.userId" :display-name="owner.displayName" size="table" />
+                  </el-checkbox>
+                </el-tooltip>
               </el-checkbox-group>
               <span v-if="!ownerOptions.length" class="project-filter-empty">暂无负责人选项</span>
             </section>
             <section class="project-filter-group">
               <h3>我的角色</h3>
               <el-checkbox-group v-model="actorAccesses" @change="refreshForFilters">
-                <el-checkbox v-for="value in accessOptions" :key="value" :value="value">{{ businessLabel(value) }}</el-checkbox>
+                <el-tooltip
+                  v-for="value in accessOptions"
+                  :key="value"
+                  :content="businessLabel(value)"
+                  placement="top"
+                  :show-after="350"
+                >
+                  <el-checkbox :value="value">
+                    {{ businessLabel(value) }}
+                  </el-checkbox>
+                </el-tooltip>
               </el-checkbox-group>
             </section>
           </div>
@@ -349,8 +391,8 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
                       fill="none"
                       aria-hidden="true"
                     >
-                      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" stroke-width="1.2" />
-                      <path d="M1.5 6h13" stroke="currentColor" stroke-width="1.2" />
+                      <rect x="2" y="2.5" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.3" />
+                      <path d="M2 6.5h12M6.5 6.5v7" stroke="currentColor" stroke-width="1.3" />
                     </svg>
                     <button
                       class="project-name-cell__link"

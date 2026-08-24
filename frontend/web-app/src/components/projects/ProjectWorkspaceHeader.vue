@@ -53,15 +53,33 @@ function navigate(routeName: string): void {
     <div class="project-workspace-header__identity">
       <div
         class="project-workspace-header__icon"
+        :class="{ 'project-workspace-header__icon--catalog': section === 'catalog' }"
         aria-hidden="true"
       >
-        <el-icon>
+        <template v-if="section === 'catalog'">
+          <span class="project-workspace-header__avatar-text">{{ heading ? heading.charAt(0) : 'M' }}</span>
+          <span class="project-workspace-header__home-badge" title="主工作空间">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L2 8.207V13.5A1.5 1.5 0 0 0 3.5 15h9a1.5 1.5 0 0 0 1.5-1.5V8.207l.646.647a.5.5 0 0 0 .708-.708L8.707 1.5Z" />
+            </svg>
+          </span>
+        </template>
+        <el-icon v-else>
           <folder-opened />
         </el-icon>
       </div>
       <div class="project-workspace-header__copy">
         <div class="project-workspace-header__title-row">
           <h1>{{ heading }}</h1>
+          <span
+            v-if="section === 'catalog'"
+            class="project-workspace-header__chevron"
+            aria-hidden="true"
+          >
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M5.293 7.293a1 1 0 0 1 1.414 0L10 10.586l3.293-3.293a1 1 0 1 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 0 1 0-1.414Z" />
+            </svg>
+          </span>
           <span
             v-if="project"
             class="project-workspace-header__code"
@@ -274,10 +292,60 @@ p {
   font-size: 36px;
 }
 
+.project-workspace-header__icon--catalog {
+  background: linear-gradient(135deg, var(--yp-status-pink) 0%, color-mix(in srgb, var(--yp-status-pink) 80%, white) 100%) !important;
+  color: var(--yp-status-pink-foreground) !important;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--yp-status-pink) 25%, transparent);
+  font-weight: 700;
+  position: relative;
+}
+
+.project-workspace-header__avatar-text {
+  font-size: 38px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--yp-status-pink-foreground);
+  user-select: none;
+  font-family: var(--yp-font-heading);
+}
+
+.project-workspace-header__home-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: var(--yp-text-primary);
+  color: var(--yp-bg-surface);
+  border-radius: 6px;
+  border: 2px solid var(--yp-bg-surface);
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--yp-text-primary) 15%, transparent);
+}
+
+.project-workspace-header__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--yp-text-secondary);
+  transition: transform var(--yp-motion-fast) var(--yp-ease-standard), color var(--yp-motion-fast) var(--yp-ease-standard);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--yp-radius-xs);
+}
+
+.project-workspace-header__chevron:hover {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
 .project-workspace-header--catalog h1 {
   font-size: 32px;
   font-weight: 700;
   line-height: 40px;
+  letter-spacing: -0.02em;
 }
 
 @media (max-width: 959.98px) {
@@ -302,6 +370,15 @@ p {
   .project-workspace-header--catalog h1 {
     font-size: 28px;
     line-height: 36px;
+  }
+
+  .project-workspace-header--catalog .project-workspace-header__avatar-text {
+    font-size: 30px;
+  }
+
+  .project-workspace-header--catalog .project-workspace-header__home-badge {
+    width: 18px;
+    height: 18px;
   }
 }
 
