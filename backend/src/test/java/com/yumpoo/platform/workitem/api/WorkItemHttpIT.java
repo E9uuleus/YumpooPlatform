@@ -952,6 +952,118 @@ class WorkItemHttpIT {
         assertThat(status.equals("ARCHIVED") ? count == 0 : count == 1).isTrue();
     }
 
+    @Test
+    void workItemUpdatesSanitizeMentionsReplayExactlyOnceAndKeepParentVersion() throws Exception {
+        JsonNode created = createWorkItem("/api/v1/contents/" + contentId + "/work-items",
+                "讨论目标", "MEDIUM", member.userId(), null);
+        UUID workItemId = UUID.fromString(created.path("id").asText());
+        String path = "/api/v1/work-items/" + workItemId + "/updates";
+        String parentUpdatedAt = json.readTree(get("/api/v1/work-items/" + workItemId, member).body())
+                .path("updatedAt").asText();
+        UUID key = UUID.randomUUID();
+        String unsafe = "<h1 style=\"color:red\">标题</h1><p onclick=\"evil()\">你好 "
+                + "<span data-type=\"mention\" data-mention-user-id=\"" + owner.userId()
+                + "\">@伪造名</span><script>alert(1)</script>"
+                + "<a href=\"https://example.com/x\">链接</a></p>";
+        String request = updateBody(unsafe);
+
+        assertThat(get(path, null).statusCode()).isEqualTo(401);
+        assertThat(get(path, outsider).statusCode()).isEqualTo(404);
+        assertThat(get(path, admin).statusCode()).isEqualTo(200);
+        assertThat(mutate("POST", path, outsider, request, null, UUID.randomUUID()).statusCode())
+                .isEqualTo(404);
+        assertThat(mutate("POST", path, admin, request, null, UUID.randomUUID()).statusCode())
+                .isEqualTo(403);
+
+        HttpResponse<String> published = mutate("POST", path, member, request, null, key);
+        assertThat(published.statusCode()).as(published.body()).isEqualTo(201);
+        assertThat(published.headers().firstValue("etag")).contains("\"0\"");
+        assertThat(published.headers().firstValue("location")).isPresent();
+        JsonNode update = json.readTree(published.body());
+        assertThat(update.path("status").asText()).isEqualTo("PUBLISHED");
+        assertThat(update.path("authorDisplayName").asText()).isEqualTo("M2-10 Member");
+        assertThat(update.path("bodyHtml").asText())
+                .contains("@M2-10 Owner", "target=\"_blank\"", "nofollow noopener noreferrer")
+                .doesNotContain("伪造名", "script", "onclick", "style", "<h1");
+        assertThat(update.path("bodyText").asText()).contains("标题", "你好", "@M2-10 Owner", "链接");
+        assertThat(Instant.parse(update.path("editDeadlineAt").asText()))
+                .isEqualTo(Instant.parse(update.path("createdAt").asText()).plusSeconds(900));
+
+        JsonNode parent = json.readTree(get("/api/v1/work-items/" + workItemId, member).body());
+        assertThat(parent.path("rowVersion").asLong()).isZero();
+        assertThat(Instant.parse(parent.path("updatedAt").asText()))
+                .isEqualTo(Instant.parse(parentUpdatedAt));
+        HttpResponse<String> replay = mutate("POST", path, member, request, null, key);
+        assertThat(replay.statusCode()).isEqualTo(201);
+        assertThat(replay.body()).isEqualTo(published.body());
+        assertThat(mutate("POST", path, member, updateBody("<p>不同请求</p>"), null, key).statusCode())
+                .isEqualTo(409);
+
+        UUID updateId = UUID.fromString(update.path("id").asText());
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_update WHERE id=:id")
+                .param("id", updateId).query(Long.class).single()).isOne();
+        assertThat(jdbc.sql("SELECT mentioned_display_name FROM yumpoo.work_item_update_mention "
+                        + "WHERE update_id=:id AND mentioned_user_id=:userId")
+                .param("id", updateId).param("userId", owner.userId()).query(String.class).single())
+                .isEqualTo("M2-10 Owner");
+        String payload = jdbc.sql("SELECT payload_json::text FROM yumpoo.outbox_event "
+                        + "WHERE aggregate_id=:id AND event_type='workitem.work_item_update_published'")
+                .param("id", updateId).query(String.class).single();
+        assertThat(payload).contains("mentionedUserIds", owner.userId().toString())
+                .doesNotContain("bodyHtml", "bodyText", "你好");
+
+        long before = jdbc.sql("SELECT count(*) FROM yumpoo.work_item_update WHERE work_item_id=:id")
+                .param("id", workItemId).query(Long.class).single();
+        assertThat(mutate("POST", path, member,
+                updateBody("<p><span data-type=\"mention\" data-mention-user-id=\"not-a-uuid\">x</span></p>"),
+                null, UUID.randomUUID()).statusCode()).isEqualTo(422);
+        HttpResponse<String> inactiveMention = mutate("POST", path, member,
+                updateBody("<p><span data-type=\"mention\" data-mention-user-id=\"" + outsider.userId()
+                        + "\">@外部用户</span></p>"), null, UUID.randomUUID());
+        assertThat(inactiveMention.statusCode()).isEqualTo(422);
+        assertThat(inactiveMention.body()).contains("MENTION_NOT_ACTIVE_PROJECT_MEMBER");
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_update WHERE work_item_id=:id")
+                .param("id", workItemId).query(Long.class).single()).isEqualTo(before);
+    }
+
+    @Test
+    void workItemUpdateCursorLoadsOlderAscendingWithoutConcurrentDuplicatesAndArchiveIsReadOnly()
+            throws Exception {
+        JsonNode created = createWorkItem("/api/v1/contents/" + contentId + "/work-items",
+                "分页讨论", "LOW", null, null);
+        UUID workItemId = UUID.fromString(created.path("id").asText());
+        String path = "/api/v1/work-items/" + workItemId + "/updates";
+        for (String text : List.of("第一条", "第二条", "第三条")) {
+            assertThat(mutate("POST", path, owner, updateBody("<p>" + text + "</p>"), null,
+                    UUID.randomUUID()).statusCode()).isEqualTo(201);
+        }
+
+        JsonNode latest = json.readTree(get(path + "?size=2", member).body());
+        assertThat(latest.path("items").size()).isEqualTo(2);
+        assertThat(latest.path("items").get(0).path("bodyText").asText()).isEqualTo("第二条");
+        assertThat(latest.path("items").get(1).path("bodyText").asText()).isEqualTo("第三条");
+        String cursor = latest.path("nextCursor").asText();
+        assertThat(cursor).isNotBlank();
+        assertThat(get(path + "?cursor=not-base64&size=2", member).statusCode()).isEqualTo(422);
+
+        assertThat(mutate("POST", path, member, updateBody("<p>并发新增</p>"), null,
+                UUID.randomUUID()).statusCode()).isEqualTo(201);
+        JsonNode older = json.readTree(get(path + "?cursor="
+                + URLEncoder.encode(cursor, StandardCharsets.UTF_8) + "&size=2", member).body());
+        assertThat(older.path("items").size()).isEqualTo(1);
+        assertThat(older.path("items").get(0).path("bodyText").asText()).isEqualTo("第一条");
+        assertThat(older.path("nextCursor").isNull()).isTrue();
+
+        jdbc.sql("UPDATE yumpoo.content SET status='ARCHIVED', archived_at=transaction_timestamp(), "
+                        + "archived_by_user_id=:actor, updated_at=transaction_timestamp(), "
+                        + "updated_by_user_id=:actor, row_version=row_version+1 WHERE id=:id")
+                .param("actor", owner.userId()).param("id", contentId).update();
+        assertThat(get(path, admin).statusCode()).isEqualTo(200);
+        assertThat(get(path, member).statusCode()).isEqualTo(200);
+        assertThat(mutate("POST", path, member, updateBody("<p>归档后拒绝</p>"), null,
+                UUID.randomUUID()).statusCode()).isEqualTo(409);
+    }
+
     private ActorFixture actor(UUID userId) {
         return new ActorFixture(userId, sessions.issueWebSession(userId, "m210-http"));
     }
@@ -963,6 +1075,10 @@ class WorkItemHttpIT {
                         null, null, dueDate), null, UUID.randomUUID());
         assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
         return json.readTree(response.body());
+    }
+
+    private String updateBody(String bodyHtml) throws Exception {
+        return json.writeValueAsString(java.util.Map.of("bodyHtml", bodyHtml));
     }
 
     private JsonNode body(HttpResponse<String> response) throws Exception {
@@ -1162,6 +1278,10 @@ class WorkItemHttpIT {
     }
 
     private void cleanUp() {
+        jdbc.sql("DELETE FROM yumpoo.work_item_update_mention WHERE company_id=:id")
+                .param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_update WHERE company_id=:id")
+                .param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_project_counter WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.content WHERE company_id=:id").param("id", COMPANY_ID).update();

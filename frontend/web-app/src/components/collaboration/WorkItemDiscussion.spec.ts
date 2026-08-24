@@ -120,4 +120,32 @@ describe('WorkItemDiscussion', () => {
     expect(wrapper.find('.discussion-composer').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('传输失败重试复用原幂等键，成功后采用服务端净化响应', async () => {
+    api.publish.mockRejectedValueOnce(new TypeError('network unavailable'))
+      .mockResolvedValueOnce(update(
+        '35000000-0000-4000-8000-000000000033',
+        '服务端净化正文',
+        '2026-08-24T10:03:00Z',
+      ))
+    const wrapper = mount(WorkItemDiscussion, {
+      props: { workItemId: '35000000-0000-4000-8000-000000000026', members: [member], canPublish: true },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    const exposed = wrapper.vm as unknown as { editor: { commands: { setContent: (html: string) => void } } }
+    exposed.editor.commands.setContent('<p onclick="evil()">本地草稿</p>')
+    await flushPromises()
+    await wrapper.get('.discussion-composer__footer button').trigger('click')
+    await flushPromises()
+    const firstKey = api.publish.mock.calls[0]?.[0].idempotencyKey
+
+    await wrapper.get('.discussion-composer__footer button').trigger('click')
+    await flushPromises()
+    expect(api.publish).toHaveBeenCalledTimes(2)
+    expect(api.publish.mock.calls[1]?.[0].idempotencyKey).toBe(firstKey)
+    expect(wrapper.html()).toContain('服务端净化正文')
+    expect(wrapper.html()).not.toContain('onclick="evil()"')
+    wrapper.unmount()
+  })
 })

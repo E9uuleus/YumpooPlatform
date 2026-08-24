@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @Repository
-public final class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
+public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
     private static final String COLUMNS = """
             id, company_id, project_id, content_id, work_item_id, author_user_id,
             author_display_name, body_html, body_text, status, edit_deadline_at,

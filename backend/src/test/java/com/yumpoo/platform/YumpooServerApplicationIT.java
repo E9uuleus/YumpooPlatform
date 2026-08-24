@@ -279,6 +279,11 @@ class YumpooServerApplicationIT {
                         + "AND tablename = 'work_item'",
                 String.class
         );
+        List<String> workItemUpdateIndexNames = jdbcTemplate.queryForList(
+                "SELECT indexname FROM pg_indexes WHERE schemaname = 'yumpoo' "
+                        + "AND tablename = 'work_item_update'",
+                String.class
+        );
         List<String> companySeeds = jdbcTemplate.queryForList(
                 "SELECT id::text || '|' || singleton_slot || '|' || display_name || '|' "
                         + "|| timezone || '|' || week_start_day || '|' "
@@ -293,7 +298,7 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
@@ -325,6 +330,8 @@ class YumpooServerApplicationIT {
                 "work_item",
                 "work_item_project_counter",
                 "work_item_rank_lane",
+                "work_item_update",
+                "work_item_update_mention",
                 "workflow_status_definition",
                 "workflow_transition_definition",
                 "workspace"
@@ -512,6 +519,11 @@ class YumpooServerApplicationIT {
                 "idx_work_item_content_assignee",
                 "idx_work_item_content_due_date"
         );
+        assertThat(workItemUpdateIndexNames).containsExactlyInAnyOrder(
+                "work_item_update_pkey",
+                "uq_work_item_update_company_id",
+                "idx_work_item_update_page"
+        );
         assertThat(companySeeds).containsExactly(
                 "00000000-0000-4000-8000-000000000001|1|Yumpoo|Asia/Shanghai|MONDAY|480|0"
         );
@@ -532,7 +544,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v29DatabaseUpgradesThroughV34WithQueryKanbanMainWorkspacePersonalSlugAndSoftDeleteRank() throws Exception {
+    void v29DatabaseUpgradesThroughV35WithWorkItemUpdates() throws Exception {
         String database = "yumpoo_m213_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -549,8 +561,8 @@ class YumpooServerApplicationIT {
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
             MigrateResult upgraded = latest.migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(5);
-            assertThat(upgraded.targetSchemaVersion).hasToString("34");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(6);
+            assertThat(upgraded.targetSchemaVersion).hasToString("35");
             assertThat(workItemIndexes(jdbcUrl)).contains(
                     "idx_work_item_content_page",
                     "idx_work_item_content_status_page",
@@ -560,6 +572,9 @@ class YumpooServerApplicationIT {
                     "idx_work_item_content_status_rank_page");
             assertThat(workspaceFacts(jdbcUrl)).containsExactly("MAIN|0|ACTIVE|1");
             assertThat(generatedWorkItemColumns(jdbcUrl)).containsExactly("active_lane_rank");
+            assertThat(workItemUpdateIndexes(jdbcUrl)).containsExactlyInAnyOrder(
+                    "idx_work_item_update_page", "uq_work_item_update_company_id",
+                    "work_item_update_pkey");
         } finally {
             Container.ExecResult dropped = postgresContainer.execInContainer(
                     "dropdb", "--force", "-U", postgresContainer.getUsername(), database);
@@ -714,7 +729,7 @@ class YumpooServerApplicationIT {
                 }
                 connection.commit();
             }
-            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("34");
+            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("35");
             try (Connection connection = DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(), postgresContainer.getPassword());
                  Statement statement = connection.createStatement()) {
@@ -759,6 +774,18 @@ class YumpooServerApplicationIT {
              Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery("SELECT indexname FROM pg_indexes "
                      + "WHERE schemaname='yumpoo' AND tablename='work_item' ORDER BY indexname")) {
+            List<String> indexes = new java.util.ArrayList<>();
+            while (result.next()) indexes.add(result.getString(1));
+            return List.copyOf(indexes);
+        }
+    }
+
+    private List<String> workItemUpdateIndexes(String jdbcUrl) throws Exception {
+        try (Connection connection = DriverManager.getConnection(jdbcUrl,
+                postgresContainer.getUsername(), postgresContainer.getPassword());
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("SELECT indexname FROM pg_indexes "
+                     + "WHERE schemaname='yumpoo' AND tablename='work_item_update' ORDER BY indexname")) {
             List<String> indexes = new java.util.ArrayList<>();
             while (result.next()) indexes.add(result.getString(1));
             return List.copyOf(indexes);

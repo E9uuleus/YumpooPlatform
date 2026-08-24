@@ -43,7 +43,7 @@ class JsoupCollaborationHtmlSanitizerTest {
     }
 
     @Test
-    void canonicalizesMentionsAndDeduplicatesIdsInDocumentOrder() {
+    void canonicalizesMentionsDeduplicatesIdsAndPreservesUnicode() {
         String html = "<p>你好 <span data-type=\"mention\" data-mention-user-id=\"" + USER_ID
                 + "\">@伪造名</span><span data-type=\"mention\" data-mention-user-id=\""
                 + USER_ID + "\">@再次伪造</span> 👋</p>";
@@ -73,5 +73,12 @@ class JsoupCollaborationHtmlSanitizerTest {
         var result = sanitizer.canonicalize(sanitizer.parse("<p>" + text + "</p>"), Map.of());
         assertThat(result.bodyText()).hasSize(16_384);
         assertThat(result.bodyHtml()).startsWith("<p>").endsWith("</p>");
+
+        var nearHtmlLimit = sanitizer.canonicalize(
+                sanitizer.parse("<p>x" + "<br>".repeat(16_382) + "</p>"), Map.of());
+        assertThat(nearHtmlLimit.bodyHtml()).hasSize(65_536);
+        assertThatThrownBy(() -> sanitizer.canonicalize(
+                sanitizer.parse("<p>x" + "<br>".repeat(16_383) + "</p>"), Map.of()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

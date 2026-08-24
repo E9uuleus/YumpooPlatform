@@ -27,6 +27,7 @@ const loading = ref(false)
 const publishing = ref(false)
 const problem = ref<ApiProblem>()
 const timeline = ref<HTMLElement>()
+const draftText = ref('')
 let publishKey = crypto.randomUUID()
 let publishKeyBody = ''
 
@@ -116,6 +117,7 @@ const editor = useEditor({
   ],
   onUpdate: ({ editor: current }) => {
     const html = current.getHTML()
+    draftText.value = current.getText()
     if (html !== publishKeyBody) {
       publishKey = crypto.randomUUID()
       publishKeyBody = html
@@ -123,7 +125,7 @@ const editor = useEditor({
   },
 })
 
-const hasDraft = computed(() => Boolean(editor.value?.getText().trim()))
+const hasDraft = computed(() => Boolean(draftText.value.trim()))
 
 watch(() => props.canPublish, value => editor.value?.setEditable(value))
 
@@ -228,7 +230,7 @@ function discardDraft(): void {
   publishKeyBody = editor.value?.getHTML() ?? ''
 }
 
-defineExpose({ hasDraft, discardDraft })
+defineExpose({ hasDraft, discardDraft, editor })
 onMounted(loadLatest)
 </script>
 

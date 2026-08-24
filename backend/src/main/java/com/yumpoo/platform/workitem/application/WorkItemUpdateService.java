@@ -48,7 +48,7 @@ import static com.yumpoo.platform.workitem.application.WorkItemUpdateModels.Work
 import static com.yumpoo.platform.workitem.application.WorkItemUpdateModels.WorkItemUpdateView;
 
 @Service
-public final class WorkItemUpdateService {
+public class WorkItemUpdateService {
     private static final String PUBLISHED = "workitem.work_item_update_published";
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
