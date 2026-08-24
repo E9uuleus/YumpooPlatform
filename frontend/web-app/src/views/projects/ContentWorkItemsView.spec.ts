@@ -26,6 +26,13 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ContentWorkItemsView from './ContentWorkItemsView.vue'
 
+interface WorkItemUndoEntryForTest {
+  tombstone: WorkItemDetail
+  restoreIdempotencyKey: string
+  loading: boolean
+  problem?: unknown
+}
+
 const api = vi.hoisted(() => ({
   getProject: vi.fn(),
   listProjectMembers: vi.fn(),
@@ -38,6 +45,8 @@ const api = vi.hoisted(() => ({
   updateWorkItem: vi.fn(),
   transitionWorkItem: vi.fn(),
   rankMoveWorkItem: vi.fn(),
+  deleteWorkItem: vi.fn(),
+  restoreWorkItem: vi.fn(),
 }))
 const routing = vi.hoisted(() => ({
   route: { name: 'content-work-items', params: { projectId: 'project-1', contentId: 'content-1' },
@@ -60,6 +69,8 @@ vi.mock('../../api/client', () => ({
     updateWorkItem: api.updateWorkItem,
     transitionWorkItem: api.transitionWorkItem,
     rankMoveWorkItem: api.rankMoveWorkItem,
+    deleteWorkItem: api.deleteWorkItem,
+    restoreWorkItem: api.restoreWorkItem,
   },
 }))
 vi.mock('@yumpoo/api-client', async (importOriginal) => ({
@@ -135,7 +146,8 @@ function summary(id = 'work-item-1', statusCode = 'BACKLOG', title = '实现核�
     timelineEndDate: new Date('2026-08-29T00:00:00.000Z'),
     dueDate: new Date('2026-08-30T00:00:00.000Z'),
     rowVersion: 0, etag: '"0"',
-    capabilities: { canEditFields: true, canMoveInKanban: true, availableTransitions: defaultTransitions },
+    capabilities: { canEditFields: true, canMoveInKanban: true, canDelete: true,
+      canRestore: false, availableTransitions: defaultTransitions },
     updatedAt: new Date('2026-08-22T02:00:00Z'),
   }
 }
@@ -153,8 +165,10 @@ function detail(
 ): WorkItemDetail {
   return {
     ...summary(), description, notes: null,
-    rowVersion: 0, etag: '"0"', capabilities: { canEditFields: true, canMoveInKanban: true, availableTransitions },
+    rowVersion: 0, etag: '"0"', capabilities: { canEditFields: true, canMoveInKanban: true,
+      canDelete: true, canRestore: false, availableTransitions },
     createdAt: new Date('2026-08-22T01:00:00Z'),
+    deleted: false, deletedAt: null, deletedByUserId: null, deleteReason: null,
   }
 }
 
@@ -189,9 +203,17 @@ describe('M2-10 Content 工作项工作区', () => {
     api.updateWorkItem.mockResolvedValue({ ...detail(), rowVersion: 1, etag: '"1"' })
     api.transitionWorkItem.mockResolvedValue({
       ...detail(), statusCode: 'READY', statusCategory: WorkItemStatusCategory.InProgress,
-      rowVersion: 1, etag: '"1"', capabilities: { canEditFields: true, canMoveInKanban: true, availableTransitions: [] },
+      rowVersion: 1, etag: '"1"', capabilities: { canEditFields: true, canMoveInKanban: true,
+        canDelete: true, canRestore: false, availableTransitions: [] },
     })
     api.rankMoveWorkItem.mockResolvedValue(detail())
+    api.deleteWorkItem.mockResolvedValue({
+      ...detail(), rowVersion: 1, etag: '"1"', deleted: true,
+      deletedAt: new Date('2026-08-24T01:00:00Z'), deletedByUserId: 'owner-1',
+      deleteReason: '需求已合并', capabilities: { canEditFields: false, canMoveInKanban: false,
+        canDelete: false, canRestore: true, availableTransitions: [] },
+    })
+    api.restoreWorkItem.mockResolvedValue({ ...detail(), rowVersion: 2, etag: '"2"' })
   })
 
   it('使用服务端分页并呈现全部协作字段列', async () => {
@@ -432,7 +454,8 @@ describe('M2-10 Content 工作项工作区', () => {
       statusCategory: WorkItemStatusCategory.InProgress, requiresResolution: true,
     }
     const item = { ...summary(), capabilities: {
-      canEditFields: true, canMoveInKanban: true, availableTransitions: [required],
+      canEditFields: true, canMoveInKanban: true, canDelete: true,
+      canRestore: false, availableTransitions: [required],
     } }
     api.listContentWorkItems.mockImplementation(({ status }: { status?: Set<string> }) =>
       Promise.resolve(page(status?.has('BACKLOG') ? [item] : [])))
@@ -592,10 +615,96 @@ describe('M2-10 Content 工作项工作区', () => {
     wrapper.unmount()
   })
 
+  it('删除要求理由、提示未保存草稿，并在当前页面保留多个撤销项', async () => {
+    const firstTombstone = {
+      ...detail(), id: 'work-item-1', rowVersion: 1, etag: '"1"', deleted: true,
+      deletedAt: new Date(), deletedByUserId: 'owner-1', deleteReason: '需求已合并',
+      capabilities: { canEditFields: false, canMoveInKanban: false, canDelete: false,
+        canRestore: true, availableTransitions: [] },
+    }
+    const secondTombstone = { ...firstTombstone, id: 'work-item-2', itemNo: 'PROJECT_1-2' }
+    api.deleteWorkItem.mockResolvedValueOnce(firstTombstone).mockResolvedValueOnce(secondTombstone)
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      detailDraft: { title: string }
+      deleteReason: string
+      undoEntries: WorkItemUndoEntryForTest[]
+      openDetail: (item: WorkItemSummary) => Promise<void>
+      openDelete: () => void
+      deleteWorkItem: () => Promise<void>
+    }
+    await vm.openDetail(summary())
+    vm.detailDraft.title = '未保存草稿'
+    vm.openDelete(); await flushPromises()
+    expect(wrapper.text()).toContain('当前有未保存的字段草稿')
+    await vm.deleteWorkItem()
+    expect(api.deleteWorkItem).not.toHaveBeenCalled()
+    vm.deleteReason = '需求已合并'
+    await vm.deleteWorkItem(); await flushPromises()
+    await vm.openDetail(summary('work-item-2', 'BACKLOG', '第二项'))
+    vm.openDelete(); vm.deleteReason = '重复任务'
+    await vm.deleteWorkItem(); await flushPromises()
+    expect(vm.undoEntries).toHaveLength(2)
+    expect(wrapper.text()).toContain('PROJECT_1-1 已删除')
+    expect(wrapper.text()).toContain('PROJECT_1-2 已删除')
+    wrapper.unmount()
+  })
+
+  it('撤销传输失败使用同一幂等键重试，成功后打开恢复项', async () => {
+    api.restoreWorkItem.mockRejectedValueOnce({ kind: 'fallback', message: '网络连接异常' })
+      .mockResolvedValueOnce({ ...detail(), rowVersion: 2, etag: '"2"' })
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      deleteReason: string
+      detailOpen: boolean
+      undoEntries: WorkItemUndoEntryForTest[]
+      openDetail: (item: WorkItemSummary) => Promise<void>
+      openDelete: () => void
+      deleteWorkItem: () => Promise<void>
+      restoreWorkItem: (entry: WorkItemUndoEntryForTest) => Promise<void>
+    }
+    await vm.openDetail(summary()); vm.openDelete(); vm.deleteReason = '临时删除'
+    await vm.deleteWorkItem()
+    const entry = vm.undoEntries[0]!
+    await vm.restoreWorkItem(entry)
+    const originalKey = api.restoreWorkItem.mock.calls[0]?.[0].idempotencyKey
+    await vm.restoreWorkItem(entry); await flushPromises()
+    expect(api.restoreWorkItem.mock.calls[1]?.[0].idempotencyKey).toBe(originalKey)
+    expect(vm.undoEntries).toHaveLength(0)
+    expect(vm.detailOpen).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('删除遇到 412 只刷新服务器事实且不自动重提', async () => {
+    const latest = { ...detail(), title: '服务器新版本', rowVersion: 1, etag: '"1"' }
+    api.getWorkItem.mockResolvedValueOnce(detail()).mockResolvedValueOnce(latest)
+    api.deleteWorkItem.mockRejectedValueOnce({ kind: 'response', status: 412,
+      error: { code: 'VERSION_CONFLICT', message: '版本冲突', requestId: 'request-delete',
+        retryable: false, fieldErrors: [] } })
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as {
+      detailDraft: { title: string }
+      deleteReason: string
+      latestConflict?: WorkItemDetail
+      openDetail: (item: WorkItemSummary) => Promise<void>
+      openDelete: () => void
+      deleteWorkItem: () => Promise<void>
+    }
+    await vm.openDetail(summary())
+    vm.detailDraft.title = '本地未保存草稿'
+    vm.openDelete(); vm.deleteReason = '准备删除'
+    await vm.deleteWorkItem(); await flushPromises()
+    expect(api.deleteWorkItem).toHaveBeenCalledTimes(1)
+    expect(vm.detailDraft.title).toBe('本地未保存草稿')
+    expect(vm.latestConflict?.title).toBe('服务器新版本')
+    wrapper.unmount()
+  })
+
   it('终态或只读详情不显示状态迁移入口', async () => {
     api.getWorkItem.mockResolvedValue({
       ...detail('安全纯文本', []),
-      capabilities: { canEditFields: false, canMoveInKanban: false, availableTransitions: [] },
+      capabilities: { canEditFields: false, canMoveInKanban: false, canDelete: false,
+        canRestore: false, availableTransitions: [] },
     })
     const wrapper = mountView(); await flushPromises()
     const vm = wrapper.vm as unknown as { openDetail: (item: WorkItemSummary) => Promise<void> }

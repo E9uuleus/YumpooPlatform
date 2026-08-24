@@ -107,6 +107,13 @@ interface WorkItemFieldsDraft {
   dueDate: string
 }
 
+interface WorkItemUndoEntry {
+  tombstone: WorkItemDetail
+  restoreIdempotencyKey: string
+  loading: boolean
+  problem?: ApiProblem
+}
+
 const route = useRoute()
 const router = useRouter()
 const ElOption = ElOptionRaw as unknown as DefineComponent
@@ -152,6 +159,11 @@ const detailDraft = reactive<WorkItemFieldsDraft>({
 })
 const detailSaving = ref(false)
 const latestConflict = ref<WorkItemDetail>()
+const deleteOpen = ref(false)
+const deleteReason = ref('')
+const deleting = ref(false)
+const deleteIdempotencyKey = ref<string>()
+const undoEntries = ref<WorkItemUndoEntry[]>([])
 const transitionOpen = ref(false)
 const transitionSaving = ref(false)
 const transitionToStatus = ref('')
@@ -207,6 +219,18 @@ const readOnlyReason = computed(() => {
   return undefined
 })
 const canEditDetail = computed(() => detail.value?.capabilities.canEditFields === true)
+const canDeleteDetail = computed(() => detail.value?.capabilities.canDelete === true)
+const detailDraftDirty = computed(() => {
+  if (!detail.value) return false
+  return detailDraft.title !== detail.value.title
+    || detailDraft.priority !== detail.value.priority
+    || detailDraft.assigneeUserId !== (detail.value.assigneeUserId ?? '')
+    || detailDraft.description !== (detail.value.description ?? '')
+    || detailDraft.notes !== (detail.value.notes ?? '')
+    || detailDraft.timelineStartDate !== inputDate(detail.value.timelineStartDate)
+    || detailDraft.timelineEndDate !== inputDate(detail.value.timelineEndDate)
+    || detailDraft.dueDate !== inputDate(detail.value.dueDate)
+})
 const activeMembers = computed(() => members.value.filter(member =>
   member.membershipStatus === ProjectMembershipStatus.Active))
 const canSaveSharedQuery = computed(() => project.value?.actorAccess === ProjectActorAccess.Owner
@@ -873,6 +897,114 @@ function loadLatestDetail(): void {
   resetTransition()
 }
 
+function openDelete(): void {
+  if (!detail.value?.capabilities.canDelete || latestConflict.value) return
+  deleteReason.value = ''
+  deleteIdempotencyKey.value = globalThis.crypto.randomUUID()
+  deleteOpen.value = true
+}
+
+function resetDelete(): void {
+  if (deleting.value) return
+  deleteOpen.value = false
+  deleteReason.value = ''
+  deleteIdempotencyKey.value = undefined
+}
+
+async function refreshLifecycleFacts(workItemId: string): Promise<void> {
+  await refreshCurrentView()
+  try {
+    latestConflict.value = await workItemsApi.getWorkItem({ workItemId })
+  } catch {
+    detailOpen.value = false
+  }
+}
+
+async function deleteWorkItem(): Promise<void> {
+  if (!detail.value || !deleteIdempotencyKey.value || !canDeleteDetail.value) return
+  const reason = deleteReason.value.trim()
+  if (!reason) {
+    error.value = localProblem('请输入删除理由。')
+    return
+  }
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
+    return
+  }
+  deleting.value = true
+  error.value = undefined
+  const deletingId = detail.value.id
+  try {
+    const tombstone = await workItemsApi.deleteWorkItem({
+      workItemId: deletingId,
+      xXSRFTOKEN: csrf,
+      ifMatch: detail.value.etag,
+      idempotencyKey: deleteIdempotencyKey.value,
+      workItemDeleteRequest: { reason },
+    })
+    undoEntries.value.unshift({
+      tombstone,
+      restoreIdempotencyKey: globalThis.crypto.randomUUID(),
+      loading: false,
+    })
+    deleteOpen.value = false
+    detailOpen.value = false
+    detail.value = undefined
+    deleteReason.value = ''
+    deleteIdempotencyKey.value = undefined
+    await refreshCurrentView()
+    ElMessage.success(`已删除 ${tombstone.itemNo}，可在当前页面撤销。`)
+  } catch (reasonValue) {
+    const problem = await toApiProblem(reasonValue)
+    error.value = problem
+    if (isProblemStatus(problem, 409) || isProblemStatus(problem, 412)) {
+      await refreshLifecycleFacts(deletingId)
+      deleteOpen.value = false
+    }
+  } finally {
+    deleting.value = false
+  }
+}
+
+async function restoreWorkItem(entry: WorkItemUndoEntry): Promise<void> {
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    entry.problem = localProblem('缺少 CSRF 凭据，请刷新后重试。')
+    return
+  }
+  entry.loading = true
+  delete entry.problem
+  try {
+    const restored = await workItemsApi.restoreWorkItem({
+      workItemId: entry.tombstone.id,
+      xXSRFTOKEN: csrf,
+      ifMatch: entry.tombstone.etag,
+      idempotencyKey: entry.restoreIdempotencyKey,
+    })
+    undoEntries.value = undoEntries.value.filter(candidate => candidate !== entry)
+    await refreshCurrentView()
+    detail.value = restored
+    latestConflict.value = undefined
+    assignDraft(detailDraft, restored)
+    detailOpen.value = true
+    ElMessage.success(`已恢复 ${restored.itemNo}`)
+  } catch (reasonValue) {
+    const problem = await toApiProblem(reasonValue)
+    entry.problem = problem
+    error.value = problem
+    if (isProblemStatus(problem, 409) || isProblemStatus(problem, 412)) {
+      await refreshCurrentView()
+    }
+  } finally {
+    entry.loading = false
+  }
+}
+
+function dismissUndo(entry: WorkItemUndoEntry): void {
+  undoEntries.value = undoEntries.value.filter(candidate => candidate !== entry)
+}
+
 function openTransition(): void {
   const first = availableTransitions.value[0]
   if (!first || latestConflict.value) return
@@ -998,6 +1130,35 @@ onBeforeUnmount(() => {
       v-if="error"
       :problem="error"
     />
+
+    <div
+      v-if="undoEntries.length"
+      class="undo-queue"
+      aria-live="polite"
+    >
+      <div
+        v-for="entry in undoEntries"
+        :key="entry.tombstone.id"
+        class="undo-entry"
+      >
+        <div>
+          <strong>{{ entry.tombstone.itemNo }} 已删除</strong>
+          <span>{{ entry.tombstone.title }} · {{ entry.tombstone.deleteReason }}</span>
+          <span v-if="entry.problem" class="undo-entry__error">撤销未完成，可使用同一请求安全重试。</span>
+        </div>
+        <el-button
+          type="primary"
+          plain
+          :loading="entry.loading"
+          @click="restoreWorkItem(entry)"
+        >
+          撤销删除
+        </el-button>
+        <el-button :disabled="entry.loading" @click="dismissUndo(entry)">
+          忽略
+        </el-button>
+      </div>
+    </div>
 
     <template v-if="content">
       <div class="workspace-toolbar">
@@ -1603,6 +1764,15 @@ onBeforeUnmount(() => {
             变更状态
           </el-button>
           <el-button
+            v-if="canDeleteDetail"
+            type="danger"
+            plain
+            :disabled="Boolean(latestConflict)"
+            @click="openDelete"
+          >
+            删除
+          </el-button>
+          <el-button
             v-if="canEditDetail"
             type="primary"
             :loading="detailSaving"
@@ -1614,6 +1784,42 @@ onBeforeUnmount(() => {
         </div>
       </template>
     </el-drawer>
+
+    <el-dialog
+      v-model="deleteOpen"
+      title="删除工作项"
+      width="min(480px, 92vw)"
+      :close-on-click-modal="!deleting"
+      :close-on-press-escape="!deleting"
+      @closed="resetDelete"
+    >
+      <template v-if="detail">
+        <p>将软删除 <strong>{{ detail.itemNo }} · {{ detail.title }}</strong>。普通列表、Kanban 与详情将不再显示它。</p>
+        <p v-if="detailDraftDirty" class="delete-draft-warning" role="alert">
+          当前有未保存的字段草稿；删除成功后这些草稿不会保存。
+        </p>
+        <el-form label-position="top" @submit.prevent="deleteWorkItem">
+          <el-form-item label="删除理由" required>
+            <el-input
+              v-model="deleteReason"
+              type="textarea"
+              :rows="4"
+              maxlength="500"
+              show-word-limit
+              :disabled="deleting"
+              placeholder="说明为什么删除此工作项"
+            />
+          </el-form-item>
+        </el-form>
+        <p class="transition-note">删除成功后，可在当前页面的撤销提示中恢复；刷新或离开页面后提示不会保留。</p>
+      </template>
+      <template #footer>
+        <el-button :disabled="deleting" @click="resetDelete">取消</el-button>
+        <el-button type="danger" :loading="deleting" @click="deleteWorkItem">
+          确认删除
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="transitionOpen"
@@ -1696,6 +1902,12 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .work-items-page { display: grid; gap: var(--yp-space-5); }
+.undo-queue { display: grid; gap: var(--yp-space-2); }
+.undo-entry { display: flex; align-items: center; gap: var(--yp-space-2); padding: var(--yp-space-3) var(--yp-space-4); border: 1px solid var(--yp-border-subtle); border-left: 3px solid var(--yp-status-blue); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.undo-entry > div { display: grid; flex: 1; gap: 2px; color: var(--yp-text-secondary); }
+.undo-entry strong { color: var(--yp-text-primary); }
+.undo-entry__error { color: var(--yp-status-red); }
+.delete-draft-warning { padding: var(--yp-space-3); border: 1px solid var(--yp-status-yellow); border-radius: var(--yp-radius-md); background: var(--yp-bg-selected); color: var(--yp-text-primary); }
 .workspace-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--yp-space-4); padding: var(--yp-space-4) var(--yp-space-5); border: 1px solid var(--yp-border-subtle); background: var(--yp-bg-surface); }
 .content-heading { display: flex; flex-wrap: wrap; align-items: center; gap: var(--yp-space-2); }
 .content-heading h2 { margin: 0; font-size: var(--yp-type-section-title-size); }
