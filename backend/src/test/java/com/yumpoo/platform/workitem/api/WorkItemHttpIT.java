@@ -1192,6 +1192,95 @@ class WorkItemHttpIT {
                 .param("id", moderatedId.toString()).query(Long.class).single()).isEqualTo(2);
     }
 
+    @Test
+    void workItemUpdateConcurrentMutationHasOneWinnerAndAuditOutboxFailuresRollbackEverything()
+            throws Exception {
+        JsonNode created = createWorkItem("/api/v1/contents/" + contentId + "/work-items",
+                "讨论并发与事务", "HIGH", member.userId(), null);
+        UUID workItemId = UUID.fromString(created.path("id").asText());
+        String collection = "/api/v1/work-items/" + workItemId + "/updates";
+
+        JsonNode concurrent = json.readTree(mutate("POST", collection, member,
+                updateBody("<p>竞争写</p>"), null, UUID.randomUUID()).body());
+        UUID concurrentId = UUID.fromString(concurrent.path("id").asText());
+        String concurrentResource = "/api/v1/work-item-updates/" + concurrentId;
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Future<HttpResponse<String>> edit = executor.submit(() -> {
+                ready.countDown();
+                start.await(5, TimeUnit.SECONDS);
+                return mutate("PATCH", concurrentResource, member,
+                        updateBody("<p>竞争编辑</p>"), "\"0\"", null);
+            });
+            Future<HttpResponse<String>> delete = executor.submit(() -> {
+                ready.countDown();
+                start.await(5, TimeUnit.SECONDS);
+                return mutate("DELETE", concurrentResource, member, "{}", "\"0\"", null);
+            });
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(List.of(edit.get(10, TimeUnit.SECONDS).statusCode(),
+                            delete.get(10, TimeUnit.SECONDS).statusCode()))
+                    .containsExactlyInAnyOrder(200, 412);
+        }
+        assertThat(jdbc.sql("SELECT row_version FROM yumpoo.work_item_update WHERE id=:id")
+                .param("id", concurrentId).query(Long.class).single()).isOne();
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE aggregate_id=:id "
+                        + "AND event_type IN ('workitem.work_item_update_edited',"
+                        + "'workitem.work_item_update_deleted')")
+                .param("id", concurrentId).query(Long.class).single()).isOne();
+
+        String mention = "<p>事务回滚 <span data-type=\"mention\" data-mention-user-id=\""
+                + owner.userId() + "\">@Owner</span></p>";
+        JsonNode outboxProbe = json.readTree(mutate("POST", collection, member,
+                updateBody(mention), null, UUID.randomUUID()).body());
+        UUID outboxProbeId = UUID.fromString(outboxProbe.path("id").asText());
+        jdbc.sql("CREATE OR REPLACE FUNCTION yumpoo.m217_fail_outbox() RETURNS trigger "
+                + "LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''m2-17 outbox failure''; END'").update();
+        jdbc.sql("CREATE TRIGGER m217_fail_outbox BEFORE INSERT ON yumpoo.outbox_event "
+                + "FOR EACH ROW WHEN (NEW.event_type = 'workitem.work_item_update_edited') "
+                + "EXECUTE FUNCTION yumpoo.m217_fail_outbox()").update();
+        try {
+            assertThat(mutate("PATCH", "/api/v1/work-item-updates/" + outboxProbeId, member,
+                    updateBody("<p>不应落库</p>"), "\"0\"", null).statusCode()).isEqualTo(500);
+        } finally {
+            jdbc.sql("DROP TRIGGER IF EXISTS m217_fail_outbox ON yumpoo.outbox_event").update();
+            jdbc.sql("DROP FUNCTION IF EXISTS yumpoo.m217_fail_outbox()").update();
+        }
+        assertThat(jdbc.sql("SELECT body_text || ':' || status || ':' || row_version "
+                        + "FROM yumpoo.work_item_update WHERE id=:id")
+                .param("id", outboxProbeId).query(String.class).single())
+                .isEqualTo("事务回滚 @M2-10 Owner:PUBLISHED:0");
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_update_mention WHERE update_id=:id")
+                .param("id", outboxProbeId).query(Long.class).single()).isOne();
+
+        JsonNode auditProbe = json.readTree(mutate("POST", collection, member,
+                updateBody(mention), null, UUID.randomUUID()).body());
+        UUID auditProbeId = UUID.fromString(auditProbe.path("id").asText());
+        jdbc.sql("CREATE OR REPLACE FUNCTION yumpoo.m217_fail_audit() RETURNS trigger "
+                + "LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''m2-17 audit failure''; END'").update();
+        jdbc.sql("CREATE TRIGGER m217_fail_audit BEFORE INSERT ON yumpoo.security_audit_event "
+                + "FOR EACH ROW WHEN (NEW.action = 'WORK_ITEM_UPDATE_SELF_DELETED') "
+                + "EXECUTE FUNCTION yumpoo.m217_fail_audit()").update();
+        try {
+            assertThat(mutate("DELETE", "/api/v1/work-item-updates/" + auditProbeId, member,
+                    "{}", "\"0\"", null).statusCode()).isEqualTo(500);
+        } finally {
+            jdbc.sql("DROP TRIGGER IF EXISTS m217_fail_audit ON yumpoo.security_audit_event").update();
+            jdbc.sql("DROP FUNCTION IF EXISTS yumpoo.m217_fail_audit()").update();
+        }
+        assertThat(jdbc.sql("SELECT body_text || ':' || status || ':' || row_version "
+                        + "FROM yumpoo.work_item_update WHERE id=:id")
+                .param("id", auditProbeId).query(String.class).single())
+                .isEqualTo("事务回滚 @M2-10 Owner:PUBLISHED:0");
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_update_mention WHERE update_id=:id")
+                .param("id", auditProbeId).query(Long.class).single()).isOne();
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE aggregate_id=:id "
+                        + "AND event_type='workitem.work_item_update_deleted'")
+                .param("id", auditProbeId).query(Long.class).single()).isZero();
+    }
+
     private ActorFixture actor(UUID userId) {
         return new ActorFixture(userId, sessions.issueWebSession(userId, "m210-http"));
     }

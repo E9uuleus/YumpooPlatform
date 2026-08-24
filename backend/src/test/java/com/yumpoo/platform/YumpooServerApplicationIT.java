@@ -583,6 +583,29 @@ class YumpooServerApplicationIT {
     }
 
     @Test
+    void v35DatabaseUpgradesForwardThroughV36WithoutRewritingPublishedMigration() throws Exception {
+        String database = "yumpoo_m217_" + UUID.randomUUID().toString().replace("-", "");
+        Container.ExecResult created = postgresContainer.execInContainer(
+                "createdb", "-U", postgresContainer.getUsername(), database);
+        assertThat(created.getExitCode()).as(created.getStderr()).isZero();
+        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
+                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        try {
+            Flyway toV35 = migrationFlyway(jdbcUrl, "35");
+            assertThat(toV35.migrate().targetSchemaVersion).hasToString("35");
+
+            MigrateResult upgraded = migrationFlyway(jdbcUrl, null).migrate();
+            assertThat(upgraded.migrationsExecuted).isOne();
+            assertThat(upgraded.targetSchemaVersion).hasToString("36");
+            assertThat(migrationFlyway(jdbcUrl, null).validateWithResult().validationSuccessful).isTrue();
+        } finally {
+            Container.ExecResult dropped = postgresContainer.execInContainer(
+                    "dropdb", "--force", "-U", postgresContainer.getUsername(), database);
+            assertThat(dropped.getExitCode()).as(dropped.getStderr()).isZero();
+        }
+    }
+
+    @Test
     void v32ChoosesMainThenActiveThenArchivedAndPreservesProjectFacts() throws Exception {
         verifyWorkspaceConsolidation("main", """
                 ('41000000-0000-4000-8000-000000000001', 'ARCHIVE_FIRST', 0, 'ARCHIVED'),

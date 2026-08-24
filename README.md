@@ -1,5 +1,19 @@
 # YumpooPlatform
 
+## M2-17 Update 编辑、删除与治理删除
+
+M2-17 在独立 `WorkItemUpdate` 讨论流上增加单条 GET、PATCH 与 DELETE。作者可在服务端固定 15 分钟窗口内编辑或无理由自删，截止时刻本身已超窗；当前 ProjectOwner 可提供 1–500 字理由随时治理删除，包括 Project 或 Content 已归档时。所有写操作使用强 `If-Match`，只推进 Update 自身版本，不改变父 Work Item。
+
+编辑重新净化富文本并原子替换 ACTIVE 项目成员 Mention；净化后无变化不会增版或发事件。删除不可恢复，正文置空但保留原时间线位置、作者、编辑事实、删除时间、操作者、治理理由和 Mention 快照。成功删除、Security Audit 与 Outbox 同事务提交，失败治理使用独立失败审计；编辑/删除事件不携带正文或可还原摘要。Activity 投影与查询继续由 M2-20 统一实现。
+
+Web 根据服务端能力显示编辑、自删和治理删除，编辑器与发布采用同一受限 Tiptap 配置且草稿互不影响。作者操作在本地到达截止时主动隐藏，但最终仍由服务端裁决；412 会单条刷新并保留编辑草稿，409 关闭写能力并保留草稿供复制。墓碑只显示固定占位，治理删除额外显示理由，绝不渲染原正文。
+
+```powershell
+pnpm verify:m2-17
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-16 Work Item 独立讨论与项目成员提及
 
 M2-16 新增独立 `WorkItemUpdate` 讨论流及 `GET/POST /api/v1/work-items/{workItemId}/updates`。首次读取最新窗口，对外始终按旧到新展示，并以 Base64URL 复合游标向上加载更早内容；发布要求 XSRF 与幂等键，同键同请求精确重放。讨论不会推进父 Work Item 的版本、ETag 或更新时间。
