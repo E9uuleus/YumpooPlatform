@@ -45,6 +45,8 @@ public final class ProjectController {
 
     @GetMapping("/projects")
     ResponseEntity<OffsetPageResponse<ProjectSummary>> list(
+            @RequestParam(required = false) UUID workspaceId,
+            @RequestParam(required = false) ProjectTypeFilter projectType,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) List<ProjectTypeFilter> projectTypes,
             @RequestParam(required = false) List<UUID> ownerUserIds,
@@ -57,8 +59,7 @@ public final class ProjectController {
         CurrentActor actor = actorProvider.requiredActive();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(service.findAll(actor, new ProjectSearchCriteria(query,
-                                projectTypes == null ? List.of() : projectTypes.stream()
-                                        .map(ProjectTypeFilter::toDomain).toList(),
+                                ProjectTypeFilter.merge(projectType, projectTypes),
                                 ownerUserIds, actorAccesses, updatedSince, lifecycle, productId),
                         OffsetPageRequest.of(page, size)));
     }

@@ -5,6 +5,7 @@ import {
   type Project, type ProjectPage, type ProjectSummary, type ProjectTemplateVersion,
 } from '@yumpoo/api-client'
 import { flushPromises, mount } from '@vue/test-utils'
+import { ElPopover } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSession } from '../../composables/useSession'
 import ProjectsView from './ProjectsView.vue'
@@ -27,7 +28,8 @@ vi.mock('@yumpoo/api-client', async importOriginal => ({
 const now = new Date('2026-08-23T02:30:00Z')
 const capabilities = {
   canUpdateSettings: true, canActivate: false, canManageMembers: true, canReassignOwner: true,
-  canManageProductLinks: true, canArchive: true, canRestore: false, canOverrideArchive: true,
+  canManageProductLinks: true, canArchive: true, canRestore: false,
+  canMoveWorkspace: false, canOverrideArchive: true,
 }
 const summary: ProjectSummary = {
   id: 'project-1', workspaceId: 'workspace-main', workspaceCode: 'MAIN', workspaceName: '主工作空间',
@@ -131,7 +133,7 @@ describe('项目管理页', () => {
     useSession().authentication.value = authentication(AuthenticationRole.CompanyMember)
     const wrapper = mount(ProjectsView, { attachTo: document.body })
     await flushPromises()
-    await wrapper.get('button[aria-label="展开筛选"]').trigger('click')
+    wrapper.findComponent(ElPopover).vm.$emit('update:visible', true)
     await flushPromises()
     expect(wrapper.get('button[aria-label="展开筛选"]').classes()).toContain('active')
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))

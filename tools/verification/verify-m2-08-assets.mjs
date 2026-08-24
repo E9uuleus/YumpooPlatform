@@ -23,8 +23,12 @@ for (const fragment of ['coverage mismatch', 'DEPENDENCY_UNAVAILABLE', '!report.
 assert(!collector.includes('Noop') && !collector.includes('EmptyProvider'), '禁止空 blocker provider')
 for (const fragment of ['stableFailure', 'PROJECT_ARCHIVE_WITH_OPEN_ITEMS']) assert(governance.includes(fragment), `治理覆盖缺少 ${fragment}`)
 for (const fragment of ['catalog.project_archived', 'catalog.project_reopened']) assert(lifecycle.includes(fragment), `生命周期缺少 ${fragment}`)
-assert(!controller.includes('workspace-moves'), 'HTTP 仍暴露 Project Workspace 迁移')
-assert(!openapi.includes('/projects/{projectId}/workspace-moves:'), 'OpenAPI 仍暴露 Project Workspace 迁移')
+for (const fragment of ['workspace-moves', 'legacyMove', 'INVALID_STATE_TRANSITION']) {
+  assert(controller.includes(fragment), `HTTP 缺少 Project Workspace deprecated 兼容适配 ${fragment}`)
+}
+for (const fragment of ['/projects/{projectId}/workspace-moves:', 'deprecated: true']) {
+  assert(openapi.includes(fragment), `OpenAPI 缺少 Project Workspace deprecated 兼容面 ${fragment}`)
+}
 for (const fragment of ['/projects/{projectId}/archive:', '/projects/{projectId}/restore:', '/admin/governance-overrides:']) {
   assert(openapi.includes(fragment), `OpenAPI 缺少 ${fragment}`)
 }
@@ -35,5 +39,5 @@ assert(!page.includes('迁移 Workspace'), '项目端仍显示 Workspace 迁移'
 assert(events.includes('catalog.project_moved_to_workspace'), '历史迁移事件 schema 必须继续可读')
 assert(note.includes('Status: implemented') && note.includes('不再支持跨 Workspace 迁移'), '生命周期 Note 未同步 MAIN 事实')
 
-console.log('M2-08 归档、恢复、覆盖与 blocker 关闭失败协议有效；Workspace 迁移已安全退役。')
+console.log('M2-08 归档、恢复、覆盖与 blocker 关闭失败协议有效；Workspace 迁移能力已退役并保留 v1 拒绝适配。')
 function assert(condition, message) { if (!condition) throw new Error(`M2-08 资产验证失败：${message}`) }

@@ -30,6 +30,13 @@ export interface WorkspaceUpdateRequest {
      * @memberof WorkspaceUpdateRequest
      */
     description: string | null;
+    /**
+     * v1 兼容字段；MAIN 的 sortOrder 永远保持 0。
+     * @type {number}
+     * @memberof WorkspaceUpdateRequest
+     * @deprecated
+     */
+    sortOrder?: number;
 }
 
 /**
@@ -53,6 +60,7 @@ export function WorkspaceUpdateRequestFromJSONTyped(json: any, ignoreDiscriminat
 
         'name': json['name'],
         'description': json['description'],
+        'sortOrder': json['sortOrder'] == null ? undefined : json['sortOrder'],
     };
 }
 
@@ -69,5 +77,6 @@ export function WorkspaceUpdateRequestToJSONTyped(value?: WorkspaceUpdateRequest
 
         'name': value['name'],
         'description': value['description'],
+        'sortOrder': value['sortOrder'],
     };
 }

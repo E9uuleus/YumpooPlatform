@@ -24,11 +24,12 @@ for (const fragment of [
 for (const fragment of ['@GetMapping("/workspaces")', '@GetMapping("/workspaces/{workspaceId}")', '@PatchMapping("/workspaces/{workspaceId}")']) {
   assert(controller.includes(fragment), `Workspace 只读/改名接口缺少 ${fragment}`)
 }
-for (const forbidden of ['@PostMapping("/workspaces")', '/archive")', '/restore")']) {
-  assert(!controller.includes(forbidden), `Workspace Controller 仍暴露 ${forbidden}`)
+for (const compatibility of ['legacyCreate', 'legacyArchive', 'legacyRestore', 'INVALID_STATE_TRANSITION']) {
+  assert(controller.includes(compatibility), `Workspace v1 兼容适配缺少 ${compatibility}`)
 }
-assert(!openapi.includes('/workspaces/{workspaceId}/archive:'), 'OpenAPI 仍暴露 Workspace 归档')
-assert(!openapi.includes('/workspaces/{workspaceId}/restore:'), 'OpenAPI 仍暴露 Workspace 恢复')
+for (const route of ['/workspaces/{workspaceId}/archive:', '/workspaces/{workspaceId}/restore:', 'deprecated: true']) {
+  assert(openapi.includes(route), `OpenAPI 缺少 Workspace deprecated 兼容面 ${route}`)
+}
 for (const historical of ['catalog.workspace_created', 'catalog.workspace_archived', 'catalog.workspace_restored']) {
   assert(events.includes(historical), `历史事件目录缺少 ${historical}`)
 }

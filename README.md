@@ -114,7 +114,7 @@ pnpm verify:m2-03
 
 M2-02 的 V17 建立了 Workspace 历史基线；V32 已将其收口为每 Company 唯一且永远 ACTIVE 的 MAIN。列表和详情继续提供稳定 ID，COMPANY_ADMIN 可带强 ETag 修改名称和描述；创建、排序、归档、恢复和项目迁移接口已退役。Workspace 不保存成员、角色或授权事实。
 
-OpenAPI 与生成 TypeScript 客户端已同步当前只读/改名契约；历史 Workspace 领域事件 schema 保留用于读取既有事实。Project 创建在事务内读取 MAIN，不再接受客户端 Workspace 选择。
+OpenAPI 与生成 TypeScript 客户端已同步当前只读/改名能力；已冻结的 v1 Workspace 写操作、迁移操作和相关字段以 deprecated 拒绝适配保留，历史 Workspace 领域事件 schema 继续用于读取既有事实。Project 创建在事务内读取 MAIN，不再接受客户端 Workspace 选择，旧 `workspaceId` 仅作为忽略的兼容字段接收。
 
 ```powershell
 pnpm verify:m2-02

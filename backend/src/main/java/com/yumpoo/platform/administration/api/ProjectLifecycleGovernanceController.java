@@ -13,6 +13,8 @@ import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
+import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
+import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -20,6 +22,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import tools.jackson.databind.ObjectMapper;
 
@@ -70,6 +73,21 @@ public final class ProjectLifecycleGovernanceController {
                 Map.of("projectId", projectId.toString(), "ifMatch", Long.toString(version)),
                 objectMapper.createObjectNode()))).result();
         return stored(result);
+    }
+
+    @Deprecated(forRemoval = false)
+    @PostMapping("/projects/{projectId}/workspace-moves")
+    ResponseEntity<Void> legacyMove(@PathVariable UUID projectId,
+            @Valid @RequestBody ProjectWorkspaceMoveRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String keyHeader) {
+        CurrentActor actor = visible(projectId);
+        if (!actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)) {
+            throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+        }
+        ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        keys.parseRequired(keyHeader);
+        throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
     }
 
     private CurrentActor visible(UUID projectId) {

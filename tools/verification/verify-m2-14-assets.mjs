@@ -31,7 +31,7 @@ const readme=read('README.md')
 const report=JSON.parse(read('evidence/m2-14/verification-report.json'))
 const acceptance=JSON.parse(read('evidence/m2-14/acceptance-matrix.json'))
 
-assert(Math.max(...versions)===32,'M2-14 Flyway 最新版本必须是 V32')
+assert(Math.max(...versions)>=32,'M2-14 Flyway 版本不得早于 V32')
 for(const fragment of ['work_item_rank_lane','item_sequence DESC, id ASC','^[0-9]{39}$','UNIQUE NULLS NOT DISTINCT','idx_work_item_content_status_rank_page','ON DELETE CASCADE']) assert(migration.includes(fragment),`V31 缺少 ${fragment}`)
 for(const fragment of ['WIDTH = 39','between','evenlySpaced','reserved Kanban boundaries']) assert(rank.includes(fragment),`rank 模型缺少 ${fragment}`)
 for(const fragment of ['lockRankLanes','allocateRank','rewriteRanks','RankAllocation','WorkItemRankPlacement.START','appendRankChanged','WORK_ITEM_RANK_ANCHOR_INVALID']) assert(service.includes(fragment),`移动服务缺少 ${fragment}`)

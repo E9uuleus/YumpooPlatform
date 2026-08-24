@@ -61,6 +61,13 @@ export interface ProjectCapabilities {
      */
     readonly canRestore: boolean;
     /**
+     * v1 兼容字段；MAIN 单例启用后永远为 false。
+     * @type {boolean}
+     * @memberof ProjectCapabilities
+     * @deprecated
+     */
+    readonly canMoveWorkspace: boolean;
+    /**
      *
      * @type {boolean}
      * @memberof ProjectCapabilities
@@ -79,6 +86,7 @@ export function instanceOfProjectCapabilities(value: object): value is ProjectCa
     if (!('canManageProductLinks' in value) || value['canManageProductLinks'] === undefined) return false;
     if (!('canArchive' in value) || value['canArchive'] === undefined) return false;
     if (!('canRestore' in value) || value['canRestore'] === undefined) return false;
+    if (!('canMoveWorkspace' in value) || value['canMoveWorkspace'] === undefined) return false;
     if (!('canOverrideArchive' in value) || value['canOverrideArchive'] === undefined) return false;
     return true;
 }
@@ -100,6 +108,7 @@ export function ProjectCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator:
         'canManageProductLinks': json['canManageProductLinks'],
         'canArchive': json['canArchive'],
         'canRestore': json['canRestore'],
+        'canMoveWorkspace': json['canMoveWorkspace'],
         'canOverrideArchive': json['canOverrideArchive'],
     };
 }
@@ -108,7 +117,7 @@ export function ProjectCapabilitiesToJSON(json: any): ProjectCapabilities {
     return ProjectCapabilitiesToJSONTyped(json, false);
 }
 
-export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canActivate'|'canManageMembers'|'canReassignOwner'|'canManageProductLinks'|'canArchive'|'canRestore'|'canOverrideArchive'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canActivate'|'canManageMembers'|'canReassignOwner'|'canManageProductLinks'|'canArchive'|'canRestore'|'canMoveWorkspace'|'canOverrideArchive'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Filter as FilterIcon, Search as SearchIcon } from '@element-plus/icons-vue'
-import { ElButton, ElIcon, ElPopover, ElTag, ElTooltip } from 'element-plus'
+import { ElIcon, ElPopover, ElTag, ElTooltip } from 'element-plus'
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { ActiveFilter } from '../../design-system/types'
 

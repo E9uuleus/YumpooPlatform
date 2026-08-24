@@ -37,6 +37,7 @@ import type {
   ProjectProductLinkUpdateRequest,
   ProjectType,
   ProjectUpdateRequest,
+  ProjectWorkspaceMoveRequest,
 } from '../models/index';
 import {
     ErrorResponseFromJSON,
@@ -85,6 +86,8 @@ import {
     ProjectTypeToJSON,
     ProjectUpdateRequestFromJSON,
     ProjectUpdateRequestToJSON,
+    ProjectWorkspaceMoveRequestFromJSON,
+    ProjectWorkspaceMoveRequestToJSON,
 } from '../models/index';
 
 export interface ActivateProjectRequest {
@@ -152,6 +155,8 @@ export interface ListProjectProductsRequest {
 }
 
 export interface ListProjectsRequest {
+    workspaceId?: string;
+    projectType?: ProjectType;
     query?: string;
     projectTypes?: Array<ProjectType>;
     ownerUserIds?: Array<string>;
@@ -161,6 +166,14 @@ export interface ListProjectsRequest {
     productId?: string;
     page?: number;
     size?: number;
+}
+
+export interface MoveProjectWorkspaceRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    projectWorkspaceMoveRequest: ProjectWorkspaceMoveRequest;
 }
 
 export interface ReassignProjectOwnerRequest {
@@ -838,6 +851,14 @@ export class ProjectsApi extends runtime.BaseAPI {
     async listProjectsRaw(requestParameters: ListProjectsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectPage>> {
         const queryParameters: any = {};
 
+        if (requestParameters['workspaceId'] != null) {
+            queryParameters['workspaceId'] = requestParameters['workspaceId'];
+        }
+
+        if (requestParameters['projectType'] != null) {
+            queryParameters['projectType'] = requestParameters['projectType'];
+        }
+
         if (requestParameters['query'] != null) {
             queryParameters['query'] = requestParameters['query'];
         }
@@ -895,6 +916,90 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async listProjects(requestParameters: ListProjectsRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectPage> {
         const response = await this.listProjectsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 所有 Project 已归属 MAIN；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+     * 已弃用的跨 Workspace 迁移兼容入口
+     * @deprecated
+     */
+    async moveProjectWorkspaceRaw(requestParameters: MoveProjectWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling moveProjectWorkspace().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling moveProjectWorkspace().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling moveProjectWorkspace().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling moveProjectWorkspace().'
+            );
+        }
+
+        if (requestParameters['projectWorkspaceMoveRequest'] == null) {
+            throw new runtime.RequiredError(
+                'projectWorkspaceMoveRequest',
+                'Required parameter "projectWorkspaceMoveRequest" was null or undefined when calling moveProjectWorkspace().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/workspace-moves`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectWorkspaceMoveRequestToJSON(requestParameters['projectWorkspaceMoveRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectFromJSON(jsonValue));
+    }
+
+    /**
+     * 所有 Project 已归属 MAIN；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+     * 已弃用的跨 Workspace 迁移兼容入口
+     * @deprecated
+     */
+    async moveProjectWorkspace(requestParameters: MoveProjectWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
+        const response = await this.moveProjectWorkspaceRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

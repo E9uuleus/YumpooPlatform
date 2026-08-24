@@ -7,7 +7,7 @@ import {
 import {
   ElButton, ElCheckbox, ElCheckboxGroup, ElDrawer, ElForm, ElFormItem, ElIcon, ElInput,
   ElLoading, ElMessage, ElMessageBox, ElOption as ElOptionRaw, ElPagination, ElSelect as ElSelectRaw,
-  ElTable, ElTableColumn, type FormInstance, type FormRules,
+  ElTable, ElTableColumn, ElTooltip, type FormInstance, type FormRules,
 } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, type DefineComponent } from 'vue'
 import { useRouter } from 'vue-router'

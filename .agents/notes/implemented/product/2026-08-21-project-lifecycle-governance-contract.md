@@ -8,7 +8,7 @@ Project 需要可恢复的归档和可审计的紧急治理覆盖。若各事实
 
 ## Decision
 
-Project 只允许 `ACTIVE -> ARCHIVED` 和 `ARCHIVED -> ACTIVE`。DRAFT 不可直接归档；MAIN 单工作空间实施后 Project 不再支持跨 Workspace 迁移。恢复保留首次 `activatedAt`，清空 `archivedAt`。归档和恢复都锁定 Project 行并使用强版本前置条件；恢复重新确认 Project 仍归属当前 Company 的 ACTIVE MAIN。
+Project 只允许 `ACTIVE -> ARCHIVED` 和 `ARCHIVED -> ACTIVE`。DRAFT 不可直接归档；MAIN 单工作空间实施后 Project 不再支持跨 Workspace 迁移。冻结的 v1 迁移路径仅作为 deprecated 兼容入口保留，校验可见性、CompanyAdmin、强版本和幂等键后固定以 `INVALID_STATE_TRANSITION` 拒绝，不改变 Project。恢复保留首次 `activatedAt`，清空 `archivedAt`。归档和恢复都锁定 Project 行并使用强版本前置条件；恢复重新确认 Project 仍归属当前 Company 的 ACTIVE MAIN。
 
 普通归档仅 ProjectOwner 可执行。CompanyAdmin 不借普通管理员读取权限绕过 Owner，而是使用显式 `PROJECT_ARCHIVE_WITH_OPEN_ITEMS` 覆盖；CompanyAdmin 独占恢复。覆盖理由只进入授权可见的 `admin_override` 与 Security Audit，不进入领域事件。覆盖记录只保存请求哈希、幂等键、安全前后快照和按 code 聚合的非负计数，不保存 blocker 对象 ID 或业务正文。历史 Workspace 覆盖记录仍可读取，但创建请求不再接受 Workspace 覆盖。
 

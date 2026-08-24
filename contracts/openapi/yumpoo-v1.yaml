@@ -597,8 +597,16 @@ paths:
       tags: [Workspaces]
       operationId: listWorkspaces
       summary: 查询当前公司的 MAIN 主工作空间
-      description: 每个 Company 永远只返回一个 code=MAIN、status=ACTIVE 的内部工作空间。
+      description: 每个 Company 永远只返回一个 code=MAIN、status=ACTIVE 的内部工作空间；保留 status 仅用于 v1 客户端兼容。
       security: [{ sessionCookie: [] }]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          deprecated: true
+          schema:
+            $ref: '#/components/schemas/WorkspaceStatusFilter'
+            default: ACTIVE
       responses:
         '200':
           description: 当前 Company 的 MAIN 主工作空间。
@@ -608,6 +616,36 @@ paths:
         '400': { $ref: '#/components/responses/MalformedRequest' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Workspaces]
+      operationId: createWorkspace
+      summary: 已弃用的 Workspace 创建兼容入口
+      description: MAIN 单例启用后不再创建 Workspace；合法旧请求固定返回 409 INVALID_STATE_TRANSITION。
+      deprecated: true
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkspaceCreateRequest' }
+      responses:
+        '201':
+          description: 历史 v1 成功响应形状；MAIN 单例部署不再产生此结果。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Workspace' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /workspaces/{workspaceId}:
     get:
       tags: [Workspaces]
@@ -650,6 +688,54 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '412': { $ref: '#/components/responses/VersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /workspaces/{workspaceId}/archive:
+    post:
+      tags: [Workspaces]
+      operationId: archiveWorkspace
+      summary: 已弃用的 Workspace 归档兼容入口
+      description: MAIN 必须保持 ACTIVE；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+      deprecated: true
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200': { $ref: '#/components/responses/WorkspaceChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /workspaces/{workspaceId}/restore:
+    post:
+      tags: [Workspaces]
+      operationId: restoreWorkspace
+      summary: 已弃用的 Workspace 恢复兼容入口
+      description: MAIN 已固定为 ACTIVE；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+      deprecated: true
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200': { $ref: '#/components/responses/WorkspaceChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -835,6 +921,8 @@ paths:
       description: lifecycle 省略时返回 DRAFT 与 ACTIVE；分页和总数使用相同权限及筛选谓词。
       security: [{ sessionCookie: [] }]
       parameters:
+        - { name: workspaceId, in: query, deprecated: true, schema: { $ref: '#/components/schemas/Uuid' } }
+        - { name: projectType, in: query, deprecated: true, schema: { $ref: '#/components/schemas/ProjectType' } }
         - { name: query, in: query, schema: { type: string, maxLength: 80 } }
         - name: projectTypes
           in: query
@@ -1017,6 +1105,33 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/workspace-moves:
+    post:
+      tags: [Projects]
+      operationId: moveProjectWorkspace
+      summary: 已弃用的跨 Workspace 迁移兼容入口
+      description: 所有 Project 已归属 MAIN；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+      deprecated: true
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectWorkspaceMoveRequest' } } }
+      responses:
+        '200': { $ref: '#/components/responses/ProjectChanged' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
   /admin/governance-overrides:
@@ -1834,6 +1949,20 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Workspace' }
 
+    WorkspaceCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [code, name, sortOrder]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 32
+          pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+
     WorkspaceUpdateRequest:
       type: object
       additionalProperties: false
@@ -1841,6 +1970,12 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
         description: { type: string, minLength: 1, maxLength: 500, nullable: true }
+        sortOrder:
+          type: integer
+          format: int32
+          minimum: 0
+          deprecated: true
+          description: v1 兼容字段；MAIN 的 sortOrder 永远保持 0。
 
     ProductStatus:
       type: string
@@ -1934,7 +2069,7 @@ components:
       type: object
       additionalProperties: false
       required: [canUpdateSettings, canActivate, canManageMembers, canReassignOwner,
-        canManageProductLinks, canArchive, canRestore, canOverrideArchive]
+        canManageProductLinks, canArchive, canRestore, canMoveWorkspace, canOverrideArchive]
       properties:
         canUpdateSettings: { type: boolean, readOnly: true }
         canActivate: { type: boolean, readOnly: true }
@@ -1943,7 +2078,20 @@ components:
         canManageProductLinks: { type: boolean, readOnly: true }
         canArchive: { type: boolean, readOnly: true }
         canRestore: { type: boolean, readOnly: true }
+        canMoveWorkspace:
+          type: boolean
+          readOnly: true
+          deprecated: true
+          description: v1 兼容字段；MAIN 单例启用后永远为 false。
         canOverrideArchive: { type: boolean, readOnly: true }
+
+    ProjectWorkspaceMoveRequest:
+      type: object
+      additionalProperties: false
+      required: [targetWorkspaceId, reason]
+      properties:
+        targetWorkspaceId: { $ref: '#/components/schemas/Uuid' }
+        reason: { type: string, minLength: 10, maxLength: 500 }
 
     GovernanceOverrideAction:
       type: string
@@ -1951,7 +2099,8 @@ components:
 
     GovernanceOverrideCreateAction:
       type: string
-      enum: [PROJECT_ARCHIVE_WITH_OPEN_ITEMS]
+      enum: [PROJECT_ARCHIVE_WITH_OPEN_ITEMS, WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS]
+      description: WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS 仅为 v1 请求兼容保留，提交后返回稳定失败结果。
 
     GovernanceTargetType:
       type: string
@@ -1967,7 +2116,7 @@ components:
       required: [action, targetType, targetId, reason]
       properties:
         action: { $ref: '#/components/schemas/GovernanceOverrideCreateAction' }
-        targetType: { type: string, enum: [PROJECT] }
+        targetType: { type: string, enum: [PROJECT, WORKSPACE] }
         targetId: { $ref: '#/components/schemas/Uuid' }
         reason: { type: string, minLength: 10, maxLength: 500 }
 
@@ -2144,6 +2293,7 @@ components:
         - templateKey
         - templateVersion
       properties:
+        workspaceId: { $ref: '#/components/schemas/Uuid' }
         code:
           type: string
           minLength: 2

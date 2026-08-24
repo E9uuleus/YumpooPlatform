@@ -205,6 +205,7 @@ public class ProjectService {
                 (owner || admin) && mutable, admin && mutable, owner && mutable,
                 owner && project.lifecycle() == ProjectLifecycle.ACTIVE,
                 admin && project.lifecycle() == ProjectLifecycle.ARCHIVED,
+                false,
                 admin && project.lifecycle() == ProjectLifecycle.ACTIVE);
     }
 

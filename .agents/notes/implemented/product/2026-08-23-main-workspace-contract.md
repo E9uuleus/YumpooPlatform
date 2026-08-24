@@ -10,15 +10,15 @@ Workspace 曾承担 Company 内项目导航和归类的稳定入口，并提供�
 
 `catalog` 继续拥有 Workspace 事实，但每个 Company 永远只有一个内部主工作空间。它固定为 `code=MAIN`、`sortOrder=0`、`status=ACTIVE`，数据库以 Company 唯一约束和固定值检查约束关闭第二行、非 MAIN、非零排序及归档状态。Company 新建后由数据库初始化主空间；系统生成行允许创建人和更新人为空，管理员首次 PATCH 后记录更新人。主空间名称和可空描述仍可由 CompanyAdmin 通过强 ETag 修改，稳定 ID 不随改名改变。
 
-公开接口只保留 Workspace 列表、详情以及名称/描述 PATCH。列表无分页且恰好返回当前 Company 的 MAIN；详情对同 Company 有效成员可见；PATCH 只允许 CompanyAdmin，规范化后无变化不写库、不递增版本、不产生事件。创建、排序修改、归档、恢复、Workspace 归档覆盖和跨 Workspace 项目迁移不再是可调用能力，Project capabilities 也不再包含 `canMoveWorkspace`。
+产品能力只保留 Workspace 列表、详情以及名称/描述 PATCH。列表无分页且恰好返回当前 Company 的 MAIN；详情对同 Company 有效成员可见；PATCH 只允许 CompanyAdmin，规范化后无变化不写库、不递增版本、不产生事件。已冻结的 v1 wire 继续发布创建、归档、恢复和跨 Workspace 项目迁移操作，但全部标记为 deprecated，并在完成身份、资源及前置条件校验后以 `INVALID_STATE_TRANSITION` 关闭失败；它们不得写入 Workspace、Project、事件或治理记录。旧 `status`、`workspaceId`、单值 `projectType`、`sortOrder` 请求字段继续被接收，`ProjectCapabilities.canMoveWorkspace` 继续返回且永远为 `false`，避免旧客户端因契约删字段直接失效。
 
-Project 创建请求不接收 `workspaceId`。原子创建事务锁定当前 Company 的 ACTIVE MAIN 并自动写入其稳定 ID；响应继续返回 workspace ID/code/name 作为内部归属兼容信息。Project 恢复同样重新确认其归属仍是当前 MAIN。Workspace 不保存成员、角色或授权事实；Project 可见性继续只由 Company、ACTIVE Project membership、Owner 与 CompanyAdmin 权限谓词决定。
+Project 创建请求把 `workspaceId` 保留为可选 deprecated 兼容字段，但不以其选择归属。原子创建事务锁定当前 Company 的 ACTIVE MAIN 并自动写入其稳定 ID；响应继续返回 workspace ID/code/name 作为内部归属兼容信息。Project 恢复同样重新确认其归属仍是当前 MAIN。Workspace 不保存成员、角色或授权事实；Project 可见性继续只由 Company、ACTIVE Project membership、Owner 与 CompanyAdmin 权限谓词决定。
 
 浏览器中的个人 `/workspace/{workspaceSlug}` 地址只是当前用户项目目录的规范展示入口，不对应 `catalog.workspace` 行，也不改变 MAIN 归属或授权谓词；其身份与不可变规则由[个人工作台规范路由](2026-08-24-personal-workspace-route.md)拥有。
 
 V32 迁移按“现有 MAIN → 首个 ACTIVE → 首个 ARCHIVED → 新建主工作空间”选择每个 Company 的 canonical 行。已有行保留 ID、名称、描述、行版本、创建/更新时间和操作者，只规范化固定字段；没有历史行时使用默认名称“主工作空间”。所有生命周期的 Project 只更新 `workspace_id` 到 canonical ID，不修改 Project ID、成员、Content、关系、rowVersion 或业务时间，随后删除其余 Workspace 行并建立单例约束。迁移不可逆，执行前必须备份数据库，回滚通过备份恢复。
 
-历史 `catalog.workspace_created`、`catalog.workspace_archived`、`catalog.workspace_restored`、`catalog.project_moved_to_workspace` 事件和 `WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS` 治理记录继续可读取，以维持 Activity、审计和恢复解释；运行时代码不再产生这些事实。治理创建契约只接受 Project 归档覆盖，历史响应枚举仍保留旧值。
+历史 `catalog.workspace_created`、`catalog.workspace_archived`、`catalog.workspace_restored`、`catalog.project_moved_to_workspace` 事件和 `WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS` 治理记录继续可读取，以维持 Activity、审计和恢复解释；运行时代码不再产生这些事实。治理创建请求为 v1 兼容仍接受旧 Workspace action/target 形状，但执行为可重放的稳定失败；只有 Project 归档覆盖能够成功。
 
 ## Alternatives considered
 
@@ -33,6 +33,8 @@ V32 迁移按“现有 MAIN → 首个 ACTIVE → 首个 ARCHIVED → 新建主�
 ## Consequences
 
 客户端不再加载 Workspace 作为项目创建或列表筛选选项，只在需要管理主空间名称/描述时使用 Workspace 资源。项目目录以单表展示，显式请求全部生命周期；所有行与 total 复用相同权限及筛选谓词，Workspace `visibleProjectCount` 仍可作为兼容派生值但不再参与分组。
+
+生成客户端仍包含已弃用的 Workspace 写操作和迁移方法，供旧调用方完成编译与受控退役；新代码不得调用这些方法。删除 deprecated v1 wire 必须等到新的主版本契约和迁移窗口，不能在当前 v1 基线上直接移除。
 
 数据库升级会合并并删除多余 Workspace 行，运维必须在 Flyway 执行前完成可恢复备份。任何未来重新引入多 Workspace 的提案都必须新增决策，说明授权边界、迁移、分页、生命周期并发和历史兼容，而不能移除单例约束后恢复旧接口。
 

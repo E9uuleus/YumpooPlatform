@@ -30,7 +30,7 @@ const activeProject: ProjectDetail = {
   capabilities: {
     canUpdateSettings: true, canActivate: false, canManageMembers: true,
     canReassignOwner: false, canManageProductLinks: true, canArchive: true,
-    canRestore: false, canOverrideArchive: true,
+    canRestore: false, canMoveWorkspace: false, canOverrideArchive: true,
   },
   rowVersion: 3, etag: '"3"', createdAt: new Date(), updatedAt: new Date(),
   activatedAt: new Date(), archivedAt: null,
@@ -53,7 +53,7 @@ describe('ProjectLifecycleActions', () => {
       capabilities: {
         canUpdateSettings: false, canActivate: false, canManageMembers: false,
         canReassignOwner: false, canManageProductLinks: false, canArchive: false,
-        canRestore: true, canOverrideArchive: false,
+        canRestore: true, canMoveWorkspace: false, canOverrideArchive: false,
       },
       archivedAt: new Date(),
     }

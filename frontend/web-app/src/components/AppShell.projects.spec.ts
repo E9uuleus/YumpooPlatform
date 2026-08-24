@@ -39,6 +39,7 @@ const capabilities = {
   canManageProductLinks: true,
   canArchive: true,
   canRestore: false,
+  canMoveWorkspace: false,
   canOverrideArchive: true,
 }
 

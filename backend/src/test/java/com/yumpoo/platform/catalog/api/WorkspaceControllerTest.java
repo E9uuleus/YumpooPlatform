@@ -4,6 +4,7 @@ import com.yumpoo.platform.catalog.application.workspace.WorkspaceService;
 import com.yumpoo.platform.catalog.application.workspace.WorkspaceView;
 import com.yumpoo.platform.catalog.domain.workspace.WorkspaceStatus;
 import com.yumpoo.platform.foundation.api.http.IfMatchParser;
+import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
@@ -13,7 +14,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.Arrays;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,7 +37,8 @@ class WorkspaceControllerTest {
         CurrentActorProvider actorProvider = mock(CurrentActorProvider.class);
         when(actorProvider.requiredActive()).thenReturn(actor);
         service = mock(WorkspaceService.class);
-        controller = new WorkspaceController(actorProvider, service, new IfMatchParser());
+        controller = new WorkspaceController(
+                actorProvider, service, new IfMatchParser(), new IdempotencyKeyParser());
     }
 
     @Test
@@ -55,10 +56,26 @@ class WorkspaceControllerTest {
     }
 
     @Test
-    void controllerNoLongerPublishesCreationOrLifecycleMutations() {
-        Set<String> methods = Arrays.stream(WorkspaceController.class.getDeclaredMethods())
-                .map(java.lang.reflect.Method::getName).collect(java.util.stream.Collectors.toSet());
-        assertThat(methods).doesNotContain("create", "archive", "restore", "lifecycle");
+    void deprecatedCreationEndpointCannotCreateASecondWorkspace() {
+        when(service.findAll(actor,
+                com.yumpoo.platform.catalog.application.workspace.WorkspaceListStatus.ALL))
+                .thenReturn(java.util.List.of(view(0)));
+        WorkspaceCreateRequest request = new WorkspaceCreateRequest("OTHER", "其他空间", null, 1);
+
+        assertCode(() -> controller.legacyCreate(request, UUID.randomUUID().toString()),
+                StandardErrorCode.INVALID_STATE_TRANSITION);
+    }
+
+    @Test
+    void deprecatedLifecycleEndpointsResolveMainBeforeRejectingMutation() {
+        when(service.findForAdministration(actor, WORKSPACE_ID)).thenReturn(view(0));
+
+        assertCode(() -> controller.legacyArchive(
+                        WORKSPACE_ID, "\"0\"", UUID.randomUUID().toString()),
+                StandardErrorCode.INVALID_STATE_TRANSITION);
+        assertCode(() -> controller.legacyRestore(
+                        WORKSPACE_ID, "\"0\"", UUID.randomUUID().toString()),
+                StandardErrorCode.INVALID_STATE_TRANSITION);
     }
 
     private static WorkspaceView view(long version) {

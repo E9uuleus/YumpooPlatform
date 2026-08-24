@@ -12,12 +12,13 @@
  */
 
 /**
- *
+ * WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS 仅为 v1 请求兼容保留，提交后返回稳定失败结果。
  * @export
  * @enum {string}
  */
 export enum GovernanceOverrideCreateAction {
     ProjectArchiveWithOpenItems = 'PROJECT_ARCHIVE_WITH_OPEN_ITEMS',
+    WorkspaceArchiveWithActiveProjects = 'WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS',
     UnknownDefaultOpenApi = '11184809'
 }
 
