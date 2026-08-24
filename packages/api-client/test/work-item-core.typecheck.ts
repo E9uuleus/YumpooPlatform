@@ -7,8 +7,10 @@ import {
 } from '../src/generated/models/index.js'
 import type {
   CreateWorkItemRequest,
+  DeleteWorkItemRequest,
   ListContentWorkItemsRequest,
   RankMoveWorkItemRequest,
+  RestoreWorkItemRequest,
   TransitionWorkItemRequest,
   UpdateWorkItemRequest,
 } from '../src/generated/apis/WorkItemsApi.js'
@@ -100,6 +102,24 @@ const rankMove: RankMoveWorkItemRequest = {
   },
 }
 
+const softDelete: DeleteWorkItemRequest = {
+  workItemId: update.workItemId,
+  xXSRFTOKEN: 'csrf-token',
+  ifMatch: '"0"',
+  idempotencyKey: '2a000000-0000-4000-8000-000000000408',
+  workItemDeleteRequest: { reason: '重复工作项' },
+}
+
+const restore: RestoreWorkItemRequest = {
+  workItemId: update.workItemId,
+  xXSRFTOKEN: 'csrf-token',
+  ifMatch: '"1"',
+  idempotencyKey: '2a000000-0000-4000-8000-000000000409',
+}
+
+// @ts-expect-error M2-15 删除必须提交理由。
+const missingDeleteReason: DeleteWorkItemRequest['workItemDeleteRequest'] = {}
+
 // @ts-expect-error M2-14 rank move 必须明确目标状态与定位方式。
 const missingPlacement: RankMoveWorkItemRequest['workItemRankMoveRequest'] = {
   toStatus: 'READY',
@@ -128,6 +148,9 @@ void advancedPage
 void update
 void transition
 void rankMove
+void softDelete
+void restore
+void missingDeleteReason
 void missingPlacement
 void missingTarget
 void missingPriorityBody

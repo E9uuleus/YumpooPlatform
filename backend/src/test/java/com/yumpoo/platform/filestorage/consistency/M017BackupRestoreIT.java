@@ -902,6 +902,15 @@ class M017BackupRestoreIT {
                 }
                 assertThat(workItem.executeBatch()).hasSize(2);
             }
+            try (PreparedStatement tombstone = connection.prepareStatement("""
+                    UPDATE yumpoo.work_item
+                       SET deleted_at=?, deleted_by_user_id='00000000-0000-4000-8000-000000000102',
+                           delete_reason='备份恢复需保留删除事实'
+                     WHERE id='00000000-0000-4000-8000-000000000816'
+                    """)) {
+                tombstone.setObject(1, createdAt.plusHours(2));
+                assertThat(tombstone.executeUpdate()).isOne();
+            }
             try (PreparedStatement event = connection.prepareStatement("""
                     INSERT INTO yumpoo.outbox_event (
                         event_id, event_type, event_version, aggregate_type, aggregate_id,
@@ -996,7 +1005,9 @@ class M017BackupRestoreIT {
                                 || COALESCE(item.due_date::text,'-') || ':' || item.row_version || ':'
                                 || item.reporter_user_id || ':' || item.created_by_user_id || ':'
                                 || item.updated_by_user_id || ':' || item.created_at || ':'
-                                || item.updated_at, ',' ORDER BY item.item_sequence)
+                                || item.updated_at || ':' || COALESCE(item.deleted_at::text,'-') || ':'
+                                || COALESCE(item.deleted_by_user_id::text,'-') || ':'
+                                || COALESCE(item.delete_reason,'-'), ',' ORDER BY item.item_sequence)
                                FROM yumpoo.work_item item WHERE item.project_id=project.id)
                                 AS work_items,
                             string_agg(content.code || ':' || content.work_item_type || ':'

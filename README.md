@@ -1,5 +1,19 @@
 # YumpooPlatform
 
+## M2-15 Work Item 软删除、恢复与归档只读
+
+M2-15 新增 `DELETE /api/v1/work-items/{workItemId}` 与 `POST /api/v1/work-items/{workItemId}/restore`。Project Owner 和 ACTIVE Member 都可写，CompanyAdmin 保持只读，非成员隐藏为 404；父 Project 或 Content 归档后，创建、PATCH、迁移、rank、删除和恢复统一拒绝。普通详情、Table、Kanban、参与人排序与开放事项 blocker 均排除墓碑，删除/恢复命令使用强 ETag、XSRF 和持久化幂等键。
+
+V34 通过生成列 `active_lane_rank` 与可延迟唯一约束保证活动项 rank 唯一，同时允许墓碑保留重复历史 rank。恢复保留编号、字段与原状态；历史 rank 空闲时复用，被占用时在 lane 锁内恢复到顶部。删除/恢复各发布不含正文和内部 rank 的 v1 事件，备份恢复覆盖删除时间、操作者与理由。
+
+Web 详情抽屉提供危险操作确认、必填理由和未保存草稿警告；删除成功后只在当前页面内存保留多条即时撤销提示，不新增持久回收站。传输失败重试复用原幂等键，409/412 只刷新真源、不自动重提。物理清理、Activity 投影以及 Relation/Worklog/Feedback 引用展示继续由后续里程碑交付。
+
+```powershell
+pnpm verify:m2-15
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-14 现状修正：项目管理与 MAIN 主工作空间
 
 每个 Company 现在由数据库保证恰好一个 `code=MAIN / status=ACTIVE / sortOrder=0` 的内部主工作空间。V32 按既有 MAIN、首个 ACTIVE、首个 ARCHIVED的优先级保留稳定身份，把所有生命周期 Project 迁入 MAIN 后删除其余 Workspace；迁移不可逆，升级前必须备份，回滚使用备份恢复。Project 创建请求不再接受 `workspaceId`，服务端在原子事务内锁定 MAIN 自动归属；Workspace 公开写能力只保留名称和描述 PATCH。
@@ -10,7 +24,7 @@
 
 M2-14 以 V31 为 Work Item 增加状态泳道内持久化 rank。升级按既有 `item_sequence DESC, id ASC` 回填 39 位定长十进制位置；创建与普通状态迁移置于目标状态顶部，同状态移动支持 `START/BEFORE/AFTER/END`，间隙耗尽时在 Content/状态 lane 锁内保持相对顺序重平衡。Kanban 查询要求恰好一个状态、拒绝 Table sort，并固定按 `rank ASC, id ASC` 稳定分页；移动命令要求 XSRF、强 `If-Match` 与幂等键。
 
-Web 保留 Content 的多状态分组，并在每组内渲染独立状态泳道。鼠标和触控只从 Pointer 拖动手柄启动，提供阈值、取消、合法投放与边缘滚动；键盘/触控菜单覆盖上下移、顶底定位和合法跨状态。要求说明的跨状态移动先确认；提交期间显示 pending，失败恢复快照，传输失败的明确重试复用原幂等键，409/412 只刷新服务端事实与能力。M2-15 删除恢复、M2-20 Activity、M2-23 事件冻结和 M2-24 总验收继续延期。
+Web 保留 Content 的多状态分组，并在每组内渲染独立状态泳道。鼠标和触控只从 Pointer 拖动手柄启动，提供阈值、取消、合法投放与边缘滚动；键盘/触控菜单覆盖上下移、顶底定位和合法跨状态。要求说明的跨状态移动先确认；提交期间显示 pending，失败恢复快照，传输失败的明确重试复用原幂等键，409/412 只刷新服务端事实与能力。M2-15 删除恢复已交付，M2-20 Activity、M2-23 事件冻结和 M2-24 总验收继续延期。
 
 ```powershell
 pnpm verify:m2-14
