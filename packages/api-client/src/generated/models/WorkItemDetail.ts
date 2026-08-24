@@ -185,6 +185,30 @@ export interface WorkItemDetail {
      * @memberof WorkItemDetail
      */
     readonly updatedAt: Date;
+    /**
+     *
+     * @type {boolean}
+     * @memberof WorkItemDetail
+     */
+    readonly deleted: boolean;
+    /**
+     *
+     * @type {Date}
+     * @memberof WorkItemDetail
+     */
+    readonly deletedAt: Date | null;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemDetail
+     */
+    readonly deletedByUserId: string | null;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemDetail
+     */
+    readonly deleteReason: string | null;
 }
 
 
@@ -216,6 +240,10 @@ export function instanceOfWorkItemDetail(value: object): value is WorkItemDetail
     if (!('capabilities' in value) || value['capabilities'] === undefined) return false;
     if (!('createdAt' in value) || value['createdAt'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
+    if (!('deleted' in value) || value['deleted'] === undefined) return false;
+    if (!('deletedAt' in value) || value['deletedAt'] === undefined) return false;
+    if (!('deletedByUserId' in value) || value['deletedByUserId'] === undefined) return false;
+    if (!('deleteReason' in value) || value['deleteReason'] === undefined) return false;
     return true;
 }
 
@@ -252,6 +280,10 @@ export function WorkItemDetailFromJSONTyped(json: any, ignoreDiscriminator: bool
         'capabilities': WorkItemCapabilitiesFromJSON(json['capabilities']),
         'createdAt': (new Date(json['createdAt'])),
         'updatedAt': (new Date(json['updatedAt'])),
+        'deleted': json['deleted'],
+        'deletedAt': (json['deletedAt'] == null ? null : new Date(json['deletedAt'])),
+        'deletedByUserId': json['deletedByUserId'],
+        'deleteReason': json['deleteReason'],
     };
 }
 
@@ -259,7 +291,7 @@ export function WorkItemDetailToJSON(json: any): WorkItemDetail {
     return WorkItemDetailToJSONTyped(json, false);
 }
 
-export function WorkItemDetailToJSONTyped(value?: Omit<WorkItemDetail, 'rowVersion'|'etag'|'createdAt'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemDetailToJSONTyped(value?: Omit<WorkItemDetail, 'rowVersion'|'etag'|'createdAt'|'updatedAt'|'deleted'|'deletedAt'|'deletedByUserId'|'deleteReason'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

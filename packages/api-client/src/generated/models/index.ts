@@ -114,6 +114,7 @@ export * from './WeComIntegrationStatus';
 export * from './WeComOAuthStatus';
 export * from './WorkItemCapabilities';
 export * from './WorkItemCreateRequest';
+export * from './WorkItemDeleteRequest';
 export * from './WorkItemDetail';
 export * from './WorkItemPage';
 export * from './WorkItemPriority';

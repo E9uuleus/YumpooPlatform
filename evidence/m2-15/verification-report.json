@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-15",
+  "status": "PASS",
+  "startedAt": "2026-08-24T09:32:37Z",
+  "completedAt": "2026-08-24T09:36:18Z",
+  "command": "pnpm verify:m2-15",
+  "flywayVersion": "34",
+  "testCounts": {
+    "backendUnit": 383,
+    "backendIntegration": 200,
+    "nodeArchitecture": 9,
+    "apiClient": 7,
+    "web": 160,
+    "desktop": 24
+  },
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiBackwardCompatible": true,
+    "generatedClientConsistent": true,
+    "backendCleanVerify": true,
+    "v34CleanAndUpgradeMigration": true,
+    "activeRankUniqueAndTombstoneRanksRepeatable": true,
+    "deleteRestorePermissionsAndVisibility": true,
+    "reasonAndDeleteFacts": true,
+    "idempotencyAndEventExactlyOnce": true,
+    "etagAndLifecycleConflicts": true,
+    "parentArchiveReadOnly": true,
+    "rankReuseAndTopFallback": true,
+    "openItemBlockerExcludesDeleted": true,
+    "pageScopedUndoAndRetry": true,
+    "backupRestore": true,
+    "nodeGate": true
+  }
+}

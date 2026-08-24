@@ -123,4 +123,48 @@ class WorkItemTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("endpoints");
     }
+
+    @Test
+    void softDeleteAndRestorePreserveIdentityFieldsAndStatus() {
+        UUID reporter = UUID.randomUUID();
+        UUID actor = UUID.randomUUID();
+        WorkItem active = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), 15, "PROJECT_1-15", ContentWorkItemType.TASK,
+                "待清理任务", "IN_PROGRESS", WorkItemStatusCategory.IN_PROGRESS,
+                WorkItemPriority.HIGH, actor, "描述", "备注", null, null, null,
+                RANK, reporter, Instant.EPOCH);
+
+        WorkItem deleted = active.softDelete("  已合并到主任务  ", actor,
+                Instant.EPOCH.plusSeconds(1));
+        String restoredRank = KanbanRank.evenlySpaced(1, 2);
+        WorkItem restored = deleted.restore(restoredRank, reporter,
+                Instant.EPOCH.plusSeconds(2));
+
+        assertThat(deleted.deleted()).isTrue();
+        assertThat(deleted.deleteReason()).isEqualTo("已合并到主任务");
+        assertThat(deleted.deletedByUserId()).isEqualTo(actor);
+        assertThat(restored.deleted()).isFalse();
+        assertThat(restored.deletedAt()).isNull();
+        assertThat(restored.deleteReason()).isNull();
+        assertThat(restored.id()).isEqualTo(active.id());
+        assertThat(restored.itemNo()).isEqualTo(active.itemNo());
+        assertThat(restored.title()).isEqualTo(active.title());
+        assertThat(restored.statusCode()).isEqualTo(active.statusCode());
+        assertThat(restored.rank()).isEqualTo(restoredRank);
+    }
+
+    @Test
+    void deleteReasonMustContainOneToFiveHundredTrimmedCharacters() {
+        WorkItem item = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), 16, "PROJECT_1-16", ContentWorkItemType.TASK,
+                "待删除任务", "BACKLOG", WorkItemStatusCategory.TODO, WorkItemPriority.LOW,
+                null, null, null, null, null, null, RANK, UUID.randomUUID(), Instant.EPOCH);
+
+        assertThatThrownBy(() -> item.softDelete("   ", UUID.randomUUID(),
+                Instant.EPOCH.plusSeconds(1))).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("deleteReason");
+        assertThatThrownBy(() -> item.softDelete("删".repeat(501), UUID.randomUUID(),
+                Instant.EPOCH.plusSeconds(1))).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("deleteReason");
+    }
 }

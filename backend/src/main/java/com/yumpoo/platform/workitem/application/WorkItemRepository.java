@@ -17,10 +17,18 @@ public interface WorkItemRepository {
     long nextSequence(UUID companyId, UUID projectId);
     boolean insert(WorkItem workItem);
     Optional<WorkItemModels.WorkItemLocator> findLocator(UUID companyId, UUID workItemId);
+    Optional<WorkItemModels.WorkItemLocator> findLocatorIncludingDeleted(UUID companyId,
+            UUID workItemId);
     Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId, UUID workItemId);
+    Optional<WorkItem> findIncludingDeleted(UUID companyId, UUID projectId, UUID contentId,
+            UUID workItemId);
     Optional<WorkItem> lock(UUID companyId, UUID projectId, UUID contentId, UUID workItemId);
+    Optional<WorkItem> lockIncludingDeleted(UUID companyId, UUID projectId, UUID contentId,
+            UUID workItemId);
     Optional<WorkItem> update(WorkItem workItem, long expectedVersion);
     Optional<WorkItem> transition(WorkItem workItem, long expectedVersion);
+    Optional<WorkItem> softDelete(WorkItem workItem, long expectedVersion);
+    Optional<WorkItem> restore(WorkItem workItem, long expectedVersion);
     void lockRankLanes(UUID contentId, Collection<String> statuses);
     List<RankedWorkItem> findRankOrder(UUID companyId, UUID projectId, UUID contentId,
             String statusCode);

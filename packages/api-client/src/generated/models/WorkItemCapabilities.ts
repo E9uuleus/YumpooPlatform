@@ -40,6 +40,18 @@ export interface WorkItemCapabilities {
     readonly canMoveInKanban: boolean;
     /**
      *
+     * @type {boolean}
+     * @memberof WorkItemCapabilities
+     */
+    readonly canDelete: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof WorkItemCapabilities
+     */
+    readonly canRestore: boolean;
+    /**
+     *
      * @type {Array<WorkItemTransitionOption>}
      * @memberof WorkItemCapabilities
      */
@@ -52,6 +64,8 @@ export interface WorkItemCapabilities {
 export function instanceOfWorkItemCapabilities(value: object): value is WorkItemCapabilities {
     if (!('canEditFields' in value) || value['canEditFields'] === undefined) return false;
     if (!('canMoveInKanban' in value) || value['canMoveInKanban'] === undefined) return false;
+    if (!('canDelete' in value) || value['canDelete'] === undefined) return false;
+    if (!('canRestore' in value) || value['canRestore'] === undefined) return false;
     if (!('availableTransitions' in value) || value['availableTransitions'] === undefined) return false;
     return true;
 }
@@ -68,6 +82,8 @@ export function WorkItemCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator
 
         'canEditFields': json['canEditFields'],
         'canMoveInKanban': json['canMoveInKanban'],
+        'canDelete': json['canDelete'],
+        'canRestore': json['canRestore'],
         'availableTransitions': ((json['availableTransitions'] as Array<any>).map(WorkItemTransitionOptionFromJSON)),
     };
 }
@@ -76,7 +92,7 @@ export function WorkItemCapabilitiesToJSON(json: any): WorkItemCapabilities {
     return WorkItemCapabilitiesToJSONTyped(json, false);
 }
 
-export function WorkItemCapabilitiesToJSONTyped(value?: Omit<WorkItemCapabilities, 'canEditFields'|'canMoveInKanban'|'availableTransitions'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemCapabilitiesToJSONTyped(value?: Omit<WorkItemCapabilities, 'canEditFields'|'canMoveInKanban'|'canDelete'|'canRestore'|'availableTransitions'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

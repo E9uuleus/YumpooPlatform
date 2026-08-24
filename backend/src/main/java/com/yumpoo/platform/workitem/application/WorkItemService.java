@@ -51,7 +51,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
+import static com.yumpoo.platform.workitem.application.WorkItemCommands.Delete;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.RankMove;
+import static com.yumpoo.platform.workitem.application.WorkItemCommands.Restore;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Update;
 import static com.yumpoo.platform.workitem.application.WorkItemModels.*;
@@ -65,6 +67,8 @@ public class WorkItemService {
     private static final String UNASSIGNED = "workitem.work_item_unassigned";
     private static final String STATUS_CHANGED = "workitem.work_item_status_changed";
     private static final String RANK_CHANGED = "workitem.work_item_rank_changed";
+    private static final String DELETED = "workitem.work_item_deleted";
+    private static final String RESTORED = "workitem.work_item_restored";
 
     private final WorkItemRepository workItems;
     private final ContentRepository contents;
@@ -138,6 +142,21 @@ public class WorkItemService {
         Content content = contents.find(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         WorkItem item = workItems.find(project.companyId(), project.projectId(),
+                        locator.contentId(), workItemId)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        return detail(item, people(project.companyId(), List.of(item)), canEdit(project, content),
+                template(project.templateKey(), project.templateVersion()));
+    }
+
+    @Transactional(readOnly = true)
+    public WorkItemDetail findForLifecycle(CurrentActor actor, UUID workItemId) {
+        requireActor(actor);
+        WorkItemLocator locator = workItems.findLocatorIncludingDeleted(actor.companyId(), workItemId)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        ProjectAccessSnapshot project = visible(actor, locator.projectId());
+        Content content = contents.find(project.companyId(), project.projectId(), locator.contentId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        WorkItem item = workItems.findIncludingDeleted(project.companyId(), project.projectId(),
                         locator.contentId(), workItemId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         return detail(item, people(project.companyId(), List.of(item)), canEdit(project, content),
@@ -289,6 +308,93 @@ public class WorkItemService {
                 command.requestHash()), () -> rankMove(command, locator));
     }
 
+    public IdempotencyExecutionResult delete(Delete command) {
+        requireActor(command.actor());
+        WorkItemLocator locator = workItems.findLocatorIncludingDeleted(
+                        command.actor().companyId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        ProjectAccessSnapshot project = visible(command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        String reason = normalizeDeleteReason(command.reason());
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
+                command.actor().userId(), "DELETE", "deleteWorkItem", command.idempotencyKey()),
+                command.requestHash()), () -> delete(command, locator, reason));
+    }
+
+    private StoredCommandResult delete(Delete command, WorkItemLocator locator, String reason) {
+        ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
+                command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireActiveContent(content);
+        WorkItem before = workItems.lockIncludingDeleted(project.companyId(), project.projectId(),
+                        content.id(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(before, command.expectedVersion());
+        if (before.deleted()) throw invalidLifecycle("WORK_ITEM_ALREADY_DELETED");
+        WorkItem candidate;
+        try {
+            candidate = before.softDelete(reason, command.actor().userId(), clock.instant());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw invalidLifecycle("WORK_ITEM_DELETE_REJECTED");
+        }
+        WorkItem after = workItems.softDelete(candidate, command.expectedVersion())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        appendDeleted(after, command.actor());
+        return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
+                template(project.templateKey(), project.templateVersion())));
+    }
+
+    public IdempotencyExecutionResult restore(Restore command) {
+        requireActor(command.actor());
+        WorkItemLocator locator = workItems.findLocatorIncludingDeleted(
+                        command.actor().companyId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        ProjectAccessSnapshot project = visible(command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
+                command.actor().userId(), "POST", "restoreWorkItem", command.idempotencyKey()),
+                command.requestHash()), () -> restore(command, locator));
+    }
+
+    private StoredCommandResult restore(Restore command, WorkItemLocator locator) {
+        ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
+                command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireActiveContent(content);
+        WorkItem snapshot = workItems.findIncludingDeleted(project.companyId(), project.projectId(),
+                        content.id(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(snapshot, command.expectedVersion());
+        if (!snapshot.deleted()) throw invalidLifecycle("WORK_ITEM_NOT_DELETED");
+        workItems.lockRankLanes(content.id(), List.of(snapshot.statusCode()));
+        WorkItem before = workItems.lockIncludingDeleted(project.companyId(), project.projectId(),
+                        content.id(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(before, command.expectedVersion());
+        if (!before.deleted()) throw invalidLifecycle("WORK_ITEM_NOT_DELETED");
+        List<RankedWorkItem> lane = workItems.findRankOrder(project.companyId(), project.projectId(),
+                content.id(), before.statusCode());
+        boolean originalRankAvailable = lane.stream().noneMatch(item -> item.rank().equals(before.rank()));
+        String rank = originalRankAvailable ? before.rank()
+                : allocateRank(project.companyId(), project.projectId(), content.id(),
+                        before.statusCode(), WorkItemRankPlacement.START, null, null).rank();
+        WorkItem candidate;
+        try {
+            candidate = before.restore(rank, command.actor().userId(), clock.instant());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw invalidLifecycle("WORK_ITEM_RESTORE_REJECTED");
+        }
+        WorkItem after = workItems.restore(candidate, command.expectedVersion())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        appendRestored(after, command.actor());
+        return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
+                template(project.templateKey(), project.templateVersion())));
+    }
+
     private StoredCommandResult rankMove(RankMove command, WorkItemLocator locator) {
         WorkItemRankPlacement placement = placement(command.placement(), command.anchorWorkItemId());
         ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
@@ -410,7 +516,7 @@ public class WorkItemService {
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
                 item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
-                new WorkItemCapabilities(canEditFields, canEditFields,
+                new WorkItemCapabilities(canEditFields, canEditFields, canEditFields, false,
                         availableTransitions(item, canEditFields, template)), item.updatedAt());
     }
 
@@ -423,9 +529,12 @@ public class WorkItemService {
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
                 item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
-                new WorkItemCapabilities(canEditFields, canEditFields,
-                        availableTransitions(item, canEditFields, template)),
-                item.createdAt(), item.updatedAt());
+                new WorkItemCapabilities(canEditFields && !item.deleted(),
+                        canEditFields && !item.deleted(), canEditFields && !item.deleted(),
+                        canEditFields && item.deleted(),
+                        availableTransitions(item, canEditFields && !item.deleted(), template)),
+                item.createdAt(), item.updatedAt(), item.deleted(), item.deletedAt(),
+                item.deletedByUserId(), item.deleteReason());
     }
 
     private static List<WorkItemTransitionOption> availableTransitions(WorkItem item,
@@ -603,6 +712,36 @@ public class WorkItemService {
         append(RANK_CHANGED, item, actor, payload);
     }
 
+    private void appendDeleted(WorkItem item, CurrentActor actor) {
+        Map<String, Object> payload = lifecycleEventPayload(item);
+        payload.put("deletedAt", item.deletedAt());
+        payload.put("deletedByUserId", item.deletedByUserId());
+        payload.put("deleteReason", item.deleteReason());
+        append(DELETED, item, actor, payload);
+    }
+
+    private void appendRestored(WorkItem item, CurrentActor actor) {
+        Map<String, Object> payload = lifecycleEventPayload(item);
+        payload.put("restoredAt", item.updatedAt());
+        payload.put("restoredByUserId", actor.userId());
+        append(RESTORED, item, actor, payload);
+    }
+
+    private static Map<String, Object> lifecycleEventPayload(WorkItem item) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("workItemId", item.id());
+        payload.put("projectId", item.projectId());
+        payload.put("contentId", item.contentId());
+        payload.put("itemNo", item.itemNo());
+        payload.put("title", item.title());
+        payload.put("workItemType", item.type().name());
+        payload.put("statusCode", item.statusCode());
+        payload.put("statusCategory", item.statusCategory().name());
+        payload.put("priority", item.priority().name());
+        payload.put("rowVersion", item.rowVersion());
+        return payload;
+    }
+
     private static Map<String, Object> commonEventPayload(WorkItem item) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("workItemId", item.id());
@@ -697,6 +836,20 @@ public class WorkItemService {
         if (normalized.length() > 500)
             throw validation("resolution", "INVALID_LENGTH", "迁移说明不能超过 500 字符");
         return normalized;
+    }
+
+    private static String normalizeDeleteReason(String value) {
+        if (value == null) throw validation("reason", "REQUIRED", "删除理由不能为空");
+        String normalized = value.strip();
+        if (normalized.isEmpty())
+            throw validation("reason", "REQUIRED", "删除理由不能为空");
+        if (normalized.length() > 500)
+            throw validation("reason", "INVALID_LENGTH", "删除理由不能超过 500 字符");
+        return normalized;
+    }
+
+    private static ApplicationException invalidLifecycle(String reason) {
+        return ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, reason);
     }
 
     private static void requireActiveContent(Content content) {

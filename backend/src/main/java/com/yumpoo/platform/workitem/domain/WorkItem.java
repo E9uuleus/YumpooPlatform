@@ -49,6 +49,11 @@ public record WorkItem(
         boolean deleted = deletedAt != null || deletedByUserId != null || deleteReason != null;
         if (deleted && (deletedAt == null || deletedByUserId == null || deleteReason == null))
             throw new IllegalArgumentException("deleted work item must contain complete delete facts");
+        if (deleted) {
+            deleteReason = normalizeRequired(deleteReason, 500, "deleteReason");
+            if (deletedAt.isBefore(createdAt))
+                throw new IllegalArgumentException("deletedAt must not precede createdAt");
+        }
     }
 
     public static WorkItem create(UUID id, UUID companyId, UUID projectId, UUID contentId,
@@ -103,6 +108,32 @@ public record WorkItem(
                 description, notes, timelineStartDate, timelineEndDate, dueDate, nextRank,
                 rowVersion, createdAt, createdByUserId, now, actorUserId, deletedAt,
                 deletedByUserId, deleteReason);
+    }
+
+    public WorkItem softDelete(String reason, UUID actorUserId, Instant now) {
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (deletedAt != null) throw new IllegalStateException("work item is already deleted");
+        if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                description, notes, timelineStartDate, timelineEndDate, dueDate, rank,
+                rowVersion, createdAt, createdByUserId, now, actorUserId, now, actorUserId, reason);
+    }
+
+    public WorkItem restore(String nextRank, UUID actorUserId, Instant now) {
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (deletedAt == null) throw new IllegalStateException("work item is not deleted");
+        if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                description, notes, timelineStartDate, timelineEndDate, dueDate, nextRank,
+                rowVersion, createdAt, createdByUserId, now, actorUserId, null, null, null);
+    }
+
+    public boolean deleted() {
+        return deletedAt != null;
     }
 
     private static String normalizeRequired(String value, int maximum, String field) {

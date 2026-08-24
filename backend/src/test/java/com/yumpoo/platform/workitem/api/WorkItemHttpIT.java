@@ -46,6 +46,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @ActiveProfiles("test")
 @Import(PostgreSqlTestContainerConfiguration.class)
@@ -187,6 +188,169 @@ class WorkItemHttpIT {
             assertThat(event.has("assigneeUserId")).isTrue();
             assertThat(event.has("timelineStartDate")).isTrue();
         }
+    }
+
+    @Test
+    void deleteRestoreIsHiddenIdempotentAuthorizedAndPreservesFactsAndRank() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        JsonNode created = createWorkItem(collection, "待软删除", "HIGH", member.userId(),
+                "2026-08-30");
+        UUID workItemId = UUID.fromString(created.path("id").asText());
+        String itemNo = created.path("itemNo").asText();
+        String originalRank = workItemRank(workItemId);
+        String path = "/api/v1/work-items/" + workItemId;
+        String deleteBody = "{\"reason\":\"  已合并到主任务  \"}";
+        UUID deleteKey = UUID.randomUUID();
+
+        assertThat(mutate("DELETE", path, member, deleteBody, null, deleteKey).statusCode())
+                .isEqualTo(428);
+        assertThat(mutate("DELETE", path, outsider, deleteBody, "\"0\"", deleteKey).statusCode())
+                .isEqualTo(404);
+        assertThat(mutate("DELETE", path, admin, deleteBody, "\"0\"", deleteKey).statusCode())
+                .isEqualTo(403);
+        assertThat(mutate("DELETE", path, member, "{\"reason\":\"   \"}",
+                "\"0\"", UUID.randomUUID()).statusCode()).isEqualTo(422);
+        assertThat(mutate("DELETE", path, member,
+                "{\"reason\":\"" + "删".repeat(501) + "\"}", "\"0\"",
+                UUID.randomUUID()).statusCode()).isEqualTo(422);
+
+        HttpResponse<String> deletedResponse = mutate("DELETE", path, member, deleteBody,
+                "\"0\"", deleteKey);
+        assertThat(deletedResponse.statusCode()).as(deletedResponse.body()).isEqualTo(200);
+        JsonNode tombstone = json.readTree(deletedResponse.body());
+        assertThat(tombstone.path("deleted").asBoolean()).isTrue();
+        assertThat(tombstone.path("deleteReason").asText()).isEqualTo("已合并到主任务");
+        assertThat(tombstone.path("deletedByUserId").asText()).isEqualTo(member.userId().toString());
+        assertThat(tombstone.path("capabilities").path("canEditFields").asBoolean()).isFalse();
+        assertThat(tombstone.path("capabilities").path("canDelete").asBoolean()).isFalse();
+        assertThat(tombstone.path("capabilities").path("canRestore").asBoolean()).isTrue();
+        assertThat(get(path, member).statusCode()).isEqualTo(404);
+        assertThat(ids(body(get(collection + "?page=0&size=20", member))))
+                .doesNotContain(workItemId.toString());
+        assertThat(workItemEventCount(workItemId, "workitem.work_item_deleted")).isOne();
+
+        HttpResponse<String> replay = mutate("DELETE", path, member, deleteBody,
+                "\"0\"", deleteKey);
+        assertThat(replay.statusCode()).isEqualTo(200);
+        assertThat(replay.body()).isEqualTo(deletedResponse.body());
+        assertThat(workItemEventCount(workItemId, "workitem.work_item_deleted")).isOne();
+        assertThat(mutate("DELETE", path, member, deleteBody, "\"1\"",
+                UUID.randomUUID()).statusCode()).isEqualTo(409);
+
+        String restorePath = path + "/restore";
+        assertThat(mutate("POST", restorePath, member, "", null,
+                UUID.randomUUID()).statusCode()).isEqualTo(428);
+        assertThat(mutate("POST", restorePath, outsider, "", "\"1\"",
+                UUID.randomUUID()).statusCode()).isEqualTo(404);
+        assertThat(mutate("POST", restorePath, admin, "", "\"1\"",
+                UUID.randomUUID()).statusCode()).isEqualTo(403);
+        UUID restoreKey = UUID.randomUUID();
+        HttpResponse<String> restoredResponse = mutate("POST", restorePath, owner, "",
+                "\"1\"", restoreKey);
+        assertThat(restoredResponse.statusCode()).as(restoredResponse.body()).isEqualTo(200);
+        JsonNode restored = json.readTree(restoredResponse.body());
+        assertThat(restored.path("deleted").asBoolean()).isFalse();
+        assertThat(restored.path("deletedAt").isNull()).isTrue();
+        assertThat(restored.path("itemNo").asText()).isEqualTo(itemNo);
+        assertThat(restored.path("title").asText()).isEqualTo("待软删除");
+        assertThat(restored.path("statusCode").asText()).isEqualTo(created.path("statusCode").asText());
+        assertThat(workItemRank(workItemId)).isEqualTo(originalRank);
+        assertThat(get(path, member).statusCode()).isEqualTo(200);
+        assertThat(workItemEventCount(workItemId, "workitem.work_item_restored")).isOne();
+
+        HttpResponse<String> restoreReplay = mutate("POST", restorePath, owner, "",
+                "\"1\"", restoreKey);
+        assertThat(restoreReplay.statusCode()).isEqualTo(200);
+        assertThat(restoreReplay.body()).isEqualTo(restoredResponse.body());
+        assertThat(mutate("POST", restorePath, owner, "", "\"2\"",
+                UUID.randomUUID()).statusCode()).isEqualTo(409);
+    }
+
+    @Test
+    void concurrentDeleteAndRestoreEachHaveOneWinner() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        JsonNode created = createWorkItem(collection, "并发删除恢复", "MEDIUM", null, null);
+        UUID workItemId = UUID.fromString(created.path("id").asText());
+        String path = "/api/v1/work-items/" + workItemId;
+        CountDownLatch deleteStart = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Future<HttpResponse<String>> first = pool.submit(() -> {
+                deleteStart.await();
+                return mutate("DELETE", path, member, "{\"reason\":\"并发删除一\"}",
+                        "\"0\"", UUID.randomUUID());
+            });
+            Future<HttpResponse<String>> second = pool.submit(() -> {
+                deleteStart.await();
+                return mutate("DELETE", path, owner, "{\"reason\":\"并发删除二\"}",
+                        "\"0\"", UUID.randomUUID());
+            });
+            deleteStart.countDown();
+            assertThat(List.of(first.get(20, TimeUnit.SECONDS).statusCode(),
+                    second.get(20, TimeUnit.SECONDS).statusCode()))
+                    .containsExactlyInAnyOrder(200, 412);
+        }
+        assertThat(workItemEventCount(workItemId, "workitem.work_item_deleted")).isOne();
+
+        CountDownLatch restoreStart = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Future<HttpResponse<String>> first = pool.submit(() -> {
+                restoreStart.await();
+                return mutate("POST", path + "/restore", member, "", "\"1\"",
+                        UUID.randomUUID());
+            });
+            Future<HttpResponse<String>> second = pool.submit(() -> {
+                restoreStart.await();
+                return mutate("POST", path + "/restore", owner, "", "\"1\"",
+                        UUID.randomUUID());
+            });
+            restoreStart.countDown();
+            assertThat(List.of(first.get(20, TimeUnit.SECONDS).statusCode(),
+                    second.get(20, TimeUnit.SECONDS).statusCode()))
+                    .containsExactlyInAnyOrder(200, 412);
+        }
+        assertThat(workItemEventCount(workItemId, "workitem.work_item_restored")).isOne();
+    }
+
+    @Test
+    void restoreMovesToLaneTopWhenHistoricalRankIsOccupiedAndArchivedParentsRejectWrites()
+            throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        JsonNode occupied = createWorkItem(collection, "占位任务", "LOW", null, null);
+        JsonNode deleted = createWorkItem(collection, "待恢复任务", "MEDIUM", null, null);
+        UUID occupiedId = UUID.fromString(occupied.path("id").asText());
+        UUID deletedId = UUID.fromString(deleted.path("id").asText());
+        String deletedRank = workItemRank(deletedId);
+        String deletePath = "/api/v1/work-items/" + deletedId;
+        assertThat(mutate("DELETE", deletePath, owner, "{\"reason\":\"临时删除\"}",
+                "\"0\"", UUID.randomUUID()).statusCode()).isEqualTo(200);
+        jdbc.sql("UPDATE yumpoo.work_item SET rank=:rank WHERE id=:id")
+                .param("rank", deletedRank).param("id", occupiedId).update();
+
+        jdbc.sql("UPDATE yumpoo.content SET status='ARCHIVED', archived_at=transaction_timestamp(), "
+                        + "archived_by_user_id=:actor, updated_at=transaction_timestamp(), "
+                        + "updated_by_user_id=:actor, row_version=row_version+1 WHERE id=:id")
+                .param("actor", owner.userId()).param("id", contentId).update();
+        assertThat(mutate("POST", deletePath + "/restore", member, "", "\"1\"",
+                UUID.randomUUID()).statusCode()).isEqualTo(409);
+        jdbc.sql("UPDATE yumpoo.content SET status='ACTIVE', archived_at=NULL, "
+                        + "archived_by_user_id=NULL, updated_at=transaction_timestamp(), "
+                        + "updated_by_user_id=:actor, row_version=row_version+1 WHERE id=:id")
+                .param("actor", owner.userId()).param("id", contentId).update();
+
+        HttpResponse<String> restored = mutate("POST", deletePath + "/restore", member, "",
+                "\"1\"", UUID.randomUUID());
+        assertThat(restored.statusCode()).as(restored.body()).isEqualTo(200);
+        assertThat(workItemRank(deletedId)).isLessThan(workItemRank(occupiedId));
+        assertThatThrownBy(() -> jdbc.sql("UPDATE yumpoo.work_item SET rank=:rank WHERE id=:id")
+                .param("rank", workItemRank(occupiedId)).param("id", deletedId).update())
+                .isInstanceOf(RuntimeException.class);
+
+        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED', archived_at=transaction_timestamp(), "
+                        + "updated_at=transaction_timestamp(), updated_by_user_id=:actor, "
+                        + "row_version=row_version+1 WHERE id=:id")
+                .param("actor", owner.userId()).param("id", PROJECT_ID).update();
+        assertThat(mutate("DELETE", deletePath, owner, "{\"reason\":\"归档后拒绝\"}",
+                "\"2\"", UUID.randomUUID()).statusCode()).isEqualTo(409);
     }
 
     @Test
@@ -568,6 +732,35 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void deletingOpenItemRemovesArchiveBlockerAndRestoreWaitsForActiveParent() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        JsonNode created = createWorkItem(collection, "删除后解除归档阻塞", "HIGH", null, null);
+        UUID workItemId = UUID.fromString(created.path("id").asText());
+        String itemPath = "/api/v1/work-items/" + workItemId;
+        String contentPath = "/api/v1/contents/" + contentId;
+
+        HttpResponse<String> blocked = mutate("POST", contentPath + "/archive", owner, "",
+                contentEtag, UUID.randomUUID());
+        assertThat(blocked.statusCode()).as(blocked.body()).isEqualTo(409);
+        assertThat(mutate("DELETE", itemPath, member, "{\"reason\":\"解除归档阻塞\"}",
+                "\"0\"", UUID.randomUUID()).statusCode()).isEqualTo(200);
+
+        HttpResponse<String> archived = mutate("POST", contentPath + "/archive", owner, "",
+                contentEtag, UUID.randomUUID());
+        assertThat(archived.statusCode()).as(archived.body()).isEqualTo(200);
+        assertThat(mutate("POST", itemPath + "/restore", member, "", "\"1\"",
+                UUID.randomUUID()).statusCode()).isEqualTo(409);
+
+        HttpResponse<String> parentRestored = mutate("POST", contentPath + "/restore", owner, "",
+                archived.headers().firstValue("etag").orElseThrow(), UUID.randomUUID());
+        assertThat(parentRestored.statusCode()).as(parentRestored.body()).isEqualTo(200);
+        HttpResponse<String> itemRestored = mutate("POST", itemPath + "/restore", member, "",
+                "\"1\"", UUID.randomUUID());
+        assertThat(itemRestored.statusCode()).as(itemRestored.body()).isEqualTo(200);
+        assertThat(json.readTree(itemRestored.body()).path("deleted").asBoolean()).isFalse();
+    }
+
+    @Test
     void fullSnapshotPatchEnforcesEtagMembershipDatesNoopAndSafeEvents() throws Exception {
         String collection = "/api/v1/contents/" + contentId + "/work-items";
         HttpResponse<String> created = mutate("POST", collection, member,
@@ -816,6 +1009,18 @@ class WorkItemHttpIT {
         return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
                         + "WHERE event_type LIKE 'workitem.work_item_%'")
                 .query(Long.class).single();
+    }
+
+    private long workItemEventCount(UUID workItemId, String eventType) {
+        return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
+                        + "WHERE aggregate_id=:id AND event_type=:eventType")
+                .param("id", workItemId).param("eventType", eventType)
+                .query(Long.class).single();
+    }
+
+    private String workItemRank(UUID workItemId) {
+        return jdbc.sql("SELECT rank FROM yumpoo.work_item WHERE id=:id")
+                .param("id", workItemId).query(String.class).single();
     }
 
     private long statusEventCount(UUID workItemId) {

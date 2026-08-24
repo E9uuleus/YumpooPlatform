@@ -1721,6 +1721,67 @@ paths:
         '412': { $ref: '#/components/responses/VersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
+    delete:
+      tags: [WorkItems]
+      operationId: deleteWorkItem
+      summary: 软删除 Work Item
+      description: 删除后普通详情、Table 与 Kanban 均不再返回该项；同一幂等命令重放原墓碑结果。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDeleteRequest' } } }
+      responses:
+        '200':
+          description: Work Item 已软删除，或返回同一幂等命令保存的墓碑结果。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-items/{workItemId}/restore:
+    post:
+      tags: [WorkItems]
+      operationId: restoreWorkItem
+      summary: 恢复已删除 Work Item
+      description: 保留原状态；历史 rank 未占用时复用，否则恢复到原状态泳道顶部。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Work Item 已恢复，或返回同一幂等命令保存的结果。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
 
   /work-items/{workItemId}/transitions:
     post:
@@ -2540,7 +2601,8 @@ components:
       required: [id, projectId, contentId, itemNo, type, title, statusCode,
         statusCategory, priority, assigneeUserId, assigneeDisplayName, reporterUserId,
         reporterDisplayName, description, notes, timelineStartDate, timelineEndDate,
-        dueDate, rowVersion, etag, capabilities, createdAt, updatedAt]
+        dueDate, rowVersion, etag, capabilities, createdAt, updatedAt, deleted,
+        deletedAt, deletedByUserId, deleteReason]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
@@ -2565,14 +2627,20 @@ components:
         capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
         createdAt: { type: string, format: date-time, readOnly: true }
         updatedAt: { type: string, format: date-time, readOnly: true }
+        deleted: { type: boolean, readOnly: true }
+        deletedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+        deletedByUserId: { type: string, format: uuid, nullable: true, readOnly: true }
+        deleteReason: { type: string, minLength: 1, maxLength: 500, nullable: true, readOnly: true }
 
     WorkItemCapabilities:
       type: object
       additionalProperties: false
-      required: [canEditFields, canMoveInKanban, availableTransitions]
+      required: [canEditFields, canMoveInKanban, canDelete, canRestore, availableTransitions]
       properties:
         canEditFields: { type: boolean, readOnly: true }
         canMoveInKanban: { type: boolean, readOnly: true }
+        canDelete: { type: boolean, readOnly: true }
+        canRestore: { type: boolean, readOnly: true }
         availableTransitions:
           type: array
           readOnly: true
@@ -2612,6 +2680,13 @@ components:
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+
+    WorkItemDeleteRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
 
     WorkItemUpdateRequest:
       type: object

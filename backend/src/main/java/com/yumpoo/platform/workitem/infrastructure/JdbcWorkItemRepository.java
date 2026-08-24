@@ -105,8 +105,19 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     @Override
     public Optional<WorkItemLocator> findLocator(UUID companyId, UUID workItemId) {
+        return findLocator(companyId, workItemId, false);
+    }
+
+    @Override
+    public Optional<WorkItemLocator> findLocatorIncludingDeleted(UUID companyId, UUID workItemId) {
+        return findLocator(companyId, workItemId, true);
+    }
+
+    private Optional<WorkItemLocator> findLocator(UUID companyId, UUID workItemId,
+            boolean includeDeleted) {
         return jdbc.sql("SELECT id, project_id, content_id FROM yumpoo.work_item "
-                        + "WHERE company_id=:companyId AND id=:workItemId AND deleted_at IS NULL")
+                        + "WHERE company_id=:companyId AND id=:workItemId"
+                        + (includeDeleted ? "" : " AND deleted_at IS NULL"))
                 .param("companyId", companyId).param("workItemId", workItemId)
                 .query((rs, row) -> new WorkItemLocator(rs.getObject("id", UUID.class),
                         rs.getObject("project_id", UUID.class),
@@ -115,12 +126,24 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     @Override
     public Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId, UUID workItemId) {
-        return find(companyId, projectId, contentId, workItemId, false);
+        return find(companyId, projectId, contentId, workItemId, false, false);
+    }
+
+    @Override
+    public Optional<WorkItem> findIncludingDeleted(UUID companyId, UUID projectId,
+            UUID contentId, UUID workItemId) {
+        return find(companyId, projectId, contentId, workItemId, false, true);
     }
 
     @Override
     public Optional<WorkItem> lock(UUID companyId, UUID projectId, UUID contentId, UUID workItemId) {
-        return find(companyId, projectId, contentId, workItemId, true);
+        return find(companyId, projectId, contentId, workItemId, true, false);
+    }
+
+    @Override
+    public Optional<WorkItem> lockIncludingDeleted(UUID companyId, UUID projectId,
+            UUID contentId, UUID workItemId) {
+        return find(companyId, projectId, contentId, workItemId, true, true);
     }
 
     @Override
@@ -163,6 +186,48 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 """.formatted(COLUMNS))
                 .param("statusCode", item.statusCode())
                 .param("statusCategory", item.statusCategory().name())
+                .param("rank", item.rank())
+                .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
+                .param("updatedByUserId", item.updatedByUserId())
+                .param("companyId", item.companyId()).param("projectId", item.projectId())
+                .param("contentId", item.contentId()).param("id", item.id())
+                .param("expectedVersion", expectedVersion)
+                .query(JdbcWorkItemRepository::map).optional();
+    }
+
+    @Override
+    public Optional<WorkItem> softDelete(WorkItem item, long expectedVersion) {
+        return jdbc.sql("""
+                UPDATE yumpoo.work_item
+                   SET deleted_at=:deletedAt, deleted_by_user_id=:deletedByUserId,
+                       delete_reason=:deleteReason, row_version=row_version+1,
+                       updated_at=:updatedAt, updated_by_user_id=:updatedByUserId
+                 WHERE company_id=:companyId AND project_id=:projectId AND content_id=:contentId
+                   AND id=:id AND deleted_at IS NULL AND row_version=:expectedVersion
+                RETURNING %s
+                """.formatted(COLUMNS))
+                .param("deletedAt", OffsetDateTime.ofInstant(item.deletedAt(), ZoneOffset.UTC))
+                .param("deletedByUserId", item.deletedByUserId())
+                .param("deleteReason", item.deleteReason())
+                .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
+                .param("updatedByUserId", item.updatedByUserId())
+                .param("companyId", item.companyId()).param("projectId", item.projectId())
+                .param("contentId", item.contentId()).param("id", item.id())
+                .param("expectedVersion", expectedVersion)
+                .query(JdbcWorkItemRepository::map).optional();
+    }
+
+    @Override
+    public Optional<WorkItem> restore(WorkItem item, long expectedVersion) {
+        return jdbc.sql("""
+                UPDATE yumpoo.work_item
+                   SET rank=:rank, deleted_at=NULL, deleted_by_user_id=NULL, delete_reason=NULL,
+                       row_version=row_version+1, updated_at=:updatedAt,
+                       updated_by_user_id=:updatedByUserId
+                 WHERE company_id=:companyId AND project_id=:projectId AND content_id=:contentId
+                   AND id=:id AND deleted_at IS NOT NULL AND row_version=:expectedVersion
+                RETURNING %s
+                """.formatted(COLUMNS))
                 .param("rank", item.rank())
                 .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
                 .param("updatedByUserId", item.updatedByUserId())
@@ -227,10 +292,11 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     private Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId,
-            UUID workItemId, boolean lock) {
+            UUID workItemId, boolean lock, boolean includeDeleted) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item WHERE company_id=:companyId "
                         + "AND project_id=:projectId AND content_id=:contentId AND id=:workItemId "
-                        + "AND deleted_at IS NULL" + (lock ? " FOR UPDATE" : ""))
+                        + (includeDeleted ? "" : "AND deleted_at IS NULL ")
+                        + (lock ? "FOR UPDATE" : ""))
                 .param("companyId", companyId).param("projectId", projectId)
                 .param("contentId", contentId).param("workItemId", workItemId)
                 .query(JdbcWorkItemRepository::map).optional();

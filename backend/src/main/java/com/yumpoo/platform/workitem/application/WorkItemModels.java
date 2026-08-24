@@ -23,12 +23,14 @@ public final class WorkItemModels {
             String reporterDisplayName, String description, String notes,
             LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
             long rowVersion, String etag, WorkItemCapabilities capabilities,
-            Instant createdAt, Instant updatedAt) {}
+            Instant createdAt, Instant updatedAt, boolean deleted, Instant deletedAt,
+            UUID deletedByUserId, String deleteReason) {}
 
     public record WorkItemTransitionOption(String toStatus, String displayName,
             String statusCategory, boolean requiresResolution) {}
 
     public record WorkItemCapabilities(boolean canEditFields, boolean canMoveInKanban,
+            boolean canDelete, boolean canRestore,
             List<WorkItemTransitionOption> availableTransitions) {
         public WorkItemCapabilities { availableTransitions = List.copyOf(availableTransitions); }
     }
