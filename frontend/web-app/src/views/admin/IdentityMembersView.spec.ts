@@ -56,7 +56,7 @@ function versionConflict(): ResponseError {
 describe('成员版本冲突', () => {
   beforeEach(() => {
     useSession().authentication.value = {
-      user: { id: 'user', displayName: '管理员' },
+      user: { id: 'user', displayName: '管理员', workspaceSlug: 'admin-user' },
       company: { id: 'company', displayName: '测试公司', timezone: 'Asia/Shanghai', weekStartDay: 'MONDAY' },
       roles: new Set([AuthenticationRole.CompanyAdmin]),
       client: { type: AuthenticationClientType.Web, compatibility: ClientCompatibility.Supported },

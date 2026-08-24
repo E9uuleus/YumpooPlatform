@@ -116,91 +116,59 @@ class WorkspaceHttpIT {
     }
 
     @Test
-    void authenticationCsrfAndRoleBoundaryProtectWorkspaceMutations() throws Exception {
+    void authenticationAndRetiredRoutesProtectMainWorkspace() throws Exception {
         assertThat(get("/api/v1/workspaces", null).statusCode()).isEqualTo(401);
-        assertThat(get("/api/v1/workspaces", member).statusCode()).isEqualTo(200);
+        HttpResponse<String> listed = get("/api/v1/workspaces", member);
+        assertThat(listed.statusCode()).isEqualTo(200);
+        assertThat(listed.body()).contains("\"code\":\"MAIN\"", "\"status\":\"ACTIVE\"");
 
-        HttpResponse<String> noCsrf = mutate(
+        HttpResponse<String> rejectedCreation = mutate(
                 "POST", "/api/v1/workspaces", admin,
-                createBody("CSRF_PROBE", "CSRF Probe"), null, UUID.randomUUID(), false);
-        assertThat(noCsrf.statusCode()).isEqualTo(403);
-
-        HttpResponse<String> memberWrite = mutate(
-                "POST", "/api/v1/workspaces", member,
-                createBody("MEMBER_DENIED", "Member denied"), null, UUID.randomUUID(), true);
-        assertThat(memberWrite.statusCode()).isEqualTo(403);
-        assertThat(memberWrite.body()).contains("ACCESS_DENIED");
+                "{\"code\":\"SECONDARY\",\"name\":\"其他空间\",\"description\":null,\"sortOrder\":1}",
+                null, UUID.randomUUID(), true);
+        assertThat(rejectedCreation.statusCode()).isEqualTo(409);
+        assertThat(rejectedCreation.body()).contains("INVALID_STATE_TRANSITION");
     }
 
     @Test
-    void administratorLifecycleUsesStrongEtagIdempotencyAndHiddenArchivedReads() throws Exception {
-        UUID createKey = UUID.randomUUID();
-        String body = createBody("DELIVERY", "交付空间");
-        HttpResponse<String> created = mutate(
-                "POST", "/api/v1/workspaces", admin, body, null, createKey, true);
-        assertThat(created.statusCode()).as("body=%s", created.body()).isEqualTo(201);
-        assertThat(created.headers().firstValue("etag")).contains("\"0\"");
-        String location = created.headers().firstValue("location").orElseThrow();
-
-        HttpResponse<String> replay = mutate(
-                "POST", "/api/v1/workspaces", admin, body, null, createKey, true);
-        assertThat(replay.statusCode()).isEqualTo(201);
-        assertThat(objectMapper.readTree(replay.body())).isEqualTo(objectMapper.readTree(created.body()));
-        assertThat(jdbcClient.sql("""
-                        SELECT count(*) FROM yumpoo.outbox_event
-                         WHERE event_type = 'catalog.workspace_created'
-                        """).query(Integer.class).single()).isOne();
-
-        HttpResponse<String> reused = mutate(
-                "POST", "/api/v1/workspaces", admin,
-                createBody("DIFFERENT", "不同请求"), null, createKey, true);
-        assertThat(reused.statusCode()).isEqualTo(409);
-        assertThat(reused.body()).contains("IDEMPOTENCY_KEY_REUSED");
-
+    void administratorPatchesOnlyNameAndDescriptionWithStrongEtag() throws Exception {
+        var main = objectMapper.readTree(get("/api/v1/workspaces", member).body()).path("items").get(0);
+        String location = "/api/v1/workspaces/" + main.path("id").asText();
         assertThat(get(location, member).statusCode()).isEqualTo(200);
         HttpResponse<String> missingIfMatch = mutate(
-                "PATCH", location, admin, updateBody("交付空间", null, 10),
+                "PATCH", location, admin, updateBody("研发主空间", null),
                 null, null, true);
         assertThat(missingIfMatch.statusCode()).isEqualTo(428);
 
+        HttpResponse<String> memberWrite = mutate(
+                "PATCH", location, member, updateBody("无权限", null),
+                "\"0\"", null, true);
+        assertThat(memberWrite.statusCode()).isEqualTo(403);
+
         HttpResponse<String> updated = mutate(
-                "PATCH", location, admin, updateBody("交付 Workspace", null, 20),
+                "PATCH", location, admin, updateBody("研发主空间", "统一项目归属"),
                 "\"0\"", null, true);
         assertThat(updated.statusCode()).as("body=%s", updated.body()).isEqualTo(200);
         assertThat(updated.headers().firstValue("etag")).contains("\"1\"");
+        assertThat(updated.body()).contains("\"code\":\"MAIN\"", "\"sortOrder\":0", "\"status\":\"ACTIVE\"");
 
         HttpResponse<String> stale = mutate(
-                "PATCH", location, admin, updateBody("旧版本", null, 20),
+                "PATCH", location, admin, updateBody("旧版本", null),
                 "\"0\"", null, true);
         assertThat(stale.statusCode()).isEqualTo(412);
         assertThat(stale.body()).contains("VERSION_CONFLICT");
 
-        HttpResponse<String> archived = mutate(
-                "POST", location + "/archive", admin, "", "\"1\"", UUID.randomUUID(), true);
-        assertThat(archived.statusCode()).as("body=%s", archived.body()).isEqualTo(200);
-        assertThat(archived.headers().firstValue("etag")).contains("\"2\"");
-        assertThat(get(location, member).statusCode()).isEqualTo(404);
-        assertThat(get("/api/v1/workspaces?status=ARCHIVED", member).statusCode()).isEqualTo(403);
-        assertThat(get("/api/v1/workspaces?status=ARCHIVED", admin).body()).contains("DELIVERY");
+        HttpResponse<String> rejectedArchive = mutate(
+                "POST", location + "/archive", admin, "", "\"1\"",
+                UUID.randomUUID(), true);
+        assertThat(rejectedArchive.statusCode()).isEqualTo(409);
+        assertThat(rejectedArchive.body()).contains("INVALID_STATE_TRANSITION");
 
-        HttpResponse<String> invalidArchive = mutate(
-                "POST", location + "/archive", admin, "", "\"2\"", UUID.randomUUID(), true);
-        assertThat(invalidArchive.statusCode()).isEqualTo(409);
-        assertThat(invalidArchive.body()).contains("INVALID_STATE_TRANSITION");
-    }
-
-    @Test
-    void duplicateCodeReturnsStableFieldValidation() throws Exception {
-        assertThat(mutate(
-                "POST", "/api/v1/workspaces", admin,
-                createBody("DUPLICATE", "第一个"), null, UUID.randomUUID(), true).statusCode())
-                .isEqualTo(201);
-
-        HttpResponse<String> duplicate = mutate(
-                "POST", "/api/v1/workspaces", admin,
-                createBody("DUPLICATE", "第二个"), null, UUID.randomUUID(), true);
-        assertThat(duplicate.statusCode()).isEqualTo(422);
-        assertThat(duplicate.body()).contains("VALIDATION_FAILED", "ALREADY_EXISTS", "code");
+        HttpResponse<String> rejectedRestore = mutate(
+                "POST", location + "/restore", admin, "", "\"1\"",
+                UUID.randomUUID(), true);
+        assertThat(rejectedRestore.statusCode()).isEqualTo(409);
+        assertThat(rejectedRestore.body()).contains("INVALID_STATE_TRANSITION");
     }
 
     private ActorFixture actor(UUID userId) {
@@ -253,15 +221,9 @@ class WorkspaceHttpIT {
         return URI.create("http://127.0.0.1:" + port + path);
     }
 
-    private static String createBody(String code, String name) {
-        return "{\"code\":\"" + code + "\",\"name\":\"" + name
-                + "\",\"description\":null,\"sortOrder\":10}";
-    }
-
-    private static String updateBody(String name, String description, int sortOrder) {
+    private static String updateBody(String name, String description) {
         String encodedDescription = description == null ? "null" : "\"" + description + "\"";
-        return "{\"name\":\"" + name + "\",\"description\":" + encodedDescription
-                + ",\"sortOrder\":" + sortOrder + "}";
+        return "{\"name\":\"" + name + "\",\"description\":" + encodedDescription + "}";
     }
 
     private static String cookies(ActorFixture actor) {
@@ -272,8 +234,13 @@ class WorkspaceHttpIT {
     }
 
     private void cleanUp() {
-        jdbcClient.sql("DELETE FROM yumpoo.workspace WHERE company_id = :companyId")
-                .param("companyId", COMPANY_ID).update();
+        jdbcClient.sql("""
+                UPDATE yumpoo.workspace
+                   SET name='主工作空间', description=NULL, row_version=0,
+                       created_by_user_id=NULL, updated_by_user_id=NULL,
+                       updated_at=created_at
+                 WHERE company_id=:companyId
+                """).param("companyId", COMPANY_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.outbox_consumer_receipt").update();
         jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
                 .param("companyId", COMPANY_ID).update();

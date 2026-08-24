@@ -4,7 +4,6 @@ import java.util.UUID;
 
 public record ProjectCreationMutation(
         UUID companyId,
-        UUID workspaceId,
         String code,
         String name,
         String description,

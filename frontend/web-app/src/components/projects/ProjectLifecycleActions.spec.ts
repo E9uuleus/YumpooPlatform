@@ -12,9 +12,8 @@ import ProjectLifecycleActions from './ProjectLifecycleActions.vue'
 vi.mock('../../api/client', () => ({
   administrationApi: { createGovernanceOverride: vi.fn() },
   projectsApi: {
-    archiveProject: vi.fn(), restoreProject: vi.fn(), moveProjectWorkspace: vi.fn(),
+    archiveProject: vi.fn(), restoreProject: vi.fn(),
   },
-  workspacesApi: { listWorkspaces: vi.fn() },
 }))
 vi.mock('@yumpoo/api-client', async (importOriginal) => ({
   ...await importOriginal<typeof import('@yumpoo/api-client')>(),
@@ -31,19 +30,19 @@ const activeProject: ProjectDetail = {
   capabilities: {
     canUpdateSettings: true, canActivate: false, canManageMembers: true,
     canReassignOwner: false, canManageProductLinks: true, canArchive: true,
-    canRestore: false, canMoveWorkspace: true, canOverrideArchive: true,
+    canRestore: false, canMoveWorkspace: false, canOverrideArchive: true,
   },
   rowVersion: 3, etag: '"3"', createdAt: new Date(), updatedAt: new Date(),
   activatedAt: new Date(), archivedAt: null,
 }
 
 describe('ProjectLifecycleActions', () => {
-  it('按服务端能力显示普通归档、覆盖归档与迁移入口', () => {
+  it('按服务端能力显示普通归档与覆盖归档入口', () => {
     const wrapper = mount(ProjectLifecycleActions, { props: { project: activeProject } })
 
     expect(wrapper.text()).toContain('归档 Project')
     expect(wrapper.text()).toContain('治理覆盖归档')
-    expect(wrapper.text()).toContain('迁移 Workspace')
+    expect(wrapper.text()).not.toContain('迁移 Workspace')
     expect(wrapper.text()).not.toContain('恢复 Project')
   })
 

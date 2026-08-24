@@ -77,7 +77,9 @@ export interface UpdateWorkspaceRequest {
 export class WorkspacesApi extends runtime.BaseAPI {
 
     /**
-     * 归档 ACTIVE Workspace
+     * MAIN 必须保持 ACTIVE；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+     * 已弃用的 Workspace 归档兼容入口
+     * @deprecated
      */
     async archiveWorkspaceRaw(requestParameters: ArchiveWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Workspace>> {
         if (requestParameters['workspaceId'] == null) {
@@ -139,7 +141,9 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 归档 ACTIVE Workspace
+     * MAIN 必须保持 ACTIVE；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+     * 已弃用的 Workspace 归档兼容入口
+     * @deprecated
      */
     async archiveWorkspace(requestParameters: ArchiveWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Workspace> {
         const response = await this.archiveWorkspaceRaw(requestParameters, initOverrides);
@@ -147,7 +151,9 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 创建 Workspace
+     * MAIN 单例启用后不再创建 Workspace；合法旧请求固定返回 409 INVALID_STATE_TRANSITION。
+     * 已弃用的 Workspace 创建兼容入口
+     * @deprecated
      */
     async createWorkspaceRaw(requestParameters: CreateWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Workspace>> {
         if (requestParameters['xXSRFTOKEN'] == null) {
@@ -200,7 +206,9 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 创建 Workspace
+     * MAIN 单例启用后不再创建 Workspace；合法旧请求固定返回 409 INVALID_STATE_TRANSITION。
+     * 已弃用的 Workspace 创建兼容入口
+     * @deprecated
      */
     async createWorkspace(requestParameters: CreateWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Workspace> {
         const response = await this.createWorkspaceRaw(requestParameters, initOverrides);
@@ -245,8 +253,8 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 默认只返回 ACTIVE；ARCHIVED/ALL 筛选仅 COMPANY_ADMIN 可用。
-     * 查询当前公司的 Workspace 导航目录
+     * 每个 Company 永远只返回一个 code=MAIN、status=ACTIVE 的内部工作空间；保留 status 仅用于 v1 客户端兼容。
+     * 查询当前公司的 MAIN 主工作空间
      */
     async listWorkspacesRaw(requestParameters: ListWorkspacesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkspaceList>> {
         const queryParameters: any = {};
@@ -271,8 +279,8 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 默认只返回 ACTIVE；ARCHIVED/ALL 筛选仅 COMPANY_ADMIN 可用。
-     * 查询当前公司的 Workspace 导航目录
+     * 每个 Company 永远只返回一个 code=MAIN、status=ACTIVE 的内部工作空间；保留 status 仅用于 v1 客户端兼容。
+     * 查询当前公司的 MAIN 主工作空间
      */
     async listWorkspaces(requestParameters: ListWorkspacesRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkspaceList> {
         const response = await this.listWorkspacesRaw(requestParameters, initOverrides);
@@ -280,7 +288,9 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 恢复 ARCHIVED Workspace
+     * MAIN 已固定为 ACTIVE；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+     * 已弃用的 Workspace 恢复兼容入口
+     * @deprecated
      */
     async restoreWorkspaceRaw(requestParameters: RestoreWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Workspace>> {
         if (requestParameters['workspaceId'] == null) {
@@ -342,7 +352,9 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 恢复 ARCHIVED Workspace
+     * MAIN 已固定为 ACTIVE；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+     * 已弃用的 Workspace 恢复兼容入口
+     * @deprecated
      */
     async restoreWorkspace(requestParameters: RestoreWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Workspace> {
         const response = await this.restoreWorkspaceRaw(requestParameters, initOverrides);
@@ -350,7 +362,7 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 替换 Workspace 的完整可变字段快照
+     * 修改 MAIN 主工作空间的名称与描述
      */
     async updateWorkspaceRaw(requestParameters: UpdateWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Workspace>> {
         if (requestParameters['workspaceId'] == null) {
@@ -411,7 +423,7 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 替换 Workspace 的完整可变字段快照
+     * 修改 MAIN 主工作空间的名称与描述
      */
     async updateWorkspace(requestParameters: UpdateWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Workspace> {
         const response = await this.updateWorkspaceRaw(requestParameters, initOverrides);

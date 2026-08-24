@@ -61,9 +61,10 @@ export interface ProjectCapabilities {
      */
     readonly canRestore: boolean;
     /**
-     *
+     * v1 兼容字段；MAIN 单例启用后永远为 false。
      * @type {boolean}
      * @memberof ProjectCapabilities
+     * @deprecated
      */
     readonly canMoveWorkspace: boolean;
     /**

@@ -34,7 +34,7 @@ class ProjectMembershipGovernanceIT {
     private static final UUID MEMBER=UUID.fromString("25000000-0000-4000-8000-000000000103");
     private static final UUID NEXT_OWNER=UUID.fromString("25000000-0000-4000-8000-000000000104");
     private static final UUID LEFT=UUID.fromString("25000000-0000-4000-8000-000000000105");
-    private static final UUID WORKSPACE=UUID.fromString("25000000-0000-4000-8000-000000000106");
+    private static final UUID WORKSPACE=UUID.fromString("a460aa25-7180-490b-ab14-f9ec09049024");
 
     @Autowired ProjectCreationOrchestrator creation;
     @Autowired ProjectMembershipGovernanceService governance;
@@ -52,15 +52,9 @@ class ProjectMembershipGovernanceIT {
         insertUser(MEMBER,"M2-05 Member","ACTIVE","ENABLED");
         insertUser(NEXT_OWNER,"M2-05 Next Owner","ACTIVE","ENABLED");
         insertUser(LEFT,"M2-05 Left","LEFT","ENABLED");
-        jdbc.sql("""
-                INSERT INTO yumpoo.workspace(id,company_id,code,name,sort_order,status,row_version,
-                    created_at,created_by_user_id,updated_at,updated_by_user_id)
-                VALUES(:id,:company,'M2_05','M2-05 Workspace',10,'ACTIVE',0,
-                    transaction_timestamp(),:admin,transaction_timestamp(),:admin)
-                """).param("id",WORKSPACE).param("company",COMPANY).param("admin",ADMIN).update();
         try(RequestCorrelationContext.Scope ignored=RequestCorrelationContext.open(
                 RequestCorrelation.root("m205-create"))) {
-            projectId=creation.create(new ProjectCreationCommand(admin(),WORKSPACE,"M2_05_PROJECT",
+            projectId=creation.create(new ProjectCreationCommand(admin(),"M2_05_PROJECT",
                     "M2-05 Project",null,"PRODUCT_DEVELOPMENT",OWNER,"RND",1,null,null,null,null,
                     UUID.randomUUID(),new RequestHash("a".repeat(64)),"WEB","test"))
                     .result().resourceId();
@@ -265,7 +259,6 @@ class ProjectMembershipGovernanceIT {
         new TransactionTemplate(transactionManager).executeWithoutResult(status->{
             jdbc.sql("DELETE FROM yumpoo.project_membership WHERE company_id=:company").param("company",COMPANY).update();
             jdbc.sql("DELETE FROM yumpoo.project WHERE company_id=:company").param("company",COMPANY).update();});
-        jdbc.sql("DELETE FROM yumpoo.workspace WHERE id=:id").param("id",WORKSPACE).update();
         jdbc.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id=:company").param("company",COMPANY).update();
         jdbc.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id IN (:ids)")
                 .param("ids",java.util.List.of(ADMIN,OWNER)).update();

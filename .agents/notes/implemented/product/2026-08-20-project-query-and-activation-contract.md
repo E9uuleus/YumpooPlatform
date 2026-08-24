@@ -8,7 +8,9 @@ Project 列表、Workspace 计数、管理员治理可见性、Owner 日常命�
 
 ## Decision
 
-Project 范围查询在数据库同时约束 company 与调用人的 ACTIVE membership，COMPANY_ADMIN 才可绕过 membership。页面行和总数复用完全相同的筛选谓词，默认生命周期是 DRAFT+ACTIVE，并按 name、code、id 稳定排序。Workspace `visibleProjectCount` 使用同一可见性和生命周期口径一次分组统计，不保存派生计数。
+Project 范围查询在数据库同时约束 company 与调用人的 ACTIVE membership，COMPANY_ADMIN 才可绕过 membership。页面行和总数复用完全相同的权限与筛选谓词，支持名称/编码大小写不敏感包含搜索、项目类型/负责人/调用人角色多选、最后修改时间起点、生命周期与 Product；组内 OR、组间 AND。默认生命周期仍是 DRAFT+ACTIVE，项目管理页显式请求 ALL，并按 name、code、id 稳定排序。Workspace `visibleProjectCount` 使用同一可见性和当前生命周期口径，不保存派生计数。
+
+负责人筛选选项只从调用人可见的全部生命周期 Project 中提取 distinct owner，再通过 Identity & Access 最小用户快照补充显示名。仍挂在 Project 上的离职或停用负责人保持可筛选；接口不返回其他目录资料，也不泄露不可见 Project 的负责人。摘要响应包含必填 `createdAt/updatedAt`，Workspace ID/code/name 只作为内部 MAIN 归属兼容信息。
 
 详情返回 actorAccess 和四个能力布尔值。能力只供 UI 优化；每个命令重新鉴权。Owner 可 PATCH 设置并激活，管理员非成员只能读取、治理成员和重指派负责人，不能代替 Owner 修改设置或激活；Owner 同时是管理员时走 Owner 日常路径。
 

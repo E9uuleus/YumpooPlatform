@@ -12,20 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
-import type { GovernanceTargetType } from './GovernanceTargetType';
+import type { GovernanceOverrideCreateAction } from './GovernanceOverrideCreateAction';
 import {
-    GovernanceTargetTypeFromJSON,
-    GovernanceTargetTypeFromJSONTyped,
-    GovernanceTargetTypeToJSON,
-    GovernanceTargetTypeToJSONTyped,
-} from './GovernanceTargetType';
-import type { GovernanceOverrideAction } from './GovernanceOverrideAction';
-import {
-    GovernanceOverrideActionFromJSON,
-    GovernanceOverrideActionFromJSONTyped,
-    GovernanceOverrideActionToJSON,
-    GovernanceOverrideActionToJSONTyped,
-} from './GovernanceOverrideAction';
+    GovernanceOverrideCreateActionFromJSON,
+    GovernanceOverrideCreateActionFromJSONTyped,
+    GovernanceOverrideCreateActionToJSON,
+    GovernanceOverrideCreateActionToJSONTyped,
+} from './GovernanceOverrideCreateAction';
 
 /**
  *
@@ -35,16 +28,16 @@ import {
 export interface GovernanceOverrideRequest {
     /**
      *
-     * @type {GovernanceOverrideAction}
+     * @type {GovernanceOverrideCreateAction}
      * @memberof GovernanceOverrideRequest
      */
-    action: GovernanceOverrideAction;
+    action: GovernanceOverrideCreateAction;
     /**
      *
-     * @type {GovernanceTargetType}
+     * @type {string}
      * @memberof GovernanceOverrideRequest
      */
-    targetType: GovernanceTargetType;
+    targetType: GovernanceOverrideRequestTargetTypeEnum;
     /**
      * 不透明 UUID；客户端不得从值中推导业务语义。
      * @type {string}
@@ -59,6 +52,15 @@ export interface GovernanceOverrideRequest {
     reason: string;
 }
 
+/**
+* @export
+* @enum {string}
+*/
+export enum GovernanceOverrideRequestTargetTypeEnum {
+    Project = 'PROJECT',
+    Workspace = 'WORKSPACE',
+    UnknownDefaultOpenApi = '11184809'
+}
 
 
 /**
@@ -82,8 +84,8 @@ export function GovernanceOverrideRequestFromJSONTyped(json: any, ignoreDiscrimi
     }
     return {
 
-        'action': GovernanceOverrideActionFromJSON(json['action']),
-        'targetType': GovernanceTargetTypeFromJSON(json['targetType']),
+        'action': GovernanceOverrideCreateActionFromJSON(json['action']),
+        'targetType': json['targetType'],
         'targetId': json['targetId'],
         'reason': json['reason'],
     };
@@ -100,8 +102,8 @@ export function GovernanceOverrideRequestToJSONTyped(value?: GovernanceOverrideR
 
     return {
 
-        'action': GovernanceOverrideActionToJSON(value['action']),
-        'targetType': GovernanceTargetTypeToJSON(value['targetType']),
+        'action': GovernanceOverrideCreateActionToJSON(value['action']),
+        'targetType': value['targetType'],
         'targetId': value['targetId'],
         'reason': value['reason'],
     };

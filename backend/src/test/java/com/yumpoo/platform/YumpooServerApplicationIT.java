@@ -293,7 +293,7 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
@@ -440,6 +440,8 @@ class YumpooServerApplicationIT {
                 "ck_identity_user_left_facts",
                 "ck_identity_user_disabled_facts",
                 "ck_identity_user_authorization_version",
+                "uq_identity_user_company_workspace_slug",
+                "ck_identity_user_workspace_slug",
                 "ck_identity_user_row_version",
                 "ck_identity_user_timestamps",
                 "external_identity_pkey",
@@ -456,6 +458,7 @@ class YumpooServerApplicationIT {
         assertThat(identityIndexNames).containsExactlyInAnyOrder(
                 "identity_user_pkey",
                 "uq_identity_user_id_company",
+                "uq_identity_user_company_workspace_slug",
                 "idx_identity_user_company_status_created",
                 "external_identity_pkey",
                 "uq_external_identity_provider_member",
@@ -529,7 +532,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v29DatabaseUpgradesThroughV31WithQueryAndKanbanIndexes() throws Exception {
+    void v29DatabaseUpgradesThroughV33WithQueryKanbanMainWorkspaceAndPersonalSlug() throws Exception {
         String database = "yumpoo_m213_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -546,8 +549,8 @@ class YumpooServerApplicationIT {
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
             MigrateResult upgraded = latest.migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(2);
-            assertThat(upgraded.targetSchemaVersion).hasToString("31");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(4);
+            assertThat(upgraded.targetSchemaVersion).hasToString("33");
             assertThat(workItemIndexes(jdbcUrl)).contains(
                     "idx_work_item_content_page",
                     "idx_work_item_content_status_page",
@@ -555,11 +558,29 @@ class YumpooServerApplicationIT {
                     "idx_work_item_content_assignee",
                     "idx_work_item_content_due_date",
                     "idx_work_item_content_status_rank_page");
+            assertThat(workspaceFacts(jdbcUrl)).containsExactly("MAIN|0|ACTIVE|1");
         } finally {
             Container.ExecResult dropped = postgresContainer.execInContainer(
                     "dropdb", "--force", "-U", postgresContainer.getUsername(), database);
             assertThat(dropped.getExitCode()).as(dropped.getStderr()).isZero();
         }
+    }
+
+    @Test
+    void v32ChoosesMainThenActiveThenArchivedAndPreservesProjectFacts() throws Exception {
+        verifyWorkspaceConsolidation("main", """
+                ('41000000-0000-4000-8000-000000000001', 'ARCHIVE_FIRST', 0, 'ARCHIVED'),
+                ('41000000-0000-4000-8000-000000000002', 'ACTIVE_FIRST', 20, 'ACTIVE'),
+                ('41000000-0000-4000-8000-000000000003', 'MAIN', 50, 'ARCHIVED')
+                """, "41000000-0000-4000-8000-000000000003", true);
+        verifyWorkspaceConsolidation("active", """
+                ('42000000-0000-4000-8000-000000000001', 'ARCHIVE_FIRST', 0, 'ARCHIVED'),
+                ('42000000-0000-4000-8000-000000000002', 'ACTIVE_FIRST', 20, 'ACTIVE')
+                """, "42000000-0000-4000-8000-000000000002", false);
+        verifyWorkspaceConsolidation("archived", """
+                ('43000000-0000-4000-8000-000000000001', 'ARCHIVE_FIRST', 0, 'ARCHIVED'),
+                ('43000000-0000-4000-8000-000000000002', 'ARCHIVE_SECOND', 10, 'ARCHIVED')
+                """, "43000000-0000-4000-8000-000000000001", false);
     }
 
     @Test
@@ -621,6 +642,116 @@ class YumpooServerApplicationIT {
         return configuration.load();
     }
 
+    private void verifyWorkspaceConsolidation(String label, String workspaceValues,
+            String expectedWorkspaceId, boolean includeProjects) throws Exception {
+        String database = "yumpoo_main_" + label + "_" + UUID.randomUUID().toString().replace("-", "");
+        Container.ExecResult created = postgresContainer.execInContainer(
+                "createdb", "-U", postgresContainer.getUsername(), database);
+        assertThat(created.getExitCode()).as(created.getStderr()).isZero();
+        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
+                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        try {
+            assertThat(migrationFlyway(jdbcUrl, "31").migrate().targetSchemaVersion).hasToString("31");
+            try (Connection connection = DriverManager.getConnection(jdbcUrl,
+                    postgresContainer.getUsername(), postgresContainer.getPassword());
+                 Statement statement = connection.createStatement()) {
+                connection.setAutoCommit(false);
+                statement.execute("""
+                        INSERT INTO yumpoo.identity_user (
+                            id, company_id, employment_status, account_status, display_name,
+                            directory_synced_at, authorization_version, row_version, created_at, updated_at
+                        ) VALUES ('40000000-0000-4000-8000-000000000001',
+                            '00000000-0000-4000-8000-000000000001', 'ACTIVE', 'ENABLED',
+                            'V32 Migration Owner', transaction_timestamp(), 0, 0,
+                            transaction_timestamp(), transaction_timestamp());
+                        """);
+                statement.execute("""
+                        INSERT INTO yumpoo.workspace (
+                            id, company_id, code, name, sort_order, status, row_version,
+                            created_at, created_by_user_id, updated_at, updated_by_user_id)
+                        SELECT fixture.id::uuid, '00000000-0000-4000-8000-000000000001'::uuid,
+                               fixture.code, fixture.code, fixture.sort_order, fixture.status, 4,
+                               transaction_timestamp(), '40000000-0000-4000-8000-000000000001'::uuid,
+                               transaction_timestamp(), '40000000-0000-4000-8000-000000000001'::uuid
+                        FROM (VALUES
+                        """ + workspaceValues + """
+                        ) fixture(id, code, sort_order, status);
+                        """);
+                if (includeProjects) {
+                    statement.execute("""
+                            INSERT INTO yumpoo.project (
+                                id, company_id, workspace_id, project_code, name, project_type,
+                                lifecycle, owner_user_id, template_key, template_version, row_version,
+                                created_at, created_by_user_id, updated_at, updated_by_user_id,
+                                activated_at, archived_at)
+                            VALUES
+                            ('44000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001',
+                             '41000000-0000-4000-8000-000000000001', 'MIGRATE_DRAFT', 'Migrate Draft',
+                             'PRODUCT_DEVELOPMENT', 'DRAFT', '40000000-0000-4000-8000-000000000001',
+                             'RND', 1, 7, transaction_timestamp(), '40000000-0000-4000-8000-000000000001',
+                             transaction_timestamp(), '40000000-0000-4000-8000-000000000001', NULL, NULL),
+                            ('44000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001',
+                             '41000000-0000-4000-8000-000000000002', 'MIGRATE_ACTIVE', 'Migrate Active',
+                             'PRODUCT_DEVELOPMENT', 'ACTIVE', '40000000-0000-4000-8000-000000000001',
+                             'RND', 1, 8, transaction_timestamp(), '40000000-0000-4000-8000-000000000001',
+                             transaction_timestamp(), '40000000-0000-4000-8000-000000000001',
+                             transaction_timestamp(), NULL),
+                            ('44000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000001',
+                             '41000000-0000-4000-8000-000000000003', 'MIGRATE_ARCHIVED', 'Migrate Archived',
+                             'PRODUCT_DEVELOPMENT', 'ARCHIVED', '40000000-0000-4000-8000-000000000001',
+                             'RND', 1, 9, transaction_timestamp(), '40000000-0000-4000-8000-000000000001',
+                             transaction_timestamp(), '40000000-0000-4000-8000-000000000001',
+                             transaction_timestamp(), transaction_timestamp());
+                            INSERT INTO yumpoo.project_membership (
+                                id, company_id, project_id, user_id, status, joined_at,
+                                joined_by_user_id, row_version)
+                            SELECT gen_random_uuid(), company_id, id,
+                                   '40000000-0000-4000-8000-000000000001', 'ACTIVE',
+                                   transaction_timestamp(), '40000000-0000-4000-8000-000000000001', 0
+                            FROM yumpoo.project;
+                            """);
+                }
+                connection.commit();
+            }
+            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("33");
+            try (Connection connection = DriverManager.getConnection(jdbcUrl,
+                    postgresContainer.getUsername(), postgresContainer.getPassword());
+                 Statement statement = connection.createStatement()) {
+                try (ResultSet workspace = statement.executeQuery("""
+                        SELECT id, code, sort_order, status, row_version FROM yumpoo.workspace
+                        """)) {
+                    assertThat(workspace.next()).isTrue();
+                    assertThat(workspace.getObject("id", UUID.class)).hasToString(expectedWorkspaceId);
+                    assertThat(workspace.getString("code")).isEqualTo("MAIN");
+                    assertThat(workspace.getInt("sort_order")).isZero();
+                    assertThat(workspace.getString("status")).isEqualTo("ACTIVE");
+                    assertThat(workspace.getLong("row_version")).isEqualTo(4);
+                    assertThat(workspace.next()).isFalse();
+                }
+                if (includeProjects) {
+                    try (ResultSet projects = statement.executeQuery("""
+                            SELECT count(*) AS total, count(DISTINCT workspace_id) AS workspace_count,
+                                   min(workspace_id::text) AS workspace_id,
+                                   string_agg(project_code || ':' || lifecycle || ':' || row_version,
+                                              ',' ORDER BY project_code) AS facts
+                            FROM yumpoo.project
+                            """)) {
+                        assertThat(projects.next()).isTrue();
+                        assertThat(projects.getInt("total")).isEqualTo(3);
+                        assertThat(projects.getInt("workspace_count")).isOne();
+                        assertThat(projects.getString("workspace_id")).isEqualTo(expectedWorkspaceId);
+                        assertThat(projects.getString("facts")).isEqualTo(
+                                "MIGRATE_ACTIVE:ACTIVE:8,MIGRATE_ARCHIVED:ARCHIVED:9,MIGRATE_DRAFT:DRAFT:7");
+                    }
+                }
+            }
+        } finally {
+            Container.ExecResult dropped = postgresContainer.execInContainer(
+                    "dropdb", "--force", "-U", postgresContainer.getUsername(), database);
+            assertThat(dropped.getExitCode()).as(dropped.getStderr()).isZero();
+        }
+    }
+
     private List<String> workItemIndexes(String jdbcUrl) throws Exception {
         try (Connection connection = DriverManager.getConnection(jdbcUrl,
                 postgresContainer.getUsername(), postgresContainer.getPassword());
@@ -630,6 +761,20 @@ class YumpooServerApplicationIT {
             List<String> indexes = new java.util.ArrayList<>();
             while (result.next()) indexes.add(result.getString(1));
             return List.copyOf(indexes);
+        }
+    }
+
+    private List<String> workspaceFacts(String jdbcUrl) throws Exception {
+        try (Connection connection = DriverManager.getConnection(jdbcUrl,
+                postgresContainer.getUsername(), postgresContainer.getPassword());
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT code || '|' || sort_order || '|' || status || '|' || count(*) OVER ()
+                     FROM yumpoo.workspace ORDER BY company_id
+                     """)) {
+            List<String> facts = new java.util.ArrayList<>();
+            while (result.next()) facts.add(result.getString(1));
+            return List.copyOf(facts);
         }
     }
 

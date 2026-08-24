@@ -162,6 +162,23 @@
   box-shadow: var(--yp-shadow-popover);
 }
 
+.el-popper.is-dark {
+  max-width: 240px;
+  padding: var(--yp-space-2) var(--yp-space-3);
+  border: 1px solid var(--yp-text-primary);
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-inverse);
+  background: var(--yp-text-primary);
+  box-shadow: var(--yp-shadow-popover);
+  font-size: var(--yp-type-caption-size);
+  line-height: var(--yp-type-caption-line);
+}
+
+.el-popper.is-dark .el-popper__arrow::before {
+  border-color: var(--yp-text-primary);
+  background: var(--yp-text-primary);
+}
+
 .el-tag {
   border-radius: var(--yp-radius-sm);
 }

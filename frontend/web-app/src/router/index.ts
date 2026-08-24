@@ -10,7 +10,6 @@ import { consumeReturnPath, rememberReturnPath } from '../auth/navigation'
 import AppShell from '../components/AppShell.vue'
 import { useSession } from '../composables/useSession'
 import LoginView from '../views/auth/LoginView.vue'
-import HomeView from '../views/home/HomeView.vue'
 import ForbiddenView from '../views/status/ForbiddenView.vue'
 import NotFoundView from '../views/status/NotFoundView.vue'
 import SessionStatusView from '../views/status/SessionStatusView.vue'
@@ -57,21 +56,27 @@ export const routes: RouteRecordRaw[] = [
     children: [
       {
         path: '',
-        name: 'home',
-        component: HomeView,
+        name: 'workspace-root',
+        component: ProjectsView,
         meta: { shellSection: 'work' },
       },
       {
-        path: 'projects',
-        name: 'projects',
+        path: 'workspace',
+        name: 'workspace-entry',
         component: ProjectsView,
-        meta: { shellSection: 'projects' },
+        meta: { shellSection: 'work' },
+      },
+      {
+        path: 'workspace/:workspaceSlug',
+        name: 'workspace',
+        component: ProjectsView,
+        meta: { shellSection: 'work' },
       },
       {
         path: 'projects/:projectId',
         component: ProjectLayout,
         redirect: route => ({ name: 'project-overview', params: route.params }),
-        meta: { shellSection: 'projects' },
+        meta: { shellSection: 'work' },
         children: [
           { path: 'overview', name: 'project-overview', component: ProjectOverviewView },
           { path: 'contents', name: 'project-contents', component: ProjectContentsView },
@@ -155,7 +160,7 @@ watch(useSession().phase, (next) => {
   }
 })
 
-function sessionDestination(to: RouteLocationNormalized) {
+export function sessionDestination(to: RouteLocationNormalized) {
   const session = useSession()
   if (session.phase.value === 'anonymous') {
     if (to.name === 'login') return true
@@ -180,11 +185,12 @@ function sessionDestination(to: RouteLocationNormalized) {
     && !requiredRoles.some(role => session.authentication.value?.roles.has(role))) {
     return to.name === 'forbidden' ? true : { name: 'forbidden' }
   }
-  if (to.name === 'home') {
-    const returnPath = consumeReturnPath()
-    if (returnPath !== '/') {
-      return returnPath
-    }
+  const workspaceSlug = session.authentication.value.user.workspaceSlug
+  if (to.name === 'workspace-root' || to.name === 'workspace-entry') {
+    return { name: 'workspace', params: { workspaceSlug }, replace: true }
+  }
+  if (to.name === 'workspace' && to.params.workspaceSlug !== workspaceSlug) {
+    return { name: 'workspace', params: { workspaceSlug }, replace: true }
   }
   return true
 }

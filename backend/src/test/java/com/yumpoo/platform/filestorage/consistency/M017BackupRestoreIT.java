@@ -566,26 +566,24 @@ class M017BackupRestoreIT {
 
     private static void createWorkspaceFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
-             PreparedStatement insert = connection.prepareStatement("""
-                     INSERT INTO yumpoo.workspace (
-                         id, company_id, code, name, description, sort_order,
-                         status, row_version, created_at, created_by_user_id,
-                         updated_at, updated_by_user_id
-                     ) VALUES (
-                         '00000000-0000-4000-8000-000000000502',
-                         '00000000-0000-4000-8000-000000000001',
-                         'RESTORE_PROBE', 'M2-02 Restore Workspace',
-                         'Workspace lifecycle backup restore probe', 12,
-                         'ARCHIVED', 3, ?,
-                         '00000000-0000-4000-8000-000000000102', ?,
-                         '00000000-0000-4000-8000-000000000102'
-                     )
+             PreparedStatement update = connection.prepareStatement("""
+                     UPDATE yumpoo.workspace
+                        SET id='00000000-0000-4000-8000-000000000502',
+                            name='M2-02 MAIN Restore Workspace',
+                            description='Singleton MAIN backup restore probe',
+                            row_version=3,
+                            created_at=?,
+                            created_by_user_id='00000000-0000-4000-8000-000000000102',
+                            updated_at=?,
+                            updated_by_user_id='00000000-0000-4000-8000-000000000102'
+                      WHERE company_id='00000000-0000-4000-8000-000000000001'
+                        AND code='MAIN' AND sort_order=0 AND status='ACTIVE'
                      """)) {
             OffsetDateTime observedAt = OffsetDateTime.ofInstant(
                     Instant.parse("2026-08-20T05:00:00Z"), ZoneOffset.UTC);
-            insert.setObject(1, observedAt);
-            insert.setObject(2, observedAt.plusHours(1));
-            assertThat(insert.executeUpdate()).isOne();
+            update.setObject(1, observedAt);
+            update.setObject(2, observedAt.plusHours(1));
+            assertThat(update.executeUpdate()).isOne();
         }
     }
 

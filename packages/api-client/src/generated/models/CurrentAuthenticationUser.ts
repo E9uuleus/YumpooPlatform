@@ -30,6 +30,12 @@ export interface CurrentAuthenticationUser {
      * @memberof CurrentAuthenticationUser
      */
     displayName: string;
+    /**
+     * 当前用户不可变的工作台 URL 片段；不承担身份授权语义。
+     * @type {string}
+     * @memberof CurrentAuthenticationUser
+     */
+    workspaceSlug: string;
 }
 
 /**
@@ -38,6 +44,7 @@ export interface CurrentAuthenticationUser {
 export function instanceOfCurrentAuthenticationUser(value: object): value is CurrentAuthenticationUser {
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('displayName' in value) || value['displayName'] === undefined) return false;
+    if (!('workspaceSlug' in value) || value['workspaceSlug'] === undefined) return false;
     return true;
 }
 
@@ -53,6 +60,7 @@ export function CurrentAuthenticationUserFromJSONTyped(json: any, ignoreDiscrimi
 
         'id': json['id'],
         'displayName': json['displayName'],
+        'workspaceSlug': json['workspaceSlug'],
     };
 }
 
@@ -69,5 +77,6 @@ export function CurrentAuthenticationUserToJSONTyped(value?: CurrentAuthenticati
 
         'id': value['id'],
         'displayName': value['displayName'],
+        'workspaceSlug': value['workspaceSlug'],
     };
 }

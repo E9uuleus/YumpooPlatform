@@ -42,7 +42,7 @@ class ProjectCreationIT {
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final UUID ADMIN_ID = UUID.fromString("24000000-0000-4000-8000-000000000101");
     private static final UUID OWNER_ID = UUID.fromString("24000000-0000-4000-8000-000000000102");
-    private static final UUID WORKSPACE_ID = UUID.fromString("24000000-0000-4000-8000-000000000103");
+    private static final UUID WORKSPACE_ID = UUID.fromString("a460aa25-7180-490b-ab14-f9ec09049024");
 
     @Autowired private ProjectCreationOrchestrator orchestrator;
     @Autowired private ProjectActivationOrchestrator activationOrchestrator;
@@ -57,15 +57,6 @@ class ProjectCreationIT {
         cleanUp();
         insertUser(ADMIN_ID, "M2-04 Admin", "ACTIVE", "ENABLED");
         insertUser(OWNER_ID, "M2-04 Owner", "ACTIVE", "ENABLED");
-        jdbcClient.sql("""
-                        INSERT INTO yumpoo.workspace (
-                            id, company_id, code, name, sort_order, status, row_version,
-                            created_at, created_by_user_id, updated_at, updated_by_user_id
-                        ) VALUES (:id, :companyId, 'M2_04', 'M2-04 Workspace', 10, 'ACTIVE', 0,
-                            transaction_timestamp(), :adminId, transaction_timestamp(), :adminId)
-                        """)
-                .param("id", WORKSPACE_ID).param("companyId", COMPANY_ID)
-                .param("adminId", ADMIN_ID).update();
     }
 
     @AfterEach
@@ -148,6 +139,41 @@ class ProjectCreationIT {
         assertThat(jdbcClient.sql("SELECT payload_json::text FROM yumpoo.outbox_event WHERE event_type='catalog.project_updated' AND aggregate_id=:id")
                 .param("id", first).query(String.class).single())
                 .doesNotContain("private description", "private contact");
+    }
+
+    @Test
+    void projectManagementQueryCombinesSearchFiltersDatesOwnersAndAccessWithoutCountDrift() {
+        UUID alpha = create("FILTER_ALPHA", "PRODUCT_DEVELOPMENT", "RND", null, "a")
+                .result().resourceId();
+        UUID beta = create("FILTER_BETA", "PRE_SALES", "PRE_SALES", "客户", "b")
+                .result().resourceId();
+        java.time.Instant threshold = java.time.Instant.now().minus(java.time.Duration.ofDays(1));
+        jdbcClient.sql("UPDATE yumpoo.project SET created_at=:old, updated_at=:old WHERE id=:id")
+                .param("old", java.time.OffsetDateTime.ofInstant(
+                        threshold.minus(java.time.Duration.ofDays(30)), java.time.ZoneOffset.UTC))
+                .param("id", alpha).update();
+
+        var criteria = new com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria(
+                "filter", List.of(com.yumpoo.platform.catalog.domain.project.ProjectType.PRE_SALES),
+                List.of(OWNER_ID),
+                List.of(com.yumpoo.platform.catalog.application.project.ProjectActorAccess.OWNER),
+                threshold,
+                com.yumpoo.platform.catalog.application.project.ProjectLifecycleFilter.ALL,
+                null);
+        var result = projectService.findAll(owner(), criteria,
+                com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest.of(0, 1));
+
+        assertThat(result.items()).singleElement().satisfies(project -> {
+            assertThat(project.id()).isEqualTo(beta);
+            assertThat(project.createdAt()).isNotNull();
+            assertThat(project.updatedAt()).isAfter(threshold);
+        });
+        assertThat(result.totalElements()).isOne();
+        assertThat(projectService.findOwnerOptions(owner())).singleElement()
+                .satisfies(option -> {
+                    assertThat(option.userId()).isEqualTo(OWNER_ID);
+                    assertThat(option.displayName()).isEqualTo("M2-04 Owner");
+                });
     }
 
     @Test
@@ -330,7 +356,7 @@ class ProjectCreationIT {
         ProjectCreationCommand command = command(code, projectType, templateKey,
                 UUID.randomUUID(), hashSeed.repeat(64));
         if (customerName != null) {
-            command = new ProjectCreationCommand(command.actor(), command.workspaceId(), command.code(),
+            command = new ProjectCreationCommand(command.actor(), command.code(),
                     command.name(), command.description(), command.projectType(), command.ownerUserId(),
                     command.templateKey(), command.templateVersion(), customerName,
                     command.customerReference(), command.deliverySite(), command.contactNote(),
@@ -342,7 +368,7 @@ class ProjectCreationIT {
     private ProjectCreationCommand command(
             String code, String projectType, String templateKey, UUID key, String hash
     ) {
-        return new ProjectCreationCommand(admin(), WORKSPACE_ID, code, "  " + code + "  ",
+        return new ProjectCreationCommand(admin(), code, "  " + code + "  ",
                 "  private description  ", projectType, OWNER_ID, templateKey, 1,
                 null, " ", " ", " private contact ", key, new RequestHash(hash),
                 "WEB", "m2-04-test");
@@ -412,7 +438,6 @@ class ProjectCreationIT {
             jdbcClient.sql("DELETE FROM yumpoo.project_membership WHERE company_id = :companyId").param("companyId", COMPANY_ID).update();
             jdbcClient.sql("DELETE FROM yumpoo.project WHERE company_id = :companyId").param("companyId", COMPANY_ID).update();
         });
-        jdbcClient.sql("DELETE FROM yumpoo.workspace WHERE id = :id").param("id", WORKSPACE_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE target_type = 'PROJECT'").update();
         jdbcClient.sql("DELETE FROM yumpoo.outbox_consumer_receipt WHERE event_id IN (SELECT event_id FROM yumpoo.outbox_event WHERE company_id = :companyId)")
                 .param("companyId", COMPANY_ID).update();

@@ -100,7 +100,7 @@ public class ProjectCreationOrchestrator {
         }
 
         ProjectSnapshot project = projectCommandPort.create(new ProjectCreationMutation(
-                command.actor().companyId(), command.workspaceId(), command.code(), command.name(),
+                command.actor().companyId(), command.code(), command.name(),
                 command.description(), command.projectType(), command.ownerUserId(),
                 command.templateKey(), command.templateVersion(), command.customerName(),
                 command.customerReference(), command.deliverySite(), command.contactNote(),

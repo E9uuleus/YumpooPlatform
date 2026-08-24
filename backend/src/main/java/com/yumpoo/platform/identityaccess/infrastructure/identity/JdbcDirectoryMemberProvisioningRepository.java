@@ -9,6 +9,7 @@ import com.yumpoo.platform.identityaccess.domain.identity.ExternalIdentity;
 import com.yumpoo.platform.identityaccess.domain.identity.ExternalIdentityProvider;
 import com.yumpoo.platform.identityaccess.domain.identity.ProfileHash;
 import com.yumpoo.platform.identityaccess.domain.identity.User;
+import com.yumpoo.platform.identityaccess.domain.identity.WorkspaceSlug;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -113,21 +114,27 @@ public class JdbcDirectoryMemberProvisioningRepository
     ) {
         UUID userId = UUID.randomUUID();
         UUID externalIdentityId = UUID.randomUUID();
+        WorkspaceSlug workspaceSlug = allocateWorkspaceSlug(
+                companyId,
+                profile.externalUserId(),
+                userId
+        );
         OffsetDateTime databaseNow = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
         int insertedUsers = jdbcClient.sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
-                            display_name, email, mobile, department_summary,
+                            display_name, workspace_slug, email, mobile, department_summary,
                             directory_synced_at, row_version, created_at, updated_at
                         ) VALUES (
                             :id, :companyId, 'ACTIVE', 'ENABLED',
-                            :displayName, :email, :mobile, :departmentSummary,
+                            :displayName, :workspaceSlug, :email, :mobile, :departmentSummary,
                             :now, 0, :now, :now
                         )
                         """)
                 .param("id", userId)
                 .param("companyId", companyId)
                 .param("displayName", profile.displayName())
+                .param("workspaceSlug", workspaceSlug.value())
                 .param("email", profile.email().applyTo(null))
                 .param("mobile", profile.mobile().applyTo(null))
                 .param("departmentSummary", profile.departmentSummary())
@@ -321,6 +328,51 @@ public class JdbcDirectoryMemberProvisioningRepository
         return new DirectoryMemberBinding(user, identity);
     }
 
+    private WorkspaceSlug allocateWorkspaceSlug(
+            UUID companyId,
+            String externalUserId,
+            UUID userId
+    ) {
+        acquireWorkspaceSlugAllocationLock(companyId);
+        WorkspaceSlug preferred = WorkspaceSlug.fromExternalUserId(externalUserId, userId);
+        if (!workspaceSlugExists(companyId, preferred)) {
+            return preferred;
+        }
+        WorkspaceSlug disambiguated = preferred.disambiguated(userId);
+        if (!workspaceSlugExists(companyId, disambiguated)) {
+            return disambiguated;
+        }
+        WorkspaceSlug fallback = WorkspaceSlug.fallback(userId);
+        if (!workspaceSlugExists(companyId, fallback)) {
+            return fallback;
+        }
+        throw new IllegalStateException("Unable to allocate a unique workspace slug");
+    }
+
+    private void acquireWorkspaceSlugAllocationLock(UUID companyId) {
+        int[] keys = advisoryLockKeys(companyId + "\0WORKSPACE_SLUG");
+        jdbcClient.sql("SELECT pg_advisory_xact_lock(:namespaceKey, :identityKey)")
+                .param("namespaceKey", keys[0])
+                .param("identityKey", keys[1])
+                .query((resultSet, rowNumber) -> Boolean.TRUE)
+                .single();
+    }
+
+    private boolean workspaceSlugExists(UUID companyId, WorkspaceSlug workspaceSlug) {
+        return jdbcClient.sql("""
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM yumpoo.identity_user
+                            WHERE company_id = :companyId
+                              AND workspace_slug = :workspaceSlug
+                        )
+                        """)
+                .param("companyId", companyId)
+                .param("workspaceSlug", workspaceSlug.value())
+                .query(Boolean.class)
+                .single();
+    }
+
     private static Instant instant(ResultSet resultSet, String column) throws SQLException {
         return resultSet.getTimestamp(column).toInstant();
     }
@@ -338,12 +390,14 @@ public class JdbcDirectoryMemberProvisioningRepository
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(provider, "provider must not be null");
         Objects.requireNonNull(externalUserId, "externalUserId must not be null");
+        return advisoryLockKeys(companyId + "\0" + provider.name() + "\0" + externalUserId);
+    }
+
+    private static int[] advisoryLockKeys(String lockIdentity) {
+        Objects.requireNonNull(lockIdentity, "lockIdentity must not be null");
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(
-                    (companyId + "\0" + provider.name() + "\0" + externalUserId)
-                            .getBytes(StandardCharsets.UTF_8)
-            );
+            byte[] hash = digest.digest(lockIdentity.getBytes(StandardCharsets.UTF_8));
             ByteBuffer keys = ByteBuffer.wrap(hash);
             return new int[]{keys.getInt(), keys.getInt()};
         } catch (NoSuchAlgorithmException exception) {

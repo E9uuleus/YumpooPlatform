@@ -54,7 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WorkItemHttpIT {
 
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
-    private static final UUID WORKSPACE_ID = UUID.fromString("2a000000-0000-4000-8000-000000000201");
+    private static final UUID WORKSPACE_ID = UUID.fromString("a460aa25-7180-490b-ab14-f9ec09049024");
     private static final UUID PROJECT_ID = UUID.fromString("2a000000-0000-4000-8000-000000000301");
     private static final String SESSION_COOKIE = "__Host-yumpoo-session";
     private static final String CSRF_COOKIE = "__Host-yumpoo-csrf";
@@ -892,13 +892,8 @@ class WorkItemHttpIT {
     }
 
     private void createWorkspace() {
-        jdbc.sql("""
-                INSERT INTO yumpoo.workspace (id, company_id, code, name, sort_order, status,
-                    row_version, created_at, created_by_user_id, updated_at, updated_by_user_id)
-                VALUES (:id, :companyId, 'M2_10', 'M2-10', 100, 'ACTIVE', 0,
-                    transaction_timestamp(), :actor, transaction_timestamp(), :actor)
-                """).param("id", WORKSPACE_ID).param("companyId", COMPANY_ID)
-                .param("actor", owner.userId()).update();
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.workspace WHERE id=:id AND code='MAIN'")
+                .param("id", WORKSPACE_ID).query(Integer.class).single()).isOne();
     }
 
     private void createProject(UUID ownerId, UUID memberId) {
@@ -969,7 +964,6 @@ class WorkItemHttpIT {
             jdbc.sql("DELETE FROM yumpoo.project_membership WHERE company_id=:id").param("id", COMPANY_ID).update();
             jdbc.sql("DELETE FROM yumpoo.project WHERE company_id=:id").param("id", COMPANY_ID).update();
         });
-        jdbc.sql("DELETE FROM yumpoo.workspace WHERE id=:id").param("id", WORKSPACE_ID).update();
         jdbc.sql("DELETE FROM yumpoo.outbox_consumer_receipt").update();
         jdbc.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("""

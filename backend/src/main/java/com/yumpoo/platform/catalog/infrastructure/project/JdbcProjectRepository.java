@@ -7,6 +7,7 @@ import com.yumpoo.platform.catalog.application.project.ProjectLifecycleFilter;
 import com.yumpoo.platform.catalog.application.project.ProjectMembershipModels;
 import com.yumpoo.platform.catalog.application.project.ProjectPageResult;
 import com.yumpoo.platform.catalog.application.project.ProjectQueryRow;
+import com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
@@ -213,24 +214,6 @@ public class JdbcProjectRepository implements ProjectRepository {
     }
 
     @Override
-    public Optional<Project> moveWorkspace(Project project, long expectedVersion) {
-        return jdbcClient.sql("""
-                UPDATE yumpoo.project SET workspace_id=:workspaceId,
-                    row_version=row_version+1, updated_at=:updatedAt,
-                    updated_by_user_id=:updatedByUserId
-                WHERE company_id=:companyId AND id=:id AND lifecycle IN ('DRAFT','ACTIVE')
-                  AND row_version=:expectedVersion
-                RETURNING %s
-                """.formatted(COLUMNS))
-                .param("workspaceId", project.workspaceId())
-                .param("updatedAt", OffsetDateTime.ofInstant(project.updatedAt(), ZoneOffset.UTC))
-                .param("updatedByUserId", project.updatedByUserId())
-                .param("companyId", project.companyId()).param("id", project.id())
-                .param("expectedVersion", expectedVersion)
-                .query(JdbcProjectRepository::map).optional();
-    }
-
-    @Override
     public long countCurrentByWorkspace(UUID companyId, UUID workspaceId) {
         return jdbcClient.sql("""
                 SELECT count(*) FROM yumpoo.project
@@ -253,12 +236,16 @@ public class JdbcProjectRepository implements ProjectRepository {
     }
 
     @Override
-    public ProjectPageResult findVisible(CurrentActor actor, UUID workspaceId,
-                                         ProjectType projectType, ProjectLifecycleFilter lifecycle,
-                                         UUID productId,
+    public ProjectPageResult findVisible(CurrentActor actor, ProjectSearchCriteria criteria,
                                          OffsetPageRequest page) {
-        String predicate = " AND (:allWorkspaces OR p.workspace_id=:workspaceId) "
-                + "AND (:allTypes OR p.project_type=:projectType) "
+        String actorAccess = "CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER' "
+                + "WHEN m.id IS NOT NULL THEN 'MEMBER' ELSE 'COMPANY_ADMIN_READ_ONLY' END";
+        String predicate = " AND (:allQuery OR p.name ILIKE :query ESCAPE '\\' "
+                + "OR p.project_code ILIKE :query ESCAPE '\\') "
+                + "AND (:allTypes OR p.project_type IN (:projectTypes)) "
+                + "AND (:allOwners OR p.owner_user_id IN (:ownerUserIds)) "
+                + "AND (:allAccesses OR (" + actorAccess + ") IN (:actorAccesses)) "
+                + "AND (:allUpdatedSince OR p.updated_at >= :updatedSince) "
                 + "AND (:allProducts OR EXISTS (SELECT 1 FROM yumpoo.project_product_link ppl "
                 + "WHERE ppl.company_id=p.company_id AND ppl.project_id=p.id "
                 + "AND ppl.product_id=:productId AND ppl.removed_at IS NULL)) "
@@ -269,13 +256,20 @@ public class JdbcProjectRepository implements ProjectRepository {
                 + "WHEN m.id IS NOT NULL THEN 'MEMBER' ELSE 'COMPANY_ADMIN_READ_ONLY' END actor_access "
                 + VISIBLE_FROM + predicate
                 + "ORDER BY p.name, p.project_code, p.id LIMIT :limit OFFSET :offset"), actor);
-        items = filters(items, workspaceId, projectType, lifecycle, productId)
+        items = filters(items, criteria)
                 .param("limit", page.size()).param("offset", (long) page.page() * page.size());
         JdbcClient.StatementSpec count = filters(visible(jdbcClient.sql(
                 "SELECT count(*) " + VISIBLE_FROM + predicate), actor),
-                workspaceId, projectType, lifecycle, productId);
+                criteria);
         return new ProjectPageResult(items.query(JdbcProjectRepository::mapQueryRow).list(),
                 count.query(Long.class).single());
+    }
+
+    @Override
+    public List<UUID> findVisibleOwnerIds(CurrentActor actor) {
+        return visible(jdbcClient.sql("SELECT DISTINCT p.owner_user_id " + VISIBLE_FROM
+                + " ORDER BY p.owner_user_id"), actor)
+                .query(UUID.class).list();
     }
 
     @Override
@@ -336,13 +330,35 @@ public class JdbcProjectRepository implements ProjectRepository {
     }
 
     private static JdbcClient.StatementSpec filters(JdbcClient.StatementSpec statement,
-            UUID workspaceId, ProjectType projectType, ProjectLifecycleFilter lifecycle,
-            UUID productId) {
+            ProjectSearchCriteria criteria) {
+        ProjectLifecycleFilter lifecycle = criteria.lifecycle();
         boolean current = lifecycle == null;
-        return statement.param("allWorkspaces", workspaceId == null)
-                .param("workspaceId", workspaceId == null ? new UUID(0, 0) : workspaceId)
-                .param("allTypes", projectType == null)
-                .param("projectType", projectType == null ? "SOFTWARE_DEVELOPMENT" : projectType.name())
+        String normalizedQuery = criteria.query() == null ? "" : criteria.query()
+                .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        List<String> projectTypes = criteria.projectTypes().isEmpty()
+                ? List.of("PRODUCT_DEVELOPMENT")
+                : criteria.projectTypes().stream().map(Enum::name).toList();
+        List<UUID> ownerUserIds = criteria.ownerUserIds().isEmpty()
+                ? List.of(new UUID(0, 0)) : criteria.ownerUserIds();
+        List<String> actorAccesses = criteria.actorAccesses().isEmpty()
+                ? List.of("OWNER")
+                : criteria.actorAccesses().stream().map(access -> switch (access) {
+                    case OWNER -> "OWNER";
+                    case MEMBER -> "MEMBER";
+                    case COMPANY_ADMIN -> "COMPANY_ADMIN_READ_ONLY";
+                }).toList();
+        Instant updatedSince = criteria.updatedSince() == null ? Instant.EPOCH : criteria.updatedSince();
+        UUID productId = criteria.productId();
+        return statement.param("allQuery", criteria.query() == null)
+                .param("query", "%" + normalizedQuery + "%")
+                .param("allTypes", criteria.projectTypes().isEmpty())
+                .param("projectTypes", projectTypes)
+                .param("allOwners", criteria.ownerUserIds().isEmpty())
+                .param("ownerUserIds", ownerUserIds)
+                .param("allAccesses", criteria.actorAccesses().isEmpty())
+                .param("actorAccesses", actorAccesses)
+                .param("allUpdatedSince", criteria.updatedSince() == null)
+                .param("updatedSince", OffsetDateTime.ofInstant(updatedSince, ZoneOffset.UTC))
                 .param("allProducts", productId == null)
                 .param("productId", productId == null ? new UUID(0, 0) : productId)
                 .param("draft", current || lifecycle == ProjectLifecycleFilter.DRAFT

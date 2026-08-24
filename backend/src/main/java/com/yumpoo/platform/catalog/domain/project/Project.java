@@ -179,22 +179,6 @@ public record Project(
                 createdByUserId, now, actorUserId, activatedAt, null);
     }
 
-    public Project moveToWorkspace(UUID targetWorkspaceId, UUID actorUserId, Instant now) {
-        Objects.requireNonNull(targetWorkspaceId, "targetWorkspaceId must not be null");
-        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
-        Objects.requireNonNull(now, "now must not be null");
-        if (lifecycle == ProjectLifecycle.ARCHIVED) {
-            throw new IllegalStateException("archived project cannot move workspace");
-        }
-        if (workspaceId.equals(targetWorkspaceId)) {
-            throw new IllegalStateException("target workspace must differ from current workspace");
-        }
-        return new Project(id, companyId, targetWorkspaceId, code, name, description, projectType,
-                lifecycle, ownerUserId, templateKey, templateVersion, customerName,
-                customerReference, deliverySite, contactNote, rowVersion + 1, createdAt,
-                createdByUserId, now, actorUserId, activatedAt, archivedAt);
-    }
-
     private static String requireCode(String value) {
         Objects.requireNonNull(value, "code must not be null");
         if (!CODE.matcher(value).matches()) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ElAvatar } from 'element-plus'
+import { ElAvatar, ElTooltip } from 'element-plus'
 import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{
@@ -47,28 +47,36 @@ const stateLabel = computed(() => {
   if (props.accountStatus === 'DISABLED') return '已停用'
   return undefined
 })
+const tooltipLabel = computed(() => stateLabel.value ? `${name.value}（${stateLabel.value}）` : name.value)
 </script>
 
 <template>
-  <span
-    class="yp-assignee"
-    :class="{ 'yp-assignee--unassigned': !userId && !displayName }"
+  <el-tooltip
+    :content="tooltipLabel"
+    placement="top"
   >
-    <el-avatar
-      :size="avatarSize"
-      :src="avatarUrl ?? ''"
-      :style="`--yp-assignee-color: ${avatarColor}`"
-    >
-      {{ initials }}
-    </el-avatar>
     <span
-      v-if="showName"
-      class="yp-assignee__name"
+      class="yp-assignee"
+      :class="{ 'yp-assignee--unassigned': !userId && !displayName }"
+      :aria-label="showName ? undefined : tooltipLabel"
     >
-      {{ name }}
-      <small v-if="stateLabel">（{{ stateLabel }}）</small>
+      <el-avatar
+        :size="avatarSize"
+        :src="avatarUrl ?? ''"
+        :style="`--yp-assignee-color: ${avatarColor}`"
+      >
+        {{ initials }}
+      </el-avatar>
+      <span
+        v-if="showName"
+        class="yp-assignee__name"
+        :class="`yp-assignee__name--${size}`"
+      >
+        {{ name }}
+        <small v-if="stateLabel">（{{ stateLabel }}）</small>
+      </span>
     </span>
-  </span>
+  </el-tooltip>
 </template>
 
 <style scoped>
@@ -98,6 +106,14 @@ const stateLabel = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.yp-assignee__name--table {
+  max-width: 120px;
+}
+
+.yp-assignee__name--default {
+  max-width: 160px;
 }
 
 .yp-assignee__name small {

@@ -4,8 +4,11 @@ import com.yumpoo.platform.catalog.application.project.ProjectDetail;
 import com.yumpoo.platform.catalog.application.project.ProjectLifecycleFilter;
 import com.yumpoo.platform.catalog.application.project.ProjectService;
 import com.yumpoo.platform.catalog.application.project.ProjectSummary;
-import com.yumpoo.platform.catalog.application.project.ProjectTypeFilter;
+import com.yumpoo.platform.catalog.application.project.ProjectActorAccess;
+import com.yumpoo.platform.catalog.application.project.ProjectOwnerOption;
+import com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria;
 import com.yumpoo.platform.catalog.application.project.ProjectUpdateCommand;
+import com.yumpoo.platform.catalog.application.project.ProjectTypeFilter;
 import com.yumpoo.platform.foundation.api.http.IfMatchParser;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageResponse;
@@ -22,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @ApiV1Controller
@@ -42,14 +47,27 @@ public final class ProjectController {
     ResponseEntity<OffsetPageResponse<ProjectSummary>> list(
             @RequestParam(required = false) UUID workspaceId,
             @RequestParam(required = false) ProjectTypeFilter projectType,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) List<ProjectTypeFilter> projectTypes,
+            @RequestParam(required = false) List<UUID> ownerUserIds,
+            @RequestParam(required = false) List<ProjectActorAccess> actorAccesses,
+            @RequestParam(required = false) Instant updatedSince,
             @RequestParam(required = false) ProjectLifecycleFilter lifecycle,
             @RequestParam(required = false) UUID productId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CurrentActor actor = actorProvider.requiredActive();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(service.findAll(actor, workspaceId, projectType, lifecycle, productId,
+                .body(service.findAll(actor, new ProjectSearchCriteria(query,
+                                ProjectTypeFilter.merge(projectType, projectTypes),
+                                ownerUserIds, actorAccesses, updatedSince, lifecycle, productId),
                         OffsetPageRequest.of(page, size)));
+    }
+
+    @GetMapping("/projects/owner-options")
+    ResponseEntity<List<ProjectOwnerOption>> ownerOptions() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(service.findOwnerOptions(actorProvider.requiredActive()));
     }
 
     @GetMapping("/projects/{projectId}")

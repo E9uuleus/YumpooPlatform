@@ -19,12 +19,11 @@ public interface ProjectRepository {
     Optional<Project> activate(Project project, long expectedVersion);
     Optional<Project> archive(Project project, long expectedVersion);
     Optional<Project> reopen(Project project, long expectedVersion);
-    Optional<Project> moveWorkspace(Project project, long expectedVersion);
     long countCurrentByWorkspace(UUID companyId, UUID workspaceId);
     Optional<ProjectQueryRow> findVisibleById(CurrentActor actor, UUID projectId);
-    ProjectPageResult findVisible(CurrentActor actor, UUID workspaceId, ProjectType projectType,
-                                  ProjectLifecycleFilter lifecycle, UUID productId,
+    ProjectPageResult findVisible(CurrentActor actor, ProjectSearchCriteria criteria,
                                   OffsetPageRequest page);
+    List<UUID> findVisibleOwnerIds(CurrentActor actor);
     java.util.Map<UUID, Long> countVisibleCurrentByWorkspace(CurrentActor actor,
                                                              java.util.Collection<UUID> workspaceIds);
     List<Project> findGovernedByOwner(UUID companyId, UUID ownerUserId);

@@ -54,40 +54,25 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
 
     private static final String FIND_ACTIVE_BY_ID = FIND_BY_ID + " AND status = 'ACTIVE'";
 
-    private static final String INSERT = """
-            INSERT INTO yumpoo.workspace (
-                id, company_id, code, name, description, sort_order, status, row_version,
-                created_at, created_by_user_id, updated_at, updated_by_user_id
-            ) VALUES (
-                :id, :companyId, :code, :name, :description, :sortOrder, :status, :rowVersion,
-                :createdAt, :createdByUserId, :updatedAt, :updatedByUserId
-            )
-            ON CONFLICT (company_id, code) DO NOTHING
+    private static final String FIND_MAIN_FOR_SHARE = """
+            SELECT
+            """ + COLUMNS + """
+            FROM yumpoo.workspace
+            WHERE company_id = :companyId
+              AND code = 'MAIN'
+              AND status = 'ACTIVE'
+            FOR SHARE
             """;
 
     private static final String UPDATE_DETAILS = """
             UPDATE yumpoo.workspace
             SET name = :name,
                 description = :description,
-                sort_order = :sortOrder,
                 row_version = row_version + 1,
                 updated_at = :updatedAt,
                 updated_by_user_id = :updatedByUserId
             WHERE company_id = :companyId
               AND id = :id
-              AND row_version = :expectedRowVersion
-            RETURNING
-            """ + COLUMNS;
-
-    private static final String CHANGE_STATUS = """
-            UPDATE yumpoo.workspace
-            SET status = :newStatus,
-                row_version = row_version + 1,
-                updated_at = :updatedAt,
-                updated_by_user_id = :updatedByUserId
-            WHERE company_id = :companyId
-              AND id = :id
-              AND status = :expectedStatus
               AND row_version = :expectedRowVersion
             RETURNING
             """ + COLUMNS;
@@ -119,26 +104,11 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
     }
 
     @Override
-    public Optional<Workspace> findActiveByIdForShare(UUID companyId, UUID workspaceId) {
-        return jdbcClient.sql(FIND_BY_ID + " AND status = 'ACTIVE' FOR SHARE")
+    public Optional<Workspace> findMainForShare(UUID companyId) {
+        return jdbcClient.sql(FIND_MAIN_FOR_SHARE)
                 .param("companyId", companyId)
-                .param("workspaceId", workspaceId)
                 .query(JdbcWorkspaceRepository::map)
                 .optional();
-    }
-
-    @Override
-    public Optional<Workspace> lockById(UUID companyId, UUID workspaceId) {
-        return jdbcClient.sql(FIND_BY_ID + " FOR UPDATE")
-                .param("companyId", companyId)
-                .param("workspaceId", workspaceId)
-                .query(JdbcWorkspaceRepository::map)
-                .optional();
-    }
-
-    @Override
-    public boolean insert(Workspace workspace) {
-        return bindWorkspace(jdbcClient.sql(INSERT), workspace).update() == 1;
     }
 
     @Override
@@ -146,29 +116,10 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
         return jdbcClient.sql(UPDATE_DETAILS)
                 .param("name", workspace.name())
                 .param("description", workspace.description())
-                .param("sortOrder", workspace.sortOrder())
                 .param("updatedAt", utc(workspace.updatedAt()))
                 .param("updatedByUserId", workspace.updatedByUserId())
                 .param("companyId", workspace.companyId())
                 .param("id", workspace.id())
-                .param("expectedRowVersion", expectedRowVersion)
-                .query(JdbcWorkspaceRepository::map)
-                .optional();
-    }
-
-    @Override
-    public Optional<Workspace> changeStatus(
-            Workspace workspace,
-            WorkspaceStatus expectedStatus,
-            long expectedRowVersion
-    ) {
-        return jdbcClient.sql(CHANGE_STATUS)
-                .param("newStatus", workspace.status().name())
-                .param("updatedAt", utc(workspace.updatedAt()))
-                .param("updatedByUserId", workspace.updatedByUserId())
-                .param("companyId", workspace.companyId())
-                .param("id", workspace.id())
-                .param("expectedStatus", expectedStatus.name())
                 .param("expectedRowVersion", expectedRowVersion)
                 .query(JdbcWorkspaceRepository::map)
                 .optional();
@@ -180,25 +131,6 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
                 .param("workspaceId", workspaceId)
                 .query(JdbcWorkspaceRepository::map)
                 .optional();
-    }
-
-    private static JdbcClient.StatementSpec bindWorkspace(
-            JdbcClient.StatementSpec statement,
-            Workspace workspace
-    ) {
-        return statement
-                .param("id", workspace.id())
-                .param("companyId", workspace.companyId())
-                .param("code", workspace.code())
-                .param("name", workspace.name())
-                .param("description", workspace.description())
-                .param("sortOrder", workspace.sortOrder())
-                .param("status", workspace.status().name())
-                .param("rowVersion", workspace.rowVersion())
-                .param("createdAt", utc(workspace.createdAt()))
-                .param("createdByUserId", workspace.createdByUserId())
-                .param("updatedAt", utc(workspace.updatedAt()))
-                .param("updatedByUserId", workspace.updatedByUserId());
     }
 
     private static Workspace map(ResultSet resultSet, int rowNumber) throws SQLException {

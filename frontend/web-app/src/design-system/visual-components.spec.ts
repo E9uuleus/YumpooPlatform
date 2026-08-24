@@ -35,6 +35,15 @@ describe('视觉语义组件', () => {
     expect(first.get('.yp-assignee__name').text()).toContain('（已停用）')
   })
 
+  it('仅显示头像时通过统一浮窗和无障碍名称提示负责人', () => {
+    const wrapper = mount(YpAssignee, {
+      props: { userId: 'user-42', displayName: '张三', showName: false },
+    })
+    expect(wrapper.find('.yp-assignee__name').exists()).toBe(false)
+    expect(wrapper.get('.yp-assignee').attributes('aria-label')).toBe('张三')
+    expect(wrapper.getComponent(ElTooltip).props('content')).toBe('张三')
+  })
+
   it('优先级保留中文语义并灰显未知值', () => {
     expect(mount(YpPriorityBadge, { props: { priority: 'URGENT' } }).text()).toContain('紧急')
     const unknown = mount(YpPriorityBadge, { props: { priority: 'P5' } })

@@ -115,7 +115,7 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     @Override
     public ProjectSnapshot create(ProjectCreationMutation mutation) {
         return snapshot(service.create(new ProjectCreateCommand(
-                mutation.companyId(), mutation.workspaceId(), mutation.code(), mutation.name(),
+                mutation.companyId(), mutation.code(), mutation.name(),
                 mutation.description(), mutation.projectType(), mutation.ownerUserId(),
                 mutation.templateKey(), mutation.templateVersion(), mutation.customerName(),
                 mutation.customerReference(), mutation.deliverySite(), mutation.contactNote(),
@@ -158,22 +158,6 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     public ProjectSnapshot reopen(ProjectRestoreMutation mutation) {
         return snapshot(lifecycleService.reopen(new com.yumpoo.platform.catalog.application.project.ProjectRestoreCommand(
                 mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(), mutation.actorUserId())));
-    }
-
-    @Override
-    public ProjectSnapshot moveWorkspace(ProjectWorkspaceMoveMutation mutation) {
-        return snapshot(lifecycleService.moveWorkspace(
-                new com.yumpoo.platform.catalog.application.project.ProjectWorkspaceMoveCommand(
-                        mutation.companyId(), mutation.projectId(), mutation.targetWorkspaceId(),
-                        mutation.expectedRowVersion(), mutation.actorUserId())));
-    }
-
-    @Override
-    public ProjectSnapshot lockForWorkspaceMove(ProjectWorkspaceMoveMutation mutation) {
-        return snapshot(lifecycleService.lockForWorkspaceMove(
-                new com.yumpoo.platform.catalog.application.project.ProjectWorkspaceMoveCommand(
-                mutation.companyId(), mutation.projectId(), mutation.targetWorkspaceId(),
-                mutation.expectedRowVersion(), mutation.actorUserId())));
     }
 
     @Override

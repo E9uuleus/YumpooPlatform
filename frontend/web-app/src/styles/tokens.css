@@ -68,9 +68,11 @@
 :root[data-density='comfortable'] {
   --yp-control-height: 40px;
   --yp-control-height-small: 32px;
+  --yp-control-height-medium: 36px;
   --yp-control-height-large: 48px;
   --yp-navigation-height: 40px;
   --yp-table-row-height: 44px;
+  --yp-table-row-height-spacious: 48px;
   --yp-status-height: 28px;
   --yp-card-padding: 20px;
 }
@@ -78,9 +80,11 @@
 :root[data-density='compact'] {
   --yp-control-height: 36px;
   --yp-control-height-small: 28px;
+  --yp-control-height-medium: 32px;
   --yp-control-height-large: 40px;
   --yp-navigation-height: 36px;
   --yp-table-row-height: 36px;
+  --yp-table-row-height-spacious: 40px;
   --yp-status-height: 24px;
   --yp-card-padding: 16px;
 }
@@ -91,7 +95,7 @@
   --yp-bg-surface: #ffffff;
   --yp-bg-raised: #ffffff;
   --yp-bg-sunken: #f5f6f8;
-  --yp-bg-hover: #f0f4fa;
+  --yp-bg-hover: #eff0f4;
   --yp-bg-selected: #eaf3ff;
   --yp-border-subtle: #e6e9ef;
   --yp-border-default: #d0d4e4;

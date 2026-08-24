@@ -16,6 +16,7 @@ import * as runtime from '../runtime';
 import type {
   ErrorResponse,
   Project,
+  ProjectActorAccess,
   ProjectCreateRequest,
   ProjectDetail,
   ProjectLifecycleFilter,
@@ -25,6 +26,7 @@ import type {
   ProjectMemberPage,
   ProjectMemberRemoveRequest,
   ProjectMembershipStatusFilter,
+  ProjectOwnerOption,
   ProjectOwnerReassignmentRequest,
   ProjectPage,
   ProjectProductCandidatePage,
@@ -42,6 +44,8 @@ import {
     ErrorResponseToJSON,
     ProjectFromJSON,
     ProjectToJSON,
+    ProjectActorAccessFromJSON,
+    ProjectActorAccessToJSON,
     ProjectCreateRequestFromJSON,
     ProjectCreateRequestToJSON,
     ProjectDetailFromJSON,
@@ -60,6 +64,8 @@ import {
     ProjectMemberRemoveRequestToJSON,
     ProjectMembershipStatusFilterFromJSON,
     ProjectMembershipStatusFilterToJSON,
+    ProjectOwnerOptionFromJSON,
+    ProjectOwnerOptionToJSON,
     ProjectOwnerReassignmentRequestFromJSON,
     ProjectOwnerReassignmentRequestToJSON,
     ProjectPageFromJSON,
@@ -151,6 +157,11 @@ export interface ListProjectProductsRequest {
 export interface ListProjectsRequest {
     workspaceId?: string;
     projectType?: ProjectType;
+    query?: string;
+    projectTypes?: Array<ProjectType>;
+    ownerUserIds?: Array<string>;
+    actorAccesses?: Array<ProjectActorAccess>;
+    updatedSince?: Date;
     lifecycle?: ProjectLifecycleFilter;
     productId?: string;
     page?: number;
@@ -710,6 +721,37 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
+     * 只返回可见项目当前负责人最小信息，包含仍挂在项目上的离职或停用用户。
+     * 查询调用人可见项目涉及的负责人选项
+     */
+    async listProjectOwnerOptionsRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<ProjectOwnerOption>>> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/owner-options`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(ProjectOwnerOptionFromJSON));
+    }
+
+    /**
+     * 只返回可见项目当前负责人最小信息，包含仍挂在项目上的离职或停用用户。
+     * 查询调用人可见项目涉及的负责人选项
+     */
+    async listProjectOwnerOptions(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<ProjectOwnerOption>> {
+        const response = await this.listProjectOwnerOptionsRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Owner 或 CompanyAdmin 搜索本企业 ACTIVE Product 候选
      */
     async listProjectProductCandidatesRaw(requestParameters: ListProjectProductCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectProductCandidatePage>> {
@@ -817,6 +859,26 @@ export class ProjectsApi extends runtime.BaseAPI {
             queryParameters['projectType'] = requestParameters['projectType'];
         }
 
+        if (requestParameters['query'] != null) {
+            queryParameters['query'] = requestParameters['query'];
+        }
+
+        if (requestParameters['projectTypes'] != null) {
+            queryParameters['projectTypes'] = requestParameters['projectTypes'];
+        }
+
+        if (requestParameters['ownerUserIds'] != null) {
+            queryParameters['ownerUserIds'] = requestParameters['ownerUserIds'];
+        }
+
+        if (requestParameters['actorAccesses'] != null) {
+            queryParameters['actorAccesses'] = requestParameters['actorAccesses'];
+        }
+
+        if (requestParameters['updatedSince'] != null) {
+            queryParameters['updatedSince'] = (requestParameters['updatedSince'] as any).toISOString();
+        }
+
         if (requestParameters['lifecycle'] != null) {
             queryParameters['lifecycle'] = requestParameters['lifecycle'];
         }
@@ -858,7 +920,9 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * CompanyAdmin 迁移 DRAFT 或 ACTIVE Project 到 ACTIVE Workspace
+     * 所有 Project 已归属 MAIN；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+     * 已弃用的跨 Workspace 迁移兼容入口
+     * @deprecated
      */
     async moveProjectWorkspaceRaw(requestParameters: MoveProjectWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
         if (requestParameters['projectId'] == null) {
@@ -930,7 +994,9 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * CompanyAdmin 迁移 DRAFT 或 ACTIVE Project 到 ACTIVE Workspace
+     * 所有 Project 已归属 MAIN；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+     * 已弃用的跨 Workspace 迁移兼容入口
+     * @deprecated
      */
     async moveProjectWorkspace(requestParameters: MoveProjectWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
         const response = await this.moveProjectWorkspaceRaw(requestParameters, initOverrides);

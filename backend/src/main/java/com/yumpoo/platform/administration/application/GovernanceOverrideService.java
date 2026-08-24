@@ -5,16 +5,9 @@ import com.yumpoo.platform.audit.api.SecurityAuditAppendPort;
 import com.yumpoo.platform.audit.api.SecurityAuditDraft;
 import com.yumpoo.platform.audit.api.SecurityAuditOutcome;
 import com.yumpoo.platform.catalog.api.ProjectSnapshot;
-import com.yumpoo.platform.catalog.api.WorkspaceGovernanceCommandPort;
-import com.yumpoo.platform.catalog.api.WorkspaceGovernanceMutation;
-import com.yumpoo.platform.catalog.api.WorkspaceGovernanceSnapshot;
-import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.SafeBlocker;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
-import com.yumpoo.platform.foundation.application.event.EventActor;
-import com.yumpoo.platform.foundation.application.event.EventDraft;
-import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
 import com.yumpoo.platform.foundation.application.idempotency.IdempotencyCommand;
 import com.yumpoo.platform.foundation.application.idempotency.IdempotencyExecutionResult;
 import com.yumpoo.platform.foundation.application.idempotency.IdempotencyScope;
@@ -35,21 +28,19 @@ import java.util.UUID;
 @Service
 public class GovernanceOverrideService {
     private final ProjectLifecycleGovernanceService projectLifecycle;
-    private final WorkspaceGovernanceCommandPort workspaces;
     private final GovernanceOverrideRepository repository;
     private final IdempotentCommandExecutor idempotency;
     private final SecurityAuditAppendPort audits;
-    private final TransactionalEventPort events;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public GovernanceOverrideService(ProjectLifecycleGovernanceService projectLifecycle,
-            WorkspaceGovernanceCommandPort workspaces, GovernanceOverrideRepository repository,
+            GovernanceOverrideRepository repository,
             IdempotentCommandExecutor idempotency, SecurityAuditAppendPort audits,
-            TransactionalEventPort events, ObjectMapper objectMapper, Clock clock) {
-        this.projectLifecycle = projectLifecycle; this.workspaces = workspaces;
+            ObjectMapper objectMapper, Clock clock) {
+        this.projectLifecycle = projectLifecycle;
         this.repository = repository; this.idempotency = idempotency; this.audits = audits;
-        this.events = events; this.objectMapper = objectMapper; this.clock = clock;
+        this.objectMapper = objectMapper; this.clock = clock;
     }
 
     @Transactional
@@ -87,7 +78,8 @@ public class GovernanceOverrideService {
     private StoredCommandResult execute(GovernanceOverrideCommand command, String reason) {
         return switch (command.action()) {
             case PROJECT_ARCHIVE_WITH_OPEN_ITEMS -> archiveProject(command, reason);
-            case WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS -> archiveWorkspace(command, reason);
+            case WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS -> throw new ApplicationException(
+                    StandardErrorCode.VALIDATION_FAILED);
         };
     }
 
@@ -101,32 +93,6 @@ public class GovernanceOverrideService {
         insert(command, reason, "PROJECT", safe(before), safe(after), blockers,
                 GovernanceOverrideResult.SUCCEEDED, null);
         return projectLifecycle.stored(after);
-    }
-
-    private StoredCommandResult archiveWorkspace(GovernanceOverrideCommand command, String reason) {
-        requireTargetType(command, "WORKSPACE");
-        WorkspaceGovernanceMutation mutation = new WorkspaceGovernanceMutation(command.actor().companyId(),
-                command.targetId(), command.expectedRowVersion(), command.actor().userId());
-        WorkspaceGovernanceSnapshot before = workspaces.lockForArchiveOverride(mutation);
-        List<SafeBlocker> blockers = before.currentProjectCount() == 0 ? List.of()
-                : List.of(new SafeBlocker("CURRENT_PROJECTS", before.currentProjectCount()));
-        WorkspaceGovernanceSnapshot after = workspaces.archiveOverride(mutation);
-        insert(command, reason, "WORKSPACE", safe(before), safe(after), blockers,
-                GovernanceOverrideResult.SUCCEEDED, null);
-        audits.append(new SecurityAuditDraft(after.companyId(), "workspace-archive-override:"
-                + command.idempotencyKey(), "WORKSPACE_ARCHIVE_OVERRIDE", SecurityAuditOutcome.SUCCEEDED,
-                SecurityAuditActor.user(command.actor().userId(),
-                        ProjectLifecycleGovernanceService.roleNames(command.actor())), "WORKSPACE",
-                after.workspaceId().toString(), reason, safe(before), safe(after), null,
-                command.idempotencyKey(), null, null, clock.instant()));
-        events.append(new EventDraft("catalog.workspace_archived", 1, "Workspace", after.workspaceId(),
-                after.rowVersion(), after.companyId(), EventActor.user(command.actor().userId()),
-                objectMapper.valueToTree(Map.of("workspaceId", after.workspaceId(), "code", after.code(),
-                        "fromStatus", before.status(), "toStatus", after.status(),
-                        "mode", "GOVERNANCE_OVERRIDE"))));
-        return jsonResult(200, Map.of("id", after.workspaceId(), "code", after.code(),
-                "status", after.status(), "rowVersion", after.rowVersion()), after.workspaceId(),
-                StrongEtag.format(after.rowVersion()));
     }
 
     private StoredCommandResult stableFailure(GovernanceOverrideCommand command, String reason,
@@ -167,11 +133,6 @@ public class GovernanceOverrideService {
 
     private JsonNode safe(ProjectSnapshot project) {
         return objectMapper.valueToTree(ProjectLifecycleGovernanceService.safeSnapshot(project));
-    }
-
-    private JsonNode safe(WorkspaceGovernanceSnapshot workspace) {
-        return objectMapper.valueToTree(Map.of("workspaceId", workspace.workspaceId(),
-                "status", workspace.status(), "rowVersion", workspace.rowVersion()));
     }
 
     private StoredCommandResult jsonResult(int status, Object body, UUID resourceId, String etag) {

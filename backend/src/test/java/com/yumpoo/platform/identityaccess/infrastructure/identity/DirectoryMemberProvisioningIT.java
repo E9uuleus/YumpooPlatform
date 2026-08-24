@@ -80,13 +80,13 @@ class DirectoryMemberProvisioningIT {
         assertThat(count("identity_user")).isOne();
         assertThat(count("external_identity")).isOne();
         assertThat(jdbcClient.sql("""
-                        SELECT display_name || '|' || mobile
+                        SELECT display_name || '|' || mobile || '|' || workspace_slug
                         FROM yumpoo.identity_user
                         WHERE id = :id
                         """)
                 .param("id", created.userId())
                 .query(String.class)
-                .single()).isEqualTo("Alice Renamed|13900000000");
+                .single()).isEqualTo("Alice Renamed|13900000000|member-a");
     }
 
     @Test
@@ -107,6 +107,35 @@ class DirectoryMemberProvisioningIT {
         assertThat(second.userId()).isNotEqualTo(first.userId());
         assertThat(count("identity_user")).isEqualTo(2);
         assertThat(count("external_identity")).isEqualTo(2);
+    }
+
+    @Test
+    void allocatesReadableImmutableSlugsAndDisambiguatesNormalizedCollisions() {
+        DirectoryMemberProvisioningResult first = service.provisionOrRefresh(profile(
+                "Member-A",
+                "First",
+                null,
+                "a"
+        ));
+        DirectoryMemberProvisioningResult second = service.provisionOrRefresh(profile(
+                "member/a",
+                "Second",
+                null,
+                "b"
+        ));
+
+        assertThat(workspaceSlug(first.userId())).isEqualTo("member-a");
+        assertThat(workspaceSlug(second.userId())).isEqualTo(
+                "member-a-" + second.userId().toString().replace("-", "").substring(0, 8)
+        );
+        assertThatThrownBy(() -> jdbcClient.sql("""
+                        UPDATE yumpoo.identity_user
+                        SET workspace_slug = 'changed'
+                        WHERE id = :id
+                        """)
+                .param("id", first.userId())
+                .update()).isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(workspaceSlug(first.userId())).isEqualTo("member-a");
     }
 
     @Test
@@ -296,6 +325,17 @@ class DirectoryMemberProvisioningIT {
         }
         return jdbcClient.sql("SELECT count(*) FROM yumpoo." + tableName)
                 .query(Integer.class)
+                .single();
+    }
+
+    private String workspaceSlug(UUID userId) {
+        return jdbcClient.sql("""
+                        SELECT workspace_slug
+                        FROM yumpoo.identity_user
+                        WHERE id = :id
+                        """)
+                .param("id", userId)
+                .query(String.class)
                 .single();
     }
 

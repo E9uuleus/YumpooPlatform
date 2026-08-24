@@ -1,0 +1,49 @@
+/* 本地打包 Web 字体：Poppins（标题）+ Figtree（正文）
+ * 来源：Google Fonts，SIL Open Font License 1.1（许可文本见 src/assets/fonts/OFL-*.txt）
+ * 子集：latin；中文经由 token 中的 PingFang SC / Microsoft YaHei 系统回退
+ */
+
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('../assets/fonts/figtree-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F, U+2070-209F, U+20A0-20BF, U+2100-214F;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/poppins-latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F, U+2070-209F, U+20A0-20BF, U+2100-214F;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../assets/fonts/poppins-latin-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F, U+2070-209F, U+20A0-20BF, U+2100-214F;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../assets/fonts/poppins-latin-600.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F, U+2070-209F, U+20A0-20BF, U+2100-214F;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../assets/fonts/poppins-latin-700.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+2000-206F, U+2070-209F, U+20A0-20BF, U+2100-214F;
+}

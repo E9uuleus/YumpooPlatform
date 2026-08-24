@@ -38,7 +38,7 @@ export interface ProjectCreateRequest {
      * @type {string}
      * @memberof ProjectCreateRequest
      */
-    workspaceId: string;
+    workspaceId?: string;
     /**
      *
      * @type {string}
@@ -113,7 +113,6 @@ export interface ProjectCreateRequest {
  * Check if a given object implements the ProjectCreateRequest interface.
  */
 export function instanceOfProjectCreateRequest(value: object): value is ProjectCreateRequest {
-    if (!('workspaceId' in value) || value['workspaceId'] === undefined) return false;
     if (!('code' in value) || value['code'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('projectType' in value) || value['projectType'] === undefined) return false;
@@ -133,7 +132,7 @@ export function ProjectCreateRequestFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
 
-        'workspaceId': json['workspaceId'],
+        'workspaceId': json['workspaceId'] == null ? undefined : json['workspaceId'],
         'code': json['code'],
         'name': json['name'],
         'description': json['description'] == null ? undefined : json['description'],

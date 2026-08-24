@@ -48,7 +48,7 @@ class ProjectProductLinkIT {
     private static final UUID OWNER = UUID.fromString("27000000-0000-4000-8000-000000000101");
     private static final UUID MEMBER = UUID.fromString("27000000-0000-4000-8000-000000000102");
     private static final UUID ADMIN = UUID.fromString("27000000-0000-4000-8000-000000000103");
-    private static final UUID WORKSPACE = UUID.fromString("27000000-0000-4000-8000-000000000104");
+    private static final UUID WORKSPACE = UUID.fromString("a460aa25-7180-490b-ab14-f9ec09049024");
     private static final UUID PROJECT = UUID.fromString("27000000-0000-4000-8000-000000000105");
     private static final UUID PRODUCT_ONE = UUID.fromString("27000000-0000-4000-8000-000000000106");
     private static final UUID PRODUCT_TWO = UUID.fromString("27000000-0000-4000-8000-000000000107");
@@ -65,12 +65,6 @@ class ProjectProductLinkIT {
         insertUser(OWNER, "M2-07 Owner");
         insertUser(MEMBER, "M2-07 Member");
         insertUser(ADMIN, "M2-07 Admin");
-        jdbc.sql("""
-                INSERT INTO yumpoo.workspace(id,company_id,code,name,sort_order,status,row_version,
-                    created_at,created_by_user_id,updated_at,updated_by_user_id)
-                VALUES(:id,:company,'M2_07','M2-07 Workspace',10,'ACTIVE',0,
-                    transaction_timestamp(),:owner,transaction_timestamp(),:owner)
-                """).param("id", WORKSPACE).param("company", COMPANY).param("owner", OWNER).update();
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             jdbc.sql("""
                     INSERT INTO yumpoo.project(id,company_id,workspace_id,project_code,name,
@@ -303,7 +297,6 @@ class ProjectProductLinkIT {
                 jdbc.sql("DELETE FROM yumpoo.project WHERE id=:project")
                         .param("project", PROJECT).update();
             });
-            jdbc.sql("DELETE FROM yumpoo.workspace WHERE id=:workspace").param("workspace", WORKSPACE).update();
             jdbc.sql("DELETE FROM yumpoo.identity_user WHERE id IN (:owner,:member,:admin)")
                     .param("owner", OWNER).param("member", MEMBER).param("admin", ADMIN).update();
         } catch (RuntimeException ignored) {

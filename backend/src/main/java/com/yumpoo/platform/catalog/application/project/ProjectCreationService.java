@@ -37,16 +37,14 @@ public class ProjectCreationService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public ProjectApplicationSnapshot create(ProjectCreateCommand command) {
-        if (workspaceRepository.findActiveByIdForShare(
-                command.companyId(), command.workspaceId()).isEmpty()) {
-            throw ApplicationException.validation(new FieldViolation(
-                    "workspaceId", "INVALID_WORKSPACE", "Workspace 必须是本企业 ACTIVE Workspace"));
-        }
+        UUID workspaceId = workspaceRepository.findMainForShare(command.companyId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.INTERNAL_ERROR))
+                .id();
 
         Instant now = clock.instant();
         Project project;
         try {
-            project = Project.create(UUID.randomUUID(), command.companyId(), command.workspaceId(),
+            project = Project.create(UUID.randomUUID(), command.companyId(), workspaceId,
                     command.code(), command.name(), command.description(),
                     ProjectType.valueOf(command.projectType()), command.ownerUserId(),
                     command.templateKey(), command.templateVersion(), command.customerName(),
