@@ -296,6 +296,11 @@ events:
     schema: schemas/workitem.work-item-restored-v1.schema.json
     validExamples: [examples/workitem.work-item-restored-v1.json]
     invalidExamples: [examples/workitem.work-item-restored-v1.invalid.json]
+  - eventType: workitem.work_item_update_published
+    eventVersion: 1
+    schema: schemas/workitem.work-item-update-published-v1.schema.json
+    validExamples: [examples/workitem.work-item-update-published-v1.json]
+    invalidExamples: [examples/workitem.work-item-update-published-v1.invalid.json]
   - eventType: workitem.content_updated
     eventVersion: 1
     schema: schemas/workitem.content-updated-v1.schema.json

@@ -54,6 +54,12 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     }
 
     @Override
+    public java.util.Set<java.util.UUID> findActiveMemberIds(java.util.UUID companyId,
+            java.util.UUID projectId, java.util.Collection<java.util.UUID> userIds) {
+        return membershipService.findActiveMemberIds(companyId, projectId, userIds);
+    }
+
+    @Override
     public ProjectAccessSnapshot requireVisible(com.yumpoo.platform.identityaccess.api.CurrentActor actor,
                                                 java.util.UUID projectId) {
         return access(membershipService.requireVisible(actor, projectId));

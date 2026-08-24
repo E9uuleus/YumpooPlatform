@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-update-published-v1.schema.json",
+  "title": "Work Item update published",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    { "type": "object", "properties": {
+      "eventType": { "const": "workitem.work_item_update_published" },
+      "eventVersion": { "const": 1 },
+      "aggregateType": { "const": "WorkItemUpdate" },
+      "aggregateVersion": { "type": "integer", "minimum": 0 },
+      "payload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["updateId", "workItemId", "projectId", "contentId", "itemNo", "title", "authorUserId", "mentionedUserIds", "rowVersion"],
+        "properties": {
+          "updateId": { "type": "string", "format": "uuid" },
+          "workItemId": { "type": "string", "format": "uuid" },
+          "projectId": { "type": "string", "format": "uuid" },
+          "contentId": { "type": "string", "format": "uuid" },
+          "itemNo": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "authorUserId": { "type": "string", "format": "uuid" },
+          "mentionedUserIds": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "format": "uuid" }
+          },
+          "rowVersion": { "type": "integer", "minimum": 0 }
+        }
+      }
+    } }
+  ]
+}
