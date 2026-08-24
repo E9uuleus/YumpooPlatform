@@ -33,11 +33,14 @@ import {
   ElDropdownItem,
   ElDropdownMenu,
   ElMessage,
+  ElMessageBox,
   ElOption as ElOptionRaw,
   ElPagination,
   ElSelect as ElSelectRaw,
   ElTable,
   ElTableColumn,
+  ElTabPane as ElTabPaneRaw,
+  ElTabs as ElTabsRaw,
 } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type DefineComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -49,6 +52,7 @@ import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import ContentTableQueryEditor from '../../components/projects/ContentTableQueryEditor.vue'
+import WorkItemDiscussion from '../../components/collaboration/WorkItemDiscussion.vue'
 import {
   cloneTableQuery,
   encodeTableQuery,
@@ -114,10 +118,17 @@ interface WorkItemUndoEntry {
   problem?: ApiProblem
 }
 
+interface WorkItemDiscussionHandle {
+  hasDraft: boolean
+  discardDraft: () => void
+}
+
 const route = useRoute()
 const router = useRouter()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
+const ElTabs = ElTabsRaw as unknown as DefineComponent
+const ElTabPane = ElTabPaneRaw as unknown as DefineComponent
 const projectId = String(route.params.projectId)
 const contentId = String(route.params.contentId)
 const project = ref<ProjectDetail>()
@@ -153,6 +164,8 @@ const createForm = reactive({
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
+const detailTab = ref<'details' | 'discussion'>('details')
+const discussion = ref<WorkItemDiscussionHandle>()
 const detailDraft = reactive<WorkItemFieldsDraft>({
   title: '', priority: WorkItemPriority.Medium, assigneeUserId: '', description: '', notes: '',
   timelineStartDate: '', timelineEndDate: '', dueDate: '',
@@ -220,6 +233,7 @@ const readOnlyReason = computed(() => {
 })
 const canEditDetail = computed(() => detail.value?.capabilities.canEditFields === true)
 const canDeleteDetail = computed(() => detail.value?.capabilities.canDelete === true)
+const canPublishUpdate = computed(() => canCreate.value && detail.value !== undefined)
 const detailDraftDirty = computed(() => {
   if (!detail.value) return false
   return detailDraft.title !== detail.value.title
@@ -825,7 +839,9 @@ async function createWorkItem(): Promise<void> {
 }
 
 async function openDetail(item: WorkItemSummary): Promise<void> {
+  if (detailOpen.value && detail.value?.id !== item.id && !await confirmDiscardDiscussion()) return
   detailOpen.value = true
+  detailTab.value = 'details'
   detailLoading.value = true
   detail.value = undefined
   latestConflict.value = undefined
@@ -839,6 +855,34 @@ async function openDetail(item: WorkItemSummary): Promise<void> {
   } finally {
     detailLoading.value = false
   }
+}
+
+async function confirmDiscardDiscussion(): Promise<boolean> {
+  if (!discussion.value?.hasDraft) return true
+  try {
+    await ElMessageBox.confirm('讨论草稿尚未发布，离开后将丢弃。', '放弃讨论草稿？', {
+      confirmButtonText: '放弃草稿',
+      cancelButtonText: '继续编辑',
+      type: 'warning',
+    })
+    discussion.value.discardDraft()
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function beforeDetailTabLeave(next: string | number, previous: string | number): Promise<boolean> {
+  if (previous === 'discussion' && next !== 'discussion') return confirmDiscardDiscussion()
+  return true
+}
+
+async function beforeCloseDetail(done: () => void): Promise<void> {
+  if (await confirmDiscardDiscussion()) done()
+}
+
+async function requestCloseDetail(): Promise<void> {
+  if (await confirmDiscardDiscussion()) detailOpen.value = false
 }
 
 async function refreshCurrentView(firstPage = false): Promise<void> {
@@ -1580,6 +1624,7 @@ onBeforeUnmount(() => {
       v-model="detailOpen"
       title="工作项详情"
       size="min(560px, 100vw)"
+      :before-close="beforeCloseDetail"
     >
       <div
         v-loading="detailLoading"
@@ -1615,7 +1660,9 @@ onBeforeUnmount(() => {
             >{{ statusLabel(detail.statusCode) }}</span>
             <span class="version-badge">版本 {{ detail.rowVersion }}</span>
           </div>
-          <dl>
+          <el-tabs v-model="detailTab" :before-leave="beforeDetailTabLeave" class="detail-tabs">
+            <el-tab-pane label="详情" name="details">
+              <dl>
             <div>
               <dt>处理人</dt><dd>
                 <yp-assignee
@@ -1634,8 +1681,8 @@ onBeforeUnmount(() => {
             </div>
             <div><dt>创建时间</dt><dd>{{ formatDate(detail.createdAt) }}</dd></div>
             <div><dt>更新时间</dt><dd>{{ formatDate(detail.updatedAt) }}</dd></div>
-          </dl>
-          <el-form
+              </dl>
+              <el-form
             class="work-item-editor"
             label-position="top"
             @submit.prevent="saveWorkItem()"
@@ -1745,18 +1792,30 @@ onBeforeUnmount(() => {
                 />
               </el-form-item>
             </div>
-          </el-form>
+              </el-form>
+            </el-tab-pane>
+            <el-tab-pane label="讨论" name="discussion" lazy>
+              <work-item-discussion
+                v-if="detailTab === 'discussion'"
+                ref="discussion"
+                :work-item-id="detail.id"
+                :members="activeMembers"
+                :can-publish="canPublishUpdate"
+                :read-only-reason="readOnlyReason"
+              />
+            </el-tab-pane>
+          </el-tabs>
         </template>
       </div>
       <template #footer>
         <div class="drawer-footer">
           <span v-if="detail && !canEditDetail">当前角色或资源状态仅允许查看。</span>
           <span v-else />
-          <el-button @click="detailOpen = false">
+          <el-button @click="requestCloseDetail">
             关闭
           </el-button>
           <el-button
-            v-if="availableTransitions.length"
+            v-if="detailTab === 'details' && availableTransitions.length"
             type="success"
             :disabled="Boolean(latestConflict)"
             @click="openTransition"
@@ -1764,7 +1823,7 @@ onBeforeUnmount(() => {
             变更状态
           </el-button>
           <el-button
-            v-if="canDeleteDetail"
+            v-if="detailTab === 'details' && canDeleteDetail"
             type="danger"
             plain
             :disabled="Boolean(latestConflict)"
@@ -1773,7 +1832,7 @@ onBeforeUnmount(() => {
             删除
           </el-button>
           <el-button
-            v-if="canEditDetail"
+            v-if="detailTab === 'details' && canEditDetail"
             type="primary"
             :loading="detailSaving"
             :disabled="Boolean(latestConflict)"
@@ -1959,6 +2018,7 @@ onBeforeUnmount(() => {
 .work-item-card__status { justify-self: start; }
 .load-more { margin: auto var(--yp-space-3) var(--yp-space-3); }
 .detail-panel { min-height: 240px; }
+.detail-tabs { margin-top: var(--yp-space-3); }
 .detail-panel__eyebrow { color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
 .detail-panel__badges { display: flex; align-items: center; gap: var(--yp-space-3); }
 .version-badge { color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }

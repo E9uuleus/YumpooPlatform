@@ -1,5 +1,19 @@
 # YumpooPlatform
 
+## M2-16 Work Item 独立讨论与项目成员提及
+
+M2-16 新增独立 `WorkItemUpdate` 讨论流及 `GET/POST /api/v1/work-items/{workItemId}/updates`。首次读取最新窗口，对外始终按旧到新展示，并以 Base64URL 复合游标向上加载更早内容；发布要求 XSRF 与幂等键，同键同请求精确重放。讨论不会推进父 Work Item 的版本、ETag 或更新时间。
+
+服务端用固定富文本白名单净化 HTML，只接受绝对安全链接和合法 Mention wire，并用发布时 ACTIVE 项目成员及权威显示名重写提及。Owner 与 ACTIVE Member 可发布，CompanyAdmin 以及归档 Project/Content 只读；非成员、跨企业和墓碑事项隐藏为 404。发布事件只传播引用、作者、排序后的 Mention ID 与版本，不传播正文。
+
+Web 详情抽屉提供“详情 / 讨论”双页签，首次进入讨论时才加载，支持加载更早、手动刷新、受限富文本和键盘 Mention。页面只渲染服务器净化响应；失败保留草稿和幂等键，关闭或切换事项会确认未发布草稿。编辑/删除、附件、Activity、实时更新、通知和未读数继续延期。
+
+```powershell
+pnpm verify:m2-16
+```
+
+完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
+
 ## M2-15 Work Item 软删除、恢复与归档只读
 
 M2-15 新增 `DELETE /api/v1/work-items/{workItemId}` 与 `POST /api/v1/work-items/{workItemId}/restore`。Project Owner 和 ACTIVE Member 都可写，CompanyAdmin 保持只读，非成员隐藏为 404；父 Project 或 Content 归档后，创建、PATCH、迁移、rank、删除和恢复统一拒绝。普通详情、Table、Kanban、参与人排序与开放事项 blocker 均排除墓碑，删除/恢复命令使用强 ETag、XSRF 和持久化幂等键。

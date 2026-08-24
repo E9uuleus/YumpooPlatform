@@ -1,0 +1,26 @@
+{
+  "eventId": "35000000-0000-4000-8000-000000000011",
+  "eventType": "workitem.work_item_update_published",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-24T10:00:00Z",
+  "aggregateType": "WorkItemUpdate",
+  "aggregateId": "35000000-0000-4000-8000-000000000012",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "35000000-0000-4000-8000-000000000013" },
+  "requestId": "m2-16-update-publish-invalid",
+  "correlationId": "m2-16-update-publish-invalid",
+  "causationId": null,
+  "payload": {
+    "updateId": "35000000-0000-4000-8000-000000000012",
+    "workItemId": "35000000-0000-4000-8000-000000000014",
+    "projectId": "35000000-0000-4000-8000-000000000015",
+    "contentId": "35000000-0000-4000-8000-000000000016",
+    "itemNo": "PROJECT_CORE-16",
+    "title": "禁止事件携带正文",
+    "authorUserId": "35000000-0000-4000-8000-000000000013",
+    "mentionedUserIds": [],
+    "rowVersion": 0,
+    "bodyHtml": "<p>不应出现在事件中</p>"
+  }
+}

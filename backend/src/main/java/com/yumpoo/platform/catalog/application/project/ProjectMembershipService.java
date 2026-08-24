@@ -20,6 +20,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Collection;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -58,6 +60,16 @@ public class ProjectMembershipService {
     @Transactional(readOnly = true)
     public boolean isActiveMember(UUID companyId, UUID projectId, UUID userId) {
         return membershipRepository.existsActive(companyId, projectId, userId);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<UUID> findActiveMemberIds(UUID companyId, UUID projectId,
+            Collection<UUID> userIds) {
+        return membershipRepository.findByUsers(companyId, projectId, userIds).values().stream()
+                .filter(membership -> membership.status()
+                        == com.yumpoo.platform.catalog.domain.project.ProjectMembershipStatus.ACTIVE)
+                .map(com.yumpoo.platform.catalog.domain.project.ProjectMembership::userId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     @Transactional(readOnly = true)

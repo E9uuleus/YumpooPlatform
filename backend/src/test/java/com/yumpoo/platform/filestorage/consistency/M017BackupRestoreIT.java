@@ -129,6 +129,8 @@ class M017BackupRestoreIT {
                     .isEqualTo(readProjectContentFact(source));
             assertThat(readWorkItemStatusEventFact(target))
                     .isEqualTo(readWorkItemStatusEventFact(source));
+            assertThat(readWorkItemUpdateFact(target))
+                    .isEqualTo(readWorkItemUpdateFact(source));
             assertThat(readAdminOverrideFact(target))
                     .isEqualTo(readAdminOverrideFact(source));
 
@@ -911,6 +913,38 @@ class M017BackupRestoreIT {
                 tombstone.setObject(1, createdAt.plusHours(2));
                 assertThat(tombstone.executeUpdate()).isOne();
             }
+            try (PreparedStatement update = connection.prepareStatement("""
+                    INSERT INTO yumpoo.work_item_update (
+                        id, company_id, project_id, content_id, work_item_id,
+                        author_user_id, author_display_name, body_html, body_text, status,
+                        edit_deadline_at, row_version, created_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000818',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000802',
+                        '00000000-0000-4000-8000-000000000805',
+                        '00000000-0000-4000-8000-000000000815',
+                        '00000000-0000-4000-8000-000000000102', 'M2-16 Author',
+                        '<p>恢复讨论 <span data-type="mention" data-mention-user-id="00000000-0000-4000-8000-000000000102">@M2-16 Author</span></p>',
+                        '恢复讨论 @M2-16 Author', 'PUBLISHED', ?, 0, ?
+                    )
+                    """)) {
+                update.setObject(1, createdAt.plusMinutes(15));
+                update.setObject(2, createdAt);
+                assertThat(update.executeUpdate()).isOne();
+            }
+            try (PreparedStatement mention = connection.prepareStatement("""
+                    INSERT INTO yumpoo.work_item_update_mention (
+                        update_id, company_id, mentioned_user_id, mentioned_display_name, created_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000818',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000102', 'M2-16 Author', ?
+                    )
+                    """)) {
+                mention.setObject(1, createdAt);
+                assertThat(mention.executeUpdate()).isOne();
+            }
             try (PreparedStatement event = connection.prepareStatement("""
                     INSERT INTO yumpoo.outbox_event (
                         event_id, event_type, event_version, aggregate_type, aggregate_id,
@@ -1059,6 +1093,26 @@ class M017BackupRestoreIT {
                             || ':' || after_snapshot::text AS fact
                      FROM yumpoo.admin_override
                      WHERE id = '00000000-0000-4000-8000-000000000812'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            String fact = result.getString("fact");
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
+    }
+
+    private static String readWorkItemUpdateFact(PostgreSQLContainer container) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT update_record.body_html || ':' || update_record.body_text || ':'
+                            || update_record.status || ':' || update_record.edit_deadline_at || ':'
+                            || update_record.row_version || ':'
+                            || mention.mentioned_user_id || ':' || mention.mentioned_display_name AS fact
+                       FROM yumpoo.work_item_update update_record
+                       JOIN yumpoo.work_item_update_mention mention
+                         ON mention.update_id = update_record.id
+                      WHERE update_record.id = '00000000-0000-4000-8000-000000000818'
                      """)) {
             assertThat(result.next()).isTrue();
             String fact = result.getString("fact");
