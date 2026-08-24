@@ -47,6 +47,8 @@ const api = vi.hoisted(() => ({
   rankMoveWorkItem: vi.fn(),
   deleteWorkItem: vi.fn(),
   restoreWorkItem: vi.fn(),
+  listWorkItemUpdates: vi.fn(),
+  publishWorkItemUpdate: vi.fn(),
 }))
 const routing = vi.hoisted(() => ({
   route: { name: 'content-work-items', params: { projectId: 'project-1', contentId: 'content-1' },
@@ -71,6 +73,10 @@ vi.mock('../../api/client', () => ({
     rankMoveWorkItem: api.rankMoveWorkItem,
     deleteWorkItem: api.deleteWorkItem,
     restoreWorkItem: api.restoreWorkItem,
+  },
+  workItemUpdatesApi: {
+    listWorkItemUpdates: api.listWorkItemUpdates,
+    publishWorkItemUpdate: api.publishWorkItemUpdate,
   },
 }))
 vi.mock('@yumpoo/api-client', async (importOriginal) => ({
@@ -214,6 +220,23 @@ describe('M2-10 Content 工作项工作区', () => {
         canDelete: false, canRestore: true, availableTransitions: [] },
     })
     api.restoreWorkItem.mockResolvedValue({ ...detail(), rowVersion: 2, etag: '"2"' })
+    api.listWorkItemUpdates.mockResolvedValue({ items: [], nextCursor: null })
+  })
+
+  it('详情抽屉提供双页签且讨论仅在首次进入时加载', async () => {
+    const wrapper = mountView(); await flushPromises()
+    const vm = wrapper.vm as unknown as { openDetail: (item: WorkItemSummary) => Promise<void> }
+    await vm.openDetail(summary()); await flushPromises()
+    expect(wrapper.text()).toContain('详情')
+    expect(wrapper.text()).toContain('讨论')
+    expect(api.listWorkItemUpdates).not.toHaveBeenCalled()
+
+    const discussionTab = wrapper.findAll('.el-tabs__item')
+      .find(tab => tab.text().includes('讨论'))
+    await discussionTab?.trigger('click')
+    await flushPromises()
+    expect(api.listWorkItemUpdates).toHaveBeenCalledWith({ workItemId: 'work-item-1', size: 20 })
+    wrapper.unmount()
   })
 
   it('使用服务端分页并呈现全部协作字段列', async () => {
