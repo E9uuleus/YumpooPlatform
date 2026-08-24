@@ -122,8 +122,12 @@ class WorkspaceHttpIT {
         assertThat(listed.statusCode()).isEqualTo(200);
         assertThat(listed.body()).contains("\"code\":\"MAIN\"", "\"status\":\"ACTIVE\"");
 
-        assertThat(mutate("POST", "/api/v1/workspaces", admin, "{}", null,
-                UUID.randomUUID(), true).statusCode()).isEqualTo(405);
+        HttpResponse<String> rejectedCreation = mutate(
+                "POST", "/api/v1/workspaces", admin,
+                "{\"code\":\"SECONDARY\",\"name\":\"其他空间\",\"description\":null,\"sortOrder\":1}",
+                null, UUID.randomUUID(), true);
+        assertThat(rejectedCreation.statusCode()).isEqualTo(409);
+        assertThat(rejectedCreation.body()).contains("INVALID_STATE_TRANSITION");
     }
 
     @Test
@@ -154,10 +158,17 @@ class WorkspaceHttpIT {
         assertThat(stale.statusCode()).isEqualTo(412);
         assertThat(stale.body()).contains("VERSION_CONFLICT");
 
-        assertThat(mutate("POST", location + "/archive", admin, "", "\"1\"",
-                UUID.randomUUID(), true).statusCode()).isEqualTo(404);
-        assertThat(mutate("POST", location + "/restore", admin, "", "\"1\"",
-                UUID.randomUUID(), true).statusCode()).isEqualTo(404);
+        HttpResponse<String> rejectedArchive = mutate(
+                "POST", location + "/archive", admin, "", "\"1\"",
+                UUID.randomUUID(), true);
+        assertThat(rejectedArchive.statusCode()).isEqualTo(409);
+        assertThat(rejectedArchive.body()).contains("INVALID_STATE_TRANSITION");
+
+        HttpResponse<String> rejectedRestore = mutate(
+                "POST", location + "/restore", admin, "", "\"1\"",
+                UUID.randomUUID(), true);
+        assertThat(rejectedRestore.statusCode()).isEqualTo(409);
+        assertThat(rejectedRestore.body()).contains("INVALID_STATE_TRANSITION");
     }
 
     private ActorFixture actor(UUID userId) {
