@@ -9,7 +9,6 @@ import com.yumpoo.platform.catalog.api.ProjectLifecycleCommandPort;
 import com.yumpoo.platform.catalog.api.ProjectRestoreMutation;
 import com.yumpoo.platform.catalog.api.ProjectRestoreSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectSnapshot;
-import com.yumpoo.platform.catalog.api.ProjectWorkspaceMoveMutation;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
@@ -92,25 +91,6 @@ public final class ProjectLifecycleGovernanceService {
             ProjectSnapshot after = projects.reopen(mutation);
             appendLifecycle("PROJECT_REOPENED", "catalog.project_reopened", before, after,
                     command.actor(), command.idempotencyKey(), null);
-            return stored(after);
-        });
-    }
-
-    public IdempotencyExecutionResult move(ProjectWorkspaceMoveOperationCommand command) {
-        requireAdmin(command.actor());
-        String reason = validateReason(command.reason());
-        return idempotency.execute(key(command.actor(), "moveProjectWorkspace", command.idempotencyKey(),
-                command.requestHash()), () -> {
-            ProjectWorkspaceMoveMutation mutation = new ProjectWorkspaceMoveMutation(
-                    command.actor().companyId(), command.projectId(), command.targetWorkspaceId(),
-                    command.expectedRowVersion(), command.actor().userId());
-            ProjectSnapshot before = projects.lockForWorkspaceMove(mutation);
-            ProjectSnapshot after = projects.moveWorkspace(mutation);
-            Map<String, Object> payload = lifecycleSummary(before, after);
-            payload.put("fromWorkspaceId", before.workspaceId());
-            payload.put("toWorkspaceId", after.workspaceId());
-            append("PROJECT_MOVED_TO_WORKSPACE", "catalog.project_moved_to_workspace", before, after,
-                    command.actor(), command.idempotencyKey(), reason, payload);
             return stored(after);
         });
     }

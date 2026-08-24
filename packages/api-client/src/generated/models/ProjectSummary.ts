@@ -131,6 +131,18 @@ export interface ProjectSummary {
      * @memberof ProjectSummary
      */
     readonly etag: string;
+    /**
+     *
+     * @type {Date}
+     * @memberof ProjectSummary
+     */
+    readonly createdAt: Date;
+    /**
+     *
+     * @type {Date}
+     * @memberof ProjectSummary
+     */
+    readonly updatedAt: Date;
 }
 
 
@@ -153,6 +165,8 @@ export function instanceOfProjectSummary(value: object): value is ProjectSummary
     if (!('capabilities' in value) || value['capabilities'] === undefined) return false;
     if (!('rowVersion' in value) || value['rowVersion'] === undefined) return false;
     if (!('etag' in value) || value['etag'] === undefined) return false;
+    if (!('createdAt' in value) || value['createdAt'] === undefined) return false;
+    if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
     return true;
 }
 
@@ -180,6 +194,8 @@ export function ProjectSummaryFromJSONTyped(json: any, ignoreDiscriminator: bool
         'capabilities': ProjectCapabilitiesFromJSON(json['capabilities']),
         'rowVersion': json['rowVersion'],
         'etag': json['etag'],
+        'createdAt': (new Date(json['createdAt'])),
+        'updatedAt': (new Date(json['updatedAt'])),
     };
 }
 
@@ -187,7 +203,7 @@ export function ProjectSummaryToJSON(json: any): ProjectSummary {
     return ProjectSummaryToJSONTyped(json, false);
 }
 
-export function ProjectSummaryToJSONTyped(value?: Omit<ProjectSummary, 'rowVersion'|'etag'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectSummaryToJSONTyped(value?: Omit<ProjectSummary, 'rowVersion'|'etag'|'createdAt'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

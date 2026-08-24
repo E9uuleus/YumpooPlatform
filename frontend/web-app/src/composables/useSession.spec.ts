@@ -24,7 +24,7 @@ import { ensureAuthentication, useSession } from './useSession'
 
 function currentAuthentication(compatibility = ClientCompatibility.Supported): CurrentAuthentication {
   return {
-    user: { id: crypto.randomUUID(), displayName: '测试用户' },
+    user: { id: crypto.randomUUID(), displayName: '测试用户', workspaceSlug: 'member' },
     company: {
       id: crypto.randomUUID(), displayName: '测试公司', timezone: 'Asia/Shanghai', weekStartDay: 'MONDAY',
     },

@@ -15,7 +15,7 @@ const router = useRouter()
       <template #extra>
         <el-button
           type="primary"
-          @click="router.push({ name: 'home' })"
+          @click="router.push({ name: 'workspace-entry' })"
         >
           返回工作台
         </el-button>

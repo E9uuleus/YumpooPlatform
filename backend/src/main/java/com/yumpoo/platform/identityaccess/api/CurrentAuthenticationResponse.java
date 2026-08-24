@@ -25,7 +25,11 @@ public record CurrentAuthenticationResponse(
             roles.add(Role.APP_MANAGER);
         }
         return new CurrentAuthenticationResponse(
-                new User(view.user().userId(), view.user().displayName()),
+                new User(
+                        view.user().userId(),
+                        view.user().displayName(),
+                        view.user().workspaceSlug()
+                ),
                 new Company(
                         view.company().companyId(),
                         view.company().displayName(),
@@ -37,7 +41,7 @@ public record CurrentAuthenticationResponse(
         );
     }
 
-    public record User(UUID id, String displayName) {
+    public record User(UUID id, String displayName, String workspaceSlug) {
     }
 
     public record Company(

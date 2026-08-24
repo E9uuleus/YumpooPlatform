@@ -1,5 +1,11 @@
 # YumpooPlatform
 
+## M2-14 现状修正：项目管理与 MAIN 主工作空间
+
+每个 Company 现在由数据库保证恰好一个 `code=MAIN / status=ACTIVE / sortOrder=0` 的内部主工作空间。V32 按既有 MAIN、首个 ACTIVE、首个 ARCHIVED的优先级保留稳定身份，把所有生命周期 Project 迁入 MAIN 后删除其余 Workspace；迁移不可逆，升级前必须备份，回滚使用备份恢复。Project 创建请求不再接受 `workspaceId`，服务端在原子事务内锁定 MAIN 自动归属；Workspace 公开写能力只保留名称和描述 PATCH。
+
+`/projects` 已重构为单表管理页，默认显式查询全部生命周期。服务端支持项目名称/编码搜索、项目类型/负责人/我的角色多选、公司时区自然日修改时间筛选以及仅来自可见项目的负责人候选；行与 total 复用相同权限和筛选谓词。页面提供折叠搜索、四列即时筛选、精确列序、公司时区分钟显示、移动端连续行和无 Workspace 的创建抽屉；侧栏统一为“项目 → 管理项目”层级。
+
 ## M2-14 Kanban rank 与受控拖动
 
 M2-14 以 V31 为 Work Item 增加状态泳道内持久化 rank。升级按既有 `item_sequence DESC, id ASC` 回填 39 位定长十进制位置；创建与普通状态迁移置于目标状态顶部，同状态移动支持 `START/BEFORE/AFTER/END`，间隙耗尽时在 Content/状态 lane 锁内保持相对顺序重平衡。Kanban 查询要求恰好一个状态、拒绝 Table sort，并固定按 `rank ASC, id ASC` 稳定分页；移动命令要求 XSRF、强 `If-Match` 与幂等键。
@@ -52,7 +58,7 @@ pnpm verify:m2-11
 
 M2-07 已交付 V27 关系小聚合、四类关系、单一可选主 Product、关系强 ETag、持久化幂等、软移除与重新关联新 ID。关系写入锁定 Project 但不增加 Project 版本；Owner 可写，成员和非成员 CompanyAdmin 只读。Product 读取范围现包含关联 Project 的 ACTIVE member，Product 写权限仍显式限制为 ProductOwner 或 CompanyAdmin；项目目录支持远程 Product 筛选。
 
-M2-08 已交付 Project 普通归档、治理覆盖归档、恢复、Workspace 迁移和 Workspace 占用保护。M2-10 已接入 Work Item 的真实 `OPEN_WORK_ITEMS` provider；Worklog 与 Feedback provider 及完整 PPM-014 仍留给 M2-24，不制造零值 blocker 或虚假 Verified 结论。
+M2-08 已交付 Project 普通归档、治理覆盖归档和恢复；历史 Workspace 迁移事件仍可读取，但 MAIN 单工作空间实施后不再提供或产生跨 Workspace 迁移。M2-10 已接入 Work Item 的真实 `OPEN_WORK_ITEMS` provider；Worklog 与 Feedback provider 及完整 PPM-014 仍留给 M2-24，不制造零值 blocker 或虚假 Verified 结论。
 
 OpenAPI、生成 TypeScript SDK、三类 v1 事件、Vue 关联产品页、PostgreSQL 并发/回滚测试和备份恢复事实已同步。真实 Feedback 引用的解绑 blocker 继续由 M3B/M2-24 建立，不在尚无 Feedback 真源时伪造已验证结论。
 
@@ -82,7 +88,7 @@ OpenAPI、生成 TypeScript `ProjectsApi`、V24/V25 迁移、备份恢复与 `pn
 
 ## M2-04 Project 原子创建与初始 Content
 
-M2-04 交付 `POST /api/v1/projects`：COMPANY_ADMIN 显式选择已发布模板版本，在单一事务内创建 DRAFT Project、ACTIVE owner membership、模板定义的三类初始 Content、Security Audit、两类 Outbox 和可字节级重放的幂等响应。Project 类型、Workspace 和模板引用创建后固化，非研发客户名的必填检查保留到 M2-06 激活。
+M2-04 交付 `POST /api/v1/projects`：COMPANY_ADMIN 显式选择已发布模板版本，在单一事务内创建 DRAFT Project、ACTIVE owner membership、模板定义的三类初始 Content、Security Audit、两类 Outbox 和可字节级重放的幂等响应。当前请求不再提交 Workspace，服务端自动归属 Company 的 MAIN；Project 类型和模板引用创建后固化，非研发客户名的必填检查保留到 M2-06 激活。
 
 OpenAPI、生成的 TypeScript `ProjectsApi`、两类 v1 事件与备份恢复覆盖已同步。列表/详情/PATCH、激活、成员管理、Content API/View Config 和 Activity 投影分别留给 M2-05、M2-06、M2-09 与 M2-20。
 
@@ -104,11 +110,11 @@ pnpm verify:m2-03
 
 完整门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。
 
-## M2-02 Workspace 生命周期
+## M2-02 Workspace 基线与 MAIN 收口
 
-M2-02 在 `catalog` 中交付 Company 内 Workspace 的 V17 数据模型、稳定调用方 code、查询/详情、完整可变快照 PATCH，以及带强 ETag 和持久化幂等的归档/恢复命令。普通有效成员只读取 ACTIVE 导航项，COMPANY_ADMIN 可查询和治理 ARCHIVED 项；Workspace 不保存成员、角色或授权事实。
+M2-02 的 V17 建立了 Workspace 历史基线；V32 已将其收口为每 Company 唯一且永远 ACTIVE 的 MAIN。列表和详情继续提供稳定 ID，COMPANY_ADMIN 可带强 ETag 修改名称和描述；创建、排序、归档、恢复和项目迁移接口已退役。Workspace 不保存成员、角色或授权事实。
 
-OpenAPI、生成 TypeScript 客户端和领域事件随实现冻结。`visibleProjectCount` 已按 Project SQL 可见性谓词实时分组统计；Project 创建继续通过 `WorkspaceSnapshotQuery` 校验同 Company 的 ACTIVE Workspace。
+OpenAPI 与生成 TypeScript 客户端已同步当前只读/改名契约；历史 Workspace 领域事件 schema 保留用于读取既有事实。Project 创建在事务内读取 MAIN，不再接受客户端 Workspace 选择。
 
 ```powershell
 pnpm verify:m2-02

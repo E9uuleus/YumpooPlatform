@@ -27,9 +27,7 @@ public record Workspace(
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(status, "status must not be null");
         Objects.requireNonNull(createdAt, "createdAt must not be null");
-        Objects.requireNonNull(createdByUserId, "createdByUserId must not be null");
         Objects.requireNonNull(updatedAt, "updatedAt must not be null");
-        Objects.requireNonNull(updatedByUserId, "updatedByUserId must not be null");
         code = requireCode(code);
         name = normalizeRequired(name, 80, "name");
         description = normalizeOptional(description, 500, "description");
@@ -44,43 +42,20 @@ public record Workspace(
         }
     }
 
-    public static Workspace create(
-            UUID id,
-            UUID companyId,
-            String code,
-            String name,
-            String description,
-            int sortOrder,
-            UUID actorUserId,
-            Instant now
-    ) {
-        return new Workspace(
-                id, companyId, code, name, description, sortOrder, WorkspaceStatus.ACTIVE, 0,
-                now, actorUserId, now, actorUserId);
-    }
-
     public Workspace updateDetails(
             String newName,
             String newDescription,
-            int newSortOrder,
             UUID actorUserId,
             Instant now
     ) {
         return new Workspace(
-                id, companyId, code, newName, newDescription, newSortOrder, status,
+                id, companyId, code, newName, newDescription, sortOrder, status,
                 rowVersion + 1, createdAt, createdByUserId, now, actorUserId);
     }
 
-    public Workspace changeStatus(WorkspaceStatus newStatus, UUID actorUserId, Instant now) {
-        return new Workspace(
-                id, companyId, code, name, description, sortOrder, newStatus,
-                rowVersion + 1, createdAt, createdByUserId, now, actorUserId);
-    }
-
-    public boolean hasSameDetails(String candidateName, String candidateDescription, int candidateSortOrder) {
+    public boolean hasSameDetails(String candidateName, String candidateDescription) {
         return name.equals(normalizeRequired(candidateName, 80, "name"))
-                && Objects.equals(description, normalizeOptional(candidateDescription, 500, "description"))
-                && sortOrder == candidateSortOrder;
+                && Objects.equals(description, normalizeOptional(candidateDescription, 500, "description"));
     }
 
     private static String requireCode(String value) {

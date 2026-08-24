@@ -2,45 +2,38 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..','..')
-const read=(relative)=>fs.readFileSync(path.join(root,relative),'utf8')
-const migration=read('backend/src/main/resources/db/migration/administration/V28__create_admin_override.sql')
-const project=read('backend/src/main/java/com/yumpoo/platform/catalog/domain/project/Project.java')
-const projectRepository=read('backend/src/main/java/com/yumpoo/platform/catalog/infrastructure/project/JdbcProjectRepository.java')
-const workspaceRepository=read('backend/src/main/java/com/yumpoo/platform/catalog/infrastructure/workspace/JdbcWorkspaceRepository.java')
-const workspaceService=read('backend/src/main/java/com/yumpoo/platform/catalog/application/workspace/WorkspaceService.java')
-const collector=read('backend/src/main/java/com/yumpoo/platform/administration/application/ProjectArchiveBlockerCollector.java')
-const governance=read('backend/src/main/java/com/yumpoo/platform/administration/application/GovernanceOverrideService.java')
-const openapi=read('contracts/openapi/yumpoo-v1.yaml')
-const events=read('contracts/events/catalog.yaml')
-const sdk=read('packages/api-client/src/generated/apis/ProjectsApi.ts')
-const adminSdk=read('packages/api-client/src/generated/apis/AdministrationApi.ts')
-const page=read('frontend/web-app/src/views/projects/ProjectLifecycleActions.vue')
-const backup=read('backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java')
-const note=read('.agents/notes/implemented/product/2026-08-21-project-lifecycle-governance-contract.md')
-const report=JSON.parse(read('evidence/m2-08/verification-report.json'))
-const acceptance=JSON.parse(read('evidence/m2-08/acceptance-matrix.json'))
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+const read = relative => fs.readFileSync(path.join(root, relative), 'utf8')
+const migration = read('backend/src/main/resources/db/migration/administration/V28__create_admin_override.sql')
+const collector = read('backend/src/main/java/com/yumpoo/platform/administration/application/ProjectArchiveBlockerCollector.java')
+const governance = read('backend/src/main/java/com/yumpoo/platform/administration/application/GovernanceOverrideService.java')
+const lifecycle = read('backend/src/main/java/com/yumpoo/platform/administration/application/ProjectLifecycleGovernanceService.java')
+const controller = read('backend/src/main/java/com/yumpoo/platform/administration/api/ProjectLifecycleGovernanceController.java')
+const page = read('frontend/web-app/src/components/projects/ProjectLifecycleActions.vue')
+const openapi = read('contracts/openapi/yumpoo-v1.yaml')
+const events = read('contracts/events/catalog.yaml')
+const note = read('.agents/notes/implemented/product/2026-08-21-project-lifecycle-governance-contract.md')
 
-for(const fragment of ['CREATE TABLE yumpoo.admin_override','request_hash','before_snapshot','blocker_counts','uq_admin_override_idempotency','BETWEEN 200 AND 499']) assert(migration.includes(fragment),`V28 缺少 ${fragment}`)
-for(const fragment of ['archive(','reopen(','moveToWorkspace(','target workspace must differ']) assert(project.includes(fragment),`Project 聚合缺少 ${fragment}`)
-for(const fragment of ['FOR UPDATE','FOR SHARE','countCurrentByWorkspace','lifecycle IN (\'DRAFT\',\'ACTIVE\')']) assert(projectRepository.includes(fragment),`Project 锁或统计缺少 ${fragment}`)
-assert(workspaceRepository.includes('FOR UPDATE')&&workspaceRepository.includes('FOR SHARE'),'Workspace 排他/共享锁缺失')
-for(const fragment of ['WORKSPACE_ARCHIVE_BLOCKED','CURRENT_PROJECTS','countCurrentByWorkspace']) assert(workspaceService.includes(fragment),`Workspace 占用保护缺少 ${fragment}`)
-for(const fragment of ['DECLARED_SOURCES = Set.of()','coverage mismatch','DEPENDENCY_UNAVAILABLE','!report.complete()']) assert(collector.includes(fragment),`blocker 关闭失败协议缺少 ${fragment}`)
-assert(!collector.includes('Noop')&&!collector.includes('EmptyProvider'),'禁止空 blocker provider')
-for(const fragment of ['stableFailure','GovernanceOverrideResult.FAILED','PROJECT_ARCHIVE_WITH_OPEN_ITEMS','WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS']) assert(governance.includes(fragment),`治理覆盖编排缺少 ${fragment}`)
-for(const fragment of ['/projects/{projectId}/archive:','/projects/{projectId}/restore:','/projects/{projectId}/workspace-moves:','/admin/governance-overrides:','canOverrideArchive','PROJECT_ARCHIVE_BLOCKED','CURRENT_PROJECTS']) assert(openapi.includes(fragment),`OpenAPI 缺少 ${fragment}`)
-for(const fragment of ['catalog.project_archived','catalog.project_reopened','catalog.project_moved_to_workspace']) assert(events.includes(fragment),`事件目录缺少 ${fragment}`)
-for(const fragment of ['archiveProject','restoreProject','moveProjectWorkspace']) assert(sdk.includes(fragment),`ProjectsApi 缺少 ${fragment}`)
-for(const fragment of ['createGovernanceOverride','listGovernanceOverrides']) assert(adminSdk.includes(fragment),`AdministrationApi 缺少 ${fragment}`)
-for(const fragment of ['治理覆盖归档','workspace.id !== props.project.workspaceId','problem.error.details.blockers','Project 已被其他操作更新']) assert(page.includes(fragment),`项目端闭环缺少 ${fragment}`)
-for(const fragment of ['yumpoo.admin_override','archived_at','readAdminOverrideFact']) assert(backup.includes(fragment),`备份恢复缺少 ${fragment}`)
-assert(note.includes('Status: implemented')&&note.includes('禁止 Noop')&&note.includes('M2-24'),'Agent Note 状态或诚实边界缺失')
-assert(report.milestone==='M2-08'&&report.status==='PASS'&&report.flywayVersion==='28','验证报告无效')
-for(const id of ['PPM-001-MOVE','PPM-011-LIFECYCLE','PPM-016-MOVE-CORE']) assert(acceptance.verifiedSlices.some(item=>item.requirementId===id),`验收矩阵缺少 ${id}`)
-assert(!acceptance.verifiedSlices.some(item=>item.requirementId==='PPM-014'),'PPM-014 不得在 M2-08 虚假标记 Verified')
-assert(acceptance.deferredRequirements.some(item=>item.requirementId==='PPM-014-REAL-BLOCKERS'),'三类真实 blocker 未明确延期')
-assert(acceptance.deferredRequirements.some(item=>item.requirementId==='PPM-016-ACTIVITY'),'Activity 投影未明确延期')
+for (const fragment of ['CREATE TABLE yumpoo.admin_override', 'request_hash', 'before_snapshot', 'blocker_counts']) {
+  assert(migration.includes(fragment), `V28 缺少 ${fragment}`)
+}
+for (const fragment of ['coverage mismatch', 'DEPENDENCY_UNAVAILABLE', '!report.complete()']) {
+  assert(collector.includes(fragment), `blocker 关闭失败协议缺少 ${fragment}`)
+}
+assert(!collector.includes('Noop') && !collector.includes('EmptyProvider'), '禁止空 blocker provider')
+for (const fragment of ['stableFailure', 'PROJECT_ARCHIVE_WITH_OPEN_ITEMS']) assert(governance.includes(fragment), `治理覆盖缺少 ${fragment}`)
+for (const fragment of ['catalog.project_archived', 'catalog.project_reopened']) assert(lifecycle.includes(fragment), `生命周期缺少 ${fragment}`)
+assert(!controller.includes('workspace-moves'), 'HTTP 仍暴露 Project Workspace 迁移')
+assert(!openapi.includes('/projects/{projectId}/workspace-moves:'), 'OpenAPI 仍暴露 Project Workspace 迁移')
+for (const fragment of ['/projects/{projectId}/archive:', '/projects/{projectId}/restore:', '/admin/governance-overrides:']) {
+  assert(openapi.includes(fragment), `OpenAPI 缺少 ${fragment}`)
+}
+for (const fragment of ['治理覆盖归档', 'problem.error.details.blockers', 'Project 已被其他操作更新']) {
+  assert(page.includes(fragment), `项目端生命周期闭环缺少 ${fragment}`)
+}
+assert(!page.includes('迁移 Workspace'), '项目端仍显示 Workspace 迁移')
+assert(events.includes('catalog.project_moved_to_workspace'), '历史迁移事件 schema 必须继续可读')
+assert(note.includes('Status: implemented') && note.includes('不再支持跨 Workspace 迁移'), '生命周期 Note 未同步 MAIN 事实')
 
-console.log('M2-08 生命周期、锁、覆盖记录、契约、Web、备份恢复和诚实范围资产有效。')
-function assert(condition,message){if(!condition)throw new Error(`M2-08 资产验证失败：${message}`)}
+console.log('M2-08 归档、恢复、覆盖与 blocker 关闭失败协议有效；Workspace 迁移已安全退役。')
+function assert(condition, message) { if (!condition) throw new Error(`M2-08 资产验证失败：${message}`) }

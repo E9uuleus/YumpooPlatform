@@ -9,7 +9,6 @@ public record WorkspaceUpdateCommand(
         UUID workspaceId,
         long expectedRowVersion,
         String name,
-        String description,
-        int sortOrder
+        String description
 ) {
 }

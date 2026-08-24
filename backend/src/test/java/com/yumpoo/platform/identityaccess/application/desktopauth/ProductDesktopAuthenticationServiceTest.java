@@ -142,7 +142,7 @@ class ProductDesktopAuthenticationServiceTest {
 
     private static AuthenticationUser eligibleUser() {
         return new AuthenticationUser(
-                USER_ID, COMPANY_ID, "Member", EmploymentStatus.ACTIVE,
+                USER_ID, COMPANY_ID, "Member", "member", EmploymentStatus.ACTIVE,
                 AccountStatus.ENABLED, EmploymentStatus.ACTIVE, 2, 3
         );
     }

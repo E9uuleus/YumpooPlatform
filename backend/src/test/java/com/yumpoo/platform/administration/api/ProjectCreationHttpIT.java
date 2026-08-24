@@ -46,7 +46,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ProjectCreationHttpIT {
 
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
-    private static final UUID WORKSPACE_ID = UUID.fromString("24000000-0000-4000-8000-000000000201");
     private static final String SESSION_COOKIE = "__Host-yumpoo-session";
     private static final String CSRF_COOKIE = "__Host-yumpoo-csrf";
 
@@ -90,15 +89,6 @@ class ProjectCreationHttpIT {
             member = actor(memberUser.userId());
             admin = actor(adminUser.userId());
 
-            jdbcClient.sql("""
-                            INSERT INTO yumpoo.workspace (
-                                id, company_id, code, name, sort_order, status, row_version,
-                                created_at, created_by_user_id, updated_at, updated_by_user_id
-                            ) VALUES (:id, :companyId, 'M2_04_HTTP', 'M2-04 HTTP', 10,
-                                'ACTIVE', 0, transaction_timestamp(), :adminId,
-                                transaction_timestamp(), :adminId)
-                            """).param("id", WORKSPACE_ID).param("companyId", COMPANY_ID)
-                    .param("adminId", adminUser.userId()).update();
         }
     }
 
@@ -154,9 +144,6 @@ class ProjectCreationHttpIT {
         assertValidation(body("BAD_OWNER", "PRE_SALES", "PRE_SALES", UUID.randomUUID()),
                 UUID.randomUUID(), "ownerUserId", "INVALID_OWNER");
 
-        String invalidWorkspace = body("BAD_WORKSPACE", "PRE_SALES", "PRE_SALES", member.userId())
-                .replace(WORKSPACE_ID.toString(), UUID.randomUUID().toString());
-        assertValidation(invalidWorkspace, UUID.randomUUID(), "workspaceId", "INVALID_WORKSPACE");
         assertValidation(body("BAD_TEMPLATE", "PRODUCT_DEVELOPMENT", "PRE_SALES", member.userId()),
                 UUID.randomUUID(), "templateKey", "TEMPLATE_TYPE_MISMATCH");
 
@@ -206,7 +193,6 @@ class ProjectCreationHttpIT {
 
     private String body(String code, String type, String template, UUID ownerId) throws Exception {
         var body = objectMapper.createObjectNode();
-        body.put("workspaceId", WORKSPACE_ID.toString());
         body.put("code", code);
         body.put("name", "  " + code + "  ");
         body.put("description", "  private description  ");
@@ -240,7 +226,6 @@ class ProjectCreationHttpIT {
             jdbcClient.sql("DELETE FROM yumpoo.project WHERE company_id = :companyId")
                     .param("companyId", COMPANY_ID).update();
         });
-        jdbcClient.sql("DELETE FROM yumpoo.workspace WHERE id = :id").param("id", WORKSPACE_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.outbox_consumer_receipt").update();
         jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id = :companyId")
                 .param("companyId", COMPANY_ID).update();

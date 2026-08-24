@@ -10,7 +10,7 @@ Project 创建同时跨越 `catalog` 的 Project/负责人 membership、`templat
 
 `POST /api/v1/projects` 是 M2-04 唯一公开的 Project operation，由 `administration.application.ProjectCreationOrchestrator` 持有单一 PostgreSQL 事务。只有 `COMPANY_ADMIN` 可执行；请求以 `templateKey + templateVersion` 显式选择模板版本，模板必须保持 PUBLISHED，并通过共享行锁与并发停用串行。固定映射为 `PRODUCT_DEVELOPMENT → RND`、`PRE_SALES → PRE_SALES`、`IMPLEMENTATION → IMPLEMENTATION`、`HYPERCARE → HYPERCARE`。
 
-`catalog.project` 保存 Company 内唯一且不可变的 code、类型、Workspace、负责人和模板引用；创建时固定为 `DRAFT/rowVersion=0`。负责人必须是本企业 `ACTIVE + ENABLED` User，并在同一事务同步创建 ACTIVE `project_membership`。延迟约束触发器在事务提交时保证当前 owner 始终有 ACTIVE membership，允许 M2-05 在一个事务中先建 membership 再改 owner。
+`catalog.project` 保存 Company 内唯一且不可变的 code、类型、内部 MAIN Workspace 归属、负责人和模板引用；创建时固定为 `DRAFT/rowVersion=0`。请求不接受 `workspaceId`，事务内锁定 Company 唯一且 ACTIVE 的 MAIN 后自动写入其稳定 ID。负责人必须是本企业 `ACTIVE + ENABLED` User，并在同一事务同步创建 ACTIVE `project_membership`。延迟约束触发器在事务提交时保证当前 owner 始终有 ACTIVE membership，允许 M2-05 在一个事务中先建 membership 再改 owner。
 
 `workitem.content` 是初始 Content 真源。初始化端口按锁定的模板快照创建全部 blueprint；四个 V1 模板当前均形成 REQUIREMENTS、TASKS、DEFECTS 三行。每行保存模板 key/version 和 blueprint code，初始为 ACTIVE、使用 blueprint 的默认视图且 `viewConfig={}`。只约束 Project 内 code 唯一，不约束同一 Project 内 Content 类型唯一，为 M2-09 的后续 Content 管理保留空间。
 
@@ -31,6 +31,6 @@ M2-04 不实现列表、详情、PATCH、激活、成员管理、Content API/Vie
 
 ## Consequences
 
-客户端创建时必须携带 UUID `Idempotency-Key`，成功只收到完整 Project，不收到 Content 摘要；响应固定为 201、`ETag: "0"` 和稳定 Location。owner、Workspace、模板、类型映射或重复 code 返回字段级 422；权限失败为 403；幂等键异体复用或处理中为 409。Content、Audit、任一 Outbox 或持久化写入失败都返回 500，且 Project、membership、Content、审计、事件和幂等占位全部回滚。
+客户端创建时必须携带 UUID `Idempotency-Key`，但不提交或选择 Workspace；成功只收到完整 Project，不收到 Content 摘要，响应固定为 201、`ETag: "0"` 和稳定 Location。MAIN 缺失属于内部不变量失败；owner、模板、类型映射或重复 code 返回字段级 422；权限失败为 403；幂等键异体复用或处理中为 409。Content、Audit、任一 Outbox 或持久化写入失败都返回 500，且 Project、membership、Content、审计、事件和幂等占位全部回滚。MAIN 归属的长期理由由 [MAIN 单工作空间契约](2026-08-23-main-workspace-contract.md) 拥有。
 
 后续里程碑必须复用 Project 和 membership 真源、模板 provenance 与跨模块端口，不得增加临时 owner 角色、重复模板快照表或第二个创建接口。M2-05 重指派必须满足延迟 membership 不变量；M2-06 激活补齐非研发 customerName 和真实可见性；M2-09 才公开 Content CRUD；M2-20 消费现有 Outbox 形成 Activity。

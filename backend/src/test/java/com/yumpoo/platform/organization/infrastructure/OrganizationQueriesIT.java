@@ -147,7 +147,13 @@ class OrganizationQueriesIT {
 
     @Test
     void failsClosedWhenCompanyIsMissingOrTimezoneIsInvalid() {
-        jdbcClient.sql("DELETE FROM yumpoo.company").update();
+        jdbcClient.sql("""
+                DO $$
+                BEGIN
+                    DELETE FROM yumpoo.workspace;
+                    DELETE FROM yumpoo.company;
+                END $$
+                """).update();
         assertThatThrownBy(companyConfigurationQuery::current)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Exactly one Company");

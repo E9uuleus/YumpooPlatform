@@ -68,7 +68,7 @@ const session = useSession()
           查看当前账号可见的项目。
         </p>
         <div class="action-row">
-          <el-button @click="router.push({ name: 'projects' })">
+          <el-button @click="router.push({ name: 'workspace-entry' })">
             打开项目工作台
           </el-button>
         </div>

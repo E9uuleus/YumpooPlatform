@@ -98,7 +98,8 @@ public class ProjectLifecycleService {
         Project before = requiredLocked(command.companyId(), command.projectId());
         requireVersion(before, command.expectedRowVersion());
         requireLifecycle(before, ProjectLifecycle.ARCHIVED);
-        if (workspaces.findActiveByIdForShare(before.companyId(), before.workspaceId()).isEmpty()) {
+        if (workspaces.findMainForShare(before.companyId())
+                .filter(workspace -> workspace.id().equals(before.workspaceId())).isEmpty()) {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
                     "WORKSPACE_UNAVAILABLE");
         }
@@ -106,37 +107,6 @@ public class ProjectLifecycleService {
                         command.expectedRowVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         return snapshot(after);
-    }
-
-    @Transactional(propagation = Propagation.MANDATORY)
-    public ProjectApplicationSnapshot moveWorkspace(ProjectWorkspaceMoveCommand command) {
-        Project before = requiredLocked(command.companyId(), command.projectId());
-        requireVersion(before, command.expectedRowVersion());
-        if (before.lifecycle() == ProjectLifecycle.ARCHIVED) {
-            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
-        }
-        if (before.workspaceId().equals(command.targetWorkspaceId())) {
-            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "WORKSPACE_UNCHANGED");
-        }
-        if (workspaces.findActiveByIdForShare(before.companyId(), command.targetWorkspaceId()).isEmpty()) {
-            throw ApplicationException.validation(new com.yumpoo.platform.foundation.application.error.FieldViolation(
-                    "targetWorkspaceId", "INVALID_WORKSPACE", "目标 Workspace 必须是本企业 ACTIVE Workspace"));
-        }
-        Project after = projects.moveWorkspace(before.moveToWorkspace(command.targetWorkspaceId(),
-                        command.actorUserId(), clock.instant()), command.expectedRowVersion())
-                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
-        return snapshot(after);
-    }
-
-    @Transactional(propagation = Propagation.MANDATORY)
-    public ProjectApplicationSnapshot lockForWorkspaceMove(ProjectWorkspaceMoveCommand command) {
-        Project project = requiredLocked(command.companyId(), command.projectId());
-        requireVersion(project, command.expectedRowVersion());
-        if (project.lifecycle() == ProjectLifecycle.ARCHIVED) {
-            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
-        }
-        return snapshot(project);
     }
 
     @Transactional(propagation = Propagation.MANDATORY)

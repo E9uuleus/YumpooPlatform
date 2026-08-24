@@ -596,54 +596,18 @@ paths:
     get:
       tags: [Workspaces]
       operationId: listWorkspaces
-      summary: 查询当前公司的 Workspace 导航目录
-      description: 默认只返回 ACTIVE；ARCHIVED/ALL 筛选仅 COMPANY_ADMIN 可用。
+      summary: 查询当前公司的 MAIN 主工作空间
+      description: 每个 Company 永远只返回一个 code=MAIN、status=ACTIVE 的内部工作空间。
       security: [{ sessionCookie: [] }]
-      parameters:
-        - name: status
-          in: query
-          required: false
-          schema:
-            $ref: '#/components/schemas/WorkspaceStatusFilter'
-            default: ACTIVE
       responses:
         '200':
-          description: 按 sortOrder、name、id 稳定排序的 Workspace。
+          description: 当前 Company 的 MAIN 主工作空间。
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkspaceList' }
         '400': { $ref: '#/components/responses/MalformedRequest' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
-    post:
-      tags: [Workspaces]
-      operationId: createWorkspace
-      summary: 创建 Workspace
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - $ref: '#/components/parameters/XsrfToken'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/WorkspaceCreateRequest' }
-      responses:
-        '201':
-          description: Workspace 已创建，或返回同一幂等命令的既有成功结果。
-          headers:
-            Location: { $ref: '#/components/headers/Location' }
-            ETag: { $ref: '#/components/headers/ETag' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Workspace' }
-        '400': { $ref: '#/components/responses/MalformedRequest' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/ValidationFailed' }
-        '500': { $ref: '#/components/responses/InternalError' }
-
   /workspaces/{workspaceId}:
     get:
       tags: [Workspaces]
@@ -667,7 +631,7 @@ paths:
     patch:
       tags: [Workspaces]
       operationId: updateWorkspace
-      summary: 替换 Workspace 的完整可变字段快照
+      summary: 修改 MAIN 主工作空间的名称与描述
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/WorkspaceId'
@@ -686,50 +650,6 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '412': { $ref: '#/components/responses/VersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
-        '428': { $ref: '#/components/responses/PreconditionRequired' }
-        '500': { $ref: '#/components/responses/InternalError' }
-
-  /workspaces/{workspaceId}/archive:
-    post:
-      tags: [Workspaces]
-      operationId: archiveWorkspace
-      summary: 归档 ACTIVE Workspace
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/XsrfToken'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/IfMatch'
-      responses:
-        '200': { $ref: '#/components/responses/WorkspaceChanged' }
-        '400': { $ref: '#/components/responses/MalformedRequest' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '412': { $ref: '#/components/responses/VersionConflict' }
-        '428': { $ref: '#/components/responses/PreconditionRequired' }
-        '500': { $ref: '#/components/responses/InternalError' }
-
-  /workspaces/{workspaceId}/restore:
-    post:
-      tags: [Workspaces]
-      operationId: restoreWorkspace
-      summary: 恢复 ARCHIVED Workspace
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - $ref: '#/components/parameters/WorkspaceId'
-        - $ref: '#/components/parameters/XsrfToken'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/IfMatch'
-      responses:
-        '200': { $ref: '#/components/responses/WorkspaceChanged' }
-        '400': { $ref: '#/components/responses/MalformedRequest' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '412': { $ref: '#/components/responses/VersionConflict' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -915,8 +835,23 @@ paths:
       description: lifecycle 省略时返回 DRAFT 与 ACTIVE；分页和总数使用相同权限及筛选谓词。
       security: [{ sessionCookie: [] }]
       parameters:
-        - { name: workspaceId, in: query, schema: { $ref: '#/components/schemas/Uuid' } }
-        - { name: projectType, in: query, schema: { $ref: '#/components/schemas/ProjectType' } }
+        - { name: query, in: query, schema: { type: string, maxLength: 80 } }
+        - name: projectTypes
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/ProjectType' } }
+        - name: ownerUserIds
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/Uuid' } }
+        - name: actorAccesses
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/ProjectActorAccess' } }
+        - { name: updatedSince, in: query, schema: { type: string, format: date-time } }
         - { name: lifecycle, in: query, schema: { $ref: '#/components/schemas/ProjectLifecycleFilter' } }
         - { name: productId, in: query, schema: { $ref: '#/components/schemas/Uuid' } }
         - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
@@ -956,6 +891,23 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '500': { $ref: '#/components/responses/InternalError' }
+
+  /projects/owner-options:
+    get:
+      tags: [Projects]
+      operationId: listProjectOwnerOptions
+      summary: 查询调用人可见项目涉及的负责人选项
+      description: 只返回可见项目当前负责人最小信息，包含仍挂在项目上的离职或停用用户。
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 按显示名和用户 ID 稳定排序的负责人选项。
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProjectOwnerOption' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
 
   /projects/{projectId}:
     get:
@@ -1065,31 +1017,6 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '412': { $ref: '#/components/responses/VersionConflict' }
-        '428': { $ref: '#/components/responses/PreconditionRequired' }
-
-  /projects/{projectId}/workspace-moves:
-    post:
-      tags: [Projects]
-      operationId: moveProjectWorkspace
-      summary: CompanyAdmin 迁移 DRAFT 或 ACTIVE Project 到 ACTIVE Workspace
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - $ref: '#/components/parameters/ProjectId'
-        - $ref: '#/components/parameters/XsrfToken'
-        - $ref: '#/components/parameters/IfMatch'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectWorkspaceMoveRequest' } } }
-      responses:
-        '200': { $ref: '#/components/responses/ProjectChanged' }
-        '400': { $ref: '#/components/responses/MalformedRequest' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '412': { $ref: '#/components/responses/VersionConflict' }
-        '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
   /admin/governance-overrides:
@@ -1907,28 +1834,13 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Workspace' }
 
-    WorkspaceCreateRequest:
-      type: object
-      additionalProperties: false
-      required: [code, name, sortOrder]
-      properties:
-        code:
-          type: string
-          minLength: 2
-          maxLength: 32
-          pattern: '^[A-Z][A-Z0-9_]{1,31}$'
-        name: { type: string, minLength: 1, maxLength: 80 }
-        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
-        sortOrder: { type: integer, format: int32, minimum: 0 }
-
     WorkspaceUpdateRequest:
       type: object
       additionalProperties: false
-      required: [name, description, sortOrder]
+      required: [name, description]
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
         description: { type: string, minLength: 1, maxLength: 500, nullable: true }
-        sortOrder: { type: integer, format: int32, minimum: 0 }
 
     ProductStatus:
       type: string
@@ -2022,7 +1934,7 @@ components:
       type: object
       additionalProperties: false
       required: [canUpdateSettings, canActivate, canManageMembers, canReassignOwner,
-        canManageProductLinks, canArchive, canRestore, canMoveWorkspace, canOverrideArchive]
+        canManageProductLinks, canArchive, canRestore, canOverrideArchive]
       properties:
         canUpdateSettings: { type: boolean, readOnly: true }
         canActivate: { type: boolean, readOnly: true }
@@ -2031,20 +1943,15 @@ components:
         canManageProductLinks: { type: boolean, readOnly: true }
         canArchive: { type: boolean, readOnly: true }
         canRestore: { type: boolean, readOnly: true }
-        canMoveWorkspace: { type: boolean, readOnly: true }
         canOverrideArchive: { type: boolean, readOnly: true }
-
-    ProjectWorkspaceMoveRequest:
-      type: object
-      additionalProperties: false
-      required: [targetWorkspaceId, reason]
-      properties:
-        targetWorkspaceId: { $ref: '#/components/schemas/Uuid' }
-        reason: { type: string, minLength: 10, maxLength: 500 }
 
     GovernanceOverrideAction:
       type: string
       enum: [PROJECT_ARCHIVE_WITH_OPEN_ITEMS, WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS]
+
+    GovernanceOverrideCreateAction:
+      type: string
+      enum: [PROJECT_ARCHIVE_WITH_OPEN_ITEMS]
 
     GovernanceTargetType:
       type: string
@@ -2059,8 +1966,8 @@ components:
       additionalProperties: false
       required: [action, targetType, targetId, reason]
       properties:
-        action: { $ref: '#/components/schemas/GovernanceOverrideAction' }
-        targetType: { $ref: '#/components/schemas/GovernanceTargetType' }
+        action: { $ref: '#/components/schemas/GovernanceOverrideCreateAction' }
+        targetType: { type: string, enum: [PROJECT] }
         targetId: { $ref: '#/components/schemas/Uuid' }
         reason: { type: string, minLength: 10, maxLength: 500 }
 
@@ -2230,7 +2137,6 @@ components:
       type: object
       additionalProperties: false
       required:
-        - workspaceId
         - code
         - name
         - projectType
@@ -2238,7 +2144,6 @@ components:
         - templateKey
         - templateVersion
       properties:
-        workspaceId: { $ref: '#/components/schemas/Uuid' }
         code:
           type: string
           minLength: 2
@@ -2259,7 +2164,8 @@ components:
       type: object
       additionalProperties: false
       required: [id, workspaceId, workspaceCode, workspaceName, code, name, projectType,
-        lifecycle, ownerUserId, ownerDisplayName, actorAccess, capabilities, rowVersion, etag]
+        lifecycle, ownerUserId, ownerDisplayName, actorAccess, capabilities, rowVersion, etag,
+        createdAt, updatedAt]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         workspaceId: { $ref: '#/components/schemas/Uuid' }
@@ -2275,6 +2181,16 @@ components:
         capabilities: { $ref: '#/components/schemas/ProjectCapabilities' }
         rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
         etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+
+    ProjectOwnerOption:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName]
+      properties:
+        userId: { $ref: '#/components/schemas/Uuid' }
+        displayName: { type: string, minLength: 1, maxLength: 200 }
 
     ProjectPage:
       type: object
@@ -3191,13 +3107,19 @@ components:
     CurrentAuthenticationUser:
       type: object
       additionalProperties: false
-      required: [id, displayName]
+      required: [id, displayName, workspaceSlug]
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
         displayName:
           type: string
           minLength: 1
+        workspaceSlug:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[a-z0-9]([a-z0-9._@-]{0,62}[a-z0-9])?$'
+          description: 当前用户不可变的工作台 URL 片段；不承担身份授权语义。
 
     CurrentAuthenticationCompany:
       type: object

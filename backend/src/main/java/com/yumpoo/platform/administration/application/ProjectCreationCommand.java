@@ -7,7 +7,6 @@ import java.util.UUID;
 
 public record ProjectCreationCommand(
         CurrentActor actor,
-        UUID workspaceId,
         String code,
         String name,
         String description,

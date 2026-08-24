@@ -57,7 +57,7 @@ public final class ProjectCreationController {
         CurrentActor actor = currentActorProvider.requiredActive();
         UUID idempotencyKey = idempotencyKeyParser.parseRequired(idempotencyHeader);
         ProjectCreationCommand command = new ProjectCreationCommand(
-                actor, body.workspaceId(), body.code(), body.name(), body.description(),
+                actor, body.code(), body.name(), body.description(),
                 body.projectType(), body.ownerUserId(), body.templateKey(), body.templateVersion(),
                 body.customerName(), body.customerReference(), body.deliverySite(),
                 body.contactNote(), idempotencyKey,

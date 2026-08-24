@@ -59,11 +59,11 @@ class M106WebAuthenticationIT {
         jdbcClient.sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status,
-                            display_name, directory_synced_at,
+                            display_name, workspace_slug, directory_synced_at,
                             authorization_version, row_version, created_at, updated_at
                         ) VALUES (
                             :userId, :companyId, 'ACTIVE', 'ENABLED',
-                            'M1-06 Web Member', transaction_timestamp(),
+                            'M1-06 Web Member', 'member-m106', transaction_timestamp(),
                             0, 0, transaction_timestamp(), transaction_timestamp()
                         )
                         """)
@@ -135,7 +135,7 @@ class M106WebAuthenticationIT {
         HttpResponse<String> me = get("/api/v1/auth/me", securityCookies);
         assertThat(me.statusCode()).isEqualTo(200);
         assertThat(me.body())
-                .contains(USER_ID.toString(), "M1-06 Web Member", "Yumpoo")
+                .contains(USER_ID.toString(), "M1-06 Web Member", "member-m106", "Yumpoo")
                 .contains("Asia/Shanghai", "MONDAY")
                 .contains("\"roles\":[\"COMPANY_MEMBER\",\"COMPANY_ADMIN\",\"APP_MANAGER\"]")
                 .contains("WEB", "SUPPORTED");

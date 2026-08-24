@@ -3,7 +3,6 @@ package com.yumpoo.platform.administration.api;
 import com.yumpoo.platform.administration.application.ProjectArchiveOperationCommand;
 import com.yumpoo.platform.administration.application.ProjectLifecycleGovernanceService;
 import com.yumpoo.platform.administration.application.ProjectRestoreOperationCommand;
-import com.yumpoo.platform.administration.application.ProjectWorkspaceMoveOperationCommand;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.foundation.api.http.IdempotencyKeyParser;
 import com.yumpoo.platform.foundation.api.http.IdempotencyRequestHasher;
@@ -14,7 +13,6 @@ import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
-import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -22,7 +20,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import tools.jackson.databind.ObjectMapper;
 
@@ -72,21 +69,6 @@ public final class ProjectLifecycleGovernanceController {
                 projectId, version, key, hasher.hash("restoreProject",
                 Map.of("projectId", projectId.toString(), "ifMatch", Long.toString(version)),
                 objectMapper.createObjectNode()))).result();
-        return stored(result);
-    }
-
-    @PostMapping("/projects/{projectId}/workspace-moves")
-    ResponseEntity<String> move(@PathVariable UUID projectId,
-            @Valid @RequestBody ProjectWorkspaceMoveRequest body,
-            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
-            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String keyHeader) {
-        CurrentActor actor = visible(projectId);
-        long version = ifMatch.parseForVisibleResource(true, ifMatchHeader);
-        UUID key = keys.parseRequired(keyHeader);
-        StoredCommandResult result = service.move(new ProjectWorkspaceMoveOperationCommand(actor,
-                projectId, body.targetWorkspaceId(), body.reason(), version, key,
-                hasher.hash("moveProjectWorkspace", Map.of("projectId", projectId.toString(),
-                        "ifMatch", Long.toString(version)), objectMapper.valueToTree(body)))).result();
         return stored(result);
     }
 

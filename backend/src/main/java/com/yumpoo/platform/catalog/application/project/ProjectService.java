@@ -2,7 +2,6 @@ package com.yumpoo.platform.catalog.application.project;
 
 import com.yumpoo.platform.catalog.domain.project.Project;
 import com.yumpoo.platform.catalog.domain.project.ProjectLifecycle;
-import com.yumpoo.platform.catalog.domain.project.ProjectType;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageResponse;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
@@ -46,24 +45,46 @@ public class ProjectService {
     }
 
     @Transactional(readOnly = true)
-    public OffsetPageResponse<ProjectSummary> findAll(CurrentActor actor, UUID workspaceId,
-            ProjectTypeFilter projectType, ProjectLifecycleFilter lifecycle, OffsetPageRequest page) {
-        return findAll(actor, workspaceId, projectType, lifecycle, null, page);
-    }
-
-    @Transactional(readOnly = true)
-    public OffsetPageResponse<ProjectSummary> findAll(CurrentActor actor, UUID workspaceId,
-            ProjectTypeFilter projectType, ProjectLifecycleFilter lifecycle, UUID productId,
+    public OffsetPageResponse<ProjectSummary> findAll(CurrentActor actor,
+            ProjectSearchCriteria criteria,
             OffsetPageRequest page) {
         requireActor(actor);
-        ProjectPageResult result = repository.findVisible(actor, workspaceId,
-                projectType == null ? null : projectType.toDomain(), lifecycle, productId, page);
+        ProjectPageResult result = repository.findVisible(actor, criteria, page);
         Map<UUID, MinimalUserSnapshot> owners = userQuery.findByUserIds(actor.companyId(),
                 result.items().stream().map(row -> row.project().ownerUserId()).distinct().toList());
         List<ProjectSummary> items = result.items().stream()
                 .map(row -> summary(actor, row, displayName(owners, row.project().ownerUserId())))
                 .toList();
         return OffsetPageResponse.of(items, page, result.totalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public OffsetPageResponse<ProjectSummary> findAll(CurrentActor actor, UUID ignoredWorkspaceId,
+            ProjectTypeFilter projectType, ProjectLifecycleFilter lifecycle, OffsetPageRequest page) {
+        return findAll(actor, new ProjectSearchCriteria(null,
+                projectType == null ? List.of() : List.of(projectType.toDomain()),
+                List.of(), List.of(), null, lifecycle, null), page);
+    }
+
+    @Transactional(readOnly = true)
+    public OffsetPageResponse<ProjectSummary> findAll(CurrentActor actor, UUID ignoredWorkspaceId,
+            ProjectTypeFilter projectType, ProjectLifecycleFilter lifecycle, UUID productId,
+            OffsetPageRequest page) {
+        return findAll(actor, new ProjectSearchCriteria(null,
+                projectType == null ? List.of() : List.of(projectType.toDomain()),
+                List.of(), List.of(), null, lifecycle, productId), page);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectOwnerOption> findOwnerOptions(CurrentActor actor) {
+        requireActor(actor);
+        List<UUID> ownerIds = repository.findVisibleOwnerIds(actor);
+        Map<UUID, MinimalUserSnapshot> owners = userQuery.findByUserIds(actor.companyId(), ownerIds);
+        return ownerIds.stream()
+                .map(userId -> new ProjectOwnerOption(userId, displayName(owners, userId)))
+                .sorted(java.util.Comparator.comparing(ProjectOwnerOption::displayName)
+                        .thenComparing(ProjectOwnerOption::userId))
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -152,7 +173,8 @@ public class ProjectService {
         return new ProjectSummary(project.id(), project.workspaceId(), row.workspaceCode(),
                 row.workspaceName(), project.code(), project.name(), project.projectType().name(),
                 project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
-                capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()));
+                capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()),
+                project.createdAt(), project.updatedAt());
     }
 
     private static ProjectDetail detail(CurrentActor actor, ProjectQueryRow row, String ownerName) {
@@ -183,7 +205,6 @@ public class ProjectService {
                 (owner || admin) && mutable, admin && mutable, owner && mutable,
                 owner && project.lifecycle() == ProjectLifecycle.ACTIVE,
                 admin && project.lifecycle() == ProjectLifecycle.ARCHIVED,
-                admin && mutable,
                 admin && project.lifecycle() == ProjectLifecycle.ACTIVE);
     }
 

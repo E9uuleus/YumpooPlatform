@@ -5,10 +5,10 @@ import com.yumpoo.platform.catalog.domain.project.ProjectType;
 public enum ProjectTypeFilter {
     PRODUCT_DEVELOPMENT,
     PRE_SALES,
-    SALES,
-    DELIVERY;
+    IMPLEMENTATION,
+    HYPERCARE;
 
-    ProjectType toDomain() {
+    public ProjectType toDomain() {
         return ProjectType.valueOf(name());
     }
 }

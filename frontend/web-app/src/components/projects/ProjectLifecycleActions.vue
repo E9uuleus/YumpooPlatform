@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import {
-  GovernanceOverrideAction,
-  GovernanceTargetType,
+  GovernanceOverrideCreateAction,
+  GovernanceOverrideRequestTargetTypeEnum,
   ProjectLifecycle,
-  WorkspaceStatusFilter,
   readCsrfToken,
   type ProjectDetail,
   type SafeBlocker,
-  type Workspace,
 } from '@yumpoo/api-client'
 import {
   ElAlert,
@@ -18,16 +16,12 @@ import {
   ElInput,
   ElMessage,
   ElMessageBox,
-  ElOption as ElOptionRaw,
-  ElSelect as ElSelectRaw,
 } from 'element-plus'
-import { computed, reactive, ref, type DefineComponent } from 'vue'
-import { administrationApi, projectsApi, workspacesApi } from '../../api/client'
+import { computed, reactive, ref } from 'vue'
+import { administrationApi, projectsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 
 const props = defineProps<{ project: ProjectDetail }>()
-const ElOption = ElOptionRaw as unknown as DefineComponent
-const ElSelect = ElSelectRaw as unknown as DefineComponent
 const emit = defineEmits<{
   changed: []
   problem: [problem: ApiProblem]
@@ -35,10 +29,8 @@ const emit = defineEmits<{
 
 const busy = ref(false)
 const overrideOpen = ref(false)
-const moveOpen = ref(false)
-const candidates = ref<Workspace[]>([])
 const blockers = ref<SafeBlocker[]>([])
-const form = reactive({ reason: '', targetWorkspaceId: '' })
+const form = reactive({ reason: '' })
 
 const blockerLabels: Record<string, string> = {
   OPEN_WORK_ITEMS: '未关闭工作项',
@@ -49,10 +41,8 @@ const blockerLabels: Record<string, string> = {
 
 const canOperate = computed(() => props.project.capabilities.canArchive
   || props.project.capabilities.canRestore
-  || props.project.capabilities.canMoveWorkspace
   || props.project.capabilities.canOverrideArchive)
 const validReason = computed(() => form.reason.trim().length >= 10 && form.reason.trim().length <= 500)
-const validMove = computed(() => validReason.value && Boolean(form.targetWorkspaceId))
 
 function csrf(): string | undefined {
   const token = readCsrfToken()
@@ -69,9 +59,7 @@ async function run(operation: (token: string) => Promise<unknown>, success: stri
     await operation(token)
     ElMessage.success(success)
     overrideOpen.value = false
-    moveOpen.value = false
     form.reason = ''
-    form.targetWorkspaceId = ''
     emit('changed')
   } catch (reason) {
     const problem = await toApiProblem(reason)
@@ -102,7 +90,7 @@ async function archive(): Promise<void> {
 
 async function restore(): Promise<void> {
   try {
-    await ElMessageBox.confirm('恢复前将重新验证 Owner、模板和 Workspace。', '恢复 Project', {
+    await ElMessageBox.confirm('恢复前将重新验证 Owner、模板和主工作空间。', '恢复 Project', {
       type: 'warning', confirmButtonText: '确认恢复', cancelButtonText: '取消',
     })
   } catch { return }
@@ -112,30 +100,6 @@ async function restore(): Promise<void> {
   }), 'Project 已恢复')
 }
 
-async function openMove(): Promise<void> {
-  try {
-    const response = await workspacesApi.listWorkspaces({ status: WorkspaceStatusFilter.Active })
-    candidates.value = response.items.filter((workspace) => workspace.id !== props.project.workspaceId)
-    form.targetWorkspaceId = candidates.value[0]?.id ?? ''
-    form.reason = ''
-    moveOpen.value = true
-  } catch (reason) {
-    emit('problem', await toApiProblem(reason))
-  }
-}
-
-async function move(): Promise<void> {
-  if (!validMove.value) return
-  await run((token) => projectsApi.moveProjectWorkspace({
-    projectId: props.project.id, xXSRFTOKEN: token, ifMatch: props.project.etag,
-    idempotencyKey: crypto.randomUUID(),
-    projectWorkspaceMoveRequest: {
-      targetWorkspaceId: form.targetWorkspaceId,
-      reason: form.reason.trim(),
-    },
-  }), 'Project 已迁移到目标 Workspace')
-}
-
 async function overrideArchive(): Promise<void> {
   if (!validReason.value) return
   await run((token) => administrationApi.createGovernanceOverride({
@@ -143,8 +107,8 @@ async function overrideArchive(): Promise<void> {
     ifMatch: props.project.etag,
     idempotencyKey: crypto.randomUUID(),
     governanceOverrideRequest: {
-      action: GovernanceOverrideAction.ProjectArchiveWithOpenItems,
-      targetType: GovernanceTargetType.Project,
+      action: GovernanceOverrideCreateAction.ProjectArchiveWithOpenItems,
+      targetType: GovernanceOverrideRequestTargetTypeEnum.Project,
       targetId: props.project.id,
       reason: form.reason.trim(),
     },
@@ -178,13 +142,6 @@ async function overrideArchive(): Promise<void> {
         @click="form.reason = ''; overrideOpen = true"
       >
         治理覆盖归档
-      </el-button>
-      <el-button
-        v-if="project.capabilities.canMoveWorkspace"
-        :loading="busy"
-        @click="openMove"
-      >
-        迁移 Workspace
       </el-button>
       <el-button
         v-if="project.capabilities.canRestore"
@@ -230,29 +187,6 @@ async function overrideArchive(): Promise<void> {
       </template>
     </el-dialog>
 
-    <el-dialog
-      v-model="moveOpen"
-      title="迁移 Workspace"
-      width="520px"
-    >
-      <el-form label-position="top">
-        <el-form-item label="目标 Workspace" required>
-          <el-select v-model="form.targetWorkspaceId" class="full-width" placeholder="选择 ACTIVE Workspace">
-            <el-option v-for="workspace in candidates" :key="workspace.id" :label="`${workspace.name} (${workspace.code})`" :value="workspace.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="迁移理由（10–500 字）" required>
-          <el-input v-model="form.reason" type="textarea" maxlength="500" show-word-limit />
-        </el-form-item>
-      </el-form>
-      <p v-if="!candidates.length" class="dialog-note">没有可迁移的其他 ACTIVE Workspace。</p>
-      <template #footer>
-        <el-button @click="moveOpen = false">取消</el-button>
-        <el-button type="primary" :disabled="!validMove" :loading="busy" @click="move">
-          确认迁移
-        </el-button>
-      </template>
-    </el-dialog>
   </section>
 </template>
 
@@ -272,5 +206,4 @@ async function overrideArchive(): Promise<void> {
 .lifecycle-actions__buttons { display: flex; flex-wrap: wrap; gap: var(--yp-space-2); }
 .blocker-list { margin: var(--yp-space-2) 0 0; padding-left: 20px; }
 .dialog-note { margin: 0 0 var(--yp-space-4); color: var(--yp-text-secondary); }
-.full-width { width: 100%; }
 </style>

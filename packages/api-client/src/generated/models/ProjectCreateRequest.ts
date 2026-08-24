@@ -34,12 +34,6 @@ import {
  */
 export interface ProjectCreateRequest {
     /**
-     * 不透明 UUID；客户端不得从值中推导业务语义。
-     * @type {string}
-     * @memberof ProjectCreateRequest
-     */
-    workspaceId: string;
-    /**
      *
      * @type {string}
      * @memberof ProjectCreateRequest
@@ -113,7 +107,6 @@ export interface ProjectCreateRequest {
  * Check if a given object implements the ProjectCreateRequest interface.
  */
 export function instanceOfProjectCreateRequest(value: object): value is ProjectCreateRequest {
-    if (!('workspaceId' in value) || value['workspaceId'] === undefined) return false;
     if (!('code' in value) || value['code'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('projectType' in value) || value['projectType'] === undefined) return false;
@@ -133,7 +126,6 @@ export function ProjectCreateRequestFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
 
-        'workspaceId': json['workspaceId'],
         'code': json['code'],
         'name': json['name'],
         'description': json['description'] == null ? undefined : json['description'],
@@ -159,7 +151,6 @@ export function ProjectCreateRequestToJSONTyped(value?: ProjectCreateRequest | n
 
     return {
 
-        'workspaceId': value['workspaceId'],
         'code': value['code'],
         'name': value['name'],
         'description': value['description'],

@@ -6,7 +6,6 @@ const createProject: CreateProjectRequest = {
   xXSRFTOKEN: 'csrf-token',
   idempotencyKey: '24000000-0000-4000-8000-000000000001',
   projectCreateRequest: {
-    workspaceId: '24000000-0000-4000-8000-000000000002',
     code: 'M2_04',
     name: 'M2-04 Project',
     description: null,

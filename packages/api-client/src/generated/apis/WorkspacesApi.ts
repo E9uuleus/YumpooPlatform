@@ -16,9 +16,7 @@ import * as runtime from '../runtime';
 import type {
   ErrorResponse,
   Workspace,
-  WorkspaceCreateRequest,
   WorkspaceList,
-  WorkspaceStatusFilter,
   WorkspaceUpdateRequest,
 } from '../models/index';
 import {
@@ -26,42 +24,14 @@ import {
     ErrorResponseToJSON,
     WorkspaceFromJSON,
     WorkspaceToJSON,
-    WorkspaceCreateRequestFromJSON,
-    WorkspaceCreateRequestToJSON,
     WorkspaceListFromJSON,
     WorkspaceListToJSON,
-    WorkspaceStatusFilterFromJSON,
-    WorkspaceStatusFilterToJSON,
     WorkspaceUpdateRequestFromJSON,
     WorkspaceUpdateRequestToJSON,
 } from '../models/index';
 
-export interface ArchiveWorkspaceRequest {
-    workspaceId: string;
-    xXSRFTOKEN: string;
-    idempotencyKey: string;
-    ifMatch: string;
-}
-
-export interface CreateWorkspaceRequest {
-    xXSRFTOKEN: string;
-    idempotencyKey: string;
-    workspaceCreateRequest: WorkspaceCreateRequest;
-}
-
 export interface GetWorkspaceRequest {
     workspaceId: string;
-}
-
-export interface ListWorkspacesRequest {
-    status?: WorkspaceStatusFilter;
-}
-
-export interface RestoreWorkspaceRequest {
-    workspaceId: string;
-    xXSRFTOKEN: string;
-    idempotencyKey: string;
-    ifMatch: string;
 }
 
 export interface UpdateWorkspaceRequest {
@@ -75,137 +45,6 @@ export interface UpdateWorkspaceRequest {
  *
  */
 export class WorkspacesApi extends runtime.BaseAPI {
-
-    /**
-     * 归档 ACTIVE Workspace
-     */
-    async archiveWorkspaceRaw(requestParameters: ArchiveWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Workspace>> {
-        if (requestParameters['workspaceId'] == null) {
-            throw new runtime.RequiredError(
-                'workspaceId',
-                'Required parameter "workspaceId" was null or undefined when calling archiveWorkspace().'
-            );
-        }
-
-        if (requestParameters['xXSRFTOKEN'] == null) {
-            throw new runtime.RequiredError(
-                'xXSRFTOKEN',
-                'Required parameter "xXSRFTOKEN" was null or undefined when calling archiveWorkspace().'
-            );
-        }
-
-        if (requestParameters['idempotencyKey'] == null) {
-            throw new runtime.RequiredError(
-                'idempotencyKey',
-                'Required parameter "idempotencyKey" was null or undefined when calling archiveWorkspace().'
-            );
-        }
-
-        if (requestParameters['ifMatch'] == null) {
-            throw new runtime.RequiredError(
-                'ifMatch',
-                'Required parameter "ifMatch" was null or undefined when calling archiveWorkspace().'
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (requestParameters['xXSRFTOKEN'] != null) {
-            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
-        }
-
-        if (requestParameters['idempotencyKey'] != null) {
-            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
-        }
-
-        if (requestParameters['ifMatch'] != null) {
-            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
-        }
-
-
-        let urlPath = `/workspaces/{workspaceId}/archive`;
-        urlPath = urlPath.replace(`{${"workspaceId"}}`, encodeURIComponent(String(requestParameters['workspaceId'])));
-
-        const response = await this.request({
-            path: urlPath,
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => WorkspaceFromJSON(jsonValue));
-    }
-
-    /**
-     * 归档 ACTIVE Workspace
-     */
-    async archiveWorkspace(requestParameters: ArchiveWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Workspace> {
-        const response = await this.archiveWorkspaceRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
-
-    /**
-     * 创建 Workspace
-     */
-    async createWorkspaceRaw(requestParameters: CreateWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Workspace>> {
-        if (requestParameters['xXSRFTOKEN'] == null) {
-            throw new runtime.RequiredError(
-                'xXSRFTOKEN',
-                'Required parameter "xXSRFTOKEN" was null or undefined when calling createWorkspace().'
-            );
-        }
-
-        if (requestParameters['idempotencyKey'] == null) {
-            throw new runtime.RequiredError(
-                'idempotencyKey',
-                'Required parameter "idempotencyKey" was null or undefined when calling createWorkspace().'
-            );
-        }
-
-        if (requestParameters['workspaceCreateRequest'] == null) {
-            throw new runtime.RequiredError(
-                'workspaceCreateRequest',
-                'Required parameter "workspaceCreateRequest" was null or undefined when calling createWorkspace().'
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        headerParameters['Content-Type'] = 'application/json';
-
-        if (requestParameters['xXSRFTOKEN'] != null) {
-            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
-        }
-
-        if (requestParameters['idempotencyKey'] != null) {
-            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
-        }
-
-
-        let urlPath = `/workspaces`;
-
-        const response = await this.request({
-            path: urlPath,
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-            body: WorkspaceCreateRequestToJSON(requestParameters['workspaceCreateRequest']),
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => WorkspaceFromJSON(jsonValue));
-    }
-
-    /**
-     * 创建 Workspace
-     */
-    async createWorkspace(requestParameters: CreateWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Workspace> {
-        const response = await this.createWorkspaceRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
 
     /**
      * 查询 Workspace 详情
@@ -245,15 +84,11 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 默认只返回 ACTIVE；ARCHIVED/ALL 筛选仅 COMPANY_ADMIN 可用。
-     * 查询当前公司的 Workspace 导航目录
+     * 每个 Company 永远只返回一个 code=MAIN、status=ACTIVE 的内部工作空间。
+     * 查询当前公司的 MAIN 主工作空间
      */
-    async listWorkspacesRaw(requestParameters: ListWorkspacesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkspaceList>> {
+    async listWorkspacesRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkspaceList>> {
         const queryParameters: any = {};
-
-        if (requestParameters['status'] != null) {
-            queryParameters['status'] = requestParameters['status'];
-        }
 
         const headerParameters: runtime.HTTPHeaders = {};
 
@@ -271,86 +106,16 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 默认只返回 ACTIVE；ARCHIVED/ALL 筛选仅 COMPANY_ADMIN 可用。
-     * 查询当前公司的 Workspace 导航目录
+     * 每个 Company 永远只返回一个 code=MAIN、status=ACTIVE 的内部工作空间。
+     * 查询当前公司的 MAIN 主工作空间
      */
-    async listWorkspaces(requestParameters: ListWorkspacesRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkspaceList> {
-        const response = await this.listWorkspacesRaw(requestParameters, initOverrides);
+    async listWorkspaces(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkspaceList> {
+        const response = await this.listWorkspacesRaw(initOverrides);
         return await response.value();
     }
 
     /**
-     * 恢复 ARCHIVED Workspace
-     */
-    async restoreWorkspaceRaw(requestParameters: RestoreWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Workspace>> {
-        if (requestParameters['workspaceId'] == null) {
-            throw new runtime.RequiredError(
-                'workspaceId',
-                'Required parameter "workspaceId" was null or undefined when calling restoreWorkspace().'
-            );
-        }
-
-        if (requestParameters['xXSRFTOKEN'] == null) {
-            throw new runtime.RequiredError(
-                'xXSRFTOKEN',
-                'Required parameter "xXSRFTOKEN" was null or undefined when calling restoreWorkspace().'
-            );
-        }
-
-        if (requestParameters['idempotencyKey'] == null) {
-            throw new runtime.RequiredError(
-                'idempotencyKey',
-                'Required parameter "idempotencyKey" was null or undefined when calling restoreWorkspace().'
-            );
-        }
-
-        if (requestParameters['ifMatch'] == null) {
-            throw new runtime.RequiredError(
-                'ifMatch',
-                'Required parameter "ifMatch" was null or undefined when calling restoreWorkspace().'
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (requestParameters['xXSRFTOKEN'] != null) {
-            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
-        }
-
-        if (requestParameters['idempotencyKey'] != null) {
-            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
-        }
-
-        if (requestParameters['ifMatch'] != null) {
-            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
-        }
-
-
-        let urlPath = `/workspaces/{workspaceId}/restore`;
-        urlPath = urlPath.replace(`{${"workspaceId"}}`, encodeURIComponent(String(requestParameters['workspaceId'])));
-
-        const response = await this.request({
-            path: urlPath,
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => WorkspaceFromJSON(jsonValue));
-    }
-
-    /**
-     * 恢复 ARCHIVED Workspace
-     */
-    async restoreWorkspace(requestParameters: RestoreWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Workspace> {
-        const response = await this.restoreWorkspaceRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
-
-    /**
-     * 替换 Workspace 的完整可变字段快照
+     * 修改 MAIN 主工作空间的名称与描述
      */
     async updateWorkspaceRaw(requestParameters: UpdateWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Workspace>> {
         if (requestParameters['workspaceId'] == null) {
@@ -411,7 +176,7 @@ export class WorkspacesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 替换 Workspace 的完整可变字段快照
+     * 修改 MAIN 主工作空间的名称与描述
      */
     async updateWorkspace(requestParameters: UpdateWorkspaceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Workspace> {
         const response = await this.updateWorkspaceRaw(requestParameters, initOverrides);

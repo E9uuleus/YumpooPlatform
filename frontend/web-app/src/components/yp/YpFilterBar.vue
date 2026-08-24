@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Filter as FilterIcon, Search as SearchIcon } from '@element-plus/icons-vue'
 import { ElButton, ElIcon, ElPopover, ElTag, ElTooltip } from 'element-plus'
-import { nextTick, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { ActiveFilter } from '../../design-system/types'
 
 withDefaults(defineProps<{
@@ -10,12 +10,16 @@ withDefaults(defineProps<{
   loading?: boolean
   labeledTools?: boolean
   popoverClass?: string
+  popoverWidth?: number
+  inlineSearch?: boolean
 }>(), {
   filters: () => [],
   resultCount: null,
   loading: false,
   labeledTools: false,
   popoverClass: '',
+  popoverWidth: 720,
+  inlineSearch: false,
 })
 
 defineEmits<{
@@ -26,6 +30,15 @@ defineEmits<{
 const searchOpen = ref(false)
 const filtersOpen = ref(false)
 const searchPanel = ref<HTMLElement>()
+
+function closePanelsOnEscape(event: KeyboardEvent): void {
+  if (event.key !== 'Escape') return
+  searchOpen.value = false
+  filtersOpen.value = false
+}
+
+onMounted(() => document.addEventListener('keydown', closePanelsOnEscape))
+onBeforeUnmount(() => document.removeEventListener('keydown', closePanelsOnEscape))
 
 async function toggleSearch(): Promise<void> {
   searchOpen.value = !searchOpen.value
@@ -41,7 +54,7 @@ async function toggleSearch(): Promise<void> {
   <section
     class="yp-filter-bar"
     aria-label="筛选条件"
-    @keydown.esc="searchOpen = false; filtersOpen = false"
+    @keydown.esc="closePanelsOnEscape"
   >
     <div class="yp-filter-bar__toolbar">
       <div class="yp-filter-bar__tools">
@@ -65,12 +78,19 @@ async function toggleSearch(): Promise<void> {
               <span v-if="labeledTools">搜索</span>
             </button>
           </el-tooltip>
+          <div
+            v-if="inlineSearch && searchOpen"
+            ref="searchPanel"
+            class="yp-filter-bar__inline-search"
+          >
+            <slot name="search" />
+          </div>
         </template>
         <el-popover
           v-if="$slots.filters || $slots.default"
           v-model:visible="filtersOpen"
           placement="bottom-start"
-          :width="720"
+          :width="popoverWidth"
           :popper-class="['yp-filter-popover', popoverClass].filter(Boolean).join(' ')"
           trigger="click"
         >
@@ -147,7 +167,7 @@ async function toggleSearch(): Promise<void> {
       </div>
     </div>
     <div
-      v-if="searchOpen && $slots.search"
+      v-if="!inlineSearch && searchOpen && $slots.search"
       ref="searchPanel"
       class="yp-filter-bar__search"
     >
@@ -177,6 +197,16 @@ async function toggleSearch(): Promise<void> {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--yp-space-2);
+}
+
+.yp-filter-bar__inline-search {
+  display: flex;
+  align-items: center;
+  min-width: min(360px, 50vw);
+}
+
+.yp-filter-bar__inline-search :deep(.el-input) {
+  width: min(360px, 50vw);
 }
 
 .yp-filter-bar__summary {
@@ -235,8 +265,8 @@ async function toggleSearch(): Promise<void> {
   padding: 0 4px;
   place-items: center;
   border-radius: var(--yp-radius-pill);
-  color: var(--yp-status-blue-foreground);
-  background: var(--yp-action-primary);
+  color: var(--yp-text-inverse);
+  background: var(--yp-text-primary);
   font-size: 10px;
   line-height: 1;
 }

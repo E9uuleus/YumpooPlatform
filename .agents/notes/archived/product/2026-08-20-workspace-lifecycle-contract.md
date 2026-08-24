@@ -1,6 +1,7 @@
 # Agent Note: Workspace 生命周期契约
 
 Status: implemented
+Archived: 2026-08-24
 
 ## Problem
 

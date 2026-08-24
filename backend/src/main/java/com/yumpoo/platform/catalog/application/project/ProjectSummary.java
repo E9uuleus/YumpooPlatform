@@ -1,5 +1,6 @@
 package com.yumpoo.platform.catalog.application.project;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public record ProjectSummary(
@@ -16,6 +17,8 @@ public record ProjectSummary(
         ProjectActorAccess actorAccess,
         ProjectCapabilities capabilities,
         long rowVersion,
-        String etag
+        String etag,
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }
