@@ -1,4 +1,5 @@
 import {
+  ErrorCode,
   ProjectMemberAccountStatusEnum,
   ProjectMemberEmploymentStatusEnum,
   ProjectMembershipStatus,
@@ -7,15 +8,25 @@ import {
   type WorkItemUpdate,
 } from '@yumpoo/api-client'
 import { flushPromises, mount } from '@vue/test-utils'
+import { ElMessageBox } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import WorkItemDiscussion from './WorkItemDiscussion.vue'
 
-const api = vi.hoisted(() => ({ list: vi.fn(), publish: vi.fn() }))
+const api = vi.hoisted(() => ({
+  list: vi.fn(),
+  publish: vi.fn(),
+  get: vi.fn(),
+  edit: vi.fn(),
+  delete: vi.fn(),
+}))
 
 vi.mock('../../api/client', () => ({
   workItemUpdatesApi: {
     listWorkItemUpdates: api.list,
     publishWorkItemUpdate: api.publish,
+    getWorkItemUpdate: api.get,
+    editWorkItemUpdate: api.edit,
+    deleteWorkItemUpdate: api.delete,
   },
 }))
 vi.mock('@yumpoo/api-client', async importOriginal => ({
@@ -64,6 +75,18 @@ function update(id: string, bodyText: string, createdAt: string): WorkItemUpdate
     deletedAt: null,
     deletedByUserId: null,
     deleteReason: null,
+    capabilities: {
+      canEdit: false,
+      canSelfDelete: false,
+      canModerateDelete: false,
+    },
+  }
+}
+
+function actionableUpdate(capabilities: WorkItemUpdate['capabilities']): WorkItemUpdate {
+  return {
+    ...update('35000000-0000-4000-8000-000000000034', '可操作讨论', '2099-08-24T10:02:00Z'),
+    capabilities,
   }
 }
 
@@ -146,6 +169,157 @@ describe('WorkItemDiscussion', () => {
     expect(api.publish.mock.calls[1]?.[0].idempotencyKey).toBe(firstKey)
     expect(wrapper.html()).toContain('服务端净化正文')
     expect(wrapper.html()).not.toContain('onclick="evil()"')
+    wrapper.unmount()
+  })
+
+  it('按服务端能力展示操作，编辑回填并以强 ETag 原位更新', async () => {
+    const existing = actionableUpdate({ canEdit: true, canSelfDelete: true, canModerateDelete: false })
+    api.list.mockResolvedValueOnce({ items: [existing], nextCursor: null })
+    api.edit.mockResolvedValueOnce({
+      ...existing,
+      bodyHtml: '<p>服务端净化后的编辑</p>',
+      bodyText: '服务端净化后的编辑',
+      status: WorkItemUpdateStatus.Edited,
+      rowVersion: 1,
+      etag: '"1"',
+    })
+    const wrapper = mount(WorkItemDiscussion, {
+      props: { workItemId: existing.workItemId, members: [member], canPublish: true },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('编辑')
+    expect(wrapper.text()).toContain('删除')
+    expect(wrapper.text()).not.toContain('治理删除')
+
+    const editButton = wrapper.findAll('button').find(button => button.text() === '编辑')!
+    await editButton.trigger('click')
+    const exposed = wrapper.vm as unknown as {
+      editEditor: { commands: { setContent: (html: string) => void }, getHTML: () => string }
+      saveEdit: () => Promise<void>
+    }
+    expect(exposed.editEditor.getHTML()).toContain('可操作讨论')
+    exposed.editEditor.commands.setContent('<p>本地编辑 <span data-type="mention" data-mention-user-id="35000000-0000-4000-8000-000000000023">@项目成员</span></p>')
+    await exposed.saveEdit()
+    await flushPromises()
+    expect(api.edit).toHaveBeenCalledWith({
+      updateId: existing.id,
+      xXSRFTOKEN: 'csrf-token',
+      ifMatch: '"0"',
+      workItemUpdateEditRequest: { bodyHtml: expect.stringContaining('data-mention-user-id') },
+    })
+    expect(wrapper.html()).toContain('服务端净化后的编辑')
+    wrapper.unmount()
+  })
+
+  it('作者删除二次确认后渲染不可恢复占位', async () => {
+    const existing = actionableUpdate({ canEdit: false, canSelfDelete: true, canModerateDelete: false })
+    const tombstone: WorkItemUpdate = {
+      ...existing,
+      bodyHtml: null,
+      bodyText: null,
+      status: WorkItemUpdateStatus.Deleted,
+      rowVersion: 1,
+      etag: '"1"',
+      deletedAt: new Date('2099-08-24T10:03:00Z'),
+      deletedByUserId: member.userId,
+      capabilities: { canEdit: false, canSelfDelete: false, canModerateDelete: false },
+    }
+    api.list.mockResolvedValueOnce({ items: [existing], nextCursor: null })
+    api.delete.mockResolvedValueOnce(tombstone)
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValueOnce('confirm' as never)
+    const wrapper = mount(WorkItemDiscussion, {
+      props: { workItemId: existing.workItemId, members: [member], canPublish: true },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === '删除')!.trigger('click')
+    await flushPromises()
+    expect(api.delete).toHaveBeenCalledWith({
+      updateId: existing.id,
+      xXSRFTOKEN: 'csrf-token',
+      ifMatch: '"0"',
+      workItemUpdateDeleteRequest: {},
+    })
+    expect(wrapper.text()).toContain('此讨论已删除')
+    expect(wrapper.html()).not.toContain('<p>可操作讨论</p>')
+    wrapper.unmount()
+  })
+
+  it('治理删除要求理由并仅在墓碑展示治理理由', async () => {
+    const existing = actionableUpdate({ canEdit: false, canSelfDelete: false, canModerateDelete: true })
+    const tombstone: WorkItemUpdate = {
+      ...existing,
+      bodyHtml: null,
+      bodyText: null,
+      status: WorkItemUpdateStatus.Deleted,
+      rowVersion: 1,
+      etag: '"1"',
+      deletedAt: new Date('2099-08-24T10:03:00Z'),
+      deletedByUserId: '35000000-0000-4000-8000-000000000099',
+      deleteReason: '  违反项目讨论规范  '.trim(),
+      capabilities: { canEdit: false, canSelfDelete: false, canModerateDelete: false },
+    }
+    api.list.mockResolvedValueOnce({ items: [existing], nextCursor: null })
+    api.delete.mockResolvedValueOnce(tombstone)
+    vi.spyOn(ElMessageBox, 'prompt').mockResolvedValueOnce({
+      value: '  违反项目讨论规范  ',
+      action: 'confirm',
+    } as never)
+    const wrapper = mount(WorkItemDiscussion, {
+      props: { workItemId: existing.workItemId, members: [member], canPublish: true },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === '治理删除')!.trigger('click')
+    await flushPromises()
+    expect(api.delete.mock.calls[0]?.[0].workItemUpdateDeleteRequest).toEqual({ reason: '违反项目讨论规范' })
+    expect(wrapper.text()).toContain('治理理由：违反项目讨论规范')
+    expect(wrapper.html()).not.toContain('<p>可操作讨论</p>')
+    wrapper.unmount()
+  })
+
+  it('412 后单条刷新且保留未提交编辑草稿', async () => {
+    const existing = actionableUpdate({ canEdit: true, canSelfDelete: false, canModerateDelete: false })
+    const fresh = { ...existing, bodyHtml: '<p>其他人已更新</p>', bodyText: '其他人已更新', rowVersion: 1, etag: '"1"' }
+    api.list.mockResolvedValueOnce({ items: [existing], nextCursor: null })
+    api.edit.mockRejectedValueOnce({
+      kind: 'response',
+      status: 412,
+      error: { code: ErrorCode.VersionConflict, message: '版本冲突', requestId: 'req-1', retryable: false, fieldErrors: [] },
+    })
+    api.get.mockResolvedValueOnce(fresh)
+    const wrapper = mount(WorkItemDiscussion, {
+      props: { workItemId: existing.workItemId, members: [member], canPublish: true },
+      attachTo: document.body,
+    })
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === '编辑')!.trigger('click')
+    const exposed = wrapper.vm as unknown as {
+      editEditor: { commands: { setContent: (html: string) => void }, getHTML: () => string }
+      saveEdit: () => Promise<void>
+    }
+    exposed.editEditor.commands.setContent('<p>我的未提交草稿</p>')
+    await exposed.saveEdit()
+    await flushPromises()
+    expect(api.get).toHaveBeenCalledWith({ updateId: existing.id })
+    expect(exposed.editEditor.getHTML()).toContain('我的未提交草稿')
+    expect(document.body.textContent).toContain('未提交的编辑草稿仍保留')
+    wrapper.unmount()
+  })
+
+  it('到达服务端截止时刻后主动隐藏作者操作', async () => {
+    const existing = {
+      ...actionableUpdate({ canEdit: true, canSelfDelete: true, canModerateDelete: false }),
+      editDeadlineAt: new Date(Date.now()),
+    }
+    api.list.mockResolvedValueOnce({ items: [existing], nextCursor: null })
+    const wrapper = mount(WorkItemDiscussion, {
+      props: { workItemId: existing.workItemId, members: [member], canPublish: true },
+    })
+    await flushPromises()
+    expect(wrapper.findAll('button').some(button => button.text() === '编辑')).toBe(false)
+    expect(wrapper.findAll('button').some(button => button.text() === '删除')).toBe(false)
     wrapper.unmount()
   })
 })
