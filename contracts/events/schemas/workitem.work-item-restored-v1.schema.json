@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-restored-v1.schema.json",
+  "title": "Work Item restored",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    { "type": "object", "properties": {
+      "eventType": { "const": "workitem.work_item_restored" },
+      "eventVersion": { "const": 1 },
+      "aggregateType": { "const": "WorkItem" },
+      "aggregateVersion": { "type": "integer", "minimum": 2 },
+      "payload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workItemId", "projectId", "contentId", "itemNo", "title", "workItemType", "statusCode", "statusCategory", "priority", "rowVersion", "restoredAt", "restoredByUserId"],
+        "properties": {
+          "workItemId": { "type": "string", "format": "uuid" },
+          "projectId": { "type": "string", "format": "uuid" },
+          "contentId": { "type": "string", "format": "uuid" },
+          "itemNo": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "workItemType": { "enum": ["REQUIREMENT", "TASK", "DEFECT"] },
+          "statusCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
+          "statusCategory": { "enum": ["TODO", "IN_PROGRESS", "DONE", "CANCELED"] },
+          "priority": { "enum": ["LOW", "MEDIUM", "HIGH", "URGENT"] },
+          "rowVersion": { "type": "integer", "minimum": 2 },
+          "restoredAt": { "type": "string", "format": "date-time" },
+          "restoredByUserId": { "type": "string", "format": "uuid" }
+        }
+      }
+    } }
+  ]
+}

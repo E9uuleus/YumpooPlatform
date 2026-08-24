@@ -17,6 +17,7 @@ import type {
   ContentViewType,
   ErrorResponse,
   WorkItemCreateRequest,
+  WorkItemDeleteRequest,
   WorkItemDetail,
   WorkItemPage,
   WorkItemPriority,
@@ -31,6 +32,8 @@ import {
     ErrorResponseToJSON,
     WorkItemCreateRequestFromJSON,
     WorkItemCreateRequestToJSON,
+    WorkItemDeleteRequestFromJSON,
+    WorkItemDeleteRequestToJSON,
     WorkItemDetailFromJSON,
     WorkItemDetailToJSON,
     WorkItemPageFromJSON,
@@ -50,6 +53,14 @@ export interface CreateWorkItemRequest {
     xXSRFTOKEN: string;
     idempotencyKey: string;
     workItemCreateRequest: WorkItemCreateRequest;
+}
+
+export interface DeleteWorkItemRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    workItemDeleteRequest: WorkItemDeleteRequest;
 }
 
 export interface GetWorkItemRequest {
@@ -77,6 +88,13 @@ export interface RankMoveWorkItemRequest {
     ifMatch: string;
     idempotencyKey: string;
     workItemRankMoveRequest: WorkItemRankMoveRequest;
+}
+
+export interface RestoreWorkItemRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
 }
 
 export interface TransitionWorkItemRequest {
@@ -167,6 +185,88 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async createWorkItem(requestParameters: CreateWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.createWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 删除后普通详情、Table 与 Kanban 均不再返回该项；同一幂等命令重放原墓碑结果。
+     * 软删除 Work Item
+     */
+    async deleteWorkItemRaw(requestParameters: DeleteWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling deleteWorkItem().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling deleteWorkItem().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling deleteWorkItem().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling deleteWorkItem().'
+            );
+        }
+
+        if (requestParameters['workItemDeleteRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemDeleteRequest',
+                'Required parameter "workItemDeleteRequest" was null or undefined when calling deleteWorkItem().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemDeleteRequestToJSON(requestParameters['workItemDeleteRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 删除后普通详情、Table 与 Kanban 均不再返回该项；同一幂等命令重放原墓碑结果。
+     * 软删除 Work Item
+     */
+    async deleteWorkItem(requestParameters: DeleteWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.deleteWorkItemRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -369,6 +469,78 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async rankMoveWorkItem(requestParameters: RankMoveWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.rankMoveWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 保留原状态；历史 rank 未占用时复用，否则恢复到原状态泳道顶部。
+     * 恢复已删除 Work Item
+     */
+    async restoreWorkItemRaw(requestParameters: RestoreWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling restoreWorkItem().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling restoreWorkItem().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling restoreWorkItem().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling restoreWorkItem().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/restore`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 保留原状态；历史 rank 未占用时复用，否则恢复到原状态泳道顶部。
+     * 恢复已删除 Work Item
+     */
+    async restoreWorkItem(requestParameters: RestoreWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.restoreWorkItemRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

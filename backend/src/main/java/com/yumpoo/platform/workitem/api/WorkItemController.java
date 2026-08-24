@@ -9,7 +9,9 @@ import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResul
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.Delete;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.RankMove;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.Restore;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Update;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemDetail;
@@ -24,6 +26,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -160,6 +163,51 @@ public final class WorkItemController {
                                 "workItemId", workItemId.toString(),
                                 "ifMatch", Long.toString(expectedVersion)),
                         objectMapper.valueToTree(body)))).result();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setCacheControl(CacheControl.noStore());
+        headers.setETag(stored.etag());
+        return new ResponseEntity<>(stored.responseJson(), headers,
+                HttpStatus.valueOf(stored.httpStatus()));
+    }
+
+    @DeleteMapping("/work-items/{workItemId}")
+    ResponseEntity<String> delete(@PathVariable UUID workItemId,
+            @Valid @RequestBody WorkItemDeleteRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
+            String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
+            String idempotencyHeader) {
+        CurrentActor actor = actors.requiredActive();
+        service.findForLifecycle(actor, workItemId);
+        long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        UUID key = keys.parseRequired(idempotencyHeader);
+        StoredCommandResult stored = service.delete(new Delete(actor, workItemId,
+                expectedVersion, body.reason(), key, hasher.hash("deleteWorkItem", Map.of(
+                                "workItemId", workItemId.toString(),
+                                "ifMatch", Long.toString(expectedVersion)),
+                        objectMapper.valueToTree(body)))).result();
+        return storedResponse(stored);
+    }
+
+    @PostMapping("/work-items/{workItemId}/restore")
+    ResponseEntity<String> restore(@PathVariable UUID workItemId,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
+            String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
+            String idempotencyHeader) {
+        CurrentActor actor = actors.requiredActive();
+        service.findForLifecycle(actor, workItemId);
+        long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        UUID key = keys.parseRequired(idempotencyHeader);
+        StoredCommandResult stored = service.restore(new Restore(actor, workItemId,
+                expectedVersion, key, hasher.hash("restoreWorkItem", Map.of(
+                        "workItemId", workItemId.toString(),
+                        "ifMatch", Long.toString(expectedVersion)), objectMapper.nullNode()))).result();
+        return storedResponse(stored);
+    }
+
+    private static ResponseEntity<String> storedResponse(StoredCommandResult stored) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());

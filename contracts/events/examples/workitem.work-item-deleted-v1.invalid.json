@@ -1,0 +1,28 @@
+{
+  "eventId": "2f000000-0000-4000-8000-000000000011",
+  "eventType": "workitem.work_item_deleted",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-24T10:00:00Z",
+  "aggregateType": "WorkItem",
+  "aggregateId": "2f000000-0000-4000-8000-000000000012",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2f000000-0000-4000-8000-000000000013" },
+  "requestId": "m2-15-work-item-delete-invalid",
+  "correlationId": "m2-15-work-item-delete-invalid",
+  "causationId": null,
+  "payload": {
+    "workItemId": "2f000000-0000-4000-8000-000000000012",
+    "projectId": "2f000000-0000-4000-8000-000000000014",
+    "contentId": "2f000000-0000-4000-8000-000000000015",
+    "itemNo": "PROJECT_CORE-15",
+    "title": "缺少删除理由",
+    "workItemType": "TASK",
+    "statusCode": "BACKLOG",
+    "statusCategory": "TODO",
+    "priority": "LOW",
+    "rowVersion": 1,
+    "deletedAt": "2026-08-24T10:00:00Z",
+    "deletedByUserId": "2f000000-0000-4000-8000-000000000013"
+  }
+}

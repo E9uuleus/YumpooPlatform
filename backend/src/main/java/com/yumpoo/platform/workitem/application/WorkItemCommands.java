@@ -25,4 +25,10 @@ public final class WorkItemCommands {
     public record RankMove(CurrentActor actor, UUID workItemId, long expectedVersion,
             String toStatus, String placement, UUID anchorWorkItemId, String resolution,
             UUID idempotencyKey, RequestHash requestHash) {}
+
+    public record Delete(CurrentActor actor, UUID workItemId, long expectedVersion,
+            String reason, UUID idempotencyKey, RequestHash requestHash) {}
+
+    public record Restore(CurrentActor actor, UUID workItemId, long expectedVersion,
+            UUID idempotencyKey, RequestHash requestHash) {}
 }
