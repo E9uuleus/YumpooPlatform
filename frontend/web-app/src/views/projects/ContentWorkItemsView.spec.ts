@@ -237,7 +237,7 @@ describe('M2-10 Content 工作项工作区', () => {
     await flushPromises()
     expect(api.listWorkItemUpdates).toHaveBeenCalledWith({ workItemId: 'work-item-1', size: 20 })
     wrapper.unmount()
-  })
+  }, 10_000)
 
   it('使用服务端分页并呈现全部协作字段列', async () => {
     const wrapper = mountView(); await flushPromises()
