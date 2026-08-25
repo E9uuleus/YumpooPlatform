@@ -2,10 +2,11 @@
 import { ProjectLifecycle, readCsrfToken, type ProjectDetail } from '@yumpoo/api-client'
 import {
   ElButton,
+  ElLoading,
   ElMessage,
   ElMessageBox,
 } from 'element-plus'
-import { onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { projectsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
@@ -19,21 +20,30 @@ const project = ref<ProjectDetail>()
 const loading = ref(false)
 const activating = ref(false)
 const error = ref<ApiProblem>()
-const projectId = String(route.params.projectId)
+const projectId = computed(() => String(route.params.projectId))
+const vLoading = ElLoading.directive
+let loadRequest = 0
 
 function formatTime(value?: Date | null): string {
   return value ? value.toLocaleString('zh-CN') : '—'
 }
 
 async function load(): Promise<void> {
+  const request = ++loadRequest
+  const requestedProjectId = projectId.value
   loading.value = true
   error.value = undefined
   try {
-    project.value = await projectsApi.getProject({ projectId })
+    const next = await projectsApi.getProject({ projectId: requestedProjectId })
+    if (request !== loadRequest) return
+    project.value = next
   } catch (reason) {
-    error.value = await toApiProblem(reason)
+    if (request !== loadRequest) return
+    const problem = await toApiProblem(reason)
+    if (request !== loadRequest) return
+    error.value = problem
   } finally {
-    loading.value = false
+    if (request === loadRequest) loading.value = false
   }
 }
 
@@ -60,7 +70,7 @@ async function activate(): Promise<void> {
   activating.value = true
   try {
     await projectsApi.activateProject({
-      projectId,
+      projectId: projectId.value,
       xXSRFTOKEN: csrf,
       ifMatch: project.value.etag,
       idempotencyKey: crypto.randomUUID(),
@@ -75,7 +85,10 @@ async function activate(): Promise<void> {
   }
 }
 
-onMounted(load)
+watch(projectId, () => {
+  project.value = undefined
+  void load()
+}, { immediate: true })
 </script>
 
 <template>
