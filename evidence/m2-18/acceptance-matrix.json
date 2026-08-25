@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-18",
+  "verifiedSlices": [
+    {
+      "requirementId": "ATTACHMENT-INTENT-UPLOAD-QUOTA",
+      "scope": "幂等意图、Company/Project 原子预约、64 KiB 流式接收、100 MiB 硬边界、中断复用与超预约稳定拒绝",
+      "evidence": [
+        "backend/src/main/resources/db/migration/filestorage/V37__create_attachment_upload_processing.sql",
+        "backend/src/main/java/com/yumpoo/platform/filestorage/application/AttachmentLifecycleService.java",
+        "backend/src/test/java/com/yumpoo/platform/filestorage/infrastructure/LocalFileQuarantineStorageTest.java"
+      ]
+    },
+    {
+      "requirementId": "ATTACHMENT-PERSISTENT-SCAN",
+      "scope": "SKIP LOCKED 持久租赁、三次尝试、5/30 秒退避、查毒后安全检查点、内容寻址幂等发布与最终撤权",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/filestorage/infrastructure/JdbcAttachmentRepository.java",
+        "backend/src/main/java/com/yumpoo/platform/administration/application/AttachmentScanScheduler.java",
+        "backend/src/test/java/com/yumpoo/platform/filestorage/application/AttachmentLifecycleServiceTest.java"
+      ]
+    },
+    {
+      "requirementId": "ATTACHMENT-API-RESCAN",
+      "scope": "实时父对象鉴权、metadata/游标分页、APP_MANAGER 强 ETag 幂等重扫、成功失败审计与隐私安全 AVAILABLE 事件",
+      "evidence": [
+        "contracts/openapi/yumpoo-v1.yaml",
+        "contracts/events/schemas/filestorage.attachment-available-v1.schema.json",
+        "backend/src/main/java/com/yumpoo/platform/administration/api/AttachmentController.java"
+      ]
+    },
+    {
+      "requirementId": "ATTACHMENT-WEB",
+      "scope": "Work Item 直接附件、Update 懒加载、上传与状态轮询、未知 PUT 恢复、手动刷新、只读状态及清理",
+      "evidence": [
+        "frontend/web-app/src/components/collaboration/AttachmentPanel.vue",
+        "frontend/web-app/src/components/collaboration/AttachmentPanel.spec.ts",
+        "frontend/web-app/src/components/collaboration/WorkItemDiscussion.spec.ts"
+      ]
+    },
+    {
+      "requirementId": "ATTACHMENT-MIGRATION-BACKUP",
+      "scope": "全新 V37、V36 前向升级与 M0-17 真实 attachment metadata、配额、扫描任务及 blob 恢复核对",
+      "evidence": [
+        "backend/src/test/java/com/yumpoo/platform/YumpooServerApplicationIT.java",
+        "backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    { "requirementId": "ATTACHMENT-DOWNLOAD-DELETE-CLEANUP", "targetMilestone": "M2-19", "scope": "下载、逻辑删除、意图过期、临时/孤儿清理和对账" },
+    { "requirementId": "FEEDBACK-ATTACHMENTS", "targetMilestone": "M3B", "scope": "PRODUCT_FEEDBACK 与 FEEDBACK_UPDATE owner 的创建鉴权和 Web" },
+    { "requirementId": "ATTACHMENT-ADMIN-UI", "targetMilestone": "TBD", "scope": "APP_MANAGER 管理页面；M2-18 只提供受控重扫 API" }
+  ]
+}

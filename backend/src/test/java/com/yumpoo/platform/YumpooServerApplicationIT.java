@@ -755,7 +755,7 @@ class YumpooServerApplicationIT {
                 }
                 connection.commit();
             }
-            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("36");
+            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("37");
             try (Connection connection = DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(), postgresContainer.getPassword());
                  Statement statement = connection.createStatement()) {

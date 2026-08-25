@@ -4,6 +4,7 @@ import com.yumpoo.platform.filestorage.application.AttachmentSafetyProcessor;
 import com.yumpoo.platform.filestorage.infrastructure.TikaAttachmentContentDetector;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 
 import java.io.IOException;
 import java.time.Clock;
@@ -26,6 +27,7 @@ public class M014AttachmentProbeConfiguration {
     }
 
     @Bean
+    @Primary
     M014ControllableMalwareScanner m014ControllableMalwareScanner() {
         return new M014ControllableMalwareScanner();
     }
