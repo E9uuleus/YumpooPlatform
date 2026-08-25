@@ -4,11 +4,25 @@
 
 M2-18 为 Work Item 与已发布、未删除的讨论 Update 提供附件意图、64 KiB 流式 PUT、Company/Project 配额预约、持久扫描队列、元数据分页和 APP_MANAGER 受控重扫。单文件固定上限 100 MiB；扫描器不可用会按 5 秒、30 秒重试，第三次失败保留封存内容 24 小时供带理由、幂等键与强 ETag 的重扫。最终化会重新验证原上传者和父对象当前可写性，并在同一事务提交附件、配额、Security Audit 与隐私安全的 AVAILABLE Outbox 事件。
 
-Web 在 Work Item 详情直接显示附件，讨论附件只有展开对应 Update 后才加载。上传完成后按 1/2/5 秒退避轮询最多 5 分钟；PUT 结果未知时先读取 metadata，可继续上传便复用原 attachmentId，否则继续轮询。本期不显示下载或删除操作，相关清理和对账留给 M2-19；Feedback 两种 owner 仅冻结枚举并留给 M3B。
+Web 在 Work Item 详情直接显示附件，讨论附件只有展开对应 Update 后才加载。上传完成后按 1/2/5 秒退避轮询最多 5 分钟；PUT 结果未知时先读取 metadata，可继续上传便复用原 attachmentId，否则继续轮询。Feedback 两种 owner 仅冻结枚举并留给 M3B。
 
 ```powershell
 pnpm verify:m2-18
 ```
+
+## M2-19 附件下载、逻辑删除与安全维护
+
+M2-19 为 `AVAILABLE` 附件增加实时父对象授权后的 64 KiB 流式下载。服务端在打开响应流前核对正式文件存在性、大小和 SHA-256，并返回检测 MIME、UTF-8 附件文件名、`nosniff`、`private, no-store` 与 `CSP: sandbox`；不支持 Range，也不暴露永久 URL、摘要或存储路径。Web 使用同源原生链接接收附件，避免 SDK 把 100 MiB 文件缓冲进 JavaScript 内存。
+
+当前父对象可写成员可用强 ETag、XSRF、稳定幂等键和 1–500 字理由执行逻辑删除。事务同时写入墓碑、释放逻辑配额、Security Audit 与 `filestorage.attachment_deleted` v1 Outbox；普通 metadata、列表和下载立即隐藏墓碑，但物理内容仍受 `DELETED` 引用保护。
+
+V38 增加物理 Blob 注册表、发布/清理互斥租约、可续跑维护运行和内部对账问题。维护任务默认启动延迟 5 分钟、每分钟处理最多 100 条、完整运行间隔 24 小时：过期上传意图被拒绝并释放预约配额，临时文件和无活动引用的正式孤儿需连续观察满 24 小时。物理删除默认关闭；开启时必须同时配置非空批准引用。缺件、大小/摘要不符、孤儿、异常目录项、配额偏差和陈旧扫描任务仅输出 runId、问题代码与计数。
+
+```powershell
+pnpm verify:m2-19
+```
+
+附件恢复、Range/在线预览，以及受逻辑删除引用保护的正式 Blob 的 30 天、legal hold 与备份门禁清理由 M5-17 负责。
 
 完整普通门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。Defender、NTFS 与 EICAR 真实门禁必须显式 opt-in：`pnpm verify:m2-18:live`。
 

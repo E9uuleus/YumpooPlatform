@@ -47,6 +47,23 @@ class AttachmentRuntimeConfigurationTest {
                 .hasMessageContaining("requires yumpoo.attachments.defender-executable");
     }
 
+    @Test
+    void cleanupDeletionFailsClosedWithoutApprovalReference() {
+        AttachmentProperties properties=new AttachmentProperties();
+        properties.setCleanupDeleteEnabled(true);
+
+        assertThatThrownBy(()->new AttachmentRuntimeConfiguration().attachmentRuntimeSettings(properties))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("approval reference");
+    }
+
+    @Test
+    void cleanupRemainsDryRunByDefault() {
+        AttachmentProperties properties=new AttachmentProperties();
+        new AttachmentRuntimeConfiguration().attachmentRuntimeSettings(properties);
+        org.assertj.core.api.Assertions.assertThat(properties.isCleanupDeleteEnabled()).isFalse();
+    }
+
     private static Environment productionEnvironment() {
         Environment environment = mock(Environment.class);
         when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(true);

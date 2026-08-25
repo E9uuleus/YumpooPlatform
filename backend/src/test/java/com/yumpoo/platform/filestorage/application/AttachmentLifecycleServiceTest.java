@@ -19,6 +19,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 
 class AttachmentLifecycleServiceTest {
 
@@ -56,6 +57,8 @@ class AttachmentLifecycleServiceTest {
         PublishedBlob published = new PublishedBlob("sha256/aa/aa/" + "a".repeat(64), 8, claim.sha256());
         when(storage.resume(claim.attachmentId(), claim.sizeBytes(), claim.sha256())).thenReturn(sealed);
         when(storage.publish(sealed)).thenReturn(published);
+        when(repository.claimPublish(eq(claim),anyString(),anyString(),any(),any(),any()))
+                .thenReturn(true);
 
         assertThat(service.scan(claim)).isEqualTo(new ScanOutcome.Clean("text/plain", published.storageKey()));
         verify(detector, never()).detect(any(), any());

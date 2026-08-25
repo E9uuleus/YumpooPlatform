@@ -216,6 +216,19 @@ class M017BackupRestoreIT {
         OffsetDateTime now = OffsetDateTime.parse("2026-08-25T03:00:00Z");
         try (Connection connection = connection(container)) {
             connection.setAutoCommit(false);
+            try (PreparedStatement registry = connection.prepareStatement("""
+                    INSERT INTO yumpoo.attachment_blob (
+                        storage_key,sha256,size_bytes,presence_status,last_verified_at,created_at,updated_at
+                    ) VALUES (?, ?, ?, 'PRESENT', ?, ?, ?)
+                    """)) {
+                registry.setString(1,blob.storageKey());
+                registry.setString(2,blob.sha256());
+                registry.setLong(3,blob.sizeBytes());
+                registry.setObject(4,now);
+                registry.setObject(5,now.minusMinutes(3));
+                registry.setObject(6,now);
+                assertThat(registry.executeUpdate()).isOne();
+            }
             try (PreparedStatement attachment = connection.prepareStatement("""
                     INSERT INTO yumpoo.attachment (
                         id,company_id,quota_project_id,owner_type,owner_id,original_file_name,
@@ -286,7 +299,7 @@ class M017BackupRestoreIT {
                                 attachment.original_file_name, attachment.detected_mime,
                                 attachment.size_bytes, attachment.status, attachment.storage_key,
                                 attachment.row_version, task.status, task.attempt_count,
-                                task.final_result,
+                                task.final_result, blob.presence_status, blob.size_bytes,
                                 (SELECT string_agg(scope_type || '=' || reserved_bytes || '/'
                                     || available_bytes, ',' ORDER BY scope_type)
                                    FROM yumpoo.attachment_quota_usage
@@ -294,6 +307,7 @@ class M017BackupRestoreIT {
                        FROM yumpoo.attachment attachment
                        JOIN yumpoo.attachment_scan_task task
                          ON task.attachment_id=attachment.id AND task.generation=attachment.scan_generation
+                       JOIN yumpoo.attachment_blob blob ON blob.storage_key=attachment.storage_key
                       WHERE attachment.id='00000000-0000-4000-8000-000000000819'
                      """)) {
             assertThat(result.next()).isTrue();
@@ -1523,6 +1537,7 @@ class M017BackupRestoreIT {
                         Map.entry("flywayVersionMatched", true),
                         Map.entry("attachmentReferencesMatched", true),
                         Map.entry("attachmentBytesReadable", true),
+                        Map.entry("attachmentBlobRegistryReconciled", true),
                         Map.entry("orphansReportedWithoutDeletion", true),
                         Map.entry("retentionDryRunGenerated", true)
                 )

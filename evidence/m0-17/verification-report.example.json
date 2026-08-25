@@ -18,6 +18,7 @@
     "flywayVersionMatched": true,
     "attachmentReferencesMatched": true,
     "attachmentBytesReadable": true,
+    "attachmentBlobRegistryReconciled": true,
     "orphansReportedWithoutDeletion": true,
     "retentionDryRunGenerated": true
   }
