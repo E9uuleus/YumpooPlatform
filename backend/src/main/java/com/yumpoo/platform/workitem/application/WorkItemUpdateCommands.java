@@ -10,4 +10,8 @@ public final class WorkItemUpdateCommands {
 
     public record Publish(CurrentActor actor, UUID workItemId, String bodyHtml,
             UUID idempotencyKey, RequestHash requestHash) {}
+
+    public record Edit(CurrentActor actor, UUID updateId, long expectedVersion, String bodyHtml) {}
+
+    public record Delete(CurrentActor actor, UUID updateId, long expectedVersion, String reason) {}
 }

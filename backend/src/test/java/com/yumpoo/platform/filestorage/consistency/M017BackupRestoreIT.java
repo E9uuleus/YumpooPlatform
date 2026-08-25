@@ -917,20 +917,24 @@ class M017BackupRestoreIT {
                     INSERT INTO yumpoo.work_item_update (
                         id, company_id, project_id, content_id, work_item_id,
                         author_user_id, author_display_name, body_html, body_text, status,
-                        edit_deadline_at, row_version, created_at
+                        edit_deadline_at, row_version, created_at, edited_at, edited_by_user_id,
+                        deleted_at, deleted_by_user_id, delete_reason
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000818',
                         '00000000-0000-4000-8000-000000000001',
                         '00000000-0000-4000-8000-000000000802',
                         '00000000-0000-4000-8000-000000000805',
                         '00000000-0000-4000-8000-000000000815',
-                        '00000000-0000-4000-8000-000000000102', 'M2-16 Author',
-                        '<p>恢复讨论 <span data-type="mention" data-mention-user-id="00000000-0000-4000-8000-000000000102">@M2-16 Author</span></p>',
-                        '恢复讨论 @M2-16 Author', 'PUBLISHED', ?, 0, ?
+                        '00000000-0000-4000-8000-000000000102', 'M2-17 Author',
+                        NULL, NULL, 'DELETED', ?, 2, ?, ?,
+                        '00000000-0000-4000-8000-000000000102', ?,
+                        '00000000-0000-4000-8000-000000000103', '治理删除备份恢复事实'
                     )
                     """)) {
                 update.setObject(1, createdAt.plusMinutes(15));
                 update.setObject(2, createdAt);
+                update.setObject(3, createdAt.plusMinutes(5));
+                update.setObject(4, createdAt.plusHours(1));
                 assertThat(update.executeUpdate()).isOne();
             }
             try (PreparedStatement mention = connection.prepareStatement("""
@@ -939,7 +943,7 @@ class M017BackupRestoreIT {
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000818',
                         '00000000-0000-4000-8000-000000000001',
-                        '00000000-0000-4000-8000-000000000102', 'M2-16 Author', ?
+                        '00000000-0000-4000-8000-000000000102', 'M2-17 Author', ?
                     )
                     """)) {
                 mention.setObject(1, createdAt);
@@ -1105,10 +1109,13 @@ class M017BackupRestoreIT {
         try (Connection connection = connection(container);
              Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery("""
-                     SELECT update_record.body_html || ':' || update_record.body_text || ':'
-                            || update_record.status || ':' || update_record.edit_deadline_at || ':'
-                            || update_record.row_version || ':'
-                            || mention.mentioned_user_id || ':' || mention.mentioned_display_name AS fact
+                     SELECT concat_ws(':', coalesce(update_record.body_html, '<NULL>'),
+                            coalesce(update_record.body_text, '<NULL>'), update_record.status,
+                            update_record.edit_deadline_at, update_record.row_version,
+                            update_record.edited_at, update_record.edited_by_user_id,
+                            update_record.deleted_at, update_record.deleted_by_user_id,
+                            update_record.delete_reason, mention.mentioned_user_id,
+                            mention.mentioned_display_name) AS fact
                        FROM yumpoo.work_item_update update_record
                        JOIN yumpoo.work_item_update_mention mention
                          ON mention.update_id = update_record.id

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-17",
+  "verifiedSlices": [
+    {
+      "requirementId": "WORK-ITEM-UPDATE-EDIT",
+      "scope": "作者服务端 15 分钟窗口、精确截止、强 ETag、重新净化、ACTIVE Mention 原子替换、净化后无变化、父 Work Item 不增版与并发单赢家",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/workitem/domain/WorkItemUpdate.java",
+        "backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemUpdateService.java",
+        "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java"
+      ]
+    },
+    {
+      "requirementId": "WORK-ITEM-UPDATE-DELETE",
+      "scope": "作者窗口内无理由自删、不可恢复墓碑、正文置空、Mention 与时间线位置保留、删除事件和成功审计同事务",
+      "evidence": [
+        "backend/src/main/resources/db/migration/workitem/V36__enforce_work_item_update_lifecycle.sql",
+        "backend/src/test/java/com/yumpoo/platform/workitem/domain/WorkItemUpdateTest.java",
+        "backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java"
+      ]
+    },
+    {
+      "requirementId": "WORK-ITEM-UPDATE-GOVERNANCE",
+      "scope": "当前 ProjectOwner 带 1–500 字理由治理删除归档历史，CompanyAdmin/成员只读，404 隐藏，成功与失败 Security Audit，Outbox/Audit 故障原子回滚",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/catalog/api/ProjectModerationGuard.java",
+        "backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemUpdateService.java",
+        "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java"
+      ]
+    },
+    {
+      "requirementId": "WORK-ITEM-UPDATE-WEB",
+      "scope": "能力驱动操作、独立受限编辑器、自删确认、治理理由、截止主动失效、墓碑安全渲染、412 单条刷新与 409 草稿保留",
+      "evidence": [
+        "frontend/web-app/src/components/collaboration/WorkItemDiscussion.vue",
+        "frontend/web-app/src/components/collaboration/WorkItemDiscussion.spec.ts"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    { "requirementId": "WORK-ITEM-UPDATE-ATTACHMENTS", "targetMilestone": "M2-18/19", "scope": "Update 附件上传、下载和清理" },
+    { "requirementId": "WORK-ITEM-ACTIVITY-PROJECTION", "targetMilestone": "M2-20", "scope": "基于生命周期事件的 Activity 投影与查询；M2-17 业务事务不直接写 Activity" },
+    { "requirementId": "WORK-ITEM-EVENT-FREEZE", "targetMilestone": "M2-23", "scope": "领域事件最终盘点与兼容冻结" },
+    { "requirementId": "FEEDBACK-UPDATE", "targetMilestone": "M3B", "scope": "productfeedback 模块的独立 FeedbackUpdate" },
+    { "requirementId": "DISCUSSION-NOTIFICATION-REALTIME", "targetMilestone": "TBD", "scope": "通知、实时刷新和未读数" }
+  ]
+}

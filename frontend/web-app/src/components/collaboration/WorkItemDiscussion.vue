@@ -4,14 +4,22 @@ import Mention from '@tiptap/extension-mention'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import {
+  ErrorCode,
+  WorkItemUpdateStatus,
   readCsrfToken,
   type ProjectMember,
   type WorkItemUpdate,
 } from '@yumpoo/api-client'
-import { ElButton, ElMessage } from 'element-plus'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { ElButton, ElDialog, ElMessage, ElMessageBox } from 'element-plus'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { workItemUpdatesApi } from '../../api/client'
-import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
+import {
+  isProblemCode,
+  isProblemStatus,
+  localProblem,
+  toApiProblem,
+  type ApiProblem,
+} from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 
 const props = defineProps<{
@@ -26,10 +34,18 @@ const nextCursor = ref<string | null>(null)
 const loading = ref(false)
 const publishing = ref(false)
 const problem = ref<ApiProblem>()
+const editProblem = ref<ApiProblem>()
 const timeline = ref<HTMLElement>()
 const draftText = ref('')
+const editDraftText = ref('')
+const editingItemId = ref<string>()
+const editDialogVisible = ref(false)
+const savingEdit = ref(false)
+const mutatingId = ref<string>()
+const now = ref(Date.now())
 let publishKey = crypto.randomUUID()
 let publishKeyBody = ''
+let clock: ReturnType<typeof setInterval> | undefined
 
 const activeMembers = computed(() => props.members.filter(member => member.membershipStatus === 'ACTIVE'))
 
@@ -96,10 +112,8 @@ function mentionSuggestion() {
   }
 }
 
-const editor = useEditor({
-  content: '',
-  editable: props.canPublish,
-  extensions: [
+function editorExtensions() {
+  return [
     StarterKit.configure({ heading: false, codeBlock: false, horizontalRule: false, strike: false, link: false }),
     Link.configure({
       openOnClick: false,
@@ -114,7 +128,13 @@ const editor = useEditor({
       }, `@${String(node.attrs.label ?? node.attrs.id)}`],
       suggestion: mentionSuggestion(),
     }),
-  ],
+  ]
+}
+
+const editor = useEditor({
+  content: '',
+  editable: props.canPublish,
+  extensions: editorExtensions(),
   onUpdate: ({ editor: current }) => {
     const html = current.getHTML()
     draftText.value = current.getText()
@@ -122,6 +142,15 @@ const editor = useEditor({
       publishKey = crypto.randomUUID()
       publishKeyBody = html
     }
+  },
+})
+
+const editEditor = useEditor({
+  content: '',
+  editable: true,
+  extensions: editorExtensions(),
+  onUpdate: ({ editor: current }) => {
+    editDraftText.value = current.getText()
   },
 })
 
@@ -178,15 +207,167 @@ async function loadOlder(): Promise<void> {
 }
 
 function setLink(): void {
-  if (!editor.value) return
-  const previous = editor.value.getAttributes('link').href as string | undefined
+  setEditorLink(editor.value, problem)
+}
+
+function setEditLink(): void {
+  setEditorLink(editEditor.value, editProblem)
+}
+
+function setEditorLink(
+  target: typeof editor.value,
+  targetProblem: typeof problem,
+): void {
+  if (!target) return
+  const previous = target.getAttributes('link').href as string | undefined
   const href = window.prompt('输入绝对 http、https 或 mailto 链接', previous ?? 'https://')
   if (href === null) return
   if (!/^(https?:\/\/|mailto:)/i.test(href)) {
-    problem.value = localProblem('链接必须是绝对 http、https 或 mailto 地址。')
+    targetProblem.value = localProblem('链接必须是绝对 http、https 或 mailto 地址。')
     return
   }
-  editor.value.chain().focus().extendMarkRange('link').setLink({ href }).run()
+  target.chain().focus().extendMarkRange('link').setLink({ href }).run()
+}
+
+function authorWindowOpen(item: WorkItemUpdate): boolean {
+  return item.status !== WorkItemUpdateStatus.Deleted && now.value < item.editDeadlineAt.getTime()
+}
+
+function canEdit(item: WorkItemUpdate): boolean {
+  return item.capabilities.canEdit && authorWindowOpen(item)
+}
+
+function canSelfDelete(item: WorkItemUpdate): boolean {
+  return item.capabilities.canSelfDelete && authorWindowOpen(item)
+}
+
+function canModerateDelete(item: WorkItemUpdate): boolean {
+  return item.capabilities.canModerateDelete && item.status !== WorkItemUpdateStatus.Deleted
+}
+
+function startEdit(item: WorkItemUpdate): void {
+  if (!canEdit(item) || !item.bodyHtml) return
+  editingItemId.value = item.id
+  editProblem.value = undefined
+  editEditor.value?.commands.setContent(item.bodyHtml)
+  editDraftText.value = editEditor.value?.getText() ?? ''
+  editDialogVisible.value = true
+}
+
+function currentEditingItem(): WorkItemUpdate | undefined {
+  return items.value.find(item => item.id === editingItemId.value)
+}
+
+async function refreshUpdate(updateId: string): Promise<WorkItemUpdate> {
+  const fresh = await workItemUpdatesApi.getWorkItemUpdate({ updateId })
+  mergeUpdates([fresh])
+  return fresh
+}
+
+async function handleMutationProblem(reason: unknown, updateId: string, preserveEditDraft: boolean): Promise<void> {
+  const apiProblem = await toApiProblem(reason)
+  const conflict = isProblemCode(apiProblem, ErrorCode.VersionConflict) || isProblemStatus(apiProblem, 412)
+  const unavailable = isProblemStatus(apiProblem, 409)
+  if (conflict || unavailable) {
+    try {
+      await refreshUpdate(updateId)
+    } catch (refreshReason) {
+      problem.value = await toApiProblem(refreshReason)
+      return
+    }
+    const message = conflict
+      ? '讨论已被其他操作更新，已刷新当前版本；未提交的编辑草稿仍保留。'
+      : '讨论已超出可操作窗口或状态已变化；未提交的编辑草稿仍保留，可复制后再处理。'
+    if (preserveEditDraft) editProblem.value = localProblem(message)
+    else problem.value = localProblem(message.replace('；未提交的编辑草稿仍保留', ''))
+    return
+  }
+  if (preserveEditDraft) editProblem.value = apiProblem
+  else problem.value = apiProblem
+}
+
+async function saveEdit(): Promise<void> {
+  const item = currentEditingItem()
+  if (!item || !editEditor.value || !editDraftText.value.trim()) return
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    editProblem.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
+    return
+  }
+  savingEdit.value = true
+  editProblem.value = undefined
+  try {
+    const updated = await workItemUpdatesApi.editWorkItemUpdate({
+      updateId: item.id,
+      xXSRFTOKEN: csrf,
+      ifMatch: item.etag,
+      workItemUpdateEditRequest: { bodyHtml: editEditor.value.getHTML() },
+    })
+    mergeUpdates([updated])
+    editDialogVisible.value = false
+    ElMessage.success('讨论已更新')
+  } catch (reason) {
+    await handleMutationProblem(reason, item.id, true)
+  } finally {
+    savingEdit.value = false
+  }
+}
+
+async function deleteUpdate(item: WorkItemUpdate, reason?: string): Promise<void> {
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    problem.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
+    return
+  }
+  mutatingId.value = item.id
+  problem.value = undefined
+  try {
+    const deleted = await workItemUpdatesApi.deleteWorkItemUpdate({
+      updateId: item.id,
+      xXSRFTOKEN: csrf,
+      ifMatch: item.etag,
+      workItemUpdateDeleteRequest: reason === undefined ? {} : { reason },
+    })
+    mergeUpdates([deleted])
+    if (editingItemId.value === item.id) editDialogVisible.value = false
+    ElMessage.success(reason === undefined ? '讨论已删除' : '讨论已治理删除')
+  } catch (mutationReason) {
+    await handleMutationProblem(mutationReason, item.id, false)
+  } finally {
+    mutatingId.value = undefined
+  }
+}
+
+async function confirmSelfDelete(item: WorkItemUpdate): Promise<void> {
+  try {
+    await ElMessageBox.confirm('删除后正文不可恢复，但时间线会保留占位。确定删除吗？', '删除讨论', {
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  await deleteUpdate(item)
+}
+
+async function moderateDelete(item: WorkItemUpdate): Promise<void> {
+  let reason: string
+  try {
+    const result = await ElMessageBox.prompt('请输入治理删除理由（1–500 字）', '治理删除讨论', {
+      confirmButtonText: '确认治理删除',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputValidator: value => {
+        const normalized = value.trim()
+        return normalized.length > 0 && normalized.length <= 500 ? true : '理由须为 1–500 字'
+      },
+    })
+    reason = result.value.trim()
+  } catch {
+    return
+  }
+  await deleteUpdate(item, reason)
 }
 
 async function publish(): Promise<void> {
@@ -230,8 +411,14 @@ function discardDraft(): void {
   publishKeyBody = editor.value?.getHTML() ?? ''
 }
 
-defineExpose({ hasDraft, discardDraft, editor })
-onMounted(loadLatest)
+defineExpose({ hasDraft, discardDraft, editor, editEditor, saveEdit })
+onMounted(() => {
+  clock = setInterval(() => { now.value = Date.now() }, 1000)
+  void loadLatest()
+})
+onBeforeUnmount(() => {
+  if (clock) clearInterval(clock)
+})
 </script>
 
 <template>
@@ -247,9 +434,29 @@ onMounted(loadLatest)
           <strong>{{ item.authorDisplayName }}</strong>
           <time :datetime="item.createdAt.toISOString()">{{ item.createdAt.toLocaleString('zh-CN') }}</time>
           <span v-if="item.status !== 'PUBLISHED'">{{ item.status === 'EDITED' ? '已编辑' : '已删除' }}</span>
+          <span class="discussion-update__actions">
+            <el-button v-if="canEdit(item)" text size="small" @click="startEdit(item)">编辑</el-button>
+            <el-button
+              v-if="canSelfDelete(item)"
+              text
+              size="small"
+              :loading="mutatingId === item.id"
+              @click="confirmSelfDelete(item)"
+            >删除</el-button>
+            <el-button
+              v-if="canModerateDelete(item)"
+              text
+              size="small"
+              :loading="mutatingId === item.id"
+              @click="moderateDelete(item)"
+            >治理删除</el-button>
+          </span>
         </header>
         <div v-if="item.bodyHtml" class="discussion-update__body" v-html="item.bodyHtml" />
-        <p v-else class="discussion-update__deleted">此讨论已删除</p>
+        <div v-else class="discussion-update__deleted">
+          <p>此讨论已删除</p>
+          <p v-if="item.deleteReason" class="discussion-update__reason">治理理由：{{ item.deleteReason }}</p>
+        </div>
       </article>
       <p v-if="!loading && !items.length" class="discussion__empty">还没有讨论，发布第一条消息吧。</p>
     </div>
@@ -270,6 +477,25 @@ onMounted(loadLatest)
         <el-button type="primary" :loading="publishing" :disabled="!hasDraft" @click="publish">发布讨论</el-button>
       </div>
     </div>
+    <el-dialog v-model="editDialogVisible" title="编辑讨论" width="min(720px, 92vw)" destroy-on-close>
+      <inline-problem v-if="editProblem" :problem="editProblem" />
+      <div class="discussion-composer discussion-composer--edit">
+        <div class="discussion-toolbar" role="toolbar" aria-label="编辑讨论格式">
+          <el-button text @click="editEditor?.chain().focus().toggleBold().run()">粗体</el-button>
+          <el-button text @click="editEditor?.chain().focus().toggleItalic().run()">斜体</el-button>
+          <el-button text @click="editEditor?.chain().focus().toggleBulletList().run()">项目符号</el-button>
+          <el-button text @click="editEditor?.chain().focus().toggleOrderedList().run()">编号</el-button>
+          <el-button text @click="editEditor?.chain().focus().toggleBlockquote().run()">引用</el-button>
+          <el-button text @click="editEditor?.chain().focus().toggleCode().run()">行内代码</el-button>
+          <el-button text @click="setEditLink">链接</el-button>
+        </div>
+        <editor-content v-if="editEditor" :editor="editEditor" class="discussion-editor" />
+      </div>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingEdit" :disabled="!editDraftText.trim()" @click="saveEdit">保存</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -280,12 +506,16 @@ onMounted(loadLatest)
 .discussion-update { padding: var(--yp-space-3); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
 .discussion-update header { display: flex; align-items: center; gap: var(--yp-space-2); color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
 .discussion-update header strong { color: var(--yp-text-primary); font-size: var(--yp-type-body-size); }
+.discussion-update__actions { display: flex; gap: 2px; margin-left: auto; }
 .discussion-update__body { margin-top: var(--yp-space-2); line-height: 1.65; overflow-wrap: anywhere; }
-.discussion-update__body :deep(p), .discussion-update__deleted { margin: 0 0 var(--yp-space-2); }
+.discussion-update__body :deep(p), .discussion-update__deleted p { margin: 0 0 var(--yp-space-2); }
+.discussion-update__deleted { margin-top: var(--yp-space-2); color: var(--yp-text-secondary); }
+.discussion-update__reason { padding: var(--yp-space-2); border-left: 3px solid var(--yp-border-strong); background: var(--yp-bg-sunken); }
 .discussion-update__body :deep(a) { color: var(--yp-link); }
 .discussion-update__body :deep(span[data-type='mention']) { padding: 1px 4px; border-radius: var(--yp-radius-sm); color: var(--yp-link); background: var(--yp-bg-selected); }
 .discussion__empty, .discussion__readonly { color: var(--yp-text-secondary); text-align: center; }
 .discussion-composer { overflow: hidden; border: 1px solid var(--yp-border-strong); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.discussion-composer--edit { margin-top: var(--yp-space-2); }
 .discussion-toolbar { display: flex; flex-wrap: wrap; gap: 2px; padding: var(--yp-space-1); border-bottom: 1px solid var(--yp-border-subtle); }
 .discussion-editor :deep(.ProseMirror) { min-height: 120px; padding: var(--yp-space-3); outline: none; }
 .discussion-editor :deep(.ProseMirror p) { margin: 0 0 var(--yp-space-2); }

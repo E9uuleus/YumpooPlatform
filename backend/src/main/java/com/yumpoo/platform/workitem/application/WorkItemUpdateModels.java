@@ -13,7 +13,14 @@ public final class WorkItemUpdateModels {
             String bodyHtml, String bodyText, String status,
             Instant editDeadlineAt, long rowVersion, String etag,
             Instant createdAt, Instant editedAt, UUID editedByUserId,
-            Instant deletedAt, UUID deletedByUserId, String deleteReason
+            Instant deletedAt, UUID deletedByUserId, String deleteReason,
+            WorkItemUpdateCapabilities capabilities
+    ) {}
+
+    public record WorkItemUpdateCapabilities(
+            boolean canEdit,
+            boolean canSelfDelete,
+            boolean canModerateDelete
     ) {}
 
     public record WorkItemUpdatePage(List<WorkItemUpdateView> items, String nextCursor) {
@@ -26,4 +33,7 @@ public final class WorkItemUpdateModels {
     }
 
     public record UpdateCursor(Instant createdAt, UUID id) {}
+
+    public record UpdateLocator(UUID companyId, UUID projectId, UUID contentId,
+            UUID workItemId, UUID updateId) {}
 }

@@ -17,6 +17,8 @@ import type {
   ErrorResponse,
   WorkItemUpdate,
   WorkItemUpdateCreateRequest,
+  WorkItemUpdateDeleteRequest,
+  WorkItemUpdateEditRequest,
   WorkItemUpdatePage,
 } from '../models/index';
 import {
@@ -26,9 +28,31 @@ import {
     WorkItemUpdateToJSON,
     WorkItemUpdateCreateRequestFromJSON,
     WorkItemUpdateCreateRequestToJSON,
+    WorkItemUpdateDeleteRequestFromJSON,
+    WorkItemUpdateDeleteRequestToJSON,
+    WorkItemUpdateEditRequestFromJSON,
+    WorkItemUpdateEditRequestToJSON,
     WorkItemUpdatePageFromJSON,
     WorkItemUpdatePageToJSON,
 } from '../models/index';
+
+export interface DeleteWorkItemUpdateRequest {
+    updateId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    workItemUpdateDeleteRequest: WorkItemUpdateDeleteRequest;
+}
+
+export interface EditWorkItemUpdateRequest {
+    updateId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    workItemUpdateEditRequest: WorkItemUpdateEditRequest;
+}
+
+export interface GetWorkItemUpdateRequest {
+    updateId: string;
+}
 
 export interface ListWorkItemUpdatesRequest {
     workItemId: string;
@@ -47,6 +71,187 @@ export interface PublishWorkItemUpdateRequest {
  *
  */
 export class WorkItemUpdatesApi extends runtime.BaseAPI {
+
+    /**
+     * 无 reason 表示作者窗口内自删；提供 reason 表示当前 ProjectOwner 治理删除，包括归档历史。
+     * 删除或治理删除 Work Item 讨论
+     */
+    async deleteWorkItemUpdateRaw(requestParameters: DeleteWorkItemUpdateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemUpdate>> {
+        if (requestParameters['updateId'] == null) {
+            throw new runtime.RequiredError(
+                'updateId',
+                'Required parameter "updateId" was null or undefined when calling deleteWorkItemUpdate().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling deleteWorkItemUpdate().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling deleteWorkItemUpdate().'
+            );
+        }
+
+        if (requestParameters['workItemUpdateDeleteRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemUpdateDeleteRequest',
+                'Required parameter "workItemUpdateDeleteRequest" was null or undefined when calling deleteWorkItemUpdate().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/work-item-updates/{updateId}`;
+        urlPath = urlPath.replace(`{${"updateId"}}`, encodeURIComponent(String(requestParameters['updateId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemUpdateDeleteRequestToJSON(requestParameters['workItemUpdateDeleteRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemUpdateFromJSON(jsonValue));
+    }
+
+    /**
+     * 无 reason 表示作者窗口内自删；提供 reason 表示当前 ProjectOwner 治理删除，包括归档历史。
+     * 删除或治理删除 Work Item 讨论
+     */
+    async deleteWorkItemUpdate(requestParameters: DeleteWorkItemUpdateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemUpdate> {
+        const response = await this.deleteWorkItemUpdateRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅作者可在服务端 15 分钟窗口内编辑；正文和 Mention 重新净化并原子替换。
+     * 编辑 Work Item 讨论
+     */
+    async editWorkItemUpdateRaw(requestParameters: EditWorkItemUpdateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemUpdate>> {
+        if (requestParameters['updateId'] == null) {
+            throw new runtime.RequiredError(
+                'updateId',
+                'Required parameter "updateId" was null or undefined when calling editWorkItemUpdate().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling editWorkItemUpdate().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling editWorkItemUpdate().'
+            );
+        }
+
+        if (requestParameters['workItemUpdateEditRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemUpdateEditRequest',
+                'Required parameter "workItemUpdateEditRequest" was null or undefined when calling editWorkItemUpdate().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/work-item-updates/{updateId}`;
+        urlPath = urlPath.replace(`{${"updateId"}}`, encodeURIComponent(String(requestParameters['updateId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemUpdateEditRequestToJSON(requestParameters['workItemUpdateEditRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemUpdateFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅作者可在服务端 15 分钟窗口内编辑；正文和 Mention 重新净化并原子替换。
+     * 编辑 Work Item 讨论
+     */
+    async editWorkItemUpdate(requestParameters: EditWorkItemUpdateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemUpdate> {
+        const response = await this.editWorkItemUpdateRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 返回当前调用人的操作能力；删除记录仅返回占位事实，不返回原正文。
+     * 查询单条 Work Item 讨论
+     */
+    async getWorkItemUpdateRaw(requestParameters: GetWorkItemUpdateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemUpdate>> {
+        if (requestParameters['updateId'] == null) {
+            throw new runtime.RequiredError(
+                'updateId',
+                'Required parameter "updateId" was null or undefined when calling getWorkItemUpdate().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/work-item-updates/{updateId}`;
+        urlPath = urlPath.replace(`{${"updateId"}}`, encodeURIComponent(String(requestParameters['updateId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemUpdateFromJSON(jsonValue));
+    }
+
+    /**
+     * 返回当前调用人的操作能力；删除记录仅返回占位事实，不返回原正文。
+     * 查询单条 Work Item 讨论
+     */
+    async getWorkItemUpdate(requestParameters: GetWorkItemUpdateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemUpdate> {
+        const response = await this.getWorkItemUpdateRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * 首窗为最新记录，窗口内始终按 createdAt、id 升序；nextCursor 仅用于加载更早记录。

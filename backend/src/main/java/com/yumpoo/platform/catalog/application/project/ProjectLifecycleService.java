@@ -121,6 +121,13 @@ public class ProjectLifecycleService {
         return snapshot(project);
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ProjectApplicationSnapshot lockForModeration(java.util.UUID companyId,
+                                                         java.util.UUID projectId) {
+        return snapshot(projects.lockByIdForShare(companyId, projectId)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND)));
+    }
+
     private Project requiredLocked(java.util.UUID companyId, java.util.UUID projectId) {
         return projects.lockById(companyId, projectId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));

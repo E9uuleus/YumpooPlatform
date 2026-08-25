@@ -59,7 +59,7 @@ final class ArchitectureRules {
             Map.entry("templateworkflow", Set.of("foundation")),
             Map.entry("filestorage", Set.of("foundation")),
             Map.entry("workitem", Set.of(
-                    "foundation", "catalog", "templateworkflow", "identityaccess", "filestorage"
+                    "foundation", "catalog", "templateworkflow", "identityaccess", "filestorage", "audit"
             )),
             Map.entry("productfeedback", Set.of(
                     "foundation", "catalog", "workitem", "identityaccess", "filestorage"
