@@ -3,6 +3,8 @@ export * from './AccountStatus';
 export * from './AccountStatusChangeResult';
 export * from './ApiErrorBase';
 export * from './AttachmentCapabilities';
+export * from './AttachmentDeleteRequest';
+export * from './AttachmentDeleteResult';
 export * from './AttachmentIntentCreateRequest';
 export * from './AttachmentIntentResult';
 export * from './AttachmentMetadata';
