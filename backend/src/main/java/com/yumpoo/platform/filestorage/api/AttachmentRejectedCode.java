@@ -1,8 +1,5 @@
-package com.yumpoo.platform.filestorage.domain;
+package com.yumpoo.platform.filestorage.api;
 
-/**
- * 附件处理的稳定失败分类。具体扫描器输出和本机路径不得进入该类型。
- */
 public enum AttachmentRejectedCode {
     FILE_TOO_LARGE,
     FILE_TYPE_NOT_ALLOWED,

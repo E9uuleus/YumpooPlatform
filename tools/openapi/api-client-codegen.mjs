@@ -155,6 +155,22 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   }
   fs.writeFileSync(workItemCreatePath, workItemCreate, 'utf8')
 
+  const attachmentMetadataPath = path.join(sourceRoot, 'models', 'AttachmentMetadata.ts')
+  let attachmentMetadata = normalizeText(fs.readFileSync(attachmentMetadataPath, 'utf8'))
+  attachmentMetadata = replaceExactlyOnce(
+    attachmentMetadata,
+    "        'rejectedCode': json['rejectedCode'] == null ? undefined : AttachmentRejectedCodeFromJSON(json['rejectedCode']),",
+    "        ...(json['rejectedCode'] === undefined ? {} : { 'rejectedCode': json['rejectedCode'] === null ? null : AttachmentRejectedCodeFromJSON(json['rejectedCode']) }),",
+    'AttachmentMetadata 可选拒绝码精确属性兼容',
+  )
+  attachmentMetadata = replaceExactlyOnce(
+    attachmentMetadata,
+    "        'availableAt': json['availableAt'] == null ? undefined : (new Date(json['availableAt'])),",
+    "        ...(json['availableAt'] === undefined ? {} : { 'availableAt': json['availableAt'] === null ? null : new Date(json['availableAt']) }),",
+    'AttachmentMetadata 可选可用时间精确属性兼容',
+  )
+  fs.writeFileSync(attachmentMetadataPath, attachmentMetadata, 'utf8')
+
   for (const relative of listGeneratedSources(sourceRoot)) {
     const generatedPath = path.join(sourceRoot, ...relative.split('/'))
     const generated = normalizeText(fs.readFileSync(generatedPath, 'utf8'))

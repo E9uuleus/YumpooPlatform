@@ -1,0 +1,26 @@
+{
+  "eventId": "37000000-0000-4000-8000-000000000001",
+  "eventType": "filestorage.attachment_available",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-25T03:00:00Z",
+  "aggregateType": "Attachment",
+  "aggregateId": "37000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 3,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "SYSTEM", "systemCode": "ATTACHMENT_SCANNER" },
+  "requestId": "m2-18-attachment-invalid",
+  "correlationId": "m2-18-attachment-invalid",
+  "causationId": null,
+  "payload": {
+    "attachmentId": "37000000-0000-4000-8000-000000000002",
+    "ownerType": "WORK_ITEM",
+    "ownerId": "37000000-0000-4000-8000-000000000003",
+    "projectId": "37000000-0000-4000-8000-000000000004",
+    "fileName": "验收报告.pdf",
+    "detectedMime": "application/pdf",
+    "sizeBytes": 4096,
+    "uploadedByUserId": "37000000-0000-4000-8000-000000000005",
+    "rowVersion": 3,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

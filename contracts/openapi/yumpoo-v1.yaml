@@ -34,6 +34,8 @@ tags:
     description: Content 下真实工作项的创建、详情与分页只读视图。
   - name: WorkItemUpdates
     description: Work Item 下独立版本、独立时间线的项目讨论流。
+  - name: Attachments
+    description: Work Item 与已发布 Update 的附件意图、流式上传、扫描状态和受控重扫。
 paths:
   /company:
     get:
@@ -2083,6 +2085,146 @@ paths:
         '428': { $ref: '#/components/responses/PreconditionRequired' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /attachments:
+    post:
+      tags: [Attachments]
+      operationId: createAttachmentIntent
+      summary: 创建附件上传意图
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttachmentIntentCreateRequest' }
+      responses:
+        '201':
+          description: 已创建上传意图。
+          headers:
+            Location: { schema: { type: string } }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttachmentIntentResult' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /attachments/{attachmentId}:
+    get:
+      tags: [Attachments]
+      operationId: getAttachment
+      summary: 查询附件实时元数据
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '200':
+          description: 当前父对象权限下可见的附件元数据。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttachmentMetadata' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
+  /attachments/{attachmentId}/content:
+    put:
+      tags: [Attachments]
+      operationId: uploadAttachmentContent
+      summary: 流式写入一个附件内容
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/AttachmentId'
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '202':
+          description: 内容已封存并排入安全扫描。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttachmentMetadata' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/FileTooLarge' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /work-items/{workItemId}/attachments:
+    get:
+      tags: [Attachments]
+      operationId: listWorkItemAttachments
+      summary: 分页查询 Work Item 附件
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/WorkItemId'
+        - $ref: '#/components/parameters/AttachmentCursor'
+        - $ref: '#/components/parameters/AttachmentPageSize'
+      responses:
+        '200':
+          description: 附件页。
+          content: { application/json: { schema: { $ref: '#/components/schemas/AttachmentPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
+  /work-item-updates/{updateId}/attachments:
+    get:
+      tags: [Attachments]
+      operationId: listWorkItemUpdateAttachments
+      summary: 分页查询已发布 Update 附件
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/WorkItemUpdateId'
+        - $ref: '#/components/parameters/AttachmentCursor'
+        - $ref: '#/components/parameters/AttachmentPageSize'
+      responses:
+        '200':
+          description: 附件页。
+          content: { application/json: { schema: { $ref: '#/components/schemas/AttachmentPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
+  /admin/attachments/{attachmentId}/rescan:
+    post:
+      tags: [Attachments]
+      operationId: rescanAttachment
+      summary: APP_MANAGER 受控重扫仍保留封存内容的附件
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/AttachmentId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttachmentRescanRequest' }
+      responses:
+        '202':
+          description: 已重新预约配额并排入完整扫描。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/AttachmentRescanResult' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -3849,6 +3991,99 @@ components:
           nullable: true
           description: 不透明续读游标；没有下一批时为 null。
 
+    AttachmentOwnerType:
+      type: string
+      enum: [WORK_ITEM, WORK_ITEM_UPDATE, PRODUCT_FEEDBACK, FEEDBACK_UPDATE]
+
+    AttachmentStatus:
+      type: string
+      enum: [UPLOADING, AVAILABLE, REJECTED, DELETED]
+
+    AttachmentRejectedCode:
+      type: string
+      nullable: true
+      enum: [FILE_TOO_LARGE, FILE_TYPE_NOT_ALLOWED, MALWARE_DETECTED, SCAN_UNAVAILABLE, UPLOAD_INCOMPLETE, INTEGRITY_CHECK_FAILED, PARENT_NOT_WRITABLE, QUOTA_EXCEEDED]
+
+    AttachmentCapabilities:
+      type: object
+      additionalProperties: false
+      required: [canUploadContent]
+      properties:
+        canUploadContent: { type: boolean }
+
+    AttachmentMetadata:
+      type: object
+      additionalProperties: false
+      required: [id, companyId, projectId, ownerType, ownerId, originalFileName, declaredMime, status, uploadedByUserId, createdAt, expiresAt, rowVersion, etag, capabilities]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        companyId: { $ref: '#/components/schemas/Uuid' }
+        projectId: { $ref: '#/components/schemas/Uuid' }
+        ownerType: { $ref: '#/components/schemas/AttachmentOwnerType' }
+        ownerId: { $ref: '#/components/schemas/Uuid' }
+        originalFileName: { type: string, minLength: 1, maxLength: 255 }
+        declaredMime: { type: string, minLength: 1, maxLength: 160 }
+        detectedMime: { type: string, minLength: 1, maxLength: 160, nullable: true }
+        sizeBytes: { type: integer, format: int64, minimum: 1, maximum: 104857600, nullable: true }
+        status: { $ref: '#/components/schemas/AttachmentStatus' }
+        rejectedCode: { $ref: '#/components/schemas/AttachmentRejectedCode' }
+        uploadedByUserId: { $ref: '#/components/schemas/Uuid' }
+        createdAt: { type: string, format: date-time }
+        availableAt: { type: string, format: date-time, nullable: true }
+        expiresAt: { type: string, format: date-time }
+        rowVersion: { type: integer, format: int64, minimum: 0 }
+        etag: { type: string, pattern: '^"[0-9]+"$' }
+        capabilities: { $ref: '#/components/schemas/AttachmentCapabilities' }
+
+    AttachmentIntentCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [ownerType, ownerId, originalFileName, declaredMime]
+      properties:
+        ownerType: { $ref: '#/components/schemas/AttachmentOwnerType' }
+        ownerId: { $ref: '#/components/schemas/Uuid' }
+        originalFileName: { type: string, minLength: 1, maxLength: 255 }
+        declaredMime: { type: string, minLength: 1, maxLength: 160 }
+        sizeBytes: { type: integer, format: int64, minimum: 0, maximum: 104857600, nullable: true }
+
+    AttachmentIntentResult:
+      type: object
+      additionalProperties: false
+      required: [uploadUrl, expiresAt, maxBytes, metadata]
+      properties:
+        uploadUrl: { type: string, pattern: '^/api/v1/attachments/[0-9a-f-]{36}/content$' }
+        expiresAt: { type: string, format: date-time }
+        maxBytes: { type: integer, format: int64, enum: [104857600] }
+        metadata: { $ref: '#/components/schemas/AttachmentMetadata' }
+
+    AttachmentPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AttachmentMetadata' }
+        nextCursor: { type: string, minLength: 1, nullable: true }
+
+    AttachmentRescanRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+
+    AttachmentRescanResult:
+      type: object
+      additionalProperties: false
+      required: [attachmentId, status, generation, rowVersion, etag]
+      properties:
+        attachmentId: { $ref: '#/components/schemas/Uuid' }
+        status: { $ref: '#/components/schemas/AttachmentStatus' }
+        generation: { type: integer, format: int32, minimum: 1 }
+        rowVersion: { type: integer, format: int64, minimum: 0 }
+        etag: { type: string, pattern: '^"[0-9]+"$' }
+
   requestBodies:
     GovernanceReason:
       required: true
@@ -3857,6 +4092,35 @@ components:
           schema: { $ref: '#/components/schemas/GovernanceReasonRequest' }
 
   parameters:
+    AttachmentId:
+      name: attachmentId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+
+    WorkItemId:
+      name: workItemId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+
+    WorkItemUpdateId:
+      name: updateId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Uuid' }
+
+    AttachmentCursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, minLength: 1 }
+
+    AttachmentPageSize:
+      name: size
+      in: query
+      required: false
+      schema: { type: integer, format: int32, minimum: 1, maximum: 100, default: 20 }
     UserId:
       name: userId
       in: path

@@ -326,3 +326,8 @@ events:
     schema: schemas/workitem.content-restored-v1.schema.json
     validExamples: [examples/workitem.content-restored-v1.json]
     invalidExamples: [examples/workitem.content-restored-v1.invalid.json]
+  - eventType: filestorage.attachment_available
+    eventVersion: 1
+    schema: schemas/filestorage.attachment-available-v1.schema.json
+    validExamples: [examples/filestorage.attachment-available-v1.json]
+    invalidExamples: [examples/filestorage.attachment-available-v1.invalid.json]
