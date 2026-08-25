@@ -2132,8 +2132,61 @@ paths:
               schema: { $ref: '#/components/schemas/AttachmentMetadata' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '404': { $ref: '#/components/responses/ResourceNotFound' }
+    delete:
+      tags: [Attachments]
+      operationId: deleteAttachment
+      summary: 逻辑删除一个可用附件
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/AttachmentId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AttachmentDeleteRequest' }
+      responses:
+        '200':
+          description: 附件墓碑；同一幂等键可重放相同响应。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttachmentDeleteResult' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
 
   /attachments/{attachmentId}/content:
+    get:
+      tags: [Attachments]
+      operationId: downloadAttachmentContent
+      summary: 校验并流式下载一个可用附件
+      description: 不支持 Range，也不返回永久 URL、存储路径或内容摘要响应头。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/AttachmentId'
+      responses:
+        '200':
+          description: 64 KiB 有界缓冲的同源附件流。
+          headers:
+            Content-Disposition: { schema: { type: string } }
+            Content-Length: { schema: { type: integer, format: int64, minimum: 1 } }
+            X-Content-Type-Options: { schema: { type: string, enum: [nosniff] } }
+            Cache-Control: { schema: { type: string, enum: ['private, no-store'] } }
+            Content-Security-Policy: { schema: { type: string, enum: [sandbox] } }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
     put:
       tags: [Attachments]
       operationId: uploadAttachmentContent
@@ -4007,9 +4060,11 @@ components:
     AttachmentCapabilities:
       type: object
       additionalProperties: false
-      required: [canUploadContent]
+      required: [canUploadContent, canDownloadContent, canDelete]
       properties:
         canUploadContent: { type: boolean }
+        canDownloadContent: { type: boolean }
+        canDelete: { type: boolean }
 
     AttachmentMetadata:
       type: object
@@ -4072,6 +4127,27 @@ components:
       required: [reason]
       properties:
         reason: { type: string, minLength: 1, maxLength: 500 }
+
+    AttachmentDeleteRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+
+    AttachmentDeleteResult:
+      type: object
+      additionalProperties: false
+      required: [attachmentId, status, deletedByUserId, deletedAt, deleteReason, previousRowVersion, rowVersion, etag]
+      properties:
+        attachmentId: { $ref: '#/components/schemas/Uuid' }
+        status: { type: string, enum: [DELETED] }
+        deletedByUserId: { $ref: '#/components/schemas/Uuid' }
+        deletedAt: { type: string, format: date-time }
+        deleteReason: { type: string, minLength: 1, maxLength: 500 }
+        previousRowVersion: { type: integer, format: int64, minimum: 0 }
+        rowVersion: { type: integer, format: int64, minimum: 1 }
+        etag: { type: string, pattern: '^"[0-9]+"$' }
 
     AttachmentRescanResult:
       type: object

@@ -23,6 +23,16 @@ public class AttachmentLifecycleAdapter implements AttachmentLifecyclePort {
     }
     public AttachmentMetadata upload(UploadContent value){return map(service.uploadBoundary(
             new AttachmentBoundaryData.Upload(value.companyId(),value.attachmentId(),value.content(),value.contentLength(),value.now())));}
+    public DownloadContent download(UUID companyId,UUID id,Instant now){
+        AttachmentBoundaryData.Download value=service.downloadBoundary(companyId,id,now);
+        return new DownloadContent(value.inputStream(),value.originalFileName(),value.detectedMime(),value.sizeBytes());
+    }
+    public DeleteResult delete(UUID companyId,UUID id,UUID deletedBy,String reason,long version,Instant now){
+        AttachmentBoundaryData.Deleted value=service.deleteBoundary(new AttachmentBoundaryData.Delete(
+                companyId,id,deletedBy,reason,version,now));
+        return new DeleteResult(value.attachmentId(),AttachmentStatus.valueOf(value.status()),value.deletedByUserId(),
+                value.deletedAt(),value.deleteReason(),value.previousRowVersion(),value.rowVersion(),value.etag());
+    }
     public Optional<AttachmentMetadata> find(UUID companyId,UUID id,Instant now){return service.findBoundary(companyId,id,now).map(AttachmentLifecycleAdapter::map);}
     public AttachmentPage list(UUID companyId,AttachmentOwnerType type,UUID ownerId,String cursor,int size,Instant now){
         AttachmentBoundaryData.Page page=service.listBoundary(companyId,type.name(),ownerId,cursor,size,now);
@@ -52,7 +62,8 @@ public class AttachmentLifecycleAdapter implements AttachmentLifecyclePort {
                 value.ownerId(),value.originalFileName(),value.declaredMime(),value.detectedMime(),value.sizeBytes(),
                 AttachmentStatus.valueOf(value.status()),value.rejectedCode()==null?null:AttachmentRejectedCode.valueOf(value.rejectedCode()),
                 value.uploadedByUserId(),value.createdAt(),value.availableAt(),value.expiresAt(),value.rowVersion(),
-                StrongEtag.format(value.rowVersion()),new AttachmentCapabilities(value.canUploadContent()));
+                StrongEtag.format(value.rowVersion()),new AttachmentCapabilities(value.canUploadContent(),
+                        value.canDownloadContent(),value.canDelete()));
     }
     private static ScanClaim map(AttachmentBoundaryData.Claim value){return new ScanClaim(value.taskId(),value.leaseToken(),value.attachmentId(),value.companyId(),value.projectId(),AttachmentOwnerType.valueOf(value.ownerType()),value.ownerId(),value.uploadedByUserId(),value.originalFileName(),value.declaredMime(),value.sizeBytes(),value.sha256(),value.detectedMime(),value.storageKey(),value.generation(),value.attemptCount());}
     private static AttachmentBoundaryData.Claim internal(ScanClaim value){return new AttachmentBoundaryData.Claim(value.taskId(),value.leaseToken(),value.attachmentId(),value.companyId(),value.projectId(),value.ownerType().name(),value.ownerId(),value.uploadedByUserId(),value.originalFileName(),value.declaredMime(),value.sizeBytes(),value.sha256(),value.detectedMime(),value.storageKey(),value.generation(),value.attemptCount());}

@@ -91,7 +91,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
         String cursor = beforeCreatedAt == null ? "" :
                 " AND (created_at, id) < (:beforeCreatedAt, :beforeId) ";
         JdbcClient.StatementSpec spec = jdbc.sql("SELECT * FROM yumpoo.attachment WHERE company_id=:companyId "
-                + "AND owner_type=:ownerType AND owner_id=:ownerId " + cursor
+                + "AND owner_type=:ownerType AND owner_id=:ownerId AND status <> 'DELETED' " + cursor
                 + "ORDER BY created_at DESC, id DESC LIMIT :limit")
                 .param("companyId", companyId).param("ownerType", ownerType.name())
                 .param("ownerId", ownerId).param("limit", limit);
@@ -228,10 +228,63 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     @Transactional
     public void recordPublished(ScanClaim claim, String storageKey, Instant now) {
         requireTaskLease(claim);
+        jdbc.sql("""
+                INSERT INTO yumpoo.attachment_blob (
+                    storage_key,sha256,size_bytes,presence_status,last_verified_at,created_at,updated_at
+                ) VALUES (:key,:sha256,:size,'PRESENT',:now,:now,:now)
+                ON CONFLICT (storage_key) DO UPDATE SET
+                    presence_status='PRESENT',last_verified_at=:now,updated_at=:now,
+                    row_version=yumpoo.attachment_blob.row_version+1
+                 WHERE yumpoo.attachment_blob.sha256=:sha256
+                   AND yumpoo.attachment_blob.size_bytes=:size
+                """).param("key",storageKey).param("sha256",claim.sha256())
+                .param("size",claim.sizeBytes()).param("now",utc(now)).update();
         jdbc.sql("UPDATE yumpoo.attachment SET storage_key=:key, processing_stage='FINALIZING', "
                 + "updated_at=:now WHERE id=:id AND company_id=:companyId AND scan_generation=:generation")
                 .param("key", storageKey).param("now", utc(now)).param("id", claim.attachmentId())
                 .param("companyId", claim.companyId()).param("generation", claim.generation()).update();
+    }
+
+    @Override
+    @Transactional
+    public Boolean claimPublish(ScanClaim claim,String storageKey,String owner,UUID operationToken,
+            Instant now,Instant leaseUntil) {
+        jdbc.sql("""
+                INSERT INTO yumpoo.attachment_blob (
+                    storage_key,sha256,size_bytes,presence_status,created_at,updated_at
+                ) VALUES (:key,:sha256,:size,'MISSING',:now,:now)
+                ON CONFLICT (storage_key) DO NOTHING
+                """).param("key",storageKey).param("sha256",claim.sha256())
+                .param("size",claim.sizeBytes()).param("now",utc(now)).update();
+        return jdbc.sql("""
+                UPDATE yumpoo.attachment_blob SET operation_type='PUBLISH',operation_owner=:owner,
+                    operation_token=:token,operation_lease_until=:until,updated_at=:now
+                 WHERE storage_key=:key AND sha256=:sha256 AND size_bytes=:size
+                   AND (operation_lease_until IS NULL OR operation_lease_until<=:now)
+                """).param("owner",owner).param("token",operationToken).param("until",utc(leaseUntil))
+                .param("now",utc(now)).param("key",storageKey).param("sha256",claim.sha256())
+                .param("size",claim.sizeBytes()).update()==1;
+    }
+
+    @Override
+    @Transactional
+    public void completePublish(String storageKey,UUID operationToken,Instant now) {
+        jdbc.sql("""
+                UPDATE yumpoo.attachment_blob SET presence_status='PRESENT',last_verified_at=:now,
+                    operation_type=NULL,operation_owner=NULL,operation_token=NULL,operation_lease_until=NULL,
+                    updated_at=:now,row_version=row_version+1
+                 WHERE storage_key=:key AND operation_type='PUBLISH' AND operation_token=:token
+                """).param("now",utc(now)).param("key",storageKey).param("token",operationToken).update();
+    }
+
+    @Override
+    @Transactional
+    public void releasePublish(String storageKey,UUID operationToken,Instant now) {
+        jdbc.sql("""
+                UPDATE yumpoo.attachment_blob SET operation_type=NULL,operation_owner=NULL,
+                    operation_token=NULL,operation_lease_until=NULL,updated_at=:now
+                 WHERE storage_key=:key AND operation_type='PUBLISH' AND operation_token=:token
+                """).param("now",utc(now)).param("key",storageKey).param("token",operationToken).update();
     }
 
     @Override
@@ -340,6 +393,81 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                 after.rowVersion(), StrongEtag.format(after.rowVersion()));
     }
 
+    @Override
+    @Transactional
+    public AttachmentRecord delete(UUID companyId, UUID attachmentId, UUID deletedByUserId,
+            String reason, long expectedVersion, Instant now) {
+        AttachmentRecord current = locked(companyId, attachmentId);
+        if (current.rowVersion() != expectedVersion) {
+            throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+        }
+        if (current.status() != AttachmentState.AVAILABLE) {
+            throw invalid("ATTACHMENT_NOT_DELETABLE");
+        }
+        ensureQuotaRows(companyId, current.projectId(), now);
+        List<Quota> quotas = jdbc.sql("""
+                SELECT scope_type,reserved_bytes,available_bytes
+                  FROM yumpoo.attachment_quota_usage
+                 WHERE company_id=:companyId
+                   AND ((scope_type='COMPANY' AND scope_id=:companyId)
+                     OR (scope_type='PROJECT' AND scope_id=:projectId))
+                 ORDER BY scope_type FOR UPDATE
+                """).param("companyId",companyId).param("projectId",current.projectId())
+                .query((rs,row)->new Quota(rs.getString(1),rs.getLong(2),rs.getLong(3))).list();
+        if (quotas.size()!=2 || quotas.stream().anyMatch(value->value.available()<current.sizeBytes())) {
+            throw new ApplicationException(StandardErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+        adjustQuota(companyId,current.projectId(),0,-current.sizeBytes(),now);
+        int changed=jdbc.sql("""
+                UPDATE yumpoo.attachment
+                   SET status='DELETED',deleted_by_user_id=:deletedBy,deleted_at=:now,
+                       delete_reason=:reason,row_version=row_version+1,updated_at=:now
+                 WHERE company_id=:companyId AND id=:id AND status='AVAILABLE'
+                   AND row_version=:version
+                """).param("deletedBy",deletedByUserId).param("now",utc(now)).param("reason",reason)
+                .param("companyId",companyId).param("id",attachmentId)
+                .param("version",expectedVersion).update();
+        if(changed!=1) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+        return required(companyId,attachmentId);
+    }
+
+    @Override
+    @Transactional
+    public void recordReconciliationIssue(String issueCode,String subjectType,String subjectKey,
+            UUID attachmentId,UUID companyId,Instant now) {
+        int updated=jdbc.sql("""
+                UPDATE yumpoo.attachment_reconciliation_issue
+                   SET last_detected_at=:now,detection_count=detection_count+1,
+                       row_version=row_version+1
+                 WHERE issue_code=:code AND subject_type=:subjectType
+                   AND subject_key=:subjectKey AND resolved_at IS NULL
+                """).param("now",utc(now)).param("code",issueCode).param("subjectType",subjectType)
+                .param("subjectKey",subjectKey).update();
+        if(updated==0) {
+            jdbc.sql("""
+                    INSERT INTO yumpoo.attachment_reconciliation_issue (
+                        id,issue_code,subject_type,subject_key,attachment_id,company_id,
+                        first_detected_at,last_detected_at
+                    ) VALUES (:id,:code,:subjectType,:subjectKey,:attachmentId,:companyId,:now,:now)
+                    """).param("id",UUID.randomUUID()).param("code",issueCode)
+                    .param("subjectType",subjectType).param("subjectKey",subjectKey)
+                    .param("attachmentId",attachmentId).param("companyId",companyId)
+                    .param("now",utc(now)).update();
+        }
+    }
+
+    @Override
+    @Transactional
+    public void resolveReconciliationIssues(String subjectType,String subjectKey,Instant now) {
+        jdbc.sql("""
+                UPDATE yumpoo.attachment_reconciliation_issue
+                   SET resolved_at=:now,row_version=row_version+1
+                 WHERE subject_type=:subjectType AND subject_key=:subjectKey
+                   AND resolved_at IS NULL
+                """).param("now",utc(now)).param("subjectType",subjectType)
+                .param("subjectKey",subjectKey).update();
+    }
+
     private void lockAndRequireQuota(UUID companyId, UUID projectId, long bytes,
             long companyLimit, long projectLimit) {
         List<Quota> rows = jdbc.sql("""
@@ -421,7 +549,8 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                 rs.getLong("reserved_bytes"), rs.getObject("uploaded_by_user_id", UUID.class),
                 instant(rs, "intent_expires_at"), instantOrNull(rs, "quarantine_retain_until"),
                 instantOrNull(rs, "available_at"), rs.getObject("upload_lease_token", UUID.class),
-                instantOrNull(rs, "upload_lease_until"), rs.getInt("scan_generation"),
+                instantOrNull(rs, "upload_lease_until"),rs.getObject("deleted_by_user_id",UUID.class),
+                instantOrNull(rs,"deleted_at"),rs.getString("delete_reason"),rs.getInt("scan_generation"),
                 rs.getLong("row_version"), instant(rs, "created_at"));
     }
 

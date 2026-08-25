@@ -21,10 +21,22 @@ import java.nio.file.Path;
 public class AttachmentRuntimeConfiguration {
     @Bean
     AttachmentRuntimeSettings attachmentRuntimeSettings(AttachmentProperties properties) {
+        validateMaintenance(properties);
         return new AttachmentRuntimeSettings(properties.getCompanyQuotaBytes(),
                 properties.getProjectQuotaBytes(), properties.getScanLease(),
                 properties.getUploadLease(), properties.getFirstScanRetry(),
                 properties.getSecondScanRetry());
+    }
+
+    private static void validateMaintenance(AttachmentProperties properties) {
+        if(properties.isCleanupDeleteEnabled()
+                &&(properties.getCleanupApprovalReference()==null
+                ||properties.getCleanupApprovalReference().isBlank())) {
+            throw new IllegalStateException("attachment cleanup deletion requires a non-empty approval reference");
+        }
+        if(properties.getMaintenanceBatchSize()<1||properties.getMaintenanceBatchSize()>100) {
+            throw new IllegalStateException("attachment maintenance batch size must be between 1 and 100");
+        }
     }
     @Bean
     QuarantineStorage attachmentStorage(AttachmentProperties properties,

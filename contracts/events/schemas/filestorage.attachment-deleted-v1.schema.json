@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/filestorage.attachment-deleted-v1.schema.json",
+  "title": "Attachment deleted",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    { "type": "object", "properties": {
+      "eventType": { "const": "filestorage.attachment_deleted" },
+      "eventVersion": { "const": 1 },
+      "aggregateType": { "const": "Attachment" },
+      "payload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["attachmentId", "ownerType", "ownerId", "projectId", "fileName", "sizeBytes", "deletedByUserId", "deleteReason", "deletedAt", "previousRowVersion", "rowVersion"],
+        "properties": {
+          "attachmentId": { "type": "string", "format": "uuid" },
+          "ownerType": { "enum": ["WORK_ITEM", "WORK_ITEM_UPDATE"] },
+          "ownerId": { "type": "string", "format": "uuid" },
+          "projectId": { "type": "string", "format": "uuid" },
+          "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 104857600 },
+          "deletedByUserId": { "type": "string", "format": "uuid" },
+          "deleteReason": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "deletedAt": { "type": "string", "format": "date-time" },
+          "previousRowVersion": { "type": "integer", "minimum": 0 },
+          "rowVersion": { "type": "integer", "minimum": 1 }
+        }
+      }
+    } }
+  ]
+}

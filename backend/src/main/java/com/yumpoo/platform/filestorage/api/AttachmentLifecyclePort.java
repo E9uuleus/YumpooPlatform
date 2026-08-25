@@ -9,6 +9,8 @@ import com.yumpoo.platform.filestorage.api.AttachmentModels.RescanResult;
 import com.yumpoo.platform.filestorage.api.AttachmentModels.ScanClaim;
 import com.yumpoo.platform.filestorage.api.AttachmentModels.ScanOutcome;
 import com.yumpoo.platform.filestorage.api.AttachmentModels.UploadContent;
+import com.yumpoo.platform.filestorage.api.AttachmentModels.DownloadContent;
+import com.yumpoo.platform.filestorage.api.AttachmentModels.DeleteResult;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -17,6 +19,9 @@ import java.util.UUID;
 public interface AttachmentLifecyclePort {
     AttachmentIntentResult createIntent(CreateIntent command);
     AttachmentMetadata upload(UploadContent command);
+    DownloadContent download(UUID companyId, UUID attachmentId, Instant now);
+    DeleteResult delete(UUID companyId, UUID attachmentId, UUID deletedByUserId,
+            String reason, long expectedVersion, Instant now);
     Optional<AttachmentMetadata> find(UUID companyId, UUID attachmentId, Instant now);
     AttachmentPage list(UUID companyId, AttachmentOwnerType ownerType, UUID ownerId,
             String cursor, int size, Instant now);
