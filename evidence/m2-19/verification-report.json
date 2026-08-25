@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-19",
+  "status": "PASS",
+  "command": "pnpm verify:m2-19",
+  "startedAt": "2026-08-25T05:00:00Z",
+  "completedAt": "2026-08-25T06:00:00Z",
+  "flywayVersion": "38",
+  "checks": {
+    "eventContracts": true,
+    "agentNoteAndReadme": true,
+    "openApiGeneratedClient": true,
+    "backendDownloadDeleteMaintenanceTests": true,
+    "webAttachmentTests": true,
+    "dockerBackedCleanVerify": true,
+    "liveWindowsDefenderNtfs": false
+  },
+  "environmentNotes": [
+    "Windows live verification is explicit opt-in and is not part of the ordinary gate"
+  ]
+}

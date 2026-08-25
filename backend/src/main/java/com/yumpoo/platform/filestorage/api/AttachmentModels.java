@@ -10,7 +10,11 @@ import java.util.UUID;
 public final class AttachmentModels {
     private AttachmentModels() {}
 
-    public record AttachmentCapabilities(boolean canUploadContent) {}
+    public record AttachmentCapabilities(
+            boolean canUploadContent,
+            boolean canDownloadContent,
+            boolean canDelete
+    ) {}
 
     public record AttachmentMetadata(
             UUID id,
@@ -71,6 +75,28 @@ public final class AttachmentModels {
             Objects.requireNonNull(contentLength, "contentLength must not be null");
         }
     }
+
+    public record DownloadContent(
+            InputStream inputStream,
+            String originalFileName,
+            String detectedMime,
+            long sizeBytes
+    ) {
+        public DownloadContent {
+            Objects.requireNonNull(inputStream, "inputStream must not be null");
+        }
+    }
+
+    public record DeleteResult(
+            UUID attachmentId,
+            AttachmentStatus status,
+            UUID deletedByUserId,
+            Instant deletedAt,
+            String deleteReason,
+            long previousRowVersion,
+            long rowVersion,
+            String etag
+    ) {}
 
     public record ScanClaim(
             UUID taskId,

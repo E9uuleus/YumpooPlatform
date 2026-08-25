@@ -14,6 +14,8 @@
 
 import * as runtime from '../runtime';
 import type {
+  AttachmentDeleteRequest,
+  AttachmentDeleteResult,
   AttachmentIntentCreateRequest,
   AttachmentIntentResult,
   AttachmentMetadata,
@@ -23,6 +25,10 @@ import type {
   ErrorResponse,
 } from '../models/index';
 import {
+    AttachmentDeleteRequestFromJSON,
+    AttachmentDeleteRequestToJSON,
+    AttachmentDeleteResultFromJSON,
+    AttachmentDeleteResultToJSON,
     AttachmentIntentCreateRequestFromJSON,
     AttachmentIntentCreateRequestToJSON,
     AttachmentIntentResultFromJSON,
@@ -43,6 +49,18 @@ export interface CreateAttachmentIntentRequest {
     xXSRFTOKEN: string;
     idempotencyKey: string;
     attachmentIntentCreateRequest: AttachmentIntentCreateRequest;
+}
+
+export interface DeleteAttachmentRequest {
+    attachmentId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+    attachmentDeleteRequest: AttachmentDeleteRequest;
+}
+
+export interface DownloadAttachmentContentRequest {
+    attachmentId: string;
 }
 
 export interface GetAttachmentRequest {
@@ -138,6 +156,125 @@ export class AttachmentsApi extends runtime.BaseAPI {
      */
     async createAttachmentIntent(requestParameters: CreateAttachmentIntentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<AttachmentIntentResult> {
         const response = await this.createAttachmentIntentRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 逻辑删除一个可用附件
+     */
+    async deleteAttachmentRaw(requestParameters: DeleteAttachmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<AttachmentDeleteResult>> {
+        if (requestParameters['attachmentId'] == null) {
+            throw new runtime.RequiredError(
+                'attachmentId',
+                'Required parameter "attachmentId" was null or undefined when calling deleteAttachment().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling deleteAttachment().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling deleteAttachment().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling deleteAttachment().'
+            );
+        }
+
+        if (requestParameters['attachmentDeleteRequest'] == null) {
+            throw new runtime.RequiredError(
+                'attachmentDeleteRequest',
+                'Required parameter "attachmentDeleteRequest" was null or undefined when calling deleteAttachment().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/attachments/{attachmentId}`;
+        urlPath = urlPath.replace(`{${"attachmentId"}}`, encodeURIComponent(String(requestParameters['attachmentId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+            body: AttachmentDeleteRequestToJSON(requestParameters['attachmentDeleteRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => AttachmentDeleteResultFromJSON(jsonValue));
+    }
+
+    /**
+     * 逻辑删除一个可用附件
+     */
+    async deleteAttachment(requestParameters: DeleteAttachmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<AttachmentDeleteResult> {
+        const response = await this.deleteAttachmentRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 不支持 Range，也不返回永久 URL、存储路径或内容摘要响应头。
+     * 校验并流式下载一个可用附件
+     */
+    async downloadAttachmentContentRaw(requestParameters: DownloadAttachmentContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Blob>> {
+        if (requestParameters['attachmentId'] == null) {
+            throw new runtime.RequiredError(
+                'attachmentId',
+                'Required parameter "attachmentId" was null or undefined when calling downloadAttachmentContent().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/attachments/{attachmentId}/content`;
+        urlPath = urlPath.replace(`{${"attachmentId"}}`, encodeURIComponent(String(requestParameters['attachmentId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.BlobApiResponse(response);
+    }
+
+    /**
+     * 不支持 Range，也不返回永久 URL、存储路径或内容摘要响应头。
+     * 校验并流式下载一个可用附件
+     */
+    async downloadAttachmentContent(requestParameters: DownloadAttachmentContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Blob> {
+        const response = await this.downloadAttachmentContentRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

@@ -11,10 +11,16 @@ public final class AttachmentBoundaryData {
     public record Record(UUID id,UUID companyId,UUID projectId,String ownerType,UUID ownerId,
             String originalFileName,String declaredMime,String detectedMime,Long sizeBytes,
             String status,String rejectedCode,UUID uploadedByUserId,Instant createdAt,
-            Instant availableAt,Instant expiresAt,long rowVersion,boolean canUploadContent){}
+            Instant availableAt,Instant expiresAt,long rowVersion,boolean canUploadContent,
+            boolean canDownloadContent,boolean canDelete){}
     public record Create(UUID id,UUID companyId,UUID projectId,String ownerType,UUID ownerId,
             String originalFileName,String declaredMime,Long sizeBytes,UUID uploadedByUserId,Instant now){}
     public record Upload(UUID companyId,UUID attachmentId,InputStream content,OptionalLong contentLength,Instant now){}
+    public record Download(InputStream inputStream,String originalFileName,String detectedMime,long sizeBytes){}
+    public record Delete(UUID companyId,UUID attachmentId,UUID deletedByUserId,String reason,
+            long expectedVersion,Instant now){}
+    public record Deleted(UUID attachmentId,String status,UUID deletedByUserId,Instant deletedAt,
+            String deleteReason,long previousRowVersion,long rowVersion,String etag){}
     public record Intent(String uploadUrl,Instant expiresAt,long maxBytes,Record metadata){}
     public record Page(List<Record> items,String nextCursor){}
     public record Claim(UUID taskId,UUID leaseToken,UUID attachmentId,UUID companyId,UUID projectId,

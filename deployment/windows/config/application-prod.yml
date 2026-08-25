@@ -59,3 +59,9 @@ yumpoo:
     upload-temp-root: C:/ProgramData/Yumpoo/temp/uploads
     defender-executable: ${YUMPOO_DEFENDER_EXECUTABLE}
     defender-timeout: 2m
+    cleanup-delete-enabled: ${YUMPOO_ATTACHMENT_CLEANUP_DELETE_ENABLED:false}
+    cleanup-approval-reference: ${YUMPOO_ATTACHMENT_CLEANUP_APPROVAL_REFERENCE:}
+    maintenance-initial-delay: 5m
+    maintenance-poll-delay: 1m
+    maintenance-interval: 24h
+    maintenance-batch-size: 100

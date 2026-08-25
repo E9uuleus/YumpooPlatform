@@ -5,6 +5,7 @@ import {
 } from '@yumpoo/api-client'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ElMessageBox } from 'element-plus'
 import AttachmentPanel from './AttachmentPanel.vue'
 
 const api = vi.hoisted(() => ({
@@ -13,6 +14,7 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   upload: vi.fn(),
   get: vi.fn(),
+  delete: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -22,6 +24,7 @@ vi.mock('../../api/client', () => ({
     createAttachmentIntent: api.create,
     uploadAttachmentContent: api.upload,
     getAttachment: api.get,
+    deleteAttachment: api.delete,
   },
 }))
 vi.mock('@yumpoo/api-client', async importOriginal => ({
@@ -32,7 +35,7 @@ vi.mock('@yumpoo/api-client', async importOriginal => ({
 const attachmentId = '37000000-0000-4000-8000-000000000001'
 const ownerId = '37000000-0000-4000-8000-000000000002'
 
-function metadata(canUploadContent = true): AttachmentMetadata {
+function metadata(canUploadContent = true, available = false): AttachmentMetadata {
   return {
     id: attachmentId,
     companyId: '37000000-0000-4000-8000-000000000003',
@@ -41,13 +44,14 @@ function metadata(canUploadContent = true): AttachmentMetadata {
     ownerId,
     originalFileName: 'evidence.txt',
     declaredMime: 'text/plain',
-    status: AttachmentStatus.Uploading,
+    ...(available ? { detectedMime: 'text/plain', sizeBytes: 4 } : {}),
+    status: available ? AttachmentStatus.Available : AttachmentStatus.Uploading,
     uploadedByUserId: '37000000-0000-4000-8000-000000000005',
     createdAt: new Date('2026-08-25T01:00:00Z'),
     expiresAt: new Date('2026-08-26T01:00:00Z'),
     rowVersion: 0,
     etag: '"0"',
-    capabilities: { canUploadContent },
+    capabilities: { canUploadContent, canDownloadContent: available, canDelete: available },
   }
 }
 
@@ -56,6 +60,58 @@ describe('AttachmentPanel', () => {
     vi.clearAllMocks()
     api.listWorkItems.mockResolvedValue({ items: [], nextCursor: null })
     api.listUpdates.mockResolvedValue({ items: [], nextCursor: null })
+  })
+
+  it('AVAILABLE 使用同源流式下载链接', async () => {
+    api.listWorkItems.mockResolvedValue({ items: [metadata(false, true)], nextCursor: null })
+    const wrapper = mount(AttachmentPanel, {
+      props: { ownerType: AttachmentOwnerType.WorkItem, ownerId, canUpload: true },
+    })
+    await flushPromises()
+
+    expect(wrapper.get('a.attachment-name').attributes('href'))
+      .toBe(`/api/v1/attachments/${attachmentId}/content`)
+    wrapper.unmount()
+  })
+
+  it('删除携带当前 ETag、CSRF、稳定幂等键与理由并从列表移除', async () => {
+    api.listWorkItems.mockResolvedValue({ items: [metadata(false, true)], nextCursor: null })
+    api.delete.mockResolvedValue({ attachmentId, status: AttachmentStatus.Deleted })
+    vi.spyOn(ElMessageBox, 'prompt').mockResolvedValueOnce({ value: '重复附件', action: 'confirm' } as never)
+    const wrapper = mount(AttachmentPanel, {
+      props: { ownerType: AttachmentOwnerType.WorkItem, ownerId, canUpload: true },
+    })
+    await flushPromises()
+    await wrapper.get('.attachment-list button').trigger('click')
+    await flushPromises()
+
+    expect(api.delete).toHaveBeenCalledOnce()
+    expect(api.delete.mock.calls[0]?.[0]).toMatchObject({
+      attachmentId,
+      xXSRFTOKEN: 'csrf-token',
+      ifMatch: '"0"',
+      attachmentDeleteRequest: { reason: '重复附件' },
+    })
+    expect(api.delete.mock.calls[0]?.[0].idempotencyKey).toBeTypeOf('string')
+    expect(wrapper.find('a.attachment-name').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('删除传输结果未知时刷新真源并复用同一幂等键与理由', async () => {
+    api.listWorkItems.mockResolvedValue({ items: [metadata(false, true)], nextCursor: null })
+    api.delete.mockRejectedValueOnce(new TypeError('network unavailable')).mockResolvedValueOnce({})
+    vi.spyOn(ElMessageBox, 'prompt').mockResolvedValueOnce({ value: '清理重复版本', action: 'confirm' } as never)
+    const wrapper = mount(AttachmentPanel, {
+      props: { ownerType: AttachmentOwnerType.WorkItem, ownerId, canUpload: true },
+    })
+    await flushPromises()
+    await wrapper.get('.attachment-list button').trigger('click')
+    await flushPromises()
+
+    expect(api.listWorkItems).toHaveBeenCalledTimes(2)
+    expect(api.delete).toHaveBeenCalledTimes(2)
+    expect(api.delete.mock.calls[1]?.[0]).toEqual(api.delete.mock.calls[0]?.[0])
+    wrapper.unmount()
   })
 
   it('按 owner 选择列表接口，并在只读状态隐藏上传入口', async () => {

@@ -11,6 +11,10 @@ import com.yumpoo.platform.filestorage.api.AttachmentModels.AttachmentPage;
 import com.yumpoo.platform.filestorage.api.AttachmentModels.CreateIntent;
 import com.yumpoo.platform.filestorage.api.AttachmentModels.RescanResult;
 import com.yumpoo.platform.filestorage.api.AttachmentModels.UploadContent;
+import com.yumpoo.platform.filestorage.api.AttachmentModels.AttachmentCapabilities;
+import com.yumpoo.platform.filestorage.api.AttachmentModels.DeleteResult;
+import com.yumpoo.platform.filestorage.api.AttachmentModels.DownloadContent;
+import com.yumpoo.platform.filestorage.api.AttachmentStatus;
 import com.yumpoo.platform.filestorage.api.AttachmentOwnerType;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
@@ -21,6 +25,9 @@ import com.yumpoo.platform.foundation.application.idempotency.IdempotencyScope;
 import com.yumpoo.platform.foundation.application.idempotency.IdempotentCommandExecutor;
 import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
+import com.yumpoo.platform.foundation.application.event.EventActor;
+import com.yumpoo.platform.foundation.application.event.EventDraft;
+import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
 import com.yumpoo.platform.workitem.api.AttachmentParentAccessPort;
@@ -33,6 +40,8 @@ import java.time.Instant;
 import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
+import java.util.List;
+import tools.jackson.databind.node.ObjectNode;
 
 @Service
 public class AttachmentApplicationService {
@@ -40,16 +49,19 @@ public class AttachmentApplicationService {
     private final AttachmentParentAccessPort parents;
     private final IdempotentCommandExecutor idempotency;
     private final SecurityAuditAppendPort audits;
+    private final TransactionalEventPort events;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public AttachmentApplicationService(AttachmentLifecyclePort attachments,
             AttachmentParentAccessPort parents, IdempotentCommandExecutor idempotency,
-            SecurityAuditAppendPort audits, ObjectMapper objectMapper, Clock clock) {
+            SecurityAuditAppendPort audits, TransactionalEventPort events,
+            ObjectMapper objectMapper, Clock clock) {
         this.attachments = attachments;
         this.parents = parents;
         this.idempotency = idempotency;
         this.audits = audits;
+        this.events = events;
         this.objectMapper = objectMapper;
         this.clock = clock;
     }
@@ -76,15 +88,18 @@ public class AttachmentApplicationService {
     public AttachmentMetadata find(CurrentActor actor, UUID attachmentId) {
         AttachmentMetadata metadata = attachments.find(actor.companyId(), attachmentId, clock.instant())
                 .orElseThrow(AttachmentApplicationService::notFound);
+        if (metadata.status() == AttachmentStatus.DELETED) throw notFound();
         parents.requireReadable(actor, metadata.ownerType(), metadata.ownerId());
-        return metadata;
+        return capabilities(actor, metadata);
     }
 
     public AttachmentPage list(CurrentActor actor, AttachmentOwnerType ownerType, UUID ownerId,
             String cursor, Integer size) {
         parents.requireReadable(actor, ownerType, ownerId);
-        return attachments.list(actor.companyId(), ownerType, ownerId, cursor,
+        AttachmentPage page=attachments.list(actor.companyId(), ownerType, ownerId, cursor,
                 size == null ? 20 : size, clock.instant());
+        List<AttachmentMetadata> items=page.items().stream().map(value->capabilities(actor,value)).toList();
+        return new AttachmentPage(items,page.nextCursor());
     }
 
     public AttachmentMetadata upload(CurrentActor actor, UUID attachmentId, InputStream content,
@@ -96,6 +111,53 @@ public class AttachmentApplicationService {
         parents.requireWritable(actor, current.ownerType(), current.ownerId());
         return attachments.upload(new UploadContent(actor.companyId(), attachmentId, content,
                 contentLength, clock.instant()));
+    }
+
+    public DownloadContent download(CurrentActor actor,UUID attachmentId) {
+        AttachmentMetadata current=attachments.find(actor.companyId(),attachmentId,clock.instant())
+                .filter(value->value.status()==AttachmentStatus.AVAILABLE)
+                .orElseThrow(AttachmentApplicationService::notFound);
+        parents.requireReadable(actor,current.ownerType(),current.ownerId());
+        return attachments.download(actor.companyId(),attachmentId,clock.instant());
+    }
+
+    public AttachmentMetadata requireDeleteTarget(CurrentActor actor,UUID attachmentId) {
+        AttachmentMetadata current=attachments.find(actor.companyId(),attachmentId,clock.instant())
+                .orElseThrow(AttachmentApplicationService::notFound);
+        parents.requireWritable(actor,current.ownerType(),current.ownerId());
+        return current;
+    }
+
+    public IdempotencyExecutionResult delete(CurrentActor actor,UUID attachmentId,long expectedVersion,
+            String reason,UUID key,RequestHash hash) {
+        AttachmentMetadata visible=attachments.find(actor.companyId(),attachmentId,clock.instant())
+                .orElseThrow(AttachmentApplicationService::notFound);
+        parents.requireWritable(actor,visible.ownerType(),visible.ownerId());
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(actor.userId(),
+                "DELETE","deleteAttachment",key),hash),()->{
+            DeleteResult result=attachments.delete(actor.companyId(),attachmentId,actor.userId(),
+                    reason,expectedVersion,clock.instant());
+            audits.append(new SecurityAuditDraft(actor.companyId(),"attachment-delete:"+key,
+                    "ATTACHMENT_DELETED",SecurityAuditOutcome.SUCCEEDED,
+                    SecurityAuditActor.user(actor.userId(),Set.of()),"ATTACHMENT",attachmentId.toString(),
+                    result.deleteReason(),objectMapper.valueToTree(visible),objectMapper.valueToTree(result),
+                    null,key,null,null,clock.instant()));
+            ObjectNode payload=objectMapper.createObjectNode();
+            payload.put("attachmentId",attachmentId.toString());
+            payload.put("ownerType",visible.ownerType().name());
+            payload.put("ownerId",visible.ownerId().toString());
+            payload.put("projectId",visible.projectId().toString());
+            payload.put("fileName",visible.originalFileName());
+            payload.put("sizeBytes",visible.sizeBytes());
+            payload.put("deletedByUserId",result.deletedByUserId().toString());
+            payload.put("deleteReason",result.deleteReason());
+            payload.put("deletedAt",result.deletedAt().toString());
+            payload.put("previousRowVersion",result.previousRowVersion());
+            payload.put("rowVersion",result.rowVersion());
+            events.append(new EventDraft("filestorage.attachment_deleted",1,"Attachment",attachmentId,
+                    result.rowVersion(),actor.companyId(),EventActor.user(actor.userId()),payload));
+            return stored(200,result,attachmentId,result.etag());
+        });
     }
 
     public AttachmentMetadata requireRescanTarget(CurrentActor actor, UUID attachmentId) {
@@ -147,6 +209,23 @@ public class AttachmentApplicationService {
         if (!actor.hasRole(PlatformRoleCode.APP_MANAGER)) {
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         }
+    }
+    private AttachmentMetadata capabilities(CurrentActor actor,AttachmentMetadata value) {
+        boolean writable;
+        try {
+            parents.requireWritable(actor,value.ownerType(),value.ownerId());
+            writable=true;
+        } catch(ApplicationException failure) {
+            writable=false;
+        }
+        boolean available=value.status()==AttachmentStatus.AVAILABLE;
+        boolean canUpload=value.capabilities().canUploadContent()&&writable
+                &&value.uploadedByUserId().equals(actor.userId());
+        return new AttachmentMetadata(value.id(),value.companyId(),value.projectId(),value.ownerType(),
+                value.ownerId(),value.originalFileName(),value.declaredMime(),value.detectedMime(),
+                value.sizeBytes(),value.status(),value.rejectedCode(),value.uploadedByUserId(),
+                value.createdAt(),value.availableAt(),value.expiresAt(),value.rowVersion(),value.etag(),
+                new AttachmentCapabilities(canUpload,available,available&&writable));
     }
     private static ApplicationException notFound() {
         return new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);

@@ -5,7 +5,7 @@ import {
   readCsrfToken,
   type AttachmentMetadata,
 } from '@yumpoo/api-client'
-import { ElButton, ElMessage } from 'element-plus'
+import { ElButton, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { attachmentsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
@@ -21,6 +21,7 @@ const loading = ref(false)
 const uploading = ref(false)
 const error = ref<string>()
 const receivingIds = ref(new Set<string>())
+const deletingIds = ref(new Set<string>())
 const polling = new Map<string, ReturnType<typeof setTimeout>>()
 let generation = 0
 
@@ -57,8 +58,10 @@ async function load() {
       ? await attachmentsApi.listWorkItemAttachments({ workItemId: props.ownerId, size: 100 })
       : await attachmentsApi.listWorkItemUpdateAttachments({ updateId: props.ownerId, size: 100 })
     if (current === generation) items.value = page.items
+    return current === generation
   } catch (reason) {
     if (current === generation) error.value = problemMessage(await toApiProblem(reason))
+    return false
   } finally {
     if (current === generation) loading.value = false
   }
@@ -174,6 +177,86 @@ function stopAll() {
   polling.clear()
 }
 
+function downloadUrl(item: AttachmentMetadata) {
+  return `/api/v1/attachments/${encodeURIComponent(item.id)}/content`
+}
+
+async function confirmDelete(item: AttachmentMetadata) {
+  let reason: string
+  try {
+    const result = await ElMessageBox.prompt('请输入附件删除理由（1–500 字）', '删除附件', {
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputValidator: value => {
+        const normalized = value.trim()
+        return normalized.length > 0 && normalized.length <= 500 ? true : '理由须为 1–500 字'
+      },
+    })
+    reason = result.value.trim()
+  } catch {
+    return
+  }
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    ElMessage.error('安全凭据已失效，请刷新页面后重试。')
+    return
+  }
+  const key = crypto.randomUUID()
+  const deleting = new Set(deletingIds.value)
+  deleting.add(item.id)
+  deletingIds.value = deleting
+  try {
+    await deleteWithRecovery(item, reason, key, csrf)
+  } finally {
+    const next = new Set(deletingIds.value)
+    next.delete(item.id)
+    deletingIds.value = next
+  }
+}
+
+async function deleteWithRecovery(item: AttachmentMetadata, reason: string, key: string, csrf: string) {
+  const request = {
+    attachmentId: item.id,
+    xXSRFTOKEN: csrf,
+    idempotencyKey: key,
+    ifMatch: item.etag,
+    attachmentDeleteRequest: { reason },
+  }
+  try {
+    await attachmentsApi.deleteAttachment(request)
+    remove(item.id)
+    ElMessage.success('附件已删除')
+    return
+  } catch (failure) {
+    const problem = await toApiProblem(failure)
+    if (problem.kind === 'response') {
+      if (problem.status === 409 || problem.status === 412) await load()
+      error.value = problemMessage(problem)
+      return
+    }
+    const refreshed = await load()
+    if (!refreshed) return
+    if (!items.value.some(current => current.id === item.id)) return
+    try {
+      await attachmentsApi.deleteAttachment(request)
+      remove(item.id)
+      ElMessage.success('附件已删除')
+    } catch (retryFailure) {
+      const retryProblem = await toApiProblem(retryFailure)
+      if (retryProblem.kind === 'response' && (retryProblem.status === 409 || retryProblem.status === 412)) {
+        await load()
+      }
+      error.value = problemMessage(retryProblem)
+    }
+  }
+}
+
+function remove(id: string) {
+  stopPolling(id)
+  items.value = items.value.filter(item => item.id !== id)
+}
+
 watch(() => [props.ownerType, props.ownerId], () => { stopAll(); void load() })
 onMounted(() => void load())
 onBeforeUnmount(stopAll)
@@ -196,9 +279,13 @@ onDeactivated(stopAll)
     <p v-if="empty" class="attachment-panel__empty">暂无附件</p>
     <ul v-else class="attachment-list">
       <li v-for="item in items" :key="item.id">
-        <span class="attachment-name">{{ item.originalFileName }}</span>
+        <a v-if="item.capabilities.canDownloadContent" class="attachment-name attachment-name--download"
+          :href="downloadUrl(item)">{{ item.originalFileName }}</a>
+        <span v-else class="attachment-name">{{ item.originalFileName }}</span>
         <span class="attachment-size">{{ item.sizeBytes == null ? '—' : `${Math.ceil(item.sizeBytes / 1024)} KiB` }}</span>
         <span :class="['attachment-status', `attachment-status--${item.status.toLowerCase()}`]">{{ statusLabel(item) }}</span>
+        <el-button v-if="item.capabilities.canDelete" text type="danger"
+          :loading="deletingIds.has(item.id)" @click="confirmDelete(item)">删除</el-button>
       </li>
     </ul>
   </section>
@@ -212,8 +299,10 @@ onDeactivated(stopAll)
 .attachment-picker { display: inline-flex; min-height: 32px; align-items: center; padding: 0 var(--yp-space-3); border-radius: var(--yp-radius-sm); color: white; background: var(--yp-action-primary); cursor: pointer; }
 .attachment-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .attachment-list { display: grid; gap: var(--yp-space-2); margin: 0; padding: 0; list-style: none; }
-.attachment-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--yp-space-3); padding: var(--yp-space-2); border-radius: var(--yp-radius-sm); background: var(--yp-bg-sunken); }
+.attachment-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: var(--yp-space-3); padding: var(--yp-space-2); border-radius: var(--yp-radius-sm); background: var(--yp-bg-sunken); }
 .attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-name--download { color: var(--yp-action-primary); text-decoration: none; }
+.attachment-name--download:hover { text-decoration: underline; }
 .attachment-size, .attachment-status, .attachment-panel__empty { color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
 .attachment-status--available { color: var(--yp-status-green); }
 .attachment-status--rejected, .attachment-panel__error { color: var(--yp-status-red); }

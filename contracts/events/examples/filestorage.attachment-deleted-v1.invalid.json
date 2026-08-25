@@ -1,0 +1,28 @@
+{
+  "eventId": "38000000-0000-4000-8000-000000000001",
+  "eventType": "filestorage.attachment_deleted",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-25T08:00:00Z",
+  "aggregateType": "Attachment",
+  "aggregateId": "38000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 4,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "38000000-0000-4000-8000-000000000005" },
+  "requestId": "m2-19-attachment-deleted-invalid",
+  "correlationId": "m2-19-attachment-deleted-invalid",
+  "causationId": null,
+  "payload": {
+    "attachmentId": "38000000-0000-4000-8000-000000000002",
+    "ownerType": "WORK_ITEM",
+    "ownerId": "38000000-0000-4000-8000-000000000003",
+    "projectId": "38000000-0000-4000-8000-000000000004",
+    "fileName": "验收报告.pdf",
+    "sizeBytes": 4096,
+    "deletedByUserId": "38000000-0000-4000-8000-000000000005",
+    "deleteReason": "文档已过期",
+    "deletedAt": "2026-08-25T08:00:00Z",
+    "previousRowVersion": 3,
+    "rowVersion": 4,
+    "storageKey": "sha256/aa/bb/secret"
+  }
+}

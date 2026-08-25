@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-19",
+  "verifiedSlices": [
+    {
+      "requirementId": "ATTACHMENT-DOWNLOAD",
+      "scope": "AVAILABLE 实时父对象读取授权、下载前存在/大小/SHA-256 校验、64 KiB 有界流与安全响应头",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/administration/api/AttachmentController.java",
+        "backend/src/test/java/com/yumpoo/platform/administration/api/AttachmentControllerDownloadTest.java",
+        "backend/src/test/java/com/yumpoo/platform/filestorage/application/AttachmentDownloadDeleteServiceTest.java"
+      ]
+    },
+    {
+      "requirementId": "ATTACHMENT-LOGICAL-DELETE",
+      "scope": "父对象当前写权、强 ETag、XSRF、幂等墓碑、配额释放、审计与隐私安全删除事件同事务",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/administration/application/AttachmentApplicationService.java",
+        "backend/src/main/java/com/yumpoo/platform/filestorage/infrastructure/JdbcAttachmentRepository.java",
+        "contracts/events/schemas/filestorage.attachment-deleted-v1.schema.json"
+      ]
+    },
+    {
+      "requirementId": "ATTACHMENT-MAINTENANCE",
+      "scope": "24 小时意图/临时/孤儿处理、批量游标续跑、双实例租约、dry-run 默认和批准后物理删除",
+      "evidence": [
+        "backend/src/main/resources/db/migration/filestorage/V38__add_attachment_download_cleanup.sql",
+        "backend/src/main/java/com/yumpoo/platform/filestorage/infrastructure/JdbcAttachmentMaintenanceService.java",
+        "backend/src/main/java/com/yumpoo/platform/filestorage/infrastructure/AttachmentMaintenanceScheduler.java"
+      ]
+    },
+    {
+      "requirementId": "ATTACHMENT-RECONCILIATION",
+      "scope": "缺件、大小/哈希、发布/隔离孤儿、异常目录项、配额与扫描任务问题登记及恢复关闭",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/filestorage/infrastructure/JdbcAttachmentMaintenanceService.java",
+        "backend/src/main/java/com/yumpoo/platform/filestorage/infrastructure/LocalFileQuarantineStorage.java"
+      ]
+    },
+    {
+      "requirementId": "ATTACHMENT-WEB-CLOSEOUT",
+      "scope": "同源原生下载、强制删除理由、稳定幂等键、409/412 刷新和未知结果确认后重试",
+      "evidence": [
+        "frontend/web-app/src/components/collaboration/AttachmentPanel.vue",
+        "frontend/web-app/src/components/collaboration/AttachmentPanel.spec.ts"
+      ]
+    },
+    {
+      "requirementId": "ATTACHMENT-MIGRATION-RESTORE",
+      "scope": "V37→V38 Blob 注册表回填、恢复后的 attachment/blob/配额/扫描代次完整对账断言",
+      "evidence": [
+        "backend/src/test/java/com/yumpoo/platform/YumpooServerApplicationIT.java",
+        "backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    { "requirementId": "FEEDBACK-ATTACHMENTS", "targetMilestone": "M3B", "scope": "PRODUCT_FEEDBACK 与 FEEDBACK_UPDATE owner" },
+    { "requirementId": "ATTACHMENT-FORMAL-BLOB-RETENTION", "targetMilestone": "M5-17", "scope": "墓碑正式 blob 的 30 天、legal hold 与备份门禁清理、附件恢复" },
+    { "requirementId": "ATTACHMENT-RANGE-PREVIEW", "targetMilestone": "M5-17", "scope": "Range 与在线预览" }
+  ]
+}

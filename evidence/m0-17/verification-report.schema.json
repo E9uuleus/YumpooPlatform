@@ -18,7 +18,7 @@
     "checks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["postgresCustomDumpCreated", "manifestExactCoverageVerified", "payloadHashesVerified", "secretValuesExcluded", "emptyTargetsRequired", "isolatedDatabaseRestored", "flywayVersionMatched", "attachmentReferencesMatched", "attachmentBytesReadable", "orphansReportedWithoutDeletion", "retentionDryRunGenerated"],
+      "required": ["postgresCustomDumpCreated", "manifestExactCoverageVerified", "payloadHashesVerified", "secretValuesExcluded", "emptyTargetsRequired", "isolatedDatabaseRestored", "flywayVersionMatched", "attachmentReferencesMatched", "attachmentBytesReadable", "attachmentBlobRegistryReconciled", "orphansReportedWithoutDeletion", "retentionDryRunGenerated"],
       "properties": {
         "postgresCustomDumpCreated": { "const": true },
         "manifestExactCoverageVerified": { "const": true },
@@ -29,6 +29,7 @@
         "flywayVersionMatched": { "const": true },
         "attachmentReferencesMatched": { "const": true },
         "attachmentBytesReadable": { "const": true },
+        "attachmentBlobRegistryReconciled": { "const": true },
         "orphansReportedWithoutDeletion": { "const": true },
         "retentionDryRunGenerated": { "const": true }
       }

@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.OptionalLong;
 import java.util.UUID;
+import java.time.Instant;
+import java.util.List;
 
 /** 隔离接收、原子发布与流式读取端口。 */
 public interface QuarantineStorage {
@@ -24,7 +26,26 @@ public interface QuarantineStorage {
 
     boolean verify(PublishedBlob blob) throws IOException;
 
+    default BlobVerification inspect(PublishedBlob blob) throws IOException {
+        return verify(blob) ? BlobVerification.VERIFIED : BlobVerification.HASH_MISMATCH;
+    }
+
     void discard(SealedUpload upload);
 
     void discard(PublishedBlob blob);
+
+    default List<StorageEntry> listTemporary(String afterKey, int limit) throws IOException {
+        return List.of();
+    }
+
+    default List<StorageEntry> listPublished(String afterKey, int limit) throws IOException {
+        return List.of();
+    }
+
+    default boolean deleteTemporary(String key) throws IOException { return false; }
+
+    default boolean deletePublished(String storageKey) throws IOException { return false; }
+
+    record StorageEntry(String key, Instant modifiedAt, long sizeBytes,
+            boolean regularFile, boolean unsafeEntry) {}
 }

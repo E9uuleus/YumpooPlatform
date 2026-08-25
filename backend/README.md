@@ -112,6 +112,8 @@ Flyway `V7` 创建 `identity_user` 与 `external_identity`。User 固定归属 M
 
 测试层 `M017BackupSet` 拒绝危险/非规范路径、符号链接、Windows 大小写碰撞、缺件、额外文件、大小或摘要不符以及包含 Secret 值的恢复描述。恢复后测试核对 Flyway 版本、合成引用和附件真实字节，并只报告孤儿。`M017RetentionPlanner` 只生成 14 daily、8 weekly、6 monthly 的 dry-run 多标签计划，legal hold 阻止删除，但不会把失败集冒充成功代际。
 
+M2-19 起恢复断言同时核对 `attachment_blob` 注册表、附件引用、配额与扫描代次；恢复完成后必须先运行完整附件对账，物理清理保持 dry-run，直到显式提供删除开关和非空批准引用。
+
 从仓库根运行 `pnpm verify:m0-17`。该命令先校验证据契约，再串联 `verify:m0-16`，最终只接受本次运行在 `out/m0-17` 产生且绑定当前 Git HEAD 的报告。Docker 不可用会直接失败，不使用 H2。以上类型均位于测试源码，不进入生产 JAR；正式任务调度、外部介质、告警、签名/加密和 RPO/RTO 演练留给 M5/M6。
 
 ## M0-16 生产 profile 与部署健康检查

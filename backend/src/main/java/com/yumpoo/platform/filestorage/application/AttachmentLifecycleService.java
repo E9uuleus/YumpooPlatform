@@ -99,6 +99,44 @@ public class AttachmentLifecycleService {
         }
     }
 
+    public AttachmentBoundaryData.Download downloadBoundary(UUID companyId, UUID attachmentId,
+            Instant now) {
+        AttachmentRecord row = repository.find(companyId, attachmentId)
+                .filter(value -> value.status() == AttachmentState.AVAILABLE)
+                .orElseThrow(AttachmentLifecycleService::notFound);
+        PublishedBlob blob = new PublishedBlob(row.storageKey(), row.sizeBytes(), row.sha256());
+        try {
+            BlobVerification verification = storage.inspect(blob);
+            if (verification != BlobVerification.VERIFIED) {
+                repository.recordReconciliationIssue(verification.name(), "ATTACHMENT",
+                        row.id().toString(), row.id(), row.companyId(), now);
+                throw dependencyUnavailable();
+            }
+            repository.resolveReconciliationIssues("ATTACHMENT", row.id().toString(), now);
+            return new AttachmentBoundaryData.Download(storage.open(blob), row.originalFileName(),
+                    row.detectedMime(), row.sizeBytes());
+        } catch (IOException exception) {
+            repository.recordReconciliationIssue("MISSING_BLOB", "ATTACHMENT",
+                    row.id().toString(), row.id(), row.companyId(), now);
+            throw dependencyUnavailable();
+        }
+    }
+
+    public AttachmentBoundaryData.Deleted deleteBoundary(AttachmentBoundaryData.Delete value) {
+        String reason = value.reason() == null ? "" : value.reason().strip();
+        if (reason.isEmpty() || reason.length() > 500) {
+            throw validation("reason", "INVALID_LENGTH", "删除理由长度必须在 1 到 500 之间");
+        }
+        AttachmentRecord before = repository.find(value.companyId(), value.attachmentId())
+                .orElseThrow(AttachmentLifecycleService::notFound);
+        AttachmentRecord after = repository.delete(value.companyId(), value.attachmentId(),
+                value.deletedByUserId(), reason, value.expectedVersion(), value.now());
+        return new AttachmentBoundaryData.Deleted(after.id(), after.status().name(),
+                after.deletedByUserId(), after.deletedAt(), after.deleteReason(), before.rowVersion(),
+                after.rowVersion(), com.yumpoo.platform.foundation.application.concurrency.StrongEtag
+                        .format(after.rowVersion()));
+    }
+
     public Optional<AttachmentRecord> find(UUID companyId, UUID attachmentId, Instant now) {
         return repository.find(companyId, attachmentId);
     }
@@ -154,8 +192,20 @@ public class AttachmentLifecycleService {
                     return new ScanOutcome.Rejected(AttachmentRejectedCode.INTEGRITY_CHECK_FAILED);
                 }
             } else {
-                published = storage.publish(upload);
-                repository.recordPublished(claim, published.storageKey(), Instant.now());
+                String expectedKey=storageKey(claim.sha256());
+                UUID operationToken=UUID.randomUUID(); Instant leaseNow=Instant.now();
+                if(Boolean.FALSE.equals(repository.claimPublish(claim,expectedKey,"scan:"+claim.taskId(),operationToken,
+                        leaseNow,leaseNow.plus(settings.scanLease())))) {
+                    return new ScanOutcome.Unavailable();
+                }
+                try {
+                    published = storage.publish(upload);
+                    repository.recordPublished(claim, published.storageKey(), Instant.now());
+                    repository.completePublish(published.storageKey(),operationToken,Instant.now());
+                } catch(IOException|RuntimeException failure) {
+                    repository.releasePublish(expectedKey,operationToken,Instant.now());
+                    throw failure;
+                }
             }
             return new ScanOutcome.Clean(detectedMime, published.storageKey());
         } catch (UploadRejectedException exception) {
@@ -253,10 +303,12 @@ public class AttachmentLifecycleService {
     private static AttachmentBoundaryData.Record boundary(AttachmentRecord row,Instant now) {
         boolean canUpload=row.status()==AttachmentState.UPLOADING&&row.processingStage()==null
                 &&row.uploadLeaseToken()==null&&row.intentExpiresAt().isAfter(now);
+        boolean available=row.status()==AttachmentState.AVAILABLE;
         return new AttachmentBoundaryData.Record(row.id(),row.companyId(),row.projectId(),row.ownerType().name(),
                 row.ownerId(),row.originalFileName(),row.declaredMime(),row.detectedMime(),row.sizeBytes(),
                 row.status().name(),row.rejectedCode()==null?null:row.rejectedCode().name(),row.uploadedByUserId(),
-                row.createdAt(),row.availableAt(),row.intentExpiresAt(),row.rowVersion(),canUpload);
+                row.createdAt(),row.availableAt(),row.intentExpiresAt(),row.rowVersion(),canUpload,
+                available,available);
     }
     private static AttachmentBoundaryData.Claim boundary(ScanClaim value) {
         return new AttachmentBoundaryData.Claim(value.taskId(),value.leaseToken(),value.attachmentId(),value.companyId(),
@@ -308,6 +360,15 @@ public class AttachmentLifecycleService {
     }
     private static ApplicationException invalid(String reason) {
         return ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, reason);
+    }
+    private static ApplicationException notFound() {
+        return new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+    }
+    private static ApplicationException dependencyUnavailable() {
+        return new ApplicationException(StandardErrorCode.DEPENDENCY_UNAVAILABLE);
+    }
+    private static String storageKey(String sha256) {
+        return "sha256/"+sha256.substring(0,2)+"/"+sha256.substring(2,4)+"/"+sha256;
     }
     private record Cursor(Instant createdAt, UUID id) {}
 }

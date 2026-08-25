@@ -14,5 +14,6 @@ public record AttachmentRecord(
         String processingStage, AttachmentRejectedCode rejectedCode, long reservedBytes,
         UUID uploadedByUserId, Instant intentExpiresAt, Instant quarantineRetainUntil,
         Instant availableAt, UUID uploadLeaseToken, Instant uploadLeaseUntil,
+        UUID deletedByUserId, Instant deletedAt, String deleteReason,
         int scanGeneration, long rowVersion, Instant createdAt
 ) {}

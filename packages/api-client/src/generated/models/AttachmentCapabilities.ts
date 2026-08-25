@@ -24,6 +24,18 @@ export interface AttachmentCapabilities {
      * @memberof AttachmentCapabilities
      */
     canUploadContent: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof AttachmentCapabilities
+     */
+    canDownloadContent: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof AttachmentCapabilities
+     */
+    canDelete: boolean;
 }
 
 /**
@@ -31,6 +43,8 @@ export interface AttachmentCapabilities {
  */
 export function instanceOfAttachmentCapabilities(value: object): value is AttachmentCapabilities {
     if (!('canUploadContent' in value) || value['canUploadContent'] === undefined) return false;
+    if (!('canDownloadContent' in value) || value['canDownloadContent'] === undefined) return false;
+    if (!('canDelete' in value) || value['canDelete'] === undefined) return false;
     return true;
 }
 
@@ -45,6 +59,8 @@ export function AttachmentCapabilitiesFromJSONTyped(json: any, ignoreDiscriminat
     return {
 
         'canUploadContent': json['canUploadContent'],
+        'canDownloadContent': json['canDownloadContent'],
+        'canDelete': json['canDelete'],
     };
 }
 
@@ -60,5 +76,7 @@ export function AttachmentCapabilitiesToJSONTyped(value?: AttachmentCapabilities
     return {
 
         'canUploadContent': value['canUploadContent'],
+        'canDownloadContent': value['canDownloadContent'],
+        'canDelete': value['canDelete'],
     };
 }

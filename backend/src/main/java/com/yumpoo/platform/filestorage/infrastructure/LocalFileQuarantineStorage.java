@@ -1,6 +1,7 @@
 package com.yumpoo.platform.filestorage.infrastructure;
 
 import com.yumpoo.platform.filestorage.application.AttachmentUploadPolicy;
+import com.yumpoo.platform.filestorage.application.BlobVerification;
 import com.yumpoo.platform.filestorage.application.PublishedBlob;
 import com.yumpoo.platform.filestorage.application.QuarantineStorage;
 import com.yumpoo.platform.filestorage.application.SealedUpload;
@@ -25,6 +26,10 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Objects;
 import java.util.OptionalLong;
+import java.util.List;
+import java.util.Comparator;
+import java.time.Instant;
+import java.util.stream.Stream;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -192,10 +197,17 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
 
     @Override
     public boolean verify(PublishedBlob blob) throws IOException {
+        return inspect(blob) == BlobVerification.VERIFIED;
+    }
+
+    @Override
+    public BlobVerification inspect(PublishedBlob blob) throws IOException {
         Path path = resolveStorageKey(blob.storageKey());
-        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
-                || Files.size(path) != blob.sizeBytes()) {
-            return false;
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+            return BlobVerification.MISSING;
+        }
+        if (Files.size(path) != blob.sizeBytes()) {
+            return BlobVerification.SIZE_MISMATCH;
         }
         MessageDigest digest = sha256Digest();
         try (InputStream input = Files.newInputStream(
@@ -212,7 +224,7 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
         return MessageDigest.isEqual(
                 HEX.formatHex(digest.digest()).getBytes(java.nio.charset.StandardCharsets.US_ASCII),
                 blob.sha256().getBytes(java.nio.charset.StandardCharsets.US_ASCII)
-        );
+        ) ? BlobVerification.VERIFIED : BlobVerification.HASH_MISMATCH;
     }
 
     @Override
@@ -236,6 +248,57 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             Files.deleteIfExists(resolveStorageKey(blob.storageKey()));
         } catch (IOException ignored) {
             // 测试/后续对账会处理安全孤儿。
+        }
+    }
+
+    @Override
+    public List<StorageEntry> listTemporary(String afterKey, int limit) throws IOException {
+        try (Stream<Path> entries=Files.list(quarantineRoot)) {
+            return entries.map(path->entry(quarantineRoot,path,false))
+                    .sorted(Comparator.comparing(StorageEntry::key))
+                    .filter(value->afterKey==null||value.key().compareTo(afterKey)>0)
+                    .limit(limit).toList();
+        }
+    }
+
+    @Override
+    public List<StorageEntry> listPublished(String afterKey, int limit) throws IOException {
+        try (Stream<Path> entries=Files.walk(blobRoot)) {
+            return entries.filter(path->!path.equals(blobRoot))
+                    .map(path->entry(blobRoot,path,true))
+                    .filter(value->value.regularFile()||value.unsafeEntry())
+                    .sorted(Comparator.comparing(StorageEntry::key))
+                    .filter(value->afterKey==null||value.key().compareTo(afterKey)>0)
+                    .limit(limit).toList();
+        }
+    }
+
+    @Override
+    public boolean deleteTemporary(String key) throws IOException {
+        if(key==null||!key.matches("^[0-9a-fA-F-]{36}\\.(part|sealed)$")) return false;
+        Path target=requireContained(quarantineRoot,quarantineRoot.resolve(key));
+        if(Files.isSymbolicLink(target)||!Files.isRegularFile(target,LinkOption.NOFOLLOW_LINKS)) return false;
+        return Files.deleteIfExists(target);
+    }
+
+    @Override
+    public boolean deletePublished(String storageKey) throws IOException {
+        Path target=resolveStorageKey(storageKey);
+        if(Files.isSymbolicLink(target)||!Files.isRegularFile(target,LinkOption.NOFOLLOW_LINKS)) return false;
+        return Files.deleteIfExists(target);
+    }
+
+    private static StorageEntry entry(Path root,Path path,boolean published) {
+        String key=root.relativize(path).toString().replace('\\','/');
+        try {
+            boolean symbolic=Files.isSymbolicLink(path);
+            boolean regular=Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS);
+            boolean malformed=published&&regular&&!STORAGE_KEY.matcher(key).matches();
+            return new StorageEntry(key,Files.getLastModifiedTime(path,LinkOption.NOFOLLOW_LINKS).toInstant(),
+                    regular?Files.size(path):0,regular,
+                    symbolic||malformed||(!regular&&!Files.isDirectory(path,LinkOption.NOFOLLOW_LINKS)));
+        } catch(IOException failure) {
+            return new StorageEntry(key,Instant.EPOCH,0,false,true);
         }
     }
 
