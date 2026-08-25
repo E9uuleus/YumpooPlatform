@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, MoreFilled, Plus, Rank } from '@element-plus/icons-vue'
 import {
+  AttachmentOwnerType,
   ContentStatus,
   ContentTableColumn,
   ContentViewType,
@@ -53,6 +54,7 @@ import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import ContentTableQueryEditor from '../../components/projects/ContentTableQueryEditor.vue'
 import WorkItemDiscussion from '../../components/collaboration/WorkItemDiscussion.vue'
+import AttachmentPanel from '../../components/collaboration/AttachmentPanel.vue'
 import {
   cloneTableQuery,
   encodeTableQuery,
@@ -1760,6 +1762,11 @@ onBeforeUnmount(() => {
                 :disabled="!canEditDetail"
               />
             </el-form-item>
+            <attachment-panel
+              :owner-type="AttachmentOwnerType.WorkItem"
+              :owner-id="detail.id"
+              :can-upload="canEditDetail"
+            />
             <div class="date-fields">
               <el-form-item label="计划开始日">
                 <el-date-picker

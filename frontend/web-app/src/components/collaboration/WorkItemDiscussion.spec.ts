@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   get: vi.fn(),
   edit: vi.fn(),
   delete: vi.fn(),
+  listAttachments: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -27,6 +28,9 @@ vi.mock('../../api/client', () => ({
     getWorkItemUpdate: api.get,
     editWorkItemUpdate: api.edit,
     deleteWorkItemUpdate: api.delete,
+  },
+  attachmentsApi: {
+    listWorkItemUpdateAttachments: api.listAttachments,
   },
 }))
 vi.mock('@yumpoo/api-client', async importOriginal => ({
@@ -97,6 +101,29 @@ describe('WorkItemDiscussion', () => {
       items: [update('35000000-0000-4000-8000-000000000032', '较新讨论', '2026-08-24T10:02:00Z')],
       nextCursor: 'older-cursor',
     })
+    api.listAttachments.mockResolvedValue({ items: [], nextCursor: null })
+  })
+
+  it('讨论附件仅在用户展开对应 Update 后加载', async () => {
+    const wrapper = mount(WorkItemDiscussion, {
+      props: { workItemId: '35000000-0000-4000-8000-000000000026', members: [member], canPublish: true },
+    })
+    await flushPromises()
+    expect(api.listAttachments).not.toHaveBeenCalled()
+
+    const button = wrapper.findAll('button').find(candidate => candidate.text() === '附件')
+    expect(button).toBeDefined()
+    await button!.trigger('click')
+    await flushPromises()
+
+    expect(api.listAttachments).toHaveBeenCalledWith({
+      updateId: '35000000-0000-4000-8000-000000000032', size: 100,
+    })
+    await button!.trigger('click')
+    await button!.trigger('click')
+    await flushPromises()
+    expect(api.listAttachments).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 
   it('首次挂载才读取最新窗口，并向顶部加载更早记录', async () => {
