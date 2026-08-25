@@ -4,6 +4,7 @@ import Mention from '@tiptap/extension-mention'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import {
+  AttachmentOwnerType,
   ErrorCode,
   WorkItemUpdateStatus,
   readCsrfToken,
@@ -21,6 +22,7 @@ import {
   type ApiProblem,
 } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
+import AttachmentPanel from './AttachmentPanel.vue'
 
 const props = defineProps<{
   workItemId: string
@@ -42,6 +44,7 @@ const editingItemId = ref<string>()
 const editDialogVisible = ref(false)
 const savingEdit = ref(false)
 const mutatingId = ref<string>()
+const expandedAttachmentIds = ref(new Set<string>())
 const now = ref(Date.now())
 let publishKey = crypto.randomUUID()
 let publishKeyBody = ''
@@ -157,6 +160,13 @@ const editEditor = useEditor({
 const hasDraft = computed(() => Boolean(draftText.value.trim()))
 
 watch(() => props.canPublish, value => editor.value?.setEditable(value))
+
+function toggleAttachments(updateId: string): void {
+  const next = new Set(expandedAttachmentIds.value)
+  if (next.has(updateId)) next.delete(updateId)
+  else next.add(updateId)
+  expandedAttachmentIds.value = next
+}
 
 function mergeUpdates(incoming: WorkItemUpdate[]): void {
   const merged = new Map(items.value.map(item => [item.id, item]))
@@ -329,6 +339,9 @@ async function deleteUpdate(item: WorkItemUpdate, reason?: string): Promise<void
       workItemUpdateDeleteRequest: reason === undefined ? {} : { reason },
     })
     mergeUpdates([deleted])
+    const expanded = new Set(expandedAttachmentIds.value)
+    expanded.delete(item.id)
+    expandedAttachmentIds.value = expanded
     if (editingItemId.value === item.id) editDialogVisible.value = false
     ElMessage.success(reason === undefined ? '讨论已删除' : '讨论已治理删除')
   } catch (mutationReason) {
@@ -435,6 +448,12 @@ onBeforeUnmount(() => {
           <time :datetime="item.createdAt.toISOString()">{{ item.createdAt.toLocaleString('zh-CN') }}</time>
           <span v-if="item.status !== 'PUBLISHED'">{{ item.status === 'EDITED' ? '已编辑' : '已删除' }}</span>
           <span class="discussion-update__actions">
+            <el-button
+              v-if="item.status !== WorkItemUpdateStatus.Deleted"
+              text
+              size="small"
+              @click="toggleAttachments(item.id)"
+            >{{ expandedAttachmentIds.has(item.id) ? '收起附件' : '附件' }}</el-button>
             <el-button v-if="canEdit(item)" text size="small" @click="startEdit(item)">编辑</el-button>
             <el-button
               v-if="canSelfDelete(item)"
@@ -457,6 +476,15 @@ onBeforeUnmount(() => {
           <p>此讨论已删除</p>
           <p v-if="item.deleteReason" class="discussion-update__reason">治理理由：{{ item.deleteReason }}</p>
         </div>
+        <keep-alive>
+          <attachment-panel
+            v-if="item.status !== WorkItemUpdateStatus.Deleted && expandedAttachmentIds.has(item.id)"
+            class="discussion-update__attachments"
+            :owner-type="AttachmentOwnerType.WorkItemUpdate"
+            :owner-id="item.id"
+            :can-upload="canPublish"
+          />
+        </keep-alive>
       </article>
       <p v-if="!loading && !items.length" class="discussion__empty">还没有讨论，发布第一条消息吧。</p>
     </div>
@@ -511,6 +539,7 @@ onBeforeUnmount(() => {
 .discussion-update__body :deep(p), .discussion-update__deleted p { margin: 0 0 var(--yp-space-2); }
 .discussion-update__deleted { margin-top: var(--yp-space-2); color: var(--yp-text-secondary); }
 .discussion-update__reason { padding: var(--yp-space-2); border-left: 3px solid var(--yp-border-strong); background: var(--yp-bg-sunken); }
+.discussion-update__attachments { margin-top: var(--yp-space-3); }
 .discussion-update__body :deep(a) { color: var(--yp-link); }
 .discussion-update__body :deep(span[data-type='mention']) { padding: 1px 4px; border-radius: var(--yp-radius-sm); color: var(--yp-link); background: var(--yp-bg-selected); }
 .discussion__empty, .discussion__readonly { color: var(--yp-text-secondary); text-align: center; }

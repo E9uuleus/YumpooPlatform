@@ -78,6 +78,7 @@ class M017BackupRestoreIT {
             createWorkspaceFact(source);
             createProductGovernanceFact(source);
             createProjectContentFact(source);
+            createAttachmentFact(source, first);
 
             Path dump = workRoot.resolve("yumpoo.dump");
             createDump(source, dump);
@@ -133,6 +134,7 @@ class M017BackupRestoreIT {
                     .isEqualTo(readWorkItemUpdateFact(source));
             assertThat(readAdminOverrideFact(target))
                     .isEqualTo(readAdminOverrideFact(source));
+            assertThat(readAttachmentFact(target)).isEqualTo(readAttachmentFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -207,6 +209,98 @@ class M017BackupRestoreIT {
                 OptionalLong.of(bytes.length)
         );
         return storage.publish(sealed);
+    }
+
+    private static void createAttachmentFact(PostgreSQLContainer container, PublishedBlob blob)
+            throws SQLException {
+        OffsetDateTime now = OffsetDateTime.parse("2026-08-25T03:00:00Z");
+        try (Connection connection = connection(container)) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement attachment = connection.prepareStatement("""
+                    INSERT INTO yumpoo.attachment (
+                        id,company_id,quota_project_id,owner_type,owner_id,original_file_name,
+                        file_extension,declared_mime,detected_mime,size_bytes,sha256,storage_key,
+                        status,reserved_bytes,uploaded_by_user_id,intent_expires_at,sealed_at,
+                        available_at,scan_generation,row_version,created_at,updated_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000819',
+                        '00000000-0000-4000-8000-000000000001',
+                        '00000000-0000-4000-8000-000000000802','WORK_ITEM',
+                        '00000000-0000-4000-8000-000000000816','M2-18 restore evidence.txt',
+                        'txt','text/plain','text/plain',?,?,?,'AVAILABLE',0,
+                        '00000000-0000-4000-8000-000000000102',?,?,?,1,3,?,?
+                    )
+                    """)) {
+                attachment.setLong(1, blob.sizeBytes());
+                attachment.setString(2, blob.sha256());
+                attachment.setString(3, blob.storageKey());
+                attachment.setObject(4, now.plusDays(1));
+                attachment.setObject(5, now.minusMinutes(2));
+                attachment.setObject(6, now);
+                attachment.setObject(7, now.minusMinutes(3));
+                attachment.setObject(8, now);
+                assertThat(attachment.executeUpdate()).isOne();
+            }
+            try (PreparedStatement task = connection.prepareStatement("""
+                    INSERT INTO yumpoo.attachment_scan_task (
+                        id,attachment_id,company_id,generation,status,attempt_count,
+                        next_attempt_at,final_result,created_at,updated_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000820',
+                        '00000000-0000-4000-8000-000000000819',
+                        '00000000-0000-4000-8000-000000000001',1,'COMPLETED',1,?,
+                        'AVAILABLE',?,?
+                    )
+                    """)) {
+                task.setObject(1, now.minusMinutes(2));
+                task.setObject(2, now.minusMinutes(2));
+                task.setObject(3, now);
+                assertThat(task.executeUpdate()).isOne();
+            }
+            try (PreparedStatement quota = connection.prepareStatement("""
+                    INSERT INTO yumpoo.attachment_quota_usage (
+                        company_id,scope_type,scope_id,reserved_bytes,available_bytes,row_version,updated_at
+                    ) VALUES (
+                        '00000000-0000-4000-8000-000000000001','COMPANY',
+                        '00000000-0000-4000-8000-000000000001',0,?,1,?
+                    ),(
+                        '00000000-0000-4000-8000-000000000001','PROJECT',
+                        '00000000-0000-4000-8000-000000000802',0,?,1,?
+                    )
+                    """)) {
+                quota.setLong(1, blob.sizeBytes());
+                quota.setObject(2, now);
+                quota.setLong(3, blob.sizeBytes());
+                quota.setObject(4, now);
+                assertThat(quota.executeUpdate()).isEqualTo(2);
+            }
+            connection.commit();
+        }
+    }
+
+    private static String readAttachmentFact(PostgreSQLContainer container) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT concat_ws(':', attachment.owner_type, attachment.owner_id,
+                                attachment.original_file_name, attachment.detected_mime,
+                                attachment.size_bytes, attachment.status, attachment.storage_key,
+                                attachment.row_version, task.status, task.attempt_count,
+                                task.final_result,
+                                (SELECT string_agg(scope_type || '=' || reserved_bytes || '/'
+                                    || available_bytes, ',' ORDER BY scope_type)
+                                   FROM yumpoo.attachment_quota_usage
+                                  WHERE company_id=attachment.company_id)) AS fact
+                       FROM yumpoo.attachment attachment
+                       JOIN yumpoo.attachment_scan_task task
+                         ON task.attachment_id=attachment.id AND task.generation=attachment.scan_generation
+                      WHERE attachment.id='00000000-0000-4000-8000-000000000819'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            String fact = result.getString("fact");
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
     }
 
     private static void createSyntheticReferences(

@@ -298,12 +298,15 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
                 "admin_override",
                 "app_manager_governance_state",
+                "attachment",
+                "attachment_quota_usage",
+                "attachment_scan_task",
                 "company",
                 "company_calendar_day",
                 "content",
@@ -544,7 +547,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v29DatabaseUpgradesThroughV36WithWorkItemUpdateLifecycle() throws Exception {
+    void v29DatabaseUpgradesThroughV37WithAttachmentProcessing() throws Exception {
         String database = "yumpoo_m213_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -561,8 +564,8 @@ class YumpooServerApplicationIT {
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
             MigrateResult upgraded = latest.migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(7);
-            assertThat(upgraded.targetSchemaVersion).hasToString("36");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(8);
+            assertThat(upgraded.targetSchemaVersion).hasToString("37");
             assertThat(workItemIndexes(jdbcUrl)).contains(
                     "idx_work_item_content_page",
                     "idx_work_item_content_status_page",
@@ -583,7 +586,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v35DatabaseUpgradesForwardThroughV36WithoutRewritingPublishedMigration() throws Exception {
+    void v36DatabaseUpgradesForwardThroughV37WithoutRewritingPublishedMigration() throws Exception {
         String database = "yumpoo_m217_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -591,12 +594,12 @@ class YumpooServerApplicationIT {
         String jdbcUrl = postgresContainer.getJdbcUrl().replace(
                 "/" + postgresContainer.getDatabaseName(), "/" + database);
         try {
-            Flyway toV35 = migrationFlyway(jdbcUrl, "35");
-            assertThat(toV35.migrate().targetSchemaVersion).hasToString("35");
+            Flyway toV36 = migrationFlyway(jdbcUrl, "36");
+            assertThat(toV36.migrate().targetSchemaVersion).hasToString("36");
 
             MigrateResult upgraded = migrationFlyway(jdbcUrl, null).migrate();
             assertThat(upgraded.migrationsExecuted).isOne();
-            assertThat(upgraded.targetSchemaVersion).hasToString("36");
+            assertThat(upgraded.targetSchemaVersion).hasToString("37");
             assertThat(migrationFlyway(jdbcUrl, null).validateWithResult().validationSuccessful).isTrue();
         } finally {
             Container.ExecResult dropped = postgresContainer.execInContainer(
@@ -752,7 +755,7 @@ class YumpooServerApplicationIT {
                 }
                 connection.commit();
             }
-            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("36");
+            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("37");
             try (Connection connection = DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(), postgresContainer.getPassword());
                  Statement statement = connection.createStatement()) {

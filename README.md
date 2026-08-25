@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M2-18 附件上传与安全扫描闭环
+
+M2-18 为 Work Item 与已发布、未删除的讨论 Update 提供附件意图、64 KiB 流式 PUT、Company/Project 配额预约、持久扫描队列、元数据分页和 APP_MANAGER 受控重扫。单文件固定上限 100 MiB；扫描器不可用会按 5 秒、30 秒重试，第三次失败保留封存内容 24 小时供带理由、幂等键与强 ETag 的重扫。最终化会重新验证原上传者和父对象当前可写性，并在同一事务提交附件、配额、Security Audit 与隐私安全的 AVAILABLE Outbox 事件。
+
+Web 在 Work Item 详情直接显示附件，讨论附件只有展开对应 Update 后才加载。上传完成后按 1/2/5 秒退避轮询最多 5 分钟；PUT 结果未知时先读取 metadata，可继续上传便复用原 attachmentId，否则继续轮询。本期不显示下载或删除操作，相关清理和对账留给 M2-19；Feedback 两种 owner 仅冻结枚举并留给 M3B。
+
+```powershell
+pnpm verify:m2-18
+```
+
+完整普通门禁需要 Java 21、Node 24.14、pnpm 11.16 和可运行 PostgreSQL 17 Testcontainers 的 Docker Linux engine。Defender、NTFS 与 EICAR 真实门禁必须显式 opt-in：`pnpm verify:m2-18:live`。
+
 ## M2-17 Update 编辑、删除与治理删除
 
 M2-17 在独立 `WorkItemUpdate` 讨论流上增加单条 GET、PATCH 与 DELETE。作者可在服务端固定 15 分钟窗口内编辑或无理由自删，截止时刻本身已超窗；当前 ProjectOwner 可提供 1–500 字理由随时治理删除，包括 Project 或 Content 已归档时。所有写操作使用强 `If-Match`，只推进 Update 自身版本，不改变父 Work Item。

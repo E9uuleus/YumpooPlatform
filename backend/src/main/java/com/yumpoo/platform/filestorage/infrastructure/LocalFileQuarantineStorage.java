@@ -55,11 +55,27 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             InputStream source,
             OptionalLong contentLength
     ) throws IOException {
+        return receive(uploadId, source, contentLength, AttachmentUploadPolicy.MAX_BYTES);
+    }
+
+    @Override
+    public SealedUpload receive(
+            UUID uploadId,
+            InputStream source,
+            OptionalLong contentLength,
+            long reservationLimit
+    ) throws IOException {
         Objects.requireNonNull(uploadId, "uploadId must not be null");
         Objects.requireNonNull(source, "source must not be null");
         Objects.requireNonNull(contentLength, "contentLength must not be null");
+        if (reservationLimit < 0 || reservationLimit > AttachmentUploadPolicy.MAX_BYTES) {
+            throw new IllegalArgumentException("reservationLimit is outside the allowed range");
+        }
         if (contentLength.isPresent() && contentLength.orElseThrow() > AttachmentUploadPolicy.MAX_BYTES) {
             throw new UploadRejectedException(AttachmentRejectedCode.FILE_TOO_LARGE);
+        }
+        if (contentLength.isPresent() && contentLength.orElseThrow() > reservationLimit) {
+            throw new UploadRejectedException(AttachmentRejectedCode.QUOTA_EXCEEDED);
         }
 
         Path part = quarantinePath(uploadId, ".part");
@@ -87,6 +103,9 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
                     total += read;
                     if (total > AttachmentUploadPolicy.MAX_BYTES) {
                         throw new UploadRejectedException(AttachmentRejectedCode.FILE_TOO_LARGE);
+                    }
+                    if (total > reservationLimit) {
+                        throw new UploadRejectedException(AttachmentRejectedCode.QUOTA_EXCEEDED);
                     }
                     digest.update(buffer, 0, read);
                     ByteBuffer bytes = ByteBuffer.wrap(buffer, 0, read);
@@ -119,12 +138,14 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
     }
 
     @Override
+    public SealedUpload resume(UUID uploadId, long sizeBytes, String sha256) throws IOException {
+        return new SealedUpload(uploadId, quarantinePath(uploadId, ".sealed"), sizeBytes, sha256);
+    }
+
+    @Override
     public PublishedBlob publish(SealedUpload upload) throws IOException {
         Objects.requireNonNull(upload, "upload must not be null");
         Path sealed = requireContained(quarantineRoot, upload.quarantinedPath());
-        if (!Files.isRegularFile(sealed, LinkOption.NOFOLLOW_LINKS)) {
-            throw new IOException("sealed upload is unavailable");
-        }
         String storageKey = storageKey(upload.sha256());
         Path destination = resolveStorageKey(storageKey);
         prepareParent(blobRoot, destination.getParent());
@@ -138,8 +159,11 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             if (!verify(existing)) {
                 throw new IOException("existing blob failed integrity verification");
             }
-            Files.delete(sealed);
+            Files.deleteIfExists(sealed);
             return existing;
+        }
+        if (!Files.isRegularFile(sealed, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("sealed upload is unavailable");
         }
         Files.move(sealed, destination, StandardCopyOption.ATOMIC_MOVE);
         PublishedBlob published = new PublishedBlob(storageKey, upload.sizeBytes(), upload.sha256());

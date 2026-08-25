@@ -79,6 +79,20 @@ yumpoo:
     batch-size: 50
     concurrency: 2
     lease-duration: 5m
+  attachments:
+    company-quota-bytes: ${YUMPOO_ATTACHMENT_COMPANY_QUOTA_BYTES:107374182400}
+    project-quota-bytes: ${YUMPOO_ATTACHMENT_PROJECT_QUOTA_BYTES:10737418240}
+    scan-concurrency: 2
+    scan-lease: 5m
+    upload-lease: 15m
+    first-scan-retry: 5s
+    second-scan-retry: 30s
+    poll-delay: 500ms
+    initial-delay: 1s
+    attachment-root: ${YUMPOO_ATTACHMENT_ROOT:out/attachments}
+    upload-temp-root: ${YUMPOO_UPLOAD_TEMP_ROOT:out/upload-temp}
+    defender-executable: ${YUMPOO_DEFENDER_EXECUTABLE:}
+    defender-timeout: 2m
   maintenance:
     app-manager:
       enabled: ${YUMPOO_APP_MANAGER_MAINTENANCE_ENABLED:false}

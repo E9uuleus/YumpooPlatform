@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-18",
+  "status": "PASS",
+  "command": "pnpm verify:m2-18",
+  "startedAt": "2026-08-25T03:32:36Z",
+  "completedAt": "2026-08-25T03:36:26Z",
+  "flywayVersion": "37",
+  "checks": {
+    "eventContracts": true,
+    "agentNoteAndReadme": true,
+    "openApiGeneratedClient": true,
+    "backendFocusedTests": true,
+    "webAttachmentTests": true,
+    "dockerBackedCleanVerify": true,
+    "liveDefenderNtfsEicar": false
+  },
+  "testResults": {
+    "backendUnit": 397,
+    "backendIntegration": 206,
+    "apiClient": 7,
+    "web": 172,
+    "desktop": 24,
+    "workspaceBoundaries": 9
+  },
+  "environmentNotes": [
+    "liveDefenderNtfsEicar is an explicit opt-in gate and is not part of the ordinary verification command"
+  ]
+}

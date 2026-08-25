@@ -64,6 +64,21 @@ class LocalFileQuarantineStorageTest {
     }
 
     @Test
+    void rejectsBytesBeyondTheIntentReservationAndLeavesNoPartialFile() throws Exception {
+        LocalFileQuarantineStorage storage = storage();
+
+        assertThatThrownBy(() -> storage.receive(
+                UUID.randomUUID(),
+                new LazyInputStream(1025, -1),
+                OptionalLong.empty(),
+                1024
+        )).isInstanceOf(UploadRejectedException.class)
+                .extracting(exception -> ((UploadRejectedException) exception).rejectedCode())
+                .isEqualTo(AttachmentRejectedCode.QUOTA_EXCEEDED);
+        assertThat(filesUnder(tempDirectory.resolve("quarantine"))).isZero();
+    }
+
+    @Test
     void interruptedUploadDeletesPartAndCanRetryTheSameIntent() throws Exception {
         LocalFileQuarantineStorage storage = storage();
         UUID uploadId = UUID.randomUUID();

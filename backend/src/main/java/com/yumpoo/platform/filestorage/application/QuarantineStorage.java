@@ -11,6 +11,13 @@ public interface QuarantineStorage {
     SealedUpload receive(UUID uploadId, InputStream source, OptionalLong contentLength)
             throws IOException;
 
+    default SealedUpload receive(UUID uploadId, InputStream source, OptionalLong contentLength,
+            long reservationLimit) throws IOException {
+        return receive(uploadId, source, contentLength);
+    }
+
+    SealedUpload resume(UUID uploadId, long sizeBytes, String sha256) throws IOException;
+
     PublishedBlob publish(SealedUpload upload) throws IOException;
 
     InputStream open(PublishedBlob blob) throws IOException;
