@@ -702,7 +702,7 @@ function toggleColumn(key: ColumnKey, checked: boolean): void {
 }
 
 const TABLE_ROW_HEIGHT = 40
-const TABLE_DRAG_TILT_DEGREES = 15
+const TABLE_DRAG_TILT_DEGREES = 4
 const TABLE_DRAG_POINTER_THRESHOLD = 5
 
 function removeTableDragPreview(): void {
@@ -877,9 +877,12 @@ function updateTableDropTarget(clientY: number): void {
 
 function onTablePointerDown(event: PointerEvent): void {
   if (!event.isPrimary || event.button !== 0 || tableDragging.value) return
-  const index = rowIndexFromTarget(event.target)
+  const target = event.target as HTMLElement | null
+  const dragHandle = target?.closest('.work-item-link')
+  if (!dragHandle) return
+  const index = rowIndexFromTarget(target)
   const item = tableItems.value[index]
-  const row = (event.target as HTMLElement | null)?.closest('.el-table__body-wrapper tbody tr') as HTMLElement | null
+  const row = target?.closest('.el-table__body-wrapper tbody tr') as HTMLElement | null
   if (!row || !item?.capabilities.canMoveInProjectOrder) return
 
   clearTablePointerTracking()
@@ -1236,6 +1239,7 @@ onBeforeUnmount(() => {
               <el-table-column
                 label="工作项名称"
                 :width="columnWidths.title"
+                class-name="monday-title-column"
                 resizable
               >
                 <template #default="scope">
@@ -1486,7 +1490,6 @@ onBeforeUnmount(() => {
             <div v-else-if="loadingMoreError" class="incremental-state incremental-state--error">
               <span>加载更多失败</span><el-button text @click="loadTable(tableNextCursor, true)">重试</el-button>
             </div>
-            <div v-else-if="!tableNextCursor && tableItems.length" class="incremental-state">已加载全部工作项</div>
           </div>
         </div>
 
@@ -1705,21 +1708,24 @@ onBeforeUnmount(() => {
   opacity: 0.85;
 }
 
+.monday-table-surface {
+  min-height: 240px;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .monday-table-wrapper {
   width: 100%;
   max-width: 100%;
-  border: 1px solid var(--yp-border-subtle);
-  border-left: 0;
-  border-radius: 0 var(--yp-radius-md) var(--yp-radius-md) 0;
-  background: var(--yp-bg-surface);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--yp-text-primary) 3%, transparent);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
-}
-
-.table-surface {
-  min-height: 240px;
 }
 
 /* Monday Table 核心样式与网格微调 */
@@ -1733,27 +1739,21 @@ onBeforeUnmount(() => {
   font-size: 13px;
   width: max-content;
   max-width: none;
+  border: none;
+  border-left: 6px solid var(--yp-action-primary);
+  border-top-left-radius: var(--yp-radius-md);
 }
 
-:deep(.monday-table .el-table__header th.el-table__cell:first-child) {
-  position: relative;
-}
-
-:deep(.monday-table .el-table__header th.el-table__cell:first-child::before) {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 5px;
-  background: transparent;
-  z-index: 2;
-  pointer-events: none;
+:deep(.monday-table.el-table--border::after),
+:deep(.monday-table.el-table--border::before),
+:deep(.monday-table.el-table__inner-wrapper::before) {
+  display: none;
 }
 
 :deep(.monday-table .el-table__header th.el-table__cell) {
   height: 38px;
   padding: 0;
+  border-top: 1px solid var(--yp-monday-grid-border);
   border-right: 1px solid var(--yp-monday-grid-border);
   border-bottom: 1px solid var(--yp-monday-grid-border);
   background: var(--yp-monday-header-bg);
@@ -1763,23 +1763,8 @@ onBeforeUnmount(() => {
 }
 
 :deep(.monday-table .el-table__header th.el-table__cell:last-child) {
-  border-right: 0;
-}
-
-:deep(.monday-table .el-table__body td.el-table__cell:first-child) {
-  position: relative;
-}
-
-:deep(.monday-table .el-table__body td.el-table__cell:first-child::before) {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: -1px;
-  width: 5px;
-  background: color-mix(in srgb, var(--yp-action-primary) 70%, var(--yp-bg-surface));
-  z-index: 2;
-  pointer-events: none;
+  border-right: 1px solid var(--yp-monday-grid-border);
+  border-top-right-radius: var(--yp-radius-md);
 }
 
 :deep(.monday-table .el-table__body td.el-table__cell) {
@@ -1790,7 +1775,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.monday-table .el-table__body td.el-table__cell:last-child) {
-  border-right: 0;
+  border-right: 1px solid var(--yp-monday-grid-border);
 }
 
 :deep(.monday-table .el-table__body tr) {
@@ -1804,30 +1789,43 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 
-:deep(.monday-table td.monday-block-column > .cell) {
+:deep(.monday-table td.monday-block-column > .cell),
+:deep(.monday-table td.monday-title-column > .cell) {
   padding: 0;
   height: 40px;
 }
 
 .title-cell {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--yp-space-2);
+  align-items: stretch;
+  height: 40px;
+  width: 100%;
 }
 
 .work-item-link {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
+  justify-content: center;
   gap: 1px;
-  padding: 0;
+  padding: 0 var(--yp-space-3);
   border: 0;
   color: var(--yp-text-primary);
   background: transparent;
   text-align: left;
-  cursor: pointer;
+  cursor: default;
   transition: color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+:deep(.monday-table .work-item-table-row--movable) .work-item-link {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+:deep(.monday-table .work-item-table-row--movable) .work-item-link:active {
+  cursor: grabbing;
 }
 
 .work-item-link:hover .work-item-title-text {
@@ -1847,29 +1845,28 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 
-/* Monday 讨论气泡按钮 */
+/* Monday 讨论气泡按钮与分割线 */
 .monday-discussion-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 40px;
+  height: 100%;
+  flex: 0 0 40px;
   padding: 0;
   border: 0;
-  border-radius: var(--yp-radius-pill);
+  border-left: 1px solid var(--yp-monday-grid-border);
+  border-radius: 0;
   color: var(--yp-text-muted);
   background: transparent;
   cursor: pointer;
   transition: color var(--yp-motion-fast) var(--yp-ease-standard),
-              background var(--yp-motion-fast) var(--yp-ease-standard),
-              transform var(--yp-motion-fast) var(--yp-ease-standard);
+              background var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
 .monday-discussion-btn:hover {
   color: var(--yp-action-primary);
-  background: var(--yp-bg-selected);
-  transform: scale(1.05);
+  background: var(--yp-bg-hover);
 }
 
 .discussion-bubble-icon {
@@ -2025,7 +2022,8 @@ onBeforeUnmount(() => {
   padding: 0 var(--yp-space-4);
   border: 0;
   border-top: 1px solid var(--yp-border-subtle);
-  border-left: 5px solid color-mix(in srgb, var(--yp-action-primary) 30%, var(--yp-bg-surface));
+  border-left: 6px solid color-mix(in srgb, var(--yp-action-primary) 48%, var(--yp-bg-surface));
+  border-bottom-left-radius: var(--yp-radius-md);
   color: var(--yp-text-secondary);
   background: transparent;
   font-size: 13px;
@@ -2049,7 +2047,8 @@ onBeforeUnmount(() => {
   gap: var(--yp-space-2);
   padding: var(--yp-space-2) var(--yp-space-3);
   border-top: 1px solid var(--yp-border-subtle);
-  border-left: 5px solid color-mix(in srgb, var(--yp-action-primary) 30%, var(--yp-bg-surface));
+  border-left: 6px solid color-mix(in srgb, var(--yp-action-primary) 48%, var(--yp-bg-surface));
+  border-bottom-left-radius: var(--yp-radius-md);
   background: var(--yp-bg-sunken);
 }
 
@@ -2064,14 +2063,6 @@ onBeforeUnmount(() => {
 .cursor-sentinel { height: 1px; }
 .incremental-state { display: flex; min-height: 36px; align-items: center; justify-content: center; gap: var(--yp-space-2); color: var(--yp-text-muted); font-size: 12px; }
 .incremental-state--error { color: var(--yp-status-red); }
-:deep(.monday-table .work-item-table-row--movable) {
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
-}
-:deep(.monday-table .work-item-table-row--movable:active) {
-  cursor: grabbing;
-}
 :deep(.monday-table .work-item-table-row--dragging td) {
   pointer-events: none;
 }

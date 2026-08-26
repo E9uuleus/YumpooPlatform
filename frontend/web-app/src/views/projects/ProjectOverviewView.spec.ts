@@ -634,9 +634,19 @@ describe('项目级工作项首页', () => {
     } as unknown as MouseEvent)
     expect(clickPreventDefault).toHaveBeenCalledOnce()
     expect(clickStopPropagation).toHaveBeenCalledOnce()
+
+    // 验证点击非工作项名称文字区域（如讨论按钮）不会触发拖拽
+    const discussionButton = wrapper.find('.monday-discussion-btn').element
+    view.onTablePointerDown({
+      isPrimary: true, button: 0, pointerId: 8, clientX: 120, clientY: 220, target: discussionButton,
+    } as unknown as PointerEvent)
+    view.onTablePointerMove({
+      pointerId: 8, clientX: 150, clientY: 250, preventDefault: vi.fn(),
+    } as unknown as PointerEvent)
+    expect(view.tableDragging).toBeUndefined()
   })
 
-  it('创建完整的 15 度灰阶拖拽浮层并锚定抓取点跟随鼠标', async () => {
+  it('创建完整的 4 度灰阶拖拽浮层并锚定抓取点跟随鼠标', async () => {
     const wrapper = mountView()
     await flushPromises()
     const view = wrapper.vm as unknown as {
@@ -666,7 +676,7 @@ describe('项目级工作项首页', () => {
     const preview = view.createTableDragPreview(source, 150, 220)
 
     expect(preview.classList.contains('work-item-drag-preview')).toBe(true)
-    expect(preview.style.transform).toBe('rotate(15deg)')
+    expect(preview.style.transform).toBe('rotate(4deg)')
     expect(preview.style.transformOrigin).toBe('50px 20px')
     expect(preview.style.left).toBe('100px')
     expect(preview.style.top).toBe('200px')
