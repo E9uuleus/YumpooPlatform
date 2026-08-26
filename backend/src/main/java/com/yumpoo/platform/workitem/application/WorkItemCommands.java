@@ -26,6 +26,14 @@ public final class WorkItemCommands {
             String toStatus, String placement, UUID anchorWorkItemId, String resolution,
             UUID idempotencyKey, RequestHash requestHash) {}
 
+    public record ProjectOrderMove(CurrentActor actor, UUID projectId, UUID workItemId,
+            long expectedVersion, UUID previousVisibleWorkItemId, UUID nextVisibleWorkItemId,
+            UUID idempotencyKey, RequestHash requestHash) {}
+
+    public record InlineUpdate(CurrentActor actor, UUID workItemId, long expectedVersion,
+            String field, String priority, UUID assigneeUserId, LocalDate dueDate,
+            UUID idempotencyKey, RequestHash requestHash) {}
+
     public record Delete(CurrentActor actor, UUID workItemId, long expectedVersion,
             String reason, UUID idempotencyKey, RequestHash requestHash) {}
 

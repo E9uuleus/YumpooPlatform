@@ -37,7 +37,7 @@ export interface WorkItemCreateRequest {
      * @type {WorkItemPriority}
      * @memberof WorkItemCreateRequest
      */
-    priority: WorkItemPriority;
+    priority: WorkItemPriority | null;
     /**
      *
      * @type {string}

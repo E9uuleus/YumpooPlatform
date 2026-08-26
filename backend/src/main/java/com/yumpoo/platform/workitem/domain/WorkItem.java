@@ -12,7 +12,8 @@ public record WorkItem(
         String title, String statusCode, WorkItemStatusCategory statusCategory,
         WorkItemPriority priority, UUID assigneeUserId, UUID reporterUserId,
         String description, String notes, LocalDate timelineStartDate,
-        LocalDate timelineEndDate, LocalDate dueDate, String rank, long rowVersion,
+        LocalDate timelineEndDate, LocalDate dueDate, String rank, String projectSortKey,
+        long rowVersion,
         Instant createdAt, UUID createdByUserId, Instant updatedAt,
         UUID updatedByUserId, Instant deletedAt, UUID deletedByUserId, String deleteReason
 ) {
@@ -27,7 +28,6 @@ public record WorkItem(
         Objects.requireNonNull(contentId, "contentId must not be null");
         Objects.requireNonNull(type, "type must not be null");
         Objects.requireNonNull(statusCategory, "statusCategory must not be null");
-        Objects.requireNonNull(priority, "priority must not be null");
         Objects.requireNonNull(reporterUserId, "reporterUserId must not be null");
         Objects.requireNonNull(createdAt, "createdAt must not be null");
         Objects.requireNonNull(createdByUserId, "createdByUserId must not be null");
@@ -46,6 +46,7 @@ public record WorkItem(
                 && timelineEndDate.isBefore(timelineStartDate))
             throw new IllegalArgumentException("timeline end must not precede start");
         rank = KanbanRank.require(rank);
+        projectSortKey = ProjectSortKey.require(projectSortKey);
         boolean deleted = deletedAt != null || deletedByUserId != null || deleteReason != null;
         if (deleted && (deletedAt == null || deletedByUserId == null || deleteReason == null))
             throw new IllegalArgumentException("deleted work item must contain complete delete facts");
@@ -62,10 +63,22 @@ public record WorkItem(
             UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
             LocalDate timelineEndDate, LocalDate dueDate, String rank,
             UUID reporterUserId, Instant now) {
+        return create(id, companyId, projectId, contentId, itemSequence, itemNo, type, title,
+                statusCode, statusCategory, priority, assigneeUserId, description, notes,
+                timelineStartDate, timelineEndDate, dueDate, rank,
+                ProjectSortKey.evenlySpaced(1, 1), reporterUserId, now);
+    }
+
+    public static WorkItem create(UUID id, UUID companyId, UUID projectId, UUID contentId,
+            long itemSequence, String itemNo, ContentWorkItemType type, String title,
+            String statusCode, WorkItemStatusCategory statusCategory, WorkItemPriority priority,
+            UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
+            LocalDate timelineEndDate, LocalDate dueDate, String rank, String projectSortKey,
+            UUID reporterUserId, Instant now) {
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
-                description, notes, timelineStartDate, timelineEndDate, dueDate, rank, 0, now, reporterUserId,
-                now, reporterUserId, null, null, null);
+                description, notes, timelineStartDate, timelineEndDate, dueDate, rank,
+                projectSortKey, 0, now, reporterUserId, now, reporterUserId, null, null, null);
     }
 
     public WorkItem updateFields(String nextTitle, WorkItemPriority nextPriority,
@@ -78,7 +91,7 @@ public record WorkItem(
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
                 nextTitle, statusCode, statusCategory, nextPriority, nextAssigneeUserId,
                 reporterUserId, nextDescription, nextNotes, nextTimelineStartDate,
-                nextTimelineEndDate, nextDueDate, rank, rowVersion, createdAt,
+                nextTimelineEndDate, nextDueDate, rank, projectSortKey, rowVersion, createdAt,
                 createdByUserId, now, actorUserId, deletedAt, deletedByUserId, deleteReason);
     }
 
@@ -94,7 +107,8 @@ public record WorkItem(
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
                 title, nextStatusCode, nextStatusCategory, priority, assigneeUserId,
                 reporterUserId, description, notes, timelineStartDate, timelineEndDate,
-                dueDate, nextRank, rowVersion, createdAt, createdByUserId, now, actorUserId,
+                dueDate, nextRank, projectSortKey, rowVersion, createdAt, createdByUserId,
+                now, actorUserId,
                 deletedAt, deletedByUserId, deleteReason);
     }
 
@@ -106,8 +120,18 @@ public record WorkItem(
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, nextRank,
-                rowVersion, createdAt, createdByUserId, now, actorUserId, deletedAt,
+                projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId, deletedAt,
                 deletedByUserId, deleteReason);
+    }
+
+    public WorkItem reorderProject(String nextProjectSortKey, UUID actorUserId) {
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        if (deletedAt != null) throw new IllegalStateException("deleted work item cannot move");
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                description, notes, timelineStartDate, timelineEndDate, dueDate, rank,
+                nextProjectSortKey, rowVersion, createdAt, createdByUserId, updatedAt,
+                actorUserId, deletedAt, deletedByUserId, deleteReason);
     }
 
     public WorkItem softDelete(String reason, UUID actorUserId, Instant now) {
@@ -118,10 +142,16 @@ public record WorkItem(
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, rank,
-                rowVersion, createdAt, createdByUserId, now, actorUserId, now, actorUserId, reason);
+                projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
+                now, actorUserId, reason);
     }
 
     public WorkItem restore(String nextRank, UUID actorUserId, Instant now) {
+        return restore(nextRank, projectSortKey, actorUserId, now);
+    }
+
+    public WorkItem restore(String nextRank, String nextProjectSortKey, UUID actorUserId,
+            Instant now) {
         Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         Objects.requireNonNull(now, "now must not be null");
         if (deletedAt == null) throw new IllegalStateException("work item is not deleted");
@@ -129,7 +159,8 @@ public record WorkItem(
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, nextRank,
-                rowVersion, createdAt, createdByUserId, now, actorUserId, null, null, null);
+                nextProjectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
+                null, null, null);
     }
 
     public boolean deleted() {

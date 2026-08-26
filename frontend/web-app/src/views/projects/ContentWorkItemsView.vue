@@ -40,8 +40,6 @@ import {
   ElSelect as ElSelectRaw,
   ElTable,
   ElTableColumn,
-  ElTabPane as ElTabPaneRaw,
-  ElTabs as ElTabsRaw,
 } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type DefineComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -53,8 +51,8 @@ import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import ContentTableQueryEditor from '../../components/projects/ContentTableQueryEditor.vue'
-import WorkItemDiscussion from '../../components/collaboration/WorkItemDiscussion.vue'
-import AttachmentPanel from '../../components/collaboration/AttachmentPanel.vue'
+import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
+import LazyAttachmentPanel from '../../components/collaboration/LazyAttachmentPanel.vue'
 import {
   cloneTableQuery,
   encodeTableQuery,
@@ -104,7 +102,7 @@ interface PointerDragState {
 
 interface WorkItemFieldsDraft {
   title: string
-  priority: WorkItemPriority
+  priority: WorkItemPriority | null
   assigneeUserId: string
   description: string
   notes: string
@@ -129,8 +127,6 @@ const route = useRoute()
 const router = useRouter()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
-const ElTabs = ElTabsRaw as unknown as DefineComponent
-const ElTabPane = ElTabPaneRaw as unknown as DefineComponent
 const projectId = String(route.params.projectId)
 const contentId = String(route.params.contentId)
 const project = ref<ProjectDetail>()
@@ -1662,8 +1658,16 @@ onBeforeUnmount(() => {
             >{{ statusLabel(detail.statusCode) }}</span>
             <span class="version-badge">版本 {{ detail.rowVersion }}</span>
           </div>
-          <el-tabs v-model="detailTab" :before-leave="beforeDetailTabLeave" class="detail-tabs">
-            <el-tab-pane label="详情" name="details">
+          <work-item-detail-panel
+            v-model="detailTab"
+            ref="discussion"
+            :work-item-id="detail.id"
+            :members="activeMembers"
+            :can-publish="canPublishUpdate"
+            :read-only-reason="readOnlyReason"
+            :before-leave="beforeDetailTabLeave"
+          >
+            <template #details>
               <dl>
             <div>
               <dt>处理人</dt><dd>
@@ -1703,10 +1707,11 @@ onBeforeUnmount(() => {
             <div class="editor-grid">
               <el-form-item
                 label="优先级"
-                required
               >
                 <el-select
                   v-model="detailDraft.priority"
+                  clearable
+                  placeholder="未设置"
                   :disabled="!canEditDetail"
                 >
                   <el-option
@@ -1762,7 +1767,7 @@ onBeforeUnmount(() => {
                 :disabled="!canEditDetail"
               />
             </el-form-item>
-            <attachment-panel
+            <lazy-attachment-panel
               :owner-type="AttachmentOwnerType.WorkItem"
               :owner-id="detail.id"
               :can-upload="canEditDetail"
@@ -1800,18 +1805,8 @@ onBeforeUnmount(() => {
               </el-form-item>
             </div>
               </el-form>
-            </el-tab-pane>
-            <el-tab-pane label="讨论" name="discussion" lazy>
-              <work-item-discussion
-                v-if="detailTab === 'discussion'"
-                ref="discussion"
-                :work-item-id="detail.id"
-                :members="activeMembers"
-                :can-publish="canPublishUpdate"
-                :read-only-reason="readOnlyReason"
-              />
-            </el-tab-pane>
-          </el-tabs>
+            </template>
+          </work-item-detail-panel>
         </template>
       </div>
       <template #footer>

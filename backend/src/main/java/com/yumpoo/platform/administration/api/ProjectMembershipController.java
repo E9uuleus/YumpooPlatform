@@ -40,9 +40,13 @@ public final class ProjectMembershipController {
     @GetMapping("/projects/{projectId}/members")
     ProjectMemberPage members(@PathVariable UUID projectId,
             @RequestParam(required=false, defaultValue="ALL") String status,
+            @RequestParam(required=false) String q,
             @RequestParam(required=false) Integer page, @RequestParam(required=false) Integer size) {
+        if (q != null && q.strip().length() > 200)
+            throw ApplicationException.validation(new FieldViolation("q", "INVALID_LENGTH",
+                    "成员搜索关键字最多 200 个字符"));
         CurrentActor actor=actors.requiredActive();
-        return query.findMembers(actor, projectId, parseStatus(status), OffsetPageRequest.of(page,size));
+        return query.findMembers(actor, projectId, parseStatus(status), q, OffsetPageRequest.of(page,size));
     }
 
     @GetMapping("/projects/{projectId}/member-candidates")

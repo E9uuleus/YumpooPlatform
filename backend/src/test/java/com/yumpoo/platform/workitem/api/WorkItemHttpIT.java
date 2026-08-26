@@ -425,6 +425,104 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void projectCollectionAggregatesContentsAndSupportsNullablePriority() throws Exception {
+        String firstCollection = "/api/v1/contents/" + contentId + "/work-items";
+        UUID secondContentId = UUID.fromString(createContent("DEFECTS", "缺陷").path("id").asText());
+        String secondCollection = "/api/v1/contents/" + secondContentId + "/work-items";
+        JsonNode prioritized = createWorkItem(firstCollection, "有优先级", "LOW", member.userId(), null);
+        JsonNode nullable = createWorkItem(secondCollection, "待定优先级", null, null, null);
+        String projectCollection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+
+        assertThat(get(projectCollection, null).statusCode()).isEqualTo(401);
+        assertThat(get(projectCollection, outsider).statusCode()).isEqualTo(404);
+        assertThat(get(projectCollection, admin).statusCode()).isEqualTo(200);
+
+        JsonNode aggregate = body(get(projectCollection + "?sort=PRIORITY,ASC", member));
+        assertThat(aggregate.path("items").size()).isEqualTo(2);
+        assertThat(aggregate.path("nextCursor").isNull()).isTrue();
+        assertThat(titles(aggregate)).containsExactly("有优先级", "待定优先级");
+        assertThat(aggregate.path("items").get(1).path("priority").isNull()).isTrue();
+        assertThat(ids(aggregate)).containsExactlyInAnyOrder(
+                prioritized.path("id").asText(), nullable.path("id").asText());
+        JsonNode light = aggregate.path("items").get(0);
+        assertThat(light.path("contentName").asText()).isNotBlank();
+        assertThat(light.has("description")).isFalse();
+        assertThat(light.has("notes")).isFalse();
+        JsonNode firstCursorPage = body(get(projectCollection + "?limit=1", member));
+        assertThat(firstCursorPage.path("items").size()).isOne();
+        String projectCursor = firstCursorPage.path("nextCursor").asText();
+        assertThat(projectCursor).isNotBlank();
+        JsonNode secondCursorPage = body(get(projectCollection + "?limit=1&cursor="
+                + URLEncoder.encode(projectCursor, StandardCharsets.UTF_8), member));
+        assertThat(secondCursorPage.path("items").size()).isOne();
+        assertThat(ids(secondCursorPage)).doesNotContain(ids(firstCursorPage).getFirst());
+        assertThat(get(projectCollection + "?limit=101", member).statusCode()).isEqualTo(422);
+        assertThat(get(projectCollection + "?limit=1&q=other&cursor="
+                + URLEncoder.encode(projectCursor, StandardCharsets.UTF_8), member).statusCode())
+                .isEqualTo(422);
+        assertThat(get(projectCollection + "?cursor=" + projectCursor + "x", member).statusCode())
+                .isEqualTo(422);
+
+        String filterOptions = projectCollection + "/filter-options";
+        assertThat(get(filterOptions + "?field=STATUS", outsider).statusCode()).isEqualTo(404);
+        assertThat(get(filterOptions + "?field=STATUS&limit=101", member).statusCode()).isEqualTo(422);
+        JsonNode statusOptions = body(get(filterOptions + "?field=STATUS&limit=25", member));
+        JsonNode backlogOption = null;
+        for (JsonNode option : statusOptions.path("items"))
+            if ("BACKLOG".equals(option.path("value").asText())) backlogOption = option;
+        assertThat(backlogOption).isNotNull();
+        assertThat(backlogOption.path("count").asInt()).isEqualTo(2);
+        assertThat(statusOptions.path("nextCursor").isNull()).isTrue();
+
+        String nullableResource = "/api/v1/work-items/" + nullable.path("id").asText();
+        HttpResponse<String> assigned = mutate("PATCH", nullableResource + "/assignee", member,
+                "{\"assigneeUserId\":\"" + member.userId() + "\"}", "\"0\"", UUID.randomUUID());
+        assertThat(assigned.statusCode()).as(assigned.body()).isEqualTo(200);
+        HttpResponse<String> reprioritized = mutate("PATCH", nullableResource + "/priority", member,
+                "{\"priority\":\"HIGH\"}", "\"1\"", UUID.randomUUID());
+        assertThat(reprioritized.statusCode()).as(reprioritized.body()).isEqualTo(200);
+        HttpResponse<String> dated = mutate("PATCH", nullableResource + "/due-date", member,
+                "{\"dueDate\":\"2026-09-30\"}", "\"2\"", UUID.randomUUID());
+        assertThat(dated.statusCode()).as(dated.body()).isEqualTo(200);
+        assertThat(json.readTree(dated.body()).path("dueDate").asText()).isEqualTo("2026-09-30");
+
+        var updatedAtBeforeMove = jdbc.sql("SELECT updated_at FROM yumpoo.work_item WHERE id=:id")
+                .param("id", UUID.fromString(nullable.path("id").asText()))
+                .query(java.time.OffsetDateTime.class).single();
+        HttpResponse<String> moved = mutate("POST", projectCollection + "/"
+                        + nullable.path("id").asText() + "/order-moves", member,
+                "{\"previousVisibleWorkItemId\":null,\"nextVisibleWorkItemId\":\""
+                        + prioritized.path("id").asText() + "\"}", "\"3\"", UUID.randomUUID());
+        assertThat(moved.statusCode()).as(moved.body()).isEqualTo(200);
+        assertThat(jdbc.sql("SELECT updated_at FROM yumpoo.work_item WHERE id=:id")
+                .param("id", UUID.fromString(nullable.path("id").asText()))
+                .query(java.time.OffsetDateTime.class).single()).isEqualTo(updatedAtBeforeMove);
+        assertThat(jdbc.sql("SELECT payload_json->'priority' = 'null'::jsonb FROM yumpoo.outbox_event "
+                        + "WHERE aggregate_id=:id AND event_type='workitem.work_item_created'")
+                .param("id", UUID.fromString(nullable.path("id").asText()))
+                .query(Boolean.class).single()).isTrue();
+
+        JsonNode filtered = body(get(projectCollection + "?priority=LOW", member));
+        assertThat(titles(filtered)).containsExactly("有优先级");
+        assertThat(get(projectCollection + "?view=KANBAN", member).statusCode()).isEqualTo(422);
+        assertThat(get(projectCollection + "?view=KANBAN&status=BACKLOG&status=DONE", member)
+                .statusCode()).isEqualTo(422);
+        JsonNode lane = body(get(projectCollection + "?view=KANBAN&status=BACKLOG", member));
+        assertThat(lane.path("items").size()).isEqualTo(2);
+        assertThat(lane.path("nextCursor").isNull()).isTrue();
+
+        String resource = "/api/v1/work-items/" + prioritized.path("id").asText();
+        HttpResponse<String> cleared = mutate("PATCH", resource, member,
+                workItemBody("有优先级", null, member.userId(), null, null,
+                        null, null, null), "\"0\"", null);
+        assertThat(cleared.statusCode()).as(cleared.body()).isEqualTo(200);
+        assertThat(json.readTree(cleared.body()).path("priority").isNull()).isTrue();
+        assertThat(jdbc.sql("SELECT priority IS NULL FROM yumpoo.work_item WHERE id=:id")
+                .param("id", UUID.fromString(prioritized.path("id").asText()))
+                .query(Boolean.class).single()).isTrue();
+    }
+
+    @Test
     void statusTransitionIsExplicitIdempotentAndCapabilityDriven() throws Exception {
         String collection = "/api/v1/contents/" + contentId + "/work-items";
         HttpResponse<String> created = mutate("POST", collection, member,

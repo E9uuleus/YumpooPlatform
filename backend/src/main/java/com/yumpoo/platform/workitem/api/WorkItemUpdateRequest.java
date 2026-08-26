@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public record WorkItemUpdateRequest(
         @JsonProperty(required = true) @NotBlank @Size(max = 300) String title,
-        @JsonProperty(required = true) @NotBlank
+        @JsonProperty(required = true)
         @Pattern(regexp = "LOW|MEDIUM|HIGH|URGENT") String priority,
         @JsonProperty(required = true) UUID assigneeUserId,
         @JsonProperty(required = true) @Size(max = 16384) String description,

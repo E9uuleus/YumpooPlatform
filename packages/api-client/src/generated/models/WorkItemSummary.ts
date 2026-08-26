@@ -100,7 +100,7 @@ export interface WorkItemSummary {
      * @type {WorkItemPriority}
      * @memberof WorkItemSummary
      */
-    priority: WorkItemPriority;
+    priority: WorkItemPriority | null;
     /**
      *
      * @type {string}

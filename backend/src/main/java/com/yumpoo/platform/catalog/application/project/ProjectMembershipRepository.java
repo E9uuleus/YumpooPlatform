@@ -19,8 +19,8 @@ public interface ProjectMembershipRepository {
     Optional<ProjectMembership> lock(UUID companyId, UUID projectId, UUID userId);
     Optional<ProjectMembership> update(ProjectMembership membership, long expectedVersion);
     List<ProjectMembership> findPage(UUID companyId, UUID projectId,
-                                     ListStatus status, OffsetPageRequest page);
-    long count(UUID companyId, UUID projectId, ListStatus status);
+            ListStatus status, String query, OffsetPageRequest page);
+    long count(UUID companyId, UUID projectId, ListStatus status, String query);
     Map<UUID, ProjectMembership> findByUsers(UUID companyId, UUID projectId,
                                              Collection<UUID> userIds);
     boolean existsActive(UUID companyId, UUID projectId, UUID userId);

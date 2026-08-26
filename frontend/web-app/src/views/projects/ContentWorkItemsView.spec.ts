@@ -152,8 +152,8 @@ function summary(id = 'work-item-1', statusCode = 'BACKLOG', title = '实现核�
     timelineEndDate: new Date('2026-08-29T00:00:00.000Z'),
     dueDate: new Date('2026-08-30T00:00:00.000Z'),
     rowVersion: 0, etag: '"0"',
-    capabilities: { canEditFields: true, canMoveInKanban: true, canDelete: true,
-      canRestore: false, availableTransitions: defaultTransitions },
+    capabilities: { canEditFields: true, canMoveInKanban: true, canMoveInProjectOrder: false,
+      canDiscuss: true, canDelete: true, canRestore: false, availableTransitions: defaultTransitions },
     updatedAt: new Date('2026-08-22T02:00:00Z'),
   }
 }
@@ -172,7 +172,7 @@ function detail(
   return {
     ...summary(), description, notes: null,
     rowVersion: 0, etag: '"0"', capabilities: { canEditFields: true, canMoveInKanban: true,
-      canDelete: true, canRestore: false, availableTransitions },
+      canMoveInProjectOrder: false, canDiscuss: true, canDelete: true, canRestore: false, availableTransitions },
     createdAt: new Date('2026-08-22T01:00:00Z'),
     deleted: false, deletedAt: null, deletedByUserId: null, deleteReason: null,
   }
@@ -210,14 +210,14 @@ describe('M2-10 Content 工作项工作区', () => {
     api.transitionWorkItem.mockResolvedValue({
       ...detail(), statusCode: 'READY', statusCategory: WorkItemStatusCategory.InProgress,
       rowVersion: 1, etag: '"1"', capabilities: { canEditFields: true, canMoveInKanban: true,
-        canDelete: true, canRestore: false, availableTransitions: [] },
+        canMoveInProjectOrder: false, canDiscuss: true, canDelete: true, canRestore: false, availableTransitions: [] },
     })
     api.rankMoveWorkItem.mockResolvedValue(detail())
     api.deleteWorkItem.mockResolvedValue({
       ...detail(), rowVersion: 1, etag: '"1"', deleted: true,
       deletedAt: new Date('2026-08-24T01:00:00Z'), deletedByUserId: 'owner-1',
       deleteReason: '需求已合并', capabilities: { canEditFields: false, canMoveInKanban: false,
-        canDelete: false, canRestore: true, availableTransitions: [] },
+        canMoveInProjectOrder: false, canDiscuss: false, canDelete: false, canRestore: true, availableTransitions: [] },
     })
     api.restoreWorkItem.mockResolvedValue({ ...detail(), rowVersion: 2, etag: '"2"' })
     api.listWorkItemUpdates.mockResolvedValue({ items: [], nextCursor: null })
@@ -477,8 +477,8 @@ describe('M2-10 Content 工作项工作区', () => {
       statusCategory: WorkItemStatusCategory.InProgress, requiresResolution: true,
     }
     const item = { ...summary(), capabilities: {
-      canEditFields: true, canMoveInKanban: true, canDelete: true,
-      canRestore: false, availableTransitions: [required],
+      canEditFields: true, canMoveInKanban: true, canMoveInProjectOrder: false,
+      canDiscuss: true, canDelete: true, canRestore: false, availableTransitions: [required],
     } }
     api.listContentWorkItems.mockImplementation(({ status }: { status?: Set<string> }) =>
       Promise.resolve(page(status?.has('BACKLOG') ? [item] : [])))
@@ -642,8 +642,8 @@ describe('M2-10 Content 工作项工作区', () => {
     const firstTombstone = {
       ...detail(), id: 'work-item-1', rowVersion: 1, etag: '"1"', deleted: true,
       deletedAt: new Date(), deletedByUserId: 'owner-1', deleteReason: '需求已合并',
-      capabilities: { canEditFields: false, canMoveInKanban: false, canDelete: false,
-        canRestore: true, availableTransitions: [] },
+      capabilities: { canEditFields: false, canMoveInKanban: false, canMoveInProjectOrder: false,
+        canDiscuss: false, canDelete: false, canRestore: true, availableTransitions: [] },
     }
     const secondTombstone = { ...firstTombstone, id: 'work-item-2', itemNo: 'PROJECT_1-2' }
     api.deleteWorkItem.mockResolvedValueOnce(firstTombstone).mockResolvedValueOnce(secondTombstone)
@@ -726,8 +726,8 @@ describe('M2-10 Content 工作项工作区', () => {
   it('终态或只读详情不显示状态迁移入口', async () => {
     api.getWorkItem.mockResolvedValue({
       ...detail('安全纯文本', []),
-      capabilities: { canEditFields: false, canMoveInKanban: false, canDelete: false,
-        canRestore: false, availableTransitions: [] },
+      capabilities: { canEditFields: false, canMoveInKanban: false, canMoveInProjectOrder: false,
+        canDiscuss: false, canDelete: false, canRestore: false, availableTransitions: [] },
     })
     const wrapper = mountView(); await flushPromises()
     const vm = wrapper.vm as unknown as { openDetail: (item: WorkItemSummary) => Promise<void> }

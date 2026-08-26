@@ -30,6 +30,7 @@ public final class WorkItemModels {
             String statusCategory, boolean requiresResolution) {}
 
     public record WorkItemCapabilities(boolean canEditFields, boolean canMoveInKanban,
+            boolean canMoveInProjectOrder, boolean canDiscuss,
             boolean canDelete, boolean canRestore,
             List<WorkItemTransitionOption> availableTransitions) {
         public WorkItemCapabilities { availableTransitions = List.copyOf(availableTransitions); }
@@ -38,5 +39,27 @@ public final class WorkItemModels {
     public record WorkItemPage(List<WorkItemSummary> items, int page, int size,
             long totalElements, int totalPages) {
         public WorkItemPage { items = List.copyOf(items); }
+    }
+
+    public record ProjectWorkItemListItem(UUID id, UUID projectId, UUID contentId,
+            String contentName, String itemNo, String type, String title, String statusCode,
+            String statusCategory, String priority, UUID assigneeUserId,
+            String assigneeDisplayName, LocalDate dueDate, long rowVersion, String etag,
+            WorkItemCapabilities capabilities, Instant updatedAt) {}
+
+    public record ProjectWorkItemCursorPage(List<ProjectWorkItemListItem> items,
+            String nextCursor) {
+        public ProjectWorkItemCursorPage {
+            items = List.copyOf(items);
+            if (nextCursor != null && nextCursor.isBlank())
+                throw new IllegalArgumentException("nextCursor must be null or non-blank");
+        }
+    }
+
+    public record ProjectWorkItemFilterOption(String value, String label, long count) {}
+
+    public record ProjectWorkItemFilterOptionCursorPage(
+            List<ProjectWorkItemFilterOption> items, String nextCursor) {
+        public ProjectWorkItemFilterOptionCursorPage { items = List.copyOf(items); }
     }
 }

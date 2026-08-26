@@ -139,6 +139,7 @@ export interface ListProjectMemberCandidatesRequest {
 export interface ListProjectMembersRequest {
     projectId: string;
     status?: ProjectMembershipStatusFilter;
+    q?: string;
     page?: number;
     size?: number;
 }
@@ -686,6 +687,10 @@ export class ProjectsApi extends runtime.BaseAPI {
 
         if (requestParameters['status'] != null) {
             queryParameters['status'] = requestParameters['status'];
+        }
+
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
         }
 
         if (requestParameters['page'] != null) {

@@ -93,6 +93,12 @@ class ProjectMembershipGovernanceIT {
         var reactivated=execute("reactivate",()->governance.add(memberCommand(owner(),MEMBER,1L,null,"f")));
         assertThat(reactivated.result().httpStatus()).isEqualTo(200);
         assertThat(reactivated.result().etag()).isEqualTo("\"2\"");
+        var matched=query.findMembers(owner(),projectId,ProjectMembershipStatus.ACTIVE,
+                "member",new OffsetPageRequest(0,20));
+        assertThat(matched.items()).extracting(ProjectMemberSnapshot::userId).containsExactly(MEMBER);
+        assertThat(matched.totalElements()).isOne();
+        assertThat(query.findMembers(owner(),projectId,ProjectMembershipStatus.ACTIVE,
+                "missing",new OffsetPageRequest(0,20)).totalElements()).isZero();
         assertThat(jdbc.sql("SELECT remove_reason FROM yumpoo.project_membership WHERE project_id=:id AND user_id=:user")
                 .param("id",projectId).param("user",MEMBER).query(String.class).optional()).isEmpty();
     }

@@ -80,8 +80,15 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     public ProjectMemberPage findMembers(com.yumpoo.platform.identityaccess.api.CurrentActor actor,
             java.util.UUID projectId, ProjectMembershipStatus status,
             com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest page) {
+        return findMembers(actor, projectId, status, null, page);
+    }
+
+    @Override
+    public ProjectMemberPage findMembers(com.yumpoo.platform.identityaccess.api.CurrentActor actor,
+            java.util.UUID projectId, ProjectMembershipStatus status, String query,
+            com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest page) {
         var result=membershipService.findMembers(actor,projectId,
-                ProjectMembershipModels.ListStatus.valueOf(status.name()),page);
+                ProjectMembershipModels.ListStatus.valueOf(status.name()),query,page);
         return new ProjectMemberPage(result.items().stream().map(ProjectCatalogAdapter::member).toList(),
                 result.page(),result.size(),result.totalElements(),result.totalPages());
     }

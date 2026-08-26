@@ -7,6 +7,7 @@ import com.yumpoo.platform.catalog.api.ProjectFactWriteGuard;
 import com.yumpoo.platform.catalog.api.ProjectFactWriteSnapshot;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageResponse;
+import com.yumpoo.platform.foundation.api.pagination.CursorPageRequest;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
@@ -28,6 +29,7 @@ import com.yumpoo.platform.workitem.domain.Content;
 import com.yumpoo.platform.workitem.domain.ContentStatus;
 import com.yumpoo.platform.workitem.domain.ContentViewType;
 import com.yumpoo.platform.workitem.domain.KanbanRank;
+import com.yumpoo.platform.workitem.domain.ProjectSortKey;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemPriority;
 import com.yumpoo.platform.workitem.domain.WorkItemRankPlacement;
@@ -53,11 +55,14 @@ import java.util.UUID;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Delete;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.RankMove;
+import static com.yumpoo.platform.workitem.application.WorkItemCommands.ProjectOrderMove;
+import static com.yumpoo.platform.workitem.application.WorkItemCommands.InlineUpdate;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Restore;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Update;
 import static com.yumpoo.platform.workitem.application.WorkItemModels.*;
 import static com.yumpoo.platform.workitem.application.WorkItemRepository.RankedWorkItem;
+import static com.yumpoo.platform.workitem.application.WorkItemRepository.RankedProjectWorkItem;
 
 @Service
 public class WorkItemService {
@@ -81,6 +86,9 @@ public class WorkItemService {
     private final TransactionalEventPort events;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final ProjectWorkItemCursorCodec projectCursors = new ProjectWorkItemCursorCodec();
+    private final ProjectWorkItemFilterCursorCodec projectFilterCursors =
+            new ProjectWorkItemFilterCursorCodec();
 
     public WorkItemService(WorkItemRepository workItems, ContentRepository contents,
             ProjectAccessSnapshotQuery access, ProjectFactWriteGuard writeGuard,
@@ -131,6 +139,108 @@ public class WorkItemService {
                         template)).toList(), page, total);
         return new WorkItemPage(response.items(), response.page(), response.size(),
                 response.totalElements(), response.totalPages());
+    }
+
+    @Transactional(readOnly = true)
+    public ProjectWorkItemCursorPage listProject(CurrentActor actor, UUID projectId,
+            WorkItemQuery.Request request, String view, CursorPageRequest page) {
+        requireActor(actor);
+        ProjectAccessSnapshot project = visible(actor, projectId);
+        ProjectTemplateSnapshot template = template(project.templateKey(), project.templateVersion());
+        Set<String> allowedStatuses = template.statuses().stream()
+                .map(ProjectTemplateSnapshot.WorkflowStatus::statusCode)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        WorkItemQuery query = WorkItemQuery.parse(request, allowedStatuses);
+        ContentViewType effectiveView = view(view);
+        if (effectiveView == ContentViewType.KANBAN) {
+            if (query.statuses().size() != 1)
+                throw validation("status", "KANBAN_REQUIRES_ONE_STATUS",
+                        "项目 Kanban 泳道查询必须且只能指定一个状态");
+            if (request.sorts() != null && !request.sorts().isEmpty())
+                throw validation("sort", "KANBAN_SORT_FIXED",
+                        "项目 Kanban 固定按更新时间倒序");
+        }
+        WorkItemSortRanks ranks = sortRanks(project.companyId(), project.projectId(),
+                null, query, template);
+        String fingerprint = projectCursorFingerprint(projectId, effectiveView, query);
+        ProjectWorkItemCursorCodec.Cursor decoded = projectCursors.decode(page.cursor());
+        if (decoded != null && (!decoded.fingerprint().equals(fingerprint)
+                || decoded.view() != effectiveView))
+            throw validation("cursor", "CURSOR_QUERY_MISMATCH", "游标不属于当前项目查询");
+        WorkItemRepository.ProjectCursorAnchor anchor = decoded == null ? null : decoded.anchor();
+        List<WorkItem> rows = new ArrayList<>(workItems.findProjectCursorPage(project.companyId(),
+                project.projectId(), query, ranks, effectiveView, anchor, page.limit() + 1));
+        boolean hasMore = rows.size() > page.limit();
+        if (hasMore) rows = new ArrayList<>(rows.subList(0, page.limit()));
+        Map<UUID, Content> contentById = new LinkedHashMap<>();
+        contents.findAll(project.companyId(), project.projectId())
+                .forEach(content -> contentById.put(content.id(), content));
+        Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), rows);
+        List<ProjectWorkItemListItem> items = rows.stream()
+                .map(item -> projectListItem(item, contentById.get(item.contentId()), people,
+                        canEdit(project, contentById.get(item.contentId())), template)).toList();
+        String nextCursor = hasMore && !rows.isEmpty()
+                ? projectCursors.encode(new ProjectWorkItemCursorCodec.Cursor(
+                        fingerprint, effectiveView,
+                        WorkItemRepository.ProjectCursorAnchor.from(rows.getLast()))) : null;
+        return new ProjectWorkItemCursorPage(items, nextCursor);
+    }
+
+    @Transactional(readOnly = true)
+    public ProjectWorkItemFilterOptionCursorPage listProjectFilterOptions(CurrentActor actor,
+            UUID projectId, String field, WorkItemQuery.Request request, CursorPageRequest page) {
+        requireActor(actor);
+        ProjectAccessSnapshot project = visible(actor, projectId);
+        ProjectTemplateSnapshot template = template(project.templateKey(), project.templateVersion());
+        Set<String> allowedStatuses = template.statuses().stream()
+                .map(ProjectTemplateSnapshot.WorkflowStatus::statusCode)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        WorkItemQuery query = WorkItemQuery.parse(request, allowedStatuses);
+        String normalizedField;
+        try {
+            normalizedField = Objects.requireNonNull(field).strip().toUpperCase(java.util.Locale.ROOT);
+            if (!Set.of("TITLE", "ASSIGNEE", "STATUS", "PRIORITY", "CONTENT",
+                    "DUE_DATE", "UPDATED_AT").contains(normalizedField)) throw new IllegalArgumentException();
+        } catch (RuntimeException exception) {
+            throw validation("field", "INVALID_VALUE", "筛选选项字段不受支持");
+        }
+        String fingerprint = projectCursorFingerprint(projectId, ContentViewType.TABLE, query)
+                + ":" + normalizedField;
+        ProjectWorkItemFilterCursorCodec.Cursor decoded = projectFilterCursors.decode(page.cursor());
+        if (decoded != null && (!decoded.fingerprint().equals(fingerprint)
+                || !decoded.field().equals(normalizedField)))
+            throw validation("cursor", "CURSOR_QUERY_MISMATCH", "筛选选项游标不属于当前查询");
+        List<WorkItemRepository.FilterOptionCount> rows = new ArrayList<>(
+                workItems.findProjectFilterOptions(project.companyId(), project.projectId(), query,
+                        normalizedField, decoded == null ? null : decoded.lastValue(), page.limit() + 1));
+        boolean hasMore = rows.size() > page.limit();
+        if (hasMore) rows = new ArrayList<>(rows.subList(0, page.limit()));
+        Map<UUID, String> contentNames = contents.findAll(project.companyId(), project.projectId())
+                .stream().collect(java.util.stream.Collectors.toMap(Content::id, Content::name));
+        Set<UUID> userIds = rows.stream().filter(row -> "ASSIGNEE".equals(normalizedField))
+                .map(WorkItemRepository.FilterOptionCount::value)
+                .filter(value -> !"__NULL__".equals(value)).map(UUID::fromString)
+                .collect(java.util.stream.Collectors.toSet());
+        Map<UUID, MinimalUserSnapshot> people = users.findByUserIds(project.companyId(), userIds);
+        Map<String, String> statusNames = template.statuses().stream().collect(
+                java.util.stream.Collectors.toMap(ProjectTemplateSnapshot.WorkflowStatus::statusCode,
+                        ProjectTemplateSnapshot.WorkflowStatus::displayName));
+        List<ProjectWorkItemFilterOption> items = rows.stream().map(row -> {
+            String label = switch (normalizedField) {
+                case "CONTENT" -> contentNames.getOrDefault(UUID.fromString(row.value()), row.value());
+                case "ASSIGNEE" -> "__NULL__".equals(row.value()) ? "未分配"
+                        : Optional.ofNullable(people.get(UUID.fromString(row.value())))
+                                .map(MinimalUserSnapshot::displayName).orElse("未知成员");
+                case "STATUS" -> statusNames.getOrDefault(row.value(), row.value());
+                case "PRIORITY", "DUE_DATE" -> "__NULL__".equals(row.value()) ? "未设置" : row.value();
+                default -> row.value();
+            };
+            return new ProjectWorkItemFilterOption(row.value(), label, row.count());
+        }).toList();
+        String nextCursor = hasMore && !rows.isEmpty() ? projectFilterCursors.encode(
+                new ProjectWorkItemFilterCursorCodec.Cursor(fingerprint, normalizedField,
+                        rows.getLast().value())) : null;
+        return new ProjectWorkItemFilterOptionCursorPage(items, nextCursor);
     }
 
     @Transactional(readOnly = true)
@@ -188,15 +298,23 @@ public class WorkItemService {
             workItems.lockRankLanes(content.id(), List.of(initial.statusCode()));
             String rank = allocateRank(project.companyId(), project.projectId(), content.id(),
                     initial.statusCode(), WorkItemRankPlacement.START, null, null).rank();
+            UUID workItemId = UUID.randomUUID();
+            workItems.lockProjectOrder(project.companyId(), project.projectId());
+            String projectSortKey = ProjectSortKey.between(null,
+                            workItems.findFirstProjectRank(project.companyId(), project.projectId(),
+                                    workItemId).map(RankedProjectWorkItem::rank).orElse(null))
+                    .orElseThrow(() -> ApplicationException.withReason(
+                            StandardErrorCode.INVALID_STATE_TRANSITION, "PROJECT_ORDER_DENSE"));
             long sequence = workItems.nextSequence(project.companyId(), project.projectId());
             WorkItem item;
             try {
-                item = WorkItem.create(UUID.randomUUID(), project.companyId(), project.projectId(),
+                item = WorkItem.create(workItemId, project.companyId(), project.projectId(),
                         content.id(), sequence, project.projectCode() + "-" + sequence,
                         content.workItemType(), command.title(), initial.statusCode(),
                         WorkItemStatusCategory.valueOf(initial.statusCategory()), priority,
                         command.assigneeUserId(), command.description(), command.notes(),
                         command.timelineStartDate(), command.timelineEndDate(), command.dueDate(), rank,
+                        projectSortKey,
                         command.actor().userId(), clock.instant());
             } catch (IllegalArgumentException exception) {
                 throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
@@ -308,6 +426,34 @@ public class WorkItemService {
                 command.requestHash()), () -> rankMove(command, locator));
     }
 
+    public IdempotencyExecutionResult projectOrderMove(ProjectOrderMove command) {
+        requireActor(command.actor());
+        if (command.previousVisibleWorkItemId() == null && command.nextVisibleWorkItemId() == null)
+            throw validation("body", "ORDER_ANCHOR_REQUIRED", "必须提供至少一个可见相邻工作项");
+        WorkItemLocator locator = workItems.findLocator(command.actor().companyId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        if (!locator.projectId().equals(command.projectId()))
+            throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+        ProjectAccessSnapshot project = visible(command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
+                command.actor().userId(), "POST", "moveProjectWorkItemOrder",
+                command.idempotencyKey()), command.requestHash()),
+                () -> projectOrderMove(command, locator));
+    }
+
+    public IdempotencyExecutionResult inlineUpdate(InlineUpdate command) {
+        requireActor(command.actor());
+        WorkItemLocator locator = workItems.findLocator(command.actor().companyId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        ProjectAccessSnapshot project = visible(command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
+                command.actor().userId(), "PATCH", "inlineUpdateWorkItem:" + command.field(),
+                command.idempotencyKey()), command.requestHash()),
+                () -> inlineUpdate(command, locator));
+    }
+
     public IdempotencyExecutionResult delete(Delete command) {
         requireActor(command.actor());
         WorkItemLocator locator = workItems.findLocatorIncludingDeleted(
@@ -382,9 +528,19 @@ public class WorkItemService {
         String rank = originalRankAvailable ? before.rank()
                 : allocateRank(project.companyId(), project.projectId(), content.id(),
                         before.statusCode(), WorkItemRankPlacement.START, null, null).rank();
+        workItems.lockProjectOrder(project.companyId(), project.projectId());
+        String projectSortKey = before.projectSortKey();
+        if (workItems.projectSortKeyOccupied(project.companyId(), project.projectId(),
+                projectSortKey, before.id())) {
+            projectSortKey = ProjectSortKey.between(null,
+                            workItems.findFirstProjectRank(project.companyId(), project.projectId(),
+                                    before.id()).map(RankedProjectWorkItem::rank).orElse(null))
+                    .orElseThrow(() -> ApplicationException.withReason(
+                            StandardErrorCode.INVALID_STATE_TRANSITION, "PROJECT_ORDER_DENSE"));
+        }
         WorkItem candidate;
         try {
-            candidate = before.restore(rank, command.actor().userId(), clock.instant());
+            candidate = before.restore(rank, projectSortKey, command.actor().userId(), clock.instant());
         } catch (IllegalArgumentException | IllegalStateException exception) {
             throw invalidLifecycle("WORK_ITEM_RESTORE_REJECTED");
         }
@@ -452,6 +608,149 @@ public class WorkItemService {
         return stored(200, detail(after, people(project.companyId(), List.of(after)), true, template));
     }
 
+    private StoredCommandResult projectOrderMove(ProjectOrderMove command,
+            WorkItemLocator locator) {
+        ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
+                command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        Content content = contents.lockForShare(project.companyId(), project.projectId(),
+                        locator.contentId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireActiveContent(content);
+        workItems.lockProjectOrder(project.companyId(), project.projectId());
+        WorkItem moving = workItems.lockProjectItem(project.companyId(), project.projectId(),
+                        command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(moving, command.expectedVersion());
+        if (Objects.equals(command.previousVisibleWorkItemId(), moving.id())
+                || Objects.equals(command.nextVisibleWorkItemId(), moving.id())
+                || Objects.equals(command.previousVisibleWorkItemId(),
+                        command.nextVisibleWorkItemId()))
+            throw invalidProjectOrderAnchor();
+        WorkItem previous = command.previousVisibleWorkItemId() == null ? null
+                : workItems.lockProjectItem(project.companyId(), project.projectId(),
+                                command.previousVisibleWorkItemId())
+                        .orElseThrow(WorkItemService::invalidProjectOrderAnchor);
+        WorkItem next = command.nextVisibleWorkItemId() == null ? null
+                : workItems.lockProjectItem(project.companyId(), project.projectId(),
+                                command.nextVisibleWorkItemId())
+                        .orElseThrow(WorkItemService::invalidProjectOrderAnchor);
+        if (previous != null && next != null
+                && previous.projectSortKey().compareTo(next.projectSortKey()) >= 0)
+            throw invalidProjectOrderAnchor();
+
+        String lower;
+        String upper;
+        if (previous != null) {
+            lower = previous.projectSortKey();
+            upper = workItems.findProjectNeighborAfter(project.companyId(), project.projectId(),
+                            lower, moving.id()).map(RankedProjectWorkItem::rank).orElse(null);
+        } else {
+            upper = next.projectSortKey();
+            lower = workItems.findProjectNeighborBefore(project.companyId(), project.projectId(),
+                            upper, moving.id()).map(RankedProjectWorkItem::rank).orElse(null);
+        }
+        Optional<String> allocated = ProjectSortKey.between(lower, upper);
+        if (allocated.isEmpty()) {
+            rebalanceProjectOrder(project.companyId(), project.projectId(), moving.id(),
+                    lower == null ? upper : lower);
+            if (previous != null) {
+                previous = workItems.lockProjectItem(project.companyId(), project.projectId(), previous.id())
+                        .orElseThrow(WorkItemService::invalidProjectOrderAnchor);
+                lower = previous.projectSortKey();
+                upper = workItems.findProjectNeighborAfter(project.companyId(), project.projectId(),
+                                lower, moving.id()).map(RankedProjectWorkItem::rank).orElse(null);
+            } else {
+                next = workItems.lockProjectItem(project.companyId(), project.projectId(), next.id())
+                        .orElseThrow(WorkItemService::invalidProjectOrderAnchor);
+                upper = next.projectSortKey();
+                lower = workItems.findProjectNeighborBefore(project.companyId(), project.projectId(),
+                                upper, moving.id()).map(RankedProjectWorkItem::rank).orElse(null);
+            }
+            allocated = ProjectSortKey.between(lower, upper);
+        }
+        String projectSortKey = allocated.orElseThrow(() -> ApplicationException.withReason(
+                StandardErrorCode.INVALID_STATE_TRANSITION, "PROJECT_ORDER_DENSE"));
+        WorkItem candidate;
+        try {
+            candidate = moving.reorderProject(projectSortKey, command.actor().userId());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "PROJECT_ORDER_MOVE_REJECTED");
+        }
+        WorkItem after = workItems.reorderProject(candidate, command.expectedVersion())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
+                template(project.templateKey(), project.templateVersion())));
+    }
+
+    private void rebalanceProjectOrder(UUID companyId, UUID projectId, UUID movingId,
+            String pivotKey) {
+        List<RankedProjectWorkItem> window = workItems.findProjectRankWindow(
+                companyId, projectId, pivotKey, movingId, 100);
+        if (window.isEmpty()) return;
+        String outsideLower = workItems.findProjectNeighborBefore(companyId, projectId,
+                        window.getFirst().rank(), movingId)
+                .filter(item -> window.stream().noneMatch(candidate -> candidate.id().equals(item.id())))
+                .map(RankedProjectWorkItem::rank).orElse(null);
+        String outsideUpper = workItems.findProjectNeighborAfter(companyId, projectId,
+                        window.getLast().rank(), movingId)
+                .filter(item -> window.stream().noneMatch(candidate -> candidate.id().equals(item.id())))
+                .map(RankedProjectWorkItem::rank).orElse(null);
+        Map<UUID, String> replacements = new LinkedHashMap<>();
+        for (int index = 0; index < window.size(); index++) {
+            String rank = ProjectSortKey.evenlySpacedBetween(outsideLower, outsideUpper,
+                            index + 1, window.size())
+                    .orElseThrow(() -> ApplicationException.withReason(
+                            StandardErrorCode.INVALID_STATE_TRANSITION, "PROJECT_ORDER_DENSE"));
+            replacements.put(window.get(index).id(), rank);
+        }
+        workItems.rewriteProjectSortKeys(companyId, projectId, replacements);
+    }
+
+    private StoredCommandResult inlineUpdate(InlineUpdate command, WorkItemLocator locator) {
+        ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
+                command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        Content content = contents.lockForShare(project.companyId(), project.projectId(),
+                        locator.contentId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireActiveContent(content);
+        WorkItem before = workItems.lock(project.companyId(), project.projectId(), content.id(),
+                        command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(before, command.expectedVersion());
+        if ("ASSIGNEE".equals(command.field()))
+            requireActiveAssignee(project, command.assigneeUserId());
+        WorkItem candidate;
+        try {
+            candidate = before.updateFields(before.title(),
+                    "PRIORITY".equals(command.field()) ? priority(command.priority()) : before.priority(),
+                    "ASSIGNEE".equals(command.field()) ? command.assigneeUserId() : before.assigneeUserId(),
+                    before.description(), before.notes(), before.timelineStartDate(),
+                    before.timelineEndDate(),
+                    "DUE_DATE".equals(command.field()) ? command.dueDate() : before.dueDate(),
+                    command.actor().userId(), clock.instant());
+        } catch (IllegalArgumentException exception) {
+            throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
+        }
+        List<String> changedFields = changed(before, candidate);
+        ProjectTemplateSnapshot template = template(project.templateKey(), project.templateVersion());
+        if (changedFields.isEmpty())
+            return stored(200, detail(before, people(project.companyId(), List.of(before)), true,
+                    template));
+        WorkItem after = workItems.update(candidate, command.expectedVersion())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        appendFieldsChanged(after, command.actor(), changedFields);
+        appendAssignmentChange(before, after, command.actor());
+        return stored(200, detail(after, people(project.companyId(), List.of(after)), true, template));
+    }
+
+    private static ApplicationException invalidProjectOrderAnchor() {
+        return ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
+                "PROJECT_ORDER_ANCHOR_CONFLICT");
+    }
+
     private VisibleContent visibleContent(CurrentActor actor, UUID contentId) {
         requireActor(actor);
         ContentModels.ContentLocator locator = contents.findLocator(actor.companyId(), contentId)
@@ -493,7 +792,9 @@ public class WorkItemService {
                 .anyMatch(sort -> sort.field() == ContentViewConfig.SortField.REPORTER);
         if (!assigneeSort && !reporterSort)
             return new WorkItemSortRanks(statusRanks, Map.of(), Map.of());
-        Set<UUID> participantIds = workItems.findParticipantUserIds(companyId, projectId, contentId);
+        Set<UUID> participantIds = contentId == null
+                ? workItems.findProjectParticipantUserIds(companyId, projectId)
+                : workItems.findParticipantUserIds(companyId, projectId, contentId);
         Map<UUID, MinimalUserSnapshot> snapshots = users.findByUserIds(companyId, participantIds);
         List<MinimalUserSnapshot> ordered = snapshots.values().stream()
                 .sorted(Comparator.comparing(MinimalUserSnapshot::displayName,
@@ -512,11 +813,25 @@ public class WorkItemService {
             ProjectTemplateSnapshot template) {
         return new WorkItemSummary(item.id(), item.projectId(), item.contentId(), item.itemNo(),
                 item.type().name(), item.title(), item.statusCode(), item.statusCategory().name(),
-                item.priority().name(), item.assigneeUserId(), assigneeDisplayName(item, people),
+                priorityName(item), item.assigneeUserId(), assigneeDisplayName(item, people),
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
                 item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
-                new WorkItemCapabilities(canEditFields, canEditFields, canEditFields, false,
+                new WorkItemCapabilities(canEditFields, canEditFields, canEditFields,
+                        canEditFields, canEditFields, false,
+                        availableTransitions(item, canEditFields, template)), item.updatedAt());
+    }
+
+    private static ProjectWorkItemListItem projectListItem(WorkItem item, Content content,
+            Map<UUID, MinimalUserSnapshot> people, boolean canEditFields,
+            ProjectTemplateSnapshot template) {
+        return new ProjectWorkItemListItem(item.id(), item.projectId(), item.contentId(),
+                content == null ? "未知 Content" : content.name(), item.itemNo(), item.type().name(),
+                item.title(), item.statusCode(), item.statusCategory().name(), priorityName(item),
+                item.assigneeUserId(), assigneeDisplayName(item, people), item.dueDate(),
+                item.rowVersion(), StrongEtag.format(item.rowVersion()),
+                new WorkItemCapabilities(canEditFields, canEditFields, canEditFields,
+                        canEditFields, canEditFields, false,
                         availableTransitions(item, canEditFields, template)), item.updatedAt());
     }
 
@@ -525,11 +840,12 @@ public class WorkItemService {
             ProjectTemplateSnapshot template) {
         return new WorkItemDetail(item.id(), item.projectId(), item.contentId(), item.itemNo(),
                 item.type().name(), item.title(), item.statusCode(), item.statusCategory().name(),
-                item.priority().name(), item.assigneeUserId(), assigneeDisplayName(item, people),
+                priorityName(item), item.assigneeUserId(), assigneeDisplayName(item, people),
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
                 item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
                 new WorkItemCapabilities(canEditFields && !item.deleted(),
+                        canEditFields && !item.deleted(), canEditFields && !item.deleted(),
                         canEditFields && !item.deleted(), canEditFields && !item.deleted(),
                         canEditFields && item.deleted(),
                         availableTransitions(item, canEditFields && !item.deleted(), template)),
@@ -552,6 +868,30 @@ public class WorkItemService {
                         entry.getValue().displayName(), entry.getValue().statusCategory(),
                         entry.getKey().requiresResolution()))
                 .toList();
+    }
+
+    private static String projectCursorFingerprint(UUID projectId, ContentViewType view,
+            WorkItemQuery query) {
+        String statuses = query.statuses().stream().sorted().collect(java.util.stream.Collectors.joining(","));
+        String priorities = query.priorities().stream().map(Enum::name).sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+        String assignees = query.assigneeUserIds().stream().map(UUID::toString).sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+        String contents = query.contentIds().stream().map(UUID::toString).sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+        String sorts = query.sorts().stream().map(sort -> sort.field().name() + ","
+                        + sort.direction().name()).collect(java.util.stream.Collectors.joining(";"));
+        String canonical = String.join("\n", projectId.toString(), view.name(),
+                Objects.toString(query.query(), ""), statuses, priorities, assignees, contents,
+                Objects.toString(query.dueFrom(), ""), Objects.toString(query.dueTo(), ""),
+                Objects.toString(query.updatedAfter(), ""), sorts);
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
     }
 
     private RankAllocation allocateRank(UUID companyId, UUID projectId, UUID contentId,
@@ -737,7 +1077,7 @@ public class WorkItemService {
         payload.put("workItemType", item.type().name());
         payload.put("statusCode", item.statusCode());
         payload.put("statusCategory", item.statusCategory().name());
-        payload.put("priority", item.priority().name());
+        payload.put("priority", priorityName(item));
         payload.put("rowVersion", item.rowVersion());
         return payload;
     }
@@ -752,7 +1092,7 @@ public class WorkItemService {
         payload.put("workItemType", item.type().name());
         payload.put("statusCode", item.statusCode());
         payload.put("statusCategory", item.statusCategory().name());
-        payload.put("priority", item.priority().name());
+        payload.put("priority", priorityName(item));
         payload.put("assigneeUserId", item.assigneeUserId());
         payload.put("timelineStartDate", item.timelineStartDate());
         payload.put("timelineEndDate", item.timelineEndDate());
@@ -802,16 +1142,21 @@ public class WorkItemService {
 
     private static boolean canEdit(ProjectAccessSnapshot project, Content content) {
         return project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
-                && content.status() == ContentStatus.ACTIVE
+                && content != null && content.status() == ContentStatus.ACTIVE
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
     }
 
     private static WorkItemPriority priority(String value) {
+        if (value == null) return null;
         try {
             return WorkItemPriority.valueOf(value);
         } catch (RuntimeException exception) {
             throw validation("priority", "INVALID_VALUE", "优先级无效");
         }
+    }
+
+    private static String priorityName(WorkItem item) {
+        return item.priority() == null ? null : item.priority().name();
     }
 
     private static ContentViewType view(String value) {

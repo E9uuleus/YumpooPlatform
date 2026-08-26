@@ -25,6 +25,7 @@ import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.Locale;
 
 @Repository
 public class JdbcProjectMembershipRepository implements ProjectMembershipRepository {
@@ -104,31 +105,41 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
 
     @Override
     public List<ProjectMembership> findPage(UUID companyId, UUID projectId,
-                                            ListStatus status, OffsetPageRequest page) {
+            ListStatus status, String query, OffsetPageRequest page) {
+        String normalized = normalizeQuery(query);
         return jdbcClient.sql("SELECT m.id, m.company_id, m.project_id, m.user_id, m.status, "
                         + "m.joined_at, m.joined_by_user_id, m.removed_at, m.removed_by_user_id, "
                         + "m.remove_reason, m.row_version FROM yumpoo.project_membership m "
                         + "JOIN yumpoo.project p ON p.id=m.project_id AND p.company_id=m.company_id "
+                        + "JOIN yumpoo.identity_user u ON u.id=m.user_id AND u.company_id=m.company_id "
                         + "WHERE m.company_id=:companyId AND m.project_id=:projectId "
                         + "AND (:allStatus OR m.status=:status) "
+                        + "AND (:noQuery OR lower(u.display_name) LIKE :query ESCAPE '\\') "
                         + "ORDER BY CASE WHEN m.user_id=p.owner_user_id THEN 0 WHEN m.status='ACTIVE' THEN 1 ELSE 2 END, "
                         + "CASE WHEN m.status='ACTIVE' THEN m.joined_at END, m.removed_at, m.id "
                         + "LIMIT :limit OFFSET :offset")
                 .param("companyId", companyId).param("projectId", projectId)
                 .param("allStatus", status == ListStatus.ALL)
                 .param("status", status == ListStatus.ALL ? "ACTIVE" : status.name())
+                .param("noQuery", normalized == null)
+                .param("query", normalized == null ? "" : "%" + escapeLike(normalized) + "%")
                 .param("limit", page.size()).param("offset", (long) page.page() * page.size())
                 .query(JdbcProjectMembershipRepository::map).list();
     }
 
     @Override
-    public long count(UUID companyId, UUID projectId, ListStatus status) {
-        return jdbcClient.sql("SELECT count(*) FROM yumpoo.project_membership "
-                        + "WHERE company_id=:companyId AND project_id=:projectId "
-                        + "AND (:allStatus OR status=:status)")
+    public long count(UUID companyId, UUID projectId, ListStatus status, String query) {
+        String normalized = normalizeQuery(query);
+        return jdbcClient.sql("SELECT count(*) FROM yumpoo.project_membership m "
+                        + "JOIN yumpoo.identity_user u ON u.id=m.user_id AND u.company_id=m.company_id "
+                        + "WHERE m.company_id=:companyId AND m.project_id=:projectId "
+                        + "AND (:allStatus OR m.status=:status) "
+                        + "AND (:noQuery OR lower(u.display_name) LIKE :query ESCAPE '\\')")
                 .param("companyId", companyId).param("projectId", projectId)
                 .param("allStatus", status == ListStatus.ALL)
                 .param("status", status == ListStatus.ALL ? "ACTIVE" : status.name())
+                .param("noQuery", normalized == null)
+                .param("query", normalized == null ? "" : "%" + escapeLike(normalized) + "%")
                 .query(Long.class).single();
     }
 
@@ -206,6 +217,14 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
 
     private static OffsetDateTime utc(Instant value) {
         return OffsetDateTime.ofInstant(value, ZoneOffset.UTC);
+    }
+
+    private static String normalizeQuery(String query) {
+        return query == null || query.isBlank() ? null : query.strip().toLowerCase(Locale.ROOT);
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 
     private static JdbcClient.StatementSpec nullable(
