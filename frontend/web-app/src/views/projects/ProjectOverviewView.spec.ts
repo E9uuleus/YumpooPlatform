@@ -725,7 +725,7 @@ describe('项目级工作项首页', () => {
     const preview = view.createTableDragPreview(source, 150, 220)
 
     expect(preview.classList.contains('work-item-drag-preview')).toBe(true)
-    expect(preview.style.transform).toBe('rotate(4deg)')
+    expect(preview.style.transform).toBe('rotate(2deg)')
     expect(preview.style.transformOrigin).toBe('50px 20px')
     expect(preview.style.left).toBe('100px')
     expect(preview.style.top).toBe('200px')

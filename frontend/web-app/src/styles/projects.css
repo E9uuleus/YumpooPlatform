@@ -1288,3 +1288,28 @@
     padding: 0;
   }
 }
+
+/* 状态与优先级现代弹窗容器 */
+.el-popover.work-items-label-popover {
+  padding: 0 !important;
+  min-width: unset !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--yp-border-subtle, #e6e9ef) !important;
+  background: var(--yp-bg-surface, #ffffff) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.12) !important;
+  overflow: visible !important;
+}
+
+.el-popover.color-picker-popover {
+  padding: 6px !important;
+  min-width: unset !important;
+  border-radius: 6px !important;
+  border: 1px solid var(--yp-border-subtle, #e6e9ef) !important;
+  background: var(--yp-bg-surface, #ffffff) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+}
+
+.el-dropdown__popper .label-more-dropdown-menu {
+  padding: 4px !important;
+  border-radius: 6px !important;
+}

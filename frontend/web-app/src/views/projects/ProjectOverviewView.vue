@@ -42,7 +42,7 @@ import InlineProblem from '../../components/InlineProblem.vue'
 import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
 import LazyAttachmentPanel from '../../components/collaboration/LazyAttachmentPanel.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
-import WorkItemLabelEditor from '../../components/projects/WorkItemLabelEditor.vue'
+import WorkItemLabelPopoverContent from '../../components/projects/WorkItemLabelPopoverContent.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 
@@ -53,6 +53,10 @@ interface KanbanLane {
   nextCursor: string | null
   loading: boolean
   error?: ApiProblem
+}
+
+interface LabelPopoverContentHandle {
+  resetEditor: () => void
 }
 
 const route = useRoute()
@@ -82,8 +86,6 @@ const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
 const detailTab = ref<'details' | 'discussion'>('details')
-const labelEditorOpen = ref(false)
-const labelEditorKind = ref<'status' | 'priority'>('status')
 const dragging = ref<ProjectWorkItemListItem>()
 const tableDragging = ref<ProjectWorkItemListItem>()
 const tableDraggingIndex = ref<number>(-1)
@@ -108,6 +110,7 @@ const assigneeSearch = ref('')
 const assigneeMatches = ref<ProjectMember[]>()
 const filterOptionCounts = ref(new Map<string, number>())
 const filterOptionsLoading = ref(false)
+const labelPopoverContentRefs = new Map<string, LabelPopoverContentHandle>()
 const searchExpanded = ref(Boolean(route.query.q))
 const searchInput = ref(String(route.query.q ?? ''))
 const filters = reactive({
@@ -185,6 +188,36 @@ function contentName(contentId: string): string {
 
 function statusLabel(statusCode: string): string {
   return workflowStatuses.value.find(item => item.statusCode === statusCode)?.displayName ?? statusCode
+}
+
+const labelColorValues: Record<string, string> = {
+  GREEN: 'var(--yp-label-green)',
+  TEAL: 'var(--yp-label-teal)',
+  BLUE: 'var(--yp-label-blue)',
+  INDIGO: 'var(--yp-label-indigo)',
+  PURPLE: 'var(--yp-label-purple)',
+  MAGENTA: 'var(--yp-label-magenta)',
+  RED: 'var(--yp-label-red)',
+  ORANGE: 'var(--yp-label-orange)',
+  AMBER: 'var(--yp-label-amber)',
+  LIME: 'var(--yp-label-lime)',
+  CYAN: 'var(--yp-label-cyan)',
+  GRAY: 'var(--yp-label-gray)',
+}
+
+function labelCellStyle(colorToken?: string): CSSProperties {
+  return {
+    ...(colorToken ? { backgroundColor: labelColorValues[colorToken] ?? 'var(--yp-label-gray)' } : {}),
+    color: 'var(--yp-text-inverse)',
+  }
+}
+
+function getStatusCellStyle(statusCode: string): CSSProperties {
+  return labelCellStyle(workflowStatuses.value.find(item => item.statusCode === statusCode)?.colorToken)
+}
+
+function getPriorityCellStyle(priority: string | null): CSSProperties {
+  return labelCellStyle(priorityOptions.value.find(item => item.code === priority)?.colorToken)
 }
 
 function getStatusTone(statusCode: string): string {
@@ -618,15 +651,22 @@ function onDetailModelValue(value: boolean): void {
   if (!value) void closeDetailRoute()
 }
 
-function openLabelEditor(kind: 'status' | 'priority'): void {
-  if (!labelCatalog.value?.canManage) return
-  labelEditorKind.value = kind
-  labelEditorOpen.value = true
-}
-
 function onLabelsUpdated(next: WorkItemLabelCatalog): void {
   labelCatalog.value = next
-  void refreshCurrentView()
+}
+
+function labelPopoverKey(itemId: string, kind: 'status' | 'priority'): string {
+  return `${itemId}:${kind}`
+}
+
+function setLabelPopoverContentRef(key: string, value: unknown): void {
+  const instance = value as LabelPopoverContentHandle | null
+  if (instance?.resetEditor) labelPopoverContentRefs.set(key, instance)
+  else labelPopoverContentRefs.delete(key)
+}
+
+function resetLabelPopoverContent(itemId: string, kind: 'status' | 'priority'): void {
+  labelPopoverContentRefs.get(labelPopoverKey(itemId, kind))?.resetEditor()
 }
 
 function transitionFor(item: ProjectWorkItemListItem, statusCode: string): WorkItemTransitionOption | undefined {
@@ -756,7 +796,7 @@ function toggleColumn(key: ColumnKey, checked: boolean): void {
 }
 
 const TABLE_ROW_HEIGHT = 40
-const TABLE_DRAG_TILT_DEGREES = 4
+const TABLE_DRAG_TILT_DEGREES = 2
 const TABLE_DRAG_POINTER_THRESHOLD = 5
 
 function removeTableDragPreview(): void {
@@ -1389,23 +1429,35 @@ onBeforeUnmount(() => {
                 resizable
               >
                 <template #default="scope">
-                  <el-popover placement="bottom" :width="220" trigger="click" popper-class="work-items-popover status-popover">
+                  <el-popover
+                    placement="bottom"
+                    width="auto"
+                    trigger="click"
+                    popper-class="work-items-label-popover status-popover"
+                    @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'status')"
+                  >
                     <template #reference>
-                      <button class="monday-status-cell status-chip cell-editor-trigger" :class="`monday-status-cell--${getStatusTone((scope.row as ProjectWorkItemListItem).statusCode)}`" :disabled="Boolean(editingCell)">
+                      <button
+                        class="monday-status-cell status-chip cell-editor-trigger"
+                        :class="`monday-status-cell--${getStatusTone((scope.row as ProjectWorkItemListItem).statusCode)}`"
+                        :style="getStatusCellStyle((scope.row as ProjectWorkItemListItem).statusCode)"
+                        :disabled="Boolean(editingCell)"
+                      >
                         <span>{{ statusLabel((scope.row as ProjectWorkItemListItem).statusCode) }}</span>
                       </button>
                     </template>
-                    <div class="label-options">
-                      <button
-                        v-for="status in workflowStatuses.filter(item => item.active || item.statusCode === (scope.row as ProjectWorkItemListItem).statusCode)"
-                        :key="status.statusCode"
-                        class="status-option"
-                        :class="`monday-status-cell--${getStatusTone(status.statusCode)}`"
-                        :disabled="status.statusCode !== (scope.row as ProjectWorkItemListItem).statusCode && !transitionFor(scope.row as ProjectWorkItemListItem, status.statusCode)"
-                        @click="transitionItem(scope.row as ProjectWorkItemListItem, status.statusCode)"
-                      >{{ status.displayName }}</button>
-                      <button v-if="labelCatalog?.canManage" class="edit-labels-button" @click="openLabelEditor('status')">✎ 编辑标签</button>
-                    </div>
+                    <work-item-label-popover-content
+                      :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'status'), element)"
+                      kind="status"
+                      :project-id="projectId"
+                      :catalog="labelCatalog"
+                      :workflow-statuses="workflowStatuses.filter(item => item.active || item.statusCode === (scope.row as ProjectWorkItemListItem).statusCode)"
+                      :current-value="(scope.row as ProjectWorkItemListItem).statusCode"
+                      :can-manage="Boolean(labelCatalog?.canManage)"
+                      :available-transitions="(scope.row as ProjectWorkItemListItem).capabilities.availableTransitions"
+                      @select-status="transitionItem(scope.row as ProjectWorkItemListItem, $event)"
+                      @updated="onLabelsUpdated"
+                    />
                   </el-popover>
                 </template>
               </el-table-column>
@@ -1419,17 +1471,34 @@ onBeforeUnmount(() => {
                 resizable
               >
                 <template #default="scope">
-                  <el-popover placement="bottom" :width="220" trigger="click" popper-class="work-items-popover priority-popover">
+                  <el-popover
+                    placement="bottom"
+                    width="auto"
+                    trigger="click"
+                    popper-class="work-items-label-popover priority-popover"
+                    @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'priority')"
+                  >
                     <template #reference>
-                      <button class="monday-priority-cell cell-editor-trigger" :class="`monday-priority-cell--${getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).tone}`" :disabled="Boolean(editingCell)">
+                      <button
+                        class="monday-priority-cell cell-editor-trigger"
+                        :class="`monday-priority-cell--${getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).tone}`"
+                        :style="getPriorityCellStyle((scope.row as ProjectWorkItemListItem).priority)"
+                        :disabled="Boolean(editingCell)"
+                      >
                         <span>{{ getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).label }}</span>
                       </button>
                     </template>
-                    <div class="label-options">
-                      <button v-for="priority in priorityOptions.filter(item => item.active)" :key="priority.code" class="priority-option" :class="`monday-priority-cell--${getPriorityPresentation(priority.code).tone}`" @click="patchCell(scope.row as ProjectWorkItemListItem, 'priority', priority.code)">{{ priority.displayName }}</button>
-                      <button class="priority-option monday-priority-cell--empty" @click="patchCell(scope.row as ProjectWorkItemListItem, 'priority', null)">清空</button>
-                      <button v-if="labelCatalog?.canManage" class="edit-labels-button" @click="openLabelEditor('priority')">✎ 编辑标签</button>
-                    </div>
+                    <work-item-label-popover-content
+                      :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'priority'), element)"
+                      kind="priority"
+                      :project-id="projectId"
+                      :catalog="labelCatalog"
+                      :priority-options="priorityOptions.filter(item => item.active)"
+                      :current-value="(scope.row as ProjectWorkItemListItem).priority"
+                      :can-manage="Boolean(labelCatalog?.canManage)"
+                      @select-priority="patchCell(scope.row as ProjectWorkItemListItem, 'priority', $event)"
+                      @updated="onLabelsUpdated"
+                    />
                   </el-popover>
                 </template>
               </el-table-column>
@@ -1660,14 +1729,6 @@ onBeforeUnmount(() => {
         </template>
       </div>
     </el-drawer>
-    <work-item-label-editor
-      v-if="labelCatalog"
-      v-model="labelEditorOpen"
-      :project-id="projectId"
-      :kind="labelEditorKind"
-      :catalog="labelCatalog"
-      @updated="onLabelsUpdated"
-    />
   </div>
 </template>
 
@@ -1961,6 +2022,9 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  min-height: var(--yp-table-row-height);
+  box-sizing: border-box;
 }
 
 /* 状态色块与优先级色块基础样式 */
