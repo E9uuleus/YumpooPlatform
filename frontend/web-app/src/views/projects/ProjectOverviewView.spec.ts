@@ -246,12 +246,12 @@ describe('项目级工作项首页', () => {
       tableDragging: ProjectWorkItemListItem | undefined
       tableDropIndex: number | undefined
       tableItems: ProjectWorkItemListItem[]
-      onTableDrop: (event: DragEvent) => Promise<void>
+      commitTableDrop: () => Promise<void>
     }
     view.tableDragging = moved
     view.tableDropIndex = 1
 
-    await view.onTableDrop(new Event('drop') as DragEvent)
+    await view.commitTableDrop()
 
     expect(state.moveProjectWorkItemOrder).toHaveBeenNthCalledWith(1, expect.objectContaining({
       workItemId: 'item-3', ifMatch: '"1"',
@@ -264,7 +264,7 @@ describe('项目级工作项首页', () => {
 
     view.tableDragging = view.tableItems.find(candidate => candidate.id === 'item-3')
     view.tableDropIndex = 3
-    await view.onTableDrop(new Event('drop') as DragEvent)
+    await view.commitTableDrop()
 
     expect(state.moveProjectWorkItemOrder).toHaveBeenNthCalledWith(2, expect.objectContaining({
       workItemId: 'item-3', ifMatch: '"2"',
@@ -533,5 +533,153 @@ describe('项目级工作项首页', () => {
       workItemTransitionRequest: { toStatus: 'DONE', resolution: '验收完成' },
     }))
     expect(state.listProjectWorkItems.mock.calls.length).toBeGreaterThan(callsBeforeDrop)
+  })
+
+  it('表格拖拽时隐藏源行并动态计算其余行的占位位移', async () => {
+    const first = { ...item('item-1'), title: '第一项' }
+    const second = { ...item('item-2'), title: '第二项' }
+    const third = { ...item('item-3'), title: '第三项' }
+    state.listProjectWorkItems.mockResolvedValue(page([first, second, third]))
+    const wrapper = mountView()
+    await flushPromises()
+
+    const view = wrapper.vm as unknown as {
+      tableDragging: ProjectWorkItemListItem | undefined
+      tableDraggingIndex: number
+      tableDropIndex: number | undefined
+      tableRowStyle: ({ row, rowIndex }: { row: ProjectWorkItemListItem; rowIndex: number }) => Record<string, string | number>
+      tableRowClassName: ({ row, rowIndex }: { row: ProjectWorkItemListItem; rowIndex: number }) => string
+      resetTableDragState: () => void
+    }
+
+    expect(view.tableRowStyle({ row: first, rowIndex: 0 })).toEqual({})
+    expect(view.tableRowClassName({ row: first, rowIndex: 0 })).toBe('work-item-table-row work-item-table-row--movable')
+
+    // 模拟向下拖动：从 index 0 拖至 index 2
+    view.tableDragging = first
+    view.tableDraggingIndex = 0
+    view.tableDropIndex = 2
+
+    expect(view.tableRowClassName({ row: first, rowIndex: 0 })).toContain('work-item-table-row--dragging')
+    expect(view.tableRowStyle({ row: first, rowIndex: 0 })).toEqual({ opacity: 0, pointerEvents: 'none' })
+    expect(view.tableRowStyle({ row: second, rowIndex: 1 })).toEqual({ transform: 'translateY(-40px)' })
+    expect(view.tableRowStyle({ row: third, rowIndex: 2 })).toEqual({ transform: 'translateY(0px)' })
+
+    // 模拟向上拖动：从 index 2 拖至 index 0
+    view.tableDragging = third
+    view.tableDraggingIndex = 2
+    view.tableDropIndex = 0
+
+    expect(view.tableRowStyle({ row: first, rowIndex: 0 })).toEqual({ transform: 'translateY(40px)' })
+    expect(view.tableRowStyle({ row: second, rowIndex: 1 })).toEqual({ transform: 'translateY(40px)' })
+    expect(view.tableRowStyle({ row: third, rowIndex: 2 })).toEqual({ opacity: 0, pointerEvents: 'none' })
+
+    // 结束拖拽重置
+    view.resetTableDragState()
+    expect(view.tableDragging).toBeUndefined()
+    expect(view.tableDraggingIndex).toBe(-1)
+    expect(view.tableDropIndex).toBeUndefined()
+    expect(view.tableRowStyle({ row: first, rowIndex: 0 })).toEqual({})
+  })
+
+  it('从行内按钮移动超过阈值后启动整行指针拖拽，并拦截随后的点击', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as {
+      tableDragging: ProjectWorkItemListItem | undefined
+      tableDraggingIndex: number
+      tableDropIndex: number | undefined
+      onTablePointerDown: (event: PointerEvent) => void
+      onTablePointerMove: (event: PointerEvent) => void
+      onTablePointerUp: (event: PointerEvent) => void
+      onTableClickCapture: (event: MouseEvent) => void
+    }
+    const titleButton = wrapper.find('.work-item-link').element
+
+    view.onTablePointerDown({
+      isPrimary: true, button: 0, pointerId: 7, clientX: 120, clientY: 220, target: titleButton,
+    } as unknown as PointerEvent)
+    view.onTablePointerMove({
+      pointerId: 7, clientX: 123, clientY: 223, preventDefault: vi.fn(),
+    } as unknown as PointerEvent)
+    expect(view.tableDragging).toBeUndefined()
+
+    const movePreventDefault = vi.fn()
+    view.onTablePointerMove({
+      pointerId: 7, clientX: 135, clientY: 235, preventDefault: movePreventDefault,
+    } as unknown as PointerEvent)
+    expect(movePreventDefault).toHaveBeenCalledOnce()
+    expect(view.tableDragging?.id).toBe('item-1')
+    expect(view.tableDraggingIndex).toBe(0)
+    expect(view.tableDropIndex).toBe(0)
+    expect(document.querySelector('.work-item-drag-preview')).not.toBeNull()
+
+    const pointerUpPreventDefault = vi.fn()
+    const pointerUpStopPropagation = vi.fn()
+    view.onTablePointerUp({
+      pointerId: 7,
+      preventDefault: pointerUpPreventDefault,
+      stopPropagation: pointerUpStopPropagation,
+    } as unknown as PointerEvent)
+    expect(pointerUpPreventDefault).toHaveBeenCalledOnce()
+    expect(pointerUpStopPropagation).toHaveBeenCalledOnce()
+    expect(view.tableDragging).toBeUndefined()
+    expect(document.querySelector('.work-item-drag-preview')).toBeNull()
+
+    const clickPreventDefault = vi.fn()
+    const clickStopPropagation = vi.fn()
+    view.onTableClickCapture({
+      preventDefault: clickPreventDefault,
+      stopPropagation: clickStopPropagation,
+    } as unknown as MouseEvent)
+    expect(clickPreventDefault).toHaveBeenCalledOnce()
+    expect(clickStopPropagation).toHaveBeenCalledOnce()
+  })
+
+  it('创建完整的 15 度灰阶拖拽浮层并锚定抓取点跟随鼠标', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as {
+      createTableDragPreview: (source: HTMLElement, clientX: number, clientY: number) => HTMLElement
+      moveTableDragPreview: (clientX: number, clientY: number) => void
+      resetTableDragState: () => void
+    }
+    const sourceTable = document.createElement('table')
+    const sourceBody = document.createElement('tbody')
+    const source = document.createElement('tr')
+    source.innerHTML = '<td id="drag-cell"><button tabindex="0">工作项</button></td><td>状态</td><td>负责人</td>'
+    sourceBody.appendChild(source)
+    sourceTable.appendChild(sourceBody)
+    document.body.appendChild(sourceTable)
+    vi.spyOn(source, 'getBoundingClientRect').mockReturnValue({
+      x: 100, y: 200, left: 100, top: 200, right: 700, bottom: 240,
+      width: 600, height: 40, toJSON: () => ({}),
+    } as DOMRect)
+    const widths = [260, 170, 170]
+    source.querySelectorAll('td').forEach((cell, index) => {
+      vi.spyOn(cell, 'getBoundingClientRect').mockReturnValue({
+        x: 0, y: 0, left: 0, top: 0, right: widths[index]!, bottom: 40,
+        width: widths[index]!, height: 40, toJSON: () => ({}),
+      } as DOMRect)
+    })
+
+    const preview = view.createTableDragPreview(source, 150, 220)
+
+    expect(preview.classList.contains('work-item-drag-preview')).toBe(true)
+    expect(preview.style.transform).toBe('rotate(15deg)')
+    expect(preview.style.transformOrigin).toBe('50px 20px')
+    expect(preview.style.left).toBe('100px')
+    expect(preview.style.top).toBe('200px')
+    expect(preview.querySelectorAll('td')).toHaveLength(3)
+    expect((preview.querySelectorAll('td')[0] as HTMLElement).style.width).toBe('260px')
+    expect(preview.querySelector('[id]')).toBeNull()
+    expect((preview.querySelector('button') as HTMLButtonElement).tabIndex).toBe(-1)
+
+    view.moveTableDragPreview(260, 300)
+    expect(preview.style.left).toBe('210px')
+    expect(preview.style.top).toBe('280px')
+    view.resetTableDragState()
+    expect(document.body.contains(preview)).toBe(false)
+    sourceTable.remove()
   })
 })

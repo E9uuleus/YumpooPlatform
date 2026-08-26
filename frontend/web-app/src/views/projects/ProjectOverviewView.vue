@@ -34,7 +34,7 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type DefineComponent } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type CSSProperties, type DefineComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
@@ -82,9 +82,22 @@ const detail = ref<WorkItemDetail>()
 const detailTab = ref<'details' | 'discussion'>('details')
 const dragging = ref<ProjectWorkItemListItem>()
 const tableDragging = ref<ProjectWorkItemListItem>()
+const tableDraggingIndex = ref<number>(-1)
 const tableDropIndex = ref<number>()
 const tableRef = ref<{ $el: HTMLElement }>()
 const tableSentinel = ref<HTMLElement>()
+let tableDragPreview: HTMLElement | undefined
+let tableDragPointerOffset = { x: 0, y: 0 }
+let tablePointerCandidate: {
+  pointerId: number
+  row: HTMLElement
+  item: ProjectWorkItemListItem
+  index: number
+  startX: number
+  startY: number
+} | undefined
+let suppressTableClick = false
+let suppressTableClickTimer: number | undefined
 const loadingMoreError = ref<ApiProblem>()
 const editingCell = ref('')
 const assigneeSearch = ref('')
@@ -384,7 +397,7 @@ async function loadTable(cursor: string | null = null, append = false, revision 
     const merged = append ? [...tableItems.value, ...result.items] : result.items
     tableItems.value = [...new Map(merged.map(item => [item.id, item])).values()]
     tableNextCursor.value = result.nextCursor
-    await nextTick(markDraggableRows)
+    await nextTick()
   } catch (reason) {
     if (revision === loadRevision) {
       const problem = await toApiProblem(reason)
@@ -688,17 +701,109 @@ function toggleColumn(key: ColumnKey, checked: boolean): void {
   persistTablePrefs()
 }
 
-function markDraggableRows(): void {
-  const rows = tableRef.value?.$el?.querySelectorAll('.el-table__body-wrapper tbody tr') as NodeListOf<HTMLElement> | undefined
-  rows?.forEach((row, index) => { row.draggable = Boolean(tableItems.value[index]?.capabilities.canMoveInProjectOrder) })
+const TABLE_ROW_HEIGHT = 40
+const TABLE_DRAG_TILT_DEGREES = 15
+const TABLE_DRAG_POINTER_THRESHOLD = 5
+
+function removeTableDragPreview(): void {
+  tableDragPreview?.remove()
+  tableDragPreview = undefined
+  tableDragPointerOffset = { x: 0, y: 0 }
 }
 
-function tableRowClassName({ rowIndex }: { rowIndex: number }): string {
+function moveTableDragPreview(clientX: number, clientY: number): void {
+  if (!tableDragPreview || (clientX === 0 && clientY === 0)) return
+  tableDragPreview.style.left = `${Math.round(clientX - tableDragPointerOffset.x)}px`
+  tableDragPreview.style.top = `${Math.round(clientY - tableDragPointerOffset.y)}px`
+}
+
+function createTableDragPreview(source: HTMLElement, clientX: number, clientY: number): HTMLElement {
+  removeTableDragPreview()
+  const rect = source.getBoundingClientRect()
+  const width = Math.max(rect.width, source.offsetWidth, 1)
+  const height = Math.max(rect.height, source.offsetHeight, TABLE_ROW_HEIGHT)
+  tableDragPointerOffset = {
+    x: Math.min(Math.max(clientX - rect.left, 0), width),
+    y: Math.min(Math.max(clientY - rect.top, 0), height),
+  }
+
+  const preview = document.createElement('div')
+  preview.className = 'work-item-drag-preview'
+  preview.setAttribute('aria-hidden', 'true')
+  preview.style.width = `${width}px`
+  preview.style.height = `${height}px`
+  preview.style.transform = `rotate(${TABLE_DRAG_TILT_DEGREES}deg)`
+  preview.style.transformOrigin = `${tableDragPointerOffset.x}px ${tableDragPointerOffset.y}px`
+
+  const previewTable = document.createElement('table')
+  previewTable.className = 'work-item-drag-preview__table'
+  previewTable.style.width = `${width}px`
+  const previewBody = document.createElement('tbody')
+  const previewRow = source.cloneNode(true) as HTMLTableRowElement
+  previewRow.classList.remove('work-item-table-row--dragging')
+  previewRow.classList.add('work-item-drag-preview__row')
+  previewRow.removeAttribute('draggable')
+  previewRow.removeAttribute('style')
+  previewRow.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'))
+  previewRow.querySelectorAll<HTMLElement>('button,input,select,textarea,[tabindex]').forEach(element => {
+    element.tabIndex = -1
+  })
+
+  const sourceCells = source.querySelectorAll('td')
+  const previewCells = previewRow.querySelectorAll<HTMLElement>('td')
+  sourceCells.forEach((cell, index) => {
+    const previewCell = previewCells[index]
+    if (!previewCell) return
+    const cellWidth = cell.getBoundingClientRect().width
+    previewCell.style.width = `${cellWidth}px`
+    previewCell.style.minWidth = `${cellWidth}px`
+    previewCell.style.maxWidth = `${cellWidth}px`
+    previewCell.style.boxSizing = 'border-box'
+  })
+
+  previewBody.appendChild(previewRow)
+  previewTable.appendChild(previewBody)
+  preview.appendChild(previewTable)
+  document.body.appendChild(preview)
+  tableDragPreview = preview
+  moveTableDragPreview(clientX, clientY)
+  return preview
+}
+
+function resetTableDragState(): void {
+  removeTableDragPreview()
+  tableDragging.value = undefined
+  tableDraggingIndex.value = -1
+  tableDropIndex.value = undefined
+}
+
+function tableRowClassName({ row }: { row: ProjectWorkItemListItem; rowIndex: number }): string {
   const classes = ['work-item-table-row']
-  if (tableDropIndex.value === rowIndex) classes.push('work-item-table-row--drop-before')
-  if (tableDropIndex.value === tableItems.value.length && rowIndex === tableItems.value.length - 1)
-    classes.push('work-item-table-row--drop-after')
+  if (row.capabilities.canMoveInProjectOrder) classes.push('work-item-table-row--movable')
+  if (tableDragging.value?.id === row.id) classes.push('work-item-table-row--dragging')
   return classes.join(' ')
+}
+
+function tableRowStyle({ rowIndex }: { row: ProjectWorkItemListItem; rowIndex: number }): CSSProperties {
+  if (!tableDragging.value || tableDraggingIndex.value < 0 || tableDropIndex.value === undefined) {
+    return {}
+  }
+  const from = tableDraggingIndex.value
+  const to = tableDropIndex.value
+  let offset = 0
+
+  if (rowIndex === from) {
+    return { opacity: 0, pointerEvents: 'none' }
+  } else if (from < to && rowIndex > from && rowIndex < to) {
+    offset = -TABLE_ROW_HEIGHT
+  } else if (from > to && rowIndex >= to && rowIndex < from) {
+    offset = TABLE_ROW_HEIGHT
+  }
+
+  if (offset === 0) {
+    return { transform: 'translateY(0px)' }
+  }
+  return { transform: `translateY(${offset}px)` }
 }
 
 function captureTablePositions(): Map<string, number> {
@@ -721,55 +826,128 @@ function animateTableReorder(previous: Map<string, number>): void {
   })
 }
 
-function rowIndexFromEvent(event: DragEvent): number {
-  const row = (event.target as HTMLElement | null)?.closest('tbody tr')
+function rowIndexFromTarget(target: EventTarget | null): number {
+  const row = (target as HTMLElement | null)?.closest('.el-table__body-wrapper tbody tr')
   if (!row) return -1
   return [...row.parentElement!.children].indexOf(row)
 }
 
-function onTableDragStart(event: DragEvent): void {
-  if ((event.target as HTMLElement | null)?.closest('button,input,.el-input,.el-select,.el-popover')) { event.preventDefault(); return }
-  if (hasExplicitSort.value) {
-    event.preventDefault(); sortRules.value = []; void syncUrl(); ElMessage.info('已清除排序，请在列表恢复手工顺序后再次拖动。'); return
-  }
-  const index = rowIndexFromEvent(event)
-  const item = tableItems.value[index]
-  if (!item?.capabilities.canMoveInProjectOrder) { event.preventDefault(); return }
-  tableDragging.value = item
-  event.dataTransfer?.setData('text/plain', item.id)
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    const source = (event.target as HTMLElement).closest('tbody tr') as HTMLElement | null
-    if (source) {
-      const ghost = source.cloneNode(true) as HTMLElement
-      ghost.className = `${source.className} work-item-drag-ghost`
-      ghost.style.width = `${source.getBoundingClientRect().width}px`
-      document.body.appendChild(ghost)
-      event.dataTransfer.setDragImage(ghost, 24, 18)
-      window.setTimeout(() => ghost.remove())
+function clearTablePointerTracking(): void {
+  tablePointerCandidate = undefined
+  window.removeEventListener('pointermove', onTablePointerMove, true)
+  window.removeEventListener('pointerup', onTablePointerUp, true)
+  window.removeEventListener('pointercancel', onTablePointerCancel, true)
+}
+
+function suppressClickAfterTableDrag(): void {
+  suppressTableClick = true
+  if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
+  suppressTableClickTimer = window.setTimeout(() => {
+    suppressTableClick = false
+    suppressTableClickTimer = undefined
+  }, 50)
+}
+
+function onTableClickCapture(event: MouseEvent): void {
+  if (!suppressTableClick) return
+  event.preventDefault()
+  event.stopPropagation()
+  suppressTableClick = false
+  if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
+  suppressTableClickTimer = undefined
+}
+
+function updateTableDropTarget(clientY: number): void {
+  const bodyWrapper = tableRef.value?.$el?.querySelector('.el-table__body-wrapper') as HTMLElement | null
+  if (bodyWrapper && bodyWrapper.getBoundingClientRect().height > 0) {
+    const rect = bodyWrapper.getBoundingClientRect()
+    const relativeY = clientY - rect.top + bodyWrapper.scrollTop
+    const target = Math.max(0, Math.min(tableItems.value.length, Math.round(relativeY / TABLE_ROW_HEIGHT)))
+    if (tableDropIndex.value !== target) {
+      tableDropIndex.value = target
     }
   }
-}
-
-function onTableDragOver(event: DragEvent): void {
-  if (!tableDragging.value) return
-  const index = rowIndexFromEvent(event)
-  if (index >= 0) {
-    const row = (event.target as HTMLElement).closest('tbody tr')!
-    const rect = row.getBoundingClientRect()
-    tableDropIndex.value = index + (event.clientY > rect.top + rect.height / 2 ? 1 : 0)
-  }
-  if (event.clientY >= window.innerHeight - 48) {
+  if (clientY >= window.innerHeight - 48) {
     window.scrollBy({ top: 28, behavior: 'smooth' })
     if (tableNextCursor.value && !tableLoading.value) void loadTable(tableNextCursor.value, true)
+  } else if (clientY <= 48) {
+    window.scrollBy({ top: -28, behavior: 'smooth' })
   }
 }
 
-async function onTableDrop(event: DragEvent): Promise<void> {
+function onTablePointerDown(event: PointerEvent): void {
+  if (!event.isPrimary || event.button !== 0 || tableDragging.value) return
+  const index = rowIndexFromTarget(event.target)
+  const item = tableItems.value[index]
+  const row = (event.target as HTMLElement | null)?.closest('.el-table__body-wrapper tbody tr') as HTMLElement | null
+  if (!row || !item?.capabilities.canMoveInProjectOrder) return
+
+  clearTablePointerTracking()
+  tablePointerCandidate = {
+    pointerId: event.pointerId,
+    row,
+    item,
+    index,
+    startX: event.clientX,
+    startY: event.clientY,
+  }
+  window.addEventListener('pointermove', onTablePointerMove, { capture: true, passive: false })
+  window.addEventListener('pointerup', onTablePointerUp, true)
+  window.addEventListener('pointercancel', onTablePointerCancel, true)
+}
+
+function onTablePointerMove(event: PointerEvent): void {
+  const candidate = tablePointerCandidate
+  if (!candidate || candidate.pointerId !== event.pointerId) return
+
+  if (!tableDragging.value) {
+    const distance = Math.hypot(event.clientX - candidate.startX, event.clientY - candidate.startY)
+    if (distance < TABLE_DRAG_POINTER_THRESHOLD) return
+    if (hasExplicitSort.value) {
+      event.preventDefault()
+      suppressClickAfterTableDrag()
+      clearTablePointerTracking()
+      sortRules.value = []
+      void syncUrl()
+      ElMessage.info('已清除排序，请在列表恢复手工顺序后再次拖动。')
+      return
+    }
+    createTableDragPreview(candidate.row, candidate.startX, candidate.startY)
+    tableDragging.value = candidate.item
+    tableDraggingIndex.value = candidate.index
+    tableDropIndex.value = candidate.index
+    suppressClickAfterTableDrag()
+  }
+
   event.preventDefault()
+  moveTableDragPreview(event.clientX, event.clientY)
+  updateTableDropTarget(event.clientY)
+}
+
+function onTablePointerUp(event: PointerEvent): void {
+  const candidate = tablePointerCandidate
+  if (!candidate || candidate.pointerId !== event.pointerId) return
+  const dragged = Boolean(tableDragging.value)
+  clearTablePointerTracking()
+  if (!dragged) return
+  event.preventDefault()
+  event.stopPropagation()
+  suppressClickAfterTableDrag()
+  void commitTableDrop()
+}
+
+function onTablePointerCancel(event: PointerEvent): void {
+  if (!tablePointerCandidate || tablePointerCandidate.pointerId !== event.pointerId) return
+  const dragged = Boolean(tableDragging.value)
+  clearTablePointerTracking()
+  if (dragged) suppressClickAfterTableDrag()
+  resetTableDragState()
+}
+
+async function commitTableDrop(): Promise<void> {
   const item = tableDragging.value
   let target = tableDropIndex.value
-  tableDragging.value = undefined; tableDropIndex.value = undefined
+  resetTableDragState()
   if (!item || target === undefined) return
   const original = [...tableItems.value]
   const from = original.findIndex(candidate => candidate.id === item.id)
@@ -850,8 +1028,11 @@ onMounted(() => {
 onBeforeUnmount(() => {
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
   if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
+  if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
   tableObserver?.disconnect(); kanbanObserver?.disconnect()
   document.removeEventListener('pointerdown', onDocumentPointerDown)
+  clearTablePointerTracking()
+  removeTableDragPreview()
 })
 </script>
 
@@ -1037,15 +1218,14 @@ onBeforeUnmount(() => {
         >
           <div
             class="monday-table-wrapper"
-            @dragstart.capture="onTableDragStart"
-            @dragover.prevent="onTableDragOver"
-            @drop.prevent="onTableDrop"
-            @dragend="tableDragging = undefined; tableDropIndex = undefined"
+            @pointerdown.capture="onTablePointerDown"
+            @click.capture="onTableClickCapture"
           >
             <el-table
               ref="tableRef"
               :data="tableItems"
               :row-class-name="tableRowClassName"
+              :row-style="tableRowStyle"
               row-key="id"
               class="monday-table"
               :style="{ minWidth: `${tableMinWidth}px` }"
@@ -1553,7 +1733,22 @@ onBeforeUnmount(() => {
   font-size: 13px;
   width: max-content;
   max-width: none;
-  border-left: 5px solid color-mix(in srgb, var(--yp-action-primary) 55%, var(--yp-bg-surface));
+}
+
+:deep(.monday-table .el-table__header th.el-table__cell:first-child) {
+  position: relative;
+}
+
+:deep(.monday-table .el-table__header th.el-table__cell:first-child::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 5px;
+  background: transparent;
+  z-index: 2;
+  pointer-events: none;
 }
 
 :deep(.monday-table .el-table__header th.el-table__cell) {
@@ -1571,6 +1766,22 @@ onBeforeUnmount(() => {
   border-right: 0;
 }
 
+:deep(.monday-table .el-table__body td.el-table__cell:first-child) {
+  position: relative;
+}
+
+:deep(.monday-table .el-table__body td.el-table__cell:first-child::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: -1px;
+  width: 5px;
+  background: color-mix(in srgb, var(--yp-action-primary) 70%, var(--yp-bg-surface));
+  z-index: 2;
+  pointer-events: none;
+}
+
 :deep(.monday-table .el-table__body td.el-table__cell) {
   height: 40px;
   padding: 0;
@@ -1580,6 +1791,12 @@ onBeforeUnmount(() => {
 
 :deep(.monday-table .el-table__body td.el-table__cell:last-child) {
   border-right: 0;
+}
+
+:deep(.monday-table .el-table__body tr) {
+  position: relative;
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
+  will-change: transform;
 }
 
 :deep(.monday-table .el-table__cell > .cell) {
@@ -1847,11 +2064,21 @@ onBeforeUnmount(() => {
 .cursor-sentinel { height: 1px; }
 .incremental-state { display: flex; min-height: 36px; align-items: center; justify-content: center; gap: var(--yp-space-2); color: var(--yp-text-muted); font-size: 12px; }
 .incremental-state--error { color: var(--yp-status-red); }
-:deep(.monday-table .el-table__body tr[draggable='true']) { cursor: grab; transition: transform var(--yp-motion-fast) var(--yp-ease-standard), box-shadow var(--yp-motion-fast) var(--yp-ease-standard); }
-:deep(.monday-table .el-table__body tr[draggable='true']:active) { cursor: grabbing; }
-:deep(.monday-table .work-item-table-row--drop-before td) { box-shadow: inset 0 2px 0 var(--yp-action-primary); }
-:deep(.monday-table .work-item-table-row--drop-after td) { box-shadow: inset 0 -2px 0 var(--yp-action-primary); }
-.work-item-drag-ghost { position: fixed; top: -10000px; left: -10000px; z-index: 9999; opacity: .9; pointer-events: none; box-shadow: var(--yp-shadow-lg); }
+:deep(.monday-table .work-item-table-row--movable) {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+:deep(.monday-table .work-item-table-row--movable:active) {
+  cursor: grabbing;
+}
+:deep(.monday-table .work-item-table-row--dragging td) {
+  pointer-events: none;
+}
+:deep(.monday-table .work-item-table-row--dragging) {
+  opacity: 0 !important;
+  transition: none !important;
+}
 
 .quick-title-field { grid-column: 1; }
 .quick-content-field { grid-column: 5; }
@@ -1954,5 +2181,73 @@ onBeforeUnmount(() => {
   .quick-submit {
     justify-self: stretch;
   }
+}
+</style>
+
+<style>
+.work-item-drag-preview {
+  position: fixed;
+  z-index: 100000;
+  pointer-events: none;
+  overflow: hidden;
+  border: 1px solid var(--yp-border-strong);
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--yp-bg-raised) 0%, var(--yp-bg-sunken) 100%);
+  box-shadow:
+    var(--yp-shadow-overlay),
+    0 7px 16px color-mix(in srgb, var(--yp-text-primary) 20%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--yp-bg-surface) 96%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--yp-text-primary) 18%, transparent);
+  filter: grayscale(1);
+  opacity: 0.96;
+  cursor: grabbing;
+  user-select: none;
+  will-change: left, top, transform;
+}
+
+.work-item-drag-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--yp-bg-surface) 17%, transparent),
+    color-mix(in srgb, var(--yp-text-primary) 10%, transparent)
+  );
+  box-shadow: inset 5px 0 0 var(--yp-text-muted);
+  pointer-events: none;
+}
+
+.work-item-drag-preview__table {
+  height: 100%;
+  table-layout: fixed;
+  border-spacing: 0;
+  border-collapse: collapse;
+  color: var(--yp-text-secondary);
+  background: var(--yp-bg-sunken);
+}
+
+.work-item-drag-preview__row,
+.work-item-drag-preview__row > td {
+  height: 40px;
+}
+
+.work-item-drag-preview__row > td {
+  padding: 0;
+  overflow: hidden;
+  color: var(--yp-text-secondary) !important;
+  background: var(--yp-bg-sunken) !important;
+  border-right: 1px solid var(--yp-border-default) !important;
+  border-bottom: 1px solid var(--yp-border-strong) !important;
+  box-sizing: border-box;
+}
+
+.work-item-drag-preview__row > td:nth-child(even) {
+  background: var(--yp-bg-hover) !important;
+}
+
+.work-item-drag-preview * {
+  pointer-events: none !important;
+  cursor: grabbing !important;
 }
 </style>
