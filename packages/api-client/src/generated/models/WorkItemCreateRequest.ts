@@ -12,14 +12,6 @@
  */
 
 import { mapValues } from '../runtime';
-import type { WorkItemPriority } from './WorkItemPriority';
-import {
-    WorkItemPriorityFromJSON,
-    WorkItemPriorityFromJSONTyped,
-    WorkItemPriorityToJSON,
-    WorkItemPriorityToJSONTyped,
-} from './WorkItemPriority';
-
 /**
  *
  * @export
@@ -34,10 +26,10 @@ export interface WorkItemCreateRequest {
     title: string;
     /**
      *
-     * @type {WorkItemPriority}
+     * @type {string}
      * @memberof WorkItemCreateRequest
      */
-    priority: WorkItemPriority | null;
+    priority: string | null;
     /**
      *
      * @type {string}
@@ -76,8 +68,6 @@ export interface WorkItemCreateRequest {
     dueDate?: Date | null;
 }
 
-
-
 /**
  * Check if a given object implements the WorkItemCreateRequest interface.
  */
@@ -100,7 +90,7 @@ export function WorkItemCreateRequestFromJSONTyped(json: any, ignoreDiscriminato
     return {
 
         'title': json['title'],
-        'priority': WorkItemPriorityFromJSON(json['priority']),
+        'priority': json['priority'],
         ...(json['assigneeUserId'] === undefined ? {} : { 'assigneeUserId': json['assigneeUserId'] }),
         'description': json['description'],
         'notes': json['notes'],
@@ -122,7 +112,7 @@ export function WorkItemCreateRequestToJSONTyped(value?: WorkItemCreateRequest |
     return {
 
         'title': value['title'],
-        'priority': WorkItemPriorityToJSON(value['priority']),
+        'priority': value['priority'],
         'assigneeUserId': value['assigneeUserId'],
         'description': value['description'],
         'notes': value['notes'],

@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
+import {
+    WorkItemLabelColorTokenFromJSON,
+    WorkItemLabelColorTokenFromJSONTyped,
+    WorkItemLabelColorTokenToJSON,
+    WorkItemLabelColorTokenToJSONTyped,
+} from './WorkItemLabelColorToken';
 import type { WorkflowStatusCategory } from './WorkflowStatusCategory';
 import {
     WorkflowStatusCategoryFromJSON,
@@ -46,10 +53,28 @@ export interface ContentWorkflowStatusOption {
     statusCategory: WorkflowStatusCategory;
     /**
      *
+     * @type {WorkItemLabelColorToken}
+     * @memberof ContentWorkflowStatusOption
+     */
+    colorToken: WorkItemLabelColorToken;
+    /**
+     *
      * @type {number}
      * @memberof ContentWorkflowStatusOption
      */
     sortOrder: number;
+    /**
+     *
+     * @type {boolean}
+     * @memberof ContentWorkflowStatusOption
+     */
+    active: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof ContentWorkflowStatusOption
+     */
+    protectedLabel: boolean;
     /**
      *
      * @type {boolean}
@@ -73,7 +98,10 @@ export function instanceOfContentWorkflowStatusOption(value: object): value is C
     if (!('statusCode' in value) || value['statusCode'] === undefined) return false;
     if (!('displayName' in value) || value['displayName'] === undefined) return false;
     if (!('statusCategory' in value) || value['statusCategory'] === undefined) return false;
+    if (!('colorToken' in value) || value['colorToken'] === undefined) return false;
     if (!('sortOrder' in value) || value['sortOrder'] === undefined) return false;
+    if (!('active' in value) || value['active'] === undefined) return false;
+    if (!('protectedLabel' in value) || value['protectedLabel'] === undefined) return false;
     if (!('initial' in value) || value['initial'] === undefined) return false;
     if (!('terminal' in value) || value['terminal'] === undefined) return false;
     return true;
@@ -92,7 +120,10 @@ export function ContentWorkflowStatusOptionFromJSONTyped(json: any, ignoreDiscri
         'statusCode': json['statusCode'],
         'displayName': json['displayName'],
         'statusCategory': WorkflowStatusCategoryFromJSON(json['statusCategory']),
+        'colorToken': WorkItemLabelColorTokenFromJSON(json['colorToken']),
         'sortOrder': json['sortOrder'],
+        'active': json['active'],
+        'protectedLabel': json['protectedLabel'],
         'initial': json['initial'],
         'terminal': json['terminal'],
     };
@@ -112,7 +143,10 @@ export function ContentWorkflowStatusOptionToJSONTyped(value?: ContentWorkflowSt
         'statusCode': value['statusCode'],
         'displayName': value['displayName'],
         'statusCategory': WorkflowStatusCategoryToJSON(value['statusCategory']),
+        'colorToken': WorkItemLabelColorTokenToJSON(value['colorToken']),
         'sortOrder': value['sortOrder'],
+        'active': value['active'],
+        'protectedLabel': value['protectedLabel'],
         'initial': value['initial'],
         'terminal': value['terminal'],
     };

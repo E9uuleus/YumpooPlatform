@@ -1,5 +1,15 @@
 # YumpooPlatform
 
+## M2-19A 项目表格路由、截止日期与标签目录
+
+M2-19A 为项目总览 Table 的工作项详情抽屉增加 `?view=table&workItemId={itemId}` 深链接，支持直接访问、刷新和前进/后退；日期选择器选择任意具体日期、Today 或清空都会调用既有强 ETag、幂等截止日期命令。
+
+V41 增加 Project 级状态与优先级标签目录。Owner 与 ACTIVE Member 可新增、改名、选择受控颜色、排序、启停和删除未引用标签；CompanyAdmin 只读。受保护的 `NOT_STARTED/未开始` 是未来工作项统一初始状态，不可停用或删除；停用标签继续展示已有引用。Table、Kanban、Content、筛选与排序消费同一目录，优先级允许空且新建默认空。路由和日期修复本身不涉及数据库结构，标签配置涉及 V41 三张新表和 Work Item 项目内外键。
+
+```powershell
+pnpm verify:m2-19a
+```
+
 ## M2-18 附件上传与安全扫描闭环
 
 M2-18 为 Work Item 与已发布、未删除的讨论 Update 提供附件意图、64 KiB 流式 PUT、Company/Project 配额预约、持久扫描队列、元数据分页和 APP_MANAGER 受控重扫。单文件固定上限 100 MiB；扫描器不可用会按 5 秒、30 秒重试，第三次失败保留封存内容 24 小时供带理由、幂等键与强 ETag 的重扫。最终化会重新验证原上传者和父对象当前可写性，并在同一事务提交附件、配额、Security Audit 与隐私安全的 AVAILABLE Outbox 事件。

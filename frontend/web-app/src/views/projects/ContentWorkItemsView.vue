@@ -21,6 +21,7 @@ import {
   type WorkItemPage,
   type WorkItemSummary,
   type WorkItemTransitionOption,
+  type WorkItemLabelCatalog,
 } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -51,6 +52,7 @@ import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import ContentTableQueryEditor from '../../components/projects/ContentTableQueryEditor.vue'
+import WorkItemLabelEditor from '../../components/projects/WorkItemLabelEditor.vue'
 import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
 import LazyAttachmentPanel from '../../components/collaboration/LazyAttachmentPanel.vue'
 import {
@@ -131,6 +133,7 @@ const projectId = String(route.params.projectId)
 const contentId = String(route.params.contentId)
 const project = ref<ProjectDetail>()
 const catalog = ref<ProjectContentCatalog>()
+const labelCatalog = ref<WorkItemLabelCatalog>()
 const content = ref<Content>()
 const members = ref<ProjectMember[]>([])
 const tableQuery = ref<ContentTableQuery>({
@@ -151,7 +154,7 @@ const createOpen = ref(false)
 const creating = ref(false)
 const createForm = reactive({
   title: '',
-  priority: WorkItemPriority.Medium,
+  priority: null as string | null,
   assigneeUserId: '',
   description: '',
   notes: '',
@@ -165,7 +168,7 @@ const detail = ref<WorkItemDetail>()
 const detailTab = ref<'details' | 'discussion'>('details')
 const discussion = ref<WorkItemDiscussionHandle>()
 const detailDraft = reactive<WorkItemFieldsDraft>({
-  title: '', priority: WorkItemPriority.Medium, assigneeUserId: '', description: '', notes: '',
+  title: '', priority: null, assigneeUserId: '', description: '', notes: '',
   timelineStartDate: '', timelineEndDate: '', dueDate: '',
 })
 const detailSaving = ref(false)
@@ -180,6 +183,8 @@ const transitionSaving = ref(false)
 const transitionToStatus = ref('')
 const transitionResolution = ref('')
 const transitionIdempotencyKey = ref<string>()
+const labelEditorOpen = ref(false)
+const labelEditorKind = ref<'status' | 'priority'>('status')
 const kanbanStates = reactive<Record<string, KanbanLaneState>>({})
 const kanbanInitialized = ref(false)
 const kanbanBoard = ref<HTMLElement>()
@@ -222,6 +227,8 @@ const canCreate = computed(() => Boolean(project.value && content.value
   && content.value.status === ContentStatus.Active
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
+const priorityOptions = computed(() => [...(labelCatalog.value?.priorities ?? [])]
+  .sort((left, right) => left.sortOrder - right.sortOrder))
 const readOnlyReason = computed(() => {
   if (project.value?.lifecycle === ProjectLifecycle.Archived) return 'Project 已归档，工作项仅可查看。'
   if (content.value?.status === ContentStatus.Archived) return 'Content 已归档，不能创建工作项。'
@@ -361,9 +368,10 @@ async function loadWorkspace(): Promise<void> {
   loading.value = true
   error.value = undefined
   try {
-    const [nextProject, nextCatalog] = await Promise.all([
+    const [nextProject, nextCatalog, nextLabels] = await Promise.all([
       projectsApi.getProject({ projectId }),
       contentsApi.listProjectContents({ projectId }),
+      workItemsApi.getProjectWorkItemLabels({ projectId }),
     ])
     const nextContent = nextCatalog.items.find(item => item.id === contentId)
     if (!nextContent) {
@@ -372,6 +380,7 @@ async function loadWorkspace(): Promise<void> {
     }
     project.value = nextProject
     catalog.value = nextCatalog
+    labelCatalog.value = nextLabels
     content.value = nextContent
     await loadMembers()
     tableQuery.value = hasCustomTableQuery(route.query)
@@ -794,7 +803,7 @@ async function changeView(view: ContentViewType): Promise<void> {
 
 function openCreate(): void {
   createForm.title = ''
-  createForm.priority = WorkItemPriority.Medium
+  createForm.priority = null
   createForm.assigneeUserId = ''
   createForm.description = ''
   createForm.notes = ''
@@ -802,6 +811,20 @@ function openCreate(): void {
   createForm.timelineEndDate = ''
   createForm.dueDate = ''
   createOpen.value = true
+}
+
+function openLabelEditor(kind: 'status' | 'priority'): void {
+  if (!labelCatalog.value?.canManage) return
+  labelEditorKind.value = kind
+  labelEditorOpen.value = true
+}
+
+async function onLabelsUpdated(next: WorkItemLabelCatalog): Promise<void> {
+  labelCatalog.value = next
+  const nextCatalog = await contentsApi.listProjectContents({ projectId })
+  catalog.value = nextCatalog
+  content.value = nextCatalog.items.find(item => item.id === contentId)
+  await refreshCurrentView(true)
 }
 
 async function createWorkItem(): Promise<void> {
@@ -1522,26 +1545,16 @@ onBeforeUnmount(() => {
         </el-form-item>
         <el-form-item
           label="优先级"
-          required
         >
-          <el-select v-model="createForm.priority">
+          <el-select v-model="createForm.priority" clearable placeholder="未设置">
             <el-option
-              label="低"
-              :value="WorkItemPriority.Low"
-            />
-            <el-option
-              label="中"
-              :value="WorkItemPriority.Medium"
-            />
-            <el-option
-              label="高"
-              :value="WorkItemPriority.High"
-            />
-            <el-option
-              label="紧急"
-              :value="WorkItemPriority.Urgent"
+              v-for="priority in priorityOptions.filter(item => item.active)"
+              :key="priority.code"
+              :label="priority.displayName"
+              :value="priority.code"
             />
           </el-select>
+          <el-button v-if="labelCatalog?.canManage" text @click="openLabelEditor('priority')">编辑标签</el-button>
         </el-form-item>
         <el-form-item label="处理人">
           <el-select
@@ -1715,22 +1728,13 @@ onBeforeUnmount(() => {
                   :disabled="!canEditDetail"
                 >
                   <el-option
-                    label="低"
-                    :value="WorkItemPriority.Low"
-                  />
-                  <el-option
-                    label="中"
-                    :value="WorkItemPriority.Medium"
-                  />
-                  <el-option
-                    label="高"
-                    :value="WorkItemPriority.High"
-                  />
-                  <el-option
-                    label="紧急"
-                    :value="WorkItemPriority.Urgent"
+                    v-for="priority in priorityOptions.filter(item => item.active || item.code === detailDraft.priority)"
+                    :key="priority.code"
+                    :label="priority.displayName"
+                    :value="priority.code"
                   />
                 </el-select>
+                <el-button v-if="labelCatalog?.canManage" text @click="openLabelEditor('priority')">编辑标签</el-button>
               </el-form-item>
               <el-form-item label="处理人">
                 <el-select
@@ -1914,6 +1918,7 @@ onBeforeUnmount(() => {
               :value="option.toStatus"
             />
           </el-select>
+          <el-button v-if="labelCatalog?.canManage" text @click="openLabelEditor('status')">编辑标签</el-button>
         </el-form-item>
         <el-form-item
           :label="selectedTransition?.requiresResolution ? '迁移说明（必填）' : '迁移说明（可选）'"
@@ -1937,6 +1942,15 @@ onBeforeUnmount(() => {
         </el-button>
       </template>
     </el-dialog>
+
+    <work-item-label-editor
+      v-if="labelCatalog"
+      v-model="labelEditorOpen"
+      :project-id="projectId"
+      :kind="labelEditorKind"
+      :catalog="labelCatalog"
+      @updated="onLabelsUpdated"
+    />
 
     <el-dialog
       v-model="moveResolutionOpen"

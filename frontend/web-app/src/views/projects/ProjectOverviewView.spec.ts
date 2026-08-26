@@ -30,6 +30,7 @@ const state = vi.hoisted(() => ({
   listProjectMembers: vi.fn(),
   listProjectWorkItems: vi.fn(),
   listProjectWorkItemFilterOptions: vi.fn(),
+  getProjectWorkItemLabels: vi.fn(),
   moveProjectWorkItemOrder: vi.fn(),
   patchWorkItemAssignee: vi.fn(),
   patchWorkItemPriority: vi.fn(),
@@ -53,6 +54,7 @@ vi.mock('../../api/client', () => ({
   workItemsApi: {
     listProjectWorkItems: state.listProjectWorkItems,
     listProjectWorkItemFilterOptions: state.listProjectWorkItemFilterOptions,
+    getProjectWorkItemLabels: state.getProjectWorkItemLabels,
     moveProjectWorkItemOrder: state.moveProjectWorkItemOrder,
     patchWorkItemAssignee: state.patchWorkItemAssignee,
     patchWorkItemPriority: state.patchWorkItemPriority,
@@ -97,6 +99,7 @@ function catalog(): ProjectContentCatalog {
       { statusCode: 'BACKLOG', displayName: '待开始', statusCategory: 'TODO', sortOrder: 1, initial: true, terminal: false },
       { statusCode: 'DONE', displayName: '已完成', statusCategory: 'DONE', sortOrder: 2, initial: false, terminal: true },
     ] as never,
+    priorityOptions: [], canManageLabels: true,
     canCreate: true,
   }
 }
@@ -145,6 +148,14 @@ describe('项目级工作项首页', () => {
     })
     state.getProject.mockImplementation(({ projectId }: { projectId: string }) => Promise.resolve(project(projectId)))
     state.listProjectContents.mockResolvedValue(catalog())
+    state.getProjectWorkItemLabels.mockResolvedValue({
+      statuses: [
+        { code: 'BACKLOG', displayName: '待开始', colorToken: 'BLUE', statusCategory: 'TODO',
+          sortOrder: 10, active: true, protectedLabel: false, inUse: true },
+        { code: 'DONE', displayName: '已完成', colorToken: 'GREEN', statusCategory: 'DONE',
+          sortOrder: 20, active: true, protectedLabel: false, inUse: false },
+      ], priorities: [], rowVersion: 0, etag: '"0"', canManage: true,
+    } as never)
     state.listProjectMembers.mockResolvedValue({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
     state.listProjectWorkItems.mockResolvedValue(page())
     state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [], nextCursor: null })
@@ -343,6 +354,7 @@ describe('项目级工作项首页', () => {
 
     await wrapper.get('.work-item-link').trigger('click')
     await flushPromises()
+    expect(state.push).toHaveBeenCalledWith({ query: { workItemId: 'item-1' } })
     expect(state.getWorkItem).toHaveBeenLastCalledWith({ workItemId: 'item-1' })
     expect((wrapper.vm as unknown as { detailTab: string }).detailTab).toBe('details')
 
@@ -350,6 +362,43 @@ describe('项目级工作项首页', () => {
     await flushPromises()
     expect(state.getWorkItem).toHaveBeenCalledTimes(2)
     expect((wrapper.vm as unknown as { detailTab: string }).detailTab).toBe('discussion')
+  })
+
+  it('直达 workItemId 路由恢复抽屉且不重复加载项目列表', async () => {
+    state.route.query = { view: 'table', workItemId: 'item-1' }
+    const wrapper = mountView()
+    await flushPromises()
+    const listCalls = state.listProjectWorkItems.mock.calls.length
+
+    expect(state.getWorkItem).toHaveBeenCalledWith({ workItemId: 'item-1' })
+    state.route.query.workItemId = 'item-2'
+    await nextTick()
+    await flushPromises()
+
+    expect(state.getWorkItem).toHaveBeenLastCalledWith({ workItemId: 'item-2' })
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(listCalls)
+    wrapper.unmount()
+  })
+
+  it('选择具体截止日期立即提交自然日字段命令', async () => {
+    state.patchWorkItemDueDate.mockResolvedValue({
+      ...item(), dueDate: new Date('2026-09-01T00:00:00.000Z'), rowVersion: 2, etag: '"2"',
+    } as unknown as WorkItemDetail)
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as {
+      tableItems: ProjectWorkItemListItem[]
+      onDueDateChange: (item: ProjectWorkItemListItem, value: string | null) => void
+    }
+
+    view.onDueDateChange(view.tableItems[0]!, '2026-09-01')
+    await flushPromises()
+
+    expect(state.patchWorkItemDueDate).toHaveBeenCalledWith(expect.objectContaining({
+      workItemId: 'item-1', ifMatch: '"1"',
+      workItemDueDatePatchRequest: { dueDate: new Date('2026-09-01T00:00:00.000Z') },
+    }))
+    wrapper.unmount()
   })
 
   it('Enter 快速创建时发送空优先级，且重复按键不会重复提交', async () => {

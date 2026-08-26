@@ -24,7 +24,7 @@ public record ContentViewConfig(Table table, Kanban kanban) {
 
     public record Sort(SortField field, SortDirection direction) {}
 
-    public record Filters(String query, List<String> statusCodes, List<Priority> priorities,
+    public record Filters(String query, List<String> statusCodes, List<String> priorities,
                           List<UUID> assigneeUserIds, LocalDate dueFrom, LocalDate dueTo,
                           Instant updatedAfter) {
         public Filters {
@@ -53,5 +53,4 @@ public record ContentViewConfig(Table table, Kanban kanban) {
     }
 
     public enum SortDirection { ASC, DESC }
-    public enum Priority { LOW, MEDIUM, HIGH, URGENT }
 }

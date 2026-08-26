@@ -8,7 +8,6 @@ import {
   ProjectLifecycle,
   ProjectMembershipStatus,
   ProjectMembershipStatusFilter,
-  WorkItemPriority,
   ListProjectWorkItemFilterOptionsFieldEnum,
   readCsrfToken,
   type ProjectContentCatalog,
@@ -17,6 +16,7 @@ import {
   type WorkItemDetail,
   type ProjectWorkItemListItem,
   type WorkItemTransitionOption,
+  type WorkItemLabelCatalog,
 } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -42,6 +42,7 @@ import InlineProblem from '../../components/InlineProblem.vue'
 import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
 import LazyAttachmentPanel from '../../components/collaboration/LazyAttachmentPanel.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
+import WorkItemLabelEditor from '../../components/projects/WorkItemLabelEditor.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 
@@ -62,6 +63,7 @@ const projectId = computed(() => String(route.params.projectId))
 const selectedView = computed<ProjectView>(() => route.query.view === 'kanban' ? 'kanban' : 'table')
 const project = ref<ProjectDetail>()
 const catalog = ref<ProjectContentCatalog>()
+const labelCatalog = ref<WorkItemLabelCatalog>()
 const members = ref<ProjectMember[]>([])
 const tableItems = ref<ProjectWorkItemListItem[]>([])
 const tableNextCursor = ref<string | null>(null)
@@ -80,6 +82,8 @@ const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
 const detailTab = ref<'details' | 'discussion'>('details')
+const labelEditorOpen = ref(false)
+const labelEditorKind = ref<'status' | 'priority'>('status')
 const dragging = ref<ProjectWorkItemListItem>()
 const tableDragging = ref<ProjectWorkItemListItem>()
 const tableDraggingIndex = ref<number>(-1)
@@ -107,7 +111,7 @@ const filterOptionsLoading = ref(false)
 const searchExpanded = ref(Boolean(route.query.q))
 const searchInput = ref(String(route.query.q ?? ''))
 const filters = reactive({
-  assignees: new Set<string>(), statuses: new Set<string>(), priorities: new Set<WorkItemPriority>(),
+  assignees: new Set<string>(), statuses: new Set<string>(), priorities: new Set<string>(),
   contents: new Set<string>(), dueRange: [] as Date[], updatedAfter: null as Date | null,
 })
 interface SortRule { field: string; direction: 'ASC' | 'DESC' }
@@ -122,8 +126,6 @@ const columns: Array<{ key: ColumnKey; label: string; defaultWidth: number; minW
   { key: 'dueDate', label: '截止日期', defaultWidth: 140, minWidth: 112 },
   { key: 'updatedAt', label: '最后更新时间', defaultWidth: 170, minWidth: 135 },
 ]
-const priorityOptions = [WorkItemPriority.Urgent, WorkItemPriority.High,
-  WorkItemPriority.Medium, WorkItemPriority.Low]
 const columnWidths = reactive<Record<ColumnKey, number>>(Object.fromEntries(columns.map(item => [item.key, item.defaultWidth])) as Record<ColumnKey, number>)
 const hiddenColumns = ref(new Set<ColumnKey>())
 let loadRevision = 0
@@ -150,7 +152,10 @@ const filteredMembers = computed(() => {
 
 const contentsById = computed(() => new Map((catalog.value?.items ?? []).map(item => [item.id, item])))
 const activeContents = computed(() => (catalog.value?.items ?? []).filter(item => item.status === ContentStatus.Active))
-const workflowStatuses = computed(() => [...(catalog.value?.workflowStatusOptions ?? [])]
+const workflowStatuses = computed(() => [...(labelCatalog.value?.statuses ?? [])]
+  .sort((left, right) => left.sortOrder - right.sortOrder)
+  .map(status => ({ ...status, statusCode: status.code })))
+const priorityOptions = computed(() => [...(labelCatalog.value?.priorities ?? [])]
   .sort((left, right) => left.sortOrder - right.sortOrder))
 const activeMembers = computed(() => members.value.filter(item => item.membershipStatus === ProjectMembershipStatus.Active))
 const canCreate = computed(() => Boolean(project.value
@@ -184,6 +189,12 @@ function statusLabel(statusCode: string): string {
 
 function getStatusTone(statusCode: string): string {
   const option = workflowStatuses.value.find(item => item.statusCode === statusCode)
+  const colorTone: Record<string, string> = {
+    GREEN: 'green', TEAL: 'green', BLUE: 'blue', INDIGO: 'blue', PURPLE: 'blue',
+    MAGENTA: 'red', RED: 'red', ORANGE: 'yellow', AMBER: 'yellow', LIME: 'green',
+    CYAN: 'blue', GRAY: 'gray',
+  }
+  if (option?.colorToken) return colorTone[option.colorToken] ?? 'gray'
   const category = option?.statusCategory
   if (category === 'DONE') return 'green'
   if (category === 'IN_PROGRESS') return 'yellow'
@@ -204,6 +215,13 @@ function getStatusTone(statusCode: string): string {
 
 function getPriorityPresentation(priority: string | null): { label: string; tone: string } {
   if (!priority) return { label: '—', tone: 'empty' }
+  const option = priorityOptions.value.find(item => item.code === priority)
+  const tokenTone: Record<string, string> = {
+    RED: 'urgent', MAGENTA: 'urgent', ORANGE: 'high', AMBER: 'high',
+    GREEN: 'low', LIME: 'low', TEAL: 'medium', CYAN: 'medium', BLUE: 'low',
+    INDIGO: 'medium', PURPLE: 'medium', GRAY: 'empty',
+  }
+  if (option) return { label: option.displayName, tone: tokenTone[option.colorToken] ?? 'empty' }
   const upper = priority.toUpperCase()
   if (upper === 'URGENT') return { label: '紧急', tone: 'urgent' }
   if (upper === 'HIGH') return { label: '高', tone: 'high' }
@@ -215,7 +233,7 @@ function getPriorityPresentation(priority: string | null): { label: string; tone
 function isOverdue(dueDate: Date | string | null, statusCode: string): boolean {
   if (!dueDate) return false
   const option = workflowStatuses.value.find(item => item.statusCode === statusCode)
-  if (option?.terminal || option?.statusCategory === 'DONE' || option?.statusCategory === 'CANCELED') {
+  if (option?.statusCategory === 'DONE' || option?.statusCategory === 'CANCELED') {
     return false
   }
   const due = new Date(dueDate)
@@ -244,7 +262,7 @@ function applyRouteState(): void {
   searchExpanded.value = Boolean(searchInput.value)
   filters.assignees = new Set(queryValues('assignee'))
   filters.statuses = new Set(queryValues('status'))
-  filters.priorities = new Set(queryValues('priority') as WorkItemPriority[])
+  filters.priorities = new Set(queryValues('priority'))
   filters.contents = new Set(queryValues('content'))
   const dueFrom = route.query.dueFrom ? new Date(String(route.query.dueFrom)) : undefined
   const dueTo = route.query.dueTo ? new Date(String(route.query.dueTo)) : undefined
@@ -317,7 +335,7 @@ function toggleSet<T>(set: Set<T>, value: T, checked: boolean): void {
   if (checked) next.add(value); else next.delete(value)
   if (set === filters.assignees) filters.assignees = next as Set<string>
   else if (set === filters.statuses) filters.statuses = next as Set<string>
-  else if (set === filters.priorities) filters.priorities = next as Set<WorkItemPriority>
+  else if (set === filters.priorities) filters.priorities = next as Set<string>
   else filters.contents = next as Set<string>
   void syncUrl()
 }
@@ -464,19 +482,22 @@ async function loadWorkspace(): Promise<void> {
   error.value = undefined
   project.value = undefined
   catalog.value = undefined
+  labelCatalog.value = undefined
   tableItems.value = []
   tableNextCursor.value = null
   members.value = []
   Object.keys(lanes).forEach(key => delete lanes[key])
   closeQuick()
   try {
-    const [nextProject, nextCatalog] = await Promise.all([
+    const [nextProject, nextCatalog, nextLabels] = await Promise.all([
       projectsApi.getProject({ projectId: requestedProjectId }),
       contentsApi.listProjectContents({ projectId: requestedProjectId }),
+      workItemsApi.getProjectWorkItemLabels({ projectId: requestedProjectId }),
     ])
     if (revision !== loadRevision) return
     project.value = nextProject
     catalog.value = nextCatalog
+    labelCatalog.value = nextLabels
     await Promise.all([
       loadMembers(requestedProjectId, revision),
       selectedView.value === 'kanban' ? loadKanban(revision) : loadTable(null, false, revision),
@@ -560,19 +581,52 @@ function onDocumentPointerDown(event: PointerEvent): void {
   void createQuick(false)
 }
 
-async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion'): Promise<void> {
+async function loadDetail(workItemId: string, tab: 'details' | 'discussion' = 'details'): Promise<void> {
   detailOpen.value = true
   detailTab.value = tab
   detailLoading.value = true
   detail.value = undefined
   try {
-    detail.value = await workItemsApi.getWorkItem({ workItemId: item.id })
+    detail.value = await workItemsApi.getWorkItem({ workItemId })
   } catch (reason) {
     error.value = await toApiProblem(reason)
     detailOpen.value = false
+    await closeDetailRoute()
   } finally {
     detailLoading.value = false
   }
+}
+
+async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion'): Promise<void> {
+  detailTab.value = tab
+  if (String(route.query.workItemId ?? '') === item.id) {
+    await loadDetail(item.id, tab)
+    return
+  }
+  await router.push({ query: { ...route.query, workItemId: item.id } })
+}
+
+async function closeDetailRoute(): Promise<void> {
+  if (!route.query.workItemId) return
+  const next = { ...route.query }
+  delete next.workItemId
+  await router.push({ query: next })
+}
+
+function onDetailModelValue(value: boolean): void {
+  detailOpen.value = value
+  if (!value) void closeDetailRoute()
+}
+
+function openLabelEditor(kind: 'status' | 'priority'): void {
+  if (!labelCatalog.value?.canManage) return
+  labelEditorKind.value = kind
+  labelEditorOpen.value = true
+}
+
+function onLabelsUpdated(next: WorkItemLabelCatalog): void {
+  labelCatalog.value = next
+  void refreshCurrentView()
 }
 
 function transitionFor(item: ProjectWorkItemListItem, statusCode: string): WorkItemTransitionOption | undefined {
@@ -652,7 +706,7 @@ async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'pri
     const updated = field === 'assignee'
       ? await workItemsApi.patchWorkItemAssignee({ ...common, workItemAssigneePatchRequest: { assigneeUserId: value as string | null } })
       : field === 'priority'
-        ? await workItemsApi.patchWorkItemPriority({ ...common, workItemPriorityPatchRequest: { priority: value as WorkItemPriority | null } })
+        ? await workItemsApi.patchWorkItemPriority({ ...common, workItemPriorityPatchRequest: { priority: value as string | null } })
         : await workItemsApi.patchWorkItemDueDate({ ...common, workItemDueDatePatchRequest: { dueDate: value as Date | null } })
     replaceLightItem(item.id, updated)
     return true
@@ -1002,15 +1056,33 @@ function resetCurrentData(): void {
   if (selectedView.value === 'kanban') void loadKanban(revision); else void loadTable(null, false, revision)
 }
 
-function onDueDateChange(item: ProjectWorkItemListItem, value: unknown): void {
-  void patchCell(item, 'dueDate', value instanceof Date ? value : null)
+function apiDate(value: string | null): Date | null {
+  return value ? new Date(`${value}T00:00:00.000Z`) : null
+}
+
+function todayValue(): string {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function onDueDateChange(item: ProjectWorkItemListItem, value: string | null): void {
+  void patchCell(item, 'dueDate', apiDate(value))
 }
 
 watch(projectId, () => { applyRouteState(); void loadWorkspace() }, { immediate: true })
-watch(() => JSON.stringify(route.query), () => {
+watch(() => JSON.stringify(Object.fromEntries(Object.entries(route.query)
+  .filter(([key]) => key !== 'workItemId'))), () => {
   if (!project.value) return
   applyRouteState(); resetCurrentData()
 })
+watch(() => route.query.workItemId, value => {
+  const workItemId = Array.isArray(value) ? value[0] : value
+  if (workItemId) void loadDetail(String(workItemId), detailTab.value)
+  else { detailOpen.value = false; detail.value = undefined }
+}, { immediate: true })
 watch(assigneeSearch, scheduleMemberSearch)
 
 onMounted(() => {
@@ -1158,9 +1230,9 @@ onBeforeUnmount(() => {
                 </section>
                 <section>
                   <h4>优先级</h4>
-                  <button v-for="priority in priorityOptions" :key="priority" class="filter-value" @click="toggleSet(filters.priorities, priority, !filters.priorities.has(priority))">
-                    <el-checkbox :model-value="filters.priorities.has(priority)" @click.stop />
-                    <span>{{ getPriorityPresentation(priority).label }}</span><small>{{ countBy('priority', priority) }}</small>
+                  <button v-for="priority in priorityOptions" :key="priority.code" class="filter-value" @click="toggleSet(filters.priorities, priority.code, !filters.priorities.has(priority.code))">
+                    <el-checkbox :model-value="filters.priorities.has(priority.code)" @click.stop />
+                    <span>{{ priority.displayName }}</span><small>{{ countBy('priority', priority.code) }}</small>
                   </button>
                 </section>
                 <section>
@@ -1325,13 +1397,14 @@ onBeforeUnmount(() => {
                     </template>
                     <div class="label-options">
                       <button
-                        v-for="status in workflowStatuses"
+                        v-for="status in workflowStatuses.filter(item => item.active || item.statusCode === (scope.row as ProjectWorkItemListItem).statusCode)"
                         :key="status.statusCode"
                         class="status-option"
                         :class="`monday-status-cell--${getStatusTone(status.statusCode)}`"
                         :disabled="status.statusCode !== (scope.row as ProjectWorkItemListItem).statusCode && !transitionFor(scope.row as ProjectWorkItemListItem, status.statusCode)"
                         @click="transitionItem(scope.row as ProjectWorkItemListItem, status.statusCode)"
                       >{{ status.displayName }}</button>
+                      <button v-if="labelCatalog?.canManage" class="edit-labels-button" @click="openLabelEditor('status')">✎ 编辑标签</button>
                     </div>
                   </el-popover>
                 </template>
@@ -1353,8 +1426,9 @@ onBeforeUnmount(() => {
                       </button>
                     </template>
                     <div class="label-options">
-                      <button v-for="priority in priorityOptions" :key="priority" class="priority-option" :class="`monday-priority-cell--${getPriorityPresentation(priority).tone}`" @click="patchCell(scope.row as ProjectWorkItemListItem, 'priority', priority)">{{ getPriorityPresentation(priority).label }}</button>
+                      <button v-for="priority in priorityOptions.filter(item => item.active)" :key="priority.code" class="priority-option" :class="`monday-priority-cell--${getPriorityPresentation(priority.code).tone}`" @click="patchCell(scope.row as ProjectWorkItemListItem, 'priority', priority.code)">{{ priority.displayName }}</button>
                       <button class="priority-option monday-priority-cell--empty" @click="patchCell(scope.row as ProjectWorkItemListItem, 'priority', null)">清空</button>
+                      <button v-if="labelCatalog?.canManage" class="edit-labels-button" @click="openLabelEditor('priority')">✎ 编辑标签</button>
                     </div>
                   </el-popover>
                 </template>
@@ -1415,8 +1489,8 @@ onBeforeUnmount(() => {
                     </span>
                     </button></template>
                     <div class="date-editor">
-                      <div><el-button @click="patchCell(scope.row as ProjectWorkItemListItem, 'dueDate', new Date())">Today</el-button><el-button text @click="patchCell(scope.row as ProjectWorkItemListItem, 'dueDate', null)">清空</el-button></div>
-                      <el-date-picker :model-value="(scope.row as ProjectWorkItemListItem).dueDate" type="date" placeholder="选择截止日期" @change="onDueDateChange(scope.row as ProjectWorkItemListItem, $event)" />
+                      <div><el-button @click="onDueDateChange(scope.row as ProjectWorkItemListItem, todayValue())">Today</el-button><el-button text @click="onDueDateChange(scope.row as ProjectWorkItemListItem, null)">清空</el-button></div>
+                      <el-date-picker :model-value="(scope.row as ProjectWorkItemListItem).dueDate ? formatDate((scope.row as ProjectWorkItemListItem).dueDate) : null" type="date" value-format="YYYY-MM-DD" placeholder="选择截止日期" @update:model-value="onDueDateChange(scope.row as ProjectWorkItemListItem, $event as string | null)" />
                     </div>
                   </el-popover>
                 </template>
@@ -1503,7 +1577,7 @@ onBeforeUnmount(() => {
             v-loading="lane(status.statusCode).loading"
             class="kanban-lane"
             @dragover.prevent
-            @drop.prevent="dropInto(status.statusCode)"
+            @drop.prevent="status.active && dropInto(status.statusCode)"
           >
             <header><strong>{{ status.displayName }}</strong><span>{{ lane(status.statusCode).items.length }}{{ lane(status.statusCode).nextCursor ? '+' : '' }}</span></header>
             <inline-problem
@@ -1534,9 +1608,10 @@ onBeforeUnmount(() => {
     </template>
 
     <el-drawer
-      v-model="detailOpen"
+      :model-value="detailOpen"
       title="工作项详情"
       size="min(560px, 100vw)"
+      @update:model-value="onDetailModelValue"
     >
       <div
         v-loading="detailLoading"
@@ -1585,6 +1660,14 @@ onBeforeUnmount(() => {
         </template>
       </div>
     </el-drawer>
+    <work-item-label-editor
+      v-if="labelCatalog"
+      v-model="labelEditorOpen"
+      :project-id="projectId"
+      :kind="labelEditorKind"
+      :catalog="labelCatalog"
+      @updated="onLabelsUpdated"
+    />
   </div>
 </template>
 

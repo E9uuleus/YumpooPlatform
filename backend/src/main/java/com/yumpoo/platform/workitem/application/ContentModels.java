@@ -11,10 +11,13 @@ public final class ContentModels {
     public record BlueprintOption(String blueprintCode, String displayName, String workItemType,
                                   String defaultViewType) {}
     public record WorkflowStatusOption(String statusCode, String displayName, String statusCategory,
-                                       int sortOrder, boolean initial, boolean terminal) {}
+            String colorToken, int sortOrder, boolean active, boolean protectedLabel,
+            boolean initial, boolean terminal) {}
+    public record PriorityOption(String priorityCode, String displayName, String colorToken,
+            int sortOrder, boolean active) {}
     public record ProjectContentCatalog(List<ContentView> items,
             List<BlueprintOption> blueprintOptions, List<WorkflowStatusOption> workflowStatusOptions,
-            boolean canCreate) {}
+            List<PriorityOption> priorityOptions, boolean canCreate, boolean canManageLabels) {}
     public record ContentView(UUID id, UUID projectId, String code, String name, String description,
             String workItemType, String status, String defaultViewType,
             ContentViewConfig viewConfig, String appliedTemplateKey, int appliedTemplateVersion,

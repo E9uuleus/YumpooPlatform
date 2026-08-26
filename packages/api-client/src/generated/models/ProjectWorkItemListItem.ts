@@ -12,13 +12,6 @@
  */
 
 import { mapValues } from '../runtime';
-import type { WorkItemPriority } from './WorkItemPriority';
-import {
-    WorkItemPriorityFromJSON,
-    WorkItemPriorityFromJSONTyped,
-    WorkItemPriorityToJSON,
-    WorkItemPriorityToJSONTyped,
-} from './WorkItemPriority';
 import type { WorkItemCapabilities } from './WorkItemCapabilities';
 import {
     WorkItemCapabilitiesFromJSON,
@@ -103,10 +96,10 @@ export interface ProjectWorkItemListItem {
     statusCategory: WorkItemStatusCategory;
     /**
      *
-     * @type {WorkItemPriority}
+     * @type {string}
      * @memberof ProjectWorkItemListItem
      */
-    priority: WorkItemPriority | null;
+    priority: string | null;
     /**
      *
      * @type {string}
@@ -196,7 +189,7 @@ export function ProjectWorkItemListItemFromJSONTyped(json: any, ignoreDiscrimina
         'title': json['title'],
         'statusCode': json['statusCode'],
         'statusCategory': WorkItemStatusCategoryFromJSON(json['statusCategory']),
-        'priority': WorkItemPriorityFromJSON(json['priority']),
+        'priority': json['priority'],
         'assigneeUserId': json['assigneeUserId'],
         'assigneeDisplayName': json['assigneeDisplayName'],
         'dueDate': (json['dueDate'] == null ? null : new Date(json['dueDate'])),
@@ -227,7 +220,7 @@ export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemL
         'title': value['title'],
         'statusCode': value['statusCode'],
         'statusCategory': WorkItemStatusCategoryToJSON(value['statusCategory']),
-        'priority': WorkItemPriorityToJSON(value['priority']),
+        'priority': value['priority'],
         'assigneeUserId': value['assigneeUserId'],
         'assigneeDisplayName': value['assigneeDisplayName'],
         'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),

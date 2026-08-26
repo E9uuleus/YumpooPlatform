@@ -20,10 +20,13 @@ import java.util.UUID;
 public class ContentInitializationService {
 
     private final ContentRepository repository;
+    private final WorkItemLabelRepository labels;
     private final Clock clock;
 
-    public ContentInitializationService(ContentRepository repository, Clock clock) {
+    public ContentInitializationService(ContentRepository repository,
+            WorkItemLabelRepository labels, Clock clock) {
         this.repository = repository;
+        this.labels = labels;
         this.clock = clock;
     }
 
@@ -34,6 +37,8 @@ public class ContentInitializationService {
         }
         Set<String> codes = new HashSet<>();
         Instant now = clock.instant();
+        labels.initialize(initialization.companyId(), initialization.projectId(),
+                initialization.templateKey(), initialization.templateVersion(), now);
         List<Content> contents = initialization.blueprints().stream().map(blueprint -> {
             if (!codes.add(blueprint.contentCode())) {
                 throw new ApplicationException(StandardErrorCode.VALIDATION_FAILED);

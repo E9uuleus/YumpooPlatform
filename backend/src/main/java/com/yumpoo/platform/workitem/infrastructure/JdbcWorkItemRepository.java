@@ -8,7 +8,6 @@ import com.yumpoo.platform.workitem.application.WorkItemSortRanks;
 import com.yumpoo.platform.workitem.domain.ContentWorkItemType;
 import com.yumpoo.platform.workitem.domain.ContentViewType;
 import com.yumpoo.platform.workitem.domain.WorkItem;
-import com.yumpoo.platform.workitem.domain.WorkItemPriority;
 import com.yumpoo.platform.workitem.domain.WorkItemStatusCategory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -630,7 +629,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         }
         if (!query.priorities().isEmpty()) {
             sql.append(" AND priority IN (:priorities)");
-            parameters.put("priorities", query.priorities().stream().map(Enum::name).toList());
+            parameters.put("priorities", query.priorities());
         }
         if (!query.assigneeUserIds().isEmpty()) {
             sql.append(" AND assignee_user_id IN (:assigneeUserIds)");
@@ -669,8 +668,8 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                         "status", ranks.statuses(), direction, index);
                 case PRIORITY -> {
                     order.add("CASE WHEN priority IS NULL THEN 1 ELSE 0 END ASC");
-                    order.add("CASE priority WHEN 'LOW' THEN 0 WHEN 'MEDIUM' THEN 1 "
-                            + "WHEN 'HIGH' THEN 2 WHEN 'URGENT' THEN 3 ELSE 4 END " + direction);
+                    addRankedTextOrder(order, parameters, "priority", "priority",
+                            ranks.priorities(), direction, index);
                 }
                 case ASSIGNEE -> addRankedUserOrder(order, parameters, "assignee_user_id",
                         "assignee", ranks.assignees(), direction, index);
@@ -711,10 +710,14 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 case PRIORITY -> {
                     terms.add(new SeekTerm("CASE WHEN priority IS NULL THEN 1 ELSE 0 END", "ASC",
                             anchor != null && anchor.priority() == null ? 1 : 0));
-                    terms.add(new SeekTerm("CASE priority WHEN 'LOW' THEN 0 WHEN 'MEDIUM' THEN 1 "
-                            + "WHEN 'HIGH' THEN 2 WHEN 'URGENT' THEN 3 ELSE 4 END", direction,
-                            anchor == null || anchor.priority() == null ? 4
-                                    : anchor.priority().ordinal()));
+                    String expression = rankedTextExpression(parameters, "priority",
+                            "projectPriority", ranks.priorities(), index);
+                    terms.add(new SeekTerm(expression, direction,
+                            anchor == null || anchor.priority() == null ? ranks.priorities().size()
+                                    : ranks.priorities().getOrDefault(anchor.priority(),
+                                            ranks.priorities().size())));
+                    terms.add(new SeekTerm("coalesce(priority, '')", "ASC",
+                            anchor == null || anchor.priority() == null ? "" : anchor.priority()));
                 }
                 case ASSIGNEE -> {
                     terms.add(new SeekTerm("CASE WHEN assignee_user_id IS NULL THEN 1 ELSE 0 END",
@@ -864,7 +867,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 rs.getLong("item_sequence"), rs.getString("item_no"),
                 ContentWorkItemType.valueOf(rs.getString("type")), rs.getString("title"),
                 rs.getString("status_code"), WorkItemStatusCategory.valueOf(rs.getString("status_category")),
-                priority(rs.getString("priority")),
+                rs.getString("priority"),
                 rs.getObject("assignee_user_id", UUID.class), rs.getObject("reporter_user_id", UUID.class),
                 rs.getString("description"), rs.getString("notes"), rs.getObject("timeline_start_date", java.time.LocalDate.class),
                 rs.getObject("timeline_end_date", java.time.LocalDate.class), rs.getObject("due_date", java.time.LocalDate.class),
@@ -881,10 +884,6 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     private static String priorityName(WorkItem item) {
-        return item.priority() == null ? null : item.priority().name();
-    }
-
-    private static WorkItemPriority priority(String value) {
-        return value == null ? null : WorkItemPriority.valueOf(value);
+        return item.priority();
     }
 }

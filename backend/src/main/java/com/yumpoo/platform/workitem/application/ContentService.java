@@ -51,6 +51,7 @@ public class ContentService {
     private final ProjectAccessSnapshotQuery access;
     private final ProjectFactWriteGuard writeGuard;
     private final ProjectTemplateVersionQuery templates;
+    private final WorkItemLabelRepository labels;
     private final ContentViewConfigCodec configs;
     private final IdempotentCommandExecutor idempotency;
     private final TransactionalEventPort events;
@@ -60,10 +61,12 @@ public class ContentService {
     public ContentService(ContentRepository contents, WorkItemRepository workItems,
             ProjectAccessSnapshotQuery access,
             ProjectFactWriteGuard writeGuard, ProjectTemplateVersionQuery templates,
+            WorkItemLabelRepository labels,
             ContentViewConfigCodec configs, IdempotentCommandExecutor idempotency,
             TransactionalEventPort events, ObjectMapper objectMapper, Clock clock) {
         this.contents = contents; this.workItems = workItems; this.access = access; this.writeGuard = writeGuard;
-        this.templates = templates; this.configs = configs; this.idempotency = idempotency;
+        this.templates = templates; this.labels = labels; this.configs = configs;
+        this.idempotency = idempotency;
         this.events = events; this.objectMapper = objectMapper; this.clock = clock;
     }
 
@@ -71,14 +74,21 @@ public class ContentService {
     public ProjectContentCatalog catalog(CurrentActor actor, UUID projectId) {
         ProjectAccessSnapshot project = visible(actor, projectId);
         ProjectTemplateSnapshot template = template(project.templateKey(), project.templateVersion());
+        List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
+                project.companyId(), project.projectId());
+        List<WorkItemLabelModels.PriorityLabel> priorityLabels = labels.priorities(
+                project.companyId(), project.projectId());
         List<ContentView> items = contents.findAll(project.companyId(), projectId).stream()
-                .map(content -> view(content, template)).toList();
+                .map(content -> view(content, template, statusLabels, priorityLabels)).toList();
         return new ProjectContentCatalog(items, template.contentBlueprints().stream()
                 .sorted(java.util.Comparator.comparingInt(ProjectTemplateSnapshot.ContentBlueprint::sortOrder))
                 .map(value -> new BlueprintOption(value.contentCode(), value.displayName(),
                         value.workItemType(), value.defaultViewType())).toList(),
-                statusOptions(template), project.actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER
-                        && project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED);
+                statusOptions(statusLabels), priorityOptions(priorityLabels),
+                project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+                        && project.actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER,
+                project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+                        && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY);
     }
 
     @Transactional(readOnly = true)
@@ -87,7 +97,9 @@ public class ContentService {
         ProjectAccessSnapshot project = visible(actor, locator.projectId());
         Content content = contents.find(project.companyId(), locator.projectId(), contentId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        return view(content, template(project.templateKey(), project.templateVersion()));
+        return view(content, template(project.templateKey(), project.templateVersion()),
+                labels.statuses(project.companyId(), project.projectId()),
+                labels.priorities(project.companyId(), project.projectId()));
     }
 
     public IdempotencyExecutionResult create(Create command) {
@@ -100,7 +112,12 @@ public class ContentService {
                     .filter(value -> value.contentCode().equals(command.blueprintCode())).findFirst()
                     .orElseThrow(() -> validation("blueprintCode", "UNKNOWN_BLUEPRINT",
                             "蓝图必须属于 Project 固定模板"));
-            ContentViewConfig config = configs.normalize(objectMapper.createObjectNode(), template.statuses());
+            List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
+                    project.companyId(), project.projectId());
+            List<WorkItemLabelModels.PriorityLabel> priorityLabels = labels.priorities(
+                    project.companyId(), project.projectId());
+            ContentViewConfig config = configs.normalizeForCatalog(objectMapper.createObjectNode(),
+                    statusLabels, priorityLabels);
             Content content = Content.create(UUID.randomUUID(), project.companyId(), project.projectId(),
                     command.code(), command.name(), command.description(),
                     ContentWorkItemType.valueOf(blueprint.workItemType()),
@@ -110,7 +127,7 @@ public class ContentService {
             if (!contents.insert(content)) throw validation("code", "DUPLICATE",
                     "同一 Project 内 Content 代码不可重复");
             append(CREATED, content, command.actor(), List.of());
-            return stored(201, view(content, template));
+            return stored(201, view(content, template, statusLabels, priorityLabels));
         });
     }
 
@@ -122,17 +139,23 @@ public class ContentService {
         requireVersion(before, command.expectedVersion());
         requireStatus(before, ContentStatus.ACTIVE);
         ProjectTemplateSnapshot template = template(project.templateKey(), project.templateVersion());
-        String canonicalBefore = configs.write(configs.read(before.viewConfigJson(), template.statuses()));
-        String canonicalAfter = configs.write(configs.normalize(command.viewConfig(), template.statuses()));
+        List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
+                project.companyId(), project.projectId());
+        List<WorkItemLabelModels.PriorityLabel> priorityLabels = labels.priorities(
+                project.companyId(), project.projectId());
+        String canonicalBefore = configs.write(configs.readForCatalog(before.viewConfigJson(),
+                statusLabels, priorityLabels));
+        String canonicalAfter = configs.write(configs.normalizeForCatalog(command.viewConfig(),
+                statusLabels, priorityLabels));
         Content candidate = before.update(command.name(), command.description(),
                 viewType(command.defaultViewType()),
                 canonicalAfter, command.actor().userId(), clock.instant());
         List<String> changed = changed(before, candidate, canonicalBefore, canonicalAfter);
-        if (changed.isEmpty()) return view(before, template);
+        if (changed.isEmpty()) return view(before, template, statusLabels, priorityLabels);
         Content after = contents.update(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         append(UPDATED, after, command.actor(), changed);
-        return view(after, template);
+        return view(after, template, statusLabels, priorityLabels);
     }
 
     public IdempotencyExecutionResult archive(Transition command) {
@@ -167,7 +190,10 @@ public class ContentService {
         Content after = contents.update(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         append(eventType, after, command.actor(), List.of("status"));
-        return stored(200, view(after, template(project.templateKey(), project.templateVersion())));
+        ProjectTemplateSnapshot template = template(project.templateKey(), project.templateVersion());
+        return stored(200, view(after, template,
+                labels.statuses(project.companyId(), project.projectId()),
+                labels.priorities(project.companyId(), project.projectId())));
     }
 
     private ContentLocator requireOwnerVisible(CurrentActor actor, UUID contentId) {
@@ -206,21 +232,36 @@ public class ContentService {
                         "TEMPLATE_UNAVAILABLE"));
     }
 
-    private ContentView view(Content content, ProjectTemplateSnapshot template) {
+    private ContentView view(Content content, ProjectTemplateSnapshot template,
+            List<WorkItemLabelModels.StatusLabel> statusLabels,
+            List<WorkItemLabelModels.PriorityLabel> priorityLabels) {
         return new ContentView(content.id(), content.projectId(), content.code(), content.name(),
                 content.description(), content.workItemType().name(), content.status().name(),
-                content.defaultViewType().name(), configs.read(content.viewConfigJson(), template.statuses()),
+                content.defaultViewType().name(), configs.readForCatalog(content.viewConfigJson(),
+                        statusLabels, priorityLabels),
                 content.appliedTemplateKey(), content.appliedTemplateVersion(),
                 content.appliedBlueprintCode(), content.rowVersion(), StrongEtag.format(content.rowVersion()),
                 content.createdAt(), content.createdByUserId(), content.updatedAt(),
                 content.updatedByUserId(), content.archivedAt(), content.archivedByUserId());
     }
 
-    private static List<WorkflowStatusOption> statusOptions(ProjectTemplateSnapshot template) {
-        return template.statuses().stream().sorted(java.util.Comparator.comparingInt(
-                        ProjectTemplateSnapshot.WorkflowStatus::sortOrder))
-                .map(value -> new WorkflowStatusOption(value.statusCode(), value.displayName(),
-                        value.statusCategory(), value.sortOrder(), value.initial(), value.terminal())).toList();
+    private static List<WorkflowStatusOption> statusOptions(
+            List<WorkItemLabelModels.StatusLabel> labels) {
+        return labels.stream().sorted(java.util.Comparator.comparingInt(
+                        WorkItemLabelModels.StatusLabel::sortOrder))
+                .map(value -> new WorkflowStatusOption(value.code(), value.displayName(),
+                        value.statusCategory(), value.colorToken(), value.sortOrder(), value.active(),
+                        value.protectedLabel(), value.protectedLabel(),
+                        value.statusCategory().equals("DONE")
+                                || value.statusCategory().equals("CANCELED"))).toList();
+    }
+
+    private static List<PriorityOption> priorityOptions(
+            List<WorkItemLabelModels.PriorityLabel> labels) {
+        return labels.stream().sorted(java.util.Comparator.comparingInt(
+                        WorkItemLabelModels.PriorityLabel::sortOrder))
+                .map(value -> new PriorityOption(value.code(), value.displayName(),
+                        value.colorToken(), value.sortOrder(), value.active())).toList();
     }
 
     private void append(String eventType, Content content, CurrentActor actor, List<String> changedFields) {

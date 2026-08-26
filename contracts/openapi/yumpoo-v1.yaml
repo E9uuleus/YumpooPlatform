@@ -1653,6 +1653,166 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
+  /projects/{projectId}/work-item-labels:
+    get:
+      tags: [WorkItems]
+      operationId: getProjectWorkItemLabels
+      summary: 查询 Project 级工作项状态与优先级标签目录
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 返回活动及停用但仍可展示的标签；目录使用独立强 ETag。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
+  /projects/{projectId}/work-item-labels/statuses:
+    post:
+      tags: [WorkItems]
+      operationId: createProjectWorkItemStatusLabel
+      summary: 新增 Project 状态标签
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCreateRequest' } } }
+      responses:
+        '200':
+          description: 标签已新增并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/work-item-labels/statuses/{code}:
+    patch:
+      tags: [WorkItems]
+      operationId: updateProjectWorkItemStatusLabel
+      summary: 立即保存状态标签名称、颜色或启停状态
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WorkItemLabelCode'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelUpdateRequest' } } }
+      responses:
+        '200':
+          description: 标签已更新并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+    delete:
+      tags: [WorkItems]
+      operationId: deleteProjectWorkItemStatusLabel
+      summary: 删除未受保护且从未被工作项引用的状态标签
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WorkItemLabelCode'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: 标签已软删除并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/work-item-labels/priorities:
+    post:
+      tags: [WorkItems]
+      operationId: createProjectWorkItemPriorityLabel
+      summary: 新增 Project 优先级标签
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCreateRequest' } } }
+      responses:
+        '200':
+          description: 标签已新增并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/work-item-labels/priorities/{code}:
+    patch:
+      tags: [WorkItems]
+      operationId: updateProjectWorkItemPriorityLabel
+      summary: 立即保存优先级标签名称、颜色或启停状态
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WorkItemLabelCode'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelUpdateRequest' } } }
+      responses:
+        '200':
+          description: 标签已更新并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+    delete:
+      tags: [WorkItems]
+      operationId: deleteProjectWorkItemPriorityLabel
+      summary: 删除从未被工作项引用的优先级标签
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WorkItemLabelCode'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: 标签已软删除并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /projects/{projectId}/work-items/filter-options:
     get:
       tags: [WorkItems]
@@ -3163,11 +3323,74 @@ components:
 
     WorkItemPriority:
       type: string
-      enum: [LOW, MEDIUM, HIGH, URGENT]
+      pattern: '^[A-Z][A-Z0-9_]{1,31}$'
 
     WorkItemStatusCategory:
       type: string
       enum: [TODO, IN_PROGRESS, DONE, CANCELED]
+
+    WorkItemLabelColorToken:
+      type: string
+      enum: [GREEN, TEAL, BLUE, INDIGO, PURPLE, MAGENTA, RED, ORANGE, AMBER, LIME, CYAN, GRAY]
+
+    WorkItemStatusLabel:
+      type: object
+      additionalProperties: false
+      required: [code, displayName, colorToken, statusCategory, sortOrder, active,
+        protectedLabel, inUse]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+        active: { type: boolean }
+        protectedLabel: { type: boolean }
+        inUse: { type: boolean }
+
+    WorkItemPriorityLabel:
+      type: object
+      additionalProperties: false
+      required: [code, displayName, colorToken, sortOrder, active, inUse]
+      properties:
+        code: { $ref: '#/components/schemas/WorkItemPriority' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+        active: { type: boolean }
+        inUse: { type: boolean }
+
+    WorkItemLabelCatalog:
+      type: object
+      additionalProperties: false
+      required: [statuses, priorities, rowVersion, etag, canManage]
+      properties:
+        statuses: { type: array, items: { $ref: '#/components/schemas/WorkItemStatusLabel' } }
+        priorities: { type: array, items: { $ref: '#/components/schemas/WorkItemPriorityLabel' } }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+        canManage: { type: boolean, readOnly: true }
+
+    WorkItemLabelCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [displayName, colorToken]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+
+    WorkItemLabelUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [displayName, colorToken, active, sortOrder]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 80, nullable: true }
+        colorToken:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/WorkItemLabelColorToken' }]
+          nullable: true
+        active: { type: boolean, nullable: true }
+        sortOrder: { type: integer, format: int32, minimum: 0, nullable: true }
 
     WorkItemSummary:
       type: object
@@ -3631,24 +3854,42 @@ components:
     ContentWorkflowStatusOption:
       type: object
       additionalProperties: false
-      required: [statusCode, displayName, statusCategory, sortOrder, initial, terminal]
+      required: [statusCode, displayName, statusCategory, colorToken, sortOrder, active,
+        protectedLabel, initial, terminal]
       properties:
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         displayName: { type: string, minLength: 1, maxLength: 80 }
         statusCategory: { $ref: '#/components/schemas/WorkflowStatusCategory' }
-        sortOrder: { type: integer, format: int32, minimum: 1 }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+        active: { type: boolean }
+        protectedLabel: { type: boolean }
         initial: { type: boolean }
         terminal: { type: boolean }
+
+    ContentPriorityOption:
+      type: object
+      additionalProperties: false
+      required: [priorityCode, displayName, colorToken, sortOrder, active]
+      properties:
+        priorityCode: { $ref: '#/components/schemas/WorkItemPriority' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+        active: { type: boolean }
 
     ProjectContentCatalog:
       type: object
       additionalProperties: false
-      required: [items, blueprintOptions, workflowStatusOptions, canCreate]
+      required: [items, blueprintOptions, workflowStatusOptions, priorityOptions, canCreate,
+        canManageLabels]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Content' } }
         blueprintOptions: { type: array, items: { $ref: '#/components/schemas/ContentBlueprintOption' } }
         workflowStatusOptions: { type: array, items: { $ref: '#/components/schemas/ContentWorkflowStatusOption' } }
+        priorityOptions: { type: array, items: { $ref: '#/components/schemas/ContentPriorityOption' } }
         canCreate: { type: boolean }
+        canManageLabels: { type: boolean }
 
     ContentCreateRequest:
       type: object
@@ -4610,6 +4851,11 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Uuid' }
+    WorkItemLabelCode:
+      name: code
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
 
     RunId:
       name: runId

@@ -10,7 +10,7 @@ public record WorkItem(
         UUID id, UUID companyId, UUID projectId, UUID contentId,
         long itemSequence, String itemNo, ContentWorkItemType type,
         String title, String statusCode, WorkItemStatusCategory statusCategory,
-        WorkItemPriority priority, UUID assigneeUserId, UUID reporterUserId,
+        String priority, UUID assigneeUserId, UUID reporterUserId,
         String description, String notes, LocalDate timelineStartDate,
         LocalDate timelineEndDate, LocalDate dueDate, String rank, String projectSortKey,
         long rowVersion,
@@ -40,6 +40,7 @@ public record WorkItem(
         title = normalizeRequired(title, 300, "title");
         if (statusCode == null || !STATUS.matcher(statusCode).matches())
             throw new IllegalArgumentException("statusCode must be a stable uppercase identifier");
+        priority = normalizeCode(priority, "priority");
         description = normalizeOptional(description, MAX_BODY_LENGTH, "description");
         notes = normalizeOptional(notes, MAX_BODY_LENGTH, "notes");
         if (timelineStartDate != null && timelineEndDate != null
@@ -59,7 +60,7 @@ public record WorkItem(
 
     public static WorkItem create(UUID id, UUID companyId, UUID projectId, UUID contentId,
             long itemSequence, String itemNo, ContentWorkItemType type, String title,
-            String statusCode, WorkItemStatusCategory statusCategory, WorkItemPriority priority,
+            String statusCode, WorkItemStatusCategory statusCategory, String priority,
             UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
             LocalDate timelineEndDate, LocalDate dueDate, String rank,
             UUID reporterUserId, Instant now) {
@@ -71,7 +72,7 @@ public record WorkItem(
 
     public static WorkItem create(UUID id, UUID companyId, UUID projectId, UUID contentId,
             long itemSequence, String itemNo, ContentWorkItemType type, String title,
-            String statusCode, WorkItemStatusCategory statusCategory, WorkItemPriority priority,
+            String statusCode, WorkItemStatusCategory statusCategory, String priority,
             UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
             LocalDate timelineEndDate, LocalDate dueDate, String rank, String projectSortKey,
             UUID reporterUserId, Instant now) {
@@ -81,7 +82,7 @@ public record WorkItem(
                 projectSortKey, 0, now, reporterUserId, now, reporterUserId, null, null, null);
     }
 
-    public WorkItem updateFields(String nextTitle, WorkItemPriority nextPriority,
+    public WorkItem updateFields(String nextTitle, String nextPriority,
             UUID nextAssigneeUserId, String nextDescription, String nextNotes,
             LocalDate nextTimelineStartDate, LocalDate nextTimelineEndDate,
             LocalDate nextDueDate, UUID actorUserId, Instant now) {
@@ -181,6 +182,14 @@ public record WorkItem(
         if (normalized.isEmpty()) return null;
         if (normalized.length() > maximum)
             throw new IllegalArgumentException(field + " length is invalid");
+        return normalized;
+    }
+
+    private static String normalizeCode(String value, String field) {
+        if (value == null) return null;
+        String normalized = value.strip();
+        if (!STATUS.matcher(normalized).matches())
+            throw new IllegalArgumentException(field + " must be a stable uppercase identifier");
         return normalized;
     }
 }

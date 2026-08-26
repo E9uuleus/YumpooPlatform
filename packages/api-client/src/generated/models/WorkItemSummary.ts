@@ -12,13 +12,6 @@
  */
 
 import { mapValues } from '../runtime';
-import type { WorkItemPriority } from './WorkItemPriority';
-import {
-    WorkItemPriorityFromJSON,
-    WorkItemPriorityFromJSONTyped,
-    WorkItemPriorityToJSON,
-    WorkItemPriorityToJSONTyped,
-} from './WorkItemPriority';
 import type { WorkItemCapabilities } from './WorkItemCapabilities';
 import {
     WorkItemCapabilitiesFromJSON,
@@ -97,10 +90,10 @@ export interface WorkItemSummary {
     statusCategory: WorkItemStatusCategory;
     /**
      *
-     * @type {WorkItemPriority}
+     * @type {string}
      * @memberof WorkItemSummary
      */
-    priority: WorkItemPriority | null;
+    priority: string | null;
     /**
      *
      * @type {string}
@@ -230,7 +223,7 @@ export function WorkItemSummaryFromJSONTyped(json: any, ignoreDiscriminator: boo
         'title': json['title'],
         'statusCode': json['statusCode'],
         'statusCategory': WorkItemStatusCategoryFromJSON(json['statusCategory']),
-        'priority': WorkItemPriorityFromJSON(json['priority']),
+        'priority': json['priority'],
         'assigneeUserId': json['assigneeUserId'],
         'assigneeDisplayName': json['assigneeDisplayName'],
         'reporterUserId': json['reporterUserId'],
@@ -266,7 +259,7 @@ export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'rowVer
         'title': value['title'],
         'statusCode': value['statusCode'],
         'statusCategory': WorkItemStatusCategoryToJSON(value['statusCategory']),
-        'priority': WorkItemPriorityToJSON(value['priority']),
+        'priority': value['priority'],
         'assigneeUserId': value['assigneeUserId'],
         'assigneeDisplayName': value['assigneeDisplayName'],
         'reporterUserId': value['reporterUserId'],

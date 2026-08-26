@@ -24,8 +24,10 @@ import type {
   WorkItemDeleteRequest,
   WorkItemDetail,
   WorkItemDueDatePatchRequest,
+  WorkItemLabelCatalog,
+  WorkItemLabelCreateRequest,
+  WorkItemLabelUpdateRequest,
   WorkItemPage,
-  WorkItemPriority,
   WorkItemPriorityPatchRequest,
   WorkItemRankMoveRequest,
   WorkItemTransitionRequest,
@@ -52,10 +54,14 @@ import {
     WorkItemDetailToJSON,
     WorkItemDueDatePatchRequestFromJSON,
     WorkItemDueDatePatchRequestToJSON,
+    WorkItemLabelCatalogFromJSON,
+    WorkItemLabelCatalogToJSON,
+    WorkItemLabelCreateRequestFromJSON,
+    WorkItemLabelCreateRequestToJSON,
+    WorkItemLabelUpdateRequestFromJSON,
+    WorkItemLabelUpdateRequestToJSON,
     WorkItemPageFromJSON,
     WorkItemPageToJSON,
-    WorkItemPriorityFromJSON,
-    WorkItemPriorityToJSON,
     WorkItemPriorityPatchRequestFromJSON,
     WorkItemPriorityPatchRequestToJSON,
     WorkItemRankMoveRequestFromJSON,
@@ -66,11 +72,39 @@ import {
     WorkItemUpdateRequestToJSON,
 } from '../models/index';
 
+export interface CreateProjectWorkItemPriorityLabelRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    workItemLabelCreateRequest: WorkItemLabelCreateRequest;
+}
+
+export interface CreateProjectWorkItemStatusLabelRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    workItemLabelCreateRequest: WorkItemLabelCreateRequest;
+}
+
 export interface CreateWorkItemRequest {
     contentId: string;
     xXSRFTOKEN: string;
     idempotencyKey: string;
     workItemCreateRequest: WorkItemCreateRequest;
+}
+
+export interface DeleteProjectWorkItemPriorityLabelRequest {
+    projectId: string;
+    code: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+}
+
+export interface DeleteProjectWorkItemStatusLabelRequest {
+    projectId: string;
+    code: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
 }
 
 export interface DeleteWorkItemRequest {
@@ -79,6 +113,10 @@ export interface DeleteWorkItemRequest {
     ifMatch: string;
     idempotencyKey: string;
     workItemDeleteRequest: WorkItemDeleteRequest;
+}
+
+export interface GetProjectWorkItemLabelsRequest {
+    projectId: string;
 }
 
 export interface GetWorkItemRequest {
@@ -92,7 +130,7 @@ export interface ListContentWorkItemsRequest {
     view?: ContentViewType;
     status?: Set<string>;
     q?: string;
-    priority?: Set<WorkItemPriority>;
+    priority?: Set<string>;
     assigneeUserId?: Set<string>;
     dueFrom?: Date;
     dueTo?: Date;
@@ -107,7 +145,7 @@ export interface ListProjectWorkItemFilterOptionsRequest {
     limit?: number;
     q?: string;
     status?: Set<string>;
-    priority?: Set<WorkItemPriority>;
+    priority?: Set<string>;
     assigneeUserId?: Set<string>;
     contentId?: Set<string>;
     dueFrom?: Date;
@@ -123,7 +161,7 @@ export interface ListProjectWorkItemsRequest {
     view?: ContentViewType;
     status?: Set<string>;
     q?: string;
-    priority?: Set<WorkItemPriority>;
+    priority?: Set<string>;
     assigneeUserId?: Set<string>;
     contentId?: Set<string>;
     dueFrom?: Date;
@@ -188,6 +226,22 @@ export interface TransitionWorkItemRequest {
     workItemTransitionRequest: WorkItemTransitionRequest;
 }
 
+export interface UpdateProjectWorkItemPriorityLabelRequest {
+    projectId: string;
+    code: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    workItemLabelUpdateRequest: WorkItemLabelUpdateRequest;
+}
+
+export interface UpdateProjectWorkItemStatusLabelRequest {
+    projectId: string;
+    code: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    workItemLabelUpdateRequest: WorkItemLabelUpdateRequest;
+}
+
 export interface UpdateWorkItemRequest {
     workItemId: string;
     xXSRFTOKEN: string;
@@ -199,6 +253,144 @@ export interface UpdateWorkItemRequest {
  *
  */
 export class WorkItemsApi extends runtime.BaseAPI {
+
+    /**
+     * 新增 Project 优先级标签
+     */
+    async createProjectWorkItemPriorityLabelRaw(requestParameters: CreateProjectWorkItemPriorityLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemLabelCatalog>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling createProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling createProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling createProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        if (requestParameters['workItemLabelCreateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemLabelCreateRequest',
+                'Required parameter "workItemLabelCreateRequest" was null or undefined when calling createProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/work-item-labels/priorities`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemLabelCreateRequestToJSON(requestParameters['workItemLabelCreateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemLabelCatalogFromJSON(jsonValue));
+    }
+
+    /**
+     * 新增 Project 优先级标签
+     */
+    async createProjectWorkItemPriorityLabel(requestParameters: CreateProjectWorkItemPriorityLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemLabelCatalog> {
+        const response = await this.createProjectWorkItemPriorityLabelRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 新增 Project 状态标签
+     */
+    async createProjectWorkItemStatusLabelRaw(requestParameters: CreateProjectWorkItemStatusLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemLabelCatalog>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling createProjectWorkItemStatusLabel().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling createProjectWorkItemStatusLabel().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling createProjectWorkItemStatusLabel().'
+            );
+        }
+
+        if (requestParameters['workItemLabelCreateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemLabelCreateRequest',
+                'Required parameter "workItemLabelCreateRequest" was null or undefined when calling createProjectWorkItemStatusLabel().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/work-item-labels/statuses`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemLabelCreateRequestToJSON(requestParameters['workItemLabelCreateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemLabelCatalogFromJSON(jsonValue));
+    }
+
+    /**
+     * 新增 Project 状态标签
+     */
+    async createProjectWorkItemStatusLabel(requestParameters: CreateProjectWorkItemStatusLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemLabelCatalog> {
+        const response = await this.createProjectWorkItemStatusLabelRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * Project、Content、type、报告人和模板初始状态均由服务端派生；处理人必须是 ACTIVE Project 成员。
@@ -268,6 +460,140 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async createWorkItem(requestParameters: CreateWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.createWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 删除从未被工作项引用的优先级标签
+     */
+    async deleteProjectWorkItemPriorityLabelRaw(requestParameters: DeleteProjectWorkItemPriorityLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemLabelCatalog>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling deleteProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        if (requestParameters['code'] == null) {
+            throw new runtime.RequiredError(
+                'code',
+                'Required parameter "code" was null or undefined when calling deleteProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling deleteProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling deleteProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/work-item-labels/priorities/{code}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"code"}}`, encodeURIComponent(String(requestParameters['code'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemLabelCatalogFromJSON(jsonValue));
+    }
+
+    /**
+     * 删除从未被工作项引用的优先级标签
+     */
+    async deleteProjectWorkItemPriorityLabel(requestParameters: DeleteProjectWorkItemPriorityLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemLabelCatalog> {
+        const response = await this.deleteProjectWorkItemPriorityLabelRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 删除未受保护且从未被工作项引用的状态标签
+     */
+    async deleteProjectWorkItemStatusLabelRaw(requestParameters: DeleteProjectWorkItemStatusLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemLabelCatalog>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling deleteProjectWorkItemStatusLabel().'
+            );
+        }
+
+        if (requestParameters['code'] == null) {
+            throw new runtime.RequiredError(
+                'code',
+                'Required parameter "code" was null or undefined when calling deleteProjectWorkItemStatusLabel().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling deleteProjectWorkItemStatusLabel().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling deleteProjectWorkItemStatusLabel().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/work-item-labels/statuses/{code}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"code"}}`, encodeURIComponent(String(requestParameters['code'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemLabelCatalogFromJSON(jsonValue));
+    }
+
+    /**
+     * 删除未受保护且从未被工作项引用的状态标签
+     */
+    async deleteProjectWorkItemStatusLabel(requestParameters: DeleteProjectWorkItemStatusLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemLabelCatalog> {
+        const response = await this.deleteProjectWorkItemStatusLabelRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -350,6 +676,43 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async deleteWorkItem(requestParameters: DeleteWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.deleteWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 查询 Project 级工作项状态与优先级标签目录
+     */
+    async getProjectWorkItemLabelsRaw(requestParameters: GetProjectWorkItemLabelsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemLabelCatalog>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling getProjectWorkItemLabels().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/work-item-labels`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemLabelCatalogFromJSON(jsonValue));
+    }
+
+    /**
+     * 查询 Project 级工作项状态与优先级标签目录
+     */
+    async getProjectWorkItemLabels(requestParameters: GetProjectWorkItemLabelsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemLabelCatalog> {
+        const response = await this.getProjectWorkItemLabelsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -1215,6 +1578,160 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async transitionWorkItem(requestParameters: TransitionWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.transitionWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 立即保存优先级标签名称、颜色或启停状态
+     */
+    async updateProjectWorkItemPriorityLabelRaw(requestParameters: UpdateProjectWorkItemPriorityLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemLabelCatalog>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        if (requestParameters['code'] == null) {
+            throw new runtime.RequiredError(
+                'code',
+                'Required parameter "code" was null or undefined when calling updateProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        if (requestParameters['workItemLabelUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemLabelUpdateRequest',
+                'Required parameter "workItemLabelUpdateRequest" was null or undefined when calling updateProjectWorkItemPriorityLabel().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/work-item-labels/priorities/{code}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"code"}}`, encodeURIComponent(String(requestParameters['code'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemLabelUpdateRequestToJSON(requestParameters['workItemLabelUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemLabelCatalogFromJSON(jsonValue));
+    }
+
+    /**
+     * 立即保存优先级标签名称、颜色或启停状态
+     */
+    async updateProjectWorkItemPriorityLabel(requestParameters: UpdateProjectWorkItemPriorityLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemLabelCatalog> {
+        const response = await this.updateProjectWorkItemPriorityLabelRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 立即保存状态标签名称、颜色或启停状态
+     */
+    async updateProjectWorkItemStatusLabelRaw(requestParameters: UpdateProjectWorkItemStatusLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemLabelCatalog>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateProjectWorkItemStatusLabel().'
+            );
+        }
+
+        if (requestParameters['code'] == null) {
+            throw new runtime.RequiredError(
+                'code',
+                'Required parameter "code" was null or undefined when calling updateProjectWorkItemStatusLabel().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateProjectWorkItemStatusLabel().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateProjectWorkItemStatusLabel().'
+            );
+        }
+
+        if (requestParameters['workItemLabelUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemLabelUpdateRequest',
+                'Required parameter "workItemLabelUpdateRequest" was null or undefined when calling updateProjectWorkItemStatusLabel().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/work-item-labels/statuses/{code}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"code"}}`, encodeURIComponent(String(requestParameters['code'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemLabelUpdateRequestToJSON(requestParameters['workItemLabelUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemLabelCatalogFromJSON(jsonValue));
+    }
+
+    /**
+     * 立即保存状态标签名称、颜色或启停状态
+     */
+    async updateProjectWorkItemStatusLabel(requestParameters: UpdateProjectWorkItemStatusLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemLabelCatalog> {
+        const response = await this.updateProjectWorkItemStatusLabelRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

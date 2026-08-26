@@ -82,7 +82,9 @@ function catalog(canCreate = true): ProjectContentCatalog {
     blueprintOptions: [{ blueprintCode: 'REQUIREMENT', displayName: '需求',
       workItemType: WorkItemType.Requirement, defaultViewType: ContentViewType.Table }],
     workflowStatusOptions: [{ statusCode: 'TODO', displayName: '待办', statusCategory: WorkflowStatusCategory.Todo,
-      sortOrder: 1, initial: true, terminal: false }],
+      colorToken: 'BLUE' as never, sortOrder: 1, active: true, protectedLabel: false,
+      initial: true, terminal: false }],
+    priorityOptions: [], canManageLabels: true,
   }
 }
 

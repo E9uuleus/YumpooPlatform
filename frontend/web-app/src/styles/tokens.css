@@ -45,6 +45,18 @@
   --yp-status-pink: #d62e85;
   --yp-status-orange: #ff7b00;
   --yp-status-gray: #676879;
+  --yp-label-green: #00c875;
+  --yp-label-teal: #008f6b;
+  --yp-label-blue: #0086c0;
+  --yp-label-indigo: #4e5bd5;
+  --yp-label-purple: #784bd1;
+  --yp-label-magenta: #e50073;
+  --yp-label-red: #e2445c;
+  --yp-label-orange: #fdab3d;
+  --yp-label-amber: #ffcb00;
+  --yp-label-lime: #9cd326;
+  --yp-label-cyan: #50c5d8;
+  --yp-label-gray: #a7a7a7;
   --yp-status-gray-foreground: #ffffff;
   --yp-status-blue-foreground: #ffffff;
   --yp-status-green-foreground: #0b2b20;

@@ -4,6 +4,15 @@ import {
   type FetchAPI,
 } from './generated/runtime.js'
 
+/** Compatibility constants; the wire type is now an open Project-scoped label code. */
+export type WorkItemPriority = string
+export const WorkItemPriority = {
+  Low: 'LOW',
+  Medium: 'MEDIUM',
+  High: 'HIGH',
+  Urgent: 'URGENT',
+} as const
+
 const csrfCookieName = '__Host-yumpoo-csrf'
 const csrfHeaderName = 'X-XSRF-TOKEN'
 const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE'])

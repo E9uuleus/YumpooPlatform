@@ -2,7 +2,6 @@ package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
-import com.yumpoo.platform.workitem.domain.WorkItemPriority;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -20,7 +19,7 @@ import static com.yumpoo.platform.workitem.application.ContentViewConfig.SortFie
 public record WorkItemQuery(
         String query,
         Set<String> statuses,
-        Set<WorkItemPriority> priorities,
+        Set<String> priorities,
         Set<UUID> assigneeUserIds,
         Set<UUID> contentIds,
         LocalDate dueFrom,
@@ -73,14 +72,15 @@ public record WorkItemQuery(
         return result;
     }
 
-    private static Set<WorkItemPriority> priorities(Collection<String> requested) {
+    private static Set<String> priorities(Collection<String> requested) {
         if (requested == null) return Set.of();
-        Set<WorkItemPriority> result = new LinkedHashSet<>();
+        Set<String> result = new LinkedHashSet<>();
         for (String value : requested) {
-            try { result.add(WorkItemPriority.valueOf(value)); }
-            catch (IllegalArgumentException | NullPointerException exception) {
+            String normalized = value == null ? null : value.strip();
+            if (normalized == null || !normalized.matches("^[A-Z][A-Z0-9_]{1,31}$")) {
                 throw invalid("priority", "INVALID_VALUE", "优先级筛选值无效");
             }
+            result.add(normalized);
         }
         return result;
     }

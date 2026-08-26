@@ -12,7 +12,7 @@ Project 创建同时跨越 `catalog` 的 Project/负责人 membership、`templat
 
 `catalog.project` 保存 Company 内唯一且不可变的 code、类型、内部 MAIN Workspace 归属、负责人和模板引用；创建时固定为 `DRAFT/rowVersion=0`。请求不接受 `workspaceId`，事务内锁定 Company 唯一且 ACTIVE 的 MAIN 后自动写入其稳定 ID。负责人必须是本企业 `ACTIVE + ENABLED` User，并在同一事务同步创建 ACTIVE `project_membership`。延迟约束触发器在事务提交时保证当前 owner 始终有 ACTIVE membership，允许 M2-05 在一个事务中先建 membership 再改 owner。
 
-`workitem.content` 是初始 Content 真源。初始化端口按锁定的模板快照创建全部 blueprint；四个 V1 模板当前均形成 REQUIREMENTS、TASKS、DEFECTS 三行。每行保存模板 key/version 和 blueprint code，初始为 ACTIVE、使用 blueprint 的默认视图且 `viewConfig={}`。只约束 Project 内 code 唯一，不约束同一 Project 内 Content 类型唯一，为 M2-09 的后续 Content 管理保留空间。
+`workitem.content` 是初始 Content 真源。初始化端口按锁定的模板快照创建全部 blueprint；四个 V1 模板当前均形成 REQUIREMENTS、TASKS、DEFECTS 三行。每行保存模板 key/version 和 blueprint code，初始为 ACTIVE、使用 blueprint 的默认视图且 `viewConfig={}`。只约束 Project 内 code 唯一，不约束同一 Project 内 Content 类型唯一，为 M2-09 的后续 Content 管理保留空间。M2-19A 起同一初始化事务还建立 [Project 级状态/优先级标签目录](../data/2026-08-26-project-work-item-label-catalog.md)，因此调用方不会观察到缺少目录的 Project。
 
 客户文本在创建时去除首尾空白，空串归一为 null。PRODUCT_DEVELOPMENT 的客户字段始终可选；PRE_SALES、IMPLEMENTATION、HYPERCARE 也允许缺少 `customerName` 创建 DRAFT，PPM-007 的必填检查延至 M2-06 激活，而不是阻止草稿初始化。
 

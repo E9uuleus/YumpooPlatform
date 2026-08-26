@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-19A",
+  "status": "PASS",
+  "command": "pnpm verify:m2-19a",
+  "startedAt": "2026-08-26T12:00:00Z",
+  "completedAt": "2026-08-26T13:00:00Z",
+  "flywayVersion": "41",
+  "checks": {
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiGeneratedClient": true,
+    "backendCleanTests": true,
+    "webTests": true,
+    "webTypecheck": true,
+    "assetGate": true
+  },
+  "databaseConclusion": "标签目录需要 V41 数据库迁移；抽屉路由与截止日期修复不修改表设计"
+}

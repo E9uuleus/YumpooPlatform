@@ -3,7 +3,6 @@ package com.yumpoo.platform.workitem.application;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.workitem.domain.ContentViewType;
 import com.yumpoo.platform.workitem.domain.WorkItem;
-import com.yumpoo.platform.workitem.domain.WorkItemPriority;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -19,7 +18,7 @@ public interface WorkItemRepository {
     record RankedProjectWorkItem(UUID id, String rank) {}
     record FilterOptionCount(String value, long count) {}
     record ProjectCursorAnchor(UUID id, String projectSortKey, long itemSequence,
-            String title, String statusCode, WorkItemPriority priority,
+            String title, String statusCode, String priority,
             UUID assigneeUserId, UUID reporterUserId, LocalDate timelineStartDate,
             LocalDate timelineEndDate, LocalDate dueDate, Instant updatedAt) {
         static ProjectCursorAnchor from(WorkItem item) {

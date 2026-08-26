@@ -8,6 +8,8 @@ Work Item 是跨 Content、Project 生命周期与归档治理的长期事实。
 
 ## Decision
 
+M2-19A 起，Project 级状态/优先级标签目录成为运行时可选值、展示和排序真源；受保护初始状态、停用/删除及粗统计兼容语义见 [Project 级标签目录决策](../data/2026-08-26-project-work-item-label-catalog.md)。下文关于固定模板迁移图和固定优先级秩的描述仅适用于 M2-19A 前事实及模板初始化来源。
+
 `work_item` 保存完整领域列。创建与 M2-11 字段更新使用标题、优先级、处理人、描述、备注、计划起止日和截止日的快照；`priority` 与其他可空字段必须显式出现，传 `null` 表示暂不设置或清空。摘要、详情、事件和数据库列共同接受空优先级，V39 只移除 `priority` 的非空约束而不改写既有值。描述与备注规范化为最多 16 KiB 的纯文本；自然日使用 `LocalDate`/`YYYY-MM-DD`，不经过服务器或浏览器本地时区换算。既有 v1 创建契约继续允许旧客户端省略新增处理人和日期，初始值按空处理；新 Web 固定提交完整八字段。
 
 事项编号按 Project 独立计数器原子递增，固化为 `PROJECT_CODE-sequence`。编号不复用，Project 改名或后续代码策略变化都不改写既有编号。幂等记录包住编号分配、Work Item 插入和 Outbox；同键同请求重放存储的 201 响应，不再次推进计数器或发布事件。
@@ -16,11 +18,11 @@ Work Item 是跨 Content、Project 生命周期与归档治理的长期事实。
 
 字段更新事务固定按 Project `FOR SHARE`、Content `FOR SHARE`、Work Item `FOR UPDATE` 加锁，再校验调用人、预期版本、ACTIVE assignee membership 与字段约束，最后执行带 `row_version` 条件的更新。Owner 与 ACTIVE Member 只可编辑 DRAFT/ACTIVE Project 的 ACTIVE Content；非成员 CompanyAdmin 为 403，不可见资源为 404，归档资源为 409。强 ETag 由 `rowVersion` 派生；无实际变化返回原资源和 ETag，不改变版本、审计时间或 Outbox；旧 ETag 返回 412，绝不自动重放。
 
-M2-12 状态命令根据 Project 固化的 `templateKey + templateVersion` 读取精确迁移边。迁移只允许边上的 `MEMBER` 权限，目标类别从模板目标状态派生；说明去除首尾空白、最长 500 字，要求说明的边缺失时返回 422。M2-14 起状态命令按 Project → Content → 排序后的源/目标 lane → Work Item 加锁，专用条件更新改变 `status_code/status_category/rank`、更新审计字段和 `row_version`，并把事项放到目标状态顶部；所有协作字段保持不变。
+M2-12 初始实现按 Project 固化模板读取迁移边；M2-19A 后模板只负责目录初始化，运行时允许在所有启用状态间迁移，目标具体状态与颜色来自 Project 标签目录，自定义状态使用兼容类别 TODO。状态命令仍按 Project → Content → 排序后的源/目标 lane → Work Item 加锁，专用条件更新改变 `status_code/status_category/rank`、更新审计字段和 `row_version`，并把事项放到目标状态顶部；所有协作字段保持不变。
 
-`WorkItemCapabilities.availableTransitions` 是服务端按模板状态顺序计算的唯一客户端选项源；只读、归档、终态、无权限或无合法边时为空。迁移要求 XSRF、强 `If-Match` 与持久化幂等键；同键同请求精确重放原 200 响应，同键异参冲突。状态、一条 Outbox 事件与幂等完成记录在同一事务提交；重放、非法边和并发失败不发新事件。
+`WorkItemCapabilities.availableTransitions` 是服务端按 Project 标签目录顺序计算的唯一客户端迁移选项源；只读、归档或无权限时为空，停用状态不可作为新目标。迁移要求 XSRF、强 `If-Match` 与持久化幂等键；同键同请求精确重放原 200 响应，同键异参冲突。状态、一条 Outbox 事件与幂等完成记录在同一事务提交；重放、非法目标和并发失败不发新事件。
 
-M2-13 列表查询先完成 Project/Content 可见性校验，再按固定模板验证状态和排序。标题包含搜索大小写不敏感且转义 SQL LIKE 通配符；同字段值取 OR、不同字段取 AND，截止区间包含首尾，`updatedAfter` 严格大于。排序最多三层且字段来自 `ContentSortField`，重复、未知或格式错误统一返回 422；所有排序最后追加 `id ASC`，未传新参数的旧客户端继续按事项序号倒序。状态秩来自模板 `sortOrder`，优先级秩固定为 LOW、MEDIUM、HIGH、URGENT。
+M2-13 列表查询先完成 Project/Content 可见性校验，再验证状态和排序；M2-19A 后状态与优先级合法值及秩来自 Project 标签目录。标题包含搜索大小写不敏感且转义 SQL LIKE 通配符；同字段值取 OR、不同字段取 AND，截止区间包含首尾，`updatedAfter` 严格大于。排序最多三层且字段来自 `ContentSortField`，重复、未知或格式错误统一返回 422；所有排序最后追加 `id ASC`，未传新参数的旧客户端继续按事项序号倒序。
 
 `GET /projects/{projectId}/work-items` 在完成 Project 可见性判断后聚合该 Project 全部 Content 的非删除 Work Item。它使用独立的 Keyset Cursor 契约 `ProjectWorkItemCursorPage`，默认 25、最大 100，执行 `limit + 1` 且不做 OFFSET/COUNT；版本化 Base64URL 游标绑定 Project、视图、查询指纹和末行的完整排序元组，下一页直接以该不可变快照 seek，不因锚点随后被编辑而漂移，篡改、跨 Project 或换筛选复用均返回 422。服务端先批量加载 Content 与参与人员，再逐行计算可见性、字段编辑、讨论、项目排序和状态迁移能力，禁止逐事项查询。项目列表项是专用轻量模型，只包含表格/看板字段、ETag 和能力，明确不携带描述、备注、评论、附件或时间线详情；这些数据只在打开详情、讨论或附件区域时分别查询。优先级升降序都将空值放在末尾，指定优先级筛选不包含空值。项目 Kanban 必须恰好指定一个状态，并固定按 `updatedAt DESC, id ASC` 使用每泳道独立游标。
 

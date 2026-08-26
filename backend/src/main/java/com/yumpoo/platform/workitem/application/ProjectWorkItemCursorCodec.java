@@ -3,7 +3,6 @@ package com.yumpoo.platform.workitem.application;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.workitem.domain.ContentViewType;
-import com.yumpoo.platform.workitem.domain.WorkItemPriority;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -64,7 +63,7 @@ final class ProjectWorkItemCursorCodec {
     private static LocalDate date(String value) {
         return "-".equals(value) ? null : LocalDate.parse(value);
     }
-    private static WorkItemPriority priority(String value) {
-        return "-".equals(value) ? null : WorkItemPriority.valueOf(value);
+    private static String priority(String value) {
+        return "-".equals(value) ? null : value;
     }
 }

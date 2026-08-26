@@ -12,14 +12,6 @@
  */
 
 import { mapValues } from '../runtime';
-import type { WorkItemPriority } from './WorkItemPriority';
-import {
-    WorkItemPriorityFromJSON,
-    WorkItemPriorityFromJSONTyped,
-    WorkItemPriorityToJSON,
-    WorkItemPriorityToJSONTyped,
-} from './WorkItemPriority';
-
 /**
  *
  * @export
@@ -28,13 +20,11 @@ import {
 export interface WorkItemPriorityPatchRequest {
     /**
      *
-     * @type {WorkItemPriority}
+     * @type {string}
      * @memberof WorkItemPriorityPatchRequest
      */
-    priority: WorkItemPriority | null;
+    priority: string | null;
 }
-
-
 
 /**
  * Check if a given object implements the WorkItemPriorityPatchRequest interface.
@@ -54,7 +44,7 @@ export function WorkItemPriorityPatchRequestFromJSONTyped(json: any, ignoreDiscr
     }
     return {
 
-        'priority': WorkItemPriorityFromJSON(json['priority']),
+        'priority': json['priority'],
     };
 }
 
@@ -69,6 +59,6 @@ export function WorkItemPriorityPatchRequestToJSONTyped(value?: WorkItemPriority
 
     return {
 
-        'priority': WorkItemPriorityToJSON(value['priority']),
+        'priority': value['priority'],
     };
 }
