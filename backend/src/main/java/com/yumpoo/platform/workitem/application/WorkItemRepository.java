@@ -75,6 +75,8 @@ public interface WorkItemRepository {
     List<WorkItem> findProjectCursorPage(UUID companyId, UUID projectId,
             WorkItemQuery query, WorkItemSortRanks ranks, ContentViewType view,
             ProjectCursorAnchor anchor, int limit);
+    List<WorkItem> findSubitems(UUID companyId, UUID projectId, UUID parentWorkItemId,
+            WorkItemQuery query, WorkItemSortRanks ranks);
     List<FilterOptionCount> findProjectFilterOptions(UUID companyId, UUID projectId,
             WorkItemQuery query, String field, String afterValue, int limit);
     long countProjectPage(UUID companyId, UUID projectId, WorkItemQuery query);

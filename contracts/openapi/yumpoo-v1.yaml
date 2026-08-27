@@ -2008,6 +2008,104 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
+  /work-items/{parentWorkItemId}/subitems:
+    get:
+      tags: [WorkItems]
+      operationId: listWorkItemSubitems
+      summary: 查询 Work Item 的直接子项
+      description: 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: parentWorkItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - name: sort
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 3
+            items:
+              type: string
+              pattern: '^(ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
+      responses:
+        '200':
+          description: 当前调用人可见的直接子项。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemSubitemList' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      tags: [WorkItems]
+      operationId: createWorkItemSubitem
+      summary: 为根 Work Item 创建全新子项
+      description: 子项必须属于父项所在 Project；Content 可在同 Project 的 ACTIVE Content 中选择。本阶段不支持在子项下继续创建子项。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: parentWorkItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemSubitemCreateRequest' } } }
+      responses:
+        '201':
+          description: 子项及 PARENT_CHILD 关系已原子创建或幂等重放。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /work-items/{parentWorkItemId}/subitems/{subitemId}/order-moves:
+    post:
+      tags: [WorkItems]
+      operationId: moveWorkItemSubitemOrder
+      summary: 调整同一父项下的子项顺序
+      description: 可见前后锚点必须都是该父项的未删除直接子项。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: parentWorkItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - name: subitemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectWorkItemOrderMoveRequest' } } }
+      responses:
+        '200':
+          description: 子项顺序已更新或返回幂等重放结果。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /work-items/{workItemId}:
     get:
       tags: [WorkItems]
@@ -3552,7 +3650,7 @@ components:
       additionalProperties: false
       required: [id, projectId, contentId, contentName, itemNo, type, title, statusCode,
         statusCategory, priority, assigneeUserId, assigneeDisplayName, dueDate, rowVersion,
-        etag, capabilities, updatedAt]
+        etag, capabilities, subitemCount, updatedAt]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
@@ -3573,6 +3671,7 @@ components:
         rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
         etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
         capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
+        subitemCount: { type: integer, format: int64, minimum: 0, readOnly: true }
         updatedAt: { type: string, format: date-time, readOnly: true }
 
     ProjectWorkItemCursorPage:
@@ -3584,6 +3683,13 @@ components:
           type: array
           items: { $ref: '#/components/schemas/ProjectWorkItemListItem' }
         nextCursor: { type: string, minLength: 1, maxLength: 512, nullable: true }
+
+    WorkItemSubitemList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ProjectWorkItemListItem' } }
 
     ProjectWorkItemFilterOption:
       type: object
@@ -3717,6 +3823,24 @@ components:
       additionalProperties: false
       required: [title, priority, description, notes]
       properties:
+        title: { type: string, minLength: 1, maxLength: 300 }
+        priority:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/WorkItemPriority' }]
+          nullable: true
+        assigneeUserId: { type: string, format: uuid, nullable: true }
+        description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        timelineStartDate: { type: string, format: date, nullable: true }
+        timelineEndDate: { type: string, format: date, nullable: true }
+        dueDate: { type: string, format: date, nullable: true }
+
+    WorkItemSubitemCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [contentId, title, priority, description, notes]
+      properties:
+        contentId: { $ref: '#/components/schemas/Uuid' }
         title: { type: string, minLength: 1, maxLength: 300 }
         priority:
           type: string

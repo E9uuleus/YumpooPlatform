@@ -138,6 +138,12 @@ export interface ProjectWorkItemListItem {
     capabilities: WorkItemCapabilities;
     /**
      *
+     * @type {number}
+     * @memberof ProjectWorkItemListItem
+     */
+    readonly subitemCount: number;
+    /**
+     *
      * @type {Date}
      * @memberof ProjectWorkItemListItem
      */
@@ -166,6 +172,7 @@ export function instanceOfProjectWorkItemListItem(value: object): value is Proje
     if (!('rowVersion' in value) || value['rowVersion'] === undefined) return false;
     if (!('etag' in value) || value['etag'] === undefined) return false;
     if (!('capabilities' in value) || value['capabilities'] === undefined) return false;
+    if (!('subitemCount' in value) || value['subitemCount'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
     return true;
 }
@@ -196,6 +203,7 @@ export function ProjectWorkItemListItemFromJSONTyped(json: any, ignoreDiscrimina
         'rowVersion': json['rowVersion'],
         'etag': json['etag'],
         'capabilities': WorkItemCapabilitiesFromJSON(json['capabilities']),
+        'subitemCount': json['subitemCount'],
         'updatedAt': (new Date(json['updatedAt'])),
     };
 }
@@ -204,7 +212,7 @@ export function ProjectWorkItemListItemToJSON(json: any): ProjectWorkItemListIte
     return ProjectWorkItemListItemToJSONTyped(json, false);
 }
 
-export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemListItem, 'rowVersion'|'etag'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemListItem, 'rowVersion'|'etag'|'subitemCount'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

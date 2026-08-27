@@ -147,6 +147,8 @@ export * from './WorkItemRankMoveRequest';
 export * from './WorkItemRankPlacement';
 export * from './WorkItemStatusCategory';
 export * from './WorkItemStatusLabel';
+export * from './WorkItemSubitemCreateRequest';
+export * from './WorkItemSubitemList';
 export * from './WorkItemSummary';
 export * from './WorkItemTransitionOption';
 export * from './WorkItemTransitionRequest';

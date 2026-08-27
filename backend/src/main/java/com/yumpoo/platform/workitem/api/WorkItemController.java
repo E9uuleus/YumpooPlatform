@@ -10,9 +10,11 @@ import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResul
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.CreateSubitem;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Delete;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.RankMove;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.ProjectOrderMove;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.SubitemOrderMove;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.InlineUpdate;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Restore;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Transition;
@@ -21,6 +23,7 @@ import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemDetail;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemPage;
 import com.yumpoo.platform.workitem.application.WorkItemModels.ProjectWorkItemCursorPage;
 import com.yumpoo.platform.workitem.application.WorkItemModels.ProjectWorkItemFilterOptionCursorPage;
+import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemSubitemList;
 import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemService;
 import jakarta.validation.Valid;
@@ -147,6 +150,61 @@ public final class WorkItemController {
         headers.setETag(stored.etag());
         headers.setLocation(URI.create("/api/v1/work-items/" + stored.resourceId()));
         return new ResponseEntity<>(stored.responseJson(), headers, HttpStatus.CREATED);
+    }
+
+    @GetMapping("/work-items/{parentWorkItemId}/subitems")
+    ResponseEntity<WorkItemSubitemList> listSubitems(@PathVariable UUID parentWorkItemId,
+            HttpServletRequest httpRequest) {
+        String[] sorts = httpRequest.getParameterValues("sort");
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(service.listSubitems(actors.requiredActive(), parentWorkItemId,
+                        new WorkItemQuery.Request(null, null, null, null, null,
+                                null, null, null, sorts == null ? null : List.of(sorts))));
+    }
+
+    @PostMapping("/work-items/{parentWorkItemId}/subitems")
+    ResponseEntity<String> createSubitem(@PathVariable UUID parentWorkItemId,
+            @Valid @RequestBody WorkItemSubitemCreateRequest body,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
+            String idempotencyHeader) {
+        CurrentActor actor = actors.requiredActive();
+        UUID key = keys.parseRequired(idempotencyHeader);
+        StoredCommandResult stored = service.createSubitem(new CreateSubitem(actor,
+                parentWorkItemId, body.contentId(), body.title(), body.priority(),
+                body.assigneeUserId(), body.description(), body.notes(), body.timelineStartDate(),
+                body.timelineEndDate(), body.dueDate(), key,
+                hasher.hash("createWorkItemSubitem", Map.of(
+                                "parentWorkItemId", parentWorkItemId.toString()),
+                        objectMapper.valueToTree(body)))).result();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setCacheControl(CacheControl.noStore());
+        headers.setETag(stored.etag());
+        headers.setLocation(URI.create("/api/v1/work-items/" + stored.resourceId()));
+        return new ResponseEntity<>(stored.responseJson(), headers, HttpStatus.CREATED);
+    }
+
+    @PostMapping("/work-items/{parentWorkItemId}/subitems/{subitemId}/order-moves")
+    ResponseEntity<String> subitemOrderMove(@PathVariable UUID parentWorkItemId,
+            @PathVariable UUID subitemId,
+            @RequestBody ProjectWorkItemOrderMoveRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false)
+            String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
+            String idempotencyHeader) {
+        CurrentActor actor = actors.requiredActive();
+        service.find(actor, subitemId);
+        long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        UUID key = keys.parseRequired(idempotencyHeader);
+        StoredCommandResult stored = service.subitemOrderMove(new SubitemOrderMove(actor,
+                parentWorkItemId, subitemId, expectedVersion,
+                body.previousVisibleWorkItemId(), body.nextVisibleWorkItemId(), key,
+                hasher.hash("moveWorkItemSubitemOrder", Map.of(
+                                "parentWorkItemId", parentWorkItemId.toString(),
+                                "subitemId", subitemId.toString(),
+                                "ifMatch", Long.toString(expectedVersion)),
+                        objectMapper.valueToTree(body)))).result();
+        return storedResponse(stored);
     }
 
     @GetMapping("/work-items/{workItemId}")

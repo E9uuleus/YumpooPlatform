@@ -45,7 +45,11 @@ public final class WorkItemModels {
             String contentName, String itemNo, String type, String title, String statusCode,
             String statusCategory, String priority, UUID assigneeUserId,
             String assigneeDisplayName, LocalDate dueDate, long rowVersion, String etag,
-            WorkItemCapabilities capabilities, Instant updatedAt) {}
+            WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt) {}
+
+    public record WorkItemSubitemList(List<ProjectWorkItemListItem> items) {
+        public WorkItemSubitemList { items = List.copyOf(items); }
+    }
 
     public record ProjectWorkItemCursorPage(List<ProjectWorkItemListItem> items,
             String nextCursor) {

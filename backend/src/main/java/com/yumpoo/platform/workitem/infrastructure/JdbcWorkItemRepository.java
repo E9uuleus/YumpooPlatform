@@ -541,6 +541,25 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
+    public List<WorkItem> findSubitems(UUID companyId, UUID projectId, UUID parentWorkItemId,
+            WorkItemQuery query, WorkItemSortRanks ranks) {
+        Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
+        parameters.put("parentWorkItemId", parentWorkItemId);
+        String where = where(query, parameters, false, false)
+                + " AND EXISTS (SELECT 1 FROM yumpoo.work_item_relation relation "
+                + "WHERE relation.company_id=:companyId "
+                + "AND relation.relation_type='PARENT_CHILD' "
+                + "AND relation.left_work_item_id=:parentWorkItemId "
+                + "AND relation.right_work_item_id=yumpoo.work_item.id "
+                + "AND relation.deleted_at IS NULL)";
+        String orderBy = query.sorts().isEmpty() ? "project_sort_key ASC, id ASC"
+                : orderBy(query, ranks, parameters);
+        JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
+                + " FROM yumpoo.work_item" + where + " ORDER BY " + orderBy);
+        return bind(statement, parameters).query(JdbcWorkItemRepository::map).list();
+    }
+
+    @Override
     public List<FilterOptionCount> findProjectFilterOptions(UUID companyId, UUID projectId,
             WorkItemQuery query, String field, String afterValue, int limit) {
         String expression = switch (field) {
@@ -614,10 +633,22 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     private static String where(WorkItemQuery query, Map<String, Object> parameters,
             boolean contentScoped) {
+        return where(query, parameters, contentScoped, true);
+    }
+
+    private static String where(WorkItemQuery query, Map<String, Object> parameters,
+            boolean contentScoped, boolean rootsOnly) {
         StringBuilder sql = new StringBuilder(" WHERE company_id=:companyId")
                 .append(" AND project_id=:projectId")
                 .append(contentScoped ? " AND content_id=:contentId" : "")
                 .append(" AND deleted_at IS NULL");
+        if (rootsOnly) {
+            sql.append(" AND NOT EXISTS (SELECT 1 FROM yumpoo.work_item_relation relation ")
+                    .append("WHERE relation.company_id=:companyId ")
+                    .append("AND relation.relation_type='PARENT_CHILD' ")
+                    .append("AND relation.right_work_item_id=yumpoo.work_item.id ")
+                    .append("AND relation.deleted_at IS NULL)");
+        }
         if (query.query() != null) {
             sql.append(" AND (lower(title) LIKE :titleQuery ESCAPE '\\' "
                     + "OR lower(item_no) LIKE :titleQuery ESCAPE '\\')");

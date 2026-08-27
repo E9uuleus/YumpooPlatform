@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-relation-created-v1.schema.json",
+  "title": "Work Item relation created",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    { "type": "object", "properties": {
+      "eventType": { "const": "workitem.work_item_relation_created" },
+      "eventVersion": { "const": 1 },
+      "aggregateType": { "const": "WorkItemRelation" },
+      "aggregateVersion": { "const": 0 },
+      "payload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["relationId", "relationType", "leftWorkItemId", "rightWorkItemId", "leftProjectId", "rightProjectId"],
+        "properties": {
+          "relationId": { "type": "string", "format": "uuid" },
+          "relationType": { "enum": ["PARENT_CHILD", "RELATED", "BLOCKS", "SOURCE", "DUPLICATE"] },
+          "leftWorkItemId": { "type": "string", "format": "uuid" },
+          "rightWorkItemId": { "type": "string", "format": "uuid" },
+          "leftProjectId": { "type": "string", "format": "uuid" },
+          "rightProjectId": { "type": "string", "format": "uuid" }
+        }
+      }
+    } }
+  ]
+}

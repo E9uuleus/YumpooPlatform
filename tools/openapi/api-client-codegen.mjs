@@ -155,6 +155,24 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   }
   fs.writeFileSync(workItemCreatePath, workItemCreate, 'utf8')
 
+  const workItemSubitemCreatePath = path.join(sourceRoot, 'models', 'WorkItemSubitemCreateRequest.ts')
+  let workItemSubitemCreate = normalizeText(fs.readFileSync(workItemSubitemCreatePath, 'utf8'))
+  workItemSubitemCreate = replaceExactlyOnce(
+    workItemSubitemCreate,
+    "        'assigneeUserId': json['assigneeUserId'] == null ? undefined : json['assigneeUserId'],",
+    "        ...(json['assigneeUserId'] === undefined ? {} : { 'assigneeUserId': json['assigneeUserId'] }),",
+    'WorkItemSubitemCreateRequest 可选处理人精确属性兼容',
+  )
+  for (const field of ['timelineStartDate', 'timelineEndDate', 'dueDate']) {
+    workItemSubitemCreate = replaceExactlyOnce(
+      workItemSubitemCreate,
+      `        '${field}': json['${field}'] == null ? undefined : (new Date(json['${field}'])),`,
+      `        ...(json['${field}'] === undefined ? {} : { '${field}': json['${field}'] === null ? null : new Date(json['${field}']) }),`,
+      `WorkItemSubitemCreateRequest 可选自然日 ${field} 精确属性兼容`,
+    )
+  }
+  fs.writeFileSync(workItemSubitemCreatePath, workItemSubitemCreate, 'utf8')
+
   const attachmentMetadataPath = path.join(sourceRoot, 'models', 'AttachmentMetadata.ts')
   let attachmentMetadata = normalizeText(fs.readFileSync(attachmentMetadataPath, 'utf8'))
   attachmentMetadata = replaceExactlyOnce(

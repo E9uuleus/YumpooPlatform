@@ -14,6 +14,11 @@ public final class WorkItemCommands {
             LocalDate timelineEndDate, LocalDate dueDate, UUID idempotencyKey,
             RequestHash requestHash) {}
 
+    public record CreateSubitem(CurrentActor actor, UUID parentWorkItemId, UUID contentId,
+            String title, String priority, UUID assigneeUserId, String description, String notes,
+            LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
+            UUID idempotencyKey, RequestHash requestHash) {}
+
     public record Update(CurrentActor actor, UUID workItemId, long expectedVersion,
             String title, String priority, UUID assigneeUserId, String description,
             String notes, LocalDate timelineStartDate, LocalDate timelineEndDate,
@@ -27,6 +32,10 @@ public final class WorkItemCommands {
             UUID idempotencyKey, RequestHash requestHash) {}
 
     public record ProjectOrderMove(CurrentActor actor, UUID projectId, UUID workItemId,
+            long expectedVersion, UUID previousVisibleWorkItemId, UUID nextVisibleWorkItemId,
+            UUID idempotencyKey, RequestHash requestHash) {}
+
+    public record SubitemOrderMove(CurrentActor actor, UUID parentWorkItemId, UUID subitemId,
             long expectedVersion, UUID previousVisibleWorkItemId, UUID nextVisibleWorkItemId,
             UUID idempotencyKey, RequestHash requestHash) {}
 

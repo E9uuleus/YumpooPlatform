@@ -30,6 +30,8 @@ import type {
   WorkItemPage,
   WorkItemPriorityPatchRequest,
   WorkItemRankMoveRequest,
+  WorkItemSubitemCreateRequest,
+  WorkItemSubitemList,
   WorkItemTransitionRequest,
   WorkItemUpdateRequest,
 } from '../models/index';
@@ -66,6 +68,10 @@ import {
     WorkItemPriorityPatchRequestToJSON,
     WorkItemRankMoveRequestFromJSON,
     WorkItemRankMoveRequestToJSON,
+    WorkItemSubitemCreateRequestFromJSON,
+    WorkItemSubitemCreateRequestToJSON,
+    WorkItemSubitemListFromJSON,
+    WorkItemSubitemListToJSON,
     WorkItemTransitionRequestFromJSON,
     WorkItemTransitionRequestToJSON,
     WorkItemUpdateRequestFromJSON,
@@ -91,6 +97,13 @@ export interface CreateWorkItemRequest {
     xXSRFTOKEN: string;
     idempotencyKey: string;
     workItemCreateRequest: WorkItemCreateRequest;
+}
+
+export interface CreateWorkItemSubitemRequest {
+    parentWorkItemId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    workItemSubitemCreateRequest: WorkItemSubitemCreateRequest;
 }
 
 export interface DeleteProjectWorkItemPriorityLabelRequest {
@@ -170,9 +183,23 @@ export interface ListProjectWorkItemsRequest {
     sort?: Array<string>;
 }
 
+export interface ListWorkItemSubitemsRequest {
+    parentWorkItemId: string;
+    sort?: Array<string>;
+}
+
 export interface MoveProjectWorkItemOrderRequest {
     projectId: string;
     workItemId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    projectWorkItemOrderMoveRequest: ProjectWorkItemOrderMoveRequest;
+}
+
+export interface MoveWorkItemSubitemOrderRequest {
+    parentWorkItemId: string;
+    subitemId: string;
     xXSRFTOKEN: string;
     ifMatch: string;
     idempotencyKey: string;
@@ -460,6 +487,77 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async createWorkItem(requestParameters: CreateWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.createWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 子项必须属于父项所在 Project；Content 可在同 Project 的 ACTIVE Content 中选择。本阶段不支持在子项下继续创建子项。
+     * 为根 Work Item 创建全新子项
+     */
+    async createWorkItemSubitemRaw(requestParameters: CreateWorkItemSubitemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['parentWorkItemId'] == null) {
+            throw new runtime.RequiredError(
+                'parentWorkItemId',
+                'Required parameter "parentWorkItemId" was null or undefined when calling createWorkItemSubitem().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling createWorkItemSubitem().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling createWorkItemSubitem().'
+            );
+        }
+
+        if (requestParameters['workItemSubitemCreateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemSubitemCreateRequest',
+                'Required parameter "workItemSubitemCreateRequest" was null or undefined when calling createWorkItemSubitem().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{parentWorkItemId}/subitems`;
+        urlPath = urlPath.replace(`{${"parentWorkItemId"}}`, encodeURIComponent(String(requestParameters['parentWorkItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemSubitemCreateRequestToJSON(requestParameters['workItemSubitemCreateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 子项必须属于父项所在 Project；Content 可在同 Project 的 ACTIVE Content 中选择。本阶段不支持在子项下继续创建子项。
+     * 为根 Work Item 创建全新子项
+     */
+    async createWorkItemSubitem(requestParameters: CreateWorkItemSubitemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.createWorkItemSubitemRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -1016,6 +1114,49 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
+     * 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
+     * 查询 Work Item 的直接子项
+     */
+    async listWorkItemSubitemsRaw(requestParameters: ListWorkItemSubitemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemSubitemList>> {
+        if (requestParameters['parentWorkItemId'] == null) {
+            throw new runtime.RequiredError(
+                'parentWorkItemId',
+                'Required parameter "parentWorkItemId" was null or undefined when calling listWorkItemSubitems().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['sort'] != null) {
+            queryParameters['sort'] = requestParameters['sort'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/work-items/{parentWorkItemId}/subitems`;
+        urlPath = urlPath.replace(`{${"parentWorkItemId"}}`, encodeURIComponent(String(requestParameters['parentWorkItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemSubitemListFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
+     * 查询 Work Item 的直接子项
+     */
+    async listWorkItemSubitems(requestParameters: ListWorkItemSubitemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemSubitemList> {
+        const response = await this.listWorkItemSubitemsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * 仅提交筛选结果中的可见上下邻项；服务端在真实项目顺序中分配稀疏键。
      * 调整项目共享表格顺序
      */
@@ -1102,6 +1243,96 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async moveProjectWorkItemOrder(requestParameters: MoveProjectWorkItemOrderRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.moveProjectWorkItemOrderRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 可见前后锚点必须都是该父项的未删除直接子项。
+     * 调整同一父项下的子项顺序
+     */
+    async moveWorkItemSubitemOrderRaw(requestParameters: MoveWorkItemSubitemOrderRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['parentWorkItemId'] == null) {
+            throw new runtime.RequiredError(
+                'parentWorkItemId',
+                'Required parameter "parentWorkItemId" was null or undefined when calling moveWorkItemSubitemOrder().'
+            );
+        }
+
+        if (requestParameters['subitemId'] == null) {
+            throw new runtime.RequiredError(
+                'subitemId',
+                'Required parameter "subitemId" was null or undefined when calling moveWorkItemSubitemOrder().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling moveWorkItemSubitemOrder().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling moveWorkItemSubitemOrder().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling moveWorkItemSubitemOrder().'
+            );
+        }
+
+        if (requestParameters['projectWorkItemOrderMoveRequest'] == null) {
+            throw new runtime.RequiredError(
+                'projectWorkItemOrderMoveRequest',
+                'Required parameter "projectWorkItemOrderMoveRequest" was null or undefined when calling moveWorkItemSubitemOrder().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{parentWorkItemId}/subitems/{subitemId}/order-moves`;
+        urlPath = urlPath.replace(`{${"parentWorkItemId"}}`, encodeURIComponent(String(requestParameters['parentWorkItemId'])));
+        urlPath = urlPath.replace(`{${"subitemId"}}`, encodeURIComponent(String(requestParameters['subitemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectWorkItemOrderMoveRequestToJSON(requestParameters['projectWorkItemOrderMoveRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 可见前后锚点必须都是该父项的未删除直接子项。
+     * 调整同一父项下的子项顺序
+     */
+    async moveWorkItemSubitemOrder(requestParameters: MoveWorkItemSubitemOrderRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.moveWorkItemSubitemOrderRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

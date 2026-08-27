@@ -1,0 +1,22 @@
+{
+  "eventId": "2a000000-0000-4000-8000-000000000021",
+  "eventType": "workitem.work_item_relation_created",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-27T16:00:00Z",
+  "aggregateType": "WorkItemRelation",
+  "aggregateId": "2a000000-0000-4000-8000-000000000022",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2a000000-0000-4000-8000-000000000023" },
+  "requestId": "m2-21a-create-subitem",
+  "correlationId": "m2-21a-create-subitem",
+  "causationId": null,
+  "payload": {
+    "relationId": "2a000000-0000-4000-8000-000000000022",
+    "relationType": "PARENT_CHILD",
+    "leftWorkItemId": "2a000000-0000-4000-8000-000000000024",
+    "rightWorkItemId": "2a000000-0000-4000-8000-000000000025",
+    "leftProjectId": "2a000000-0000-4000-8000-000000000026",
+    "rightProjectId": "2a000000-0000-4000-8000-000000000026"
+  }
+}
