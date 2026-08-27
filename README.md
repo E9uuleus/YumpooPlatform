@@ -1,5 +1,15 @@
 # YumpooPlatform
 
+## M2-21A 项目工作项直接子项
+
+M2-21A 以 V43 `work_item_relation` 提前交付 M2-21 的直接父子项切片：根项下可原子创建全新子项、按父项查询和在同父兄弟间排序；项目与 Content 的 Table、Kanban、筛选计数只展示根项，列表批量返回 `subitemCount`。删除不会级联关系或晋升子项，恢复后回到原嵌套。挂接既有项、换父/解除、递归防环及其他关系类型仍留在 M2-21。
+
+项目表格提供 Monday 形态的单层展开子表，首次展开懒加载并缓存；子表共享列偏好和字段编辑、详情/讨论、选择、排序、拖拽与快速新增能力，但保持独立状态且不显示递归入口。创建默认继承父 Content，也可选择同 Project 的其他 ACTIVE Content。
+
+```powershell
+pnpm verify:m2-21a
+```
+
 ## M2-19A 项目表格路由、截止日期与标签目录
 
 M2-19A 为项目总览 Table 的工作项详情抽屉增加 `?view=table&workItemId={itemId}` 深链接，支持直接访问、刷新和前进/后退；日期选择器选择任意具体日期、Today 或清空都会调用既有强 ETag、幂等截止日期命令。
