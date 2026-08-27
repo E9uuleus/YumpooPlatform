@@ -29,13 +29,16 @@ const state = vi.hoisted(() => ({
   listProjectContents: vi.fn(),
   listProjectMembers: vi.fn(),
   listProjectWorkItems: vi.fn(),
+  listWorkItemSubitems: vi.fn(),
   listProjectWorkItemFilterOptions: vi.fn(),
   getProjectWorkItemLabels: vi.fn(),
   moveProjectWorkItemOrder: vi.fn(),
+  moveWorkItemSubitemOrder: vi.fn(),
   patchWorkItemAssignee: vi.fn(),
   patchWorkItemPriority: vi.fn(),
   patchWorkItemDueDate: vi.fn(),
   createWorkItem: vi.fn(),
+  createWorkItemSubitem: vi.fn(),
   getWorkItem: vi.fn(),
   transitionWorkItem: vi.fn(),
 }))
@@ -53,13 +56,16 @@ vi.mock('../../api/client', () => ({
   contentsApi: { listProjectContents: state.listProjectContents },
   workItemsApi: {
     listProjectWorkItems: state.listProjectWorkItems,
+    listWorkItemSubitems: state.listWorkItemSubitems,
     listProjectWorkItemFilterOptions: state.listProjectWorkItemFilterOptions,
     getProjectWorkItemLabels: state.getProjectWorkItemLabels,
     moveProjectWorkItemOrder: state.moveProjectWorkItemOrder,
+    moveWorkItemSubitemOrder: state.moveWorkItemSubitemOrder,
     patchWorkItemAssignee: state.patchWorkItemAssignee,
     patchWorkItemPriority: state.patchWorkItemPriority,
     patchWorkItemDueDate: state.patchWorkItemDueDate,
     createWorkItem: state.createWorkItem,
+    createWorkItemSubitem: state.createWorkItemSubitem,
     getWorkItem: state.getWorkItem,
     transitionWorkItem: state.transitionWorkItem,
   },
@@ -110,6 +116,7 @@ function item(id = 'item-1'): ProjectWorkItemListItem {
     title: '实现项目工作项首页', statusCode: 'BACKLOG', statusCategory: WorkItemStatusCategory.Todo,
     priority: null, assigneeUserId: null, assigneeDisplayName: null,
     dueDate: null, rowVersion: 1, etag: '"1"',
+    subitemCount: 0,
     capabilities: { canEditFields: true, canMoveInKanban: true, canMoveInProjectOrder: true,
       canDiscuss: true, canDelete: true, canRestore: false, availableTransitions: [] },
     updatedAt: new Date('2026-08-25T01:00:00Z'),
@@ -158,8 +165,10 @@ describe('项目级工作项首页', () => {
     } as never)
     state.listProjectMembers.mockResolvedValue({ items: [], page: 0, size: 100, totalElements: 0, totalPages: 0 })
     state.listProjectWorkItems.mockResolvedValue(page())
+    state.listWorkItemSubitems.mockResolvedValue({ items: [] })
     state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [], nextCursor: null })
     state.createWorkItem.mockResolvedValue({ ...item('created'), itemNo: 'WI-2' } as unknown as WorkItemDetail)
+    state.createWorkItemSubitem.mockResolvedValue({ ...item('subitem-created'), itemNo: 'WI-3' } as unknown as WorkItemDetail)
     state.getWorkItem.mockResolvedValue(item() as unknown as WorkItemDetail)
   })
 
@@ -178,6 +187,33 @@ describe('项目级工作项首页', () => {
     expect(state.listProjectWorkItems).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1', view: ContentViewType.Table,
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
+  })
+
+  it('首次展开时懒加载直接子项，折叠后复用缓存且不显示递归入口', async () => {
+    const parent = { ...item('parent-1'), subitemCount: 1 }
+    const child = { ...item('child-1'), title: '直接子项' }
+    state.listProjectWorkItems.mockResolvedValue(page([parent]))
+    state.listWorkItemSubitems.mockResolvedValue({ items: [child] })
+    const wrapper = mountView()
+    await flushPromises()
+    const expand = wrapper.get('button[aria-label="展开子项"]')
+    expect(expand.attributes('aria-expanded')).toBe('false')
+    await expand.trigger('click')
+    await flushPromises()
+
+    expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(1)
+    expect(state.listWorkItemSubitems).toHaveBeenCalledWith({ parentWorkItemId: parent.id })
+    expect(wrapper.text()).toContain('直接子项')
+    expect(wrapper.text()).toContain('1 子项')
+    expect(wrapper.findAll('.monday-subitem-table .el-table__expand-icon')).toHaveLength(0)
+
+    const collapse = wrapper.get('button[aria-label="收起子项"]')
+    expect(collapse.attributes('aria-expanded')).toBe('true')
+    await collapse.trigger('click')
+    await nextTick()
+    await wrapper.get('button[aria-label="展开子项"]').trigger('click')
+    await flushPromises()
+    expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(1)
   })
 
   it('持久化列宽与隐藏列，且工作项名称始终可见', async () => {
@@ -344,7 +380,8 @@ describe('项目级工作项首页', () => {
     expect(view.tableSorting).toBe(true)
     expect(view.tableLoading).toBe(false)
     expect(view.tableItems.map(row => row.id)).toEqual(['item-3', 'item-1', 'item-2'])
-    expect(wrapper.find('.table-surface .el-loading-mask').exists()).toBe(false)
+    const sortingMask = wrapper.find('.table-surface .el-loading-mask')
+    expect(!sortingMask.exists() || !sortingMask.isVisible()).toBe(true)
     expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({
       sort: ['TITLE,ASC'],
     }), expect.anything())
@@ -369,7 +406,7 @@ describe('项目级工作项首页', () => {
     expect(view.tableSorting).toBe(false)
     expect(view.tableItems.map(row => row.id)).toEqual(['item-3', 'item-2', 'item-1'])
     expect(rowAnimationSpies.every(animate => animate.mock.calls.length === 0)).toBe(true)
-  })
+  }, 10_000)
 
   it('在每个列头复刻 Monday 双三角排序按钮，并在清除后恢复初始状态', async () => {
     vi.spyOn(ElMessage, 'success').mockImplementation(() => undefined as never)

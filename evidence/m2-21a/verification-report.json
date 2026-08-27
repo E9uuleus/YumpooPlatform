@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-21A",
+  "status": "IMPLEMENTED_WITH_ENVIRONMENT_BLOCKER",
+  "command": "pnpm verify:m2-21a",
+  "startedAt": "2026-08-28T00:00:00Z",
+  "completedAt": "2026-08-27T16:42:22Z",
+  "flywayVersion": "43",
+  "checks": {
+    "backendCompileAndTestCompile": true,
+    "backendPostgreSqlHttpIntegration": false,
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiGeneratedClient": true,
+    "webFocusedTests": true,
+    "webFullTests": true,
+    "webTypecheck": true,
+    "webBuild": true,
+    "assetGate": true,
+    "browserVisualComparison": true
+  },
+  "environmentBlocker": "当前 Codex 宿主中的 Java 21 HttpClient 在测试类构造阶段因 Unable to establish loopback connection 失败，尚未进入 Spring/Testcontainers；不得将 PostgreSQL HTTP 集成测试记为通过。",
+  "databaseConclusion": "V43 新增 work_item_relation 与根/子项查询索引；迁移 SQL 仍需在可建立本机回环与 Docker 连接的 PostgreSQL 集成测试环境完成运行验收。",
+  "browserConclusion": "已在只读 Monday 页面与本地项目页对照展开图标、32px 缩进、蓝色连接线、独立表头、行高及明暗主题；本地正在运行的后端是变更前旧进程，因此新增子项接口在该进程上返回 404，未冒充端到端运行通过。"
+}

@@ -425,6 +425,85 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void subitemsAreNestedIdempotentRootFilteredAndSiblingScoped() throws Exception {
+        String contentCollection = "/api/v1/contents/" + contentId + "/work-items";
+        JsonNode parent = createWorkItem(contentCollection, "父工作项", "HIGH", member.userId(), null);
+        JsonNode emptyParent = createWorkItem(contentCollection, "空父工作项", null, null, null);
+        UUID otherContentId = UUID.fromString(createContent("SUB_TASKS", "子任务").path("id").asText());
+        String subitemsPath = "/api/v1/work-items/" + parent.path("id").asText() + "/subitems";
+
+        assertThat(get(subitemsPath, outsider).statusCode()).isEqualTo(404);
+        assertThat(body(get(subitemsPath, member)).path("items").isEmpty()).isTrue();
+
+        UUID createKey = UUID.randomUUID();
+        String firstBody = subitemBody(otherContentId, "跨 Content 子项一", "MEDIUM");
+        HttpResponse<String> firstCreated = mutate("POST", subitemsPath, member,
+                firstBody, null, createKey);
+        assertThat(firstCreated.statusCode()).as(firstCreated.body()).isEqualTo(201);
+        assertThat(firstCreated.headers().firstValue("location")).isPresent();
+        assertThat(firstCreated.headers().firstValue("etag")).contains("\"0\"");
+        JsonNode first = json.readTree(firstCreated.body());
+        UUID firstId = UUID.fromString(first.path("id").asText());
+        assertThat(first.path("contentId").asText()).isEqualTo(otherContentId.toString());
+        assertThat(first.path("type").asText()).isEqualTo("TASK");
+
+        HttpResponse<String> replay = mutate("POST", subitemsPath, member,
+                firstBody, null, createKey);
+        assertThat(replay.statusCode()).isEqualTo(201);
+        assertThat(replay.body()).isEqualTo(firstCreated.body());
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_relation "
+                        + "WHERE right_work_item_id=:id AND deleted_at IS NULL")
+                .param("id", firstId).query(Long.class).single()).isOne();
+
+        JsonNode second = json.readTree(mutate("POST", subitemsPath, member,
+                subitemBody(contentId, "同 Content 子项二", "LOW"), null,
+                UUID.randomUUID()).body());
+        UUID secondId = UUID.fromString(second.path("id").asText());
+
+        JsonNode direct = body(get(subitemsPath, member));
+        assertThat(titles(direct)).containsExactly("跨 Content 子项一", "同 Content 子项二");
+        assertThat(direct.path("items").get(0).path("subitemCount").asLong()).isZero();
+
+        JsonNode roots = body(get("/api/v1/projects/" + PROJECT_ID + "/work-items", member));
+        assertThat(ids(roots)).containsExactlyInAnyOrder(
+                parent.path("id").asText(), emptyParent.path("id").asText());
+        JsonNode parentSummary = java.util.stream.StreamSupport.stream(
+                        roots.path("items").spliterator(), false)
+                .filter(node -> node.path("id").asText().equals(parent.path("id").asText()))
+                .findFirst().orElseThrow();
+        assertThat(parentSummary.path("subitemCount").asLong()).isEqualTo(2L);
+        assertThat(body(get("/api/v1/contents/" + otherContentId + "/work-items", member))
+                .path("totalElements").asLong()).isZero();
+
+        HttpResponse<String> nested = mutate("POST", "/api/v1/work-items/" + firstId + "/subitems",
+                member, subitemBody(contentId, "不允许的孙项", null), null, UUID.randomUUID());
+        assertThat(nested.statusCode()).as(nested.body()).isEqualTo(409);
+        assertThat(json.readTree(nested.body()).path("code").asText())
+                .isEqualTo("INVALID_STATE_TRANSITION");
+
+        HttpResponse<String> moved = mutate("POST", subitemsPath + "/" + secondId + "/order-moves",
+                member, "{\"previousVisibleWorkItemId\":null,\"nextVisibleWorkItemId\":\""
+                        + firstId + "\"}", "\"0\"", UUID.randomUUID());
+        assertThat(moved.statusCode()).as(moved.body()).isEqualTo(200);
+        assertThat(moved.headers().firstValue("etag")).contains("\"1\"");
+        assertThat(mutate("POST", subitemsPath + "/" + secondId + "/order-moves", member,
+                "{\"previousVisibleWorkItemId\":null,\"nextVisibleWorkItemId\":\""
+                        + firstId + "\"}", "\"0\"", UUID.randomUUID()).statusCode()).isEqualTo(412);
+
+        List<String> relationEvents = jdbc.sql("""
+                SELECT payload_json::text FROM yumpoo.outbox_event
+                 WHERE event_type='workitem.work_item_relation_created'
+                 ORDER BY occurred_at
+                """).query(String.class).list();
+        assertThat(relationEvents).hasSize(2);
+        JsonNode relationEvent = json.readTree(relationEvents.getFirst());
+        assertThat(relationEvent.path("relationType").asText()).isEqualTo("PARENT_CHILD");
+        assertThat(relationEvent.path("leftWorkItemId").asText()).isEqualTo(parent.path("id").asText());
+        assertThat(relationEvent.path("rightWorkItemId").asText()).isEqualTo(firstId.toString());
+        assertThat(relationEvent.has("title")).isFalse();
+    }
+
+    @Test
     void projectCollectionAggregatesContentsAndSupportsNullablePriority() throws Exception {
         String firstCollection = "/api/v1/contents/" + contentId + "/work-items";
         UUID secondContentId = UUID.fromString(createContent("DEFECTS", "缺陷").path("id").asText());
@@ -1508,6 +1587,14 @@ class WorkItemHttpIT {
         return json.writeValueAsString(body);
     }
 
+    private String subitemBody(UUID targetContentId, String title, String priority) throws Exception {
+        var body = json.createObjectNode();
+        body.put("contentId", targetContentId.toString());
+        body.put("title", title);
+        if (priority == null) body.putNull("priority"); else body.put("priority", priority);
+        return json.writeValueAsString(body);
+    }
+
     private String transitionBody(String toStatus, String resolution) throws Exception {
         var body = json.createObjectNode();
         body.put("toStatus", toStatus);
@@ -1596,6 +1683,8 @@ class WorkItemHttpIT {
         jdbc.sql("DELETE FROM yumpoo.work_item_update_mention WHERE company_id=:id")
                 .param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_update WHERE company_id=:id")
+                .param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_relation WHERE company_id=:id")
                 .param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_project_counter WHERE company_id=:id").param("id", COMPANY_ID).update();
