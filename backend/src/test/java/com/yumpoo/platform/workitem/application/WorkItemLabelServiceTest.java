@@ -64,6 +64,17 @@ class WorkItemLabelServiceTest {
     }
 
     @Test
+    void acceptsMondayLabelPaletteColor() {
+        when(labels.insertPriority(eq(COMPANY_ID), eq(PROJECT_ID), any(), eq("客户关注"),
+                eq("SOFIA_PINK"), eq(20), eq(NOW))).thenReturn(true);
+
+        service.createPriority(actor, PROJECT_ID, 4, "客户关注", "sofia_pink");
+
+        verify(labels).insertPriority(eq(COMPANY_ID), eq(PROJECT_ID), any(), eq("客户关注"),
+                eq("SOFIA_PINK"), eq(20), eq(NOW));
+    }
+
+    @Test
     void refusesToDeactivateOrDeleteProtectedNotStartedLabel() {
         assertThatThrownBy(() -> service.updateStatus(actor, PROJECT_ID, "NOT_STARTED", 4,
                 null, null, false, null))

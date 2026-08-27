@@ -225,6 +225,32 @@
   background: var(--yp-bg-surface);
 }
 
+@media (min-width: 901px) {
+  body.yp-project-overview-scroll {
+    overflow: hidden;
+  }
+
+  body.yp-project-overview-scroll .app-shell--workspace {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body.yp-project-overview-scroll .app-shell--workspace .app-main {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  body.yp-project-overview-scroll .app-shell--workspace .app-main > .project-workspace {
+    height: 100%;
+    min-height: 0;
+  }
+
+  body.yp-project-overview-scroll.yp-work-items-drawer-open .monday-table-surface {
+    margin-right: max(0px, calc(var(--yp-work-items-drawer-width, 560px) - var(--project-page-inline-gutter)));
+  }
+}
+
 .project-workspace,
 .project-catalog {
   display: grid;

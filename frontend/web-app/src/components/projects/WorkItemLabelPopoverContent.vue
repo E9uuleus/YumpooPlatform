@@ -10,6 +10,10 @@ import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElInput, ElMessage, ElPopov
 import { computed, nextTick, ref } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
+import {
+  mondayWorkItemLabelColors,
+  workItemLabelColorStyle as colorStyle,
+} from './workItemLabelColors'
 
 type Label = WorkItemStatusLabel | WorkItemPriorityLabel
 
@@ -67,40 +71,7 @@ const draftLabels = ref<DraftLabel[]>([])
 const deletedCodes = ref(new Set<string>())
 let draftSequence = 0
 
-const colorPalette = [
-  { token: WorkItemLabelColorToken.Lime, label: '草绿', color: 'var(--yp-label-lime)' },
-  { token: WorkItemLabelColorToken.Amber, label: '琥珀黄', color: 'var(--yp-label-amber)' },
-  { token: WorkItemLabelColorToken.Orange, label: '橙色', color: 'var(--yp-label-orange)' },
-  { token: WorkItemLabelColorToken.Red, label: '红色', color: 'var(--yp-label-red)' },
-  { token: WorkItemLabelColorToken.Magenta, label: '品红', color: 'var(--yp-label-magenta)' },
-  { token: WorkItemLabelColorToken.Purple, label: '紫色', color: 'var(--yp-label-purple)' },
-  { token: WorkItemLabelColorToken.Indigo, label: '靛蓝', color: 'var(--yp-label-indigo)' },
-  { token: WorkItemLabelColorToken.Blue, label: '蓝色', color: 'var(--yp-label-blue)' },
-  { token: WorkItemLabelColorToken.Cyan, label: '青色', color: 'var(--yp-label-cyan)' },
-  { token: WorkItemLabelColorToken.Teal, label: '墨绿', color: 'var(--yp-label-teal)' },
-  { token: WorkItemLabelColorToken.Green, label: '绿色', color: 'var(--yp-label-green)' },
-  { token: WorkItemLabelColorToken.Gray, label: '灰色', color: 'var(--yp-label-gray)' },
-]
-
-const colorValues: Record<string, string> = {
-  GREEN: 'var(--yp-label-green)',
-  TEAL: 'var(--yp-label-teal)',
-  BLUE: 'var(--yp-label-blue)',
-  INDIGO: 'var(--yp-label-indigo)',
-  PURPLE: 'var(--yp-label-purple)',
-  MAGENTA: 'var(--yp-label-magenta)',
-  RED: 'var(--yp-label-red)',
-  ORANGE: 'var(--yp-label-orange)',
-  AMBER: 'var(--yp-label-amber)',
-  LIME: 'var(--yp-label-lime)',
-  CYAN: 'var(--yp-label-cyan)',
-  GRAY: 'var(--yp-label-gray)',
-}
-
-function colorStyle(token?: WorkItemLabelColorToken | string): Record<string, string> {
-  if (!token) return { backgroundColor: 'var(--yp-label-gray)' }
-  return { backgroundColor: colorValues[token] ?? 'var(--yp-label-gray)' }
-}
+const colorPalette = mondayWorkItemLabelColors
 
 const labels = computed(() => draftLabels.value)
 
@@ -186,7 +157,7 @@ async function createLabel(): Promise<void> {
     code: `draft-${draftSequence}`,
     persistedCode: null,
     displayName: defaultName,
-    colorToken: WorkItemLabelColorToken.Blue,
+    colorToken: WorkItemLabelColorToken.BrightBlue,
     active: true,
     sortOrder: draftLabels.value.length + 1,
     inUse: false,

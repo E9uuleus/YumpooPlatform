@@ -14,7 +14,7 @@ import {
   type ProjectWorkItemListItem,
 } from '@yumpoo/api-client'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectOverviewView from './ProjectOverviewView.vue'
@@ -173,6 +173,8 @@ describe('项目级工作项首页', () => {
     expect(labels).toEqual(['工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '最后更新时间'])
     expect(wrapper.text()).toContain('产品需求')
     expect(wrapper.text()).toContain('实现项目工作项首页')
+    expect(wrapper.get('.work-item-link').text()).toBe('实现项目工作项首页')
+    expect(wrapper.find('.work-item-code-text').exists()).toBe(false)
     expect(state.listProjectWorkItems).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-1', view: ContentViewType.Table,
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
@@ -196,6 +198,82 @@ describe('项目级工作项首页', () => {
     expect(labels).toContain('工作项名称')
     expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}'))
       .toMatchObject({ version: 1, widths: { priority: 188 }, hidden: ['priority'] })
+  })
+
+  it('拖拽业务列表头时复刻原色列浮层、横向避让并持久化新顺序', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as {
+      movableColumnOrder: string[]
+      columnDraggingKey: string | undefined
+      columnDraggingIndex: number
+      columnDropIndex: number | undefined
+      onTableColumnPointerDown: (event: PointerEvent) => void
+      onTableColumnPointerMove: (event: PointerEvent) => void
+      onTableColumnPointerUp: (event: PointerEvent) => void
+      tableColumnDragStyle: (columnKey?: string) => Record<string, string | number>
+    }
+    const movableHeaders = wrapper.findAll<HTMLTableCellElement>('th.monday-movable-column-header')
+    expect(movableHeaders).toHaveLength(6)
+    expect(movableHeaders.map(header => header.text())).toEqual(['处理人', '状态', '优先级', '工作项类别', '截止日期', '最后更新时间'])
+    expect(wrapper.get('th.monday-title-column').classes()).not.toContain('monday-movable-column-header')
+
+    const widths = [90, 130, 120, 150, 140, 170]
+    let left = 100
+    movableHeaders.forEach((header, index) => {
+      const width = widths[index]!
+      const currentLeft = left
+      vi.spyOn(header.element, 'getBoundingClientRect').mockReturnValue({
+        x: currentLeft, y: 200, left: currentLeft, top: 200, right: currentLeft + width, bottom: 238,
+        width, height: 38, toJSON: () => ({}),
+      } as DOMRect)
+      Object.defineProperty(header.element, 'offsetWidth', { configurable: true, value: width })
+      left += width
+    })
+    vi.spyOn(wrapper.get('.monday-table').element, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 200, left: 0, top: 200, right: 900, bottom: 600,
+      width: 900, height: 400, toJSON: () => ({}),
+    } as DOMRect)
+
+    view.onTableColumnPointerDown({
+      isPrimary: true, button: 0, pointerId: 21, clientX: 210, clientY: 219, target: movableHeaders[1]!.element,
+    } as unknown as PointerEvent)
+    view.onTableColumnPointerMove({
+      pointerId: 21, clientX: 213, clientY: 220, preventDefault: vi.fn(),
+    } as unknown as PointerEvent)
+    expect(view.columnDraggingKey).toBeUndefined()
+
+    const movePreventDefault = vi.fn()
+    view.onTableColumnPointerMove({
+      pointerId: 21, clientX: 390, clientY: 224, preventDefault: movePreventDefault,
+    } as unknown as PointerEvent)
+    expect(movePreventDefault).toHaveBeenCalledOnce()
+    expect(view.columnDraggingKey).toBe('status')
+    expect(view.columnDropIndex).toBe(3)
+    expect(view.tableColumnDragStyle('status')).toEqual({ opacity: 0, pointerEvents: 'none' })
+    expect(view.tableColumnDragStyle('priority')).toEqual({ transform: 'translateX(-130px)' })
+    const preview = document.querySelector<HTMLElement>('.work-item-column-drag-preview')
+    expect(preview).not.toBeNull()
+    expect(preview?.style.transform).toBe('rotate(1deg)')
+    expect(preview?.querySelector('.work-item-column-drag-preview__header')?.classList).toContain('monday-column-header--status')
+    expect(preview?.querySelectorAll('.work-item-column-drag-preview__cell')).toHaveLength(1)
+    expect(preview?.querySelector('.work-item-column-drag-preview__cell')?.classList).toContain('monday-block-column')
+    expect(preview?.querySelector('.monday-status-cell')?.getAttribute('style'))
+      .toBe(wrapper.get('.monday-status-cell').attributes('style'))
+
+    const pointerUpPreventDefault = vi.fn()
+    const pointerUpStopPropagation = vi.fn()
+    view.onTableColumnPointerUp({
+      pointerId: 21, preventDefault: pointerUpPreventDefault, stopPropagation: pointerUpStopPropagation,
+    } as unknown as PointerEvent)
+    await flushPromises()
+    expect(pointerUpPreventDefault).toHaveBeenCalledOnce()
+    expect(pointerUpStopPropagation).toHaveBeenCalledOnce()
+    expect(view.movableColumnOrder.slice(0, 3)).toEqual(['assignee', 'priority', 'status'])
+    expect(document.querySelector('.work-item-column-drag-preview')).toBeNull()
+    expect(wrapper.findAll('th.monday-movable-column-header').map(header => header.text()).slice(0, 3)).toEqual(['处理人', '优先级', '状态'])
+    expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}').order)
+      .toEqual(['assignee', 'priority', 'status', 'content', 'dueDate', 'updatedAt'])
   })
 
   it('将搜索、筛选和最多三层排序同步到 URL', async () => {
@@ -222,6 +300,164 @@ describe('项目级工作项首页', () => {
       q: 'WI-42', status: 'BACKLOG', content: 'content-1',
       sort: 'PRIORITY,DESC;DUE_DATE,ASC;UPDATED_AT,DESC',
     } })
+  })
+
+  it('列头按钮与排序窗口仅改变排序时保留当前表格，并在结果返回后直接换序', async () => {
+    const first = { ...item('item-1'), title: 'Alpha' }
+    const second = { ...item('item-2'), title: 'Bravo' }
+    const third = { ...item('item-3'), title: 'Charlie' }
+    let resolveQuickSort!: (value: ProjectWorkItemCursorPage) => void
+    let resolvePopoverSort!: (value: ProjectWorkItemCursorPage) => void
+    state.listProjectWorkItems
+      .mockResolvedValueOnce(page([third, first, second]))
+      .mockImplementationOnce(() => new Promise(resolve => { resolveQuickSort = resolve }))
+      .mockImplementationOnce(() => new Promise(resolve => { resolvePopoverSort = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.matches('.el-table__body-wrapper tbody tr')) {
+        const index = [...this.parentElement!.children].indexOf(this)
+        return {
+          x: 0, y: index * 44, left: 0, top: index * 44, right: 800, bottom: index * 44 + 44,
+          width: 800, height: 44, toJSON: () => ({}),
+        } as DOMRect
+      }
+      return originalGetBoundingClientRect.call(this)
+    })
+    const rowAnimationSpies = wrapper.findAll('.el-table__body-wrapper tbody tr').map(row => {
+      const animate = vi.fn(() => ({} as Animation))
+      Object.defineProperty(row.element, 'animate', { configurable: true, value: animate })
+      return animate
+    })
+    const view = wrapper.vm as unknown as {
+      tableItems: ProjectWorkItemListItem[]
+      tableLoading: boolean
+      tableSorting: boolean
+      sortRules: Array<{ field: string, direction: 'ASC' | 'DESC' }>
+      syncUrl: () => Promise<void>
+    }
+
+    await wrapper.get('button[aria-label="按工作项名称升序排列"]').trigger('click')
+    await nextTick()
+
+    expect(view.tableSorting).toBe(true)
+    expect(view.tableLoading).toBe(false)
+    expect(view.tableItems.map(row => row.id)).toEqual(['item-3', 'item-1', 'item-2'])
+    expect(wrapper.find('.table-surface .el-loading-mask').exists()).toBe(false)
+    expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({
+      sort: ['TITLE,ASC'],
+    }), expect.anything())
+
+    resolveQuickSort(page([first, second, third]))
+    await flushPromises()
+    expect(view.tableSorting).toBe(false)
+    expect(view.tableItems.map(row => row.id)).toEqual(['item-1', 'item-2', 'item-3'])
+    expect(rowAnimationSpies.every(animate => animate.mock.calls.length === 0)).toBe(true)
+
+    view.sortRules = [{ field: 'PRIORITY', direction: 'DESC' }]
+    await view.syncUrl()
+    await nextTick()
+    expect(view.tableSorting).toBe(true)
+    expect(view.tableItems.map(row => row.id)).toEqual(['item-1', 'item-2', 'item-3'])
+    expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({
+      sort: ['PRIORITY,DESC'],
+    }), expect.anything())
+
+    resolvePopoverSort(page([third, second, first]))
+    await flushPromises()
+    expect(view.tableSorting).toBe(false)
+    expect(view.tableItems.map(row => row.id)).toEqual(['item-3', 'item-2', 'item-1'])
+    expect(rowAnimationSpies.every(animate => animate.mock.calls.length === 0)).toBe(true)
+  })
+
+  it('在每个列头复刻 Monday 双三角排序按钮，并在清除后恢复初始状态', async () => {
+    vi.spyOn(ElMessage, 'success').mockImplementation(() => undefined as never)
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.findAll('.monday-column-quick-sort')).toHaveLength(7)
+    expect(wrapper.findAll('.monday-column-quick-sort__label').map(node => node.text())).toEqual([
+      '工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '最后更新时间',
+    ])
+    expect(wrapper.findAll('.sort-button .asc-icon')).toHaveLength(7)
+    expect(wrapper.findAll('.sort-button .desc-icon')).toHaveLength(7)
+    expect(wrapper.find('.clear-button-wrapper').exists()).toBe(false)
+    expect(wrapper.findAllComponents({ name: 'ElTooltip' }).map(component => component.props('content')))
+      .toContain('按工作项名称排序')
+    const view = wrapper.vm as unknown as {
+      columnDraggingKey: string | undefined
+      onTableColumnPointerDown: (event: PointerEvent) => void
+      onTableColumnPointerMove: (event: PointerEvent) => void
+    }
+    view.onTableColumnPointerDown({
+      isPrimary: true, button: 0, pointerId: 31, clientX: 420, clientY: 205,
+      target: wrapper.get('button[aria-label="按处理人升序排列"]').element,
+    } as unknown as PointerEvent)
+    view.onTableColumnPointerMove({
+      pointerId: 31, clientX: 520, clientY: 205, preventDefault: vi.fn(),
+    } as unknown as PointerEvent)
+    expect(view.columnDraggingKey).toBeUndefined()
+
+    await wrapper.get('button[aria-label="按工作项名称升序排列"]').trigger('click')
+    await flushPromises()
+    expect(state.replace).toHaveBeenLastCalledWith({ query: { sort: 'TITLE,ASC' } })
+    expect(wrapper.get('.work-items-toolbar').text()).toContain('排序 / 1')
+    expect(wrapper.get('.sort-by-column').classes()).toContain('sort-by-column--active')
+    expect(wrapper.find('button[aria-label="清除工作项名称排序"]').exists()).toBe(true)
+    expect(wrapper.find('button[aria-label="保存工作项名称排序后的工作项顺序"]').exists()).toBe(true)
+
+    await wrapper.get('button[aria-label="将工作项名称切换为降序"]').trigger('click')
+    await flushPromises()
+    expect(state.replace).toHaveBeenLastCalledWith({ query: { sort: 'TITLE,DESC' } })
+
+    await wrapper.get('button[aria-label="清除工作项名称排序"]').trigger('click')
+    await flushPromises()
+    expect(state.replace).toHaveBeenLastCalledWith({ query: {} })
+    expect(wrapper.find('.sort-by-column--active').exists()).toBe(false)
+    expect(wrapper.find('.clear-button-wrapper').exists()).toBe(false)
+  })
+
+  it('保存排序时加载完整结果，并用相邻项避让接口固化新的工作项顺序', async () => {
+    vi.spyOn(ElMessage, 'success').mockImplementation(() => undefined as never)
+    vi.spyOn(ElMessage, 'info').mockImplementation(() => undefined as never)
+    const first = { ...item('item-1'), title: '第一项' }
+    const second = { ...item('item-2'), title: '第二项' }
+    const third = { ...item('item-3'), title: '第三项' }
+    state.listProjectWorkItems.mockImplementation(({ cursor }: { cursor?: string }) => Promise.resolve(cursor
+      ? { items: [second], nextCursor: null }
+      : { items: [third, first], nextCursor: 'page-2' }))
+    state.moveProjectWorkItemOrder
+      .mockResolvedValueOnce({ ...first, etag: '"2"', rowVersion: 2 })
+      .mockResolvedValueOnce({ ...second, etag: '"2"', rowVersion: 2 })
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as {
+      sortRules: Array<{ field: string, direction: string }>
+      tableLoading: boolean
+      saveSortedWorkItemOrder: () => Promise<void>
+    }
+    view.sortRules = [{ field: 'TITLE', direction: 'ASC' }]
+    view.tableLoading = true
+    await view.saveSortedWorkItemOrder()
+    expect(state.moveProjectWorkItemOrder).not.toHaveBeenCalled()
+    expect(ElMessage.info).toHaveBeenCalledWith('排序结果仍在加载，请稍后再保存工作项顺序')
+    view.tableLoading = false
+
+    await view.saveSortedWorkItemOrder()
+
+    expect(state.listProjectWorkItems).toHaveBeenCalledWith(expect.objectContaining({ cursor: 'page-2' }), expect.anything())
+    expect(state.moveProjectWorkItemOrder).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      workItemId: 'item-1',
+      projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: 'item-3', nextVisibleWorkItemId: null },
+    }))
+    expect(state.moveProjectWorkItemOrder).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      workItemId: 'item-2',
+      projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: 'item-1', nextVisibleWorkItemId: null },
+    }))
+    expect(state.replace).toHaveBeenLastCalledWith({ query: {} })
+    expect(ElMessage.success).toHaveBeenCalledWith('已保存 3 个工作项的当前顺序')
+    expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}')).not.toHaveProperty('savedSort')
   })
 
   it('按游标无感追加并按 ID 去重', async () => {
@@ -611,7 +847,7 @@ describe('项目级工作项首页', () => {
 
     expect(view.tableRowClassName({ row: first, rowIndex: 0 })).toContain('work-item-table-row--dragging')
     expect(view.tableRowStyle({ row: first, rowIndex: 0 })).toEqual({ opacity: 0, pointerEvents: 'none' })
-    expect(view.tableRowStyle({ row: second, rowIndex: 1 })).toEqual({ transform: 'translateY(-40px)' })
+    expect(view.tableRowStyle({ row: second, rowIndex: 1 })).toEqual({ transform: 'translateY(-36px)' })
     expect(view.tableRowStyle({ row: third, rowIndex: 2 })).toEqual({ transform: 'translateY(0px)' })
 
     // 模拟向上拖动：从 index 2 拖至 index 0
@@ -619,8 +855,8 @@ describe('项目级工作项首页', () => {
     view.tableDraggingIndex = 2
     view.tableDropIndex = 0
 
-    expect(view.tableRowStyle({ row: first, rowIndex: 0 })).toEqual({ transform: 'translateY(40px)' })
-    expect(view.tableRowStyle({ row: second, rowIndex: 1 })).toEqual({ transform: 'translateY(40px)' })
+    expect(view.tableRowStyle({ row: first, rowIndex: 0 })).toEqual({ transform: 'translateY(36px)' })
+    expect(view.tableRowStyle({ row: second, rowIndex: 1 })).toEqual({ transform: 'translateY(36px)' })
     expect(view.tableRowStyle({ row: third, rowIndex: 2 })).toEqual({ opacity: 0, pointerEvents: 'none' })
 
     // 结束拖拽重置
@@ -641,6 +877,7 @@ describe('项目级工作项首页', () => {
       onTablePointerDown: (event: PointerEvent) => void
       onTablePointerMove: (event: PointerEvent) => void
       onTablePointerUp: (event: PointerEvent) => void
+      onTablePointerCancel: (event: PointerEvent) => void
       onTableClickCapture: (event: MouseEvent) => void
     }
     const titleButton = wrapper.find('.work-item-link').element
@@ -693,9 +930,25 @@ describe('项目级工作项首页', () => {
       pointerId: 8, clientX: 150, clientY: 250, preventDefault: vi.fn(),
     } as unknown as PointerEvent)
     expect(view.tableDragging).toBeUndefined()
+
+    // 复选框本体及其留白区域均可作为拖拽起点，移动后不触发勾选点击
+    const checkbox = wrapper.find('.el-table__body .monday-selection-column .el-checkbox__inner').element
+    view.onTablePointerDown({
+      isPrimary: true, button: 0, pointerId: 9, clientX: 24, clientY: 220, target: checkbox,
+    } as unknown as PointerEvent)
+    const checkboxMovePreventDefault = vi.fn()
+    view.onTablePointerMove({
+      pointerId: 9, clientX: 40, clientY: 236, preventDefault: checkboxMovePreventDefault,
+    } as unknown as PointerEvent)
+    expect(checkboxMovePreventDefault).toHaveBeenCalledOnce()
+    expect(view.tableDragging?.id).toBe('item-1')
+    expect(document.querySelector('.work-item-drag-preview')).not.toBeNull()
+    view.onTablePointerCancel({ pointerId: 9 } as unknown as PointerEvent)
+    expect(view.tableDragging).toBeUndefined()
+    expect(document.querySelector('.work-item-drag-preview')).toBeNull()
   })
 
-  it('创建完整的 4 度灰阶拖拽浮层并锚定抓取点跟随鼠标', async () => {
+  it('创建完整的 1 度灰阶拖拽浮层并锚定抓取点跟随鼠标', async () => {
     const wrapper = mountView()
     await flushPromises()
     const view = wrapper.vm as unknown as {
@@ -711,22 +964,22 @@ describe('项目级工作项首页', () => {
     sourceTable.appendChild(sourceBody)
     document.body.appendChild(sourceTable)
     vi.spyOn(source, 'getBoundingClientRect').mockReturnValue({
-      x: 100, y: 200, left: 100, top: 200, right: 700, bottom: 240,
-      width: 600, height: 40, toJSON: () => ({}),
+      x: 100, y: 200, left: 100, top: 200, right: 700, bottom: 236,
+      width: 600, height: 36, toJSON: () => ({}),
     } as DOMRect)
     const widths = [260, 170, 170]
     source.querySelectorAll('td').forEach((cell, index) => {
       vi.spyOn(cell, 'getBoundingClientRect').mockReturnValue({
-        x: 0, y: 0, left: 0, top: 0, right: widths[index]!, bottom: 40,
-        width: widths[index]!, height: 40, toJSON: () => ({}),
+        x: 0, y: 0, left: 0, top: 0, right: widths[index]!, bottom: 36,
+        width: widths[index]!, height: 36, toJSON: () => ({}),
       } as DOMRect)
     })
 
-    const preview = view.createTableDragPreview(source, 150, 220)
+    const preview = view.createTableDragPreview(source, 150, 218)
 
     expect(preview.classList.contains('work-item-drag-preview')).toBe(true)
-    expect(preview.style.transform).toBe('rotate(2deg)')
-    expect(preview.style.transformOrigin).toBe('50px 20px')
+    expect(preview.style.transform).toBe('rotate(1deg)')
+    expect(preview.style.transformOrigin).toBe('50px 18px')
     expect(preview.style.left).toBe('100px')
     expect(preview.style.top).toBe('200px')
     expect(preview.querySelectorAll('td')).toHaveLength(3)
@@ -736,9 +989,185 @@ describe('项目级工作项首页', () => {
 
     view.moveTableDragPreview(260, 300)
     expect(preview.style.left).toBe('210px')
-    expect(preview.style.top).toBe('280px')
+    expect(preview.style.top).toBe('282px')
     view.resetTableDragState()
     expect(document.body.contains(preview)).toBe(false)
     sourceTable.remove()
+  })
+
+  it('分别高亮可交互内容块，并让固定名称列的表格独立滚动', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const view = wrapper.vm as unknown as {
+      detailOpen: boolean
+      detail: { id: string } | undefined
+      drawerWidth: number
+      isResizingDrawer: boolean
+      selectedRowId: string | undefined
+      selectedCellKey: string | undefined
+      selectCell: (rowId: string, cellKey: string) => void
+      isRowSelected: (rowId: string) => boolean
+      onDrawerResizePointerDown: (event: PointerEvent) => void
+      syncPageScrollbars: () => void
+    }
+
+    const table = wrapper.findComponent({ name: 'ElTable' })
+    const tableColumns = wrapper.findAllComponents({ name: 'ElTableColumn' })
+    const selectionColumn = tableColumns.find(column => column.props('type') === 'selection')
+    const titleColumn = tableColumns.find(column => column.props('columnKey') === 'title')
+    expect(table.props('height')).toBe('100%')
+    expect(selectionColumn?.props('width')).toBe(48)
+    expect(selectionColumn?.props('fixed')).toBe(true)
+    expect(selectionColumn?.props('reserveSelection')).toBe(true)
+    expect(titleColumn?.props('fixed')).toBe(true)
+    expect(wrapper.find('.el-table__append-wrapper .monday-quick-add').exists()).toBe(true)
+
+    const tableScroll = wrapper.get('.monday-table .el-scrollbar__wrap').element as HTMLElement
+    const horizontalScrollbar = document.body.querySelector<HTMLElement>('.project-table-scrollbar--horizontal')
+    const verticalScrollbar = document.body.querySelector<HTMLElement>('.project-table-scrollbar--vertical')
+    expect(horizontalScrollbar).not.toBeNull()
+    expect(verticalScrollbar).not.toBeNull()
+    Object.defineProperties(tableScroll, {
+      clientWidth: { configurable: true, value: 800 },
+      scrollWidth: { configurable: true, value: 1120 },
+      clientHeight: { configurable: true, value: 300 },
+      scrollHeight: { configurable: true, value: 850 },
+    })
+    Object.defineProperties(horizontalScrollbar!, {
+      clientWidth: { configurable: true, value: 900 },
+    })
+    Object.defineProperties(verticalScrollbar!, {
+      clientHeight: { configurable: true, value: 700 },
+    })
+    view.syncPageScrollbars()
+    await nextTick()
+    expect(horizontalScrollbar!.querySelector<HTMLElement>('.project-table-scrollbar__horizontal-spacer')?.style.width).toBe('1220px')
+    expect(verticalScrollbar!.querySelector<HTMLElement>('.project-table-scrollbar__vertical-spacer')?.style.height).toBe('1250px')
+
+    horizontalScrollbar!.scrollLeft = 120
+    horizontalScrollbar!.dispatchEvent(new Event('scroll'))
+    expect(tableScroll.scrollLeft).toBe(120)
+    verticalScrollbar!.scrollTop = 180
+    verticalScrollbar!.dispatchEvent(new Event('scroll'))
+    expect(tableScroll.scrollTop).toBe(180)
+    tableScroll.scrollLeft = 240
+    tableScroll.scrollTop = 360
+    tableScroll.dispatchEvent(new Event('scroll'))
+    expect(horizontalScrollbar!.scrollLeft).toBe(240)
+    expect(verticalScrollbar!.scrollTop).toBe(360)
+
+    // 名称高亮只覆盖名称按钮，不延伸到讨论按钮所在区域
+    view.selectCell('item-1', 'title')
+    await nextTick()
+    const titleBtn = wrapper.find('.work-item-link')
+    const discussionBtn = wrapper.find('.monday-discussion-btn')
+    expect(titleBtn.classes()).toContain('monday-cell--selected')
+    expect(titleBtn.element.closest('td')?.classList.contains('monday-cell--selected')).toBe(false)
+    expect(discussionBtn.classes()).not.toContain('monday-cell--selected')
+
+    // 选中状态单元格
+    const statusBtn = wrapper.find('.monday-status-cell')
+    await statusBtn.trigger('click')
+    expect(view.selectedRowId).toBe('item-1')
+    expect(view.selectedCellKey).toBe('item-1:status')
+    expect(statusBtn.element.closest('td')?.classList.contains('monday-cell--selected')).toBe(true)
+
+    // 选中优先级单元格
+    const priorityBtn = wrapper.find('.monday-priority-cell')
+    await priorityBtn.trigger('click')
+    expect(view.selectedCellKey).toBe('item-1:priority')
+    expect(priorityBtn.element.closest('td')?.classList.contains('monday-cell--selected')).toBe(true)
+    expect(statusBtn.element.closest('td')?.classList.contains('monday-cell--selected')).toBe(false)
+
+    const assigneeBtn = wrapper.find('.monday-cell-centered')
+    await assigneeBtn.trigger('click')
+    expect(view.selectedCellKey).toBe('item-1:assignee')
+    expect(assigneeBtn.element.closest('td')?.classList.contains('monday-cell--selected')).toBe(true)
+
+    const dueDateBtn = wrapper.find('.monday-due-date-cell')
+    await dueDateBtn.trigger('click')
+    expect(view.selectedCellKey).toBe('item-1:dueDate')
+    expect(dueDateBtn.element.closest('td')?.classList.contains('monday-cell--selected')).toBe(true)
+
+    // 抽屉打开时，同时高亮打开的工作项行和新点击的标签行
+    view.detailOpen = true
+    view.detail = { id: 'item-1' }
+    view.selectCell('item-2', 'status')
+    await nextTick()
+    expect(view.isRowSelected('item-1')).toBe(true)
+    expect(view.isRowSelected('item-2')).toBe(true)
+    expect(view.selectedCellKey).toBe('item-2:status')
+    expect(document.body.classList.contains('yp-project-overview-scroll')).toBe(true)
+    expect(document.body.classList.contains('yp-work-items-drawer-open')).toBe(true)
+    expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('560px')
+
+    // 详情抽屉不带深色蒙版且包含左侧关闭按钮与拖动手柄
+    const drawer = wrapper.findComponent({ name: 'ElDrawer' })
+    expect(drawer.props('modal')).toBe(false)
+    expect(drawer.props('modalPenetrable')).toBe(true)
+    expect(drawer.props('appendToBody')).toBe(true)
+    expect(drawer.props('showClose')).toBe(true)
+    expect(document.body.querySelector('.work-items-detail-drawer__header .el-drawer__close-btn')).not.toBeNull()
+    expect(document.body.querySelector('.drawer-resize-handle')).not.toBeNull()
+
+    // 拖动手柄调整抽屉宽度
+    view.onDrawerResizePointerDown({
+      clientX: 500,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as PointerEvent)
+    expect(view.isResizingDrawer).toBe(true)
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 400 }))
+    expect(view.drawerWidth).toBe(660)
+    window.dispatchEvent(new MouseEvent('pointerup'))
+    expect(view.isResizingDrawer).toBe(false)
+    await nextTick()
+    expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('660px')
+
+    // 抽屉最小宽度略微增加，且不会被拖到阈值以下
+    view.onDrawerResizePointerDown({
+      clientX: 400,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as PointerEvent)
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 900 }))
+    expect(view.drawerWidth).toBe(440)
+    window.dispatchEvent(new MouseEvent('pointerup'))
+
+    view.detailOpen = false
+    await nextTick()
+    expect(document.body.classList.contains('yp-work-items-drawer-open')).toBe(false)
+    expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('')
+  })
+
+  it('通过左侧复选框选择多行，并为选中行应用浅蓝遮罩', async () => {
+    const first = item('item-1')
+    const second = item('item-2')
+    state.listProjectWorkItems.mockResolvedValue(page([first, second]))
+    const wrapper = mountView()
+    await flushPromises()
+
+    const view = wrapper.vm as unknown as {
+      selectedWorkItemIds: Set<string>
+      isRowSelected: (rowId: string) => boolean
+      tableRowClassName: (context: { row: ProjectWorkItemListItem, rowIndex: number }) => string
+    }
+    const rowCheckboxes = wrapper.findAll<HTMLInputElement>('.el-table__body .monday-selection-column .el-checkbox__original')
+    expect(rowCheckboxes).toHaveLength(2)
+
+    await rowCheckboxes[0]!.setValue(true)
+    expect([...view.selectedWorkItemIds]).toEqual(['item-1'])
+    expect(wrapper.findAll('.el-table__body tr.work-item-table-row--selected')).toHaveLength(1)
+
+    await rowCheckboxes[1]!.setValue(true)
+    expect([...view.selectedWorkItemIds]).toEqual(['item-1', 'item-2'])
+    expect(view.isRowSelected('item-1')).toBe(true)
+    expect(view.tableRowClassName({ row: second, rowIndex: 1 })).toContain('work-item-table-row--selected')
+    expect(wrapper.findAll('.el-table__body tr.work-item-table-row--selected')).toHaveLength(2)
+
+    await rowCheckboxes[0]!.setValue(false)
+    expect([...view.selectedWorkItemIds]).toEqual(['item-2'])
+    expect(wrapper.findAll('.el-table__body tr.work-item-table-row--selected')).toHaveLength(1)
   })
 })

@@ -142,6 +142,32 @@ describe('WorkItemLabelPopoverContent', () => {
     expect(wrapper.find('.label-select-view').exists()).toBe(true)
   })
 
+  it.each(['status', 'priority'] as const)('编辑态：%s 使用完整 Monday 33 色板', async kind => {
+    const catalog = mockCatalog()
+    const wrapper = mount(WorkItemLabelPopoverContent, {
+      props: {
+        kind,
+        projectId: 'project-1',
+        catalog,
+        canManage: true,
+      },
+      global: {
+        stubs: {
+          ElPopover: {
+            template: '<div><slot name="reference" /><slot /></div>',
+          },
+        },
+      },
+    })
+
+    await wrapper.find('.edit-action-btn').trigger('click')
+
+    const swatches = wrapper.findAll('.color-swatch-item')
+    expect(swatches).toHaveLength(catalog[kind === 'status' ? 'statuses' : 'priorities'].length * 33)
+    expect(swatches[0]?.attributes('style')).toContain('--yp-label-bright-green')
+    expect(swatches[32]?.attributes('style')).toContain('--yp-label-pecan')
+  })
+
   it('编辑态操作：新增标签仅在点击应用后调用 API', async () => {
     const catalog = mockCatalog()
     const updatedCatalog = {
@@ -154,7 +180,7 @@ describe('WorkItemLabelPopoverContent', () => {
           code: 'CUSTOM_3',
           displayName: '新标签',
           statusCategory: WorkItemStatusCategory.Todo,
-          colorToken: WorkItemLabelColorToken.Blue,
+          colorToken: WorkItemLabelColorToken.BrightBlue,
           active: true,
           sortOrder: 8,
           inUse: false,
@@ -190,7 +216,7 @@ describe('WorkItemLabelPopoverContent', () => {
         projectId: 'project-1',
         workItemLabelCreateRequest: expect.objectContaining({
           displayName: '新标签',
-          colorToken: WorkItemLabelColorToken.Blue,
+          colorToken: WorkItemLabelColorToken.BrightBlue,
         }),
       }),
     )
@@ -227,7 +253,7 @@ describe('WorkItemLabelPopoverContent', () => {
       rowVersion: 2,
       etag: '"etag-2"',
       statuses: catalog.statuses.map(label => label.code === 'DONE'
-        ? { ...label, colorToken: WorkItemLabelColorToken.Lime }
+        ? { ...label, colorToken: WorkItemLabelColorToken.BrightGreen }
         : label),
     }
     vi.mocked(workItemsApi.updateProjectWorkItemStatusLabel).mockResolvedValue(updatedCatalog)
@@ -251,6 +277,7 @@ describe('WorkItemLabelPopoverContent', () => {
     await wrapper.find('.edit-action-btn').trigger('click')
     const firstColor = wrapper.find('.color-swatch-item')
     expect(firstColor.exists()).toBe(true)
+    expect(firstColor.attributes('style')).toContain('--yp-label-bright-green')
     await firstColor.trigger('click')
 
     expect(workItemsApi.updateProjectWorkItemStatusLabel).not.toHaveBeenCalled()
@@ -262,7 +289,7 @@ describe('WorkItemLabelPopoverContent', () => {
       expect.objectContaining({
         code: 'DONE',
         workItemLabelUpdateRequest: expect.objectContaining({
-          colorToken: WorkItemLabelColorToken.Lime,
+          colorToken: WorkItemLabelColorToken.BrightGreen,
         }),
       }),
     )

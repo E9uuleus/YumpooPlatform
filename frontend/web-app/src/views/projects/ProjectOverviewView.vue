@@ -41,8 +41,10 @@ import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
 import LazyAttachmentPanel from '../../components/collaboration/LazyAttachmentPanel.vue'
+import MondayColumnQuickSort from '../../components/projects/MondayColumnQuickSort.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import WorkItemLabelPopoverContent from '../../components/projects/WorkItemLabelPopoverContent.vue'
+import { workItemLabelColorValue } from '../../components/projects/workItemLabelColors'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 
@@ -73,6 +75,7 @@ const tableItems = ref<ProjectWorkItemListItem[]>([])
 const tableNextCursor = ref<string | null>(null)
 const loading = ref(false)
 const tableLoading = ref(false)
+const tableSorting = ref(false)
 const error = ref<ApiProblem>()
 const vLoading = ElLoading.directive
 const lanes = reactive<Record<string, KanbanLane>>({})
@@ -90,14 +93,36 @@ const dragging = ref<ProjectWorkItemListItem>()
 const tableDragging = ref<ProjectWorkItemListItem>()
 const tableDraggingIndex = ref<number>(-1)
 const tableDropIndex = ref<number>()
+const columnDraggingKey = ref<MovableColumnKey>()
+const columnDraggingIndex = ref(-1)
+const columnDropIndex = ref<number>()
+const selectedWorkItemIds = ref(new Set<string>())
 const tableRef = ref<{ $el: HTMLElement }>()
 const tableSentinel = ref<HTMLElement>()
+const horizontalPageScrollbar = ref<HTMLElement>()
+const verticalPageScrollbar = ref<HTMLElement>()
+const horizontalScrollExtent = ref(1)
+const verticalScrollExtent = ref(1)
+const pageScrollbarLeft = ref(0)
 let tableDragPreview: HTMLElement | undefined
+let tableColumnDragPreview: HTMLElement | undefined
+let tableScrollElement: HTMLElement | undefined
+let pageScrollbarSyncQueued = false
 let tableDragPointerOffset = { x: 0, y: 0 }
+let tableColumnDragPointerOffset = { x: 0, y: 0 }
 let tablePointerCandidate: {
   pointerId: number
   row: HTMLElement
   item: ProjectWorkItemListItem
+  index: number
+  startX: number
+  startY: number
+} | undefined
+let tableColumnPointerCandidate: {
+  pointerId: number
+  key: MovableColumnKey
+  header: HTMLTableCellElement
+  headerRects: Array<{ left: number; width: number }>
   index: number
   startX: number
   startY: number
@@ -113,13 +138,158 @@ const filterOptionsLoading = ref(false)
 const labelPopoverContentRefs = new Map<string, LabelPopoverContentHandle>()
 const searchExpanded = ref(Boolean(route.query.q))
 const searchInput = ref(String(route.query.q ?? ''))
+const selectedRowId = ref<string | undefined>(route.query.workItemId ? String(route.query.workItemId) : undefined)
+const selectedCellKey = ref<string | undefined>(route.query.workItemId ? `${route.query.workItemId}:title` : undefined)
+const TABLE_SELECTION_COLUMN_WIDTH = 48
+const DRAWER_MIN_WIDTH = 440
+const DRAWER_VIEWPORT_GUTTER = 60
+const drawerWidth = ref(560)
+const isResizingDrawer = ref(false)
+const pageScrollbarRight = computed(() => detailOpen.value ? drawerWidth.value : 0)
+const horizontalPageScrollbarStyle = computed<CSSProperties>(() => ({
+  left: `${pageScrollbarLeft.value}px`,
+  right: `${pageScrollbarRight.value}px`,
+}))
+const verticalPageScrollbarStyle = computed<CSSProperties>(() => ({
+  right: `${pageScrollbarRight.value}px`,
+}))
+
+function onDrawerResizePointerDown(event: PointerEvent): void {
+  event.preventDefault()
+  event.stopPropagation()
+  isResizingDrawer.value = true
+  const startX = event.clientX
+  const startWidth = drawerWidth.value
+
+  const onPointerMove = (e: PointerEvent) => {
+    const delta = startX - e.clientX
+    const maxWidth = Math.max(DRAWER_MIN_WIDTH, window.innerWidth - DRAWER_VIEWPORT_GUTTER)
+    const nextWidth = Math.max(DRAWER_MIN_WIDTH, Math.min(maxWidth, startWidth + delta))
+    drawerWidth.value = nextWidth
+  }
+
+  const onPointerUp = () => {
+    isResizingDrawer.value = false
+    window.removeEventListener('pointermove', onPointerMove)
+    window.removeEventListener('pointerup', onPointerUp)
+    window.removeEventListener('pointercancel', onPointerUp)
+  }
+
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', onPointerUp)
+}
+
+function selectCell(rowId: string, cellKey: string): void {
+  selectedRowId.value = rowId
+  selectedCellKey.value = `${rowId}:${cellKey}`
+}
+
+function tableCellClassName({
+  row,
+  column,
+}: {
+  row: ProjectWorkItemListItem
+  column: { columnKey?: string }
+}): string {
+  if (!column.columnKey || column.columnKey === 'title') return ''
+  return selectedCellKey.value === `${row.id}:${column.columnKey}` ? 'monday-cell--selected' : ''
+}
+
+function syncProjectPageScrollLayout(): void {
+  document.body.classList.toggle('yp-work-items-drawer-open', detailOpen.value)
+  if (detailOpen.value) {
+    document.body.style.setProperty('--yp-work-items-drawer-width', `${drawerWidth.value}px`)
+  } else {
+    document.body.style.removeProperty('--yp-work-items-drawer-width')
+  }
+  schedulePageScrollbarSync()
+}
+
+function resolveTableScrollElement(): HTMLElement | undefined {
+  return tableRef.value?.$el?.querySelector<HTMLElement>('.el-scrollbar__wrap') ?? undefined
+}
+
+function syncPageScrollbarPositions(): void {
+  if (!tableScrollElement) return
+  const horizontal = horizontalPageScrollbar.value
+  const vertical = verticalPageScrollbar.value
+  if (horizontal && Math.abs(horizontal.scrollLeft - tableScrollElement.scrollLeft) > 0.5) {
+    horizontal.scrollLeft = tableScrollElement.scrollLeft
+  }
+  if (vertical && Math.abs(vertical.scrollTop - tableScrollElement.scrollTop) > 0.5) {
+    vertical.scrollTop = tableScrollElement.scrollTop
+  }
+}
+
+function onTableScroll(): void {
+  syncPageScrollbarPositions()
+}
+
+function bindTableScrollElement(next: HTMLElement | undefined): void {
+  if (tableScrollElement === next) return
+  tableScrollElement?.removeEventListener('scroll', onTableScroll)
+  tableScrollElement = next
+  tableScrollElement?.addEventListener('scroll', onTableScroll, { passive: true })
+}
+
+function syncPageScrollbars(): void {
+  bindTableScrollElement(resolveTableScrollElement())
+
+  const contextNavigation = document.querySelector<HTMLElement>('.app-shell--workspace .context-navigation')
+  const appMain = document.querySelector<HTMLElement>('.app-shell--workspace .app-main')
+  const contextRect = contextNavigation?.getBoundingClientRect()
+  const appMainRect = appMain?.getBoundingClientRect()
+  const contextVisible = Boolean(contextNavigation && contextRect && contextRect.width > 0
+    && getComputedStyle(contextNavigation).display !== 'none')
+  pageScrollbarLeft.value = Math.max(0, Math.round(contextVisible ? contextRect!.right : (appMainRect?.left ?? 0)))
+
+  const horizontal = horizontalPageScrollbar.value
+  const vertical = verticalPageScrollbar.value
+  if (!tableScrollElement || !horizontal || !vertical) return
+
+  horizontalScrollExtent.value = Math.max(
+    horizontal.clientWidth,
+    horizontal.clientWidth + tableScrollElement.scrollWidth - tableScrollElement.clientWidth,
+  )
+  verticalScrollExtent.value = Math.max(
+    vertical.clientHeight,
+    vertical.clientHeight + tableScrollElement.scrollHeight - tableScrollElement.clientHeight,
+  )
+  void nextTick(syncPageScrollbarPositions)
+}
+
+function schedulePageScrollbarSync(): void {
+  if (pageScrollbarSyncQueued) return
+  pageScrollbarSyncQueued = true
+  void nextTick(() => {
+    pageScrollbarSyncQueued = false
+    syncPageScrollbars()
+  })
+}
+
+function onHorizontalPageScroll(): void {
+  if (!tableScrollElement || !horizontalPageScrollbar.value) return
+  if (Math.abs(tableScrollElement.scrollLeft - horizontalPageScrollbar.value.scrollLeft) > 0.5) {
+    tableScrollElement.scrollLeft = horizontalPageScrollbar.value.scrollLeft
+  }
+}
+
+function onVerticalPageScroll(): void {
+  if (!tableScrollElement || !verticalPageScrollbar.value) return
+  if (Math.abs(tableScrollElement.scrollTop - verticalPageScrollbar.value.scrollTop) > 0.5) {
+    tableScrollElement.scrollTop = verticalPageScrollbar.value.scrollTop
+  }
+}
 const filters = reactive({
   assignees: new Set<string>(), statuses: new Set<string>(), priorities: new Set<string>(),
   contents: new Set<string>(), dueRange: [] as Date[], updatedAfter: null as Date | null,
 })
 interface SortRule { field: string; direction: 'ASC' | 'DESC' }
 const sortRules = ref<SortRule[]>([])
+const savingSortOrder = ref(false)
 type ColumnKey = 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate' | 'updatedAt'
+type MovableColumnKey = Exclude<ColumnKey, 'title'>
 const columns: Array<{ key: ColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
   { key: 'title', label: '工作项名称', defaultWidth: 320, minWidth: 220 },
   { key: 'assignee', label: '处理人', defaultWidth: 90, minWidth: 72 },
@@ -129,6 +299,18 @@ const columns: Array<{ key: ColumnKey; label: string; defaultWidth: number; minW
   { key: 'dueDate', label: '截止日期', defaultWidth: 140, minWidth: 112 },
   { key: 'updatedAt', label: '最后更新时间', defaultWidth: 170, minWidth: 135 },
 ]
+const sortFieldByColumn: Record<ColumnKey, string> = {
+  title: 'TITLE',
+  assignee: 'ASSIGNEE',
+  status: 'STATUS',
+  priority: 'PRIORITY',
+  content: 'CONTENT',
+  dueDate: 'DUE_DATE',
+  updatedAt: 'UPDATED_AT',
+}
+const columnByKey = new Map(columns.map(column => [column.key, column]))
+const defaultMovableColumnOrder = columns.filter(column => column.key !== 'title').map(column => column.key as MovableColumnKey)
+const movableColumnOrder = ref<MovableColumnKey[]>([...defaultMovableColumnOrder])
 const columnWidths = reactive<Record<ColumnKey, number>>(Object.fromEntries(columns.map(item => [item.key, item.defaultWidth])) as Record<ColumnKey, number>)
 const hiddenColumns = ref(new Set<ColumnKey>())
 let loadRevision = 0
@@ -140,11 +322,17 @@ let activeController: AbortController | undefined
 
 const TABLE_PREFS_VERSION = 1
 const tablePrefsKey = computed(() => `yumpoo:project-work-items:table:v${TABLE_PREFS_VERSION}`)
-const visibleColumns = computed(() => columns.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
-const tableMinWidth = computed(() => visibleColumns.value.reduce((sum, item) => sum + columnWidths[item.key], 5))
-const quickGridStyle = computed(() => ({ gridTemplateColumns: visibleColumns.value.map(item => `${columnWidths[item.key]}px`).join(' ') }))
-const quickContentColumn = computed(() => Math.max(2, visibleColumns.value.findIndex(item => item.key === 'content') + 1))
-const quickSubmitColumn = computed(() => visibleColumns.value.length)
+const orderedColumns = computed(() => [
+  columnByKey.get('title')!,
+  ...movableColumnOrder.value.map(key => columnByKey.get(key)!),
+])
+const visibleColumns = computed(() => orderedColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
+const movableVisibleColumns = computed(() => visibleColumns.value.filter(item => item.key !== 'title'))
+const quickGridStyle = computed(() => ({
+  gridTemplateColumns: [`${TABLE_SELECTION_COLUMN_WIDTH}px`, ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`)].join(' '),
+}))
+const quickContentColumn = computed(() => Math.max(3, visibleColumns.value.findIndex(item => item.key === 'content') + 2))
+const quickSubmitColumn = computed(() => visibleColumns.value.length + 1)
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -190,24 +378,9 @@ function statusLabel(statusCode: string): string {
   return workflowStatuses.value.find(item => item.statusCode === statusCode)?.displayName ?? statusCode
 }
 
-const labelColorValues: Record<string, string> = {
-  GREEN: 'var(--yp-label-green)',
-  TEAL: 'var(--yp-label-teal)',
-  BLUE: 'var(--yp-label-blue)',
-  INDIGO: 'var(--yp-label-indigo)',
-  PURPLE: 'var(--yp-label-purple)',
-  MAGENTA: 'var(--yp-label-magenta)',
-  RED: 'var(--yp-label-red)',
-  ORANGE: 'var(--yp-label-orange)',
-  AMBER: 'var(--yp-label-amber)',
-  LIME: 'var(--yp-label-lime)',
-  CYAN: 'var(--yp-label-cyan)',
-  GRAY: 'var(--yp-label-gray)',
-}
-
 function labelCellStyle(colorToken?: string): CSSProperties {
   return {
-    ...(colorToken ? { backgroundColor: labelColorValues[colorToken] ?? 'var(--yp-label-gray)' } : {}),
+    ...(colorToken ? { backgroundColor: workItemLabelColorValue(colorToken) } : {}),
     color: 'var(--yp-text-inverse)',
   }
 }
@@ -308,6 +481,12 @@ function applyRouteState(): void {
     const [field = 'UPDATED_AT', direction = 'DESC'] = value.split(',')
     return { field, direction: direction === 'ASC' ? 'ASC' : 'DESC' }
   })
+}
+
+function routeQuerySignature(includeSort: boolean): string {
+  return JSON.stringify(Object.fromEntries(Object.entries(route.query)
+    .filter(([key]) => key !== 'workItemId' && (includeSort || key !== 'sort'))
+    .sort(([left], [right]) => left.localeCompare(right))))
 }
 
 async function syncUrl(extra: Record<string, string | undefined> = {}): Promise<void> {
@@ -439,7 +618,7 @@ function listRequest(cursor?: string | null) {
 }
 
 async function loadTable(cursor: string | null = null, append = false, revision = loadRevision): Promise<void> {
-  if (tableLoading.value) return
+  if (tableLoading.value || tableSorting.value) return
   tableLoading.value = true
   loadingMoreError.value = undefined
   try {
@@ -456,6 +635,45 @@ async function loadTable(cursor: string | null = null, append = false, revision 
     }
   } finally {
     if (revision === loadRevision) tableLoading.value = false
+  }
+}
+
+async function reloadSortedTableInPlace(): Promise<void> {
+  const revision = ++loadRevision
+  activeController?.abort()
+  const controller = new AbortController()
+  activeController = controller
+  tableLoading.value = false
+  tableSorting.value = true
+  loadingMoreError.value = undefined
+  error.value = undefined
+  const minimumItemCount = Math.max(1, tableItems.value.length)
+  const loaded = new Map<string, ProjectWorkItemListItem>()
+  let cursor: string | null = null
+  let nextCursor: string | null = null
+
+  try {
+    while (true) {
+      const result = await workItemsApi.listProjectWorkItems(
+        listRequest(cursor),
+        { signal: controller.signal },
+      )
+      if (revision !== loadRevision) return
+      result.items.forEach(item => loaded.set(item.id, item))
+      nextCursor = result.nextCursor
+      if (!nextCursor || loaded.size >= minimumItemCount || nextCursor === cursor) break
+      cursor = nextCursor
+    }
+
+    tableItems.value = [...loaded.values()]
+    tableNextCursor.value = nextCursor
+    await nextTick()
+  } catch (reason) {
+    if (revision === loadRevision && !(reason instanceof DOMException && reason.name === 'AbortError')) {
+      error.value = await toApiProblem(reason)
+    }
+  } finally {
+    if (revision === loadRevision) tableSorting.value = false
   }
 }
 
@@ -516,6 +734,7 @@ async function loadWorkspace(): Promise<void> {
   project.value = undefined
   catalog.value = undefined
   labelCatalog.value = undefined
+  selectedWorkItemIds.value = new Set()
   tableItems.value = []
   tableNextCursor.value = null
   members.value = []
@@ -631,6 +850,7 @@ async function loadDetail(workItemId: string, tab: 'details' | 'discussion' = 'd
 }
 
 async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion'): Promise<void> {
+  selectCell(item.id, tab === 'details' ? 'title' : 'discussion')
   detailTab.value = tab
   if (String(route.query.workItemId ?? '') === item.id) {
     await loadDetail(item.id, tab)
@@ -764,19 +984,125 @@ function setSortCount(count: number): void {
   void syncUrl()
 }
 
+function sortDirectionForColumn(key: ColumnKey): 'ASC' | 'DESC' | undefined {
+  return sortRules.value.find(rule => rule.field === sortFieldByColumn[key])?.direction
+}
+
+function applyColumnQuickSort(key: ColumnKey): void {
+  if (savingSortOrder.value) return
+  const field = sortFieldByColumn[key]
+  const index = sortRules.value.findIndex(rule => rule.field === field)
+  const next = sortRules.value.map(rule => ({ ...rule }))
+  if (index >= 0) {
+    const current = next[index]!
+    next[index] = { ...current, direction: current.direction === 'ASC' ? 'DESC' : 'ASC' }
+  } else if (next.length < 3) {
+    next.push({ field, direction: 'ASC' })
+  } else {
+    next[next.length - 1] = { field, direction: 'ASC' }
+  }
+  sortRules.value = next
+  void syncUrl()
+}
+
+function clearColumnSort(key: ColumnKey): void {
+  if (savingSortOrder.value) return
+  const field = sortFieldByColumn[key]
+  sortRules.value = sortRules.value.filter(rule => rule.field !== field)
+  void syncUrl()
+}
+
+function clearAllSorts(): void {
+  if (savingSortOrder.value) return
+  sortRules.value = []
+  void syncUrl()
+}
+
+async function loadAllSortedWorkItems(): Promise<boolean> {
+  while (tableNextCursor.value) {
+    const cursor = tableNextCursor.value
+    await loadTable(cursor, true)
+    if (loadingMoreError.value || tableNextCursor.value === cursor) return false
+  }
+  return true
+}
+
+async function saveSortedWorkItemOrder(): Promise<void> {
+  if (savingSortOrder.value || !sortRules.value.length) return
+  if (tableLoading.value || tableSorting.value) {
+    ElMessage.info('排序结果仍在加载，请稍后再保存工作项顺序')
+    return
+  }
+  savingSortOrder.value = true
+  try {
+    if (!await loadAllSortedWorkItems()) {
+      ElMessage.error('无法加载完整排序结果，暂未保存工作项顺序')
+      return
+    }
+    const ordered = [...tableItems.value]
+    if (ordered.some(item => !item.capabilities.canMoveInProjectOrder)) {
+      ElMessage.warning('当前结果中包含不可调整顺序的工作项')
+      return
+    }
+    const csrf = readCsrfToken()
+    if (!csrf) {
+      error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
+      return
+    }
+    for (let index = 1; index < ordered.length; index += 1) {
+      const item = tableItems.value.find(candidate => candidate.id === ordered[index]!.id) ?? ordered[index]!
+      const updated = await workItemsApi.moveProjectWorkItemOrder({
+        projectId: projectId.value,
+        workItemId: item.id,
+        xXSRFTOKEN: csrf,
+        ifMatch: item.etag,
+        idempotencyKey: globalThis.crypto.randomUUID(),
+        projectWorkItemOrderMoveRequest: {
+          previousVisibleWorkItemId: ordered[index - 1]!.id,
+          nextVisibleWorkItemId: null,
+        },
+      })
+      replaceLightItem(item.id, updated)
+    }
+    sortRules.value = []
+    await syncUrl()
+    ElMessage.success(`已保存 ${ordered.length} 个工作项的当前顺序`)
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+    await loadTable(null, false)
+  } finally {
+    savingSortOrder.value = false
+  }
+}
+
 function persistTablePrefs(): void {
-  localStorage.setItem(tablePrefsKey.value, JSON.stringify({ version: TABLE_PREFS_VERSION, widths: columnWidths, hidden: [...hiddenColumns.value] }))
+  localStorage.setItem(tablePrefsKey.value, JSON.stringify({
+    version: TABLE_PREFS_VERSION,
+    widths: columnWidths,
+    hidden: [...hiddenColumns.value],
+    order: movableColumnOrder.value,
+  }))
 }
 
 function loadTablePrefs(): void {
   try {
-    const parsed = JSON.parse(localStorage.getItem(tablePrefsKey.value) ?? '{}') as { version?: number; widths?: Partial<Record<ColumnKey, number>>; hidden?: ColumnKey[] }
+    const parsed = JSON.parse(localStorage.getItem(tablePrefsKey.value) ?? '{}') as {
+      version?: number
+      widths?: Partial<Record<ColumnKey, number>>
+      hidden?: ColumnKey[]
+      order?: ColumnKey[]
+    }
     if (parsed.version !== TABLE_PREFS_VERSION) return
     columns.forEach(column => {
       const value = parsed.widths?.[column.key]
       if (typeof value === 'number') columnWidths[column.key] = Math.max(column.minWidth, value)
     })
     hiddenColumns.value = new Set((parsed.hidden ?? []).filter(key => key !== 'title'))
+    const savedOrder = (parsed.order ?? []).filter((key): key is MovableColumnKey => key !== 'title' && defaultMovableColumnOrder.includes(key as MovableColumnKey))
+    movableColumnOrder.value = [
+      ...new Set(savedOrder),
+      ...defaultMovableColumnOrder.filter(key => !savedOrder.includes(key)),
+    ]
   } catch { /* 忽略损坏的本地视图偏好 */ }
 }
 
@@ -795,8 +1121,8 @@ function toggleColumn(key: ColumnKey, checked: boolean): void {
   persistTablePrefs()
 }
 
-const TABLE_ROW_HEIGHT = 40
-const TABLE_DRAG_TILT_DEGREES = 2
+const TABLE_ROW_HEIGHT = 36
+const TABLE_DRAG_TILT_DEGREES = 1
 const TABLE_DRAG_POINTER_THRESHOLD = 5
 
 function removeTableDragPreview(): void {
@@ -871,10 +1197,254 @@ function resetTableDragState(): void {
   tableDropIndex.value = undefined
 }
 
+function removeTableColumnDragPreview(): void {
+  tableColumnDragPreview?.remove()
+  tableColumnDragPreview = undefined
+  tableColumnDragPointerOffset = { x: 0, y: 0 }
+}
+
+function moveTableColumnDragPreview(clientX: number, clientY: number): void {
+  if (!tableColumnDragPreview || (clientX === 0 && clientY === 0)) return
+  tableColumnDragPreview.style.left = `${Math.round(clientX - tableColumnDragPointerOffset.x)}px`
+  tableColumnDragPreview.style.top = `${Math.round(clientY - tableColumnDragPointerOffset.y)}px`
+}
+
+function sanitizeColumnDragPreview(root: HTMLElement): void {
+  root.removeAttribute('id')
+  root.removeAttribute('style')
+  root.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'))
+  root.querySelectorAll<HTMLElement>('button,input,select,textarea,[tabindex]').forEach(element => {
+    element.tabIndex = -1
+  })
+}
+
+function createTableColumnDragPreview(header: HTMLTableCellElement, clientX: number, clientY: number): HTMLElement {
+  removeTableColumnDragPreview()
+  const headerRect = header.getBoundingClientRect()
+  const width = Math.max(headerRect.width, header.offsetWidth, 1)
+  const tableRect = tableRef.value?.$el?.getBoundingClientRect()
+  const height = Math.max(headerRect.height, Math.min(tableRect?.height ?? 420, window.innerHeight - 24))
+  tableColumnDragPointerOffset = {
+    x: Math.min(Math.max(clientX - headerRect.left, 0), width),
+    y: Math.min(Math.max(clientY - headerRect.top, 0), height),
+  }
+
+  const preview = document.createElement('div')
+  preview.className = 'work-item-column-drag-preview'
+  preview.setAttribute('aria-hidden', 'true')
+  preview.style.width = `${width}px`
+  preview.style.height = `${height}px`
+  preview.style.transform = `rotate(${TABLE_DRAG_TILT_DEGREES}deg)`
+  preview.style.transformOrigin = `${tableColumnDragPointerOffset.x}px ${tableColumnDragPointerOffset.y}px`
+
+  const previewTable = document.createElement('table')
+  previewTable.className = 'work-item-column-drag-preview__table'
+  previewTable.style.width = `${width}px`
+  const previewHead = document.createElement('thead')
+  const previewHeadRow = document.createElement('tr')
+  const previewHeader = header.cloneNode(true) as HTMLTableCellElement
+  sanitizeColumnDragPreview(previewHeader)
+  previewHeader.classList.add('work-item-column-drag-preview__header')
+  previewHeader.style.width = `${width}px`
+  previewHeadRow.appendChild(previewHeader)
+  previewHead.appendChild(previewHeadRow)
+  previewTable.appendChild(previewHead)
+
+  const headerIndex = header.parentElement ? [...header.parentElement.children].indexOf(header) : -1
+  const previewBody = document.createElement('tbody')
+  const sourceRows = tableRef.value?.$el?.querySelectorAll<HTMLTableRowElement>('.el-table__body-wrapper tbody tr') ?? []
+  sourceRows.forEach(sourceRow => {
+    const sourceCell = sourceRow.children[headerIndex]
+    if (!(sourceCell instanceof HTMLTableCellElement)) return
+    const previewRow = document.createElement('tr')
+    const previewCell = sourceCell.cloneNode(true) as HTMLTableCellElement
+    sanitizeColumnDragPreview(previewCell)
+    previewCell.classList.add('work-item-column-drag-preview__cell')
+    previewCell.style.width = `${width}px`
+    previewRow.appendChild(previewCell)
+    previewBody.appendChild(previewRow)
+  })
+  previewTable.appendChild(previewBody)
+  preview.appendChild(previewTable)
+  document.body.appendChild(preview)
+  tableColumnDragPreview = preview
+  moveTableColumnDragPreview(clientX, clientY)
+  return preview
+}
+
+function resetTableColumnDragState(): void {
+  removeTableColumnDragPreview()
+  columnDraggingKey.value = undefined
+  columnDraggingIndex.value = -1
+  columnDropIndex.value = undefined
+}
+
+function tableColumnDragStyle(columnKey?: string): CSSProperties {
+  const draggedKey = columnDraggingKey.value
+  const dropIndex = columnDropIndex.value
+  const from = columnDraggingIndex.value
+  if (!draggedKey || dropIndex === undefined || from < 0 || !columnKey || columnKey === 'title') return {}
+  const index = movableVisibleColumns.value.findIndex(column => column.key === columnKey)
+  if (index < 0) return {}
+  if (columnKey === draggedKey) return { opacity: 0, pointerEvents: 'none' }
+
+  const draggedWidth = columnWidths[draggedKey]
+  if (from < dropIndex && index > from && index < dropIndex) {
+    return { transform: `translateX(-${draggedWidth}px)` }
+  }
+  if (from > dropIndex && index >= dropIndex && index < from) {
+    return { transform: `translateX(${draggedWidth}px)` }
+  }
+  return { transform: 'translateX(0px)' }
+}
+
+function tableCellStyle({ column }: { column: { columnKey?: string } }): CSSProperties {
+  return tableColumnDragStyle(column.columnKey)
+}
+
+function tableHeaderCellStyle({ column }: { column: { columnKey?: string } }): CSSProperties {
+  return tableColumnDragStyle(column.columnKey)
+}
+
+function movableHeaderCells(): HTMLTableCellElement[] {
+  return [...(tableRef.value?.$el?.querySelectorAll<HTMLTableCellElement>('.el-table__header-wrapper th.monday-movable-column-header') ?? [])]
+}
+
+function updateTableColumnDropTarget(clientX: number): void {
+  const headerRects = tableColumnPointerCandidate?.headerRects ?? movableHeaderCells().map(header => {
+    const rect = header.getBoundingClientRect()
+    return { left: rect.left, width: rect.width }
+  })
+  let target = headerRects.findIndex(rect => clientX < rect.left + rect.width / 2)
+  if (target < 0) target = headerRects.length
+  columnDropIndex.value = target
+}
+
+function clearTableColumnPointerTracking(): void {
+  tableColumnPointerCandidate = undefined
+  window.removeEventListener('pointermove', onTableColumnPointerMove, true)
+  window.removeEventListener('pointerup', onTableColumnPointerUp, true)
+  window.removeEventListener('pointercancel', onTableColumnPointerCancel, true)
+}
+
+function onTableColumnPointerDown(event: PointerEvent): void {
+  if (!event.isPrimary || event.button !== 0 || tableDragging.value || columnDraggingKey.value) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.sort-by-column')) return
+  const header = target?.closest<HTMLTableCellElement>('th.monday-movable-column-header')
+  if (!header) return
+  const rect = header.getBoundingClientRect()
+  if (rect.width > 0 && rect.right - event.clientX <= 8) return
+  const headers = movableHeaderCells()
+  const index = headers.indexOf(header)
+  const key = movableVisibleColumns.value[index]?.key as MovableColumnKey | undefined
+  if (!key) return
+
+  clearTableColumnPointerTracking()
+  tableColumnPointerCandidate = {
+    pointerId: event.pointerId,
+    key,
+    header,
+    headerRects: headers.map(candidate => {
+      const candidateRect = candidate.getBoundingClientRect()
+      return { left: candidateRect.left, width: candidateRect.width }
+    }),
+    index,
+    startX: event.clientX,
+    startY: event.clientY,
+  }
+  window.addEventListener('pointermove', onTableColumnPointerMove, { capture: true, passive: false })
+  window.addEventListener('pointerup', onTableColumnPointerUp, true)
+  window.addEventListener('pointercancel', onTableColumnPointerCancel, true)
+}
+
+function onTableColumnPointerMove(event: PointerEvent): void {
+  const candidate = tableColumnPointerCandidate
+  if (!candidate || candidate.pointerId !== event.pointerId) return
+  if (!columnDraggingKey.value) {
+    const distance = Math.hypot(event.clientX - candidate.startX, event.clientY - candidate.startY)
+    if (distance < TABLE_DRAG_POINTER_THRESHOLD) return
+    createTableColumnDragPreview(candidate.header, candidate.startX, candidate.startY)
+    columnDraggingKey.value = candidate.key
+    columnDraggingIndex.value = candidate.index
+    columnDropIndex.value = candidate.index
+    suppressClickAfterTableDrag()
+  }
+  event.preventDefault()
+  moveTableColumnDragPreview(event.clientX, event.clientY)
+  updateTableColumnDropTarget(event.clientX)
+}
+
+function commitTableColumnDrop(): void {
+  const draggedKey = columnDraggingKey.value
+  const from = columnDraggingIndex.value
+  let target = columnDropIndex.value
+  resetTableColumnDragState()
+  if (!draggedKey || from < 0 || target === undefined) return
+  const visibleKeys = movableVisibleColumns.value.map(column => column.key as MovableColumnKey)
+  const currentVisibleIndex = visibleKeys.indexOf(draggedKey)
+  if (currentVisibleIndex < 0) return
+  const remainingVisible = visibleKeys.filter(key => key !== draggedKey)
+  if (currentVisibleIndex < target) target -= 1
+  target = Math.max(0, Math.min(target, remainingVisible.length))
+  if (target === currentVisibleIndex) return
+
+  const nextOrder = movableColumnOrder.value.filter(key => key !== draggedKey)
+  const beforeKey = remainingVisible[target]
+  if (beforeKey) {
+    nextOrder.splice(nextOrder.indexOf(beforeKey), 0, draggedKey)
+  } else {
+    const lastVisibleKey = remainingVisible.at(-1)
+    const insertionIndex = lastVisibleKey ? nextOrder.indexOf(lastVisibleKey) + 1 : nextOrder.length
+    nextOrder.splice(insertionIndex, 0, draggedKey)
+  }
+  movableColumnOrder.value = nextOrder
+  persistTablePrefs()
+  schedulePageScrollbarSync()
+}
+
+function onTableColumnPointerUp(event: PointerEvent): void {
+  const candidate = tableColumnPointerCandidate
+  if (!candidate || candidate.pointerId !== event.pointerId) return
+  const dragged = Boolean(columnDraggingKey.value)
+  clearTableColumnPointerTracking()
+  if (!dragged) return
+  event.preventDefault()
+  event.stopPropagation()
+  suppressClickAfterTableDrag()
+  commitTableColumnDrop()
+}
+
+function onTableColumnPointerCancel(event: PointerEvent): void {
+  if (!tableColumnPointerCandidate || tableColumnPointerCandidate.pointerId !== event.pointerId) return
+  const dragged = Boolean(columnDraggingKey.value)
+  clearTableColumnPointerTracking()
+  if (dragged) suppressClickAfterTableDrag()
+  resetTableColumnDragState()
+}
+
+function onTableSurfacePointerDown(event: PointerEvent): void {
+  onTableColumnPointerDown(event)
+  if (!tableColumnPointerCandidate) onTablePointerDown(event)
+}
+
+function isRowSelected(rowId: string): boolean {
+  if (selectedWorkItemIds.value.has(rowId)) return true
+  if (selectedRowId.value === rowId) return true
+  if (detailOpen.value && detail.value?.id === rowId) return true
+  return false
+}
+
+function onTableSelectionChange(rows: ProjectWorkItemListItem[]): void {
+  selectedWorkItemIds.value = new Set(rows.map(row => row.id))
+}
+
 function tableRowClassName({ row }: { row: ProjectWorkItemListItem; rowIndex: number }): string {
   const classes = ['work-item-table-row']
   if (row.capabilities.canMoveInProjectOrder) classes.push('work-item-table-row--movable')
   if (tableDragging.value?.id === row.id) classes.push('work-item-table-row--dragging')
+  if (tableSorting.value) classes.push('work-item-table-row--sorting')
+  if (isRowSelected(row.id)) classes.push('work-item-table-row--selected')
   return classes.join(' ')
 }
 
@@ -963,7 +1533,7 @@ function updateTableDropTarget(clientY: number): void {
   }
   if (clientY >= window.innerHeight - 48) {
     window.scrollBy({ top: 28, behavior: 'smooth' })
-    if (tableNextCursor.value && !tableLoading.value) void loadTable(tableNextCursor.value, true)
+    if (tableNextCursor.value && !tableLoading.value && !tableSorting.value) void loadTable(tableNextCursor.value, true)
   } else if (clientY <= 48) {
     window.scrollBy({ top: -28, behavior: 'smooth' })
   }
@@ -972,8 +1542,8 @@ function updateTableDropTarget(clientY: number): void {
 function onTablePointerDown(event: PointerEvent): void {
   if (!event.isPrimary || event.button !== 0 || tableDragging.value) return
   const target = event.target as HTMLElement | null
-  const dragHandle = target?.closest('.work-item-link')
-  if (!dragHandle) return
+  const dragArea = target?.closest('.work-item-link, .monday-selection-column')
+  if (!dragArea) return
   const index = rowIndexFromTarget(target)
   const item = tableItems.value[index]
   const row = target?.closest('.el-table__body-wrapper tbody tr') as HTMLElement | null
@@ -1091,6 +1661,7 @@ function clearFilters(): void {
 function resetCurrentData(): void {
   const revision = ++loadRevision
   activeController?.abort(); activeController = new AbortController()
+  selectedWorkItemIds.value = new Set()
   error.value = undefined; tableItems.value = []; tableNextCursor.value = null
   Object.keys(lanes).forEach(key => delete lanes[key])
   if (selectedView.value === 'kanban') void loadKanban(revision); else void loadTable(null, false, revision)
@@ -1113,23 +1684,47 @@ function onDueDateChange(item: ProjectWorkItemListItem, value: string | null): v
 }
 
 watch(projectId, () => { applyRouteState(); void loadWorkspace() }, { immediate: true })
-watch(() => JSON.stringify(Object.fromEntries(Object.entries(route.query)
-  .filter(([key]) => key !== 'workItemId'))), () => {
+watch([() => routeQuerySignature(true), () => routeQuerySignature(false)], ([, context], [, previousContext]) => {
   if (!project.value) return
-  applyRouteState(); resetCurrentData()
+  const sortOnly = selectedView.value === 'table' && context === previousContext
+  applyRouteState()
+  if (sortOnly) void reloadSortedTableInPlace()
+  else resetCurrentData()
 })
 watch(() => route.query.workItemId, value => {
   const workItemId = Array.isArray(value) ? value[0] : value
-  if (workItemId) void loadDetail(String(workItemId), detailTab.value)
-  else { detailOpen.value = false; detail.value = undefined }
+  if (workItemId) {
+    selectedRowId.value = String(workItemId)
+    if (!selectedCellKey.value || !selectedCellKey.value.startsWith(`${workItemId}:`)) {
+      selectedCellKey.value = `${workItemId}:title`
+    }
+    void loadDetail(String(workItemId), detailTab.value)
+  } else {
+    detailOpen.value = false
+    detail.value = undefined
+  }
 }, { immediate: true })
 watch(assigneeSearch, scheduleMemberSearch)
+watch([detailOpen, drawerWidth], syncProjectPageScrollLayout, { flush: 'post' })
+watch([
+  tableRef,
+  () => selectedView.value,
+  () => tableItems.value.length,
+  () => quickOpen.value,
+  () => tableLoading.value,
+  () => loadingMoreError.value,
+  () => visibleColumns.value.map(item => `${item.key}:${columnWidths[item.key]}`).join('|'),
+], schedulePageScrollbarSync, { flush: 'post' })
 
 onMounted(() => {
+  document.body.classList.add('yp-project-overview-scroll')
+  syncProjectPageScrollLayout()
+  window.addEventListener('resize', schedulePageScrollbarSync)
   loadTablePrefs()
   document.addEventListener('pointerdown', onDocumentPointerDown)
   tableObserver = new IntersectionObserver(entries => {
-    if (entries.some(entry => entry.isIntersecting) && tableNextCursor.value && !tableLoading.value) void loadTable(tableNextCursor.value, true)
+    if (entries.some(entry => entry.isIntersecting) && tableNextCursor.value && !tableLoading.value && !tableSorting.value)
+      void loadTable(tableNextCursor.value, true)
   }, { rootMargin: '320px 0px' })
   kanbanObserver = new IntersectionObserver(entries => {
     entries.filter(entry => entry.isIntersecting).forEach(entry => {
@@ -1146,15 +1741,21 @@ onBeforeUnmount(() => {
   if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
   tableObserver?.disconnect(); kanbanObserver?.disconnect()
   document.removeEventListener('pointerdown', onDocumentPointerDown)
+  window.removeEventListener('resize', schedulePageScrollbarSync)
+  bindTableScrollElement(undefined)
+  document.body.classList.remove('yp-project-overview-scroll', 'yp-work-items-drawer-open')
+  document.body.style.removeProperty('--yp-work-items-drawer-width')
   clearTablePointerTracking()
+  clearTableColumnPointerTracking()
   removeTableDragPreview()
+  removeTableColumnDragPreview()
 })
 </script>
 
 <template>
   <div
     v-loading="loading"
-    class="project-view-stack"
+    class="project-view-stack project-overview-stack"
   >
     <inline-problem
       v-if="error"
@@ -1290,14 +1891,14 @@ onBeforeUnmount(() => {
             </div>
           </el-popover>
 
-          <el-popover placement="bottom-start" :width="420" trigger="click" :disabled="selectedView === 'kanban'" popper-class="work-items-popover">
+          <el-popover placement="bottom-start" :width="420" trigger="click" :disabled="selectedView === 'kanban' || savingSortOrder" popper-class="work-items-popover">
             <template #reference>
-              <button class="toolbar-button" :disabled="selectedView === 'kanban'" :class="{ active: sortRules.length }">
-                <el-icon><sort /></el-icon><span>排序</span>
+              <button class="toolbar-button" :disabled="selectedView === 'kanban' || savingSortOrder" :class="{ active: sortRules.length }">
+                <el-icon><sort /></el-icon><span>排序<span v-if="sortRules.length"> / {{ sortRules.length }}</span></span>
               </button>
             </template>
             <div class="sort-popover">
-              <header><strong>排序方式</strong><button class="text-button" @click="sortRules = []; syncUrl()">清除</button></header>
+              <header><strong>排序方式</strong><button class="text-button" @click="clearAllSorts">清除</button></header>
               <div v-for="(rule, index) in sortRules" :key="index" class="sort-rule">
                 <el-select v-model="rule.field" @change="syncUrl">
                   <el-option label="工作项名称" value="TITLE" /><el-option label="处理人" value="ASSIGNEE" />
@@ -1329,11 +1930,12 @@ onBeforeUnmount(() => {
         <div
           v-if="selectedView === 'table'"
           v-loading="tableLoading"
+          :aria-busy="tableLoading || tableSorting"
           class="table-surface monday-table-surface"
         >
           <div
             class="monday-table-wrapper"
-            @pointerdown.capture="onTablePointerDown"
+            @pointerdown.capture="onTableSurfacePointerDown"
             @click.capture="onTableClickCapture"
           >
             <el-table
@@ -1341,30 +1943,57 @@ onBeforeUnmount(() => {
               :data="tableItems"
               :row-class-name="tableRowClassName"
               :row-style="tableRowStyle"
+              :cell-class-name="tableCellClassName"
+              :cell-style="tableCellStyle"
+              :header-cell-style="tableHeaderCellStyle"
               row-key="id"
               class="monday-table"
-              :style="{ minWidth: `${tableMinWidth}px` }"
+              height="100%"
               empty-text="当前项目暂无工作项"
               border
               @header-dragend="onHeaderDragEnd"
+              @selection-change="onTableSelectionChange"
             >
               <el-table-column
+                type="selection"
+                :width="TABLE_SELECTION_COLUMN_WIDTH"
+                fixed
+                reserve-selection
+                class-name="monday-selection-column"
+                label-class-name="monday-selection-column"
+              />
+              <el-table-column
                 label="工作项名称"
+                column-key="title"
                 :width="columnWidths.title"
+                header-align="center"
                 class-name="monday-title-column"
+                label-class-name="monday-title-column monday-sortable-column-header"
+                fixed
                 resizable
               >
+                <template #header>
+                  <monday-column-quick-sort
+                    label="工作项名称"
+                    :direction="sortDirectionForColumn('title')"
+                    :saving="savingSortOrder"
+                    @sort="applyColumnQuickSort('title')"
+                    @clear="clearColumnSort('title')"
+                    @save="saveSortedWorkItemOrder"
+                  />
+                </template>
                 <template #default="scope">
                   <div class="title-cell">
                     <button
                       class="work-item-link"
-                      @click="openDetail(scope.row as ProjectWorkItemListItem, 'details')"
+                      :class="{ 'monday-cell--selected': selectedCellKey === `${(scope.row as ProjectWorkItemListItem).id}:title` }"
+                      @click.stop="openDetail(scope.row as ProjectWorkItemListItem, 'details')"
                     >
                       <span class="work-item-title-text">{{ (scope.row as ProjectWorkItemListItem).title }}</span>
-                      <small class="work-item-code-text">{{ (scope.row as ProjectWorkItemListItem).itemNo }}</small>
                     </button>
                     <button
                       class="monday-discussion-btn"
+                      :class="{ 'monday-cell--selected': selectedCellKey === `${(scope.row as ProjectWorkItemListItem).id}:discussion` }"
                       aria-label="打开协作讨论"
                       title="打开协作讨论"
                       @click.stop="openDetail(scope.row as ProjectWorkItemListItem, 'discussion')"
@@ -1396,243 +2025,211 @@ onBeforeUnmount(() => {
               </el-table-column>
 
               <el-table-column
-                v-if="!hiddenColumns.has('assignee')"
-                label="处理人"
-                :width="columnWidths.assignee"
+                v-for="column in movableVisibleColumns"
+                :key="column.key"
+                :label="column.label"
+                :column-key="column.key"
+                :width="columnWidths[column.key]"
                 align="center"
+                :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' ? ' monday-block-column' : ''}`"
+                :label-class-name="`monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key}`"
                 resizable
               >
-                <template #default="scope">
-                  <el-popover placement="bottom" :width="360" trigger="click" popper-class="work-items-popover" @show="assigneeSearch = ''">
-                    <template #reference>
-                      <button class="cell-editor-trigger monday-cell-centered" :disabled="Boolean(editingCell)">
-                        <yp-assignee :user-id="(scope.row as ProjectWorkItemListItem).assigneeUserId" :display-name="(scope.row as ProjectWorkItemListItem).assigneeDisplayName" :show-name="false" size="table" />
-                      </button>
-                    </template>
-                    <div class="popover-stack">
-                      <el-input v-model="assigneeSearch" autofocus clearable placeholder="搜索项目成员" />
-                      <button class="popover-option" @click="patchCell(scope.row as ProjectWorkItemListItem, 'assignee', null)"><span class="empty-avatar">—</span><span>清空处理人</span></button>
-                      <button v-for="member in filteredMembers" :key="member.userId" class="popover-option" @click="patchCell(scope.row as ProjectWorkItemListItem, 'assignee', member.userId)">
-                        <yp-assignee :user-id="member.userId" :display-name="member.displayName" />
-                      </button>
-                    </div>
-                  </el-popover>
+                <template #header>
+                  <monday-column-quick-sort
+                    :label="column.label"
+                    :direction="sortDirectionForColumn(column.key)"
+                    :saving="savingSortOrder"
+                    @sort="applyColumnQuickSort(column.key)"
+                    @clear="clearColumnSort(column.key)"
+                    @save="saveSortedWorkItemOrder"
+                  />
                 </template>
-              </el-table-column>
-
-              <el-table-column
-                v-if="!hiddenColumns.has('status')"
-                label="状态"
-                :width="columnWidths.status"
-                align="center"
-                class-name="monday-block-column"
-                resizable
-              >
                 <template #default="scope">
-                  <el-popover
-                    placement="bottom"
-                    width="auto"
-                    trigger="click"
-                    popper-class="work-items-label-popover status-popover"
-                    @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'status')"
-                  >
-                    <template #reference>
-                      <button
-                        class="monday-status-cell status-chip cell-editor-trigger"
-                        :class="`monday-status-cell--${getStatusTone((scope.row as ProjectWorkItemListItem).statusCode)}`"
-                        :style="getStatusCellStyle((scope.row as ProjectWorkItemListItem).statusCode)"
-                        :disabled="Boolean(editingCell)"
-                      >
-                        <span>{{ statusLabel((scope.row as ProjectWorkItemListItem).statusCode) }}</span>
-                      </button>
-                    </template>
-                    <work-item-label-popover-content
-                      :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'status'), element)"
-                      kind="status"
-                      :project-id="projectId"
-                      :catalog="labelCatalog"
-                      :workflow-statuses="workflowStatuses.filter(item => item.active || item.statusCode === (scope.row as ProjectWorkItemListItem).statusCode)"
-                      :current-value="(scope.row as ProjectWorkItemListItem).statusCode"
-                      :can-manage="Boolean(labelCatalog?.canManage)"
-                      :available-transitions="(scope.row as ProjectWorkItemListItem).capabilities.availableTransitions"
-                      @select-status="transitionItem(scope.row as ProjectWorkItemListItem, $event)"
-                      @updated="onLabelsUpdated"
-                    />
-                  </el-popover>
-                </template>
-              </el-table-column>
+                  <template v-if="column.key === 'assignee'">
+                    <el-popover placement="bottom" :width="360" trigger="click" popper-class="work-items-popover" @show="assigneeSearch = ''">
+                      <template #reference>
+                        <button
+                          class="cell-editor-trigger monday-cell-centered"
+                          :disabled="Boolean(editingCell)"
+                          @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'assignee')"
+                        >
+                          <yp-assignee :user-id="(scope.row as ProjectWorkItemListItem).assigneeUserId" :display-name="(scope.row as ProjectWorkItemListItem).assigneeDisplayName" :show-name="false" size="table" />
+                        </button>
+                      </template>
+                      <div class="popover-stack">
+                        <el-input v-model="assigneeSearch" autofocus clearable placeholder="搜索项目成员" />
+                        <button class="popover-option" @click="patchCell(scope.row as ProjectWorkItemListItem, 'assignee', null)"><span class="empty-avatar">—</span><span>清空处理人</span></button>
+                        <button v-for="member in filteredMembers" :key="member.userId" class="popover-option" @click="patchCell(scope.row as ProjectWorkItemListItem, 'assignee', member.userId)">
+                          <yp-assignee :user-id="member.userId" :display-name="member.displayName" />
+                        </button>
+                      </div>
+                    </el-popover>
+                  </template>
 
-              <el-table-column
-                v-if="!hiddenColumns.has('priority')"
-                label="优先级"
-                :width="columnWidths.priority"
-                align="center"
-                class-name="monday-block-column"
-                resizable
-              >
-                <template #default="scope">
-                  <el-popover
-                    placement="bottom"
-                    width="auto"
-                    trigger="click"
-                    popper-class="work-items-label-popover priority-popover"
-                    @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'priority')"
-                  >
-                    <template #reference>
-                      <button
-                        class="monday-priority-cell cell-editor-trigger"
-                        :class="`monday-priority-cell--${getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).tone}`"
-                        :style="getPriorityCellStyle((scope.row as ProjectWorkItemListItem).priority)"
-                        :disabled="Boolean(editingCell)"
-                      >
-                        <span>{{ getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).label }}</span>
-                      </button>
-                    </template>
-                    <work-item-label-popover-content
-                      :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'priority'), element)"
-                      kind="priority"
-                      :project-id="projectId"
-                      :catalog="labelCatalog"
-                      :priority-options="priorityOptions.filter(item => item.active)"
-                      :current-value="(scope.row as ProjectWorkItemListItem).priority"
-                      :can-manage="Boolean(labelCatalog?.canManage)"
-                      @select-priority="patchCell(scope.row as ProjectWorkItemListItem, 'priority', $event)"
-                      @updated="onLabelsUpdated"
-                    />
-                  </el-popover>
-                </template>
-              </el-table-column>
-
-              <el-table-column
-                v-if="!hiddenColumns.has('content')"
-                label="工作项类别"
-                :width="columnWidths.content"
-                align="center"
-                resizable
-              >
-                <template #default="scope">
-                  <span class="monday-content-label">{{ (scope.row as ProjectWorkItemListItem).contentName }}</span>
-                </template>
-              </el-table-column>
-
-              <el-table-column
-                v-if="!hiddenColumns.has('dueDate')"
-                label="截止日期"
-                :width="columnWidths.dueDate"
-                align="center"
-                resizable
-              >
-                <template #default="scope">
-                  <el-popover placement="bottom" :width="300" trigger="click" popper-class="work-items-popover date-popover">
-                    <template #reference><button class="monday-due-date-cell cell-editor-trigger" :disabled="Boolean(editingCell)">
-                    <span
-                      v-if="isOverdue((scope.row as ProjectWorkItemListItem).dueDate, (scope.row as ProjectWorkItemListItem).statusCode)"
-                      class="monday-overdue-badge"
-                      title="已超出截止时间"
+                  <template v-else-if="column.key === 'status'">
+                    <el-popover
+                      placement="bottom"
+                      width="auto"
+                      trigger="click"
+                      popper-class="work-items-label-popover status-popover"
+                      @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'status')"
                     >
-                      <svg
-                        width="15"
-                        height="15"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                      >
-                        <circle
-                          cx="8"
-                          cy="8"
-                          r="7"
-                          class="overdue-circle"
-                        />
-                        <path
-                          d="M8 4.2V8.5M8 11.2V11.8"
-                          class="overdue-exclamation"
-                          stroke-width="1.6"
-                          stroke-linecap="round"
-                        />
-                      </svg>
-                    </span>
-                    <span
-                      class="due-date-text"
-                      :class="{ 'due-date-text--overdue': isOverdue((scope.row as ProjectWorkItemListItem).dueDate, (scope.row as ProjectWorkItemListItem).statusCode) }"
-                    >
-                      {{ formatDate((scope.row as ProjectWorkItemListItem).dueDate) }}
-                    </span>
-                    </button></template>
-                    <div class="date-editor">
-                      <div><el-button @click="onDueDateChange(scope.row as ProjectWorkItemListItem, todayValue())">Today</el-button><el-button text @click="onDueDateChange(scope.row as ProjectWorkItemListItem, null)">清空</el-button></div>
-                      <el-date-picker :model-value="(scope.row as ProjectWorkItemListItem).dueDate ? formatDate((scope.row as ProjectWorkItemListItem).dueDate) : null" type="date" value-format="YYYY-MM-DD" placeholder="选择截止日期" @update:model-value="onDueDateChange(scope.row as ProjectWorkItemListItem, $event as string | null)" />
-                    </div>
-                  </el-popover>
-                </template>
-              </el-table-column>
+                      <template #reference>
+                        <button
+                          class="monday-status-cell status-chip cell-editor-trigger"
+                          :class="`monday-status-cell--${getStatusTone((scope.row as ProjectWorkItemListItem).statusCode)}`"
+                          :style="getStatusCellStyle((scope.row as ProjectWorkItemListItem).statusCode)"
+                          :disabled="Boolean(editingCell)"
+                          @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'status')"
+                        >
+                          <span>{{ statusLabel((scope.row as ProjectWorkItemListItem).statusCode) }}</span>
+                        </button>
+                      </template>
+                      <work-item-label-popover-content
+                        :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'status'), element)"
+                        kind="status"
+                        :project-id="projectId"
+                        :catalog="labelCatalog"
+                        :workflow-statuses="workflowStatuses.filter(item => item.active || item.statusCode === (scope.row as ProjectWorkItemListItem).statusCode)"
+                        :current-value="(scope.row as ProjectWorkItemListItem).statusCode"
+                        :can-manage="Boolean(labelCatalog?.canManage)"
+                        :available-transitions="(scope.row as ProjectWorkItemListItem).capabilities.availableTransitions"
+                        @select-status="transitionItem(scope.row as ProjectWorkItemListItem, $event)"
+                        @updated="onLabelsUpdated"
+                      />
+                    </el-popover>
+                  </template>
 
-              <el-table-column
-                v-if="!hiddenColumns.has('updatedAt')"
-                label="最后更新时间"
-                :width="columnWidths.updatedAt"
-                align="center"
-                resizable
-              >
-                <template #default="scope">
-                  <span class="monday-timestamp">{{ formatTime((scope.row as ProjectWorkItemListItem).updatedAt) }}</span>
+                  <template v-else-if="column.key === 'priority'">
+                    <el-popover
+                      placement="bottom"
+                      width="auto"
+                      trigger="click"
+                      popper-class="work-items-label-popover priority-popover"
+                      @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'priority')"
+                    >
+                      <template #reference>
+                        <button
+                          class="monday-priority-cell cell-editor-trigger"
+                          :class="`monday-priority-cell--${getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).tone}`"
+                          :style="getPriorityCellStyle((scope.row as ProjectWorkItemListItem).priority)"
+                          :disabled="Boolean(editingCell)"
+                          @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'priority')"
+                        >
+                          <span>{{ getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).label }}</span>
+                        </button>
+                      </template>
+                      <work-item-label-popover-content
+                        :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'priority'), element)"
+                        kind="priority"
+                        :project-id="projectId"
+                        :catalog="labelCatalog"
+                        :priority-options="priorityOptions.filter(item => item.active)"
+                        :current-value="(scope.row as ProjectWorkItemListItem).priority"
+                        :can-manage="Boolean(labelCatalog?.canManage)"
+                        @select-priority="patchCell(scope.row as ProjectWorkItemListItem, 'priority', $event)"
+                        @updated="onLabelsUpdated"
+                      />
+                    </el-popover>
+                  </template>
+
+                  <span v-else-if="column.key === 'content'" class="monday-content-label">{{ (scope.row as ProjectWorkItemListItem).contentName }}</span>
+
+                  <template v-else-if="column.key === 'dueDate'">
+                    <el-popover placement="bottom" :width="300" trigger="click" popper-class="work-items-popover date-popover">
+                      <template #reference>
+                        <button
+                          class="monday-due-date-cell cell-editor-trigger"
+                          :disabled="Boolean(editingCell)"
+                          @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'dueDate')"
+                        >
+                          <span
+                            v-if="isOverdue((scope.row as ProjectWorkItemListItem).dueDate, (scope.row as ProjectWorkItemListItem).statusCode)"
+                            class="monday-overdue-badge"
+                            title="已超出截止时间"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                              <circle cx="8" cy="8" r="7" class="overdue-circle" />
+                              <path d="M8 4.2V8.5M8 11.2V11.8" class="overdue-exclamation" stroke-width="1.6" stroke-linecap="round" />
+                            </svg>
+                          </span>
+                          <span
+                            class="due-date-text"
+                            :class="{ 'due-date-text--overdue': isOverdue((scope.row as ProjectWorkItemListItem).dueDate, (scope.row as ProjectWorkItemListItem).statusCode) }"
+                          >
+                            {{ formatDate((scope.row as ProjectWorkItemListItem).dueDate) }}
+                          </span>
+                        </button>
+                      </template>
+                      <div class="date-editor">
+                        <div><el-button @click="onDueDateChange(scope.row as ProjectWorkItemListItem, todayValue())">Today</el-button><el-button text @click="onDueDateChange(scope.row as ProjectWorkItemListItem, null)">清空</el-button></div>
+                        <el-date-picker :model-value="(scope.row as ProjectWorkItemListItem).dueDate ? formatDate((scope.row as ProjectWorkItemListItem).dueDate) : null" type="date" value-format="YYYY-MM-DD" placeholder="选择截止日期" @update:model-value="onDueDateChange(scope.row as ProjectWorkItemListItem, $event as string | null)" />
+                      </div>
+                    </el-popover>
+                  </template>
+
+                  <span v-else-if="column.key === 'updatedAt'" class="monday-timestamp">{{ formatTime((scope.row as ProjectWorkItemListItem).updatedAt) }}</span>
                 </template>
               </el-table-column>
+              <template #append>
+                <div
+                  v-if="quickOpen"
+                  ref="quickRow"
+                  class="quick-row monday-quick-row"
+                  :style="quickGridStyle"
+                >
+                  <el-input
+                    ref="quickTitleInput"
+                    v-model="quickTitle"
+                    class="quick-title-field"
+                    maxlength="300"
+                    :disabled="quickCreating"
+                    placeholder="输入工作项名称；Enter 创建，Shift+Enter 创建后继续"
+                    @keydown="onQuickKeydown"
+                  />
+                  <el-select
+                    v-model="quickContentId"
+                    class="quick-content-field"
+                    :style="{ gridColumn: quickContentColumn }"
+                    :disabled="quickCreating"
+                    filterable
+                    placeholder="选择工作项类别"
+                  >
+                    <el-option
+                      v-for="item in activeContents"
+                      :key="item.id"
+                      :label="item.name"
+                      :value="item.id"
+                    />
+                  </el-select>
+                  <el-button
+                    class="quick-submit"
+                    :style="{ gridColumn: quickSubmitColumn }"
+                    type="primary"
+                    :loading="quickCreating"
+                    :disabled="!quickContentId || !quickTitle.trim()"
+                    @click="createQuick(false)"
+                  >
+                    添加
+                  </el-button>
+                </div>
+                <button
+                  v-else
+                  class="quick-add monday-quick-add"
+                  :disabled="!canCreate"
+                  @click="openQuick"
+                >
+                  <el-icon><plus /></el-icon>
+                  <span>添加工作项</span>
+                </button>
+                <div ref="tableSentinel" class="cursor-sentinel" aria-hidden="true" />
+                <div v-if="tableLoading && tableItems.length" class="incremental-state">正在加载更多工作项…</div>
+                <div v-else-if="loadingMoreError" class="incremental-state incremental-state--error">
+                  <span>加载更多失败</span><el-button text @click="loadTable(tableNextCursor, true)">重试</el-button>
+                </div>
+              </template>
             </el-table>
-
-            <div
-              v-if="quickOpen"
-              ref="quickRow"
-              class="quick-row monday-quick-row"
-              :style="quickGridStyle"
-            >
-              <el-input
-                ref="quickTitleInput"
-                v-model="quickTitle"
-                class="quick-title-field"
-                maxlength="300"
-                :disabled="quickCreating"
-                placeholder="输入工作项名称；Enter 创建，Shift+Enter 创建后继续"
-                @keydown="onQuickKeydown"
-              />
-              <el-select
-                v-model="quickContentId"
-                class="quick-content-field"
-                :style="{ gridColumn: quickContentColumn }"
-                :disabled="quickCreating"
-                filterable
-                placeholder="选择工作项类别"
-              >
-                <el-option
-                  v-for="item in activeContents"
-                  :key="item.id"
-                  :label="item.name"
-                  :value="item.id"
-                />
-              </el-select>
-              <el-button
-                class="quick-submit"
-                :style="{ gridColumn: quickSubmitColumn }"
-                type="primary"
-                :loading="quickCreating"
-                :disabled="!quickContentId || !quickTitle.trim()"
-                @click="createQuick(false)"
-              >
-                添加
-              </el-button>
-            </div>
-            <button
-              v-else
-              class="quick-add monday-quick-add"
-              :disabled="!canCreate"
-              @click="openQuick"
-            >
-              <el-icon><plus /></el-icon>
-              <span>添加工作项</span>
-            </button>
-            <div ref="tableSentinel" class="cursor-sentinel" aria-hidden="true" />
-            <div v-if="tableLoading && tableItems.length" class="incremental-state">正在加载更多工作项…</div>
-            <div v-else-if="loadingMoreError" class="incremental-state incremental-state--error">
-              <span>加载更多失败</span><el-button text @click="loadTable(tableNextCursor, true)">重试</el-button>
-            </div>
           </div>
         </div>
 
@@ -1678,10 +2275,35 @@ onBeforeUnmount(() => {
 
     <el-drawer
       :model-value="detailOpen"
+      :modal="false"
+      :modal-penetrable="true"
+      append-to-body
       title="工作项详情"
-      size="min(560px, 100vw)"
+      header-class="work-items-detail-drawer__header"
+      modal-class="work-items-drawer-overlay"
+      class="work-items-detail-drawer"
+      :size="`${drawerWidth}px`"
       @update:model-value="onDetailModelValue"
     >
+      <div
+        class="drawer-resize-handle"
+        :class="{ 'drawer-resize-handle--resizing': isResizingDrawer }"
+        title="拖动调整抽屉宽度"
+        @pointerdown="onDrawerResizePointerDown"
+      >
+        <div class="drawer-resize-grip" aria-hidden="true">
+          <svg width="6" height="18" viewBox="0 0 6 18" fill="currentColor">
+            <circle cx="1.5" cy="2" r="1.1" />
+            <circle cx="4.5" cy="2" r="1.1" />
+            <circle cx="1.5" cy="6.5" r="1.1" />
+            <circle cx="4.5" cy="6.5" r="1.1" />
+            <circle cx="1.5" cy="11" r="1.1" />
+            <circle cx="4.5" cy="11" r="1.1" />
+            <circle cx="1.5" cy="15.5" r="1.1" />
+            <circle cx="4.5" cy="15.5" r="1.1" />
+          </svg>
+        </div>
+      </div>
       <div
         v-loading="detailLoading"
         class="detail-panel"
@@ -1729,13 +2351,50 @@ onBeforeUnmount(() => {
         </template>
       </div>
     </el-drawer>
+
+    <teleport to="body">
+      <div
+        v-if="project && selectedView === 'table'"
+        ref="horizontalPageScrollbar"
+        class="project-table-scrollbar project-table-scrollbar--horizontal"
+        :style="horizontalPageScrollbarStyle"
+        aria-label="横向滚动工作项表格"
+        tabindex="0"
+        @scroll.passive="onHorizontalPageScroll"
+      >
+        <div
+          class="project-table-scrollbar__horizontal-spacer"
+          :style="{ width: `${horizontalScrollExtent}px` }"
+          aria-hidden="true"
+        />
+      </div>
+      <div
+        v-if="project && selectedView === 'table'"
+        ref="verticalPageScrollbar"
+        class="project-table-scrollbar project-table-scrollbar--vertical"
+        :style="verticalPageScrollbarStyle"
+        aria-label="纵向滚动工作项表格"
+        tabindex="0"
+        @scroll.passive="onVerticalPageScroll"
+      >
+        <div
+          class="project-table-scrollbar__vertical-spacer"
+          :style="{ height: `${verticalScrollExtent}px` }"
+          aria-hidden="true"
+        />
+      </div>
+    </teleport>
   </div>
 </template>
 
 <style scoped>
 .work-items-home {
+  display: flex;
   min-width: 0;
+  min-height: 0;
   max-width: 100%;
+  flex: 1 1 0;
+  flex-direction: column;
   border: 0;
   border-radius: var(--yp-radius-md);
   background: transparent;
@@ -1753,6 +2412,14 @@ onBeforeUnmount(() => {
 .table-surface {
   min-width: 0;
   max-width: 100%;
+}
+
+.project-overview-stack {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .work-items-toolbar {
@@ -1853,45 +2520,134 @@ onBeforeUnmount(() => {
 }
 
 .monday-table-surface {
+  display: flex;
+  min-width: 0;
   min-height: 240px;
+  flex: 1 1 0;
   border: 0 !important;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  overflow: visible !important;
+  padding-top: 14px;
 }
 
 .monday-table-wrapper {
+  display: flex;
   width: 100%;
+  min-width: 0;
+  min-height: 0;
   max-width: 100%;
+  flex: 1 1 auto;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
+  overflow: visible !important;
 }
 
 /* Monday Table 核心样式与网格微调 */
+:deep(.monday-table.el-table),
+:deep(.monday-table .el-table__inner-wrapper),
+:deep(.monday-table .el-table__header-wrapper),
+:deep(.monday-table .el-table__header),
+:deep(.monday-table .el-table__header thead),
+:deep(.monday-table .el-table__header tr),
+:deep(.monday-table .el-table__header th.el-table__cell),
+:deep(.monday-table .el-table__header th.el-table__cell > .cell),
+:deep(.monday-table .el-table-fixed-column--left),
+:deep(.monday-table th.monday-sortable-column-header),
+:deep(.monday-table th.monday-sortable-column-header > .cell) {
+  overflow: visible !important;
+}
+
 :deep(.monday-table.el-table) {
-  --el-table-border-color: var(--yp-border-subtle);
+  --work-item-table-row-height: 36px;
+  --el-table-border-color: var(--yp-monday-grid-border);
   --el-table-header-bg-color: var(--yp-monday-header-bg);
   --el-table-header-text-color: var(--yp-text-secondary);
   --el-table-row-hover-bg-color: var(--yp-bg-sunken);
   --el-table-tr-bg-color: var(--yp-bg-surface);
   color: var(--yp-text-primary);
   font-size: 13px;
-  width: max-content;
-  max-width: none;
+  width: 100%;
+  max-width: 100%;
   border: none;
-  border-left: 6px solid var(--yp-action-primary);
   border-top-left-radius: var(--yp-radius-md);
+}
+
+:deep(.monday-table .el-scrollbar__wrap) {
+  overscroll-behavior: contain;
+}
+
+:deep(.monday-table .el-scrollbar__bar) {
+  display: none !important;
+}
+
+.project-table-scrollbar {
+  position: fixed;
+  z-index: 1999;
+  background: var(--yp-bg-sunken);
+  scrollbar-color: var(--yp-border-strong) var(--yp-bg-sunken);
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+.project-table-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.project-table-scrollbar::-webkit-scrollbar-track {
+  background: var(--yp-bg-sunken);
+}
+
+.project-table-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid var(--yp-bg-sunken);
+  border-radius: var(--yp-radius-pill);
+  background: var(--yp-border-strong);
+}
+
+.project-table-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--yp-text-secondary);
+}
+
+.project-table-scrollbar--horizontal {
+  bottom: 0;
+  height: 12px;
+  overflow-x: scroll;
+  overflow-y: hidden;
+}
+
+.project-table-scrollbar--vertical {
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  overflow-x: hidden;
+  overflow-y: scroll;
+}
+
+.project-table-scrollbar__horizontal-spacer {
+  height: 1px;
+}
+
+.project-table-scrollbar__vertical-spacer {
+  width: 1px;
+}
+
+:deep(.monday-table .el-table__body tr.work-item-table-row--selected td.el-table__cell) {
+  background-color: var(--yp-bg-selected) !important;
 }
 
 :deep(.monday-table.el-table--border::after),
 :deep(.monday-table.el-table--border::before),
 :deep(.monday-table.el-table__inner-wrapper::before) {
   display: none;
+}
+
+:deep(.monday-table .el-table__header-wrapper) {
+  position: relative;
+  z-index: 6;
 }
 
 :deep(.monday-table .el-table__header th.el-table__cell) {
@@ -1906,13 +2662,33 @@ onBeforeUnmount(() => {
   color: var(--yp-text-secondary);
 }
 
+:deep(.monday-table th.monday-sortable-column-header) {
+  position: relative;
+  z-index: 4;
+}
+
+:deep(.monday-table th.monday-sortable-column-header:hover),
+:deep(.monday-table th.monday-sortable-column-header:focus-within),
+:deep(.monday-table th.monday-sortable-column-header:has(.sort-by-column--active)) {
+  z-index: 8;
+}
+
+:deep(.monday-table .el-table__header th.el-table__cell:first-child),
+:deep(.monday-table .el-table__body td.el-table__cell:first-child) {
+  border-left: 6px solid var(--yp-action-primary);
+}
+
+:deep(.monday-table .el-table__header th.el-table__cell:first-child) {
+  border-top-left-radius: var(--yp-radius-md);
+}
+
 :deep(.monday-table .el-table__header th.el-table__cell:last-child) {
   border-right: 1px solid var(--yp-monday-grid-border);
   border-top-right-radius: var(--yp-radius-md);
 }
 
 :deep(.monday-table .el-table__body td.el-table__cell) {
-  height: 40px;
+  height: var(--work-item-table-row-height);
   padding: 0;
   border-right: 1px solid var(--yp-monday-grid-border);
   border-bottom: 1px solid var(--yp-monday-grid-border);
@@ -1922,10 +2698,101 @@ onBeforeUnmount(() => {
   border-right: 1px solid var(--yp-monday-grid-border);
 }
 
+:deep(.monday-table .monday-selection-column > .cell) {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+:deep(.monday-table .monday-selection-column .el-checkbox) {
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+:deep(.monday-table .work-item-table-row--movable .monday-selection-column),
+:deep(.monday-table .work-item-table-row--movable .monday-selection-column .el-checkbox),
+:deep(.monday-table .work-item-table-row--movable .monday-selection-column .el-checkbox__input) {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+:deep(.monday-table .work-item-table-row--movable .monday-selection-column:active),
+:deep(.monday-table .work-item-table-row--movable .monday-selection-column:active .el-checkbox),
+:deep(.monday-table .work-item-table-row--movable .monday-selection-column:active .el-checkbox__input) {
+  cursor: grabbing;
+}
+
+:deep(.monday-table .monday-selection-column .el-checkbox__inner) {
+  width: 16px;
+  height: 16px;
+  border-color: var(--yp-border-strong);
+  border-radius: 2px;
+  background: var(--yp-bg-surface);
+}
+
+:deep(.monday-table .monday-selection-column .el-checkbox__input.is-checked .el-checkbox__inner),
+:deep(.monday-table .monday-selection-column .el-checkbox__input.is-indeterminate .el-checkbox__inner) {
+  border-color: var(--yp-action-primary);
+  background: var(--yp-action-primary);
+}
+
+:deep(.monday-table .monday-selection-column .el-checkbox__inner::after) {
+  display: none;
+}
+
+:deep(.monday-table .monday-selection-column .el-checkbox__input.is-checked .el-checkbox__inner::after) {
+  display: block;
+  top: 1px;
+  left: 1px;
+  width: 14px;
+  height: 14px;
+  border: 0;
+  background: var(--yp-status-blue-foreground);
+  clip-path: polygon(8% 49%, 20% 36%, 42% 57%, 78% 20%, 91% 33%, 43% 79%);
+  transform: none;
+}
+
+:deep(.monday-table .monday-selection-column .el-checkbox__input.is-indeterminate .el-checkbox__inner::before) {
+  top: 7px;
+  right: 3px;
+  left: 3px;
+  height: 2px;
+}
+
 :deep(.monday-table .el-table__body tr) {
   position: relative;
   transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
   will-change: transform;
+}
+
+:deep(.monday-table .el-table__body tr.work-item-table-row--sorting) {
+  transition: none !important;
+  will-change: auto;
+}
+
+:deep(.monday-table th.monday-movable-column-header),
+:deep(.monday-table td.monday-movable-column) {
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease;
+  will-change: transform;
+}
+
+:deep(.monday-table th.monday-movable-column-header),
+:deep(.monday-table th.monday-movable-column-header > .cell) {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+:deep(.monday-table th.monday-movable-column-header:active),
+:deep(.monday-table th.monday-movable-column-header:active > .cell) {
+  cursor: grabbing;
 }
 
 :deep(.monday-table .el-table__cell > .cell) {
@@ -1936,24 +2803,23 @@ onBeforeUnmount(() => {
 :deep(.monday-table td.monday-block-column > .cell),
 :deep(.monday-table td.monday-title-column > .cell) {
   padding: 0;
-  height: 40px;
+  height: var(--work-item-table-row-height);
 }
 
 .title-cell {
   display: flex;
   align-items: stretch;
-  height: 40px;
+  height: var(--work-item-table-row-height);
   width: 100%;
 }
 
 .work-item-link {
   display: flex;
+  align-items: center;
   min-width: 0;
   flex: 1 1 auto;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1px;
-  padding: 0 var(--yp-space-3);
+  justify-content: flex-start;
+  padding: 0 var(--yp-space-3) 0 var(--yp-space-5);
   border: 0;
   color: var(--yp-text-primary);
   background: transparent;
@@ -1972,8 +2838,9 @@ onBeforeUnmount(() => {
   cursor: grabbing;
 }
 
-.work-item-link:hover .work-item-title-text {
-  color: var(--yp-action-primary);
+.work-item-link:focus,
+.work-item-link:active {
+  outline: none;
 }
 
 .work-item-title-text {
@@ -1982,11 +2849,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   font-weight: 500;
   font-size: 13.5px;
-}
-
-.work-item-code-text {
-  color: var(--yp-text-muted);
-  font-size: 11px;
+  color: var(--yp-text-primary);
 }
 
 /* Monday 讨论气泡按钮与分割线 */
@@ -2023,8 +2886,32 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: var(--yp-table-row-height);
+  height: 100%;
+  min-height: var(--work-item-table-row-height);
   box-sizing: border-box;
+}
+
+:deep(.monday-table .el-table__body td.el-table__cell.monday-cell--selected) {
+  position: relative;
+  z-index: 4;
+}
+
+.work-item-link.monday-cell--selected,
+.monday-discussion-btn.monday-cell--selected {
+  position: relative;
+  z-index: 4;
+}
+
+:deep(.monday-table .el-table__body td.el-table__cell.monday-cell--selected::after),
+.work-item-link.monday-cell--selected::after,
+.monday-discussion-btn.monday-cell--selected::after {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  border: 0.5px solid var(--yp-action-primary);
+  box-sizing: border-box;
+  content: '';
+  pointer-events: none;
 }
 
 /* 状态色块与优先级色块基础样式 */
@@ -2036,7 +2923,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 100%;
   height: 100%;
-  min-height: 40px;
+  min-height: var(--work-item-table-row-height);
   padding: 0 var(--yp-space-2);
   font-size: 13px;
   font-weight: 600;
@@ -2045,14 +2932,14 @@ onBeforeUnmount(() => {
   cursor: pointer;
   box-sizing: border-box;
   overflow: hidden;
-  transition: filter var(--yp-motion-fast) var(--yp-ease-standard);
+  transition: opacity var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
 .monday-status-cell { border: 0; font-family: inherit; }
 
 .monday-status-cell:hover,
 .monday-priority-cell:hover {
-  filter: brightness(0.95);
+  opacity: 0.7;
 }
 
 /* 纸质向内翻折角 (沿折痕线轴对称翻折到左下方的深色三角，直角朝向内侧) */
@@ -2128,6 +3015,10 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 5px;
+  width: 100%;
+  height: 100%;
+  min-height: var(--work-item-table-row-height);
+  box-sizing: border-box;
 }
 
 .monday-overdue-badge {
@@ -2218,7 +3109,7 @@ onBeforeUnmount(() => {
   transition: none !important;
 }
 
-.quick-title-field { grid-column: 1; }
+.quick-title-field { grid-column: 2; }
 .quick-content-field { grid-column: 5; }
 .quick-submit { grid-column: 7; justify-self: center; height: 32px; }
 
@@ -2323,7 +3214,8 @@ onBeforeUnmount(() => {
 </style>
 
 <style>
-.work-item-drag-preview {
+.work-item-drag-preview,
+.work-item-column-drag-preview {
   position: fixed;
   z-index: 100000;
   pointer-events: none;
@@ -2343,7 +3235,8 @@ onBeforeUnmount(() => {
   will-change: left, top, transform;
 }
 
-.work-item-drag-preview::after {
+.work-item-drag-preview::after,
+.work-item-column-drag-preview::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -2352,7 +3245,7 @@ onBeforeUnmount(() => {
     color-mix(in srgb, var(--yp-bg-surface) 17%, transparent),
     color-mix(in srgb, var(--yp-text-primary) 10%, transparent)
   );
-  box-shadow: inset 5px 0 0 var(--yp-text-muted);
+  box-shadow: inset 6px 0 0 var(--yp-text-muted);
   pointer-events: none;
 }
 
@@ -2367,7 +3260,7 @@ onBeforeUnmount(() => {
 
 .work-item-drag-preview__row,
 .work-item-drag-preview__row > td {
-  height: 40px;
+  height: 36px;
 }
 
 .work-item-drag-preview__row > td {
@@ -2384,8 +3277,120 @@ onBeforeUnmount(() => {
   background: var(--yp-bg-hover) !important;
 }
 
-.work-item-drag-preview * {
+.work-item-column-drag-preview__table {
+  width: 100%;
+  table-layout: fixed;
+  border-spacing: 0;
+  border-collapse: collapse;
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-surface);
+}
+
+.work-item-column-drag-preview {
+  filter: none;
+  opacity: 1;
+}
+
+.work-item-column-drag-preview::after {
+  background: transparent;
+  box-shadow: none;
+}
+
+.work-item-column-drag-preview__header {
+  height: 38px;
+  padding: 0 var(--yp-space-2);
+  overflow: hidden;
+  color: var(--yp-text-secondary) !important;
+  background: var(--yp-monday-header-bg) !important;
+  border-right: 1px solid var(--yp-monday-grid-border) !important;
+  border-bottom: 1px solid var(--yp-monday-grid-border) !important;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.work-item-column-drag-preview__cell {
+  height: 36px;
+  padding: 0;
+  overflow: hidden;
+  color: var(--yp-text-primary) !important;
+  background: var(--yp-bg-surface) !important;
+  border-right: 1px solid var(--yp-monday-grid-border) !important;
+  border-bottom: 1px solid var(--yp-monday-grid-border) !important;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.work-item-drag-preview *,
+.work-item-column-drag-preview * {
   pointer-events: none !important;
   cursor: grabbing !important;
+}
+
+/* 抽屉无蒙版交互穿透 */
+.work-items-drawer-overlay {
+  pointer-events: none !important;
+  background: transparent !important;
+}
+
+.work-items-drawer-overlay .el-drawer,
+.work-items-detail-drawer {
+  pointer-events: auto !important;
+  box-shadow: -4px 0 24px color-mix(in srgb, var(--yp-text-primary) 12%, transparent) !important;
+  overflow: visible !important;
+}
+
+/* 抽屉左侧拖动手柄 */
+.drawer-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  cursor: ew-resize;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  touch-action: none;
+}
+
+.drawer-resize-handle::before {
+  content: '';
+  position: absolute;
+  inset: 0 10px 0 0;
+  background: var(--yp-bg-sunken);
+  box-shadow: -2px 0 8px color-mix(in srgb, var(--yp-text-primary) 10%, transparent);
+  opacity: 0;
+  transition: opacity var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.drawer-resize-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 32px;
+  border-radius: 4px;
+  color: var(--yp-text-secondary);
+  background: var(--yp-bg-sunken);
+  border: 1px solid var(--yp-monday-grid-border);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--yp-text-primary) 10%, transparent);
+  opacity: 0;
+  transform: scale(.92);
+  transition: opacity var(--yp-motion-fast) var(--yp-ease-standard),
+              transform var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.drawer-resize-handle:hover::before,
+.drawer-resize-handle--resizing::before,
+.drawer-resize-handle:hover .drawer-resize-grip,
+.drawer-resize-handle--resizing .drawer-resize-grip {
+  opacity: 1;
+}
+
+.drawer-resize-handle:hover .drawer-resize-grip,
+.drawer-resize-handle--resizing .drawer-resize-grip {
+  transform: scale(1);
 }
 </style>

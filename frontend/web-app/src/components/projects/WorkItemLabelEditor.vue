@@ -10,6 +10,7 @@ import { ElButton, ElDialog, ElInput, ElMessage, ElTooltip } from 'element-plus'
 import { computed, ref } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
+import { mondayWorkItemLabelColors, workItemLabelColorStyle } from './workItemLabelColors'
 
 const props = defineProps<{
   modelValue: boolean
@@ -23,25 +24,16 @@ const emit = defineEmits<{
 }>()
 
 type Label = WorkItemStatusLabel | WorkItemPriorityLabel
-const colors = Object.values(WorkItemLabelColorToken)
-  .filter(value => value !== WorkItemLabelColorToken.UnknownDefaultOpenApi)
+const colors = mondayWorkItemLabelColors.map(item => item.token)
 const newName = ref('')
-const newColor = ref<WorkItemLabelColorToken>(WorkItemLabelColorToken.Blue)
+const newColor = ref<WorkItemLabelColorToken>(WorkItemLabelColorToken.BrightBlue)
 const saving = ref('')
 const labels = computed<Label[]>(() => props.kind === 'status'
   ? props.catalog.statuses
   : props.catalog.priorities)
 
 function colorStyle(token: WorkItemLabelColorToken): Record<string, string> {
-  const values: Record<string, string> = {
-    GREEN: 'var(--yp-label-green)', TEAL: 'var(--yp-label-teal)',
-    BLUE: 'var(--yp-label-blue)', INDIGO: 'var(--yp-label-indigo)',
-    PURPLE: 'var(--yp-label-purple)', MAGENTA: 'var(--yp-label-magenta)',
-    RED: 'var(--yp-label-red)', ORANGE: 'var(--yp-label-orange)',
-    AMBER: 'var(--yp-label-amber)', LIME: 'var(--yp-label-lime)',
-    CYAN: 'var(--yp-label-cyan)', GRAY: 'var(--yp-label-gray)',
-  }
-  return { backgroundColor: values[token] ?? 'var(--yp-label-gray)' }
+  return workItemLabelColorStyle(token)
 }
 
 async function createLabel(): Promise<void> {

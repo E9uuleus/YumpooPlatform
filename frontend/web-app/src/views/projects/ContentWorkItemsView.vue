@@ -1633,10 +1633,29 @@ onBeforeUnmount(() => {
 
     <el-drawer
       v-model="detailOpen"
-      title="工作项详情"
+      :modal="false"
+      :modal-penetrable="true"
+      :show-close="false"
+      header-class="work-items-detail-drawer__header"
+      modal-class="work-items-drawer-overlay"
+      class="work-items-detail-drawer"
       size="min(560px, 100vw)"
       :before-close="beforeCloseDetail"
     >
+      <template #header>
+        <div class="drawer-header-left">
+          <button
+            class="drawer-close-btn"
+            aria-label="关闭抽屉"
+            title="关闭抽屉"
+            type="button"
+            @click="requestCloseDetail"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true" class="icon_35ca7030fb noFocusStyle_b681ef9152" data-testid="icon" data-vibe="Icon"><path d="M3.53033 2.46967C3.23744 2.17678 2.76256 2.17678 2.46967 2.46967C2.17678 2.76256 2.17678 3.23744 2.46967 3.53033L8.97639 10.037L2.47093 16.5425C2.17804 16.8354 2.17804 17.3103 2.47093 17.6032C2.76382 17.8961 3.2387 17.8961 3.53159 17.6032L10.037 11.0977L16.5425 17.6032C16.8354 17.8961 17.3103 17.8961 17.6032 17.6032C17.8961 17.3103 17.8961 16.8354 17.6032 16.5425L11.0977 10.037L17.6044 3.53033C17.8973 3.23744 17.8973 2.76256 17.6044 2.46967C17.3115 2.17678 16.8367 2.17678 16.5438 2.46967L10.037 8.97639L3.53033 2.46967Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+          </button>
+          <span class="drawer-title">工作项详情</span>
+        </div>
+      </template>
       <div
         v-loading="detailLoading"
         class="detail-panel"
@@ -2065,5 +2084,38 @@ onBeforeUnmount(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .work-item-card, .kanban-lane { transition: none; }
+}
+
+.drawer-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--yp-space-3);
+}
+
+.drawer-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--yp-radius-sm);
+  background: transparent;
+  color: var(--yp-text-muted);
+  cursor: pointer;
+  transition: color var(--yp-motion-fast) var(--yp-ease-standard),
+              background var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.drawer-close-btn:hover {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
+.drawer-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--yp-text-primary);
 }
 </style>

@@ -151,6 +151,40 @@
   font-weight: 600;
 }
 
+.work-items-detail-drawer__header {
+  position: relative;
+  min-height: 28px;
+  padding-left: 60px !important;
+}
+
+.work-items-detail-drawer__header .el-drawer__close-btn,
+.work-items-detail-drawer .drawer-close-btn {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--yp-motion-fast) var(--yp-ease-standard),
+              background var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.work-items-detail-drawer__header .el-drawer__close-btn:hover,
+.work-items-detail-drawer__header .el-drawer__close-btn:focus-visible,
+.work-items-detail-drawer .drawer-close-btn:hover,
+.work-items-detail-drawer .drawer-close-btn:focus-visible {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
 .el-overlay {
   background-color: var(--yp-overlay);
 }
