@@ -42,6 +42,9 @@ import InlineProblem from '../../components/InlineProblem.vue'
 import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
 import LazyAttachmentPanel from '../../components/collaboration/LazyAttachmentPanel.vue'
 import MondayColumnQuickSort from '../../components/projects/MondayColumnQuickSort.vue'
+import ProjectWorkItemSubitemsTable, {
+  type ProjectWorkItemSubitemSortRule,
+} from '../../components/projects/ProjectWorkItemSubitemsTable.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import WorkItemLabelPopoverContent from '../../components/projects/WorkItemLabelPopoverContent.vue'
 import { workItemLabelColorValue } from '../../components/projects/workItemLabelColors'
@@ -55,6 +58,14 @@ interface KanbanLane {
   nextCursor: string | null
   loading: boolean
   error?: ApiProblem
+}
+
+interface SubitemState {
+  items: ProjectWorkItemListItem[]
+  loading: boolean
+  loaded: boolean
+  error?: ApiProblem
+  sortRules: ProjectWorkItemSubitemSortRule[]
 }
 
 interface LabelPopoverContentHandle {
@@ -79,6 +90,9 @@ const tableSorting = ref(false)
 const error = ref<ApiProblem>()
 const vLoading = ElLoading.directive
 const lanes = reactive<Record<string, KanbanLane>>({})
+const subitems = reactive<Record<string, SubitemState>>({})
+const expandedSubitemIds = ref<string[]>([])
+const subitemSelections = reactive<Record<string, Set<string>>>({})
 const quickOpen = ref(false)
 const quickContentId = ref('')
 const quickTitle = ref('')
@@ -97,7 +111,7 @@ const columnDraggingKey = ref<MovableColumnKey>()
 const columnDraggingIndex = ref(-1)
 const columnDropIndex = ref<number>()
 const selectedWorkItemIds = ref(new Set<string>())
-const tableRef = ref<{ $el: HTMLElement }>()
+const tableRef = ref<{ $el: HTMLElement; toggleRowExpansion: (row: ProjectWorkItemListItem, expanded?: boolean) => void }>()
 const tableSentinel = ref<HTMLElement>()
 const horizontalPageScrollbar = ref<HTMLElement>()
 const verticalPageScrollbar = ref<HTMLElement>()
@@ -141,6 +155,7 @@ const searchInput = ref(String(route.query.q ?? ''))
 const selectedRowId = ref<string | undefined>(route.query.workItemId ? String(route.query.workItemId) : undefined)
 const selectedCellKey = ref<string | undefined>(route.query.workItemId ? `${route.query.workItemId}:title` : undefined)
 const TABLE_SELECTION_COLUMN_WIDTH = 48
+const TABLE_EXPAND_COLUMN_WIDTH = 1
 const DRAWER_MIN_WIDTH = 440
 const DRAWER_VIEWPORT_GUTTER = 60
 const drawerWidth = ref(560)
@@ -329,10 +344,11 @@ const orderedColumns = computed(() => [
 const visibleColumns = computed(() => orderedColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
 const movableVisibleColumns = computed(() => visibleColumns.value.filter(item => item.key !== 'title'))
 const quickGridStyle = computed(() => ({
-  gridTemplateColumns: [`${TABLE_SELECTION_COLUMN_WIDTH}px`, ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`)].join(' '),
+  gridTemplateColumns: [`${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
+    ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`)].join(' '),
 }))
-const quickContentColumn = computed(() => Math.max(3, visibleColumns.value.findIndex(item => item.key === 'content') + 2))
-const quickSubmitColumn = computed(() => visibleColumns.value.length + 1)
+const quickContentColumn = computed(() => Math.max(4, visibleColumns.value.findIndex(item => item.key === 'content') + 3))
+const quickSubmitColumn = computed(() => visibleColumns.value.length + 2)
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -368,6 +384,89 @@ function lane(statusCode: string): KanbanLane {
     items: [], nextCursor: null, loading: false,
   }
   return lanes[statusCode]
+}
+
+function subitemState(parentId: string): SubitemState {
+  if (!subitems[parentId]) subitems[parentId] = {
+    items: [], loading: false, loaded: false, sortRules: [],
+  }
+  return subitems[parentId]
+}
+
+async function loadSubitems(parentId: string, force = false): Promise<void> {
+  const state = subitemState(parentId)
+  if (state.loading || (state.loaded && !force)) return
+  state.loading = true
+  delete state.error
+  try {
+    const result = await workItemsApi.listWorkItemSubitems({
+      parentWorkItemId: parentId,
+      ...(state.sortRules.length
+        ? { sort: state.sortRules.map(rule => `${rule.field},${rule.direction}`) }
+        : {}),
+    })
+    state.items = result.items
+    state.loaded = true
+  } catch (reason) {
+    state.error = await toApiProblem(reason)
+  } finally {
+    state.loading = false
+    schedulePageScrollbarSync()
+  }
+}
+
+function onTableExpandChange(row: ProjectWorkItemListItem,
+  expanded: ProjectWorkItemListItem[] | boolean): void {
+  const expandedRows = Array.isArray(expanded) ? expanded : expanded
+    ? [...tableItems.value.filter(item => expandedSubitemIds.value.includes(item.id)), row]
+    : tableItems.value.filter(item => item.id !== row.id
+      && expandedSubitemIds.value.includes(item.id))
+  expandedSubitemIds.value = [...new Set(expandedRows.map(item => item.id))]
+  if (expandedRows.some(item => item.id === row.id)) void loadSubitems(row.id)
+  schedulePageScrollbarSync()
+}
+
+function toggleSubitems(row: ProjectWorkItemListItem): void {
+  tableRef.value?.toggleRowExpansion(row, !expandedSubitemIds.value.includes(row.id))
+}
+
+function onSubitemSortChange(parentId: string, rules: ProjectWorkItemSubitemSortRule[]): void {
+  const state = subitemState(parentId)
+  state.sortRules = rules.slice(0, 3)
+  state.loaded = false
+  void loadSubitems(parentId, true)
+}
+
+function bumpSubitemCount(parentId: string, delta: number): void {
+  const apply = (item: ProjectWorkItemListItem): ProjectWorkItemListItem => item.id === parentId
+    ? { ...item, subitemCount: Math.max(0, item.subitemCount + delta) }
+    : item
+  tableItems.value = tableItems.value.map(apply)
+  Object.values(lanes).forEach(state => { state.items = state.items.map(apply) })
+}
+
+function onSubitemCreated(parent: ProjectWorkItemListItem): void {
+  bumpSubitemCount(parent.id, 1)
+  const state = subitemState(parent.id)
+  state.loaded = false
+  void loadSubitems(parent.id, true)
+  ElMessage.success('子项已创建')
+}
+
+function onSubitemSelectionChange(parentId: string, rows: ProjectWorkItemListItem[]): void {
+  subitemSelections[parentId] = new Set(rows.map(row => row.id))
+}
+
+function moveSharedColumn(source: string, target: string): void {
+  if (source === 'title' || target === 'title' || source === target) return
+  const sourceKey = source as MovableColumnKey
+  const targetKey = target as MovableColumnKey
+  const next = movableColumnOrder.value.filter(key => key !== sourceKey)
+  const targetIndex = next.indexOf(targetKey)
+  if (targetIndex < 0) return
+  next.splice(targetIndex, 0, sourceKey)
+  movableColumnOrder.value = next
+  persistTablePrefs()
 }
 
 function contentName(contentId: string): string {
@@ -943,16 +1042,20 @@ async function transitionItem(item: ProjectWorkItemListItem, statusCode: string)
   await dropInto(statusCode)
 }
 
-function replaceLightItem(id: string, detail: WorkItemDetail): void {
+function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
   const apply = (item: ProjectWorkItemListItem): ProjectWorkItemListItem => item.id !== id ? item : {
-    ...item, statusCode: detail.statusCode, statusCategory: detail.statusCategory,
-    priority: detail.priority,
-    assigneeUserId: detail.assigneeUserId, assigneeDisplayName: detail.assigneeDisplayName,
-    dueDate: detail.dueDate, updatedAt: detail.updatedAt, rowVersion: detail.rowVersion, etag: detail.etag,
-    capabilities: detail.capabilities,
+    ...item, statusCode: updatedDetail.statusCode, statusCategory: updatedDetail.statusCategory,
+    priority: updatedDetail.priority,
+    assigneeUserId: updatedDetail.assigneeUserId,
+    assigneeDisplayName: updatedDetail.assigneeDisplayName,
+    dueDate: updatedDetail.dueDate, updatedAt: updatedDetail.updatedAt,
+    rowVersion: updatedDetail.rowVersion, etag: updatedDetail.etag,
+    capabilities: updatedDetail.capabilities,
   }
   tableItems.value = tableItems.value.map(apply)
   Object.values(lanes).forEach(state => { state.items = state.items.map(apply) })
+  Object.values(subitems).forEach(state => { state.items = state.items.map(apply) })
+  if (detail.value?.id === id) detail.value = { ...detail.value, ...updatedDetail }
 }
 
 async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate', value: string | Date | null): Promise<boolean> {
@@ -1252,7 +1355,9 @@ function createTableColumnDragPreview(header: HTMLTableCellElement, clientX: num
 
   const headerIndex = header.parentElement ? [...header.parentElement.children].indexOf(header) : -1
   const previewBody = document.createElement('tbody')
-  const sourceRows = tableRef.value?.$el?.querySelectorAll<HTMLTableRowElement>('.el-table__body-wrapper tbody tr') ?? []
+  const sourceRows = tableRef.value?.$el?.querySelectorAll<HTMLTableRowElement>(
+    '.el-table__body-wrapper tbody tr.work-item-table-row',
+  ) ?? []
   sourceRows.forEach(sourceRow => {
     const sourceCell = sourceRow.children[headerIndex]
     if (!(sourceCell instanceof HTMLTableCellElement)) return
@@ -1424,12 +1529,14 @@ function onTableColumnPointerCancel(event: PointerEvent): void {
 }
 
 function onTableSurfacePointerDown(event: PointerEvent): void {
+  if ((event.target as HTMLElement | null)?.closest('.subitem-table-shell')) return
   onTableColumnPointerDown(event)
   if (!tableColumnPointerCandidate) onTablePointerDown(event)
 }
 
 function isRowSelected(rowId: string): boolean {
   if (selectedWorkItemIds.value.has(rowId)) return true
+  if (Object.values(subitemSelections).some(ids => ids.has(rowId))) return true
   if (selectedRowId.value === rowId) return true
   if (detailOpen.value && detail.value?.id === rowId) return true
   return false
@@ -1471,12 +1578,16 @@ function tableRowStyle({ rowIndex }: { row: ProjectWorkItemListItem; rowIndex: n
 }
 
 function captureTablePositions(): Map<string, number> {
-  const rows = tableRef.value?.$el?.querySelectorAll('.el-table__body-wrapper tbody tr') as NodeListOf<HTMLElement> | undefined
+  const rows = tableRef.value?.$el?.querySelectorAll(
+    '.el-table__body-wrapper tbody tr.work-item-table-row',
+  ) as NodeListOf<HTMLElement> | undefined
   return new Map(tableItems.value.map((item, index) => [item.id, rows?.[index]?.getBoundingClientRect().top ?? 0]))
 }
 
 function animateTableReorder(previous: Map<string, number>): void {
-  const rows = tableRef.value?.$el?.querySelectorAll('.el-table__body-wrapper tbody tr') as NodeListOf<HTMLElement> | undefined
+  const rows = tableRef.value?.$el?.querySelectorAll(
+    '.el-table__body-wrapper tbody tr.work-item-table-row',
+  ) as NodeListOf<HTMLElement> | undefined
   tableItems.value.forEach((item, index) => {
     const row = rows?.[index]
     const before = previous.get(item.id)
@@ -1491,7 +1602,7 @@ function animateTableReorder(previous: Map<string, number>): void {
 }
 
 function rowIndexFromTarget(target: EventTarget | null): number {
-  const row = (target as HTMLElement | null)?.closest('.el-table__body-wrapper tbody tr')
+  const row = (target as HTMLElement | null)?.closest('tr.work-item-table-row')
   if (!row) return -1
   return [...row.parentElement!.children].indexOf(row)
 }
@@ -1513,6 +1624,7 @@ function suppressClickAfterTableDrag(): void {
 }
 
 function onTableClickCapture(event: MouseEvent): void {
+  if ((event.target as HTMLElement | null)?.closest('.subitem-table-shell')) return
   if (!suppressTableClick) return
   event.preventDefault()
   event.stopPropagation()
@@ -1522,14 +1634,22 @@ function onTableClickCapture(event: MouseEvent): void {
 }
 
 function updateTableDropTarget(clientY: number): void {
-  const bodyWrapper = tableRef.value?.$el?.querySelector('.el-table__body-wrapper') as HTMLElement | null
-  if (bodyWrapper && bodyWrapper.getBoundingClientRect().height > 0) {
-    const rect = bodyWrapper.getBoundingClientRect()
-    const scrollTop = resolveTableScrollElement()?.scrollTop ?? bodyWrapper.scrollTop
-    const relativeY = clientY - rect.top + scrollTop
-    const target = Math.max(0, Math.min(tableItems.value.length, Math.round(relativeY / TABLE_ROW_HEIGHT)))
-    if (tableDropIndex.value !== target) {
-      tableDropIndex.value = target
+  const rows = [...(tableRef.value?.$el?.querySelectorAll<HTMLElement>(
+    '.el-table__body-wrapper tbody tr.work-item-table-row',
+  ) ?? [])]
+  const hasMeasuredRows = rows.some(row => row.getBoundingClientRect().height > 0)
+  if (hasMeasuredRows) {
+    const target = rows.findIndex(row => clientY < row.getBoundingClientRect().top
+      + row.getBoundingClientRect().height / 2)
+    tableDropIndex.value = target < 0 ? tableItems.value.length : target
+  } else {
+    const bodyWrapper = tableRef.value?.$el?.querySelector('.el-table__body-wrapper') as HTMLElement | null
+    if (bodyWrapper && bodyWrapper.getBoundingClientRect().height > 0) {
+      const rect = bodyWrapper.getBoundingClientRect()
+      const scrollTop = resolveTableScrollElement()?.scrollTop ?? bodyWrapper.scrollTop
+      const relativeY = clientY - rect.top + scrollTop
+      tableDropIndex.value = Math.max(0, Math.min(tableItems.value.length,
+        Math.round(relativeY / TABLE_ROW_HEIGHT)))
     }
   }
   if (clientY >= window.innerHeight - 48) {
@@ -1547,7 +1667,7 @@ function onTablePointerDown(event: PointerEvent): void {
   if (!dragArea) return
   const index = rowIndexFromTarget(target)
   const item = tableItems.value[index]
-  const row = target?.closest('.el-table__body-wrapper tbody tr') as HTMLElement | null
+  const row = target?.closest('tr.work-item-table-row') as HTMLElement | null
   if (!row || !item?.capabilities.canMoveInProjectOrder) return
 
   clearTablePointerTracking()
@@ -1665,6 +1785,9 @@ function resetCurrentData(): void {
   selectedWorkItemIds.value = new Set()
   error.value = undefined; tableItems.value = []; tableNextCursor.value = null
   Object.keys(lanes).forEach(key => delete lanes[key])
+  Object.keys(subitems).forEach(key => delete subitems[key])
+  Object.keys(subitemSelections).forEach(key => delete subitemSelections[key])
+  expandedSubitemIds.value = []
   if (selectedView.value === 'kanban') void loadKanban(revision); else void loadTable(null, false, revision)
 }
 
@@ -1942,6 +2065,7 @@ onBeforeUnmount(() => {
             <el-table
               ref="tableRef"
               :data="tableItems"
+              :expand-row-keys="expandedSubitemIds"
               :row-class-name="tableRowClassName"
               :row-style="tableRowStyle"
               :cell-class-name="tableCellClassName"
@@ -1954,7 +2078,40 @@ onBeforeUnmount(() => {
               border
               @header-dragend="onHeaderDragEnd"
               @selection-change="onTableSelectionChange"
+              @expand-change="onTableExpandChange"
             >
+              <el-table-column type="expand" :width="TABLE_EXPAND_COLUMN_WIDTH" fixed class-name="monday-expand-column">
+                <template #default="scope">
+                  <project-work-item-subitems-table
+                    v-if="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
+                    :project-id="projectId"
+                    :parent="scope.row as ProjectWorkItemListItem"
+                    :items="subitemState((scope.row as ProjectWorkItemListItem).id).items"
+                    :loading="subitemState((scope.row as ProjectWorkItemListItem).id).loading"
+                    :error="subitemState((scope.row as ProjectWorkItemListItem).id).error"
+                    :sort-rules="subitemState((scope.row as ProjectWorkItemListItem).id).sortRules"
+                    :columns="visibleColumns"
+                    :column-widths="columnWidths"
+                    :active-contents="activeContents"
+                    :members="members"
+                    :workflow-statuses="workflowStatuses"
+                    :priority-options="priorityOptions"
+                    :label-catalog="labelCatalog"
+                    :can-create="canCreate"
+                    :editing-cell="Boolean(editingCell)"
+                    @retry="loadSubitems((scope.row as ProjectWorkItemListItem).id, true)"
+                    @sort-change="onSubitemSortChange((scope.row as ProjectWorkItemListItem).id, $event)"
+                    @created="onSubitemCreated"
+                    @updated="replaceLightItem"
+                    @open-detail="openDetail"
+                    @patch="patchCell"
+                    @transition="transitionItem"
+                    @selection-change="onSubitemSelectionChange"
+                    @header-resize="onHeaderDragEnd"
+                    @move-column="moveSharedColumn"
+                  />
+                </template>
+              </el-table-column>
               <el-table-column
                 type="selection"
                 :width="TABLE_SELECTION_COLUMN_WIDTH"
@@ -1986,11 +2143,40 @@ onBeforeUnmount(() => {
                 <template #default="scope">
                   <div class="title-cell">
                     <button
+                      class="subitem-expand-button"
+                      type="button"
+                      :aria-label="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id) ? '收起子项' : '展开子项'"
+                      :aria-expanded="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
+                      @click.stop="toggleSubitems(scope.row as ProjectWorkItemListItem)"
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M5.5 3.5L10 8L5.5 12.5"
+                          stroke="currentColor"
+                          stroke-width="1.6"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        />
+                      </svg>
+                    </button>
+                    <button
                       class="work-item-link"
                       :class="{ 'monday-cell--selected': selectedCellKey === `${(scope.row as ProjectWorkItemListItem).id}:title` }"
                       @click.stop="openDetail(scope.row as ProjectWorkItemListItem, 'details')"
                     >
                       <span class="work-item-title-text">{{ (scope.row as ProjectWorkItemListItem).title }}</span>
+                      <span
+                        v-if="(scope.row as ProjectWorkItemListItem).subitemCount > 0"
+                        class="subitem-count-badge"
+                      >
+                        {{ (scope.row as ProjectWorkItemListItem).subitemCount }} 子项
+                      </span>
                     </button>
                     <button
                       class="monday-discussion-btn"
@@ -3164,9 +3350,67 @@ onBeforeUnmount(() => {
   transition: none !important;
 }
 
-.quick-title-field { grid-column: 2; }
+.quick-title-field { grid-column: 3; }
 .quick-content-field { grid-column: 5; }
 .quick-submit { grid-column: 7; justify-self: center; height: 32px; }
+
+.subitem-count-badge {
+  flex: 0 0 auto;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--yp-bg-sunken);
+  color: var(--yp-text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+:deep(.monday-table td.monday-expand-column) {
+  padding: 0;
+  text-align: center;
+}
+
+:deep(.monday-table td.monday-expand-column .cell) {
+  padding: 0;
+  justify-content: center;
+}
+
+:deep(.monday-table .el-table__expand-icon) {
+  display: none;
+}
+
+.subitem-expand-button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--yp-text-secondary);
+  cursor: pointer;
+}
+
+.subitem-expand-button:hover,
+.subitem-expand-button:focus-visible {
+  color: var(--yp-link);
+  background: var(--yp-bg-sunken);
+}
+
+.subitem-expand-button svg {
+  transition: transform 120ms ease;
+}
+
+.subitem-expand-button[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+:deep(.monday-table .el-table__expanded-cell) {
+  padding: 0 !important;
+  background: var(--yp-bg-surface);
+}
 
 .table-pagination {
   justify-content: flex-end;
