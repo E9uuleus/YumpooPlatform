@@ -867,6 +867,34 @@ describe('项目级工作项首页', () => {
     expect(view.tableRowStyle({ row: first, rowIndex: 0 })).toEqual({})
   })
 
+  it('表格滚动后使用实际滚动容器偏移计算拖拽落点', async () => {
+    state.listProjectWorkItems.mockResolvedValue(page(
+      Array.from({ length: 4 }, (_, index) => ({
+        ...item(`item-${index + 1}`),
+        title: `第 ${index + 1} 项`,
+      })),
+    ))
+    const wrapper = mountView()
+    await flushPromises()
+
+    const bodyWrapper = wrapper.get('.monday-table .el-table__body-wrapper').element as HTMLElement
+    const tableScroll = wrapper.get('.monday-table .el-scrollbar__wrap').element as HTMLElement
+    vi.spyOn(bodyWrapper, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 100, left: 0, top: 100, right: 900, bottom: 400,
+      width: 900, height: 300, toJSON: () => ({}),
+    } as DOMRect)
+    tableScroll.scrollTop = 72
+
+    const view = wrapper.vm as unknown as {
+      tableDropIndex: number | undefined
+      updateTableDropTarget: (clientY: number) => void
+    }
+    view.updateTableDropTarget(109)
+
+    expect(bodyWrapper.scrollTop).toBe(0)
+    expect(view.tableDropIndex).toBe(2)
+  })
+
   it('从行内按钮移动超过阈值后启动整行指针拖拽，并拦截随后的点击', async () => {
     const wrapper = mountView()
     await flushPromises()

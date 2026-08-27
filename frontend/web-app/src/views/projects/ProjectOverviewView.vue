@@ -1525,7 +1525,8 @@ function updateTableDropTarget(clientY: number): void {
   const bodyWrapper = tableRef.value?.$el?.querySelector('.el-table__body-wrapper') as HTMLElement | null
   if (bodyWrapper && bodyWrapper.getBoundingClientRect().height > 0) {
     const rect = bodyWrapper.getBoundingClientRect()
-    const relativeY = clientY - rect.top + bodyWrapper.scrollTop
+    const scrollTop = resolveTableScrollElement()?.scrollTop ?? bodyWrapper.scrollTop
+    const relativeY = clientY - rect.top + scrollTop
     const target = Math.max(0, Math.min(tableItems.value.length, Math.round(relativeY / TABLE_ROW_HEIGHT)))
     if (tableDropIndex.value !== target) {
       tableDropIndex.value = target
@@ -2563,6 +2564,7 @@ onBeforeUnmount(() => {
 
 :deep(.monday-table.el-table) {
   --work-item-table-row-height: 36px;
+  --work-item-group-accent: rgb(87, 155, 252);
   --el-table-border-color: var(--yp-monday-grid-border);
   --el-table-header-bg-color: var(--yp-monday-header-bg);
   --el-table-header-text-color: var(--yp-text-secondary);
@@ -2645,6 +2647,10 @@ onBeforeUnmount(() => {
   display: none;
 }
 
+:deep(.monday-table .el-table__border-left-patch) {
+  display: none;
+}
+
 :deep(.monday-table .el-table__header-wrapper) {
   position: relative;
   z-index: 6;
@@ -2675,11 +2681,48 @@ onBeforeUnmount(() => {
 
 :deep(.monday-table .el-table__header th.el-table__cell:first-child),
 :deep(.monday-table .el-table__body td.el-table__cell:first-child) {
-  border-left: 6px solid var(--yp-action-primary);
+  position: relative;
+  border-bottom: 0;
+  border-left: 0;
+}
+
+:deep(.monday-table .el-table__header th.el-table__cell:first-child)::before,
+:deep(.monday-table .el-table__body td.el-table__cell:first-child)::before {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  background: var(--work-item-group-accent);
+  content: '';
+  pointer-events: none;
+}
+
+:deep(.monday-table .el-table__header th.el-table__cell:first-child)::after,
+:deep(.monday-table .el-table__body td.el-table__cell:first-child)::after {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 6px;
+  height: 1px;
+  background: var(--yp-monday-grid-border);
+  content: '';
+  pointer-events: none;
 }
 
 :deep(.monday-table .el-table__header th.el-table__cell:first-child) {
-  border-top-left-radius: var(--yp-radius-md);
+  border-top: 0;
+  border-top-left-radius: 0;
+  background-image: linear-gradient(var(--yp-monday-grid-border), var(--yp-monday-grid-border));
+  background-position: 6px top;
+  background-repeat: no-repeat;
+  background-size: calc(100% - 6px) 1px;
+}
+
+:deep(.monday-table .el-table__header th.el-table__cell:first-child)::before {
+  border-radius: 6px 0 0;
 }
 
 :deep(.monday-table .el-table__header th.el-table__cell:last-child) {
@@ -2703,7 +2746,8 @@ onBeforeUnmount(() => {
   height: 100%;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 0 0 0 6px;
+  box-sizing: border-box;
 }
 
 :deep(.monday-table .monday-selection-column .el-checkbox) {
@@ -3052,16 +3096,14 @@ onBeforeUnmount(() => {
 
 /* 快速新增 */
 .monday-quick-add {
+  position: relative;
   display: flex;
   width: 100%;
   align-items: center;
   gap: var(--yp-space-2);
-  height: 38px;
-  padding: 0 var(--yp-space-4);
+  height: var(--work-item-table-row-height);
+  padding: 0 var(--yp-space-4) 0 calc(var(--yp-space-4) + 6px);
   border: 0;
-  border-top: 1px solid var(--yp-border-subtle);
-  border-left: 6px solid color-mix(in srgb, var(--yp-action-primary) 48%, var(--yp-bg-surface));
-  border-bottom-left-radius: var(--yp-radius-md);
   color: var(--yp-text-secondary);
   background: transparent;
   font-size: 13px;
@@ -3080,14 +3122,27 @@ onBeforeUnmount(() => {
 }
 
 .monday-quick-row {
+  position: relative;
   display: grid;
   min-width: max-content;
   gap: var(--yp-space-2);
-  padding: var(--yp-space-2) var(--yp-space-3);
-  border-top: 1px solid var(--yp-border-subtle);
-  border-left: 6px solid color-mix(in srgb, var(--yp-action-primary) 48%, var(--yp-bg-surface));
-  border-bottom-left-radius: var(--yp-radius-md);
+  padding: var(--yp-space-2) var(--yp-space-3) var(--yp-space-2) calc(var(--yp-space-3) + 6px);
   background: var(--yp-bg-sunken);
+}
+
+.monday-quick-add::before,
+.monday-quick-row::before {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  border-radius: 0 0 0 6px;
+  background: var(--work-item-group-accent);
+  content: '';
+  opacity: .5;
+  pointer-events: none;
 }
 
 .cell-editor-trigger { padding: 0; border: 0; font: inherit; cursor: pointer; }
