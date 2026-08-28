@@ -3409,22 +3409,9 @@ onBeforeUnmount(() => {
 }
 
 :deep(.monday-table .el-table__expanded-cell) {
-  position: relative;
   padding: 0 !important;
   border-left: 0;
   background: var(--yp-bg-surface);
-}
-
-:deep(.monday-table .el-table__expanded-cell)::before {
-  position: absolute;
-  z-index: 2;
-  top: -1px;
-  bottom: -1px;
-  left: 0;
-  width: 6px;
-  background: var(--work-item-group-accent);
-  content: '';
-  pointer-events: none;
 }
 
 .table-pagination {
