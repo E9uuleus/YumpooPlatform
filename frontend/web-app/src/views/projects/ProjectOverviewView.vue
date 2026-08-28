@@ -2879,7 +2879,6 @@ onBeforeUnmount(() => {
 :deep(.monday-table .el-table__header th.monday-selection-column),
 :deep(.monday-table .el-table__body td.monday-selection-column) {
   position: relative;
-  border-bottom: 0;
   border-left: 0;
 }
 
@@ -2887,26 +2886,22 @@ onBeforeUnmount(() => {
 :deep(.monday-table .el-table__body td.monday-selection-column)::before {
   position: absolute;
   z-index: 2;
-  top: 0;
-  bottom: 0;
-  left: 0;
+  left: -1px;
   width: 6px;
   background: var(--work-item-group-accent);
   content: '';
   pointer-events: none;
 }
 
-:deep(.monday-table .el-table__header th.monday-selection-column)::after,
-:deep(.monday-table .el-table__body td.monday-selection-column)::after {
-  position: absolute;
-  z-index: 1;
-  right: 0;
-  bottom: 0;
-  left: 6px;
-  height: 1px;
-  background: var(--yp-monday-grid-border);
-  content: '';
-  pointer-events: none;
+:deep(.monday-table .el-table__header th.monday-selection-column)::before {
+  top: 0;
+  bottom: -1px;
+  border-radius: 6px 0 0;
+}
+
+:deep(.monday-table .el-table__body td.monday-selection-column)::before {
+  top: -1px;
+  bottom: -1px;
 }
 
 :deep(.monday-table .el-table__header th.monday-selection-column) {
@@ -2916,10 +2911,6 @@ onBeforeUnmount(() => {
   background-position: 6px top;
   background-repeat: no-repeat;
   background-size: calc(100% - 6px) 1px;
-}
-
-:deep(.monday-table .el-table__header th.monday-selection-column)::before {
-  border-radius: 6px 0 0;
 }
 
 :deep(.monday-table .el-table__header th.el-table__cell:last-child) {
@@ -3331,14 +3322,13 @@ onBeforeUnmount(() => {
 .monday-quick-row::before {
   position: absolute;
   z-index: 2;
-  top: 0;
-  bottom: 0;
+  top: -1px;
+  bottom: -1px;
   left: 0;
   width: 6px;
   border-radius: 0 0 0 6px;
   background: var(--work-item-group-accent);
   content: '';
-  opacity: .5;
   pointer-events: none;
 }
 
@@ -3428,8 +3418,8 @@ onBeforeUnmount(() => {
 :deep(.monday-table .el-table__expanded-cell)::before {
   position: absolute;
   z-index: 2;
-  top: 0;
-  bottom: 0;
+  top: -1px;
+  bottom: -1px;
   left: 0;
   width: 6px;
   background: var(--work-item-group-accent);
@@ -3569,8 +3559,15 @@ onBeforeUnmount(() => {
     color-mix(in srgb, var(--yp-bg-surface) 17%, transparent),
     color-mix(in srgb, var(--yp-text-primary) 10%, transparent)
   );
-  box-shadow: inset 6px 0 0 var(--yp-text-muted);
   pointer-events: none;
+}
+
+.work-item-drag-preview::after {
+  box-shadow: inset 6px 0 0 rgb(87, 155, 252);
+}
+
+.work-item-column-drag-preview::after {
+  box-shadow: inset 6px 0 0 var(--yp-text-muted);
 }
 
 .work-item-drag-preview__table {

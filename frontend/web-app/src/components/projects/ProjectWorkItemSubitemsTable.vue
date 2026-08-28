@@ -480,6 +480,7 @@ function onColumnDrop(target: string): void {
 :deep(.monday-subitem-table .el-table__body tr) { height: 36px; }
 :deep(.monday-subitem-table .el-table__cell) { box-sizing: border-box; height: 36px; padding: 0; border-color: var(--yp-border-subtle); }
 :deep(.monday-subitem-table .cell) { height: 34px; padding: 0 8px; display: flex; align-items: center; justify-content: center; }
+:deep(.monday-subitem-table th.el-table__cell) { border-top: 0 !important; }
 :deep(.monday-subitem-table th .cell) { font-size: 13px; color: var(--yp-text-secondary); }
 .subitem-column-header { width: 100%; height: 100%; min-width: 0; }
 .subitem-title-cell { width: 100%; height: 34px; display: flex; align-items: center; min-width: 0; }
