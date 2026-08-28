@@ -2865,15 +2865,26 @@ onBeforeUnmount(() => {
   z-index: 8;
 }
 
-:deep(.monday-table .el-table__header th.el-table__cell:first-child),
-:deep(.monday-table .el-table__body td.el-table__cell:first-child) {
+:deep(.monday-table .monday-expand-column) {
+  width: 1px;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+:deep(.monday-table .monday-expand-column > .cell) {
+  display: none;
+}
+
+:deep(.monday-table .el-table__header th.monday-selection-column),
+:deep(.monday-table .el-table__body td.monday-selection-column) {
   position: relative;
   border-bottom: 0;
   border-left: 0;
 }
 
-:deep(.monday-table .el-table__header th.el-table__cell:first-child)::before,
-:deep(.monday-table .el-table__body td.el-table__cell:first-child)::before {
+:deep(.monday-table .el-table__header th.monday-selection-column)::before,
+:deep(.monday-table .el-table__body td.monday-selection-column)::before {
   position: absolute;
   z-index: 2;
   top: 0;
@@ -2885,8 +2896,8 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-:deep(.monday-table .el-table__header th.el-table__cell:first-child)::after,
-:deep(.monday-table .el-table__body td.el-table__cell:first-child)::after {
+:deep(.monday-table .el-table__header th.monday-selection-column)::after,
+:deep(.monday-table .el-table__body td.monday-selection-column)::after {
   position: absolute;
   z-index: 1;
   right: 0;
@@ -2898,7 +2909,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-:deep(.monday-table .el-table__header th.el-table__cell:first-child) {
+:deep(.monday-table .el-table__header th.monday-selection-column) {
   border-top: 0;
   border-top-left-radius: 0;
   background-image: linear-gradient(var(--yp-monday-grid-border), var(--yp-monday-grid-border));
@@ -2907,7 +2918,7 @@ onBeforeUnmount(() => {
   background-size: calc(100% - 6px) 1px;
 }
 
-:deep(.monday-table .el-table__header th.el-table__cell:first-child)::before {
+:deep(.monday-table .el-table__header th.monday-selection-column)::before {
   border-radius: 6px 0 0;
 }
 
@@ -3408,8 +3419,22 @@ onBeforeUnmount(() => {
 }
 
 :deep(.monday-table .el-table__expanded-cell) {
+  position: relative;
   padding: 0 !important;
+  border-left: 0;
   background: var(--yp-bg-surface);
+}
+
+:deep(.monday-table .el-table__expanded-cell)::before {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  background: var(--work-item-group-accent);
+  content: '';
+  pointer-events: none;
 }
 
 .table-pagination {

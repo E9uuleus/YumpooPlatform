@@ -349,6 +349,7 @@ function onColumnDrop(target: string): void {
       >
         <template #header>
           <div
+            class="subitem-column-header"
             :draggable="column.key !== 'title'"
             @dragstart="columnDraggingKey = column.key"
             @dragover.prevent
@@ -472,15 +473,15 @@ function onColumnDrop(target: string): void {
 .subitem-table-shell {
   position: relative;
   margin-left: 32px;
-  border-left: 3px solid var(--yp-link);
   background: var(--yp-bg-surface);
 }
-.monday-subitem-table { width: calc(100% - 3px); --el-table-row-hover-bg-color: var(--yp-bg-sunken); }
+.monday-subitem-table { width: 100%; --el-table-row-hover-bg-color: var(--yp-bg-sunken); }
 :deep(.monday-subitem-table .el-table__header tr),
 :deep(.monday-subitem-table .el-table__body tr) { height: 36px; }
 :deep(.monday-subitem-table .el-table__cell) { box-sizing: border-box; height: 36px; padding: 0; border-color: var(--yp-border-subtle); }
 :deep(.monday-subitem-table .cell) { height: 34px; padding: 0 8px; display: flex; align-items: center; justify-content: center; }
 :deep(.monday-subitem-table th .cell) { font-size: 13px; color: var(--yp-text-secondary); }
+.subitem-column-header { width: 100%; height: 100%; min-width: 0; }
 .subitem-title-cell { width: 100%; height: 34px; display: flex; align-items: center; min-width: 0; }
 .subitem-link { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: transparent; color: var(--yp-text-primary); cursor: pointer; }
 .subitem-link:hover { color: var(--yp-link); text-decoration: underline; }

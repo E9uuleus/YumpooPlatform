@@ -128,4 +128,13 @@ describe('项目工作项子表格', () => {
     expect(wrapper.find('.subitem-table-shell').attributes('aria-label')).toContain('parent-1')
     expect(wrapper.findAll('.el-table__expand-icon')).toHaveLength(0)
   })
+
+  it('让每个可调整宽度的表头占满单元格并完整显示列名', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    const headers = wrapper.findAll('.subitem-column-header')
+
+    expect(headers).toHaveLength(2)
+    expect(headers.map(header => header.text())).toEqual(['工作项名称', '工作项类别'])
+  })
 })
