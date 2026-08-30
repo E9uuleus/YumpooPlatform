@@ -847,6 +847,58 @@ class M017BackupRestoreIT {
                 membership.setObject(1, createdAt);
                 assertThat(membership.executeUpdate()).isOne();
             }
+            try (Statement labels = connection.createStatement()) {
+                assertThat(labels.executeUpdate("""
+                        INSERT INTO yumpoo.project_work_item_label_catalog
+                            (project_id, company_id, row_version, created_at, updated_at)
+                        VALUES ('00000000-0000-4000-8000-000000000802',
+                            '00000000-0000-4000-8000-000000000001', 2,
+                            transaction_timestamp(), transaction_timestamp())
+                        """)).isOne();
+                assertThat(labels.executeUpdate("""
+                        INSERT INTO yumpoo.project_work_item_status_label (
+                            project_id, company_id, status_code, display_name, color_token,
+                            status_category, sort_order, active, protected_label)
+                        VALUES ('00000000-0000-4000-8000-000000000802',
+                            '00000000-0000-4000-8000-000000000001',
+                            'NOT_STARTED', '未开始', 'GRAY', 'TODO', 0, true, true)
+                        """)).isOne();
+                assertThat(labels.executeUpdate("""
+                        INSERT INTO yumpoo.project_work_item_status_label (
+                            project_id, company_id, status_code, display_name, color_token,
+                            status_category, sort_order, active, protected_label)
+                        SELECT '00000000-0000-4000-8000-000000000802',
+                               '00000000-0000-4000-8000-000000000001',
+                               status.status_code, status.display_name,
+                               CASE status.status_category WHEN 'DONE' THEN 'GREEN'
+                                   WHEN 'CANCELED' THEN 'GRAY'
+                                   WHEN 'IN_PROGRESS' THEN 'ORANGE' ELSE 'BLUE' END,
+                               status.status_category, status.sort_order + 100, true, false
+                          FROM yumpoo.project_template_definition template
+                          JOIN yumpoo.workflow_status_definition status
+                            ON status.template_id=template.id
+                         WHERE template.template_key='RND' AND template.template_version=1
+                           AND status.status_code <> 'NOT_STARTED'
+                        """)).isPositive();
+                assertThat(labels.executeUpdate("""
+                        INSERT INTO yumpoo.project_work_item_priority_label (
+                            project_id, company_id, priority_code, display_name, color_token,
+                            sort_order, active)
+                        SELECT '00000000-0000-4000-8000-000000000802',
+                               '00000000-0000-4000-8000-000000000001', seed.code,
+                               seed.name, seed.color, seed.sort_order, true
+                          FROM (VALUES ('LOW', '低', 'BLUE', 10),
+                               ('MEDIUM', '中', 'TEAL', 20),
+                               ('HIGH', '高', 'ORANGE', 30),
+                               ('URGENT', '紧急', 'RED', 40))
+                               AS seed(code, name, color, sort_order)
+                        """)).isEqualTo(4);
+                assertThat(labels.executeUpdate("""
+                        INSERT INTO yumpoo.work_item_project_order (project_id, company_id)
+                        VALUES ('00000000-0000-4000-8000-000000000802',
+                            '00000000-0000-4000-8000-000000000001')
+                        """)).isOne();
+            }
             try (PreparedStatement membership = connection.prepareStatement("""
                     INSERT INTO yumpoo.project_membership (
                         id, company_id, project_id, user_id, status, joined_at, joined_by_user_id,
@@ -974,13 +1026,14 @@ class M017BackupRestoreIT {
             try (PreparedStatement workItem = connection.prepareStatement("""
                     INSERT INTO yumpoo.work_item (
                         id, company_id, project_id, content_id, item_sequence, item_no, type,
-                        title, status_code, status_category, rank, priority, assignee_user_id,
+                        title, status_code, status_category, rank, project_sort_key,
+                        priority, assignee_user_id,
                         reporter_user_id, description, notes, timeline_start_date,
                         timeline_end_date, due_date, row_version, created_at,
                         created_by_user_id, updated_at, updated_by_user_id
                     ) VALUES (?, '00000000-0000-4000-8000-000000000001',
                         '00000000-0000-4000-8000-000000000802',
-                        '00000000-0000-4000-8000-000000000805', ?, ?, 'TASK', ?, ?, ?, ?, ?,
+                        '00000000-0000-4000-8000-000000000805', ?, ?, 'TASK', ?, ?, ?, ?, ?, ?,
                         ?, '00000000-0000-4000-8000-000000000102', ?, ?, ?, ?, ?, ?, ?,
                         '00000000-0000-4000-8000-000000000102', ?,
                         '00000000-0000-4000-8000-000000000102')
@@ -989,12 +1042,14 @@ class M017BackupRestoreIT {
                         {UUID.fromString("00000000-0000-4000-8000-000000000815"), 1L,
                                 "M2_04_RESTORE-1", "恢复工作项一", "BACKLOG", "TODO",
                                 "500000000000000000000000000000000000000", "MEDIUM",
+                                "333333333333333333333333333333333333333",
                                 UUID.fromString("00000000-0000-4000-8000-000000000102"),
                                 "保留纯文本描述", "保留纯文本备注", LocalDate.parse("2026-08-20"),
                                 LocalDate.parse("2026-08-22"), LocalDate.parse("2026-08-23"), 0L},
                         {UUID.fromString("00000000-0000-4000-8000-000000000816"), 2L,
                                 "M2_04_RESTORE-2", "恢复工作项二", "DONE", "DONE",
                                 "500000000000000000000000000000000000000", "HIGH",
+                                "666666666666666666666666666666666666666",
                                 null, "第二项描述", null, null, null,
                                 LocalDate.parse("2026-08-24"), 4L}
                 };
@@ -1002,12 +1057,12 @@ class M017BackupRestoreIT {
                     workItem.setObject(1, fact[0]); workItem.setObject(2, fact[1]);
                     workItem.setObject(3, fact[2]); workItem.setObject(4, fact[3]);
                     workItem.setObject(5, fact[4]); workItem.setObject(6, fact[5]);
-                    workItem.setObject(7, fact[6]); workItem.setObject(8, fact[7]);
-                    workItem.setObject(9, fact[8]); workItem.setObject(10, fact[9]);
+                    workItem.setObject(7, fact[6]); workItem.setObject(8, fact[8]);
+                    workItem.setObject(9, fact[7]); workItem.setObject(10, fact[9]);
                     workItem.setObject(11, fact[10]); workItem.setObject(12, fact[11]);
                     workItem.setObject(13, fact[12]); workItem.setObject(14, fact[13]);
-                    workItem.setObject(15, fact[14]); workItem.setObject(16, createdAt);
-                    workItem.setObject(17, createdAt.plusHours(1));
+                    workItem.setObject(15, fact[14]); workItem.setObject(16, fact[15]);
+                    workItem.setObject(17, createdAt); workItem.setObject(18, createdAt.plusHours(1));
                     workItem.addBatch();
                 }
                 assertThat(workItem.executeBatch()).hasSize(2);
@@ -1135,6 +1190,20 @@ class M017BackupRestoreIT {
                             issue.row_version AS issue_version,
                             (SELECT counter.last_sequence FROM yumpoo.work_item_project_counter counter
                               WHERE counter.project_id=project.id) AS work_item_sequence,
+                            (SELECT catalog.row_version
+                               FROM yumpoo.project_work_item_label_catalog catalog
+                              WHERE catalog.project_id=project.id) AS label_catalog_version,
+                            (SELECT string_agg(label.status_code || ':' || label.display_name || ':'
+                                || label.color_token || ':' || label.status_category || ':'
+                                || label.sort_order || ':' || label.active || ':'
+                                || label.protected_label, ',' ORDER BY label.sort_order)
+                               FROM yumpoo.project_work_item_status_label label
+                              WHERE label.project_id=project.id) AS status_labels,
+                            (SELECT string_agg(label.priority_code || ':' || label.display_name || ':'
+                                || label.color_token || ':' || label.sort_order || ':' || label.active,
+                                ',' ORDER BY label.sort_order)
+                               FROM yumpoo.project_work_item_priority_label label
+                              WHERE label.project_id=project.id) AS priority_labels,
                             (SELECT string_agg(lane.status_code, ',' ORDER BY lane.status_code)
                                FROM yumpoo.work_item_rank_lane lane
                               WHERE lane.content_id IN (
@@ -1142,7 +1211,7 @@ class M017BackupRestoreIT {
                                    WHERE lane_content.project_id=project.id)) AS rank_lanes,
                             (SELECT string_agg(item.item_no || ':' || item.type || ':' || item.title
                                 || ':' || item.status_code || ':' || item.status_category || ':'
-                                || item.rank || ':' || item.priority || ':'
+                                || item.rank || ':' || item.project_sort_key || ':' || item.priority || ':'
                                 || COALESCE(item.description,'-') || ':'
                                 || COALESCE(item.notes,'-') || ':'
                                 || COALESCE(item.assignee_user_id::text,'-') || ':'
@@ -1189,7 +1258,9 @@ class M017BackupRestoreIT {
                     result.getString("product_link_facts"),
                     result.getString("issue_type"), result.getString("target_type"),
                     result.getString("issue_status"), result.getLong("issue_version"),
-                    result.getLong("work_item_sequence"), result.getString("rank_lanes"),
+                    result.getLong("work_item_sequence"), result.getLong("label_catalog_version"),
+                    result.getString("status_labels"), result.getString("priority_labels"),
+                    result.getString("rank_lanes"),
                     result.getString("work_items"), result.getString("contents"));
             assertThat(result.next()).isFalse();
             return fact;
@@ -1401,6 +1472,9 @@ class M017BackupRestoreIT {
             String issueStatus,
             long issueVersion,
             long workItemSequence,
+            long labelCatalogVersion,
+            String statusLabels,
+            String priorityLabels,
             String rankLanes,
             String workItems,
             String contents
