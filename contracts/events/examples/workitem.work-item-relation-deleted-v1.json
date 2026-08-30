@@ -1,0 +1,23 @@
+{
+  "eventId": "2b000000-0000-4000-8000-000000000001",
+  "eventType": "workitem.work_item_relation_deleted",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-30T08:00:00Z",
+  "aggregateType": "WorkItemRelation",
+  "aggregateId": "2b000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2b000000-0000-4000-8000-000000000003" },
+  "requestId": "m2-21-delete-relation",
+  "correlationId": "m2-21-delete-relation",
+  "causationId": null,
+  "payload": {
+    "relationId": "2b000000-0000-4000-8000-000000000002",
+    "relationType": "BLOCKS",
+    "leftWorkItemId": "2b000000-0000-4000-8000-000000000004",
+    "rightWorkItemId": "2b000000-0000-4000-8000-000000000005",
+    "leftProjectId": "2b000000-0000-4000-8000-000000000006",
+    "rightProjectId": "2b000000-0000-4000-8000-000000000006",
+    "deletedAt": "2026-08-30T08:00:00Z"
+  }
+}

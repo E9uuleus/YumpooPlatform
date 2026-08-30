@@ -1,0 +1,26 @@
+{
+  "eventId": "2b000000-0000-4000-8000-000000000021",
+  "eventType": "workitem.work_item_parent_changed",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-30T08:10:00Z",
+  "aggregateType": "WorkItemRelation",
+  "aggregateId": "2b000000-0000-4000-8000-000000000022",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2b000000-0000-4000-8000-000000000023" },
+  "requestId": "m2-21-change-parent",
+  "correlationId": "m2-21-change-parent",
+  "causationId": null,
+  "payload": {
+    "relationId": "2b000000-0000-4000-8000-000000000022",
+    "relationType": "PARENT_CHILD",
+    "leftWorkItemId": "2b000000-0000-4000-8000-000000000024",
+    "rightWorkItemId": "2b000000-0000-4000-8000-000000000025",
+    "leftProjectId": "2b000000-0000-4000-8000-000000000026",
+    "rightProjectId": "2b000000-0000-4000-8000-000000000026",
+    "oldRelationId": "2b000000-0000-4000-8000-000000000027",
+    "oldParentWorkItemId": "2b000000-0000-4000-8000-000000000028",
+    "newParentWorkItemId": "2b000000-0000-4000-8000-000000000024",
+    "childWorkItemId": "2b000000-0000-4000-8000-000000000025"
+  }
+}

@@ -101,6 +101,32 @@ class ActivityProjectionServiceTest {
                 .containsExactly(PROJECT, rightProject);
     }
 
+    @Test
+    void projectsDeletedAndParentChangedOnceForBothSameProjectEndpoints() {
+        UUID rightItem = UUID.fromString("44000000-0000-4000-8000-000000000006");
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("relationId", UUID.randomUUID().toString());
+        payload.put("relationType", "PARENT_CHILD");
+        payload.put("leftWorkItemId", ITEM.toString());
+        payload.put("rightWorkItemId", rightItem.toString());
+        payload.put("leftProjectId", PROJECT.toString());
+        payload.put("rightProjectId", PROJECT.toString());
+
+        service.consume(event("workitem.work_item_relation_deleted", CUTOVER.plusSeconds(1), payload));
+        service.consume(event("workitem.work_item_parent_changed", CUTOVER.plusSeconds(2), payload));
+
+        ArgumentCaptor<ActivityStoredEvent> captor = ArgumentCaptor.forClass(ActivityStoredEvent.class);
+        verify(repository, org.mockito.Mockito.times(2)).append(captor.capture());
+        assertThat(captor.getAllValues()).allSatisfy(stored -> {
+            assertThat(stored.scopeId()).isEqualTo(PROJECT);
+            assertThat(stored.primaryWorkItemId()).isEqualTo(ITEM);
+            assertThat(stored.secondaryWorkItemId()).isEqualTo(rightItem);
+            assertThat(stored.safeParameters().toString()).doesNotContain("deleteReason");
+        });
+        assertThat(captor.getAllValues()).extracting(ActivityStoredEvent::templateCode)
+                .containsExactly("WORK_ITEM_RELATION_DELETED", "WORK_ITEM_PARENT_CHANGED");
+    }
+
     private ObjectNode workItem() {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("workItemId", ITEM.toString());

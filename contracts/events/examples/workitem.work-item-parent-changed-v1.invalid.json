@@ -1,0 +1,27 @@
+{
+  "eventId": "2b000000-0000-4000-8000-000000000031",
+  "eventType": "workitem.work_item_parent_changed",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-30T08:10:00Z",
+  "aggregateType": "WorkItemRelation",
+  "aggregateId": "2b000000-0000-4000-8000-000000000032",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "USER", "userId": "2b000000-0000-4000-8000-000000000033" },
+  "requestId": "m2-21-change-parent-invalid",
+  "correlationId": "m2-21-change-parent-invalid",
+  "causationId": null,
+  "payload": {
+    "relationId": "2b000000-0000-4000-8000-000000000032",
+    "relationType": "PARENT_CHILD",
+    "leftWorkItemId": "2b000000-0000-4000-8000-000000000034",
+    "rightWorkItemId": "2b000000-0000-4000-8000-000000000035",
+    "leftProjectId": "2b000000-0000-4000-8000-000000000036",
+    "rightProjectId": "2b000000-0000-4000-8000-000000000036",
+    "oldRelationId": "2b000000-0000-4000-8000-000000000037",
+    "oldParentWorkItemId": "2b000000-0000-4000-8000-000000000038",
+    "newParentWorkItemId": "2b000000-0000-4000-8000-000000000034",
+    "childWorkItemId": "2b000000-0000-4000-8000-000000000035",
+    "title": "不得进入跨边界事件"
+  }
+}

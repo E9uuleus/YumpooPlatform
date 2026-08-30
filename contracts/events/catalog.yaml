@@ -266,6 +266,16 @@ events:
     schema: schemas/workitem.work-item-relation-created-v1.schema.json
     validExamples: [examples/workitem.work-item-relation-created-v1.json]
     invalidExamples: [examples/workitem.work-item-relation-created-v1.invalid.json]
+  - eventType: workitem.work_item_relation_deleted
+    eventVersion: 1
+    schema: schemas/workitem.work-item-relation-deleted-v1.schema.json
+    validExamples: [examples/workitem.work-item-relation-deleted-v1.json]
+    invalidExamples: [examples/workitem.work-item-relation-deleted-v1.invalid.json]
+  - eventType: workitem.work_item_parent_changed
+    eventVersion: 1
+    schema: schemas/workitem.work-item-parent-changed-v1.schema.json
+    validExamples: [examples/workitem.work-item-parent-changed-v1.json]
+    invalidExamples: [examples/workitem.work-item-parent-changed-v1.invalid.json]
   - eventType: workitem.work_item_fields_changed
     eventVersion: 1
     schema: schemas/workitem.work-item-fields-changed-v1.schema.json
