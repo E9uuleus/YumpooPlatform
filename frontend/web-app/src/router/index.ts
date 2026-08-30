@@ -25,6 +25,7 @@ import ProjectProductsView from '../views/projects/ProjectProductsView.vue'
 import ProjectContentsView from '../views/projects/ProjectContentsView.vue'
 import ContentWorkItemsView from '../views/projects/ContentWorkItemsView.vue'
 import ProjectSettingsView from '../views/projects/ProjectSettingsView.vue'
+import ProjectActivityView from '../views/projects/ProjectActivityView.vue'
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -83,6 +84,7 @@ export const routes: RouteRecordRaw[] = [
           { path: 'contents/:contentId', name: 'content-work-items', component: ContentWorkItemsView },
           { path: 'members', name: 'project-members', component: ProjectMembersView },
           { path: 'products', name: 'project-products', component: ProjectProductsView },
+          { path: 'activity', name: 'project-activity', component: ProjectActivityView },
           { path: 'settings', name: 'project-settings', component: ProjectSettingsView },
         ],
       },

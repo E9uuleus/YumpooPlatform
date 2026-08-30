@@ -3,6 +3,7 @@ import type { ProjectMember } from '@yumpoo/api-client'
 import { ElTabPane as ElTabPaneRaw, ElTabs as ElTabsRaw } from 'element-plus'
 import { computed, ref, type DefineComponent } from 'vue'
 import WorkItemDiscussion from './WorkItemDiscussion.vue'
+import ActivityTimeline from './ActivityTimeline.vue'
 
 interface DiscussionHandle {
   hasDraft: boolean
@@ -10,20 +11,20 @@ interface DiscussionHandle {
 }
 
 const props = defineProps<{
-  modelValue: 'details' | 'discussion'
+  modelValue: 'details' | 'discussion' | 'activity'
   workItemId: string
   members: ProjectMember[]
   canPublish: boolean
   readOnlyReason?: string | undefined
   beforeLeave?: ((next: string | number, previous: string | number) => boolean | Promise<boolean>) | undefined
 }>()
-const emit = defineEmits<{ 'update:modelValue': [value: 'details' | 'discussion'] }>()
+const emit = defineEmits<{ 'update:modelValue': [value: 'details' | 'discussion' | 'activity'] }>()
 const ElTabs = ElTabsRaw as unknown as DefineComponent
 const ElTabPane = ElTabPaneRaw as unknown as DefineComponent
 const discussion = ref<DiscussionHandle>()
 const tab = computed({
   get: () => props.modelValue,
-  set: value => emit('update:modelValue', value as 'details' | 'discussion'),
+  set: value => emit('update:modelValue', value as 'details' | 'discussion' | 'activity'),
 })
 const hasDraft = computed(() => Boolean(discussion.value?.hasDraft))
 
@@ -59,6 +60,9 @@ defineExpose({ hasDraft, discardDraft })
         :can-publish="canPublish"
         :read-only-reason="readOnlyReason"
       />
+    </el-tab-pane>
+    <el-tab-pane label="动态" name="activity" lazy>
+      <activity-timeline v-if="tab === 'activity'" :work-item-id="workItemId" compact />
     </el-tab-pane>
   </el-tabs>
 </template>

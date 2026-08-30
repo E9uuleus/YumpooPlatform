@@ -11,6 +11,7 @@ import {
   WorkItemsApi,
   WorkItemUpdatesApi,
   AttachmentsApi,
+  ActivityApi,
   createYumpooApiClient,
 } from '@yumpoo/api-client'
 import { globalProblemMiddleware } from './problems'
@@ -30,3 +31,4 @@ export const contentsApi = new ContentsApi(yumpooApiClient)
 export const workItemsApi = new WorkItemsApi(yumpooApiClient)
 export const workItemUpdatesApi = new WorkItemUpdatesApi(yumpooApiClient)
 export const attachmentsApi = new AttachmentsApi(yumpooApiClient)
+export const activityApi = new ActivityApi(yumpooApiClient)
