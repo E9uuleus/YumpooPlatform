@@ -89,7 +89,7 @@ export interface WorkItemDetail {
      */
     statusCategory: WorkItemStatusCategory;
     /**
-     *
+     * 可空的 Project 级优先级标签代码；非空值须从标签目录获取并按不透明值回传。
      * @type {string}
      * @memberof WorkItemDetail
      */

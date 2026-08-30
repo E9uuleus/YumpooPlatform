@@ -3421,7 +3421,12 @@ components:
 
     WorkItemPriority:
       type: string
-      pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+      description: Project 级优先级标签代码；客户端须从标签目录获取并按不透明值回传。
+
+    NullableWorkItemPriority:
+      type: string
+      nullable: true
+      description: 可空的 Project 级优先级标签代码；非空值须从标签目录获取并按不透明值回传。
 
     WorkItemStatusCategory:
       type: string
@@ -3549,10 +3554,7 @@ components:
         title: { type: string, minLength: 1, maxLength: 300 }
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
-        priority:
-          type: string
-          allOf: [{ $ref: '#/components/schemas/WorkItemPriority' }]
-          nullable: true
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
         assigneeDisplayName: { type: string, minLength: 1, nullable: true }
         reporterUserId: { $ref: '#/components/schemas/Uuid' }
@@ -3584,10 +3586,7 @@ components:
         title: { type: string, minLength: 1, maxLength: 300 }
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
-        priority:
-          type: string
-          allOf: [{ $ref: '#/components/schemas/WorkItemPriority' }]
-          nullable: true
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
         assigneeDisplayName: { type: string, minLength: 1, nullable: true }
         reporterUserId: { $ref: '#/components/schemas/Uuid' }
@@ -3661,10 +3660,7 @@ components:
         title: { type: string, minLength: 1, maxLength: 300 }
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
-        priority:
-          type: string
-          allOf: [{ $ref: '#/components/schemas/WorkItemPriority' }]
-          nullable: true
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
         assigneeDisplayName: { type: string, minLength: 1, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
@@ -3728,10 +3724,7 @@ components:
       additionalProperties: false
       required: [priority]
       properties:
-        priority:
-          type: string
-          allOf: [{ $ref: '#/components/schemas/WorkItemPriority' }]
-          nullable: true
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
 
     WorkItemDueDatePatchRequest:
       type: object
@@ -3824,10 +3817,7 @@ components:
       required: [title, priority, description, notes]
       properties:
         title: { type: string, minLength: 1, maxLength: 300 }
-        priority:
-          type: string
-          allOf: [{ $ref: '#/components/schemas/WorkItemPriority' }]
-          nullable: true
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
         description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
@@ -3842,10 +3832,7 @@ components:
       properties:
         contentId: { $ref: '#/components/schemas/Uuid' }
         title: { type: string, minLength: 1, maxLength: 300 }
-        priority:
-          type: string
-          allOf: [{ $ref: '#/components/schemas/WorkItemPriority' }]
-          nullable: true
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
         description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
@@ -3867,10 +3854,7 @@ components:
         timelineStartDate, timelineEndDate, dueDate]
       properties:
         title: { type: string, minLength: 1, maxLength: 300 }
-        priority:
-          type: string
-          allOf: [{ $ref: '#/components/schemas/WorkItemPriority' }]
-          nullable: true
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
         description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }

@@ -10,7 +10,8 @@ const serviceTest = read('backend/src/test/java/com/yumpoo/platform/workitem/app
 const openapi = read('contracts/openapi/yumpoo-v1.yaml')
 const sdk = read('packages/api-client/src/generated/apis/WorkItemsApi.ts')
 const overview = read('frontend/web-app/src/views/projects/ProjectOverviewView.vue')
-const editor = read('frontend/web-app/src/components/projects/WorkItemLabelEditor.vue')
+const editor = read('frontend/web-app/src/components/projects/WorkItemLabelPopoverContent.vue')
+const labelColors = read('frontend/web-app/src/components/projects/workItemLabelColors.ts')
 const content = read('frontend/web-app/src/views/projects/ContentWorkItemsView.vue')
 const note = read('.agents/notes/implemented/data/2026-08-26-project-work-item-label-catalog.md')
 const readme = read('README.md')
@@ -36,8 +37,10 @@ for (const fragment of ['workItemId: item.id', 'route.query.workItemId',
   'value-format="YYYY-MM-DD"', '@update:model-value="onDueDateChange']) {
   assert(overview.includes(fragment), `项目表格缺少 ${fragment}`)
 }
-for (const fragment of ['新增标签', '停用', '你不能删除正在使用的标签',
-  'var(--yp-label-', 'sortOrder: target.sortOrder']) assert(editor.includes(fragment), `标签编辑器缺少 ${fragment}`)
+for (const fragment of ['+ 新增标签', '停用标签', 'label.inUse',
+  'deletedCodes.value', 'sortOrder: index + 1']) assert(editor.includes(fragment), `标签编辑器缺少 ${fragment}`)
+for (const fragment of ['mondayWorkItemLabelColors', 'var(--yp-label-bright-green)',
+  'var(--yp-label-pecan)']) assert(labelColors.includes(fragment), `标签色板缺少 ${fragment}`)
 assert(content.includes("openLabelEditor('status')") && content.includes("openLabelEditor('priority')"),
   'Content 工作台未开放双标签编辑入口')
 for (const fragment of ['部分替代', 'NOT_STARTED', '所有启用状态之间可直接迁移',

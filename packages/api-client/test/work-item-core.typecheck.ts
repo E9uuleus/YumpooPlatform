@@ -2,9 +2,9 @@ import {
   ContentViewType,
   ContentSortDirection,
   ContentSortField,
-  WorkItemPriority,
   WorkItemRankPlacement,
 } from '../src/generated/models/index.js'
+import { WorkItemPriority } from '../src/yumpoo-api-client.js'
 import type {
   CreateWorkItemRequest,
   DeleteWorkItemRequest,
