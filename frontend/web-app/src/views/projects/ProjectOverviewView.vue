@@ -420,6 +420,7 @@ const orderedSubitemColumns = computed(() => [
 const visibleColumns = computed(() => orderedColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
 const visibleSubitemColumns = computed(() => orderedSubitemColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
 const movableVisibleColumns = computed(() => visibleColumns.value.filter(item => item.key !== 'title'))
+const tableColumnStructureKey = computed(() => movableColumnOrder.value.join('|'))
 const quickGridStyle = computed(() => ({
   gridTemplateColumns: [`${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
     ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
@@ -2237,6 +2238,7 @@ onBeforeUnmount(() => {
             @click.capture="onTableClickCapture"
           >
             <el-table
+              :key="tableColumnStructureKey"
               ref="tableRef"
               :data="tableItems"
               :fit="true"

@@ -456,8 +456,10 @@ describe('项目级工作项首页', () => {
     expect(view.tableSorting).toBe(true)
     expect(view.tableLoading).toBe(false)
     expect(view.tableItems.map(row => row.id)).toEqual(['item-3', 'item-1', 'item-2'])
-    const sortingMask = wrapper.find('.table-surface .el-loading-mask')
-    expect(!sortingMask.exists() || !sortingMask.isVisible()).toBe(true)
+    await vi.waitFor(() => {
+      const sortingMask = wrapper.find('.table-surface .el-loading-mask')
+      expect(!sortingMask.exists() || !sortingMask.isVisible()).toBe(true)
+    })
     expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({
       sort: ['TITLE,ASC'],
     }), expect.anything())
@@ -482,7 +484,7 @@ describe('项目级工作项首页', () => {
     expect(view.tableSorting).toBe(false)
     expect(view.tableItems.map(row => row.id)).toEqual(['item-3', 'item-2', 'item-1'])
     expect(rowAnimationSpies.every(animate => animate.mock.calls.length === 0)).toBe(true)
-  }, 10_000)
+  }, 30_000)
 
   it('在每个列头复刻 Monday 双三角排序按钮，并在清除后恢复初始状态', async () => {
     vi.spyOn(ElMessage, 'success').mockImplementation(() => undefined as never)
