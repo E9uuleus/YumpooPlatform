@@ -87,7 +87,7 @@ const contextItems = computed<ContextItem[]>(() => {
     const projectId = typeof route.params.projectId === 'string' ? route.params.projectId : undefined
     if (projectId) {
       items.push(
-        { label: '概览', routeName: 'project-overview', params: { projectId }, icon: Grid, groupLabel: '当前项目' },
+        { label: '工作项', routeName: 'project-overview', params: { projectId }, icon: Grid, groupLabel: '当前项目' },
         { label: '成员', routeName: 'project-members', params: { projectId }, icon: User },
         { label: '设置', routeName: 'project-settings', params: { projectId }, icon: Setting },
       )

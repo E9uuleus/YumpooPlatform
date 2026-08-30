@@ -8,11 +8,13 @@ Project 固定模板需要落成用户可管理的 Content 容器，同时保持
 
 ## Decision
 
+M2-19A 后，Content 视图的状态和优先级选项来自 [Project 级标签目录](../data/2026-08-26-project-work-item-label-catalog.md)；固定模板仍提供初始 Content/状态来源，但不再是运行时唯一可选值真源。
+
 Content 创建只接受项目内唯一代码、名称、描述和 `blueprintCode`。服务端从 Project 固定的模板 key/version 查找蓝图，派生不可变的工作项类型、初始默认视图和模板来源；同一 Project 允许多个 Content 使用相同工作项类型。既有 Project 固定到 RETIRED 模板后仍可继续按该版本创建 Content。
 
 Content 写事务先通过 catalog 的 `ProjectFactWriteGuard` 获取 Project `FOR SHARE` 锁并复核主体访问，再对既有 Content 获取 `FOR UPDATE`。Owner 独占写权限；Member 和 CompanyAdmin 只读；同公司不可见主体及跨公司访问返回 404。归档 Project 可读但禁止 Content 写入。Content 只允许 `ACTIVE -> ARCHIVED -> ACTIVE`，归档状态不可编辑，等价规范化 PATCH 不推进版本也不发布事件。
 
-`ContentViewConfig` 是递归关闭的强类型 wire 契约，顶层只允许 `table` 和 `kanban`，规范化 JSON 上限为 16 KiB。历史 `{}` 在读取时展开为稳定默认值；列缺项按默认顺序补齐，TITLE 不可隐藏，排序字段不重复且最多三个，状态筛选必须属于固定模板。显式 Kanban 分组必须且只能覆盖模板全部状态一次。PATCH 完整替换可变详情并在比较前规范化。
+`ContentViewConfig` 是递归关闭的强类型 wire 契约，顶层只允许 `table` 和 `kanban`，规范化 JSON 上限为 16 KiB。历史 `{}` 在读取时展开为稳定默认值；列缺项按默认顺序补齐，TITLE 不可隐藏，排序字段不重复且最多三个。M2-19A 后状态/优先级筛选必须属于 Project 标签目录，新增状态会兼容追加到 Kanban 配置；停用状态保留既有分组与读取能力。PATCH 完整替换可变详情并在比较前规范化。
 
 M2-13 继续复用 `ContentViewConfig.table.filters/sort` 作为 Content 共享默认，不新增私人视图或新的 wire/event 版本。所有可读用户都可在 URL 中临时使用完整筛选与排序；只有 Project Owner 可通过现有 Content PATCH 保存共享默认，Member 和 CompanyAdmin 保持只读。共享默认写入继续发布现有 `workitem.content_updated`，普通查询不发布事件。
 

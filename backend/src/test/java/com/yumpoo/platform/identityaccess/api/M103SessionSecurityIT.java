@@ -236,6 +236,9 @@ class M103SessionSecurityIT {
         HttpResponse<String> mismatch = send("POST", session, csrf, "wrong-csrf-token");
 
         assertThat(valid.statusCode()).as(valid.body()).isEqualTo(204);
+        assertThat(valid.headers().allValues("set-cookie"))
+                .noneMatch(cookie -> cookie.startsWith(SessionHttpCookies.CSRF_COOKIE + "=")
+                        && cookie.contains("Max-Age=0"));
         assertThat(missing.statusCode()).isEqualTo(403);
         assertThat(headerOnly.statusCode()).isEqualTo(403);
         assertThat(cookieOnly.statusCode()).isEqualTo(403);

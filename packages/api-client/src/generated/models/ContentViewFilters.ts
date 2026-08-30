@@ -12,14 +12,6 @@
  */
 
 import { mapValues } from '../runtime';
-import type { WorkItemPriority } from './WorkItemPriority';
-import {
-    WorkItemPriorityFromJSON,
-    WorkItemPriorityFromJSONTyped,
-    WorkItemPriorityToJSON,
-    WorkItemPriorityToJSONTyped,
-} from './WorkItemPriority';
-
 /**
  *
  * @export
@@ -40,10 +32,10 @@ export interface ContentViewFilters {
     statusCodes: Set<string>;
     /**
      *
-     * @type {Set<WorkItemPriority>}
+     * @type {Set<string>}
      * @memberof ContentViewFilters
      */
-    priorities: Set<WorkItemPriority>;
+    priorities: Set<string>;
     /**
      *
      * @type {Set<string>}
@@ -96,7 +88,7 @@ export function ContentViewFiltersFromJSONTyped(json: any, ignoreDiscriminator: 
 
         'query': json['query'],
         'statusCodes': new Set(json['statusCodes']),
-        'priorities': (new Set((json['priorities'] as Array<any>).map(WorkItemPriorityFromJSON))),
+        'priorities': new Set(json['priorities']),
         'assigneeUserIds': new Set(json['assigneeUserIds']),
         'dueFrom': (json['dueFrom'] == null ? null : new Date(json['dueFrom'])),
         'dueTo': (json['dueTo'] == null ? null : new Date(json['dueTo'])),
@@ -117,7 +109,7 @@ export function ContentViewFiltersToJSONTyped(value?: ContentViewFilters | null,
 
         'query': value['query'],
         'statusCodes': Array.from(value['statusCodes'] as Set<any>),
-        'priorities': (Array.from(value['priorities'] as Set<any>).map(WorkItemPriorityToJSON)),
+        'priorities': Array.from(value['priorities'] as Set<any>),
         'assigneeUserIds': Array.from(value['assigneeUserIds'] as Set<any>),
         'dueFrom': value['dueFrom'] == null ? value['dueFrom'] : value['dueFrom'].toISOString().substring(0,10),
         'dueTo': value['dueTo'] == null ? value['dueTo'] : value['dueTo'].toISOString().substring(0,10),

@@ -1311,6 +1311,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - { name: status, in: query, schema: { $ref: '#/components/schemas/ProjectMembershipStatusFilter' } }
+        - { name: q, in: query, schema: { type: string, maxLength: 200 } }
         - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
         - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses:
@@ -1565,6 +1566,339 @@ paths:
         '412': { $ref: '#/components/responses/VersionConflict' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /projects/{projectId}/work-items:
+    get:
+      tags: [WorkItems]
+      operationId: listProjectWorkItems
+      summary: 分页查询 Project 下全部 Content 的真实 Work Item
+      description: >-
+        聚合 Project 内全部 Content 的非删除 Work Item。TABLE 复用白名单筛选与排序；
+        KANBAN 必须指定单一 status，固定按更新时间倒序，不提供跨 Content rank。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - name: cursor
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 512 }
+        - name: limit
+          in: query
+          schema: { type: integer, format: int32, minimum: 1, maximum: 100, default: 25 }
+        - name: view
+          in: query
+          description: TABLE 使用白名单排序；KANBAN 要求单一 status 且固定按 updatedAt 倒序。
+          schema: { $ref: '#/components/schemas/ContentViewType' }
+        - name: status
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: priority
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items: { $ref: '#/components/schemas/WorkItemPriority' }
+        - name: assigneeUserId
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items: { $ref: '#/components/schemas/Uuid' }
+        - name: contentId
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items: { $ref: '#/components/schemas/Uuid' }
+        - name: dueFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: dueTo
+          in: query
+          schema: { type: string, format: date }
+        - name: updatedAfter
+          in: query
+          schema: { type: string, format: date-time }
+        - name: sort
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 3
+            items:
+              type: string
+              pattern: '^(ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
+      responses:
+        '200':
+          description: 已先按 Project 可见性与筛选条件裁剪，再稳定分页。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectWorkItemCursorPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /projects/{projectId}/work-item-labels:
+    get:
+      tags: [WorkItems]
+      operationId: getProjectWorkItemLabels
+      summary: 查询 Project 级工作项状态与优先级标签目录
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 返回活动及停用但仍可展示的标签；目录使用独立强 ETag。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+
+  /projects/{projectId}/work-item-labels/statuses:
+    post:
+      tags: [WorkItems]
+      operationId: createProjectWorkItemStatusLabel
+      summary: 新增 Project 状态标签
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCreateRequest' } } }
+      responses:
+        '200':
+          description: 标签已新增并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/work-item-labels/statuses/{code}:
+    patch:
+      tags: [WorkItems]
+      operationId: updateProjectWorkItemStatusLabel
+      summary: 立即保存状态标签名称、颜色或启停状态
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WorkItemLabelCode'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelUpdateRequest' } } }
+      responses:
+        '200':
+          description: 标签已更新并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+    delete:
+      tags: [WorkItems]
+      operationId: deleteProjectWorkItemStatusLabel
+      summary: 删除未受保护且从未被工作项引用的状态标签
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WorkItemLabelCode'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: 标签已软删除并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/work-item-labels/priorities:
+    post:
+      tags: [WorkItems]
+      operationId: createProjectWorkItemPriorityLabel
+      summary: 新增 Project 优先级标签
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCreateRequest' } } }
+      responses:
+        '200':
+          description: 标签已新增并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/work-item-labels/priorities/{code}:
+    patch:
+      tags: [WorkItems]
+      operationId: updateProjectWorkItemPriorityLabel
+      summary: 立即保存优先级标签名称、颜色或启停状态
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WorkItemLabelCode'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelUpdateRequest' } } }
+      responses:
+        '200':
+          description: 标签已更新并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+    delete:
+      tags: [WorkItems]
+      operationId: deleteProjectWorkItemPriorityLabel
+      summary: 删除从未被工作项引用的优先级标签
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/WorkItemLabelCode'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: 标签已软删除并返回最新目录。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemLabelCatalog' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/work-items/filter-options:
+    get:
+      tags: [WorkItems]
+      operationId: listProjectWorkItemFilterOptions
+      summary: 按当前项目查询上下文分页取得筛选选项及动态计数
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: field
+          in: query
+          required: true
+          schema: { type: string, enum: [TITLE, ASSIGNEE, STATUS, PRIORITY, CONTENT, DUE_DATE, UPDATED_AT] }
+        - { name: cursor, in: query, schema: { type: string, minLength: 1, maxLength: 2048 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - { name: q, in: query, schema: { type: string } }
+        - name: status
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, uniqueItems: true, items: { type: string } }
+        - name: priority
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/WorkItemPriority' } }
+        - name: assigneeUserId
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+        - name: contentId
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+        - { name: dueFrom, in: query, schema: { type: string, format: date } }
+        - { name: dueTo, in: query, schema: { type: string, format: date } }
+        - { name: updatedAfter, in: query, schema: { type: string, format: date-time } }
+        - name: sort
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, maxItems: 3, items: { type: string } }
+      responses:
+        '200':
+          description: 选项以值稳定排序，计数应用当前查询上下文。
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectWorkItemFilterOptionCursorPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /projects/{projectId}/work-items/{workItemId}/order-moves:
+    post:
+      tags: [WorkItems]
+      operationId: moveProjectWorkItemOrder
+      summary: 调整项目共享表格顺序
+      description: 仅提交筛选结果中的可见上下邻项；服务端在真实项目顺序中分配稀疏键。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectWorkItemOrderMoveRequest' } } }
+      responses:
+        '200':
+          description: 顺序已更新或返回幂等重放结果。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /contents/{contentId}/work-items:
     get:
       tags: [WorkItems]
@@ -1674,6 +2008,104 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
+  /work-items/{parentWorkItemId}/subitems:
+    get:
+      tags: [WorkItems]
+      operationId: listWorkItemSubitems
+      summary: 查询 Work Item 的直接子项
+      description: 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: parentWorkItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - name: sort
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 3
+            items:
+              type: string
+              pattern: '^(ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
+      responses:
+        '200':
+          description: 当前调用人可见的直接子项。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemSubitemList' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      tags: [WorkItems]
+      operationId: createWorkItemSubitem
+      summary: 为根 Work Item 创建全新子项
+      description: 子项必须属于父项所在 Project；Content 可在同 Project 的 ACTIVE Content 中选择。本阶段不支持在子项下继续创建子项。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: parentWorkItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemSubitemCreateRequest' } } }
+      responses:
+        '201':
+          description: 子项及 PARENT_CHILD 关系已原子创建或幂等重放。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /work-items/{parentWorkItemId}/subitems/{subitemId}/order-moves:
+    post:
+      tags: [WorkItems]
+      operationId: moveWorkItemSubitemOrder
+      summary: 调整同一父项下的子项顺序
+      description: 可见前后锚点必须都是该父项的未删除直接子项。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: parentWorkItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - name: subitemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectWorkItemOrderMoveRequest' } } }
+      responses:
+        '200':
+          description: 子项顺序已更新或返回幂等重放结果。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /work-items/{workItemId}:
     get:
       tags: [WorkItems]
@@ -1748,6 +2180,99 @@ paths:
           headers:
             ETag: { $ref: '#/components/headers/ETag' }
             Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-items/{workItemId}/assignee:
+    patch:
+      tags: [WorkItems]
+      operationId: patchWorkItemAssignee
+      summary: 单独更新处理人
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemAssigneePatchRequest' } } }
+      responses:
+        '200':
+          description: 处理人已更新或返回幂等重放结果。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-items/{workItemId}/priority:
+    patch:
+      tags: [WorkItems]
+      operationId: patchWorkItemPriority
+      summary: 单独更新优先级
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemPriorityPatchRequest' } } }
+      responses:
+        '200':
+          description: 优先级已更新或返回幂等重放结果。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-items/{workItemId}/due-date:
+    patch:
+      tags: [WorkItems]
+      operationId: patchWorkItemDueDate
+      summary: 单独更新截止日期
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDueDatePatchRequest' } } }
+      responses:
+        '200':
+          description: 截止日期已更新或返回幂等重放结果。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
           content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
         '400': { $ref: '#/components/responses/MalformedRequest' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
@@ -2896,11 +3421,122 @@ components:
 
     WorkItemPriority:
       type: string
-      enum: [LOW, MEDIUM, HIGH, URGENT]
+      description: Project 级优先级标签代码；客户端须从标签目录获取并按不透明值回传。
+
+    NullableWorkItemPriority:
+      type: string
+      nullable: true
+      description: 可空的 Project 级优先级标签代码；非空值须从标签目录获取并按不透明值回传。
 
     WorkItemStatusCategory:
       type: string
       enum: [TODO, IN_PROGRESS, DONE, CANCELED]
+
+    WorkItemLabelColorToken:
+      type: string
+      enum:
+        - BRIGHT_GREEN
+        - SALADISH
+        - EGG_YOLK
+        - DARK_ORANGE
+        - PEACH
+        - SUNSET
+        - DARK_RED
+        - SOFIA_PINK
+        - LIPSTICK
+        - BUBBLE
+        - DARK_PURPLE
+        - BERRY
+        - DARK_INDIGO
+        - INDIGO
+        - NAVY
+        - BRIGHT_BLUE
+        - AQUAMARINE
+        - CHILI_BLUE
+        - RIVER
+        - WINTER
+        - AMERICAN_GRAY
+        - BLACKISH
+        - BROWN
+        - ORCHID
+        - TAN
+        - SKY
+        - COFFEE
+        - ROYAL
+        - TEAL
+        - LAVENDER
+        - STEEL
+        - LILAC
+        - PECAN
+        - GREEN
+        - BLUE
+        - PURPLE
+        - MAGENTA
+        - RED
+        - ORANGE
+        - AMBER
+        - LIME
+        - CYAN
+        - GRAY
+
+    WorkItemStatusLabel:
+      type: object
+      additionalProperties: false
+      required: [code, displayName, colorToken, statusCategory, sortOrder, active,
+        protectedLabel, inUse]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+        active: { type: boolean }
+        protectedLabel: { type: boolean }
+        inUse: { type: boolean }
+
+    WorkItemPriorityLabel:
+      type: object
+      additionalProperties: false
+      required: [code, displayName, colorToken, sortOrder, active, inUse]
+      properties:
+        code: { $ref: '#/components/schemas/WorkItemPriority' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+        active: { type: boolean }
+        inUse: { type: boolean }
+
+    WorkItemLabelCatalog:
+      type: object
+      additionalProperties: false
+      required: [statuses, priorities, rowVersion, etag, canManage]
+      properties:
+        statuses: { type: array, items: { $ref: '#/components/schemas/WorkItemStatusLabel' } }
+        priorities: { type: array, items: { $ref: '#/components/schemas/WorkItemPriorityLabel' } }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+        canManage: { type: boolean, readOnly: true }
+
+    WorkItemLabelCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [displayName, colorToken]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+
+    WorkItemLabelUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [displayName, colorToken, active, sortOrder]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 80, nullable: true }
+        colorToken:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/WorkItemLabelColorToken' }]
+          nullable: true
+        active: { type: boolean, nullable: true }
+        sortOrder: { type: integer, format: int32, minimum: 0, nullable: true }
 
     WorkItemSummary:
       type: object
@@ -2918,7 +3554,7 @@ components:
         title: { type: string, minLength: 1, maxLength: 300 }
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
-        priority: { $ref: '#/components/schemas/WorkItemPriority' }
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
         assigneeDisplayName: { type: string, minLength: 1, nullable: true }
         reporterUserId: { $ref: '#/components/schemas/Uuid' }
@@ -2950,7 +3586,7 @@ components:
         title: { type: string, minLength: 1, maxLength: 300 }
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
-        priority: { $ref: '#/components/schemas/WorkItemPriority' }
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
         assigneeDisplayName: { type: string, minLength: 1, nullable: true }
         reporterUserId: { $ref: '#/components/schemas/Uuid' }
@@ -2973,10 +3609,13 @@ components:
     WorkItemCapabilities:
       type: object
       additionalProperties: false
-      required: [canEditFields, canMoveInKanban, canDelete, canRestore, availableTransitions]
+      required: [canEditFields, canMoveInKanban, canMoveInProjectOrder, canDiscuss,
+        canDelete, canRestore, availableTransitions]
       properties:
         canEditFields: { type: boolean, readOnly: true }
         canMoveInKanban: { type: boolean, readOnly: true }
+        canMoveInProjectOrder: { type: boolean, readOnly: true }
+        canDiscuss: { type: boolean, readOnly: true }
         canDelete: { type: boolean, readOnly: true }
         canRestore: { type: boolean, readOnly: true }
         availableTransitions:
@@ -3004,6 +3643,95 @@ components:
         size: { type: integer, format: int32, minimum: 1, maximum: 100 }
         totalElements: { type: integer, format: int64, minimum: 0 }
         totalPages: { type: integer, format: int32, minimum: 0 }
+
+    ProjectWorkItemListItem:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, contentId, contentName, itemNo, type, title, statusCode,
+        statusCategory, priority, assigneeUserId, assigneeDisplayName, dueDate, rowVersion,
+        etag, capabilities, subitemCount, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        projectId: { $ref: '#/components/schemas/Uuid' }
+        contentId: { $ref: '#/components/schemas/Uuid' }
+        contentName: { type: string, minLength: 1, maxLength: 120 }
+        itemNo: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$' }
+        type: { $ref: '#/components/schemas/WorkItemType' }
+        title: { type: string, minLength: 1, maxLength: 300 }
+        statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
+        assigneeUserId: { type: string, format: uuid, nullable: true }
+        assigneeDisplayName: { type: string, minLength: 1, nullable: true }
+        dueDate: { type: string, format: date, nullable: true }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+        capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
+        subitemCount: { type: integer, format: int64, minimum: 0, readOnly: true }
+        updatedAt: { type: string, format: date-time, readOnly: true }
+
+    ProjectWorkItemCursorPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ProjectWorkItemListItem' }
+        nextCursor: { type: string, minLength: 1, maxLength: 512, nullable: true }
+
+    WorkItemSubitemList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ProjectWorkItemListItem' } }
+
+    ProjectWorkItemFilterOption:
+      type: object
+      additionalProperties: false
+      required: [value, label, count]
+      properties:
+        value: { type: string }
+        label: { type: string }
+        count: { type: integer, format: int64, minimum: 0 }
+
+    ProjectWorkItemFilterOptionCursorPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ProjectWorkItemFilterOption' } }
+        nextCursor: { type: string, minLength: 1, maxLength: 2048, nullable: true }
+
+    ProjectWorkItemOrderMoveRequest:
+      type: object
+      additionalProperties: false
+      required: [previousVisibleWorkItemId, nextVisibleWorkItemId]
+      properties:
+        previousVisibleWorkItemId: { type: string, format: uuid, nullable: true }
+        nextVisibleWorkItemId: { type: string, format: uuid, nullable: true }
+
+    WorkItemAssigneePatchRequest:
+      type: object
+      additionalProperties: false
+      required: [assigneeUserId]
+      properties:
+        assigneeUserId: { type: string, format: uuid, nullable: true }
+
+    WorkItemPriorityPatchRequest:
+      type: object
+      additionalProperties: false
+      required: [priority]
+      properties:
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
+
+    WorkItemDueDatePatchRequest:
+      type: object
+      additionalProperties: false
+      required: [dueDate]
+      properties:
+        dueDate: { type: string, format: date, nullable: true }
 
     WorkItemUpdateStatus:
       type: string
@@ -3089,7 +3817,22 @@ components:
       required: [title, priority, description, notes]
       properties:
         title: { type: string, minLength: 1, maxLength: 300 }
-        priority: { $ref: '#/components/schemas/WorkItemPriority' }
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
+        assigneeUserId: { type: string, format: uuid, nullable: true }
+        description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        timelineStartDate: { type: string, format: date, nullable: true }
+        timelineEndDate: { type: string, format: date, nullable: true }
+        dueDate: { type: string, format: date, nullable: true }
+
+    WorkItemSubitemCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [contentId, title, priority, description, notes]
+      properties:
+        contentId: { $ref: '#/components/schemas/Uuid' }
+        title: { type: string, minLength: 1, maxLength: 300 }
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
         description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
@@ -3111,7 +3854,7 @@ components:
         timelineStartDate, timelineEndDate, dueDate]
       properties:
         title: { type: string, minLength: 1, maxLength: 300 }
-        priority: { $ref: '#/components/schemas/WorkItemPriority' }
+        priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
         description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
@@ -3262,24 +4005,42 @@ components:
     ContentWorkflowStatusOption:
       type: object
       additionalProperties: false
-      required: [statusCode, displayName, statusCategory, sortOrder, initial, terminal]
+      required: [statusCode, displayName, statusCategory, colorToken, sortOrder, active,
+        protectedLabel, initial, terminal]
       properties:
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         displayName: { type: string, minLength: 1, maxLength: 80 }
         statusCategory: { $ref: '#/components/schemas/WorkflowStatusCategory' }
-        sortOrder: { type: integer, format: int32, minimum: 1 }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+        active: { type: boolean }
+        protectedLabel: { type: boolean }
         initial: { type: boolean }
         terminal: { type: boolean }
+
+    ContentPriorityOption:
+      type: object
+      additionalProperties: false
+      required: [priorityCode, displayName, colorToken, sortOrder, active]
+      properties:
+        priorityCode: { $ref: '#/components/schemas/WorkItemPriority' }
+        displayName: { type: string, minLength: 1, maxLength: 80 }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        sortOrder: { type: integer, format: int32, minimum: 0 }
+        active: { type: boolean }
 
     ProjectContentCatalog:
       type: object
       additionalProperties: false
-      required: [items, blueprintOptions, workflowStatusOptions, canCreate]
+      required: [items, blueprintOptions, workflowStatusOptions, priorityOptions, canCreate,
+        canManageLabels]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Content' } }
         blueprintOptions: { type: array, items: { $ref: '#/components/schemas/ContentBlueprintOption' } }
         workflowStatusOptions: { type: array, items: { $ref: '#/components/schemas/ContentWorkflowStatusOption' } }
+        priorityOptions: { type: array, items: { $ref: '#/components/schemas/ContentPriorityOption' } }
         canCreate: { type: boolean }
+        canManageLabels: { type: boolean }
 
     ContentCreateRequest:
       type: object
@@ -4241,6 +5002,11 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Uuid' }
+    WorkItemLabelCode:
+      name: code
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
 
     RunId:
       name: runId

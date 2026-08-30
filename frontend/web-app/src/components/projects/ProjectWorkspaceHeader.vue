@@ -33,7 +33,7 @@ const heading = computed(() => props.project?.name ?? props.title)
 const supportingText = computed(() => props.project?.description
   || (props.project ? `${props.project.workspaceName} 中的项目空间` : props.description))
 const moreRoutes = computed(() => [
-  ...(props.section !== 'overview' ? [{ command: 'project-overview', label: '概览' }] : []),
+  ...(props.section !== 'overview' ? [{ command: 'project-overview', label: '工作项' }] : []),
   ...(props.section !== 'contents' ? [{ command: 'project-contents', label: 'Content' }] : []),
   ...(props.section !== 'products' ? [{ command: 'project-products', label: '关联产品' }] : []),
   ...(props.section !== 'settings' ? [{ command: 'project-settings', label: '设置' }] : []),
@@ -48,7 +48,10 @@ function navigate(routeName: string): void {
 <template>
   <header
     class="project-workspace-header"
-    :class="{ 'project-workspace-header--catalog': section === 'catalog' }"
+    :class="{
+      'project-workspace-header--catalog': section === 'catalog',
+      'project-workspace-header--overview': section === 'overview',
+    }"
   >
     <div class="project-workspace-header__identity">
       <div
@@ -58,8 +61,16 @@ function navigate(routeName: string): void {
       >
         <template v-if="section === 'catalog'">
           <span class="project-workspace-header__avatar-text">{{ heading ? heading.charAt(0) : 'M' }}</span>
-          <span class="project-workspace-header__home-badge" title="主工作空间">
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+          <span
+            class="project-workspace-header__home-badge"
+            title="主工作空间"
+          >
+            <svg
+              width="11"
+              height="11"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+            >
               <path d="M8.707 1.5a1 1 0 0 0-1.414 0L.646 8.146a.5.5 0 0 0 .708.708L2 8.207V13.5A1.5 1.5 0 0 0 3.5 15h9a1.5 1.5 0 0 0 1.5-1.5V8.207l.646.647a.5.5 0 0 0 .708-.708L8.707 1.5Z" />
             </svg>
           </span>
@@ -76,7 +87,12 @@ function navigate(routeName: string): void {
             class="project-workspace-header__chevron"
             aria-hidden="true"
           >
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
               <path d="M5.293 7.293a1 1 0 0 1 1.414 0L10 10.586l3.293-3.293a1 1 0 1 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 0 1 0-1.414Z" />
             </svg>
           </span>
@@ -261,6 +277,25 @@ p {
 .project-workspace-header__more {
   width: var(--yp-control-height);
   padding: 0;
+}
+
+.project-workspace-header--overview {
+  padding: var(--yp-space-2) 0 var(--yp-space-4);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.project-workspace-header--overview .project-workspace-header__icon {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  font-size: 24px;
+}
+
+.project-workspace-header--overview h1 {
+  font-size: 26px;
+  line-height: 34px;
 }
 
 .project-workspace-header--catalog {

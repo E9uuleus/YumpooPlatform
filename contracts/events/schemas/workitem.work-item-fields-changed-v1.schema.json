@@ -22,7 +22,7 @@
           "workItemType": { "enum": ["REQUIREMENT", "TASK", "DEFECT"] },
           "statusCode": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
           "statusCategory": { "enum": ["TODO", "IN_PROGRESS", "DONE", "CANCELED"] },
-          "priority": { "enum": ["LOW", "MEDIUM", "HIGH", "URGENT"] },
+          "priority": { "type": ["string", "null"], "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
           "assigneeUserId": { "type": ["string", "null"], "format": "uuid" },
           "timelineStartDate": { "type": ["string", "null"], "format": "date" },
           "timelineEndDate": { "type": ["string", "null"], "format": "date" },

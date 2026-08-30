@@ -15,6 +15,7 @@ import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,6 +75,7 @@ class WorkItemHttpIT {
     @Autowired private Clock clock;
     @Autowired private ObjectMapper json;
     @Autowired private PlatformTransactionManager transactionManager;
+    @Autowired private WorkItemLabelRepository labels;
 
     private ActorFixture owner;
     private ActorFixture member;
@@ -135,7 +137,7 @@ class WorkItemHttpIT {
         assertThat(first.path("itemNo").asText()).isEqualTo("M2_10_ACTIVE-1");
         assertThat(first.path("title").asText()).isEqualTo("第一项");
         assertThat(first.path("type").asText()).isEqualTo("TASK");
-        assertThat(first.path("statusCode").asText()).isEqualTo("BACKLOG");
+        assertThat(first.path("statusCode").asText()).isEqualTo("NOT_STARTED");
         assertThat(first.path("statusCategory").asText()).isEqualTo("TODO");
         assertThat(first.path("description").asText()).isEqualTo("纯文本描述");
         assertThat(first.path("notes").isNull()).isTrue();
@@ -161,7 +163,7 @@ class WorkItemHttpIT {
         assertThat(page.path("totalElements").asLong()).isEqualTo(2);
         assertThat(page.path("totalPages").asLong()).isEqualTo(2);
         assertThat(page.path("items").get(0).path("itemNo").asText()).isEqualTo("M2_10_ACTIVE-2");
-        JsonNode grouped = json.readTree(get(collection + "?status=BACKLOG&status=DONE", member).body());
+        JsonNode grouped = json.readTree(get(collection + "?status=NOT_STARTED&status=DONE", member).body());
         assertThat(grouped.path("totalElements").asLong()).isEqualTo(2);
         JsonNode fullPage = json.readTree(get(collection + "?page=0&size=20", member).body());
         JsonNode firstSummary = fullPage.path("items").get(1);
@@ -385,7 +387,7 @@ class WorkItemHttpIT {
         assertThat(literalOnly.path("items").get(0).path("id").asText())
                 .isEqualTo(literal.path("id").asText());
 
-        JsonNode combined = body(get(collection + "?status=BACKLOG&priority=LOW&priority=MEDIUM"
+        JsonNode combined = body(get(collection + "?status=NOT_STARTED&priority=LOW&priority=MEDIUM"
                 + "&assigneeUserId=" + owner.userId()
                 + "&dueFrom=2026-08-20&dueTo=2026-08-20", member));
         assertThat(combined.path("totalElements").asLong()).isEqualTo(1);
@@ -425,6 +427,183 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void subitemsAreNestedIdempotentRootFilteredAndSiblingScoped() throws Exception {
+        String contentCollection = "/api/v1/contents/" + contentId + "/work-items";
+        JsonNode parent = createWorkItem(contentCollection, "父工作项", "HIGH", member.userId(), null);
+        JsonNode emptyParent = createWorkItem(contentCollection, "空父工作项", null, null, null);
+        UUID otherContentId = UUID.fromString(createContent("SUB_TASKS", "子任务").path("id").asText());
+        String subitemsPath = "/api/v1/work-items/" + parent.path("id").asText() + "/subitems";
+
+        assertThat(get(subitemsPath, outsider).statusCode()).isEqualTo(404);
+        assertThat(body(get(subitemsPath, member)).path("items").isEmpty()).isTrue();
+
+        UUID createKey = UUID.randomUUID();
+        String firstBody = subitemBody(otherContentId, "跨 Content 子项一", "MEDIUM");
+        HttpResponse<String> firstCreated = mutate("POST", subitemsPath, member,
+                firstBody, null, createKey);
+        assertThat(firstCreated.statusCode()).as(firstCreated.body()).isEqualTo(201);
+        assertThat(firstCreated.headers().firstValue("location")).isPresent();
+        assertThat(firstCreated.headers().firstValue("etag")).contains("\"0\"");
+        JsonNode first = json.readTree(firstCreated.body());
+        UUID firstId = UUID.fromString(first.path("id").asText());
+        assertThat(first.path("contentId").asText()).isEqualTo(otherContentId.toString());
+        assertThat(first.path("type").asText()).isEqualTo("TASK");
+
+        HttpResponse<String> replay = mutate("POST", subitemsPath, member,
+                firstBody, null, createKey);
+        assertThat(replay.statusCode()).isEqualTo(201);
+        assertThat(replay.body()).isEqualTo(firstCreated.body());
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_relation "
+                        + "WHERE right_work_item_id=:id AND deleted_at IS NULL")
+                .param("id", firstId).query(Long.class).single()).isOne();
+
+        JsonNode second = json.readTree(mutate("POST", subitemsPath, member,
+                subitemBody(contentId, "同 Content 子项二", "LOW"), null,
+                UUID.randomUUID()).body());
+        UUID secondId = UUID.fromString(second.path("id").asText());
+
+        JsonNode direct = body(get(subitemsPath, member));
+        assertThat(titles(direct)).containsExactly("同 Content 子项二", "跨 Content 子项一");
+        assertThat(direct.path("items").get(0).path("subitemCount").asLong()).isZero();
+
+        JsonNode roots = body(get("/api/v1/projects/" + PROJECT_ID + "/work-items", member));
+        assertThat(ids(roots)).containsExactlyInAnyOrder(
+                parent.path("id").asText(), emptyParent.path("id").asText());
+        JsonNode parentSummary = java.util.stream.StreamSupport.stream(
+                        roots.path("items").spliterator(), false)
+                .filter(node -> node.path("id").asText().equals(parent.path("id").asText()))
+                .findFirst().orElseThrow();
+        assertThat(parentSummary.path("subitemCount").asLong()).isEqualTo(2L);
+        assertThat(body(get("/api/v1/contents/" + otherContentId + "/work-items", member))
+                .path("totalElements").asLong()).isZero();
+
+        HttpResponse<String> nested = mutate("POST", "/api/v1/work-items/" + firstId + "/subitems",
+                member, subitemBody(contentId, "不允许的孙项", null), null, UUID.randomUUID());
+        assertThat(nested.statusCode()).as(nested.body()).isEqualTo(409);
+        assertThat(json.readTree(nested.body()).path("code").asText())
+                .isEqualTo("INVALID_STATE_TRANSITION");
+
+        HttpResponse<String> moved = mutate("POST", subitemsPath + "/" + secondId + "/order-moves",
+                member, "{\"previousVisibleWorkItemId\":null,\"nextVisibleWorkItemId\":\""
+                        + firstId + "\"}", "\"0\"", UUID.randomUUID());
+        assertThat(moved.statusCode()).as(moved.body()).isEqualTo(200);
+        assertThat(moved.headers().firstValue("etag")).contains("\"1\"");
+        assertThat(mutate("POST", subitemsPath + "/" + secondId + "/order-moves", member,
+                "{\"previousVisibleWorkItemId\":null,\"nextVisibleWorkItemId\":\""
+                        + firstId + "\"}", "\"0\"", UUID.randomUUID()).statusCode()).isEqualTo(412);
+
+        List<String> relationEvents = jdbc.sql("""
+                SELECT payload_json::text FROM yumpoo.outbox_event
+                 WHERE event_type='workitem.work_item_relation_created'
+                 ORDER BY occurred_at
+                """).query(String.class).list();
+        assertThat(relationEvents).hasSize(2);
+        JsonNode relationEvent = json.readTree(relationEvents.getFirst());
+        assertThat(relationEvent.path("relationType").asText()).isEqualTo("PARENT_CHILD");
+        assertThat(relationEvent.path("leftWorkItemId").asText()).isEqualTo(parent.path("id").asText());
+        assertThat(relationEvent.path("rightWorkItemId").asText()).isEqualTo(firstId.toString());
+        assertThat(relationEvent.has("title")).isFalse();
+    }
+
+    @Test
+    void projectCollectionAggregatesContentsAndSupportsNullablePriority() throws Exception {
+        String firstCollection = "/api/v1/contents/" + contentId + "/work-items";
+        UUID secondContentId = UUID.fromString(createContent("DEFECTS", "缺陷").path("id").asText());
+        String secondCollection = "/api/v1/contents/" + secondContentId + "/work-items";
+        JsonNode prioritized = createWorkItem(firstCollection, "有优先级", "LOW", member.userId(), null);
+        JsonNode nullable = createWorkItem(secondCollection, "待定优先级", null, null, null);
+        String projectCollection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+
+        assertThat(get(projectCollection, null).statusCode()).isEqualTo(401);
+        assertThat(get(projectCollection, outsider).statusCode()).isEqualTo(404);
+        assertThat(get(projectCollection, admin).statusCode()).isEqualTo(200);
+
+        JsonNode aggregate = body(get(projectCollection + "?sort=PRIORITY,ASC", member));
+        assertThat(aggregate.path("items").size()).isEqualTo(2);
+        assertThat(aggregate.path("nextCursor").isNull()).isTrue();
+        assertThat(titles(aggregate)).containsExactly("有优先级", "待定优先级");
+        assertThat(aggregate.path("items").get(1).path("priority").isNull()).isTrue();
+        assertThat(ids(aggregate)).containsExactlyInAnyOrder(
+                prioritized.path("id").asText(), nullable.path("id").asText());
+        JsonNode light = aggregate.path("items").get(0);
+        assertThat(light.path("contentName").asText()).isNotBlank();
+        assertThat(light.has("description")).isFalse();
+        assertThat(light.has("notes")).isFalse();
+        JsonNode firstCursorPage = body(get(projectCollection + "?limit=1", member));
+        assertThat(firstCursorPage.path("items").size()).isOne();
+        String projectCursor = firstCursorPage.path("nextCursor").asText();
+        assertThat(projectCursor).isNotBlank();
+        JsonNode secondCursorPage = body(get(projectCollection + "?limit=1&cursor="
+                + URLEncoder.encode(projectCursor, StandardCharsets.UTF_8), member));
+        assertThat(secondCursorPage.path("items").size()).isOne();
+        assertThat(ids(secondCursorPage)).doesNotContain(ids(firstCursorPage).getFirst());
+        assertThat(get(projectCollection + "?limit=101", member).statusCode()).isEqualTo(422);
+        assertThat(get(projectCollection + "?limit=1&q=other&cursor="
+                + URLEncoder.encode(projectCursor, StandardCharsets.UTF_8), member).statusCode())
+                .isEqualTo(422);
+        assertThat(get(projectCollection + "?cursor=" + projectCursor + "x", member).statusCode())
+                .isEqualTo(422);
+
+        String filterOptions = projectCollection + "/filter-options";
+        assertThat(get(filterOptions + "?field=STATUS", outsider).statusCode()).isEqualTo(404);
+        assertThat(get(filterOptions + "?field=STATUS&limit=101", member).statusCode()).isEqualTo(422);
+        JsonNode statusOptions = body(get(filterOptions + "?field=STATUS&limit=25", member));
+        JsonNode initialOption = null;
+        for (JsonNode option : statusOptions.path("items"))
+            if ("NOT_STARTED".equals(option.path("value").asText())) initialOption = option;
+        assertThat(initialOption).isNotNull();
+        assertThat(initialOption.path("count").asInt()).isEqualTo(2);
+        assertThat(statusOptions.path("nextCursor").isNull()).isTrue();
+
+        String nullableResource = "/api/v1/work-items/" + nullable.path("id").asText();
+        HttpResponse<String> assigned = mutate("PATCH", nullableResource + "/assignee", member,
+                "{\"assigneeUserId\":\"" + member.userId() + "\"}", "\"0\"", UUID.randomUUID());
+        assertThat(assigned.statusCode()).as(assigned.body()).isEqualTo(200);
+        HttpResponse<String> reprioritized = mutate("PATCH", nullableResource + "/priority", member,
+                "{\"priority\":\"HIGH\"}", "\"1\"", UUID.randomUUID());
+        assertThat(reprioritized.statusCode()).as(reprioritized.body()).isEqualTo(200);
+        HttpResponse<String> dated = mutate("PATCH", nullableResource + "/due-date", member,
+                "{\"dueDate\":\"2026-09-30\"}", "\"2\"", UUID.randomUUID());
+        assertThat(dated.statusCode()).as(dated.body()).isEqualTo(200);
+        assertThat(json.readTree(dated.body()).path("dueDate").asText()).isEqualTo("2026-09-30");
+
+        var updatedAtBeforeMove = jdbc.sql("SELECT updated_at FROM yumpoo.work_item WHERE id=:id")
+                .param("id", UUID.fromString(nullable.path("id").asText()))
+                .query(java.time.OffsetDateTime.class).single();
+        HttpResponse<String> moved = mutate("POST", projectCollection + "/"
+                        + nullable.path("id").asText() + "/order-moves", member,
+                "{\"previousVisibleWorkItemId\":null,\"nextVisibleWorkItemId\":\""
+                        + prioritized.path("id").asText() + "\"}", "\"3\"", UUID.randomUUID());
+        assertThat(moved.statusCode()).as(moved.body()).isEqualTo(200);
+        assertThat(jdbc.sql("SELECT updated_at FROM yumpoo.work_item WHERE id=:id")
+                .param("id", UUID.fromString(nullable.path("id").asText()))
+                .query(java.time.OffsetDateTime.class).single()).isEqualTo(updatedAtBeforeMove);
+        assertThat(jdbc.sql("SELECT payload_json->'priority' = 'null'::jsonb FROM yumpoo.outbox_event "
+                        + "WHERE aggregate_id=:id AND event_type='workitem.work_item_created'")
+                .param("id", UUID.fromString(nullable.path("id").asText()))
+                .query(Boolean.class).single()).isTrue();
+
+        JsonNode filtered = body(get(projectCollection + "?priority=LOW", member));
+        assertThat(titles(filtered)).containsExactly("有优先级");
+        assertThat(get(projectCollection + "?view=KANBAN", member).statusCode()).isEqualTo(422);
+        assertThat(get(projectCollection + "?view=KANBAN&status=NOT_STARTED&status=DONE", member)
+                .statusCode()).isEqualTo(422);
+        JsonNode lane = body(get(projectCollection + "?view=KANBAN&status=NOT_STARTED", member));
+        assertThat(lane.path("items").size()).isEqualTo(2);
+        assertThat(lane.path("nextCursor").isNull()).isTrue();
+
+        String resource = "/api/v1/work-items/" + prioritized.path("id").asText();
+        HttpResponse<String> cleared = mutate("PATCH", resource, member,
+                workItemBody("有优先级", null, member.userId(), null, null,
+                        null, null, null), "\"0\"", null);
+        assertThat(cleared.statusCode()).as(cleared.body()).isEqualTo(200);
+        assertThat(json.readTree(cleared.body()).path("priority").isNull()).isTrue();
+        assertThat(jdbc.sql("SELECT priority IS NULL FROM yumpoo.work_item WHERE id=:id")
+                .param("id", UUID.fromString(prioritized.path("id").asText()))
+                .query(Boolean.class).single()).isTrue();
+    }
+
+    @Test
     void statusTransitionIsExplicitIdempotentAndCapabilityDriven() throws Exception {
         String collection = "/api/v1/contents/" + contentId + "/work-items";
         HttpResponse<String> created = mutate("POST", collection, member,
@@ -435,15 +614,16 @@ class WorkItemHttpIT {
         UUID workItemId = UUID.fromString(createdJson.path("id").asText());
         String transitionPath = created.headers().firstValue("location").orElseThrow()
                 + "/transitions";
-        assertThat(transitionTargets(createdJson)).containsExactly("READY", "CANCELED");
+        assertThat(transitionTargets(createdJson)).contains("READY", "IN_REVIEW", "CANCELED")
+                .doesNotContain("NOT_STARTED");
 
         long eventsBefore = statusEventCount(workItemId);
         HttpResponse<String> illegal = mutate("POST", transitionPath, member,
-                transitionBody("IN_REVIEW", null), "\"0\"", UUID.randomUUID());
+                transitionBody("NOT_STARTED", null), "\"0\"", UUID.randomUUID());
         assertThat(illegal.statusCode()).as(illegal.body()).isEqualTo(409);
         assertThat(statusEventCount(workItemId)).isEqualTo(eventsBefore);
         assertThat(json.readTree(get("/api/v1/work-items/" + workItemId, member).body())
-                .path("statusCode").asText()).isEqualTo("BACKLOG");
+                .path("statusCode").asText()).isEqualTo("NOT_STARTED");
 
         UUID replayKey = UUID.randomUUID();
         String readyBody = transitionBody("READY", "  需求已澄清  ");
@@ -456,7 +636,8 @@ class WorkItemHttpIT {
         assertThat(readyJson.path("statusCategory").asText()).isEqualTo("TODO");
         assertThat(readyJson.path("description").asText()).isEqualTo("保留描述");
         assertThat(readyJson.path("notes").asText()).isEqualTo("保留备注");
-        assertThat(transitionTargets(readyJson)).containsExactly("IN_PROGRESS", "CANCELED");
+        assertThat(transitionTargets(readyJson)).contains("IN_PROGRESS", "IN_REVIEW", "CANCELED")
+                .doesNotContain("READY");
 
         HttpResponse<String> replay = mutate("POST", transitionPath, member,
                 readyBody, "\"0\"", replayKey);
@@ -467,7 +648,7 @@ class WorkItemHttpIT {
                 SELECT payload_json::text FROM yumpoo.outbox_event
                  WHERE aggregate_id=:id AND event_type='workitem.work_item_status_changed'
                 """).param("id", workItemId).query(String.class).single());
-        assertThat(event.path("fromStatus").asText()).isEqualTo("BACKLOG");
+        assertThat(event.path("fromStatus").asText()).isEqualTo("NOT_STARTED");
         assertThat(event.path("toStatus").asText()).isEqualTo("READY");
         assertThat(event.path("resolution").asText()).isEqualTo("需求已澄清");
         assertThat(event.has("description")).isFalse();
@@ -500,7 +681,8 @@ class WorkItemHttpIT {
         JsonNode doneJson = json.readTree(done.body());
         assertThat(doneJson.path("statusCategory").asText()).isEqualTo("DONE");
         assertThat(doneJson.path("rowVersion").asLong()).isEqualTo(4);
-        assertThat(doneJson.path("capabilities").path("availableTransitions").isEmpty()).isTrue();
+        assertThat(transitionTargets(doneJson))
+                .containsExactly("NOT_STARTED", "BACKLOG", "READY", "IN_PROGRESS", "IN_REVIEW", "CANCELED");
         assertThat(mutate("POST", "/api/v1/contents/" + contentId + "/archive",
                 owner, "", contentEtag, UUID.randomUUID()).statusCode()).isEqualTo(200);
     }
@@ -508,10 +690,10 @@ class WorkItemHttpIT {
     @Test
     void allFixedTemplatesExposeAndExecuteTheirInitialTransition() throws Exception {
         List<TemplateCase> cases = List.of(
-                new TemplateCase("M212_RND", "PRODUCT_DEVELOPMENT", "RND", "BACKLOG", "READY", "TODO"),
-                new TemplateCase("M212_PRE", "PRE_SALES", "PRE_SALES", "TO_ASSESS", "PREPARING", "IN_PROGRESS"),
-                new TemplateCase("M212_IMPL", "IMPLEMENTATION", "IMPLEMENTATION", "PLANNED", "IN_PROGRESS", "IN_PROGRESS"),
-                new TemplateCase("M212_HYPER", "HYPERCARE", "HYPERCARE", "OPEN", "DIAGNOSING", "IN_PROGRESS")
+                new TemplateCase("M212_RND", "PRODUCT_DEVELOPMENT", "RND", "NOT_STARTED", "READY", "TODO"),
+                new TemplateCase("M212_PRE", "PRE_SALES", "PRE_SALES", "NOT_STARTED", "PREPARING", "IN_PROGRESS"),
+                new TemplateCase("M212_IMPL", "IMPLEMENTATION", "IMPLEMENTATION", "NOT_STARTED", "IN_PROGRESS", "IN_PROGRESS"),
+                new TemplateCase("M212_HYPER", "HYPERCARE", "HYPERCARE", "NOT_STARTED", "DIAGNOSING", "IN_PROGRESS")
         );
 
         for (TemplateCase fixture : cases) {
@@ -596,14 +778,14 @@ class WorkItemHttpIT {
         JsonNode third = createWorkItem(collection, "第三张", "HIGH", null, null);
 
         assertThat(get(collection + "?view=KANBAN", member).statusCode()).isEqualTo(422);
-        assertThat(get(collection + "?view=KANBAN&status=BACKLOG&status=READY", member).statusCode())
+        assertThat(get(collection + "?view=KANBAN&status=NOT_STARTED&status=READY", member).statusCode())
                 .isEqualTo(422);
-        assertThat(get(collection + "?view=KANBAN&status=BACKLOG&sort=TITLE,ASC", member).statusCode())
+        assertThat(get(collection + "?view=KANBAN&status=NOT_STARTED&sort=TITLE,ASC", member).statusCode())
                 .isEqualTo(422);
         JsonNode firstPage = json.readTree(get(
-                collection + "?view=KANBAN&status=BACKLOG&page=0&size=2", member).body());
+                collection + "?view=KANBAN&status=NOT_STARTED&page=0&size=2", member).body());
         JsonNode secondPage = json.readTree(get(
-                collection + "?view=KANBAN&status=BACKLOG&page=1&size=2", member).body());
+                collection + "?view=KANBAN&status=NOT_STARTED&page=1&size=2", member).body());
         assertThat(titles(firstPage)).containsExactly("第三张", "第二张");
         assertThat(titles(secondPage)).containsExactly("第一张");
         assertThat(firstPage.path("items").get(0).path("etag").asText()).isEqualTo("\"0\"");
@@ -613,7 +795,7 @@ class WorkItemHttpIT {
         UUID firstId = UUID.fromString(first.path("id").asText());
         String firstMovePath = "/api/v1/work-items/" + firstId + "/rank-moves";
         UUID key = UUID.randomUUID();
-        String startBody = rankMoveBody("BACKLOG", "START", null, null);
+        String startBody = rankMoveBody("NOT_STARTED", "START", null, null);
         HttpResponse<String> moved = mutate("POST", firstMovePath, member,
                 startBody, "\"0\"", key);
         assertThat(moved.statusCode()).as(moved.body()).isEqualTo(200);
@@ -624,7 +806,7 @@ class WorkItemHttpIT {
         assertThat(replay.body()).isEqualTo(moved.body());
         assertThat(rankEventCount(firstId)).isEqualTo(1);
         assertThat(titles(json.readTree(get(
-                collection + "?view=KANBAN&status=BACKLOG", member).body())))
+                collection + "?view=KANBAN&status=NOT_STARTED", member).body())))
                 .containsExactly("第一张", "第三张", "第二张");
 
         long eventsBeforeNoop = workItemEventCount();
@@ -635,10 +817,10 @@ class WorkItemHttpIT {
         assertThat(workItemEventCount()).isEqualTo(eventsBeforeNoop);
 
         assertThat(mutate("POST", firstMovePath, member,
-                rankMoveBody("BACKLOG", "START", UUID.fromString(second.path("id").asText()), null),
+                rankMoveBody("NOT_STARTED", "START", UUID.fromString(second.path("id").asText()), null),
                 "\"1\"", UUID.randomUUID()).statusCode()).isEqualTo(422);
         assertThat(mutate("POST", firstMovePath, member,
-                rankMoveBody("BACKLOG", "BEFORE", UUID.randomUUID(), null),
+                rankMoveBody("NOT_STARTED", "BEFORE", UUID.randomUUID(), null),
                 "\"1\"", UUID.randomUUID()).statusCode()).isEqualTo(409);
         assertThat(mutate("POST", firstMovePath, member, startBody,
                 null, UUID.randomUUID()).statusCode()).isEqualTo(428);
@@ -675,13 +857,13 @@ class WorkItemHttpIT {
             Future<HttpResponse<String>> top = pool.submit(() -> {
                 start.await();
                 return mutate("POST", path, member,
-                        rankMoveBody("BACKLOG", "START", null, null),
+                        rankMoveBody("NOT_STARTED", "START", null, null),
                         "\"0\"", UUID.randomUUID());
             });
             Future<HttpResponse<String>> bottom = pool.submit(() -> {
                 start.await();
                 return mutate("POST", path, member,
-                        rankMoveBody("BACKLOG", "END", null, null),
+                        rankMoveBody("NOT_STARTED", "END", null, null),
                         "\"0\"", UUID.randomUUID());
             });
             start.countDown();
@@ -691,7 +873,7 @@ class WorkItemHttpIT {
         }
         assertThat(rankEventCount(firstId)).isEqualTo(1);
         assertThat(jdbc.sql("SELECT count(DISTINCT rank) = count(*) FROM yumpoo.work_item "
-                        + "WHERE content_id=:id AND status_code='BACKLOG' AND deleted_at IS NULL")
+                        + "WHERE content_id=:id AND status_code='NOT_STARTED' AND deleted_at IS NULL")
                 .param("id", contentId).query(Boolean.class).single()).isTrue();
     }
 
@@ -1410,6 +1592,14 @@ class WorkItemHttpIT {
         return json.writeValueAsString(body);
     }
 
+    private String subitemBody(UUID targetContentId, String title, String priority) throws Exception {
+        var body = json.createObjectNode();
+        body.put("contentId", targetContentId.toString());
+        body.put("title", title);
+        if (priority == null) body.putNull("priority"); else body.put("priority", priority);
+        return json.writeValueAsString(body);
+    }
+
     private String transitionBody(String toStatus, String resolution) throws Exception {
         var body = json.createObjectNode();
         body.put("toStatus", toStatus);
@@ -1456,6 +1646,7 @@ class WorkItemHttpIT {
                 """).param("ownerMembership", UUID.randomUUID()).param("memberMembership", UUID.randomUUID())
                     .param("companyId", COMPANY_ID).param("projectId", PROJECT_ID)
                     .param("ownerId", ownerId).param("memberId", memberId).update();
+            labels.initialize(COMPANY_ID, PROJECT_ID, "RND", 1, clock.instant());
         });
     }
 
@@ -1485,6 +1676,7 @@ class WorkItemHttpIT {
                     .param("memberMembership", UUID.randomUUID()).param("companyId", COMPANY_ID)
                     .param("projectId", projectId).param("ownerId", owner.userId())
                     .param("memberId", member.userId()).update();
+            labels.initialize(COMPANY_ID, projectId, templateKey, 1, clock.instant());
         });
         return projectId;
     }
@@ -1498,6 +1690,8 @@ class WorkItemHttpIT {
         jdbc.sql("DELETE FROM yumpoo.work_item_update_mention WHERE company_id=:id")
                 .param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_update WHERE company_id=:id")
+                .param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_relation WHERE company_id=:id")
                 .param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_project_counter WHERE company_id=:id").param("id", COMPANY_ID).update();

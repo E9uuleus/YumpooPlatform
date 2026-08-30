@@ -40,6 +40,7 @@ const api = vi.hoisted(() => ({
   getContent: vi.fn(),
   updateContent: vi.fn(),
   listContentWorkItems: vi.fn(),
+  getProjectWorkItemLabels: vi.fn(),
   createWorkItem: vi.fn(),
   getWorkItem: vi.fn(),
   updateWorkItem: vi.fn(),
@@ -66,6 +67,7 @@ vi.mock('../../api/client', () => ({
     getContent: api.getContent, updateContent: api.updateContent },
   workItemsApi: {
     listContentWorkItems: api.listContentWorkItems,
+    getProjectWorkItemLabels: api.getProjectWorkItemLabels,
     createWorkItem: api.createWorkItem,
     getWorkItem: api.getWorkItem,
     updateWorkItem: api.updateWorkItem,
@@ -130,14 +132,15 @@ function catalog(item = content()): ProjectContentCatalog {
     items: [item], canCreate: true, blueprintOptions: [],
     workflowStatusOptions: [
       { statusCode: 'BACKLOG', displayName: '待办', statusCategory: WorkflowStatusCategory.Todo,
-        sortOrder: 10, initial: true, terminal: false },
+        colorToken: 'BLUE' as never, sortOrder: 10, active: true, protectedLabel: false, initial: true, terminal: false },
       { statusCode: 'IN_PROGRESS', displayName: '进行中', statusCategory: WorkflowStatusCategory.InProgress,
-        sortOrder: 20, initial: false, terminal: false },
+        colorToken: 'ORANGE' as never, sortOrder: 20, active: true, protectedLabel: false, initial: false, terminal: false },
       { statusCode: 'READY', displayName: '就绪', statusCategory: WorkflowStatusCategory.InProgress,
-        sortOrder: 30, initial: false, terminal: false },
+        colorToken: 'BLUE' as never, sortOrder: 30, active: true, protectedLabel: false, initial: false, terminal: false },
       { statusCode: 'DONE', displayName: '已完成', statusCategory: WorkflowStatusCategory.Done,
-        sortOrder: 40, initial: false, terminal: true },
+        colorToken: 'GREEN' as never, sortOrder: 40, active: true, protectedLabel: false, initial: false, terminal: true },
     ],
+    priorityOptions: [], canManageLabels: true,
   }
 }
 
@@ -152,8 +155,8 @@ function summary(id = 'work-item-1', statusCode = 'BACKLOG', title = '实现核�
     timelineEndDate: new Date('2026-08-29T00:00:00.000Z'),
     dueDate: new Date('2026-08-30T00:00:00.000Z'),
     rowVersion: 0, etag: '"0"',
-    capabilities: { canEditFields: true, canMoveInKanban: true, canDelete: true,
-      canRestore: false, availableTransitions: defaultTransitions },
+    capabilities: { canEditFields: true, canMoveInKanban: true, canMoveInProjectOrder: false,
+      canDiscuss: true, canDelete: true, canRestore: false, availableTransitions: defaultTransitions },
     updatedAt: new Date('2026-08-22T02:00:00Z'),
   }
 }
@@ -172,7 +175,7 @@ function detail(
   return {
     ...summary(), description, notes: null,
     rowVersion: 0, etag: '"0"', capabilities: { canEditFields: true, canMoveInKanban: true,
-      canDelete: true, canRestore: false, availableTransitions },
+      canMoveInProjectOrder: false, canDiscuss: true, canDelete: true, canRestore: false, availableTransitions },
     createdAt: new Date('2026-08-22T01:00:00Z'),
     deleted: false, deletedAt: null, deletedByUserId: null, deleteReason: null,
   }
@@ -201,6 +204,15 @@ describe('M2-10 Content 工作项工作区', () => {
       page: 0, size: 100, totalElements: 1, totalPages: 1,
     })
     api.listProjectContents.mockResolvedValue(catalog())
+    api.getProjectWorkItemLabels.mockResolvedValue({
+      statuses: catalog().workflowStatusOptions.map(status => ({
+        code: status.statusCode, displayName: status.displayName, colorToken: status.colorToken,
+        statusCategory: status.statusCategory, sortOrder: status.sortOrder, active: true,
+        protectedLabel: status.protectedLabel, inUse: true,
+      })),
+      priorities: [{ code: 'MEDIUM', displayName: '中', colorToken: 'TEAL', sortOrder: 20,
+        active: true, inUse: true }], rowVersion: 0, etag: '"0"', canManage: true,
+    } as never)
     api.getContent.mockResolvedValue(content())
     api.updateContent.mockResolvedValue(content())
     api.listContentWorkItems.mockResolvedValue(page([summary()]))
@@ -210,14 +222,14 @@ describe('M2-10 Content 工作项工作区', () => {
     api.transitionWorkItem.mockResolvedValue({
       ...detail(), statusCode: 'READY', statusCategory: WorkItemStatusCategory.InProgress,
       rowVersion: 1, etag: '"1"', capabilities: { canEditFields: true, canMoveInKanban: true,
-        canDelete: true, canRestore: false, availableTransitions: [] },
+        canMoveInProjectOrder: false, canDiscuss: true, canDelete: true, canRestore: false, availableTransitions: [] },
     })
     api.rankMoveWorkItem.mockResolvedValue(detail())
     api.deleteWorkItem.mockResolvedValue({
       ...detail(), rowVersion: 1, etag: '"1"', deleted: true,
       deletedAt: new Date('2026-08-24T01:00:00Z'), deletedByUserId: 'owner-1',
       deleteReason: '需求已合并', capabilities: { canEditFields: false, canMoveInKanban: false,
-        canDelete: false, canRestore: true, availableTransitions: [] },
+        canMoveInProjectOrder: false, canDiscuss: false, canDelete: false, canRestore: true, availableTransitions: [] },
     })
     api.restoreWorkItem.mockResolvedValue({ ...detail(), rowVersion: 2, etag: '"2"' })
     api.listWorkItemUpdates.mockResolvedValue({ items: [], nextCursor: null })
@@ -350,7 +362,7 @@ describe('M2-10 Content 工作项工作区', () => {
   it('创建请求提交完整八字段快照并用 UTC 保持自然日', async () => {
     const wrapper = mountView(); await flushPromises()
     const vm = wrapper.vm as unknown as {
-      createForm: { title: string; priority: WorkItemPriority; assigneeUserId: string;
+      createForm: { title: string; priority: WorkItemPriority | null; assigneeUserId: string;
         description: string; notes: string; timelineStartDate: string;
         timelineEndDate: string; dueDate: string }
       createWorkItem: () => Promise<void>
@@ -367,7 +379,7 @@ describe('M2-10 Content 工作项工作区', () => {
     expect(request).toEqual({
       contentId: 'content-1', xXSRFTOKEN: 'csrf-token', idempotencyKey: expect.any(String),
       workItemCreateRequest: {
-        title: '新任务', priority: WorkItemPriority.Medium, assigneeUserId: 'owner-1',
+        title: '新任务', priority: null, assigneeUserId: 'owner-1',
         description: '描述', notes: null,
         timelineStartDate: new Date('2026-08-22T00:00:00.000Z'),
         timelineEndDate: new Date('2026-08-29T00:00:00.000Z'),
@@ -477,8 +489,8 @@ describe('M2-10 Content 工作项工作区', () => {
       statusCategory: WorkItemStatusCategory.InProgress, requiresResolution: true,
     }
     const item = { ...summary(), capabilities: {
-      canEditFields: true, canMoveInKanban: true, canDelete: true,
-      canRestore: false, availableTransitions: [required],
+      canEditFields: true, canMoveInKanban: true, canMoveInProjectOrder: false,
+      canDiscuss: true, canDelete: true, canRestore: false, availableTransitions: [required],
     } }
     api.listContentWorkItems.mockImplementation(({ status }: { status?: Set<string> }) =>
       Promise.resolve(page(status?.has('BACKLOG') ? [item] : [])))
@@ -642,8 +654,8 @@ describe('M2-10 Content 工作项工作区', () => {
     const firstTombstone = {
       ...detail(), id: 'work-item-1', rowVersion: 1, etag: '"1"', deleted: true,
       deletedAt: new Date(), deletedByUserId: 'owner-1', deleteReason: '需求已合并',
-      capabilities: { canEditFields: false, canMoveInKanban: false, canDelete: false,
-        canRestore: true, availableTransitions: [] },
+      capabilities: { canEditFields: false, canMoveInKanban: false, canMoveInProjectOrder: false,
+        canDiscuss: false, canDelete: false, canRestore: true, availableTransitions: [] },
     }
     const secondTombstone = { ...firstTombstone, id: 'work-item-2', itemNo: 'PROJECT_1-2' }
     api.deleteWorkItem.mockResolvedValueOnce(firstTombstone).mockResolvedValueOnce(secondTombstone)
@@ -726,8 +738,8 @@ describe('M2-10 Content 工作项工作区', () => {
   it('终态或只读详情不显示状态迁移入口', async () => {
     api.getWorkItem.mockResolvedValue({
       ...detail('安全纯文本', []),
-      capabilities: { canEditFields: false, canMoveInKanban: false, canDelete: false,
-        canRestore: false, availableTransitions: [] },
+      capabilities: { canEditFields: false, canMoveInKanban: false, canMoveInProjectOrder: false,
+        canDiscuss: false, canDelete: false, canRestore: false, availableTransitions: [] },
     })
     const wrapper = mountView(); await flushPromises()
     const vm = wrapper.vm as unknown as { openDetail: (item: WorkItemSummary) => Promise<void> }

@@ -15,6 +15,7 @@ import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -70,6 +71,7 @@ class ContentHttpIT {
     @Autowired private Clock clock;
     @Autowired private ObjectMapper json;
     @Autowired private PlatformTransactionManager transactionManager;
+    @Autowired private WorkItemLabelRepository labels;
 
     private ActorFixture owner;
     private ActorFixture member;
@@ -259,10 +261,10 @@ class ContentHttpIT {
     @Test
     void allFixedTemplatesAndRetiredProjectTemplateRemainAuthoritative() throws Exception {
         String[][] templates = {
-                {"29000000-0000-4000-8000-000000000311", "RND", "PRODUCT_DEVELOPMENT", "BACKLOG"},
-                {"29000000-0000-4000-8000-000000000312", "PRE_SALES", "PRE_SALES", "TO_ASSESS"},
-                {"29000000-0000-4000-8000-000000000313", "IMPLEMENTATION", "IMPLEMENTATION", "PLANNED"},
-                {"29000000-0000-4000-8000-000000000314", "HYPERCARE", "HYPERCARE", "OPEN"}
+                {"29000000-0000-4000-8000-000000000311", "RND", "PRODUCT_DEVELOPMENT"},
+                {"29000000-0000-4000-8000-000000000312", "PRE_SALES", "PRE_SALES"},
+                {"29000000-0000-4000-8000-000000000313", "IMPLEMENTATION", "IMPLEMENTATION"},
+                {"29000000-0000-4000-8000-000000000314", "HYPERCARE", "HYPERCARE"}
         };
         for (int index = 0; index < templates.length; index++) {
             String[] template = templates[index];
@@ -277,7 +279,7 @@ class ContentHttpIT {
             assertThat(result.path("appliedTemplateKey").asText()).isEqualTo(template[1]);
             assertThat(result.path("workItemType").asText()).isEqualTo("REQUIREMENT");
             assertThat(result.path("viewConfig").path("kanban").path("statusGroups").get(0)
-                    .path("statusCodes").get(0).asText()).isEqualTo(template[3]);
+                    .path("statusCodes").get(0).asText()).isEqualTo("NOT_STARTED");
         }
 
         createRetiredTemplate();
@@ -373,6 +375,7 @@ class ContentHttpIT {
                 """).param("ownerMembership", UUID.randomUUID()).param("memberMembership", UUID.randomUUID())
                 .param("companyId", COMPANY_ID).param("projectId", projectId)
                 .param("ownerId", ownerId).param("memberId", memberId).update();
+            labels.initialize(COMPANY_ID, projectId, templateKey, templateVersion, clock.instant());
         });
     }
 

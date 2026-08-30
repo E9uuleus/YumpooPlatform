@@ -2,7 +2,6 @@ package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
-import com.yumpoo.platform.workitem.domain.WorkItemPriority;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -20,8 +19,9 @@ import static com.yumpoo.platform.workitem.application.ContentViewConfig.SortFie
 public record WorkItemQuery(
         String query,
         Set<String> statuses,
-        Set<WorkItemPriority> priorities,
+        Set<String> priorities,
         Set<UUID> assigneeUserIds,
+        Set<UUID> contentIds,
         LocalDate dueFrom,
         LocalDate dueTo,
         Instant updatedAfter,
@@ -31,6 +31,7 @@ public record WorkItemQuery(
         statuses = Set.copyOf(statuses);
         priorities = Set.copyOf(priorities);
         assigneeUserIds = Set.copyOf(assigneeUserIds);
+        contentIds = Set.copyOf(contentIds);
         sorts = List.copyOf(sorts);
     }
 
@@ -38,6 +39,7 @@ public record WorkItemQuery(
 
     public record Request(String query, Collection<String> statuses,
                           Collection<String> priorities, Collection<UUID> assigneeUserIds,
+                          Collection<UUID> contentIds,
                           LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter,
                           Collection<String> sorts) {}
 
@@ -49,6 +51,7 @@ public record WorkItemQuery(
                 statuses(request.statuses(), allowedStatuses), priorities(request.priorities()),
                 request.assigneeUserIds() == null ? Set.of()
                         : new LinkedHashSet<>(request.assigneeUserIds()),
+                request.contentIds() == null ? Set.of() : new LinkedHashSet<>(request.contentIds()),
                 request.dueFrom(), request.dueTo(), request.updatedAfter(), sorts(request.sorts()));
     }
 
@@ -69,21 +72,22 @@ public record WorkItemQuery(
         return result;
     }
 
-    private static Set<WorkItemPriority> priorities(Collection<String> requested) {
+    private static Set<String> priorities(Collection<String> requested) {
         if (requested == null) return Set.of();
-        Set<WorkItemPriority> result = new LinkedHashSet<>();
+        Set<String> result = new LinkedHashSet<>();
         for (String value : requested) {
-            try { result.add(WorkItemPriority.valueOf(value)); }
-            catch (IllegalArgumentException | NullPointerException exception) {
+            String normalized = value == null ? null : value.strip();
+            if (normalized == null || !normalized.matches("^[A-Z][A-Z0-9_]{1,31}$")) {
                 throw invalid("priority", "INVALID_VALUE", "优先级筛选值无效");
             }
+            result.add(normalized);
         }
         return result;
     }
 
     private static List<Sort> sorts(Collection<String> requested) {
         if (requested == null || requested.isEmpty())
-            return List.of(new Sort(SortField.ITEM_NO, SortDirection.DESC));
+            return List.of();
         if (requested.size() > 3)
             throw invalid("sort", "TOO_MANY", "最多配置三个排序字段");
         List<Sort> result = new ArrayList<>();

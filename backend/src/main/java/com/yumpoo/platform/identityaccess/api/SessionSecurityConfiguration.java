@@ -19,6 +19,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
 import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.csrf.InvalidCsrfTokenException;
 import org.springframework.security.web.csrf.MissingCsrfTokenException;
@@ -62,7 +63,10 @@ public class SessionSecurityConfiguration {
                         .requireCsrfProtectionMatcher(request ->
                                 SessionRequestContext.present(request)
                                         && !isSafeMethod(request.getMethod()))
-                        .csrfTokenRequestHandler(requestHandler))
+                        .csrfTokenRequestHandler(requestHandler)
+                        // 每请求认证不代表重新登录；CSRF 轮换由会话签发与退出显式管理。
+                        .sessionAuthenticationStrategy(
+                                new NullAuthenticatedSessionStrategy()))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationRequired())
                         .accessDeniedHandler(csrfDenied(errorWriter)))

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-21A",
+  "verifiedSlices": [
+    {
+      "requirementId": "WORK-ITEM-PARENT-CHILD-DATA",
+      "scope": "V43 建立五类关系预留结构，并约束父子同企业、同项目、禁止自关联、有效对子唯一与有效子项单父",
+      "evidence": ["backend/src/main/resources/db/migration/workitem/V43__create_work_item_relation.sql", ".agents/notes/implemented/data/2026-08-28-work-item-parent-child-relations.md"]
+    },
+    {
+      "requirementId": "WORK-ITEM-SUBITEM-API",
+      "scope": "在根项下幂等创建全新直接子项、无分页查询、同父兄弟排序、禁止孙项与跨 Content 派生类型",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemService.java", "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java", "contracts/openapi/yumpoo-v1.yaml"]
+    },
+    {
+      "requirementId": "WORK-ITEM-ROOT-QUERY",
+      "scope": "项目与 Content 的 Table、Kanban、筛选计数排除子项并批量返回未删除直接子项数，详情与 blocker 保留全事项语义",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/workitem/infrastructure/JdbcWorkItemRepository.java", "backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemService.java"]
+    },
+    {
+      "requirementId": "WORK-ITEM-SUBITEM-TABLE",
+      "scope": "项目表格单层懒加载/缓存子表，共享列与编辑能力并隔离选择、排序、新增和拖拽状态",
+      "evidence": ["frontend/web-app/src/views/projects/ProjectOverviewView.vue", "frontend/web-app/src/components/projects/ProjectWorkItemSubitemsTable.vue", "frontend/web-app/src/components/projects/ProjectWorkItemSubitemsTable.spec.ts"]
+    },
+    {
+      "requirementId": "WORK-ITEM-RELATION-EVENT",
+      "scope": "子项创建与最小 PARENT_CHILD 关系事件在同一幂等事务提交，生成 SDK 与事件 Schema 保持漂移门禁",
+      "evidence": ["contracts/events/schemas/workitem.work-item-relation-created-v1.schema.json", "contracts/events/catalog.yaml", "packages/api-client/src/generated/apis/WorkItemsApi.ts"]
+    }
+  ],
+  "deferredRequirements": [
+    { "requirementId": "WORK-ITEM-GENERAL-RELATIONS", "targetMilestone": "M2-21", "scope": "挂接既有项、换父、解除、递归环检测与 RELATED/BLOCKS/SOURCE/DUPLICATE 命令和查询" },
+    { "requirementId": "WORK-ITEM-CROSS-PROJECT-RELATIONS", "targetMilestone": "M2-22", "scope": "跨项目双侧权限与不可见端占位" }
+  ]
+}

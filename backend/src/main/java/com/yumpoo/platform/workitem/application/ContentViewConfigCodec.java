@@ -33,12 +33,29 @@ public final class ContentViewConfigCodec {
 
     public ContentViewConfig normalize(JsonNode input,
             List<ProjectTemplateSnapshot.WorkflowStatus> statuses) {
+        return normalize(input, statuses.stream().map(status -> new StatusOption(
+                        status.statusCode(), status.displayName())).toList(),
+                Set.of("LOW", "MEDIUM", "HIGH", "URGENT"), true);
+    }
+
+    public ContentViewConfig normalizeForCatalog(JsonNode input,
+            List<WorkItemLabelModels.StatusLabel> statuses,
+            List<WorkItemLabelModels.PriorityLabel> priorities) {
+        return normalize(input, statuses.stream().map(status -> new StatusOption(
+                        status.code(), status.displayName())).toList(),
+                priorities.stream().map(WorkItemLabelModels.PriorityLabel::code)
+                        .collect(java.util.stream.Collectors.toSet()), false);
+    }
+
+    private ContentViewConfig normalize(JsonNode input, List<StatusOption> statuses,
+            Set<String> priorities, boolean strictPartition) {
         JsonNode root = input == null ? objectMapper.createObjectNode() : input;
         requireObject(root, "viewConfig");
         ensureSize(root);
         rejectUnknown(root, Set.of("table", "kanban"), "viewConfig");
         ContentViewConfig result = new ContentViewConfig(
-                table(root.get("table"), statuses), kanban(root.get("kanban"), statuses));
+                table(root.get("table"), statuses, priorities),
+                kanban(root.get("kanban"), statuses, strictPartition));
         if (write(result).getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_BYTES)
             throw invalid("viewConfig", "TOO_LARGE", "视图配置不得超过 16 KiB");
         return result;
@@ -51,6 +68,15 @@ public final class ContentViewConfigCodec {
         }
     }
 
+    public ContentViewConfig readForCatalog(String json,
+            List<WorkItemLabelModels.StatusLabel> statuses,
+            List<WorkItemLabelModels.PriorityLabel> priorities) {
+        try { return normalizeForCatalog(objectMapper.readTree(json), statuses, priorities); }
+        catch (JacksonException exception) {
+            throw new IllegalStateException("stored content view config is invalid", exception);
+        }
+    }
+
     public String write(ContentViewConfig config) {
         try { return objectMapper.writeValueAsString(config); }
         catch (JacksonException exception) {
@@ -58,7 +84,7 @@ public final class ContentViewConfigCodec {
         }
     }
 
-    private Table table(JsonNode node, List<ProjectTemplateSnapshot.WorkflowStatus> statuses) {
+    private Table table(JsonNode node, List<StatusOption> statuses, Set<String> priorities) {
         if (node == null || node.isNull()) node = objectMapper.createObjectNode();
         requireObject(node, "viewConfig.table");
         rejectUnknown(node, Set.of("columnOrder", "hiddenColumns", "sort", "filters"),
@@ -72,7 +98,8 @@ public final class ContentViewConfigCodec {
         if (hidden.contains(TableColumn.TITLE))
             throw invalid("viewConfig.table.hiddenColumns", "TITLE_REQUIRED", "标题列不可隐藏");
         List<Sort> sort = sorts(node.get("sort"));
-        return new Table(normalizedOrder, hidden, sort, filters(node.get("filters"), statuses));
+        return new Table(normalizedOrder, hidden, sort,
+                filters(node.get("filters"), statuses, priorities));
     }
 
     private List<Sort> sorts(JsonNode node) {
@@ -93,7 +120,8 @@ public final class ContentViewConfigCodec {
         return result;
     }
 
-    private Filters filters(JsonNode node, List<ProjectTemplateSnapshot.WorkflowStatus> statuses) {
+    private Filters filters(JsonNode node, List<StatusOption> statuses,
+            Set<String> allowedPriorities) {
         if (node == null || node.isNull()) node = objectMapper.createObjectNode();
         requireObject(node, "viewConfig.table.filters");
         rejectUnknown(node, Set.of("query", "statusCodes", "priorities", "assigneeUserIds",
@@ -101,12 +129,15 @@ public final class ContentViewConfigCodec {
         String query = optionalText(node.get("query"), "viewConfig.table.filters.query");
         List<String> statusCodes = textList(node.get("statusCodes"),
                 "viewConfig.table.filters.statusCodes", List.of());
-        Set<String> validStatuses = statuses.stream().map(ProjectTemplateSnapshot.WorkflowStatus::statusCode)
+        Set<String> validStatuses = statuses.stream().map(StatusOption::code)
                 .collect(java.util.stream.Collectors.toSet());
         if (!validStatuses.containsAll(statusCodes))
             throw invalid("viewConfig.table.filters.statusCodes", "UNKNOWN_STATUS", "筛选状态必须属于项目模板");
-        List<Priority> priorities = enumList(node.get("priorities"), Priority.class,
+        List<String> priorities = textList(node.get("priorities"),
                 "viewConfig.table.filters.priorities", List.of());
+        if (!allowedPriorities.containsAll(priorities))
+            throw invalid("viewConfig.table.filters.priorities", "UNKNOWN_PRIORITY",
+                    "筛选优先级必须属于项目标签目录");
         List<UUID> assignees = textList(node.get("assigneeUserIds"),
                 "viewConfig.table.filters.assigneeUserIds", List.of()).stream().map(value -> {
             try { return UUID.fromString(value); }
@@ -122,14 +153,14 @@ public final class ContentViewConfigCodec {
         return new Filters(query, statusCodes, priorities, assignees, dueFrom, dueTo, updatedAfter);
     }
 
-    private Kanban kanban(JsonNode node, List<ProjectTemplateSnapshot.WorkflowStatus> statuses) {
+    private Kanban kanban(JsonNode node, List<StatusOption> statuses, boolean strictPartition) {
         if (node == null || node.isNull()) node = objectMapper.createObjectNode();
         requireObject(node, "viewConfig.kanban");
         rejectUnknown(node, Set.of("statusGroups"), "viewConfig.kanban");
         JsonNode groupsNode = node.get("statusGroups");
         if (groupsNode == null || groupsNode.isNull() || (groupsNode.isArray() && groupsNode.isEmpty())) {
             return new Kanban(statuses.stream().map(status -> new StatusGroup(
-                    status.displayName(), List.of(status.statusCode()))).toList());
+                    status.displayName(), List.of(status.code()))).toList());
         }
         requireArray(groupsNode, "viewConfig.kanban.statusGroups");
         List<StatusGroup> groups = new ArrayList<>();
@@ -145,9 +176,17 @@ public final class ContentViewConfigCodec {
             covered.addAll(codes);
             groups.add(new StatusGroup(name, codes));
         }
-        List<String> expected = statuses.stream().map(ProjectTemplateSnapshot.WorkflowStatus::statusCode).toList();
-        if (covered.size() != new HashSet<>(covered).size() || !new HashSet<>(covered).equals(new HashSet<>(expected)))
+        List<String> expected = statuses.stream().map(StatusOption::code).toList();
+        if (covered.size() != new HashSet<>(covered).size()
+                || !new HashSet<>(expected).containsAll(covered)
+                || (strictPartition && !new HashSet<>(covered).equals(new HashSet<>(expected))))
             throw invalid("viewConfig.kanban.statusGroups", "INVALID_PARTITION", "看板分组必须且只能覆盖全部模板状态一次");
+        if (!strictPartition) {
+            Set<String> existing = new HashSet<>(covered);
+            statuses.stream().filter(status -> !existing.contains(status.code()))
+                    .forEach(status -> groups.add(new StatusGroup(status.displayName(),
+                            List.of(status.code()))));
+        }
         return new Kanban(groups);
     }
 
@@ -231,4 +270,6 @@ public final class ContentViewConfigCodec {
     private static ApplicationException invalid(String field, String code, String message) {
         return ApplicationException.validation(new FieldViolation(field, code, message));
     }
+
+    private record StatusOption(String code, String displayName) {}
 }

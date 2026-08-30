@@ -12,14 +12,6 @@
  */
 
 import { mapValues } from '../runtime';
-import type { WorkItemPriority } from './WorkItemPriority';
-import {
-    WorkItemPriorityFromJSON,
-    WorkItemPriorityFromJSONTyped,
-    WorkItemPriorityToJSON,
-    WorkItemPriorityToJSONTyped,
-} from './WorkItemPriority';
-
 /**
  *
  * @export
@@ -33,11 +25,11 @@ export interface WorkItemUpdateRequest {
      */
     title: string;
     /**
-     *
-     * @type {WorkItemPriority}
+     * 可空的 Project 级优先级标签代码；非空值须从标签目录获取并按不透明值回传。
+     * @type {string}
      * @memberof WorkItemUpdateRequest
      */
-    priority: WorkItemPriority;
+    priority: string | null;
     /**
      *
      * @type {string}
@@ -76,8 +68,6 @@ export interface WorkItemUpdateRequest {
     dueDate: Date | null;
 }
 
-
-
 /**
  * Check if a given object implements the WorkItemUpdateRequest interface.
  */
@@ -104,7 +94,7 @@ export function WorkItemUpdateRequestFromJSONTyped(json: any, ignoreDiscriminato
     return {
 
         'title': json['title'],
-        'priority': WorkItemPriorityFromJSON(json['priority']),
+        'priority': json['priority'],
         'assigneeUserId': json['assigneeUserId'],
         'description': json['description'],
         'notes': json['notes'],
@@ -126,7 +116,7 @@ export function WorkItemUpdateRequestToJSONTyped(value?: WorkItemUpdateRequest |
     return {
 
         'title': value['title'],
-        'priority': WorkItemPriorityToJSON(value['priority']),
+        'priority': value['priority'],
         'assigneeUserId': value['assigneeUserId'],
         'description': value['description'],
         'notes': value['notes'],

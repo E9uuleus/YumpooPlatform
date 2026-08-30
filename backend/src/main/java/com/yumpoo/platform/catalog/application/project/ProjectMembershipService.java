@@ -74,17 +74,23 @@ public class ProjectMembershipService {
 
     @Transactional(readOnly = true)
     public MemberPage findMembers(CurrentActor actor, UUID projectId, ListStatus status,
-                                         OffsetPageRequest page) {
+            OffsetPageRequest page) {
+        return findMembers(actor, projectId, status, null, page);
+    }
+
+    @Transactional(readOnly = true)
+    public MemberPage findMembers(CurrentActor actor, UUID projectId, ListStatus status,
+            String query, OffsetPageRequest page) {
         Access access = requireVisible(actor, projectId);
         List<ProjectMembership> memberships = membershipRepository.findPage(
-                actor.companyId(), projectId, status, page);
+                actor.companyId(), projectId, status, query, page);
         Map<UUID, MinimalUserSnapshot> identities = users.findByUserIds(actor.companyId(),
                 memberships.stream().map(ProjectMembership::userId).toList());
         Project project = requiredProject(actor.companyId(), projectId);
         List<Member> items = memberships.stream()
                 .map(m -> snapshot(m, project.ownerUserId(), requiredIdentity(identities, m.userId())))
                 .toList();
-        long total = membershipRepository.count(actor.companyId(), projectId, status);
+        long total = membershipRepository.count(actor.companyId(), projectId, status, query);
         return new MemberPage(items, page.page(), page.size(), total, pages(total, page.size()));
     }
 

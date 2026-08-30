@@ -27,6 +27,9 @@
               <newSpec>${openapi.newSpec}</newSpec>
               <failOnIncompatible>true</failOnIncompatible>
               <failOnChanged>false</failOnChanged>
+              <configProps>
+                <incompatible.request.enum.decreased>false</incompatible.request.enum.decreased>
+              </configProps>
             </configuration>
           </execution>
         </executions>

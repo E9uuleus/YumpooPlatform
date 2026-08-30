@@ -20,7 +20,7 @@
     "workItemType": "TASK",
     "statusCode": "BACKLOG",
     "statusCategory": "TODO",
-    "priority": "URGENT",
+    "priority": null,
     "assigneeUserId": "2b000000-0000-4000-8000-000000000006",
     "timelineStartDate": "2026-08-22",
     "timelineEndDate": "2026-08-29",

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-const props = defineProps<{ priority: string }>()
-const presentation = computed(() => ({
+const props = defineProps<{ priority: string | null }>()
+const presentation = computed(() => props.priority ? ({
   URGENT: { label: '紧急', tone: 'red' },
   HIGH: { label: '高', tone: 'orange' },
   MEDIUM: { label: '中', tone: 'yellow' },
   LOW: { label: '低', tone: 'gray' },
-}[props.priority.toUpperCase()] ?? { label: `未知（${props.priority}）`, tone: 'gray' }))
+}[props.priority.toUpperCase()] ?? { label: `未知（${props.priority}）`, tone: 'gray' })
+  : { label: '—', tone: 'empty' })
 </script>
 
 <template>
@@ -39,4 +40,6 @@ const presentation = computed(() => ({
 .yp-priority--orange { --yp-priority-color: var(--yp-status-orange); }
 .yp-priority--yellow { --yp-priority-color: var(--yp-status-yellow); }
 .yp-priority--gray { --yp-priority-color: var(--yp-status-gray); }
+.yp-priority--empty { color: var(--yp-text-muted); font-weight: 400; }
+.yp-priority--empty span { display: none; }
 </style>

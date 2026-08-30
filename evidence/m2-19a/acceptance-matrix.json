@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-19A",
+  "verifiedSlices": [
+    {
+      "requirementId": "TABLE-DRAWER-ROUTE",
+      "scope": "项目表格工作项抽屉通过 workItemId 查询参数支持直达、刷新、前进后退与关闭恢复",
+      "evidence": ["frontend/web-app/src/views/projects/ProjectOverviewView.vue", "frontend/web-app/src/views/projects/ProjectOverviewView.spec.ts"]
+    },
+    {
+      "requirementId": "DUE-DATE-IMMEDIATE-PATCH",
+      "scope": "具体日期、Today 与清空均以自然日调用强 ETag、幂等截止日期字段命令",
+      "evidence": ["frontend/web-app/src/views/projects/ProjectOverviewView.vue", "frontend/web-app/src/views/projects/ProjectOverviewView.spec.ts"]
+    },
+    {
+      "requirementId": "PROJECT-WORK-ITEM-LABEL-CATALOG",
+      "scope": "Project 级状态/优先级新增、改名、受控颜色、排序、启停、引用阻止删除与强版本",
+      "evidence": ["backend/src/main/resources/db/migration/workitem/V41__create_project_work_item_label_catalog.sql", "backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemLabelService.java", "backend/src/test/java/com/yumpoo/platform/workitem/application/WorkItemLabelServiceTest.java"]
+    },
+    {
+      "requirementId": "LABEL-CATALOG-THREE-VIEW-CONSISTENCY",
+      "scope": "Table、Kanban、Content、筛选、排序和新建/迁移共同读取 Project 标签目录",
+      "evidence": ["frontend/web-app/src/components/projects/WorkItemLabelEditor.vue", "frontend/web-app/src/views/projects/ContentWorkItemsView.vue", "backend/src/main/java/com/yumpoo/platform/workitem/application/ContentService.java"]
+    },
+    {
+      "requirementId": "LABEL-CATALOG-CONTRACT-COMPATIBILITY",
+      "scope": "OpenAPI、生成 SDK、事件优先级字符串兼容、NOT_STARTED 初始状态与粗统计类别兼容",
+      "evidence": ["contracts/openapi/yumpoo-v1.yaml", "packages/api-client/src/generated/apis/WorkItemsApi.ts", "contracts/events/schemas/workitem.work-item-created-v1.schema.json"]
+    }
+  ],
+  "deferredRequirements": [
+    { "requirementId": "VISUAL-WORKFLOW-GRAPH", "targetMilestone": "Future ADR", "scope": "受控迁移边与可视化工作流设计器" },
+    { "requirementId": "ARBITRARY-LABEL-COLOR", "targetMilestone": "Future ADR", "scope": "受控色板之外的任意颜色" }
+  ]
+}

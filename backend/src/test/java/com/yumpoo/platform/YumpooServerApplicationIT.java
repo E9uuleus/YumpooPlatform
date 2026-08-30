@@ -298,7 +298,7 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(applicationTableNames).containsExactly(
@@ -331,11 +331,16 @@ class YumpooServerApplicationIT {
                 "project_product_link",
                 "project_template_content_blueprint",
                 "project_template_definition",
+                "project_work_item_label_catalog",
+                "project_work_item_priority_label",
+                "project_work_item_status_label",
                 "security_audit_event",
                 "wecom_oauth_attempt",
                 "work_item",
                 "work_item_project_counter",
+                "work_item_project_order",
                 "work_item_rank_lane",
+                "work_item_relation",
                 "work_item_update",
                 "work_item_update_mention",
                 "workflow_status_definition",
@@ -550,7 +555,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v29DatabaseUpgradesThroughV38WithAttachmentMaintenance() throws Exception {
+    void v29DatabaseUpgradesThroughV43WithProjectLabelsAndRelations() throws Exception {
         String database = "yumpoo_m213_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -567,17 +572,20 @@ class YumpooServerApplicationIT {
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
             MigrateResult upgraded = latest.migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(9);
-            assertThat(upgraded.targetSchemaVersion).hasToString("38");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(14);
+            assertThat(upgraded.targetSchemaVersion).hasToString("43");
             assertThat(workItemIndexes(jdbcUrl)).contains(
                     "idx_work_item_content_page",
                     "idx_work_item_content_status_page",
                     "idx_work_item_content_updated_page",
                     "idx_work_item_content_assignee",
                     "idx_work_item_content_due_date",
-                    "idx_work_item_content_status_rank_page");
+                    "idx_work_item_content_status_rank_page",
+                    "idx_work_item_project_sort_page");
             assertThat(workspaceFacts(jdbcUrl)).containsExactly("MAIN|0|ACTIVE|1");
-            assertThat(generatedWorkItemColumns(jdbcUrl)).containsExactly("active_lane_rank");
+            assertThat(generatedWorkItemColumns(jdbcUrl)).containsExactlyInAnyOrder(
+                    "active_lane_rank", "active_project_sort_key");
+            assertThat(workItemPriorityNullable(jdbcUrl)).isTrue();
             assertThat(workItemUpdateIndexes(jdbcUrl)).containsExactlyInAnyOrder(
                     "idx_work_item_update_page", "uq_work_item_update_company_id",
                     "work_item_update_pkey");
@@ -589,7 +597,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v37DatabaseUpgradesForwardThroughV38AndBackfillsBlobRegistry() throws Exception {
+    void v37DatabaseUpgradesForwardThroughV43AndBackfillsBlobRegistry() throws Exception {
         String database = "yumpoo_m217_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -622,8 +630,8 @@ class YumpooServerApplicationIT {
             }
 
             MigrateResult upgraded = migrationFlyway(jdbcUrl, null).migrate();
-            assertThat(upgraded.migrationsExecuted).isOne();
-            assertThat(upgraded.targetSchemaVersion).hasToString("38");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(6);
+            assertThat(upgraded.targetSchemaVersion).hasToString("43");
             assertThat(migrationFlyway(jdbcUrl, null).validateWithResult().validationSuccessful).isTrue();
             try (Connection connection=DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(),postgresContainer.getPassword());
@@ -786,7 +794,7 @@ class YumpooServerApplicationIT {
                 }
                 connection.commit();
             }
-            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("38");
+            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("43");
             try (Connection connection = DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(), postgresContainer.getPassword());
                  Statement statement = connection.createStatement()) {
@@ -859,6 +867,18 @@ class YumpooServerApplicationIT {
             List<String> columns = new java.util.ArrayList<>();
             while (result.next()) columns.add(result.getString(1));
             return List.copyOf(columns);
+        }
+    }
+
+    private boolean workItemPriorityNullable(String jdbcUrl) throws Exception {
+        try (Connection connection = DriverManager.getConnection(jdbcUrl,
+                postgresContainer.getUsername(), postgresContainer.getPassword());
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("SELECT is_nullable='YES' FROM "
+                     + "information_schema.columns WHERE table_schema='yumpoo' "
+                     + "AND table_name='work_item' AND column_name='priority'")) {
+            assertThat(result.next()).isTrue();
+            return result.getBoolean(1);
         }
     }
 

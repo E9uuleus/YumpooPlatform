@@ -32,9 +32,9 @@ for(const fragment of ['statusCode','statusCategory','rank']) assert(domain.incl
 assert(domain.includes('transitionStatus')||domain.includes('WorkItem move('),'Work Item 领域缺少状态迁移入口')
 assert(transitionService.indexOf('lockForFactWrite')<transitionService.indexOf('lockForShare'),'迁移必须先锁 Project 再锁 Content')
 assert(transitionService.indexOf('lockForShare')<transitionService.indexOf('workItems.lock'),'迁移必须先锁 Content 再锁 Work Item')
-assert(transitionService.indexOf('requireVersion')<transitionService.indexOf('template(project.templateKey()'),'必须先校验版本再读取固化模板')
-assert(transitionService.indexOf('requiresResolution')<transitionService.indexOf('workItems.transition'),'说明校验必须先于条件更新')
-for(const fragment of ['availableTransitions','sortOrder','requiredPermission','work_item_status_changed']) assert(service.includes(fragment),`应用服务缺少 ${fragment}`)
+assert(transitionService.indexOf('requireVersion(snapshot')<transitionService.indexOf('labels.statuses('),'必须先校验版本再读取项目状态标签')
+assert(transitionService.indexOf('normalizeResolution')<transitionService.indexOf('workItems.transition'),'说明规范化必须先于条件更新')
+for(const fragment of ['availableTransitions','sortOrder','selectableStatus','work_item_status_changed']) assert(service.includes(fragment),`应用服务缺少 ${fragment}`)
 assert(!transitionService.includes('securityAudit'),'普通状态迁移不得额外写 Security Audit')
 const transitionSql=repository.slice(repository.indexOf('Optional<WorkItem> transition'),repository.indexOf('private Optional<WorkItem> executeUpdate'))
 for(const fragment of ['status_code=:statusCode','status_category=:statusCategory','row_version=row_version+1','row_version=:expectedVersion','RETURNING']) assert(transitionSql.includes(fragment),`专用状态更新缺少 ${fragment}`)
@@ -53,7 +53,7 @@ assert(pageTest.includes('只读 Kanban')||pageTest.includes('多状态分组'),
 for(const fragment of ['statusTransitionChangesOnlyWorkflowAndAuditFacts','statusTransitionRejectsSameEndpoint','after.rank()']) assert(domainTest.includes(fragment),`领域测试缺少 ${fragment}`)
 for(const fragment of ['allFixedTemplatesExposeAndExecuteTheirInitialTransition','concurrentTransitionsHaveOneWinnerAndSameKeyProducesOneEvent','work_item_status_changed','availableTransitions','permissionsAndRealOpenItemArchiveBlockersAreEnforced']) assert(httpTest.includes(fragment),`HTTP 测试缺少 ${fragment}`)
 for(const fragment of ['workitem.work_item_status_changed','toStatusCategory','aggregate_version','readWorkItemStatusEventFact']) assert(backup.includes(fragment),`备份恢复缺少 ${fragment}`)
-for(const fragment of ['Status: implemented','M2-12 状态命令','availableTransitions','M2-23/M2-24']) assert(note.includes(fragment),`Work Item Agent Note 缺少 ${fragment}`)
+for(const fragment of ['Status: implemented','运行时允许在所有启用状态间迁移','availableTransitions','M2-23/M2-24']) assert(note.includes(fragment),`Work Item Agent Note 缺少 ${fragment}`)
 assert(note.includes('Project → Content → Work Item')||note.includes('Project → Content → 排序后的源/目标 lane → Work Item'),'Agent Note 缺少状态迁移锁序')
 assert(readme.includes('## M2-12 Work Item 独立状态迁移'),'README 未同步 M2-12')
 assert(report.milestone==='M2-12'&&report.status==='PASS'&&report.flywayVersion==='29','验证报告无效')
@@ -61,5 +61,5 @@ assert(report.testCounts.backendUnit>=380&&report.testCounts.backendIntegration>
 assert(acceptance.verifiedSlices.length===1&&acceptance.verifiedSlices[0].requirementId==='WORK-ITEM-STATUS-TRANSITIONS','验收矩阵未确认 M2-12 状态迁移切片')
 for(const milestone of ['M2-13','M2-14','M2-15','M2-20','M2-23','M2-24']) assert(acceptance.deferredRequirements.some(item=>item.targetMilestone===milestone),`验收矩阵未诚实延期 ${milestone}`)
 
-console.log('M2-12 状态迁移、模板能力、强 ETag、幂等 Outbox、Vue 草稿保护、备份恢复和证据资产有效。')
+console.log('M2-12 状态迁移、项目标签能力、强 ETag、幂等 Outbox、Vue 草稿保护、备份恢复和证据资产有效。')
 function assert(condition,message){if(!condition)throw new Error(`M2-12 资产验证失败：${message}`)}

@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { ContentPriorityOption } from './ContentPriorityOption';
+import {
+    ContentPriorityOptionFromJSON,
+    ContentPriorityOptionFromJSONTyped,
+    ContentPriorityOptionToJSON,
+    ContentPriorityOptionToJSONTyped,
+} from './ContentPriorityOption';
 import type { ContentWorkflowStatusOption } from './ContentWorkflowStatusOption';
 import {
     ContentWorkflowStatusOptionFromJSON,
@@ -60,10 +67,22 @@ export interface ProjectContentCatalog {
     workflowStatusOptions: Array<ContentWorkflowStatusOption>;
     /**
      *
+     * @type {Array<ContentPriorityOption>}
+     * @memberof ProjectContentCatalog
+     */
+    priorityOptions: Array<ContentPriorityOption>;
+    /**
+     *
      * @type {boolean}
      * @memberof ProjectContentCatalog
      */
     canCreate: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof ProjectContentCatalog
+     */
+    canManageLabels: boolean;
 }
 
 /**
@@ -73,7 +92,9 @@ export function instanceOfProjectContentCatalog(value: object): value is Project
     if (!('items' in value) || value['items'] === undefined) return false;
     if (!('blueprintOptions' in value) || value['blueprintOptions'] === undefined) return false;
     if (!('workflowStatusOptions' in value) || value['workflowStatusOptions'] === undefined) return false;
+    if (!('priorityOptions' in value) || value['priorityOptions'] === undefined) return false;
     if (!('canCreate' in value) || value['canCreate'] === undefined) return false;
+    if (!('canManageLabels' in value) || value['canManageLabels'] === undefined) return false;
     return true;
 }
 
@@ -90,7 +111,9 @@ export function ProjectContentCatalogFromJSONTyped(json: any, ignoreDiscriminato
         'items': ((json['items'] as Array<any>).map(ContentFromJSON)),
         'blueprintOptions': ((json['blueprintOptions'] as Array<any>).map(ContentBlueprintOptionFromJSON)),
         'workflowStatusOptions': ((json['workflowStatusOptions'] as Array<any>).map(ContentWorkflowStatusOptionFromJSON)),
+        'priorityOptions': ((json['priorityOptions'] as Array<any>).map(ContentPriorityOptionFromJSON)),
         'canCreate': json['canCreate'],
+        'canManageLabels': json['canManageLabels'],
     };
 }
 
@@ -108,6 +131,8 @@ export function ProjectContentCatalogToJSONTyped(value?: ProjectContentCatalog |
         'items': ((value['items'] as Array<any>).map(ContentToJSON)),
         'blueprintOptions': ((value['blueprintOptions'] as Array<any>).map(ContentBlueprintOptionToJSON)),
         'workflowStatusOptions': ((value['workflowStatusOptions'] as Array<any>).map(ContentWorkflowStatusOptionToJSON)),
+        'priorityOptions': ((value['priorityOptions'] as Array<any>).map(ContentPriorityOptionToJSON)),
         'canCreate': value['canCreate'],
+        'canManageLabels': value['canManageLabels'],
     };
 }

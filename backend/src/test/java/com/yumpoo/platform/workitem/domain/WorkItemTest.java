@@ -74,6 +74,22 @@ class WorkItemTest {
     }
 
     @Test
+    void priorityCanBeCreatedAndUpdatedAsNull() {
+        UUID actor = UUID.randomUUID();
+        WorkItem created = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), 10, "PROJECT_1-10", ContentWorkItemType.TASK,
+                "暂不定优先级", "BACKLOG", WorkItemStatusCategory.TODO, null,
+                null, null, null, null, null, null, RANK, actor, Instant.EPOCH);
+
+        WorkItem cleared = created.updateFields("清空优先级", null,
+                null, null, null, null, null, null,
+                actor, Instant.EPOCH.plusSeconds(1));
+
+        assertThat(created.priority()).isNull();
+        assertThat(cleared.priority()).isNull();
+    }
+
+    @Test
     void rejectsInvertedTimelineOnCreateAndUpdate() {
         assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1", ContentWorkItemType.TASK,

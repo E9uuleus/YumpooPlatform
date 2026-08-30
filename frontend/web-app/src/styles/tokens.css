@@ -45,6 +45,50 @@
   --yp-status-pink: #d62e85;
   --yp-status-orange: #ff7b00;
   --yp-status-gray: #676879;
+  --yp-label-green: #00c875;
+  --yp-label-teal: #175a63;
+  --yp-label-blue: #0086c0;
+  --yp-label-indigo: #5559df;
+  --yp-label-purple: #784bd1;
+  --yp-label-magenta: #e50073;
+  --yp-label-red: #e2445c;
+  --yp-label-orange: #fdab3d;
+  --yp-label-amber: #ffcb00;
+  --yp-label-lime: #9cd326;
+  --yp-label-cyan: #50c5d8;
+  --yp-label-gray: #c4c4c4;
+  --yp-label-bright-green: #9cd326;
+  --yp-label-saladish: #cab641;
+  --yp-label-egg-yolk: #ffcb00;
+  --yp-label-dark-orange: #ff6d3b;
+  --yp-label-peach: #ffadad;
+  --yp-label-sunset: #ff7575;
+  --yp-label-dark-red: #bb3354;
+  --yp-label-sofia-pink: #e50073;
+  --yp-label-lipstick: #ff5ac4;
+  --yp-label-bubble: #faa1f1;
+  --yp-label-dark-purple: #784bd1;
+  --yp-label-berry: #7e3b8a;
+  --yp-label-dark-indigo: #401694;
+  --yp-label-navy: #225091;
+  --yp-label-bright-blue: #579bfc;
+  --yp-label-aquamarine: #4eccc6;
+  --yp-label-chili-blue: #66ccff;
+  --yp-label-river: #74afcc;
+  --yp-label-winter: #9aadbd;
+  --yp-label-american-gray: #757575;
+  --yp-label-blackish: #333333;
+  --yp-label-brown: #7f5347;
+  --yp-label-orchid: #e484bd;
+  --yp-label-tan: #bca58a;
+  --yp-label-sky: #a1e3f6;
+  --yp-label-coffee: #cd9282;
+  --yp-label-royal: #216edf;
+  --yp-label-lavender: #bda8f9;
+  --yp-label-steel: #a9bee8;
+  --yp-label-lilac: #9d99b9;
+  --yp-label-pecan: #563e3e;
+  --yp-status-gray-foreground: #ffffff;
   --yp-status-blue-foreground: #ffffff;
   --yp-status-green-foreground: #0b2b20;
   --yp-status-yellow-foreground: #342200;
@@ -53,7 +97,17 @@
   --yp-status-teal-foreground: #062f34;
   --yp-status-pink-foreground: #ffffff;
   --yp-status-orange-foreground: #2e1a00;
-  --yp-status-gray-foreground: #ffffff;
+  --yp-priority-urgent: #333333;
+  --yp-priority-high: #401694;
+  --yp-priority-medium: #5559df;
+  --yp-priority-low: #579bfc;
+  --yp-priority-empty: #c4c4c4;
+  --yp-priority-foreground: #ffffff;
+  --yp-priority-empty-foreground: #25272c;
+  --yp-monday-header-bg: #f6f7fb;
+  --yp-monday-grid-border: #c4c4c4;
+  --yp-monday-track-bg: #e6e9ef;
+  --yp-monday-bar-bg: #fcfdfe;
 
   --yp-motion-fast: 120ms;
   --yp-motion-popover: 160ms;
@@ -138,6 +192,11 @@
   --yp-brand-glow: #66afff;
   --yp-status-surface-mix: 22%;
   --yp-status-border-mix: 42%;
+  --yp-monday-header-bg: #292b34;
+  --yp-monday-grid-border: #3a3d48;
+  --yp-monday-track-bg: #30323b;
+  --yp-monday-bar-bg: #202128;
+  --yp-priority-empty-foreground: #202128;
 }
 
 :root.dark[data-theme='night'] {
@@ -163,6 +222,11 @@
   --yp-brand-glow: #70b7ff;
   --yp-status-surface-mix: 24%;
   --yp-status-border-mix: 44%;
+  --yp-monday-header-bg: #14263b;
+  --yp-monday-grid-border: #263b55;
+  --yp-monday-track-bg: #1b2d44;
+  --yp-monday-bar-bg: #0d1b2a;
+  --yp-priority-empty-foreground: #0d1b2a;
 }
 
 @media (prefers-reduced-motion: reduce) {
