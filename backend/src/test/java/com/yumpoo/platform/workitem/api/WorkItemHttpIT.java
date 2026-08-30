@@ -463,7 +463,7 @@ class WorkItemHttpIT {
         UUID secondId = UUID.fromString(second.path("id").asText());
 
         JsonNode direct = body(get(subitemsPath, member));
-        assertThat(titles(direct)).containsExactly("跨 Content 子项一", "同 Content 子项二");
+        assertThat(titles(direct)).containsExactly("同 Content 子项二", "跨 Content 子项一");
         assertThat(direct.path("items").get(0).path("subitemCount").asLong()).isZero();
 
         JsonNode roots = body(get("/api/v1/projects/" + PROJECT_ID + "/work-items", member));
@@ -681,7 +681,8 @@ class WorkItemHttpIT {
         JsonNode doneJson = json.readTree(done.body());
         assertThat(doneJson.path("statusCategory").asText()).isEqualTo("DONE");
         assertThat(doneJson.path("rowVersion").asLong()).isEqualTo(4);
-        assertThat(doneJson.path("capabilities").path("availableTransitions").isEmpty()).isTrue();
+        assertThat(transitionTargets(doneJson))
+                .containsExactly("NOT_STARTED", "BACKLOG", "READY", "IN_PROGRESS", "IN_REVIEW", "CANCELED");
         assertThat(mutate("POST", "/api/v1/contents/" + contentId + "/archive",
                 owner, "", contentEtag, UUID.randomUUID()).statusCode()).isEqualTo(200);
     }
