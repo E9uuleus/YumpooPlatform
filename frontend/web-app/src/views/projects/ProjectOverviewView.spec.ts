@@ -174,12 +174,26 @@ describe('项目级工作项首页', () => {
 
   afterEach(() => vi.restoreAllMocks())
 
-  it('按固定顺序展示列名，并将 Content 映射为类别名称', async () => {
+  it('按固定顺序展示业务列和不可拖拽的新增列入口，并将 Content 映射为类别名称', async () => {
     const wrapper = mountView()
     await flushPromises()
 
     const labels = wrapper.findAll('.el-table__header th').map(node => node.text()).filter(Boolean)
     expect(labels).toEqual(['工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '最后更新时间'])
+    const addColumnHeader = wrapper.get('th.monday-add-column-header')
+    const addColumn = wrapper.findAllComponents({ name: 'ElTableColumn' })
+      .find(column => column.props('columnKey') === 'add-column')
+    const addColumnButton = addColumnHeader.get('button.monday-add-column-icon')
+    expect(addColumnButton.attributes('aria-label')).toBe('添加列（功能预留）')
+    expect(addColumnButton.get('svg').attributes()).toMatchObject({
+      viewBox: '0 0 20 20', width: '18', height: '18', fill: 'currentColor',
+    })
+    expect(addColumnButton.get('path').attributes('d')).toContain('M10 2.25')
+    expect(addColumnHeader.classes()).not.toContain('monday-movable-column-header')
+    expect(addColumn?.props('width')).toBe('')
+    expect(addColumn?.props('minWidth')).toBe(96)
+    expect(addColumn?.props('resizable')).toBe(false)
+    expect(wrapper.get('td.monday-add-column').text()).toBe('')
     expect(wrapper.text()).toContain('产品需求')
     expect(wrapper.text()).toContain('实现项目工作项首页')
     expect(wrapper.get('.work-item-link').text()).toBe('实现项目工作项首页')
@@ -204,7 +218,8 @@ describe('项目级工作项首页', () => {
     expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(1)
     expect(state.listWorkItemSubitems).toHaveBeenCalledWith({ parentWorkItemId: parent.id })
     expect(wrapper.text()).toContain('直接子项')
-    expect(wrapper.text()).toContain('1 子项')
+    expect(wrapper.get('.monday-subitems-counter-component__subitems-count').text()).toBe('1')
+    expect(wrapper.findAll('.subitem-hierarchy-branch--data')).toHaveLength(1)
     expect(wrapper.findAll('.monday-subitem-table .el-table__expand-icon')).toHaveLength(0)
 
     const collapse = wrapper.get('button[aria-label="收起子项"]')
@@ -244,13 +259,19 @@ describe('项目级工作项首页', () => {
       columnDraggingKey: string | undefined
       columnDraggingIndex: number
       columnDropIndex: number | undefined
+      columnResizingKey: string | undefined
+      columnWidths: Record<string, number>
       onTableColumnPointerDown: (event: PointerEvent) => void
       onTableColumnPointerMove: (event: PointerEvent) => void
       onTableColumnPointerUp: (event: PointerEvent) => void
+      onTableColumnResizePointerMove: (event: PointerEvent) => void
+      onTableColumnResizePointerUp: (event: PointerEvent) => void
       tableColumnDragStyle: (columnKey?: string) => Record<string, string | number>
     }
     const movableHeaders = wrapper.findAll<HTMLTableCellElement>('th.monday-movable-column-header')
     expect(movableHeaders).toHaveLength(6)
+    expect(wrapper.findAll('.monday-column-resize-handle')).toHaveLength(7)
+    expect(wrapper.get('th.monday-title-column .monday-title-column-resize-handle').attributes('data-column-key')).toBe('title')
     expect(movableHeaders.map(header => header.text())).toEqual(['处理人', '状态', '优先级', '工作项类别', '截止日期', '最后更新时间'])
     expect(wrapper.get('th.monday-title-column').classes()).not.toContain('monday-movable-column-header')
 
@@ -270,6 +291,37 @@ describe('项目级工作项首页', () => {
       x: 0, y: 200, left: 0, top: 200, right: 900, bottom: 600,
       width: 900, height: 400, toJSON: () => ({}),
     } as DOMRect)
+
+    const resizeHandle = movableHeaders[0]!.get<HTMLElement>('.monday-column-resize-handle')
+    expect(resizeHandle.attributes('data-column-key')).toBe('assignee')
+    const resizeDownPreventDefault = vi.fn()
+    const resizeDownStopPropagation = vi.fn()
+    view.onTableColumnPointerDown({
+      isPrimary: true, button: 0, pointerId: 20, clientX: 188, clientY: 219, target: resizeHandle.element,
+      preventDefault: resizeDownPreventDefault, stopPropagation: resizeDownStopPropagation,
+    } as unknown as PointerEvent)
+    expect(resizeDownPreventDefault).toHaveBeenCalledOnce()
+    expect(resizeDownStopPropagation).toHaveBeenCalledOnce()
+    expect(view.columnResizingKey).toBe('assignee')
+
+    const resizeMovePreventDefault = vi.fn()
+    view.onTableColumnResizePointerMove({
+      pointerId: 20, clientX: 218, clientY: 219,
+      preventDefault: resizeMovePreventDefault, stopPropagation: vi.fn(),
+    } as unknown as PointerEvent)
+    await nextTick()
+    expect(resizeMovePreventDefault).toHaveBeenCalledOnce()
+    expect(view.columnWidths.assignee).toBe(120)
+    expect(wrapper.get('th.monday-column-header--assignee').classes()).toContain('monday-column-resizing')
+    expect(view.columnDraggingKey).toBeUndefined()
+    expect(document.querySelector('.work-item-column-drag-preview')).toBeNull()
+
+    view.onTableColumnResizePointerUp({
+      pointerId: 20, clientX: 218, clientY: 219, preventDefault: vi.fn(), stopPropagation: vi.fn(),
+    } as unknown as PointerEvent)
+    await nextTick()
+    expect(view.columnResizingKey).toBeUndefined()
+    expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}').widths.assignee).toBe(120)
 
     view.onTableColumnPointerDown({
       isPrimary: true, button: 0, pointerId: 21, clientX: 210, clientY: 219, target: movableHeaders[1]!.element,
@@ -307,9 +359,33 @@ describe('项目级工作项首页', () => {
     expect(pointerUpStopPropagation).toHaveBeenCalledOnce()
     expect(view.movableColumnOrder.slice(0, 3)).toEqual(['assignee', 'priority', 'status'])
     expect(document.querySelector('.work-item-column-drag-preview')).toBeNull()
-    expect(wrapper.findAll('th.monday-movable-column-header').map(header => header.text()).slice(0, 3)).toEqual(['处理人', '优先级', '状态'])
+    await vi.waitFor(() => {
+      expect(wrapper.findAll('th.monday-movable-column-header').map(header => header.text()).slice(0, 3))
+        .toEqual(['处理人', '优先级', '状态'])
+    })
     expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}').order)
       .toEqual(['assignee', 'priority', 'status', 'content', 'dueDate', 'updatedAt'])
+  })
+
+  it('主表与子工作项分别持久化列顺序', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as {
+      movableColumnOrder: string[]
+      subitemMovableColumnOrder: string[]
+      moveSubitemColumn: (source: string, target: string, placement?: 'before' | 'after') => void
+    }
+
+    view.moveSubitemColumn('status', 'priority', 'after')
+    await flushPromises()
+
+    expect(view.movableColumnOrder.slice(0, 3)).toEqual(['assignee', 'status', 'priority'])
+    expect(view.subitemMovableColumnOrder.slice(0, 3)).toEqual(['assignee', 'priority', 'status'])
+    expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}'))
+      .toMatchObject({
+        order: ['assignee', 'status', 'priority', 'content', 'dueDate', 'updatedAt'],
+        subitemOrder: ['assignee', 'priority', 'status', 'content', 'dueDate', 'updatedAt'],
+      })
   })
 
   it('将搜索、筛选和最多三层排序同步到 URL', async () => {
@@ -680,8 +756,14 @@ describe('项目级工作项首页', () => {
     const wrapper = mountView()
     await flushPromises()
 
+    expect(wrapper.get('.quick-add').text()).toBe('添加工作项')
+    expect(wrapper.find('.quick-add svg').exists()).toBe(false)
+    expect(wrapper.find('.quick-add .monday-quick-checkbox').exists()).toBe(true)
+    expect(wrapper.find('.quick-add input[type="checkbox"]').exists()).toBe(false)
     await wrapper.get('.quick-add').trigger('click')
-    const input = wrapper.get('input[placeholder^="输入工作项名称"]')
+    const input = wrapper.get('input[placeholder="添加工作项"]')
+    expect(wrapper.find('.quick-content-field').exists()).toBe(true)
+    expect(wrapper.find('.quick-row .monday-quick-checkbox').exists()).toBe(true)
     await input.setValue('快速新增事项')
     await input.trigger('keydown', { key: 'Enter' })
     await input.trigger('keydown', { key: 'Enter' })
@@ -699,7 +781,7 @@ describe('项目级工作项首页', () => {
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('.quick-add').trigger('click')
-    const input = wrapper.get('input[placeholder^="输入工作项名称"]')
+    const input = wrapper.get('input[placeholder="添加工作项"]')
 
     await input.trigger('keydown', { key: 'Enter' })
     expect(state.createWorkItem).not.toHaveBeenCalled()
@@ -717,7 +799,7 @@ describe('项目级工作项首页', () => {
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('.quick-add').trigger('click')
-    const input = wrapper.get('input[placeholder^="输入工作项名称"]')
+    const input = wrapper.get('input[placeholder="添加工作项"]')
     await input.setValue('保留的草稿')
 
     document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
@@ -1075,6 +1157,7 @@ describe('项目级工作项首页', () => {
       isRowSelected: (rowId: string) => boolean
       onDrawerResizePointerDown: (event: PointerEvent) => void
       syncPageScrollbars: () => void
+      horizontalOverflow: boolean
     }
 
     const table = wrapper.findComponent({ name: 'ElTable' })
@@ -1086,9 +1169,12 @@ describe('项目级工作项首页', () => {
     expect(selectionColumn?.props('fixed')).toBe(true)
     expect(selectionColumn?.props('reserveSelection')).toBe(true)
     expect(titleColumn?.props('fixed')).toBe(true)
+    expect(titleColumn?.props('width')).toBe('')
+    expect(titleColumn?.props('minWidth')).toBe(320)
     expect(wrapper.find('.el-table__append-wrapper .monday-quick-add').exists()).toBe(true)
 
     const tableScroll = wrapper.get('.monday-table .el-scrollbar__wrap').element as HTMLElement
+    const tableHeaderScroll = wrapper.get('.monday-table .el-table__header-wrapper').element as HTMLElement
     const horizontalScrollbar = document.body.querySelector<HTMLElement>('.project-table-scrollbar--horizontal')
     const verticalScrollbar = document.body.querySelector<HTMLElement>('.project-table-scrollbar--vertical')
     expect(horizontalScrollbar).not.toBeNull()
@@ -1107,12 +1193,15 @@ describe('项目级工作项首页', () => {
     })
     view.syncPageScrollbars()
     await nextTick()
+    expect(view.horizontalOverflow).toBe(true)
+    expect(horizontalScrollbar!.style.display).not.toBe('none')
     expect(horizontalScrollbar!.querySelector<HTMLElement>('.project-table-scrollbar__horizontal-spacer')?.style.width).toBe('1220px')
     expect(verticalScrollbar!.querySelector<HTMLElement>('.project-table-scrollbar__vertical-spacer')?.style.height).toBe('1250px')
 
     horizontalScrollbar!.scrollLeft = 120
     horizontalScrollbar!.dispatchEvent(new Event('scroll'))
     expect(tableScroll.scrollLeft).toBe(120)
+    expect(tableHeaderScroll.scrollLeft).toBe(120)
     verticalScrollbar!.scrollTop = 180
     verticalScrollbar!.dispatchEvent(new Event('scroll'))
     expect(tableScroll.scrollTop).toBe(180)
@@ -1120,6 +1209,7 @@ describe('项目级工作项首页', () => {
     tableScroll.scrollTop = 360
     tableScroll.dispatchEvent(new Event('scroll'))
     expect(horizontalScrollbar!.scrollLeft).toBe(240)
+    expect(tableHeaderScroll.scrollLeft).toBe(240)
     expect(verticalScrollbar!.scrollTop).toBe(360)
 
     // 名称高亮只覆盖名称按钮，不延伸到讨论按钮所在区域

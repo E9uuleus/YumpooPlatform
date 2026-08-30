@@ -47,10 +47,45 @@ for (const fragment of ['listWorkItemSubitems', 'createWorkItemSubitem',
 for (const fragment of ['workitem.work_item_relation_created', 'relationType',
   'leftWorkItemId', 'rightWorkItemId']) assert(eventSchema.includes(fragment), `关系事件缺少 ${fragment}`)
 for (const fragment of ['expandedSubitemIds', 'loadSubitems', 'onTableExpandChange',
-  'project-work-item-subitems-table']) assert(overview.includes(fragment), `项目表格缺少 ${fragment}`)
-for (const fragment of ['aria-label', 'margin-left: 32px', 'height: 36px',
+  'project-work-item-subitems-table', '--work-item-hierarchy-gap: 14px',
+  '--work-item-table-scroll-left', 'syncSubitemFixedColumnScrollPosition',
+  'subitemMovableColumnOrder', 'visibleSubitemColumns', 'moveSubitemColumn',
+  'monday-add-column-icon', 'M10 2.25C10.4142 2.25',
+  'monday-quick-add__field', 'placeholder="添加工作项"', 'placeholder="Content"',
+  'monday-quick-checkbox', 'translateX(2px)',
+  '--work-item-quick-control-height: 26px', '.monday-quick-row:focus-within',
+  'background: var(--yp-bg-selected)', 'outline: none !important',
+  'height: var(--work-item-table-row-height)']) {
+  assert(overview.includes(fragment), `项目表格缺少 ${fragment}`)
+}
+for (const fragment of ['aria-label', '--work-item-hierarchy-indent, 40px',
+  '--work-item-hierarchy-line-width, 1px', '--work-item-hierarchy-bar-width, 6px',
+  '--subitem-hierarchy-corner-radius', 'border-bottom-left-radius: var(--subitem-hierarchy-corner-radius)',
+  '.subitem-table-frame::after', 'background-position: var(--subitem-hierarchy-bar-width) top',
+  'background: var(--yp-monday-grid-border, var(--yp-border-subtle))',
+  'left: var(--subitem-hierarchy-bar-width)', 'bottom: var(--subitem-hierarchy-line-width)',
+  'monday-subitem-table--empty', 'subitem-hierarchy-bar__trailing',
+  '--subitem-add-row-accent: rgba(87, 155, 252, 0.5)',
+  'subitem-hierarchy-branch--add::before', 'border-color: var(--subitem-add-row-accent)',
+  '--subitem-table-row-height: 36px', 'subitem-hierarchy-branch--data', 'subitem-block-column',
+  'monday-sortable-column-header', 'monday-column-resize-handle', 'onColumnPointerDown',
+  '--subitem-sort-overflow-space: 20px', '.el-table__header-wrapper',
+  'th.monday-sortable-column-header:has(.sort-by-column--active)',
+  'createColumnDragPreview', 'columnDragStyle', 'subitem-column-drag-source', 'columnDropAllowed',
+  '.el-table__body-wrapper tbody tr.el-table__row',
+  'SUBITEM_ADD_COLUMN_MIN_WIDTH', 'subitem-add-column-header', 'subitem-add-column-button',
+  'M10 2.25C10.4142 2.25',
+  '--subitem-table-quick-height: var(--subitem-table-row-height)', 'subitem-add__field',
+  'placeholder="添加子项"', 'placeholder="Content"',
+  'subitem-quick-checkbox', 'color-mix(in srgb, var(--yp-border-strong) 50%, transparent)',
+  '--subitem-quick-control-height: 26px', '.subitem-quick-row:focus-within',
+  '.monday-subitem-table.el-table--border::after',
+  'translateX(var(--work-item-table-scroll-left, 0px))',
   'createWorkItemSubitem', 'moveWorkItemSubitemOrder']) assert(subtable.includes(fragment), `子表格缺少 ${fragment}`)
-for (const fragment of ['默认继承父项 Content', '直接兄弟锚点', '不渲染下一级展开入口']) {
+assert(!subtable.includes('subitem-hierarchy-branch--header'), '子表头不应渲染层级连接锚点')
+for (const fragment of ['默认继承父项 Content', '直接兄弟锚点', '不渲染下一级展开入口',
+  '表头不渲染连接锚点', '空子项时让添加行紧接表头', '状态和优先级标签占满对应子项单元格',
+  '固定勾选和名称列，并让单行表头整列可拖出表格但仅在当前子表内落下']) {
   assert(subtableTest.includes(fragment), `子表格验收缺少 ${fragment}`)
 }
 for (const fragment of ['根查询语义', 'M2-21', '不级联', '递归环检测']) {

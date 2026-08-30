@@ -244,6 +244,9 @@
   body.yp-project-overview-scroll .app-shell--workspace .app-main > .project-workspace {
     height: 100%;
     min-height: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
   }
 
   body.yp-project-overview-scroll.yp-work-items-drawer-open .monday-table-surface {
@@ -1115,9 +1118,9 @@
   }
 }
 
-@media (max-width: 1279px) {
-  .app-shell--workspace.app-shell--context-open .app-main {
-    padding-left: var(--yp-space-10);
+@media (min-width: 960px) and (max-width: 1279px) {
+  body.yp-project-overview-scroll .app-shell--workspace.app-shell--context-open .app-main {
+    padding-left: calc(260px + var(--yp-space-10));
   }
 }
 

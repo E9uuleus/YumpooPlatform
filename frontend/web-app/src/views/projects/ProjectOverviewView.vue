@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Filter as FilterIcon, Hide, Plus, Search, Sort, User } from '@element-plus/icons-vue'
+import { Filter as FilterIcon, Hide, Search, Sort, User } from '@element-plus/icons-vue'
 import {
   ContentStatus,
   AttachmentOwnerType,
@@ -110,11 +110,17 @@ const tableDropIndex = ref<number>()
 const columnDraggingKey = ref<MovableColumnKey>()
 const columnDraggingIndex = ref(-1)
 const columnDropIndex = ref<number>()
+const columnResizingKey = ref<MovableColumnKey>()
 const selectedWorkItemIds = ref(new Set<string>())
-const tableRef = ref<{ $el: HTMLElement; toggleRowExpansion: (row: ProjectWorkItemListItem, expanded?: boolean) => void }>()
+const tableRef = ref<{
+  $el: HTMLElement
+  doLayout: () => void
+  toggleRowExpansion: (row: ProjectWorkItemListItem, expanded?: boolean) => void
+}>()
 const tableSentinel = ref<HTMLElement>()
 const horizontalPageScrollbar = ref<HTMLElement>()
 const verticalPageScrollbar = ref<HTMLElement>()
+const horizontalOverflow = ref(false)
 const horizontalScrollExtent = ref(1)
 const verticalScrollExtent = ref(1)
 const pageScrollbarLeft = ref(0)
@@ -122,6 +128,8 @@ let tableDragPreview: HTMLElement | undefined
 let tableColumnDragPreview: HTMLElement | undefined
 let tableScrollElement: HTMLElement | undefined
 let pageScrollbarSyncQueued = false
+let responsiveTableLayoutFrame: number | undefined
+let projectPageResizeObserver: ResizeObserver | undefined
 let tableDragPointerOffset = { x: 0, y: 0 }
 let tableColumnDragPointerOffset = { x: 0, y: 0 }
 let tablePointerCandidate: {
@@ -141,6 +149,13 @@ let tableColumnPointerCandidate: {
   startX: number
   startY: number
 } | undefined
+let tableColumnResizeCandidate: {
+  pointerId: number
+  key: MovableColumnKey
+  minWidth: number
+  startWidth: number
+  startX: number
+} | undefined
 let suppressTableClick = false
 let suppressTableClickTimer: number | undefined
 const loadingMoreError = ref<ApiProblem>()
@@ -156,6 +171,7 @@ const selectedRowId = ref<string | undefined>(route.query.workItemId ? String(ro
 const selectedCellKey = ref<string | undefined>(route.query.workItemId ? `${route.query.workItemId}:title` : undefined)
 const TABLE_SELECTION_COLUMN_WIDTH = 48
 const TABLE_EXPAND_COLUMN_WIDTH = 1
+const TABLE_ADD_COLUMN_MIN_WIDTH = 96
 const DRAWER_MIN_WIDTH = 440
 const DRAWER_VIEWPORT_GUTTER = 60
 const drawerWidth = ref(560)
@@ -218,7 +234,7 @@ function syncProjectPageScrollLayout(): void {
   } else {
     document.body.style.removeProperty('--yp-work-items-drawer-width')
   }
-  schedulePageScrollbarSync()
+  scheduleResponsiveTableLayout()
 }
 
 function resolveTableScrollElement(): HTMLElement | undefined {
@@ -237,7 +253,24 @@ function syncPageScrollbarPositions(): void {
   }
 }
 
+function syncTableHeaderScrollPosition(): void {
+  if (!tableScrollElement) return
+  const headerWrapper = tableRef.value?.$el?.querySelector<HTMLElement>('.el-table__header-wrapper')
+  if (headerWrapper && Math.abs(headerWrapper.scrollLeft - tableScrollElement.scrollLeft) > 0.5) {
+    headerWrapper.scrollLeft = tableScrollElement.scrollLeft
+  }
+}
+
+function syncSubitemFixedColumnScrollPosition(): void {
+  tableRef.value?.$el?.style.setProperty(
+    '--work-item-table-scroll-left',
+    `${tableScrollElement?.scrollLeft ?? 0}px`,
+  )
+}
+
 function onTableScroll(): void {
+  syncSubitemFixedColumnScrollPosition()
+  syncTableHeaderScrollPosition()
   syncPageScrollbarPositions()
 }
 
@@ -246,6 +279,7 @@ function bindTableScrollElement(next: HTMLElement | undefined): void {
   tableScrollElement?.removeEventListener('scroll', onTableScroll)
   tableScrollElement = next
   tableScrollElement?.addEventListener('scroll', onTableScroll, { passive: true })
+  syncSubitemFixedColumnScrollPosition()
 }
 
 function syncPageScrollbars(): void {
@@ -263,6 +297,10 @@ function syncPageScrollbars(): void {
   const vertical = verticalPageScrollbar.value
   if (!tableScrollElement || !horizontal || !vertical) return
 
+  const nextHorizontalOverflow = tableScrollElement.scrollWidth - tableScrollElement.clientWidth > 1
+  const horizontalOverflowChanged = horizontalOverflow.value !== nextHorizontalOverflow
+  horizontalOverflow.value = nextHorizontalOverflow
+
   horizontalScrollExtent.value = Math.max(
     horizontal.clientWidth,
     horizontal.clientWidth + tableScrollElement.scrollWidth - tableScrollElement.clientWidth,
@@ -272,6 +310,7 @@ function syncPageScrollbars(): void {
     vertical.clientHeight + tableScrollElement.scrollHeight - tableScrollElement.clientHeight,
   )
   void nextTick(syncPageScrollbarPositions)
+  if (horizontalOverflowChanged) void nextTick(schedulePageScrollbarSync)
 }
 
 function schedulePageScrollbarSync(): void {
@@ -283,11 +322,43 @@ function schedulePageScrollbarSync(): void {
   })
 }
 
+function syncResponsiveTableLayout(): void {
+  tableRef.value?.doLayout()
+  schedulePageScrollbarSync()
+}
+
+function scheduleResponsiveTableLayout(): void {
+  if (responsiveTableLayoutFrame !== undefined) return
+  responsiveTableLayoutFrame = window.requestAnimationFrame(() => {
+    responsiveTableLayoutFrame = undefined
+    syncResponsiveTableLayout()
+  })
+}
+
+function flushResponsiveTableLayout(): void {
+  if (responsiveTableLayoutFrame !== undefined) {
+    window.cancelAnimationFrame(responsiveTableLayoutFrame)
+    responsiveTableLayoutFrame = undefined
+  }
+  syncResponsiveTableLayout()
+}
+
+function observeProjectPageResizeTargets(): void {
+  projectPageResizeObserver?.disconnect()
+  if (typeof ResizeObserver === 'undefined') return
+  projectPageResizeObserver = new ResizeObserver(scheduleResponsiveTableLayout)
+  const appMain = document.querySelector<HTMLElement>('.app-shell--workspace .app-main')
+  if (appMain) projectPageResizeObserver.observe(appMain)
+  if (tableRef.value?.$el) projectPageResizeObserver.observe(tableRef.value.$el)
+}
+
 function onHorizontalPageScroll(): void {
   if (!tableScrollElement || !horizontalPageScrollbar.value) return
   if (Math.abs(tableScrollElement.scrollLeft - horizontalPageScrollbar.value.scrollLeft) > 0.5) {
     tableScrollElement.scrollLeft = horizontalPageScrollbar.value.scrollLeft
   }
+  syncSubitemFixedColumnScrollPosition()
+  syncTableHeaderScrollPosition()
 }
 
 function onVerticalPageScroll(): void {
@@ -326,6 +397,7 @@ const sortFieldByColumn: Record<ColumnKey, string> = {
 const columnByKey = new Map(columns.map(column => [column.key, column]))
 const defaultMovableColumnOrder = columns.filter(column => column.key !== 'title').map(column => column.key as MovableColumnKey)
 const movableColumnOrder = ref<MovableColumnKey[]>([...defaultMovableColumnOrder])
+const subitemMovableColumnOrder = ref<MovableColumnKey[]>([...defaultMovableColumnOrder])
 const columnWidths = reactive<Record<ColumnKey, number>>(Object.fromEntries(columns.map(item => [item.key, item.defaultWidth])) as Record<ColumnKey, number>)
 const hiddenColumns = ref(new Set<ColumnKey>())
 let loadRevision = 0
@@ -341,14 +413,19 @@ const orderedColumns = computed(() => [
   columnByKey.get('title')!,
   ...movableColumnOrder.value.map(key => columnByKey.get(key)!),
 ])
+const orderedSubitemColumns = computed(() => [
+  columnByKey.get('title')!,
+  ...subitemMovableColumnOrder.value.map(key => columnByKey.get(key)!),
+])
 const visibleColumns = computed(() => orderedColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
+const visibleSubitemColumns = computed(() => orderedSubitemColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
 const movableVisibleColumns = computed(() => visibleColumns.value.filter(item => item.key !== 'title'))
 const quickGridStyle = computed(() => ({
   gridTemplateColumns: [`${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
-    ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`)].join(' '),
+    ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
 }))
 const quickContentColumn = computed(() => Math.max(4, visibleColumns.value.findIndex(item => item.key === 'content') + 3))
-const quickSubmitColumn = computed(() => visibleColumns.value.length + 2)
+const quickSubmitColumn = computed(() => visibleColumns.value.length + 3)
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -457,15 +534,15 @@ function onSubitemSelectionChange(parentId: string, rows: ProjectWorkItemListIte
   subitemSelections[parentId] = new Set(rows.map(row => row.id))
 }
 
-function moveSharedColumn(source: string, target: string): void {
+function moveSubitemColumn(source: string, target: string, placement: 'before' | 'after' = 'before'): void {
   if (source === 'title' || target === 'title' || source === target) return
   const sourceKey = source as MovableColumnKey
   const targetKey = target as MovableColumnKey
-  const next = movableColumnOrder.value.filter(key => key !== sourceKey)
+  const next = subitemMovableColumnOrder.value.filter(key => key !== sourceKey)
   const targetIndex = next.indexOf(targetKey)
   if (targetIndex < 0) return
-  next.splice(targetIndex, 0, sourceKey)
-  movableColumnOrder.value = next
+  next.splice(targetIndex + (placement === 'after' ? 1 : 0), 0, sourceKey)
+  subitemMovableColumnOrder.value = next
   persistTablePrefs()
 }
 
@@ -1184,6 +1261,7 @@ function persistTablePrefs(): void {
     widths: columnWidths,
     hidden: [...hiddenColumns.value],
     order: movableColumnOrder.value,
+    subitemOrder: subitemMovableColumnOrder.value,
   }))
 }
 
@@ -1194,6 +1272,7 @@ function loadTablePrefs(): void {
       widths?: Partial<Record<ColumnKey, number>>
       hidden?: ColumnKey[]
       order?: ColumnKey[]
+      subitemOrder?: ColumnKey[]
     }
     if (parsed.version !== TABLE_PREFS_VERSION) return
     columns.forEach(column => {
@@ -1205,6 +1284,11 @@ function loadTablePrefs(): void {
     movableColumnOrder.value = [
       ...new Set(savedOrder),
       ...defaultMovableColumnOrder.filter(key => !savedOrder.includes(key)),
+    ]
+    const savedSubitemOrder = (parsed.subitemOrder ?? []).filter((key): key is MovableColumnKey => key !== 'title' && defaultMovableColumnOrder.includes(key as MovableColumnKey))
+    subitemMovableColumnOrder.value = [
+      ...new Set(savedSubitemOrder),
+      ...defaultMovableColumnOrder.filter(key => !savedSubitemOrder.includes(key)),
     ]
   } catch { /* 忽略损坏的本地视图偏好 */ }
 }
@@ -1227,6 +1311,7 @@ function toggleColumn(key: ColumnKey, checked: boolean): void {
 const TABLE_ROW_HEIGHT = 36
 const TABLE_DRAG_TILT_DEGREES = 1
 const TABLE_DRAG_POINTER_THRESHOLD = 5
+const TABLE_COLUMN_RESIZE_HANDLE_WIDTH = 8
 
 function removeTableDragPreview(): void {
   tableDragPreview?.remove()
@@ -1432,14 +1517,94 @@ function clearTableColumnPointerTracking(): void {
   window.removeEventListener('pointercancel', onTableColumnPointerCancel, true)
 }
 
+function clearTableColumnResizeTracking(): void {
+  tableColumnResizeCandidate = undefined
+  columnResizingKey.value = undefined
+  window.removeEventListener('pointermove', onTableColumnResizePointerMove, true)
+  window.removeEventListener('pointerup', onTableColumnResizePointerUp, true)
+  window.removeEventListener('pointercancel', onTableColumnResizePointerCancel, true)
+  document.body.style.removeProperty('cursor')
+  document.body.style.removeProperty('user-select')
+}
+
+function applyTableColumnResize(clientX: number): void {
+  const candidate = tableColumnResizeCandidate
+  if (!candidate) return
+  const nextWidth = Math.max(
+    candidate.minWidth,
+    Math.round(candidate.startWidth + clientX - candidate.startX),
+  )
+  if (columnWidths[candidate.key] === nextWidth) return
+  columnWidths[candidate.key] = nextWidth
+  scheduleResponsiveTableLayout()
+}
+
+function onTableColumnResizePointerDown(event: PointerEvent, handle: HTMLElement): void {
+  const columnKey = handle.dataset.columnKey as ColumnKey | undefined
+  const config = columnKey ? columnByKey.get(columnKey) : undefined
+  const header = handle.closest<HTMLTableCellElement>('th.monday-movable-column-header')
+  if (!columnKey || !config || columnKey === 'title' || !header) return
+  const key = columnKey as MovableColumnKey
+
+  clearTableColumnPointerTracking()
+  clearTableColumnResizeTracking()
+  const renderedWidth = header.getBoundingClientRect().width
+  tableColumnResizeCandidate = {
+    pointerId: event.pointerId,
+    key,
+    minWidth: config.minWidth,
+    startWidth: renderedWidth > 0 ? renderedWidth : columnWidths[key],
+    startX: event.clientX,
+  }
+  columnResizingKey.value = key
+  event.preventDefault()
+  event.stopPropagation()
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+  window.addEventListener('pointermove', onTableColumnResizePointerMove, { capture: true, passive: false })
+  window.addEventListener('pointerup', onTableColumnResizePointerUp, true)
+  window.addEventListener('pointercancel', onTableColumnResizePointerCancel, true)
+}
+
+function onTableColumnResizePointerMove(event: PointerEvent): void {
+  if (!tableColumnResizeCandidate || tableColumnResizeCandidate.pointerId !== event.pointerId) return
+  event.preventDefault()
+  event.stopPropagation()
+  applyTableColumnResize(event.clientX)
+}
+
+function onTableColumnResizePointerUp(event: PointerEvent): void {
+  if (!tableColumnResizeCandidate || tableColumnResizeCandidate.pointerId !== event.pointerId) return
+  event.preventDefault()
+  event.stopPropagation()
+  applyTableColumnResize(event.clientX)
+  clearTableColumnResizeTracking()
+  void nextTick(flushResponsiveTableLayout)
+  persistTablePrefs()
+  suppressClickAfterTableDrag()
+}
+
+function onTableColumnResizePointerCancel(event: PointerEvent): void {
+  if (!tableColumnResizeCandidate || tableColumnResizeCandidate.pointerId !== event.pointerId) return
+  clearTableColumnResizeTracking()
+  void nextTick(flushResponsiveTableLayout)
+  persistTablePrefs()
+  suppressClickAfterTableDrag()
+}
+
 function onTableColumnPointerDown(event: PointerEvent): void {
-  if (!event.isPrimary || event.button !== 0 || tableDragging.value || columnDraggingKey.value) return
+  if (!event.isPrimary || event.button !== 0 || tableDragging.value || columnDraggingKey.value || columnResizingKey.value) return
   const target = event.target as HTMLElement | null
+  const resizeHandle = target?.closest<HTMLElement>('.monday-column-resize-handle')
+  if (resizeHandle) {
+    onTableColumnResizePointerDown(event, resizeHandle)
+    return
+  }
   if (target?.closest('.sort-by-column')) return
   const header = target?.closest<HTMLTableCellElement>('th.monday-movable-column-header')
   if (!header) return
   const rect = header.getBoundingClientRect()
-  if (rect.width > 0 && rect.right - event.clientX <= 8) return
+  if (rect.width > 0 && rect.right - event.clientX < TABLE_COLUMN_RESIZE_HANDLE_WIDTH) return
   const headers = movableHeaderCells()
   const index = headers.indexOf(header)
   const key = movableVisibleColumns.value[index]?.key as MovableColumnKey | undefined
@@ -1531,7 +1696,7 @@ function onTableColumnPointerCancel(event: PointerEvent): void {
 function onTableSurfacePointerDown(event: PointerEvent): void {
   if ((event.target as HTMLElement | null)?.closest('.subitem-table-shell')) return
   onTableColumnPointerDown(event)
-  if (!tableColumnPointerCandidate) onTablePointerDown(event)
+  if (!tableColumnPointerCandidate && !tableColumnResizeCandidate) onTablePointerDown(event)
 }
 
 function isRowSelected(rowId: string): boolean {
@@ -1663,6 +1828,7 @@ function updateTableDropTarget(clientY: number): void {
 function onTablePointerDown(event: PointerEvent): void {
   if (!event.isPrimary || event.button !== 0 || tableDragging.value) return
   const target = event.target as HTMLElement | null
+  if (target?.closest('.subitem-expand-button, .monday-subitems-counter-component')) return
   const dragArea = target?.closest('.work-item-link, .monday-selection-column')
   if (!dragArea) return
   const index = rowIndexFromTarget(target)
@@ -1830,6 +1996,10 @@ watch(() => route.query.workItemId, value => {
 }, { immediate: true })
 watch(assigneeSearch, scheduleMemberSearch)
 watch([detailOpen, drawerWidth], syncProjectPageScrollLayout, { flush: 'post' })
+watch(tableRef, () => {
+  observeProjectPageResizeTargets()
+  scheduleResponsiveTableLayout()
+}, { flush: 'post' })
 watch([
   tableRef,
   () => selectedView.value,
@@ -1843,7 +2013,8 @@ watch([
 onMounted(() => {
   document.body.classList.add('yp-project-overview-scroll')
   syncProjectPageScrollLayout()
-  window.addEventListener('resize', schedulePageScrollbarSync)
+  observeProjectPageResizeTargets()
+  window.addEventListener('resize', scheduleResponsiveTableLayout)
   loadTablePrefs()
   document.addEventListener('pointerdown', onDocumentPointerDown)
   tableObserver = new IntersectionObserver(entries => {
@@ -1863,14 +2034,17 @@ onBeforeUnmount(() => {
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
   if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
   if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
+  if (responsiveTableLayoutFrame !== undefined) window.cancelAnimationFrame(responsiveTableLayoutFrame)
+  projectPageResizeObserver?.disconnect()
   tableObserver?.disconnect(); kanbanObserver?.disconnect()
   document.removeEventListener('pointerdown', onDocumentPointerDown)
-  window.removeEventListener('resize', schedulePageScrollbarSync)
+  window.removeEventListener('resize', scheduleResponsiveTableLayout)
   bindTableScrollElement(undefined)
   document.body.classList.remove('yp-project-overview-scroll', 'yp-work-items-drawer-open')
   document.body.style.removeProperty('--yp-work-items-drawer-width')
   clearTablePointerTracking()
   clearTableColumnPointerTracking()
+  clearTableColumnResizeTracking()
   removeTableDragPreview()
   removeTableColumnDragPreview()
 })
@@ -2065,6 +2239,7 @@ onBeforeUnmount(() => {
             <el-table
               ref="tableRef"
               :data="tableItems"
+              :fit="true"
               :expand-row-keys="expandedSubitemIds"
               :row-class-name="tableRowClassName"
               :row-style="tableRowStyle"
@@ -2090,7 +2265,7 @@ onBeforeUnmount(() => {
                     :loading="subitemState((scope.row as ProjectWorkItemListItem).id).loading"
                     :error="subitemState((scope.row as ProjectWorkItemListItem).id).error"
                     :sort-rules="subitemState((scope.row as ProjectWorkItemListItem).id).sortRules"
-                    :columns="visibleColumns"
+                    :columns="visibleSubitemColumns"
                     :column-widths="columnWidths"
                     :active-contents="activeContents"
                     :members="members"
@@ -2108,7 +2283,7 @@ onBeforeUnmount(() => {
                     @transition="transitionItem"
                     @selection-change="onSubitemSelectionChange"
                     @header-resize="onHeaderDragEnd"
-                    @move-column="moveSharedColumn"
+                    @move-column="moveSubitemColumn"
                   />
                 </template>
               </el-table-column>
@@ -2123,7 +2298,7 @@ onBeforeUnmount(() => {
               <el-table-column
                 label="工作项名称"
                 column-key="title"
-                :width="columnWidths.title"
+                :min-width="columnWidths.title"
                 header-align="center"
                 class-name="monday-title-column"
                 label-class-name="monday-title-column monday-sortable-column-header"
@@ -2139,45 +2314,62 @@ onBeforeUnmount(() => {
                     @clear="clearColumnSort('title')"
                     @save="saveSortedWorkItemOrder"
                   />
+                  <span
+                    class="monday-column-resize-handle monday-title-column-resize-handle"
+                    data-column-key="title"
+                    aria-hidden="true"
+                  />
                 </template>
                 <template #default="scope">
                   <div class="title-cell">
-                    <button
-                      class="subitem-expand-button"
-                      type="button"
-                      :aria-label="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id) ? '收起子项' : '展开子项'"
-                      :aria-expanded="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
-                      @click.stop="toggleSubitems(scope.row as ProjectWorkItemListItem)"
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M5.5 3.5L10 8L5.5 12.5"
-                          stroke="currentColor"
-                          stroke-width="1.6"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        />
-                      </svg>
-                    </button>
-                    <button
+                    <div
                       class="work-item-link"
                       :class="{ 'monday-cell--selected': selectedCellKey === `${(scope.row as ProjectWorkItemListItem).id}:title` }"
+                      tabindex="0"
+                      role="button"
                       @click.stop="openDetail(scope.row as ProjectWorkItemListItem, 'details')"
                     >
-                      <span class="work-item-title-text">{{ (scope.row as ProjectWorkItemListItem).title }}</span>
-                      <span
-                        v-if="(scope.row as ProjectWorkItemListItem).subitemCount > 0"
-                        class="subitem-count-badge"
+                      <button
+                        class="subitem-expand-button"
+                        :class="{
+                          'subitem-expand-button--has-subitems': (scope.row as ProjectWorkItemListItem).subitemCount > 0,
+                          'subitem-expand-button--empty': (scope.row as ProjectWorkItemListItem).subitemCount === 0,
+                        }"
+                        type="button"
+                        :aria-label="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id) ? '收起子项' : '展开子项'"
+                        :aria-expanded="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
+                        @click.stop="toggleSubitems(scope.row as ProjectWorkItemListItem)"
                       >
-                        {{ (scope.row as ProjectWorkItemListItem).subitemCount }} 子项
-                      </span>
-                    </button>
+                        <svg
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          width="16"
+                          height="16"
+                          aria-hidden="true"
+                          class="icon_35ca7030fb monday-expand-icon"
+                          data-testid="icon"
+                          data-vibe="Icon"
+                        >
+                          <path
+                            fill="currentColor"
+                            d="M12.76 10.56a.77.77 0 0 0 0-1.116L8.397 5.233a.84.84 0 0 0-1.157 0 .77.77 0 0 0 0 1.116l3.785 3.653-3.785 3.652a.77.77 0 0 0 0 1.117.84.84 0 0 0 1.157 0l4.363-4.211Z"
+                          />
+                        </svg>
+                      </button>
+                      <span class="work-item-title-text">{{ (scope.row as ProjectWorkItemListItem).title }}</span>
+                      <div
+                        v-if="(scope.row as ProjectWorkItemListItem).subitemCount > 0"
+                        data-testid="clickable"
+                        tabindex="0"
+                        role="button"
+                        :aria-label="`${(scope.row as ProjectWorkItemListItem).subitemCount} Subitems`"
+                        :aria-expanded="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
+                        class="clickable_b3ab95e8e9 monday-subitems-counter-component name-cell-component__subitems-counter disableTextSelection_fae179dda6"
+                        @click.stop="toggleSubitems(scope.row as ProjectWorkItemListItem)"
+                      >
+                        <div class="monday-subitems-counter-component__subitems-count">{{ (scope.row as ProjectWorkItemListItem).subitemCount }}</div>
+                      </div>
+                    </div>
                     <button
                       class="monday-discussion-btn"
                       :class="{ 'monday-cell--selected': selectedCellKey === `${(scope.row as ProjectWorkItemListItem).id}:discussion` }"
@@ -2219,7 +2411,7 @@ onBeforeUnmount(() => {
                 :width="columnWidths[column.key]"
                 align="center"
                 :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' ? ' monday-block-column' : ''}`"
-                :label-class-name="`monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key}`"
+                :label-class-name="`monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key}${columnResizingKey === column.key ? ' monday-column-resizing' : ''}`"
                 resizable
               >
                 <template #header>
@@ -2230,6 +2422,11 @@ onBeforeUnmount(() => {
                     @sort="applyColumnQuickSort(column.key)"
                     @clear="clearColumnSort(column.key)"
                     @save="saveSortedWorkItemOrder"
+                  />
+                  <span
+                    class="monday-column-resize-handle"
+                    :data-column-key="column.key"
+                    aria-hidden="true"
                   />
                 </template>
                 <template #default="scope">
@@ -2359,6 +2556,40 @@ onBeforeUnmount(() => {
                   <span v-else-if="column.key === 'updatedAt'" class="monday-timestamp">{{ formatTime((scope.row as ProjectWorkItemListItem).updatedAt) }}</span>
                 </template>
               </el-table-column>
+
+              <el-table-column
+                label="添加列"
+                column-key="add-column"
+                :min-width="TABLE_ADD_COLUMN_MIN_WIDTH"
+                :resizable="false"
+                header-align="left"
+                class-name="monday-add-column"
+                label-class-name="monday-add-column-header"
+              >
+                <template #header>
+                  <button
+                    type="button"
+                    class="monday-add-column-icon"
+                    aria-label="添加列（功能预留）"
+                    title="添加列（功能预留）"
+                  >
+                    <svg
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      width="18"
+                      height="18"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M10 2.25C10.4142 2.25 10.75 2.58579 10.75 3V9.25H17C17.4142 9.25 17.75 9.58579 17.75 10C17.75 10.4142 17.4142 10.75 17 10.75H10.75V17C10.75 17.4142 10.4142 17.75 10 17.75C9.58579 17.75 9.25 17.4142 9.25 17V10.75H3C2.58579 10.75 2.25 10.4142 2.25 10C2.25 9.58579 2.58579 9.25 3 9.25H9.25V3C9.25 2.58579 9.58579 2.25 10 2.25Z"
+                        fill-rule="evenodd"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </template>
+              </el-table-column>
+
               <template #append>
                 <div
                   v-if="quickOpen"
@@ -2366,13 +2597,15 @@ onBeforeUnmount(() => {
                   class="quick-row monday-quick-row"
                   :style="quickGridStyle"
                 >
+                  <span class="monday-quick-checkbox" aria-hidden="true" />
                   <el-input
                     ref="quickTitleInput"
                     v-model="quickTitle"
                     class="quick-title-field"
                     maxlength="300"
                     :disabled="quickCreating"
-                    placeholder="输入工作项名称；Enter 创建，Shift+Enter 创建后继续"
+                    placeholder="添加工作项"
+                    aria-label="工作项名称；Enter 创建，Shift+Enter 创建后继续"
                     @keydown="onQuickKeydown"
                   />
                   <el-select
@@ -2381,7 +2614,7 @@ onBeforeUnmount(() => {
                     :style="{ gridColumn: quickContentColumn }"
                     :disabled="quickCreating"
                     filterable
-                    placeholder="选择工作项类别"
+                    placeholder="Content"
                   >
                     <el-option
                       v-for="item in activeContents"
@@ -2404,11 +2637,12 @@ onBeforeUnmount(() => {
                 <button
                   v-else
                   class="quick-add monday-quick-add"
+                  :style="quickGridStyle"
                   :disabled="!canCreate"
                   @click="openQuick"
                 >
-                  <el-icon><plus /></el-icon>
-                  <span>添加工作项</span>
+                  <span class="monday-quick-checkbox" aria-hidden="true" />
+                  <span class="monday-quick-add__field">添加工作项</span>
                 </button>
                 <div ref="tableSentinel" class="cursor-sentinel" aria-hidden="true" />
                 <div v-if="tableLoading && tableItems.length" class="incremental-state">正在加载更多工作项…</div>
@@ -2542,6 +2776,7 @@ onBeforeUnmount(() => {
     <teleport to="body">
       <div
         v-if="project && selectedView === 'table'"
+        v-show="horizontalOverflow"
         ref="horizontalPageScrollbar"
         class="project-table-scrollbar project-table-scrollbar--horizontal"
         :style="horizontalPageScrollbarStyle"
@@ -2736,7 +2971,6 @@ onBeforeUnmount(() => {
 /* Monday Table 核心样式与网格微调 */
 :deep(.monday-table.el-table),
 :deep(.monday-table .el-table__inner-wrapper),
-:deep(.monday-table .el-table__header-wrapper),
 :deep(.monday-table .el-table__header),
 :deep(.monday-table .el-table__header thead),
 :deep(.monday-table .el-table__header tr),
@@ -2750,12 +2984,27 @@ onBeforeUnmount(() => {
 
 :deep(.monday-table.el-table) {
   --work-item-table-row-height: 36px;
+  --work-item-table-header-height: 38px;
+  --work-item-sort-overflow-space: 20px;
   --work-item-group-accent: rgb(87, 155, 252);
+  --work-item-hierarchy-indent: 40px;
+  --work-item-hierarchy-gap: 14px;
+  --work-item-hierarchy-line-width: 1px;
+  --work-item-hierarchy-bar-width: 6px;
+  --work-item-hierarchy-bar-center: 3px;
+  --work-item-hierarchy-corner-radius: var(--work-item-hierarchy-bar-width);
+  --work-item-hierarchy-spine-offset: calc(
+    var(--work-item-hierarchy-bar-center) - (var(--work-item-hierarchy-line-width) / 2)
+  );
+  --work-item-column-resize-idle: rgb(208, 212, 228);
+  --work-item-column-resize-accent: rgb(87, 155, 252);
+  --work-item-table-cell-bg: var(--yp-bg-surface);
+  --work-item-quick-add-accent: rgb(87, 155, 252);
   --el-table-border-color: var(--yp-monday-grid-border);
-  --el-table-header-bg-color: var(--yp-monday-header-bg);
+  --el-table-header-bg-color: var(--work-item-table-cell-bg);
   --el-table-header-text-color: var(--yp-text-secondary);
   --el-table-row-hover-bg-color: var(--yp-bg-sunken);
-  --el-table-tr-bg-color: var(--yp-bg-surface);
+  --el-table-tr-bg-color: var(--work-item-table-cell-bg);
   color: var(--yp-text-primary);
   font-size: 13px;
   width: 100%;
@@ -2829,7 +3078,8 @@ onBeforeUnmount(() => {
 
 :deep(.monday-table.el-table--border::after),
 :deep(.monday-table.el-table--border::before),
-:deep(.monday-table.el-table__inner-wrapper::before) {
+:deep(.monday-table .el-table__inner-wrapper::before),
+:deep(.monday-table.el-table--border .el-table__inner-wrapper::after) {
   display: none;
 }
 
@@ -2837,21 +3087,39 @@ onBeforeUnmount(() => {
   display: none;
 }
 
-:deep(.monday-table .el-table__header-wrapper) {
+:deep(.monday-table.el-table > .el-table__inner-wrapper > .el-table__header-wrapper) {
   position: relative;
   z-index: 6;
+  margin-top: calc(-1 * var(--work-item-sort-overflow-space));
+  padding-top: var(--work-item-sort-overflow-space);
+  overflow: hidden !important;
+}
+
+/* 顶部安全区会增加 headerWrapper 的测量高度，这里保持数据区可视高度不变。 */
+:deep(.monday-table.el-table > .el-table__inner-wrapper > .el-table__body-wrapper) {
+  height: calc(100% - var(--work-item-table-header-height)) !important;
 }
 
 :deep(.monday-table .el-table__header th.el-table__cell) {
-  height: 38px;
+  height: var(--work-item-table-header-height);
   padding: 0;
   border-top: 1px solid var(--yp-monday-grid-border);
   border-right: 1px solid var(--yp-monday-grid-border);
   border-bottom: 1px solid var(--yp-monday-grid-border);
-  background: var(--yp-monday-header-bg);
+  background: var(--work-item-table-cell-bg);
   font-size: 13px;
   font-weight: 500;
   color: var(--yp-text-secondary);
+}
+
+:deep(.monday-table .el-table__header th.el-table__cell:hover),
+:deep(.monday-table .el-table__header th.el-table__cell:focus-within) {
+  background: var(--work-item-table-cell-bg);
+}
+
+:deep(.monday-table .el-table__header th.monday-sortable-column-header:hover),
+:deep(.monday-table .el-table__header th.monday-sortable-column-header:focus-within) {
+  background: var(--yp-bg-sunken);
 }
 
 :deep(.monday-table th.monday-sortable-column-header) {
@@ -2859,10 +3127,20 @@ onBeforeUnmount(() => {
   z-index: 4;
 }
 
+:deep(.monday-table .el-table__header th.el-table-fixed-column--left) {
+  z-index: 10;
+}
+
 :deep(.monday-table th.monday-sortable-column-header:hover),
 :deep(.monday-table th.monday-sortable-column-header:focus-within),
 :deep(.monday-table th.monday-sortable-column-header:has(.sort-by-column--active)) {
   z-index: 8;
+}
+
+:deep(.monday-table .el-table__header th.el-table-fixed-column--left:hover),
+:deep(.monday-table .el-table__header th.el-table-fixed-column--left:focus-within),
+:deep(.monday-table .el-table__header th.el-table-fixed-column--left:has(.sort-by-column--active)) {
+  z-index: 12;
 }
 
 :deep(.monday-table .monday-expand-column) {
@@ -2887,7 +3165,7 @@ onBeforeUnmount(() => {
   position: absolute;
   z-index: 2;
   left: -1px;
-  width: 6px;
+  width: var(--work-item-hierarchy-bar-width);
   background: var(--work-item-group-accent);
   content: '';
   pointer-events: none;
@@ -2896,7 +3174,7 @@ onBeforeUnmount(() => {
 :deep(.monday-table .el-table__header th.monday-selection-column)::before {
   top: 0;
   bottom: -1px;
-  border-radius: 6px 0 0;
+  border-radius: var(--work-item-hierarchy-corner-radius) 0 0;
 }
 
 :deep(.monday-table .el-table__body td.monday-selection-column)::before {
@@ -2908,14 +3186,14 @@ onBeforeUnmount(() => {
   border-top: 0;
   border-top-left-radius: 0;
   background-image: linear-gradient(var(--yp-monday-grid-border), var(--yp-monday-grid-border));
-  background-position: 6px top;
+  background-position: var(--work-item-hierarchy-bar-width) top;
   background-repeat: no-repeat;
-  background-size: calc(100% - 6px) 1px;
+  background-size: calc(100% - var(--work-item-hierarchy-bar-width)) 1px;
 }
 
 :deep(.monday-table .el-table__header th.el-table__cell:last-child) {
-  border-right: 1px solid var(--yp-monday-grid-border);
-  border-top-right-radius: var(--yp-radius-md);
+  border-right: 0;
+  border-top-right-radius: 0;
 }
 
 :deep(.monday-table .el-table__body td.el-table__cell) {
@@ -2926,7 +3204,59 @@ onBeforeUnmount(() => {
 }
 
 :deep(.monday-table .el-table__body td.el-table__cell:last-child) {
-  border-right: 1px solid var(--yp-monday-grid-border);
+  border-right: 0;
+}
+
+:deep(.monday-table th.monday-add-column-header),
+:deep(.monday-table td.monday-add-column) {
+  border-left: 1px solid var(--yp-monday-grid-border) !important;
+  border-right: 0 !important;
+}
+
+:deep(.monday-table th.monday-add-column-header) {
+  position: relative;
+  border-top-right-radius: 0;
+}
+
+:deep(.monday-table .el-table__header th.el-table__cell:has(+ th.monday-add-column-header)),
+:deep(.monday-table .el-table__body td.el-table__cell:has(+ td.monday-add-column)) {
+  border-right: 0;
+}
+
+:deep(.monday-table th.monday-add-column-header > .cell) {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 0 0 10px;
+}
+
+.monday-add-column-icon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--yp-radius-sm, 4px);
+  background: transparent;
+  color: var(--yp-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--yp-motion-fast) var(--yp-ease-standard),
+              background-color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.monday-add-column-icon:hover {
+  background: var(--yp-bg-hover);
+  color: var(--yp-text-primary);
+}
+
+.monday-add-column-icon:focus-visible {
+  outline: 2px solid var(--yp-action-primary);
+  outline-offset: -2px;
 }
 
 :deep(.monday-table .monday-selection-column > .cell) {
@@ -3027,6 +3357,61 @@ onBeforeUnmount(() => {
   cursor: grabbing;
 }
 
+.monday-column-resize-handle {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  overflow: hidden;
+  cursor: col-resize;
+}
+
+:deep(.monday-table th.monday-movable-column-header .monday-column-resize-handle)::before,
+:deep(.monday-table th.monday-title-column .monday-title-column-resize-handle)::before {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  border-radius: 16px;
+  background: var(--work-item-column-resize-idle);
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  transition: background 100ms ease, opacity 100ms ease;
+}
+
+.monday-title-column-resize-handle {
+  overflow: visible;
+}
+
+:deep(.monday-table th.monday-title-column .monday-title-column-resize-handle)::before {
+  clip-path: inset(0 0 0 50%);
+}
+
+:deep(.monday-table th.monday-movable-column-header:hover .monday-column-resize-handle)::before {
+  opacity: 1;
+}
+
+:deep(.monday-table th.monday-title-column:hover .monday-title-column-resize-handle)::before {
+  opacity: 1;
+}
+
+:deep(.monday-table th.monday-movable-column-header:has(.monday-column-resize-handle:hover) .monday-column-resize-handle)::before,
+:deep(.monday-table th.monday-movable-column-header.noclick .monday-column-resize-handle)::before,
+:deep(.monday-table th.monday-movable-column-header.monday-column-resizing .monday-column-resize-handle)::before {
+  background: var(--work-item-column-resize-accent);
+  opacity: 1;
+}
+
+:deep(.monday-table th.monday-title-column:has(.monday-title-column-resize-handle:hover) .monday-title-column-resize-handle)::before,
+:deep(.monday-table th.monday-title-column.noclick .monday-title-column-resize-handle)::before {
+  background: var(--work-item-column-resize-accent);
+  opacity: 1;
+}
+
 :deep(.monday-table .el-table__cell > .cell) {
   padding: 0 var(--yp-space-3);
   line-height: 1.4;
@@ -3051,12 +3436,14 @@ onBeforeUnmount(() => {
   min-width: 0;
   flex: 1 1 auto;
   justify-content: flex-start;
-  padding: 0 var(--yp-space-3) 0 var(--yp-space-5);
+  padding: 0 var(--yp-space-2) 0 var(--yp-space-2);
   border: 0;
   color: var(--yp-text-primary);
   background: transparent;
   text-align: left;
   cursor: default;
+  position: relative;
+  box-sizing: border-box;
   transition: color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
@@ -3285,23 +3672,60 @@ onBeforeUnmount(() => {
 /* 快速新增 */
 .monday-quick-add {
   position: relative;
-  display: flex;
+  display: grid;
   width: 100%;
+  min-width: max-content;
   align-items: center;
-  gap: var(--yp-space-2);
   height: var(--work-item-table-row-height);
-  padding: 0 var(--yp-space-4) 0 calc(var(--yp-space-4) + 6px);
+  padding: 0;
   border: 0;
   color: var(--yp-text-secondary);
   background: transparent;
   font-size: 13px;
   cursor: pointer;
-  transition: color var(--yp-motion-fast) var(--yp-ease-standard), background var(--yp-motion-fast) var(--yp-ease-standard);
+  transition: color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
-.monday-quick-add:hover:not(:disabled) {
-  color: var(--yp-action-primary);
-  background: var(--yp-bg-hover);
+.monday-quick-add__field {
+  display: flex;
+  height: 26px;
+  grid-column: 3;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--yp-radius-sm, 4px);
+  text-align: left;
+  transition: border-color var(--yp-motion-fast) var(--yp-ease-standard),
+              background-color var(--yp-motion-fast) var(--yp-ease-standard),
+              color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.monday-quick-checkbox {
+  width: 16px;
+  height: 16px;
+  grid-column: 2;
+  align-self: center;
+  justify-self: center;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--yp-border-strong) 50%, transparent);
+  border-radius: 2px;
+  background: var(--yp-bg-surface);
+  transform: translateX(2px);
+  pointer-events: none;
+}
+
+.monday-quick-add:hover:not(:disabled) .monday-quick-add__field {
+  border-color: var(--yp-border-strong, var(--yp-border-default));
+  background: var(--yp-bg-surface);
+  color: var(--yp-text-primary);
+}
+
+.monday-quick-add:focus-visible { outline: none; }
+
+.monday-quick-add:focus-visible .monday-quick-add__field {
+  border-color: var(--yp-action-primary);
+  box-shadow: 0 0 0 1px var(--yp-action-primary);
 }
 
 .monday-quick-add:disabled {
@@ -3310,12 +3734,25 @@ onBeforeUnmount(() => {
 }
 
 .monday-quick-row {
+  --work-item-quick-control-height: 26px;
   position: relative;
   display: grid;
+  height: var(--work-item-table-row-height);
   min-width: max-content;
-  gap: var(--yp-space-2);
-  padding: var(--yp-space-2) var(--yp-space-3) var(--yp-space-2) calc(var(--yp-space-3) + 6px);
-  background: var(--yp-bg-sunken);
+  gap: 0;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0;
+  background: transparent;
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.monday-quick-row:focus-within { background: var(--yp-bg-selected); }
+
+.monday-quick-add,
+.monday-quick-row {
+  border-bottom: 1px solid var(--yp-monday-grid-border);
+  box-sizing: border-box;
 }
 
 .monday-quick-add::before,
@@ -3327,8 +3764,9 @@ onBeforeUnmount(() => {
   left: 0;
   width: 6px;
   border-radius: 0 0 0 6px;
-  background: var(--work-item-group-accent);
+  background: var(--work-item-quick-add-accent);
   content: '';
+  opacity: .5;
   pointer-events: none;
 }
 
@@ -3351,19 +3789,67 @@ onBeforeUnmount(() => {
   transition: none !important;
 }
 
-.quick-title-field { grid-column: 3; }
+.quick-title-field,
+.quick-content-field {
+  align-self: center;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 0 4px;
+}
+.quick-title-field { grid-column: 3; padding-left: 8px; }
 .quick-content-field { grid-column: 5; }
-.quick-submit { grid-column: 7; justify-self: center; height: 32px; }
+.quick-submit {
+  justify-self: center;
+  width: 64px;
+  height: var(--work-item-quick-control-height);
+  padding: 0 12px;
+}
+:deep(.monday-quick-row .el-input__wrapper),
+:deep(.monday-quick-row .el-select__wrapper) {
+  height: var(--work-item-quick-control-height);
+  min-height: var(--work-item-quick-control-height);
+}
+:deep(.monday-quick-row .el-input__wrapper.is-focus),
+:deep(.monday-quick-row .el-select__wrapper.is-focused) {
+  box-shadow: 0 0 0 1px var(--yp-border-default) inset !important;
+}
+:deep(.monday-quick-row .el-input__wrapper:has(input:focus-visible)),
+:deep(.monday-quick-row .el-select__wrapper:has(input:focus-visible)) {
+  outline: none !important;
+  outline-offset: 0;
+}
 
-.subitem-count-badge {
-  flex: 0 0 auto;
+.monday-subitems-counter-component {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
   margin-left: 8px;
-  padding: 1px 7px;
-  border-radius: 10px;
-  background: var(--yp-bg-sunken);
+  flex: 0 0 auto;
+  border-radius: var(--yp-radius-sm, 4px);
+  background-color: var(--yp-bg-sunken);
   color: var(--yp-text-secondary);
-  font-size: 11px;
-  line-height: 18px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  transition: background-color var(--yp-motion-fast) var(--yp-ease-standard),
+              color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.monday-subitems-counter-component:hover {
+  background-color: var(--yp-bg-hover);
+  color: var(--yp-text-primary);
+}
+
+.monday-subitems-counter-component__subitems-count {
+  display: inline-block;
+  line-height: 1;
+  text-align: center;
 }
 
 :deep(.monday-table td.monday-expand-column) {
@@ -3381,26 +3867,35 @@ onBeforeUnmount(() => {
 }
 
 .subitem-expand-button {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  flex: 0 0 20px;
+  margin-right: 6px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--yp-radius-sm, 4px);
   background: transparent;
-  color: var(--yp-text-secondary);
   cursor: pointer;
+  box-sizing: border-box;
+  transition: background var(--yp-motion-fast) var(--yp-ease-standard),
+              color var(--yp-motion-fast) var(--yp-ease-standard),
+              opacity var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
 .subitem-expand-button:hover,
 .subitem-expand-button:focus-visible {
-  color: var(--yp-link);
-  background: var(--yp-bg-sunken);
+  background: var(--yp-bg-hover);
 }
 
 .subitem-expand-button svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  transform-origin: center;
   transition: transform 120ms ease;
 }
 
@@ -3408,10 +3903,53 @@ onBeforeUnmount(() => {
   transform: rotate(90deg);
 }
 
+/* 没有子工作项：平时隐藏占位，hover 时出现浅色展开按钮 */
+.subitem-expand-button--empty {
+  opacity: 0;
+  color: var(--yp-text-placeholder);
+  pointer-events: none;
+}
+
+:deep(.monday-table .work-item-table-row:hover) .subitem-expand-button--empty,
+.work-item-link:hover .subitem-expand-button--empty,
+.subitem-expand-button--empty:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.subitem-expand-button--empty:hover {
+  color: var(--yp-text-secondary);
+}
+
+/* 已有子工作项：常驻深色展开按钮 */
+.subitem-expand-button--has-subitems {
+  opacity: 1;
+  color: var(--yp-text-primary);
+  pointer-events: auto;
+}
+
+.subitem-expand-button--has-subitems:hover {
+  color: var(--yp-text-primary);
+}
+
 :deep(.monday-table .el-table__expanded-cell) {
-  padding: 0 !important;
+  position: relative;
+  padding: var(--work-item-hierarchy-gap) 0 !important;
   border-left: 0;
   background: var(--yp-bg-surface);
+}
+
+:deep(.monday-table .el-table__expanded-cell)::before {
+  position: absolute;
+  z-index: 4;
+  top: -1px;
+  bottom: -1px;
+  left: var(--work-item-hierarchy-spine-offset);
+  width: var(--work-item-hierarchy-line-width);
+  border-radius: var(--work-item-hierarchy-line-width);
+  background: var(--work-item-group-accent);
+  content: '';
+  pointer-events: none;
 }
 
 .table-pagination {
@@ -3500,18 +4038,6 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
 }
 
-@media (max-width: 720px) {
-  .monday-quick-row {
-    grid-template-columns: 1fr;
-    min-width: 0;
-  }
-  .quick-title-field, .quick-content-field, .quick-submit {
-    grid-column: 1;
-  }
-  .quick-submit {
-    justify-self: stretch;
-  }
-}
 </style>
 
 <style>

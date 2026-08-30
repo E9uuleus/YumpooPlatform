@@ -141,7 +141,7 @@ const tooltipText = computed(() => props.direction === 'ASC'
   height: 22px;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, calc(-50% + 2px));
+  transform: translate(-50%, -50%);
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
@@ -278,18 +278,18 @@ const tooltipText = computed(() => props.direction === 'ASC'
 }
 
 .monday-column-quick-sort:hover .clear-button-wrapper,
-.monday-column-quick-sort:focus-within .clear-button-wrapper,
+.monday-column-quick-sort:has(:focus-visible) .clear-button-wrapper,
 .sort-by-column:hover .clear-button-wrapper,
-.sort-by-column:focus-within .clear-button-wrapper {
+.sort-by-column:has(:focus-visible) .clear-button-wrapper {
   opacity: 1;
   pointer-events: auto;
   transform: translate(0, -50%) scale(1);
 }
 
 .monday-column-quick-sort:hover .save-button-wrapper,
-.monday-column-quick-sort:focus-within .save-button-wrapper,
+.monday-column-quick-sort:has(:focus-visible) .save-button-wrapper,
 .sort-by-column:hover .save-button-wrapper,
-.sort-by-column:focus-within .save-button-wrapper {
+.sort-by-column:has(:focus-visible) .save-button-wrapper {
   opacity: 1;
   pointer-events: auto;
   transform: translate(0, -50%) scale(1);

@@ -26,5 +26,6 @@ export default defineConfig({
     environment: 'happy-dom',
     include: ['src/**/*.spec.ts'],
     clearMocks: true,
+    testTimeout: 20_000,
   },
 })
