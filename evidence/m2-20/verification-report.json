@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-20",
+  "status": "BLOCKED_ENVIRONMENT",
+  "command": "pnpm verify:m2-20",
+  "startedAt": "2026-08-30T11:06:53.000Z",
+  "completedAt": "2026-08-30T11:24:37.555Z",
+  "baseCommit": "da9262a",
+  "flywayVersion": "44",
+  "checks": {
+    "eventContracts": true,
+    "agentNoteAndReadme": true,
+    "openApiGeneratedClient": true,
+    "backendCleanVerify": false,
+    "backendUnitTests": true,
+    "postgresActivityTests": true,
+    "webActivityTests": true,
+    "nodeGate": true
+  },
+  "environmentNotes": [
+    "完整 clean verify 连续两次在宿主机 Oracle JDK 21.0.6 的 java.net.http.HttpClient 初始化阶段失败：UnixDomainSockets.connect0 返回 Invalid argument，69 个 HTTP/随机端口集成用例在业务断言前报 Unable to establish loopback connection。",
+    "后续专项 verify 中 424 个后端单元测试全部通过；PostgreSQL ActivityProjectionIT 3 项与 M017BackupRestoreIT 1 项专项集成测试全部通过，Flyway V1→V44、切点、约束、索引、并发幂等和备份恢复已实际验证。",
+    "完整 Node 门禁通过：API client 7 项、Web 240 项、Desktop 24 项，以及 lint、架构、类型检查和生产构建。"
+  ]
+}

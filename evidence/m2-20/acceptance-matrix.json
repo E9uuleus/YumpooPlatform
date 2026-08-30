@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-20",
+  "verifiedSlices": [
+    {
+      "requirementId": "ACTIVITY-CUTOVER-PERSISTENCE",
+      "scope": "V44 追加表、唯一键、范围与事项游标索引、全局切点及旧事件不回填",
+      "evidence": [
+        "backend/src/main/resources/db/migration/audit/V44__create_activity_projection.sql",
+        "backend/src/test/java/com/yumpoo/platform/YumpooServerApplicationIT.java",
+        "backend/src/test/java/com/yumpoo/platform/audit/infrastructure/ActivityProjectionIT.java"
+      ]
+    },
+    {
+      "requirementId": "ACTIVITY-SAFE-PROJECTION",
+      "scope": "显式 v1 订阅、行为人快照、服务端模板摘要、指派去重和敏感字段排除",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/audit/api/ActivityProjectionService.java",
+        "backend/src/test/java/com/yumpoo/platform/audit/api/ActivityProjectionServiceTest.java"
+      ]
+    },
+    {
+      "requirementId": "ACTIVITY-CURSOR-ACL",
+      "scope": "Project 与软删除 Work Item 当前可见性、筛选指纹绑定和稳定倒序游标",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/administration/api/ActivityController.java",
+        "backend/src/main/java/com/yumpoo/platform/audit/application/ActivityService.java"
+      ]
+    },
+    {
+      "requirementId": "ACTIVITY-CONTRACT-SDK",
+      "scope": "两个公开 GET、ActivityPage historyStartedAt、事件目录与生成 TypeScript SDK",
+      "evidence": [
+        "contracts/openapi/yumpoo-v1.yaml",
+        "packages/api-client/src/generated/apis/ActivityApi.ts",
+        "contracts/events/catalog.yaml"
+      ]
+    },
+    {
+      "requirementId": "ACTIVITY-WEB",
+      "scope": "项目动态路由、导航、日期分组、筛选刷新、加载更早和事项懒加载页签",
+      "evidence": [
+        "frontend/web-app/src/views/projects/ProjectActivityView.vue",
+        "frontend/web-app/src/components/collaboration/ActivityTimeline.vue",
+        "frontend/web-app/src/components/collaboration/ActivityTimeline.spec.ts"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    { "requirementId": "PRODUCT-ACTIVITY-PUBLIC-SURFACE", "targetMilestone": "TBD", "scope": "Product Activity HTTP 与页面" },
+    { "requirementId": "FEEDBACK-ACTIVITY", "targetMilestone": "M3B", "scope": "Feedback 事件映射与公开时间线" },
+    { "requirementId": "ACTIVITY-RETENTION", "targetMilestone": "M5", "scope": "Activity 独立保留、归档与清理政策" }
+  ]
+}

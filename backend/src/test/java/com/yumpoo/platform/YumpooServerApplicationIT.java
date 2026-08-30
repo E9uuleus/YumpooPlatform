@@ -298,10 +298,16 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44"
         );
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT accepted_from IS NOT NULL FROM yumpoo.activity_projection_state
+                WHERE projection_code = 'ACTIVITY_V1'
+                """, Boolean.class)).isTrue();
         assertThat(applicationTableNames).containsExactly(
+                "activity_event",
+                "activity_projection_state",
                 "admin_override",
                 "app_manager_governance_state",
                 "attachment",
@@ -555,7 +561,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v29DatabaseUpgradesThroughV43WithProjectLabelsAndRelations() throws Exception {
+    void v29DatabaseUpgradesThroughV44WithActivityProjection() throws Exception {
         String database = "yumpoo_m213_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -572,8 +578,8 @@ class YumpooServerApplicationIT {
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
             MigrateResult upgraded = latest.migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(14);
-            assertThat(upgraded.targetSchemaVersion).hasToString("43");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(15);
+            assertThat(upgraded.targetSchemaVersion).hasToString("44");
             assertThat(workItemIndexes(jdbcUrl)).contains(
                     "idx_work_item_content_page",
                     "idx_work_item_content_status_page",
@@ -597,7 +603,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v37DatabaseUpgradesForwardThroughV43AndBackfillsBlobRegistry() throws Exception {
+    void v37DatabaseUpgradesForwardThroughV44AndBackfillsBlobRegistry() throws Exception {
         String database = "yumpoo_m217_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -630,8 +636,8 @@ class YumpooServerApplicationIT {
             }
 
             MigrateResult upgraded = migrationFlyway(jdbcUrl, null).migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(6);
-            assertThat(upgraded.targetSchemaVersion).hasToString("43");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(7);
+            assertThat(upgraded.targetSchemaVersion).hasToString("44");
             assertThat(migrationFlyway(jdbcUrl, null).validateWithResult().validationSuccessful).isTrue();
             try (Connection connection=DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(),postgresContainer.getPassword());

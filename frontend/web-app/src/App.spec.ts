@@ -88,7 +88,7 @@ describe('M1-12 Web 全局壳', () => {
     const details = await mountApplication('/projects/project-42/members')
     await flushPromises()
     const detailItems = details.findAll('.context-navigation > .global-navigation button')
-    expect(detailItems.map(item => item.text())).toEqual(['项目', '管理项目', '工作项', '成员', '设置'])
+    expect(detailItems.map(item => item.text())).toEqual(['项目', '管理项目', '工作项', '成员', '动态', '设置'])
     expect(detailItems.find(item => item.text() === '成员')?.attributes('aria-current')).toBe('page')
     details.unmount()
   })
