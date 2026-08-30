@@ -102,7 +102,7 @@ const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
-const detailTab = ref<'details' | 'discussion'>('details')
+const detailTab = ref<'details' | 'discussion' | 'activity'>('details')
 const dragging = ref<ProjectWorkItemListItem>()
 const tableDragging = ref<ProjectWorkItemListItem>()
 const tableDraggingIndex = ref<number>(-1)
@@ -1010,7 +1010,7 @@ function onDocumentPointerDown(event: PointerEvent): void {
   void createQuick(false)
 }
 
-async function loadDetail(workItemId: string, tab: 'details' | 'discussion' = 'details'): Promise<void> {
+async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'activity' = 'details'): Promise<void> {
   detailOpen.value = true
   detailTab.value = tab
   detailLoading.value = true

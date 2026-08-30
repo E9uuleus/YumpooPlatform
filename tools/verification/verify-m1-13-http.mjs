@@ -324,7 +324,7 @@ function verifyDatabaseState() {
   const missingM113Migrations = Number(psql("SELECT count(*) FROM generate_series(1, 14) AS required(version) WHERE NOT EXISTS (SELECT 1 FROM yumpoo.flyway_schema_history AS history WHERE history.success = true AND history.version::integer = required.version)"))
   assert(missingM113Migrations === 0, `required M1-13 migrations are missing: ${missingM113Migrations}`)
   assert(/^\d+$/u.test(flywayVersion) && Number(flywayVersion) >= 14, `unexpected Flyway version: ${flywayVersion}`)
-  const outOfScopeTables = psql("SELECT table_name FROM information_schema.tables WHERE table_schema = 'yumpoo' AND lower(table_name) ~ '(project|product|membership|owner)' AND table_name NOT IN ('project_template_definition', 'project_template_content_blueprint') ORDER BY table_name")
+  const outOfScopeTables = psql("SELECT table_name FROM information_schema.tables WHERE table_schema = 'yumpoo' AND lower(table_name) ~ '(project|product|membership|owner)' AND table_name NOT IN ('project_template_definition', 'project_template_content_blueprint', 'activity_projection_state') ORDER BY table_name")
     .split(/\r?\n/u)
     .filter(Boolean)
   const outOfScopeFacts = outOfScopeTables.flatMap((tableName) => {

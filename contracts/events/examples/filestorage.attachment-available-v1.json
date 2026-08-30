@@ -16,6 +16,8 @@
     "ownerType": "WORK_ITEM",
     "ownerId": "37000000-0000-4000-8000-000000000003",
     "projectId": "37000000-0000-4000-8000-000000000004",
+    "contentId": "37000000-0000-4000-8000-000000000006",
+    "workItemId": "37000000-0000-4000-8000-000000000003",
     "fileName": "验收报告.pdf",
     "detectedMime": "application/pdf",
     "sizeBytes": 4096,

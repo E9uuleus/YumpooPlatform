@@ -79,6 +79,7 @@ class M017BackupRestoreIT {
             createProductGovernanceFact(source);
             createProjectContentFact(source);
             createAttachmentFact(source, first);
+            createActivityFact(source);
 
             Path dump = workRoot.resolve("yumpoo.dump");
             createDump(source, dump);
@@ -135,6 +136,7 @@ class M017BackupRestoreIT {
             assertThat(readAdminOverrideFact(target))
                     .isEqualTo(readAdminOverrideFact(source));
             assertThat(readAttachmentFact(target)).isEqualTo(readAttachmentFact(source));
+            assertThat(readActivityFact(target)).isEqualTo(readActivityFact(source));
 
             Path restoreQuarantine = Files.createDirectories(restoreRoot.resolve("quarantine"));
             LocalFileQuarantineStorage restoredStorage = new LocalFileQuarantineStorage(
@@ -209,6 +211,50 @@ class M017BackupRestoreIT {
                 OptionalLong.of(bytes.length)
         );
         return storage.publish(sealed);
+    }
+
+    private static void createActivityFact(PostgreSQLContainer container) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO yumpoo.activity_event (
+                        id,event_id,projection_code,company_id,scope_type,scope_id,
+                        entity_type,entity_id,entity_ref,event_type,actor_type,actor_user_id,
+                        actor_display_name,occurred_at,template_code,safe_parameters,
+                        entity_version,request_id,correlation_id,primary_work_item_id
+                    ) VALUES (
+                        '44000000-0000-4000-8000-000000000020',
+                        '44000000-0000-4000-8000-000000000021','ACTIVITY_V1',
+                        '00000000-0000-4000-8000-000000000001','PROJECT',
+                        '00000000-0000-4000-8000-000000000802','WORK_ITEM',
+                        '00000000-0000-4000-8000-000000000816','M2-20 RESTORE-20',
+                        'workitem.work_item_created','USER',
+                        '00000000-0000-4000-8000-000000000102','Restore Member',
+                        '2026-08-30T08:20:00Z','WORK_ITEM_CREATED',
+                        '{"entityRef":"M2-20 RESTORE-20"}'::jsonb,1,
+                        'm2-20-backup-restore','m2-20-backup-restore',
+                        '00000000-0000-4000-8000-000000000816'
+                    )
+                    """);
+        }
+    }
+
+    private static String readActivityFact(PostgreSQLContainer container) throws SQLException {
+        try (Connection connection = connection(container);
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT event_id || ':' || projection_code || ':' || scope_id || ':'
+                            || entity_type || ':' || entity_id || ':' || entity_ref || ':'
+                            || event_type || ':' || actor_display_name || ':' || template_code
+                            || ':' || safe_parameters::text || ':' || primary_work_item_id AS fact
+                     FROM yumpoo.activity_event
+                     WHERE id = '44000000-0000-4000-8000-000000000020'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            String fact = result.getString("fact");
+            assertThat(result.next()).isFalse();
+            return fact;
+        }
     }
 
     private static void createAttachmentFact(PostgreSQLContainer container, PublishedBlob blob)

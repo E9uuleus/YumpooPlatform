@@ -165,7 +165,7 @@ const createForm = reactive({
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
-const detailTab = ref<'details' | 'discussion'>('details')
+const detailTab = ref<'details' | 'discussion' | 'activity'>('details')
 const discussion = ref<WorkItemDiscussionHandle>()
 const detailDraft = reactive<WorkItemFieldsDraft>({
   title: '', priority: null, assigneeUserId: '', description: '', notes: '',

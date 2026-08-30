@@ -43,8 +43,9 @@ public class AttachmentFinalizationService {
         Optional<Finalization> candidate=attachments.prepareFinalization(claim,clean,clock.instant());
         if(candidate.isEmpty()) return;
         Finalization finalization=candidate.orElseThrow();
+        AttachmentParentAccessPort.AttachmentParentContext parent;
         try {
-            parents.requireWritableByOriginalUploader(finalization.companyId(),
+            parent = parents.requireWritableByOriginalUploader(finalization.companyId(),
                     finalization.uploadedByUserId(),finalization.ownerType(),finalization.ownerId());
         } catch (RuntimeException failure) {
             attachments.completeRejected(claim,AttachmentRejectedCode.PARENT_NOT_WRITABLE,clock.instant());
@@ -61,6 +62,8 @@ public class AttachmentFinalizationService {
         payload.put("ownerType",metadata.ownerType().name());
         payload.put("ownerId",metadata.ownerId().toString());
         payload.put("projectId",metadata.projectId().toString());
+        payload.put("contentId",parent.contentId().toString());
+        payload.put("workItemId",parent.workItemId().toString());
         payload.put("fileName",metadata.originalFileName());
         payload.put("detectedMime",metadata.detectedMime());
         payload.put("sizeBytes",metadata.sizeBytes());

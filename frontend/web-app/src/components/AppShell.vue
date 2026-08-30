@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Close, FolderOpened, Grid, Menu as MenuIcon, Search, Setting, User } from '@element-plus/icons-vue'
+import { Clock, Close, FolderOpened, Grid, Menu as MenuIcon, Search, Setting, User } from '@element-plus/icons-vue'
 import { AuthenticationClientType, ProjectLifecycleFilter, type ProjectSummary } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -89,6 +89,7 @@ const contextItems = computed<ContextItem[]>(() => {
       items.push(
         { label: '工作项', routeName: 'project-overview', params: { projectId }, icon: Grid, groupLabel: '当前项目' },
         { label: '成员', routeName: 'project-members', params: { projectId }, icon: User },
+        { label: '动态', routeName: 'project-activity', params: { projectId }, icon: Clock },
         { label: '设置', routeName: 'project-settings', params: { projectId }, icon: Setting },
       )
     }

@@ -1,5 +1,15 @@
 # YumpooPlatform
 
+## M2-20 Activity 追加投影与游标查询
+
+M2-20 以 V44 建立 Project、Product、Feedback 三类预留范围的 append-only Activity 投影。当前公开 Project 动态页和 Work Item 详情“动态”页签；Product 生命周期会进入内部投影，但暂不开放 Product Activity 页面或 HTTP 查询。投影只接收 V44 切点后的新事件，不回填旧 Outbox，API 通过 `historyStartedAt` 明示历史起点。
+
+投影保存模板码、服务端中文摘要和严格白名单参数，并在写入时固化行为人显示名；正文、客户字段、删除或治理理由、哈希和跨范围标识不会落库。项目与事项查询每次按当前 Project 可见性重新鉴权，并使用绑定范围与筛选指纹的 `(occurredAt, id)` 倒序游标。
+
+```powershell
+pnpm verify:m2-20
+```
+
 ## M2-21A 项目工作项直接子项
 
 M2-21A 以 V43 `work_item_relation` 提前交付 M2-21 的直接父子项切片：根项下可原子创建全新子项、按父项查询和在同父兄弟间排序；项目与 Content 的 Table、Kanban、筛选计数只展示根项，列表批量返回 `subitemCount`。删除不会级联关系或晋升子项，恢复后回到原嵌套。挂接既有项、换父/解除、递归防环及其他关系类型仍留在 M2-21。

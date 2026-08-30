@@ -18,6 +18,7 @@ describe('Project 工作台路由', () => {
       'contents/:contentId',
       'members',
       'products',
+      'activity',
       'settings',
     ])
   })
