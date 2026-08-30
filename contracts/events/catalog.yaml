@@ -336,3 +336,8 @@ events:
     schema: schemas/filestorage.attachment-available-v1.schema.json
     validExamples: [examples/filestorage.attachment-available-v1.json]
     invalidExamples: [examples/filestorage.attachment-available-v1.invalid.json]
+  - eventType: filestorage.attachment_deleted
+    eventVersion: 1
+    schema: schemas/filestorage.attachment-deleted-v1.schema.json
+    validExamples: [examples/filestorage.attachment-deleted-v1.json]
+    invalidExamples: [examples/filestorage.attachment-deleted-v1.invalid.json]

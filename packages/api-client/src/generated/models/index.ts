@@ -1,6 +1,10 @@
 /* tslint:disable */
 export * from './AccountStatus';
 export * from './AccountStatusChangeResult';
+export * from './ActivityActor';
+export * from './ActivityAudienceType';
+export * from './ActivityItem';
+export * from './ActivityPage';
 export * from './ApiErrorBase';
 export * from './AttachmentCapabilities';
 export * from './AttachmentDeleteRequest';

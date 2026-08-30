@@ -36,6 +36,8 @@ tags:
     description: Work Item 下独立版本、独立时间线的项目讨论流。
   - name: Attachments
     description: Work Item 与已发布 Update 的附件意图、流式上传、扫描状态和受控重扫。
+  - name: Activity
+    description: Project 与 Work Item 的追加式安全动态时间线。
 paths:
   /company:
     get:
@@ -2803,6 +2805,54 @@ paths:
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /projects/{projectId}/activity:
+    get:
+      tags: [Activity]
+      operationId: listProjectActivity
+      summary: 查询项目动态
+      description: 仅返回 V44 切点后的白名单事实；每次请求按当前 Project 可见性重新鉴权。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: projectId, in: path, required: true, schema: { $ref: '#/components/schemas/Uuid' } }
+        - $ref: '#/components/parameters/ActivityCursor'
+        - $ref: '#/components/parameters/ActivitySize'
+        - $ref: '#/components/parameters/ActivityEventType'
+        - $ref: '#/components/parameters/ActivityEntityType'
+        - $ref: '#/components/parameters/ActivityOccurredFrom'
+        - $ref: '#/components/parameters/ActivityOccurredTo'
+      responses:
+        '200':
+          description: 按 occurredAt、id 倒序的项目动态。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ActivityPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /work-items/{workItemId}/activity:
+    get:
+      tags: [Activity]
+      operationId: listWorkItemActivity
+      summary: 查询事项动态
+      description: 软删除事项仍可在当前 Project 可见时读取历史；游标不可跨事项或筛选复用。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: workItemId, in: path, required: true, schema: { $ref: '#/components/schemas/Uuid' } }
+        - $ref: '#/components/parameters/ActivityCursor'
+        - $ref: '#/components/parameters/ActivitySize'
+        - $ref: '#/components/parameters/ActivityEventType'
+        - $ref: '#/components/parameters/ActivityEntityType'
+        - $ref: '#/components/parameters/ActivityOccurredFrom'
+        - $ref: '#/components/parameters/ActivityOccurredTo'
+      responses:
+        '200':
+          description: 按 occurredAt、id 倒序的事项动态。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ActivityPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -2812,6 +2862,58 @@ components:
       description: 服务端签发的 HttpOnly、Secure、SameSite=Lax Web Session Cookie。
 
   schemas:
+    ActivityAudienceType:
+      type: string
+      enum: [PROJECT, PRODUCT, FEEDBACK]
+
+    ActivityActor:
+      type: object
+      additionalProperties: false
+      required: [type, userId, displayName]
+      properties:
+        type: { type: string, enum: [USER, SYSTEM, ADMIN_OVERRIDE] }
+        userId: { type: string, format: uuid, nullable: true }
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+
+    ActivityItem:
+      type: object
+      additionalProperties: false
+      required: [id, audienceType, sourceEventType, entityType, entityId, entityRef,
+        relatedWorkItemIds, actor, occurredAt, templateCode, summary, safeParameters, requestId]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        audienceType: { $ref: '#/components/schemas/ActivityAudienceType' }
+        sourceEventType: { type: string, minLength: 3, maxLength: 128 }
+        entityType: { type: string, minLength: 2, maxLength: 32 }
+        entityId: { $ref: '#/components/schemas/Uuid' }
+        entityRef: { type: string, minLength: 1, maxLength: 320, nullable: true }
+        relatedWorkItemIds:
+          type: array
+          maxItems: 2
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/Uuid' }
+        actor: { $ref: '#/components/schemas/ActivityActor' }
+        occurredAt: { type: string, format: date-time }
+        templateCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{2,95}$' }
+        summary: { type: string, minLength: 1, maxLength: 500 }
+        safeParameters:
+          type: object
+          additionalProperties: true
+          description: 仅包含契约白名单内的安全展示参数。
+        requestId: { type: string, minLength: 1, maxLength: 64 }
+
+    ActivityPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, historyStartedAt]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ActivityItem' } }
+        nextCursor: { type: string, minLength: 1, maxLength: 2048, nullable: true }
+        historyStartedAt:
+          type: string
+          format: date-time
+          description: Activity V1 投影开始接收事件的明确切点，更早历史未回填。
+
     Uuid:
       type: string
       format: uuid
@@ -4929,6 +5031,47 @@ components:
           schema: { $ref: '#/components/schemas/GovernanceReasonRequest' }
 
   parameters:
+    ActivityCursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, minLength: 1, maxLength: 2048 }
+    ActivitySize:
+      name: size
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    ActivityEventType:
+      name: eventType
+      in: query
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        uniqueItems: true
+        items: { type: string, minLength: 3, maxLength: 128 }
+    ActivityEntityType:
+      name: entityType
+      in: query
+      required: false
+      style: form
+      explode: true
+      schema:
+        type: array
+        uniqueItems: true
+        items: { type: string, minLength: 2, maxLength: 32 }
+    ActivityOccurredFrom:
+      name: occurredFrom
+      in: query
+      required: false
+      schema: { type: string, format: date-time }
+    ActivityOccurredTo:
+      name: occurredTo
+      in: query
+      required: false
+      schema: { type: string, format: date-time }
+
     AttachmentId:
       name: attachmentId
       in: path

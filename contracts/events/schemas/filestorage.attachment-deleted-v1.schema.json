@@ -17,6 +17,8 @@
           "ownerType": { "enum": ["WORK_ITEM", "WORK_ITEM_UPDATE"] },
           "ownerId": { "type": "string", "format": "uuid" },
           "projectId": { "type": "string", "format": "uuid" },
+          "contentId": { "type": "string", "format": "uuid" },
+          "workItemId": { "type": "string", "format": "uuid" },
           "fileName": { "type": "string", "minLength": 1, "maxLength": 255 },
           "sizeBytes": { "type": "integer", "minimum": 1, "maximum": 104857600 },
           "deletedByUserId": { "type": "string", "format": "uuid" },

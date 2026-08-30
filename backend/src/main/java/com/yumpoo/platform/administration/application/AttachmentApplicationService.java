@@ -132,7 +132,8 @@ public class AttachmentApplicationService {
             String reason,UUID key,RequestHash hash) {
         AttachmentMetadata visible=attachments.find(actor.companyId(),attachmentId,clock.instant())
                 .orElseThrow(AttachmentApplicationService::notFound);
-        parents.requireWritable(actor,visible.ownerType(),visible.ownerId());
+        AttachmentParentAccessPort.AttachmentParentContext parent =
+                parents.requireWritable(actor,visible.ownerType(),visible.ownerId());
         return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(actor.userId(),
                 "DELETE","deleteAttachment",key),hash),()->{
             DeleteResult result=attachments.delete(actor.companyId(),attachmentId,actor.userId(),
@@ -147,6 +148,8 @@ public class AttachmentApplicationService {
             payload.put("ownerType",visible.ownerType().name());
             payload.put("ownerId",visible.ownerId().toString());
             payload.put("projectId",visible.projectId().toString());
+            payload.put("contentId",parent.contentId().toString());
+            payload.put("workItemId",parent.workItemId().toString());
             payload.put("fileName",visible.originalFileName());
             payload.put("sizeBytes",visible.sizeBytes());
             payload.put("deletedByUserId",result.deletedByUserId().toString());
