@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "milestone": "M2-21",
-  "status": "PASSED",
+  "status": "IMPLEMENTED_WITH_ENVIRONMENT_BLOCKER",
   "command": "pnpm verify:m2-21",
   "startedAt": "2026-08-30T13:45:33Z",
   "completedAt": "2026-08-30T13:47:33Z",
@@ -9,7 +9,7 @@
   "checks": {
     "backendCompileAndTestCompile": true,
     "backendFocusedUnitTests": true,
-    "backendPostgreSqlHttpIntegration": true,
+    "backendPostgreSqlHttpIntegration": false,
     "eventContracts": true,
     "agentNotesAndDocs": true,
     "openApiGeneratedClient": true,
@@ -19,7 +19,7 @@
     "webBuild": true,
     "assetGate": true
   },
-  "environmentBlocker": null,
-  "databaseConclusion": "M2-21 沿用 V43，无新增迁移；完整 Maven 测试（含架构、PostgreSQL/Testcontainers 与 HTTP 集成）已通过。",
+  "environmentBlocker": "当前 Windows 宿主中的 Java 21 HttpClient 在 WorkItemHttpIT 构造阶段因 Unable to establish loopback connection 失败，尚未进入 Spring/Testcontainers 或 M2-21 断言；不得将本机 PostgreSQL HTTP 集成测试记为通过。",
+  "databaseConclusion": "M2-21 沿用 V43，无新增迁移；主代码、测试代码和聚焦单元测试已通过，本机 PostgreSQL HTTP 集成测试受 Java 回环阻断，交由 Linux CI 的 Maven verify 验收。",
   "webConclusion": "关系组件 focused Vitest 3/3、完整 Web Vitest 243/243、vue-tsc、生产构建和 M2-21 资产门禁均已通过。"
 }

@@ -24,7 +24,8 @@ for (const fragment of ['WorkItemRelationType', 'findActivePair', 'validateParen
   assert(service.includes(fragment), `关系服务缺少 ${fragment}`)
 }
 for (const fragment of ['CandidateFacts', 'already_related', 'parent_is_child',
-  'child_has_children', 'ORDER BY relation.created_at DESC, relation.id ASC']) {
+  'child_has_children', 'candidate.type AS type_code', 'parent_item.type AS parent_type',
+  'ORDER BY relation.created_at DESC, relation.id ASC']) {
   assert(repository.includes(fragment), `关系仓储缺少 ${fragment}`)
 }
 for (const fragment of ['/relations")', '/relation-candidates")', '/parent-changes")',

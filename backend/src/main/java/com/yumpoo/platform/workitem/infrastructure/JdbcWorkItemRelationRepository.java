@@ -29,10 +29,10 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
 
     private static final String PROJECTION_COLUMNS = RELATION_COLUMNS + """
             , left_item.content_id AS left_content_id, left_item.item_no AS left_item_no,
-            left_item.type_code AS left_type, left_item.title AS left_title,
+            left_item.type AS left_type, left_item.title AS left_title,
             left_item.status_code AS left_status_code, left_item.deleted_at AS left_deleted_at,
             right_item.content_id AS right_content_id, right_item.item_no AS right_item_no,
-            right_item.type_code AS right_type, right_item.title AS right_title,
+            right_item.type AS right_type, right_item.title AS right_title,
             right_item.status_code AS right_status_code, right_item.deleted_at AS right_deleted_at
             """;
 
@@ -180,7 +180,7 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
             boolean currentIsLeft, OffsetPageRequest page) {
         return jdbc.sql("""
                 SELECT candidate.id, candidate.project_id, candidate.content_id,
-                       candidate.item_no, candidate.type_code, candidate.title,
+                       candidate.item_no, candidate.type AS type_code, candidate.title,
                        candidate.status_code, candidate.deleted_at,
                        EXISTS (SELECT 1 FROM yumpoo.work_item_relation existing
                                 WHERE existing.company_id=:companyId
@@ -204,7 +204,7 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
                        active_parent.row_version AS active_parent_version,
                        parent_item.id AS parent_id, parent_item.project_id AS parent_project_id,
                        parent_item.content_id AS parent_content_id,
-                       parent_item.item_no AS parent_item_no, parent_item.type_code AS parent_type,
+                       parent_item.item_no AS parent_item_no, parent_item.type AS parent_type,
                        parent_item.title AS parent_title,
                        parent_item.status_code AS parent_status_code,
                        parent_item.deleted_at AS parent_deleted_at
