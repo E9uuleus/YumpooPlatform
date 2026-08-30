@@ -661,9 +661,18 @@ class WorkItemHttpIT {
                 "{\"reason\":\"验证已删除对端\"}", "\"0\"",
                 UUID.randomUUID()).statusCode()).isEqualTo(200);
         JsonNode placeholders = body(get(firstRelations, member));
-        assertThat(placeholders.path("items").size()).isEqualTo(5);
+        assertThat(placeholders.path("items").size()).isEqualTo(4);
         placeholders.path("items").forEach(item ->
                 assertThat(item.path("counterpart").path("deleted").asBoolean()).isTrue());
+        UUID activeParentId = jdbc.sql("SELECT left_work_item_id FROM yumpoo.work_item_relation "
+                        + "WHERE relation_type='PARENT_CHILD' AND right_work_item_id=:childId "
+                        + "AND deleted_at IS NULL")
+                .param("childId", childId).query(UUID.class).single();
+        JsonNode parentPlaceholder = body(get("/api/v1/work-items/" + activeParentId
+                + "/relations?relationType=PARENT_CHILD", member));
+        assertThat(parentPlaceholder.path("items").size()).isOne();
+        assertThat(parentPlaceholder.path("items").get(0)
+                .path("counterpart").path("deleted").asBoolean()).isTrue();
         JsonNode noDeletedCandidate = body(get("/api/v1/work-items/" + firstParentId
                 + "/relation-candidates?relationType=RELATED&currentRole=RELATED&q="
                 + URLEncoder.encode(child.path("itemNo").asText(), StandardCharsets.UTF_8), member));
