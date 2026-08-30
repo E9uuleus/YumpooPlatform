@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-21",
+  "status": "PASSED",
+  "command": "pnpm verify:m2-21",
+  "startedAt": "2026-08-30T13:45:33Z",
+  "completedAt": "2026-08-30T13:47:33Z",
+  "flywayVersion": "43",
+  "checks": {
+    "backendCompileAndTestCompile": true,
+    "backendFocusedUnitTests": true,
+    "backendPostgreSqlHttpIntegration": true,
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiGeneratedClient": true,
+    "webFocusedTests": true,
+    "webFullTests": true,
+    "webTypecheck": true,
+    "webBuild": true,
+    "assetGate": true
+  },
+  "environmentBlocker": null,
+  "databaseConclusion": "M2-21 沿用 V43，无新增迁移；完整 Maven 测试（含架构、PostgreSQL/Testcontainers 与 HTTP 集成）已通过。",
+  "webConclusion": "关系组件 focused Vitest 3/3、完整 Web Vitest 243/243、vue-tsc、生产构建和 M2-21 资产门禁均已通过。"
+}

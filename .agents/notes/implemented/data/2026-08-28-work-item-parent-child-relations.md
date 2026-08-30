@@ -4,29 +4,31 @@ Status: implemented
 
 ## Problem
 
-Work Item 核心原先没有关系事实，项目与 Content 的 Table/Kanban 会把所有事项平铺展示。产品关系基线又要求 `PARENT_CHILD` 同项目、单父和无环；如果仅在前端保存嵌套或把父 id 直接塞入 Work Item，会产生第二真源，难以继续承载 RELATED、BLOCKS、SOURCE 和 DUPLICATE，也无法保留关系删除审计。
+Work Item 需要统一承载父子、相关、阻塞、来源和重复五类普通关系，并保留方向、删除审计、幂等与 Activity。父子关系若允许任意深度，就会引入递归查询、环检测、树移动和删除恢复后的多层展示语义；这些复杂度与当前产品只需要“根项 + 一层子项”的目标不相称。
 
 ## Decision
 
-M2-21A 以 `work_item_relation` 作为普通关系的唯一事实表，父项为 left、子项为 right。表结构预留五类关系并保存两侧 Project 快照、创建审计、软删除事实和 `row_version`；数据库约束同企业、禁止自关联、活动关系对唯一、活动子项最多一个父项，并要求 `PARENT_CHILD` 两侧同 Project。本切片的应用层只创建 `PARENT_CHILD`。
+`work_item_relation` 是普通关系唯一事实表，沿用 V43 且不新增迁移。五类关系均由应用层开放：父子固定父为 left、子为 right；RELATED 按 UUID 规范化；BLOCKS、SOURCE、DUPLICATE 按当前侧角色映射 left/right。同类型同方向的有效边唯一，不同类型可以共存。逻辑关系已存在时返回既有事实和 200，不重复写事件；解除后再次关联创建新 relationId，不提供恢复关系接口。
 
-子项命令只能在根工作项下创建全新事项，并在一个事务内写入 Work Item、关系、幂等结果、`workitem.work_item_created` 与 `workitem.work_item_relation_created`。这个受限入口天然无环；挂接既有事项、换父、解除关系和递归环检测仍属于 M2-21。子项可选择父项所属 Project 的任一 ACTIVE Content，类型继续由 Content 派生。
+父子层级永久限定为两层：只有根项与其直接子项。子项不能成为父项，有子项的根项不能成为子项，子项只能有一个有效父项。该更强约束本身保证无环，因此不实现递归 DAG 扫描、任意深度树移动或递归 UI。M2-21A 的新建子项、根查询、直接子项查询和同父排序继续复用；M2-21 增加挂接既有项、原子换父和解除。
 
-项目与 Content 的 Table、Kanban、筛选计数只返回没有活动 `PARENT_CHILD` 入边的根事项。直接子项只从 `/work-items/{parentId}/subitems` 查询，项目列表项批量携带未删除直接子项数，禁止逐行计数。子项仍是完整 Work Item，可通过详情地址访问、参与开放项 blocker，并复用字段编辑、状态、讨论、附件、删除恢复和强 ETag 规则。
+关系写命令先锁 Project，再按 UUID 顺序锁 Work Item，最后锁 Relation。同项目 Project 锁串行化跨行层级约束并与项目归档竞争保持一致。换父在一个事务内软删除旧关系、创建新关系、保存幂等结果并只发出 `workitem.work_item_parent_changed`；不额外产生一删一建两条 Activity。挂接、换父和解除不修改 Work Item 版本或 `project_sort_key`。
 
-删除 Work Item 不级联删除关系，也不把子项晋升为根项。删除的子项不计数；恢复后重新出现在原父项下。父项删除期间子项仍不进入根查询，父项恢复后恢复嵌套。项目手工排序与每个父项的子项排序使用同一稀疏键事实，但移动命令分别限制为根锚点或同父直接兄弟锚点。
+项目与 Content 的 Table、Kanban、筛选计数只返回没有有效 `PARENT_CHILD` 入边的根项；直接子项继续从 `/work-items/{parentId}/subitems` 查询。关系查询与候选查询使用全部同项目事项语义，包括子项；候选批量返回 `ELIGIBLE`、`REPARENT_REQUIRED` 或 `INELIGIBLE` 及稳定原因。Web 保持单层子表，不在子行增加递归入口，并在共享详情抽屉增加懒加载“关系”页签。
 
-Web 只展示一层 Monday 形态子表：所有根行都有可访问的展开按钮，首次展开懒加载，折叠保留缓存；子表共享主表列偏好、编辑能力和详情入口，但维护独立的加载、错误、选择、排序、保存与快速新增状态，且子行不再提供递归展开入口。
+删除 Work Item 不级联关系。关系查询保留已删除对端的编号、标题和 `deleted=true` 占位，有写权限者仍可解除；候选搜索排除已删除事项。ACTIVE MEMBER/OWNER 可管理关系，CompanyAdmin 与归档项目只读。M2-21 只创建同项目关系；双方可见的跨项目请求返回 `CROSS_PROJECT_RELATION_NOT_SUPPORTED`，不可见资源仍为 404。跨项目关系和失权端脱敏占位由 M2-22 负责。
 
-本记录部分替代 [Work Item 核心契约](../architecture/2026-08-22-work-item-core-contract.md) 中“Relation 尚未落地”和项目列表包含全部非删除事项的旧结论；编号、权限、并发、归档、详情、讨论、附件和 blocker 的其余决定继续有效。
+创建复用 `workitem.work_item_relation_created` v1；解除使用 `workitem.work_item_relation_deleted` v1；换父使用 `workitem.work_item_parent_changed` v1。事件只携带关系类型、端点/项目 ID、关系 ID、版本和时间，不传播标题、正文或解除原因。同项目关系只生成一条项目 Activity 投影，并让两端 Work Item 查询都可命中。
+
+本记录替代 [Work Item 核心契约](../architecture/2026-08-22-work-item-core-contract.md) 中“Relation 尚未落地”及原先预期未来递归防环的结论；编号、权限、并发、归档、详情、讨论、附件和 blocker 的其余决定继续有效。
 
 ## Alternatives considered
 
 - 在 `work_item` 增加 `parent_id`：拒绝。无法统一承载其余四类关系、关系审计与软删除，也会把关系生命周期耦合进 Work Item 行。
-- 在前端视图配置保存子项：拒绝。关系会变成不可审计的 UI 偏好，API、blocker、Activity 和其他客户端无法得到同一事实。
-- M2-21A 同时开放挂接既有事项和任意深度：拒绝。它要求递归环检测、换父并发与解除/恢复语义；当前用户价值可由“新建直接子项”闭合交付。
+- 允许任意深度并执行递归环检测：拒绝。产品确认永久采用两层模型；更强的本地不变量更易并发封闭，也与现有单层表格一致。
+- 换父复用普通删除再创建两个公开命令：拒绝。中间状态会暂时把子项提升为根项，也会生成误导性的两条 Activity。
 - 父项删除时级联删除或自动晋升子项：拒绝。两者都会在删除操作中静默改写独立 Work Item 的可见结构和历史关系。
 
 ## Consequences
 
-备份恢复、导入和未来关系命令必须把 Work Item 与 `work_item_relation` 视为一致性集合。新增普通列表、统计或筛选入口必须明确选择根语义还是全事项语义；开放项 blocker 与详情仍使用全事项。未来 M2-21 挂接既有事项时必须在数据库约束之外增加事务内递归环检测，并延续 Project→Content→Work Item→Relation 的确定锁序。关系事件只能兼容增加字段，不能传播正文或不可见端敏感快照。
+备份恢复、导入和未来关系命令必须把 Work Item 与 `work_item_relation` 视为一致性集合。新增普通列表、统计或筛选入口必须明确选择根语义还是全事项语义；开放项 blocker 与详情继续使用全事项。任何未来放宽到三层以上的提案都属于推翻本决策，必须重新评估数据约束、锁序、查询、Activity 和 Web 展开模型，不能在当前接口上静默扩展。

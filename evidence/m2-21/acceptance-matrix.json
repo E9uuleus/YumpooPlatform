@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-21",
+  "verifiedSlices": [
+    {
+      "requirementId": "WORK-ITEM-GENERAL-RELATIONS",
+      "scope": "五类同项目关系、双向当前侧角色、RELATED 规范化、重复返回既有事实、批量候选原因和已删除对端占位",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemRelationService.java", "backend/src/main/java/com/yumpoo/platform/workitem/infrastructure/JdbcWorkItemRelationRepository.java", "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java"]
+    },
+    {
+      "requirementId": "WORK-ITEM-PARENT-CHANGE",
+      "scope": "永久两层父子不变量，挂接既有项、强 ETag 原子换父、带理由解除且保持 Work Item 版本与项目排序键",
+      "evidence": [".agents/notes/implemented/data/2026-08-28-work-item-parent-child-relations.md", "backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemRelationService.java"]
+    },
+    {
+      "requirementId": "WORK-ITEM-RELATION-WEB",
+      "scope": "项目页与 Content 页共享懒加载关系页签，分组、禁用原因、换父确认、解除原因、冲突刷新和已删除占位",
+      "evidence": ["frontend/web-app/src/components/collaboration/WorkItemRelations.vue", "frontend/web-app/src/components/collaboration/WorkItemRelations.spec.ts", "frontend/web-app/src/components/collaboration/WorkItemDetailPanel.vue"]
+    },
+    {
+      "requirementId": "WORK-ITEM-RELATION-EVENTS",
+      "scope": "创建、解除、换父事件契约与双方 Activity；换父只生成单一语义 Activity，事件不携带标题正文或原因",
+      "evidence": ["contracts/events/catalog.yaml", "backend/src/main/java/com/yumpoo/platform/audit/api/ActivityProjectionService.java", "backend/src/test/java/com/yumpoo/platform/audit/api/ActivityProjectionServiceTest.java"]
+    },
+    {
+      "requirementId": "WORK-ITEM-RELATION-CONTRACT",
+      "scope": "OpenAPI 五个 operation、关系与候选模型、黄金事件样例和生成 TypeScript SDK 漂移门禁",
+      "evidence": ["contracts/openapi/yumpoo-v1.yaml", "contracts/events/schemas/workitem.work-item-relation-deleted-v1.schema.json", "contracts/events/schemas/workitem.work-item-parent-changed-v1.schema.json", "packages/api-client/src/generated/apis/WorkItemsApi.ts"]
+    }
+  ],
+  "deferredRequirements": [
+    { "requirementId": "WORK-ITEM-CROSS-PROJECT-RELATIONS", "targetMilestone": "M2-22", "scope": "跨项目双侧权限、失权后不可见端裁剪与脱敏占位" }
+  ]
+}
