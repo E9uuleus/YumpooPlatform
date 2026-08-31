@@ -1026,6 +1026,18 @@ async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'r
   }
 }
 
+async function openRelatedWorkItem(target: { workItemId: string, projectId: string }): Promise<void> {
+  if (target.projectId === projectId.value) {
+    await loadDetail(target.workItemId)
+    return
+  }
+  await router.push({
+    name: 'project-overview',
+    params: { projectId: target.projectId },
+    query: { workItemId: target.workItemId },
+  })
+}
+
 async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> {
   for (const id of affectedWorkItemIds) {
     if (subitems[id]) subitems[id].loaded = false
@@ -2749,11 +2761,12 @@ onBeforeUnmount(() => {
           <work-item-detail-panel
             v-model="detailTab"
             :work-item-id="detail.id"
+            :current-project-id="detail.projectId"
             :members="activeMembers"
             :can-publish="canPublishDiscussion"
             :read-only-reason="discussionReadOnlyReason"
             @relations-changed="onRelationsChanged"
-            @open-work-item="loadDetail($event)"
+            @open-work-item="openRelatedWorkItem"
           >
             <template #details>
               <dl class="detail-list">

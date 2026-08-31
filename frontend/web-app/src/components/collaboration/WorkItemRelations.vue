@@ -1,28 +1,31 @@
 <script setup lang="ts">
 import {
+  ProjectActorAccess,
   WorkItemRelationCandidateEligibilityEnum,
   WorkItemRelationRole,
   WorkItemRelationType,
   readCsrfToken,
   type WorkItemRelation,
   type WorkItemRelationCandidate,
+  type ProjectSummary,
 } from '@yumpoo/api-client'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref, watch } from 'vue'
-import { workItemsApi } from '../../api/client'
+import { projectsApi, workItemsApi } from '../../api/client'
 import { isProblemStatus, problemMessage, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 
-const props = defineProps<{ workItemId: string }>()
+const props = defineProps<{ workItemId: string, currentProjectId: string }>()
 const emit = defineEmits<{
   changed: [affectedWorkItemIds: string[]]
-  openWorkItem: [workItemId: string]
+  openWorkItem: [target: { workItemId: string, projectId: string }]
 }>()
 
 const relations = ref<WorkItemRelation[]>([])
 const relationPage = ref(0)
 const relationPages = ref(0)
 const canCreate = ref(false)
+const hasHiddenRelations = ref(false)
 const loading = ref(false)
 const problem = ref<ApiProblem>()
 const dialogVisible = ref(false)
@@ -36,6 +39,9 @@ const searching = ref(false)
 const mutating = ref(false)
 const mutationSignature = ref('')
 const mutationKey = ref('')
+const targetProjectId = ref(props.currentProjectId)
+const projectOptions = ref<ProjectSummary[]>([])
+const projectSearching = ref(false)
 
 const typeOptions = [
   { value: WorkItemRelationType.ParentChild, label: '父子' },
@@ -97,11 +103,22 @@ watch(relationType, type => {
   currentRole.value = rolesByType[type][0]?.value ?? WorkItemRelationRole.Related
   candidates.value = []
   candidatePages.value = 0
+  if (type === WorkItemRelationType.ParentChild) targetProjectId.value = props.currentProjectId
+})
+
+watch(targetProjectId, () => {
+  candidates.value = []
+  candidatePage.value = 0
+  candidatePages.value = 0
 })
 
 watch(() => props.workItemId, () => {
   relationPage.value = 0
   void loadRelations()
+})
+
+watch(() => props.currentProjectId, projectId => {
+  targetProjectId.value = projectId
 })
 
 onMounted(loadRelations)
@@ -119,6 +136,7 @@ async function loadRelations(page = relationPage.value): Promise<void> {
     relationPage.value = result.page
     relationPages.value = result.totalPages
     canCreate.value = result.canCreate
+    hasHiddenRelations.value = result.hasHiddenRelations
   } catch (reason) {
     problem.value = await toApiProblem(reason)
   } finally {
@@ -133,6 +151,25 @@ function openCreate(): void {
   problem.value = undefined
   mutationSignature.value = ''
   mutationKey.value = ''
+  targetProjectId.value = props.currentProjectId
+  void searchProjects('')
+}
+
+async function searchProjects(text: string): Promise<void> {
+  projectSearching.value = true
+  try {
+    const result = await projectsApi.listProjects({
+      ...(text.trim() ? { query: text.trim() } : {}),
+      actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member],
+      page: 0,
+      size: 20,
+    })
+    projectOptions.value = result.items
+  } catch (reason) {
+    problem.value = await toApiProblem(reason)
+  } finally {
+    projectSearching.value = false
+  }
 }
 
 async function search(page = 0): Promise<void> {
@@ -145,6 +182,7 @@ async function search(page = 0): Promise<void> {
       workItemId: props.workItemId,
       relationType: relationType.value,
       currentRole: currentRole.value,
+      targetProjectId: targetProjectId.value,
       q: text,
       page,
       size: 12,
@@ -178,7 +216,7 @@ async function choose(candidate: WorkItemRelationCandidate): Promise<void> {
     problem.value = await toApiProblem(new Error('CSRF token missing'))
     return
   }
-  const signature = `create:${relationType.value}:${currentRole.value}:${candidate.item.id}`
+  const signature = `create:${relationType.value}:${currentRole.value}:${targetProjectId.value}:${candidate.item.id}`
   mutating.value = true
   problem.value = undefined
   try {
@@ -189,6 +227,7 @@ async function choose(candidate: WorkItemRelationCandidate): Promise<void> {
       workItemRelationCreateRequest: {
         relationType: relationType.value,
         currentRole: currentRole.value,
+        targetProjectId: targetProjectId.value,
         targetWorkItemId: candidate.item.id,
       },
     })
@@ -299,7 +338,8 @@ function cancelled(reason: unknown): boolean {
       <el-button v-if="canCreate" type="primary" @click="openCreate">添加关系</el-button>
     </div>
     <inline-problem v-if="problem && !dialogVisible" :problem="problem" />
-    <el-empty v-if="!loading && !relations.length" description="暂无关系" />
+    <p v-if="hasHiddenRelations" class="relations__hidden">存在关联项不可见</p>
+    <el-empty v-if="!loading && !relations.length && !hasHiddenRelations" description="暂无关系" />
     <section v-for="group in groups" :key="group.role" class="relation-group">
       <h3>{{ group.label }}</h3>
       <ul class="relation-list">
@@ -308,7 +348,7 @@ function cancelled(reason: unknown): boolean {
             type="button"
             class="relation-link"
             :disabled="relation.counterpart.deleted"
-            @click="emit('openWorkItem', relation.counterpart.id)"
+            @click="emit('openWorkItem', { workItemId: relation.counterpart.id, projectId: relation.counterpart.projectId })"
           >
             <strong>{{ relation.counterpart.itemNo }}</strong>
             <span>{{ relation.counterpart.title }}</span>
@@ -332,6 +372,24 @@ function cancelled(reason: unknown): boolean {
 
     <el-dialog v-model="dialogVisible" title="添加事项关系" width="min(680px, 92vw)">
       <el-form label-position="top">
+        <el-form-item label="目标项目">
+          <el-select
+            v-model="targetProjectId"
+            filterable
+            remote
+            :remote-method="searchProjects"
+            :loading="projectSearching"
+            :disabled="relationType === WorkItemRelationType.ParentChild"
+            placeholder="搜索可写项目"
+          >
+            <el-option
+              v-for="project in projectOptions"
+              :key="project.id"
+              :label="`${project.code} ${project.name}`"
+              :value="project.id"
+            />
+          </el-select>
+        </el-form-item>
         <div class="relations__selectors">
           <el-form-item label="关系类型">
             <el-select v-model="relationType">
@@ -344,7 +402,7 @@ function cancelled(reason: unknown): boolean {
             </el-select>
           </el-form-item>
         </div>
-        <el-form-item label="搜索同项目事项">
+        <el-form-item label="搜索目标项目事项">
           <el-input v-model="query" maxlength="80" clearable @keyup.enter="search(0)">
             <template #append><el-button :loading="searching" @click="search(0)">搜索</el-button></template>
           </el-input>
@@ -377,6 +435,7 @@ function cancelled(reason: unknown): boolean {
 <style scoped>
 .relations { min-height: 180px; padding: var(--yp-space-3) 0; }
 .relations__toolbar, .relations__pager { display: flex; align-items: center; justify-content: space-between; gap: var(--yp-space-3); }
+.relations__hidden { margin: var(--yp-space-3) 0; color: var(--el-text-color-secondary); }
 .relation-group h3 { margin: var(--yp-space-4) 0 var(--yp-space-2); font-size: 0.9rem; }
 .relation-list, .candidate-list { display: grid; gap: var(--yp-space-2); margin: 0; padding: 0; list-style: none; }
 .relation-list li { display: flex; align-items: center; gap: var(--yp-space-2); padding: var(--yp-space-2); border: 1px solid var(--el-border-color-lighter); border-radius: var(--yp-radius-md); }

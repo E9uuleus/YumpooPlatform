@@ -878,13 +878,21 @@ async function openDetail(item: WorkItemSummary): Promise<void> {
   }
 }
 
-async function openRelatedWorkItem(workItemId: string): Promise<void> {
-  if (detail.value?.id !== workItemId && !await confirmDiscardDiscussion()) return
+async function openRelatedWorkItem(target: { workItemId: string, projectId: string }): Promise<void> {
+  if (detail.value?.id !== target.workItemId && !await confirmDiscardDiscussion()) return
+  if (target.projectId !== projectId) {
+    await router.push({
+      name: 'project-overview',
+      params: { projectId: target.projectId },
+      query: { workItemId: target.workItemId },
+    })
+    return
+  }
   detailLoading.value = true
   detailTab.value = 'details'
   latestConflict.value = undefined
   try {
-    detail.value = await workItemsApi.getWorkItem({ workItemId })
+    detail.value = await workItemsApi.getWorkItem({ workItemId: target.workItemId })
     assignDraft(detailDraft, detail.value)
   } catch (reason) {
     error.value = await toApiProblem(reason)
@@ -1713,6 +1721,7 @@ onBeforeUnmount(() => {
             v-model="detailTab"
             ref="discussion"
             :work-item-id="detail.id"
+            :current-project-id="detail.projectId"
             :members="activeMembers"
             :can-publish="canPublishUpdate"
             :read-only-reason="readOnlyReason"
