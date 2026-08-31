@@ -137,6 +137,16 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   )
   fs.writeFileSync(emptyDetailsPath, emptyDetails, 'utf8')
 
+  const productPath = path.join(sourceRoot, 'models', 'Product.ts')
+  let product = normalizeText(fs.readFileSync(productPath, 'utf8'))
+  product = replaceExactlyOnce(
+    product,
+    "        'capabilities': json['capabilities'] == null ? undefined : ProductCapabilitiesFromJSON(json['capabilities']),",
+    "        ...(json['capabilities'] == null ? {} : { 'capabilities': ProductCapabilitiesFromJSON(json['capabilities']) }),",
+    'Product 可选能力快照精确属性兼容',
+  )
+  fs.writeFileSync(productPath, product, 'utf8')
+
   const workItemCreatePath = path.join(sourceRoot, 'models', 'WorkItemCreateRequest.ts')
   let workItemCreate = normalizeText(fs.readFileSync(workItemCreatePath, 'utf8'))
   workItemCreate = replaceExactlyOnce(

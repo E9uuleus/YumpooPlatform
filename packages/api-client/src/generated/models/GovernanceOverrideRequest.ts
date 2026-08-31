@@ -58,6 +58,7 @@ export interface GovernanceOverrideRequest {
 */
 export enum GovernanceOverrideRequestTargetTypeEnum {
     Project = 'PROJECT',
+    Product = 'PRODUCT',
     Workspace = 'WORKSPACE',
     UnknownDefaultOpenApi = '11184809'
 }

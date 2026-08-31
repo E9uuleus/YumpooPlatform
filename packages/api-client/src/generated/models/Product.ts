@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { ProductCapabilities } from './ProductCapabilities';
+import {
+    ProductCapabilitiesFromJSON,
+    ProductCapabilitiesFromJSONTyped,
+    ProductCapabilitiesToJSON,
+    ProductCapabilitiesToJSONTyped,
+} from './ProductCapabilities';
 import type { ProductStatus } from './ProductStatus';
 import {
     ProductStatusFromJSON,
@@ -64,10 +71,28 @@ export interface Product {
     ownerUserId: string;
     /**
      *
+     * @type {string}
+     * @memberof Product
+     */
+    readonly ownerDisplayName?: string;
+    /**
+     *
      * @type {number}
      * @memberof Product
      */
     readonly rowVersion: number;
+    /**
+     *
+     * @type {string}
+     * @memberof Product
+     */
+    readonly etag?: string;
+    /**
+     *
+     * @type {ProductCapabilities}
+     * @memberof Product
+     */
+    capabilities?: ProductCapabilities;
 }
 
 
@@ -102,7 +127,10 @@ export function ProductFromJSONTyped(json: any, ignoreDiscriminator: boolean): P
         'description': json['description'],
         'status': ProductStatusFromJSON(json['status']),
         'ownerUserId': json['ownerUserId'],
+        'ownerDisplayName': json['ownerDisplayName'] == null ? undefined : json['ownerDisplayName'],
         'rowVersion': json['rowVersion'],
+        'etag': json['etag'] == null ? undefined : json['etag'],
+        ...(json['capabilities'] == null ? {} : { 'capabilities': ProductCapabilitiesFromJSON(json['capabilities']) }),
     };
 }
 
@@ -110,7 +138,7 @@ export function ProductToJSON(json: any): Product {
     return ProductToJSONTyped(json, false);
 }
 
-export function ProductToJSONTyped(value?: Omit<Product, 'rowVersion'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProductToJSONTyped(value?: Omit<Product, 'ownerDisplayName'|'rowVersion'|'etag'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -123,5 +151,6 @@ export function ProductToJSONTyped(value?: Omit<Product, 'rowVersion'> | null, i
         'description': value['description'],
         'status': ProductStatusToJSON(value['status']),
         'ownerUserId': value['ownerUserId'],
+        'capabilities': ProductCapabilitiesToJSON(value['capabilities']),
     };
 }

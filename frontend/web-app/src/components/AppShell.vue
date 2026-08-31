@@ -430,6 +430,15 @@ onBeforeUnmount(() => {
               </svg>
               <span>管理项目</span>
             </button>
+            <button
+              type="button"
+              :aria-current="route.name === 'products' || route.name === 'product-detail' ? 'page' : undefined"
+              :class="{ active: route.name === 'products' || route.name === 'product-detail' }"
+              @click="navigate('products')"
+            >
+              <el-icon aria-hidden="true"><grid /></el-icon>
+              <span>产品</span>
+            </button>
             <el-tooltip
               v-for="project in navigationProjects"
               :key="project.id"
@@ -634,6 +643,10 @@ onBeforeUnmount(() => {
             <button type="button" :class="{ active: route.name === 'workspace' }" @click="navigate('workspace')">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path d="M14.688 9.267a1.1 1.1 0 0 1 1.03.707l.235.606.702.41.639-.1a1.1 1.1 0 0 1 1.123.545l.27.471a1.12 1.12 0 0 1-.092 1.251l-.404.512v.817l.403.51a1.12 1.12 0 0 1 .092 1.253l-.27.47a1.107 1.107 0 0 1-1.122.544l-.639-.098-.702.41-.235.606a1.1 1.1 0 0 1-1.03.707h-.54a1.1 1.1 0 0 1-1.029-.707l-.236-.607-.702-.409-.639.098a1.096 1.096 0 0 1-1.122-.544l-.272-.471a1.12 1.12 0 0 1 .093-1.25l.404-.512v-.816l-.403-.51a1.12 1.12 0 0 1-.093-1.254l.27-.47a1.109 1.109 0 0 1 1.123-.545l.639.098.702-.409.235-.606a1.1 1.1 0 0 1 1.03-.707h.54Zm-6.303 1.598a.75.75 0 0 1 .158.018l-.238.427a1.684 1.684 0 0 0 .132 1.836l.573.747v1.196l-.574.748a1.683 1.683 0 0 0-.132 1.833l.045.08H3a.75.75 0 0 1-.75-.75v-5.385a.75.75 0 0 1 .75-.75h5.385ZM3.75 16.25h3.885v-3.885H3.75v3.885Zm10.668-3.959c-.47 0-.92.188-1.253.524a1.793 1.793 0 0 0 .575 2.912 1.759 1.759 0 0 0 1.93-.387 1.792 1.792 0 0 0-.268-2.748 1.763 1.763 0 0 0-.984-.301ZM8.385 2.25a.75.75 0 0 1 .75.75v5.385a.75.75 0 0 1-.75.75H3a.75.75 0 0 1-.75-.75V3A.75.75 0 0 1 3 2.25h5.385Zm8.615 0a.75.75 0 0 1 .75.75v5.385a.75.75 0 0 1-.75.75h-.53l-.248-.657a1.622 1.622 0 0 0-.725-.843h.753V3.75h-3.885v3.885h.886a1.7 1.7 0 0 0-.147.09 1.627 1.627 0 0 0-.578.753l-.248.657h-.663a.75.75 0 0 1-.75-.75V3a.75.75 0 0 1 .75-.75H17ZM3.75 7.635h3.885V3.75H3.75v3.885Z" /></svg>
               <span>管理项目</span>
+            </button>
+            <button type="button" :class="{ active: route.name === 'products' || route.name === 'product-detail' }" @click="navigate('products')">
+              <el-icon aria-hidden="true"><grid /></el-icon>
+              <span>产品</span>
             </button>
             <el-tooltip
               v-for="project in navigationProjects"

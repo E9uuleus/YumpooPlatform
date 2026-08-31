@@ -26,6 +26,8 @@ import ProjectContentsView from '../views/projects/ProjectContentsView.vue'
 import ContentWorkItemsView from '../views/projects/ContentWorkItemsView.vue'
 import ProjectSettingsView from '../views/projects/ProjectSettingsView.vue'
 import ProjectActivityView from '../views/projects/ProjectActivityView.vue'
+import ProductsView from '../views/products/ProductsView.vue'
+import ProductDetailView from '../views/products/ProductDetailView.vue'
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -71,6 +73,18 @@ export const routes: RouteRecordRaw[] = [
         path: 'workspace/:workspaceSlug',
         name: 'workspace',
         component: ProjectsView,
+        meta: { shellSection: 'work' },
+      },
+      {
+        path: 'products',
+        name: 'products',
+        component: ProductsView,
+        meta: { shellSection: 'work' },
+      },
+      {
+        path: 'products/:productId',
+        name: 'product-detail',
+        component: ProductDetailView,
         meta: { shellSection: 'work' },
       },
       {

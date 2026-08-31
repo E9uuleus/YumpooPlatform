@@ -3194,7 +3194,21 @@ components:
         description: { type: string, maxLength: 500, nullable: true }
         status: { $ref: '#/components/schemas/ProductStatus' }
         ownerUserId: { $ref: '#/components/schemas/Uuid' }
+        ownerDisplayName: { type: string, readOnly: true }
         rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        etag: { type: string, readOnly: true, pattern: '^"[0-9]+"$' }
+        capabilities: { $ref: '#/components/schemas/ProductCapabilities' }
+
+    ProductCapabilities:
+      type: object
+      additionalProperties: false
+      required: [canUpdate, canArchive, canRestore, canOverrideArchive, canReassignOwner]
+      properties:
+        canUpdate: { type: boolean, readOnly: true }
+        canArchive: { type: boolean, readOnly: true }
+        canRestore: { type: boolean, readOnly: true }
+        canOverrideArchive: { type: boolean, readOnly: true }
+        canReassignOwner: { type: boolean, readOnly: true }
 
     ProductPage:
       type: object
@@ -3289,16 +3303,16 @@ components:
 
     GovernanceOverrideAction:
       type: string
-      enum: [PROJECT_ARCHIVE_WITH_OPEN_ITEMS, WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS]
+      enum: [PROJECT_ARCHIVE_WITH_OPEN_ITEMS, PRODUCT_ARCHIVE_WITH_BLOCKERS, WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS]
 
     GovernanceOverrideCreateAction:
       type: string
-      enum: [PROJECT_ARCHIVE_WITH_OPEN_ITEMS, WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS]
+      enum: [PROJECT_ARCHIVE_WITH_OPEN_ITEMS, PRODUCT_ARCHIVE_WITH_BLOCKERS, WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS]
       description: WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS 仅为 v1 请求兼容保留，提交后返回稳定失败结果。
 
     GovernanceTargetType:
       type: string
-      enum: [PROJECT, WORKSPACE]
+      enum: [PROJECT, PRODUCT, WORKSPACE]
 
     GovernanceOverrideResult:
       type: string
@@ -3310,7 +3324,7 @@ components:
       required: [action, targetType, targetId, reason]
       properties:
         action: { $ref: '#/components/schemas/GovernanceOverrideCreateAction' }
-        targetType: { type: string, enum: [PROJECT, WORKSPACE] }
+        targetType: { type: string, enum: [PROJECT, PRODUCT, WORKSPACE] }
         targetId: { $ref: '#/components/schemas/Uuid' }
         reason: { type: string, minLength: 10, maxLength: 500 }
 
