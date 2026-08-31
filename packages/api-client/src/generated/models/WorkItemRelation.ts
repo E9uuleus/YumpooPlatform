@@ -72,7 +72,7 @@ export interface WorkItemRelation {
      */
     counterpartRole: WorkItemRelationRole;
     /**
-     *
+     * 返回的逐条关系固定为 true。
      * @type {boolean}
      * @memberof WorkItemRelation
      */

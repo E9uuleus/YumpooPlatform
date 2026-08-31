@@ -46,6 +46,12 @@ export interface WorkItemRelationCreateRequest {
      */
     currentRole: WorkItemRelationRole;
     /**
+     * 目标项目；省略时兼容为当前项目，跨项目创建时必须显式提供。
+     * @type {string}
+     * @memberof WorkItemRelationCreateRequest
+     */
+    targetProjectId?: string;
+    /**
      * 不透明 UUID；客户端不得从值中推导业务语义。
      * @type {string}
      * @memberof WorkItemRelationCreateRequest
@@ -77,6 +83,7 @@ export function WorkItemRelationCreateRequestFromJSONTyped(json: any, ignoreDisc
 
         'relationType': WorkItemRelationTypeFromJSON(json['relationType']),
         'currentRole': WorkItemRelationRoleFromJSON(json['currentRole']),
+        'targetProjectId': json['targetProjectId'] == null ? undefined : json['targetProjectId'],
         'targetWorkItemId': json['targetWorkItemId'],
     };
 }
@@ -94,6 +101,7 @@ export function WorkItemRelationCreateRequestToJSONTyped(value?: WorkItemRelatio
 
         'relationType': WorkItemRelationTypeToJSON(value['relationType']),
         'currentRole': WorkItemRelationRoleToJSON(value['currentRole']),
+        'targetProjectId': value['targetProjectId'],
         'targetWorkItemId': value['targetWorkItemId'],
     };
 }

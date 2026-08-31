@@ -47,6 +47,11 @@ public class ProjectMembershipService {
     }
 
     @Transactional(readOnly = true)
+    public Map<UUID, Access> findVisible(CurrentActor actor, Collection<UUID> projectIds) {
+        return membershipRepository.findVisible(actor, projectIds);
+    }
+
+    @Transactional(readOnly = true)
     public java.util.List<ProjectApplicationSnapshot> findGovernedByOwner(UUID companyId, UUID ownerUserId) {
         return projectRepository.findGovernedByOwner(companyId, ownerUserId).stream()
                 .map(ProjectMembershipService::project).toList();

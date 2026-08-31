@@ -68,12 +68,13 @@ public final class WorkItemRelationController {
     ResponseEntity<CandidatePage> candidates(@PathVariable UUID workItemId,
             @RequestParam String relationType,
             @RequestParam String currentRole,
+            @RequestParam(required = false) UUID targetProjectId,
             @RequestParam String q,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(service.candidates(actors.requiredActive(), workItemId,
-                        relationType, currentRole, q,
+                        relationType, currentRole, targetProjectId, q,
                         OffsetPageRequest.of(page, size)));
     }
 
@@ -86,7 +87,7 @@ public final class WorkItemRelationController {
         UUID key = keys.parseRequired(idempotencyHeader);
         StoredCommandResult result = service.create(new Create(actor, workItemId,
                 body.relationType(), body.currentRole(),
-                body.targetWorkItemId(), key,
+                body.targetProjectId(), body.targetWorkItemId(), key,
                 hasher.hash("createWorkItemRelation", Map.of(
                                 "workItemId", workItemId.toString()),
                         objectMapper.valueToTree(body)))).result();

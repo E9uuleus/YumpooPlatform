@@ -36,6 +36,16 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     }
 
     @Override
+    public java.util.Map<java.util.UUID, ProjectAccessSnapshot> findVisible(
+            com.yumpoo.platform.identityaccess.api.CurrentActor actor,
+            java.util.Collection<java.util.UUID> projectIds) {
+        return membershipService.findVisible(actor, projectIds).entrySet().stream()
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        java.util.Map.Entry::getKey,
+                        entry -> access(entry.getValue())));
+    }
+
+    @Override
     public ProjectFactWriteSnapshot lockForFactWrite(
             com.yumpoo.platform.identityaccess.api.CurrentActor actor, java.util.UUID projectId) {
         membershipService.requireVisible(actor, projectId);

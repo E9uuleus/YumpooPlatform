@@ -45,7 +45,7 @@ export interface WorkItemRelationPage {
      */
     size: number;
     /**
-     *
+     * 仅统计可见关系。
      * @type {number}
      * @memberof WorkItemRelationPage
      */
@@ -62,6 +62,12 @@ export interface WorkItemRelationPage {
      * @memberof WorkItemRelationPage
      */
     readonly canCreate: boolean;
+    /**
+     * 是否存在至少一个不可见对端；该聚合信号忽略 relationType 过滤。
+     * @type {boolean}
+     * @memberof WorkItemRelationPage
+     */
+    readonly hasHiddenRelations: boolean;
 }
 
 /**
@@ -74,6 +80,7 @@ export function instanceOfWorkItemRelationPage(value: object): value is WorkItem
     if (!('totalElements' in value) || value['totalElements'] === undefined) return false;
     if (!('totalPages' in value) || value['totalPages'] === undefined) return false;
     if (!('canCreate' in value) || value['canCreate'] === undefined) return false;
+    if (!('hasHiddenRelations' in value) || value['hasHiddenRelations'] === undefined) return false;
     return true;
 }
 
@@ -93,6 +100,7 @@ export function WorkItemRelationPageFromJSONTyped(json: any, ignoreDiscriminator
         'totalElements': json['totalElements'],
         'totalPages': json['totalPages'],
         'canCreate': json['canCreate'],
+        'hasHiddenRelations': json['hasHiddenRelations'],
     };
 }
 
@@ -100,7 +108,7 @@ export function WorkItemRelationPageToJSON(json: any): WorkItemRelationPage {
     return WorkItemRelationPageToJSONTyped(json, false);
 }
 
-export function WorkItemRelationPageToJSONTyped(value?: Omit<WorkItemRelationPage, 'canCreate'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemRelationPageToJSONTyped(value?: Omit<WorkItemRelationPage, 'canCreate'|'hasHiddenRelations'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

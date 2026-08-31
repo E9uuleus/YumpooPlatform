@@ -8,4 +8,5 @@ import java.util.UUID;
 public record WorkItemRelationCreateRequest(
         @NotBlank String relationType,
         @NotBlank String currentRole,
+        UUID targetProjectId,
         @NotNull UUID targetWorkItemId) {}

@@ -235,6 +235,7 @@ export interface ListWorkItemRelationCandidatesRequest {
     relationType: WorkItemRelationType;
     currentRole: WorkItemRelationRole;
     q: string;
+    targetProjectId?: string;
     page?: number;
     size?: number;
 }
@@ -634,8 +635,8 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 相同逻辑关系已存在时返回既有关系且不重复写事件。
-     * 创建同项目 Work Item 关系
+     * 普通关系可跨项目，父子关系必须同项目；相同逻辑关系已存在时返回既有关系且不重复写事件。
+     * 创建 Work Item 关系
      */
     async createWorkItemRelationRaw(requestParameters: CreateWorkItemRelationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemRelation>> {
         if (requestParameters['workItemId'] == null) {
@@ -696,8 +697,8 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 相同逻辑关系已存在时返回既有关系且不重复写事件。
-     * 创建同项目 Work Item 关系
+     * 普通关系可跨项目，父子关系必须同项目；相同逻辑关系已存在时返回既有关系且不重复写事件。
+     * 创建 Work Item 关系
      */
     async createWorkItemRelation(requestParameters: CreateWorkItemRelationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemRelation> {
         const response = await this.createWorkItemRelationRaw(requestParameters, initOverrides);
@@ -1409,7 +1410,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
 
     /**
      * 返回合法、需显式换父和不合法候选以及稳定原因码；不包含已删除事项。
-     * 搜索同项目关系候选 Work Item
+     * 搜索关系候选 Work Item
      */
     async listWorkItemRelationCandidatesRaw(requestParameters: ListWorkItemRelationCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemRelationCandidatePage>> {
         if (requestParameters['workItemId'] == null) {
@@ -1450,6 +1451,10 @@ export class WorkItemsApi extends runtime.BaseAPI {
             queryParameters['currentRole'] = requestParameters['currentRole'];
         }
 
+        if (requestParameters['targetProjectId'] != null) {
+            queryParameters['targetProjectId'] = requestParameters['targetProjectId'];
+        }
+
         if (requestParameters['q'] != null) {
             queryParameters['q'] = requestParameters['q'];
         }
@@ -1480,7 +1485,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
 
     /**
      * 返回合法、需显式换父和不合法候选以及稳定原因码；不包含已删除事项。
-     * 搜索同项目关系候选 Work Item
+     * 搜索关系候选 Work Item
      */
     async listWorkItemRelationCandidates(requestParameters: ListWorkItemRelationCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemRelationCandidatePage> {
         const response = await this.listWorkItemRelationCandidatesRaw(requestParameters, initOverrides);

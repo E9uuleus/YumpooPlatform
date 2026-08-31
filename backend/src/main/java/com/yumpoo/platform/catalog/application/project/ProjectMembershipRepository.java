@@ -25,4 +25,5 @@ public interface ProjectMembershipRepository {
                                              Collection<UUID> userIds);
     boolean existsActive(UUID companyId, UUID projectId, UUID userId);
     Optional<Access> findVisible(CurrentActor actor, UUID projectId);
+    Map<UUID, Access> findVisible(CurrentActor actor, Collection<UUID> projectIds);
 }

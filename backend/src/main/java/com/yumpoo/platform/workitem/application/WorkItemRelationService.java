@@ -42,12 +42,15 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class WorkItemRelationService {
@@ -83,9 +86,10 @@ public class WorkItemRelationService {
         requireActor(actor);
         WorkItemRelation relation = relations.findById(actor.companyId(), relationId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        ProjectAccessSnapshot project = visible(actor, relation.leftProjectId());
-        return requiredView(project.companyId(), relationId, relation.leftWorkItemId(),
-                canWrite(project));
+        Map<UUID, ProjectAccessSnapshot> projects = visible(actor,
+                projectIds(relation.leftProjectId(), relation.rightProjectId()));
+        return requiredView(actor.companyId(), relationId, relation.leftWorkItemId(),
+                projects.values().stream().allMatch(WorkItemRelationService::canWrite));
     }
 
     @Transactional(readOnly = true)
@@ -95,18 +99,30 @@ public class WorkItemRelationService {
                 : enumValue("relationType", relationTypeValue, WorkItemRelationType.class);
         WorkItemLocator locator = activeLocator(actor, workItemId);
         ProjectAccessSnapshot project = visible(actor, locator.projectId());
+        Set<UUID> counterpartProjectIds = relations.findCounterpartProjectIds(
+                project.companyId(), workItemId);
+        Map<UUID, ProjectAccessSnapshot> visibleProjects = access.findVisible(actor,
+                counterpartProjectIds);
+        Set<UUID> visibleProjectIds = new HashSet<>(visibleProjects.keySet());
+        visibleProjectIds.add(project.projectId());
         List<RelationView> items = relations.findActiveForWorkItem(project.companyId(), workItemId,
-                        relationType, page).stream()
-                .map(projection -> view(projection, workItemId, canWrite(project))).toList();
-        long total = relations.countActiveForWorkItem(project.companyId(), workItemId, relationType);
+                        relationType, visibleProjectIds, page).stream()
+                .map(projection -> view(projection, workItemId,
+                        canWrite(project) && canWrite(visibleProjects.get(
+                                counterpartProjectId(projection.relation(), workItemId)))))
+                .toList();
+        long total = relations.countActiveForWorkItem(project.companyId(), workItemId,
+                relationType, visibleProjectIds);
+        boolean hasHiddenRelations = relations.hasHiddenForWorkItem(project.companyId(),
+                workItemId, visibleProjectIds);
         return new RelationPage(items, page.page(), page.size(), total, totalPages(total, page.size()),
-                canWrite(project));
+                canWrite(project), hasHiddenRelations);
     }
 
     @Transactional(readOnly = true)
     public CandidatePage candidates(CurrentActor actor, UUID workItemId,
             String relationTypeValue, String currentRoleValue,
-            String query, OffsetPageRequest page) {
+            UUID targetProjectId, String query, OffsetPageRequest page) {
         WorkItemRelationType relationType = enumValue(
                 "relationType", relationTypeValue, WorkItemRelationType.class);
         WorkItemRelationRole currentRole = enumValue(
@@ -114,11 +130,19 @@ public class WorkItemRelationService {
         validateRole(relationType, currentRole);
         String normalizedQuery = normalizeQuery(query);
         WorkItemLocator locator = activeLocator(actor, workItemId);
-        ProjectAccessSnapshot project = visible(actor, locator.projectId());
-        List<Candidate> items = relations.findCandidates(project.companyId(), project.projectId(),
+        ProjectAccessSnapshot currentProject = visible(actor, locator.projectId());
+        UUID effectiveTargetProjectId = targetProjectId == null
+                ? currentProject.projectId() : targetProjectId;
+        ProjectAccessSnapshot targetProject = visible(actor, effectiveTargetProjectId);
+        requireWritable(currentProject);
+        requireWritable(targetProject);
+        requireSameProjectForParentChild(relationType, currentProject.projectId(),
+                targetProject.projectId());
+        List<Candidate> items = relations.findCandidates(currentProject.companyId(),
+                        targetProject.projectId(),
                         workItemId, normalizedQuery, relationType, currentRole.leftSide(), page).stream()
                 .map(this::candidate).toList();
-        long total = relations.countCandidates(project.companyId(), project.projectId(),
+        long total = relations.countCandidates(currentProject.companyId(), targetProject.projectId(),
                 workItemId, normalizedQuery);
         return new CandidatePage(items, page.page(), page.size(), total,
                 totalPages(total, page.size()));
@@ -134,25 +158,30 @@ public class WorkItemRelationService {
         if (command.currentWorkItemId().equals(command.targetWorkItemId()))
             throw invalid("targetWorkItemId", "SELF_RELATION_NOT_ALLOWED", "事项不能关联自身");
         WorkItemLocator current = activeLocator(command.actor(), command.currentWorkItemId());
-        WorkItemLocator target = activeLocator(command.actor(), command.targetWorkItemId());
-        requireSameVisibleProject(command.actor(), current, target);
-        ProjectAccessSnapshot visible = visible(command.actor(), current.projectId());
-        requireWritable(visible);
+        ProjectAccessSnapshot currentProject = visible(command.actor(), current.projectId());
+        UUID targetProjectId = command.targetProjectId() == null
+                ? current.projectId() : command.targetProjectId();
+        ProjectAccessSnapshot targetProject = visible(command.actor(), targetProjectId);
+        requireWritable(currentProject);
+        requireWritable(targetProject);
+        requireSameProjectForParentChild(relationType, current.projectId(), targetProjectId);
+        WorkItemLocator target = activeLocator(command.actor(), targetProjectId,
+                command.targetWorkItemId());
         return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
                 command.actor().userId(), "POST", "createWorkItemRelation",
                 command.idempotencyKey()), command.requestHash()), () -> {
-            ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
-                    command.actor(), current.projectId());
-            requireWritable(project);
-            Map<UUID, WorkItem> locked = lockItems(project, current, target);
+            Map<UUID, ProjectFactWriteSnapshot> projects = lockProjects(command.actor(),
+                    projectIds(current.projectId(), target.projectId()));
+            Map<UUID, WorkItem> locked = lockItems(projects, current, target);
             Pair pair = pair(relationType, currentRole,
                     command.currentWorkItemId(), command.targetWorkItemId());
-            WorkItemRelation existing = relations.findActivePair(project.companyId(), pair.type(),
+            WorkItemRelation existing = relations.findActivePair(command.actor().companyId(), pair.type(),
                     pair.leftWorkItemId(), pair.rightWorkItemId()).orElse(null);
-            if (existing != null) return stored(200, requiredView(project.companyId(), existing.id(),
+            if (existing != null) return stored(200, requiredView(command.actor().companyId(), existing.id(),
                     command.currentWorkItemId(), true));
-            validateParentChild(project.companyId(), pair, null);
-            WorkItemRelation relation = WorkItemRelation.create(UUID.randomUUID(), project.companyId(),
+            validateParentChild(command.actor().companyId(), pair, null);
+            WorkItemRelation relation = WorkItemRelation.create(UUID.randomUUID(),
+                    command.actor().companyId(),
                     pair.type(), pair.leftWorkItemId(), pair.rightWorkItemId(),
                     locked.get(pair.leftWorkItemId()).projectId(),
                     locked.get(pair.rightWorkItemId()).projectId(), command.actor().userId(),
@@ -160,15 +189,15 @@ public class WorkItemRelationService {
             try {
                 if (!relations.insert(relation)) throw new IllegalStateException("relation insert failed");
             } catch (DataIntegrityViolationException exception) {
-                WorkItemRelation duplicate = relations.findActivePair(project.companyId(), pair.type(),
+                WorkItemRelation duplicate = relations.findActivePair(command.actor().companyId(), pair.type(),
                         pair.leftWorkItemId(), pair.rightWorkItemId()).orElse(null);
-                if (duplicate != null) return stored(200, requiredView(project.companyId(), duplicate.id(),
+                if (duplicate != null) return stored(200, requiredView(command.actor().companyId(), duplicate.id(),
                         command.currentWorkItemId(), true));
                 throw conflict(pair.type() == WorkItemRelationType.PARENT_CHILD
                         ? "PARENT_CHILD_CONSTRAINT_VIOLATION" : "RELATION_ALREADY_ACTIVE");
             }
             appendCreated(relation, command.actor());
-            return stored(201, requiredView(project.companyId(), relation.id(),
+            return stored(201, requiredView(command.actor().companyId(), relation.id(),
                     command.currentWorkItemId(), true));
         });
     }
@@ -230,16 +259,16 @@ public class WorkItemRelationService {
         requireActor(command.actor());
         WorkItemRelation snapshot = relations.findById(command.actor().companyId(), command.relationId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        ProjectAccessSnapshot visible = visible(command.actor(), snapshot.leftProjectId());
-        requireWritable(visible);
+        Map<UUID, ProjectAccessSnapshot> visibleProjects = visible(command.actor(),
+                projectIds(snapshot.leftProjectId(), snapshot.rightProjectId()));
+        visibleProjects.values().forEach(WorkItemRelationService::requireWritable);
         return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
                 command.actor().userId(), "DELETE", "deleteWorkItemRelation",
                 command.idempotencyKey()), command.requestHash()), () -> {
-            ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(command.actor(),
-                    snapshot.leftProjectId());
-            requireWritable(project);
-            lockRelationEndpoints(project, snapshot);
-            WorkItemRelation before = relations.lock(project.companyId(), command.relationId())
+            Map<UUID, ProjectFactWriteSnapshot> projects = lockProjects(command.actor(),
+                    projectIds(snapshot.leftProjectId(), snapshot.rightProjectId()));
+            lockRelationEndpoints(projects, snapshot);
+            WorkItemRelation before = relations.lock(command.actor().companyId(), command.relationId())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             requireVersion(before, command.expectedVersion());
             if (!before.active()) throw conflict("RELATION_NOT_ACTIVE");
@@ -247,7 +276,7 @@ public class WorkItemRelationService {
                             command.reason(), clock.instant()), command.expectedVersion())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
             appendDeleted(after, command.actor());
-            return stored(200, requiredView(project.companyId(), after.id(),
+            return stored(200, requiredView(command.actor().companyId(), after.id(),
                     after.leftWorkItemId(), false));
         });
     }
@@ -281,45 +310,71 @@ public class WorkItemRelationService {
 
     private Map<UUID, WorkItem> lockItems(ProjectFactWriteSnapshot project,
             WorkItemLocator first, WorkItemLocator second) {
-        if (!project.projectId().equals(first.projectId()) || !project.projectId().equals(second.projectId()))
-            throw invalid("targetWorkItemId", "CROSS_PROJECT_RELATION_NOT_SUPPORTED",
-                    "M2-21 只允许同项目关系");
+        return lockItems(Map.of(project.projectId(), project), first, second);
+    }
+
+    private Map<UUID, WorkItem> lockItems(Map<UUID, ProjectFactWriteSnapshot> projects,
+            WorkItemLocator first, WorkItemLocator second) {
         Map<UUID, WorkItem> result = new LinkedHashMap<>();
-        List<UUID> ids = List.of(first.workItemId(), second.workItemId()).stream()
-                .distinct().sorted(Comparator.comparing(UUID::toString)).toList();
-        for (UUID id : ids) {
-            WorkItem item = workItems.lockProjectItem(project.companyId(), project.projectId(), id)
-                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-            result.put(id, item);
+        Map<UUID, List<WorkItemLocator>> grouped = List.of(first, second).stream().distinct()
+                .collect(Collectors.groupingBy(WorkItemLocator::projectId));
+        for (UUID projectId : grouped.keySet().stream()
+                .sorted(Comparator.comparing(UUID::toString)).toList()) {
+            ProjectFactWriteSnapshot project = projects.get(projectId);
+            if (project == null) throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+            for (WorkItemLocator locator : grouped.get(projectId).stream()
+                    .sorted(Comparator.comparing(item -> item.workItemId().toString())).toList()) {
+                WorkItem item = workItems.lockProjectItem(project.companyId(), projectId,
+                                locator.workItemId())
+                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+                result.put(locator.workItemId(), item);
+            }
         }
         return result;
     }
 
-    private void lockRelationEndpoints(ProjectFactWriteSnapshot project,
+    private void lockRelationEndpoints(Map<UUID, ProjectFactWriteSnapshot> projects,
             WorkItemRelation relation) {
-        List<WorkItemLocator> endpoints = List.of(relation.leftWorkItemId(),
-                        relation.rightWorkItemId()).stream().distinct()
-                .sorted(Comparator.comparing(UUID::toString))
-                .map(id -> workItems.findLocatorIncludingDeleted(project.companyId(), id)
-                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND)))
-                .toList();
-        for (WorkItemLocator endpoint : endpoints) {
-            if (!project.projectId().equals(endpoint.projectId()))
-                throw invalid("relationId", "CROSS_PROJECT_RELATION_NOT_SUPPORTED",
-                        "M2-21 只允许同项目关系");
-            workItems.lockIncludingDeleted(project.companyId(), endpoint.projectId(),
-                            endpoint.contentId(), endpoint.workItemId())
-                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        Map<UUID, List<UUID>> endpoints = new LinkedHashMap<>();
+        endpoints.computeIfAbsent(relation.leftProjectId(), ignored -> new java.util.ArrayList<>())
+                .add(relation.leftWorkItemId());
+        endpoints.computeIfAbsent(relation.rightProjectId(), ignored -> new java.util.ArrayList<>())
+                .add(relation.rightWorkItemId());
+        for (UUID projectId : endpoints.keySet().stream()
+                .sorted(Comparator.comparing(UUID::toString)).toList()) {
+            ProjectFactWriteSnapshot project = projects.get(projectId);
+            if (project == null) throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+            for (UUID workItemId : endpoints.get(projectId).stream().distinct()
+                    .sorted(Comparator.comparing(UUID::toString)).toList()) {
+                WorkItemLocator endpoint = workItems.findLocatorIncludingDeleted(project.companyId(),
+                                workItemId)
+                        .filter(locator -> locator.projectId().equals(projectId))
+                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+                workItems.lockIncludingDeleted(project.companyId(), endpoint.projectId(),
+                                endpoint.contentId(), endpoint.workItemId())
+                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            }
         }
     }
 
-    private void requireSameVisibleProject(CurrentActor actor, WorkItemLocator current,
-            WorkItemLocator target) {
-        visible(actor, current.projectId());
-        if (!current.projectId().equals(target.projectId())) {
-            visible(actor, target.projectId());
-            throw invalid("targetWorkItemId", "CROSS_PROJECT_RELATION_NOT_SUPPORTED",
-                    "M2-21 只允许同项目关系");
+    private Map<UUID, ProjectFactWriteSnapshot> lockProjects(CurrentActor actor,
+            Set<UUID> projectIds) {
+        Map<UUID, ProjectFactWriteSnapshot> result = new LinkedHashMap<>();
+        for (UUID projectId : projectIds.stream()
+                .sorted(Comparator.comparing(UUID::toString)).toList()) {
+            ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(actor, projectId);
+            requireWritable(project);
+            result.put(projectId, project);
+        }
+        return result;
+    }
+
+    private static void requireSameProjectForParentChild(WorkItemRelationType relationType,
+            UUID currentProjectId, UUID targetProjectId) {
+        if (relationType == WorkItemRelationType.PARENT_CHILD
+                && !currentProjectId.equals(targetProjectId)) {
+            throw invalid("targetProjectId", "PARENT_CHILD_REQUIRES_SAME_PROJECT",
+                    "父子关系必须位于同一项目");
         }
     }
 
@@ -329,9 +384,34 @@ public class WorkItemRelationService {
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
 
+    private WorkItemLocator activeLocator(CurrentActor actor, UUID projectId, UUID workItemId) {
+        requireActor(actor);
+        return workItems.findLocator(actor.companyId(), projectId, workItemId)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+    }
+
     private ProjectAccessSnapshot visible(CurrentActor actor, UUID projectId) {
         return access.findVisible(actor, projectId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    private Map<UUID, ProjectAccessSnapshot> visible(CurrentActor actor, Set<UUID> projectIds) {
+        Map<UUID, ProjectAccessSnapshot> result = access.findVisible(actor, projectIds);
+        if (!result.keySet().containsAll(projectIds))
+            throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+        return result;
+    }
+
+    private static UUID counterpartProjectId(WorkItemRelation relation, UUID currentWorkItemId) {
+        return relation.leftWorkItemId().equals(currentWorkItemId)
+                ? relation.rightProjectId() : relation.leftProjectId();
+    }
+
+    private static Set<UUID> projectIds(UUID first, UUID second) {
+        Set<UUID> result = new HashSet<>();
+        result.add(first);
+        result.add(second);
+        return result;
     }
 
     private static Pair pair(WorkItemRelationType type, WorkItemRelationRole role,
