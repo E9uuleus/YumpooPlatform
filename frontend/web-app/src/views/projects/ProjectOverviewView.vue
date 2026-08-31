@@ -102,7 +102,7 @@ const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
-const detailTab = ref<'details' | 'discussion' | 'activity'>('details')
+const detailTab = ref<'details' | 'discussion' | 'relations' | 'activity'>('details')
 const dragging = ref<ProjectWorkItemListItem>()
 const tableDragging = ref<ProjectWorkItemListItem>()
 const tableDraggingIndex = ref<number>(-1)
@@ -1010,7 +1010,7 @@ function onDocumentPointerDown(event: PointerEvent): void {
   void createQuick(false)
 }
 
-async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'activity' = 'details'): Promise<void> {
+async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'relations' | 'activity' = 'details'): Promise<void> {
   detailOpen.value = true
   detailTab.value = tab
   detailLoading.value = true
@@ -1024,6 +1024,16 @@ async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'a
   } finally {
     detailLoading.value = false
   }
+}
+
+async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> {
+  for (const id of affectedWorkItemIds) {
+    if (subitems[id]) subitems[id].loaded = false
+  }
+  await refreshCurrentView()
+  await Promise.all(expandedSubitemIds.value
+    .filter(id => affectedWorkItemIds.includes(id))
+    .map(id => loadSubitems(id, true)))
 }
 
 async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion'): Promise<void> {
@@ -2742,6 +2752,8 @@ onBeforeUnmount(() => {
             :members="activeMembers"
             :can-publish="canPublishDiscussion"
             :read-only-reason="discussionReadOnlyReason"
+            @relations-changed="onRelationsChanged"
+            @open-work-item="loadDetail($event)"
           >
             <template #details>
               <dl class="detail-list">

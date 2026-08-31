@@ -4,6 +4,7 @@ import { ElTabPane as ElTabPaneRaw, ElTabs as ElTabsRaw } from 'element-plus'
 import { computed, ref, type DefineComponent } from 'vue'
 import WorkItemDiscussion from './WorkItemDiscussion.vue'
 import ActivityTimeline from './ActivityTimeline.vue'
+import WorkItemRelations from './WorkItemRelations.vue'
 
 interface DiscussionHandle {
   hasDraft: boolean
@@ -11,20 +12,24 @@ interface DiscussionHandle {
 }
 
 const props = defineProps<{
-  modelValue: 'details' | 'discussion' | 'activity'
+  modelValue: 'details' | 'discussion' | 'relations' | 'activity'
   workItemId: string
   members: ProjectMember[]
   canPublish: boolean
   readOnlyReason?: string | undefined
   beforeLeave?: ((next: string | number, previous: string | number) => boolean | Promise<boolean>) | undefined
 }>()
-const emit = defineEmits<{ 'update:modelValue': [value: 'details' | 'discussion' | 'activity'] }>()
+const emit = defineEmits<{
+  'update:modelValue': [value: 'details' | 'discussion' | 'relations' | 'activity']
+  'relationsChanged': [affectedWorkItemIds: string[]]
+  'openWorkItem': [workItemId: string]
+}>()
 const ElTabs = ElTabsRaw as unknown as DefineComponent
 const ElTabPane = ElTabPaneRaw as unknown as DefineComponent
 const discussion = ref<DiscussionHandle>()
 const tab = computed({
   get: () => props.modelValue,
-  set: value => emit('update:modelValue', value as 'details' | 'discussion' | 'activity'),
+  set: value => emit('update:modelValue', value as 'details' | 'discussion' | 'relations' | 'activity'),
 })
 const hasDraft = computed(() => Boolean(discussion.value?.hasDraft))
 
@@ -59,6 +64,14 @@ defineExpose({ hasDraft, discardDraft })
         :members="members"
         :can-publish="canPublish"
         :read-only-reason="readOnlyReason"
+      />
+    </el-tab-pane>
+    <el-tab-pane label="关系" name="relations" lazy>
+      <work-item-relations
+        v-if="tab === 'relations'"
+        :work-item-id="workItemId"
+        @changed="emit('relationsChanged', $event)"
+        @open-work-item="emit('openWorkItem', $event)"
       />
     </el-tab-pane>
     <el-tab-pane label="动态" name="activity" lazy>

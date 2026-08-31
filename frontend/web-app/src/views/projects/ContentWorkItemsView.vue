@@ -165,7 +165,7 @@ const createForm = reactive({
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
-const detailTab = ref<'details' | 'discussion' | 'activity'>('details')
+const detailTab = ref<'details' | 'discussion' | 'relations' | 'activity'>('details')
 const discussion = ref<WorkItemDiscussionHandle>()
 const detailDraft = reactive<WorkItemFieldsDraft>({
   title: '', priority: null, assigneeUserId: '', description: '', notes: '',
@@ -876,6 +876,25 @@ async function openDetail(item: WorkItemSummary): Promise<void> {
   } finally {
     detailLoading.value = false
   }
+}
+
+async function openRelatedWorkItem(workItemId: string): Promise<void> {
+  if (detail.value?.id !== workItemId && !await confirmDiscardDiscussion()) return
+  detailLoading.value = true
+  detailTab.value = 'details'
+  latestConflict.value = undefined
+  try {
+    detail.value = await workItemsApi.getWorkItem({ workItemId })
+    assignDraft(detailDraft, detail.value)
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+async function onRelationsChanged(): Promise<void> {
+  await refreshCurrentView(true)
 }
 
 async function confirmDiscardDiscussion(): Promise<boolean> {
@@ -1698,6 +1717,8 @@ onBeforeUnmount(() => {
             :can-publish="canPublishUpdate"
             :read-only-reason="readOnlyReason"
             :before-leave="beforeDetailTabLeave"
+            @relations-changed="onRelationsChanged"
+            @open-work-item="openRelatedWorkItem"
           >
             <template #details>
               <dl>

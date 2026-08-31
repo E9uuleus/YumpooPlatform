@@ -41,6 +41,8 @@ public class ActivitySummaryRenderer {
             case "WORK_ITEM_DELETED" -> "删除了事项 " + ref;
             case "WORK_ITEM_RESTORED" -> "恢复了事项 " + ref;
             case "WORK_ITEM_RELATION_CREATED" -> "创建了事项关系";
+            case "WORK_ITEM_RELATION_DELETED" -> "解除事项关系";
+            case "WORK_ITEM_PARENT_CHANGED" -> "更换事项父项";
             case "WORK_ITEM_UPDATE_PUBLISHED" -> "在事项 " + ref + " 发布了动态";
             case "WORK_ITEM_UPDATE_EDITED" -> "编辑了事项 " + ref + " 的动态";
             case "WORK_ITEM_UPDATE_DELETED" -> "删除了事项 " + ref + " 的动态";

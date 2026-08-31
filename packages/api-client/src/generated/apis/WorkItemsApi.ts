@@ -28,8 +28,16 @@ import type {
   WorkItemLabelCreateRequest,
   WorkItemLabelUpdateRequest,
   WorkItemPage,
+  WorkItemParentChangeRequest,
   WorkItemPriorityPatchRequest,
   WorkItemRankMoveRequest,
+  WorkItemRelation,
+  WorkItemRelationCandidatePage,
+  WorkItemRelationCreateRequest,
+  WorkItemRelationDeleteRequest,
+  WorkItemRelationPage,
+  WorkItemRelationRole,
+  WorkItemRelationType,
   WorkItemSubitemCreateRequest,
   WorkItemSubitemList,
   WorkItemTransitionRequest,
@@ -64,10 +72,26 @@ import {
     WorkItemLabelUpdateRequestToJSON,
     WorkItemPageFromJSON,
     WorkItemPageToJSON,
+    WorkItemParentChangeRequestFromJSON,
+    WorkItemParentChangeRequestToJSON,
     WorkItemPriorityPatchRequestFromJSON,
     WorkItemPriorityPatchRequestToJSON,
     WorkItemRankMoveRequestFromJSON,
     WorkItemRankMoveRequestToJSON,
+    WorkItemRelationFromJSON,
+    WorkItemRelationToJSON,
+    WorkItemRelationCandidatePageFromJSON,
+    WorkItemRelationCandidatePageToJSON,
+    WorkItemRelationCreateRequestFromJSON,
+    WorkItemRelationCreateRequestToJSON,
+    WorkItemRelationDeleteRequestFromJSON,
+    WorkItemRelationDeleteRequestToJSON,
+    WorkItemRelationPageFromJSON,
+    WorkItemRelationPageToJSON,
+    WorkItemRelationRoleFromJSON,
+    WorkItemRelationRoleToJSON,
+    WorkItemRelationTypeFromJSON,
+    WorkItemRelationTypeToJSON,
     WorkItemSubitemCreateRequestFromJSON,
     WorkItemSubitemCreateRequestToJSON,
     WorkItemSubitemListFromJSON,
@@ -77,6 +101,14 @@ import {
     WorkItemUpdateRequestFromJSON,
     WorkItemUpdateRequestToJSON,
 } from '../models/index';
+
+export interface ChangeWorkItemParentRequest {
+    relationId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    workItemParentChangeRequest: WorkItemParentChangeRequest;
+}
 
 export interface CreateProjectWorkItemPriorityLabelRequest {
     projectId: string;
@@ -97,6 +129,13 @@ export interface CreateWorkItemRequest {
     xXSRFTOKEN: string;
     idempotencyKey: string;
     workItemCreateRequest: WorkItemCreateRequest;
+}
+
+export interface CreateWorkItemRelationRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    workItemRelationCreateRequest: WorkItemRelationCreateRequest;
 }
 
 export interface CreateWorkItemSubitemRequest {
@@ -126,6 +165,14 @@ export interface DeleteWorkItemRequest {
     ifMatch: string;
     idempotencyKey: string;
     workItemDeleteRequest: WorkItemDeleteRequest;
+}
+
+export interface DeleteWorkItemRelationRequest {
+    relationId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    workItemRelationDeleteRequest: WorkItemRelationDeleteRequest;
 }
 
 export interface GetProjectWorkItemLabelsRequest {
@@ -181,6 +228,22 @@ export interface ListProjectWorkItemsRequest {
     dueTo?: Date;
     updatedAfter?: Date;
     sort?: Array<string>;
+}
+
+export interface ListWorkItemRelationCandidatesRequest {
+    workItemId: string;
+    relationType: WorkItemRelationType;
+    currentRole: WorkItemRelationRole;
+    q: string;
+    page?: number;
+    size?: number;
+}
+
+export interface ListWorkItemRelationsRequest {
+    workItemId: string;
+    relationType?: WorkItemRelationType;
+    page?: number;
+    size?: number;
 }
 
 export interface ListWorkItemSubitemsRequest {
@@ -280,6 +343,86 @@ export interface UpdateWorkItemRequest {
  *
  */
 export class WorkItemsApi extends runtime.BaseAPI {
+
+    /**
+     * 原子更换 Work Item 父项
+     */
+    async changeWorkItemParentRaw(requestParameters: ChangeWorkItemParentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemRelation>> {
+        if (requestParameters['relationId'] == null) {
+            throw new runtime.RequiredError(
+                'relationId',
+                'Required parameter "relationId" was null or undefined when calling changeWorkItemParent().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling changeWorkItemParent().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling changeWorkItemParent().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling changeWorkItemParent().'
+            );
+        }
+
+        if (requestParameters['workItemParentChangeRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemParentChangeRequest',
+                'Required parameter "workItemParentChangeRequest" was null or undefined when calling changeWorkItemParent().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-item-relations/{relationId}/parent-changes`;
+        urlPath = urlPath.replace(`{${"relationId"}}`, encodeURIComponent(String(requestParameters['relationId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemParentChangeRequestToJSON(requestParameters['workItemParentChangeRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemRelationFromJSON(jsonValue));
+    }
+
+    /**
+     * 原子更换 Work Item 父项
+     */
+    async changeWorkItemParent(requestParameters: ChangeWorkItemParentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemRelation> {
+        const response = await this.changeWorkItemParentRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * 新增 Project 优先级标签
@@ -487,6 +630,77 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async createWorkItem(requestParameters: CreateWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.createWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 相同逻辑关系已存在时返回既有关系且不重复写事件。
+     * 创建同项目 Work Item 关系
+     */
+    async createWorkItemRelationRaw(requestParameters: CreateWorkItemRelationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemRelation>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling createWorkItemRelation().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling createWorkItemRelation().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling createWorkItemRelation().'
+            );
+        }
+
+        if (requestParameters['workItemRelationCreateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemRelationCreateRequest',
+                'Required parameter "workItemRelationCreateRequest" was null or undefined when calling createWorkItemRelation().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/relations`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemRelationCreateRequestToJSON(requestParameters['workItemRelationCreateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemRelationFromJSON(jsonValue));
+    }
+
+    /**
+     * 相同逻辑关系已存在时返回既有关系且不重复写事件。
+     * 创建同项目 Work Item 关系
+     */
+    async createWorkItemRelation(requestParameters: CreateWorkItemRelationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemRelation> {
+        const response = await this.createWorkItemRelationRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -774,6 +988,86 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async deleteWorkItem(requestParameters: DeleteWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.deleteWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 解除 Work Item 关系
+     */
+    async deleteWorkItemRelationRaw(requestParameters: DeleteWorkItemRelationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemRelation>> {
+        if (requestParameters['relationId'] == null) {
+            throw new runtime.RequiredError(
+                'relationId',
+                'Required parameter "relationId" was null or undefined when calling deleteWorkItemRelation().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling deleteWorkItemRelation().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling deleteWorkItemRelation().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling deleteWorkItemRelation().'
+            );
+        }
+
+        if (requestParameters['workItemRelationDeleteRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemRelationDeleteRequest',
+                'Required parameter "workItemRelationDeleteRequest" was null or undefined when calling deleteWorkItemRelation().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-item-relations/{relationId}`;
+        urlPath = urlPath.replace(`{${"relationId"}}`, encodeURIComponent(String(requestParameters['relationId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemRelationDeleteRequestToJSON(requestParameters['workItemRelationDeleteRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemRelationFromJSON(jsonValue));
+    }
+
+    /**
+     * 解除 Work Item 关系
+     */
+    async deleteWorkItemRelation(requestParameters: DeleteWorkItemRelationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemRelation> {
+        const response = await this.deleteWorkItemRelationRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -1110,6 +1404,135 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async listProjectWorkItems(requestParameters: ListProjectWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectWorkItemCursorPage> {
         const response = await this.listProjectWorkItemsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 返回合法、需显式换父和不合法候选以及稳定原因码；不包含已删除事项。
+     * 搜索同项目关系候选 Work Item
+     */
+    async listWorkItemRelationCandidatesRaw(requestParameters: ListWorkItemRelationCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemRelationCandidatePage>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling listWorkItemRelationCandidates().'
+            );
+        }
+
+        if (requestParameters['relationType'] == null) {
+            throw new runtime.RequiredError(
+                'relationType',
+                'Required parameter "relationType" was null or undefined when calling listWorkItemRelationCandidates().'
+            );
+        }
+
+        if (requestParameters['currentRole'] == null) {
+            throw new runtime.RequiredError(
+                'currentRole',
+                'Required parameter "currentRole" was null or undefined when calling listWorkItemRelationCandidates().'
+            );
+        }
+
+        if (requestParameters['q'] == null) {
+            throw new runtime.RequiredError(
+                'q',
+                'Required parameter "q" was null or undefined when calling listWorkItemRelationCandidates().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['relationType'] != null) {
+            queryParameters['relationType'] = requestParameters['relationType'];
+        }
+
+        if (requestParameters['currentRole'] != null) {
+            queryParameters['currentRole'] = requestParameters['currentRole'];
+        }
+
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/work-items/{workItemId}/relation-candidates`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemRelationCandidatePageFromJSON(jsonValue));
+    }
+
+    /**
+     * 返回合法、需显式换父和不合法候选以及稳定原因码；不包含已删除事项。
+     * 搜索同项目关系候选 Work Item
+     */
+    async listWorkItemRelationCandidates(requestParameters: ListWorkItemRelationCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemRelationCandidatePage> {
+        const response = await this.listWorkItemRelationCandidatesRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 分页查询 Work Item 的有效关系
+     */
+    async listWorkItemRelationsRaw(requestParameters: ListWorkItemRelationsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemRelationPage>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling listWorkItemRelations().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['relationType'] != null) {
+            queryParameters['relationType'] = requestParameters['relationType'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/work-items/{workItemId}/relations`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemRelationPageFromJSON(jsonValue));
+    }
+
+    /**
+     * 分页查询 Work Item 的有效关系
+     */
+    async listWorkItemRelations(requestParameters: ListWorkItemRelationsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemRelationPage> {
+        const response = await this.listWorkItemRelationsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

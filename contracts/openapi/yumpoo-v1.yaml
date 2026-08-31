@@ -2108,6 +2108,167 @@ paths:
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /work-items/{workItemId}/relations:
+    get:
+      tags: [WorkItems]
+      operationId: listWorkItemRelations
+      summary: 分页查询 Work Item 的有效关系
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - name: relationType
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/WorkItemRelationType' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 按创建时间倒序返回当前侧语义、对端摘要和操作能力。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemRelationPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      tags: [WorkItems]
+      operationId: createWorkItemRelation
+      summary: 创建同项目 Work Item 关系
+      description: 相同逻辑关系已存在时返回既有关系且不重复写事件。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemRelationCreateRequest' } } }
+      responses:
+        '200':
+          description: 逻辑关系已存在。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemRelation' } } }
+        '201':
+          description: 关系已创建或幂等重放。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemRelation' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /work-items/{workItemId}/relation-candidates:
+    get:
+      tags: [WorkItems]
+      operationId: listWorkItemRelationCandidates
+      summary: 搜索同项目关系候选 Work Item
+      description: 返回合法、需显式换父和不合法候选以及稳定原因码；不包含已删除事项。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - name: relationType
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/WorkItemRelationType' }
+        - name: currentRole
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/WorkItemRelationRole' }
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 80 }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: 候选判定页。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemRelationCandidatePage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /work-item-relations/{relationId}/parent-changes:
+    post:
+      tags: [WorkItems]
+      operationId: changeWorkItemParent
+      summary: 原子更换 Work Item 父项
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: relationId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemParentChangeRequest' } } }
+      responses:
+        '200':
+          description: 旧关系已软删除且新父子关系已在同一事务创建。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemRelation' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-item-relations/{relationId}:
+    delete:
+      tags: [WorkItems]
+      operationId: deleteWorkItemRelation
+      summary: 解除 Work Item 关系
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: relationId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemRelationDeleteRequest' } } }
+      responses:
+        '200':
+          description: 返回解除后的关系事实投影。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemRelation' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /work-items/{workItemId}:
     get:
       tags: [WorkItems]
@@ -3788,6 +3949,128 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/ProjectWorkItemListItem' } }
+
+    WorkItemRelationType:
+      type: string
+      enum: [PARENT_CHILD, RELATED, BLOCKS, SOURCE, DUPLICATE]
+
+    WorkItemRelationRole:
+      type: string
+      enum: [PARENT, CHILD, RELATED, BLOCKS, BLOCKED_BY, SOURCE, DERIVED_FROM, DUPLICATE_OF, CANONICAL]
+
+    WorkItemRelationCounterpart:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, contentId, itemNo, type, title, statusCode, deleted]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        projectId: { $ref: '#/components/schemas/Uuid' }
+        contentId: { $ref: '#/components/schemas/Uuid' }
+        itemNo: { type: string }
+        type: { type: string }
+        title: { type: string }
+        statusCode: { type: string }
+        deleted: { type: boolean, readOnly: true }
+
+    WorkItemRelationCapabilities:
+      type: object
+      additionalProperties: false
+      required: [canDelete, canChangeParent]
+      properties:
+        canDelete: { type: boolean, readOnly: true }
+        canChangeParent: { type: boolean, readOnly: true }
+
+    WorkItemRelation:
+      type: object
+      additionalProperties: false
+      required: [id, relationType, currentRole, counterpartRole, counterpartVisible,
+        counterpart, status, createdByUserId, createdAt, deletedByUserId, deletedAt,
+        deleteReason, rowVersion, etag, capabilities]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        relationType: { $ref: '#/components/schemas/WorkItemRelationType' }
+        currentRole: { $ref: '#/components/schemas/WorkItemRelationRole' }
+        counterpartRole: { $ref: '#/components/schemas/WorkItemRelationRole' }
+        counterpartVisible: { type: boolean, readOnly: true }
+        counterpart: { $ref: '#/components/schemas/WorkItemRelationCounterpart' }
+        status: { type: string, enum: [ACTIVE, DELETED] }
+        createdByUserId: { $ref: '#/components/schemas/Uuid' }
+        createdAt: { type: string, format: date-time, readOnly: true }
+        deletedByUserId: { type: string, format: uuid, nullable: true, readOnly: true }
+        deletedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+        deleteReason: { type: string, minLength: 1, maxLength: 500, nullable: true, readOnly: true }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+        capabilities: { $ref: '#/components/schemas/WorkItemRelationCapabilities' }
+
+    WorkItemRelationPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, totalElements, totalPages, canCreate]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/WorkItemRelation' } }
+        page: { type: integer, format: int32, minimum: 0 }
+        size: { type: integer, format: int32, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, format: int32, minimum: 0 }
+        canCreate: { type: boolean, readOnly: true }
+
+    WorkItemRelationActiveParent:
+      type: object
+      additionalProperties: false
+      required: [relationId, etag, parent]
+      properties:
+        relationId: { $ref: '#/components/schemas/Uuid' }
+        etag: { type: string, pattern: '^"[0-9]+"$' }
+        parent: { $ref: '#/components/schemas/WorkItemRelationCounterpart' }
+
+    WorkItemRelationCandidate:
+      type: object
+      additionalProperties: false
+      required: [item, eligibility, reasonCode, activeParent]
+      properties:
+        item: { $ref: '#/components/schemas/WorkItemRelationCounterpart' }
+        eligibility: { type: string, enum: [ELIGIBLE, REPARENT_REQUIRED, INELIGIBLE] }
+        reasonCode: { type: string, nullable: true }
+        activeParent:
+          type: object
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/WorkItemRelationActiveParent' }]
+
+    WorkItemRelationCandidatePage:
+      type: object
+      additionalProperties: false
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/WorkItemRelationCandidate' } }
+        page: { type: integer, format: int32, minimum: 0 }
+        size: { type: integer, format: int32, minimum: 1, maximum: 100 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, format: int32, minimum: 0 }
+
+    WorkItemRelationCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [relationType, currentRole, targetWorkItemId]
+      properties:
+        relationType: { $ref: '#/components/schemas/WorkItemRelationType' }
+        currentRole: { $ref: '#/components/schemas/WorkItemRelationRole' }
+        targetWorkItemId: { $ref: '#/components/schemas/Uuid' }
+
+    WorkItemParentChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [newParentWorkItemId, reason]
+      properties:
+        newParentWorkItemId: { $ref: '#/components/schemas/Uuid' }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+
+    WorkItemRelationDeleteRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
 
     ProjectWorkItemFilterOption:
       type: object

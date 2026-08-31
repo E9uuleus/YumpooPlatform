@@ -506,6 +506,180 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void ordinaryRelationsSupportAllRolesAtomicReparentDeletionAndDeletedCounterpart() throws Exception {
+        String collection = "/api/v1/contents/" + contentId + "/work-items";
+        JsonNode firstParent = createWorkItem(collection, "父项一", "HIGH", member.userId(), null);
+        JsonNode secondParent = createWorkItem(collection, "父项二", "MEDIUM", member.userId(), null);
+        JsonNode thirdParent = createWorkItem(collection, "父项三", "MEDIUM", member.userId(), null);
+        JsonNode child = createWorkItem(collection, "候选子项", "LOW", member.userId(), null);
+        UUID firstParentId = UUID.fromString(firstParent.path("id").asText());
+        UUID secondParentId = UUID.fromString(secondParent.path("id").asText());
+        UUID thirdParentId = UUID.fromString(thirdParent.path("id").asText());
+        UUID childId = UUID.fromString(child.path("id").asText());
+        String firstRelations = "/api/v1/work-items/" + firstParentId + "/relations";
+        String originalSortKey = jdbc.sql("SELECT project_sort_key FROM yumpoo.work_item WHERE id=:id")
+                .param("id", childId).query(String.class).single();
+
+        assertThat(get(firstRelations, outsider).statusCode()).isEqualTo(404);
+        JsonNode adminPage = body(get(firstRelations, admin));
+        assertThat(adminPage.path("canCreate").asBoolean()).isFalse();
+        assertThat(mutate("POST", firstRelations, admin,
+                relationBody("RELATED", "RELATED", childId), null,
+                UUID.randomUUID()).statusCode()).isEqualTo(403);
+
+        UUID parentKey = UUID.randomUUID();
+        HttpResponse<String> parentCreated = mutate("POST", firstRelations, member,
+                relationBody("PARENT_CHILD", "PARENT", childId), null, parentKey);
+        assertThat(parentCreated.statusCode()).as(parentCreated.body()).isEqualTo(201);
+        JsonNode parentRelation = json.readTree(parentCreated.body());
+        assertThat(parentRelation.path("currentRole").asText()).isEqualTo("PARENT");
+        assertThat(parentRelation.path("counterpartRole").asText()).isEqualTo("CHILD");
+
+        HttpResponse<String> replay = mutate("POST", firstRelations, member,
+                relationBody("PARENT_CHILD", "PARENT", childId), null, parentKey);
+        assertThat(replay.statusCode()).isEqualTo(201);
+        assertThat(replay.body()).isEqualTo(parentCreated.body());
+        HttpResponse<String> duplicate = mutate("POST", firstRelations, member,
+                relationBody("PARENT_CHILD", "PARENT", childId), null, UUID.randomUUID());
+        assertThat(duplicate.statusCode()).isEqualTo(200);
+        assertThat(duplicate.body()).isEqualTo(parentCreated.body());
+
+        List<List<String>> directed = List.of(
+                List.of("RELATED", "RELATED"),
+                List.of("BLOCKS", "BLOCKED_BY"),
+                List.of("SOURCE", "DERIVED_FROM"),
+                List.of("DUPLICATE", "CANONICAL"));
+        for (List<String> relation : directed) {
+            HttpResponse<String> response = mutate("POST", firstRelations, member,
+                    relationBody(relation.get(0), relation.get(1), childId), null,
+                    UUID.randomUUID());
+            assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+            assertThat(json.readTree(response.body()).path("currentRole").asText())
+                    .isEqualTo(relation.get(1));
+        }
+        List<String> relatedEndpoints = jdbc.sql("SELECT left_work_item_id::text, "
+                        + "right_work_item_id::text FROM yumpoo.work_item_relation "
+                        + "WHERE relation_type='RELATED' AND deleted_at IS NULL")
+                .query((rs, row) -> List.of(rs.getString(1), rs.getString(2))).single();
+        assertThat(relatedEndpoints.get(0)).isLessThan(relatedEndpoints.get(1));
+        JsonNode relationPage = body(get(firstRelations + "?page=0&size=20", member));
+        assertThat(relationPage.path("totalElements").asLong()).isEqualTo(5L);
+        assertThat(relationPage.path("items").size()).isEqualTo(5);
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
+                        + "WHERE event_type='workitem.work_item_relation_created'")
+                .query(Long.class).single()).isEqualTo(5L);
+
+        HttpResponse<String> childCannotParent = mutate("POST",
+                "/api/v1/work-items/" + childId + "/relations", member,
+                relationBody("PARENT_CHILD", "PARENT", secondParentId), null,
+                UUID.randomUUID());
+        assertThat(childCannotParent.statusCode()).isEqualTo(409);
+        HttpResponse<String> parentWithChildrenCannotBecomeChild = mutate("POST",
+                "/api/v1/work-items/" + secondParentId + "/relations", member,
+                relationBody("PARENT_CHILD", "PARENT", firstParentId), null,
+                UUID.randomUUID());
+        assertThat(parentWithChildrenCannotBecomeChild.statusCode()).isEqualTo(409);
+
+        JsonNode candidates = body(get("/api/v1/work-items/" + secondParentId
+                + "/relation-candidates?relationType=PARENT_CHILD&currentRole=PARENT&q="
+                + URLEncoder.encode(child.path("itemNo").asText(), StandardCharsets.UTF_8), member));
+        assertThat(candidates.path("items").size()).isOne();
+        JsonNode candidate = candidates.path("items").get(0);
+        assertThat(candidate.path("eligibility").asText()).isEqualTo("REPARENT_REQUIRED");
+        assertThat(candidate.path("reasonCode").asText()).isEqualTo("CHILD_ALREADY_HAS_PARENT");
+        assertThat(candidate.path("activeParent").path("parent").path("id").asText())
+                .isEqualTo(firstParentId.toString());
+
+        UUID oldRelationId = UUID.fromString(parentRelation.path("id").asText());
+        HttpResponse<String> reparented = mutate("POST",
+                "/api/v1/work-item-relations/" + oldRelationId + "/parent-changes", member,
+                "{\"newParentWorkItemId\":\"" + secondParentId
+                        + "\",\"reason\":\"调整父项\"}", "\"0\"", UUID.randomUUID());
+        assertThat(reparented.statusCode()).as(reparented.body()).isEqualTo(200);
+        JsonNode newRelation = json.readTree(reparented.body());
+        UUID newRelationId = UUID.fromString(newRelation.path("id").asText());
+        assertThat(newRelationId).isNotEqualTo(oldRelationId);
+        assertThat(newRelation.path("counterpart").path("id").asText())
+                .isEqualTo(secondParentId.toString());
+        assertThat(jdbc.sql("SELECT delete_reason FROM yumpoo.work_item_relation WHERE id=:id")
+                .param("id", oldRelationId).query(String.class).single()).isEqualTo("调整父项");
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
+                        + "WHERE event_type='workitem.work_item_parent_changed'")
+                .query(Long.class).single()).isOne();
+        assertThat(mutate("POST", "/api/v1/work-item-relations/" + oldRelationId
+                        + "/parent-changes", member,
+                "{\"newParentWorkItemId\":\"" + firstParentId
+                        + "\",\"reason\":\"旧版本\"}", "\"0\"",
+                UUID.randomUUID()).statusCode()).isEqualTo(412);
+
+        HttpResponse<String> deleted = mutate("DELETE",
+                "/api/v1/work-item-relations/" + newRelationId, member,
+                "{\"reason\":\"解除层级\"}", "\"0\"", UUID.randomUUID());
+        assertThat(deleted.statusCode()).as(deleted.body()).isEqualTo(200);
+        assertThat(json.readTree(deleted.body()).path("status").asText()).isEqualTo("DELETED");
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_relation WHERE "
+                        + "relation_type='PARENT_CHILD' AND right_work_item_id=:id AND deleted_at IS NULL")
+                .param("id", childId).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql("SELECT project_sort_key FROM yumpoo.work_item WHERE id=:id")
+                .param("id", childId).query(String.class).single()).isEqualTo(originalSortKey);
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
+                        + "WHERE event_type='workitem.work_item_relation_deleted'")
+                .query(Long.class).single()).isOne();
+
+        HttpResponse<String> rebuilt = mutate("POST", firstRelations, member,
+                relationBody("PARENT_CHILD", "PARENT", childId), null, UUID.randomUUID());
+        assertThat(rebuilt.statusCode()).as(rebuilt.body()).isEqualTo(201);
+        String rebuiltId = json.readTree(rebuilt.body()).path("id").asText();
+        assertThat(rebuiltId)
+                .isNotEqualTo(oldRelationId.toString()).isNotEqualTo(newRelationId.toString());
+        CountDownLatch reparentStart = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Future<HttpResponse<String>> one = pool.submit(() -> {
+                reparentStart.await();
+                return mutate("POST", "/api/v1/work-item-relations/" + rebuiltId
+                                + "/parent-changes", member,
+                        "{\"newParentWorkItemId\":\"" + secondParentId
+                                + "\",\"reason\":\"并发换父一\"}", "\"0\"", UUID.randomUUID());
+            });
+            Future<HttpResponse<String>> two = pool.submit(() -> {
+                reparentStart.await();
+                return mutate("POST", "/api/v1/work-item-relations/" + rebuiltId
+                                + "/parent-changes", owner,
+                        "{\"newParentWorkItemId\":\"" + thirdParentId
+                                + "\",\"reason\":\"并发换父二\"}", "\"0\"", UUID.randomUUID());
+            });
+            reparentStart.countDown();
+            assertThat(List.of(one.get(20, TimeUnit.SECONDS).statusCode(),
+                    two.get(20, TimeUnit.SECONDS).statusCode()))
+                    .containsExactlyInAnyOrder(200, 412);
+        }
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
+                        + "WHERE event_type='workitem.work_item_parent_changed'")
+                .query(Long.class).single()).isEqualTo(2L);
+
+        assertThat(mutate("DELETE", "/api/v1/work-items/" + childId, member,
+                "{\"reason\":\"验证已删除对端\"}", "\"0\"",
+                UUID.randomUUID()).statusCode()).isEqualTo(200);
+        JsonNode placeholders = body(get(firstRelations, member));
+        assertThat(placeholders.path("items").size()).isEqualTo(4);
+        placeholders.path("items").forEach(item ->
+                assertThat(item.path("counterpart").path("deleted").asBoolean()).isTrue());
+        UUID activeParentId = jdbc.sql("SELECT left_work_item_id FROM yumpoo.work_item_relation "
+                        + "WHERE relation_type='PARENT_CHILD' AND right_work_item_id=:childId "
+                        + "AND deleted_at IS NULL")
+                .param("childId", childId).query(UUID.class).single();
+        JsonNode parentPlaceholder = body(get("/api/v1/work-items/" + activeParentId
+                + "/relations?relationType=PARENT_CHILD", member));
+        assertThat(parentPlaceholder.path("items").size()).isOne();
+        assertThat(parentPlaceholder.path("items").get(0)
+                .path("counterpart").path("deleted").asBoolean()).isTrue();
+        JsonNode noDeletedCandidate = body(get("/api/v1/work-items/" + firstParentId
+                + "/relation-candidates?relationType=RELATED&currentRole=RELATED&q="
+                + URLEncoder.encode(child.path("itemNo").asText(), StandardCharsets.UTF_8), member));
+        assertThat(noDeletedCandidate.path("items").isEmpty()).isTrue();
+    }
+
+    @Test
     void projectCollectionAggregatesContentsAndSupportsNullablePriority() throws Exception {
         String firstCollection = "/api/v1/contents/" + contentId + "/work-items";
         UUID secondContentId = UUID.fromString(createContent("DEFECTS", "缺陷").path("id").asText());
@@ -1598,6 +1772,11 @@ class WorkItemHttpIT {
         body.put("title", title);
         if (priority == null) body.putNull("priority"); else body.put("priority", priority);
         return json.writeValueAsString(body);
+    }
+
+    private static String relationBody(String relationType, String currentRole, UUID targetId) {
+        return "{\"relationType\":\"" + relationType + "\",\"currentRole\":\""
+                + currentRole + "\",\"targetWorkItemId\":\"" + targetId + "\"}";
     }
 
     private String transitionBody(String toStatus, String resolution) throws Exception {
