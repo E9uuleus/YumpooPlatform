@@ -1,5 +1,17 @@
 # YumpooPlatform
 
+## M2-24 项目协作阶段收口
+
+M2-24 对 M2 已存在的 Project、Content、Work Item、关系、Activity 与 Product 切片执行综合回归，并交付 Product 治理 Web 闭环。Product 普通归档现在以 `ACTIVE_DEVELOPMENT_SUPPORT_PROJECTS` 阻断有效 DEVELOPMENT/SUPPORT 关系所指向的不同 ACTIVE Project；CompanyAdmin 可填写 10–500 字理由执行显式覆盖，安全记录前后快照和聚合计数，但不修改 Project 或关系事实。Product 归档事件 v1 兼容增加可选 `mode/blockers`，治理理由不进入领域事件。
+
+M3A/M3B 只能通过 `ProjectFactWriteGuard`、`ProductFactWriteGuard`、`ProductProjectRelationQuery` 与 actor-scoped `WorkItemReferenceQuery` 接入现有事实。跨聚合写入固定使用“Project → 按 UUID 排序的 Product”锁序；Product 归档不反向锁 Project。Web 新增 `/products` 与 `/products/:productId`，提供列表、创建、能力驱动编辑、普通/覆盖归档和恢复，并保持强 ETag、独立幂等键和 412 草稿保留。
+
+本次不制造尚未实现的 provider：Project 归档的 Worklog blocker 在 M3A-13 最终验收，Project/Product 归档及关系解绑的 Feedback blocker 在 M3B-11 最终验收，Project 三类 blocker 总门禁在两者均完成后执行。MAIN Workspace 管理 UI 属于 M5-07，Product Owner 重指派 UI 属于 M5-09（现有 API 保留），提醒调度属于 M4。
+
+```powershell
+pnpm verify:m2-24
+```
+
 ## M2-23 Work Item 领域事件契约冻结
 
 M2-23 冻结 Work Item 八类、Update 三类与 Relation 三类共 14 个核心 v1 事件。冻结清单统一登记类型、版本、聚合、Schema、生产者、Activity 消费者以及接收者引用；同一 v1 只允许新增可选字段，事件名、聚合语义、必填字段、既有字段约束和封闭对象规则不可改变。PR 门禁从目标分支提交临时提取历史 Schema 与合法样例，不提交重复基线；破坏性演进必须新增 v2 并保留 v1。
@@ -138,7 +150,7 @@ pnpm verify:m2-15
 
 M2-14 以 V31 为 Work Item 增加状态泳道内持久化 rank。升级按既有 `item_sequence DESC, id ASC` 回填 39 位定长十进制位置；创建与普通状态迁移置于目标状态顶部，同状态移动支持 `START/BEFORE/AFTER/END`，间隙耗尽时在 Content/状态 lane 锁内保持相对顺序重平衡。Kanban 查询要求恰好一个状态、拒绝 Table sort，并固定按 `rank ASC, id ASC` 稳定分页；移动命令要求 XSRF、强 `If-Match` 与幂等键。
 
-Web 保留 Content 的多状态分组，并在每组内渲染独立状态泳道。鼠标和触控只从 Pointer 拖动手柄启动，提供阈值、取消、合法投放与边缘滚动；键盘/触控菜单覆盖上下移、顶底定位和合法跨状态。要求说明的跨状态移动先确认；提交期间显示 pending，失败恢复快照，传输失败的明确重试复用原幂等键，409/412 只刷新服务端事实与能力。M2-15 删除恢复、M2-20 Activity 与 M2-23 事件冻结已交付，M2-24 总验收继续延期。
+Web 保留 Content 的多状态分组，并在每组内渲染独立状态泳道。鼠标和触控只从 Pointer 拖动手柄启动，提供阈值、取消、合法投放与边缘滚动；键盘/触控菜单覆盖上下移、顶底定位和合法跨状态。要求说明的跨状态移动先确认；提交期间显示 pending，失败恢复快照，传输失败的明确重试复用原幂等键，409/412 只刷新服务端事实与能力。M2-15 删除恢复、M2-20 Activity、M2-23 事件冻结与 M2-24 阶段收口均已交付。
 
 ```powershell
 pnpm verify:m2-14
@@ -162,7 +174,7 @@ pnpm verify:m2-13
 
 M2-12 新增 `POST /api/v1/work-items/{workItemId}/transitions`，由服务端按 Project 固化模板版本校验精确迁移边并计算 `capabilities.availableTransitions`。命令必须携带 XSRF、强 `If-Match` 和幂等键；状态/类别、新版本、一条 `workitem.work_item_status_changed` v1 Outbox 和幂等结果原子提交。迁移不改变 rank 或任何协作字段；CompanyAdmin 保持只读，归档、终态、非法边与并发版本冲突均按固定问题语义拒绝。Flyway 仍停在 V29。
 
-Web 仅在 Work Item 详情抽屉展示服务端返回的合法目标。说明最长 500 字，迁移边可要求必填；传输失败的显式重试复用原幂等键。成功后刷新详情与当前 Table/Kanban，保留未保存字段草稿；412 沿用冲突面板且不自动重试。M2-13 已交付高级查询，M2-14 已交付 rank/拖动，M2-15 删除恢复、M2-20 Activity 与 M2-23 最终事件冻结也已交付；M2-24 总验收继续延期。
+Web 仅在 Work Item 详情抽屉展示服务端返回的合法目标。说明最长 500 字，迁移边可要求必填；传输失败的显式重试复用原幂等键。成功后刷新详情与当前 Table/Kanban，保留未保存字段草稿；412 沿用冲突面板且不自动重试。M2-13 高级查询、M2-14 rank/拖动、M2-15 删除恢复、M2-20 Activity、M2-23 事件冻结与 M2-24 阶段收口均已交付。
 
 ```powershell
 pnpm verify:m2-12
@@ -186,9 +198,9 @@ pnpm verify:m2-11
 
 M2-07 已交付 V27 关系小聚合、四类关系、单一可选主 Product、关系强 ETag、持久化幂等、软移除与重新关联新 ID。关系写入锁定 Project 但不增加 Project 版本；Owner 可写，成员和非成员 CompanyAdmin 只读。Product 读取范围现包含关联 Project 的 ACTIVE member，Product 写权限仍显式限制为 ProductOwner 或 CompanyAdmin；项目目录支持远程 Product 筛选。
 
-M2-08 已交付 Project 普通归档、治理覆盖归档和恢复；历史 Workspace 迁移事件仍可读取，但 MAIN 单工作空间实施后不再提供或产生跨 Workspace 迁移。M2-10 已接入 Work Item 的真实 `OPEN_WORK_ITEMS` provider；Worklog 与 Feedback provider 及完整 PPM-014 仍留给 M2-24，不制造零值 blocker 或虚假 Verified 结论。
+M2-08 已交付 Project 普通归档、治理覆盖归档和恢复；历史 Workspace 迁移事件仍可读取，但 MAIN 单工作空间实施后不再提供或产生跨 Workspace 迁移。M2-10 已接入 Work Item 的真实 `OPEN_WORK_ITEMS` provider；Worklog 与 Feedback provider 分别延期到 M3A-13 与 M3B-11，完整 PPM-014 总门禁在两者均完成后执行，不制造零值 blocker 或虚假 Verified 结论。
 
-OpenAPI、生成 TypeScript SDK、三类 v1 事件、Vue 关联产品页、PostgreSQL 并发/回滚测试和备份恢复事实已同步。真实 Feedback 引用的解绑 blocker 继续由 M3B/M2-24 建立，不在尚无 Feedback 真源时伪造已验证结论。
+OpenAPI、生成 TypeScript SDK、三类 v1 事件、Vue 关联产品页、PostgreSQL 并发/回滚测试和备份恢复事实已同步。M2-24 已冻结 Project→Product 锁序和活动研发/支持项目 Product blocker；真实 Feedback 引用的解绑 blocker 由 M3B-11 建立，不在尚无 Feedback 真源时伪造已验证结论。
 
 ```powershell
 pnpm verify:m2-07
@@ -230,7 +242,7 @@ pnpm verify:m2-04
 
 M2-03 在 `catalog` 中交付 V18 Product 主数据、SQL 权限分页、详情与资料更新，在 `administration` 中交付归档、恢复和唯一负责人重指派。负责人只保存在 `product.owner_user_id`；离职或禁用通过 `OWNER_MISSING` 治理投影逐 Product 打开问题，不改变生命周期、不自动提升其他成员。
 
-OpenAPI、生成的 TypeScript `ProductsApi` 和五类 v1 事件已同步冻结。当前没有 ProductProjectLink/Feedback 真源，因此不制造空 blocker 或覆盖归档入口；项目成员可见性、真实 PPM-015 blocker 与覆盖治理分别由 M2-07/M2-24 和 M3B 接入。
+OpenAPI、生成的 TypeScript `ProductsApi` 和五类 v1 事件已同步冻结。M2-07 已提供 ProductProjectLink 真源与项目成员可见性；M2-24 已接入活动 DEVELOPMENT/SUPPORT Project blocker、治理覆盖与 Product Web。Feedback blocker 继续由 M3B-11 的真实 provider 接入，不制造空 blocker。
 
 ```powershell
 pnpm verify:m2-03

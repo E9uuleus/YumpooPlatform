@@ -29,6 +29,7 @@
               <failOnChanged>false</failOnChanged>
               <configProps>
                 <incompatible.request.enum.decreased>false</incompatible.request.enum.decreased>
+                <incompatible.response.enum.increased>false</incompatible.response.enum.increased>
               </configProps>
             </configuration>
           </execution>

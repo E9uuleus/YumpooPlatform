@@ -76,6 +76,7 @@ export * from './MemberPage';
 export * from './PageMetadata';
 export * from './PageResponse';
 export * from './Product';
+export * from './ProductCapabilities';
 export * from './ProductCreateRequest';
 export * from './ProductOwnerReassignmentRequest';
 export * from './ProductPage';

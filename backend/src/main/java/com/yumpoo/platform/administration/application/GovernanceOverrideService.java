@@ -5,6 +5,7 @@ import com.yumpoo.platform.audit.api.SecurityAuditAppendPort;
 import com.yumpoo.platform.audit.api.SecurityAuditDraft;
 import com.yumpoo.platform.audit.api.SecurityAuditOutcome;
 import com.yumpoo.platform.catalog.api.ProjectSnapshot;
+import com.yumpoo.platform.catalog.api.ProductSnapshot;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.SafeBlocker;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
@@ -28,6 +29,7 @@ import java.util.UUID;
 @Service
 public class GovernanceOverrideService {
     private final ProjectLifecycleGovernanceService projectLifecycle;
+    private final ProductGovernanceService productLifecycle;
     private final GovernanceOverrideRepository repository;
     private final IdempotentCommandExecutor idempotency;
     private final SecurityAuditAppendPort audits;
@@ -35,10 +37,11 @@ public class GovernanceOverrideService {
     private final Clock clock;
 
     public GovernanceOverrideService(ProjectLifecycleGovernanceService projectLifecycle,
+            ProductGovernanceService productLifecycle,
             GovernanceOverrideRepository repository,
             IdempotentCommandExecutor idempotency, SecurityAuditAppendPort audits,
             ObjectMapper objectMapper, Clock clock) {
-        this.projectLifecycle = projectLifecycle;
+        this.projectLifecycle = projectLifecycle; this.productLifecycle = productLifecycle;
         this.repository = repository; this.idempotency = idempotency; this.audits = audits;
         this.objectMapper = objectMapper; this.clock = clock;
     }
@@ -78,9 +81,22 @@ public class GovernanceOverrideService {
     private StoredCommandResult execute(GovernanceOverrideCommand command, String reason) {
         return switch (command.action()) {
             case PROJECT_ARCHIVE_WITH_OPEN_ITEMS -> archiveProject(command, reason);
+            case PRODUCT_ARCHIVE_WITH_BLOCKERS -> archiveProduct(command, reason);
             case WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS -> throw new ApplicationException(
                     StandardErrorCode.VALIDATION_FAILED);
         };
+    }
+
+    private StoredCommandResult archiveProduct(GovernanceOverrideCommand command, String reason) {
+        requireTargetType(command, "PRODUCT");
+        ProductSnapshot before = productLifecycle.lockForOverride(command.actor(), command.targetId(),
+                command.expectedRowVersion());
+        List<SafeBlocker> blockers = productLifecycle.blockers(before);
+        ProductSnapshot after = productLifecycle.archiveOverride(command.actor(), command.targetId(),
+                command.expectedRowVersion(), command.idempotencyKey(), reason, blockers);
+        insert(command, reason, "PRODUCT", safe(before), safe(after), blockers,
+                GovernanceOverrideResult.SUCCEEDED, null);
+        return productLifecycle.stored(after, command.actor());
     }
 
     private StoredCommandResult archiveProject(GovernanceOverrideCommand command, String reason) {
@@ -133,6 +149,10 @@ public class GovernanceOverrideService {
 
     private JsonNode safe(ProjectSnapshot project) {
         return objectMapper.valueToTree(ProjectLifecycleGovernanceService.safeSnapshot(project));
+    }
+
+    private JsonNode safe(ProductSnapshot product) {
+        return objectMapper.valueToTree(ProductGovernanceService.safeSnapshot(product));
     }
 
     private StoredCommandResult jsonResult(int status, Object body, UUID resourceId, String etag) {

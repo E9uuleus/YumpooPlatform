@@ -164,6 +164,24 @@ public class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
+    public Optional<Product> lockById(UUID companyId, UUID productId) {
+        return locked(companyId, productId, " FOR UPDATE");
+    }
+
+    @Override
+    public Optional<Product> lockByIdForShare(UUID companyId, UUID productId) {
+        return locked(companyId, productId, " FOR SHARE");
+    }
+
+    private Optional<Product> locked(UUID companyId, UUID productId, String lockClause) {
+        return jdbcClient.sql(FIND_BY_ID + lockClause)
+                .param("companyId", companyId)
+                .param("productId", productId)
+                .query(JdbcProductRepository::map)
+                .optional();
+    }
+
+    @Override
     public List<Product> findByOwner(UUID companyId, UUID ownerUserId, ProductStatus status) {
         return jdbcClient.sql("SELECT " + COLUMNS + " FROM yumpoo.product "
                         + "WHERE company_id = :companyId AND owner_user_id = :ownerUserId "

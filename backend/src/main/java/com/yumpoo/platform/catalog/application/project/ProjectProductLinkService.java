@@ -195,7 +195,7 @@ public class ProjectProductLinkService {
     }
 
     private Product requireActiveProduct(UUID companyId, UUID productId) {
-        Product product = products.findById(companyId, productId).orElse(null);
+        Product product = products.lockByIdForShare(companyId, productId).orElse(null);
         if (product == null || product.status() != ProductStatus.ACTIVE) {
             throw ApplicationException.validation(new FieldViolation(
                     "productId", "INVALID_PRODUCT", "产品必须是本企业的 ACTIVE Product"));

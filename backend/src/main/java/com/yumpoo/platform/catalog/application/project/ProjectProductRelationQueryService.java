@@ -24,4 +24,23 @@ public class ProjectProductRelationQueryService {
                         .map(ProjectProductRelation::toDomain)
                         .collect(Collectors.toUnmodifiableSet()));
     }
+
+    @Transactional(readOnly = true)
+    public long countActiveProjects(UUID companyId, UUID productId,
+                                    Set<ProjectProductRelation> allowedTypes) {
+        return links.countActiveProjects(companyId, productId, domainTypes(allowedTypes));
+    }
+
+    @Transactional(readOnly = true)
+    public Set<UUID> findProductIds(UUID companyId, UUID projectId,
+                                    Set<ProjectProductRelation> allowedTypes) {
+        return links.findProductIds(companyId, projectId, domainTypes(allowedTypes));
+    }
+
+    private static Set<com.yumpoo.platform.catalog.domain.project.ProjectProductRelationType> domainTypes(
+            Set<ProjectProductRelation> allowedTypes) {
+        return allowedTypes == null ? Set.of() : allowedTypes.stream()
+                .map(ProjectProductRelation::toDomain)
+                .collect(Collectors.toUnmodifiableSet());
+    }
 }

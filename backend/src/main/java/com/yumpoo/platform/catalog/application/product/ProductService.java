@@ -19,8 +19,11 @@ import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResul
 import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
+import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
+import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -42,6 +45,7 @@ public class ProductService {
 
     private final ProductRepository repository;
     private final ActiveUserSnapshotQuery activeUserQuery;
+    private final MinimalUserSnapshotQuery minimalUsers;
     private final IdempotentCommandExecutor idempotentCommandExecutor;
     private final TransactionalEventPort eventPort;
     private final ObjectMapper objectMapper;
@@ -50,6 +54,7 @@ public class ProductService {
     public ProductService(
             ProductRepository repository,
             ActiveUserSnapshotQuery activeUserQuery,
+            MinimalUserSnapshotQuery minimalUsers,
             IdempotentCommandExecutor idempotentCommandExecutor,
             TransactionalEventPort eventPort,
             ObjectMapper objectMapper,
@@ -57,6 +62,7 @@ public class ProductService {
     ) {
         this.repository = repository;
         this.activeUserQuery = activeUserQuery;
+        this.minimalUsers = minimalUsers;
         this.idempotentCommandExecutor = idempotentCommandExecutor;
         this.eventPort = eventPort;
         this.objectMapper = objectMapper;
@@ -88,14 +94,19 @@ public class ProductService {
         }
         if (normalized != null && normalized.isEmpty()) normalized = null;
         ProductPageResult result = repository.findVisible(actor, status, normalized, page);
-        return OffsetPageResponse.of(result.items().stream().map(ProductView::from).toList(),
+        Map<UUID, MinimalUserSnapshot> owners = minimalUsers.findByUserIds(actor.companyId(),
+                result.items().stream().map(Product::ownerUserId)
+                        .collect(java.util.stream.Collectors.toSet()));
+        return OffsetPageResponse.of(result.items().stream().map(product -> view(product, actor,
+                        displayName(owners, product.ownerUserId()))).toList(),
                 page, result.totalElements());
     }
 
     @Transactional(readOnly = true)
     public ProductView findVisible(CurrentActor actor, UUID productId) {
         requireActiveActor(actor);
-        return ProductView.from(requiredVisible(actor, productId));
+        Product product = requiredVisible(actor, productId);
+        return view(product, actor, displayName(product));
     }
 
     @Transactional(readOnly = true)
@@ -119,6 +130,31 @@ public class ProductService {
                 .toList();
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ProductApplicationSnapshot lockForFactWrite(CurrentActor actor, UUID productId) {
+        requiredVisible(actor, productId);
+        Product product = repository.lockByIdForShare(actor.companyId(), productId)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requiredVisible(actor, productId);
+        return snapshot(product);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ProductApplicationSnapshot lockForArchive(ProductLifecycleChange mutation) {
+        Product product = requiredLocked(mutation.companyId(), mutation.productId());
+        requireVersion(product, mutation.expectedRowVersion());
+        requireStatus(product, ProductStatus.ACTIVE);
+        return snapshot(product);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ProductApplicationSnapshot lockForRestore(ProductLifecycleChange mutation) {
+        Product product = requiredLocked(mutation.companyId(), mutation.productId());
+        requireVersion(product, mutation.expectedRowVersion());
+        requireStatus(product, ProductStatus.ARCHIVED);
+        return snapshot(product);
+    }
+
     public IdempotencyExecutionResult create(ProductCreateCommand command) {
         requireCompanyAdmin(command.actor());
         requireValidOwner(command.actor().companyId(), command.ownerUserId());
@@ -135,7 +171,7 @@ public class ProductService {
                         "code", "ALREADY_EXISTS", "Product 编码已存在"));
             }
             appendCreated(product, command.actor());
-            return stored(201, product);
+            return stored(201, product, command.actor());
         });
     }
 
@@ -151,7 +187,7 @@ public class ProductService {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
         if (before.hasSameDetails(command.name(), command.description())) {
-            return ProductView.from(before);
+            return view(before, command.actor(), displayName(before));
         }
         Product candidate = before.updateDetails(command.name(), command.description(),
                 command.actor().userId(), clock.instant());
@@ -159,16 +195,14 @@ public class ProductService {
                 .orElseThrow(() -> conditionalFailure(before.companyId(), before.id(),
                         command.expectedRowVersion(), ProductStatus.ACTIVE));
         appendUpdated(before, after, command.actor());
-        return ProductView.from(after);
+        return view(after, command.actor(), displayName(after));
     }
 
     @Transactional
     public ProductChangeResult archive(ProductLifecycleChange mutation) {
-        Product before = required(mutation.companyId(), mutation.productId());
+        Product before = requiredLocked(mutation.companyId(), mutation.productId());
         requireVersion(before, mutation.expectedRowVersion());
-        if (before.status() != ProductStatus.ACTIVE) {
-            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
-        }
+        requireStatus(before, ProductStatus.ACTIVE);
         Product candidate = before.archive(mutation.actorUserId(), clock.instant());
         Product after = repository.changeStatus(candidate, ProductStatus.ACTIVE,
                         mutation.expectedRowVersion())
@@ -179,11 +213,9 @@ public class ProductService {
 
     @Transactional
     public ProductChangeResult restore(ProductLifecycleChange mutation) {
-        Product before = required(mutation.companyId(), mutation.productId());
+        Product before = requiredLocked(mutation.companyId(), mutation.productId());
         requireVersion(before, mutation.expectedRowVersion());
-        if (before.status() != ProductStatus.ARCHIVED) {
-            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
-        }
+        requireStatus(before, ProductStatus.ARCHIVED);
         Product candidate = before.restore(mutation.actorUserId(), clock.instant());
         Product after = repository.changeStatus(candidate, ProductStatus.ARCHIVED,
                         mutation.expectedRowVersion())
@@ -194,7 +226,7 @@ public class ProductService {
 
     @Transactional
     public ProductChangeResult reassignOwner(ProductOwnerChange mutation) {
-        Product before = required(mutation.companyId(), mutation.productId());
+        Product before = requiredLocked(mutation.companyId(), mutation.productId());
         requireVersion(before, mutation.expectedRowVersion());
         if (before.ownerUserId().equals(mutation.newOwnerUserId())) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
@@ -251,14 +283,28 @@ public class ProductService {
         return List.copyOf(fields);
     }
 
-    private StoredCommandResult stored(int status, Product product) {
+    private StoredCommandResult stored(int status, Product product, CurrentActor actor) {
         try {
             return new StoredCommandResult(status,
-                    objectMapper.writeValueAsString(ProductView.from(product)),
+                    objectMapper.writeValueAsString(view(product, actor, displayName(product))),
                     product.id(), StrongEtag.format(product.rowVersion()));
         } catch (JacksonException exception) {
             throw new IllegalStateException("product response serialization failed", exception);
         }
+    }
+
+    private ProductView view(Product product, CurrentActor actor, String ownerDisplayName) {
+        return ProductView.from(product, actor, ownerDisplayName);
+    }
+
+    private String displayName(Product product) {
+        return minimalUsers.findByUserId(product.companyId(), product.ownerUserId())
+                .map(MinimalUserSnapshot::displayName).orElse("-");
+    }
+
+    private static String displayName(Map<UUID, MinimalUserSnapshot> owners, UUID ownerUserId) {
+        MinimalUserSnapshot owner = owners.get(ownerUserId);
+        return owner == null ? "-" : owner.displayName();
     }
 
     private Product requiredVisible(CurrentActor actor, UUID productId) {
@@ -269,6 +315,11 @@ public class ProductService {
 
     private Product required(UUID companyId, UUID productId) {
         return repository.findById(companyId, productId)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    private Product requiredLocked(UUID companyId, UUID productId) {
+        return repository.lockById(companyId, productId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
     }
 
@@ -296,6 +347,12 @@ public class ProductService {
     private static void requireVersion(Product product, long expectedVersion) {
         if (product.rowVersion() != expectedVersion) {
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+        }
+    }
+
+    private static void requireStatus(Product product, ProductStatus expected) {
+        if (product.status() != expected) {
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
     }
 

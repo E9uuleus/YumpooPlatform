@@ -14,6 +14,8 @@ public interface ProductRepository {
                                   OffsetPageRequest page);
     Optional<Product> findVisibleById(CurrentActor actor, UUID productId);
     Optional<Product> findById(UUID companyId, UUID productId);
+    Optional<Product> lockById(UUID companyId, UUID productId);
+    Optional<Product> lockByIdForShare(UUID companyId, UUID productId);
     List<Product> findByOwner(UUID companyId, UUID ownerUserId, ProductStatus status);
     boolean insert(Product product);
     Optional<Product> updateDetails(Product product, long expectedRowVersion);

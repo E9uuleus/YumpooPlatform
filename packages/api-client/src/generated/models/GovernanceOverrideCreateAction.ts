@@ -18,6 +18,7 @@
  */
 export enum GovernanceOverrideCreateAction {
     ProjectArchiveWithOpenItems = 'PROJECT_ARCHIVE_WITH_OPEN_ITEMS',
+    ProductArchiveWithBlockers = 'PRODUCT_ARCHIVE_WITH_BLOCKERS',
     WorkspaceArchiveWithActiveProjects = 'WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS',
     UnknownDefaultOpenApi = '11184809'
 }

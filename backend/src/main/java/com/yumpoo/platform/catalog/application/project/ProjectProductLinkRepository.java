@@ -22,4 +22,8 @@ public interface ProjectProductLinkRepository {
                                         OffsetPageRequest page);
     boolean hasActiveRelation(UUID companyId, UUID projectId, UUID productId,
                               Set<ProjectProductRelationType> allowedTypes);
+    long countActiveProjects(UUID companyId, UUID productId,
+                             Set<ProjectProductRelationType> allowedTypes);
+    Set<UUID> findProductIds(UUID companyId, UUID projectId,
+                             Set<ProjectProductRelationType> allowedTypes);
 }

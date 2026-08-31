@@ -19,10 +19,25 @@ public class ProductProjectRelationCatalogAdapter implements ProductProjectRelat
     @Override
     public boolean hasActiveRelation(UUID companyId, UUID projectId, UUID productId,
                                      Set<RelationType> allowedTypes) {
-        Set<ProjectProductRelation> applicationTypes = allowedTypes == null
-                ? Set.of()
-                : allowedTypes.stream().map(type -> ProjectProductRelation.valueOf(type.name()))
+        return query.hasActiveRelation(companyId, projectId, productId,
+                applicationTypes(allowedTypes));
+    }
+
+    @Override
+    public long countActiveProjects(UUID companyId, UUID productId,
+                                    Set<RelationType> allowedTypes) {
+        return query.countActiveProjects(companyId, productId, applicationTypes(allowedTypes));
+    }
+
+    @Override
+    public Set<UUID> findProductIds(UUID companyId, UUID projectId,
+                                    Set<RelationType> allowedTypes) {
+        return query.findProductIds(companyId, projectId, applicationTypes(allowedTypes));
+    }
+
+    private static Set<ProjectProductRelation> applicationTypes(Set<RelationType> allowedTypes) {
+        return allowedTypes == null ? Set.of() : allowedTypes.stream()
+                .map(type -> ProjectProductRelation.valueOf(type.name()))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        return query.hasActiveRelation(companyId, projectId, productId, applicationTypes);
     }
 }

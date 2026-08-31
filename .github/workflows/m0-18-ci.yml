@@ -101,6 +101,10 @@ jobs:
         env:
           YUMPOO_M223_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: pnpm verify:m2-23:assets
+      - name: Verify M2-24 final acceptance assets
+        env:
+          YUMPOO_M224_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: pnpm verify:m2-24:assets
       - name: Upload M1-13 verification report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
