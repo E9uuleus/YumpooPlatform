@@ -13,7 +13,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Component
-public class ProductCatalogAdapter implements ProductSnapshotQuery, ProductOwnerScopeQuery, ProductCommandPort {
+public class ProductCatalogAdapter implements ProductSnapshotQuery, ProductOwnerScopeQuery,
+        ProductCommandPort, ProductFactWriteGuard {
 
     private final ProductService service;
 
@@ -47,17 +48,30 @@ public class ProductCatalogAdapter implements ProductSnapshotQuery, ProductOwner
     }
 
     @Override
+    public ProductFactWriteSnapshot lockForFactWrite(CurrentActor actor, UUID productId) {
+        ProductSnapshot product = snapshot(service.lockForFactWrite(actor, productId));
+        return new ProductFactWriteSnapshot(product.productId(), product.companyId(), product.code(),
+                product.status(), product.ownerUserId());
+    }
+
+    @Override
+    public ProductSnapshot lockForArchive(ProductLifecycleMutation mutation) {
+        return snapshot(service.lockForArchive(change(mutation)));
+    }
+
+    @Override
+    public ProductSnapshot lockForRestore(ProductLifecycleMutation mutation) {
+        return snapshot(service.lockForRestore(change(mutation)));
+    }
+
+    @Override
     public ProductMutationResult archive(ProductLifecycleMutation mutation) {
-        return result(service.archive(new ProductLifecycleChange(
-                mutation.companyId(), mutation.productId(), mutation.expectedRowVersion(),
-                mutation.actorUserId())));
+        return result(service.archive(change(mutation)));
     }
 
     @Override
     public ProductMutationResult restore(ProductLifecycleMutation mutation) {
-        return result(service.restore(new ProductLifecycleChange(
-                mutation.companyId(), mutation.productId(), mutation.expectedRowVersion(),
-                mutation.actorUserId())));
+        return result(service.restore(change(mutation)));
     }
 
     @Override
@@ -69,6 +83,11 @@ public class ProductCatalogAdapter implements ProductSnapshotQuery, ProductOwner
 
     private static ProductMutationResult result(ProductChangeResult result) {
         return new ProductMutationResult(snapshot(result.before()), snapshot(result.after()));
+    }
+
+    private static ProductLifecycleChange change(ProductLifecycleMutation mutation) {
+        return new ProductLifecycleChange(mutation.companyId(), mutation.productId(),
+                mutation.expectedRowVersion(), mutation.actorUserId());
     }
 
     private static ProductSnapshot snapshot(ProductApplicationSnapshot product) {

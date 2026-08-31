@@ -175,6 +175,38 @@ public class JdbcProjectProductLinkRepository implements ProjectProductLinkRepos
                 .query(Boolean.class).single();
     }
 
+    @Override
+    public long countActiveProjects(UUID companyId, UUID productId,
+                                    Set<ProjectProductRelationType> allowedTypes) {
+        if (allowedTypes.isEmpty()) return 0;
+        return jdbcClient.sql("""
+                SELECT count(DISTINCT l.project_id)
+                  FROM yumpoo.project_product_link l
+                  JOIN yumpoo.project p
+                    ON p.company_id=l.company_id AND p.id=l.project_id
+                 WHERE l.company_id=:companyId AND l.product_id=:productId
+                   AND l.removed_at IS NULL AND p.lifecycle='ACTIVE'
+                   AND l.relation_type IN (:relationTypes)
+                """).param("companyId", companyId).param("productId", productId)
+                .param("relationTypes", allowedTypes.stream().map(Enum::name).toList())
+                .query(Long.class).single();
+    }
+
+    @Override
+    public Set<UUID> findProductIds(UUID companyId, UUID projectId,
+                                    Set<ProjectProductRelationType> allowedTypes) {
+        if (allowedTypes.isEmpty()) return Set.of();
+        return Set.copyOf(jdbcClient.sql("""
+                SELECT DISTINCT product_id
+                  FROM yumpoo.project_product_link
+                 WHERE company_id=:companyId AND project_id=:projectId
+                   AND removed_at IS NULL AND relation_type IN (:relationTypes)
+                 ORDER BY product_id
+                """).param("companyId", companyId).param("projectId", projectId)
+                .param("relationTypes", allowedTypes.stream().map(Enum::name).toList())
+                .query(UUID.class).list());
+    }
+
     private static String viewSelect() {
         return "SELECT l.id AS link_id, l.company_id, l.project_id, l.product_id, "
                 + "l.relation_type, l.is_primary, l.linked_at, l.linked_by_user_id, "

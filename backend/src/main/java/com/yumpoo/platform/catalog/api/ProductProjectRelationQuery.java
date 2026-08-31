@@ -7,6 +7,8 @@ public interface ProductProjectRelationQuery {
 
     boolean hasActiveRelation(UUID companyId, UUID projectId, UUID productId,
                               Set<RelationType> allowedTypes);
+    long countActiveProjects(UUID companyId, UUID productId, Set<RelationType> allowedTypes);
+    Set<UUID> findProductIds(UUID companyId, UUID projectId, Set<RelationType> allowedTypes);
 
     enum RelationType {
         DEVELOPMENT,
