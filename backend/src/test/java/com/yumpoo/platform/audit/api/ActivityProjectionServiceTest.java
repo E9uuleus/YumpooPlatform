@@ -102,6 +102,32 @@ class ActivityProjectionServiceTest {
     }
 
     @Test
+    void createsTwoPrivacyScopedProjectionsWhenCrossProjectRelationIsDeleted() {
+        UUID rightProject = UUID.fromString("44000000-0000-4000-8000-000000000014");
+        UUID rightItem = UUID.fromString("44000000-0000-4000-8000-000000000015");
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("relationId", UUID.randomUUID().toString());
+        payload.put("relationType", "RELATED");
+        payload.put("leftWorkItemId", ITEM.toString());
+        payload.put("rightWorkItemId", rightItem.toString());
+        payload.put("leftProjectId", PROJECT.toString());
+        payload.put("rightProjectId", rightProject.toString());
+        payload.put("deletedAt", CUTOVER.plusSeconds(1).toString());
+
+        service.consume(event("workitem.work_item_relation_deleted", CUTOVER.plusSeconds(1), payload));
+
+        ArgumentCaptor<ActivityStoredEvent> captor = ArgumentCaptor.forClass(ActivityStoredEvent.class);
+        verify(repository, org.mockito.Mockito.times(2)).append(captor.capture());
+        assertThat(captor.getAllValues()).extracting(ActivityStoredEvent::scopeId)
+                .containsExactly(PROJECT, rightProject);
+        assertThat(captor.getAllValues()).allSatisfy(stored -> {
+            assertThat(stored.secondaryWorkItemId()).isNull();
+            assertThat(stored.safeParameters().toString())
+                    .doesNotContain(ITEM.toString(), rightItem.toString());
+        });
+    }
+
+    @Test
     void projectsDeletedAndParentChangedOnceForBothSameProjectEndpoints() {
         UUID rightItem = UUID.fromString("44000000-0000-4000-8000-000000000006");
         ObjectNode payload = objectMapper.createObjectNode();

@@ -680,6 +680,140 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void crossProjectRelationsRequireBothMembershipsAndHideInvisibleCounterparts() throws Exception {
+        UUID targetProjectId = createProjectFixture("M2_22_TARGET", "PRODUCT_DEVELOPMENT", "RND");
+        UUID targetContentId = UUID.fromString(createContent(targetProjectId,
+                "M2_22_TASKS", "跨项目任务").path("id").asText());
+        JsonNode current = createWorkItem("/api/v1/contents/" + contentId + "/work-items",
+                "关系源事项", "HIGH", member.userId(), null);
+        JsonNode target = createWorkItem("/api/v1/contents/" + targetContentId + "/work-items",
+                "关系目标事项", "MEDIUM", member.userId(), null);
+        UUID currentId = UUID.fromString(current.path("id").asText());
+        UUID targetId = UUID.fromString(target.path("id").asText());
+        String currentRelations = "/api/v1/work-items/" + currentId + "/relations";
+        String targetQuery = "&targetProjectId=" + targetProjectId;
+
+        setMembership(targetProjectId, member.userId(), false);
+        HttpResponse<String> hiddenCandidates = get("/api/v1/work-items/" + currentId
+                + "/relation-candidates?relationType=RELATED&currentRole=RELATED&q=M2" + targetQuery,
+                member);
+        assertThat(hiddenCandidates.statusCode()).isEqualTo(404);
+        HttpResponse<String> hiddenCreate = mutate("POST", currentRelations, member,
+                relationBody("RELATED", "RELATED", targetProjectId, targetId), null,
+                UUID.randomUUID());
+        assertThat(hiddenCreate.statusCode()).isEqualTo(404);
+
+        setMembership(targetProjectId, member.userId(), true);
+        List<List<String>> types = List.of(
+                List.of("RELATED", "RELATED"),
+                List.of("BLOCKS", "BLOCKS"),
+                List.of("SOURCE", "SOURCE"),
+                List.of("DUPLICATE", "DUPLICATE_OF"));
+        java.util.ArrayList<UUID> relationIds = new java.util.ArrayList<>();
+        for (List<String> type : types) {
+            HttpResponse<String> created = mutate("POST", currentRelations, member,
+                    relationBody(type.get(0), type.get(1), targetProjectId, targetId), null,
+                    UUID.randomUUID());
+            assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
+            relationIds.add(UUID.fromString(json.readTree(created.body()).path("id").asText()));
+        }
+        HttpResponse<String> crossParent = mutate("POST", currentRelations, member,
+                relationBody("PARENT_CHILD", "PARENT", targetProjectId, targetId), null,
+                UUID.randomUUID());
+        assertThat(crossParent.statusCode()).isEqualTo(422);
+        assertThat(crossParent.body()).contains("PARENT_CHILD_REQUIRES_SAME_PROJECT");
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_relation WHERE company_id=:companyId "
+                        + "AND left_project_id<>right_project_id AND deleted_at IS NULL")
+                .param("companyId", COMPANY_ID).query(Long.class).single()).isEqualTo(4L);
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item WHERE id IN (:ids) "
+                        + "AND deleted_at IS NULL")
+                .param("ids", List.of(currentId, targetId)).query(Long.class).single()).isEqualTo(2L);
+
+        JsonNode visible = body(get(currentRelations, member));
+        assertThat(visible.path("totalElements").asLong()).isEqualTo(4L);
+        assertThat(visible.path("hasHiddenRelations").asBoolean()).isFalse();
+        visible.path("items").forEach(item -> {
+            assertThat(item.path("counterpartVisible").asBoolean()).isTrue();
+            assertThat(item.path("counterpart").isObject()).isTrue();
+            assertThat(item.path("capabilities").path("canDelete").asBoolean()).isTrue();
+        });
+
+        JsonNode adminPage = body(get(currentRelations, admin));
+        assertThat(adminPage.path("items").get(0).path("capabilities")
+                .path("canDelete").asBoolean()).isFalse();
+        assertThat(mutate("DELETE", "/api/v1/work-item-relations/" + relationIds.getFirst(), admin,
+                "{\"reason\":\"管理员只读\"}", "\"0\"", UUID.randomUUID()).statusCode())
+                .isEqualTo(403);
+
+        setMembership(targetProjectId, member.userId(), false);
+        for (String type : List.of("RELATED", "BLOCKS", "SOURCE", "DUPLICATE", "PARENT_CHILD")) {
+            JsonNode hidden = body(get(currentRelations + "?relationType=" + type, member));
+            assertThat(hidden.path("items").isEmpty()).isTrue();
+            assertThat(hidden.path("totalElements").asLong()).isZero();
+            assertThat(hidden.path("hasHiddenRelations").asBoolean()).isTrue();
+            assertThat(hidden.toString()).doesNotContain(targetId.toString())
+                    .doesNotContain(targetProjectId.toString())
+                    .doesNotContain(relationIds.getFirst().toString());
+        }
+        assertThat(mutate("DELETE", "/api/v1/work-item-relations/" + relationIds.getFirst(), member,
+                "{\"reason\":\"失权删除\"}", "\"0\"", UUID.randomUUID()).statusCode())
+                .isEqualTo(404);
+
+        setMembership(targetProjectId, member.userId(), true);
+        assertThat(body(get(currentRelations, member)).path("totalElements").asLong()).isEqualTo(4L);
+        archiveProject(targetProjectId, true);
+        HttpResponse<String> archivedCreate = mutate("POST", currentRelations, member,
+                relationBody("RELATED", "RELATED", targetProjectId, targetId), null,
+                UUID.randomUUID());
+        assertThat(archivedCreate.statusCode()).isEqualTo(409);
+        assertThat(archivedCreate.body()).contains("PROJECT_ARCHIVED");
+        HttpResponse<String> archivedDelete = mutate("DELETE",
+                "/api/v1/work-item-relations/" + relationIds.getFirst(), member,
+                "{\"reason\":\"归档删除\"}", "\"0\"", UUID.randomUUID());
+        assertThat(archivedDelete.statusCode()).isEqualTo(409);
+        assertThat(archivedDelete.body()).contains("PROJECT_ARCHIVED");
+        archiveProject(targetProjectId, false);
+        assertThat(mutate("DELETE", "/api/v1/work-item-relations/" + relationIds.getFirst(), member,
+                "{\"reason\":\"正常解除\"}", "\"0\"", UUID.randomUUID()).statusCode())
+                .isEqualTo(200);
+
+        JsonNode concurrentLeft = createWorkItem("/api/v1/contents/" + contentId + "/work-items",
+                "并发左端", "LOW", member.userId(), null);
+        JsonNode concurrentRight = createWorkItem("/api/v1/contents/" + targetContentId + "/work-items",
+                "并发右端", "LOW", member.userId(), null);
+        UUID leftId = UUID.fromString(concurrentLeft.path("id").asText());
+        UUID rightId = UUID.fromString(concurrentRight.path("id").asText());
+        CountDownLatch start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Future<HttpResponse<String>> one = pool.submit(() -> {
+                start.await();
+                return mutate("POST", "/api/v1/work-items/" + leftId + "/relations", member,
+                        relationBody("RELATED", "RELATED", targetProjectId, rightId), null,
+                        UUID.randomUUID());
+            });
+            Future<HttpResponse<String>> two = pool.submit(() -> {
+                start.await();
+                return mutate("POST", "/api/v1/work-items/" + rightId + "/relations", member,
+                        relationBody("RELATED", "RELATED", PROJECT_ID, leftId), null,
+                        UUID.randomUUID());
+            });
+            start.countDown();
+            assertThat(List.of(one.get(20, TimeUnit.SECONDS).statusCode(),
+                    two.get(20, TimeUnit.SECONDS).statusCode()))
+                    .containsExactlyInAnyOrder(200, 201);
+        }
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_relation WHERE relation_type='RELATED' "
+                        + "AND deleted_at IS NULL AND left_work_item_id IN (:ids) AND right_work_item_id IN (:ids)")
+                .param("ids", List.of(leftId, rightId)).query(Long.class).single()).isOne();
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
+                        + "WHERE event_type='workitem.work_item_relation_created' "
+                        + "AND payload_json->>'leftWorkItemId' IN (:ids) "
+                        + "AND payload_json->>'rightWorkItemId' IN (:ids)")
+                .param("ids", List.of(leftId.toString(), rightId.toString()))
+                .query(Long.class).single()).isOne();
+    }
+
+    @Test
     void projectCollectionAggregatesContentsAndSupportsNullablePriority() throws Exception {
         String firstCollection = "/api/v1/contents/" + contentId + "/work-items";
         UUID secondContentId = UUID.fromString(createContent("DEFECTS", "缺陷").path("id").asText());
@@ -1777,6 +1911,34 @@ class WorkItemHttpIT {
     private static String relationBody(String relationType, String currentRole, UUID targetId) {
         return "{\"relationType\":\"" + relationType + "\",\"currentRole\":\""
                 + currentRole + "\",\"targetWorkItemId\":\"" + targetId + "\"}";
+    }
+
+    private static String relationBody(String relationType, String currentRole,
+            UUID targetProjectId, UUID targetId) {
+        return "{\"relationType\":\"" + relationType + "\",\"currentRole\":\""
+                + currentRole + "\",\"targetProjectId\":\"" + targetProjectId
+                + "\",\"targetWorkItemId\":\"" + targetId + "\"}";
+    }
+
+    private void setMembership(UUID projectId, UUID userId, boolean active) {
+        jdbc.sql("UPDATE yumpoo.project_membership SET status=:status, row_version=row_version+1, "
+                        + "removed_at=CASE WHEN :active THEN NULL ELSE transaction_timestamp() END, "
+                        + "removed_by_user_id=CASE WHEN :active THEN NULL ELSE :actorId END, "
+                        + "remove_reason=CASE WHEN :active THEN NULL ELSE 'M2-22 visibility probe' END "
+                        + "WHERE company_id=:companyId AND project_id=:projectId AND user_id=:userId")
+                .param("status", active ? "ACTIVE" : "REMOVED").param("active", active)
+                .param("actorId", owner.userId()).param("companyId", COMPANY_ID)
+                .param("projectId", projectId).param("userId", userId).update();
+    }
+
+    private void archiveProject(UUID projectId, boolean archived) {
+        jdbc.sql("UPDATE yumpoo.project SET lifecycle=:lifecycle, row_version=row_version+1, "
+                        + "archived_at=CASE WHEN :archived THEN transaction_timestamp() ELSE NULL END, "
+                        + "updated_at=transaction_timestamp(), updated_by_user_id=:actorId "
+                        + "WHERE company_id=:companyId AND id=:projectId")
+                .param("lifecycle", archived ? "ARCHIVED" : "ACTIVE")
+                .param("archived", archived).param("actorId", owner.userId())
+                .param("companyId", COMPANY_ID).param("projectId", projectId).update();
     }
 
     private String transitionBody(String toStatus, String resolution) throws Exception {

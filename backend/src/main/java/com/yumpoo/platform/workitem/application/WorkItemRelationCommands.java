@@ -9,7 +9,8 @@ public final class WorkItemRelationCommands {
 
     public record Create(CurrentActor actor, UUID currentWorkItemId,
             String relationType, String currentRole,
-            UUID targetWorkItemId, UUID idempotencyKey, RequestHash requestHash) {}
+            UUID targetProjectId, UUID targetWorkItemId,
+            UUID idempotencyKey, RequestHash requestHash) {}
 
     public record ChangeParent(CurrentActor actor, UUID relationId, long expectedVersion,
             UUID newParentWorkItemId, String reason, UUID idempotencyKey,

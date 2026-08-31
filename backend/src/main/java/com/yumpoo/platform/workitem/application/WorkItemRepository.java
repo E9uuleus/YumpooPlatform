@@ -32,6 +32,8 @@ public interface WorkItemRepository {
     long nextSequence(UUID companyId, UUID projectId);
     boolean insert(WorkItem workItem);
     Optional<WorkItemModels.WorkItemLocator> findLocator(UUID companyId, UUID workItemId);
+    Optional<WorkItemModels.WorkItemLocator> findLocator(UUID companyId, UUID projectId,
+            UUID workItemId);
     Optional<WorkItemModels.WorkItemLocator> findLocatorIncludingDeleted(UUID companyId,
             UUID workItemId);
     Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId, UUID workItemId);

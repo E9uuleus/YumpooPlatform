@@ -109,6 +109,18 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
+    public Optional<WorkItemLocator> findLocator(UUID companyId, UUID projectId, UUID workItemId) {
+        return jdbc.sql("SELECT id, project_id, content_id FROM yumpoo.work_item "
+                        + "WHERE company_id=:companyId AND project_id=:projectId "
+                        + "AND id=:workItemId AND deleted_at IS NULL")
+                .param("companyId", companyId).param("projectId", projectId)
+                .param("workItemId", workItemId)
+                .query((rs, row) -> new WorkItemLocator(rs.getObject("id", UUID.class),
+                        rs.getObject("project_id", UUID.class),
+                        rs.getObject("content_id", UUID.class))).optional();
+    }
+
+    @Override
     public Optional<WorkItemLocator> findLocatorIncludingDeleted(UUID companyId, UUID workItemId) {
         return findLocator(companyId, workItemId, true);
     }

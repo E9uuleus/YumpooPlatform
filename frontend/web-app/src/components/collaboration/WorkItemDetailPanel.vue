@@ -14,6 +14,7 @@ interface DiscussionHandle {
 const props = defineProps<{
   modelValue: 'details' | 'discussion' | 'relations' | 'activity'
   workItemId: string
+  currentProjectId: string
   members: ProjectMember[]
   canPublish: boolean
   readOnlyReason?: string | undefined
@@ -22,7 +23,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: 'details' | 'discussion' | 'relations' | 'activity']
   'relationsChanged': [affectedWorkItemIds: string[]]
-  'openWorkItem': [workItemId: string]
+  'openWorkItem': [target: { workItemId: string, projectId: string }]
 }>()
 const ElTabs = ElTabsRaw as unknown as DefineComponent
 const ElTabPane = ElTabPaneRaw as unknown as DefineComponent
@@ -70,6 +71,7 @@ defineExpose({ hasDraft, discardDraft })
       <work-item-relations
         v-if="tab === 'relations'"
         :work-item-id="workItemId"
+        :current-project-id="currentProjectId"
         @changed="emit('relationsChanged', $event)"
         @open-work-item="emit('openWorkItem', $event)"
       />

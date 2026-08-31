@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public interface WorkItemRelationRepository {
@@ -33,10 +34,14 @@ public interface WorkItemRelationRepository {
     Optional<WorkItemRelation> findActiveParent(UUID companyId, UUID childWorkItemId);
     Optional<Projection> findProjection(UUID companyId, UUID relationId);
     Optional<WorkItemRelation> softDelete(WorkItemRelation relation, long expectedVersion);
+    Set<UUID> findCounterpartProjectIds(UUID companyId, UUID workItemId);
     List<Projection> findActiveForWorkItem(UUID companyId, UUID workItemId,
-            WorkItemRelationType relationType, OffsetPageRequest page);
+            WorkItemRelationType relationType, Collection<UUID> visibleProjectIds,
+            OffsetPageRequest page);
     long countActiveForWorkItem(UUID companyId, UUID workItemId,
-            WorkItemRelationType relationType);
+            WorkItemRelationType relationType, Collection<UUID> visibleProjectIds);
+    boolean hasHiddenForWorkItem(UUID companyId, UUID workItemId,
+            Collection<UUID> visibleProjectIds);
     List<CandidateFacts> findCandidates(UUID companyId, UUID projectId, UUID excludedWorkItemId,
             String query, WorkItemRelationType relationType, boolean currentIsLeft,
             OffsetPageRequest page);

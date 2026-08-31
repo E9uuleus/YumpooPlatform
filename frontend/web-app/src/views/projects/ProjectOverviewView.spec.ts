@@ -731,6 +731,19 @@ describe('项目级工作项首页', () => {
     wrapper.unmount()
   })
 
+  it('跨项目关系跳转到目标项目上下文并携带 workItemId', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await (wrapper.vm as unknown as {
+      openRelatedWorkItem: (target: { workItemId: string, projectId: string }) => Promise<void>
+    }).openRelatedWorkItem({ workItemId: 'remote-item', projectId: 'project-2' })
+    expect(state.push).toHaveBeenCalledWith({
+      name: 'project-overview',
+      params: { projectId: 'project-2' },
+      query: { workItemId: 'remote-item' },
+    })
+  })
+
   it('选择具体截止日期立即提交自然日字段命令', async () => {
     state.patchWorkItemDueDate.mockResolvedValue({
       ...item(), dueDate: new Date('2026-09-01T00:00:00.000Z'), rowVersion: 2, etag: '"2"',

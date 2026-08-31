@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Repository
@@ -147,15 +148,31 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
     }
 
     @Override
+    public Set<UUID> findCounterpartProjectIds(UUID companyId, UUID workItemId) {
+        return Set.copyOf(jdbc.sql("""
+                SELECT DISTINCT CASE WHEN left_work_item_id=:workItemId
+                                     THEN right_project_id ELSE left_project_id END
+                  FROM yumpoo.work_item_relation
+                 WHERE company_id=:companyId AND deleted_at IS NULL
+                   AND (left_work_item_id=:workItemId OR right_work_item_id=:workItemId)
+                """).param("companyId", companyId).param("workItemId", workItemId)
+                .query(UUID.class).list());
+    }
+
+    @Override
     public List<Projection> findActiveForWorkItem(UUID companyId, UUID workItemId,
-            WorkItemRelationType relationType, OffsetPageRequest page) {
+            WorkItemRelationType relationType, Collection<UUID> visibleProjectIds,
+            OffsetPageRequest page) {
         String typePredicate = relationType == null ? "" : " AND relation.relation_type=:relationType";
         JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + PROJECTION_COLUMNS + projectionJoins()
                         + " WHERE relation.company_id=:companyId AND relation.deleted_at IS NULL"
                         + " AND (relation.left_work_item_id=:workItemId OR relation.right_work_item_id=:workItemId)"
+                        + " AND (CASE WHEN relation.left_work_item_id=:workItemId THEN relation.right_project_id"
+                        + " ELSE relation.left_project_id END) IN (:visibleProjectIds)"
                         + typePredicate + " ORDER BY relation.created_at DESC, relation.id ASC"
                         + " LIMIT :limit OFFSET :offset")
                 .param("companyId", companyId).param("workItemId", workItemId)
+                .param("visibleProjectIds", visibleProjectIds)
                 .param("limit", page.size()).param("offset", Math.multiplyExact(page.page(), page.size()));
         if (relationType != null) statement = statement.param("relationType", relationType.name());
         return statement.query(JdbcWorkItemRelationRepository::mapProjection).list();
@@ -163,15 +180,32 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
 
     @Override
     public long countActiveForWorkItem(UUID companyId, UUID workItemId,
-            WorkItemRelationType relationType) {
+            WorkItemRelationType relationType, Collection<UUID> visibleProjectIds) {
         String typePredicate = relationType == null ? "" : " AND relation_type=:relationType";
         JdbcClient.StatementSpec statement = jdbc.sql("SELECT count(*) FROM yumpoo.work_item_relation "
                         + "WHERE company_id=:companyId AND deleted_at IS NULL "
                         + "AND (left_work_item_id=:workItemId OR right_work_item_id=:workItemId)"
+                        + " AND (CASE WHEN left_work_item_id=:workItemId THEN right_project_id"
+                        + " ELSE left_project_id END) IN (:visibleProjectIds)"
                         + typePredicate)
-                .param("companyId", companyId).param("workItemId", workItemId);
+                .param("companyId", companyId).param("workItemId", workItemId)
+                .param("visibleProjectIds", visibleProjectIds);
         if (relationType != null) statement = statement.param("relationType", relationType.name());
         return statement.query(Long.class).single();
+    }
+
+    @Override
+    public boolean hasHiddenForWorkItem(UUID companyId, UUID workItemId,
+            Collection<UUID> visibleProjectIds) {
+        return jdbc.sql("""
+                SELECT EXISTS (
+                    SELECT 1 FROM yumpoo.work_item_relation
+                     WHERE company_id=:companyId AND deleted_at IS NULL
+                       AND (left_work_item_id=:workItemId OR right_work_item_id=:workItemId)
+                       AND (CASE WHEN left_work_item_id=:workItemId THEN right_project_id
+                                 ELSE left_project_id END) NOT IN (:visibleProjectIds))
+                """).param("companyId", companyId).param("workItemId", workItemId)
+                .param("visibleProjectIds", visibleProjectIds).query(Boolean.class).single();
     }
 
     @Override

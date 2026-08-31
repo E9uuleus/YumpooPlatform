@@ -19,7 +19,8 @@ public final class WorkItemRelationModels {
             long rowVersion, String etag, Capabilities capabilities) {}
 
     public record RelationPage(List<RelationView> items, int page, int size,
-            long totalElements, int totalPages, boolean canCreate) {
+            long totalElements, int totalPages, boolean canCreate,
+            boolean hasHiddenRelations) {
         public RelationPage { items = List.copyOf(items); }
     }
 

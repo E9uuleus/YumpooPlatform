@@ -179,13 +179,30 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
                 WHERE p.id=:projectId AND p.company_id=:companyId AND (:admin OR m.id IS NOT NULL)
                 """).param("actorUserId", actor.userId()).param("projectId", projectId)
                 .param("companyId", actor.companyId()).param("admin", admin)
-                .query((rs, row) -> new Access(
-                        rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
-                        rs.getString("lifecycle"), ActorAccess.valueOf(rs.getString("actor_access")),
-                        rs.getString("template_key"), rs.getInt("template_version"),
-                        rs.getLong("project_version"), rs.getObject("membership_version") == null
-                                ? OptionalLong.empty() : OptionalLong.of(rs.getLong("membership_version"))))
+                .query(JdbcProjectMembershipRepository::mapAccess)
                 .optional();
+    }
+
+    @Override
+    public Map<UUID, Access> findVisible(CurrentActor actor, Collection<UUID> projectIds) {
+        if (projectIds.isEmpty()) return Map.of();
+        boolean admin = actor.hasRole(PlatformRoleCode.COMPANY_ADMIN);
+        return jdbcClient.sql("""
+                SELECT p.id, p.company_id, p.lifecycle, p.template_key, p.template_version,
+                       p.row_version AS project_version,
+                       m.row_version AS membership_version,
+                       CASE WHEN p.owner_user_id=:actorUserId THEN 'OWNER'
+                            WHEN m.id IS NOT NULL THEN 'MEMBER'
+                            ELSE 'COMPANY_ADMIN_READ_ONLY' END AS actor_access
+                FROM yumpoo.project p
+                LEFT JOIN yumpoo.project_membership m
+                  ON m.project_id=p.id AND m.user_id=:actorUserId AND m.status='ACTIVE'
+                WHERE p.id IN (:projectIds) AND p.company_id=:companyId
+                  AND (:admin OR m.id IS NOT NULL)
+                """).param("actorUserId", actor.userId()).param("projectIds", projectIds)
+                .param("companyId", actor.companyId()).param("admin", admin)
+                .query(JdbcProjectMembershipRepository::mapAccess).list().stream()
+                .collect(Collectors.toUnmodifiableMap(Access::projectId, Function.identity()));
     }
 
     private Optional<ProjectMembership> find(UUID companyId, UUID projectId, UUID userId, boolean lock) {
@@ -204,6 +221,15 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
                 instant(rs, "joined_at"), rs.getObject("joined_by_user_id", UUID.class),
                 nullableInstant(rs, "removed_at"), rs.getObject("removed_by_user_id", UUID.class),
                 rs.getString("remove_reason"), rs.getLong("row_version"));
+    }
+
+    private static Access mapAccess(ResultSet rs, int row) throws SQLException {
+        return new Access(rs.getObject("id", UUID.class),
+                rs.getObject("company_id", UUID.class), rs.getString("lifecycle"),
+                ActorAccess.valueOf(rs.getString("actor_access")), rs.getString("template_key"),
+                rs.getInt("template_version"), rs.getLong("project_version"),
+                rs.getObject("membership_version") == null ? OptionalLong.empty()
+                        : OptionalLong.of(rs.getLong("membership_version")));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
