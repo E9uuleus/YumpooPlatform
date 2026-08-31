@@ -4,6 +4,7 @@ import com.yumpoo.platform.audit.application.ActivityRepository;
 import com.yumpoo.platform.audit.application.ActivityStoredEvent;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventActor;
+import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -12,6 +13,7 @@ import tools.jackson.databind.node.ObjectNode;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +48,25 @@ class ActivityProjectionServiceTest {
     void acknowledgesPreCutoverEventsWithoutProjection() {
         service.consume(event("workitem.work_item_created", CUTOVER.minusSeconds(1), workItem()));
         verify(repository, never()).append(any());
+    }
+
+    @Test
+    void subscribesToEveryFrozenM223WorkItemEventAtV1() {
+        assertThat(service.subscriptions()).containsAll(Set.of(
+                new EventSubscription("workitem.work_item_created", 1),
+                new EventSubscription("workitem.work_item_fields_changed", 1),
+                new EventSubscription("workitem.work_item_assigned", 1),
+                new EventSubscription("workitem.work_item_unassigned", 1),
+                new EventSubscription("workitem.work_item_status_changed", 1),
+                new EventSubscription("workitem.work_item_rank_changed", 1),
+                new EventSubscription("workitem.work_item_deleted", 1),
+                new EventSubscription("workitem.work_item_restored", 1),
+                new EventSubscription("workitem.work_item_update_published", 1),
+                new EventSubscription("workitem.work_item_update_edited", 1),
+                new EventSubscription("workitem.work_item_update_deleted", 1),
+                new EventSubscription("workitem.work_item_relation_created", 1),
+                new EventSubscription("workitem.work_item_relation_deleted", 1),
+                new EventSubscription("workitem.work_item_parent_changed", 1)));
     }
 
     @Test
