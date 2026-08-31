@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-22",
+  "verifiedSlices": [
+    {
+      "requirementId": "WORK-ITEM-CROSS-PROJECT-RELATIONS",
+      "scope": "四类跨项目普通关系、目标项目约束、父子同项目拒绝、双侧 ACTIVE membership 与可写生命周期",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemRelationService.java", "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java", "contracts/openapi/yumpoo-v1.yaml"]
+    },
+    {
+      "requirementId": "WORK-ITEM-HIDDEN-RELATION-PRIVACY",
+      "scope": "分页前裁剪、可见 totalElements、与类型无关的单一匿名占位、旧 relationId 失权 404",
+      "evidence": [".agents/notes/implemented/security/2026-08-31-cross-project-work-item-relation-visibility.md", "backend/src/main/java/com/yumpoo/platform/workitem/infrastructure/JdbcWorkItemRelationRepository.java", "frontend/web-app/src/components/collaboration/WorkItemRelations.vue"]
+    },
+    {
+      "requirementId": "WORK-ITEM-CROSS-PROJECT-CONCURRENCY",
+      "scope": "Project UUID、Work Item UUID、Relation 固定锁序，相反方向 RELATED 并发只形成一条关系和一次事件",
+      "evidence": ["backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemRelationService.java", "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java"]
+    },
+    {
+      "requirementId": "WORK-ITEM-CROSS-PROJECT-WEB",
+      "scope": "可写目标项目远程选择、候选清空、父子项目锁定、匿名占位和目标项目上下文路由",
+      "evidence": ["frontend/web-app/src/components/collaboration/WorkItemRelations.vue", "frontend/web-app/src/components/collaboration/WorkItemRelations.spec.ts", "frontend/web-app/src/views/projects/ProjectOverviewView.spec.ts", "frontend/web-app/src/views/projects/ContentWorkItemsView.spec.ts"]
+    },
+    {
+      "requirementId": "WORK-ITEM-CROSS-PROJECT-ACTIVITY",
+      "scope": "创建与解除沿用 v1 事件并为两侧分别投影，单侧 Activity 不保存另一侧事项 ID",
+      "evidence": ["contracts/events/catalog.yaml", "backend/src/test/java/com/yumpoo/platform/audit/api/ActivityProjectionServiceTest.java"]
+    }
+  ],
+  "deferredRequirements": []
+}

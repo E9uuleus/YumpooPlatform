@@ -1,5 +1,15 @@
 # YumpooPlatform
 
+## M2-22 跨项目普通关系与不可见端占位
+
+M2-22 在 V43 上让 RELATED、BLOCKS、SOURCE、DUPLICATE 支持跨项目，PARENT_CHILD 继续永久限定同项目。创建和解除要求操作者在两侧均为 ACTIVE OWNER/MEMBER，且两侧 Project 为 DRAFT 或 ACTIVE；仅凭 CompanyAdmin 可见时只读，任一侧归档以 `PROJECT_ARCHIVED` 拒绝写入。事务按 Project UUID、Work Item UUID、Relation 固定锁序，封闭相反方向并发创建。
+
+关系查询先由 catalog 的 actor-scoped 批量快照判断对端 Project 可见性，再进行分页和计数。失去对端权限后不返回关系行、数量、类型、relationId、ETag 或对端字段，只提供与类型过滤无关的单一 `hasHiddenRelations` 信号。Web 可远程选择可写目标 Project；父子关系锁定当前项目，同项目继续切换抽屉，跨项目则进入目标项目总览并通过 `workItemId` 打开详情。
+
+```powershell
+pnpm verify:m2-22
+```
+
 ## M2-20 Activity 追加投影与游标查询
 
 M2-20 以 V44 建立 Project、Product、Feedback 三类预留范围的 append-only Activity 投影。当前公开 Project 动态页和 Work Item 详情“动态”页签；Product 生命周期会进入内部投影，但暂不开放 Product Activity 页面或 HTTP 查询。投影只接收 V44 切点后的新事件，不回填旧 Outbox，API 通过 `historyStartedAt` 明示历史起点。

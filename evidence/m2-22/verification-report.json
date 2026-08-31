@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-22",
+  "status": "IMPLEMENTED_WITH_ENVIRONMENT_BLOCKER",
+  "command": "pnpm verify:m2-22",
+  "startedAt": "2026-08-31T01:49:00Z",
+  "completedAt": "2026-08-31T02:09:00Z",
+  "flywayVersion": "43",
+  "checks": {
+    "backendCompileAndTestCompile": true,
+    "backendFocusedUnitTests": true,
+    "backendPostgreSqlHttpIntegration": false,
+    "eventContracts": true,
+    "agentNotesAndDocs": true,
+    "openApiGeneratedClient": true,
+    "openApiOriginDevCompatibility": true,
+    "webFocusedTests": true,
+    "webFullTests": true,
+    "webTypecheck": true,
+    "webBuild": true,
+    "assetGate": true
+  },
+  "environmentBlocker": "当前 Windows 宿主中的 Java 21 HttpClient 在 WorkItemHttpIT 构造阶段因 Unable to establish loopback connection 失败；沙箱内外均已复现，尚未进入 Spring/Testcontainers 或 M2-22 PostgreSQL 断言，不得记为通过。",
+  "databaseConclusion": "M2-22 沿用 V43，无新增迁移；后端编译、测试编译和聚焦单元测试通过，本机 PostgreSQL HTTP 集成由既有 Java 回环问题阻断，交由 Linux CI 的 Maven clean verify 最终验收。",
+  "webConclusion": "M2-22 相关组件与路由 Vitest 60/60、完整 Web Vitest 247/247、API client 7/7、desktop 24/24、全工作区类型检查与生产构建均已通过。"
+}

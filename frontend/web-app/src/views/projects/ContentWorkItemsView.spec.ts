@@ -235,6 +235,20 @@ describe('M2-10 Content 工作项工作区', () => {
     api.listWorkItemUpdates.mockResolvedValue({ items: [], nextCursor: null })
   })
 
+  it('从关系打开跨项目事项时进入目标项目总览', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await (wrapper.vm as unknown as {
+      openRelatedWorkItem: (target: { workItemId: string, projectId: string }) => Promise<void>
+    }).openRelatedWorkItem({ workItemId: 'remote-item', projectId: 'project-2' })
+    expect(routing.push).toHaveBeenCalledWith({
+      name: 'project-overview',
+      params: { projectId: 'project-2' },
+      query: { workItemId: 'remote-item' },
+    })
+    wrapper.unmount()
+  })
+
   it('详情抽屉提供双页签且讨论仅在首次进入时加载', async () => {
     const wrapper = mountView(); await flushPromises()
     const vm = wrapper.vm as unknown as { openDetail: (item: WorkItemSummary) => Promise<void> }

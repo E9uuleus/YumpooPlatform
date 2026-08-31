@@ -95,6 +95,8 @@ jobs:
         run: pnpm verify:m2-21a:assets
       - name: Verify M2-21 work item relation assets
         run: pnpm verify:m2-21:assets
+      - name: Verify M2-22 cross-project relation assets
+        run: pnpm verify:m2-22:assets
       - name: Upload M1-13 verification report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
