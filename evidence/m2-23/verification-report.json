@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-23",
+  "status": "IMPLEMENTED_WITH_ENVIRONMENT_BLOCKER",
+  "command": "pnpm verify:m2-23",
+  "startedAt": "2026-08-31T03:30:00Z",
+  "completedAt": "2026-08-31T03:49:31Z",
+  "flywayVersion": "44",
+  "checks": {
+    "eventContracts": true,
+    "eventContractCompatibility": true,
+    "compatibilityToolTests": true,
+    "producerConsumerInventory": true,
+    "backendCompileAndTestCompile": true,
+    "backendFocusedUnitTests": true,
+    "backendUnitTests": true,
+    "backendPostgreSqlHttpIntegration": false,
+    "unknownVersionPermanentFailureRegressionPresent": true,
+    "unknownVersionPermanentFailureIntegration": false,
+    "contentAttachmentRegression": true,
+    "agentNotesAndDocs": true,
+    "openApiGeneratedClient": true,
+    "openApiOriginDevCompatibility": true,
+    "nodeFullGate": true,
+    "assetGate": true,
+    "fullMavenGate": false
+  },
+  "environmentBlocker": "当前 Windows 宿主中的 Java 21 HttpClient 因 Unable to establish loopback connection 失败。完整 Maven 已通过 430 个普通测试（0 失败）并启动 PostgreSQL 17、执行 Flyway V1-V44；failsafe 共 185 个集成用例，其中 71 个使用 HttpClient 或随机端口 Web 上下文的用例在构造/启动阶段错误，包含 WorkItemHttpIT 的 24 个用例，均未进入 M2-23 运行时断言，不得记为通过。",
+  "databaseConclusion": "M2-23 沿用 V44，无数据库迁移；783 个主源码、166 个测试源码编译通过，430 个普通测试及可运行的非 HTTP PostgreSQL 集成测试通过。14 类 PostgreSQL HTTP Outbox 断言交由 Linux PR CI 的 Maven clean verify 最终验收。",
+  "contractConclusion": "61 个事件版本及其合法/非法样例通过；14 个冻结 v1 已从 origin/dev 临时基线完成兼容比较，兼容工具 9 个正反向用例和生产者/消费者清单审计通过。OpenAPI 相对 origin/dev 无差异，完整 Node 门禁、Agent Note 和文档门禁通过。"
+}

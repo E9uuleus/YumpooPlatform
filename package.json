@@ -16,6 +16,9 @@
     "check:api-client": "node tools/openapi/api-client-codegen.mjs check",
     "check:openapi": "pnpm run lint:openapi && pnpm run validate:openapi-examples && pnpm run check:api-client",
     "validate:event-contracts": "node tools/events/validate-event-contracts.mjs",
+    "check:event-contract-compat": "node tools/events/check-event-contract-compat.mjs",
+    "test:event-contract-compat": "node --test --test-isolation=none tools/events/event-contract-compat.test.mjs",
+    "audit:workitem-event-inventory": "node tools/events/audit-workitem-event-inventory.mjs",
     "check:openapi-compat": "node tools/openapi/check-openapi-compat.mjs",
     "verify-md-links": "tsx scripts/verify-md-links.ts",
     "verify-agent-notes": "tsx scripts/verify-agent-notes.ts",
@@ -133,7 +136,9 @@
     "verify:m2-21:assets": "node tools/verification/verify-m2-21-assets.mjs",
     "verify:m2-21": "node tools/verification/verify-m2-21.mjs",
     "verify:m2-22:assets": "node tools/verification/verify-m2-22-assets.mjs",
-    "verify:m2-22": "node tools/verification/verify-m2-22.mjs"
+    "verify:m2-22": "node tools/verification/verify-m2-22.mjs",
+    "verify:m2-23:assets": "node tools/verification/verify-m2-23-assets.mjs",
+    "verify:m2-23": "node tools/verification/verify-m2-23.mjs"
   },
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "2.40.1",

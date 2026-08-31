@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-23",
+  "compatibilityPolicy": "OPTIONAL_FIELDS_ONLY",
+  "consumerPolicy": {
+    "requiresCurrentAuthorization": true,
+    "notificationSafePayload": "TARGET_REFERENCES_ONLY",
+    "forbiddenNotificationSources": [
+      "title",
+      "description",
+      "notes",
+      "bodyHtml",
+      "bodyText",
+      "deleteReason",
+      "resolution"
+    ],
+    "crossProjectRelationProjection": "CURRENT_ENDPOINT_ONLY"
+  },
+  "events": [
+    {
+      "eventType": "workitem.work_item_created",
+      "eventVersion": 1,
+      "aggregateType": "WorkItem",
+      "schema": "schemas/workitem.work-item-created-v1.schema.json",
+      "producers": ["WorkItemService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "itemNo"],
+      "recipientReferenceFields": []
+    },
+    {
+      "eventType": "workitem.work_item_fields_changed",
+      "eventVersion": 1,
+      "aggregateType": "WorkItem",
+      "schema": "schemas/workitem.work-item-fields-changed-v1.schema.json",
+      "producers": ["WorkItemService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "itemNo"],
+      "recipientReferenceFields": []
+    },
+    {
+      "eventType": "workitem.work_item_assigned",
+      "eventVersion": 1,
+      "aggregateType": "WorkItem",
+      "schema": "schemas/workitem.work-item-assigned-v1.schema.json",
+      "producers": ["WorkItemService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "ASSIGNEE",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "itemNo"],
+      "recipientReferenceFields": ["assigneeUserId"]
+    },
+    {
+      "eventType": "workitem.work_item_unassigned",
+      "eventVersion": 1,
+      "aggregateType": "WorkItem",
+      "schema": "schemas/workitem.work-item-unassigned-v1.schema.json",
+      "producers": ["WorkItemService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "itemNo"],
+      "recipientReferenceFields": []
+    },
+    {
+      "eventType": "workitem.work_item_status_changed",
+      "eventVersion": 1,
+      "aggregateType": "WorkItem",
+      "schema": "schemas/workitem.work-item-status-changed-v1.schema.json",
+      "producers": ["WorkItemService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "itemNo"],
+      "recipientReferenceFields": []
+    },
+    {
+      "eventType": "workitem.work_item_rank_changed",
+      "eventVersion": 1,
+      "aggregateType": "WorkItem",
+      "schema": "schemas/workitem.work-item-rank-changed-v1.schema.json",
+      "producers": ["WorkItemService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "itemNo"],
+      "recipientReferenceFields": []
+    },
+    {
+      "eventType": "workitem.work_item_deleted",
+      "eventVersion": 1,
+      "aggregateType": "WorkItem",
+      "schema": "schemas/workitem.work-item-deleted-v1.schema.json",
+      "producers": ["WorkItemService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "itemNo"],
+      "recipientReferenceFields": []
+    },
+    {
+      "eventType": "workitem.work_item_restored",
+      "eventVersion": 1,
+      "aggregateType": "WorkItem",
+      "schema": "schemas/workitem.work-item-restored-v1.schema.json",
+      "producers": ["WorkItemService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "itemNo"],
+      "recipientReferenceFields": []
+    },
+    {
+      "eventType": "workitem.work_item_update_published",
+      "eventVersion": 1,
+      "aggregateType": "WorkItemUpdate",
+      "schema": "schemas/workitem.work-item-update-published-v1.schema.json",
+      "producers": ["WorkItemUpdateService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "MENTIONED_USERS",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "updateId", "itemNo"],
+      "recipientReferenceFields": ["mentionedUserIds"]
+    },
+    {
+      "eventType": "workitem.work_item_update_edited",
+      "eventVersion": 1,
+      "aggregateType": "WorkItemUpdate",
+      "schema": "schemas/workitem.work-item-update-edited-v1.schema.json",
+      "producers": ["WorkItemUpdateService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "updateId", "itemNo"],
+      "recipientReferenceFields": []
+    },
+    {
+      "eventType": "workitem.work_item_update_deleted",
+      "eventVersion": 1,
+      "aggregateType": "WorkItemUpdate",
+      "schema": "schemas/workitem.work-item-update-deleted-v1.schema.json",
+      "producers": ["WorkItemUpdateService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["projectId", "contentId", "workItemId", "updateId", "itemNo"],
+      "recipientReferenceFields": []
+    },
+    {
+      "eventType": "workitem.work_item_relation_created",
+      "eventVersion": 1,
+      "aggregateType": "WorkItemRelation",
+      "schema": "schemas/workitem.work-item-relation-created-v1.schema.json",
+      "producers": ["WorkItemService", "WorkItemRelationService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["relationId", "leftProjectId", "rightProjectId", "leftWorkItemId", "rightWorkItemId"],
+      "recipientReferenceFields": [],
+      "scopeIsolation": "PROJECT_ENDPOINT"
+    },
+    {
+      "eventType": "workitem.work_item_relation_deleted",
+      "eventVersion": 1,
+      "aggregateType": "WorkItemRelation",
+      "schema": "schemas/workitem.work-item-relation-deleted-v1.schema.json",
+      "producers": ["WorkItemRelationService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["relationId", "leftProjectId", "rightProjectId", "leftWorkItemId", "rightWorkItemId"],
+      "recipientReferenceFields": [],
+      "scopeIsolation": "PROJECT_ENDPOINT"
+    },
+    {
+      "eventType": "workitem.work_item_parent_changed",
+      "eventVersion": 1,
+      "aggregateType": "WorkItemRelation",
+      "schema": "schemas/workitem.work-item-parent-changed-v1.schema.json",
+      "producers": ["WorkItemRelationService"],
+      "activityConsumer": "audit-activity-v1",
+      "notificationTrigger": "NONE",
+      "targetReferenceFields": ["relationId", "leftProjectId", "rightProjectId", "leftWorkItemId", "rightWorkItemId"],
+      "recipientReferenceFields": [],
+      "scopeIsolation": "PROJECT_ENDPOINT"
+    }
+  ]
+}

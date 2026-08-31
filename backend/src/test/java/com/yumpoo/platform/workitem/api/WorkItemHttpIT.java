@@ -35,6 +35,8 @@ import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.nio.charset.StandardCharsets;
@@ -190,6 +192,7 @@ class WorkItemHttpIT {
             assertThat(event.has("assigneeUserId")).isTrue();
             assertThat(event.has("timelineStartDate")).isTrue();
         }
+        assertOutboxEventContract("workitem.work_item_created");
     }
 
     @Test
@@ -259,6 +262,8 @@ class WorkItemHttpIT {
         assertThat(workItemRank(workItemId)).isEqualTo(originalRank);
         assertThat(get(path, member).statusCode()).isEqualTo(200);
         assertThat(workItemEventCount(workItemId, "workitem.work_item_restored")).isOne();
+        assertOutboxEventContract("workitem.work_item_deleted");
+        assertOutboxEventContract("workitem.work_item_restored");
 
         HttpResponse<String> restoreReplay = mutate("POST", restorePath, owner, "",
                 "\"1\"", restoreKey);
@@ -503,6 +508,7 @@ class WorkItemHttpIT {
         assertThat(relationEvent.path("leftWorkItemId").asText()).isEqualTo(parent.path("id").asText());
         assertThat(relationEvent.path("rightWorkItemId").asText()).isEqualTo(firstId.toString());
         assertThat(relationEvent.has("title")).isFalse();
+        assertOutboxEventContract("workitem.work_item_relation_created");
     }
 
     @Test
@@ -625,6 +631,8 @@ class WorkItemHttpIT {
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event "
                         + "WHERE event_type='workitem.work_item_relation_deleted'")
                 .query(Long.class).single()).isOne();
+        assertOutboxEventContract("workitem.work_item_parent_changed");
+        assertOutboxEventContract("workitem.work_item_relation_deleted");
 
         HttpResponse<String> rebuilt = mutate("POST", firstRelations, member,
                 relationBody("PARENT_CHILD", "PARENT", childId), null, UUID.randomUUID());
@@ -961,6 +969,7 @@ class WorkItemHttpIT {
         assertThat(event.path("resolution").asText()).isEqualTo("需求已澄清");
         assertThat(event.has("description")).isFalse();
         assertThat(event.has("notes")).isFalse();
+        assertOutboxEventContract("workitem.work_item_status_changed");
 
         assertThat(mutate("POST", transitionPath, member,
                 transitionBody("CANCELED", null), "\"0\"", UUID.randomUUID()).statusCode())
@@ -1150,6 +1159,7 @@ class WorkItemHttpIT {
                         + "WHERE aggregate_id=:id AND event_type='workitem.work_item_rank_changed'")
                 .param("id", firstId).query(String.class).single();
         assertThat(rankPayload).doesNotContain("\"rank\"");
+        assertOutboxEventContract("workitem.work_item_rank_changed");
     }
 
     @Test
@@ -1348,6 +1358,9 @@ class WorkItemHttpIT {
             assertThat(event.has("notes")).isFalse();
             assertThat(event.path("changedFields").isArray()).isTrue();
         }
+        assertOutboxEventContract("workitem.work_item_fields_changed");
+        assertOutboxEventContract("workitem.work_item_assigned");
+        assertOutboxEventContract("workitem.work_item_unassigned");
     }
 
     @Test
@@ -1501,6 +1514,7 @@ class WorkItemHttpIT {
                 .param("id", updateId).query(String.class).single();
         assertThat(payload).contains("mentionedUserIds", owner.userId().toString())
                 .doesNotContain("bodyHtml", "bodyText", "你好");
+        assertOutboxEventContract("workitem.work_item_update_published");
 
         long before = jdbc.sql("SELECT count(*) FROM yumpoo.work_item_update WHERE work_item_id=:id")
                 .param("id", workItemId).query(Long.class).single();
@@ -1593,6 +1607,7 @@ class WorkItemHttpIT {
                 .param("id", updateId).query(String.class).single();
         assertThat(event).contains("removedMentionedUserIds", owner.userId().toString())
                 .doesNotContain("bodyHtml", "bodyText\"", "更新正文");
+        assertOutboxEventContract("workitem.work_item_update_edited");
         assertThat(mutate("PATCH", resource, owner, updateBody("<p>Owner 不能改写</p>"),
                 "\"1\"", null).statusCode()).isEqualTo(403);
         assertThat(mutate("PATCH", resource, member, updateBody("<p>旧版本</p>"),
@@ -1642,6 +1657,7 @@ class WorkItemHttpIT {
                 .param("id", selfId).query(String.class).single();
         assertThat(selfEvent).contains("\"deletionMode\": \"SELF\"")
                 .doesNotContain("bodyHtml", "bodyText", "自删");
+        assertOutboxEventContract("workitem.work_item_update_deleted");
         assertThat(mutate("DELETE", selfResource, member, "{}", "\"0\"", null).statusCode())
                 .isEqualTo(412);
         assertThat(mutate("DELETE", selfResource, member, "{}", "\"1\"", null).statusCode())
@@ -1839,6 +1855,73 @@ class WorkItemHttpIT {
                         + "WHERE aggregate_id=:id AND event_type=:eventType")
                 .param("id", workItemId).param("eventType", eventType)
                 .query(Long.class).single();
+    }
+
+    private void assertOutboxEventContract(String eventType) throws Exception {
+        Path eventsRoot = eventContractsRoot();
+        JsonNode manifest = json.readTree(Files.readString(
+                eventsRoot.resolve("freeze/workitem-m2-v1.json"), StandardCharsets.UTF_8));
+        JsonNode frozen = null;
+        for (JsonNode candidate : manifest.path("events")) {
+            if (eventType.equals(candidate.path("eventType").asText())
+                    && candidate.path("eventVersion").asInt() == 1) {
+                frozen = candidate;
+                break;
+            }
+        }
+        assertThat(frozen).as("M2-23 冻结事件 %s", eventType).isNotNull();
+        JsonNode schema = json.readTree(Files.readString(
+                eventsRoot.resolve(frozen.path("schema").asText()), StandardCharsets.UTF_8));
+        JsonNode eventLayer = null;
+        for (JsonNode candidate : schema.path("allOf")) {
+            if (candidate.path("properties").has("eventType")) {
+                eventLayer = candidate;
+                break;
+            }
+        }
+        assertThat(eventLayer).as("%s 事件层", eventType).isNotNull();
+        JsonNode contractProperties = eventLayer.path("properties");
+        JsonNode payloadSchema = contractProperties.path("payload");
+        Set<String> declared = payloadSchema.path("properties").properties().stream()
+                .map(java.util.Map.Entry::getKey).collect(java.util.stream.Collectors.toSet());
+
+        List<OutboxContractRow> rows = jdbc.sql("""
+                SELECT event_version, aggregate_type, aggregate_version, payload_json::text
+                  FROM yumpoo.outbox_event WHERE event_type=:eventType ORDER BY occurred_at, event_id
+                """).param("eventType", eventType)
+                .query((rs, row) -> new OutboxContractRow(
+                        rs.getInt(1), rs.getString(2), rs.getLong(3), rs.getString(4))).list();
+        assertThat(rows).as("%s 实际 Outbox 事件", eventType).isNotEmpty();
+        for (OutboxContractRow row : rows) {
+            assertThat(row.eventVersion()).isEqualTo(contractProperties.path("eventVersion").path("const").asInt());
+            assertThat(row.aggregateType()).isEqualTo(contractProperties.path("aggregateType").path("const").asText());
+            JsonNode aggregateVersion = contractProperties.path("aggregateVersion");
+            if (aggregateVersion.has("const")) {
+                assertThat(row.aggregateVersion()).isEqualTo(aggregateVersion.path("const").asLong());
+            } else {
+                assertThat(row.aggregateVersion()).isGreaterThanOrEqualTo(aggregateVersion.path("minimum").asLong());
+            }
+            JsonNode payload = json.readTree(row.payload());
+            for (JsonNode required : payloadSchema.path("required")) {
+                assertThat(payload.has(required.asText()))
+                        .as("%s 必填字段 %s", eventType, required.asText()).isTrue();
+            }
+            assertThat(payload.properties().stream().map(java.util.Map.Entry::getKey).toList())
+                    .allMatch(declared::contains);
+            assertThat(payload.has("description")).isFalse();
+            assertThat(payload.has("notes")).isFalse();
+            assertThat(payload.has("bodyHtml")).isFalse();
+            assertThat(payload.has("bodyText")).isFalse();
+        }
+    }
+
+    private static Path eventContractsRoot() {
+        Path workingDirectory = Path.of("").toAbsolutePath().normalize();
+        for (Path candidate : List.of(workingDirectory.resolve("contracts/events"),
+                workingDirectory.resolve("../contracts/events").normalize())) {
+            if (Files.isDirectory(candidate)) return candidate;
+        }
+        throw new IllegalStateException("找不到 contracts/events");
     }
 
     private String workItemRank(UUID workItemId) {
@@ -2065,4 +2148,7 @@ class WorkItemHttpIT {
             String initialStatus, String nextStatus, String nextCategory) {}
 
     private record ActorFixture(UUID userId, IssuedSession session) {}
+
+    private record OutboxContractRow(int eventVersion, String aggregateType,
+            long aggregateVersion, String payload) {}
 }
