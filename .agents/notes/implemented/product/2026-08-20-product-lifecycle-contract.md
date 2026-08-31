@@ -16,7 +16,9 @@ Product 使用 Company 内唯一、创建后不可变的稳定 code。名称与�
 
 负责人重指派由 `administration` 在单一持久化幂等事务内编排身份校验、Catalog 条件更新、Security Audit、Outbox 和重放结果。身份离职、返岗、禁用、启用以及 Product 重指派、归档事件驱动 `OWNER_MISSING + PRODUCT` 治理投影；同一身份事件可为多个 ACTIVE Product 打开独立问题，双状态重新有效、重指派或归档时解析。告警不改变 Product 生命周期，也不自动提升其他成员。
 
-M2-03 不创建 ProductProjectLink、Feedback 或临时 blocker。正常归档当前只验证 Product 自身状态和版本；真实 ACTIVE 研发/支持项目、未关闭反馈 blocker 与覆盖归档入口由 M2-24 在真源落地后扩展现有 `administration` 编排，Product–Project 可见范围由 M2-07/M2-24 接入。负责人治理的 Activity 投影由 M2-20 消费现有事件。
+M2-03 不创建 ProductProjectLink、Feedback 或临时 blocker。M2-24 已在 `administration` 接入真实 Product–Project blocker：有效 DEVELOPMENT/SUPPORT 关系所指向的不同 ACTIVE Project 以 `ACTIVE_DEVELOPMENT_SUPPORT_PROJECTS` 聚合计数，普通归档因此返回 `PRODUCT_ARCHIVE_BLOCKED`；CompanyAdmin 只能通过带 10–500 字理由的显式 `PRODUCT_ARCHIVE_WITH_BLOCKERS` 覆盖。覆盖保存安全前后快照和聚合计数，不改写 Project 或关系事实。Feedback 真源仍不存在，因此只保留 source 枚举，不声明、不注入空 provider；该 blocker 延期到 M3B-11。
+
+Product 归档事务在完成主体可见性与授权复核后排他锁 Product，再校验强版本、状态并收集 blocker；Product 事实写入通过 `ProductFactWriteGuard` 获取共享锁并复核 ACTIVE。Product–Project 关系写入先锁 Project，再按 UUID 顺序锁相关 Product；Product 归档不反向锁 Project。`catalog.product_archived` v1 兼容新增可选 `mode/blockers`，新生产者始终输出，治理理由仍只进入 Security Audit 和 override 记录。负责人治理的 Activity 投影由 M2-20 消费现有事件。
 
 ## Alternatives considered
 
@@ -30,4 +32,4 @@ M2-03 不创建 ProductProjectLink、Feedback 或临时 blocker。正常归档�
 
 客户端必须保存 Product ID 与强 ETag，PATCH 发送完整 `name/description` 快照，所有生命周期命令发送 `If-Match`，创建、归档、恢复和重指派发送 UUID 幂等键。恢复若当前负责人不可用，返回 `409 INVALID_STATE_TRANSITION` 且 `details.reason=OWNER_MISSING`；创建或重指派目标无效返回 `422 ownerUserId/INVALID_OWNER`。
 
-跨模块消费者只使用 `ProductSnapshotQuery`、生命周期/负责人条件命令端口和 `ProductOwnerScopeQuery`，不得读取 Catalog 表或复制负责人展示资料。五类 v1 Product 事件不携带描述正文或治理理由正文。未来加入真实 blocker 时必须保持现有资源路径与事务编排，并用新的验收证据覆盖 PPM-015，而不能回写 M2-03 为已验证。
+跨模块消费者只使用 `ProductSnapshotQuery`、生命周期/负责人条件命令端口、`ProductOwnerScopeQuery` 与 `ProductFactWriteGuard`，不得读取 Catalog 表或复制负责人展示资料。五类 v1 Product 事件不携带描述正文或治理理由正文。M2-24 已验证 Product 活动研发/支持 Project blocker、覆盖归档、恢复和并发锁序，并保持现有资源路径；未关闭 Feedback 的 PPM-015 切片仍必须由 M3B-11 的真实 provider 和最终验收补齐，不能以预留枚举或静态零计数冒充通过。

@@ -99,12 +99,15 @@ test('OpenAPI compatibility check fails when no baseline is supplied', () => {
   assert.match(`${result.stdout}\n${result.stderr}`, /必须显式传入历史基线/u)
 })
 
-test('OpenAPI compatibility gate only relaxes request enum removal', () => {
+test('OpenAPI compatibility gate only relaxes approved enum evolution', () => {
   const source = fs.readFileSync(path.join(repositoryRoot, 'tools', 'openapi', 'openapi-diff-pom.xml'), 'utf8')
   assert.match(source, /<failOnIncompatible>true<\/failOnIncompatible>/u)
   assert.deepEqual(
     source.match(/<incompatible\.[^>]+>false<\/incompatible\.[^>]+>/gu) ?? [],
-    ['<incompatible.request.enum.decreased>false</incompatible.request.enum.decreased>'],
+    [
+      '<incompatible.request.enum.decreased>false</incompatible.request.enum.decreased>',
+      '<incompatible.response.enum.increased>false</incompatible.response.enum.increased>',
+    ],
   )
 })
 

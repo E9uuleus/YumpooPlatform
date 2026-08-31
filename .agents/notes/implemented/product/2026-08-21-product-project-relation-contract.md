@@ -10,11 +10,11 @@ Product 与 Project 的关系同时影响项目导航、Product 可见范围、�
 
 Product–Project 关系由 Catalog 拥有的 `project_product_link` 小聚合保存。每条关系有独立 ID、强 ETag、审计字段和软移除事实；有效的 project/product/type 三元组唯一，同一 Product 可用不同类型重复关联。移除后重新关联创建新 ID，不复活历史行，也不增加 Project `rowVersion`。
 
-每个 Project 最多一个有效主关系，但允许没有主关系。切换主 Product 是两个显式命令：先取消旧主，再设置新主；服务端不会自动提升其他关系。所有写入先锁 Project 行，使关系写入和后续 M2-08 归档守卫共享串行化边界。Owner 只能在 DRAFT/ACTIVE Project 写关系；成员与非成员 CompanyAdmin 只读。建立关系要求 Product 当前 ACTIVE，解绑历史关系不受 Product 后续归档影响。
+每个 Project 最多一个有效主关系，但允许没有主关系。切换主 Product 是两个显式命令：先取消旧主，再设置新主；服务端不会自动提升其他关系。所有写入先锁 Project 行，使关系写入和 M2-08 归档守卫共享串行化边界，再对相关 Product 按 UUID 排序获取共享锁并在锁内复核 ACTIVE。Owner 只能在 DRAFT/ACTIVE Project 写关系；成员与非成员 CompanyAdmin 只读。建立关系要求 Product 当前 ACTIVE，解绑历史关系不受 Product 后续归档影响。Product 归档只排他锁 Product 后读取聚合计数，不反向锁 Project；由此关系先提交必被 blocker 看见，归档先提交则关系等待后因 ARCHIVED 失败。
 
 Product 读取范围包含 CompanyAdmin、ProductOwner 和任一关联 Project 的 ACTIVE member；列表、总数和详情使用同一 SQL `EXISTS` 谓词。Product 更新仍显式要求 CompanyAdmin 或 ProductOwner。Project 列表的 `productId` 过滤同样在权限 SQL 内参与计数和稳定分页。
 
-Catalog 发布只读 `ProductProjectRelationQuery`，由未来 M3B 按场景传入允许的关系类型。M2-07 不创建 Feedback 表、空 blocker 或虚假引用；真实 Feedback 对解绑和 Product 归档的阻断继续由 M3B/M2-24 建立。
+Catalog 发布只读 `ProductProjectRelationQuery`：调用者显式传入关系类型校验现有关联合法性，按 Product 统计 ACTIVE 研发/支持 Project，并可按 Project 查询有效关联 Product ID。M3B 必须复用该端口，不得读取 Catalog 内部表。M2-07/M2-24 不创建 Feedback 表、空 blocker 或虚假引用；真实 Feedback 对解绑和 Product 归档的阻断由 M3B-11 建立。
 
 ## Alternatives considered
 
@@ -26,4 +26,4 @@ Catalog 发布只读 `ProductProjectRelationQuery`，由未来 M3B 按场景传�
 
 ## Consequences
 
-关系消费者必须使用有效关系而非历史行，且不能把 `ProjectCapabilities` 当作服务端授权凭据。M2-08 归档写入必须锁同一 Project 行；M3B 必须通过公开查询端口选择允许类型；M2-24 才能在真实 Feedback 引用存在后冻结解绑/归档 blocker。事件载荷只携带稳定 ID、关系类型与主标记变化，不复制 Product 名称或移除理由正文。
+关系消费者必须使用有效关系而非历史行，且不能把 `ProjectCapabilities` 当作服务端授权凭据。M2-08 归档写入锁同一 Project 行；M2-24 已冻结 Project→Product 锁序和真实活动项目 Product blocker。M3B 必须通过公开查询端口选择允许类型，并在 Feedback 真源存在后于 M3B-11 冻结解绑及归档 blocker。事件载荷只携带稳定 ID、关系类型与主标记变化，不复制 Product 名称或移除理由正文。

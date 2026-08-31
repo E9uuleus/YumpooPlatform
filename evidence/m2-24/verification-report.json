@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "milestone": "M2-24",
-  "status": "IMPLEMENTED_WITH_ENVIRONMENT_BLOCKER",
+  "status": "VERIFIED",
   "command": "pnpm verify:m2-24",
   "startedAt": "2026-08-31T05:46:00Z",
-  "completedAt": "2026-08-31T06:14:10Z",
+  "completedAt": "2026-08-31T06:52:39Z",
   "flywayVersion": "45",
   "checks": {
     "productArchiveCollectorUnit": true,
@@ -13,7 +13,7 @@
     "productRelationArchiveRace": true,
     "projectActivationArchiveRace": true,
     "productOverrideBackupRestore": true,
-    "productHttpContract": false,
+    "productHttpContract": true,
     "productWebComponents": true,
     "productWebTypecheck": true,
     "eventContracts": true,
@@ -22,13 +22,13 @@
     "agentNotesAndDocs": true,
     "architectureGate": true,
     "assetGate": true,
-    "fullMavenGate": false,
+    "fullMavenGate": true,
     "backendUnitTests": true,
     "backendNonHttpPostgreSqlIntegration": true,
     "nodeFullGate": true,
-    "linuxPrCi": false
+    "linuxPrCi": true
   },
-  "environmentBlocker": "当前 Windows 宿主中的 Java 21 HttpClient 因 Unable to establish loopback connection 失败。完整 Maven 已通过 434 个普通测试（0 失败）并执行 187 个集成用例；其中 71 个使用 HttpClient 或随机端口 Web 上下文的用例在构造/启动阶段错误，未进入业务断言。非 HTTP PostgreSQL 专项可正常运行，Linux PR CI 必须最终全绿。",
-  "databaseConclusion": "V45 已在 PostgreSQL 17 Testcontainers 上迁移并通过 Product 活动研发/支持项目去重 blocker、普通/覆盖归档与关系事实保留、关系创建/Product 归档竞态、Project 激活/Product 归档竞态，以及 Product override 备份恢复专项测试。完整 Maven 的 434 个普通测试全绿；集成阶段除 Windows loopback 影响的 71 个错误外无断言失败。",
-  "contractConclusion": "Product Web 4 文件 10 个专项测试、完整 Web 257 个测试、API client 7 个测试、Desktop 24 个测试、Node 类型检查/构建、模块架构、文档/Agent Note、61 个事件版本及相对 origin/dev 的事件/OpenAPI 兼容门禁均通过。Product HTTP 契约留待 Linux PR CI 进入业务断言，当前不记为通过。"
+  "environmentBlocker": "本地 Windows 宿主中的 Java 21 HttpClient 曾因 Unable to establish loopback connection 失败：434 个普通测试通过，188 个集成用例中 71 个在 HttpClient 构造或随机端口 Web 上下文启动阶段错误、0 个业务断言失败。PR #62 的 Linux Portable Gate 已完整通过真实 HTTP/PostgreSQL 门禁，证明该现象仅为本地环境限制；同一 tested commit 的 Windows x64 Gate 也已通过。",
+  "databaseConclusion": "V45 已在 PostgreSQL 17 Testcontainers 上迁移并通过 Product 活动研发/支持项目去重 blocker、普通/覆盖归档与关系事实保留、关系创建/Product 归档竞态、Project 激活/Product 归档竞态，以及 Product override 备份恢复专项测试。PR #62 的 Linux Portable Gate 已通过完整 Maven 与全部历史迁移升级验收。",
+  "contractConclusion": "Product Web 4 文件 10 个专项测试、完整 Web 257 个测试、API client 7 个测试、Desktop 24 个测试、Node 类型检查/构建、模块架构、文档/Agent Note、61 个事件版本、Product HTTP 契约及相对 origin/dev 的事件/OpenAPI 兼容门禁均已通过；PR #62 的 Linux Portable Gate 与 Windows x64 Gate 全绿。"
 }
