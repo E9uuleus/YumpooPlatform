@@ -1,6 +1,9 @@
 package com.yumpoo.platform.catalog.infrastructure.product;
 
 import com.yumpoo.platform.administration.application.ProductGovernanceService;
+import com.yumpoo.platform.administration.application.GovernanceOverrideAction;
+import com.yumpoo.platform.administration.application.GovernanceOverrideCommand;
+import com.yumpoo.platform.administration.application.GovernanceOverrideService;
 import com.yumpoo.platform.administration.application.ProductLifecycleGovernanceCommand;
 import com.yumpoo.platform.administration.application.ProductOwnerReassignmentCommand;
 import com.yumpoo.platform.administration.infrastructure.governance.JdbcProductOwnerGovernanceProjection;
@@ -28,6 +31,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
@@ -49,9 +54,11 @@ class ProductCatalogIT {
 
     @Autowired private ProductService productService;
     @Autowired private ProductGovernanceService governanceService;
+    @Autowired private GovernanceOverrideService overrideService;
     @Autowired private JdbcProductOwnerGovernanceProjection ownerGovernanceProjection;
     @Autowired private JdbcClient jdbcClient;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private PlatformTransactionManager transactionManager;
 
     @BeforeEach
     void insertUsers() {
@@ -159,6 +166,45 @@ class ProductCatalogIT {
     }
 
     @Test
+    void activeDevelopmentAndSupportProjectsBlockOnceAndAdminOverrideKeepsFacts() {
+        try (RequestCorrelationContext.Scope ignored = correlation("m2-24-product-blocker")) {
+            UUID productId = create("M2_24_BLOCKER", "M2-24 Blocker", OWNER_ONE, "b");
+            UUID active = insertProject("M2_24_ACTIVE", "ACTIVE");
+            UUID draft = insertProject("M2_24_DRAFT", "DRAFT");
+            insertLink(active, productId, "DEVELOPMENT");
+            insertLink(active, productId, "SUPPORT");
+            insertLink(draft, productId, "DEVELOPMENT");
+
+            assertThatThrownBy(() -> governanceService.archive(lifecycle(
+                    owner(OWNER_ONE), productId, 0, "c")))
+                    .isInstanceOfSatisfying(ApplicationException.class, error -> {
+                        assertThat(error.errorCode()).isEqualTo(
+                                StandardErrorCode.INVALID_STATE_TRANSITION);
+                        assertThat(error.reason()).isEqualTo("PRODUCT_ARCHIVE_BLOCKED");
+                        assertThat(error.blockers()).extracting("code", "count")
+                                .containsExactly(org.assertj.core.groups.Tuple.tuple(
+                                        "ACTIVE_DEVELOPMENT_SUPPORT_PROJECTS", 1L));
+                    });
+
+            IdempotencyExecutionResult overridden = overrideService.override(
+                    new GovernanceOverrideCommand(admin(),
+                            GovernanceOverrideAction.PRODUCT_ARCHIVE_WITH_BLOCKERS,
+                            "PRODUCT", productId, "阶段收口确认后执行显式产品归档覆盖", 0,
+                            UUID.randomUUID(), new RequestHash("d".repeat(64))));
+            assertThat(overridden.result().responseJson())
+                    .contains("\"status\":\"ARCHIVED\"", "ownerDisplayName",
+                            "capabilities", "etag");
+            assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.project_product_link "
+                            + "WHERE product_id = :productId AND removed_at IS NULL")
+                    .param("productId", productId).query(Integer.class).single()).isEqualTo(3);
+            assertThat(jdbcClient.sql("SELECT blocker_counts::text FROM yumpoo.admin_override "
+                            + "WHERE target_type = 'PRODUCT' AND target_id = :productId")
+                    .param("productId", productId).query(String.class).single())
+                    .contains("ACTIVE_DEVELOPMENT_SUPPORT_PROJECTS", "1");
+        }
+    }
+
+    @Test
     void ownerMissingProjectionFansOutAndResolvesOnlyFromCurrentFacts() {
         UUID first;
         UUID second;
@@ -199,6 +245,57 @@ class ProductCatalogIT {
         return productService.create(new ProductCreateCommand(admin(), code, name, null,
                 ownerUserId, UUID.randomUUID(), new RequestHash(hash.repeat(64))))
                 .result().resourceId();
+    }
+
+    private UUID insertProject(String code, String lifecycle) {
+        UUID projectId = UUID.randomUUID();
+        UUID workspaceId = jdbcClient.sql("SELECT id FROM yumpoo.workspace "
+                        + "WHERE company_id = :companyId ORDER BY created_at LIMIT 1")
+                .param("companyId", COMPANY_ID).query(UUID.class).single();
+        new TransactionTemplate(transactionManager).executeWithoutResult(ignored -> {
+        jdbcClient.sql("""
+                        INSERT INTO yumpoo.project (
+                            id, company_id, workspace_id, project_code, name, project_type,
+                            lifecycle, owner_user_id, template_key, template_version, row_version,
+                            created_at, created_by_user_id, updated_at, updated_by_user_id,
+                            activated_at, archived_at
+                        ) VALUES (:id, :companyId, :workspaceId, :code, :code,
+                            'PRODUCT_DEVELOPMENT', 'DRAFT', :ownerId, 'RND', 1, 0,
+                            transaction_timestamp(), :ownerId, transaction_timestamp(), :ownerId,
+                            NULL, NULL)
+                        """).param("id", projectId).param("companyId", COMPANY_ID)
+                .param("workspaceId", workspaceId).param("code", code)
+                .param("ownerId", OWNER_ONE).update();
+        jdbcClient.sql("""
+                        INSERT INTO yumpoo.project_membership (
+                            id, company_id, project_id, user_id, status, joined_at,
+                            joined_by_user_id, row_version
+                        ) VALUES (:id, :companyId, :projectId, :ownerId, 'ACTIVE',
+                            transaction_timestamp(), :ownerId, 0)
+                        """).param("id", UUID.randomUUID()).param("companyId", COMPANY_ID)
+                .param("projectId", projectId).param("ownerId", OWNER_ONE).update();
+        if ("ACTIVE".equals(lifecycle)) {
+            jdbcClient.sql("""
+                            UPDATE yumpoo.project SET lifecycle = 'ACTIVE',
+                                activated_at = transaction_timestamp(),
+                                updated_at = transaction_timestamp(), row_version = 1
+                            WHERE id = :id
+                            """).param("id", projectId).update();
+        }
+        });
+        return projectId;
+    }
+
+    private void insertLink(UUID projectId, UUID productId, String relationType) {
+        jdbcClient.sql("""
+                        INSERT INTO yumpoo.project_product_link (
+                            id, company_id, project_id, product_id, relation_type, is_primary,
+                            linked_at, linked_by_user_id, updated_at, updated_by_user_id, row_version
+                        ) VALUES (:id, :companyId, :projectId, :productId, :relationType, false,
+                            transaction_timestamp(), :ownerId, transaction_timestamp(), :ownerId, 0)
+                        """).param("id", UUID.randomUUID()).param("companyId", COMPANY_ID)
+                .param("projectId", projectId).param("productId", productId)
+                .param("relationType", relationType).param("ownerId", OWNER_ONE).update();
     }
 
     private ProductLifecycleGovernanceCommand lifecycle(
@@ -282,6 +379,19 @@ class ProductCatalogIT {
     }
 
     private void cleanUp() {
+        jdbcClient.sql("DELETE FROM yumpoo.admin_override WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID).update();
+        new TransactionTemplate(transactionManager).executeWithoutResult(ignored -> {
+        jdbcClient.sql("DELETE FROM yumpoo.project_product_link WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID).update();
+        jdbcClient.sql("DELETE FROM yumpoo.project_membership WHERE company_id = :companyId "
+                        + "AND project_id IN (SELECT id FROM yumpoo.project "
+                        + "WHERE company_id = :companyId AND project_code LIKE 'M2_24_%')")
+                .param("companyId", COMPANY_ID).update();
+        jdbcClient.sql("DELETE FROM yumpoo.project WHERE company_id = :companyId "
+                        + "AND project_code LIKE 'M2_24_%'")
+                .param("companyId", COMPANY_ID).update();
+        });
         jdbcClient.sql("DELETE FROM yumpoo.governance_issue WHERE target_type = 'PRODUCT'").update();
         jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE target_type = 'PRODUCT'").update();
         jdbcClient.sql("DELETE FROM yumpoo.outbox_consumer_receipt WHERE event_id IN (SELECT event_id FROM yumpoo.outbox_event WHERE company_id = :companyId)")

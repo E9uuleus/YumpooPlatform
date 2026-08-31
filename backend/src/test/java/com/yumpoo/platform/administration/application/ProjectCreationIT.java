@@ -43,9 +43,11 @@ class ProjectCreationIT {
     private static final UUID ADMIN_ID = UUID.fromString("24000000-0000-4000-8000-000000000101");
     private static final UUID OWNER_ID = UUID.fromString("24000000-0000-4000-8000-000000000102");
     private static final UUID WORKSPACE_ID = UUID.fromString("a460aa25-7180-490b-ab14-f9ec09049024");
+    private static final UUID ACTIVATION_PRODUCT_ID = UUID.fromString("24000000-0000-4000-8000-000000000124");
 
     @Autowired private ProjectCreationOrchestrator orchestrator;
     @Autowired private ProjectActivationOrchestrator activationOrchestrator;
+    @Autowired private ProductGovernanceService productGovernance;
     @Autowired private com.yumpoo.platform.catalog.application.project.ProjectService projectService;
     @Autowired private com.yumpoo.platform.catalog.application.workspace.WorkspaceService workspaceService;
     @Autowired private JdbcClient jdbcClient;
@@ -202,6 +204,48 @@ class ProjectCreationIT {
                 });
         assertThat(jdbcClient.sql("SELECT lifecycle FROM yumpoo.project WHERE id=:id")
                 .param("id", missingCustomer).query(String.class).single()).isEqualTo("DRAFT");
+    }
+
+    @Test
+    void projectActivationAndRelatedProductArchiveEndInOneConsistentFactOrder() throws Exception {
+        UUID projectId = create("M224_ACTIVATION", "PRODUCT_DEVELOPMENT", "RND", null, "a")
+                .result().resourceId();
+        jdbcClient.sql("""
+                INSERT INTO yumpoo.product(id, company_id, product_code, name, status, owner_user_id,
+                    row_version, created_at, created_by_user_id, updated_at, updated_by_user_id)
+                VALUES(:id, :company, 'M224_ACTIVATION_PRODUCT', 'M2-24 Activation Product',
+                    'ACTIVE', :owner, 0, transaction_timestamp(), :owner,
+                    transaction_timestamp(), :owner)
+                """).param("id", ACTIVATION_PRODUCT_ID).param("company", COMPANY_ID)
+                .param("owner", OWNER_ID).update();
+        jdbcClient.sql("""
+                INSERT INTO yumpoo.project_product_link(id, company_id, project_id, product_id,
+                    relation_type, is_primary, row_version, linked_at, linked_by_user_id,
+                    updated_at, updated_by_user_id)
+                VALUES(:id, :company, :project, :product, 'DEVELOPMENT', true, 0,
+                    transaction_timestamp(), :owner, transaction_timestamp(), :owner)
+                """).param("id", UUID.randomUUID()).param("company", COMPANY_ID)
+                .param("project", projectId).param("product", ACTIVATION_PRODUCT_ID)
+                .param("owner", OWNER_ID).update();
+
+        CountDownLatch start = new CountDownLatch(1);
+        boolean activationWon;
+        boolean archiveWon;
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            Future<Boolean> activation = executor.submit(() -> concurrentActivation(start, projectId));
+            Future<Boolean> archive = executor.submit(() -> concurrentProductArchive(start));
+            start.countDown();
+            activationWon = activation.get(10, TimeUnit.SECONDS);
+            archiveWon = archive.get(10, TimeUnit.SECONDS);
+        }
+
+        assertThat(activationWon ^ archiveWon).isTrue();
+        assertThat(jdbcClient.sql("SELECT lifecycle FROM yumpoo.project WHERE id=:id")
+                .param("id", projectId).query(String.class).single())
+                .isEqualTo(activationWon ? "ACTIVE" : "DRAFT");
+        assertThat(jdbcClient.sql("SELECT status FROM yumpoo.product WHERE id=:id")
+                .param("id", ACTIVATION_PRODUCT_ID).query(String.class).single())
+                .isEqualTo(archiveWon ? "ARCHIVED" : "ACTIVE");
     }
 
     @Test
@@ -391,6 +435,34 @@ class ProjectCreationIT {
         }
     }
 
+    private boolean concurrentActivation(CountDownLatch start, UUID projectId) {
+        try {
+            start.await(5, TimeUnit.SECONDS);
+            activate(projectId, 0);
+            return true;
+        } catch (ApplicationException expected) {
+            return false;
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
+    }
+
+    private boolean concurrentProductArchive(CountDownLatch start) {
+        try {
+            start.await(5, TimeUnit.SECONDS);
+            try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
+                    RequestCorrelation.root("m224-activation-product-archive"))) {
+                productGovernance.archive(new ProductLifecycleGovernanceCommand(owner(),
+                        ACTIVATION_PRODUCT_ID, 0, UUID.randomUUID(), new RequestHash("b".repeat(64))));
+            }
+            return true;
+        } catch (ApplicationException expected) {
+            return false;
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
+    }
+
     private void installFailureTrigger(FailurePoint point) {
         dropFailureTrigger();
         jdbcClient.sql("""
@@ -434,19 +506,26 @@ class ProjectCreationIT {
 
     private void cleanUp() {
         jdbcClient.sql("DELETE FROM yumpoo.content WHERE company_id = :companyId").param("companyId", COMPANY_ID).update();
+        jdbcClient.sql("DELETE FROM yumpoo.project_product_link WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID).update();
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             jdbcClient.sql("DELETE FROM yumpoo.project_membership WHERE company_id = :companyId").param("companyId", COMPANY_ID).update();
             jdbcClient.sql("DELETE FROM yumpoo.project WHERE company_id = :companyId").param("companyId", COMPANY_ID).update();
         });
         jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE target_type = 'PROJECT'").update();
+        jdbcClient.sql("DELETE FROM yumpoo.security_audit_event WHERE target_type = 'PRODUCT'").update();
         jdbcClient.sql("DELETE FROM yumpoo.outbox_consumer_receipt WHERE event_id IN (SELECT event_id FROM yumpoo.outbox_event WHERE company_id = :companyId)")
                 .param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.outbox_event WHERE company_id = :companyId AND aggregate_type = 'Project'")
+        jdbcClient.sql("DELETE FROM yumpoo.outbox_event WHERE company_id = :companyId AND aggregate_type IN ('Project', 'Product')")
                 .param("companyId", COMPANY_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :adminId AND route_key = 'createProject'")
                 .param("adminId", ADMIN_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :ownerId AND route_key = 'activateProject'")
                 .param("ownerId", OWNER_ID).update();
+        jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :ownerId AND route_key = 'archiveProduct'")
+                .param("ownerId", OWNER_ID).update();
+        jdbcClient.sql("DELETE FROM yumpoo.product WHERE id = :productId")
+                .param("productId", ACTIVATION_PRODUCT_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id IN (:adminId, :ownerId)")
                 .param("adminId", ADMIN_ID).param("ownerId", OWNER_ID).update();
     }

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-24",
+  "verifiedSlices": [
+    {
+      "requirementId": "PRODUCT-ARCHIVE-BLOCKERS",
+      "scope": "仅以真实 Product–Project 关系统计不同 ACTIVE DEVELOPMENT/SUPPORT Project；普通归档阻断，CompanyAdmin 显式覆盖保留关系事实，并覆盖锁序与双向竞态",
+      "evidence": [
+        "backend/src/test/java/com/yumpoo/platform/administration/application/ProductArchiveBlockerCollectorTest.java",
+        "backend/src/test/java/com/yumpoo/platform/administration/application/ProjectCreationIT.java",
+        "backend/src/test/java/com/yumpoo/platform/catalog/infrastructure/product/ProductCatalogIT.java",
+        "backend/src/test/java/com/yumpoo/platform/catalog/infrastructure/project/ProjectProductLinkIT.java",
+        "backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java"
+      ]
+    },
+    {
+      "requirementId": "PRODUCT-GOVERNANCE-WEB",
+      "scope": "Product 列表、创建、详情编辑、409 blocker 到治理覆盖、恢复、能力裁剪、强 ETag 与 412 草稿保留",
+      "evidence": [
+        "frontend/web-app/src/views/products/ProductsView.spec.ts",
+        "frontend/web-app/src/views/products/ProductDetailView.spec.ts",
+        "backend/src/test/java/com/yumpoo/platform/catalog/api/ProductHttpIT.java"
+      ]
+    },
+    {
+      "requirementId": "M3-PUBLIC-PORTS",
+      "scope": "Product 共享事实写锁、actor-scoped Work Item 引用快照及 Product–Project 统计/关联 Product 查询均通过模块 api 暴露，未开放正文、备注、处理人或客户数据",
+      "evidence": [
+        "backend/src/main/java/com/yumpoo/platform/catalog/api/ProductFactWriteGuard.java",
+        "backend/src/main/java/com/yumpoo/platform/catalog/api/ProductProjectRelationQuery.java",
+        "backend/src/main/java/com/yumpoo/platform/workitem/api/WorkItemReferenceQuery.java",
+        "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemReferenceAdapterTest.java"
+      ]
+    },
+    {
+      "requirementId": "M2-CROSS-SLICE-REGRESSION",
+      "scope": "既有 Project 模板/Content、Work Item、Table/Kanban、Update、附件、Activity、跨项目关系、归档与权限矩阵由完整 Maven/Node 门禁回归，M2-24 不新增测试专用业务接口",
+      "evidence": [
+        "backend/src/test/java/com/yumpoo/platform/administration/api/ProjectCreationHttpIT.java",
+        "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java",
+        "backend/src/test/java/com/yumpoo/platform/audit/infrastructure/ActivityProjectionIT.java",
+        "tools/verification/verify-m2-24.mjs"
+      ]
+    },
+    {
+      "requirementId": "PRODUCT-EVENT-COMPATIBILITY",
+      "scope": "catalog.product_archived v1 仅新增可选 mode/blockers，新生产者始终写入安全聚合计数且不传播治理理由",
+      "evidence": [
+        "contracts/events/schemas/catalog.product-archived-v1.schema.json",
+        "contracts/events/examples/catalog.product-archived-v1.json",
+        "tools/verification/verify-m2-24-assets.mjs"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    {
+      "requirementId": "M3A-WORKLOG-BLOCKER",
+      "target": "M3A-13",
+      "reason": "Worklog 真源尚未实现；Project 归档的 Worklog provider 与最终验收在 M3A-13 交付，不注册空或固定零 provider。"
+    },
+    {
+      "requirementId": "M3B-FEEDBACK-BLOCKERS",
+      "target": "M3B-11",
+      "reason": "Product Feedback 真源尚未实现；Project/Product 归档与关系解绑的 Feedback provider 在 M3B-11 交付，不注册占位 provider。"
+    },
+    {
+      "requirementId": "PROJECT-BLOCKER-TOTAL-GATE",
+      "target": "M3A-13 + M3B-11",
+      "reason": "Project 的 Work Item、Worklog、Feedback 三类 blocker 总集成门禁必须在 M3A-13 与 M3B-11 均完成后执行。"
+    },
+    {
+      "requirementId": "MAIN-WORKSPACE-UI",
+      "target": "M5-07",
+      "reason": "MAIN Workspace 管理 UI 属于 M5-07，本阶段不新增配置页面。"
+    },
+    {
+      "requirementId": "PRODUCT-OWNER-REASSIGNMENT-UI",
+      "target": "M5-09",
+      "reason": "Product Owner 重指派 UI 属于 M5-09，既有服务端 API 保留。"
+    },
+    {
+      "requirementId": "SCHEDULED-REMINDERS",
+      "target": "M4",
+      "reason": "提醒调度属于 M4，不纳入 M2 阶段完成定义。"
+    }
+  ]
+}

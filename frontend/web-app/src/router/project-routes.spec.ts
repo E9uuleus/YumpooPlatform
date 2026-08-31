@@ -11,6 +11,8 @@ describe('Project 工作台路由', () => {
     expect(shell?.children?.find(route => route.path === 'workspace/:workspaceSlug')?.name).toBe('workspace')
     expect(shell?.children?.some(route => route.path === 'projects')).toBe(false)
     expect(shell?.children?.some(route => route.name === 'home')).toBe(false)
+    expect(shell?.children?.find(route => route.path === 'products')?.name).toBe('products')
+    expect(shell?.children?.find(route => route.path === 'products/:productId')?.name).toBe('product-detail')
     expect(detail?.meta?.shellSection).toBe('work')
     expect(detail?.children?.map(route => route.path)).toEqual([
       'overview',

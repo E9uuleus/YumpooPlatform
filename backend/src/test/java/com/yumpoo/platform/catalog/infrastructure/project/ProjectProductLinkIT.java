@@ -1,5 +1,7 @@
 package com.yumpoo.platform.catalog.infrastructure.project;
 
+import com.yumpoo.platform.administration.application.ProductGovernanceService;
+import com.yumpoo.platform.administration.application.ProductLifecycleGovernanceCommand;
 import com.yumpoo.platform.catalog.application.product.ProductListStatus;
 import com.yumpoo.platform.catalog.application.product.ProductService;
 import com.yumpoo.platform.catalog.application.product.ProductUpdateCommand;
@@ -54,6 +56,7 @@ class ProjectProductLinkIT {
     private static final UUID PRODUCT_TWO = UUID.fromString("27000000-0000-4000-8000-000000000107");
 
     @Autowired ProjectProductLinkService links;
+    @Autowired ProductGovernanceService productGovernance;
     @Autowired ProductService products;
     @Autowired ProjectService projects;
     @Autowired JdbcClient jdbc;
@@ -191,11 +194,51 @@ class ProjectProductLinkIT {
                 .query(Integer.class).single()).isOne();
     }
 
+    @Test
+    void productArchiveAndDevelopmentLinkRaceEndsInOneConsistentFactOrder() throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        boolean linkWon;
+        boolean archiveWon;
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var link = executor.submit(() -> concurrentCreate(start, PRODUCT_ONE, "m224-link"));
+            var archive = executor.submit(() -> concurrentArchive(start));
+            start.countDown();
+            linkWon = link.get(10, TimeUnit.SECONDS);
+            archiveWon = archive.get(10, TimeUnit.SECONDS);
+        }
+
+        assertThat(linkWon ^ archiveWon).isTrue();
+        String productStatus = jdbc.sql("SELECT status FROM yumpoo.product WHERE id=:id")
+                .param("id", PRODUCT_ONE).query(String.class).single();
+        int activeLinks = jdbc.sql("SELECT count(*) FROM yumpoo.project_product_link "
+                        + "WHERE project_id=:project AND product_id=:product "
+                        + "AND relation_type='DEVELOPMENT' AND removed_at IS NULL")
+                .param("project", PROJECT).param("product", PRODUCT_ONE)
+                .query(Integer.class).single();
+        assertThat(productStatus).isEqualTo(archiveWon ? "ARCHIVED" : "ACTIVE");
+        assertThat(activeLinks).isEqualTo(linkWon ? 1 : 0);
+    }
+
     private boolean concurrentCreate(CountDownLatch start, UUID productId, String hash) {
         try {
             start.await(5, TimeUnit.SECONDS);
             try (RequestCorrelationContext.Scope ignored = correlation("m207-concurrent-" + hash)) {
                 createAs(owner(), productId, ProjectProductRelation.DEVELOPMENT, true, hash);
+            }
+            return true;
+        } catch (ApplicationException expected) {
+            return false;
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
+    }
+
+    private boolean concurrentArchive(CountDownLatch start) {
+        try {
+            start.await(5, TimeUnit.SECONDS);
+            try (RequestCorrelationContext.Scope ignored = correlation("m224-concurrent-archive")) {
+                productGovernance.archive(new ProductLifecycleGovernanceCommand(owner(), PRODUCT_ONE,
+                        0, UUID.randomUUID(), requestHash("m224-archive")));
             }
             return true;
         } catch (ApplicationException expected) {
@@ -288,6 +331,8 @@ class ProjectProductLinkIT {
             jdbc.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id IN (:owner,:member,:admin)")
                     .param("owner", OWNER).param("member", MEMBER).param("admin", ADMIN).update();
             jdbc.sql("DELETE FROM yumpoo.outbox_event WHERE company_id=:company")
+                    .param("company", COMPANY).update();
+            jdbc.sql("DELETE FROM yumpoo.security_audit_event WHERE company_id=:company")
                     .param("company", COMPANY).update();
             jdbc.sql("DELETE FROM yumpoo.product WHERE company_id=:company")
                     .param("company", COMPANY).update();

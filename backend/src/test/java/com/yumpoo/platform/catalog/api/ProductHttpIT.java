@@ -108,6 +108,13 @@ class ProductHttpIT {
                 body, null, createKey, true);
         assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
         assertThat(created.headers().firstValue("etag")).contains("\"0\"");
+        assertThat(objectMapper.readTree(created.body()).path("ownerDisplayName").asText())
+                .isEqualTo("M2-03 Owner");
+        assertThat(objectMapper.readTree(created.body()).path("etag").asText()).isEqualTo("\"0\"");
+        assertThat(objectMapper.readTree(created.body()).path("capabilities").path("canUpdate").asBoolean())
+                .isTrue();
+        assertThat(objectMapper.readTree(created.body()).path("capabilities")
+                .path("canOverrideArchive").asBoolean()).isTrue();
         String location = created.headers().firstValue("location").orElseThrow();
 
         HttpResponse<String> replay = mutate("POST", "/api/v1/products", admin,

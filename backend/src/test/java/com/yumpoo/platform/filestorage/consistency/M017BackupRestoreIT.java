@@ -1195,14 +1195,14 @@ class M017BackupRestoreIT {
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000812',
                         '00000000-0000-4000-8000-000000000001',
-                        'PROJECT_ARCHIVE_WITH_OPEN_ITEMS', 'PROJECT',
-                        '00000000-0000-4000-8000-000000000802',
-                        '备份恢复必须保留治理覆盖理由和安全快照', ?,
+                        'PRODUCT_ARCHIVE_WITH_BLOCKERS', 'PRODUCT',
+                        '00000000-0000-4000-8000-000000000602',
+                        '备份恢复必须保留产品治理覆盖理由和安全快照', ?,
                         '00000000-0000-4000-8000-000000000813',
                         '00000000-0000-4000-8000-000000000102',
-                        '{"projectId":"00000000-0000-4000-8000-000000000802","lifecycle":"ACTIVE","rowVersion":3}'::jsonb,
-                        '{"projectId":"00000000-0000-4000-8000-000000000802","lifecycle":"ARCHIVED","rowVersion":4}'::jsonb,
-                        '[{"code":"OPEN_WORK_ITEMS","count":2}]'::jsonb,
+                        '{"productId":"00000000-0000-4000-8000-000000000602","status":"ACTIVE","rowVersion":2}'::jsonb,
+                        '{"productId":"00000000-0000-4000-8000-000000000602","status":"ARCHIVED","rowVersion":3}'::jsonb,
+                        '[{"code":"ACTIVE_DEVELOPMENT_SUPPORT_PROJECTS","count":1}]'::jsonb,
                         'SUCCEEDED', NULL, ?
                     )
                     """)) {
