@@ -1,5 +1,15 @@
 # YumpooPlatform
 
+## M2-23 Work Item 领域事件契约冻结
+
+M2-23 冻结 Work Item 八类、Update 三类与 Relation 三类共 14 个核心 v1 事件。冻结清单统一登记类型、版本、聚合、Schema、生产者、Activity 消费者以及接收者引用；同一 v1 只允许新增可选字段，事件名、聚合语义、必填字段、既有字段约束和封闭对象规则不可改变。PR 门禁从目标分支提交临时提取历史 Schema 与合法样例，不提交重复基线；破坏性演进必须新增 v2 并保留 v1。
+
+指派事件只把 `assigneeUserId` 作为候选直接接收者，讨论发布事件只把 `mentionedUserIds` 作为候选 Mention 接收者；消费者仍需按当前账号、Project 权限和资源状态重新鉴权。标题、正文与治理理由不直接成为安全通知载荷。跨项目 Relation 按两侧 Project 分别投影，任一侧不保存或展示另一侧 Work Item ID。Content 与 Attachment 事件继续执行既有契约和 Activity 回归，但不重复进入本次冻结清单。
+
+```powershell
+pnpm verify:m2-23
+```
+
 ## M2-22 跨项目普通关系与不可见端占位
 
 M2-22 在 V43 上让 RELATED、BLOCKS、SOURCE、DUPLICATE 支持跨项目，PARENT_CHILD 继续永久限定同项目。创建和解除要求操作者在两侧均为 ACTIVE OWNER/MEMBER，且两侧 Project 为 DRAFT 或 ACTIVE；仅凭 CompanyAdmin 可见时只读，任一侧归档以 `PROJECT_ARCHIVED` 拒绝写入。事务按 Project UUID、Work Item UUID、Relation 固定锁序，封闭相反方向并发创建。
@@ -128,7 +138,7 @@ pnpm verify:m2-15
 
 M2-14 以 V31 为 Work Item 增加状态泳道内持久化 rank。升级按既有 `item_sequence DESC, id ASC` 回填 39 位定长十进制位置；创建与普通状态迁移置于目标状态顶部，同状态移动支持 `START/BEFORE/AFTER/END`，间隙耗尽时在 Content/状态 lane 锁内保持相对顺序重平衡。Kanban 查询要求恰好一个状态、拒绝 Table sort，并固定按 `rank ASC, id ASC` 稳定分页；移动命令要求 XSRF、强 `If-Match` 与幂等键。
 
-Web 保留 Content 的多状态分组，并在每组内渲染独立状态泳道。鼠标和触控只从 Pointer 拖动手柄启动，提供阈值、取消、合法投放与边缘滚动；键盘/触控菜单覆盖上下移、顶底定位和合法跨状态。要求说明的跨状态移动先确认；提交期间显示 pending，失败恢复快照，传输失败的明确重试复用原幂等键，409/412 只刷新服务端事实与能力。M2-15 删除恢复已交付，M2-20 Activity、M2-23 事件冻结和 M2-24 总验收继续延期。
+Web 保留 Content 的多状态分组，并在每组内渲染独立状态泳道。鼠标和触控只从 Pointer 拖动手柄启动，提供阈值、取消、合法投放与边缘滚动；键盘/触控菜单覆盖上下移、顶底定位和合法跨状态。要求说明的跨状态移动先确认；提交期间显示 pending，失败恢复快照，传输失败的明确重试复用原幂等键，409/412 只刷新服务端事实与能力。M2-15 删除恢复、M2-20 Activity 与 M2-23 事件冻结已交付，M2-24 总验收继续延期。
 
 ```powershell
 pnpm verify:m2-14
@@ -152,7 +162,7 @@ pnpm verify:m2-13
 
 M2-12 新增 `POST /api/v1/work-items/{workItemId}/transitions`，由服务端按 Project 固化模板版本校验精确迁移边并计算 `capabilities.availableTransitions`。命令必须携带 XSRF、强 `If-Match` 和幂等键；状态/类别、新版本、一条 `workitem.work_item_status_changed` v1 Outbox 和幂等结果原子提交。迁移不改变 rank 或任何协作字段；CompanyAdmin 保持只读，归档、终态、非法边与并发版本冲突均按固定问题语义拒绝。Flyway 仍停在 V29。
 
-Web 仅在 Work Item 详情抽屉展示服务端返回的合法目标。说明最长 500 字，迁移边可要求必填；传输失败的显式重试复用原幂等键。成功后刷新详情与当前 Table/Kanban，保留未保存字段草稿；412 沿用冲突面板且不自动重试。M2-13 已交付高级查询，M2-14 已交付 rank/拖动；M2-15 删除恢复、M2-20 Activity、M2-23 最终事件冻结和 M2-24 总验收继续延期。
+Web 仅在 Work Item 详情抽屉展示服务端返回的合法目标。说明最长 500 字，迁移边可要求必填；传输失败的显式重试复用原幂等键。成功后刷新详情与当前 Table/Kanban，保留未保存字段草稿；412 沿用冲突面板且不自动重试。M2-13 已交付高级查询，M2-14 已交付 rank/拖动，M2-15 删除恢复、M2-20 Activity 与 M2-23 最终事件冻结也已交付；M2-24 总验收继续延期。
 
 ```powershell
 pnpm verify:m2-12

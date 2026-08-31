@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M2-23",
+  "verifiedSlices": [
+    {
+      "requirementId": "WORK-ITEM-EVENT-INVENTORY",
+      "scope": "冻结 Work Item 八类、Update 三类和 Relation 三类共 14 个 v1 事件，并与三个生产者及 Activity 消费者双向对账",
+      "evidence": [
+        "contracts/events/freeze/workitem-m2-v1.json",
+        "tools/events/audit-workitem-event-inventory.mjs",
+        "backend/src/test/java/com/yumpoo/platform/audit/api/ActivityProjectionServiceTest.java"
+      ]
+    },
+    {
+      "requirementId": "WORK-ITEM-EVENT-COMPATIBILITY",
+      "scope": "PR 目标提交临时基线、v1 仅增可选字段、历史合法样例回归、破坏性演进使用并保留 v2/v1",
+      "evidence": [
+        "tools/events/event-contract-compat.mjs",
+        "tools/events/event-contract-compat.test.mjs",
+        "tools/events/extract-event-contract-baseline.mjs",
+        ".github/workflows/m0-18-ci.yml"
+      ]
+    },
+    {
+      "requirementId": "WORK-ITEM-EVENT-RUNTIME-CONFORMANCE",
+      "scope": "14 类实际 Outbox 事件逐类校验版本、聚合、必填字段、封闭字段集合及正文泄露",
+      "evidence": [
+        "backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java",
+        "backend/src/test/java/com/yumpoo/platform/foundation/consistency/M011TransactionalOutboxIT.java"
+      ]
+    },
+    {
+      "requirementId": "WORK-ITEM-EVENT-RECIPIENT-SAFETY",
+      "scope": "指派与 Mention 候选接收者引用、当前权限重校验、内容和治理理由禁用、跨项目关系当前端点投影",
+      "evidence": [
+        "contracts/events/freeze/workitem-m2-v1.json",
+        ".agents/notes/implemented/data/2026-08-31-work-item-event-contract-freeze.md",
+        "backend/src/test/java/com/yumpoo/platform/audit/api/ActivityProjectionServiceTest.java"
+      ]
+    },
+    {
+      "requirementId": "CONTENT-ATTACHMENT-EVENT-REGRESSION",
+      "scope": "Content 四类与 Attachment 两类不重复冻结，但继续通过既有 Schema、样例和 Activity 消费回归",
+      "evidence": [
+        "contracts/events/catalog.yaml",
+        "backend/src/main/java/com/yumpoo/platform/audit/api/ActivityProjectionService.java",
+        "tools/events/validate-event-contracts.mjs"
+      ]
+    }
+  ],
+  "deferredRequirements": [
+    {
+      "requirementId": "M2-24-FINAL-ACCEPTANCE",
+      "reason": "M2-24 的综合验收、调度提醒和剩余引用 blocker 不属于 M2-23 事件契约冻结范围。"
+    }
+  ]
+}
