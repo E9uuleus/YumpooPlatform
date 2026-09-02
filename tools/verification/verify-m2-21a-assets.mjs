@@ -35,8 +35,8 @@ assert(relationRepository.includes('countActiveChildren'), '关系仓储缺少�
 for (const fragment of ['/subitems")', '/subitems/{subitemId}/order-moves']) {
   assert(controller.includes(fragment), `Controller 缺少 ${fragment}`)
 }
-for (const fragment of ['subitemsAreNestedIdempotentRootFilteredAndSiblingScoped',
-  'INVALID_STATE_TRANSITION', 'workitem.work_item_relation_created']) {
+for (const fragment of ['switchingCategoryPreservesIdentityHierarchyDiscussionAndProjectRanks',
+  '/subitems', 'work_item_relation', 'projectSortBefore']) {
   assert(integration.includes(fragment), `后端集成验收缺少 ${fragment}`)
 }
 for (const fragment of ['operationId: listWorkItemSubitems', 'operationId: createWorkItemSubitem',
@@ -51,7 +51,7 @@ for (const fragment of ['expandedSubitemIds', 'loadSubitems', 'onTableExpandChan
   '--work-item-table-scroll-left', 'syncSubitemFixedColumnScrollPosition',
   'subitemMovableColumnOrder', 'visibleSubitemColumns', 'moveSubitemColumn',
   'monday-add-column-icon', 'M10 2.25C10.4142 2.25',
-  'monday-quick-add__field', 'placeholder="添加工作项"', 'placeholder="Content"',
+  'monday-quick-add__field', 'placeholder="添加工作项"', 'placeholder="工作项类别"',
   'monday-quick-checkbox', 'translateX(2px)',
   '--work-item-quick-control-height: 26px', '.monday-quick-row:focus-within',
   'background: var(--yp-bg-selected)', 'outline: none !important',
@@ -67,7 +67,7 @@ for (const fragment of ['aria-label', '--work-item-hierarchy-indent, 40px',
   'monday-subitem-table--empty', 'subitem-hierarchy-bar__trailing',
   '--subitem-add-row-accent: rgba(87, 155, 252, 0.5)',
   'subitem-hierarchy-branch--add::before', 'border-color: var(--subitem-add-row-accent)',
-  '--subitem-table-row-height: 36px', 'subitem-hierarchy-branch--data', 'subitem-block-column',
+  '--subitem-table-row-height: 54px', 'subitem-hierarchy-branch--data', 'subitem-block-column',
   'monday-sortable-column-header', 'monday-column-resize-handle', 'onColumnPointerDown',
   '--subitem-sort-overflow-space: 20px', '.el-table__header-wrapper',
   'th.monday-sortable-column-header:has(.sort-by-column--active)',
@@ -76,7 +76,7 @@ for (const fragment of ['aria-label', '--work-item-hierarchy-indent, 40px',
   'SUBITEM_ADD_COLUMN_MIN_WIDTH', 'subitem-add-column-header', 'subitem-add-column-button',
   'M10 2.25C10.4142 2.25',
   '--subitem-table-quick-height: var(--subitem-table-row-height)', 'subitem-add__field',
-  'placeholder="添加子项"', 'placeholder="Content"',
+  'placeholder="添加子项"', 'placeholder="工作项类别"',
   'subitem-quick-checkbox', 'color-mix(in srgb, var(--yp-border-strong) 50%, transparent)',
   '--subitem-quick-control-height: 26px', '.subitem-quick-row:focus-within',
   '.monday-subitem-table.el-table--border::after',

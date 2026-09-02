@@ -470,7 +470,7 @@ class M017BackupRestoreIT {
                            FROM yumpoo.project_template_definition
                          UNION ALL
                          SELECT 'B|' || template.version_code || '|' || blueprint.content_code || '|'
-                                || blueprint.work_item_type || '|' || blueprint.default_view_type || '|'
+                                || blueprint.display_name || '|' || blueprint.color_token || '|'
                                 || blueprint.sort_order
                            FROM yumpoo.project_template_content_blueprint blueprint
                            JOIN yumpoo.project_template_definition template ON template.id = blueprint.template_id
@@ -944,6 +944,13 @@ class M017BackupRestoreIT {
                         VALUES ('00000000-0000-4000-8000-000000000802',
                             '00000000-0000-4000-8000-000000000001')
                         """)).isOne();
+                assertThat(labels.executeUpdate("""
+                        INSERT INTO yumpoo.content_catalog_version
+                            (project_id, company_id, row_version, updated_at)
+                        VALUES ('00000000-0000-4000-8000-000000000802',
+                            '00000000-0000-4000-8000-000000000001', 3,
+                            transaction_timestamp())
+                        """)).isOne();
             }
             try (PreparedStatement membership = connection.prepareStatement("""
                     INSERT INTO yumpoo.project_membership (
@@ -1001,57 +1008,52 @@ class M017BackupRestoreIT {
             }
             try (PreparedStatement content = connection.prepareStatement("""
                     INSERT INTO yumpoo.content (
-                        id, company_id, project_id, code, name, work_item_type, status,
-                        default_view_type, view_config, applied_template_key,
-                        applied_template_version, applied_blueprint_code, row_version,
+                        id, company_id, project_id, code, name, color_token, sort_order,
+                        active, protected_content, ever_used, row_version,
                         created_at, created_by_user_id, updated_at, updated_by_user_id
                     ) VALUES (?,
                         '00000000-0000-4000-8000-000000000001',
-                        '00000000-0000-4000-8000-000000000802', ?, ?, ?, 'ACTIVE',
-                        'TABLE', '{}'::jsonb, 'RND', 1, ?, 0, ?,
+                        '00000000-0000-4000-8000-000000000802', ?, ?, ?, ?, true, ?, ?, 0, ?,
                         '00000000-0000-4000-8000-000000000102', ?,
                         '00000000-0000-4000-8000-000000000102')
                     """)) {
                 String[][] blueprints = {
-                        {"00000000-0000-4000-8000-000000000804", "REQUIREMENTS", "需求", "REQUIREMENT"},
-                        {"00000000-0000-4000-8000-000000000805", "TASKS", "任务", "TASK"},
-                        {"00000000-0000-4000-8000-000000000806", "DEFECTS", "缺陷", "DEFECT"}
+                        {"00000000-0000-4000-8000-000000000804", "REQUIREMENTS", "需求", "BRIGHT_BLUE", "10", "false"},
+                        {"00000000-0000-4000-8000-000000000805", "TASKS", "任务", "BRIGHT_GREEN", "20", "true"},
+                        {"00000000-0000-4000-8000-000000000806", "DEFECTS", "缺陷", "DARK_RED", "30", "false"}
                 };
                 for (String[] blueprint : blueprints) {
                     content.setObject(1, UUID.fromString(blueprint[0]));
                     content.setString(2, blueprint[1]);
                     content.setString(3, blueprint[2]);
                     content.setString(4, blueprint[3]);
-                    content.setString(5, blueprint[1]);
-                    content.setObject(6, createdAt);
-                    content.setObject(7, createdAt);
+                    content.setInt(5, Integer.parseInt(blueprint[4]));
+                    content.setBoolean(6, true);
+                    content.setBoolean(7, Boolean.parseBoolean(blueprint[5]));
+                    content.setObject(8, createdAt);
+                    content.setObject(9, createdAt);
                     content.addBatch();
                 }
                 assertThat(content.executeBatch()).hasSize(3);
             }
             try (PreparedStatement archivedContent = connection.prepareStatement("""
                     INSERT INTO yumpoo.content (
-                        id, company_id, project_id, code, name, description, work_item_type,
-                        status, default_view_type, view_config, applied_template_key,
-                        applied_template_version, applied_blueprint_code, row_version,
+                        id, company_id, project_id, code, name, color_token, sort_order,
+                        active, protected_content, ever_used, row_version,
                         created_at, created_by_user_id, updated_at, updated_by_user_id,
-                        archived_at, archived_by_user_id
+                        deleted_at, deleted_by_user_id
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000814',
                         '00000000-0000-4000-8000-000000000001',
                         '00000000-0000-4000-8000-000000000802',
-                        'ARCHIVED_REQ', '已归档需求', '包含非空视图配置的恢复探针', 'REQUIREMENT',
-                        'ARCHIVED', 'KANBAN',
-                        '{"table":{"columns":["TITLE","STATUS","PRIORITY"],"hiddenColumns":["PRIORITY"],"sorts":[],"filters":{}},"kanban":{"groups":[{"name":"待开始","statuses":["TODO"]},{"name":"进行中","statuses":["IN_PROGRESS"]},{"name":"已完成","statuses":["DONE"]}]}}'::jsonb,
-                        'RND', 1, 'REQUIREMENTS', 2, ?,
+                        'LEGACY_REQUIREMENT', '停用历史类别', 'SKY', 40,
+                        false, false, false, 2, ?,
                         '00000000-0000-4000-8000-000000000102', ?,
-                        '00000000-0000-4000-8000-000000000102', ?,
-                        '00000000-0000-4000-8000-000000000102'
+                        '00000000-0000-4000-8000-000000000102', NULL, NULL
                     )
                     """)) {
                 archivedContent.setObject(1, createdAt);
                 archivedContent.setObject(2, createdAt.plusHours(2));
-                archivedContent.setObject(3, createdAt.plusHours(2));
                 assertThat(archivedContent.executeUpdate()).isOne();
             }
             try (PreparedStatement counter = connection.prepareStatement("""
@@ -1062,16 +1064,18 @@ class M017BackupRestoreIT {
                 assertThat(counter.executeUpdate()).isOne();
             }
             try (PreparedStatement lanes = connection.prepareStatement("""
-                    INSERT INTO yumpoo.work_item_rank_lane (content_id, status_code)
+                    INSERT INTO yumpoo.work_item_rank_lane (project_id, company_id, status_code)
                     VALUES
-                        ('00000000-0000-4000-8000-000000000805', 'BACKLOG'),
-                        ('00000000-0000-4000-8000-000000000805', 'DONE')
+                        ('00000000-0000-4000-8000-000000000802',
+                         '00000000-0000-4000-8000-000000000001', 'BACKLOG'),
+                        ('00000000-0000-4000-8000-000000000802',
+                         '00000000-0000-4000-8000-000000000001', 'DONE')
                     """)) {
                 assertThat(lanes.executeUpdate()).isEqualTo(2);
             }
             try (PreparedStatement workItem = connection.prepareStatement("""
                     INSERT INTO yumpoo.work_item (
-                        id, company_id, project_id, content_id, item_sequence, item_no, type,
+                        id, company_id, project_id, content_id, item_sequence, item_no,
                         title, status_code, status_category, rank, project_sort_key,
                         priority, assignee_user_id,
                         reporter_user_id, description, notes, timeline_start_date,
@@ -1079,7 +1083,7 @@ class M017BackupRestoreIT {
                         created_by_user_id, updated_at, updated_by_user_id
                     ) VALUES (?, '00000000-0000-4000-8000-000000000001',
                         '00000000-0000-4000-8000-000000000802',
-                        '00000000-0000-4000-8000-000000000805', ?, ?, 'TASK', ?, ?, ?, ?, ?, ?,
+                        '00000000-0000-4000-8000-000000000805', ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, '00000000-0000-4000-8000-000000000102', ?, ?, ?, ?, ?, ?, ?,
                         '00000000-0000-4000-8000-000000000102', ?,
                         '00000000-0000-4000-8000-000000000102')
@@ -1124,7 +1128,7 @@ class M017BackupRestoreIT {
             }
             try (PreparedStatement update = connection.prepareStatement("""
                     INSERT INTO yumpoo.work_item_update (
-                        id, company_id, project_id, content_id, work_item_id,
+                        id, company_id, project_id, work_item_id,
                         author_user_id, author_display_name, body_html, body_text, status,
                         edit_deadline_at, row_version, created_at, edited_at, edited_by_user_id,
                         deleted_at, deleted_by_user_id, delete_reason
@@ -1132,7 +1136,6 @@ class M017BackupRestoreIT {
                         '00000000-0000-4000-8000-000000000818',
                         '00000000-0000-4000-8000-000000000001',
                         '00000000-0000-4000-8000-000000000802',
-                        '00000000-0000-4000-8000-000000000805',
                         '00000000-0000-4000-8000-000000000815',
                         '00000000-0000-4000-8000-000000000102', 'M2-17 Author',
                         NULL, NULL, 'DELETED', ?, 2, ?, ?,
@@ -1166,7 +1169,7 @@ class M017BackupRestoreIT {
                         next_attempt_at, created_at
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000817',
-                        'workitem.work_item_status_changed', 1, 'WorkItem',
+                        'workitem.work_item_status_changed', 2, 'WorkItem',
                         '00000000-0000-4000-8000-000000000816', 4,
                         '00000000-0000-4000-8000-000000000001', 'USER',
                         '00000000-0000-4000-8000-000000000102', ?,
@@ -1175,7 +1178,7 @@ class M017BackupRestoreIT {
                         || '"projectId":"00000000-0000-4000-8000-000000000802",'
                         || '"contentId":"00000000-0000-4000-8000-000000000805",'
                         || '"itemNo":"M2_04_RESTORE-2","title":"恢复工作项二",'
-                        || '"workItemType":"TASK","fromStatus":"IN_PROGRESS",'
+                        || '"contentName":"任务","contentColorToken":"BRIGHT_GREEN","fromStatus":"IN_PROGRESS",'
                         || '"toStatus":"DONE","fromStatusCategory":"IN_PROGRESS",'
                         || '"toStatusCategory":"DONE","resolution":"验收通过",'
                         || '"rowVersion":4}')::jsonb,
@@ -1239,6 +1242,9 @@ class M017BackupRestoreIT {
                             (SELECT catalog.row_version
                                FROM yumpoo.project_work_item_label_catalog catalog
                               WHERE catalog.project_id=project.id) AS label_catalog_version,
+                            (SELECT catalog.row_version
+                               FROM yumpoo.content_catalog_version catalog
+                              WHERE catalog.project_id=project.id) AS content_catalog_version,
                             (SELECT string_agg(label.status_code || ':' || label.display_name || ':'
                                 || label.color_token || ':' || label.status_category || ':'
                                 || label.sort_order || ':' || label.active || ':'
@@ -1252,10 +1258,8 @@ class M017BackupRestoreIT {
                               WHERE label.project_id=project.id) AS priority_labels,
                             (SELECT string_agg(lane.status_code, ',' ORDER BY lane.status_code)
                                FROM yumpoo.work_item_rank_lane lane
-                              WHERE lane.content_id IN (
-                                  SELECT lane_content.id FROM yumpoo.content lane_content
-                                   WHERE lane_content.project_id=project.id)) AS rank_lanes,
-                            (SELECT string_agg(item.item_no || ':' || item.type || ':' || item.title
+                              WHERE lane.project_id=project.id) AS rank_lanes,
+                            (SELECT string_agg(item.item_no || ':' || item.content_id || ':' || item.title
                                 || ':' || item.status_code || ':' || item.status_category || ':'
                                 || item.rank || ':' || item.project_sort_key || ':' || item.priority || ':'
                                 || COALESCE(item.description,'-') || ':'
@@ -1271,13 +1275,11 @@ class M017BackupRestoreIT {
                                 || COALESCE(item.delete_reason,'-'), ',' ORDER BY item.item_sequence)
                                FROM yumpoo.work_item item WHERE item.project_id=project.id)
                                 AS work_items,
-                            string_agg(content.code || ':' || content.work_item_type || ':'
-                                || content.status || ':' || content.default_view_type || ':'
-                                || content.row_version || ':' || content.view_config::text || ':'
-                                || (content.archived_at IS NOT NULL) || ':'
-                                || content.applied_template_key || ':'
-                                || content.applied_template_version || ':'
-                                || content.applied_blueprint_code, ',' ORDER BY content.code) AS contents
+                            string_agg(content.code || ':' || content.name || ':'
+                                || content.color_token || ':' || content.sort_order || ':'
+                                || content.active || ':' || content.protected_content || ':'
+                                || content.ever_used || ':' || content.row_version || ':'
+                                || (content.deleted_at IS NOT NULL), ',' ORDER BY content.sort_order) AS contents
                        FROM yumpoo.project project
                        JOIN yumpoo.project_membership membership
                          ON membership.project_id = project.id
@@ -1305,6 +1307,7 @@ class M017BackupRestoreIT {
                     result.getString("issue_type"), result.getString("target_type"),
                     result.getString("issue_status"), result.getLong("issue_version"),
                     result.getLong("work_item_sequence"), result.getLong("label_catalog_version"),
+                    result.getLong("content_catalog_version"),
                     result.getString("status_labels"), result.getString("priority_labels"),
                     result.getString("rank_lanes"),
                     result.getString("work_items"), result.getString("contents"));
@@ -1519,6 +1522,7 @@ class M017BackupRestoreIT {
             long issueVersion,
             long workItemSequence,
             long labelCatalogVersion,
+            long contentCatalogVersion,
             String statusLabels,
             String priorityLabels,
             String rankLanes,

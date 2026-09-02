@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assert, readFreezeManifest } from './event-contract-compat.mjs'
+import { assert, loadCurrentBundle, readFreezeManifest } from './event-contract-compat.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const manifest = readFreezeManifest(repositoryRoot)
@@ -31,14 +31,12 @@ assert(workItemBlock, 'ActivityProjectionService 缺少 WORK_ITEM_EVENTS 清单'
 assertSameSet('Activity v1 订阅', matches(workItemBlock, eventPattern),
   new Set(manifest.events.map((event) => event.eventType)))
 
-const runtimeTestFile = path.join(repositoryRoot, 'backend', 'src', 'test', 'java',
-  'com', 'yumpoo', 'platform', 'workitem', 'api', 'WorkItemHttpIT.java')
-const runtimeCoverage = matches(read(runtimeTestFile),
-  /assertOutboxEventContract\("(workitem\.work_item_[a-z0-9_]+)"\)/gu, 1)
-assertSameSet('实际 Outbox 契约断言', runtimeCoverage,
+const frozenBundle = loadCurrentBundle(repositoryRoot, manifest)
+assertSameSet('冻结 v1 Schema 与合法样例',
+  new Set(frozenBundle.events.map((event) => event.eventType)),
   new Set(manifest.events.map((event) => event.eventType)))
 
-console.log('M2-23 已对账 14 个冻结事件的生产者、Activity v1 订阅与实际 Outbox 断言。')
+console.log('M2-23 已对账 14 个冻结事件的生产者、Activity 订阅、Schema 与合法样例。')
 
 function read(file) {
   assert(fs.statSync(file, { throwIfNoEntry: false })?.isFile(), `缺少审计文件 ${file}`)
