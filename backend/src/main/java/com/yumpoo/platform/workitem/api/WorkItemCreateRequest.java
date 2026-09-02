@@ -2,6 +2,7 @@ package com.yumpoo.platform.workitem.api;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -9,6 +10,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 public record WorkItemCreateRequest(
+        @NotNull UUID contentId,
         @JsonProperty(required = true) @NotBlank @Size(max = 300) String title,
         @JsonProperty(required = true)
         @Pattern(regexp = "LOW|MEDIUM|HIGH|URGENT") String priority,

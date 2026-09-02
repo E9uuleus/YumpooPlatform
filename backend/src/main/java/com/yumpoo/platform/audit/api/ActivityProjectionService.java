@@ -34,7 +34,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "catalog.project_product_link_updated", "catalog.product_unlinked_from_project");
     private static final Set<String> CONTENT_EVENTS = Set.of(
             "workitem.content_created", "workitem.content_updated",
-            "workitem.content_archived", "workitem.content_restored");
+            "workitem.content_deleted", "workitem.content_archived", "workitem.content_restored");
     private static final Set<String> WORK_ITEM_EVENTS = Set.of(
             "workitem.work_item_created", "workitem.work_item_fields_changed",
             "workitem.work_item_assigned", "workitem.work_item_unassigned",
@@ -45,6 +45,11 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "workitem.work_item_update_edited", "workitem.work_item_update_deleted");
     private static final Set<String> ATTACHMENT_EVENTS = Set.of(
             "filestorage.attachment_available", "filestorage.attachment_deleted");
+    private static final Set<String> V2_EVENTS = Set.of(
+            "workitem.content_created", "workitem.content_updated", "workitem.content_deleted",
+            "workitem.work_item_created", "workitem.work_item_fields_changed",
+            "workitem.work_item_status_changed", "workitem.work_item_deleted",
+            "workitem.work_item_restored");
 
     private final ActivityRepository repository;
     private final ActivityProjectionContextPort context;
@@ -66,6 +71,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     public Set<EventSubscription> subscriptions() {
         LinkedHashSet<EventSubscription> subscriptions = new LinkedHashSet<>();
         allEvents().forEach(type -> subscriptions.add(new EventSubscription(type, 1)));
+        V2_EVENTS.forEach(type -> subscriptions.add(new EventSubscription(type, 2)));
         return Set.copyOf(subscriptions);
     }
 
@@ -129,7 +135,11 @@ public class ActivityProjectionService implements OutboxEventConsumer {
         UUID contentId = uuid(payload, "contentId");
         String ref = join(text(payload, "code"), text(payload, "name"));
         ObjectNode safe = safeRef(ref);
-        safe.put("workItemType", text(payload, "workItemType"));
+        if (event.eventVersion() == 1) safe.put("workItemType", text(payload, "workItemType"));
+        else {
+            safe.put("colorToken", text(payload, "colorToken"));
+            safe.put("active", payload.path("active").asBoolean());
+        }
         append(event, ActivityAudienceType.PROJECT, uuid(payload, "projectId"), "CONTENT",
                 contentId, ref, template(event.eventType()), safe, null, null);
     }
@@ -149,6 +159,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
         if (type.endsWith("fields_changed")) {
             ArrayNode fields = array(payload, "changedFields");
             ArrayNode kept = objectMapper.createArrayNode();
+            boolean contentChanged = false;
             fields.forEach(field -> {
                 if (field.isTextual() && !"assigneeUserId".equals(field.textValue())
                         && !"description".equals(field.textValue())
@@ -156,6 +167,18 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             });
             if (kept.isEmpty()) return;
             safe.set("changedFields", kept);
+            for (JsonNode field : kept) {
+                if ("contentId".equals(field.textValue())) {
+                    contentChanged = true;
+                    break;
+                }
+            }
+            if (contentChanged) {
+                safe.put("previousContentName", text(payload, "previousContentName"));
+                safe.put("contentName", text(payload, "contentName"));
+                safe.put("previousContentColorToken", text(payload, "previousContentColorToken"));
+                safe.put("contentColorToken", text(payload, "contentColorToken"));
+            }
         } else if (type.equals("workitem.work_item_assigned")) {
             safe.put("memberDisplayName", user(event, uuid(payload, "assigneeUserId")));
         } else if (type.endsWith("status_changed")) {

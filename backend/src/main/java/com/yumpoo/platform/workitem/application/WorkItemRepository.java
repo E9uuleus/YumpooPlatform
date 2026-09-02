@@ -1,7 +1,7 @@
 package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
-import com.yumpoo.platform.workitem.domain.ContentViewType;
+import com.yumpoo.platform.workitem.domain.WorkItemViewType;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 
 import java.time.Instant;
@@ -17,13 +17,13 @@ public interface WorkItemRepository {
     record RankedWorkItem(UUID id, String rank) {}
     record RankedProjectWorkItem(UUID id, String rank) {}
     record FilterOptionCount(String value, long count) {}
-    record ProjectCursorAnchor(UUID id, String projectSortKey, long itemSequence,
-            String title, String statusCode, String priority,
+    record ProjectCursorAnchor(UUID id, String rank, String projectSortKey, long itemSequence,
+            UUID contentId, String title, String statusCode, String priority,
             UUID assigneeUserId, UUID reporterUserId, LocalDate timelineStartDate,
             LocalDate timelineEndDate, LocalDate dueDate, Instant updatedAt) {
         static ProjectCursorAnchor from(WorkItem item) {
-            return new ProjectCursorAnchor(item.id(), item.projectSortKey(), item.itemSequence(),
-                    item.title(), item.statusCode(), item.priority(), item.assigneeUserId(),
+            return new ProjectCursorAnchor(item.id(), item.rank(), item.projectSortKey(), item.itemSequence(),
+                    item.contentId(), item.title(), item.statusCode(), item.priority(), item.assigneeUserId(),
                     item.reporterUserId(), item.timelineStartDate(), item.timelineEndDate(),
                     item.dueDate(), item.updatedAt());
         }
@@ -43,13 +43,14 @@ public interface WorkItemRepository {
     Optional<WorkItem> lockIncludingDeleted(UUID companyId, UUID projectId, UUID contentId,
             UUID workItemId);
     Optional<WorkItem> update(WorkItem workItem, long expectedVersion);
+    Optional<WorkItem> changeContent(WorkItem workItem, long expectedVersion);
     Optional<WorkItem> transition(WorkItem workItem, long expectedVersion);
     Optional<WorkItem> softDelete(WorkItem workItem, long expectedVersion);
     Optional<WorkItem> restore(WorkItem workItem, long expectedVersion);
-    void lockRankLanes(UUID contentId, Collection<String> statuses);
-    List<RankedWorkItem> findRankOrder(UUID companyId, UUID projectId, UUID contentId,
+    void lockRankLanes(UUID companyId, UUID projectId, Collection<String> statuses);
+    List<RankedWorkItem> findRankOrder(UUID companyId, UUID projectId,
             String statusCode);
-    void rewriteRanks(UUID companyId, UUID projectId, UUID contentId, String statusCode,
+    void rewriteRanks(UUID companyId, UUID projectId, String statusCode,
             Map<UUID, String> ranks);
     void lockProjectOrder(UUID companyId, UUID projectId);
     Optional<WorkItem> lockProjectItem(UUID companyId, UUID projectId, UUID workItemId);
@@ -68,14 +69,14 @@ public interface WorkItemRepository {
     Set<UUID> findParticipantUserIds(UUID companyId, UUID projectId, UUID contentId);
     Set<UUID> findProjectParticipantUserIds(UUID companyId, UUID projectId);
     List<WorkItem> findPage(UUID companyId, UUID projectId, UUID contentId,
-            WorkItemQuery query, WorkItemSortRanks ranks, ContentViewType view,
+            WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
             OffsetPageRequest page);
     long countPage(UUID companyId, UUID projectId, UUID contentId, WorkItemQuery query);
     List<WorkItem> findProjectPage(UUID companyId, UUID projectId,
-            WorkItemQuery query, WorkItemSortRanks ranks, ContentViewType view,
+            WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
             OffsetPageRequest page);
     List<WorkItem> findProjectCursorPage(UUID companyId, UUID projectId,
-            WorkItemQuery query, WorkItemSortRanks ranks, ContentViewType view,
+            WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
             ProjectCursorAnchor anchor, int limit);
     List<WorkItem> findSubitems(UUID companyId, UUID projectId, UUID parentWorkItemId,
             WorkItemQuery query, WorkItemSortRanks ranks);

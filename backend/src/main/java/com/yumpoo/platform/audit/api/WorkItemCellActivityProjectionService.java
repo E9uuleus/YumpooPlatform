@@ -46,6 +46,8 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
     public Set<EventSubscription> subscriptions() {
         LinkedHashSet<EventSubscription> result = new LinkedHashSet<>();
         EVENTS.forEach(type -> result.add(new EventSubscription(type, 1)));
+        Set.of(CREATED, FIELDS_CHANGED, STATUS_CHANGED)
+                .forEach(type -> result.add(new EventSubscription(type, 2)));
         return Set.copyOf(result);
     }
 
@@ -83,6 +85,13 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
                 case "priority" -> changedLabel(event, "PRIORITY", "previousPriority", "priority");
                 case "dueDate" -> changedScalar(event, "DUE_DATE", "DATE",
                         "previousDueDate", "dueDate");
+                case "contentId" -> append(event, "CONTENT", "CHANGED",
+                        value("LABEL", text(event.payload(), "previousContentId"),
+                                text(event.payload(), "previousContentName"),
+                                text(event.payload(), "previousContentColorToken")),
+                        value("LABEL", text(event.payload(), "contentId"),
+                                text(event.payload(), "contentName"),
+                                text(event.payload(), "contentColorToken")));
                 default -> { }
             }
         }

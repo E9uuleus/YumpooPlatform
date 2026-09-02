@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-created-v2.schema.json",
+  "title": "Work Item created v2",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    { "type": "object", "properties": {
+      "eventType": { "const": "workitem.work_item_created" },
+      "eventVersion": { "const": 2 },
+      "aggregateType": { "const": "WorkItem" },
+      "aggregateVersion": { "type": "integer", "minimum": 0 },
+      "payload": {
+        "type": "object", "additionalProperties": false,
+        "required": ["workItemId", "projectId", "contentId", "itemNo", "title", "statusCode", "statusCategory", "priority", "assigneeUserId", "timelineStartDate", "timelineEndDate", "dueDate", "reporterUserId", "rowVersion"],
+        "properties": {
+          "workItemId": { "type": "string", "format": "uuid" },
+          "projectId": { "type": "string", "format": "uuid" },
+          "contentId": { "type": "string", "format": "uuid" },
+          "itemNo": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "statusCode": { "type": "string" },
+          "statusCategory": { "enum": ["TODO", "IN_PROGRESS", "DONE", "CANCELED"] },
+          "priority": { "type": ["string", "null"] },
+          "assigneeUserId": { "type": ["string", "null"], "format": "uuid" },
+          "timelineStartDate": { "type": ["string", "null"], "format": "date" },
+          "timelineEndDate": { "type": ["string", "null"], "format": "date" },
+          "dueDate": { "type": ["string", "null"], "format": "date" },
+          "reporterUserId": { "type": "string", "format": "uuid" },
+          "rowVersion": { "type": "integer", "minimum": 0 }
+        }
+      }
+    } }
+  ]
+}

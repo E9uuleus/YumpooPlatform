@@ -1,0 +1,7 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#", "$id": "https://contracts.yumpoo.local/events/workitem.content-created-v2.schema.json", "title": "Content category created v2",
+  "allOf": [{ "$ref": "event-envelope.schema.json" }, { "type": "object", "properties": {
+    "eventType": { "const": "workitem.content_created" }, "eventVersion": { "const": 2 }, "aggregateType": { "const": "Content" }, "aggregateVersion": { "type": "integer", "minimum": 0 },
+    "payload": { "$ref": "workitem.content-v2-payload.schema.json" }
+  } }]
+}

@@ -30,10 +30,12 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
 
     private static final String PROJECTION_COLUMNS = RELATION_COLUMNS + """
             , left_item.content_id AS left_content_id, left_item.item_no AS left_item_no,
-            left_item.type AS left_type, left_item.title AS left_title,
+            left_content.name AS left_content_name,
+            left_content.color_token AS left_content_color_token, left_item.title AS left_title,
             left_item.status_code AS left_status_code, left_item.deleted_at AS left_deleted_at,
             right_item.content_id AS right_content_id, right_item.item_no AS right_item_no,
-            right_item.type AS right_type, right_item.title AS right_title,
+            right_content.name AS right_content_name,
+            right_content.color_token AS right_content_color_token, right_item.title AS right_title,
             right_item.status_code AS right_status_code, right_item.deleted_at AS right_deleted_at
             """;
 
@@ -214,7 +216,8 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
             boolean currentIsLeft, OffsetPageRequest page) {
         return jdbc.sql("""
                 SELECT candidate.id, candidate.project_id, candidate.content_id,
-                       candidate.item_no, candidate.type AS type_code, candidate.title,
+                       candidate.item_no, candidate_content.name AS content_name,
+                       candidate_content.color_token AS content_color_token, candidate.title,
                        candidate.status_code, candidate.deleted_at,
                        EXISTS (SELECT 1 FROM yumpoo.work_item_relation existing
                                 WHERE existing.company_id=:companyId
@@ -238,11 +241,14 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
                        active_parent.row_version AS active_parent_version,
                        parent_item.id AS parent_id, parent_item.project_id AS parent_project_id,
                        parent_item.content_id AS parent_content_id,
-                       parent_item.item_no AS parent_item_no, parent_item.type AS parent_type,
+                       parent_item.item_no AS parent_item_no,
+                       parent_content.name AS parent_content_name,
+                       parent_content.color_token AS parent_content_color_token,
                        parent_item.title AS parent_title,
                        parent_item.status_code AS parent_status_code,
                        parent_item.deleted_at AS parent_deleted_at
                   FROM yumpoo.work_item candidate
+                  JOIN yumpoo.content candidate_content ON candidate_content.id=candidate.content_id
                  CROSS JOIN LATERAL (
                        SELECT CASE WHEN :related AND candidate.id::text < CAST(:currentWorkItemId AS text)
                                       THEN candidate.id
@@ -261,6 +267,7 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
                   LEFT JOIN yumpoo.work_item parent_item
                     ON parent_item.company_id=active_parent.company_id
                    AND parent_item.id=active_parent.left_work_item_id
+                  LEFT JOIN yumpoo.content parent_content ON parent_content.id=parent_item.content_id
                  WHERE candidate.company_id=:companyId AND candidate.project_id=:projectId
                    AND candidate.id<>:excludedWorkItemId AND candidate.deleted_at IS NULL
                    AND (lower(candidate.title) LIKE :query ESCAPE '\\'
@@ -359,7 +366,9 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
                 + " JOIN yumpoo.work_item left_item ON left_item.id=relation.left_work_item_id"
                 + " AND left_item.company_id=relation.company_id"
                 + " JOIN yumpoo.work_item right_item ON right_item.id=relation.right_work_item_id"
-                + " AND right_item.company_id=relation.company_id";
+                + " AND right_item.company_id=relation.company_id"
+                + " JOIN yumpoo.content left_content ON left_content.id=left_item.content_id"
+                + " JOIN yumpoo.content right_content ON right_content.id=right_item.content_id";
     }
 
     private static WorkItemRelation mapRelation(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
@@ -382,11 +391,13 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
         WorkItemRelation relation = mapRelation(rs, row);
         Endpoint left = new Endpoint(relation.leftWorkItemId(), relation.leftProjectId(),
                 rs.getObject("left_content_id", UUID.class), rs.getString("left_item_no"),
-                rs.getString("left_type"), rs.getString("left_title"),
+                rs.getString("left_content_name"), rs.getString("left_content_color_token"),
+                rs.getString("left_title"),
                 rs.getString("left_status_code"), rs.getObject("left_deleted_at") != null);
         Endpoint right = new Endpoint(relation.rightWorkItemId(), relation.rightProjectId(),
                 rs.getObject("right_content_id", UUID.class), rs.getString("right_item_no"),
-                rs.getString("right_type"), rs.getString("right_title"),
+                rs.getString("right_content_name"), rs.getString("right_content_color_token"),
+                rs.getString("right_title"),
                 rs.getString("right_status_code"), rs.getObject("right_deleted_at") != null);
         return new Projection(relation, left, right);
     }
@@ -394,7 +405,8 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
     private static Endpoint mapEndpoint(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
         return new Endpoint(rs.getObject("id", UUID.class), rs.getObject("project_id", UUID.class),
                 rs.getObject("content_id", UUID.class), rs.getString("item_no"),
-                rs.getString("type_code"), rs.getString("title"), rs.getString("status_code"),
+                rs.getString("content_name"), rs.getString("content_color_token"),
+                rs.getString("title"), rs.getString("status_code"),
                 rs.getObject("deleted_at") != null);
     }
 
@@ -406,7 +418,8 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
                 rs.getObject("parent_id", UUID.class),
                 rs.getObject("parent_project_id", UUID.class),
                 rs.getObject("parent_content_id", UUID.class), rs.getString("parent_item_no"),
-                rs.getString("parent_type"), rs.getString("parent_title"),
+                rs.getString("parent_content_name"), rs.getString("parent_content_color_token"),
+                rs.getString("parent_title"),
                 rs.getString("parent_status_code"), rs.getObject("parent_deleted_at") != null);
         return new CandidateFacts(item, rs.getBoolean("already_related"),
                 rs.getBoolean("parent_is_child"), rs.getBoolean("child_has_children"),

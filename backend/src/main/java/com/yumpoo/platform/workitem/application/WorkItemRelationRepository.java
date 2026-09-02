@@ -16,8 +16,9 @@ public interface WorkItemRelationRepository {
     record ParentChildRelation(UUID id, UUID companyId, UUID parentWorkItemId,
             UUID childWorkItemId, UUID projectId, UUID createdByUserId, Instant createdAt) {}
 
-    record Endpoint(UUID id, UUID projectId, UUID contentId, String itemNo, String type,
-            String title, String statusCode, boolean deleted) {}
+    record Endpoint(UUID id, UUID projectId, UUID contentId, String itemNo,
+            String contentName, String contentColorToken, String title,
+            String statusCode, boolean deleted) {}
 
     record Projection(WorkItemRelation relation, Endpoint left, Endpoint right) {}
 

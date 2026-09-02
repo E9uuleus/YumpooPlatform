@@ -23,7 +23,10 @@ import static com.yumpoo.platform.workitem.application.WorkItemUpdateModels.Upda
 @Repository
 public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
     private static final String COLUMNS = """
-            id, company_id, project_id, content_id, work_item_id, author_user_id,
+            id, company_id, project_id,
+            (SELECT item.content_id FROM yumpoo.work_item item
+              WHERE item.id=work_item_id) AS content_id,
+            work_item_id, author_user_id,
             author_display_name, body_html, body_text, status, edit_deadline_at,
             row_version, created_at, edited_at, edited_by_user_id, deleted_at,
             deleted_by_user_id, delete_reason
@@ -39,17 +42,17 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
     public boolean insert(WorkItemUpdate update, Map<UUID, String> mentionedDisplayNames) {
         int inserted = jdbc.sql("""
                 INSERT INTO yumpoo.work_item_update (
-                    id, company_id, project_id, content_id, work_item_id, author_user_id,
+                    id, company_id, project_id, work_item_id, author_user_id,
                     author_display_name, body_html, body_text, status, edit_deadline_at,
                     row_version, created_at, edited_at, edited_by_user_id, deleted_at,
                     deleted_by_user_id, delete_reason
                 ) VALUES (
-                    :id, :companyId, :projectId, :contentId, :workItemId, :authorUserId,
+                    :id, :companyId, :projectId, :workItemId, :authorUserId,
                     :authorDisplayName, :bodyHtml, :bodyText, :status, :editDeadlineAt,
                     :rowVersion, :createdAt, NULL, NULL, NULL, NULL, NULL
                 )
                 """).param("id", update.id()).param("companyId", update.companyId())
-                .param("projectId", update.projectId()).param("contentId", update.contentId())
+                .param("projectId", update.projectId())
                 .param("workItemId", update.workItemId()).param("authorUserId", update.authorUserId())
                 .param("authorDisplayName", update.authorDisplayName()).param("bodyHtml", update.bodyHtml())
                 .param("bodyText", update.bodyText()).param("status", update.status().name())
@@ -79,9 +82,11 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
     @Override
     public Optional<UpdateLocator> findLocator(UUID companyId, UUID updateId) {
         return jdbc.sql("""
-                SELECT company_id, project_id, content_id, work_item_id, id
-                FROM yumpoo.work_item_update
-                WHERE company_id=:companyId AND id=:updateId
+                SELECT discussion.company_id, discussion.project_id, item.content_id,
+                       discussion.work_item_id, discussion.id
+                FROM yumpoo.work_item_update discussion
+                JOIN yumpoo.work_item item ON item.id=discussion.work_item_id
+                WHERE discussion.company_id=:companyId AND discussion.id=:updateId
                 """).param("companyId", companyId).param("updateId", updateId)
                 .query((rs, row) -> new UpdateLocator(rs.getObject("company_id", UUID.class),
                         rs.getObject("project_id", UUID.class), rs.getObject("content_id", UUID.class),

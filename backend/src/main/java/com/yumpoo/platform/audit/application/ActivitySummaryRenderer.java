@@ -27,8 +27,9 @@ public class ActivitySummaryRenderer {
             case "PRODUCT_LINKED_TO_PROJECT" -> "关联了产品";
             case "PROJECT_PRODUCT_LINK_UPDATED" -> "更新了产品关联";
             case "PRODUCT_UNLINKED_FROM_PROJECT" -> "取消了产品关联";
-            case "CONTENT_CREATED" -> "创建了事项集合 " + ref;
-            case "CONTENT_UPDATED" -> "更新了事项集合 " + ref;
+            case "CONTENT_CREATED" -> "创建了工作项类别 " + ref;
+            case "CONTENT_UPDATED" -> "更新了工作项类别 " + ref;
+            case "CONTENT_DELETED" -> "删除了工作项类别 " + ref;
             case "CONTENT_ARCHIVED" -> "归档了事项集合 " + ref;
             case "CONTENT_RESTORED" -> "恢复了事项集合 " + ref;
             case "WORK_ITEM_CREATED" -> "创建了事项 " + ref;

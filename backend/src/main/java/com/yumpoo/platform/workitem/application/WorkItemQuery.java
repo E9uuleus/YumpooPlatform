@@ -13,8 +13,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.yumpoo.platform.workitem.application.ContentViewConfig.SortDirection;
-import static com.yumpoo.platform.workitem.application.ContentViewConfig.SortField;
+import static com.yumpoo.platform.workitem.application.WorkItemSortDirection.*;
 
 public record WorkItemQuery(
         String query,
@@ -35,7 +34,7 @@ public record WorkItemQuery(
         sorts = List.copyOf(sorts);
     }
 
-    public record Sort(SortField field, SortDirection direction) {}
+    public record Sort(WorkItemSortField field, WorkItemSortDirection direction) {}
 
     public record Request(String query, Collection<String> statuses,
                           Collection<String> priorities, Collection<UUID> assigneeUserIds,
@@ -91,15 +90,15 @@ public record WorkItemQuery(
         if (requested.size() > 3)
             throw invalid("sort", "TOO_MANY", "最多配置三个排序字段");
         List<Sort> result = new ArrayList<>();
-        Set<SortField> fields = new HashSet<>();
+        Set<WorkItemSortField> fields = new HashSet<>();
         for (String value : requested) {
             String[] parts = value == null ? new String[0] : value.split(",", -1);
-            SortField field;
-            SortDirection direction;
+            WorkItemSortField field;
+            WorkItemSortDirection direction;
             try {
                 if (parts.length != 2) throw new IllegalArgumentException();
-                field = SortField.valueOf(parts[0]);
-                direction = SortDirection.valueOf(parts[1]);
+                field = WorkItemSortField.valueOf(parts[0]);
+                direction = WorkItemSortDirection.valueOf(parts[1]);
             } catch (IllegalArgumentException exception) {
                 throw invalid("sort", "INVALID_VALUE", "排序必须使用 FIELD,DIRECTION 白名单格式");
             }

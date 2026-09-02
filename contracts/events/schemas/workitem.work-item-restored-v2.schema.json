@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#", "$id": "https://contracts.yumpoo.local/events/workitem.work-item-restored-v2.schema.json", "title": "Work Item restored v2",
+  "allOf": [{ "$ref": "event-envelope.schema.json" }, { "type": "object", "properties": {
+    "eventType": { "const": "workitem.work_item_restored" }, "eventVersion": { "const": 2 }, "aggregateType": { "const": "WorkItem" }, "aggregateVersion": { "type": "integer", "minimum": 2 },
+    "payload": { "type": "object", "additionalProperties": false,
+      "required": ["workItemId", "projectId", "contentId", "itemNo", "title", "statusCode", "statusCategory", "priority", "rowVersion", "restoredAt", "restoredByUserId"],
+      "properties": {
+        "workItemId": { "type": "string", "format": "uuid" }, "projectId": { "type": "string", "format": "uuid" }, "contentId": { "type": "string", "format": "uuid" }, "itemNo": { "type": "string" }, "title": { "type": "string" },
+        "statusCode": { "type": "string" }, "statusCategory": { "enum": ["TODO", "IN_PROGRESS", "DONE", "CANCELED"] }, "priority": { "type": ["string", "null"] }, "rowVersion": { "type": "integer", "minimum": 2 },
+        "restoredAt": { "type": "string", "format": "date-time" }, "restoredByUserId": { "type": "string", "format": "uuid" }
+      }
+    }
+  } }]
+}

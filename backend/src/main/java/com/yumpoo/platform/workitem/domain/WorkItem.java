@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 
 public record WorkItem(
         UUID id, UUID companyId, UUID projectId, UUID contentId,
-        long itemSequence, String itemNo, ContentWorkItemType type,
+        long itemSequence, String itemNo,
         String title, String statusCode, WorkItemStatusCategory statusCategory,
         String priority, UUID assigneeUserId, UUID reporterUserId,
         String description, String notes, LocalDate timelineStartDate,
@@ -26,7 +26,6 @@ public record WorkItem(
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(projectId, "projectId must not be null");
         Objects.requireNonNull(contentId, "contentId must not be null");
-        Objects.requireNonNull(type, "type must not be null");
         Objects.requireNonNull(statusCategory, "statusCategory must not be null");
         Objects.requireNonNull(reporterUserId, "reporterUserId must not be null");
         Objects.requireNonNull(createdAt, "createdAt must not be null");
@@ -59,24 +58,24 @@ public record WorkItem(
     }
 
     public static WorkItem create(UUID id, UUID companyId, UUID projectId, UUID contentId,
-            long itemSequence, String itemNo, ContentWorkItemType type, String title,
+            long itemSequence, String itemNo, String title,
             String statusCode, WorkItemStatusCategory statusCategory, String priority,
             UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
             LocalDate timelineEndDate, LocalDate dueDate, String rank,
             UUID reporterUserId, Instant now) {
-        return create(id, companyId, projectId, contentId, itemSequence, itemNo, type, title,
+        return create(id, companyId, projectId, contentId, itemSequence, itemNo, title,
                 statusCode, statusCategory, priority, assigneeUserId, description, notes,
                 timelineStartDate, timelineEndDate, dueDate, rank,
                 ProjectSortKey.evenlySpaced(1, 1), reporterUserId, now);
     }
 
     public static WorkItem create(UUID id, UUID companyId, UUID projectId, UUID contentId,
-            long itemSequence, String itemNo, ContentWorkItemType type, String title,
+            long itemSequence, String itemNo, String title,
             String statusCode, WorkItemStatusCategory statusCategory, String priority,
             UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
             LocalDate timelineEndDate, LocalDate dueDate, String rank, String projectSortKey,
             UUID reporterUserId, Instant now) {
-        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, rank,
                 projectSortKey, 0, now, reporterUserId, now, reporterUserId, null, null, null);
@@ -89,11 +88,24 @@ public record WorkItem(
         Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         Objects.requireNonNull(now, "now must not be null");
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
-        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
                 nextTitle, statusCode, statusCategory, nextPriority, nextAssigneeUserId,
                 reporterUserId, nextDescription, nextNotes, nextTimelineStartDate,
                 nextTimelineEndDate, nextDueDate, rank, projectSortKey, rowVersion, createdAt,
                 createdByUserId, now, actorUserId, deletedAt, deletedByUserId, deleteReason);
+    }
+
+    public WorkItem changeContent(UUID nextContentId, UUID actorUserId, Instant now) {
+        Objects.requireNonNull(nextContentId, "nextContentId must not be null");
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (deletedAt != null) throw new IllegalStateException("deleted work item cannot change content");
+        if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
+        return new WorkItem(id, companyId, projectId, nextContentId, itemSequence, itemNo,
+                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                description, notes, timelineStartDate, timelineEndDate, dueDate, rank,
+                projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
+                deletedAt, deletedByUserId, deleteReason);
     }
 
     public WorkItem move(String nextStatusCode, WorkItemStatusCategory nextStatusCategory,
@@ -105,7 +117,7 @@ public record WorkItem(
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
         if (Objects.equals(statusCode, nextStatusCode))
             throw new IllegalArgumentException("status transition endpoints must differ");
-        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
                 title, nextStatusCode, nextStatusCategory, priority, assigneeUserId,
                 reporterUserId, description, notes, timelineStartDate, timelineEndDate,
                 dueDate, nextRank, projectSortKey, rowVersion, createdAt, createdByUserId,
@@ -118,7 +130,7 @@ public record WorkItem(
         Objects.requireNonNull(now, "now must not be null");
         if (deletedAt != null) throw new IllegalStateException("deleted work item cannot move");
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
-        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, nextRank,
                 projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId, deletedAt,
@@ -128,7 +140,7 @@ public record WorkItem(
     public WorkItem reorderProject(String nextProjectSortKey, UUID actorUserId) {
         Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         if (deletedAt != null) throw new IllegalStateException("deleted work item cannot move");
-        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, rank,
                 nextProjectSortKey, rowVersion, createdAt, createdByUserId, updatedAt,
@@ -140,7 +152,7 @@ public record WorkItem(
         Objects.requireNonNull(now, "now must not be null");
         if (deletedAt != null) throw new IllegalStateException("work item is already deleted");
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
-        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, rank,
                 projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
@@ -157,7 +169,7 @@ public record WorkItem(
         Objects.requireNonNull(now, "now must not be null");
         if (deletedAt == null) throw new IllegalStateException("work item is not deleted");
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
-        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo, type,
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, nextRank,
                 nextProjectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,

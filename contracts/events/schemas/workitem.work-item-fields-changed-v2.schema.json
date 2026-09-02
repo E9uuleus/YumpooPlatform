@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-fields-changed-v2.schema.json",
+  "title": "Work Item fields changed v2",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    { "type": "object", "properties": {
+      "eventType": { "const": "workitem.work_item_fields_changed" },
+      "eventVersion": { "const": 2 },
+      "aggregateType": { "const": "WorkItem" },
+      "aggregateVersion": { "type": "integer", "minimum": 1 },
+      "payload": {
+        "type": "object", "additionalProperties": false,
+        "required": ["workItemId", "projectId", "contentId", "itemNo", "title", "statusCode", "statusCategory", "priority", "assigneeUserId", "timelineStartDate", "timelineEndDate", "dueDate", "rowVersion", "changedFields"],
+        "properties": {
+          "workItemId": { "type": "string", "format": "uuid" }, "projectId": { "type": "string", "format": "uuid" }, "contentId": { "type": "string", "format": "uuid" },
+          "itemNo": { "type": "string" }, "title": { "type": "string" }, "previousTitle": { "type": "string" },
+          "statusCode": { "type": "string" }, "statusCategory": { "enum": ["TODO", "IN_PROGRESS", "DONE", "CANCELED"] },
+          "priority": { "type": ["string", "null"] }, "previousPriority": { "type": ["string", "null"] },
+          "assigneeUserId": { "type": ["string", "null"], "format": "uuid" },
+          "timelineStartDate": { "type": ["string", "null"], "format": "date" }, "timelineEndDate": { "type": ["string", "null"], "format": "date" },
+          "dueDate": { "type": ["string", "null"], "format": "date" }, "previousDueDate": { "type": ["string", "null"], "format": "date" },
+          "previousContentId": { "type": "string", "format": "uuid" }, "previousContentName": { "type": "string" }, "previousContentColorToken": { "type": "string" },
+          "contentName": { "type": "string" }, "contentColorToken": { "type": "string" },
+          "rowVersion": { "type": "integer", "minimum": 1 },
+          "changedFields": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["title", "priority", "assigneeUserId", "description", "notes", "timelineStartDate", "timelineEndDate", "dueDate", "contentId"] } }
+        }
+      }
+    } }
+  ]
+}

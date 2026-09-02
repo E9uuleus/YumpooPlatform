@@ -1467,30 +1467,14 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
-  /contents/{contentId}:
-    get:
-      tags: [Contents]
-      operationId: getContent
-      summary: 查询 Content 详情与规范化视图配置
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - name: contentId
-          in: path
-          required: true
-          schema: { $ref: '#/components/schemas/Uuid' }
-      responses:
-        '200':
-          description: Content 详情。
-          headers: { ETag: { $ref: '#/components/headers/ETag' } }
-          content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
+  /projects/{projectId}/contents/{contentId}:
     patch:
       tags: [Contents]
       operationId: updateContent
-      summary: 完整替换 Content 可变详情与视图配置
+      summary: 更新工作项类别名称、颜色、顺序或启停状态
       security: [{ sessionCookie: [] }]
       parameters:
+        - $ref: '#/components/parameters/ProjectId'
         - name: contentId
           in: path
           required: true
@@ -1502,7 +1486,7 @@ paths:
         content: { application/json: { schema: { $ref: '#/components/schemas/ContentUpdateRequest' } } }
       responses:
         '200':
-          description: Content 已更新；等价配置不会推进版本。
+          description: 工作项类别已更新。
           headers: { ETag: { $ref: '#/components/headers/ETag' } }
           content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } }
         '400': { $ref: '#/components/responses/MalformedRequest' }
@@ -1513,69 +1497,37 @@ paths:
         '412': { $ref: '#/components/responses/VersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
-
-  /contents/{contentId}/archive:
-    post:
+    delete:
       tags: [Contents]
-      operationId: archiveContent
-      summary: 归档 ACTIVE Content
+      operationId: deleteContent
+      summary: 软删除从未使用的自定义工作项类别
       security: [{ sessionCookie: [] }]
       parameters:
+        - $ref: '#/components/parameters/ProjectId'
         - name: contentId
           in: path
           required: true
           schema: { $ref: '#/components/schemas/Uuid' }
         - $ref: '#/components/parameters/XsrfToken'
         - $ref: '#/components/parameters/IfMatch'
-        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
-        '200':
-          description: Content 已归档或幂等重放。
-          headers: { ETag: { $ref: '#/components/headers/ETag' } }
-          content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } }
+        '204': { description: 工作项类别已软删除。 }
         '400': { $ref: '#/components/responses/MalformedRequest' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/ResourceNotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
         '412': { $ref: '#/components/responses/VersionConflict' }
-        '428': { $ref: '#/components/responses/PreconditionRequired' }
-
-  /contents/{contentId}/restore:
-    post:
-      tags: [Contents]
-      operationId: restoreContent
-      summary: 恢复 ARCHIVED Content
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - name: contentId
-          in: path
-          required: true
-          schema: { $ref: '#/components/schemas/Uuid' }
-        - $ref: '#/components/parameters/XsrfToken'
-        - $ref: '#/components/parameters/IfMatch'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '200':
-          description: Content 已恢复或幂等重放。
-          headers: { ETag: { $ref: '#/components/headers/ETag' } }
-          content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } }
-        '400': { $ref: '#/components/responses/MalformedRequest' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
   /projects/{projectId}/work-items:
     get:
       tags: [WorkItems]
       operationId: listProjectWorkItems
-      summary: 分页查询 Project 下全部 Content 的真实 Work Item
+      summary: 分页查询 Project 下全部工作项
       description: >-
-        聚合 Project 内全部 Content 的非删除 Work Item。TABLE 复用白名单筛选与排序；
-        KANBAN 必须指定单一 status，固定按更新时间倒序，不提供跨 Content rank。
+        聚合 Project 内全部类别的非删除工作项。TABLE 复用白名单筛选与排序；
+        KANBAN 必须指定单一 status，并使用项目级状态泳道 rank。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: projectId
@@ -1590,8 +1542,8 @@ paths:
           schema: { type: integer, format: int32, minimum: 1, maximum: 100, default: 25 }
         - name: view
           in: query
-          description: TABLE 使用白名单排序；KANBAN 要求单一 status 且固定按 updatedAt 倒序。
-          schema: { $ref: '#/components/schemas/ContentViewType' }
+          description: TABLE 使用白名单排序；KANBAN 要求单一 status 且固定按项目级状态泳道 rank 排序。
+          schema: { $ref: '#/components/schemas/WorkItemViewType' }
         - name: status
           in: query
           style: form
@@ -1645,7 +1597,7 @@ paths:
             maxItems: 3
             items:
               type: string
-              pattern: '^(ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
+              pattern: '^(CONTENT|ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
       responses:
         '200':
           description: 已先按 Project 可见性与筛选条件裁剪，再稳定分页。
@@ -1653,6 +1605,31 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/ProjectWorkItemCursorPage' } } }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      tags: [WorkItems]
+      operationId: createWorkItem
+      summary: 在 Project 中创建带必填类别的工作项
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemCreateRequest' } } }
+      responses:
+        '201':
+          description: 工作项已创建或幂等重放。
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
   /projects/{projectId}/work-item-labels:
@@ -1900,115 +1877,6 @@ paths:
         '412': { $ref: '#/components/responses/VersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
-
-  /contents/{contentId}/work-items:
-    get:
-      tags: [WorkItems]
-      operationId: listContentWorkItems
-      summary: 分页查询 Content 的真实 Work Item
-      description: >-
-        所有条件显式传递；未传筛选和排序时保持事项序号倒序。status、priority、
-        assigneeUserId 与 sort 可重复，sort 按出现顺序组成最多三层排序；Kanban
-        按共享状态分组分别加载，并与其余筛选条件取交集。
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - name: contentId
-          in: path
-          required: true
-          schema: { $ref: '#/components/schemas/Uuid' }
-        - name: page
-          in: query
-          schema: { type: integer, format: int32, minimum: 0, default: 0 }
-        - name: size
-          in: query
-          schema: { type: integer, format: int32, minimum: 1, maximum: 100, default: 20 }
-        - name: view
-          in: query
-          description: TABLE 保持白名单排序；KANBAN 要求单一 status 且固定按持久化 rank 排序。
-          schema: { $ref: '#/components/schemas/ContentViewType' }
-        - name: status
-          in: query
-          style: form
-          explode: true
-          schema:
-            type: array
-            uniqueItems: true
-            items: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
-        - name: q
-          in: query
-          schema: { type: string }
-        - name: priority
-          in: query
-          style: form
-          explode: true
-          schema:
-            type: array
-            uniqueItems: true
-            items: { $ref: '#/components/schemas/WorkItemPriority' }
-        - name: assigneeUserId
-          in: query
-          style: form
-          explode: true
-          schema:
-            type: array
-            uniqueItems: true
-            items: { $ref: '#/components/schemas/Uuid' }
-        - name: dueFrom
-          in: query
-          schema: { type: string, format: date }
-        - name: dueTo
-          in: query
-          schema: { type: string, format: date }
-        - name: updatedAfter
-          in: query
-          schema: { type: string, format: date-time }
-        - name: sort
-          in: query
-          style: form
-          explode: true
-          schema:
-            type: array
-            maxItems: 3
-            items:
-              type: string
-              pattern: '^(ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
-      responses:
-        '200':
-          description: 已先按权限与筛选条件裁剪，再按白名单字段和 id 稳定分页。
-          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
-          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemPage' } } }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
-        '422': { $ref: '#/components/responses/ValidationFailed' }
-    post:
-      tags: [WorkItems]
-      operationId: createWorkItem
-      summary: 在 ACTIVE Content 中创建 Work Item
-      description: Project、Content、type、报告人和模板初始状态均由服务端派生；处理人必须是 ACTIVE Project 成员。
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - name: contentId
-          in: path
-          required: true
-          schema: { $ref: '#/components/schemas/Uuid' }
-        - $ref: '#/components/parameters/XsrfToken'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemCreateRequest' } } }
-      responses:
-        '201':
-          description: Work Item 已创建或幂等重放。
-          headers:
-            Location: { $ref: '#/components/headers/Location' }
-            ETag: { $ref: '#/components/headers/ETag' }
-          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
-        '400': { $ref: '#/components/responses/MalformedRequest' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/ValidationFailed' }
 
   /work-items/{parentWorkItemId}/subitems:
     get:
@@ -2442,6 +2310,38 @@ paths:
       responses:
         '200':
           description: 截止日期已更新或返回幂等重放结果。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-items/{workItemId}/content:
+    patch:
+      tags: [WorkItems]
+      operationId: patchWorkItemContent
+      summary: 切换工作项类别
+      description: 类别切换不改变编号、父子关系、讨论、附件、项目顺序或 Kanban rank。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemContentPatchRequest' } } }
+      responses:
+        '200':
+          description: 类别已切换；相同类别作为无事件幂等成功返回。
           headers: { ETag: { $ref: '#/components/headers/ETag' } }
           content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
         '400': { $ref: '#/components/responses/MalformedRequest' }
@@ -3819,27 +3719,9 @@ components:
         newOwnerUserId: { $ref: '#/components/schemas/Uuid' }
         reason: { type: string, minLength: 10, maxLength: 500 }
 
-    ContentStatus:
-      type: string
-      enum: [ACTIVE, ARCHIVED]
-
-    ContentViewType:
+    WorkItemViewType:
       type: string
       enum: [TABLE, KANBAN]
-
-    ContentTableColumn:
-      type: string
-      enum: [ITEM_NO, TITLE, STATUS, PRIORITY, ASSIGNEE, REPORTER, DESCRIPTION, NOTES,
-        TIMELINE, DUE_DATE, UPDATED_AT]
-
-    ContentSortField:
-      type: string
-      enum: [ITEM_NO, TITLE, STATUS, PRIORITY, ASSIGNEE, REPORTER,
-        TIMELINE_START_DATE, TIMELINE_END_DATE, DUE_DATE, UPDATED_AT]
-
-    ContentSortDirection:
-      type: string
-      enum: [ASC, DESC]
 
     WorkItemPriority:
       type: string
@@ -3963,7 +3845,7 @@ components:
     WorkItemSummary:
       type: object
       additionalProperties: false
-      required: [id, projectId, contentId, itemNo, type, title, statusCode,
+      required: [id, projectId, contentId, itemNo, contentName, contentColorToken, title, statusCode,
         statusCategory, priority, assigneeUserId, assigneeDisplayName, reporterUserId,
         reporterDisplayName, description, notes, timelineStartDate, timelineEndDate,
         dueDate, rowVersion, etag, capabilities, updatedAt]
@@ -3971,8 +3853,9 @@ components:
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
         contentId: { $ref: '#/components/schemas/Uuid' }
+        contentName: { type: string, minLength: 1, maxLength: 80 }
+        contentColorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
         itemNo: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$' }
-        type: { $ref: '#/components/schemas/WorkItemType' }
         title: { type: string, minLength: 1, maxLength: 300 }
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
@@ -3994,7 +3877,7 @@ components:
     WorkItemDetail:
       type: object
       additionalProperties: false
-      required: [id, projectId, contentId, itemNo, type, title, statusCode,
+      required: [id, projectId, contentId, itemNo, contentName, contentColorToken, title, statusCode,
         statusCategory, priority, assigneeUserId, assigneeDisplayName, reporterUserId,
         reporterDisplayName, description, notes, timelineStartDate, timelineEndDate,
         dueDate, rowVersion, etag, capabilities, createdAt, updatedAt, deleted,
@@ -4003,8 +3886,9 @@ components:
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
         contentId: { $ref: '#/components/schemas/Uuid' }
+        contentName: { type: string, minLength: 1, maxLength: 80 }
+        contentColorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
         itemNo: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$' }
-        type: { $ref: '#/components/schemas/WorkItemType' }
         title: { type: string, minLength: 1, maxLength: 300 }
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
@@ -4069,7 +3953,7 @@ components:
     ProjectWorkItemListItem:
       type: object
       additionalProperties: false
-      required: [id, projectId, contentId, contentName, itemNo, type, title, statusCode,
+      required: [id, projectId, contentId, contentName, contentColorToken, itemNo, title, statusCode,
         statusCategory, priority, assigneeUserId, assigneeDisplayName, dueDate, rowVersion,
         etag, capabilities, subitemCount, updatedAt]
       properties:
@@ -4077,8 +3961,8 @@ components:
         projectId: { $ref: '#/components/schemas/Uuid' }
         contentId: { $ref: '#/components/schemas/Uuid' }
         contentName: { type: string, minLength: 1, maxLength: 120 }
+        contentColorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
         itemNo: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$' }
-        type: { $ref: '#/components/schemas/WorkItemType' }
         title: { type: string, minLength: 1, maxLength: 300 }
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
@@ -4120,13 +4004,15 @@ components:
     WorkItemRelationCounterpart:
       type: object
       additionalProperties: false
-      required: [id, projectId, contentId, itemNo, type, title, statusCode, deleted]
+      required: [id, projectId, contentId, itemNo, contentName, contentColorToken,
+        title, statusCode, deleted]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
         contentId: { $ref: '#/components/schemas/Uuid' }
         itemNo: { type: string }
-        type: { type: string }
+        contentName: { type: string }
+        contentColorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
         title: { type: string }
         statusCode: { type: string }
         deleted: { type: boolean, readOnly: true }
@@ -4284,6 +4170,13 @@ components:
       properties:
         dueDate: { type: string, format: date, nullable: true }
 
+    WorkItemContentPatchRequest:
+      type: object
+      additionalProperties: false
+      required: [contentId]
+      properties:
+        contentId: { $ref: '#/components/schemas/Uuid' }
+
     WorkItemUpdateStatus:
       type: string
       enum: [PUBLISHED, EDITED, DELETED]
@@ -4365,8 +4258,9 @@ components:
     WorkItemCreateRequest:
       type: object
       additionalProperties: false
-      required: [title, priority, description, notes]
+      required: [contentId, title, priority, description, notes]
       properties:
+        contentId: { $ref: '#/components/schemas/Uuid' }
         title: { type: string, minLength: 1, maxLength: 300 }
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
@@ -4435,195 +4329,62 @@ components:
         anchorWorkItemId: { type: string, format: uuid, nullable: true }
         resolution: { type: string, minLength: 1, maxLength: 500, nullable: true }
 
-    ContentViewSort:
-      type: object
-      additionalProperties: false
-      required: [field, direction]
-      properties:
-        field: { $ref: '#/components/schemas/ContentSortField' }
-        direction: { $ref: '#/components/schemas/ContentSortDirection' }
-
-    ContentViewFilters:
-      type: object
-      additionalProperties: false
-      required: [query, statusCodes, priorities, assigneeUserIds, dueFrom, dueTo, updatedAfter]
-      properties:
-        query: { type: string, nullable: true }
-        statusCodes:
-          type: array
-          uniqueItems: true
-          items: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
-        priorities:
-          type: array
-          uniqueItems: true
-          items: { $ref: '#/components/schemas/WorkItemPriority' }
-        assigneeUserIds:
-          type: array
-          uniqueItems: true
-          items: { $ref: '#/components/schemas/Uuid' }
-        dueFrom: { type: string, format: date, nullable: true }
-        dueTo: { type: string, format: date, nullable: true }
-        updatedAfter: { type: string, format: date-time, nullable: true }
-
-    ContentTableViewConfig:
-      type: object
-      additionalProperties: false
-      required: [columnOrder, hiddenColumns, sort, filters]
-      properties:
-        columnOrder:
-          type: array
-          uniqueItems: true
-          items: { $ref: '#/components/schemas/ContentTableColumn' }
-        hiddenColumns:
-          type: array
-          uniqueItems: true
-          items: { $ref: '#/components/schemas/ContentTableColumn' }
-        sort:
-          type: array
-          maxItems: 3
-          items: { $ref: '#/components/schemas/ContentViewSort' }
-        filters: { $ref: '#/components/schemas/ContentViewFilters' }
-
-    ContentStatusGroup:
-      type: object
-      additionalProperties: false
-      required: [name, statusCodes]
-      properties:
-        name: { type: string, minLength: 1, maxLength: 80 }
-        statusCodes:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          items: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
-
-    ContentKanbanViewConfig:
-      type: object
-      additionalProperties: false
-      required: [statusGroups]
-      properties:
-        statusGroups:
-          type: array
-          minItems: 1
-          items: { $ref: '#/components/schemas/ContentStatusGroup' }
-
-    ContentViewConfig:
-      type: object
-      additionalProperties: false
-      required: [table, kanban]
-      properties:
-        table: { $ref: '#/components/schemas/ContentTableViewConfig' }
-        kanban: { $ref: '#/components/schemas/ContentKanbanViewConfig' }
-
     Content:
       type: object
       additionalProperties: false
-      required: [id, projectId, code, name, description, workItemType, status, defaultViewType,
-        viewConfig, appliedTemplateKey, appliedTemplateVersion, appliedBlueprintCode,
-        rowVersion, etag, createdAt, createdByUserId, updatedAt, updatedByUserId,
-        archivedAt, archivedByUserId]
+      required: [id, projectId, code, name, colorToken, sortOrder, active,
+        protectedContent, inUse, rowVersion, createdAt, createdByUserId,
+        updatedAt, updatedByUserId]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
         code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         name: { type: string, minLength: 1, maxLength: 80 }
-        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
-        workItemType: { $ref: '#/components/schemas/WorkItemType' }
-        status: { $ref: '#/components/schemas/ContentStatus' }
-        defaultViewType: { $ref: '#/components/schemas/ContentViewType' }
-        viewConfig: { $ref: '#/components/schemas/ContentViewConfig' }
-        appliedTemplateKey: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
-        appliedTemplateVersion: { type: integer, format: int32, minimum: 1 }
-        appliedBlueprintCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        sortOrder: { type: integer, format: int32, minimum: 1 }
+        active: { type: boolean }
+        protectedContent: { type: boolean, readOnly: true }
+        inUse: { type: boolean, readOnly: true }
         rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
-        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
         createdAt: { type: string, format: date-time, readOnly: true }
         createdByUserId: { $ref: '#/components/schemas/Uuid' }
         updatedAt: { type: string, format: date-time, readOnly: true }
         updatedByUserId: { $ref: '#/components/schemas/Uuid' }
-        archivedAt: { type: string, format: date-time, nullable: true, readOnly: true }
-        archivedByUserId: { type: string, format: uuid, nullable: true, readOnly: true }
-
-    ContentBlueprintOption:
-      type: object
-      additionalProperties: false
-      required: [blueprintCode, displayName, workItemType, defaultViewType]
-      properties:
-        blueprintCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
-        displayName: { type: string, minLength: 1, maxLength: 80 }
-        workItemType: { $ref: '#/components/schemas/WorkItemType' }
-        defaultViewType: { $ref: '#/components/schemas/ContentViewType' }
-
-    ContentWorkflowStatusOption:
-      type: object
-      additionalProperties: false
-      required: [statusCode, displayName, statusCategory, colorToken, sortOrder, active,
-        protectedLabel, initial, terminal]
-      properties:
-        statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
-        displayName: { type: string, minLength: 1, maxLength: 80 }
-        statusCategory: { $ref: '#/components/schemas/WorkflowStatusCategory' }
-        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
-        sortOrder: { type: integer, format: int32, minimum: 0 }
-        active: { type: boolean }
-        protectedLabel: { type: boolean }
-        initial: { type: boolean }
-        terminal: { type: boolean }
-
-    ContentPriorityOption:
-      type: object
-      additionalProperties: false
-      required: [priorityCode, displayName, colorToken, sortOrder, active]
-      properties:
-        priorityCode: { $ref: '#/components/schemas/WorkItemPriority' }
-        displayName: { type: string, minLength: 1, maxLength: 80 }
-        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
-        sortOrder: { type: integer, format: int32, minimum: 0 }
-        active: { type: boolean }
 
     ProjectContentCatalog:
       type: object
       additionalProperties: false
-      required: [items, blueprintOptions, workflowStatusOptions, priorityOptions, canCreate,
-        canManageLabels]
+      required: [items, rowVersion, etag, canManage]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/Content' } }
-        blueprintOptions: { type: array, items: { $ref: '#/components/schemas/ContentBlueprintOption' } }
-        workflowStatusOptions: { type: array, items: { $ref: '#/components/schemas/ContentWorkflowStatusOption' } }
-        priorityOptions: { type: array, items: { $ref: '#/components/schemas/ContentPriorityOption' } }
-        canCreate: { type: boolean }
-        canManageLabels: { type: boolean }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+        canManage: { type: boolean, readOnly: true }
 
     ContentCreateRequest:
       type: object
       additionalProperties: false
-      required: [code, name, description, blueprintCode]
+      required: [name, colorToken]
       properties:
-        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         name: { type: string, minLength: 1, maxLength: 80 }
-        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
-        blueprintCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
 
     ContentUpdateRequest:
       type: object
       additionalProperties: false
-      required: [name, description, defaultViewType, viewConfig]
+      required: [name, colorToken, active, sortOrder]
       properties:
-        name: { type: string, minLength: 1, maxLength: 80 }
-        description: { type: string, minLength: 1, maxLength: 500, nullable: true }
-        defaultViewType: { $ref: '#/components/schemas/ContentViewType' }
-        viewConfig: { $ref: '#/components/schemas/ContentViewConfig' }
+        name: { type: string, minLength: 1, maxLength: 80, nullable: true }
+        colorToken:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/WorkItemLabelColorToken' }]
+          nullable: true
+        active: { type: boolean, nullable: true }
+        sortOrder: { type: integer, format: int32, minimum: 1, nullable: true }
 
     ProjectTemplateVersionStatus:
       type: string
       enum: [DRAFT, PUBLISHED, RETIRED]
-
-    WorkItemType:
-      type: string
-      enum: [REQUIREMENT, TASK, DEFECT]
-
-    ProjectTemplateViewType:
-      type: string
-      enum: [TABLE]
 
     WorkflowStatusCategory:
       type: string
@@ -4636,12 +4397,11 @@ components:
     ProjectTemplateContentBlueprint:
       type: object
       additionalProperties: false
-      required: [contentCode, displayName, workItemType, defaultViewType, sortOrder]
+      required: [contentCode, displayName, colorToken, sortOrder]
       properties:
         contentCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         displayName: { type: string, minLength: 1, maxLength: 80 }
-        workItemType: { $ref: '#/components/schemas/WorkItemType' }
-        defaultViewType: { $ref: '#/components/schemas/ProjectTemplateViewType' }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
         sortOrder: { type: integer, format: int32, minimum: 1 }
 
     WorkflowStatusDefinition:
@@ -4696,8 +4456,7 @@ components:
         retiredAt: { type: string, format: date-time, nullable: true, readOnly: true }
         contentBlueprints:
           type: array
-          minItems: 3
-          maxItems: 3
+          minItems: 1
           items: { $ref: '#/components/schemas/ProjectTemplateContentBlueprint' }
         statuses:
           type: array

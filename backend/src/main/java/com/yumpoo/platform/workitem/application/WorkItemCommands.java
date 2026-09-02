@@ -9,7 +9,7 @@ import java.util.UUID;
 public final class WorkItemCommands {
     private WorkItemCommands() {}
 
-    public record Create(CurrentActor actor, UUID contentId, String title, String priority,
+    public record Create(CurrentActor actor, UUID projectId, UUID contentId, String title, String priority,
             UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
             LocalDate timelineEndDate, LocalDate dueDate, UUID idempotencyKey,
             RequestHash requestHash) {}
@@ -42,6 +42,9 @@ public final class WorkItemCommands {
     public record InlineUpdate(CurrentActor actor, UUID workItemId, long expectedVersion,
             String field, String priority, UUID assigneeUserId, LocalDate dueDate,
             UUID idempotencyKey, RequestHash requestHash) {}
+
+    public record ChangeContent(CurrentActor actor, UUID workItemId, long expectedVersion,
+            UUID contentId, UUID idempotencyKey, RequestHash requestHash) {}
 
     public record Delete(CurrentActor actor, UUID workItemId, long expectedVersion,
             String reason, UUID idempotencyKey, RequestHash requestHash) {}

@@ -11,6 +11,7 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.CreateSubitem;
+import com.yumpoo.platform.workitem.application.WorkItemCommands.ChangeContent;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Delete;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.RankMove;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.ProjectOrderMove;
@@ -111,38 +112,18 @@ public final class WorkItemController {
                         CursorPageRequest.of(cursor, limit)));
     }
 
-    @GetMapping("/contents/{contentId}/work-items")
-    ResponseEntity<WorkItemPage> list(@PathVariable UUID contentId,
-            @RequestParam(required = false) String q,
-            @RequestParam(name = "status", required = false) List<String> statuses,
-            @RequestParam(name = "priority", required = false) List<String> priorities,
-            @RequestParam(name = "assigneeUserId", required = false) List<UUID> assigneeUserIds,
-            @RequestParam(required = false) LocalDate dueFrom,
-            @RequestParam(required = false) LocalDate dueTo,
-            @RequestParam(required = false) Instant updatedAfter,
-            @RequestParam(required = false) String view,
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size,
-            HttpServletRequest httpRequest) {
-        String[] sorts = httpRequest.getParameterValues("sort");
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(service.list(actors.requiredActive(), contentId,
-                        new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds, null,
-                                dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts)),
-                        view, OffsetPageRequest.of(page, size)));
-    }
-
-    @PostMapping("/contents/{contentId}/work-items")
-    ResponseEntity<String> create(@PathVariable UUID contentId,
+    @PostMapping("/projects/{projectId}/work-items")
+    ResponseEntity<String> create(@PathVariable UUID projectId,
             @Valid @RequestBody WorkItemCreateRequest body,
             @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
             String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = service.create(new Create(actor, contentId, body.title(),
+        StoredCommandResult stored = service.create(new Create(actor, projectId, body.contentId(), body.title(),
                 body.priority(), body.assigneeUserId(), body.description(), body.notes(),
                 body.timelineStartDate(), body.timelineEndDate(), body.dueDate(), key,
-                hasher.hash("createWorkItem", Map.of("contentId", contentId.toString()),
+                hasher.hash("createWorkItem", Map.of("projectId", projectId.toString(),
+                                "contentId", body.contentId().toString()),
                         objectMapper.valueToTree(body)))).result();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -330,6 +311,24 @@ public final class WorkItemController {
             String idempotencyHeader) {
         return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "DUE_DATE",
                 null, null, body.dueDate(), body);
+    }
+
+    @PatchMapping("/work-items/{workItemId}/content")
+    ResponseEntity<String> patchContent(@PathVariable UUID workItemId,
+            @Valid @RequestBody WorkItemContentPatchRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
+            String idempotencyHeader) {
+        CurrentActor actor = actors.requiredActive();
+        service.find(actor, workItemId);
+        long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        UUID key = keys.parseRequired(idempotencyHeader);
+        StoredCommandResult stored = service.changeContent(new ChangeContent(actor, workItemId,
+                expectedVersion, body.contentId(), key, hasher.hash("changeWorkItemContent",
+                        Map.of("workItemId", workItemId.toString(),
+                                "ifMatch", Long.toString(expectedVersion)),
+                        objectMapper.valueToTree(body)))).result();
+        return storedResponse(stored);
     }
 
     private ResponseEntity<String> inlineUpdate(UUID workItemId, String ifMatchHeader,

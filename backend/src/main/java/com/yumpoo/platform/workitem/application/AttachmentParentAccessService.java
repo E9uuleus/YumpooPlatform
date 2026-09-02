@@ -10,7 +10,6 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemLocator;
 import com.yumpoo.platform.workitem.application.WorkItemUpdateModels.UpdateLocator;
 import com.yumpoo.platform.workitem.domain.Content;
-import com.yumpoo.platform.workitem.domain.ContentStatus;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemUpdate;
 import com.yumpoo.platform.workitem.domain.WorkItemUpdateStatus;
@@ -79,7 +78,7 @@ public class AttachmentParentAccessService {
     private static void requireWritable(ProjectAccessSnapshot project,Content content) {
         if(project.actorAccess()==ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
-        if(project.lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED||content.status()!=ContentStatus.ACTIVE)
+        if(project.lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED)
             throw notWritable();
     }
     private static ApplicationException notFound(){return new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);}

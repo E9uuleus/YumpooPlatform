@@ -31,7 +31,6 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.workitem.domain.Content;
-import com.yumpoo.platform.workitem.domain.ContentStatus;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemUpdate;
 import org.springframework.stereotype.Service;
@@ -125,8 +124,7 @@ public class WorkItemUpdateService {
         String nextCursor = hasMore && !rows.isEmpty()
                 ? cursors.encode(new UpdateCursor(rows.getFirst().createdAt(), rows.getFirst().id()))
                 : null;
-        boolean writable = project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
-                && content.status() == ContentStatus.ACTIVE;
+        boolean writable = project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED;
         boolean owner = project.actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER;
         return new WorkItemUpdatePage(rows.stream()
                 .map(row -> view(row, actor, writable, owner)).toList(), nextCursor);
@@ -137,8 +135,7 @@ public class WorkItemUpdateService {
         ReadContext context = visibleUpdate(actor, updateId);
         WorkItemUpdate update = updates.find(context.project().companyId(), updateId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        boolean writable = context.project().lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
-                && context.content().status() == ContentStatus.ACTIVE;
+        boolean writable = context.project().lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED;
         return view(update, actor, writable,
                 context.project().actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER);
     }
@@ -150,10 +147,6 @@ public class WorkItemUpdateService {
         requireWritable(project.actorAccess());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        if (content.status() != ContentStatus.ACTIVE) {
-            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "CONTENT_ARCHIVED");
-        }
         WorkItem item = workItems.lock(project.companyId(), project.projectId(), locator.contentId(),
                         locator.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
@@ -225,10 +218,6 @@ public class WorkItemUpdateService {
         requireWritable(project.actorAccess());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        if (content.status() != ContentStatus.ACTIVE) {
-            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "CONTENT_ARCHIVED");
-        }
         WorkItem workItem = workItems.lock(project.companyId(), project.projectId(),
                         locator.contentId(), command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
@@ -263,10 +252,6 @@ public class WorkItemUpdateService {
         requireWritable(project.actorAccess());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        if (content.status() != ContentStatus.ACTIVE) {
-            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "CONTENT_ARCHIVED");
-        }
         WorkItem item = workItems.lock(project.companyId(), project.projectId(), locator.contentId(),
                         locator.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));

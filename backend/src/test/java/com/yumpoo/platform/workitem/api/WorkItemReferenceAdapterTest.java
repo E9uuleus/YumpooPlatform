@@ -24,16 +24,17 @@ class WorkItemReferenceAdapterTest {
         UUID workItemId = UUID.randomUUID();
         CurrentActor actor = new CurrentActor(userId, companyId, 0, Set.of());
         WorkItemReferenceService.Reference reference = new WorkItemReferenceService.Reference(
-                workItemId, UUID.randomUUID(), UUID.randomUUID(), "REQ-12",
-                "REQUIREMENT", "公开标题", "IN_PROGRESS", "IN_PROGRESS", true);
+                workItemId, UUID.randomUUID(), UUID.randomUUID(), "需求", "BRIGHT_BLUE",
+                "REQ-12", "公开标题", "IN_PROGRESS", "IN_PROGRESS", true);
         when(service.findVisible(actor, workItemId, false)).thenReturn(Optional.empty());
         when(service.findVisible(actor, workItemId, true)).thenReturn(Optional.of(reference));
 
         assertThat(adapter.findVisible(actor, workItemId)).isEmpty();
         assertThat(adapter.findVisibleIncludingDeleted(actor, workItemId)).contains(
                 new WorkItemReferenceSnapshot(reference.workItemId(), reference.projectId(),
-                        reference.contentId(), reference.itemNo(),
-                        reference.type(), reference.title(), reference.statusCode(),
+                        reference.contentId(), reference.contentName(),
+                        reference.contentColorToken(), reference.itemNo(),
+                        reference.title(), reference.statusCode(),
                         reference.statusCategory(), true));
         verify(service).findVisible(actor, workItemId, false);
         verify(service).findVisible(actor, workItemId, true);

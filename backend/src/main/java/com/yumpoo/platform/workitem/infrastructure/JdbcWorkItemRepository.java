@@ -5,8 +5,7 @@ import com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemLocator;
 import com.yumpoo.platform.workitem.application.WorkItemQuery;
 import com.yumpoo.platform.workitem.application.WorkItemRepository;
 import com.yumpoo.platform.workitem.application.WorkItemSortRanks;
-import com.yumpoo.platform.workitem.domain.ContentWorkItemType;
-import com.yumpoo.platform.workitem.domain.ContentViewType;
+import com.yumpoo.platform.workitem.domain.WorkItemViewType;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemStatusCategory;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -31,7 +30,7 @@ import java.util.UUID;
 @Repository
 public class JdbcWorkItemRepository implements WorkItemRepository {
     private static final String COLUMNS = """
-            id, company_id, project_id, content_id, item_sequence, item_no, type, title,
+            id, company_id, project_id, content_id, item_sequence, item_no, title,
             status_code, status_category, priority, assignee_user_id, reporter_user_id,
             description, notes, timeline_start_date, timeline_end_date, due_date, rank,
             project_sort_key, row_version, created_at, created_by_user_id, updated_at, updated_by_user_id,
@@ -61,14 +60,14 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     public boolean insert(WorkItem item) {
         JdbcClient.StatementSpec statement = jdbc.sql("""
                 INSERT INTO yumpoo.work_item (
-                    id, company_id, project_id, content_id, item_sequence, item_no, type,
+                    id, company_id, project_id, content_id, item_sequence, item_no,
                     title, status_code, status_category, priority, assignee_user_id,
                     reporter_user_id, description, notes, timeline_start_date,
                     timeline_end_date, due_date, rank, project_sort_key, row_version, created_at,
                     created_by_user_id, updated_at, updated_by_user_id, deleted_at,
                     deleted_by_user_id, delete_reason
                 ) VALUES (
-                    :id, :companyId, :projectId, :contentId, :itemSequence, :itemNo, :type,
+                    :id, :companyId, :projectId, :contentId, :itemSequence, :itemNo,
                     :title, :statusCode, :statusCategory, :priority, :assigneeUserId,
                     :reporterUserId, :description, :notes, :timelineStartDate,
                     :timelineEndDate, :dueDate, :rank, :projectSortKey, :rowVersion, :createdAt,
@@ -78,7 +77,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 """).param("id", item.id()).param("companyId", item.companyId())
                 .param("projectId", item.projectId()).param("contentId", item.contentId())
                 .param("itemSequence", item.itemSequence()).param("itemNo", item.itemNo())
-                .param("type", item.type().name()).param("title", item.title())
+                .param("title", item.title())
                 .param("statusCode", item.statusCode())
                 .param("statusCategory", item.statusCategory().name())
                 .param("reporterUserId", item.reporterUserId())
@@ -252,38 +251,57 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
-    public void lockRankLanes(UUID contentId, Collection<String> statuses) {
+    public Optional<WorkItem> changeContent(WorkItem item, long expectedVersion) {
+        return jdbc.sql("""
+                UPDATE yumpoo.work_item
+                   SET content_id=:contentId, row_version=row_version+1,
+                       updated_at=:updatedAt, updated_by_user_id=:updatedByUserId
+                 WHERE company_id=:companyId AND project_id=:projectId AND id=:id
+                   AND deleted_at IS NULL AND row_version=:expectedVersion
+                RETURNING %s
+                """.formatted(COLUMNS))
+                .param("contentId", item.contentId())
+                .param("updatedAt", OffsetDateTime.ofInstant(item.updatedAt(), ZoneOffset.UTC))
+                .param("updatedByUserId", item.updatedByUserId())
+                .param("companyId", item.companyId()).param("projectId", item.projectId())
+                .param("id", item.id()).param("expectedVersion", expectedVersion)
+                .query(JdbcWorkItemRepository::map).optional();
+    }
+
+    @Override
+    public void lockRankLanes(UUID companyId, UUID projectId, Collection<String> statuses) {
         List<String> ordered = statuses.stream().distinct().sorted().toList();
         for (String status : ordered) {
-            jdbc.sql("INSERT INTO yumpoo.work_item_rank_lane (content_id, status_code) "
-                            + "VALUES (:contentId, :statusCode) ON CONFLICT DO NOTHING")
-                    .param("contentId", contentId).param("statusCode", status).update();
+            jdbc.sql("INSERT INTO yumpoo.work_item_rank_lane (project_id, company_id, status_code) "
+                            + "VALUES (:projectId, :companyId, :statusCode) ON CONFLICT DO NOTHING")
+                    .param("projectId", projectId).param("companyId", companyId)
+                    .param("statusCode", status).update();
         }
         jdbc.sql("SELECT status_code FROM yumpoo.work_item_rank_lane "
-                        + "WHERE content_id=:contentId AND status_code IN (:statuses) "
+                        + "WHERE project_id=:projectId AND company_id=:companyId AND status_code IN (:statuses) "
                         + "ORDER BY status_code FOR UPDATE")
-                .param("contentId", contentId).param("statuses", ordered)
+                .param("projectId", projectId).param("companyId", companyId).param("statuses", ordered)
                 .query(String.class).list();
     }
 
     @Override
-    public List<RankedWorkItem> findRankOrder(UUID companyId, UUID projectId, UUID contentId,
+    public List<RankedWorkItem> findRankOrder(UUID companyId, UUID projectId,
             String statusCode) {
         return jdbc.sql("SELECT id, rank FROM yumpoo.work_item WHERE company_id=:companyId "
-                        + "AND project_id=:projectId AND content_id=:contentId "
+                        + "AND project_id=:projectId "
                         + "AND status_code=:statusCode AND deleted_at IS NULL ORDER BY rank ASC, id ASC")
                 .param("companyId", companyId).param("projectId", projectId)
-                .param("contentId", contentId).param("statusCode", statusCode)
+                .param("statusCode", statusCode)
                 .query((rs, row) -> new RankedWorkItem(rs.getObject("id", UUID.class),
                         rs.getString("rank"))).list();
     }
 
     @Override
-    public void rewriteRanks(UUID companyId, UUID projectId, UUID contentId, String statusCode,
+    public void rewriteRanks(UUID companyId, UUID projectId, String statusCode,
             Map<UUID, String> ranks) {
         if (ranks.isEmpty()) return;
         StringBuilder cases = new StringBuilder("CASE id");
-        Map<String, Object> parameters = baseParameters(companyId, projectId, contentId);
+        Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
         List<UUID> ids = new ArrayList<>();
         int index = 0;
         for (Map.Entry<UUID, String> entry : ranks.entrySet()) {
@@ -299,7 +317,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         parameters.put("rankIds", ids);
         JdbcClient.StatementSpec statement = jdbc.sql("UPDATE yumpoo.work_item SET rank="
                 + cases.append(" ELSE rank END").toString()
-                + " WHERE company_id=:companyId AND project_id=:projectId AND content_id=:contentId"
+                + " WHERE company_id=:companyId AND project_id=:projectId"
                 + " AND status_code=:statusCode AND deleted_at IS NULL AND id IN (:rankIds)");
         int updated = bind(statement, parameters).update();
         if (updated != ranks.size()) throw new IllegalStateException("Kanban rank rebalance lost rows");
@@ -476,11 +494,11 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     @Override
     public List<WorkItem> findPage(UUID companyId, UUID projectId, UUID contentId,
-            WorkItemQuery query, WorkItemSortRanks ranks, ContentViewType view,
+            WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
             OffsetPageRequest page) {
         Map<String, Object> parameters = baseParameters(companyId, projectId, contentId);
         String where = where(query, parameters);
-        String orderBy = view == ContentViewType.KANBAN ? "rank ASC, id ASC"
+        String orderBy = view == WorkItemViewType.KANBAN ? "rank ASC, id ASC"
                 : query.sorts().isEmpty() ? "item_sequence DESC, id ASC"
                 : orderBy(query, ranks, parameters);
         parameters.put("limit", page.size());
@@ -501,12 +519,12 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     @Override
     public List<WorkItem> findProjectPage(UUID companyId, UUID projectId,
-            WorkItemQuery query, WorkItemSortRanks ranks, ContentViewType view,
+            WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
             OffsetPageRequest page) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
         String where = where(query, parameters, false);
-        String orderBy = view == ContentViewType.KANBAN
-                ? "updated_at DESC, id ASC" : orderBy(query, ranks, parameters);
+        String orderBy = view == WorkItemViewType.KANBAN
+                ? "rank ASC, id ASC" : orderBy(query, ranks, parameters);
         parameters.put("limit", page.size());
         parameters.put("offset", Math.multiplyExact(page.page(), page.size()));
         JdbcClient.StatementSpec statement = jdbc.sql("SELECT " + COLUMNS
@@ -517,18 +535,17 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     @Override
     public List<WorkItem> findProjectCursorPage(UUID companyId, UUID projectId,
-            WorkItemQuery query, WorkItemSortRanks ranks, ContentViewType view,
+            WorkItemQuery query, WorkItemSortRanks ranks, WorkItemViewType view,
             ProjectCursorAnchor anchor, int limit) {
         Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
         StringBuilder where = new StringBuilder(where(query, parameters, false));
         String orderBy;
-        if (view == ContentViewType.KANBAN) {
-            orderBy = "updated_at DESC, id ASC";
+        if (view == WorkItemViewType.KANBAN) {
+            orderBy = "rank ASC, id ASC";
             if (anchor != null) {
-                where.append(" AND (updated_at < :cursorUpdatedAt OR (updated_at = :cursorUpdatedAt")
+                where.append(" AND (rank > :cursorRank OR (rank = :cursorRank")
                         .append(" AND id > :cursorId))");
-                parameters.put("cursorUpdatedAt",
-                        OffsetDateTime.ofInstant(anchor.updatedAt(), ZoneOffset.UTC));
+                parameters.put("cursorRank", anchor.rank());
                 parameters.put("cursorId", anchor.id());
             }
         } else if (query.sorts().isEmpty()) {
@@ -705,6 +722,8 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         for (WorkItemQuery.Sort sort : query.sorts()) {
             String direction = sort.direction().name();
             switch (sort.field()) {
+                case CONTENT -> addRankedUserOrder(order, parameters, "content_id",
+                        "content", ranks.contents(), direction, index);
                 case ITEM_NO -> order.add("item_sequence " + direction);
                 case TITLE -> order.add("lower(title) " + direction);
                 case STATUS -> addRankedTextOrder(order, parameters, "status_code",
@@ -738,6 +757,14 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         for (WorkItemQuery.Sort sort : query.sorts()) {
             String direction = sort.direction().name();
             switch (sort.field()) {
+                case CONTENT -> {
+                    String expression = rankedUserExpression(parameters, "content_id",
+                            "projectContent", ranks.contents(), index);
+                    terms.add(new SeekTerm(expression, direction, anchor == null ? 0
+                            : ranks.contents().getOrDefault(anchor.contentId(), ranks.contents().size())));
+                    terms.add(new SeekTerm("content_id", "ASC",
+                            anchor == null ? new UUID(0, 0) : anchor.contentId()));
+                }
                 case ITEM_NO -> terms.add(new SeekTerm("item_sequence", direction,
                         anchor == null ? 0L : anchor.itemSequence()));
                 case TITLE -> terms.add(new SeekTerm("lower(title)", direction,
@@ -908,7 +935,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return new WorkItem(rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
                 rs.getObject("project_id", UUID.class), rs.getObject("content_id", UUID.class),
                 rs.getLong("item_sequence"), rs.getString("item_no"),
-                ContentWorkItemType.valueOf(rs.getString("type")), rs.getString("title"),
+                rs.getString("title"),
                 rs.getString("status_code"), WorkItemStatusCategory.valueOf(rs.getString("status_category")),
                 rs.getString("priority"),
                 rs.getObject("assignee_user_id", UUID.class), rs.getObject("reporter_user_id", UUID.class),
