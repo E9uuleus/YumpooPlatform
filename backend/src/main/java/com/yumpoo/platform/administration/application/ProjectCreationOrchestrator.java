@@ -112,7 +112,7 @@ public class ProjectCreationOrchestrator {
                         template.contentBlueprints().stream().map(blueprint ->
                                 new ProjectContentInitialization.Blueprint(
                                         blueprint.contentCode(), blueprint.displayName(),
-                                        blueprint.workItemType(), blueprint.defaultViewType()))
+                                        blueprint.colorToken(), blueprint.sortOrder()))
                                 .toList()));
         appendAudit(project, contents.size(), command);
         appendCreated(project, contents.size(), command.actor());

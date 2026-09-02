@@ -18,8 +18,8 @@ public record ProjectContentInitialization(
     public record Blueprint(
             String contentCode,
             String displayName,
-            String workItemType,
-            String defaultViewType
+            String colorToken,
+            int sortOrder
     ) {
     }
 }

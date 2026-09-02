@@ -1,13 +1,11 @@
 package com.yumpoo.platform.workitem.api;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
-import tools.jackson.databind.JsonNode;
 
 public record ContentUpdateRequest(
-        @NotBlank @Size(max = 80) String name,
-        @Size(min = 1, max = 500) String description,
-        @NotBlank String defaultViewType,
-        @NotNull JsonNode viewConfig
+        @Size(min = 1, max = 80) String name,
+        @Size(min = 2, max = 24) String colorToken,
+        Boolean active,
+        @Positive Integer sortOrder
 ) {}

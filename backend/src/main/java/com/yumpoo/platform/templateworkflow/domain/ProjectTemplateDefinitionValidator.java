@@ -4,10 +4,8 @@ import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.Con
 import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.StatusCategory;
 import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.WorkflowStatus;
 import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.WorkflowTransition;
-import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.WorkItemType;
 
 import java.util.ArrayDeque;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -16,12 +14,16 @@ import java.util.Set;
 public final class ProjectTemplateDefinitionValidator {
 
     public void validateForPublish(ProjectTemplateDefinition definition) {
-        if (definition.contentBlueprints().size() != WorkItemType.values().length
-                || !definition.contentBlueprints().stream()
-                .map(ContentBlueprint::workItemType)
-                .collect(() -> EnumSet.noneOf(WorkItemType.class), Set::add, Set::addAll)
-                .equals(EnumSet.allOf(WorkItemType.class))) {
-            reject("模板必须且只能包含 REQUIREMENT、TASK、DEFECT 三类 Content blueprint");
+        Set<String> contentCodes = new HashSet<>();
+        Set<Integer> contentOrders = new HashSet<>();
+        if (definition.contentBlueprints().isEmpty()) {
+            reject("模板必须至少包含一个工作项类别");
+        }
+        for (ContentBlueprint blueprint : definition.contentBlueprints()) {
+            if (!contentCodes.add(blueprint.contentCode())
+                    || !contentOrders.add(blueprint.sortOrder())) {
+                reject("工作项类别 code 和 sortOrder 必须唯一");
+            }
         }
 
         Map<String, WorkflowStatus> statuses = new HashMap<>();

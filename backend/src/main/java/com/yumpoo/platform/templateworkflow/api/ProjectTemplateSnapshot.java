@@ -30,8 +30,7 @@ public record ProjectTemplateSnapshot(
     public record ContentBlueprint(
             String contentCode,
             String displayName,
-            String workItemType,
-            String defaultViewType,
+            String colorToken,
             int sortOrder
     ) {
     }

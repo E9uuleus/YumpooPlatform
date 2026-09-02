@@ -4,7 +4,6 @@ import java.util.UUID;
 
 public record InitializedContentView(
         UUID contentId,
-        String code,
-        String workItemType
+        String code
 ) {
 }

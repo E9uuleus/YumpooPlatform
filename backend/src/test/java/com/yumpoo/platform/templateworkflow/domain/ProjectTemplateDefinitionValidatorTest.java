@@ -14,10 +14,6 @@ import static com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinit
 import static com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.StatusCategory.IN_PROGRESS;
 import static com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.StatusCategory.TODO;
 import static com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.TemplateKey.RND;
-import static com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.ViewType.TABLE;
-import static com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.WorkItemType.DEFECT;
-import static com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.WorkItemType.REQUIREMENT;
-import static com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.WorkItemType.TASK;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -35,8 +31,8 @@ class ProjectTemplateDefinitionValidatorTest {
     void rejectsMissingBlueprintDuplicateInitialUnknownEndpointAndUnreachableStatus() {
         ProjectTemplateDefinition valid = validDefinition();
 
-        assertInvalid(copy(valid, valid.contentBlueprints().subList(0, 2), valid.statuses(), valid.transitions()),
-                "三类 Content blueprint");
+        assertInvalid(copy(valid, List.of(), valid.statuses(), valid.transitions()),
+                "至少包含一个工作项类别");
 
         List<ProjectTemplateDefinition.WorkflowStatus> duplicateInitial = valid.statuses().stream()
                 .map(status -> status.statusCode().equals("READY")
@@ -81,9 +77,9 @@ class ProjectTemplateDefinitionValidatorTest {
                 RND, 1, "RND_V1", PRODUCT_DEVELOPMENT, "产品研发", DRAFT, 0,
                 null, null,
                 List.of(
-                        new ProjectTemplateDefinition.ContentBlueprint("REQUIREMENTS", "需求", REQUIREMENT, TABLE, 10),
-                        new ProjectTemplateDefinition.ContentBlueprint("TASKS", "任务", TASK, TABLE, 20),
-                        new ProjectTemplateDefinition.ContentBlueprint("DEFECTS", "缺陷", DEFECT, TABLE, 30)),
+                        new ProjectTemplateDefinition.ContentBlueprint("REQUIREMENTS", "需求", "BRIGHT_BLUE", 10),
+                        new ProjectTemplateDefinition.ContentBlueprint("TASKS", "任务", "BRIGHT_GREEN", 20),
+                        new ProjectTemplateDefinition.ContentBlueprint("DEFECTS", "缺陷", "DARK_RED", 30)),
                 List.of(
                         new ProjectTemplateDefinition.WorkflowStatus("BACKLOG", "待规划", TODO, 10, true, false),
                         new ProjectTemplateDefinition.WorkflowStatus("READY", "就绪", IN_PROGRESS, 20, false, false),

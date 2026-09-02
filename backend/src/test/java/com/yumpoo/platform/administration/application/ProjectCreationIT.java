@@ -83,16 +83,16 @@ class ProjectCreationIT {
         assertThat(count("project_membership")).isEqualTo(4);
         assertThat(count("content")).isEqualTo(12);
         assertThat(jdbcClient.sql("""
-                        SELECT code || ':' || work_item_type || ':' || default_view_type || ':'
-                               || view_config::text || ':' || applied_blueprint_code
+                        SELECT code || ':' || name || ':' || color_token || ':' || sort_order || ':'
+                               || active || ':' || protected_content
                           FROM yumpoo.content
                          WHERE project_id = :projectId
                          ORDER BY code
                         """).param("projectId", results.getFirst().result().resourceId())
                 .query(String.class).list()).containsExactly(
-                        "DEFECTS:DEFECT:TABLE:{}:DEFECTS",
-                        "REQUIREMENTS:REQUIREMENT:TABLE:{}:REQUIREMENTS",
-                        "TASKS:TASK:TABLE:{}:TASKS");
+                        "DEFECTS:缺陷:DARK_RED:30:true:true",
+                        "REQUIREMENTS:需求:BRIGHT_BLUE:10:true:true",
+                        "TASKS:任务:BRIGHT_GREEN:20:true:true");
         assertThat(jdbcClient.sql("SELECT customer_name FROM yumpoo.project WHERE project_code = 'RND_PROJECT'")
                 .query(String.class).single()).isEqualTo("Customer");
         assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.platform_role_assignment WHERE role_code = 'PROJECT_OWNER'")

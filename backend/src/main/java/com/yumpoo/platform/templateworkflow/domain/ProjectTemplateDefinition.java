@@ -67,16 +67,6 @@ public record ProjectTemplateDefinition(
         RETIRED
     }
 
-    public enum WorkItemType {
-        REQUIREMENT,
-        TASK,
-        DEFECT
-    }
-
-    public enum ViewType {
-        TABLE
-    }
-
     public enum StatusCategory {
         TODO,
         IN_PROGRESS,
@@ -91,15 +81,13 @@ public record ProjectTemplateDefinition(
     public record ContentBlueprint(
             String contentCode,
             String displayName,
-            WorkItemType workItemType,
-            ViewType defaultViewType,
+            String colorToken,
             int sortOrder
     ) {
         public ContentBlueprint {
             contentCode = requireText(contentCode, "contentCode");
             displayName = requireText(displayName, "displayName");
-            Objects.requireNonNull(workItemType, "workItemType must not be null");
-            Objects.requireNonNull(defaultViewType, "defaultViewType must not be null");
+            colorToken = requireText(colorToken, "colorToken");
             if (sortOrder <= 0) {
                 throw new IllegalArgumentException("sortOrder must be positive");
             }
