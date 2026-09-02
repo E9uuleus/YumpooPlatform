@@ -1245,6 +1245,8 @@ describe('项目级工作项首页', () => {
 
     // 选中优先级单元格
     const priorityBtn = wrapper.find('.monday-priority-cell')
+    expect(priorityBtn.text()).toBe('-')
+    expect(priorityBtn.classes()).toContain('monday-priority-cell--empty')
     await priorityBtn.trigger('click')
     expect(view.selectedCellKey).toBe('item-1:priority')
     expect(priorityBtn.element.closest('td')?.classList.contains('monday-cell--selected')).toBe(true)
@@ -1288,21 +1290,25 @@ describe('项目级工作项首页', () => {
       stopPropagation: vi.fn(),
     } as unknown as PointerEvent)
     expect(view.isResizingDrawer).toBe(true)
+    await nextTick()
+    expect(document.body.querySelector('.work-items-detail-drawer--resizing')).not.toBeNull()
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 400 }))
     expect(view.drawerWidth).toBe(660)
+    expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('660px')
     window.dispatchEvent(new MouseEvent('pointerup'))
     expect(view.isResizingDrawer).toBe(false)
     await nextTick()
+    expect(document.body.querySelector('.work-items-detail-drawer--resizing')).toBeNull()
     expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('660px')
 
-    // 抽屉最小宽度略微增加，且不会被拖到阈值以下
+    // 抽屉在动态单行布局允许的 480px 下限停止缩窄
     view.onDrawerResizePointerDown({
       clientX: 400,
       preventDefault: vi.fn(),
       stopPropagation: vi.fn(),
     } as unknown as PointerEvent)
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 900 }))
-    expect(view.drawerWidth).toBe(440)
+    expect(view.drawerWidth).toBe(480)
     window.dispatchEvent(new MouseEvent('pointerup'))
 
     view.detailOpen = false

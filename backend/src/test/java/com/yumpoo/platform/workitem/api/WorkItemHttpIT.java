@@ -1357,6 +1357,9 @@ class WorkItemHttpIT {
             assertThat(event.has("description")).isFalse();
             assertThat(event.has("notes")).isFalse();
             assertThat(event.path("changedFields").isArray()).isTrue();
+            assertThat(event.has("previousTitle")).isTrue();
+            assertThat(event.has("previousPriority")).isTrue();
+            assertThat(event.has("previousDueDate")).isTrue();
         }
         assertOutboxEventContract("workitem.work_item_fields_changed");
         assertOutboxEventContract("workitem.work_item_assigned");

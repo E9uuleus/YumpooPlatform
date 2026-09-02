@@ -3021,6 +3021,45 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
+  /work-items/{workItemId}/cell-activity:
+    get:
+      tags: [Activity]
+      operationId: listWorkItemCellActivity
+      summary: 查询工作项单元格动态
+      description: 仅返回专用投影切点后的字段白名单动态；游标绑定事项、全部筛选和首次请求时间锚点。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: workItemId, in: path, required: true, schema: { $ref: '#/components/schemas/Uuid' } }
+        - $ref: '#/components/parameters/ActivityCursor'
+        - $ref: '#/components/parameters/ActivitySize'
+        - name: timeRange
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/WorkItemCellActivityTimeRange' }
+        - name: actorUserId
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+        - name: column
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items: { $ref: '#/components/schemas/WorkItemCellActivityColumn' }
+      responses:
+        '200':
+          description: 按 occurredAt、id 倒序的工作项单元格动态及完整投影统计。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemCellActivityPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
 components:
   securitySchemes:
     sessionCookie:
@@ -3081,6 +3120,105 @@ components:
           type: string
           format: date-time
           description: Activity V1 投影开始接收事件的明确切点，更早历史未回填。
+
+    WorkItemCellActivityColumn:
+      type: string
+      enum: [WORK_ITEM_NAME, ASSIGNEE, STATUS, PRIORITY, DUE_DATE, CONTENT]
+
+    WorkItemCellActivityChangeType:
+      type: string
+      enum: [CREATED, ADDED, REMOVED, CHANGED]
+
+    WorkItemCellActivityValueType:
+      type: string
+      enum: [TEXT, MEMBER, LABEL, DATE]
+
+    WorkItemCellActivityTimeRange:
+      type: string
+      enum: [TODAY, YESTERDAY, THIS_WEEK, THIS_MONTH, THIS_YEAR]
+
+    WorkItemCellActivityValue:
+      type: object
+      additionalProperties: false
+      required: [type, referenceId, displayName, colorToken]
+      properties:
+        type: { $ref: '#/components/schemas/WorkItemCellActivityValueType' }
+        referenceId: { type: string, nullable: true }
+        displayName: { type: string, minLength: 1, maxLength: 300 }
+        colorToken: { type: string, nullable: true }
+
+    WorkItemCellActivityEntry:
+      type: object
+      additionalProperties: false
+      required: [id, eventType, actor, occurredAt, column, changeType, beforeValue,
+        afterValue, contentId, contentDisplayName]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        eventType: { type: string, minLength: 3, maxLength: 128 }
+        actor: { $ref: '#/components/schemas/ActivityActor' }
+        occurredAt: { type: string, format: date-time }
+        column: { $ref: '#/components/schemas/WorkItemCellActivityColumn' }
+        changeType: { $ref: '#/components/schemas/WorkItemCellActivityChangeType' }
+        beforeValue:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/WorkItemCellActivityValue' }]
+          nullable: true
+        afterValue:
+          type: object
+          allOf: [{ $ref: '#/components/schemas/WorkItemCellActivityValue' }]
+          nullable: true
+        contentId: { $ref: '#/components/schemas/Uuid' }
+        contentDisplayName: { type: string, minLength: 1, maxLength: 80 }
+
+    WorkItemCellActivityTimeRangeFacet:
+      type: object
+      additionalProperties: false
+      required: [value, count, selected]
+      properties:
+        value: { $ref: '#/components/schemas/WorkItemCellActivityTimeRange' }
+        count: { type: integer, format: int64, minimum: 0 }
+        selected: { type: boolean }
+
+    WorkItemCellActivityActorFacet:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, count, selected]
+      properties:
+        userId: { $ref: '#/components/schemas/Uuid' }
+        displayName: { type: string, minLength: 1, maxLength: 200 }
+        count: { type: integer, format: int64, minimum: 0 }
+        selected: { type: boolean }
+
+    WorkItemCellActivityColumnFacet:
+      type: object
+      additionalProperties: false
+      required: [value, count, selected]
+      properties:
+        value: { $ref: '#/components/schemas/WorkItemCellActivityColumn' }
+        count: { type: integer, format: int64, minimum: 0 }
+        selected: { type: boolean }
+
+    WorkItemCellActivityFacets:
+      type: object
+      additionalProperties: false
+      required: [timeRanges, actors, columns]
+      properties:
+        timeRanges: { type: array, items: { $ref: '#/components/schemas/WorkItemCellActivityTimeRangeFacet' } }
+        actors: { type: array, items: { $ref: '#/components/schemas/WorkItemCellActivityActorFacet' } }
+        columns: { type: array, items: { $ref: '#/components/schemas/WorkItemCellActivityColumnFacet' } }
+
+    WorkItemCellActivityPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, historyStartedAt, facets]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/WorkItemCellActivityEntry' } }
+        nextCursor: { type: string, minLength: 1, maxLength: 2048, nullable: true }
+        historyStartedAt:
+          type: string
+          format: date-time
+          description: 单元格动态专用投影开始接收事件的明确切点，更早历史未回填。
+        facets: { $ref: '#/components/schemas/WorkItemCellActivityFacets' }
 
     Uuid:
       type: string

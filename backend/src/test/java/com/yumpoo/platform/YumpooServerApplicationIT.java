@@ -298,8 +298,18 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47"
         );
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT checksum FROM yumpoo.flyway_schema_history WHERE version = '46'
+                """, Integer.class)).isEqualTo(1108579806);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT indexdef FROM pg_indexes
+                WHERE schemaname = 'yumpoo'
+                  AND indexname = 'idx_work_item_cell_activity_facets'
+                """, String.class))
+                .contains("actor_user_id, column_code")
+                .doesNotContain("content_id");
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT accepted_from IS NOT NULL FROM yumpoo.activity_projection_state
@@ -343,6 +353,7 @@ class YumpooServerApplicationIT {
                 "security_audit_event",
                 "wecom_oauth_attempt",
                 "work_item",
+                "work_item_cell_activity",
                 "work_item_project_counter",
                 "work_item_project_order",
                 "work_item_rank_lane",
@@ -561,7 +572,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v29DatabaseUpgradesThroughV45WithActivityProjection() throws Exception {
+    void v29DatabaseUpgradesThroughV47WithActivityProjection() throws Exception {
         String database = "yumpoo_m213_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -578,8 +589,8 @@ class YumpooServerApplicationIT {
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
             MigrateResult upgraded = latest.migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(16);
-            assertThat(upgraded.targetSchemaVersion).hasToString("45");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(18);
+            assertThat(upgraded.targetSchemaVersion).hasToString("47");
             assertThat(workItemIndexes(jdbcUrl)).contains(
                     "idx_work_item_content_page",
                     "idx_work_item_content_status_page",
@@ -603,7 +614,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v37DatabaseUpgradesForwardThroughV45AndBackfillsBlobRegistry() throws Exception {
+    void v37DatabaseUpgradesForwardThroughV47AndBackfillsBlobRegistry() throws Exception {
         String database = "yumpoo_m217_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -636,8 +647,8 @@ class YumpooServerApplicationIT {
             }
 
             MigrateResult upgraded = migrationFlyway(jdbcUrl, null).migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(8);
-            assertThat(upgraded.targetSchemaVersion).hasToString("45");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(10);
+            assertThat(upgraded.targetSchemaVersion).hasToString("47");
             assertThat(migrationFlyway(jdbcUrl, null).validateWithResult().validationSuccessful).isTrue();
             try (Connection connection=DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(),postgresContainer.getPassword());
@@ -696,6 +707,36 @@ class YumpooServerApplicationIT {
         assertThat(changedValidation.getAllErrorMessages()).containsIgnoringCase("checksum mismatch");
     }
 
+    @Test
+    void v46DatabaseUpgradesToV47ByReplacingOnlyTheFacetIndex() throws Exception {
+        String database = "yumpoo_v47_" + UUID.randomUUID().toString().replace("-", "");
+        Container.ExecResult created = postgresContainer.execInContainer(
+                "createdb", "-U", postgresContainer.getUsername(), database);
+        assertThat(created.getExitCode()).as(created.getStderr()).isZero();
+        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
+                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        try {
+            MigrateResult toV46 = migrationFlyway(jdbcUrl, "46").migrate();
+            assertThat(toV46.targetSchemaVersion).hasToString("46");
+            assertThat(cellActivityFacetIndexDefinition(jdbcUrl))
+                    .contains("actor_user_id, content_id, column_code");
+
+            Flyway latest = migrationFlyway(jdbcUrl, null);
+            MigrateResult upgraded = latest.migrate();
+
+            assertThat(upgraded.migrationsExecuted).isOne();
+            assertThat(upgraded.targetSchemaVersion).hasToString("47");
+            assertThat(latest.validateWithResult().validationSuccessful).isTrue();
+            assertThat(cellActivityFacetIndexDefinition(jdbcUrl))
+                    .contains("actor_user_id, column_code")
+                    .doesNotContain("content_id");
+        } finally {
+            Container.ExecResult dropped = postgresContainer.execInContainer(
+                    "dropdb", "--force", "-U", postgresContainer.getUsername(), database);
+            assertThat(dropped.getExitCode()).as(dropped.getStderr()).isZero();
+        }
+    }
+
     private Flyway checksumProbeFlyway(Path migrationDirectory) {
         String location = "filesystem:"
                 + migrationDirectory.toAbsolutePath().toString().replace('\\', '/');
@@ -727,6 +768,21 @@ class YumpooServerApplicationIT {
                 .baselineOnMigrate(false);
         if (target != null) configuration.target(target);
         return configuration.load();
+    }
+
+    private String cellActivityFacetIndexDefinition(String jdbcUrl) throws Exception {
+        try (Connection connection = DriverManager.getConnection(jdbcUrl,
+                postgresContainer.getUsername(), postgresContainer.getPassword());
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT indexdef
+                     FROM pg_indexes
+                     WHERE schemaname = 'yumpoo'
+                       AND indexname = 'idx_work_item_cell_activity_facets'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            return result.getString("indexdef");
+        }
     }
 
     private void verifyWorkspaceConsolidation(String label, String workspaceValues,
@@ -800,7 +856,7 @@ class YumpooServerApplicationIT {
                 }
                 connection.commit();
             }
-            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("45");
+            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("47");
             try (Connection connection = DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(), postgresContainer.getPassword());
                  Statement statement = connection.createStatement()) {

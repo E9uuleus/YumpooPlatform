@@ -50,6 +50,8 @@ workitem 通过公开只读端口向 administration 报告 `OPEN_WORK_ITEMS`，�
 
 `workitem.work_item_created` v1 兼容增加可选处理人和自然日。每次有效 PATCH 发布 `workitem.work_item_fields_changed`；分配、改派与取消分配另发 assigned/unassigned v1。每次有效状态迁移发布 `workitem.work_item_status_changed` v1，载荷只含 Work Item/Project/Content 引用、编号、标题、类型、前后状态及类别、说明和新版本，不携带 description/notes 正文。普通成员迁移不额外写 Security Audit，Activity 投影仍由 M2-20 交付。普通查询不发布事件。Table 使用 Content 的列顺序和显隐及当前查询；Kanban 保留配置分组但按单状态子泳道分页，不保存第二份卡片数据。
 
+为支持新切点后的单元格动态，`workitem.work_item_fields_changed@v1` 兼容增加可选 `previousTitle`、`previousPriority`、`previousDueDate`，当前生产者固定写入（可空字段以 JSON null 表示）；正文和备注仍严格禁止进入事件。处理人前值继续以 assigned/unassigned 专用事件为真源，状态前值继续以 status-changed 的 from/to 为真源，避免同一事实重复投影。Content 仅作为事件发生时类别快照，不新增工作项跨 Content 移动命令或事件。
+
 删除和恢复分别发布 `workitem.work_item_deleted/restored` v1；删除事件只传播必要标识、状态、优先级、删除事实和新版本，恢复事件传播恢复操作者/时间与新版本，两者都不传播 description、notes 或内部 rank。命令要求 XSRF、强 If-Match 和持久化幂等键；同键同请求精确重放原墓碑/恢复结果且不重复发事件，新键与错误生命周期冲突返回 409。Web 只维护当前页面内存中的多条即时撤销提示，不建立持久回收站；传输失败重试复用原键，409/412 只刷新真源且不自动重提。
 
 ## Alternatives considered

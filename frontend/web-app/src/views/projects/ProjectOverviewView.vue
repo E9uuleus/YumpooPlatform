@@ -172,7 +172,7 @@ const selectedCellKey = ref<string | undefined>(route.query.workItemId ? `${rout
 const TABLE_SELECTION_COLUMN_WIDTH = 48
 const TABLE_EXPAND_COLUMN_WIDTH = 1
 const TABLE_ADD_COLUMN_MIN_WIDTH = 96
-const DRAWER_MIN_WIDTH = 440
+const DRAWER_MIN_WIDTH = 480
 const DRAWER_VIEWPORT_GUTTER = 60
 const drawerWidth = ref(560)
 const isResizingDrawer = ref(false)
@@ -196,11 +196,14 @@ function onDrawerResizePointerDown(event: PointerEvent): void {
     const delta = startX - e.clientX
     const maxWidth = Math.max(DRAWER_MIN_WIDTH, window.innerWidth - DRAWER_VIEWPORT_GUTTER)
     const nextWidth = Math.max(DRAWER_MIN_WIDTH, Math.min(maxWidth, startWidth + delta))
+    if (nextWidth === drawerWidth.value) return
     drawerWidth.value = nextWidth
+    document.body.style.setProperty('--yp-work-items-drawer-width', `${nextWidth}px`)
   }
 
   const onPointerUp = () => {
     isResizingDrawer.value = false
+    scheduleResponsiveTableLayout()
     window.removeEventListener('pointermove', onPointerMove)
     window.removeEventListener('pointerup', onPointerUp)
     window.removeEventListener('pointercancel', onPointerUp)
@@ -597,7 +600,7 @@ function getStatusTone(statusCode: string): string {
 }
 
 function getPriorityPresentation(priority: string | null): { label: string; tone: string } {
-  if (!priority) return { label: '—', tone: 'empty' }
+  if (!priority) return { label: '-', tone: 'empty' }
   const option = priorityOptions.value.find(item => item.code === priority)
   const tokenTone: Record<string, string> = {
     RED: 'urgent', MAGENTA: 'urgent', ORANGE: 'high', AMBER: 'high',
@@ -2018,7 +2021,7 @@ watch(() => route.query.workItemId, value => {
   }
 }, { immediate: true })
 watch(assigneeSearch, scheduleMemberSearch)
-watch([detailOpen, drawerWidth], syncProjectPageScrollLayout, { flush: 'post' })
+watch(detailOpen, syncProjectPageScrollLayout, { flush: 'post' })
 watch(tableRef, () => {
   observeProjectPageResizeTargets()
   scheduleResponsiveTableLayout()
@@ -2726,7 +2729,7 @@ onBeforeUnmount(() => {
       title="工作项详情"
       header-class="work-items-detail-drawer__header"
       modal-class="work-items-drawer-overlay"
-      class="work-items-detail-drawer"
+      :class="['work-items-detail-drawer', { 'work-items-detail-drawer--resizing': isResizingDrawer }]"
       :size="`${drawerWidth}px`"
       @update:model-value="onDetailModelValue"
     >
@@ -4198,6 +4201,10 @@ onBeforeUnmount(() => {
   pointer-events: auto !important;
   box-shadow: -4px 0 24px color-mix(in srgb, var(--yp-text-primary) 12%, transparent) !important;
   overflow: visible !important;
+}
+
+.work-items-detail-drawer--resizing {
+  transition: none !important;
 }
 
 /* 抽屉左侧拖动手柄 */

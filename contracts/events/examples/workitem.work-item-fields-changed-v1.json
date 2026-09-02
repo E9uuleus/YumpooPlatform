@@ -17,14 +17,17 @@
     "contentId": "2b000000-0000-4000-8000-000000000005",
     "itemNo": "PROJECT_CORE-1",
     "title": "完成协作字段",
+    "previousTitle": "实现协作字段",
     "workItemType": "TASK",
     "statusCode": "BACKLOG",
     "statusCategory": "TODO",
     "priority": null,
+    "previousPriority": "HIGH",
     "assigneeUserId": "2b000000-0000-4000-8000-000000000006",
     "timelineStartDate": "2026-08-22",
     "timelineEndDate": "2026-08-29",
     "dueDate": null,
+    "previousDueDate": "2026-08-30",
     "rowVersion": 1,
     "changedFields": ["title", "priority", "assigneeUserId", "description"]
   }

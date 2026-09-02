@@ -486,7 +486,7 @@ public class WorkItemService {
         }
         WorkItem after = workItems.update(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
-        appendFieldsChanged(after, command.actor(), changedFields);
+        appendFieldsChanged(before, after, command.actor(), changedFields);
         appendAssignmentChange(before, after, command.actor());
         return detail(after, people(project.companyId(), List.of(after)), true, statusLabels);
     }
@@ -916,7 +916,7 @@ public class WorkItemService {
                     statusLabels));
         WorkItem after = workItems.update(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
-        appendFieldsChanged(after, command.actor(), changedFields);
+        appendFieldsChanged(before, after, command.actor(), changedFields);
         appendAssignmentChange(before, after, command.actor());
         return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
                 statusLabels));
@@ -1181,9 +1181,12 @@ public class WorkItemService {
                 objectMapper.valueToTree(payload)));
     }
 
-    private void appendFieldsChanged(WorkItem item, CurrentActor actor,
+    private void appendFieldsChanged(WorkItem before, WorkItem item, CurrentActor actor,
             List<String> changedFields) {
         Map<String, Object> payload = commonEventPayload(item);
+        payload.put("previousTitle", before.title());
+        payload.put("previousPriority", before.priority());
+        payload.put("previousDueDate", before.dueDate());
         payload.put("changedFields", changedFields);
         append(FIELDS_CHANGED, item, actor, payload);
     }

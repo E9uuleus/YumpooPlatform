@@ -3,7 +3,7 @@ import type { ProjectMember } from '@yumpoo/api-client'
 import { ElTabPane as ElTabPaneRaw, ElTabs as ElTabsRaw } from 'element-plus'
 import { computed, ref, type DefineComponent } from 'vue'
 import WorkItemDiscussion from './WorkItemDiscussion.vue'
-import ActivityTimeline from './ActivityTimeline.vue'
+import WorkItemCellActivityLog from './WorkItemCellActivityLog.vue'
 import WorkItemRelations from './WorkItemRelations.vue'
 
 interface DiscussionHandle {
@@ -77,7 +77,7 @@ defineExpose({ hasDraft, discardDraft })
       />
     </el-tab-pane>
     <el-tab-pane label="动态" name="activity" lazy>
-      <activity-timeline v-if="tab === 'activity'" :work-item-id="workItemId" compact />
+      <work-item-cell-activity-log v-if="tab === 'activity'" :work-item-id="workItemId" />
     </el-tab-pane>
   </el-tabs>
 </template>

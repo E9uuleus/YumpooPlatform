@@ -34,3 +34,32 @@ export function formatTimestamp(value: Date | string, timezone: string): string 
   const parts = dateParts(value, timezone, true)
   return `${part(parts, 'year')}-${part(parts, 'month')}-${part(parts, 'day')} ${part(parts, 'hour')}:${part(parts, 'minute')}`
 }
+
+/** 中文完整时间戳：YYYY年M月D日 HH:mm（动态时间悬停提示） */
+export function formatChineseTimestamp(value: Date | string, timezone: string): string {
+  const date = toDate(value)
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date).replace(/\s+/, ' ')
+}
+
+/** Monday 风格中文相对时间；now 可注入，便于每分钟刷新及单元测试。 */
+export function formatRelativeTime(value: Date | string, now: Date = new Date()): string {
+  const elapsedSeconds = Math.max(0, Math.floor((now.getTime() - toDate(value).getTime()) / 1000))
+  if (elapsedSeconds < 60) return '刚刚'
+  const minutes = Math.floor(elapsedSeconds / 60)
+  if (minutes < 60) return `${minutes}分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}天前`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}个月前`
+  return `${Math.floor(months / 12)}年前`
+}
