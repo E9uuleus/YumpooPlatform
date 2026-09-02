@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { Filter as FilterIcon, Hide, Search, Sort, User } from '@element-plus/icons-vue'
 import {
-  ContentStatus,
   AttachmentOwnerType,
-  ContentViewType,
+  WorkItemViewType,
   ProjectActorAccess,
   ProjectLifecycle,
   ProjectMembershipStatus,
@@ -47,6 +46,7 @@ import ProjectWorkItemSubitemsTable, {
 } from '../../components/projects/ProjectWorkItemSubitemsTable.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import WorkItemLabelPopoverContent from '../../components/projects/WorkItemLabelPopoverContent.vue'
+import WorkItemContentPopoverContent from '../../components/projects/WorkItemContentPopoverContent.vue'
 import { workItemLabelColorValue } from '../../components/projects/workItemLabelColors'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
@@ -439,7 +439,7 @@ const filteredMembers = computed(() => {
 })
 
 const contentsById = computed(() => new Map((catalog.value?.items ?? []).map(item => [item.id, item])))
-const activeContents = computed(() => (catalog.value?.items ?? []).filter(item => item.status === ContentStatus.Active))
+const activeContents = computed(() => (catalog.value?.items ?? []).filter(item => item.active))
 const workflowStatuses = computed(() => [...(labelCatalog.value?.statuses ?? [])]
   .sort((left, right) => left.sortOrder - right.sortOrder)
   .map(status => ({ ...status, statusCode: status.code })))
@@ -451,11 +451,12 @@ const canCreate = computed(() => Boolean(project.value
   && activeContents.value.length
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
-const detailContent = computed(() => detail.value ? contentsById.value.get(detail.value.contentId) : undefined)
-const canPublishDiscussion = computed(() => Boolean(canCreate.value && detailContent.value?.status === ContentStatus.Active))
+const canPublishDiscussion = computed(() => Boolean(project.value
+  && project.value.lifecycle !== ProjectLifecycle.Archived
+  && (project.value.actorAccess === ProjectActorAccess.Owner
+    || project.value.actorAccess === ProjectActorAccess.Member)))
 const discussionReadOnlyReason = computed(() => {
   if (project.value?.lifecycle === ProjectLifecycle.Archived) return 'Project 已归档，工作项讨论仅可查看。'
-  if (detailContent.value?.status === ContentStatus.Archived) return 'Content 已归档，工作项讨论仅可查看。'
   if (!canPublishDiscussion.value) return '当前角色没有发布讨论的权限。'
   return undefined
 })
@@ -551,7 +552,7 @@ function moveSubitemColumn(source: string, target: string, placement: 'before' |
 }
 
 function contentName(contentId: string): string {
-  return contentsById.value.get(contentId)?.name ?? '未知 Content'
+  return contentsById.value.get(contentId)?.name ?? '未知类别'
 }
 
 function statusLabel(statusCode: string): string {
@@ -783,7 +784,7 @@ async function loadMembers(requestedProjectId: string, revision: number): Promis
 function listRequest(cursor?: string | null) {
   return {
     projectId: projectId.value, limit: 25,
-    view: ContentViewType.Table,
+    view: WorkItemViewType.Table,
     ...(cursor ? { cursor } : {}),
     ...(searchInput.value.trim() ? { q: searchInput.value.trim() } : {}),
     ...(filters.statuses.size ? { status: filters.statuses } : {}),
@@ -864,7 +865,7 @@ async function loadLane(statusCode: string, cursor: string | null = null, revisi
   try {
     const result = await workItemsApi.listProjectWorkItems({
       projectId: projectId.value,
-      view: ContentViewType.Kanban,
+      view: WorkItemViewType.Kanban,
       status: new Set([statusCode]),
       limit: 25,
       ...(cursor ? { cursor } : {}),
@@ -970,10 +971,11 @@ async function createQuick(continueAdding: boolean): Promise<void> {
   error.value = undefined
   try {
     const created = await workItemsApi.createWorkItem({
-      contentId: quickContentId.value,
+      projectId: projectId.value,
       xXSRFTOKEN: csrf,
       idempotencyKey: globalThis.crypto.randomUUID(),
       workItemCreateRequest: {
+        contentId: quickContentId.value,
         title: quickTitle.value.trim(),
         priority: null,
         assigneeUserId: null,
@@ -1077,7 +1079,11 @@ function onLabelsUpdated(next: WorkItemLabelCatalog): void {
   labelCatalog.value = next
 }
 
-function labelPopoverKey(itemId: string, kind: 'status' | 'priority'): string {
+function onContentsUpdated(next: ProjectContentCatalog): void {
+  catalog.value = next
+}
+
+function labelPopoverKey(itemId: string, kind: 'status' | 'priority' | 'content'): string {
   return `${itemId}:${kind}`
 }
 
@@ -1087,7 +1093,7 @@ function setLabelPopoverContentRef(key: string, value: unknown): void {
   else labelPopoverContentRefs.delete(key)
 }
 
-function resetLabelPopoverContent(itemId: string, kind: 'status' | 'priority'): void {
+function resetLabelPopoverContent(itemId: string, kind: 'status' | 'priority' | 'content'): void {
   labelPopoverContentRefs.get(labelPopoverKey(itemId, kind))?.resetEditor()
 }
 
@@ -1147,7 +1153,9 @@ async function transitionItem(item: ProjectWorkItemListItem, statusCode: string)
 
 function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
   const apply = (item: ProjectWorkItemListItem): ProjectWorkItemListItem => item.id !== id ? item : {
-    ...item, statusCode: updatedDetail.statusCode, statusCategory: updatedDetail.statusCategory,
+    ...item, contentId: updatedDetail.contentId, contentName: updatedDetail.contentName,
+    contentColorToken: updatedDetail.contentColorToken,
+    statusCode: updatedDetail.statusCode, statusCategory: updatedDetail.statusCategory,
     priority: updatedDetail.priority,
     assigneeUserId: updatedDetail.assigneeUserId,
     assigneeDisplayName: updatedDetail.assigneeDisplayName,
@@ -1161,7 +1169,7 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
   if (detail.value?.id === id) detail.value = { ...detail.value, ...updatedDetail }
 }
 
-async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate', value: string | Date | null): Promise<boolean> {
+async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null): Promise<boolean> {
   const key = `${item.id}:${field}`
   if (editingCell.value) return false
   const csrf = readCsrfToken()
@@ -1169,12 +1177,15 @@ async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'pri
   editingCell.value = key
   try {
     const common = { workItemId: item.id, xXSRFTOKEN: csrf, ifMatch: item.etag, idempotencyKey: globalThis.crypto.randomUUID() }
-    const updated = field === 'assignee'
+    const updated = field === 'content'
+      ? await workItemsApi.patchWorkItemContent({ ...common, workItemContentPatchRequest: { contentId: value as string } })
+      : field === 'assignee'
       ? await workItemsApi.patchWorkItemAssignee({ ...common, workItemAssigneePatchRequest: { assigneeUserId: value as string | null } })
       : field === 'priority'
         ? await workItemsApi.patchWorkItemPriority({ ...common, workItemPriorityPatchRequest: { priority: value as string | null } })
         : await workItemsApi.patchWorkItemDueDate({ ...common, workItemDueDatePatchRequest: { dueDate: value as Date | null } })
     replaceLightItem(item.id, updated)
+    if (field === 'content') catalog.value = await contentsApi.listProjectContents({ projectId: projectId.value })
     return true
   } catch (reason) {
     error.value = await toApiProblem(reason)
@@ -2295,6 +2306,7 @@ onBeforeUnmount(() => {
                     :columns="visibleSubitemColumns"
                     :column-widths="columnWidths"
                     :active-contents="activeContents"
+                    :content-catalog="catalog"
                     :members="members"
                     :workflow-statuses="workflowStatuses"
                     :priority-options="priorityOptions"
@@ -2307,6 +2319,7 @@ onBeforeUnmount(() => {
                     @updated="replaceLightItem"
                     @open-detail="openDetail"
                     @patch="patchCell"
+                    @contents-updated="onContentsUpdated"
                     @transition="transitionItem"
                     @selection-change="onSubitemSelectionChange"
                     @header-resize="onHeaderDragEnd"
@@ -2437,7 +2450,7 @@ onBeforeUnmount(() => {
                 :column-key="column.key"
                 :width="columnWidths[column.key]"
                 align="center"
-                :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' ? ' monday-block-column' : ''}`"
+                :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' || column.key === 'content' ? ' monday-block-column' : ''}`"
                 :label-class-name="`monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key}${columnResizingKey === column.key ? ' monday-column-resizing' : ''}`"
                 resizable
               >
@@ -2545,7 +2558,35 @@ onBeforeUnmount(() => {
                     </el-popover>
                   </template>
 
-                  <span v-else-if="column.key === 'content'" class="monday-content-label">{{ (scope.row as ProjectWorkItemListItem).contentName }}</span>
+                  <template v-else-if="column.key === 'content'">
+                    <el-popover
+                      placement="bottom"
+                      width="auto"
+                      trigger="click"
+                      popper-class="work-items-label-popover content-popover"
+                      @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'content')"
+                    >
+                      <template #reference>
+                        <button
+                          class="monday-content-label cell-editor-trigger"
+                          :style="labelCellStyle((scope.row as ProjectWorkItemListItem).contentColorToken)"
+                          :disabled="Boolean(editingCell)"
+                          @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'content')"
+                        >
+                          <span>{{ (scope.row as ProjectWorkItemListItem).contentName || '—' }}</span>
+                        </button>
+                      </template>
+                      <work-item-content-popover-content
+                        :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'content'), element)"
+                        :project-id="projectId"
+                        :catalog="catalog"
+                        :current-value="(scope.row as ProjectWorkItemListItem).contentId"
+                        :can-manage="Boolean(catalog?.canManage)"
+                        @select="patchCell(scope.row as ProjectWorkItemListItem, 'content', $event)"
+                        @updated="onContentsUpdated"
+                      />
+                    </el-popover>
+                  </template>
 
                   <template v-else-if="column.key === 'dueDate'">
                     <el-popover placement="bottom" :width="300" trigger="click" popper-class="work-items-popover date-popover">
@@ -2641,14 +2682,16 @@ onBeforeUnmount(() => {
                     :style="{ gridColumn: quickContentColumn }"
                     :disabled="quickCreating"
                     filterable
-                    placeholder="Content"
+                    placeholder="工作项类别"
                   >
                     <el-option
                       v-for="item in activeContents"
                       :key="item.id"
                       :label="item.name"
                       :value="item.id"
-                    />
+                    >
+                      <span class="quick-content-option-pill" :style="labelCellStyle(item.colorToken)">{{ item.name }}</span>
+                    </el-option>
                   </el-select>
                   <el-button
                     class="quick-submit"
@@ -2773,6 +2816,24 @@ onBeforeUnmount(() => {
           >
             <template #details>
               <dl class="detail-list">
+                <div>
+                  <dt>工作项类别</dt>
+                  <dd>
+                    <el-popover placement="bottom" width="auto" trigger="click" popper-class="work-items-label-popover content-popover">
+                      <template #reference>
+                        <button class="detail-content-pill" :style="labelCellStyle(detail.contentColorToken)">{{ detail.contentName || '—' }}</button>
+                      </template>
+                      <work-item-content-popover-content
+                        :project-id="projectId"
+                        :catalog="catalog"
+                        :current-value="detail.contentId"
+                        :can-manage="Boolean(catalog?.canManage)"
+                        @select="patchCell(detail as unknown as ProjectWorkItemListItem, 'content', $event)"
+                        @updated="onContentsUpdated"
+                      />
+                    </el-popover>
+                  </dd>
+                </div>
                 <div><dt>状态</dt><dd>{{ statusLabel(detail.statusCode) }}</dd></div>
                 <div><dt>优先级</dt><dd><yp-priority-badge :priority="detail.priority" /></dd></div>
                 <div>
@@ -3013,7 +3074,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.monday-table.el-table) {
-  --work-item-table-row-height: 36px;
+  --work-item-table-row-height: 54px;
   --work-item-table-header-height: 38px;
   --work-item-sort-overflow-space: 20px;
   --work-item-group-accent: rgb(87, 155, 252);
@@ -3654,9 +3715,50 @@ onBeforeUnmount(() => {
 .monday-priority-cell--empty { background: var(--yp-priority-empty); color: var(--yp-priority-empty-foreground); }
 
 .monday-content-label {
-  color: var(--yp-text-secondary);
+  display: flex;
+  width: calc(100% - 48px);
+  height: 34px;
+  min-width: 0;
+  margin: 10px 24px;
+  padding: 0 16px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: var(--yp-text-inverse);
   font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+.monday-content-label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-content-option-pill,
+.detail-content-pill {
+  display: flex;
+  min-width: 0;
+  height: 34px;
+  padding: 0 16px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: var(--yp-text-inverse);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-content-option-pill { width: 100%; }
+.detail-content-pill { width: min(240px, 100%); cursor: pointer; }
 
 /* 截止日期与超期感叹号警告 */
 .monday-due-date-cell {

@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
+import {
+    WorkItemLabelColorTokenFromJSON,
+    WorkItemLabelColorTokenFromJSONTyped,
+    WorkItemLabelColorTokenToJSON,
+    WorkItemLabelColorTokenToJSONTyped,
+} from './WorkItemLabelColorToken';
+
 /**
  *
  * @export
@@ -23,35 +31,23 @@ export interface ContentCreateRequest {
      * @type {string}
      * @memberof ContentCreateRequest
      */
-    code: string;
-    /**
-     *
-     * @type {string}
-     * @memberof ContentCreateRequest
-     */
     name: string;
     /**
      *
-     * @type {string}
+     * @type {WorkItemLabelColorToken}
      * @memberof ContentCreateRequest
      */
-    description: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ContentCreateRequest
-     */
-    blueprintCode: string;
+    colorToken: WorkItemLabelColorToken;
 }
+
+
 
 /**
  * Check if a given object implements the ContentCreateRequest interface.
  */
 export function instanceOfContentCreateRequest(value: object): value is ContentCreateRequest {
-    if (!('code' in value) || value['code'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('blueprintCode' in value) || value['blueprintCode'] === undefined) return false;
+    if (!('colorToken' in value) || value['colorToken'] === undefined) return false;
     return true;
 }
 
@@ -65,10 +61,8 @@ export function ContentCreateRequestFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
 
-        'code': json['code'],
         'name': json['name'],
-        'description': json['description'],
-        'blueprintCode': json['blueprintCode'],
+        'colorToken': WorkItemLabelColorTokenFromJSON(json['colorToken']),
     };
 }
 
@@ -83,9 +77,7 @@ export function ContentCreateRequestToJSONTyped(value?: ContentCreateRequest | n
 
     return {
 
-        'code': value['code'],
         'name': value['name'],
-        'description': value['description'],
-        'blueprintCode': value['blueprintCode'],
+        'colorToken': WorkItemLabelColorTokenToJSON(value['colorToken']),
     };
 }

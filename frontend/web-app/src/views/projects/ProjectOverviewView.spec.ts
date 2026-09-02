@@ -1,12 +1,11 @@
 import {
-  ContentStatus,
-  ContentViewType,
+  WorkItemViewType,
+  WorkItemLabelColorToken,
   ProjectActorAccess,
   ProjectLifecycle,
   ProjectTemplateKey,
   ProjectType,
   WorkItemStatusCategory,
-  WorkItemType,
   type ProjectContentCatalog,
   type ProjectDetail,
   type WorkItemDetail,
@@ -93,26 +92,19 @@ function project(id: string): ProjectDetail {
 function catalog(): ProjectContentCatalog {
   return {
     items: [{
-      id: 'content-1', projectId: 'project-1', code: 'REQ', name: '产品需求', description: null,
-      workItemType: WorkItemType.Requirement, status: ContentStatus.Active,
-      defaultViewType: ContentViewType.Table, viewConfig: {} as never,
-      appliedTemplateKey: 'rnd', appliedTemplateVersion: 1, appliedBlueprintCode: 'REQ',
-      rowVersion: 1, etag: '"1"', createdAt: new Date(), createdByUserId: 'owner-1',
-      updatedAt: new Date(), updatedByUserId: 'owner-1', archivedAt: null, archivedByUserId: null,
+      id: 'content-1', projectId: 'project-1', code: 'REQ', name: '产品需求',
+      colorToken: WorkItemLabelColorToken.BrightBlue, sortOrder: 10, active: true,
+      protectedContent: true, inUse: true,
+      rowVersion: 1, createdAt: new Date(), createdByUserId: 'owner-1',
+      updatedAt: new Date(), updatedByUserId: 'owner-1',
     }],
-    blueprintOptions: [],
-    workflowStatusOptions: [
-      { statusCode: 'BACKLOG', displayName: '待开始', statusCategory: 'TODO', sortOrder: 1, initial: true, terminal: false },
-      { statusCode: 'DONE', displayName: '已完成', statusCategory: 'DONE', sortOrder: 2, initial: false, terminal: true },
-    ] as never,
-    priorityOptions: [], canManageLabels: true,
-    canCreate: true,
+    rowVersion: 1, etag: '"1"', canManage: true,
   }
 }
 
 function item(id = 'item-1'): ProjectWorkItemListItem {
   return {
-    id, projectId: 'project-1', contentId: 'content-1', contentName: '产品需求', itemNo: 'WI-1', type: WorkItemType.Requirement,
+    id, projectId: 'project-1', contentId: 'content-1', contentName: '产品需求', contentColorToken: WorkItemLabelColorToken.BrightBlue, itemNo: 'WI-1',
     title: '实现项目工作项首页', statusCode: 'BACKLOG', statusCategory: WorkItemStatusCategory.Todo,
     priority: null, assigneeUserId: null, assigneeDisplayName: null,
     dueDate: null, rowVersion: 1, etag: '"1"',
@@ -199,7 +191,7 @@ describe('项目级工作项首页', () => {
     expect(wrapper.get('.work-item-link').text()).toBe('实现项目工作项首页')
     expect(wrapper.find('.work-item-code-text').exists()).toBe(false)
     expect(state.listProjectWorkItems).toHaveBeenCalledWith(expect.objectContaining({
-      projectId: 'project-1', view: ContentViewType.Table,
+      projectId: 'project-1', view: WorkItemViewType.Table,
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
 
@@ -694,7 +686,7 @@ describe('项目级工作项首页', () => {
     await flushPromises()
     expect(state.push).toHaveBeenCalledWith({ query: { view: 'kanban' } })
     expect(state.listProjectWorkItems).toHaveBeenCalledWith(expect.objectContaining({
-      view: ContentViewType.Kanban,
+      view: WorkItemViewType.Kanban,
       status: new Set(['BACKLOG']),
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
@@ -784,8 +776,10 @@ describe('项目级工作项首页', () => {
     await input.trigger('keydown', { key: 'Enter' })
     expect(state.createWorkItem).toHaveBeenCalledTimes(1)
     expect(state.createWorkItem).toHaveBeenCalledWith(expect.objectContaining({
-      contentId: 'content-1',
-      workItemCreateRequest: expect.objectContaining({ title: '快速新增事项', priority: null }),
+      projectId: 'project-1',
+      workItemCreateRequest: expect.objectContaining({
+        contentId: 'content-1', title: '快速新增事项', priority: null,
+      }),
     }))
 
     resolveCreate?.({ ...item('created'), itemNo: 'WI-2' } as unknown as WorkItemDetail)
@@ -827,7 +821,7 @@ describe('项目级工作项首页', () => {
 
   it('没有 ACTIVE Content 时禁用快速添加', async () => {
     const archivedCatalog = catalog()
-    archivedCatalog.items[0]!.status = ContentStatus.Archived
+    archivedCatalog.items[0]!.active = false
     state.listProjectContents.mockResolvedValue(archivedCatalog)
     const wrapper = mountView()
     await flushPromises()

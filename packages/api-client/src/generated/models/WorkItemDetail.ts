@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
+import {
+    WorkItemLabelColorTokenFromJSON,
+    WorkItemLabelColorTokenFromJSONTyped,
+    WorkItemLabelColorTokenToJSON,
+    WorkItemLabelColorTokenToJSONTyped,
+} from './WorkItemLabelColorToken';
 import type { WorkItemCapabilities } from './WorkItemCapabilities';
 import {
     WorkItemCapabilitiesFromJSON,
@@ -26,13 +33,6 @@ import {
     WorkItemStatusCategoryToJSON,
     WorkItemStatusCategoryToJSONTyped,
 } from './WorkItemStatusCategory';
-import type { WorkItemType } from './WorkItemType';
-import {
-    WorkItemTypeFromJSON,
-    WorkItemTypeFromJSONTyped,
-    WorkItemTypeToJSON,
-    WorkItemTypeToJSONTyped,
-} from './WorkItemType';
 
 /**
  *
@@ -63,13 +63,19 @@ export interface WorkItemDetail {
      * @type {string}
      * @memberof WorkItemDetail
      */
-    itemNo: string;
+    contentName: string;
     /**
      *
-     * @type {WorkItemType}
+     * @type {WorkItemLabelColorToken}
      * @memberof WorkItemDetail
      */
-    type: WorkItemType;
+    contentColorToken: WorkItemLabelColorToken;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemDetail
+     */
+    itemNo: string;
     /**
      *
      * @type {string}
@@ -213,8 +219,9 @@ export function instanceOfWorkItemDetail(value: object): value is WorkItemDetail
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('projectId' in value) || value['projectId'] === undefined) return false;
     if (!('contentId' in value) || value['contentId'] === undefined) return false;
+    if (!('contentName' in value) || value['contentName'] === undefined) return false;
+    if (!('contentColorToken' in value) || value['contentColorToken'] === undefined) return false;
     if (!('itemNo' in value) || value['itemNo'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('title' in value) || value['title'] === undefined) return false;
     if (!('statusCode' in value) || value['statusCode'] === undefined) return false;
     if (!('statusCategory' in value) || value['statusCategory'] === undefined) return false;
@@ -253,8 +260,9 @@ export function WorkItemDetailFromJSONTyped(json: any, ignoreDiscriminator: bool
         'id': json['id'],
         'projectId': json['projectId'],
         'contentId': json['contentId'],
+        'contentName': json['contentName'],
+        'contentColorToken': WorkItemLabelColorTokenFromJSON(json['contentColorToken']),
         'itemNo': json['itemNo'],
-        'type': WorkItemTypeFromJSON(json['type']),
         'title': json['title'],
         'statusCode': json['statusCode'],
         'statusCategory': WorkItemStatusCategoryFromJSON(json['statusCategory']),
@@ -294,8 +302,9 @@ export function WorkItemDetailToJSONTyped(value?: Omit<WorkItemDetail, 'rowVersi
         'id': value['id'],
         'projectId': value['projectId'],
         'contentId': value['contentId'],
+        'contentName': value['contentName'],
+        'contentColorToken': WorkItemLabelColorTokenToJSON(value['contentColorToken']),
         'itemNo': value['itemNo'],
-        'type': WorkItemTypeToJSON(value['type']),
         'title': value['title'],
         'statusCode': value['statusCode'],
         'statusCategory': WorkItemStatusCategoryToJSON(value['statusCategory']),

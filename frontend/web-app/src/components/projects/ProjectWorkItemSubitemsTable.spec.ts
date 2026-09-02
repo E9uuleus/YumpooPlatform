@@ -1,6 +1,6 @@
 import {
   WorkItemStatusCategory,
-  WorkItemType,
+  WorkItemLabelColorToken,
   type ProjectWorkItemListItem,
   type WorkItemDetail,
 } from '@yumpoo/api-client'
@@ -26,7 +26,8 @@ vi.mock('../../api/client', () => ({
 function item(id: string, contentId = 'content-1'): ProjectWorkItemListItem {
   return {
     id, projectId: 'project-1', contentId, contentName: contentId === 'content-1' ? '产品需求' : '任务',
-    itemNo: id.toUpperCase(), type: WorkItemType.Requirement, title: id,
+    contentColorToken: contentId === 'content-1' ? WorkItemLabelColorToken.BrightBlue : WorkItemLabelColorToken.BrightGreen,
+    itemNo: id.toUpperCase(), title: id,
     statusCode: 'BACKLOG', statusCategory: WorkItemStatusCategory.Todo,
     priority: null, assigneeUserId: null, assigneeDisplayName: null, dueDate: null,
     subitemCount: 0, rowVersion: 1, etag: '"1"', updatedAt: new Date('2026-08-25T01:00:00Z'),
@@ -54,8 +55,8 @@ function mountTable(items = [item('child-1'), item('child-2')]) {
         content: 150, dueDate: 140, updatedAt: 170,
       },
       activeContents: [
-        { id: 'content-1', name: '产品需求' },
-        { id: 'content-2', name: '任务' },
+        { id: 'content-1', name: '产品需求', colorToken: WorkItemLabelColorToken.BrightBlue },
+        { id: 'content-2', name: '任务', colorToken: WorkItemLabelColorToken.BrightGreen },
       ],
       members: [], workflowStatuses: [], priorityOptions: [], canCreate: true, editingCell: false,
     },

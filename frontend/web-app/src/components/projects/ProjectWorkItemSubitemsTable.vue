@@ -6,6 +6,7 @@ import {
   type WorkItemLabelColorToken,
   type WorkItemDetail,
   type WorkItemLabelCatalog,
+  type ProjectContentCatalog,
 } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -26,6 +27,7 @@ import InlineProblem from '../InlineProblem.vue'
 import YpAssignee from '../yp/YpAssignee.vue'
 import MondayColumnQuickSort from './MondayColumnQuickSort.vue'
 import WorkItemLabelPopoverContent from './WorkItemLabelPopoverContent.vue'
+import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
 import { workItemLabelColorValue } from './workItemLabelColors'
 
 export interface ProjectWorkItemSubitemSortRule {
@@ -38,7 +40,7 @@ export interface ProjectWorkItemSubitemColumn {
   label: string
 }
 
-interface ContentOption { id: string; name: string }
+interface ContentOption { id: string; name: string; colorToken: WorkItemLabelColorToken }
 interface StatusOption {
   statusCode: string
   displayName: string
@@ -65,6 +67,7 @@ const props = defineProps<{
   columns: ProjectWorkItemSubitemColumn[]
   columnWidths: Record<ProjectWorkItemSubitemColumn['key'], number>
   activeContents: ContentOption[]
+  contentCatalog?: ProjectContentCatalog | undefined
   members: ProjectMember[]
   workflowStatuses: StatusOption[]
   priorityOptions: PriorityOption[]
@@ -83,7 +86,8 @@ const emit = defineEmits<{
   created: [parent: ProjectWorkItemListItem]
   updated: [id: string, detail: WorkItemDetail]
   openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion']
-  patch: [item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate', value: string | Date | null]
+  patch: [item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null]
+  contentsUpdated: [catalog: ProjectContentCatalog]
   transition: [item: ProjectWorkItemListItem, statusCode: string]
   selectionChange: [parentId: string, rows: ProjectWorkItemListItem[]]
   headerResize: [newWidth: number, oldWidth: number, column: { label: string }]
@@ -294,9 +298,13 @@ function openItem(raw: unknown, tab: 'details' | 'discussion'): void {
   emit('openDetail', row(raw), tab)
 }
 
-function patchItem(raw: unknown, field: 'assignee' | 'priority' | 'dueDate',
+function patchItem(raw: unknown, field: 'assignee' | 'priority' | 'dueDate' | 'content',
   value: string | Date | null): void {
   emit('patch', row(raw), field, value)
+}
+
+function labelCellStyle(colorToken?: string): CSSProperties {
+  return { backgroundColor: workItemLabelColorValue(colorToken), color: 'var(--yp-text-inverse)' }
 }
 
 function transitionItem(raw: unknown, statusCode: string): void {
@@ -345,7 +353,7 @@ function columnBodyClass(column: ProjectWorkItemSubitemColumn): string {
   const classes = column.key === 'title'
     ? ['monday-title-column', 'subitem-title-column']
     : ['monday-movable-column', `monday-column--${column.key}`, 'subitem-movable-column']
-  if (column.key === 'status' || column.key === 'priority') {
+  if (column.key === 'status' || column.key === 'priority' || column.key === 'content') {
     classes.push('monday-block-column', 'subitem-block-column')
   }
   return classes.join(' ')
@@ -770,7 +778,21 @@ onBeforeUnmount(() => {
               />
             </el-popover>
 
-            <span v-else-if="column.key === 'content'">{{ scope.row.contentName }}</span>
+            <el-popover v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click">
+              <template #reference>
+                <button class="subitem-content-pill" :style="labelCellStyle(scope.row.contentColorToken)" :disabled="editingCell">
+                  {{ scope.row.contentName || '—' }}
+                </button>
+              </template>
+              <work-item-content-popover-content
+                :project-id="projectId"
+                :catalog="contentCatalog"
+                :current-value="scope.row.contentId"
+                :can-manage="Boolean(contentCatalog?.canManage)"
+                @select="patchItem(scope.row, 'content', $event)"
+                @updated="emit('contentsUpdated', $event)"
+              />
+            </el-popover>
 
             <el-popover v-else-if="column.key === 'dueDate'" placement="bottom" :width="300" trigger="click">
               <template #reference>
@@ -835,8 +857,10 @@ onBeforeUnmount(() => {
               aria-label="子项名称；Enter 创建，Shift+Enter 创建后继续"
               @keydown="onQuickKeydown"
             />
-            <el-select v-model="quickContentId" class="subitem-quick-content" filterable :disabled="quickCreating" placeholder="Content">
-              <el-option v-for="content in activeContents" :key="content.id" :label="content.name" :value="content.id" />
+            <el-select v-model="quickContentId" class="subitem-quick-content" filterable :disabled="quickCreating" placeholder="工作项类别">
+              <el-option v-for="content in activeContents" :key="content.id" :label="content.name" :value="content.id">
+                <span class="subitem-content-option" :style="labelCellStyle(content.colorToken)">{{ content.name }}</span>
+              </el-option>
             </el-select>
             <el-button class="subitem-quick-submit" type="primary" :loading="quickCreating" :disabled="!quickTitle.trim() || !quickContentId" @click="createQuick(false)">添加</el-button>
           </div>
@@ -859,7 +883,7 @@ onBeforeUnmount(() => {
   --subitem-hierarchy-corner-radius: var(--work-item-hierarchy-corner-radius, var(--subitem-hierarchy-bar-width));
   --subitem-add-row-accent: rgba(87, 155, 252, 0.5);
   --subitem-table-header-height: 38px;
-  --subitem-table-row-height: 36px;
+  --subitem-table-row-height: 54px;
   --subitem-table-empty-height: 60px;
   --subitem-table-quick-height: var(--subitem-table-row-height);
   position: relative;
@@ -1014,6 +1038,32 @@ onBeforeUnmount(() => {
 :deep(.monday-subitem-table td.subitem-block-column > .cell) {
   height: var(--subitem-table-row-height);
   padding: 0;
+}
+.subitem-content-pill {
+  display: flex;
+  width: calc(100% - 48px);
+  height: 34px;
+  min-width: 0;
+  margin: 10px 24px;
+  padding: 0 16px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subitem-content-option {
+  display: flex;
+  width: 100%;
+  height: 34px;
+  padding: 0 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  box-sizing: border-box;
 }
 :deep(.monday-subitem-table th.subitem-add-column-header),
 :deep(.monday-subitem-table td.subitem-add-column) {

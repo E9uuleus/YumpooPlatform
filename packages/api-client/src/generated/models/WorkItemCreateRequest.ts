@@ -19,6 +19,12 @@ import { mapValues } from '../runtime';
  */
 export interface WorkItemCreateRequest {
     /**
+     * 不透明 UUID；客户端不得从值中推导业务语义。
+     * @type {string}
+     * @memberof WorkItemCreateRequest
+     */
+    contentId: string;
+    /**
      *
      * @type {string}
      * @memberof WorkItemCreateRequest
@@ -72,6 +78,7 @@ export interface WorkItemCreateRequest {
  * Check if a given object implements the WorkItemCreateRequest interface.
  */
 export function instanceOfWorkItemCreateRequest(value: object): value is WorkItemCreateRequest {
+    if (!('contentId' in value) || value['contentId'] === undefined) return false;
     if (!('title' in value) || value['title'] === undefined) return false;
     if (!('priority' in value) || value['priority'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
@@ -89,6 +96,7 @@ export function WorkItemCreateRequestFromJSONTyped(json: any, ignoreDiscriminato
     }
     return {
 
+        'contentId': json['contentId'],
         'title': json['title'],
         'priority': json['priority'],
         ...(json['assigneeUserId'] === undefined ? {} : { 'assigneeUserId': json['assigneeUserId'] }),
@@ -111,6 +119,7 @@ export function WorkItemCreateRequestToJSONTyped(value?: WorkItemCreateRequest |
 
     return {
 
+        'contentId': value['contentId'],
         'title': value['title'],
         'priority': value['priority'],
         'assigneeUserId': value['assigneeUserId'],

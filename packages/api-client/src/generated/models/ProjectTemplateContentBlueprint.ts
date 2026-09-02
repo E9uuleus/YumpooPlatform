@@ -12,20 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
-import type { ProjectTemplateViewType } from './ProjectTemplateViewType';
+import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
 import {
-    ProjectTemplateViewTypeFromJSON,
-    ProjectTemplateViewTypeFromJSONTyped,
-    ProjectTemplateViewTypeToJSON,
-    ProjectTemplateViewTypeToJSONTyped,
-} from './ProjectTemplateViewType';
-import type { WorkItemType } from './WorkItemType';
-import {
-    WorkItemTypeFromJSON,
-    WorkItemTypeFromJSONTyped,
-    WorkItemTypeToJSON,
-    WorkItemTypeToJSONTyped,
-} from './WorkItemType';
+    WorkItemLabelColorTokenFromJSON,
+    WorkItemLabelColorTokenFromJSONTyped,
+    WorkItemLabelColorTokenToJSON,
+    WorkItemLabelColorTokenToJSONTyped,
+} from './WorkItemLabelColorToken';
 
 /**
  *
@@ -47,16 +40,10 @@ export interface ProjectTemplateContentBlueprint {
     displayName: string;
     /**
      *
-     * @type {WorkItemType}
+     * @type {WorkItemLabelColorToken}
      * @memberof ProjectTemplateContentBlueprint
      */
-    workItemType: WorkItemType;
-    /**
-     *
-     * @type {ProjectTemplateViewType}
-     * @memberof ProjectTemplateContentBlueprint
-     */
-    defaultViewType: ProjectTemplateViewType;
+    colorToken: WorkItemLabelColorToken;
     /**
      *
      * @type {number}
@@ -73,8 +60,7 @@ export interface ProjectTemplateContentBlueprint {
 export function instanceOfProjectTemplateContentBlueprint(value: object): value is ProjectTemplateContentBlueprint {
     if (!('contentCode' in value) || value['contentCode'] === undefined) return false;
     if (!('displayName' in value) || value['displayName'] === undefined) return false;
-    if (!('workItemType' in value) || value['workItemType'] === undefined) return false;
-    if (!('defaultViewType' in value) || value['defaultViewType'] === undefined) return false;
+    if (!('colorToken' in value) || value['colorToken'] === undefined) return false;
     if (!('sortOrder' in value) || value['sortOrder'] === undefined) return false;
     return true;
 }
@@ -91,8 +77,7 @@ export function ProjectTemplateContentBlueprintFromJSONTyped(json: any, ignoreDi
 
         'contentCode': json['contentCode'],
         'displayName': json['displayName'],
-        'workItemType': WorkItemTypeFromJSON(json['workItemType']),
-        'defaultViewType': ProjectTemplateViewTypeFromJSON(json['defaultViewType']),
+        'colorToken': WorkItemLabelColorTokenFromJSON(json['colorToken']),
         'sortOrder': json['sortOrder'],
     };
 }
@@ -110,8 +95,7 @@ export function ProjectTemplateContentBlueprintToJSONTyped(value?: ProjectTempla
 
         'contentCode': value['contentCode'],
         'displayName': value['displayName'],
-        'workItemType': WorkItemTypeToJSON(value['workItemType']),
-        'defaultViewType': ProjectTemplateViewTypeToJSON(value['defaultViewType']),
+        'colorToken': WorkItemLabelColorTokenToJSON(value['colorToken']),
         'sortOrder': value['sortOrder'],
     };
 }
