@@ -14,13 +14,11 @@ import {
   ElInput,
   ElLoading,
   ElMessage,
-  ElOption as ElOptionRaw,
   ElPopover,
-  ElSelect as ElSelectRaw,
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties, type DefineComponent } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, type CSSProperties } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
@@ -77,8 +75,6 @@ const props = defineProps<{
 }>()
 
 const vLoading = ElLoading.directive
-const ElOption = ElOptionRaw as unknown as DefineComponent
-const ElSelect = ElSelectRaw as unknown as DefineComponent
 
 const emit = defineEmits<{
   retry: []
@@ -96,7 +92,8 @@ const emit = defineEmits<{
 
 const quickOpen = ref(false)
 const quickTitle = ref('')
-const quickContentId = ref(props.parent.contentId)
+const defaultContentId = computed(() => props.activeContents.find(content => content.id === props.parent.contentId)?.id
+  ?? props.activeContents[0]?.id)
 const quickCreating = ref(false)
 const quickError = ref<ApiProblem>()
 const quickTitleInput = ref<{ focus: () => void }>()
@@ -125,10 +122,6 @@ const COLUMN_DRAG_POINTER_THRESHOLD = 5
 const COLUMN_DRAG_TILT_DEGREES = 1
 const COLUMN_RESIZE_HANDLE_WIDTH = 8
 const SUBITEM_ADD_COLUMN_MIN_WIDTH = 96
-
-watch(() => props.parent.contentId, value => {
-  if (!quickOpen.value) quickContentId.value = value
-})
 
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -244,7 +237,7 @@ async function saveSortedOrder(): Promise<void> {
 }
 
 async function createQuick(continueAdding: boolean): Promise<void> {
-  if (quickCreating.value || !quickTitle.value.trim() || !quickContentId.value) return
+  if (quickCreating.value || !quickTitle.value.trim() || !defaultContentId.value) return
   const csrf = readCsrfToken()
   if (!csrf) { quickError.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
   quickCreating.value = true
@@ -255,7 +248,7 @@ async function createQuick(continueAdding: boolean): Promise<void> {
       xXSRFTOKEN: csrf,
       idempotencyKey: globalThis.crypto.randomUUID(),
       workItemSubitemCreateRequest: {
-        contentId: quickContentId.value,
+        contentId: defaultContentId.value,
         title: quickTitle.value.trim(),
         priority: null,
         assigneeUserId: null,
@@ -277,9 +270,8 @@ async function createQuick(continueAdding: boolean): Promise<void> {
 }
 
 function openQuick(): void {
-  if (!props.canCreate) return
+  if (!props.canCreate || !defaultContentId.value) return
   quickOpen.value = true
-  quickContentId.value = props.parent.contentId
   void nextTick(() => quickTitleInput.value?.focus())
 }
 
@@ -468,7 +460,8 @@ function columnDragStyle(columnKey?: string): CSSProperties {
   if (index < 0) return {}
   if (columnKey === draggedKey) return { opacity: 0, pointerEvents: 'none' }
 
-  const draggedWidth = props.columnWidths[draggedKey as ProjectWorkItemSubitemColumn['key']]
+  const draggedWidth = columnPointerCandidate?.headerRects[from]?.width
+    || props.columnWidths[draggedKey as ProjectWorkItemSubitemColumn['key']]
   if (from < dropIndex && index > from && index < dropIndex) {
     return { transform: `translateX(-${draggedWidth}px)` }
   }
@@ -478,12 +471,12 @@ function columnDragStyle(columnKey?: string): CSSProperties {
   return { transform: 'translateX(0px)' }
 }
 
-function subitemCellStyle({ column }: { column: { columnKey?: string } }): CSSProperties {
-  return columnDragStyle(column.columnKey)
+function subitemCellStyle({ column }: { column: { property?: string } }): CSSProperties {
+  return columnDragStyle(column.property)
 }
 
-function subitemHeaderCellStyle({ column }: { column: { columnKey?: string } }): CSSProperties {
-  return columnDragStyle(column.columnKey)
+function subitemHeaderCellStyle({ column }: { column: { property?: string } }): CSSProperties {
+  return columnDragStyle(column.property)
 }
 
 function movableHeaderCells(): HTMLTableCellElement[] {
@@ -659,7 +652,10 @@ onBeforeUnmount(() => {
         :data="items"
         row-key="id"
         class="monday-subitem-table"
-        :class="{ 'monday-subitem-table--empty': !loading && !error && !items.length }"
+        :class="{
+          'monday-subitem-table--empty': !loading && !error && !items.length,
+          'monday-subitem-table--column-dragging': columnDraggingKey,
+        }"
         empty-text="暂无子项，可在下方快速添加"
         border
         :cell-style="subitemCellStyle"
@@ -675,11 +671,12 @@ onBeforeUnmount(() => {
           class-name="subitem-selection-column"
           label-class-name="subitem-selection-column"
         />
+        <!-- 与主表一致，用可响应的 prop 标识当前位置的字段。 -->
         <el-table-column
-          v-for="column in columns"
-          :key="column.key"
+          v-for="(column, columnIndex) in columns"
+          :key="columnIndex"
           :label="column.label"
-          :column-key="column.key"
+          :prop="column.key"
           :width="columnWidths[column.key]"
           :fixed="column.key === 'title'"
           align="center"
@@ -857,14 +854,9 @@ onBeforeUnmount(() => {
               aria-label="子项名称；Enter 创建，Shift+Enter 创建后继续"
               @keydown="onQuickKeydown"
             />
-            <el-select v-model="quickContentId" class="subitem-quick-content" filterable :disabled="quickCreating" placeholder="工作项类别">
-              <el-option v-for="content in activeContents" :key="content.id" :label="content.name" :value="content.id">
-                <span class="subitem-content-option" :style="labelCellStyle(content.colorToken)">{{ content.name }}</span>
-              </el-option>
-            </el-select>
-            <el-button class="subitem-quick-submit" type="primary" :loading="quickCreating" :disabled="!quickTitle.trim() || !quickContentId" @click="createQuick(false)">添加</el-button>
+            <el-button class="subitem-quick-submit" type="primary" :loading="quickCreating" :disabled="!quickTitle.trim() || !defaultContentId" @click="createQuick(false)">添加</el-button>
           </div>
-          <button v-else class="subitem-add" :disabled="!canCreate" @click="openQuick">
+          <button v-else class="subitem-add" :disabled="!canCreate || !defaultContentId" @click="openQuick">
             <span class="subitem-quick-checkbox" aria-hidden="true" />
             <span class="subitem-add__field">添加子项</span>
           </button>
@@ -883,7 +875,7 @@ onBeforeUnmount(() => {
   --subitem-hierarchy-corner-radius: var(--work-item-hierarchy-corner-radius, var(--subitem-hierarchy-bar-width));
   --subitem-add-row-accent: rgba(87, 155, 252, 0.5);
   --subitem-table-header-height: 38px;
-  --subitem-table-row-height: 54px;
+  --subitem-table-row-height: 36px;
   --subitem-table-empty-height: 60px;
   --subitem-table-quick-height: var(--subitem-table-row-height);
   position: relative;
@@ -1042,9 +1034,9 @@ onBeforeUnmount(() => {
 .subitem-content-pill {
   display: flex;
   width: calc(100% - 48px);
-  height: 34px;
+  height: 26px;
   min-width: 0;
-  margin: 10px 24px;
+  margin: 5px 24px;
   padding: 0 16px;
   align-items: center;
   justify-content: center;
@@ -1054,16 +1046,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.subitem-content-option {
-  display: flex;
-  width: 100%;
-  height: 34px;
-  padding: 0 16px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  box-sizing: border-box;
 }
 :deep(.monday-subitem-table th.subitem-add-column-header),
 :deep(.monday-subitem-table td.subitem-add-column) {
@@ -1145,7 +1127,11 @@ onBeforeUnmount(() => {
 :deep(.monday-subitem-table--empty .el-table__empty-block) { display: none; }
 :deep(.monday-subitem-table th.subitem-movable-column-header),
 :deep(.monday-subitem-table td.subitem-movable-column) {
-  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease;
+  transition: none;
+}
+:deep(.monday-subitem-table--column-dragging th.subitem-movable-column-header),
+:deep(.monday-subitem-table--column-dragging td.subitem-movable-column) {
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
   will-change: transform;
 }
 :deep(.monday-subitem-table .subitem-column-drag-source) {
@@ -1217,7 +1203,7 @@ onBeforeUnmount(() => {
   display: grid;
   height: var(--subitem-table-quick-height);
   min-width: max-content;
-  grid-template-columns: 48px var(--subitem-title-column-width, 320px) 220px 72px;
+  grid-template-columns: 48px var(--subitem-title-column-width, 320px) 72px;
   gap: 0;
   align-items: center;
   box-sizing: border-box;
@@ -1227,10 +1213,7 @@ onBeforeUnmount(() => {
   transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 .subitem-quick-row:focus-within { background: var(--yp-bg-selected); }
-.subitem-quick-title,
-.subitem-quick-content { box-sizing: border-box; min-width: 0; }
-.subitem-quick-title { padding: 0 4px 0 8px; }
-.subitem-quick-content { padding: 0 4px; }
+.subitem-quick-title { box-sizing: border-box; min-width: 0; padding: 0 4px 0 8px; }
 .subitem-quick-checkbox {
   width: 16px;
   height: 16px;
@@ -1248,17 +1231,14 @@ onBeforeUnmount(() => {
   height: var(--subitem-quick-control-height);
   padding: 0 12px;
 }
-:deep(.subitem-quick-row .el-input__wrapper),
-:deep(.subitem-quick-row .el-select__wrapper) {
+:deep(.subitem-quick-row .el-input__wrapper) {
   height: var(--subitem-quick-control-height);
   min-height: var(--subitem-quick-control-height);
 }
-:deep(.subitem-quick-row .el-input__wrapper.is-focus),
-:deep(.subitem-quick-row .el-select__wrapper.is-focused) {
+:deep(.subitem-quick-row .el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px var(--yp-border-default) inset !important;
 }
-:deep(.subitem-quick-row .el-input__wrapper:has(input:focus-visible)),
-:deep(.subitem-quick-row .el-select__wrapper:has(input:focus-visible)) {
+:deep(.subitem-quick-row .el-input__wrapper:has(input:focus-visible)) {
   outline: none !important;
   outline-offset: 0;
 }

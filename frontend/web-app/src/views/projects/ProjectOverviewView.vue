@@ -94,7 +94,6 @@ const subitems = reactive<Record<string, SubitemState>>({})
 const expandedSubitemIds = ref<string[]>([])
 const subitemSelections = reactive<Record<string, Set<string>>>({})
 const quickOpen = ref(false)
-const quickContentId = ref('')
 const quickTitle = ref('')
 const quickCreating = ref(false)
 const quickRow = ref<HTMLElement>()
@@ -224,10 +223,10 @@ function tableCellClassName({
   column,
 }: {
   row: ProjectWorkItemListItem
-  column: { columnKey?: string }
+  column: { property?: string }
 }): string {
-  if (!column.columnKey || column.columnKey === 'title') return ''
-  return selectedCellKey.value === `${row.id}:${column.columnKey}` ? 'monday-cell--selected' : ''
+  if (!column.property || column.property === 'title') return ''
+  return selectedCellKey.value === `${row.id}:${column.property}` ? 'monday-cell--selected' : ''
 }
 
 function syncProjectPageScrollLayout(): void {
@@ -382,9 +381,9 @@ type MovableColumnKey = Exclude<ColumnKey, 'title'>
 const columns: Array<{ key: ColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
   { key: 'title', label: '工作项名称', defaultWidth: 320, minWidth: 220 },
   { key: 'assignee', label: '处理人', defaultWidth: 90, minWidth: 72 },
-  { key: 'status', label: '状态', defaultWidth: 130, minWidth: 96 },
-  { key: 'priority', label: '优先级', defaultWidth: 120, minWidth: 90 },
-  { key: 'content', label: '工作项类别', defaultWidth: 150, minWidth: 110 },
+  { key: 'status', label: '状态', defaultWidth: 96, minWidth: 96 },
+  { key: 'priority', label: '优先级', defaultWidth: 90, minWidth: 90 },
+  { key: 'content', label: '工作项类别', defaultWidth: 110, minWidth: 110 },
   { key: 'dueDate', label: '截止日期', defaultWidth: 140, minWidth: 112 },
   { key: 'updatedAt', label: '最后更新时间', defaultWidth: 170, minWidth: 135 },
 ]
@@ -423,12 +422,10 @@ const orderedSubitemColumns = computed(() => [
 const visibleColumns = computed(() => orderedColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
 const visibleSubitemColumns = computed(() => orderedSubitemColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
 const movableVisibleColumns = computed(() => visibleColumns.value.filter(item => item.key !== 'title'))
-const tableColumnStructureKey = computed(() => movableColumnOrder.value.join('|'))
 const quickGridStyle = computed(() => ({
   gridTemplateColumns: [`${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
     ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
 }))
-const quickContentColumn = computed(() => Math.max(4, visibleColumns.value.findIndex(item => item.key === 'content') + 3))
 const quickSubmitColumn = computed(() => visibleColumns.value.length + 3)
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
@@ -440,6 +437,7 @@ const filteredMembers = computed(() => {
 
 const contentsById = computed(() => new Map((catalog.value?.items ?? []).map(item => [item.id, item])))
 const activeContents = computed(() => (catalog.value?.items ?? []).filter(item => item.active))
+const defaultContentId = computed(() => activeContents.value[0]?.id)
 const workflowStatuses = computed(() => [...(labelCatalog.value?.statuses ?? [])]
   .sort((left, right) => left.sortOrder - right.sortOrder)
   .map(status => ({ ...status, statusCode: status.code })))
@@ -950,18 +948,16 @@ async function changeView(view: ProjectView): Promise<void> {
 function openQuick(): void {
   if (!canCreate.value) return
   quickOpen.value = true
-  if (!quickContentId.value && activeContents.value.length === 1) quickContentId.value = activeContents.value[0]!.id
   void nextTick(() => quickTitleInput.value?.focus())
 }
 
 function closeQuick(): void {
   quickOpen.value = false
-  quickContentId.value = ''
   quickTitle.value = ''
 }
 
 async function createQuick(continueAdding: boolean): Promise<void> {
-  if (quickCreating.value || !quickContentId.value || !quickTitle.value.trim()) return
+  if (quickCreating.value || !defaultContentId.value || !quickTitle.value.trim()) return
   const csrf = readCsrfToken()
   if (!csrf) {
     error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
@@ -975,7 +971,7 @@ async function createQuick(continueAdding: boolean): Promise<void> {
       xXSRFTOKEN: csrf,
       idempotencyKey: globalThis.crypto.randomUUID(),
       workItemCreateRequest: {
-        contentId: quickContentId.value,
+        contentId: defaultContentId.value,
         title: quickTitle.value.trim(),
         priority: null,
         assigneeUserId: null,
@@ -1515,7 +1511,7 @@ function tableColumnDragStyle(columnKey?: string): CSSProperties {
   if (index < 0) return {}
   if (columnKey === draggedKey) return { opacity: 0, pointerEvents: 'none' }
 
-  const draggedWidth = columnWidths[draggedKey]
+  const draggedWidth = tableColumnPointerCandidate?.headerRects[from]?.width || columnWidths[draggedKey]
   if (from < dropIndex && index > from && index < dropIndex) {
     return { transform: `translateX(-${draggedWidth}px)` }
   }
@@ -1525,16 +1521,18 @@ function tableColumnDragStyle(columnKey?: string): CSSProperties {
   return { transform: 'translateX(0px)' }
 }
 
-function tableCellStyle({ column }: { column: { columnKey?: string } }): CSSProperties {
-  return tableColumnDragStyle(column.columnKey)
+function tableCellStyle({ column }: { column: { property?: string } }): CSSProperties {
+  return tableColumnDragStyle(column.property)
 }
 
-function tableHeaderCellStyle({ column }: { column: { columnKey?: string } }): CSSProperties {
-  return tableColumnDragStyle(column.columnKey)
+function tableHeaderCellStyle({ column }: { column: { property?: string } }): CSSProperties {
+  return tableColumnDragStyle(column.property)
 }
 
 function movableHeaderCells(): HTMLTableCellElement[] {
-  return [...(tableRef.value?.$el?.querySelectorAll<HTMLTableCellElement>('.el-table__header-wrapper th.monday-movable-column-header') ?? [])]
+  return [...(tableRef.value?.$el?.querySelectorAll<HTMLTableCellElement>(
+    ':scope > .el-table__inner-wrapper > .el-table__header-wrapper th.monday-movable-column-header',
+  ) ?? [])]
 }
 
 function updateTableColumnDropTarget(clientX: number): void {
@@ -2274,7 +2272,6 @@ onBeforeUnmount(() => {
             @click.capture="onTableClickCapture"
           >
             <el-table
-              :key="tableColumnStructureKey"
               ref="tableRef"
               :data="tableItems"
               :fit="true"
@@ -2286,6 +2283,7 @@ onBeforeUnmount(() => {
               :header-cell-style="tableHeaderCellStyle"
               row-key="id"
               class="monday-table"
+              :class="{ 'monday-table--column-dragging': columnDraggingKey }"
               height="100%"
               empty-text="当前项目暂无工作项"
               border
@@ -2443,11 +2441,12 @@ onBeforeUnmount(() => {
                 </template>
               </el-table-column>
 
+              <!-- 按位置复用列；prop 会响应字段变化，column-key 只在 Element Plus 初始化列时读取。 -->
               <el-table-column
-                v-for="column in movableVisibleColumns"
-                :key="column.key"
+                v-for="(column, columnIndex) in movableVisibleColumns"
+                :key="columnIndex"
                 :label="column.label"
-                :column-key="column.key"
+                :prop="column.key"
                 :width="columnWidths[column.key]"
                 align="center"
                 :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' || column.key === 'content' ? ' monday-block-column' : ''}`"
@@ -2676,29 +2675,12 @@ onBeforeUnmount(() => {
                     aria-label="工作项名称；Enter 创建，Shift+Enter 创建后继续"
                     @keydown="onQuickKeydown"
                   />
-                  <el-select
-                    v-model="quickContentId"
-                    class="quick-content-field"
-                    :style="{ gridColumn: quickContentColumn }"
-                    :disabled="quickCreating"
-                    filterable
-                    placeholder="工作项类别"
-                  >
-                    <el-option
-                      v-for="item in activeContents"
-                      :key="item.id"
-                      :label="item.name"
-                      :value="item.id"
-                    >
-                      <span class="quick-content-option-pill" :style="labelCellStyle(item.colorToken)">{{ item.name }}</span>
-                    </el-option>
-                  </el-select>
                   <el-button
                     class="quick-submit"
                     :style="{ gridColumn: quickSubmitColumn }"
                     type="primary"
                     :loading="quickCreating"
-                    :disabled="!quickContentId || !quickTitle.trim()"
+                    :disabled="!defaultContentId || !quickTitle.trim()"
                     @click="createQuick(false)"
                   >
                     添加
@@ -3074,7 +3056,7 @@ onBeforeUnmount(() => {
 }
 
 :deep(.monday-table.el-table) {
-  --work-item-table-row-height: 54px;
+  --work-item-table-row-height: 36px;
   --work-item-table-header-height: 38px;
   --work-item-sort-overflow-space: 20px;
   --work-item-group-accent: rgb(87, 155, 252);
@@ -3430,9 +3412,14 @@ onBeforeUnmount(() => {
   will-change: auto;
 }
 
-:deep(.monday-table th.monday-movable-column-header),
-:deep(.monday-table td.monday-movable-column) {
-  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease;
+:deep(.monday-table th.monday-movable-column-header:not(.subitem-movable-column-header)),
+:deep(.monday-table td.monday-movable-column:not(.subitem-movable-column)) {
+  transition: none;
+}
+
+:deep(.monday-table--column-dragging th.monday-movable-column-header:not(.subitem-movable-column-header)),
+:deep(.monday-table--column-dragging td.monday-movable-column:not(.subitem-movable-column)) {
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
   will-change: transform;
 }
 
@@ -3606,6 +3593,10 @@ onBeforeUnmount(() => {
   z-index: 4;
 }
 
+:deep(.monday-table .el-table__body td.el-table-fixed-column--left) {
+  z-index: 5;
+}
+
 .work-item-link.monday-cell--selected,
 .monday-discussion-btn.monday-cell--selected {
   position: relative;
@@ -3717,9 +3708,9 @@ onBeforeUnmount(() => {
 .monday-content-label {
   display: flex;
   width: calc(100% - 48px);
-  height: 34px;
+  height: 26px;
   min-width: 0;
-  margin: 10px 24px;
+  margin: 5px 24px;
   padding: 0 16px;
   align-items: center;
   justify-content: center;
@@ -3740,7 +3731,6 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.quick-content-option-pill,
 .detail-content-pill {
   display: flex;
   min-width: 0;
@@ -3757,7 +3747,6 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.quick-content-option-pill { width: 100%; }
 .detail-content-pill { width: min(240px, 100%); cursor: pointer; }
 
 /* 截止日期与超期感叹号警告 */
@@ -3921,32 +3910,27 @@ onBeforeUnmount(() => {
   transition: none !important;
 }
 
-.quick-title-field,
-.quick-content-field {
+.quick-title-field {
   align-self: center;
   box-sizing: border-box;
+  grid-column: 3;
   min-width: 0;
-  padding: 0 4px;
+  padding: 0 4px 0 8px;
 }
-.quick-title-field { grid-column: 3; padding-left: 8px; }
-.quick-content-field { grid-column: 5; }
 .quick-submit {
   justify-self: center;
   width: 64px;
   height: var(--work-item-quick-control-height);
   padding: 0 12px;
 }
-:deep(.monday-quick-row .el-input__wrapper),
-:deep(.monday-quick-row .el-select__wrapper) {
+:deep(.monday-quick-row .el-input__wrapper) {
   height: var(--work-item-quick-control-height);
   min-height: var(--work-item-quick-control-height);
 }
-:deep(.monday-quick-row .el-input__wrapper.is-focus),
-:deep(.monday-quick-row .el-select__wrapper.is-focused) {
+:deep(.monday-quick-row .el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px var(--yp-border-default) inset !important;
 }
-:deep(.monday-quick-row .el-input__wrapper:has(input:focus-visible)),
-:deep(.monday-quick-row .el-select__wrapper:has(input:focus-visible)) {
+:deep(.monday-quick-row .el-input__wrapper:has(input:focus-visible)) {
   outline: none !important;
   outline-offset: 0;
 }

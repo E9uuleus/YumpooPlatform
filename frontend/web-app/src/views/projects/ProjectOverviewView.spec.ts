@@ -172,6 +172,11 @@ describe('项目级工作项首页', () => {
 
     const labels = wrapper.findAll('.el-table__header th').map(node => node.text()).filter(Boolean)
     expect(labels).toEqual(['工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '最后更新时间'])
+    for (const [key, width] of [['status', 96], ['priority', 90], ['content', 110]] as const) {
+      const column = wrapper.findAllComponents({ name: 'ElTableColumn' })
+        .find(candidate => candidate.props('prop') === key)
+      expect(column?.props('width')).toBe(width)
+    }
     const addColumnHeader = wrapper.get('th.monday-add-column-header')
     const addColumn = wrapper.findAllComponents({ name: 'ElTableColumn' })
       .find(column => column.props('columnKey') === 'add-column')
@@ -210,6 +215,8 @@ describe('项目级工作项首页', () => {
     expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(1)
     expect(state.listWorkItemSubitems).toHaveBeenCalledWith({ parentWorkItemId: parent.id })
     expect(wrapper.text()).toContain('直接子项')
+    expect(wrapper.findComponent({ name: 'ProjectWorkItemSubitemsTable' }).props('columnWidths'))
+      .toMatchObject({ status: 96, priority: 90, content: 110 })
     expect(wrapper.get('.monday-subitems-counter-component__subitems-count').text()).toBe('1')
     expect(wrapper.findAll('.subitem-hierarchy-branch--data')).toHaveLength(1)
     expect(wrapper.findAll('.monday-subitem-table .el-table__expand-icon')).toHaveLength(0)
@@ -221,6 +228,20 @@ describe('项目级工作项首页', () => {
     await wrapper.get('button[aria-label="展开子项"]').trigger('click')
     await flushPromises()
     expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(1)
+  })
+
+  it('恢复已有自定义列宽，并将低于最小值的已保存列宽限制到最小值', async () => {
+    localStorage.setItem('yumpoo:project-work-items:table:v1', JSON.stringify({
+      version: 1, widths: { status: 155, priority: 188, content: 80 },
+    }))
+    const wrapper = mountView()
+    await flushPromises()
+
+    for (const [key, width] of [['status', 155], ['priority', 188], ['content', 110]] as const) {
+      const column = wrapper.findAllComponents({ name: 'ElTableColumn' })
+        .find(candidate => candidate.props('prop') === key)
+      expect(column?.props('width')).toBe(width)
+    }
   })
 
   it('持久化列宽与隐藏列，且工作项名称始终可见', async () => {
@@ -246,6 +267,8 @@ describe('项目级工作项首页', () => {
   it('拖拽业务列表头时复刻原色列浮层、横向避让并持久化新顺序', async () => {
     const wrapper = mountView()
     await flushPromises()
+    const table = wrapper.getComponent({ name: 'ElTable' }).vm.$
+    const tableElement = wrapper.get('.monday-table').element
     const view = wrapper.vm as unknown as {
       movableColumnOrder: string[]
       columnDraggingKey: string | undefined
@@ -267,7 +290,7 @@ describe('项目级工作项首页', () => {
     expect(movableHeaders.map(header => header.text())).toEqual(['处理人', '状态', '优先级', '工作项类别', '截止日期', '最后更新时间'])
     expect(wrapper.get('th.monday-title-column').classes()).not.toContain('monday-movable-column-header')
 
-    const widths = [90, 130, 120, 150, 140, 170]
+    const widths = [90, 96, 90, 110, 140, 170]
     let left = 100
     movableHeaders.forEach((header, index) => {
       const width = widths[index]!
@@ -331,7 +354,7 @@ describe('项目级工作项首页', () => {
     expect(view.columnDraggingKey).toBe('status')
     expect(view.columnDropIndex).toBe(3)
     expect(view.tableColumnDragStyle('status')).toEqual({ opacity: 0, pointerEvents: 'none' })
-    expect(view.tableColumnDragStyle('priority')).toEqual({ transform: 'translateX(-130px)' })
+    expect(view.tableColumnDragStyle('priority')).toEqual({ transform: 'translateX(-96px)' })
     const preview = document.querySelector<HTMLElement>('.work-item-column-drag-preview')
     expect(preview).not.toBeNull()
     expect(preview?.style.transform).toBe('rotate(1deg)')
@@ -351,12 +374,112 @@ describe('项目级工作项首页', () => {
     expect(pointerUpStopPropagation).toHaveBeenCalledOnce()
     expect(view.movableColumnOrder.slice(0, 3)).toEqual(['assignee', 'priority', 'status'])
     expect(document.querySelector('.work-item-column-drag-preview')).toBeNull()
-    await vi.waitFor(() => {
-      expect(wrapper.findAll('th.monday-movable-column-header').map(header => header.text()).slice(0, 3))
-        .toEqual(['处理人', '优先级', '状态'])
-    })
+    expect(wrapper.getComponent({ name: 'ElTable' }).vm.$ === table).toBe(true)
+    expect(wrapper.get('.monday-table').element === tableElement).toBe(true)
+    expect(wrapper.findAll('th.monday-movable-column-header').map(header => header.text()).slice(0, 3))
+      .toEqual(['处理人', '优先级', '状态'])
+    expect(wrapper.get('.work-item-table-row').findAll('td.monday-movable-column')
+      .map(cell => cell.classes().find(name => name.startsWith('monday-column--'))).slice(0, 3))
+      .toEqual(['monday-column--assignee', 'monday-column--priority', 'monday-column--status'])
     expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}').order)
       .toEqual(['assignee', 'priority', 'status', 'content', 'dueDate', 'updatedAt'])
+  })
+
+  it('换列时保留滚动位置、勾选项和已展开子表中的输入', async () => {
+    const parent = { ...item('parent-1'), subitemCount: 1 }
+    state.listProjectWorkItems.mockResolvedValue(page([parent]))
+    state.listWorkItemSubitems.mockResolvedValue({ items: [item('child-1')] })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('button[aria-label="展开子项"]').trigger('click')
+    await flushPromises()
+    const subtable = wrapper.getComponent({ name: 'ProjectWorkItemSubitemsTable' })
+    const subtableInstance = subtable.vm.$
+    await subtable.get('.subitem-add').trigger('click')
+    await subtable.get('.subitem-quick-title input').setValue('尚未提交的子项')
+    const checkbox = wrapper.get<HTMLInputElement>('.work-item-table-row .monday-selection-column .el-checkbox__original')
+    await checkbox.setValue(true)
+    const scrollElement = wrapper.get<HTMLElement>('.monday-table .el-scrollbar__wrap').element
+    scrollElement.scrollLeft = 120
+    scrollElement.scrollTop = 72
+    const view = wrapper.vm as unknown as {
+      columnDraggingKey: string | undefined
+      columnDraggingIndex: number
+      columnDropIndex: number | undefined
+      selectedWorkItemIds: Set<string>
+      commitTableColumnDrop: () => void
+    }
+
+    view.columnDraggingKey = 'status'
+    view.columnDraggingIndex = 1
+    view.columnDropIndex = 3
+    view.commitTableColumnDrop()
+    await flushPromises()
+    expect(wrapper.findAll('.monday-table > .el-table__inner-wrapper th.monday-movable-column-header')
+      .map(header => header.text()).slice(0, 3)).toEqual(['处理人', '优先级', '状态'])
+
+    expect(wrapper.get<HTMLElement>('.monday-table .el-scrollbar__wrap').element === scrollElement).toBe(true)
+    expect(scrollElement.scrollLeft).toBe(120)
+    expect(scrollElement.scrollTop).toBe(72)
+    expect(wrapper.get<HTMLInputElement>('.work-item-table-row .monday-selection-column .el-checkbox__original').element.checked).toBe(true)
+    expect([...view.selectedWorkItemIds]).toEqual([parent.id])
+    expect(wrapper.getComponent({ name: 'ProjectWorkItemSubitemsTable' }).vm.$ === subtableInstance).toBe(true)
+    expect(subtable.get<HTMLInputElement>('.subitem-quick-title input').element.value).toBe('尚未提交的子项')
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(1)
+    expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(1)
+  })
+
+  it('连续换列和隐藏列后，实际表头与单元格仍对当前字段避让', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const tableInstance = wrapper.getComponent({ name: 'ElTable' }).vm.$
+    const view = wrapper.vm as unknown as {
+      movableColumnOrder: string[]
+      columnDraggingKey: string | undefined
+      columnDraggingIndex: number
+      columnDropIndex: number | undefined
+      commitTableColumnDrop: () => void
+      toggleColumn: (key: string, checked: boolean) => void
+      selectCell: (rowId: string, key: string) => void
+    }
+    const expectColumn = (key: string, opacity: string, transform: string) => {
+      for (const selector of [`th.monday-column-header--${key}`, `.work-item-table-row td.monday-column--${key}`]) {
+        const style = wrapper.get<HTMLElement>(selector).element.style
+        expect(style.opacity, selector).toBe(opacity)
+        expect(style.transform, selector).toBe(transform)
+      }
+    }
+    view.movableColumnOrder = ['assignee', 'updatedAt', 'dueDate', 'status', 'priority', 'content']
+    await nextTick()
+    view.columnDraggingKey = 'updatedAt'
+    view.columnDraggingIndex = 1
+    view.columnDropIndex = 5
+    await nextTick()
+
+    expectColumn('updatedAt', '0', '')
+    for (const key of ['dueDate', 'status', 'priority']) expectColumn(key, '', 'translateX(-170px)')
+    for (const key of ['assignee', 'content']) expectColumn(key, '', 'translateX(0px)')
+    view.commitTableColumnDrop()
+    await nextTick()
+
+    view.toggleColumn('priority', false)
+    await nextTick()
+    view.columnDraggingKey = 'content'
+    view.columnDraggingIndex = 4
+    view.columnDropIndex = 1
+    await nextTick()
+
+    expectColumn('content', '0', '')
+    for (const key of ['dueDate', 'status', 'updatedAt']) expectColumn(key, '', 'translateX(110px)')
+    expectColumn('assignee', '', 'translateX(0px)')
+    view.commitTableColumnDrop()
+    view.selectCell('item-1', 'dueDate')
+    await nextTick()
+
+    expect(wrapper.findAll('.work-item-table-row td.monday-cell--selected').map(cell => cell.classes()
+      .find(name => name.startsWith('monday-column--')))).toEqual(['monday-column--dueDate'])
+    expect(wrapper.getComponent({ name: 'ElTable' }).vm.$ === tableInstance).toBe(true)
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(1)
   })
 
   it('主表与子工作项分别持久化列顺序', async () => {
@@ -757,7 +880,14 @@ describe('项目级工作项首页', () => {
     wrapper.unmount()
   })
 
-  it('Enter 快速创建时发送空优先级，且重复按键不会重复提交', async () => {
+  it('多个类别时无需选择即可 Enter 创建，自动使用首个启用类别且重复按键不会重复提交', async () => {
+    const multipleContents = catalog()
+    multipleContents.items = [
+      { ...multipleContents.items[0]!, id: 'inactive-content', active: false },
+      multipleContents.items[0]!,
+      { ...multipleContents.items[0]!, id: 'content-2', name: '任务', sortOrder: 20 },
+    ]
+    state.listProjectContents.mockResolvedValue(multipleContents)
     let resolveCreate: ((value: WorkItemDetail) => void) | undefined
     state.createWorkItem.mockImplementation(() => new Promise<WorkItemDetail>(resolve => { resolveCreate = resolve }))
     const wrapper = mountView()
@@ -769,7 +899,7 @@ describe('项目级工作项首页', () => {
     expect(wrapper.find('.quick-add input[type="checkbox"]').exists()).toBe(false)
     await wrapper.get('.quick-add').trigger('click')
     const input = wrapper.get('input[placeholder="添加工作项"]')
-    expect(wrapper.find('.quick-content-field').exists()).toBe(true)
+    expect(wrapper.find('.quick-row .el-select').exists()).toBe(false)
     expect(wrapper.find('.quick-row .monday-quick-checkbox').exists()).toBe(true)
     await input.setValue('快速新增事项')
     await input.trigger('keydown', { key: 'Enter' })
@@ -786,7 +916,7 @@ describe('项目级工作项首页', () => {
     await flushPromises()
   })
 
-  it('空标题不创建；Shift+Enter 成功后保留类别并继续输入', async () => {
+  it('空标题不创建；Shift+Enter 成功后清空标题并继续输入', async () => {
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('.quick-add').trigger('click')
