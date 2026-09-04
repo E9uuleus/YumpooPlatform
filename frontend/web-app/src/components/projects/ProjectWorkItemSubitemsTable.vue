@@ -10,7 +10,6 @@ import {
 } from '@yumpoo/api-client'
 import {
   ElButton,
-  ElDatePicker,
   ElInput,
   ElLoading,
   ElMessage,
@@ -26,6 +25,8 @@ import YpAssignee from '../yp/YpAssignee.vue'
 import MondayColumnQuickSort from './MondayColumnQuickSort.vue'
 import WorkItemLabelPopoverContent from './WorkItemLabelPopoverContent.vue'
 import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
+import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
+import type { DueDateValue } from './workItemDueDate'
 import { workItemLabelColorValue } from './workItemLabelColors'
 
 export interface ProjectWorkItemSubitemSortRule {
@@ -83,6 +84,7 @@ const emit = defineEmits<{
   updated: [id: string, detail: WorkItemDetail]
   openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion']
   patch: [item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null]
+  dueDateChange: [item: ProjectWorkItemListItem, value: DueDateValue]
   contentsUpdated: [catalog: ProjectContentCatalog]
   transition: [item: ProjectWorkItemListItem, statusCode: string]
   selectionChange: [parentId: string, rows: ProjectWorkItemListItem[]]
@@ -159,31 +161,8 @@ function priorityStyle(priority: string | null): CSSProperties {
   return token ? { backgroundColor: workItemLabelColorValue(token), color: 'var(--yp-text-inverse)' } : {}
 }
 
-function formatDate(value: Date | string | null): string {
-  return value ? new Date(value).toISOString().slice(0, 10) : '—'
-}
-
 function formatTime(value: Date | string): string {
   return new Date(value).toLocaleString('zh-CN')
-}
-
-function isOverdue(value: Date | string | null, statusCode: string): boolean {
-  if (!value) return false
-  const category = props.workflowStatuses.find(item => item.statusCode === statusCode)?.statusCategory
-  if (category === 'DONE' || category === 'CANCELED') return false
-  const due = new Date(value)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return !Number.isNaN(due.getTime()) && due < today
-}
-
-function apiDate(value: string | null): Date | null {
-  return value ? new Date(`${value}T00:00:00.000Z`) : null
-}
-
-function todayValue(): string {
-  const today = new Date()
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 }
 
 function sortDirection(key: ProjectWorkItemSubitemColumn['key']): 'ASC' | 'DESC' | undefined {
@@ -791,18 +770,12 @@ onBeforeUnmount(() => {
               />
             </el-popover>
 
-            <el-popover v-else-if="column.key === 'dueDate'" placement="bottom" :width="300" trigger="click">
-              <template #reference>
-                <button class="subitem-cell-button" :class="{ 'subitem-due--overdue': isOverdue(scope.row.dueDate, scope.row.statusCode) }" :disabled="editingCell">
-                  {{ formatDate(scope.row.dueDate) }}
-                </button>
-              </template>
-              <div class="subitem-date-editor">
-                <el-button @click="patchItem(scope.row, 'dueDate', apiDate(todayValue()))">Today</el-button>
-                <el-button text @click="patchItem(scope.row, 'dueDate', null)">清空</el-button>
-                <el-date-picker :model-value="scope.row.dueDate ? formatDate(scope.row.dueDate) : null" type="date" value-format="YYYY-MM-DD" @update:model-value="patchItem(scope.row, 'dueDate', apiDate($event as string | null))" />
-              </div>
-            </el-popover>
+            <work-item-due-date-cell
+              v-else-if="column.key === 'dueDate'" :item="row(scope.row)"
+              style="--deadline-cell-height: 34px"
+              :can-edit="row(scope.row).capabilities.canEditFields" :busy="editingCell"
+              @change="emit('dueDateChange', row(scope.row), $event)"
+            />
 
             <span v-else-if="column.key === 'updatedAt'" class="subitem-timestamp">{{ formatTime(scope.row.updatedAt) }}</span>
           </template>
@@ -1195,8 +1168,6 @@ onBeforeUnmount(() => {
 .subitem-popover-stack { display: grid; gap: 6px; }
 .subitem-option { min-height: 34px; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .subitem-option:hover { background: var(--yp-bg-sunken); }
-.subitem-date-editor { display: flex; flex-wrap: wrap; gap: 8px; }
-.subitem-due--overdue { color: var(--yp-status-red); font-weight: 600; }
 .subitem-timestamp { color: var(--yp-text-secondary); font-size: 12px; }
 .subitem-quick-row {
   --subitem-quick-control-height: 26px;

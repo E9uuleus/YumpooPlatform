@@ -105,6 +105,30 @@ class WorkItemCellActivityProjectionServiceTest {
         assertThat(captor.getValue().afterValue().path("displayName").asText()).isEqualTo("周衡");
     }
 
+    @Test
+    void deadlineProjectsTimeOnlyCombinedAndClearAsSingleDateValues() {
+        ObjectNode payload = base();
+        payload.put("previousDueDate", "2026-09-08").put("dueDate", "2026-09-08");
+        payload.putNull("previousDueTime").put("dueTime", "18:05");
+        payload.set("changedFields", objectMapper.createArrayNode().add("dueDate"));
+        service.consume(event("workitem.work_item_fields_changed", 2, CUTOVER.plusSeconds(1), payload));
+        payload.put("previousDueTime", "18:05").put("dueDate", "2026-09-09").put("dueTime", "09:30");
+        service.consume(event("workitem.work_item_fields_changed", 2, CUTOVER.plusSeconds(2), payload));
+        payload.put("previousDueDate", "2026-09-09").put("previousDueTime", "09:30");
+        payload.putNull("dueDate").putNull("dueTime");
+        service.consume(event("workitem.work_item_fields_changed", 2, CUTOVER.plusSeconds(3), payload));
+        ArgumentCaptor<WorkItemCellActivityStoredEvent> captor = ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
+        verify(repository, times(3)).append(captor.capture());
+        var changes = captor.getAllValues();
+        assertThat(changes).extracting(WorkItemCellActivityStoredEvent::columnCode).containsOnly("DUE_DATE");
+        assertThat(changes.get(0).beforeValue().path("displayName").asText()).isEqualTo("2026-09-08");
+        assertThat(changes.get(0).afterValue().path("displayName").asText()).isEqualTo("2026-09-08 18:05");
+        assertThat(changes.get(1).beforeValue().path("displayName").asText()).isEqualTo("2026-09-08 18:05");
+        assertThat(changes.get(1).afterValue().path("displayName").asText()).isEqualTo("2026-09-09 09:30");
+        assertThat(changes.get(2).changeType()).isEqualTo("REMOVED");
+        assertThat(changes.get(2).beforeValue().path("displayName").asText()).isEqualTo("2026-09-09 09:30");
+    }
+
     private ObjectNode base() {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("workItemId", ITEM.toString());
@@ -115,7 +139,11 @@ class WorkItemCellActivityProjectionServiceTest {
     }
 
     private DomainEventEnvelope event(String type, Instant occurredAt, ObjectNode payload) {
-        return new DomainEventEnvelope(UUID.randomUUID(), type, 1, occurredAt, "WorkItem", ITEM,
+        return event(type, 1, occurredAt, payload);
+    }
+
+    private DomainEventEnvelope event(String type, int version, Instant occurredAt, ObjectNode payload) {
+        return new DomainEventEnvelope(UUID.randomUUID(), type, version, occurredAt, "WorkItem", ITEM,
                 2, COMPANY, EventActor.user(ACTOR), "cell-activity-test", "cell-activity-test",
                 null, payload);
     }

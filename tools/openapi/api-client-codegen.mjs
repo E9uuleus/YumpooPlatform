@@ -183,6 +183,23 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   }
   fs.writeFileSync(workItemSubitemCreatePath, workItemSubitemCreate, 'utf8')
 
+  for (const model of ['WorkItemSummary', 'WorkItemDetail', 'ProjectWorkItemListItem',
+    'WorkItemCreateRequest', 'WorkItemSubitemCreateRequest', 'WorkItemUpdateRequest', 'WorkItemDueDatePatchRequest']) {
+    const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
+    let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
+    source = replaceExactlyOnce(source,
+      "        'dueTime': json['dueTime'] == null ? undefined : json['dueTime'],",
+      "        ...(json['dueTime'] === undefined ? {} : { 'dueTime': json['dueTime'] }),",
+      `${model} 截止时分保留省略与显式 null 的区别`)
+    if (['WorkItemSummary', 'WorkItemDetail', 'ProjectWorkItemListItem'].includes(model)) {
+      source = replaceExactlyOnce(source,
+        "        'completedAt': json['completedAt'] == null ? undefined : (new Date(json['completedAt'])),",
+        "        ...(json['completedAt'] === undefined ? {} : { 'completedAt': json['completedAt'] === null ? null : new Date(json['completedAt']) }),",
+        `${model} 可选完成时间精确属性兼容`)
+    }
+    fs.writeFileSync(modelPath, source, 'utf8')
+  }
+
   const attachmentMetadataPath = path.join(sourceRoot, 'models', 'AttachmentMetadata.ts')
   let attachmentMetadata = normalizeText(fs.readFileSync(attachmentMetadataPath, 'utf8'))
   attachmentMetadata = replaceExactlyOnce(

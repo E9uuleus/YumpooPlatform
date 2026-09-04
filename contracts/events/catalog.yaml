@@ -294,8 +294,8 @@ events:
   - eventType: workitem.work_item_fields_changed
     eventVersion: 2
     schema: schemas/workitem.work-item-fields-changed-v2.schema.json
-    validExamples: [examples/workitem.work-item-fields-changed-v2.json]
-    invalidExamples: [examples/workitem.work-item-fields-changed-v2.invalid.json]
+    validExamples: [examples/workitem.work-item-fields-changed-v2.json, examples/workitem.deadline-time-v2.json, examples/workitem.deadline-clear-v2.json]
+    invalidExamples: [examples/workitem.work-item-fields-changed-v2.invalid.json, examples/workitem.deadline-time.invalid-v2.json]
   - eventType: workitem.work_item_assigned
     eventVersion: 1
     schema: schemas/workitem.work-item-assigned-v1.schema.json

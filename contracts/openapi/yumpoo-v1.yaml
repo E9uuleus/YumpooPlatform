@@ -2306,7 +2306,13 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDueDatePatchRequest' } } }
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkItemDueDatePatchRequest' }
+            examples:
+              withTime: { $ref: '#/components/examples/WorkItemDeadlineWithTime' }
+              dateOnly: { $ref: '#/components/examples/WorkItemDeadlineRemoveTime' }
+              clear: { $ref: '#/components/examples/WorkItemDeadlineClear' }
       responses:
         '200':
           description: 截止日期已更新或返回幂等重放结果。
@@ -3869,6 +3875,8 @@ components:
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+        dueTime: { type: string, nullable: true, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$', description: '企业时区的截止时分；更新时省略保留原值，null 移除时间。' }
+        completedAt: { type: string, format: date-time, nullable: true, readOnly: true, description: '当前 DONE 周期的实际完成时间；历史未记录时为空。' }
         rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
         etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
         capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
@@ -3902,6 +3910,8 @@ components:
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+        dueTime: { type: string, nullable: true, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$', description: '企业时区的截止时分；更新时省略保留原值，null 移除时间。' }
+        completedAt: { type: string, format: date-time, nullable: true, readOnly: true, description: '当前 DONE 周期的实际完成时间；历史未记录时为空。' }
         rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
         etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
         capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
@@ -3970,6 +3980,8 @@ components:
         assigneeUserId: { type: string, format: uuid, nullable: true }
         assigneeDisplayName: { type: string, minLength: 1, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+        dueTime: { type: string, nullable: true, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$', description: '企业时区的截止时分；更新时省略保留原值，null 移除时间。' }
+        completedAt: { type: string, format: date-time, nullable: true, readOnly: true, description: '当前 DONE 周期的实际完成时间；历史未记录时为空。' }
         rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
         etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
         capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
@@ -4169,6 +4181,7 @@ components:
       required: [dueDate]
       properties:
         dueDate: { type: string, format: date, nullable: true }
+        dueTime: { type: string, nullable: true, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$', description: '企业时区的截止时分；更新时省略保留原值，null 移除时间。' }
 
     WorkItemContentPatchRequest:
       type: object
@@ -4269,6 +4282,7 @@ components:
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+        dueTime: { type: string, nullable: true, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$', description: '企业时区的截止时分；更新时省略保留原值，null 移除时间。' }
 
     WorkItemSubitemCreateRequest:
       type: object
@@ -4284,6 +4298,7 @@ components:
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+        dueTime: { type: string, nullable: true, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$', description: '企业时区的截止时分；更新时省略保留原值，null 移除时间。' }
 
     WorkItemDeleteRequest:
       type: object
@@ -4306,6 +4321,7 @@ components:
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
         dueDate: { type: string, format: date, nullable: true }
+        dueTime: { type: string, nullable: true, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$', description: '企业时区的截止时分；更新时省略保留原值，null 移除时间。' }
 
     WorkItemTransitionRequest:
       type: object
@@ -5505,6 +5521,15 @@ components:
         minimum: 1
 
   examples:
+    WorkItemDeadlineWithTime:
+      summary: 设置企业时区的日期及分钟精度时分
+      externalValue: ../examples/work-items/deadline-with-time.json
+    WorkItemDeadlineRemoveTime:
+      summary: 移除时分并保留自然日
+      externalValue: ../examples/work-items/deadline-remove-time.json
+    WorkItemDeadlineClear:
+      summary: 同时清空截止日期和时分
+      externalValue: ../examples/work-items/deadline-clear.json
     MalformedRequest:
       summary: JSON、类型、参数或 If-Match 格式无法解析
       externalValue: ../examples/errors/400-malformed-request.json

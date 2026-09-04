@@ -1,6 +1,8 @@
 package com.yumpoo.platform.workitem.api;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import tools.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -17,5 +19,6 @@ public record WorkItemUpdateRequest(
         @JsonProperty(required = true) @Size(max = 16384) String notes,
         @JsonProperty(required = true) LocalDate timelineStartDate,
         @JsonProperty(required = true) LocalDate timelineEndDate,
-        @JsonProperty(required = true) LocalDate dueDate
+        @JsonProperty(required = true) LocalDate dueDate,
+        @JsonInclude(JsonInclude.Include.NON_NULL) JsonNode dueTime
 ) {}

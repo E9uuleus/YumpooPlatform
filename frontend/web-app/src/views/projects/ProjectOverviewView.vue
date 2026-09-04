@@ -47,6 +47,8 @@ import ProjectWorkItemSubitemsTable, {
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import WorkItemLabelPopoverContent from '../../components/projects/WorkItemLabelPopoverContent.vue'
 import WorkItemContentPopoverContent from '../../components/projects/WorkItemContentPopoverContent.vue'
+import WorkItemDueDateCell from '../../components/projects/WorkItemDueDateCell.vue'
+import type { DueDateValue } from '../../components/projects/workItemDueDate'
 import { workItemLabelColorValue } from '../../components/projects/workItemLabelColors'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
@@ -615,20 +617,6 @@ function getPriorityPresentation(priority: string | null): { label: string; tone
   return { label: priority, tone: 'empty' }
 }
 
-function isOverdue(dueDate: Date | string | null, statusCode: string): boolean {
-  if (!dueDate) return false
-  const option = workflowStatuses.value.find(item => item.statusCode === statusCode)
-  if (option?.statusCategory === 'DONE' || option?.statusCategory === 'CANCELED') {
-    return false
-  }
-  const due = new Date(dueDate)
-  if (Number.isNaN(due.getTime())) return false
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const dueDateOnly = new Date(due.getFullYear(), due.getMonth(), due.getDate())
-  return dueDateOnly < today
-}
-
 function formatDate(value: Date | string | null): string {
   return value ? new Date(value).toISOString().slice(0, 10) : '—'
 }
@@ -1155,7 +1143,8 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
     priority: updatedDetail.priority,
     assigneeUserId: updatedDetail.assigneeUserId,
     assigneeDisplayName: updatedDetail.assigneeDisplayName,
-    dueDate: updatedDetail.dueDate, updatedAt: updatedDetail.updatedAt,
+    dueDate: updatedDetail.dueDate, dueTime: updatedDetail.dueTime ?? null,
+    completedAt: updatedDetail.completedAt ?? null, updatedAt: updatedDetail.updatedAt,
     rowVersion: updatedDetail.rowVersion, etag: updatedDetail.etag,
     capabilities: updatedDetail.capabilities,
   }
@@ -1165,7 +1154,7 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
   if (detail.value?.id === id) detail.value = { ...detail.value, ...updatedDetail }
 }
 
-async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null): Promise<boolean> {
+async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null, dueTime?: string | null): Promise<boolean> {
   const key = `${item.id}:${field}`
   if (editingCell.value) return false
   const csrf = readCsrfToken()
@@ -1179,7 +1168,7 @@ async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'pri
       ? await workItemsApi.patchWorkItemAssignee({ ...common, workItemAssigneePatchRequest: { assigneeUserId: value as string | null } })
       : field === 'priority'
         ? await workItemsApi.patchWorkItemPriority({ ...common, workItemPriorityPatchRequest: { priority: value as string | null } })
-        : await workItemsApi.patchWorkItemDueDate({ ...common, workItemDueDatePatchRequest: { dueDate: value as Date | null } })
+        : await workItemsApi.patchWorkItemDueDate({ ...common, workItemDueDatePatchRequest: { dueDate: value as Date | null, ...(dueTime !== undefined ? { dueTime } : {}) } })
     replaceLightItem(item.id, updated)
     if (field === 'content') catalog.value = await contentsApi.listProjectContents({ projectId: projectId.value })
     return true
@@ -1996,16 +1985,12 @@ function apiDate(value: string | null): Date | null {
   return value ? new Date(`${value}T00:00:00.000Z`) : null
 }
 
-function todayValue(): string {
-  const today = new Date()
-  const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+function onDueDateChange(item: ProjectWorkItemListItem, value: string | null, dueTime?: string | null): void {
+  void patchCell(item, 'dueDate', apiDate(value), dueTime)
 }
 
-function onDueDateChange(item: ProjectWorkItemListItem, value: string | null): void {
-  void patchCell(item, 'dueDate', apiDate(value))
+function onDeadlineChange(item: ProjectWorkItemListItem, value: DueDateValue): void {
+  onDueDateChange(item, value.dueDate, value.dueTime)
 }
 
 watch(projectId, () => { applyRouteState(); void loadWorkspace() }, { immediate: true })
@@ -2317,6 +2302,7 @@ onBeforeUnmount(() => {
                     @updated="replaceLightItem"
                     @open-detail="openDetail"
                     @patch="patchCell"
+                    @due-date-change="onDeadlineChange"
                     @contents-updated="onContentsUpdated"
                     @transition="transitionItem"
                     @selection-change="onSubitemSelectionChange"
@@ -2588,36 +2574,13 @@ onBeforeUnmount(() => {
                   </template>
 
                   <template v-else-if="column.key === 'dueDate'">
-                    <el-popover placement="bottom" :width="300" trigger="click" popper-class="work-items-popover date-popover">
-                      <template #reference>
-                        <button
-                          class="monday-due-date-cell cell-editor-trigger"
-                          :disabled="Boolean(editingCell)"
-                          @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'dueDate')"
-                        >
-                          <span
-                            v-if="isOverdue((scope.row as ProjectWorkItemListItem).dueDate, (scope.row as ProjectWorkItemListItem).statusCode)"
-                            class="monday-overdue-badge"
-                            title="已超出截止时间"
-                          >
-                            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                              <circle cx="8" cy="8" r="7" class="overdue-circle" />
-                              <path d="M8 4.2V8.5M8 11.2V11.8" class="overdue-exclamation" stroke-width="1.6" stroke-linecap="round" />
-                            </svg>
-                          </span>
-                          <span
-                            class="due-date-text"
-                            :class="{ 'due-date-text--overdue': isOverdue((scope.row as ProjectWorkItemListItem).dueDate, (scope.row as ProjectWorkItemListItem).statusCode) }"
-                          >
-                            {{ formatDate((scope.row as ProjectWorkItemListItem).dueDate) }}
-                          </span>
-                        </button>
-                      </template>
-                      <div class="date-editor">
-                        <div><el-button @click="onDueDateChange(scope.row as ProjectWorkItemListItem, todayValue())">Today</el-button><el-button text @click="onDueDateChange(scope.row as ProjectWorkItemListItem, null)">清空</el-button></div>
-                        <el-date-picker :model-value="(scope.row as ProjectWorkItemListItem).dueDate ? formatDate((scope.row as ProjectWorkItemListItem).dueDate) : null" type="date" value-format="YYYY-MM-DD" placeholder="选择截止日期" @update:model-value="onDueDateChange(scope.row as ProjectWorkItemListItem, $event as string | null)" />
-                      </div>
-                    </el-popover>
+                    <work-item-due-date-cell
+                      :item="scope.row as ProjectWorkItemListItem"
+                      :can-edit="(scope.row as ProjectWorkItemListItem).capabilities.canEditFields"
+                      :busy="Boolean(editingCell)"
+                      @select="selectCell((scope.row as ProjectWorkItemListItem).id, 'dueDate')"
+                      @change="onDeadlineChange(scope.row as ProjectWorkItemListItem, $event)"
+                    />
                   </template>
 
                   <span v-else-if="column.key === 'updatedAt'" class="monday-timestamp">{{ formatTime((scope.row as ProjectWorkItemListItem).updatedAt) }}</span>
@@ -2826,7 +2789,7 @@ onBeforeUnmount(() => {
                     />
                   </dd>
                 </div>
-                <div><dt>截止日期</dt><dd>{{ formatDate(detail.dueDate) }}</dd></div>
+                <div><dt>截止日期</dt><dd>{{ formatDate(detail.dueDate) }}{{ detail.dueTime ? ` ${detail.dueTime}` : '' }}</dd></div>
                 <div><dt>最后更新时间</dt><dd>{{ formatTime(detail.updatedAt) }}</dd></div>
               </dl>
               <p
@@ -3748,42 +3711,6 @@ onBeforeUnmount(() => {
 }
 
 .detail-content-pill { width: min(240px, 100%); cursor: pointer; }
-
-/* 截止日期与超期感叹号警告 */
-.monday-due-date-cell {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 100%;
-  height: 100%;
-  min-height: var(--work-item-table-row-height);
-  box-sizing: border-box;
-}
-
-.monday-overdue-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.overdue-circle {
-  fill: var(--yp-status-red);
-}
-
-.overdue-exclamation {
-  stroke: var(--yp-text-inverse);
-}
-
-.due-date-text {
-  font-size: 13px;
-  color: var(--yp-text-primary);
-}
-
-.due-date-text--overdue {
-  color: var(--yp-status-red);
-  font-weight: 500;
-}
 
 .monday-timestamp {
   font-size: 12.5px;

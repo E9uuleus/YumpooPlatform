@@ -66,6 +66,12 @@ export interface WorkItemUpdateRequest {
      * @memberof WorkItemUpdateRequest
      */
     dueDate: Date | null;
+    /**
+     * 企业时区的截止时分；更新时省略保留原值，null 移除时间。
+     * @type {string}
+     * @memberof WorkItemUpdateRequest
+     */
+    dueTime?: string | null;
 }
 
 /**
@@ -101,6 +107,7 @@ export function WorkItemUpdateRequestFromJSONTyped(json: any, ignoreDiscriminato
         'timelineStartDate': (json['timelineStartDate'] == null ? null : new Date(json['timelineStartDate'])),
         'timelineEndDate': (json['timelineEndDate'] == null ? null : new Date(json['timelineEndDate'])),
         'dueDate': (json['dueDate'] == null ? null : new Date(json['dueDate'])),
+        ...(json['dueTime'] === undefined ? {} : { 'dueTime': json['dueTime'] }),
     };
 }
 
@@ -123,5 +130,6 @@ export function WorkItemUpdateRequestToJSONTyped(value?: WorkItemUpdateRequest |
         'timelineStartDate': value['timelineStartDate'] == null ? value['timelineStartDate'] : value['timelineStartDate'].toISOString().substring(0,10),
         'timelineEndDate': value['timelineEndDate'] == null ? value['timelineEndDate'] : value['timelineEndDate'].toISOString().substring(0,10),
         'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),
+        'dueTime': value['dueTime'],
     };
 }

@@ -1,4 +1,5 @@
 import {
+  ResponseError,
   WorkItemViewType,
   WorkItemLabelColorToken,
   ProjectActorAccess,
@@ -877,6 +878,40 @@ describe('项目级工作项首页', () => {
       workItemId: 'item-1', ifMatch: '"1"',
       workItemDueDatePatchRequest: { dueDate: new Date('2026-09-01T00:00:00.000Z') },
     }))
+    wrapper.unmount()
+  })
+
+  it('共享日期编辑提交时分，清空失败保留值且 412 不自动覆盖', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as {
+      tableItems: ProjectWorkItemListItem[]
+      onDeadlineChange: (row: ProjectWorkItemListItem, value: { dueDate: string | null; dueTime: string | null }) => void
+    }
+    state.patchWorkItemDueDate.mockResolvedValue({
+      ...item(), dueDate: new Date('2026-09-03T00:00:00Z'), dueTime: '18:05',
+      completedAt: new Date('2026-09-02T00:00:00Z'), rowVersion: 2, etag: '"2"',
+    })
+    view.onDeadlineChange(view.tableItems[0]!, { dueDate: '2026-09-03', dueTime: '18:05' })
+    await flushPromises()
+    expect(state.patchWorkItemDueDate).toHaveBeenLastCalledWith(expect.objectContaining({
+      workItemDueDatePatchRequest: { dueDate: new Date('2026-09-03T00:00:00Z'), dueTime: '18:05' },
+    }))
+    expect(view.tableItems[0]?.dueTime).toBe('18:05')
+    expect(view.tableItems[0]?.completedAt).toEqual(new Date('2026-09-02T00:00:00Z'))
+    state.listProjectWorkItems.mockResolvedValue({ items: [...view.tableItems], nextCursor: null })
+    state.patchWorkItemDueDate.mockRejectedValue(new ResponseError(new Response(JSON.stringify({
+      code: 'VERSION_CONFLICT', message: '数据已被更新', requestId: 'deadline-conflict',
+      retryable: false, fieldErrors: [], details: {},
+    }), { status: 412, headers: { 'Content-Type': 'application/json' } })))
+    view.onDeadlineChange(view.tableItems[0]!, { dueDate: null, dueTime: null })
+    await flushPromises()
+    expect(state.patchWorkItemDueDate).toHaveBeenCalledTimes(2)
+    expect(state.patchWorkItemDueDate).toHaveBeenLastCalledWith(expect.objectContaining({
+      ifMatch: '"2"', workItemDueDatePatchRequest: { dueDate: null, dueTime: null },
+    }))
+    expect(view.tableItems[0]?.dueTime).toBe('18:05')
+    expect(view.tableItems[0]?.dueDate).not.toBeNull()
     wrapper.unmount()
   })
 

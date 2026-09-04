@@ -155,6 +155,18 @@ export interface WorkItemSummary {
      */
     dueDate: Date | null;
     /**
+     * 企业时区的截止时分；更新时省略保留原值，null 移除时间。
+     * @type {string}
+     * @memberof WorkItemSummary
+     */
+    dueTime?: string | null;
+    /**
+     * 当前 DONE 周期的实际完成时间；历史未记录时为空。
+     * @type {Date}
+     * @memberof WorkItemSummary
+     */
+    readonly completedAt?: Date | null;
+    /**
      *
      * @type {number}
      * @memberof WorkItemSummary
@@ -241,6 +253,8 @@ export function WorkItemSummaryFromJSONTyped(json: any, ignoreDiscriminator: boo
         'timelineStartDate': (json['timelineStartDate'] == null ? null : new Date(json['timelineStartDate'])),
         'timelineEndDate': (json['timelineEndDate'] == null ? null : new Date(json['timelineEndDate'])),
         'dueDate': (json['dueDate'] == null ? null : new Date(json['dueDate'])),
+        ...(json['dueTime'] === undefined ? {} : { 'dueTime': json['dueTime'] }),
+        ...(json['completedAt'] === undefined ? {} : { 'completedAt': json['completedAt'] === null ? null : new Date(json['completedAt']) }),
         'rowVersion': json['rowVersion'],
         'etag': json['etag'],
         'capabilities': WorkItemCapabilitiesFromJSON(json['capabilities']),
@@ -252,7 +266,7 @@ export function WorkItemSummaryToJSON(json: any): WorkItemSummary {
     return WorkItemSummaryToJSONTyped(json, false);
 }
 
-export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'rowVersion'|'etag'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'completedAt'|'rowVersion'|'etag'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -278,6 +292,7 @@ export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'rowVer
         'timelineStartDate': value['timelineStartDate'] == null ? value['timelineStartDate'] : value['timelineStartDate'].toISOString().substring(0,10),
         'timelineEndDate': value['timelineEndDate'] == null ? value['timelineEndDate'] : value['timelineEndDate'].toISOString().substring(0,10),
         'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),
+        'dueTime': value['dueTime'],
         'capabilities': WorkItemCapabilitiesToJSON(value['capabilities']),
     };
 }

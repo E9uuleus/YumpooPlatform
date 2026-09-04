@@ -349,7 +349,7 @@ public class WorkItemService {
             CreatedWorkItem created = createItem(project, content, new WorkItemDraft(
                     command.title(), priority, command.assigneeUserId(), command.description(),
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
-                    command.dueDate()), command.actor());
+                    command.dueDate(), command.dueTime()), command.actor());
             return stored(201, detail(created.item(),
                     people(project.companyId(), List.of(created.item())), true,
                     created.statusLabels()));
@@ -390,7 +390,7 @@ public class WorkItemService {
             CreatedWorkItem created = createItem(project, targetContent, new WorkItemDraft(
                     command.title(), priority, command.assigneeUserId(), command.description(),
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
-                    command.dueDate()), command.actor());
+                    command.dueDate(), command.dueTime()), command.actor());
             ParentChildRelation relation = new ParentChildRelation(UUID.randomUUID(),
                     project.companyId(), parent.id(), created.item().id(), project.projectId(),
                     command.actor().userId(), created.item().createdAt());
@@ -434,7 +434,8 @@ public class WorkItemService {
                     draft.title(), initial.code(),
                     WorkItemStatusCategory.valueOf(initial.statusCategory()), draft.priority(),
                     draft.assigneeUserId(), draft.description(), draft.notes(),
-                    draft.timelineStartDate(), draft.timelineEndDate(), draft.dueDate(), rank,
+                    draft.timelineStartDate(), draft.timelineEndDate(), draft.dueDate(),
+                    draft.dueTime().resolve(draft.dueDate(), null), rank,
                     projectSortKey, actor.userId(), clock.instant());
         } catch (IllegalArgumentException exception) {
             throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
@@ -447,7 +448,7 @@ public class WorkItemService {
 
     private record WorkItemDraft(String title, String priority, UUID assigneeUserId,
             String description, String notes, LocalDate timelineStartDate,
-            LocalDate timelineEndDate, LocalDate dueDate) {}
+            LocalDate timelineEndDate, LocalDate dueDate, DueTimeChange dueTime) {}
 
     private record CreatedWorkItem(WorkItem item,
             List<WorkItemLabelModels.StatusLabel> statusLabels) {}
@@ -492,6 +493,7 @@ public class WorkItemService {
             candidate = before.updateFields(command.title(), nextPriority,
                     command.assigneeUserId(), command.description(), command.notes(),
                     command.timelineStartDate(), command.timelineEndDate(), command.dueDate(),
+                    command.dueTime().resolve(command.dueDate(), before.dueTime()),
                     command.actor().userId(), clock.instant());
         } catch (IllegalArgumentException exception) {
             throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
@@ -971,6 +973,8 @@ public class WorkItemService {
                     before.description(), before.notes(), before.timelineStartDate(),
                     before.timelineEndDate(),
                     "DUE_DATE".equals(command.field()) ? command.dueDate() : before.dueDate(),
+                    "DUE_DATE".equals(command.field())
+                            ? command.dueTime().resolve(command.dueDate(), before.dueTime()) : before.dueTime(),
                     command.actor().userId(), clock.instant());
         } catch (IllegalArgumentException exception) {
             throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
@@ -1062,7 +1066,7 @@ public class WorkItemService {
                 priorityName(item), item.assigneeUserId(), assigneeDisplayName(item, people),
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
-                item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
+                item.dueDate(), dueTimeText(item), item.completedAt(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
                 new WorkItemCapabilities(canEditFields, canEditFields, canEditFields,
                         canEditFields, canEditFields, false,
                         availableTransitions(item, canEditFields, statusLabels)), item.updatedAt());
@@ -1075,7 +1079,7 @@ public class WorkItemService {
                 content == null ? "未知类别" : content.name(),
                 content == null ? "GRAY" : content.colorToken(), item.itemNo(),
                 item.title(), item.statusCode(), item.statusCategory().name(), priorityName(item),
-                item.assigneeUserId(), assigneeDisplayName(item, people), item.dueDate(),
+                item.assigneeUserId(), assigneeDisplayName(item, people), item.dueDate(), dueTimeText(item), item.completedAt(),
                 item.rowVersion(), StrongEtag.format(item.rowVersion()),
                 new WorkItemCapabilities(canEditFields, canEditFields, canEditFields,
                         canEditFields, canEditFields, false,
@@ -1094,7 +1098,7 @@ public class WorkItemService {
                 priorityName(item), item.assigneeUserId(), assigneeDisplayName(item, people),
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
-                item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
+                item.dueDate(), dueTimeText(item), item.completedAt(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
                 new WorkItemCapabilities(canEditFields && !item.deleted(),
                         canEditFields && !item.deleted(), canEditFields && !item.deleted(),
                         canEditFields && !item.deleted(), canEditFields && !item.deleted(),
@@ -1263,6 +1267,7 @@ public class WorkItemService {
         payload.put("previousTitle", before.title());
         payload.put("previousPriority", before.priority());
         payload.put("previousDueDate", before.dueDate());
+        payload.put("previousDueTime", dueTimeText(before));
         payload.put("changedFields", changedFields);
         append(FIELDS_CHANGED, item, actor, payload);
     }
@@ -1354,6 +1359,7 @@ public class WorkItemService {
         payload.put("timelineStartDate", item.timelineStartDate());
         payload.put("timelineEndDate", item.timelineEndDate());
         payload.put("dueDate", item.dueDate());
+        payload.put("dueTime", dueTimeText(item));
         payload.put("rowVersion", item.rowVersion());
         return payload;
     }
@@ -1395,8 +1401,13 @@ public class WorkItemService {
             fields.add("timelineStartDate");
         if (!Objects.equals(before.timelineEndDate(), after.timelineEndDate()))
             fields.add("timelineEndDate");
-        if (!Objects.equals(before.dueDate(), after.dueDate())) fields.add("dueDate");
+        if (!Objects.equals(before.dueDate(), after.dueDate())
+                || !Objects.equals(before.dueTime(), after.dueTime())) fields.add("dueDate");
         return List.copyOf(fields);
+    }
+
+    private static String dueTimeText(WorkItem item) {
+        return item.dueTime() == null ? null : item.dueTime().toString();
     }
 
     private static boolean canEdit(ProjectAccessSnapshot project, Content content) {

@@ -182,6 +182,135 @@ class WorkItemHttpIT {
                 taskItem.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(409);
     }
 
+    @Test
+    void deadlineTimePreservesOmissionDistinguishesNullAndEmitsOneLogicalChange() throws Exception {
+        String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+        var body = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "截止时间"));
+        body.put("dueDate", "2026-09-08").put("dueTime", "18:05");
+        JsonNode item = created(mutate("POST", collection, member, json.writeValueAsString(body), null, UUID.randomUUID()));
+        UUID id = UUID.fromString(item.path("id").asText());
+        String path = "/api/v1/work-items/" + id;
+        assertThat(item.path("dueTime").asText()).isEqualTo("18:05");
+        assertThat(item.path("completedAt").isNull()).isTrue();
+        JsonNode listed = json.readTree(get(collection + "?view=TABLE", member).body()).path("items").get(0);
+        assertThat(listed.path("dueTime").asText()).isEqualTo("18:05");
+
+        body.remove("dueTime");
+        body.remove("contentId");
+        body.put("title", "普通编辑保留时间");
+        item = ok(mutate("PATCH", path, member, json.writeValueAsString(body), item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(item.path("dueTime").asText()).isEqualTo("18:05");
+        item = ok(mutate("PATCH", path + "/due-date", member, "{\"dueDate\":\"2026-09-09\"}",
+                item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(item.path("dueTime").asText()).isEqualTo("18:05");
+
+        String etag = item.path("etag").asText();
+        UUID key = UUID.randomUUID();
+        String removeTime = "{\"dueDate\":\"2026-09-09\",\"dueTime\":null}";
+        HttpResponse<String> removed = mutate("PATCH", path + "/due-date", member, removeTime, etag, key);
+        item = ok(removed);
+        assertThat(item.path("dueTime").isNull()).isTrue();
+        JsonNode event = lastFieldsEvent(id);
+        assertThat(event.path("changedFields").toString()).isEqualTo("[\"dueDate\"]");
+        assertThat(event.path("previousDueTime").asText()).isEqualTo("18:05");
+        assertThat(event.path("dueTime").isNull()).isTrue();
+        long eventCount = fieldsEventCount(id);
+        assertThat(mutate("PATCH", path + "/due-date", member, removeTime, etag, key).body()).isEqualTo(removed.body());
+        assertThat(mutate("PATCH", path + "/due-date", member, "{\"dueDate\":\"2026-09-09\"}", etag, key)
+                .statusCode()).isEqualTo(409);
+        assertThat(mutate("PATCH", path + "/due-date", member, "{\"dueDate\":null}", etag, UUID.randomUUID())
+                .statusCode()).isEqualTo(412);
+        item = ok(mutate("PATCH", path + "/due-date", member, removeTime, item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(fieldsEventCount(id)).isEqualTo(eventCount);
+
+        item = ok(mutate("PATCH", path + "/due-date", member, "{\"dueDate\":\"2026-09-10\",\"dueTime\":\"09:30\"}",
+                item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(fieldsEventCount(id)).isEqualTo(eventCount + 1);
+        assertThat(lastFieldsEvent(id).path("changedFields").toString()).isEqualTo("[\"dueDate\"]");
+        item = ok(mutate("PATCH", path + "/due-date", member, "{\"dueDate\":null,\"dueTime\":null}",
+                item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(item.path("dueDate").isNull()).isTrue();
+        assertThat(item.path("dueTime").isNull()).isTrue();
+        assertThat(lastFieldsEvent(id).path("previousDueTime").asText()).isEqualTo("09:30");
+        assertThat(fieldsEventCount(id)).isEqualTo(eventCount + 2);
+        ok(mutate("PATCH", path + "/due-date", member, "{\"dueDate\":null}", item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(fieldsEventCount(id)).isEqualTo(eventCount + 2);
+
+        for (String invalid : new String[] { "{\"dueDate\":null,\"dueTime\":\"09:30\"}",
+                "{\"dueDate\":\"2026-09-10\",\"dueTime\":\"24:00\"}",
+                "{\"dueDate\":\"2026-09-10\",\"dueTime\":\"9:30\"}",
+                "{\"dueDate\":\"2026-09-10\",\"dueTime\":\"09:30:00\"}",
+                "{\"dueDate\":\"2026-09-10\",\"dueTime\":930}" }) {
+            assertThat(mutate("PATCH", path + "/due-date", member, invalid, item.path("etag").asText(), UUID.randomUUID())
+                    .statusCode()).as(invalid).isEqualTo(422);
+        }
+        assertThat(mutate("PATCH", path + "/due-date", member, "{}", item.path("etag").asText(), UUID.randomUUID())
+                .statusCode()).isEqualTo(400);
+        assertThat(fieldsEventCount(id)).isEqualTo(eventCount + 2);
+    }
+
+    @Test
+    void completionFactSurvivesEditsAndBothStatusEntrypointsHandleReopening() throws Exception {
+        JsonNode parent = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "父项"), null, UUID.randomUUID()));
+        String childrenPath = "/api/v1/work-items/" + parent.path("id").asText() + "/subitems";
+        var body = (tools.jackson.databind.node.ObjectNode) json.readTree(subitemBody(tasksId, "完成时间"));
+        body.put("dueDate", "2026-09-08").put("dueTime", "08:00");
+        JsonNode item = created(mutate("POST", childrenPath, member, json.writeValueAsString(body), null, UUID.randomUUID()));
+        String path = "/api/v1/work-items/" + item.path("id").asText();
+        String todo = item.path("statusCode").asText();
+        String done = transitionTo(item, "DONE");
+        item = ok(mutate("POST", path + "/transitions", member, "{\"toStatus\":\"" + done + "\"}",
+                item.path("etag").asText(), UUID.randomUUID()));
+        String completedAt = item.path("completedAt").asText();
+        assertThat(item.path("completedAt").isNull()).isFalse();
+        body.remove("contentId");
+        item = ok(mutate("PATCH", path, member, json.writeValueAsString(body.put("title", "已完成后的编辑")),
+                item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(item.path("completedAt").asText()).isEqualTo(completedAt);
+        assertThat(item.path("dueTime").asText()).isEqualTo("08:00");
+        JsonNode child = json.readTree(get(childrenPath, member).body()).path("items").get(0);
+        assertThat(child.path("completedAt").asText()).isEqualTo(completedAt);
+        assertThat(child.path("dueTime").asText()).isEqualTo("08:00");
+
+        item = ok(mutate("POST", path + "/rank-moves", member,
+                "{\"toStatus\":\"" + todo + "\",\"placement\":\"START\"}", item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(item.path("completedAt").isNull()).isTrue();
+        item = ok(mutate("POST", path + "/rank-moves", member,
+                "{\"toStatus\":\"" + done + "\",\"placement\":\"START\"}", item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(java.time.Instant.parse(item.path("completedAt").asText())).isAfter(java.time.Instant.parse(completedAt));
+
+        jdbc.sql("UPDATE yumpoo.work_item SET completed_at=NULL WHERE id=:id")
+                .param("id", UUID.fromString(item.path("id").asText())).update();
+        item = ok(mutate("PATCH", path, member, json.writeValueAsString(body.put("title", "历史完成时间不推算")),
+                item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(item.path("statusCategory").asText()).isEqualTo("DONE");
+        assertThat(item.path("completedAt").isNull()).isTrue();
+    }
+
+    private String transitionTo(JsonNode item, String category) {
+        for (JsonNode transition : item.path("capabilities").path("availableTransitions")) {
+            if (category.equals(transition.path("statusCategory").asText())) return transition.path("toStatus").asText();
+        }
+        throw new AssertionError("Missing transition to " + category + ": " + item);
+    }
+
+    private JsonNode ok(HttpResponse<String> response) throws Exception {
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        return json.readTree(response.body());
+    }
+
+    private long fieldsEventCount(UUID id) {
+        return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE aggregate_id=:id AND event_type='workitem.work_item_fields_changed'")
+                .param("id", id).query(Long.class).single();
+    }
+
+    private JsonNode lastFieldsEvent(UUID id) throws Exception {
+        return json.readTree(jdbc.sql("SELECT payload_json::text FROM yumpoo.outbox_event WHERE aggregate_id=:id "
+                        + "AND event_type='workitem.work_item_fields_changed' ORDER BY aggregate_version DESC LIMIT 1")
+                .param("id", id).query(String.class).single());
+    }
+
     private JsonNode created(HttpResponse<String> response) throws Exception {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
         return json.readTree(response.body());

@@ -32,7 +32,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     private static final String COLUMNS = """
             id, company_id, project_id, content_id, item_sequence, item_no, title,
             status_code, status_category, priority, assignee_user_id, reporter_user_id,
-            description, notes, timeline_start_date, timeline_end_date, due_date, rank,
+            description, notes, timeline_start_date, timeline_end_date, due_date, due_time, completed_at, rank,
             project_sort_key, row_version, created_at, created_by_user_id, updated_at, updated_by_user_id,
             deleted_at, deleted_by_user_id, delete_reason
             """;
@@ -63,14 +63,14 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                     id, company_id, project_id, content_id, item_sequence, item_no,
                     title, status_code, status_category, priority, assignee_user_id,
                     reporter_user_id, description, notes, timeline_start_date,
-                    timeline_end_date, due_date, rank, project_sort_key, row_version, created_at,
+                    timeline_end_date, due_date, due_time, completed_at, rank, project_sort_key, row_version, created_at,
                     created_by_user_id, updated_at, updated_by_user_id, deleted_at,
                     deleted_by_user_id, delete_reason
                 ) VALUES (
                     :id, :companyId, :projectId, :contentId, :itemSequence, :itemNo,
                     :title, :statusCode, :statusCategory, :priority, :assigneeUserId,
                     :reporterUserId, :description, :notes, :timelineStartDate,
-                    :timelineEndDate, :dueDate, :rank, :projectSortKey, :rowVersion, :createdAt,
+                    :timelineEndDate, :dueDate, :dueTime, :completedAt, :rank, :projectSortKey, :rowVersion, :createdAt,
                     :createdByUserId, :updatedAt, :updatedByUserId, :deletedAt,
                     :deletedByUserId, :deleteReason
                 )
@@ -93,6 +93,9 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         statement = nullable(statement, "timelineStartDate", item.timelineStartDate(), Types.DATE);
         statement = nullable(statement, "timelineEndDate", item.timelineEndDate(), Types.DATE);
         statement = nullable(statement, "dueDate", item.dueDate(), Types.DATE);
+        statement = nullable(statement, "dueTime", item.dueTime(), Types.TIME);
+        statement = nullable(statement, "completedAt", item.completedAt() == null ? null
+                : item.completedAt().atOffset(ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE);
         statement = nullable(statement, "rank", item.rank(), Types.VARCHAR);
         statement = statement.param("projectSortKey", item.projectSortKey());
         statement = nullable(statement, "deletedAt", item.deletedAt() == null ? null
@@ -163,7 +166,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 UPDATE yumpoo.work_item SET title=:title, priority=:priority,
                     assignee_user_id=:assigneeUserId, description=:description, notes=:notes,
                     timeline_start_date=:timelineStartDate, timeline_end_date=:timelineEndDate,
-                    due_date=:dueDate, row_version=row_version+1, updated_at=:updatedAt,
+                    due_date=:dueDate, due_time=:dueTime, row_version=row_version+1, updated_at=:updatedAt,
                     updated_by_user_id=:updatedByUserId
                 WHERE company_id=:companyId AND project_id=:projectId AND content_id=:contentId
                   AND id=:id AND deleted_at IS NULL AND row_version=:expectedVersion
@@ -181,14 +184,16 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         statement = nullable(statement, "timelineStartDate", item.timelineStartDate(), Types.DATE);
         statement = nullable(statement, "timelineEndDate", item.timelineEndDate(), Types.DATE);
         statement = nullable(statement, "dueDate", item.dueDate(), Types.DATE);
+        statement = nullable(statement, "dueTime", item.dueTime(), Types.TIME);
         return statement.query(JdbcWorkItemRepository::map).optional();
     }
 
     @Override
     public Optional<WorkItem> transition(WorkItem item, long expectedVersion) {
-        return jdbc.sql("""
+        JdbcClient.StatementSpec statement = jdbc.sql("""
                 UPDATE yumpoo.work_item
                    SET status_code=:statusCode, status_category=:statusCategory, rank=:rank,
+                       completed_at=:completedAt,
                        row_version=row_version+1, updated_at=:updatedAt,
                        updated_by_user_id=:updatedByUserId
                  WHERE company_id=:companyId AND project_id=:projectId AND content_id=:contentId
@@ -202,8 +207,10 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 .param("updatedByUserId", item.updatedByUserId())
                 .param("companyId", item.companyId()).param("projectId", item.projectId())
                 .param("contentId", item.contentId()).param("id", item.id())
-                .param("expectedVersion", expectedVersion)
-                .query(JdbcWorkItemRepository::map).optional();
+                .param("expectedVersion", expectedVersion);
+        statement = nullable(statement, "completedAt", item.completedAt() == null ? null
+                : item.completedAt().atOffset(ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE);
+        return statement.query(JdbcWorkItemRepository::map).optional();
     }
 
     @Override
@@ -932,6 +939,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
 
     private static WorkItem map(ResultSet rs, int row) throws SQLException {
         OffsetDateTime deleted = rs.getObject("deleted_at", OffsetDateTime.class);
+        OffsetDateTime completed = rs.getObject("completed_at", OffsetDateTime.class);
         return new WorkItem(rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
                 rs.getObject("project_id", UUID.class), rs.getObject("content_id", UUID.class),
                 rs.getLong("item_sequence"), rs.getString("item_no"),
@@ -941,6 +949,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 rs.getObject("assignee_user_id", UUID.class), rs.getObject("reporter_user_id", UUID.class),
                 rs.getString("description"), rs.getString("notes"), rs.getObject("timeline_start_date", java.time.LocalDate.class),
                 rs.getObject("timeline_end_date", java.time.LocalDate.class), rs.getObject("due_date", java.time.LocalDate.class),
+                rs.getObject("due_time", java.time.LocalTime.class), completed == null ? null : completed.toInstant(),
                 rs.getString("rank"), rs.getString("project_sort_key"), rs.getLong("row_version"),
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
                 rs.getObject("created_by_user_id", UUID.class), rs.getObject("updated_at", OffsetDateTime.class).toInstant(),

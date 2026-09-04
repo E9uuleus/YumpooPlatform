@@ -25,6 +25,7 @@
           "timelineStartDate": { "type": ["string", "null"], "format": "date" },
           "timelineEndDate": { "type": ["string", "null"], "format": "date" },
           "dueDate": { "type": ["string", "null"], "format": "date" },
+          "dueTime": { "type": ["string", "null"], "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$" },
           "reporterUserId": { "type": "string", "format": "uuid" },
           "rowVersion": { "type": "integer", "minimum": 0 }
         }

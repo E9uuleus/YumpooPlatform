@@ -114,6 +114,9 @@ function structuralSchemaConstraints(schema, additionalIgnoredKeys = new Set()) 
 }
 
 function schemaForExample(relativePath) {
+  if (['work-items/deadline-with-time.json', 'work-items/deadline-remove-time.json', 'work-items/deadline-clear.json'].includes(relativePath)) {
+    return 'WorkItemDueDatePatchRequest'
+  }
   if (relativePath.startsWith('errors/')) {
     return 'ErrorResponse'
   }
@@ -269,6 +272,7 @@ const responseExampleReferences = collectExampleReferences(
 const referencedFiles = new Set()
 let validatedErrors = 0
 let validatedPagination = 0
+let validatedWorkItems = 0
 
 for (const [componentName, example] of Object.entries(examples)) {
   const externalValue = example?.externalValue
@@ -293,6 +297,8 @@ for (const [componentName, example] of Object.entries(examples)) {
       `${componentName} 未接入错误 response`,
     )
     validatedErrors += 1
+  } else if (schemaName === 'WorkItemDueDatePatchRequest') {
+    validatedWorkItems += 1
   } else {
     validatedPagination += 1
   }
@@ -316,5 +322,5 @@ assert(
 )
 
 console.log(
-  `已按 OpenAPI schema 校验 ${validatedErrors} 个错误 golden 和 ${validatedPagination} 个分页 golden。`,
+  `已按 OpenAPI schema 校验 ${validatedErrors} 个错误 golden、${validatedPagination} 个分页 golden 和 ${validatedWorkItems} 个工作项 golden。`,
 )

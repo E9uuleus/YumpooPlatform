@@ -9,6 +9,7 @@ import { nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { localProblem } from '../../api/problems'
 import ProjectWorkItemSubitemsTable from './ProjectWorkItemSubitemsTable.vue'
+import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 
 const api = vi.hoisted(() => ({
   createWorkItemSubitem: vi.fn(),
@@ -77,6 +78,18 @@ describe('项目工作项子表格', () => {
     api.createWorkItemSubitem.mockResolvedValue(item('created') as unknown as WorkItemDetail)
     api.moveWorkItemSubitemOrder.mockImplementation(({ subitemId }: { subitemId: string }) =>
       Promise.resolve(item(subitemId) as unknown as WorkItemDetail))
+  })
+
+  it('子表复用截止日期组件并完整转发日期和时间，不改变列宽', async () => {
+    const child = { ...item('child-1'), dueDate: new Date('2026-09-03T00:00:00Z'), dueTime: '18:05' }
+    const wrapper = mountTable([child])
+    await wrapper.setProps({ columns: [{ key: 'title', label: '工作项名称' }, { key: 'dueDate', label: '截止日期' }] })
+    await flushPromises()
+    wrapper.getComponent(WorkItemDueDateCell).vm.$emit('change', { dueDate: null, dueTime: null })
+    expect(wrapper.emitted('dueDateChange')).toEqual([[child, { dueDate: null, dueTime: null }]])
+    expect(wrapper.props('columnWidths').dueDate).toBe(140)
+    expect(wrapper.getComponent(WorkItemDueDateCell).attributes('style')).toContain('--deadline-cell-height: 34px')
+    wrapper.unmount()
   })
 
   it('子表换列后只隐藏当前拖动列并同步移动表头与单元格', async () => {

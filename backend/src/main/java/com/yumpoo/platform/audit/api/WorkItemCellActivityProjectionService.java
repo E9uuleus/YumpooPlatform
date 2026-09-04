@@ -83,8 +83,7 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
                         value("TEXT", null, requiredPrevious(event.payload(), "previousTitle"), null),
                         value("TEXT", null, text(event.payload(), "title"), null));
                 case "priority" -> changedLabel(event, "PRIORITY", "previousPriority", "priority");
-                case "dueDate" -> changedScalar(event, "DUE_DATE", "DATE",
-                        "previousDueDate", "dueDate");
+                case "dueDate" -> changedDueDate(event);
                 case "contentId" -> append(event, "CONTENT", "CHANGED",
                         value("LABEL", text(event.payload(), "previousContentId"),
                                 text(event.payload(), "previousContentName"),
@@ -119,12 +118,20 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
                 label(event, column, after));
     }
 
-    private void changedScalar(DomainEventEnvelope event, String column, String type,
-            String beforeField, String afterField) {
-        String before = nullableText(event.payload(), beforeField);
-        String after = nullableText(event.payload(), afterField);
-        append(event, column, change(before, after), value(type, null, before, null),
-                value(type, null, after, null));
+    private void changedDueDate(DomainEventEnvelope event) {
+        String before = deadlineText(event.payload(), "previousDueDate", "previousDueTime");
+        String after = deadlineText(event.payload(), "dueDate", "dueTime");
+        append(event, "DUE_DATE", change(before, after), value("DATE", null, before, null),
+                value("DATE", null, after, null));
+    }
+
+    private static String deadlineText(JsonNode payload, String dateField, String timeField) {
+        String date = nullableText(payload, dateField);
+        JsonNode time = payload.get(timeField);
+        if (time == null || time.isNull()) return date;
+        if (date == null || !time.isTextual()
+                || !time.textValue().matches("(?:[01][0-9]|2[0-3]):[0-5][0-9]")) throw invalid();
+        return date + " " + time.textValue();
     }
 
     private ObjectNode label(DomainEventEnvelope event, String kind, String code) {

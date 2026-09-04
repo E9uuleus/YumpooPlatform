@@ -7,6 +7,9 @@ import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.pagination.CursorPageRequest;
 import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
+import com.yumpoo.platform.foundation.application.error.ApplicationException;
+import com.yumpoo.platform.foundation.application.error.FieldViolation;
+import com.yumpoo.platform.workitem.application.DueTimeChange;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
@@ -43,10 +46,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
 
 import java.net.URI;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -124,7 +129,7 @@ public final class WorkItemController {
                 body.timelineStartDate(), body.timelineEndDate(), body.dueDate(), key,
                 hasher.hash("createWorkItem", Map.of("projectId", projectId.toString(),
                                 "contentId", body.contentId().toString()),
-                        objectMapper.valueToTree(body)))).result();
+                        objectMapper.valueToTree(body)), dueTimeChange(body.dueTime()))).result();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());
@@ -156,7 +161,7 @@ public final class WorkItemController {
                 body.timelineEndDate(), body.dueDate(), key,
                 hasher.hash("createWorkItemSubitem", Map.of(
                                 "parentWorkItemId", parentWorkItemId.toString()),
-                        objectMapper.valueToTree(body)))).result();
+                        objectMapper.valueToTree(body)), dueTimeChange(body.dueTime()))).result();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());
@@ -205,7 +210,8 @@ public final class WorkItemController {
         long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
         WorkItemDetail detail = service.update(new Update(actor, workItemId, expectedVersion,
                 body.title(), body.priority(), body.assigneeUserId(), body.description(),
-                body.notes(), body.timelineStartDate(), body.timelineEndDate(), body.dueDate()));
+                body.notes(), body.timelineStartDate(), body.timelineEndDate(), body.dueDate(),
+                dueTimeChange(body.dueTime())));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .eTag(Long.toString(detail.rowVersion())).body(detail);
     }
@@ -343,8 +349,18 @@ public final class WorkItemController {
                 hasher.hash("inlineUpdateWorkItem:" + field, Map.of(
                                 "workItemId", workItemId.toString(),
                                 "ifMatch", Long.toString(expectedVersion)),
-                        objectMapper.valueToTree(body)))).result();
+                        objectMapper.valueToTree(body)), body instanceof WorkItemDueDatePatchRequest deadline
+                        ? dueTimeChange(deadline.dueTime()) : DueTimeChange.unchanged())).result();
         return storedResponse(stored);
+    }
+
+    private static DueTimeChange dueTimeChange(JsonNode value) {
+        if (value == null) return DueTimeChange.unchanged();
+        if (value.isNull()) return new DueTimeChange(true, null);
+        if (!value.isTextual() || !value.textValue().matches("(?:[01][0-9]|2[0-3]):[0-5][0-9]"))
+            throw ApplicationException.validation(new FieldViolation("dueTime", "INVALID_TIME",
+                    "截止时间必须使用 HH:mm 格式"));
+        return new DueTimeChange(true, LocalTime.parse(value.textValue()));
     }
 
     @DeleteMapping("/work-items/{workItemId}")

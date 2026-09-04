@@ -24,6 +24,12 @@ export interface WorkItemDueDatePatchRequest {
      * @memberof WorkItemDueDatePatchRequest
      */
     dueDate: Date | null;
+    /**
+     * 企业时区的截止时分；更新时省略保留原值，null 移除时间。
+     * @type {string}
+     * @memberof WorkItemDueDatePatchRequest
+     */
+    dueTime?: string | null;
 }
 
 /**
@@ -45,6 +51,7 @@ export function WorkItemDueDatePatchRequestFromJSONTyped(json: any, ignoreDiscri
     return {
 
         'dueDate': (json['dueDate'] == null ? null : new Date(json['dueDate'])),
+        ...(json['dueTime'] === undefined ? {} : { 'dueTime': json['dueTime'] }),
     };
 }
 
@@ -60,5 +67,6 @@ export function WorkItemDueDatePatchRequestToJSONTyped(value?: WorkItemDueDatePa
     return {
 
         'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),
+        'dueTime': value['dueTime'],
     };
 }
