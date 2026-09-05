@@ -15,7 +15,7 @@ import {
 } from '@yumpoo/api-client'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { nextTick, reactive } from 'vue'
+import { defineComponent, nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectOverviewView from './ProjectOverviewView.vue'
 
@@ -41,6 +41,8 @@ const state = vi.hoisted(() => ({
   createWorkItemSubitem: vi.fn(),
   getWorkItem: vi.fn(),
   transitionWorkItem: vi.fn(),
+  routeLeave: vi.fn(),
+  routeUpdate: vi.fn(),
 }))
 
 vi.mock('@yumpoo/api-client', async importOriginal => ({
@@ -48,6 +50,8 @@ vi.mock('@yumpoo/api-client', async importOriginal => ({
   readCsrfToken: () => 'csrf-token',
 }))
 vi.mock('vue-router', () => ({
+  onBeforeRouteLeave: state.routeLeave,
+  onBeforeRouteUpdate: state.routeUpdate,
   useRoute: () => state.route,
   useRouter: () => ({ push: state.push, replace: state.replace }),
 }))
@@ -120,12 +124,17 @@ function page(items = [item()]): ProjectWorkItemCursorPage {
   return { items, nextCursor: null }
 }
 
-function mountView() {
+function mountView(discussion?: { hasDraft: boolean, busy: boolean, discardDraft: () => void }) {
   return mount(ProjectOverviewView, {
     global: {
       stubs: {
         InlineProblem: true,
-        WorkItemDetailPanel: true,
+        WorkItemDetailPanel: discussion ? defineComponent({
+          name: 'WorkItemDetailPanel',
+          props: { beforeLeave: Function },
+          setup(_props, { expose }) { expose(discussion); return {} },
+          template: '<div />',
+        }) : true,
         ProjectWorkspaceHeader: {
           props: ['project'],
           template: '<div data-testid="project-name">{{ project.name }}</div>',
@@ -1505,4 +1514,32 @@ describe('项目级工作项首页', () => {
     expect([...view.selectedWorkItemIds]).toEqual(['item-2'])
     expect(wrapper.findAll('.el-table__body tr.work-item-table-row--selected')).toHaveLength(1)
   })
+  it('标签、抽屉关闭与工作项路由共用草稿保护，保存期间禁止离开', async () => {
+    state.route.query.workItemId = 'item-1'
+    const draft = reactive({ hasDraft: true, busy: false, discardDraft: vi.fn(() => { draft.hasDraft = false }) })
+    const wrapper = mountView(draft)
+    await flushPromises()
+    const guard = state.routeLeave.mock.calls[0]![0] as () => Promise<boolean>
+    const confirm = vi.spyOn(ElMessageBox, 'confirm').mockRejectedValueOnce('cancel')
+    expect(await guard()).toBe(false)
+    expect(draft.discardDraft).not.toHaveBeenCalled()
+    draft.busy = true
+    expect(await guard()).toBe(false)
+    expect(confirm).toHaveBeenCalledTimes(1)
+    draft.busy = false
+    const drawer = wrapper.findComponent({ name: 'ElDrawer' })
+    const done = vi.fn()
+    confirm.mockResolvedValueOnce('confirm' as never)
+    await (drawer.props('beforeClose') as (done: () => void) => Promise<void>)(done)
+    expect(done).toHaveBeenCalledOnce()
+    expect(draft.discardDraft).toHaveBeenCalledOnce()
+    const routeGuard = state.routeUpdate.mock.calls[0]![0]
+    draft.hasDraft = true
+    confirm.mockRejectedValueOnce('cancel')
+    expect(await routeGuard({ params: { projectId: 'project-1' }, query: { workItemId: 'item-2' } }, state.route)).toBe(false)
+    confirm.mockResolvedValueOnce('confirm' as never)
+    const panel = wrapper.findComponent({ name: 'WorkItemDetailPanel' })
+    expect(await panel.props('beforeLeave')('details', 'discussion')).toBe(true)
+  })
+
 })

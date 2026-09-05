@@ -77,6 +77,32 @@ class WorkItemHttpIT {
     void tearDown() { cleanUp(); }
 
     @Test
+    void discussionFormatsSurvivePublishReadEditAndRejectStaleVersionOrForgedMention() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "富文本讨论验收"), null, UUID.randomUUID()));
+        String collection = "/api/v1/work-items/" + item.path("id").asText() + "/updates";
+        String fixture = java.nio.file.Files.readString(java.nio.file.Path.of("../contracts/examples/work-items/update-rich-text.json"));
+        String body = fixture.replace("35000000-0000-4000-8000-000000000007", owner.userId().toString());
+        JsonNode published = created(mutate("POST", collection, member, body, null, UUID.randomUUID()));
+        String html = published.path("bodyHtml").asText();
+        assertThat(html).contains("<h2", "<table>", "<pre><code>", "<u><s>", "font-size: 24px",
+                "data-checked=\"true\"", "data-checked=\"false\"", "@Work Category Owner", "🎉");
+        String path = "/api/v1/work-item-updates/" + published.path("id").asText();
+        JsonNode read = ok(get(path, member));
+        assertThat(read.path("bodyHtml").asText()).isEqualTo(html);
+        String changed = json.writeValueAsString(java.util.Map.of("bodyHtml", html.replace("等待验收", "验收完成")));
+        JsonNode edited = ok(mutate("PATCH", path, member, changed, read.path("etag").asText(), null));
+        assertThat(edited.path("bodyHtml").asText()).isEqualTo(html.replace("等待验收", "验收完成"));
+        assertThat(ok(get(path, member)).path("bodyHtml")).isEqualTo(edited.path("bodyHtml"));
+        assertThat(mutate("PATCH", path, member, changed, read.path("etag").asText(), null).statusCode()).isEqualTo(412);
+        assertThat(mutate("POST", collection, member, fixture, null, UUID.randomUUID()).statusCode()).isEqualTo(422);
+        String tampered = json.writeValueAsString(java.util.Map.of("bodyHtml",
+                "<p onclick='evil()'><a href='javascript:evil()'>安全正文</a><span style='position:fixed;color:#fff'>样式</span><script>evil()</script></p>"));
+        JsonNode safe = created(mutate("POST", collection, member, tampered, null, UUID.randomUUID()));
+        assertThat(safe.path("bodyHtml").asText()).doesNotContain("javascript", "onclick", "position", "script");
+    }
+
+    @Test
     void categoryIsRequiredAndProjectListCanSortByCategoryWithout422() throws Exception {
         String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
         assertThat(mutate("POST", collection, member, workItemBody(null, "缺少类别"), null,

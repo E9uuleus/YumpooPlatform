@@ -34,7 +34,7 @@ import {
   ElTableColumn,
 } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type CSSProperties, type DefineComponent } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
@@ -101,6 +101,30 @@ const quickCreating = ref(false)
 const quickRow = ref<HTMLElement>()
 const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const detailOpen = ref(false)
+const detailPanel = ref<InstanceType<typeof WorkItemDetailPanel>>()
+let leavingDiscussion: Promise<boolean> | undefined
+let detailGeneration = 0
+
+async function beforeDiscussionLeave(): Promise<boolean> {
+  if (detailPanel.value?.busy) {
+    ElMessage.info('讨论正在保存，请稍候再离开。')
+    return false
+  }
+  if (!detailPanel.value?.hasDraft) return true
+  if (leavingDiscussion) return leavingDiscussion
+  leavingDiscussion = ElMessageBox.confirm('离开将丢弃尚未发布或保存的讨论草稿。', '放弃讨论草稿', {
+    confirmButtonText: '放弃草稿', cancelButtonText: '继续编写', type: 'warning',
+  }).then(() => { detailPanel.value?.discardDraft(); return true }, () => false)
+  try { return await leavingDiscussion } finally { leavingDiscussion = undefined }
+}
+
+async function beforeDetailClose(done: () => void): Promise<void> {
+  if (await beforeDiscussionLeave()) done()
+}
+
+onBeforeRouteLeave(beforeDiscussionLeave)
+onBeforeRouteUpdate((to, from) => to.params.projectId !== from.params.projectId
+  || to.query.workItemId !== from.query.workItemId ? beforeDiscussionLeave() : true)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
 const detailTab = ref<'details' | 'discussion' | 'relations' | 'activity'>('details')
@@ -453,6 +477,7 @@ const canCreate = computed(() => Boolean(project.value
     || project.value.actorAccess === ProjectActorAccess.Member)))
 const canPublishDiscussion = computed(() => Boolean(project.value
   && project.value.lifecycle !== ProjectLifecycle.Archived
+  && detail.value?.capabilities?.canDiscuss
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
 const discussionReadOnlyReason = computed(() => {
@@ -1000,23 +1025,28 @@ function onDocumentPointerDown(event: PointerEvent): void {
 }
 
 async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'relations' | 'activity' = 'details'): Promise<void> {
+  const current = ++detailGeneration
   detailOpen.value = true
   detailTab.value = tab
   detailLoading.value = true
   detail.value = undefined
   try {
-    detail.value = await workItemsApi.getWorkItem({ workItemId })
+    const loaded = await workItemsApi.getWorkItem({ workItemId })
+    if (current === detailGeneration) detail.value = loaded
   } catch (reason) {
-    error.value = await toApiProblem(reason)
+    const failure = await toApiProblem(reason)
+    if (current !== detailGeneration) return
+    error.value = failure
     detailOpen.value = false
     await closeDetailRoute()
   } finally {
-    detailLoading.value = false
+    if (current === detailGeneration) detailLoading.value = false
   }
 }
 
 async function openRelatedWorkItem(target: { workItemId: string, projectId: string }): Promise<void> {
   if (target.projectId === projectId.value) {
+    if (!await beforeDiscussionLeave()) return
     await loadDetail(target.workItemId)
     return
   }
@@ -1038,6 +1068,8 @@ async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> 
 }
 
 async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion'): Promise<void> {
+  if (detailOpen.value && detail.value?.id === item.id && detailTab.value === tab) return
+  if (!await beforeDiscussionLeave()) return
   selectCell(item.id, tab === 'details' ? 'title' : 'discussion')
   detailTab.value = tab
   if (String(route.query.workItemId ?? '') === item.id) {
@@ -2010,6 +2042,7 @@ watch(() => route.query.workItemId, value => {
     }
     void loadDetail(String(workItemId), detailTab.value)
   } else {
+    detailGeneration++
     detailOpen.value = false
     detail.value = undefined
   }
@@ -2711,6 +2744,7 @@ onBeforeUnmount(() => {
 
     <el-drawer
       :model-value="detailOpen"
+      :before-close="beforeDetailClose"
       :modal="false"
       :modal-penetrable="true"
       append-to-body
@@ -2750,7 +2784,9 @@ onBeforeUnmount(() => {
             <h2>{{ detail.title }}</h2>
           </div>
           <work-item-detail-panel
+            ref="detailPanel"
             v-model="detailTab"
+            :before-leave="beforeDiscussionLeave"
             :work-item-id="detail.id"
             :current-project-id="detail.projectId"
             :members="activeMembers"

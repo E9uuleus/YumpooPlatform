@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import Link from '@tiptap/extension-link'
-import Mention from '@tiptap/extension-mention'
-import StarterKit from '@tiptap/starter-kit'
-import { EditorContent, useEditor } from '@tiptap/vue-3'
+import { useEditor } from '@tiptap/vue-3'
 import {
   AttachmentOwnerType,
   ErrorCode,
@@ -22,6 +19,8 @@ import {
   type ApiProblem,
 } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
+import DiscussionComposer from './DiscussionComposer.vue'
+import { discussionExtensions, discussionHasDraft } from './discussionEditor'
 import AttachmentPanel from './AttachmentPanel.vue'
 
 const props = defineProps<{
@@ -38,6 +37,23 @@ const publishing = ref(false)
 const problem = ref<ApiProblem>()
 const editProblem = ref<ApiProblem>()
 const timeline = ref<HTMLElement>()
+const sentinel = ref<HTMLElement>()
+const composer = ref<InstanceType<typeof DiscussionComposer>>()
+const editComposer = ref<InstanceType<typeof DiscussionComposer>>()
+const loadingOlder = ref(false)
+const loadProblem = ref<ApiProblem>()
+const olderProblem = ref<ApiProblem>()
+const draftHtml = ref('')
+const editHtml = ref('')
+const editOriginalHtml = ref('')
+let generation = 0
+let observer: IntersectionObserver | undefined
+let resizeObserver: ResizeObserver | undefined
+let scrollRoot: HTMLElement | undefined
+let loadController: AbortController | undefined
+let olderController: AbortController | undefined
+let frame: number | undefined
+let disposed = false
 const draftText = ref('')
 const editDraftText = ref('')
 const editingItemId = ref<string>()
@@ -50,97 +66,15 @@ let publishKey = crypto.randomUUID()
 let publishKeyBody = ''
 let clock: ReturnType<typeof setInterval> | undefined
 
-const activeMembers = computed(() => props.members.filter(member => member.membershipStatus === 'ACTIVE'))
-
-function mentionSuggestion() {
-  return {
-    char: '@',
-    items: ({ query }: { query: string }) => activeMembers.value
-      .filter(member => member.displayName.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
-      .slice(0, 8),
-    render: () => {
-      let popup: HTMLDivElement | undefined
-      let selected = 0
-      let current: { items: ProjectMember[], command: (attrs: { id: string, label: string }) => void } | undefined
-      const draw = () => {
-        if (!popup || !current) return
-        popup.replaceChildren(...current.items.map((member, index) => {
-          const button = document.createElement('button')
-          button.type = 'button'
-          button.className = index === selected ? 'mention-option mention-option--active' : 'mention-option'
-          button.textContent = member.displayName
-          button.onclick = () => current?.command({ id: member.userId, label: member.displayName })
-          return button
-        }))
-      }
-      return {
-        onStart: (suggestionProps: typeof current & { clientRect?: (() => DOMRect | null) | null }) => {
-          current = suggestionProps
-          popup = document.createElement('div')
-          popup.className = 'mention-popup'
-          popup.setAttribute('role', 'listbox')
-          document.body.appendChild(popup)
-          const rect = suggestionProps.clientRect?.()
-          if (rect) {
-            popup.style.left = `${rect.left}px`
-            popup.style.top = `${rect.bottom + 4}px`
-          }
-          draw()
-        },
-        onUpdate: (suggestionProps: typeof current) => {
-          current = suggestionProps
-          selected = 0
-          draw()
-        },
-        onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-          if (!current?.items.length) return false
-          if (event.key === 'ArrowDown') selected = (selected + 1) % current.items.length
-          else if (event.key === 'ArrowUp') selected = (selected + current.items.length - 1) % current.items.length
-          else if (event.key === 'Enter') current.command({
-            id: current.items[selected]!.userId,
-            label: current.items[selected]!.displayName,
-          })
-          else if (event.key === 'Escape') return false
-          else return false
-          draw()
-          return true
-        },
-        onExit: () => {
-          popup?.remove()
-          popup = undefined
-          current = undefined
-        },
-      }
-    },
-  }
-}
-
-function editorExtensions() {
-  return [
-    StarterKit.configure({ heading: false, codeBlock: false, horizontalRule: false, strike: false, link: false }),
-    Link.configure({
-      openOnClick: false,
-      protocols: ['http', 'https', 'mailto'],
-      HTMLAttributes: { target: '_blank', rel: 'nofollow noopener noreferrer' },
-    }),
-    Mention.configure({
-      HTMLAttributes: { 'data-type': 'mention' },
-      renderHTML: ({ node }) => ['span', {
-        'data-type': 'mention',
-        'data-mention-user-id': String(node.attrs.id),
-      }, `@${String(node.attrs.label ?? node.attrs.id)}`],
-      suggestion: mentionSuggestion(),
-    }),
-  ]
-}
-
 const editor = useEditor({
+  editorProps: { attributes: { role: 'textbox', 'aria-label': '讨论正文', 'aria-multiline': 'true' } },
   content: '',
   editable: props.canPublish,
-  extensions: editorExtensions(),
+  extensions: discussionExtensions(() => props.members, () => composer.value?.closePanel()),
   onUpdate: ({ editor: current }) => {
     const html = current.getHTML()
     draftText.value = current.getText()
+    draftHtml.value = html
     if (html !== publishKeyBody) {
       publishKey = crypto.randomUUID()
       publishKeyBody = html
@@ -149,17 +83,22 @@ const editor = useEditor({
 })
 
 const editEditor = useEditor({
+  editorProps: { attributes: { role: 'textbox', 'aria-label': '编辑讨论正文', 'aria-multiline': 'true' } },
   content: '',
   editable: true,
-  extensions: editorExtensions(),
+  extensions: discussionExtensions(() => props.members, () => editComposer.value?.closePanel()),
   onUpdate: ({ editor: current }) => {
     editDraftText.value = current.getText()
+    editHtml.value = current.getHTML()
   },
 })
 
-const hasDraft = computed(() => Boolean(draftText.value.trim()))
+const hasEditDraft = computed(() => editDialogVisible.value && editHtml.value !== editOriginalHtml.value)
+const hasDraft = computed(() => { void draftHtml.value; return discussionHasDraft(editor.value) || hasEditDraft.value })
+const busy = computed(() => publishing.value || savingEdit.value || Boolean(mutatingId.value))
 
-watch(() => props.canPublish, value => editor.value?.setEditable(value))
+watch(() => [props.canPublish, publishing.value], () => editor.value?.setEditable(props.canPublish && !publishing.value))
+watch(savingEdit, value => editEditor.value?.setEditable(!value))
 
 function toggleAttachments(updateId: string): void {
   const next = new Set(expandedAttachmentIds.value)
@@ -170,73 +109,74 @@ function toggleAttachments(updateId: string): void {
 
 function mergeUpdates(incoming: WorkItemUpdate[]): void {
   const merged = new Map(items.value.map(item => [item.id, item]))
-  incoming.forEach(item => merged.set(item.id, item))
-  items.value = Array.from(merged.values()).sort((left, right) => {
-    const time = left.createdAt.getTime() - right.createdAt.getTime()
-    return time || left.id.localeCompare(right.id)
+  incoming.forEach(item => {
+    const previous = merged.get(item.id)
+    if (!previous || item.rowVersion >= previous.rowVersion) merged.set(item.id, item)
+  })
+  items.value = Array.from(merged.values()).sort((left, right) =>
+    right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id))
+}
+
+function scrollToTop(): void { if (scrollRoot) scrollRoot.scrollTop = 0 }
+
+function queueFill(): void {
+  if (disposed || frame !== undefined || !scrollRoot) return
+  frame = requestAnimationFrame(() => {
+    frame = undefined
+    if (!sentinel.value || !scrollRoot || scrollRoot.clientHeight <= 0) return
+    const rect = sentinel.value.getBoundingClientRect()
+    const rootRect = scrollRoot.getBoundingClientRect()
+    if (rect.top <= rootRect.bottom && rect.bottom >= rootRect.top) void loadOlder()
   })
 }
 
 async function loadLatest(): Promise<void> {
+  if (busy.value || editDialogVisible.value || disposed) return
+  const current = ++generation
+  loadController?.abort()
+  olderController?.abort()
+  loadController = new AbortController()
   loading.value = true
-  problem.value = undefined
+  loadingOlder.value = false
+  loadProblem.value = undefined
+  olderProblem.value = undefined
   try {
-    const page = await workItemUpdatesApi.listWorkItemUpdates({ workItemId: props.workItemId, size: 20 })
-    mergeUpdates(page.items)
-    if (!items.value.length || nextCursor.value === null) nextCursor.value = page.nextCursor
-    await nextTick()
-    if (timeline.value) timeline.value.scrollTop = timeline.value.scrollHeight
-  } catch (reason) {
-    problem.value = await toApiProblem(reason)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadOlder(): Promise<void> {
-  if (!nextCursor.value || !timeline.value) return
-  const beforeHeight = timeline.value.scrollHeight
-  const beforeTop = timeline.value.scrollTop
-  loading.value = true
-  problem.value = undefined
-  try {
-    const page = await workItemUpdatesApi.listWorkItemUpdates({
-      workItemId: props.workItemId,
-      cursor: nextCursor.value,
-      size: 20,
-    })
+    const page = await workItemUpdatesApi.listWorkItemUpdates({ workItemId: props.workItemId, size: 20 }, { signal: loadController.signal })
+    if (current !== generation || disposed) return
+    items.value = []
     mergeUpdates(page.items)
     nextCursor.value = page.nextCursor
     await nextTick()
-    timeline.value.scrollTop = beforeTop + timeline.value.scrollHeight - beforeHeight
+    scrollToTop()
   } catch (reason) {
-    problem.value = await toApiProblem(reason)
+    const failure = await toApiProblem(reason)
+    if (current === generation && !disposed) loadProblem.value = failure
   } finally {
-    loading.value = false
+    if (current === generation && !disposed) { loading.value = false; queueFill() }
   }
 }
 
-function setLink(): void {
-  setEditorLink(editor.value, problem)
-}
-
-function setEditLink(): void {
-  setEditorLink(editEditor.value, editProblem)
-}
-
-function setEditorLink(
-  target: typeof editor.value,
-  targetProblem: typeof problem,
-): void {
-  if (!target) return
-  const previous = target.getAttributes('link').href as string | undefined
-  const href = window.prompt('输入绝对 http、https 或 mailto 链接', previous ?? 'https://')
-  if (href === null) return
-  if (!/^(https?:\/\/|mailto:)/i.test(href)) {
-    targetProblem.value = localProblem('链接必须是绝对 http、https 或 mailto 地址。')
-    return
+async function loadOlder(retry = false): Promise<void> {
+  if (disposed || !nextCursor.value || loading.value || loadingOlder.value || loadProblem.value || busy.value
+    || (olderProblem.value && !retry)) return
+  const current = generation
+  const cursor = nextCursor.value
+  olderController = new AbortController()
+  loadingOlder.value = true
+  olderProblem.value = undefined
+  try {
+    const page = await workItemUpdatesApi.listWorkItemUpdates({ workItemId: props.workItemId, cursor, size: 20 }, { signal: olderController.signal })
+    if (current !== generation || disposed) return
+    mergeUpdates(page.items)
+    nextCursor.value = page.nextCursor
+    if (page.nextCursor === cursor) olderProblem.value = localProblem('历史分页未前进，请刷新讨论后重试。')
+    await nextTick()
+  } catch (reason) {
+    const failure = await toApiProblem(reason)
+    if (current === generation && !disposed) olderProblem.value = failure
+  } finally {
+    if (current === generation && !disposed) { loadingOlder.value = false; queueFill() }
   }
-  target.chain().focus().extendMarkRange('link').setLink({ href }).run()
 }
 
 function authorWindowOpen(item: WorkItemUpdate): boolean {
@@ -256,11 +196,13 @@ function canModerateDelete(item: WorkItemUpdate): boolean {
 }
 
 function startEdit(item: WorkItemUpdate): void {
-  if (!canEdit(item) || !item.bodyHtml) return
+  if (busy.value || loading.value || !canEdit(item) || !item.bodyHtml) return
   editingItemId.value = item.id
   editProblem.value = undefined
   editEditor.value?.commands.setContent(item.bodyHtml)
   editDraftText.value = editEditor.value?.getText() ?? ''
+  editOriginalHtml.value = editEditor.value?.getHTML() ?? ''
+  editHtml.value = editOriginalHtml.value
   editDialogVisible.value = true
 }
 
@@ -268,21 +210,24 @@ function currentEditingItem(): WorkItemUpdate | undefined {
   return items.value.find(item => item.id === editingItemId.value)
 }
 
-async function refreshUpdate(updateId: string): Promise<WorkItemUpdate> {
+async function refreshUpdate(updateId: string, current: number): Promise<WorkItemUpdate> {
   const fresh = await workItemUpdatesApi.getWorkItemUpdate({ updateId })
-  mergeUpdates([fresh])
+  if (current === generation && !disposed) mergeUpdates([fresh])
   return fresh
 }
 
-async function handleMutationProblem(reason: unknown, updateId: string, preserveEditDraft: boolean): Promise<void> {
+async function handleMutationProblem(reason: unknown, updateId: string, preserveEditDraft: boolean, current: number): Promise<void> {
   const apiProblem = await toApiProblem(reason)
+  if (current !== generation || disposed) return
   const conflict = isProblemCode(apiProblem, ErrorCode.VersionConflict) || isProblemStatus(apiProblem, 412)
   const unavailable = isProblemStatus(apiProblem, 409)
   if (conflict || unavailable) {
     try {
-      await refreshUpdate(updateId)
+      await refreshUpdate(updateId, current)
+      if (current !== generation || disposed) return
     } catch (refreshReason) {
-      problem.value = await toApiProblem(refreshReason)
+      const failure = await toApiProblem(refreshReason)
+      if (current === generation && !disposed) problem.value = failure
       return
     }
     const message = conflict
@@ -298,7 +243,8 @@ async function handleMutationProblem(reason: unknown, updateId: string, preserve
 
 async function saveEdit(): Promise<void> {
   const item = currentEditingItem()
-  if (!item || !editEditor.value || !editDraftText.value.trim()) return
+  if (!item || !editEditor.value || !editDraftText.value.trim() || savingEdit.value) return
+  const current = generation
   const csrf = readCsrfToken()
   if (!csrf) {
     editProblem.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
@@ -313,17 +259,20 @@ async function saveEdit(): Promise<void> {
       ifMatch: item.etag,
       workItemUpdateEditRequest: { bodyHtml: editEditor.value.getHTML() },
     })
+    if (current !== generation || disposed) return
     mergeUpdates([updated])
     editDialogVisible.value = false
     ElMessage.success('讨论已更新')
   } catch (reason) {
-    await handleMutationProblem(reason, item.id, true)
+    await handleMutationProblem(reason, item.id, true, current)
   } finally {
-    savingEdit.value = false
+    if (current === generation && !disposed) savingEdit.value = false
   }
 }
 
 async function deleteUpdate(item: WorkItemUpdate, reason?: string): Promise<void> {
+  const current = generation
+  if (busy.value || loading.value) return
   const csrf = readCsrfToken()
   if (!csrf) {
     problem.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
@@ -338,6 +287,7 @@ async function deleteUpdate(item: WorkItemUpdate, reason?: string): Promise<void
       ifMatch: item.etag,
       workItemUpdateDeleteRequest: reason === undefined ? {} : { reason },
     })
+    if (current !== generation || disposed) return
     mergeUpdates([deleted])
     const expanded = new Set(expandedAttachmentIds.value)
     expanded.delete(item.id)
@@ -345,13 +295,14 @@ async function deleteUpdate(item: WorkItemUpdate, reason?: string): Promise<void
     if (editingItemId.value === item.id) editDialogVisible.value = false
     ElMessage.success(reason === undefined ? '讨论已删除' : '讨论已治理删除')
   } catch (mutationReason) {
-    await handleMutationProblem(mutationReason, item.id, false)
+    await handleMutationProblem(mutationReason, item.id, false, current)
   } finally {
-    mutatingId.value = undefined
+    if (current === generation && !disposed) mutatingId.value = undefined
   }
 }
 
 async function confirmSelfDelete(item: WorkItemUpdate): Promise<void> {
+  const current = generation
   try {
     await ElMessageBox.confirm('删除后正文不可恢复，但时间线会保留占位。确定删除吗？', '删除讨论', {
       confirmButtonText: '确认删除',
@@ -361,10 +312,11 @@ async function confirmSelfDelete(item: WorkItemUpdate): Promise<void> {
   } catch {
     return
   }
-  await deleteUpdate(item)
+  if (current === generation && !disposed) await deleteUpdate(item)
 }
 
 async function moderateDelete(item: WorkItemUpdate): Promise<void> {
+  const current = generation
   let reason: string
   try {
     const result = await ElMessageBox.prompt('请输入治理删除理由（1–500 字）', '治理删除讨论', {
@@ -380,11 +332,12 @@ async function moderateDelete(item: WorkItemUpdate): Promise<void> {
   } catch {
     return
   }
-  await deleteUpdate(item, reason)
+  if (current === generation && !disposed) await deleteUpdate(item, reason)
 }
 
 async function publish(): Promise<void> {
-  if (!editor.value || !props.canPublish || !hasDraft.value) return
+  if (!editor.value || !props.canPublish || !draftText.value.trim() || publishing.value || loading.value) return
+  const current = generation
   const csrf = readCsrfToken()
   if (!csrf) {
     problem.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
@@ -404,45 +357,148 @@ async function publish(): Promise<void> {
       idempotencyKey: publishKey,
       workItemUpdateCreateRequest: { bodyHtml },
     })
+    if (current !== generation || disposed) return
     mergeUpdates([published])
     editor.value.commands.clearContent(true)
     publishKey = crypto.randomUUID()
     publishKeyBody = editor.value.getHTML()
     await nextTick()
-    if (timeline.value) timeline.value.scrollTop = timeline.value.scrollHeight
+    composer.value?.reset()
+    scrollToTop()
     ElMessage.success('讨论已发布')
   } catch (reason) {
-    problem.value = await toApiProblem(reason)
+    const failure = await toApiProblem(reason)
+    if (current === generation && !disposed) problem.value = failure
   } finally {
-    publishing.value = false
+    if (current === generation && !disposed) publishing.value = false
   }
 }
 
 function discardDraft(): void {
+  editDialogVisible.value = false
+  editEditor.value?.commands.clearContent(true)
   editor.value?.commands.clearContent(true)
+  composer.value?.reset()
   publishKey = crypto.randomUUID()
   publishKeyBody = editor.value?.getHTML() ?? ''
 }
 
-defineExpose({ hasDraft, discardDraft, editor, editEditor, saveEdit })
+async function closeEdit(done: () => void): Promise<void> {
+  if (savingEdit.value) return
+  if (hasEditDraft.value) {
+    try { await ElMessageBox.confirm('离开将丢弃未保存的编辑内容。', '放弃编辑', { confirmButtonText: '放弃编辑', cancelButtonText: '继续编辑' }) }
+    catch { return }
+  }
+  done()
+}
+
+watch(() => props.workItemId, () => {
+  generation++
+  publishing.value = false
+  savingEdit.value = false
+  mutatingId.value = undefined
+  items.value = []
+  nextCursor.value = null
+  expandedAttachmentIds.value = new Set()
+  problem.value = undefined
+  editProblem.value = undefined
+  discardDraft()
+  void loadLatest()
+})
+watch(busy, value => { if (!value) queueFill() })
+
+defineExpose({ hasDraft, busy, discardDraft, editor, editEditor, saveEdit, loadLatest, loadOlder })
 onMounted(() => {
   clock = setInterval(() => { now.value = Date.now() }, 1000)
+  scrollRoot = timeline.value?.closest<HTMLElement>('.el-drawer__body') ?? undefined
+  if (scrollRoot && typeof IntersectionObserver !== 'undefined' && sentinel.value) {
+    observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) void loadOlder()
+    }, { root: scrollRoot })
+    observer.observe(sentinel.value)
+  }
+  if (scrollRoot && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(queueFill)
+    resizeObserver.observe(scrollRoot)
+    if (timeline.value) resizeObserver.observe(timeline.value)
+  }
+  scrollRoot?.addEventListener('scroll', queueFill, { passive: true })
   void loadLatest()
 })
 onBeforeUnmount(() => {
+  disposed = true
+  generation++
+  loadController?.abort()
+  olderController?.abort()
+  observer?.disconnect()
+  resizeObserver?.disconnect()
+  scrollRoot?.removeEventListener('scroll', queueFill)
+  if (frame !== undefined) cancelAnimationFrame(frame)
   if (clock) clearInterval(clock)
 })
 </script>
 
 <template>
-  <section class="discussion" aria-label="工作项讨论">
+  <section
+    class="discussion"
+    aria-label="工作项讨论"
+  >
+    <p
+      v-if="!canPublish"
+      class="discussion__readonly"
+    >
+      {{ readOnlyReason ?? '当前角色仅可查看讨论。' }}
+    </p>
+    <discussion-composer
+      v-else
+      ref="composer"
+      :editor="editor"
+      :busy="publishing"
+      :submit-disabled="!draftText.trim() || loading"
+      @submit="publish"
+    />
+    <inline-problem
+      v-if="problem"
+      :problem="problem"
+    />
     <div class="discussion__actions">
-      <el-button :disabled="!nextCursor || loading" @click="loadOlder">加载更早讨论</el-button>
-      <el-button :loading="loading" @click="loadLatest">刷新</el-button>
+      <el-button
+        text
+        size="small"
+        :loading="loading"
+        :disabled="busy"
+        @click="loadLatest"
+      >
+        刷新
+      </el-button>
     </div>
-    <inline-problem v-if="problem" :problem="problem" />
-    <div ref="timeline" v-loading="loading" class="discussion__timeline" aria-live="polite">
-      <article v-for="item in items" :key="item.id" class="discussion-update">
+    <inline-problem
+      v-if="loadProblem"
+      :problem="loadProblem"
+    />
+    <el-button
+      v-if="loadProblem"
+      @click="loadLatest"
+    >
+      重试加载讨论
+    </el-button>
+    <p
+      v-if="loading && !items.length"
+      class="discussion__state"
+      role="status"
+    >
+      正在加载讨论…
+    </p>
+    <div
+      ref="timeline"
+      class="discussion__timeline"
+      aria-live="polite"
+    >
+      <article
+        v-for="item in items"
+        :key="item.id"
+        class="discussion-update"
+      >
         <header>
           <strong>{{ item.authorDisplayName }}</strong>
           <time :datetime="item.createdAt.toISOString()">{{ item.createdAt.toLocaleString('zh-CN') }}</time>
@@ -454,7 +510,12 @@ onBeforeUnmount(() => {
               size="small"
               @click="toggleAttachments(item.id)"
             >{{ expandedAttachmentIds.has(item.id) ? '收起附件' : '附件' }}</el-button>
-            <el-button v-if="canEdit(item)" text size="small" @click="startEdit(item)">编辑</el-button>
+            <el-button
+              v-if="canEdit(item)"
+              text
+              size="small"
+              @click="startEdit(item)"
+            >编辑</el-button>
             <el-button
               v-if="canSelfDelete(item)"
               text
@@ -471,10 +532,22 @@ onBeforeUnmount(() => {
             >治理删除</el-button>
           </span>
         </header>
-        <div v-if="item.bodyHtml" class="discussion-update__body" v-html="item.bodyHtml" />
-        <div v-else class="discussion-update__deleted">
+        <div
+          v-if="item.bodyHtml"
+          class="discussion-update__body discussion-rich-text"
+          v-html="item.bodyHtml"
+        />
+        <div
+          v-else
+          class="discussion-update__deleted"
+        >
           <p>此讨论已删除</p>
-          <p v-if="item.deleteReason" class="discussion-update__reason">治理理由：{{ item.deleteReason }}</p>
+          <p
+            v-if="item.deleteReason"
+            class="discussion-update__reason"
+          >
+            治理理由：{{ item.deleteReason }}
+          </p>
         </div>
         <keep-alive>
           <attachment-panel
@@ -486,53 +559,72 @@ onBeforeUnmount(() => {
           />
         </keep-alive>
       </article>
-      <p v-if="!loading && !items.length" class="discussion__empty">还没有讨论，发布第一条消息吧。</p>
+      <p
+        v-if="!loading && !loadProblem && !items.length"
+        class="discussion__empty"
+      >
+        还没有讨论，发布第一条消息吧。
+      </p>
     </div>
-    <p v-if="!canPublish" class="discussion__readonly">{{ readOnlyReason ?? '当前角色仅可查看讨论。' }}</p>
-    <div v-else class="discussion-composer">
-      <div class="discussion-toolbar" role="toolbar" aria-label="讨论格式">
-        <el-button text @click="editor?.chain().focus().toggleBold().run()">粗体</el-button>
-        <el-button text @click="editor?.chain().focus().toggleItalic().run()">斜体</el-button>
-        <el-button text @click="editor?.chain().focus().toggleBulletList().run()">项目符号</el-button>
-        <el-button text @click="editor?.chain().focus().toggleOrderedList().run()">编号</el-button>
-        <el-button text @click="editor?.chain().focus().toggleBlockquote().run()">引用</el-button>
-        <el-button text @click="editor?.chain().focus().toggleCode().run()">行内代码</el-button>
-        <el-button text @click="setLink">链接</el-button>
-      </div>
-      <editor-content v-if="editor" :editor="editor" class="discussion-editor" />
-      <div class="discussion-composer__footer">
-        <span>输入 @ 提及 ACTIVE 项目成员</span>
-        <el-button type="primary" :loading="publishing" :disabled="!hasDraft" @click="publish">发布讨论</el-button>
-      </div>
+    <div
+      ref="sentinel"
+      class="discussion__state"
+      aria-live="polite"
+    >
+      <template v-if="loadingOlder">
+        正在加载更早讨论…
+      </template>
+      <template v-else-if="olderProblem">
+        <inline-problem :problem="olderProblem" /><el-button @click="loadOlder(true)">
+          重试加载更早讨论
+        </el-button>
+      </template>
+      <template v-else-if="!loading && !loadProblem && items.length && !nextCursor">
+        已加载全部讨论
+      </template>
     </div>
-    <el-dialog v-model="editDialogVisible" title="编辑讨论" width="min(720px, 92vw)" destroy-on-close>
-      <inline-problem v-if="editProblem" :problem="editProblem" />
-      <div class="discussion-composer discussion-composer--edit">
-        <div class="discussion-toolbar" role="toolbar" aria-label="编辑讨论格式">
-          <el-button text @click="editEditor?.chain().focus().toggleBold().run()">粗体</el-button>
-          <el-button text @click="editEditor?.chain().focus().toggleItalic().run()">斜体</el-button>
-          <el-button text @click="editEditor?.chain().focus().toggleBulletList().run()">项目符号</el-button>
-          <el-button text @click="editEditor?.chain().focus().toggleOrderedList().run()">编号</el-button>
-          <el-button text @click="editEditor?.chain().focus().toggleBlockquote().run()">引用</el-button>
-          <el-button text @click="editEditor?.chain().focus().toggleCode().run()">行内代码</el-button>
-          <el-button text @click="setEditLink">链接</el-button>
-        </div>
-        <editor-content v-if="editEditor" :editor="editEditor" class="discussion-editor" />
-      </div>
+    <el-dialog
+      v-model="editDialogVisible"
+      title="编辑讨论"
+      width="min(720px, 92vw)"
+      destroy-on-close
+      :before-close="closeEdit"
+    >
+      <inline-problem
+        v-if="editProblem"
+        :problem="editProblem"
+      />
+      <discussion-composer
+        ref="editComposer"
+        :editor="editEditor"
+        :busy="savingEdit"
+        :collapsible="false"
+        :show-submit="false"
+      />
       <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="savingEdit" :disabled="!editDraftText.trim()" @click="saveEdit">保存</el-button>
+        <el-button @click="closeEdit(() => { editDialogVisible = false })">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="savingEdit"
+          :disabled="!editDraftText.trim()"
+          @click="saveEdit"
+        >
+          保存
+        </el-button>
       </template>
     </el-dialog>
   </section>
 </template>
 
 <style scoped>
-.discussion { display: grid; min-height: 520px; gap: var(--yp-space-3); }
-.discussion__actions { display: flex; justify-content: space-between; }
-.discussion__timeline { display: grid; max-height: min(52vh, 560px); align-content: start; gap: var(--yp-space-3); overflow-y: auto; padding: var(--yp-space-2); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-sunken); }
+.discussion { display: grid; min-width: 0; gap: var(--yp-space-3); }
+.discussion__actions { display: flex; justify-content: flex-end; }
+.discussion__timeline { display: grid; min-width: 0; align-content: start; gap: var(--yp-space-3); }
+.discussion__state { min-height: 24px; text-align: center; color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
 .discussion-update { padding: var(--yp-space-3); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
-.discussion-update header { display: flex; align-items: center; gap: var(--yp-space-2); color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
+.discussion-update header { display: flex; align-items: center; gap: var(--yp-space-2); flex-wrap: wrap; color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
 .discussion-update header strong { color: var(--yp-text-primary); font-size: var(--yp-type-body-size); }
 .discussion-update__actions { display: flex; gap: 2px; margin-left: auto; }
 .discussion-update__body { margin-top: var(--yp-space-2); line-height: 1.65; overflow-wrap: anywhere; }
@@ -543,14 +635,4 @@ onBeforeUnmount(() => {
 .discussion-update__body :deep(a) { color: var(--yp-link); }
 .discussion-update__body :deep(span[data-type='mention']) { padding: 1px 4px; border-radius: var(--yp-radius-sm); color: var(--yp-link); background: var(--yp-bg-selected); }
 .discussion__empty, .discussion__readonly { color: var(--yp-text-secondary); text-align: center; }
-.discussion-composer { overflow: hidden; border: 1px solid var(--yp-border-strong); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
-.discussion-composer--edit { margin-top: var(--yp-space-2); }
-.discussion-toolbar { display: flex; flex-wrap: wrap; gap: 2px; padding: var(--yp-space-1); border-bottom: 1px solid var(--yp-border-subtle); }
-.discussion-editor :deep(.ProseMirror) { min-height: 120px; padding: var(--yp-space-3); outline: none; }
-.discussion-editor :deep(.ProseMirror p) { margin: 0 0 var(--yp-space-2); }
-.discussion-editor :deep(span[data-type='mention']) { color: var(--yp-link); background: var(--yp-bg-selected); }
-.discussion-composer__footer { display: flex; align-items: center; justify-content: space-between; gap: var(--yp-space-2); padding: var(--yp-space-2); border-top: 1px solid var(--yp-border-subtle); color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
-:global(.mention-popup) { z-index: 4000; position: fixed; display: grid; min-width: 180px; max-height: 240px; overflow-y: auto; padding: 4px; border: 1px solid var(--yp-border-strong); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); box-shadow: var(--yp-shadow-card); }
-:global(.mention-option) { padding: 8px 10px; border: 0; border-radius: var(--yp-radius-sm); color: var(--yp-text-primary); background: transparent; text-align: left; cursor: pointer; }
-:global(.mention-option--active), :global(.mention-option:hover) { background: var(--yp-bg-selected); }
 </style>

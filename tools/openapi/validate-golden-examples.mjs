@@ -114,6 +114,7 @@ function structuralSchemaConstraints(schema, additionalIgnoredKeys = new Set()) 
 }
 
 function schemaForExample(relativePath) {
+  if (relativePath === 'work-items/update-rich-text.json') return 'WorkItemUpdateCreateRequest'
   if (['work-items/deadline-with-time.json', 'work-items/deadline-remove-time.json', 'work-items/deadline-clear.json'].includes(relativePath)) {
     return 'WorkItemDueDatePatchRequest'
   }
