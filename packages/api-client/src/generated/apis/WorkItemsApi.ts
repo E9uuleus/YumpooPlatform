@@ -14,12 +14,12 @@
 
 import * as runtime from '../runtime';
 import type {
-  ContentViewType,
   ErrorResponse,
   ProjectWorkItemCursorPage,
   ProjectWorkItemFilterOptionCursorPage,
   ProjectWorkItemOrderMoveRequest,
   WorkItemAssigneePatchRequest,
+  WorkItemContentPatchRequest,
   WorkItemCreateRequest,
   WorkItemDeleteRequest,
   WorkItemDetail,
@@ -27,7 +27,6 @@ import type {
   WorkItemLabelCatalog,
   WorkItemLabelCreateRequest,
   WorkItemLabelUpdateRequest,
-  WorkItemPage,
   WorkItemParentChangeRequest,
   WorkItemPriorityPatchRequest,
   WorkItemRankMoveRequest,
@@ -42,10 +41,9 @@ import type {
   WorkItemSubitemList,
   WorkItemTransitionRequest,
   WorkItemUpdateRequest,
+  WorkItemViewType,
 } from '../models/index';
 import {
-    ContentViewTypeFromJSON,
-    ContentViewTypeToJSON,
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
     ProjectWorkItemCursorPageFromJSON,
@@ -56,6 +54,8 @@ import {
     ProjectWorkItemOrderMoveRequestToJSON,
     WorkItemAssigneePatchRequestFromJSON,
     WorkItemAssigneePatchRequestToJSON,
+    WorkItemContentPatchRequestFromJSON,
+    WorkItemContentPatchRequestToJSON,
     WorkItemCreateRequestFromJSON,
     WorkItemCreateRequestToJSON,
     WorkItemDeleteRequestFromJSON,
@@ -70,8 +70,6 @@ import {
     WorkItemLabelCreateRequestToJSON,
     WorkItemLabelUpdateRequestFromJSON,
     WorkItemLabelUpdateRequestToJSON,
-    WorkItemPageFromJSON,
-    WorkItemPageToJSON,
     WorkItemParentChangeRequestFromJSON,
     WorkItemParentChangeRequestToJSON,
     WorkItemPriorityPatchRequestFromJSON,
@@ -100,6 +98,8 @@ import {
     WorkItemTransitionRequestToJSON,
     WorkItemUpdateRequestFromJSON,
     WorkItemUpdateRequestToJSON,
+    WorkItemViewTypeFromJSON,
+    WorkItemViewTypeToJSON,
 } from '../models/index';
 
 export interface ChangeWorkItemParentRequest {
@@ -125,7 +125,7 @@ export interface CreateProjectWorkItemStatusLabelRequest {
 }
 
 export interface CreateWorkItemRequest {
-    contentId: string;
+    projectId: string;
     xXSRFTOKEN: string;
     idempotencyKey: string;
     workItemCreateRequest: WorkItemCreateRequest;
@@ -183,21 +183,6 @@ export interface GetWorkItemRequest {
     workItemId: string;
 }
 
-export interface ListContentWorkItemsRequest {
-    contentId: string;
-    page?: number;
-    size?: number;
-    view?: ContentViewType;
-    status?: Set<string>;
-    q?: string;
-    priority?: Set<string>;
-    assigneeUserId?: Set<string>;
-    dueFrom?: Date;
-    dueTo?: Date;
-    updatedAfter?: Date;
-    sort?: Array<string>;
-}
-
 export interface ListProjectWorkItemFilterOptionsRequest {
     projectId: string;
     field: ListProjectWorkItemFilterOptionsFieldEnum;
@@ -218,7 +203,7 @@ export interface ListProjectWorkItemsRequest {
     projectId: string;
     cursor?: string;
     limit?: number;
-    view?: ContentViewType;
+    view?: WorkItemViewType;
     status?: Set<string>;
     q?: string;
     priority?: Set<string>;
@@ -276,6 +261,14 @@ export interface PatchWorkItemAssigneeRequest {
     ifMatch: string;
     idempotencyKey: string;
     workItemAssigneePatchRequest: WorkItemAssigneePatchRequest;
+}
+
+export interface PatchWorkItemContentRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    workItemContentPatchRequest: WorkItemContentPatchRequest;
 }
 
 export interface PatchWorkItemDueDateRequest {
@@ -564,14 +557,13 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * Project、Content、type、报告人和模板初始状态均由服务端派生；处理人必须是 ACTIVE Project 成员。
-     * 在 ACTIVE Content 中创建 Work Item
+     * 在 Project 中创建带必填类别的工作项
      */
     async createWorkItemRaw(requestParameters: CreateWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
-        if (requestParameters['contentId'] == null) {
+        if (requestParameters['projectId'] == null) {
             throw new runtime.RequiredError(
-                'contentId',
-                'Required parameter "contentId" was null or undefined when calling createWorkItem().'
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling createWorkItem().'
             );
         }
 
@@ -611,8 +603,8 @@ export class WorkItemsApi extends runtime.BaseAPI {
         }
 
 
-        let urlPath = `/contents/{contentId}/work-items`;
-        urlPath = urlPath.replace(`{${"contentId"}}`, encodeURIComponent(String(requestParameters['contentId'])));
+        let urlPath = `/projects/{projectId}/work-items`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
 
         const response = await this.request({
             path: urlPath,
@@ -626,8 +618,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * Project、Content、type、报告人和模板初始状态均由服务端派生；处理人必须是 ACTIVE Project 成员。
-     * 在 ACTIVE Content 中创建 Work Item
+     * 在 Project 中创建带必填类别的工作项
      */
     async createWorkItem(requestParameters: CreateWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.createWorkItemRaw(requestParameters, initOverrides);
@@ -1147,89 +1138,6 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 所有条件显式传递；未传筛选和排序时保持事项序号倒序。status、priority、 assigneeUserId 与 sort 可重复，sort 按出现顺序组成最多三层排序；Kanban 按共享状态分组分别加载，并与其余筛选条件取交集。
-     * 分页查询 Content 的真实 Work Item
-     */
-    async listContentWorkItemsRaw(requestParameters: ListContentWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemPage>> {
-        if (requestParameters['contentId'] == null) {
-            throw new runtime.RequiredError(
-                'contentId',
-                'Required parameter "contentId" was null or undefined when calling listContentWorkItems().'
-            );
-        }
-
-        const queryParameters: any = {};
-
-        if (requestParameters['page'] != null) {
-            queryParameters['page'] = requestParameters['page'];
-        }
-
-        if (requestParameters['size'] != null) {
-            queryParameters['size'] = requestParameters['size'];
-        }
-
-        if (requestParameters['view'] != null) {
-            queryParameters['view'] = requestParameters['view'];
-        }
-
-        if (requestParameters['status'] != null) {
-            queryParameters['status'] = requestParameters['status'];
-        }
-
-        if (requestParameters['q'] != null) {
-            queryParameters['q'] = requestParameters['q'];
-        }
-
-        if (requestParameters['priority'] != null) {
-            queryParameters['priority'] = requestParameters['priority'];
-        }
-
-        if (requestParameters['assigneeUserId'] != null) {
-            queryParameters['assigneeUserId'] = requestParameters['assigneeUserId'];
-        }
-
-        if (requestParameters['dueFrom'] != null) {
-            queryParameters['dueFrom'] = (requestParameters['dueFrom'] as any).toISOString().substring(0,10);
-        }
-
-        if (requestParameters['dueTo'] != null) {
-            queryParameters['dueTo'] = (requestParameters['dueTo'] as any).toISOString().substring(0,10);
-        }
-
-        if (requestParameters['updatedAfter'] != null) {
-            queryParameters['updatedAfter'] = (requestParameters['updatedAfter'] as any).toISOString();
-        }
-
-        if (requestParameters['sort'] != null) {
-            queryParameters['sort'] = requestParameters['sort'];
-        }
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-
-        let urlPath = `/contents/{contentId}/work-items`;
-        urlPath = urlPath.replace(`{${"contentId"}}`, encodeURIComponent(String(requestParameters['contentId'])));
-
-        const response = await this.request({
-            path: urlPath,
-            method: 'GET',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemPageFromJSON(jsonValue));
-    }
-
-    /**
-     * 所有条件显式传递；未传筛选和排序时保持事项序号倒序。status、priority、 assigneeUserId 与 sort 可重复，sort 按出现顺序组成最多三层排序；Kanban 按共享状态分组分别加载，并与其余筛选条件取交集。
-     * 分页查询 Content 的真实 Work Item
-     */
-    async listContentWorkItems(requestParameters: ListContentWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemPage> {
-        const response = await this.listContentWorkItemsRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
-
-    /**
      * 按当前项目查询上下文分页取得筛选选项及动态计数
      */
     async listProjectWorkItemFilterOptionsRaw(requestParameters: ListProjectWorkItemFilterOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectWorkItemFilterOptionCursorPage>> {
@@ -1322,8 +1230,8 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 聚合 Project 内全部 Content 的非删除 Work Item。TABLE 复用白名单筛选与排序； KANBAN 必须指定单一 status，固定按更新时间倒序，不提供跨 Content rank。
-     * 分页查询 Project 下全部 Content 的真实 Work Item
+     * 聚合 Project 内全部类别的非删除工作项。TABLE 复用白名单筛选与排序； KANBAN 必须指定单一 status，并使用项目级状态泳道 rank。
+     * 分页查询 Project 下全部工作项
      */
     async listProjectWorkItemsRaw(requestParameters: ListProjectWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectWorkItemCursorPage>> {
         if (requestParameters['projectId'] == null) {
@@ -1400,8 +1308,8 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 聚合 Project 内全部 Content 的非删除 Work Item。TABLE 复用白名单筛选与排序； KANBAN 必须指定单一 status，固定按更新时间倒序，不提供跨 Content rank。
-     * 分页查询 Project 下全部 Content 的真实 Work Item
+     * 聚合 Project 内全部类别的非删除工作项。TABLE 复用白名单筛选与排序； KANBAN 必须指定单一 status，并使用项目级状态泳道 rank。
+     * 分页查询 Project 下全部工作项
      */
     async listProjectWorkItems(requestParameters: ListProjectWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectWorkItemCursorPage> {
         const response = await this.listProjectWorkItemsRaw(requestParameters, initOverrides);
@@ -1841,6 +1749,88 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async patchWorkItemAssignee(requestParameters: PatchWorkItemAssigneeRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.patchWorkItemAssigneeRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 类别切换不改变编号、父子关系、讨论、附件、项目顺序或 Kanban rank。
+     * 切换工作项类别
+     */
+    async patchWorkItemContentRaw(requestParameters: PatchWorkItemContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling patchWorkItemContent().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling patchWorkItemContent().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling patchWorkItemContent().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling patchWorkItemContent().'
+            );
+        }
+
+        if (requestParameters['workItemContentPatchRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemContentPatchRequest',
+                'Required parameter "workItemContentPatchRequest" was null or undefined when calling patchWorkItemContent().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/content`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemContentPatchRequestToJSON(requestParameters['workItemContentPatchRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 类别切换不改变编号、父子关系、讨论、附件、项目顺序或 Kanban rank。
+     * 切换工作项类别
+     */
+    async patchWorkItemContent(requestParameters: PatchWorkItemContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.patchWorkItemContentRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

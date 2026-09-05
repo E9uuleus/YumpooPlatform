@@ -8,10 +8,8 @@ import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.Pro
 import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.RequiredPermission;
 import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.StatusCategory;
 import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.TemplateKey;
-import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.ViewType;
 import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.WorkflowStatus;
 import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.WorkflowTransition;
-import com.yumpoo.platform.templateworkflow.domain.ProjectTemplateDefinition.WorkItemType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -150,7 +148,7 @@ public class JdbcProjectTemplateRepository implements ProjectTemplateRepository 
 
     private ProjectTemplateDefinition loadChildren(Header header) {
         List<ContentBlueprint> blueprints = jdbcClient.sql("""
-                        SELECT content_code, display_name, work_item_type, default_view_type, sort_order
+                        SELECT content_code, display_name, color_token, sort_order
                         FROM yumpoo.project_template_content_blueprint
                         WHERE template_id = :templateId
                         ORDER BY sort_order
@@ -158,8 +156,7 @@ public class JdbcProjectTemplateRepository implements ProjectTemplateRepository 
                 .param("templateId", header.id())
                 .query((resultSet, rowNumber) -> new ContentBlueprint(
                         resultSet.getString("content_code"), resultSet.getString("display_name"),
-                        WorkItemType.valueOf(resultSet.getString("work_item_type")),
-                        ViewType.valueOf(resultSet.getString("default_view_type")),
+                        resultSet.getString("color_token"),
                         resultSet.getInt("sort_order")))
                 .list();
         List<WorkflowStatus> statuses = jdbcClient.sql("""

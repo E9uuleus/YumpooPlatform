@@ -21,9 +21,44 @@ class JsoupCollaborationHtmlSanitizerTest {
                 """);
         var result = sanitizer.canonicalize(parsed, Map.of());
 
-        assertThat(result.bodyHtml()).doesNotContain("script", "onclick", "style", "img", "table")
+        assertThat(result.bodyHtml()).doesNotContain("script", "onclick", "style", "img", "h1")
                 .contains("标题", "正文", "表格文字");
         assertThat(result.bodyText()).contains("标题", "正文", "表格文字");
+    }
+
+    @Test
+    void preservesSupportedFormattingAndCanonicalTaskStateAcrossRepeatedEdits() {
+        String html = """
+                <h2 dir="rtl" style="text-align: center">标题</h2>
+                <p><span style="color: #ff0000; background-color: rgb(0, 255, 16); font-size: 24px"><strong><em><u><s>样式😀</s></u></em></strong></span><code>行内</code></p>
+                <blockquote><p>引用</p></blockquote><pre><code>代码\n第二行</code></pre><hr>
+                <ol start="3"><li><p>编号</p></li></ol><ul><li><p>项目</p></li></ul>
+                <table><tbody><tr><th colspan="2" rowspan="1"><p>表头</p></th></tr><tr><td><p>内容</p></td><td><p>单元格</p></td></tr></tbody></table>
+                <ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>完成</p></li><li data-type="taskItem" data-checked="false"><p>待办</p></li></ul>
+                """;
+        var first = sanitizer.canonicalize(sanitizer.parse(html), Map.of());
+        var second = sanitizer.canonicalize(sanitizer.parse(first.bodyHtml()), Map.of());
+        assertThat(second).isEqualTo(first);
+        assertThat(first.bodyHtml()).contains("<h2", "dir=\"rtl\"", "text-align: center", "color: #ff0000",
+                "background-color: rgb(0, 255, 16)", "font-size: 24px", "<u><s>", "<pre><code>", "<hr>",
+                "<table>", "colspan=\"2\"", "start=\"3\"", "data-checked=\"true\"", "data-checked=\"false\"");
+    }
+
+    @Test
+    void removesUnsafeStylesAttributesAndForgedTaskControls() {
+        var result = sanitizer.canonicalize(sanitizer.parse("""
+                <p dir="auto" style="text-align: center; position: fixed; background: url(javascript:evil)">
+                <span onclick="evil()" class="overlay" style="color: rgb(256, 0, 0); font-size: 999px; background-color: expression(evil)">正文</span>
+                <span style="color: #fff; font-size: 18px; opacity: 0">受限样式</span></p>
+                <ul data-type="evil"><li data-type="taskItem" data-checked="true"><input checked onclick="evil()">伪造</li></ul>
+                <ul data-type="taskList"><li data-type="taskItem" data-checked="evil">未勾选</li></ul>
+                <table><tr><td colspan="99999" rowspan="-1" style="position:fixed">表格</td></tr></table>
+                """), Map.of());
+        assertThat(result.bodyHtml()).doesNotContain("onclick", "class=", "position", "url(", "expression", "256", "999", "opacity", "input", "dir=", "rowspan", "colspan", "data-checked=\"true\"")
+                .contains("text-align: center", "color: #fff; font-size: 18px", "data-checked=\"false\"");
+        assertThatThrownBy(() -> sanitizer.canonicalize(sanitizer.parse(
+                "<span data-type=mention data-mention-user-id='" + USER_ID + "'>伪造</span>"), Map.of()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

@@ -12,6 +12,10 @@ M2-19A 起，Project 级状态/优先级标签目录成为运行时可选值、�
 
 `work_item` 保存完整领域列。创建与 M2-11 字段更新使用标题、优先级、处理人、描述、备注、计划起止日和截止日的快照；`priority` 与其他可空字段必须显式出现，传 `null` 表示暂不设置或清空。摘要、详情、事件和数据库列共同接受空优先级，V39 只移除 `priority` 的非空约束而不改写既有值。描述与备注规范化为最多 16 KiB 的纯文本；自然日使用 `LocalDate`/`YYYY-MM-DD`，不经过服务器或浏览器本地时区换算。既有 v1 创建契约继续允许旧客户端省略新增处理人和日期，初始值按空处理；新 Web 固定提交完整八字段。
 
+截止日期继续保存自然日 `dueDate`，V49 追加可空分钟精度 `dueTime`（`HH:mm` / SQL time）和只读 `completedAt`（Instant / timestamptz），不把纯日期迁成 UTC 零点时间戳。创建省略时分按空处理；字段更新和截止日期 PATCH 省略时分保留原值，显式 null 移除时分，清空日期同时清空时分；无日期而有时分及非法分钟格式拒绝。请求 DTO 和幂等哈希保留“省略／null”区别，生成客户端也保留该区别并兼容缺少新增字段的旧响应。日期与时间作为一个逻辑 `dueDate` 变更，不改变现有日期排序、筛选或游标语义。
+
+从非 DONE 进入 DONE 时记录服务端完成时间，离开 DONE 清除，再次完成重新记录；DONE 类别内切换、普通编辑、排序与删除恢复不覆盖该事实。旧已完成项不使用 updatedAt 或旧事件推算，不回填 completedAt。主子表专用日期组件按企业 IANA 时区解释年度、今天和截止时刻；纯日期包含整天，带时分按实际时长比较（夏令时重叠取较早时刻，缺口向后平移）。已完成结果固定按完成事实计算；缺少完成事实只显示“完成时间未记录”。不足 24 小时提示不足一天，完整天数向下取整；提前或按时完成划线，逾期完成不划线。当前分钟、跨午夜和页面重新激活刷新未完成项判断，不影响全局日期格式化。
+
 事项编号按 Project 独立计数器原子递增，固化为 `PROJECT_CODE-sequence`。编号不复用，Project 改名或后续代码策略变化都不改写既有编号。幂等记录包住编号分配、Work Item 插入和 Outbox；同键同请求重放存储的 201 响应，不再次推进计数器或发布事件。
 
 创建事务固定按 Project `FOR SHARE`、Content `FOR SHARE`、模板固定版本、Project 计数器、Work Item 的顺序执行，并在锁内复核 Project 与 Content 生命周期。Content 归档按 Project `FOR SHARE`、Content `FOR UPDATE` 后查询开放事项；两条事务因此只能得到“事项先创建并阻止归档”或“Content 先归档并使创建失败”。Project 归档的排他锁同样与创建互斥。
@@ -50,10 +54,13 @@ workitem 通过公开只读端口向 administration 报告 `OPEN_WORK_ITEMS`，�
 
 `workitem.work_item_created` v1 兼容增加可选处理人和自然日。每次有效 PATCH 发布 `workitem.work_item_fields_changed`；分配、改派与取消分配另发 assigned/unassigned v1。每次有效状态迁移发布 `workitem.work_item_status_changed` v1，载荷只含 Work Item/Project/Content 引用、编号、标题、类型、前后状态及类别、说明和新版本，不携带 description/notes 正文。普通成员迁移不额外写 Security Audit，Activity 投影仍由 M2-20 交付。普通查询不发布事件。Table 使用 Content 的列顺序和显隐及当前查询；Kanban 保留配置分组但按单状态子泳道分页，不保存第二份卡片数据。
 
+为支持新切点后的单元格动态，`workitem.work_item_fields_changed@v1` 兼容增加可选 `previousTitle`、`previousPriority`、`previousDueDate`，当前生产者固定写入（可空字段以 JSON null 表示）；正文和备注仍严格禁止进入事件。处理人前值继续以 assigned/unassigned 专用事件为真源，状态前值继续以 status-changed 的 from/to 为真源，避免同一事实重复投影。Content 仅作为事件发生时类别快照，不新增工作项跨 Content 移动命令或事件。
+
 删除和恢复分别发布 `workitem.work_item_deleted/restored` v1；删除事件只传播必要标识、状态、优先级、删除事实和新版本，恢复事件传播恢复操作者/时间与新版本，两者都不传播 description、notes 或内部 rank。命令要求 XSRF、强 If-Match 和持久化幂等键；同键同请求精确重放原墓碑/恢复结果且不重复发事件，新键与错误生命周期冲突返回 409。Web 只维护当前页面内存中的多条即时撤销提示，不建立持久回收站；传输失败重试复用原键，409/412 只刷新真源且不自动重提。
 
 ## Alternatives considered
 
+- 将 dueDate 改为时间戳或以 updatedAt 推算历史完成时间：拒绝。前者破坏自然日及旧客户端契约，后者会把普通编辑误认作完成事件。追加可空事实保留历史未知，不虚构精度。
 - 使用 `max(sequence)+1` 或在 JVM 内加锁：拒绝。多实例和事务回滚下无法建立单调唯一保证。
 - 用数据库全局 sequence 生成编号：拒绝。会泄露跨 Project 写入节奏，也不满足 Project 内连续、可读的编号语义。
 - 归档先提交、再异步扫描并补偿 Work Item：拒绝。会允许归档后成功写入，且用户无法得到确定的 409。

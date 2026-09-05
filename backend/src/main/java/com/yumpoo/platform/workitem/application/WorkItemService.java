@@ -24,8 +24,7 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.workitem.domain.Content;
-import com.yumpoo.platform.workitem.domain.ContentStatus;
-import com.yumpoo.platform.workitem.domain.ContentViewType;
+import com.yumpoo.platform.workitem.domain.WorkItemViewType;
 import com.yumpoo.platform.workitem.domain.KanbanRank;
 import com.yumpoo.platform.workitem.domain.ProjectSortKey;
 import com.yumpoo.platform.workitem.domain.WorkItem;
@@ -51,6 +50,7 @@ import java.util.UUID;
 
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Create;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.CreateSubitem;
+import static com.yumpoo.platform.workitem.application.WorkItemCommands.ChangeContent;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.Delete;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.RankMove;
 import static com.yumpoo.platform.workitem.application.WorkItemCommands.ProjectOrderMove;
@@ -125,8 +125,8 @@ public class WorkItemService {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         WorkItemQuery query = WorkItemQuery.parse(request, allowedStatuses);
         requireAllowedPriorities(query, priorityLabels);
-        ContentViewType effectiveView = view(view);
-        if (effectiveView == ContentViewType.KANBAN) {
+        WorkItemViewType effectiveView = view(view);
+        if (effectiveView == WorkItemViewType.KANBAN) {
             if (query.statuses().size() != 1)
                 throw validation("status", "KANBAN_REQUIRES_ONE_STATUS",
                         "Kanban 泳道查询必须且只能指定一个状态");
@@ -160,8 +160,8 @@ public class WorkItemService {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         WorkItemQuery query = WorkItemQuery.parse(request, allowedStatuses);
         requireAllowedPriorities(query, priorityLabels);
-        ContentViewType effectiveView = view(view);
-        if (effectiveView == ContentViewType.KANBAN) {
+        WorkItemViewType effectiveView = view(view);
+        if (effectiveView == WorkItemViewType.KANBAN) {
             if (query.statuses().size() != 1)
                 throw validation("status", "KANBAN_REQUIRES_ONE_STATUS",
                         "项目 Kanban 泳道查询必须且只能指定一个状态");
@@ -254,7 +254,7 @@ public class WorkItemService {
         } catch (RuntimeException exception) {
             throw validation("field", "INVALID_VALUE", "筛选选项字段不受支持");
         }
-        String fingerprint = projectCursorFingerprint(projectId, ContentViewType.TABLE, query)
+        String fingerprint = projectCursorFingerprint(projectId, WorkItemViewType.TABLE, query)
                 + ":" + normalizedField;
         ProjectWorkItemFilterCursorCodec.Cursor decoded = projectFilterCursors.decode(page.cursor());
         if (decoded != null && (!decoded.fingerprint().equals(fingerprint)
@@ -330,6 +330,9 @@ public class WorkItemService {
 
     public IdempotencyExecutionResult create(Create command) {
         VisibleContent visible = visibleContent(command.actor(), command.contentId());
+        if (!visible.project().projectId().equals(command.projectId())) {
+            throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+        }
         requireWritableAccess(visible.project().actorAccess());
         String priority = priority(command.priority());
         requireDateRange(command.timelineStartDate(), command.timelineEndDate());
@@ -346,7 +349,7 @@ public class WorkItemService {
             CreatedWorkItem created = createItem(project, content, new WorkItemDraft(
                     command.title(), priority, command.assigneeUserId(), command.description(),
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
-                    command.dueDate()), command.actor());
+                    command.dueDate(), command.dueTime()), command.actor());
             return stored(201, detail(created.item(),
                     people(project.companyId(), List.of(created.item())), true,
                     created.statusLabels()));
@@ -371,7 +374,6 @@ public class WorkItemService {
             Content parentContent = contents.lockForShare(project.companyId(), project.projectId(),
                             parentLocator.contentId())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-            requireActiveContent(parentContent);
             WorkItem parent = workItems.lock(project.companyId(), project.projectId(),
                             parentContent.id(), command.parentWorkItemId())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
@@ -388,7 +390,7 @@ public class WorkItemService {
             CreatedWorkItem created = createItem(project, targetContent, new WorkItemDraft(
                     command.title(), priority, command.assigneeUserId(), command.description(),
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
-                    command.dueDate()), command.actor());
+                    command.dueDate(), command.dueTime()), command.actor());
             ParentChildRelation relation = new ParentChildRelation(UUID.randomUUID(),
                     project.companyId(), parent.id(), created.item().id(), project.projectId(),
                     command.actor().userId(), created.item().createdAt());
@@ -414,8 +416,8 @@ public class WorkItemService {
                         StandardErrorCode.INVALID_STATE_TRANSITION,
                         "PROJECT_INITIAL_STATUS_MISSING"));
         requireSelectablePriority(draft.priority(), priorityLabels, null);
-        workItems.lockRankLanes(content.id(), List.of(initial.code()));
-        String rank = allocateRank(project.companyId(), project.projectId(), content.id(),
+        workItems.lockRankLanes(project.companyId(), project.projectId(), List.of(initial.code()));
+        String rank = allocateRank(project.companyId(), project.projectId(),
                 initial.code(), WorkItemRankPlacement.START, null, null).rank();
         UUID workItemId = UUID.randomUUID();
         workItems.lockProjectOrder(project.companyId(), project.projectId());
@@ -429,25 +431,41 @@ public class WorkItemService {
         try {
             item = WorkItem.create(workItemId, project.companyId(), project.projectId(),
                     content.id(), sequence, project.projectCode() + "-" + sequence,
-                    content.workItemType(), draft.title(), initial.code(),
+                    draft.title(), initial.code(),
                     WorkItemStatusCategory.valueOf(initial.statusCategory()), draft.priority(),
                     draft.assigneeUserId(), draft.description(), draft.notes(),
-                    draft.timelineStartDate(), draft.timelineEndDate(), draft.dueDate(), rank,
+                    draft.timelineStartDate(), draft.timelineEndDate(), draft.dueDate(),
+                    draft.dueTime().resolve(draft.dueDate(), null), rank,
                     projectSortKey, actor.userId(), clock.instant());
         } catch (IllegalArgumentException exception) {
             throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
         }
         if (!workItems.insert(item)) throw new IllegalStateException("work item insert failed");
+        markContentUsed(project, content, actor);
         appendCreated(item, actor);
         return new CreatedWorkItem(item, statusLabels);
     }
 
     private record WorkItemDraft(String title, String priority, UUID assigneeUserId,
             String description, String notes, LocalDate timelineStartDate,
-            LocalDate timelineEndDate, LocalDate dueDate) {}
+            LocalDate timelineEndDate, LocalDate dueDate, DueTimeChange dueTime) {}
 
     private record CreatedWorkItem(WorkItem item,
             List<WorkItemLabelModels.StatusLabel> statusLabels) {}
+
+    private void markContentUsed(ProjectFactWriteSnapshot project, Content content, CurrentActor actor) {
+        if (content.everUsed()) return;
+        long catalogVersion = contents.lockCatalogVersion(project.companyId(), project.projectId());
+        Content locked = contents.lock(project.companyId(), project.projectId(), content.id())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        if (locked.everUsed()) return;
+        contents.update(locked.markUsed(actor.userId(), clock.instant()), locked.rowVersion())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        if (!contents.bumpCatalogVersion(project.companyId(), project.projectId(),
+                catalogVersion, clock.instant())) {
+            throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+        }
+    }
 
     @Transactional
     public WorkItemDetail update(Update command) {
@@ -458,7 +476,6 @@ public class WorkItemService {
         requireWritableAccess(project.actorAccess());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        requireActiveContent(content);
         List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
                 project.companyId(), project.projectId());
         List<WorkItemLabelModels.PriorityLabel> priorityLabels = labels.priorities(
@@ -476,6 +493,7 @@ public class WorkItemService {
             candidate = before.updateFields(command.title(), nextPriority,
                     command.assigneeUserId(), command.description(), command.notes(),
                     command.timelineStartDate(), command.timelineEndDate(), command.dueDate(),
+                    command.dueTime().resolve(command.dueDate(), before.dueTime()),
                     command.actor().userId(), clock.instant());
         } catch (IllegalArgumentException exception) {
             throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
@@ -486,7 +504,7 @@ public class WorkItemService {
         }
         WorkItem after = workItems.update(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
-        appendFieldsChanged(after, command.actor(), changedFields);
+        appendFieldsChanged(before, after, command.actor(), changedFields);
         appendAssignmentChange(before, after, command.actor());
         return detail(after, people(project.companyId(), List.of(after)), true, statusLabels);
     }
@@ -508,7 +526,6 @@ public class WorkItemService {
         requireWritableAccess(project.actorAccess());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        requireActiveContent(content);
         WorkItem snapshot = workItems.find(project.companyId(), project.projectId(),
                         locator.contentId(), command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
@@ -518,13 +535,14 @@ public class WorkItemService {
         WorkItemLabelModels.StatusLabel target = selectableStatus(statusLabels, command.toStatus());
         requireDistinctStatus(snapshot.statusCode(), target.code());
         String resolution = normalizeResolution(command.resolution());
-        workItems.lockRankLanes(content.id(), List.of(snapshot.statusCode(), target.code()));
+        workItems.lockRankLanes(project.companyId(), project.projectId(),
+                List.of(snapshot.statusCode(), target.code()));
         WorkItem before = workItems.lock(project.companyId(), project.projectId(),
                         locator.contentId(), command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireVersion(before, command.expectedVersion());
         requireDistinctStatus(before.statusCode(), target.code());
-        String rank = allocateRank(project.companyId(), project.projectId(), content.id(),
+        String rank = allocateRank(project.companyId(), project.projectId(),
                 target.code(), WorkItemRankPlacement.START, null, before.id()).rank();
         WorkItem candidate;
         try {
@@ -604,6 +622,59 @@ public class WorkItemService {
                 () -> inlineUpdate(command, locator));
     }
 
+    public IdempotencyExecutionResult changeContent(ChangeContent command) {
+        requireActor(command.actor());
+        WorkItemLocator locator = workItems.findLocator(command.actor().companyId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        ProjectAccessSnapshot project = visible(command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
+                command.actor().userId(), "PATCH", "changeWorkItemContent",
+                command.idempotencyKey()), command.requestHash()),
+                () -> changeContent(command, locator));
+    }
+
+    private StoredCommandResult changeContent(ChangeContent command, WorkItemLocator locator) {
+        ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(command.actor(), locator.projectId());
+        requireWritableAccess(project.actorAccess());
+        WorkItem before = workItems.lock(project.companyId(), project.projectId(),
+                        locator.contentId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(before, command.expectedVersion());
+        Content previous = contents.find(project.companyId(), project.projectId(), before.contentId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        if (before.contentId().equals(command.contentId())) {
+            return stored(200, detail(before, people(project.companyId(), List.of(before)), true,
+                    labels.statuses(project.companyId(), project.projectId())));
+        }
+        long catalogVersion = contents.lockCatalogVersion(project.companyId(), project.projectId());
+        Content target = contents.lock(project.companyId(), project.projectId(), command.contentId())
+                .orElseThrow(() -> validation("contentId", "UNKNOWN_CONTENT", "工作项类别不存在"));
+        requireActiveContent(target);
+        if (!target.everUsed()) {
+            target = contents.update(target.markUsed(command.actor().userId(), clock.instant()),
+                            target.rowVersion())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+            if (!contents.bumpCatalogVersion(project.companyId(), project.projectId(),
+                    catalogVersion, clock.instant())) {
+                throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+            }
+        }
+        WorkItem candidate = before.changeContent(target.id(), command.actor().userId(), clock.instant());
+        WorkItem after = workItems.changeContent(candidate, command.expectedVersion())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+        Map<String, Object> payload = commonEventPayload(after);
+        payload.put("changedFields", List.of("contentId"));
+        payload.put("previousContentId", previous.id());
+        payload.put("previousContentName", previous.name());
+        payload.put("previousContentColorToken", previous.colorToken());
+        payload.put("contentName", target.name());
+        payload.put("contentColorToken", target.colorToken());
+        append(FIELDS_CHANGED, after, command.actor(), payload);
+        return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
+                labels.statuses(project.companyId(), project.projectId())));
+    }
+
     public IdempotencyExecutionResult delete(Delete command) {
         requireActor(command.actor());
         WorkItemLocator locator = workItems.findLocatorIncludingDeleted(
@@ -623,7 +694,6 @@ public class WorkItemService {
         requireWritableAccess(project.actorAccess());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        requireActiveContent(content);
         WorkItem before = workItems.lockIncludingDeleted(project.companyId(), project.projectId(),
                         content.id(), command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
@@ -660,23 +730,22 @@ public class WorkItemService {
         requireWritableAccess(project.actorAccess());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        requireActiveContent(content);
         WorkItem snapshot = workItems.findIncludingDeleted(project.companyId(), project.projectId(),
                         content.id(), command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireVersion(snapshot, command.expectedVersion());
         if (!snapshot.deleted()) throw invalidLifecycle("WORK_ITEM_NOT_DELETED");
-        workItems.lockRankLanes(content.id(), List.of(snapshot.statusCode()));
+        workItems.lockRankLanes(project.companyId(), project.projectId(), List.of(snapshot.statusCode()));
         WorkItem before = workItems.lockIncludingDeleted(project.companyId(), project.projectId(),
                         content.id(), command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireVersion(before, command.expectedVersion());
         if (!before.deleted()) throw invalidLifecycle("WORK_ITEM_NOT_DELETED");
         List<RankedWorkItem> lane = workItems.findRankOrder(project.companyId(), project.projectId(),
-                content.id(), before.statusCode());
+                before.statusCode());
         boolean originalRankAvailable = lane.stream().noneMatch(item -> item.rank().equals(before.rank()));
         String rank = originalRankAvailable ? before.rank()
-                : allocateRank(project.companyId(), project.projectId(), content.id(),
+                : allocateRank(project.companyId(), project.projectId(),
                         before.statusCode(), WorkItemRankPlacement.START, null, null).rank();
         workItems.lockProjectOrder(project.companyId(), project.projectId());
         String projectSortKey = before.projectSortKey();
@@ -708,7 +777,6 @@ public class WorkItemService {
         requireWritableAccess(project.actorAccess());
         Content content = contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        requireActiveContent(content);
         List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
                 project.companyId(), project.projectId());
         WorkItem snapshot = workItems.find(project.companyId(), project.projectId(), content.id(),
@@ -722,7 +790,8 @@ public class WorkItemService {
         if (snapshot.statusCode().equals(target.code()) && resolution != null) {
             throw validation("resolution", "NOT_ALLOWED", "同状态排序不接受迁移说明");
         }
-        workItems.lockRankLanes(content.id(), List.of(snapshot.statusCode(), target.code()));
+        workItems.lockRankLanes(project.companyId(), project.projectId(),
+                List.of(snapshot.statusCode(), target.code()));
         WorkItem before = workItems.lock(project.companyId(), project.projectId(), content.id(),
                         command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
@@ -730,7 +799,7 @@ public class WorkItemService {
         if (!before.statusCode().equals(snapshot.statusCode()))
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
         RankAllocation allocation = allocateRank(project.companyId(), project.projectId(),
-                content.id(), target.code(), placement, command.anchorWorkItemId(), before.id());
+                target.code(), placement, command.anchorWorkItemId(), before.id());
         if (allocation.noOp())
             return stored(200, detail(before, people(project.companyId(), List.of(before)), true,
                     statusLabels));
@@ -765,7 +834,6 @@ public class WorkItemService {
         Content content = contents.lockForShare(project.companyId(), project.projectId(),
                         locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        requireActiveContent(content);
         workItems.lockProjectOrder(project.companyId(), project.projectId());
         if (parentWorkItemId != null) {
             WorkItem parent = workItems.lockProjectItem(project.companyId(), project.projectId(),
@@ -883,7 +951,6 @@ public class WorkItemService {
         Content content = contents.lockForShare(project.companyId(), project.projectId(),
                         locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        requireActiveContent(content);
         WorkItem before = workItems.lock(project.companyId(), project.projectId(), content.id(),
                         command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
@@ -906,6 +973,8 @@ public class WorkItemService {
                     before.description(), before.notes(), before.timelineStartDate(),
                     before.timelineEndDate(),
                     "DUE_DATE".equals(command.field()) ? command.dueDate() : before.dueDate(),
+                    "DUE_DATE".equals(command.field())
+                            ? command.dueTime().resolve(command.dueDate(), before.dueTime()) : before.dueTime(),
                     command.actor().userId(), clock.instant());
         } catch (IllegalArgumentException exception) {
             throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
@@ -916,7 +985,7 @@ public class WorkItemService {
                     statusLabels));
         WorkItem after = workItems.update(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
-        appendFieldsChanged(after, command.actor(), changedFields);
+        appendFieldsChanged(before, after, command.actor(), changedFields);
         appendAssignmentChange(before, after, command.actor());
         return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
                 statusLabels));
@@ -961,11 +1030,15 @@ public class WorkItemService {
         priorityLabels.stream().sorted(Comparator.comparingInt(WorkItemLabelModels.PriorityLabel::sortOrder))
                 .forEach(priority -> priorityRanks.put(priority.code(), priorityRanks.size()));
         boolean assigneeSort = query.sorts().stream()
-                .anyMatch(sort -> sort.field() == ContentViewConfig.SortField.ASSIGNEE);
+                .anyMatch(sort -> sort.field() == WorkItemSortField.ASSIGNEE);
         boolean reporterSort = query.sorts().stream()
-                .anyMatch(sort -> sort.field() == ContentViewConfig.SortField.REPORTER);
+                .anyMatch(sort -> sort.field() == WorkItemSortField.REPORTER);
+        Map<UUID, Integer> contentRanks = new LinkedHashMap<>();
+        contents.findAll(companyId, projectId).stream()
+                .sorted(Comparator.comparingInt(Content::sortOrder).thenComparing(Content::id))
+                .forEach(content -> contentRanks.put(content.id(), contentRanks.size()));
         if (!assigneeSort && !reporterSort)
-            return new WorkItemSortRanks(statusRanks, priorityRanks, Map.of(), Map.of());
+            return new WorkItemSortRanks(statusRanks, priorityRanks, contentRanks, Map.of(), Map.of());
         Set<UUID> participantIds = contentId == null
                 ? workItems.findProjectParticipantUserIds(companyId, projectId)
                 : workItems.findParticipantUserIds(companyId, projectId, contentId);
@@ -978,19 +1051,22 @@ public class WorkItemService {
                 .toList();
         Map<UUID, Integer> personRanks = new LinkedHashMap<>();
         ordered.forEach(snapshot -> personRanks.put(snapshot.userId(), personRanks.size()));
-        return new WorkItemSortRanks(statusRanks, priorityRanks,
+        return new WorkItemSortRanks(statusRanks, priorityRanks, contentRanks,
                 assigneeSort ? personRanks : Map.of(), reporterSort ? personRanks : Map.of());
     }
 
-    private static WorkItemSummary summary(WorkItem item,
+    private WorkItemSummary summary(WorkItem item,
             Map<UUID, MinimalUserSnapshot> people, boolean canEditFields,
             List<WorkItemLabelModels.StatusLabel> statusLabels) {
+        Content content = contents.find(item.companyId(), item.projectId(), item.contentId()).orElse(null);
         return new WorkItemSummary(item.id(), item.projectId(), item.contentId(), item.itemNo(),
-                item.type().name(), item.title(), item.statusCode(), item.statusCategory().name(),
+                content == null ? "未知类别" : content.name(),
+                content == null ? "GRAY" : content.colorToken(), item.title(),
+                item.statusCode(), item.statusCategory().name(),
                 priorityName(item), item.assigneeUserId(), assigneeDisplayName(item, people),
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
-                item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
+                item.dueDate(), dueTimeText(item), item.completedAt(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
                 new WorkItemCapabilities(canEditFields, canEditFields, canEditFields,
                         canEditFields, canEditFields, false,
                         availableTransitions(item, canEditFields, statusLabels)), item.updatedAt());
@@ -1000,9 +1076,10 @@ public class WorkItemService {
             Map<UUID, MinimalUserSnapshot> people, boolean canEditFields,
             List<WorkItemLabelModels.StatusLabel> statusLabels, long subitemCount) {
         return new ProjectWorkItemListItem(item.id(), item.projectId(), item.contentId(),
-                content == null ? "未知 Content" : content.name(), item.itemNo(), item.type().name(),
+                content == null ? "未知类别" : content.name(),
+                content == null ? "GRAY" : content.colorToken(), item.itemNo(),
                 item.title(), item.statusCode(), item.statusCategory().name(), priorityName(item),
-                item.assigneeUserId(), assigneeDisplayName(item, people), item.dueDate(),
+                item.assigneeUserId(), assigneeDisplayName(item, people), item.dueDate(), dueTimeText(item), item.completedAt(),
                 item.rowVersion(), StrongEtag.format(item.rowVersion()),
                 new WorkItemCapabilities(canEditFields, canEditFields, canEditFields,
                         canEditFields, canEditFields, false,
@@ -1010,15 +1087,18 @@ public class WorkItemService {
                 item.updatedAt());
     }
 
-    private static WorkItemDetail detail(WorkItem item,
+    private WorkItemDetail detail(WorkItem item,
             Map<UUID, MinimalUserSnapshot> people, boolean canEditFields,
             List<WorkItemLabelModels.StatusLabel> statusLabels) {
+        Content content = contents.find(item.companyId(), item.projectId(), item.contentId()).orElse(null);
         return new WorkItemDetail(item.id(), item.projectId(), item.contentId(), item.itemNo(),
-                item.type().name(), item.title(), item.statusCode(), item.statusCategory().name(),
+                content == null ? "未知类别" : content.name(),
+                content == null ? "GRAY" : content.colorToken(), item.title(),
+                item.statusCode(), item.statusCategory().name(),
                 priorityName(item), item.assigneeUserId(), assigneeDisplayName(item, people),
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
-                item.dueDate(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
+                item.dueDate(), dueTimeText(item), item.completedAt(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
                 new WorkItemCapabilities(canEditFields && !item.deleted(),
                         canEditFields && !item.deleted(), canEditFields && !item.deleted(),
                         canEditFields && !item.deleted(), canEditFields && !item.deleted(),
@@ -1039,7 +1119,7 @@ public class WorkItemService {
                 .toList();
     }
 
-    private static String projectCursorFingerprint(UUID projectId, ContentViewType view,
+    private static String projectCursorFingerprint(UUID projectId, WorkItemViewType view,
             WorkItemQuery query) {
         String statuses = query.statuses().stream().sorted().collect(java.util.stream.Collectors.joining(","));
         String priorities = query.priorities().stream().sorted()
@@ -1063,10 +1143,10 @@ public class WorkItemService {
         }
     }
 
-    private RankAllocation allocateRank(UUID companyId, UUID projectId, UUID contentId,
+    private RankAllocation allocateRank(UUID companyId, UUID projectId,
             String statusCode, WorkItemRankPlacement placement, UUID anchorWorkItemId,
             UUID movingWorkItemId) {
-        List<RankedWorkItem> lane = workItems.findRankOrder(companyId, projectId, contentId, statusCode);
+        List<RankedWorkItem> lane = workItems.findRankOrder(companyId, projectId, statusCode);
         List<UUID> original = lane.stream().map(RankedWorkItem::id).toList();
         List<RankedWorkItem> available = lane.stream()
                 .filter(item -> !item.id().equals(movingWorkItemId)).toList();
@@ -1087,8 +1167,8 @@ public class WorkItemService {
             Map<UUID, String> rebalanced = new LinkedHashMap<>();
             for (int index = 0; index < lane.size(); index++)
                 rebalanced.put(lane.get(index).id(), KanbanRank.evenlySpaced(index + 1, lane.size()));
-            workItems.rewriteRanks(companyId, projectId, contentId, statusCode, rebalanced);
-            lane = workItems.findRankOrder(companyId, projectId, contentId, statusCode);
+            workItems.rewriteRanks(companyId, projectId, statusCode, rebalanced);
+            lane = workItems.findRankOrder(companyId, projectId, statusCode);
             available = lane.stream().filter(item -> !item.id().equals(movingWorkItemId)).toList();
             targetIndex = targetIndex(available, placement, anchorWorkItemId, movingWorkItemId);
             candidate = KanbanRank.between(
@@ -1181,9 +1261,13 @@ public class WorkItemService {
                 objectMapper.valueToTree(payload)));
     }
 
-    private void appendFieldsChanged(WorkItem item, CurrentActor actor,
+    private void appendFieldsChanged(WorkItem before, WorkItem item, CurrentActor actor,
             List<String> changedFields) {
         Map<String, Object> payload = commonEventPayload(item);
+        payload.put("previousTitle", before.title());
+        payload.put("previousPriority", before.priority());
+        payload.put("previousDueDate", before.dueDate());
+        payload.put("previousDueTime", dueTimeText(before));
         payload.put("changedFields", changedFields);
         append(FIELDS_CHANGED, item, actor, payload);
     }
@@ -1209,7 +1293,6 @@ public class WorkItemService {
         payload.put("contentId", after.contentId());
         payload.put("itemNo", after.itemNo());
         payload.put("title", after.title());
-        payload.put("workItemType", after.type().name());
         payload.put("fromStatus", before.statusCode());
         payload.put("toStatus", after.statusCode());
         payload.put("fromStatusCategory", before.statusCategory().name());
@@ -1255,7 +1338,6 @@ public class WorkItemService {
         payload.put("contentId", item.contentId());
         payload.put("itemNo", item.itemNo());
         payload.put("title", item.title());
-        payload.put("workItemType", item.type().name());
         payload.put("statusCode", item.statusCode());
         payload.put("statusCategory", item.statusCategory().name());
         payload.put("priority", priorityName(item));
@@ -1270,7 +1352,6 @@ public class WorkItemService {
         payload.put("contentId", item.contentId());
         payload.put("itemNo", item.itemNo());
         payload.put("title", item.title());
-        payload.put("workItemType", item.type().name());
         payload.put("statusCode", item.statusCode());
         payload.put("statusCategory", item.statusCategory().name());
         payload.put("priority", priorityName(item));
@@ -1278,13 +1359,16 @@ public class WorkItemService {
         payload.put("timelineStartDate", item.timelineStartDate());
         payload.put("timelineEndDate", item.timelineEndDate());
         payload.put("dueDate", item.dueDate());
+        payload.put("dueTime", dueTimeText(item));
         payload.put("rowVersion", item.rowVersion());
         return payload;
     }
 
     private void append(String eventType, WorkItem item, CurrentActor actor,
             Map<String, Object> payload) {
-        events.append(new EventDraft(eventType, 1, "WorkItem", item.id(), item.rowVersion(),
+        int schemaVersion = Set.of(CREATED, FIELDS_CHANGED, STATUS_CHANGED, DELETED, RESTORED)
+                .contains(eventType) ? 2 : 1;
+        events.append(new EventDraft(eventType, schemaVersion, "WorkItem", item.id(), item.rowVersion(),
                 item.companyId(), EventActor.user(actor.userId()), objectMapper.valueToTree(payload)));
     }
 
@@ -1317,13 +1401,18 @@ public class WorkItemService {
             fields.add("timelineStartDate");
         if (!Objects.equals(before.timelineEndDate(), after.timelineEndDate()))
             fields.add("timelineEndDate");
-        if (!Objects.equals(before.dueDate(), after.dueDate())) fields.add("dueDate");
+        if (!Objects.equals(before.dueDate(), after.dueDate())
+                || !Objects.equals(before.dueTime(), after.dueTime())) fields.add("dueDate");
         return List.copyOf(fields);
+    }
+
+    private static String dueTimeText(WorkItem item) {
+        return item.dueTime() == null ? null : item.dueTime().toString();
     }
 
     private static boolean canEdit(ProjectAccessSnapshot project, Content content) {
         return project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
-                && content != null && content.status() == ContentStatus.ACTIVE
+                && content != null
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
     }
 
@@ -1358,10 +1447,10 @@ public class WorkItemService {
             throw validation("priority", "INVALID_VALUE", "优先级不存在或已停用");
     }
 
-    private static ContentViewType view(String value) {
-        if (value == null || value.isBlank()) return ContentViewType.TABLE;
+    private static WorkItemViewType view(String value) {
+        if (value == null || value.isBlank()) return WorkItemViewType.TABLE;
         try {
-            return ContentViewType.valueOf(value);
+            return WorkItemViewType.valueOf(value);
         } catch (RuntimeException exception) {
             throw validation("view", "INVALID_VALUE", "工作项视图类型无效");
         }
@@ -1397,7 +1486,7 @@ public class WorkItemService {
     }
 
     private static void requireActiveContent(Content content) {
-        if (content.status() != ContentStatus.ACTIVE) {
+        if (!content.active()) {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
                     "CONTENT_ARCHIVED");
         }

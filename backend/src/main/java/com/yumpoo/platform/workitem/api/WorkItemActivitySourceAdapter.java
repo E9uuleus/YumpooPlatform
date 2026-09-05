@@ -31,6 +31,29 @@ public class WorkItemActivitySourceAdapter implements WorkItemActivitySourceQuer
                 .map(WorkItemActivitySourceAdapter::reference);
     }
 
+    @Override
+    public Optional<ContentActivityReference> findContent(UUID companyId, UUID projectId,
+            UUID contentId) {
+        return service.findContent(companyId, projectId, contentId)
+                .map(value -> new ContentActivityReference(value.id(), value.displayName()));
+    }
+
+    @Override
+    public Optional<LabelActivityReference> findStatus(UUID companyId, UUID projectId,
+            String code) {
+        return service.findStatus(companyId, projectId, code)
+                .map(value -> new LabelActivityReference(value.code(), value.displayName(),
+                        value.colorToken()));
+    }
+
+    @Override
+    public Optional<LabelActivityReference> findPriority(UUID companyId, UUID projectId,
+            String code) {
+        return service.findPriority(companyId, projectId, code)
+                .map(value -> new LabelActivityReference(value.code(), value.displayName(),
+                        value.colorToken()));
+    }
+
     private static WorkItemActivityReference reference(
             WorkItemActivitySourceService.Reference item) {
         return new WorkItemActivityReference(item.id(), item.projectId(), item.contentId(),

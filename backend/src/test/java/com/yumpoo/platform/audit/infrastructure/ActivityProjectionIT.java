@@ -3,6 +3,8 @@ package com.yumpoo.platform.audit.infrastructure;
 import com.yumpoo.platform.audit.api.ActivityProjectionService;
 import com.yumpoo.platform.audit.application.ActivityRepository;
 import com.yumpoo.platform.audit.application.ActivityStoredEvent;
+import com.yumpoo.platform.audit.application.WorkItemCellActivityRepository;
+import com.yumpoo.platform.audit.application.WorkItemCellActivityStoredEvent;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
@@ -37,12 +39,15 @@ class ActivityProjectionIT {
 
     @Autowired private ActivityProjectionService projection;
     @Autowired private ActivityRepository repository;
+    @Autowired private WorkItemCellActivityRepository cellRepository;
     @Autowired private JdbcClient jdbc;
     @Autowired private ObjectMapper objectMapper;
 
     @AfterEach
     void cleanUp() {
         jdbc.sql("DELETE FROM yumpoo.activity_event WHERE company_id = :company")
+                .param("company", COMPANY).update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_cell_activity WHERE company_id = :company")
                 .param("company", COMPANY).update();
     }
 
@@ -103,6 +108,28 @@ class ActivityProjectionIT {
                 .update()).isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    void v46CellProjectionHasIndependentCutoverAndOneEventCanSplitIntoColumns() {
+        UUID eventId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        UUID contentId = UUID.randomUUID();
+        Instant occurredAt = cellRepository.acceptedFrom().plusMillis(1);
+        WorkItemCellActivityStoredEvent name = cellStored(UUID.randomUUID(), eventId, itemId,
+                contentId, occurredAt, "WORK_ITEM_NAME");
+        WorkItemCellActivityStoredEvent priority = cellStored(UUID.randomUUID(), eventId, itemId,
+                contentId, occurredAt, "PRIORITY");
+
+        cellRepository.append(name);
+        cellRepository.append(priority);
+        cellRepository.append(cellStored(UUID.randomUUID(), eventId, itemId, contentId,
+                occurredAt, "PRIORITY"));
+
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_cell_activity WHERE event_id=:event")
+                .param("event", eventId).query(Long.class).single()).isEqualTo(2);
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.activity_projection_state WHERE projection_code='WORK_ITEM_CELL_ACTIVITY_V1'")
+                .query(Long.class).single()).isOne();
+    }
+
     private DomainEventEnvelope projectCreated(UUID eventId, Instant occurredAt, String code) {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("projectId", PROJECT.toString());
@@ -126,6 +153,16 @@ class ActivityProjectionIT {
                 "M2_20_TEST", "系统", repository.acceptedFrom().plusSeconds(1),
                 "PROJECT_CREATED", objectMapper.createObjectNode(), 0,
                 "m2-20-concurrent", "m2-20-concurrent", null, null);
+    }
+
+    private WorkItemCellActivityStoredEvent cellStored(UUID id, UUID eventId, UUID itemId,
+            UUID contentId, Instant occurredAt, String column) {
+        ObjectNode value = objectMapper.createObjectNode();
+        value.put("type", "TEXT"); value.put("displayName", "投影值");
+        return new WorkItemCellActivityStoredEvent(id, eventId, COMPANY, PROJECT, itemId,
+                contentId, "需求", "workitem.work_item_fields_changed", column, "ADDED", null,
+                value, "SYSTEM", null, "M2_20_TEST", "系统", occurredAt,
+                "cell-it", "cell-it");
     }
 
     private static void await(CountDownLatch latch) {

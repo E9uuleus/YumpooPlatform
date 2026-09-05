@@ -13,11 +13,16 @@ import java.util.UUID;
 public class WorkItemActivitySourceService {
     private final WorkItemRepository workItems;
     private final WorkItemUpdateRepository updates;
+    private final ContentRepository contents;
+    private final WorkItemLabelRepository labels;
 
     public WorkItemActivitySourceService(WorkItemRepository workItems,
-            WorkItemUpdateRepository updates) {
+            WorkItemUpdateRepository updates, ContentRepository contents,
+            WorkItemLabelRepository labels) {
         this.workItems = workItems;
         this.updates = updates;
+        this.contents = contents;
+        this.labels = labels;
     }
 
     @Transactional(readOnly = true)
@@ -32,6 +37,28 @@ public class WorkItemActivitySourceService {
         if ("WORK_ITEM".equals(ownerType)) return findIncludingDeleted(companyId, ownerId);
         if (!"WORK_ITEM_UPDATE".equals(ownerType)) return Optional.empty();
         return updates.findLocator(companyId, ownerId).flatMap(locator -> find(companyId, locator));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<ContentReference> findContent(UUID companyId, UUID projectId, UUID contentId) {
+        return contents.find(companyId, projectId, contentId)
+                .map(content -> new ContentReference(content.id(), content.name()));
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<LabelReference> findStatus(UUID companyId, UUID projectId, String code) {
+        return labels.statuses(companyId, projectId).stream()
+                .filter(label -> label.code().equals(code))
+                .map(label -> new LabelReference(label.code(), label.displayName(), label.colorToken()))
+                .findFirst();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<LabelReference> findPriority(UUID companyId, UUID projectId, String code) {
+        return labels.priorities(companyId, projectId).stream()
+                .filter(label -> label.code().equals(code))
+                .map(label -> new LabelReference(label.code(), label.displayName(), label.colorToken()))
+                .findFirst();
     }
 
     private Optional<Reference> find(UUID companyId, WorkItemLocator locator) {
@@ -51,4 +78,6 @@ public class WorkItemActivitySourceService {
 
     public record Reference(UUID id, UUID projectId, UUID contentId, String itemNo, String title) {
     }
+    public record ContentReference(UUID id, String displayName) {}
+    public record LabelReference(String code, String displayName, String colorToken) {}
 }

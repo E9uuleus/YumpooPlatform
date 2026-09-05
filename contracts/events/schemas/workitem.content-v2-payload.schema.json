@@ -1,0 +1,10 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#", "$id": "https://contracts.yumpoo.local/events/workitem.content-v2-payload.schema.json", "title": "Content category v2 payload",
+  "type": "object", "additionalProperties": false,
+  "required": ["contentId", "projectId", "code", "name", "colorToken", "sortOrder", "active", "protectedContent", "inUse", "rowVersion", "changedFields"],
+  "properties": {
+    "contentId": { "type": "string", "format": "uuid" }, "projectId": { "type": "string", "format": "uuid" }, "code": { "type": "string" }, "name": { "type": "string", "minLength": 1 }, "colorToken": { "type": "string" },
+    "sortOrder": { "type": "integer", "minimum": 1 }, "active": { "type": "boolean" }, "protectedContent": { "type": "boolean" }, "inUse": { "type": "boolean" }, "rowVersion": { "type": "integer", "minimum": 0 },
+    "changedFields": { "type": "array", "uniqueItems": true, "items": { "enum": ["name", "colorToken", "sortOrder", "active", "deletedAt"] } }
+  }
+}

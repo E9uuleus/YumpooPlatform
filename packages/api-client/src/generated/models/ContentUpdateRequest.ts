@@ -12,20 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
-import type { ContentViewConfig } from './ContentViewConfig';
+import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
 import {
-    ContentViewConfigFromJSON,
-    ContentViewConfigFromJSONTyped,
-    ContentViewConfigToJSON,
-    ContentViewConfigToJSONTyped,
-} from './ContentViewConfig';
-import type { ContentViewType } from './ContentViewType';
-import {
-    ContentViewTypeFromJSON,
-    ContentViewTypeFromJSONTyped,
-    ContentViewTypeToJSON,
-    ContentViewTypeToJSONTyped,
-} from './ContentViewType';
+    WorkItemLabelColorTokenFromJSON,
+    WorkItemLabelColorTokenFromJSONTyped,
+    WorkItemLabelColorTokenToJSON,
+    WorkItemLabelColorTokenToJSONTyped,
+} from './WorkItemLabelColorToken';
 
 /**
  *
@@ -38,25 +31,25 @@ export interface ContentUpdateRequest {
      * @type {string}
      * @memberof ContentUpdateRequest
      */
-    name: string;
+    name: string | null;
     /**
      *
-     * @type {string}
+     * @type {WorkItemLabelColorToken}
      * @memberof ContentUpdateRequest
      */
-    description: string | null;
+    colorToken: WorkItemLabelColorToken | null;
     /**
      *
-     * @type {ContentViewType}
+     * @type {boolean}
      * @memberof ContentUpdateRequest
      */
-    defaultViewType: ContentViewType;
+    active: boolean | null;
     /**
      *
-     * @type {ContentViewConfig}
+     * @type {number}
      * @memberof ContentUpdateRequest
      */
-    viewConfig: ContentViewConfig;
+    sortOrder: number | null;
 }
 
 
@@ -66,9 +59,9 @@ export interface ContentUpdateRequest {
  */
 export function instanceOfContentUpdateRequest(value: object): value is ContentUpdateRequest {
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('defaultViewType' in value) || value['defaultViewType'] === undefined) return false;
-    if (!('viewConfig' in value) || value['viewConfig'] === undefined) return false;
+    if (!('colorToken' in value) || value['colorToken'] === undefined) return false;
+    if (!('active' in value) || value['active'] === undefined) return false;
+    if (!('sortOrder' in value) || value['sortOrder'] === undefined) return false;
     return true;
 }
 
@@ -83,9 +76,9 @@ export function ContentUpdateRequestFromJSONTyped(json: any, ignoreDiscriminator
     return {
 
         'name': json['name'],
-        'description': json['description'],
-        'defaultViewType': ContentViewTypeFromJSON(json['defaultViewType']),
-        'viewConfig': ContentViewConfigFromJSON(json['viewConfig']),
+        'colorToken': WorkItemLabelColorTokenFromJSON(json['colorToken']),
+        'active': json['active'],
+        'sortOrder': json['sortOrder'],
     };
 }
 
@@ -101,8 +94,8 @@ export function ContentUpdateRequestToJSONTyped(value?: ContentUpdateRequest | n
     return {
 
         'name': value['name'],
-        'description': value['description'],
-        'defaultViewType': ContentViewTypeToJSON(value['defaultViewType']),
-        'viewConfig': ContentViewConfigToJSON(value['viewConfig']),
+        'colorToken': WorkItemLabelColorTokenToJSON(value['colorToken']),
+        'active': value['active'],
+        'sortOrder': value['sortOrder'],
     };
 }

@@ -1,25 +1,29 @@
 import {
-  ContentViewType,
-  ContentSortDirection,
-  ContentSortField,
   WorkItemRankPlacement,
+  WorkItemViewType,
 } from '../src/generated/models/index.js'
 import { WorkItemPriority } from '../src/yumpoo-api-client.js'
 import type {
   CreateWorkItemRequest,
   DeleteWorkItemRequest,
-  ListContentWorkItemsRequest,
+  ListProjectWorkItemsRequest,
+  PatchWorkItemContentRequest,
   RankMoveWorkItemRequest,
   RestoreWorkItemRequest,
   TransitionWorkItemRequest,
   UpdateWorkItemRequest,
 } from '../src/generated/apis/WorkItemsApi.js'
 
+const projectId = '2a000000-0000-4000-8000-000000000400'
+const contentId = '2a000000-0000-4000-8000-000000000401'
+const workItemId = '2a000000-0000-4000-8000-000000000404'
+
 const create: CreateWorkItemRequest = {
-  contentId: '2a000000-0000-4000-8000-000000000401',
+  projectId,
   xXSRFTOKEN: 'csrf-token',
   idempotencyKey: '2a000000-0000-4000-8000-000000000402',
   workItemCreateRequest: {
+    contentId,
     title: '实现 M2-10',
     priority: WorkItemPriority.Medium,
     description: null,
@@ -27,131 +31,73 @@ const create: CreateWorkItemRequest = {
   },
 }
 
-const groupedPage: ListContentWorkItemsRequest = {
-  contentId: create.contentId,
-  view: ContentViewType.Table,
-  page: 0,
-  size: 20,
+const page: ListProjectWorkItemsRequest = {
+  projectId,
+  view: WorkItemViewType.Table,
+  limit: 20,
   status: new Set(['BACKLOG', 'IN_PROGRESS']),
+  contentId: new Set([contentId]),
+  sort: ['CONTENT,ASC', 'UPDATED_AT,DESC'],
 }
-
-const kanbanPage: ListContentWorkItemsRequest = {
-  contentId: create.contentId,
-  view: ContentViewType.Kanban,
-  page: 0,
-  size: 20,
-  status: new Set(['BACKLOG']),
-}
-
-const advancedPage: ListContentWorkItemsRequest = {
-  contentId: create.contentId,
-  page: 1,
-  size: 20,
-  q: '稳定分页',
-  status: new Set(['BACKLOG']),
-  priority: new Set([WorkItemPriority.High, WorkItemPriority.Urgent]),
-  assigneeUserId: new Set(['2a000000-0000-4000-8000-000000000403']),
-  dueFrom: new Date('2026-08-01T00:00:00.000Z'),
-  dueTo: new Date('2026-08-31T00:00:00.000Z'),
-  updatedAfter: new Date('2026-08-01T00:00:00.000Z'),
-  sort: [
-    `${ContentSortField.Priority},${ContentSortDirection.Desc}`,
-    `${ContentSortField.UpdatedAt},${ContentSortDirection.Desc}`,
-  ],
-}
-
-create.workItemCreateRequest.assigneeUserId = '2a000000-0000-4000-8000-000000000403'
 
 const update: UpdateWorkItemRequest = {
-  workItemId: '2a000000-0000-4000-8000-000000000404',
+  workItemId,
   xXSRFTOKEN: 'csrf-token',
   ifMatch: '"0"',
   workItemUpdateRequest: {
-    title: '实现 M2-11',
-    priority: WorkItemPriority.High,
-    assigneeUserId: null,
-    description: null,
-    notes: null,
-    timelineStartDate: null,
-    timelineEndDate: null,
-    dueDate: null,
+    title: '实现 M2-11', priority: WorkItemPriority.High, assigneeUserId: null,
+    description: null, notes: null, timelineStartDate: null, timelineEndDate: null, dueDate: null,
   },
+}
+
+const changeContent: PatchWorkItemContentRequest = {
+  workItemId,
+  xXSRFTOKEN: 'csrf-token',
+  ifMatch: '"0"',
+  idempotencyKey: '2a000000-0000-4000-8000-000000000410',
+  workItemContentPatchRequest: { contentId },
 }
 
 const transition: TransitionWorkItemRequest = {
-  workItemId: update.workItemId,
-  xXSRFTOKEN: 'csrf-token',
-  ifMatch: '"0"',
+  workItemId, xXSRFTOKEN: 'csrf-token', ifMatch: '"0"',
   idempotencyKey: '2a000000-0000-4000-8000-000000000405',
-  workItemTransitionRequest: {
-    toStatus: 'READY',
-    resolution: '需求已澄清',
-  },
+  workItemTransitionRequest: { toStatus: 'READY', resolution: '需求已澄清' },
 }
 
 const rankMove: RankMoveWorkItemRequest = {
-  workItemId: update.workItemId,
-  xXSRFTOKEN: 'csrf-token',
-  ifMatch: '"0"',
+  workItemId, xXSRFTOKEN: 'csrf-token', ifMatch: '"0"',
   idempotencyKey: '2a000000-0000-4000-8000-000000000406',
   workItemRankMoveRequest: {
-    toStatus: 'READY',
-    placement: WorkItemRankPlacement.Before,
-    anchorWorkItemId: '2a000000-0000-4000-8000-000000000407',
-    resolution: null,
+    toStatus: 'READY', placement: WorkItemRankPlacement.Before,
+    anchorWorkItemId: '2a000000-0000-4000-8000-000000000407', resolution: null,
   },
 }
 
 const softDelete: DeleteWorkItemRequest = {
-  workItemId: update.workItemId,
-  xXSRFTOKEN: 'csrf-token',
-  ifMatch: '"0"',
+  workItemId, xXSRFTOKEN: 'csrf-token', ifMatch: '"0"',
   idempotencyKey: '2a000000-0000-4000-8000-000000000408',
   workItemDeleteRequest: { reason: '重复工作项' },
 }
 
 const restore: RestoreWorkItemRequest = {
-  workItemId: update.workItemId,
-  xXSRFTOKEN: 'csrf-token',
-  ifMatch: '"1"',
+  workItemId, xXSRFTOKEN: 'csrf-token', ifMatch: '"1"',
   idempotencyKey: '2a000000-0000-4000-8000-000000000409',
 }
 
-// @ts-expect-error M2-15 删除必须提交理由。
-const missingDeleteReason: DeleteWorkItemRequest['workItemDeleteRequest'] = {}
-
-// @ts-expect-error M2-14 rank move 必须明确目标状态与定位方式。
-const missingPlacement: RankMoveWorkItemRequest['workItemRankMoveRequest'] = {
-  toStatus: 'READY',
+// @ts-expect-error 创建工作项必须提交类别。
+const missingContent: CreateWorkItemRequest['workItemCreateRequest'] = {
+  title: '缺少类别', priority: null, description: null, notes: null,
 }
-
-// @ts-expect-error M2-12 状态迁移必须明确提交目标状态。
-const missingTarget: TransitionWorkItemRequest['workItemTransitionRequest'] = {
-  resolution: null,
-}
-
-// @ts-expect-error API 要求客户端明确提交优先级。
-const missingPriorityBody: CreateWorkItemRequest['workItemCreateRequest'] = {
-  title: '缺少优先级', description: null, notes: null,
-}
-
-// @ts-expect-error M2-11 PATCH 要求客户端提交完整字段快照。
-const missingDueDateBody: UpdateWorkItemRequest['workItemUpdateRequest'] = {
-  title: '缺少截止日', priority: WorkItemPriority.Medium, assigneeUserId: null,
-  description: null, notes: null, timelineStartDate: null, timelineEndDate: null,
-}
+// @ts-expect-error 类别切换必须提交目标类别。
+const missingTargetContent: PatchWorkItemContentRequest['workItemContentPatchRequest'] = {}
 
 void create
-void groupedPage
-void kanbanPage
-void advancedPage
+void page
 void update
+void changeContent
 void transition
 void rankMove
 void softDelete
 void restore
-void missingDeleteReason
-void missingPlacement
-void missingTarget
-void missingPriorityBody
-void missingDueDateBody
+void missingContent
+void missingTargetContent

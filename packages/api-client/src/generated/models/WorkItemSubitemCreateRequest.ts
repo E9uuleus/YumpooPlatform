@@ -72,6 +72,12 @@ export interface WorkItemSubitemCreateRequest {
      * @memberof WorkItemSubitemCreateRequest
      */
     dueDate?: Date | null;
+    /**
+     * 企业时区的截止时分；更新时省略保留原值，null 移除时间。
+     * @type {string}
+     * @memberof WorkItemSubitemCreateRequest
+     */
+    dueTime?: string | null;
 }
 
 /**
@@ -105,6 +111,7 @@ export function WorkItemSubitemCreateRequestFromJSONTyped(json: any, ignoreDiscr
         ...(json['timelineStartDate'] === undefined ? {} : { 'timelineStartDate': json['timelineStartDate'] === null ? null : new Date(json['timelineStartDate']) }),
         ...(json['timelineEndDate'] === undefined ? {} : { 'timelineEndDate': json['timelineEndDate'] === null ? null : new Date(json['timelineEndDate']) }),
         ...(json['dueDate'] === undefined ? {} : { 'dueDate': json['dueDate'] === null ? null : new Date(json['dueDate']) }),
+        ...(json['dueTime'] === undefined ? {} : { 'dueTime': json['dueTime'] }),
     };
 }
 
@@ -128,5 +135,6 @@ export function WorkItemSubitemCreateRequestToJSONTyped(value?: WorkItemSubitemC
         'timelineStartDate': value['timelineStartDate'] == null ? value['timelineStartDate'] : value['timelineStartDate'].toISOString().substring(0,10),
         'timelineEndDate': value['timelineEndDate'] == null ? value['timelineEndDate'] : value['timelineEndDate'].toISOString().substring(0,10),
         'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),
+        'dueTime': value['dueTime'],
     };
 }

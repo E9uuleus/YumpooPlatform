@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#", "$id": "https://contracts.yumpoo.local/events/workitem.work-item-deleted-v2.schema.json", "title": "Work Item deleted v2",
+  "allOf": [{ "$ref": "event-envelope.schema.json" }, { "type": "object", "properties": {
+    "eventType": { "const": "workitem.work_item_deleted" }, "eventVersion": { "const": 2 }, "aggregateType": { "const": "WorkItem" }, "aggregateVersion": { "type": "integer", "minimum": 1 },
+    "payload": { "type": "object", "additionalProperties": false,
+      "required": ["workItemId", "projectId", "contentId", "itemNo", "title", "statusCode", "statusCategory", "priority", "rowVersion", "deletedAt", "deletedByUserId", "deleteReason"],
+      "properties": {
+        "workItemId": { "type": "string", "format": "uuid" }, "projectId": { "type": "string", "format": "uuid" }, "contentId": { "type": "string", "format": "uuid" }, "itemNo": { "type": "string" }, "title": { "type": "string" },
+        "statusCode": { "type": "string" }, "statusCategory": { "enum": ["TODO", "IN_PROGRESS", "DONE", "CANCELED"] }, "priority": { "type": ["string", "null"] }, "rowVersion": { "type": "integer", "minimum": 1 },
+        "deletedAt": { "type": "string", "format": "date-time" }, "deletedByUserId": { "type": "string", "format": "uuid" }, "deleteReason": { "type": "string", "minLength": 1 }
+      }
+    }
+  } }]
+}

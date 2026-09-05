@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-update-edited-v2.schema.json",
+  "title": "Work Item update edited",
+  "allOf": [
+    {
+      "$ref": "event-envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": {
+          "const": "workitem.work_item_update_edited"
+        },
+        "eventVersion": {
+          "const": 2
+        },
+        "aggregateType": {
+          "const": "WorkItemUpdate"
+        },
+        "aggregateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "updateId",
+            "workItemId",
+            "projectId",
+            "contentId",
+            "itemNo",
+            "title",
+            "authorUserId",
+            "editedByUserId",
+            "previousStatus",
+            "status",
+            "previousRowVersion",
+            "rowVersion",
+            "previousBodyTextLength",
+            "bodyTextLength",
+            "mentionedUserIds",
+            "addedMentionedUserIds",
+            "removedMentionedUserIds",
+            "parentUpdateId"
+          ],
+          "properties": {
+            "updateId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "workItemId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "projectId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "contentId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "itemNo": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "authorUserId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "editedByUserId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "previousStatus": {
+              "enum": [
+                "PUBLISHED",
+                "EDITED"
+              ]
+            },
+            "status": {
+              "const": "EDITED"
+            },
+            "previousRowVersion": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rowVersion": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "previousBodyTextLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16384
+            },
+            "bodyTextLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16384
+            },
+            "mentionedUserIds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "addedMentionedUserIds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "removedMentionedUserIds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "parentUpdateId": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -256,11 +256,21 @@ events:
     schema: schemas/workitem.content-created-v1.schema.json
     validExamples: [examples/workitem.content-created-v1.json]
     invalidExamples: [examples/workitem.content-created-v1.invalid.json]
+  - eventType: workitem.content_created
+    eventVersion: 2
+    schema: schemas/workitem.content-created-v2.schema.json
+    validExamples: [examples/workitem.content-created-v2.json]
+    invalidExamples: [examples/workitem.content-created-v2.invalid.json]
   - eventType: workitem.work_item_created
     eventVersion: 1
     schema: schemas/workitem.work-item-created-v1.schema.json
     validExamples: [examples/workitem.work-item-created-v1.json]
     invalidExamples: [examples/workitem.work-item-created-v1.invalid.json]
+  - eventType: workitem.work_item_created
+    eventVersion: 2
+    schema: schemas/workitem.work-item-created-v2.schema.json
+    validExamples: [examples/workitem.work-item-created-v2.json]
+    invalidExamples: [examples/workitem.work-item-created-v2.invalid.json]
   - eventType: workitem.work_item_relation_created
     eventVersion: 1
     schema: schemas/workitem.work-item-relation-created-v1.schema.json
@@ -281,6 +291,11 @@ events:
     schema: schemas/workitem.work-item-fields-changed-v1.schema.json
     validExamples: [examples/workitem.work-item-fields-changed-v1.json]
     invalidExamples: [examples/workitem.work-item-fields-changed-v1.invalid.json]
+  - eventType: workitem.work_item_fields_changed
+    eventVersion: 2
+    schema: schemas/workitem.work-item-fields-changed-v2.schema.json
+    validExamples: [examples/workitem.work-item-fields-changed-v2.json, examples/workitem.deadline-time-v2.json, examples/workitem.deadline-clear-v2.json]
+    invalidExamples: [examples/workitem.work-item-fields-changed-v2.invalid.json, examples/workitem.deadline-time.invalid-v2.json]
   - eventType: workitem.work_item_assigned
     eventVersion: 1
     schema: schemas/workitem.work-item-assigned-v1.schema.json
@@ -296,6 +311,11 @@ events:
     schema: schemas/workitem.work-item-status-changed-v1.schema.json
     validExamples: [examples/workitem.work-item-status-changed-v1.json]
     invalidExamples: [examples/workitem.work-item-status-changed-v1.invalid.json]
+  - eventType: workitem.work_item_status_changed
+    eventVersion: 2
+    schema: schemas/workitem.work-item-status-changed-v2.schema.json
+    validExamples: [examples/workitem.work-item-status-changed-v2.json]
+    invalidExamples: [examples/workitem.work-item-status-changed-v2.invalid.json]
   - eventType: workitem.work_item_rank_changed
     eventVersion: 1
     schema: schemas/workitem.work-item-rank-changed-v1.schema.json
@@ -306,11 +326,21 @@ events:
     schema: schemas/workitem.work-item-deleted-v1.schema.json
     validExamples: [examples/workitem.work-item-deleted-v1.json]
     invalidExamples: [examples/workitem.work-item-deleted-v1.invalid.json]
+  - eventType: workitem.work_item_deleted
+    eventVersion: 2
+    schema: schemas/workitem.work-item-deleted-v2.schema.json
+    validExamples: [examples/workitem.work-item-deleted-v2.json]
+    invalidExamples: [examples/workitem.work-item-deleted-v2.invalid.json]
   - eventType: workitem.work_item_restored
     eventVersion: 1
     schema: schemas/workitem.work-item-restored-v1.schema.json
     validExamples: [examples/workitem.work-item-restored-v1.json]
     invalidExamples: [examples/workitem.work-item-restored-v1.invalid.json]
+  - eventType: workitem.work_item_restored
+    eventVersion: 2
+    schema: schemas/workitem.work-item-restored-v2.schema.json
+    validExamples: [examples/workitem.work-item-restored-v2.json]
+    invalidExamples: [examples/workitem.work-item-restored-v2.invalid.json]
   - eventType: workitem.work_item_update_published
     eventVersion: 1
     schema: schemas/workitem.work-item-update-published-v1.schema.json
@@ -331,6 +361,16 @@ events:
     schema: schemas/workitem.content-updated-v1.schema.json
     validExamples: [examples/workitem.content-updated-v1.json]
     invalidExamples: [examples/workitem.content-updated-v1.invalid.json]
+  - eventType: workitem.content_updated
+    eventVersion: 2
+    schema: schemas/workitem.content-updated-v2.schema.json
+    validExamples: [examples/workitem.content-updated-v2.json]
+    invalidExamples: [examples/workitem.content-updated-v2.invalid.json]
+  - eventType: workitem.content_deleted
+    eventVersion: 2
+    schema: schemas/workitem.content-deleted-v2.schema.json
+    validExamples: [examples/workitem.content-deleted-v2.json]
+    invalidExamples: [examples/workitem.content-deleted-v2.invalid.json]
   - eventType: workitem.content_archived
     eventVersion: 1
     schema: schemas/workitem.content-archived-v1.schema.json
@@ -351,3 +391,31 @@ events:
     schema: schemas/filestorage.attachment-deleted-v1.schema.json
     validExamples: [examples/filestorage.attachment-deleted-v1.json]
     invalidExamples: [examples/filestorage.attachment-deleted-v1.invalid.json]
+  - eventType: workitem.work_item_update_published
+    eventVersion: 2
+    schema: schemas/workitem.work-item-update-published-v2.schema.json
+    validExamples:
+      - examples/workitem.work-item-update-published-v2.json
+    invalidExamples:
+      - examples/workitem.work-item-update-published-v2.invalid.json
+  - eventType: workitem.work_item_update_edited
+    eventVersion: 2
+    schema: schemas/workitem.work-item-update-edited-v2.schema.json
+    validExamples:
+      - examples/workitem.work-item-update-edited-v2.json
+    invalidExamples:
+      - examples/workitem.work-item-update-edited-v2.invalid.json
+  - eventType: workitem.work_item_update_deleted
+    eventVersion: 2
+    schema: schemas/workitem.work-item-update-deleted-v2.schema.json
+    validExamples:
+      - examples/workitem.work-item-update-deleted-v2.json
+    invalidExamples:
+      - examples/workitem.work-item-update-deleted-v2.invalid.json
+  - eventType: workitem.work_item_update_pin_changed
+    eventVersion: 1
+    schema: schemas/workitem.work-item-update-pin-changed-v1.schema.json
+    validExamples:
+      - examples/workitem.work-item-update-pin-changed-v1.json
+    invalidExamples:
+      - examples/workitem.work-item-update-pin-changed-v1.invalid.json

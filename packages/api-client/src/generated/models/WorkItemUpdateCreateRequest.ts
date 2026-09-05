@@ -19,7 +19,13 @@ import { mapValues } from '../runtime';
  */
 export interface WorkItemUpdateCreateRequest {
     /**
-     * 未受信任的协作富文本；限制应用于服务端净化后的 HTML 与纯文本。
+     * 省略时发布主评论；指定时仅允许回复同一工作项的未删除主评论。
+     * @type {string}
+     * @memberof WorkItemUpdateCreateRequest
+     */
+    parentUpdateId?: string | null;
+    /**
+     * 未受信任的协作富文本；净化后 HTML 最多 65536 字符、纯文本非空且最多 16384 字符。 允许 p/br/strong/em/u/s/h2/pre/hr/ul/ol/li/blockquote/code/a/span/table/thead/tbody/tr/th/td。 span 仅保留受限的 color/background-color（十六进制或 0–255 整数 rgb）和 font-size（16/18/24/32/36/48px）； p/h2 仅允许 text-align 为 left/center/right；p/h2/pre/blockquote/li 的 dir 仅允许 ltr/rtl。 表格单元格 rowspan/colspan 为 1–20，ol.start 为 1–10000。 清单使用 ul[data-type=taskList] 与直接子 li[data-type=taskItem][data-checked=true|false]，已发布正文只读。 Mention 使用 span[data-type=mention][data-mention-user-id=UUID]，由服务端校验 ACTIVE 项目成员并重写显示名。 链接仅允许绝对 http/https/mailto；移除任意 class、事件、未知样式及图片等标签。客户端仅展示净化响应。
      * @type {string}
      * @memberof WorkItemUpdateCreateRequest
      */
@@ -44,6 +50,7 @@ export function WorkItemUpdateCreateRequestFromJSONTyped(json: any, ignoreDiscri
     }
     return {
 
+        'parentUpdateId': json['parentUpdateId'] == null ? undefined : json['parentUpdateId'],
         'bodyHtml': json['bodyHtml'],
     };
 }
@@ -59,6 +66,7 @@ export function WorkItemUpdateCreateRequestToJSONTyped(value?: WorkItemUpdateCre
 
     return {
 
+        'parentUpdateId': value['parentUpdateId'],
         'bodyHtml': value['bodyHtml'],
     };
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Box, Clock, Document, FolderOpened, MoreFilled, User } from '@element-plus/icons-vue'
+import { Box, Clock, FolderOpened, MoreFilled, User } from '@element-plus/icons-vue'
 import type { ProjectDetail } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -14,7 +14,7 @@ import { useRouter } from 'vue-router'
 import YpAssignee from '../yp/YpAssignee.vue'
 import YpStatusTag from '../yp/YpStatusTag.vue'
 
-type ProjectSection = 'catalog' | 'overview' | 'contents' | 'members' | 'products' | 'activity' | 'settings'
+type ProjectSection = 'catalog' | 'overview' | 'members' | 'products' | 'activity' | 'settings'
 
 const props = withDefaults(defineProps<{
   section: ProjectSection
@@ -34,7 +34,6 @@ const supportingText = computed(() => props.project?.description
   || (props.project ? `${props.project.workspaceName} 中的项目空间` : props.description))
 const moreRoutes = computed(() => [
   ...(props.section !== 'overview' ? [{ command: 'project-overview', label: '工作项' }] : []),
-  ...(props.section !== 'contents' ? [{ command: 'project-contents', label: 'Content' }] : []),
   ...(props.section !== 'products' ? [{ command: 'project-products', label: '关联产品' }] : []),
   ...(props.section !== 'activity' ? [{ command: 'project-activity', label: '动态' }] : []),
   ...(props.section !== 'settings' ? [{ command: 'project-settings', label: '设置' }] : []),
@@ -126,15 +125,6 @@ function navigate(routeName: string): void {
       v-if="project || $slots['primary-action']"
       class="project-workspace-header__actions"
     >
-      <el-button
-        v-if="project && section !== 'contents'"
-        @click="navigate('project-contents')"
-      >
-        <el-icon aria-hidden="true">
-          <document />
-        </el-icon>
-        Content
-      </el-button>
       <el-button
         v-if="project && section !== 'members'"
         @click="navigate('project-members')"

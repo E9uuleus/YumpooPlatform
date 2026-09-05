@@ -8,20 +8,12 @@ public final class ContentModels {
     private ContentModels() {}
 
     public record ContentLocator(UUID contentId, UUID projectId) {}
-    public record BlueprintOption(String blueprintCode, String displayName, String workItemType,
-                                  String defaultViewType) {}
-    public record WorkflowStatusOption(String statusCode, String displayName, String statusCategory,
-            String colorToken, int sortOrder, boolean active, boolean protectedLabel,
-            boolean initial, boolean terminal) {}
-    public record PriorityOption(String priorityCode, String displayName, String colorToken,
-            int sortOrder, boolean active) {}
-    public record ProjectContentCatalog(List<ContentView> items,
-            List<BlueprintOption> blueprintOptions, List<WorkflowStatusOption> workflowStatusOptions,
-            List<PriorityOption> priorityOptions, boolean canCreate, boolean canManageLabels) {}
-    public record ContentView(UUID id, UUID projectId, String code, String name, String description,
-            String workItemType, String status, String defaultViewType,
-            ContentViewConfig viewConfig, String appliedTemplateKey, int appliedTemplateVersion,
-            String appliedBlueprintCode, long rowVersion, String etag, Instant createdAt,
-            UUID createdByUserId, Instant updatedAt, UUID updatedByUserId, Instant archivedAt,
-            UUID archivedByUserId) {}
+    public record ProjectContentCatalog(List<ContentView> items, long rowVersion, String etag,
+                                        boolean canManage) {
+        public ProjectContentCatalog { items = List.copyOf(items); }
+    }
+    public record ContentView(UUID id, UUID projectId, String code, String name,
+            String colorToken, int sortOrder, boolean active, boolean protectedContent,
+            boolean inUse, long rowVersion, Instant createdAt, UUID createdByUserId,
+            Instant updatedAt, UUID updatedByUserId) {}
 }

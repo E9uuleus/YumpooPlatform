@@ -19,7 +19,7 @@ import { mapValues } from '../runtime';
  */
 export interface WorkItemUpdateEditRequest {
     /**
-     * 未受信任的编辑正文；服务端重新净化并从正文解析 Mention。
+     * 未受信任的编辑正文；格式白名单与 WorkItemUpdateCreateRequest.bodyHtml 相同，服务端重新净化并从正文解析 Mention。
      * @type {string}
      * @memberof WorkItemUpdateEditRequest
      */

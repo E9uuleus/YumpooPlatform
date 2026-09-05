@@ -468,7 +468,8 @@ public class WorkItemRelationService {
 
     private static Counterpart counterpart(WorkItemRelationRepository.Endpoint endpoint) {
         return new Counterpart(endpoint.id(), endpoint.projectId(), endpoint.contentId(),
-                endpoint.itemNo(), endpoint.type(), endpoint.title(), endpoint.statusCode(),
+                endpoint.itemNo(), endpoint.contentName(), endpoint.contentColorToken(),
+                endpoint.title(), endpoint.statusCode(),
                 endpoint.deleted());
     }
 

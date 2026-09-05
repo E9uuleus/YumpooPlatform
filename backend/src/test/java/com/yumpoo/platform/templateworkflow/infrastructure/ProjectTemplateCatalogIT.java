@@ -223,8 +223,8 @@ class ProjectTemplateCatalogIT {
                 .update();
         jdbcClient.sql("""
                         INSERT INTO yumpoo.project_template_content_blueprint
-                            (template_id, content_code, display_name, work_item_type, default_view_type, sort_order)
-                        SELECT :id, content_code, display_name, work_item_type, default_view_type, sort_order
+                            (template_id, content_code, display_name, color_token, sort_order)
+                        SELECT :id, content_code, display_name, color_token, sort_order
                           FROM yumpoo.project_template_content_blueprint source
                          WHERE source.template_id = (
                              SELECT id FROM yumpoo.project_template_definition

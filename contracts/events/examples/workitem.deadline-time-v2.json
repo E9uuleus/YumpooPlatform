@@ -1,0 +1,38 @@
+{
+  "eventId": "48000000-0000-4000-8000-000000000081",
+  "eventType": "workitem.work_item_fields_changed",
+  "eventVersion": 2,
+  "occurredAt": "2026-09-03T10:00:00Z",
+  "aggregateType": "WorkItem",
+  "aggregateId": "48000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 2,
+  "companyId": "48000000-0000-4000-8000-000000000003",
+  "actor": {
+    "type": "USER",
+    "userId": "48000000-0000-4000-8000-000000000004"
+  },
+  "requestId": "deadline-time-v2",
+  "correlationId": "deadline-time-v2",
+  "causationId": null,
+  "payload": {
+    "workItemId": "48000000-0000-4000-8000-000000000002",
+    "projectId": "48000000-0000-4000-8000-000000000005",
+    "contentId": "48000000-0000-4000-8000-000000000006",
+    "itemNo": "PROJECT-1",
+    "title": "截止日期",
+    "statusCode": "BACKLOG",
+    "statusCategory": "TODO",
+    "priority": null,
+    "assigneeUserId": null,
+    "timelineStartDate": null,
+    "timelineEndDate": null,
+    "dueDate": "2026-09-08",
+    "dueTime": "18:05",
+    "previousDueDate": "2026-09-08",
+    "previousDueTime": null,
+    "rowVersion": 2,
+    "changedFields": [
+      "dueDate"
+    ]
+  }
+}

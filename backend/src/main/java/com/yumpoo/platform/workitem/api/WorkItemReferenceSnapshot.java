@@ -7,8 +7,9 @@ public record WorkItemReferenceSnapshot(
         UUID workItemId,
         UUID projectId,
         UUID contentId,
+        String contentName,
+        String contentColorToken,
         String itemNo,
-        String type,
         String title,
         String statusCode,
         String statusCategory,
@@ -19,7 +20,8 @@ public record WorkItemReferenceSnapshot(
         Objects.requireNonNull(projectId, "projectId must not be null");
         Objects.requireNonNull(contentId, "contentId must not be null");
         Objects.requireNonNull(itemNo, "itemNo must not be null");
-        Objects.requireNonNull(type, "type must not be null");
+        Objects.requireNonNull(contentName, "contentName must not be null");
+        Objects.requireNonNull(contentColorToken, "contentColorToken must not be null");
         Objects.requireNonNull(title, "title must not be null");
         Objects.requireNonNull(statusCode, "statusCode must not be null");
         Objects.requireNonNull(statusCategory, "statusCategory must not be null");

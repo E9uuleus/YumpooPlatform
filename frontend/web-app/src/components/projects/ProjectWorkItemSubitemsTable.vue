@@ -6,26 +6,27 @@ import {
   type WorkItemLabelColorToken,
   type WorkItemDetail,
   type WorkItemLabelCatalog,
+  type ProjectContentCatalog,
 } from '@yumpoo/api-client'
 import {
   ElButton,
-  ElDatePicker,
   ElInput,
   ElLoading,
   ElMessage,
-  ElOption as ElOptionRaw,
   ElPopover,
-  ElSelect as ElSelectRaw,
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties, type DefineComponent } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, type CSSProperties } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 import YpAssignee from '../yp/YpAssignee.vue'
 import MondayColumnQuickSort from './MondayColumnQuickSort.vue'
 import WorkItemLabelPopoverContent from './WorkItemLabelPopoverContent.vue'
+import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
+import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
+import type { DueDateValue } from './workItemDueDate'
 import { workItemLabelColorValue } from './workItemLabelColors'
 
 export interface ProjectWorkItemSubitemSortRule {
@@ -38,7 +39,7 @@ export interface ProjectWorkItemSubitemColumn {
   label: string
 }
 
-interface ContentOption { id: string; name: string }
+interface ContentOption { id: string; name: string; colorToken: WorkItemLabelColorToken }
 interface StatusOption {
   statusCode: string
   displayName: string
@@ -65,6 +66,7 @@ const props = defineProps<{
   columns: ProjectWorkItemSubitemColumn[]
   columnWidths: Record<ProjectWorkItemSubitemColumn['key'], number>
   activeContents: ContentOption[]
+  contentCatalog?: ProjectContentCatalog | undefined
   members: ProjectMember[]
   workflowStatuses: StatusOption[]
   priorityOptions: PriorityOption[]
@@ -74,8 +76,6 @@ const props = defineProps<{
 }>()
 
 const vLoading = ElLoading.directive
-const ElOption = ElOptionRaw as unknown as DefineComponent
-const ElSelect = ElSelectRaw as unknown as DefineComponent
 
 const emit = defineEmits<{
   retry: []
@@ -83,7 +83,9 @@ const emit = defineEmits<{
   created: [parent: ProjectWorkItemListItem]
   updated: [id: string, detail: WorkItemDetail]
   openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion']
-  patch: [item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate', value: string | Date | null]
+  patch: [item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null]
+  dueDateChange: [item: ProjectWorkItemListItem, value: DueDateValue]
+  contentsUpdated: [catalog: ProjectContentCatalog]
   transition: [item: ProjectWorkItemListItem, statusCode: string]
   selectionChange: [parentId: string, rows: ProjectWorkItemListItem[]]
   headerResize: [newWidth: number, oldWidth: number, column: { label: string }]
@@ -92,7 +94,8 @@ const emit = defineEmits<{
 
 const quickOpen = ref(false)
 const quickTitle = ref('')
-const quickContentId = ref(props.parent.contentId)
+const defaultContentId = computed(() => props.activeContents.find(content => content.id === props.parent.contentId)?.id
+  ?? props.activeContents[0]?.id)
 const quickCreating = ref(false)
 const quickError = ref<ApiProblem>()
 const quickTitleInput = ref<{ focus: () => void }>()
@@ -121,10 +124,6 @@ const COLUMN_DRAG_POINTER_THRESHOLD = 5
 const COLUMN_DRAG_TILT_DEGREES = 1
 const COLUMN_RESIZE_HANDLE_WIDTH = 8
 const SUBITEM_ADD_COLUMN_MIN_WIDTH = 96
-
-watch(() => props.parent.contentId, value => {
-  if (!quickOpen.value) quickContentId.value = value
-})
 
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -162,31 +161,8 @@ function priorityStyle(priority: string | null): CSSProperties {
   return token ? { backgroundColor: workItemLabelColorValue(token), color: 'var(--yp-text-inverse)' } : {}
 }
 
-function formatDate(value: Date | string | null): string {
-  return value ? new Date(value).toISOString().slice(0, 10) : '—'
-}
-
 function formatTime(value: Date | string): string {
   return new Date(value).toLocaleString('zh-CN')
-}
-
-function isOverdue(value: Date | string | null, statusCode: string): boolean {
-  if (!value) return false
-  const category = props.workflowStatuses.find(item => item.statusCode === statusCode)?.statusCategory
-  if (category === 'DONE' || category === 'CANCELED') return false
-  const due = new Date(value)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return !Number.isNaN(due.getTime()) && due < today
-}
-
-function apiDate(value: string | null): Date | null {
-  return value ? new Date(`${value}T00:00:00.000Z`) : null
-}
-
-function todayValue(): string {
-  const today = new Date()
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 }
 
 function sortDirection(key: ProjectWorkItemSubitemColumn['key']): 'ASC' | 'DESC' | undefined {
@@ -240,7 +216,7 @@ async function saveSortedOrder(): Promise<void> {
 }
 
 async function createQuick(continueAdding: boolean): Promise<void> {
-  if (quickCreating.value || !quickTitle.value.trim() || !quickContentId.value) return
+  if (quickCreating.value || !quickTitle.value.trim() || !defaultContentId.value) return
   const csrf = readCsrfToken()
   if (!csrf) { quickError.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
   quickCreating.value = true
@@ -251,7 +227,7 @@ async function createQuick(continueAdding: boolean): Promise<void> {
       xXSRFTOKEN: csrf,
       idempotencyKey: globalThis.crypto.randomUUID(),
       workItemSubitemCreateRequest: {
-        contentId: quickContentId.value,
+        contentId: defaultContentId.value,
         title: quickTitle.value.trim(),
         priority: null,
         assigneeUserId: null,
@@ -273,9 +249,8 @@ async function createQuick(continueAdding: boolean): Promise<void> {
 }
 
 function openQuick(): void {
-  if (!props.canCreate) return
+  if (!props.canCreate || !defaultContentId.value) return
   quickOpen.value = true
-  quickContentId.value = props.parent.contentId
   void nextTick(() => quickTitleInput.value?.focus())
 }
 
@@ -294,9 +269,13 @@ function openItem(raw: unknown, tab: 'details' | 'discussion'): void {
   emit('openDetail', row(raw), tab)
 }
 
-function patchItem(raw: unknown, field: 'assignee' | 'priority' | 'dueDate',
+function patchItem(raw: unknown, field: 'assignee' | 'priority' | 'dueDate' | 'content',
   value: string | Date | null): void {
   emit('patch', row(raw), field, value)
+}
+
+function labelCellStyle(colorToken?: string): CSSProperties {
+  return { backgroundColor: workItemLabelColorValue(colorToken), color: 'var(--yp-text-inverse)' }
 }
 
 function transitionItem(raw: unknown, statusCode: string): void {
@@ -345,7 +324,7 @@ function columnBodyClass(column: ProjectWorkItemSubitemColumn): string {
   const classes = column.key === 'title'
     ? ['monday-title-column', 'subitem-title-column']
     : ['monday-movable-column', `monday-column--${column.key}`, 'subitem-movable-column']
-  if (column.key === 'status' || column.key === 'priority') {
+  if (column.key === 'status' || column.key === 'priority' || column.key === 'content') {
     classes.push('monday-block-column', 'subitem-block-column')
   }
   return classes.join(' ')
@@ -460,7 +439,8 @@ function columnDragStyle(columnKey?: string): CSSProperties {
   if (index < 0) return {}
   if (columnKey === draggedKey) return { opacity: 0, pointerEvents: 'none' }
 
-  const draggedWidth = props.columnWidths[draggedKey as ProjectWorkItemSubitemColumn['key']]
+  const draggedWidth = columnPointerCandidate?.headerRects[from]?.width
+    || props.columnWidths[draggedKey as ProjectWorkItemSubitemColumn['key']]
   if (from < dropIndex && index > from && index < dropIndex) {
     return { transform: `translateX(-${draggedWidth}px)` }
   }
@@ -470,12 +450,12 @@ function columnDragStyle(columnKey?: string): CSSProperties {
   return { transform: 'translateX(0px)' }
 }
 
-function subitemCellStyle({ column }: { column: { columnKey?: string } }): CSSProperties {
-  return columnDragStyle(column.columnKey)
+function subitemCellStyle({ column }: { column: { property?: string } }): CSSProperties {
+  return columnDragStyle(column.property)
 }
 
-function subitemHeaderCellStyle({ column }: { column: { columnKey?: string } }): CSSProperties {
-  return columnDragStyle(column.columnKey)
+function subitemHeaderCellStyle({ column }: { column: { property?: string } }): CSSProperties {
+  return columnDragStyle(column.property)
 }
 
 function movableHeaderCells(): HTMLTableCellElement[] {
@@ -651,7 +631,10 @@ onBeforeUnmount(() => {
         :data="items"
         row-key="id"
         class="monday-subitem-table"
-        :class="{ 'monday-subitem-table--empty': !loading && !error && !items.length }"
+        :class="{
+          'monday-subitem-table--empty': !loading && !error && !items.length,
+          'monday-subitem-table--column-dragging': columnDraggingKey,
+        }"
         empty-text="暂无子项，可在下方快速添加"
         border
         :cell-style="subitemCellStyle"
@@ -667,11 +650,12 @@ onBeforeUnmount(() => {
           class-name="subitem-selection-column"
           label-class-name="subitem-selection-column"
         />
+        <!-- 与主表一致，用可响应的 prop 标识当前位置的字段。 -->
         <el-table-column
-          v-for="column in columns"
-          :key="column.key"
+          v-for="(column, columnIndex) in columns"
+          :key="columnIndex"
           :label="column.label"
-          :column-key="column.key"
+          :prop="column.key"
           :width="columnWidths[column.key]"
           :fixed="column.key === 'title'"
           align="center"
@@ -770,20 +754,28 @@ onBeforeUnmount(() => {
               />
             </el-popover>
 
-            <span v-else-if="column.key === 'content'">{{ scope.row.contentName }}</span>
-
-            <el-popover v-else-if="column.key === 'dueDate'" placement="bottom" :width="300" trigger="click">
+            <el-popover v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click">
               <template #reference>
-                <button class="subitem-cell-button" :class="{ 'subitem-due--overdue': isOverdue(scope.row.dueDate, scope.row.statusCode) }" :disabled="editingCell">
-                  {{ formatDate(scope.row.dueDate) }}
+                <button class="subitem-content-pill" :style="labelCellStyle(scope.row.contentColorToken)" :disabled="editingCell">
+                  {{ scope.row.contentName || '—' }}
                 </button>
               </template>
-              <div class="subitem-date-editor">
-                <el-button @click="patchItem(scope.row, 'dueDate', apiDate(todayValue()))">Today</el-button>
-                <el-button text @click="patchItem(scope.row, 'dueDate', null)">清空</el-button>
-                <el-date-picker :model-value="scope.row.dueDate ? formatDate(scope.row.dueDate) : null" type="date" value-format="YYYY-MM-DD" @update:model-value="patchItem(scope.row, 'dueDate', apiDate($event as string | null))" />
-              </div>
+              <work-item-content-popover-content
+                :project-id="projectId"
+                :catalog="contentCatalog"
+                :current-value="scope.row.contentId"
+                :can-manage="Boolean(contentCatalog?.canManage)"
+                @select="patchItem(scope.row, 'content', $event)"
+                @updated="emit('contentsUpdated', $event)"
+              />
             </el-popover>
+
+            <work-item-due-date-cell
+              v-else-if="column.key === 'dueDate'" :item="row(scope.row)"
+              style="--deadline-cell-height: 34px"
+              :can-edit="row(scope.row).capabilities.canEditFields" :busy="editingCell"
+              @change="emit('dueDateChange', row(scope.row), $event)"
+            />
 
             <span v-else-if="column.key === 'updatedAt'" class="subitem-timestamp">{{ formatTime(scope.row.updatedAt) }}</span>
           </template>
@@ -835,12 +827,9 @@ onBeforeUnmount(() => {
               aria-label="子项名称；Enter 创建，Shift+Enter 创建后继续"
               @keydown="onQuickKeydown"
             />
-            <el-select v-model="quickContentId" class="subitem-quick-content" filterable :disabled="quickCreating" placeholder="Content">
-              <el-option v-for="content in activeContents" :key="content.id" :label="content.name" :value="content.id" />
-            </el-select>
-            <el-button class="subitem-quick-submit" type="primary" :loading="quickCreating" :disabled="!quickTitle.trim() || !quickContentId" @click="createQuick(false)">添加</el-button>
+            <el-button class="subitem-quick-submit" type="primary" :loading="quickCreating" :disabled="!quickTitle.trim() || !defaultContentId" @click="createQuick(false)">添加</el-button>
           </div>
-          <button v-else class="subitem-add" :disabled="!canCreate" @click="openQuick">
+          <button v-else class="subitem-add" :disabled="!canCreate || !defaultContentId" @click="openQuick">
             <span class="subitem-quick-checkbox" aria-hidden="true" />
             <span class="subitem-add__field">添加子项</span>
           </button>
@@ -1015,6 +1004,22 @@ onBeforeUnmount(() => {
   height: var(--subitem-table-row-height);
   padding: 0;
 }
+.subitem-content-pill {
+  display: flex;
+  width: calc(100% - 48px);
+  height: 26px;
+  min-width: 0;
+  margin: 5px 24px;
+  padding: 0 16px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 :deep(.monday-subitem-table th.subitem-add-column-header),
 :deep(.monday-subitem-table td.subitem-add-column) {
   border-right: 0 !important;
@@ -1095,7 +1100,11 @@ onBeforeUnmount(() => {
 :deep(.monday-subitem-table--empty .el-table__empty-block) { display: none; }
 :deep(.monday-subitem-table th.subitem-movable-column-header),
 :deep(.monday-subitem-table td.subitem-movable-column) {
-  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease;
+  transition: none;
+}
+:deep(.monday-subitem-table--column-dragging th.subitem-movable-column-header),
+:deep(.monday-subitem-table--column-dragging td.subitem-movable-column) {
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
   will-change: transform;
 }
 :deep(.monday-subitem-table .subitem-column-drag-source) {
@@ -1159,15 +1168,13 @@ onBeforeUnmount(() => {
 .subitem-popover-stack { display: grid; gap: 6px; }
 .subitem-option { min-height: 34px; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .subitem-option:hover { background: var(--yp-bg-sunken); }
-.subitem-date-editor { display: flex; flex-wrap: wrap; gap: 8px; }
-.subitem-due--overdue { color: var(--yp-status-red); font-weight: 600; }
 .subitem-timestamp { color: var(--yp-text-secondary); font-size: 12px; }
 .subitem-quick-row {
   --subitem-quick-control-height: 26px;
   display: grid;
   height: var(--subitem-table-quick-height);
   min-width: max-content;
-  grid-template-columns: 48px var(--subitem-title-column-width, 320px) 220px 72px;
+  grid-template-columns: 48px var(--subitem-title-column-width, 320px) 72px;
   gap: 0;
   align-items: center;
   box-sizing: border-box;
@@ -1177,10 +1184,7 @@ onBeforeUnmount(() => {
   transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 .subitem-quick-row:focus-within { background: var(--yp-bg-selected); }
-.subitem-quick-title,
-.subitem-quick-content { box-sizing: border-box; min-width: 0; }
-.subitem-quick-title { padding: 0 4px 0 8px; }
-.subitem-quick-content { padding: 0 4px; }
+.subitem-quick-title { box-sizing: border-box; min-width: 0; padding: 0 4px 0 8px; }
 .subitem-quick-checkbox {
   width: 16px;
   height: 16px;
@@ -1198,17 +1202,14 @@ onBeforeUnmount(() => {
   height: var(--subitem-quick-control-height);
   padding: 0 12px;
 }
-:deep(.subitem-quick-row .el-input__wrapper),
-:deep(.subitem-quick-row .el-select__wrapper) {
+:deep(.subitem-quick-row .el-input__wrapper) {
   height: var(--subitem-quick-control-height);
   min-height: var(--subitem-quick-control-height);
 }
-:deep(.subitem-quick-row .el-input__wrapper.is-focus),
-:deep(.subitem-quick-row .el-select__wrapper.is-focused) {
+:deep(.subitem-quick-row .el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px var(--yp-border-default) inset !important;
 }
-:deep(.subitem-quick-row .el-input__wrapper:has(input:focus-visible)),
-:deep(.subitem-quick-row .el-select__wrapper:has(input:focus-visible)) {
+:deep(.subitem-quick-row .el-input__wrapper:has(input:focus-visible)) {
   outline: none !important;
   outline-offset: 0;
 }

@@ -28,7 +28,7 @@ public class WorkItemReferenceAdapter implements WorkItemReferenceQuery {
 
     private static WorkItemReferenceSnapshot snapshot(WorkItemReferenceService.Reference item) {
         return new WorkItemReferenceSnapshot(item.workItemId(), item.projectId(), item.contentId(),
-                item.itemNo(), item.type(), item.title(), item.statusCode(),
+                item.contentName(), item.contentColorToken(), item.itemNo(), item.title(), item.statusCode(),
                 item.statusCategory(), item.deleted());
     }
 }

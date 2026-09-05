@@ -121,7 +121,7 @@ public class ProjectTemplateCatalogService {
                 definition.contentBlueprints().stream().map(blueprint ->
                         new ProjectTemplateView.ContentBlueprintView(
                                 blueprint.contentCode(), blueprint.displayName(),
-                                blueprint.workItemType().name(), blueprint.defaultViewType().name(),
+                                blueprint.colorToken(),
                                 blueprint.sortOrder())).toList(),
                 definition.statuses().stream().map(status ->
                         new ProjectTemplateView.WorkflowStatusView(

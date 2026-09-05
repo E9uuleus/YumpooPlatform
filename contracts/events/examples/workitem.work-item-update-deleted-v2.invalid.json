@@ -1,0 +1,32 @@
+{
+  "eventId": "36000000-0000-4000-8000-000000000021",
+  "eventType": "workitem.work_item_update_deleted",
+  "eventVersion": 2,
+  "occurredAt": "2026-08-24T10:20:00Z",
+  "aggregateType": "WorkItemUpdate",
+  "aggregateId": "36000000-0000-4000-8000-000000000022",
+  "aggregateVersion": 2,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": {
+    "type": "USER",
+    "userId": "36000000-0000-4000-8000-000000000023"
+  },
+  "requestId": "m2-17-update-delete",
+  "correlationId": "m2-17-update-delete",
+  "causationId": null,
+  "payload": {
+    "updateId": "36000000-0000-4000-8000-000000000022",
+    "workItemId": "36000000-0000-4000-8000-000000000024",
+    "projectId": "36000000-0000-4000-8000-000000000025",
+    "contentId": "36000000-0000-4000-8000-000000000026",
+    "itemNo": "PROJECT_CORE-17",
+    "title": "补齐讨论治理",
+    "authorUserId": "36000000-0000-4000-8000-000000000027",
+    "deletedByUserId": "36000000-0000-4000-8000-000000000023",
+    "deletionMode": "ADMIN",
+    "previousStatus": "EDITED",
+    "previousRowVersion": 1,
+    "rowVersion": 2,
+    "parentUpdateId": "invalid"
+  }
+}

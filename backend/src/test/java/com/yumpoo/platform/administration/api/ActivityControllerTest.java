@@ -2,6 +2,9 @@ package com.yumpoo.platform.administration.api;
 
 import com.yumpoo.platform.audit.api.ActivityPage;
 import com.yumpoo.platform.audit.api.ActivityQueryPort;
+import com.yumpoo.platform.audit.api.WorkItemCellActivityFacets;
+import com.yumpoo.platform.audit.api.WorkItemCellActivityPage;
+import com.yumpoo.platform.audit.api.WorkItemCellActivityQueryPort;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
@@ -9,10 +12,14 @@ import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
+import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
+import com.yumpoo.platform.organization.api.CompanyConfigurationSnapshot;
 import com.yumpoo.platform.workitem.api.WorkItemActivitySourceQuery;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.DayOfWeek;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -81,14 +88,39 @@ class ActivityControllerTest {
         verify(fixture.activity).findWorkItem(eq(COMPANY), eq(PROJECT), eq(ITEM), any());
     }
 
+    @Test
+    void cellActivityUsesCompanyCalendarAndNoStore() {
+        CurrentActor actor = new CurrentActor(UUID.randomUUID(), COMPANY, 1, Set.of());
+        Fixture fixture = fixture(actor);
+        when(fixture.workItems.findIncludingDeleted(COMPANY, ITEM)).thenReturn(Optional.of(
+                new WorkItemActivitySourceQuery.WorkItemActivityReference(ITEM, PROJECT,
+                        UUID.randomUUID(), "YMP-20", "事项")));
+        when(fixture.access.findVisible(actor, PROJECT)).thenReturn(Optional.of(project(
+                ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
+                ProjectAccessSnapshot.ActorProjectAccess.MEMBER, OptionalLong.of(3))));
+        WorkItemCellActivityPage page = new WorkItemCellActivityPage(List.of(), null, CUTOVER,
+                new WorkItemCellActivityFacets(List.of(), List.of(), List.of()));
+        when(fixture.cellActivity.find(eq(COMPANY), eq(PROJECT), eq(ITEM),
+                eq(ZoneId.of("Asia/Shanghai")), eq(DayOfWeek.MONDAY), any())).thenReturn(page);
+
+        var response = fixture.controller.cellActivity(ITEM, null, 25, null, null, null);
+
+        assertThat(response.getBody()).isSameAs(page);
+        assertThat(response.getHeaders().getCacheControl()).isEqualTo("no-store");
+    }
+
     private static Fixture fixture(CurrentActor actor) {
         CurrentActorProvider actors = mock(CurrentActorProvider.class);
         ProjectAccessSnapshotQuery access = mock(ProjectAccessSnapshotQuery.class);
         WorkItemActivitySourceQuery workItems = mock(WorkItemActivitySourceQuery.class);
         ActivityQueryPort activity = mock(ActivityQueryPort.class);
+        WorkItemCellActivityQueryPort cellActivity = mock(WorkItemCellActivityQueryPort.class);
+        CompanyConfigurationQuery company = mock(CompanyConfigurationQuery.class);
         when(actors.requiredActive()).thenReturn(actor);
-        return new Fixture(new ActivityController(actors, access, workItems, activity),
-                access, workItems, activity);
+        when(company.current()).thenReturn(new CompanyConfigurationSnapshot(COMPANY, "测试公司",
+                ZoneId.of("Asia/Shanghai"), DayOfWeek.MONDAY, 480, 1));
+        return new Fixture(new ActivityController(actors, access, workItems, activity,
+                cellActivity, company), access, workItems, activity, cellActivity);
     }
 
     private static ProjectAccessSnapshot project(ProjectAccessSnapshot.ProjectLifecycle lifecycle,
@@ -98,6 +130,7 @@ class ActivityControllerTest {
     }
 
     private record Fixture(ActivityController controller, ProjectAccessSnapshotQuery access,
-            WorkItemActivitySourceQuery workItems, ActivityQueryPort activity) {
+            WorkItemActivitySourceQuery workItems, ActivityQueryPort activity,
+            WorkItemCellActivityQueryPort cellActivity) {
     }
 }

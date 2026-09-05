@@ -29,6 +29,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,7 +42,7 @@ class YumpooServerApplicationIT {
     private static final String PLATFORM_SCHEMA = "yumpoo";
     private static final String SCHEMA_COMMENT = "YumpooPlatform single business schema";
 
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private HttpClient httpClient;
 
     @LocalServerPort
     private int port;
@@ -298,8 +299,18 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
         assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45"
+                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50"
         );
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT checksum FROM yumpoo.flyway_schema_history WHERE version = '46'
+                """, Integer.class)).isEqualTo(1108579806);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT indexdef FROM pg_indexes
+                WHERE schemaname = 'yumpoo'
+                  AND indexname = 'idx_work_item_cell_activity_facets'
+                """, String.class))
+                .contains("actor_user_id, column_code")
+                .doesNotContain("content_id");
         assertThat(schemaComment).isEqualTo(SCHEMA_COMMENT);
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT accepted_from IS NOT NULL FROM yumpoo.activity_projection_state
@@ -319,6 +330,7 @@ class YumpooServerApplicationIT {
                 "company",
                 "company_calendar_day",
                 "content",
+                "content_catalog_version",
                 "desktop_auth_attempt",
                 "directory_sync_item",
                 "directory_sync_run",
@@ -343,6 +355,7 @@ class YumpooServerApplicationIT {
                 "security_audit_event",
                 "wecom_oauth_attempt",
                 "work_item",
+                "work_item_cell_activity",
                 "work_item_project_counter",
                 "work_item_project_order",
                 "work_item_rank_lane",
@@ -539,7 +552,7 @@ class YumpooServerApplicationIT {
         assertThat(workItemUpdateIndexNames).containsExactlyInAnyOrder(
                 "work_item_update_pkey",
                 "uq_work_item_update_company_id",
-                "idx_work_item_update_page"
+                "idx_work_item_update_page", "idx_update_pinned", "idx_update_root_page", "idx_update_thread_page", "uq_update_thread_scope"
         );
         assertThat(companySeeds).containsExactly(
                 "00000000-0000-4000-8000-000000000001|1|Yumpoo|Asia/Shanghai|MONDAY|480|0"
@@ -561,7 +574,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v29DatabaseUpgradesThroughV45WithActivityProjection() throws Exception {
+    void v29DatabaseUpgradesThroughV48WithContentCategories() throws Exception {
         String database = "yumpoo_m213_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -578,22 +591,22 @@ class YumpooServerApplicationIT {
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
             MigrateResult upgraded = latest.migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(16);
-            assertThat(upgraded.targetSchemaVersion).hasToString("45");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(21);
+            assertThat(upgraded.targetSchemaVersion).hasToString("50");
             assertThat(workItemIndexes(jdbcUrl)).contains(
                     "idx_work_item_content_page",
                     "idx_work_item_content_status_page",
                     "idx_work_item_content_updated_page",
                     "idx_work_item_content_assignee",
                     "idx_work_item_content_due_date",
-                    "idx_work_item_content_status_rank_page",
+                    "idx_work_item_project_status_rank_page",
                     "idx_work_item_project_sort_page");
             assertThat(workspaceFacts(jdbcUrl)).containsExactly("MAIN|0|ACTIVE|1");
             assertThat(generatedWorkItemColumns(jdbcUrl)).containsExactlyInAnyOrder(
                     "active_lane_rank", "active_project_sort_key");
             assertThat(workItemPriorityNullable(jdbcUrl)).isTrue();
             assertThat(workItemUpdateIndexes(jdbcUrl)).containsExactlyInAnyOrder(
-                    "idx_work_item_update_page", "uq_work_item_update_company_id",
+                    "idx_work_item_update_page", "idx_update_pinned", "idx_update_root_page", "idx_update_thread_page", "uq_update_thread_scope", "uq_work_item_update_company_id",
                     "work_item_update_pkey");
         } finally {
             Container.ExecResult dropped = postgresContainer.execInContainer(
@@ -603,7 +616,161 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void v37DatabaseUpgradesForwardThroughV45AndBackfillsBlobRegistry() throws Exception {
+    void v48MigratesExistingContentsAndProjectRanksDeterministically() throws Exception {
+        String database = "yumpoo_v48_content_" + UUID.randomUUID().toString().replace("-", "");
+        Container.ExecResult created = postgresContainer.execInContainer(
+                "createdb", "-U", postgresContainer.getUsername(), database);
+        assertThat(created.getExitCode()).as(created.getStderr()).isZero();
+        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
+                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        try {
+            assertThat(migrationFlyway(jdbcUrl, "47").migrate().targetSchemaVersion)
+                    .hasToString("47");
+            try (Connection connection = DriverManager.getConnection(jdbcUrl,
+                    postgresContainer.getUsername(), postgresContainer.getPassword());
+                 Statement statement = connection.createStatement()) {
+                connection.setAutoCommit(false);
+                statement.executeUpdate("""
+                        INSERT INTO yumpoo.identity_user (
+                            id, company_id, employment_status, account_status, display_name,
+                            directory_synced_at, authorization_version, row_version,
+                            created_at, updated_at)
+                        VALUES ('48000000-0000-4000-8000-000000000001',
+                            '00000000-0000-4000-8000-000000000001', 'ACTIVE', 'ENABLED',
+                            'V48 Migration Owner', transaction_timestamp(), 0, 0,
+                            transaction_timestamp(), transaction_timestamp())
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO yumpoo.project (
+                            id, company_id, workspace_id, project_code, name, project_type,
+                            lifecycle, owner_user_id, template_key, template_version, row_version,
+                            created_at, created_by_user_id, updated_at, updated_by_user_id)
+                        VALUES ('48000000-0000-4000-8000-000000000002',
+                            '00000000-0000-4000-8000-000000000001',
+                            (SELECT id FROM yumpoo.workspace WHERE code='MAIN'),
+                            'V48_MIGRATION', 'V48 Migration', 'PRODUCT_DEVELOPMENT', 'DRAFT',
+                            '48000000-0000-4000-8000-000000000001', 'RND', 1, 0,
+                            transaction_timestamp(), '48000000-0000-4000-8000-000000000001',
+                            transaction_timestamp(), '48000000-0000-4000-8000-000000000001')
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO yumpoo.project_membership
+                            (id,company_id,project_id,user_id,status,joined_at,joined_by_user_id,row_version)
+                        VALUES ('48000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000001',
+                            '48000000-0000-4000-8000-000000000002','48000000-0000-4000-8000-000000000001',
+                            'ACTIVE',transaction_timestamp(),'48000000-0000-4000-8000-000000000001',0)
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO yumpoo.content (
+                            id, company_id, project_id, code, name, work_item_type, status,
+                            default_view_type, view_config, applied_template_key,
+                            applied_template_version, applied_blueprint_code, row_version,
+                            created_at, created_by_user_id, updated_at, updated_by_user_id,
+                            archived_at, archived_by_user_id)
+                        SELECT fixture.id::uuid,
+                               '00000000-0000-4000-8000-000000000001'::uuid,
+                               '48000000-0000-4000-8000-000000000002'::uuid,
+                               fixture.code, fixture.name, fixture.item_type, 'ARCHIVED',
+                               'TABLE', '{}'::jsonb, 'RND', 1, fixture.blueprint, 0,
+                               transaction_timestamp(),
+                               '48000000-0000-4000-8000-000000000001'::uuid,
+                               transaction_timestamp(),
+                               '48000000-0000-4000-8000-000000000001'::uuid,
+                               transaction_timestamp(),
+                               '48000000-0000-4000-8000-000000000001'::uuid
+                          FROM (VALUES
+                            ('48000000-0000-4000-8000-000000000003','REQUIREMENTS','需求','REQUIREMENT','REQUIREMENTS'),
+                            ('48000000-0000-4000-8000-000000000004','TASKS','任务','TASK','TASKS'),
+                            ('48000000-0000-4000-8000-000000000005','DEFECTS','缺陷','DEFECT','DEFECTS'),
+                            ('48000000-0000-4000-8000-000000000006','CUSTOM_TASK','自定义任务','TASK','TASKS')
+                          ) fixture(id, code, name, item_type, blueprint)
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO yumpoo.project_work_item_label_catalog (project_id,company_id)
+                        VALUES ('48000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001')
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO yumpoo.project_work_item_status_label
+                            (project_id,company_id,status_code,display_name,color_token,status_category,sort_order)
+                        VALUES ('48000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',
+                            'NOT_STARTED','未开始','GRAY','TODO',0)
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO yumpoo.work_item (
+                            id, company_id, project_id, content_id, item_sequence, item_no, type,
+                            title, status_code, status_category, priority, reporter_user_id,
+                            rank, project_sort_key, row_version, created_at, created_by_user_id,
+                            updated_at, updated_by_user_id)
+                        VALUES ('48000000-0000-4000-8000-000000000007',
+                            '00000000-0000-4000-8000-000000000001',
+                            '48000000-0000-4000-8000-000000000002',
+                            '48000000-0000-4000-8000-000000000006', 1, 'V48_MIGRATION-1',
+                            'TASK', '迁移工作项', 'NOT_STARTED', 'TODO', NULL,
+                            '48000000-0000-4000-8000-000000000001',
+                            '222222222222222222222222222222222222222',
+                            '444444444444444444444444444444444444444', 0,
+                            transaction_timestamp(), '48000000-0000-4000-8000-000000000001',
+                            transaction_timestamp(), '48000000-0000-4000-8000-000000000001')
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO yumpoo.work_item_update
+                            (id,company_id,project_id,content_id,work_item_id,author_user_id,author_display_name,
+                             body_html,body_text,status,edit_deadline_at,row_version,created_at)
+                        VALUES ('48000000-0000-4000-8000-000000000009','00000000-0000-4000-8000-000000000001',
+                            '48000000-0000-4000-8000-000000000002','48000000-0000-4000-8000-000000000006',
+                            '48000000-0000-4000-8000-000000000007','48000000-0000-4000-8000-000000000001',
+                            '迁移作者','<p>历史评论</p>','历史评论','PUBLISHED',transaction_timestamp()+interval '15 minutes',0,transaction_timestamp())
+                        """);
+                connection.commit();
+            }
+
+            MigrateResult upgraded = migrationFlyway(jdbcUrl, null).migrate();
+            assertThat(upgraded.migrationsExecuted).isEqualTo(3);
+            assertThat(upgraded.targetSchemaVersion).hasToString("50");
+            try (Connection connection = DriverManager.getConnection(jdbcUrl,
+                    postgresContainer.getUsername(), postgresContainer.getPassword());
+                 Statement statement = connection.createStatement()) {
+                assertThat(queryStrings(statement, "SELECT body_text || '|' || (parent_update_id IS NULL)::text || '|' || (pinned_at IS NULL)::text FROM yumpoo.work_item_update"))
+                        .containsExactly("历史评论|true|true");
+                assertThat(queryStrings(statement, """
+                        SELECT code || '|' || color_token || '|' || sort_order || '|'
+                               || active || '|' || protected_content || '|' || ever_used
+                        FROM yumpoo.content
+                        WHERE project_id='48000000-0000-4000-8000-000000000002'
+                        ORDER BY sort_order
+                        """)).containsExactly(
+                        "REQUIREMENTS|BRIGHT_BLUE|10|true|true|false",
+                        "TASKS|BRIGHT_GREEN|20|false|true|false",
+                        "DEFECTS|DARK_RED|30|false|true|false",
+                        "CUSTOM_TASK|BRIGHT_GREEN|40|false|false|true");
+                assertThat(queryStrings(statement, """
+                        SELECT rank || '|' || project_sort_key
+                        FROM yumpoo.work_item
+                        WHERE id='48000000-0000-4000-8000-000000000007'
+                        """)).containsExactly(
+                        "444444444444444444444444444444444444444|444444444444444444444444444444444444444");
+                assertThat(queryStrings(statement, """
+                        SELECT project_id || '|' || status_code
+                        FROM yumpoo.work_item_rank_lane
+                        WHERE project_id='48000000-0000-4000-8000-000000000002'
+                        """)).containsExactly(
+                        "48000000-0000-4000-8000-000000000002|NOT_STARTED");
+                assertThat(queryStrings(statement, """
+                        SELECT column_name FROM information_schema.columns
+                        WHERE table_schema='yumpoo'
+                          AND ((table_name='work_item' AND column_name='type')
+                            OR (table_name='work_item_update' AND column_name='content_id'))
+                        """)).isEmpty();
+            }
+        } finally {
+            Container.ExecResult dropped = postgresContainer.execInContainer(
+                    "dropdb", "--force", "-U", postgresContainer.getUsername(), database);
+            assertThat(dropped.getExitCode()).as(dropped.getStderr()).isZero();
+        }
+    }
+
+    @Test
+    void v37DatabaseUpgradesForwardThroughV48AndBackfillsBlobRegistry() throws Exception {
         String database = "yumpoo_m217_" + UUID.randomUUID().toString().replace("-", "");
         Container.ExecResult created = postgresContainer.execInContainer(
                 "createdb", "-U", postgresContainer.getUsername(), database);
@@ -636,8 +803,8 @@ class YumpooServerApplicationIT {
             }
 
             MigrateResult upgraded = migrationFlyway(jdbcUrl, null).migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(8);
-            assertThat(upgraded.targetSchemaVersion).hasToString("45");
+            assertThat(upgraded.migrationsExecuted).isEqualTo(13);
+            assertThat(upgraded.targetSchemaVersion).hasToString("50");
             assertThat(migrationFlyway(jdbcUrl, null).validateWithResult().validationSuccessful).isTrue();
             try (Connection connection=DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(),postgresContainer.getPassword());
@@ -696,6 +863,36 @@ class YumpooServerApplicationIT {
         assertThat(changedValidation.getAllErrorMessages()).containsIgnoringCase("checksum mismatch");
     }
 
+    @Test
+    void v46DatabaseUpgradesThroughV48AndKeepsTheFacetIndexContentFree() throws Exception {
+        String database = "yumpoo_v47_" + UUID.randomUUID().toString().replace("-", "");
+        Container.ExecResult created = postgresContainer.execInContainer(
+                "createdb", "-U", postgresContainer.getUsername(), database);
+        assertThat(created.getExitCode()).as(created.getStderr()).isZero();
+        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
+                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        try {
+            MigrateResult toV46 = migrationFlyway(jdbcUrl, "46").migrate();
+            assertThat(toV46.targetSchemaVersion).hasToString("46");
+            assertThat(cellActivityFacetIndexDefinition(jdbcUrl))
+                    .contains("actor_user_id, content_id, column_code");
+
+            Flyway latest = migrationFlyway(jdbcUrl, null);
+            MigrateResult upgraded = latest.migrate();
+
+            assertThat(upgraded.migrationsExecuted).isEqualTo(4);
+            assertThat(upgraded.targetSchemaVersion).hasToString("50");
+            assertThat(latest.validateWithResult().validationSuccessful).isTrue();
+            assertThat(cellActivityFacetIndexDefinition(jdbcUrl))
+                    .contains("actor_user_id, column_code")
+                    .doesNotContain("content_id");
+        } finally {
+            Container.ExecResult dropped = postgresContainer.execInContainer(
+                    "dropdb", "--force", "-U", postgresContainer.getUsername(), database);
+            assertThat(dropped.getExitCode()).as(dropped.getStderr()).isZero();
+        }
+    }
+
     private Flyway checksumProbeFlyway(Path migrationDirectory) {
         String location = "filesystem:"
                 + migrationDirectory.toAbsolutePath().toString().replace('\\', '/');
@@ -727,6 +924,29 @@ class YumpooServerApplicationIT {
                 .baselineOnMigrate(false);
         if (target != null) configuration.target(target);
         return configuration.load();
+    }
+
+    private String cellActivityFacetIndexDefinition(String jdbcUrl) throws Exception {
+        try (Connection connection = DriverManager.getConnection(jdbcUrl,
+                postgresContainer.getUsername(), postgresContainer.getPassword());
+             Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("""
+                     SELECT indexdef
+                     FROM pg_indexes
+                     WHERE schemaname = 'yumpoo'
+                       AND indexname = 'idx_work_item_cell_activity_facets'
+                     """)) {
+            assertThat(result.next()).isTrue();
+            return result.getString("indexdef");
+        }
+    }
+
+    private static List<String> queryStrings(Statement statement, String sql) throws Exception {
+        List<String> values = new ArrayList<>();
+        try (ResultSet result = statement.executeQuery(sql)) {
+            while (result.next()) values.add(result.getString(1));
+        }
+        return List.copyOf(values);
     }
 
     private void verifyWorkspaceConsolidation(String label, String workspaceValues,
@@ -800,7 +1020,7 @@ class YumpooServerApplicationIT {
                 }
                 connection.commit();
             }
-            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("45");
+            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("50");
             try (Connection connection = DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(), postgresContainer.getPassword());
                  Statement statement = connection.createStatement()) {
@@ -910,6 +1130,7 @@ class YumpooServerApplicationIT {
     }
 
     private HttpResponse<String> get(String path) throws IOException, InterruptedException {
+        if (httpClient == null) httpClient = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("http://127.0.0.1:" + port + path))
                 .GET()

@@ -16,12 +16,21 @@ import * as runtime from '../runtime';
 import type {
   ActivityPage,
   ErrorResponse,
+  WorkItemCellActivityColumn,
+  WorkItemCellActivityPage,
+  WorkItemCellActivityTimeRange,
 } from '../models/index';
 import {
     ActivityPageFromJSON,
     ActivityPageToJSON,
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
+    WorkItemCellActivityColumnFromJSON,
+    WorkItemCellActivityColumnToJSON,
+    WorkItemCellActivityPageFromJSON,
+    WorkItemCellActivityPageToJSON,
+    WorkItemCellActivityTimeRangeFromJSON,
+    WorkItemCellActivityTimeRangeToJSON,
 } from '../models/index';
 
 export interface ListProjectActivityRequest {
@@ -42,6 +51,15 @@ export interface ListWorkItemActivityRequest {
     entityType?: Set<string>;
     occurredFrom?: Date;
     occurredTo?: Date;
+}
+
+export interface ListWorkItemCellActivityRequest {
+    workItemId: string;
+    cursor?: string;
+    size?: number;
+    timeRange?: WorkItemCellActivityTimeRange;
+    actorUserId?: Set<string>;
+    column?: Set<WorkItemCellActivityColumn>;
 }
 
 /**
@@ -172,6 +190,65 @@ export class ActivityApi extends runtime.BaseAPI {
      */
     async listWorkItemActivity(requestParameters: ListWorkItemActivityRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ActivityPage> {
         const response = await this.listWorkItemActivityRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅返回专用投影切点后的字段白名单动态；游标绑定事项、全部筛选和首次请求时间锚点。
+     * 查询工作项单元格动态
+     */
+    async listWorkItemCellActivityRaw(requestParameters: ListWorkItemCellActivityRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemCellActivityPage>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling listWorkItemCellActivity().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['cursor'] != null) {
+            queryParameters['cursor'] = requestParameters['cursor'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        if (requestParameters['timeRange'] != null) {
+            queryParameters['timeRange'] = requestParameters['timeRange'];
+        }
+
+        if (requestParameters['actorUserId'] != null) {
+            queryParameters['actorUserId'] = requestParameters['actorUserId'];
+        }
+
+        if (requestParameters['column'] != null) {
+            queryParameters['column'] = requestParameters['column'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/work-items/{workItemId}/cell-activity`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemCellActivityPageFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅返回专用投影切点后的字段白名单动态；游标绑定事项、全部筛选和首次请求时间锚点。
+     * 查询工作项单元格动态
+     */
+    async listWorkItemCellActivity(requestParameters: ListWorkItemCellActivityRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemCellActivityPage> {
+        const response = await this.listWorkItemCellActivityRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

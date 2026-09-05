@@ -8,7 +8,8 @@ public final class WorkItemRelationModels {
     private WorkItemRelationModels() {}
 
     public record Counterpart(UUID id, UUID projectId, UUID contentId, String itemNo,
-            String type, String title, String statusCode, boolean deleted) {}
+            String contentName, String contentColorToken, String title,
+            String statusCode, boolean deleted) {}
 
     public record Capabilities(boolean canDelete, boolean canChangeParent) {}
 

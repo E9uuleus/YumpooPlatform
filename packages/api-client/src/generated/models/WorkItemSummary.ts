@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
+import {
+    WorkItemLabelColorTokenFromJSON,
+    WorkItemLabelColorTokenFromJSONTyped,
+    WorkItemLabelColorTokenToJSON,
+    WorkItemLabelColorTokenToJSONTyped,
+} from './WorkItemLabelColorToken';
 import type { WorkItemCapabilities } from './WorkItemCapabilities';
 import {
     WorkItemCapabilitiesFromJSON,
@@ -26,13 +33,6 @@ import {
     WorkItemStatusCategoryToJSON,
     WorkItemStatusCategoryToJSONTyped,
 } from './WorkItemStatusCategory';
-import type { WorkItemType } from './WorkItemType';
-import {
-    WorkItemTypeFromJSON,
-    WorkItemTypeFromJSONTyped,
-    WorkItemTypeToJSON,
-    WorkItemTypeToJSONTyped,
-} from './WorkItemType';
 
 /**
  *
@@ -63,13 +63,19 @@ export interface WorkItemSummary {
      * @type {string}
      * @memberof WorkItemSummary
      */
-    itemNo: string;
+    contentName: string;
     /**
      *
-     * @type {WorkItemType}
+     * @type {WorkItemLabelColorToken}
      * @memberof WorkItemSummary
      */
-    type: WorkItemType;
+    contentColorToken: WorkItemLabelColorToken;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemSummary
+     */
+    itemNo: string;
     /**
      *
      * @type {string}
@@ -149,6 +155,18 @@ export interface WorkItemSummary {
      */
     dueDate: Date | null;
     /**
+     * 企业时区的截止时分；更新时省略保留原值，null 移除时间。
+     * @type {string}
+     * @memberof WorkItemSummary
+     */
+    dueTime?: string | null;
+    /**
+     * 当前 DONE 周期的实际完成时间；历史未记录时为空。
+     * @type {Date}
+     * @memberof WorkItemSummary
+     */
+    readonly completedAt?: Date | null;
+    /**
      *
      * @type {number}
      * @memberof WorkItemSummary
@@ -183,8 +201,9 @@ export function instanceOfWorkItemSummary(value: object): value is WorkItemSumma
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('projectId' in value) || value['projectId'] === undefined) return false;
     if (!('contentId' in value) || value['contentId'] === undefined) return false;
+    if (!('contentName' in value) || value['contentName'] === undefined) return false;
+    if (!('contentColorToken' in value) || value['contentColorToken'] === undefined) return false;
     if (!('itemNo' in value) || value['itemNo'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('title' in value) || value['title'] === undefined) return false;
     if (!('statusCode' in value) || value['statusCode'] === undefined) return false;
     if (!('statusCategory' in value) || value['statusCategory'] === undefined) return false;
@@ -218,8 +237,9 @@ export function WorkItemSummaryFromJSONTyped(json: any, ignoreDiscriminator: boo
         'id': json['id'],
         'projectId': json['projectId'],
         'contentId': json['contentId'],
+        'contentName': json['contentName'],
+        'contentColorToken': WorkItemLabelColorTokenFromJSON(json['contentColorToken']),
         'itemNo': json['itemNo'],
-        'type': WorkItemTypeFromJSON(json['type']),
         'title': json['title'],
         'statusCode': json['statusCode'],
         'statusCategory': WorkItemStatusCategoryFromJSON(json['statusCategory']),
@@ -233,6 +253,8 @@ export function WorkItemSummaryFromJSONTyped(json: any, ignoreDiscriminator: boo
         'timelineStartDate': (json['timelineStartDate'] == null ? null : new Date(json['timelineStartDate'])),
         'timelineEndDate': (json['timelineEndDate'] == null ? null : new Date(json['timelineEndDate'])),
         'dueDate': (json['dueDate'] == null ? null : new Date(json['dueDate'])),
+        ...(json['dueTime'] === undefined ? {} : { 'dueTime': json['dueTime'] }),
+        ...(json['completedAt'] === undefined ? {} : { 'completedAt': json['completedAt'] === null ? null : new Date(json['completedAt']) }),
         'rowVersion': json['rowVersion'],
         'etag': json['etag'],
         'capabilities': WorkItemCapabilitiesFromJSON(json['capabilities']),
@@ -244,7 +266,7 @@ export function WorkItemSummaryToJSON(json: any): WorkItemSummary {
     return WorkItemSummaryToJSONTyped(json, false);
 }
 
-export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'rowVersion'|'etag'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'completedAt'|'rowVersion'|'etag'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -254,8 +276,9 @@ export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'rowVer
         'id': value['id'],
         'projectId': value['projectId'],
         'contentId': value['contentId'],
+        'contentName': value['contentName'],
+        'contentColorToken': WorkItemLabelColorTokenToJSON(value['contentColorToken']),
         'itemNo': value['itemNo'],
-        'type': WorkItemTypeToJSON(value['type']),
         'title': value['title'],
         'statusCode': value['statusCode'],
         'statusCategory': WorkItemStatusCategoryToJSON(value['statusCategory']),
@@ -269,6 +292,7 @@ export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'rowVer
         'timelineStartDate': value['timelineStartDate'] == null ? value['timelineStartDate'] : value['timelineStartDate'].toISOString().substring(0,10),
         'timelineEndDate': value['timelineEndDate'] == null ? value['timelineEndDate'] : value['timelineEndDate'].toISOString().substring(0,10),
         'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),
+        'dueTime': value['dueTime'],
         'capabilities': WorkItemCapabilitiesToJSON(value['capabilities']),
     };
 }

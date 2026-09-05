@@ -29,13 +29,19 @@ export interface WorkItemUpdateCapabilities {
      * @type {boolean}
      * @memberof WorkItemUpdateCapabilities
      */
-    readonly canSelfDelete: boolean;
+    readonly canDelete: boolean;
     /**
      *
      * @type {boolean}
      * @memberof WorkItemUpdateCapabilities
      */
-    readonly canModerateDelete: boolean;
+    readonly canReply: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof WorkItemUpdateCapabilities
+     */
+    readonly canPin: boolean;
 }
 
 /**
@@ -43,8 +49,9 @@ export interface WorkItemUpdateCapabilities {
  */
 export function instanceOfWorkItemUpdateCapabilities(value: object): value is WorkItemUpdateCapabilities {
     if (!('canEdit' in value) || value['canEdit'] === undefined) return false;
-    if (!('canSelfDelete' in value) || value['canSelfDelete'] === undefined) return false;
-    if (!('canModerateDelete' in value) || value['canModerateDelete'] === undefined) return false;
+    if (!('canDelete' in value) || value['canDelete'] === undefined) return false;
+    if (!('canReply' in value) || value['canReply'] === undefined) return false;
+    if (!('canPin' in value) || value['canPin'] === undefined) return false;
     return true;
 }
 
@@ -59,8 +66,9 @@ export function WorkItemUpdateCapabilitiesFromJSONTyped(json: any, ignoreDiscrim
     return {
 
         'canEdit': json['canEdit'],
-        'canSelfDelete': json['canSelfDelete'],
-        'canModerateDelete': json['canModerateDelete'],
+        'canDelete': json['canDelete'],
+        'canReply': json['canReply'],
+        'canPin': json['canPin'],
     };
 }
 
@@ -68,7 +76,7 @@ export function WorkItemUpdateCapabilitiesToJSON(json: any): WorkItemUpdateCapab
     return WorkItemUpdateCapabilitiesToJSONTyped(json, false);
 }
 
-export function WorkItemUpdateCapabilitiesToJSONTyped(value?: Omit<WorkItemUpdateCapabilities, 'canEdit'|'canSelfDelete'|'canModerateDelete'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemUpdateCapabilitiesToJSONTyped(value?: Omit<WorkItemUpdateCapabilities, 'canEdit'|'canDelete'|'canReply'|'canPin'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

@@ -3,8 +3,6 @@ package com.yumpoo.platform.workitem.application;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.workitem.domain.Content;
-import com.yumpoo.platform.workitem.domain.ContentViewType;
-import com.yumpoo.platform.workitem.domain.ContentWorkItemType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,21 +37,19 @@ public class ContentInitializationService {
         Instant now = clock.instant();
         labels.initialize(initialization.companyId(), initialization.projectId(),
                 initialization.templateKey(), initialization.templateVersion(), now);
+        repository.initializeCatalog(initialization.companyId(), initialization.projectId(), now);
         List<Content> contents = initialization.blueprints().stream().map(blueprint -> {
             if (!codes.add(blueprint.contentCode())) {
                 throw new ApplicationException(StandardErrorCode.VALIDATION_FAILED);
             }
             return Content.initial(UUID.randomUUID(), initialization.companyId(),
                     initialization.projectId(), blueprint.contentCode(), blueprint.displayName(),
-                    ContentWorkItemType.valueOf(blueprint.workItemType()),
-                    ContentViewType.valueOf(blueprint.defaultViewType()),
-                    initialization.templateKey(), initialization.templateVersion(),
-                    blueprint.contentCode(), initialization.actorUserId(), now);
+                    blueprint.colorToken(), blueprint.sortOrder(), initialization.actorUserId(), now);
         }).toList();
         if (repository.insertAll(contents) != contents.size()) {
             throw new ApplicationException(StandardErrorCode.INTERNAL_ERROR);
         }
         return contents.stream().map(content -> new InitializedContentView(
-                content.id(), content.code(), content.workItemType().name())).toList();
+                content.id(), content.code())).toList();
     }
 }

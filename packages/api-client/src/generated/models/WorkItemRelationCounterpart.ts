@@ -12,6 +12,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
+import {
+    WorkItemLabelColorTokenFromJSON,
+    WorkItemLabelColorTokenFromJSONTyped,
+    WorkItemLabelColorTokenToJSON,
+    WorkItemLabelColorTokenToJSONTyped,
+} from './WorkItemLabelColorToken';
+
 /**
  *
  * @export
@@ -47,7 +55,13 @@ export interface WorkItemRelationCounterpart {
      * @type {string}
      * @memberof WorkItemRelationCounterpart
      */
-    type: string;
+    contentName: string;
+    /**
+     *
+     * @type {WorkItemLabelColorToken}
+     * @memberof WorkItemRelationCounterpart
+     */
+    contentColorToken: WorkItemLabelColorToken;
     /**
      *
      * @type {string}
@@ -68,6 +82,8 @@ export interface WorkItemRelationCounterpart {
     readonly deleted: boolean;
 }
 
+
+
 /**
  * Check if a given object implements the WorkItemRelationCounterpart interface.
  */
@@ -76,7 +92,8 @@ export function instanceOfWorkItemRelationCounterpart(value: object): value is W
     if (!('projectId' in value) || value['projectId'] === undefined) return false;
     if (!('contentId' in value) || value['contentId'] === undefined) return false;
     if (!('itemNo' in value) || value['itemNo'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('contentName' in value) || value['contentName'] === undefined) return false;
+    if (!('contentColorToken' in value) || value['contentColorToken'] === undefined) return false;
     if (!('title' in value) || value['title'] === undefined) return false;
     if (!('statusCode' in value) || value['statusCode'] === undefined) return false;
     if (!('deleted' in value) || value['deleted'] === undefined) return false;
@@ -97,7 +114,8 @@ export function WorkItemRelationCounterpartFromJSONTyped(json: any, ignoreDiscri
         'projectId': json['projectId'],
         'contentId': json['contentId'],
         'itemNo': json['itemNo'],
-        'type': json['type'],
+        'contentName': json['contentName'],
+        'contentColorToken': WorkItemLabelColorTokenFromJSON(json['contentColorToken']),
         'title': json['title'],
         'statusCode': json['statusCode'],
         'deleted': json['deleted'],
@@ -119,7 +137,8 @@ export function WorkItemRelationCounterpartToJSONTyped(value?: Omit<WorkItemRela
         'projectId': value['projectId'],
         'contentId': value['contentId'],
         'itemNo': value['itemNo'],
-        'type': value['type'],
+        'contentName': value['contentName'],
+        'contentColorToken': WorkItemLabelColorTokenToJSON(value['contentColorToken']),
         'title': value['title'],
         'statusCode': value['statusCode'],
     };

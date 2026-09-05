@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#", "$id": "https://contracts.yumpoo.local/events/workitem.work-item-status-changed-v2.schema.json", "title": "Work Item status changed v2",
+  "allOf": [{ "$ref": "event-envelope.schema.json" }, { "type": "object", "properties": {
+    "eventType": { "const": "workitem.work_item_status_changed" }, "eventVersion": { "const": 2 }, "aggregateType": { "const": "WorkItem" }, "aggregateVersion": { "type": "integer", "minimum": 1 },
+    "payload": { "type": "object", "additionalProperties": false,
+      "required": ["workItemId", "projectId", "contentId", "itemNo", "title", "fromStatus", "toStatus", "fromStatusCategory", "toStatusCategory", "resolution", "rowVersion"],
+      "properties": {
+        "workItemId": { "type": "string", "format": "uuid" }, "projectId": { "type": "string", "format": "uuid" }, "contentId": { "type": "string", "format": "uuid" }, "itemNo": { "type": "string" }, "title": { "type": "string" },
+        "fromStatus": { "type": "string" }, "toStatus": { "type": "string" }, "fromStatusCategory": { "enum": ["TODO", "IN_PROGRESS", "DONE", "CANCELED"] }, "toStatusCategory": { "enum": ["TODO", "IN_PROGRESS", "DONE", "CANCELED"] },
+        "resolution": { "type": ["string", "null"] }, "rowVersion": { "type": "integer", "minimum": 1 }
+      }
+    }
+  } }]
+}

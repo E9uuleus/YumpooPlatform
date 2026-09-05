@@ -28,8 +28,7 @@ public record ProjectTemplateView(
     public record ContentBlueprintView(
             String contentCode,
             String displayName,
-            String workItemType,
-            String defaultViewType,
+            String colorToken,
             int sortOrder
     ) {
     }

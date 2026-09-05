@@ -19,6 +19,12 @@ import { mapValues } from '../runtime';
  */
 export interface WorkItemCreateRequest {
     /**
+     * 不透明 UUID；客户端不得从值中推导业务语义。
+     * @type {string}
+     * @memberof WorkItemCreateRequest
+     */
+    contentId: string;
+    /**
      *
      * @type {string}
      * @memberof WorkItemCreateRequest
@@ -66,12 +72,19 @@ export interface WorkItemCreateRequest {
      * @memberof WorkItemCreateRequest
      */
     dueDate?: Date | null;
+    /**
+     * 企业时区的截止时分；更新时省略保留原值，null 移除时间。
+     * @type {string}
+     * @memberof WorkItemCreateRequest
+     */
+    dueTime?: string | null;
 }
 
 /**
  * Check if a given object implements the WorkItemCreateRequest interface.
  */
 export function instanceOfWorkItemCreateRequest(value: object): value is WorkItemCreateRequest {
+    if (!('contentId' in value) || value['contentId'] === undefined) return false;
     if (!('title' in value) || value['title'] === undefined) return false;
     if (!('priority' in value) || value['priority'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
@@ -89,6 +102,7 @@ export function WorkItemCreateRequestFromJSONTyped(json: any, ignoreDiscriminato
     }
     return {
 
+        'contentId': json['contentId'],
         'title': json['title'],
         'priority': json['priority'],
         ...(json['assigneeUserId'] === undefined ? {} : { 'assigneeUserId': json['assigneeUserId'] }),
@@ -97,6 +111,7 @@ export function WorkItemCreateRequestFromJSONTyped(json: any, ignoreDiscriminato
         ...(json['timelineStartDate'] === undefined ? {} : { 'timelineStartDate': json['timelineStartDate'] === null ? null : new Date(json['timelineStartDate']) }),
         ...(json['timelineEndDate'] === undefined ? {} : { 'timelineEndDate': json['timelineEndDate'] === null ? null : new Date(json['timelineEndDate']) }),
         ...(json['dueDate'] === undefined ? {} : { 'dueDate': json['dueDate'] === null ? null : new Date(json['dueDate']) }),
+        ...(json['dueTime'] === undefined ? {} : { 'dueTime': json['dueTime'] }),
     };
 }
 
@@ -111,6 +126,7 @@ export function WorkItemCreateRequestToJSONTyped(value?: WorkItemCreateRequest |
 
     return {
 
+        'contentId': value['contentId'],
         'title': value['title'],
         'priority': value['priority'],
         'assigneeUserId': value['assigneeUserId'],
@@ -119,5 +135,6 @@ export function WorkItemCreateRequestToJSONTyped(value?: WorkItemCreateRequest |
         'timelineStartDate': value['timelineStartDate'] == null ? value['timelineStartDate'] : value['timelineStartDate'].toISOString().substring(0,10),
         'timelineEndDate': value['timelineEndDate'] == null ? value['timelineEndDate'] : value['timelineEndDate'].toISOString().substring(0,10),
         'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),
+        'dueTime': value['dueTime'],
     };
 }

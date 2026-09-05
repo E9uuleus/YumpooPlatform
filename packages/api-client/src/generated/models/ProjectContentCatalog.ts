@@ -12,20 +12,6 @@
  */
 
 import { mapValues } from '../runtime';
-import type { ContentPriorityOption } from './ContentPriorityOption';
-import {
-    ContentPriorityOptionFromJSON,
-    ContentPriorityOptionFromJSONTyped,
-    ContentPriorityOptionToJSON,
-    ContentPriorityOptionToJSONTyped,
-} from './ContentPriorityOption';
-import type { ContentWorkflowStatusOption } from './ContentWorkflowStatusOption';
-import {
-    ContentWorkflowStatusOptionFromJSON,
-    ContentWorkflowStatusOptionFromJSONTyped,
-    ContentWorkflowStatusOptionToJSON,
-    ContentWorkflowStatusOptionToJSONTyped,
-} from './ContentWorkflowStatusOption';
 import type { Content } from './Content';
 import {
     ContentFromJSON,
@@ -33,13 +19,6 @@ import {
     ContentToJSON,
     ContentToJSONTyped,
 } from './Content';
-import type { ContentBlueprintOption } from './ContentBlueprintOption';
-import {
-    ContentBlueprintOptionFromJSON,
-    ContentBlueprintOptionFromJSONTyped,
-    ContentBlueprintOptionToJSON,
-    ContentBlueprintOptionToJSONTyped,
-} from './ContentBlueprintOption';
 
 /**
  *
@@ -55,34 +34,22 @@ export interface ProjectContentCatalog {
     items: Array<Content>;
     /**
      *
-     * @type {Array<ContentBlueprintOption>}
+     * @type {number}
      * @memberof ProjectContentCatalog
      */
-    blueprintOptions: Array<ContentBlueprintOption>;
+    readonly rowVersion: number;
     /**
      *
-     * @type {Array<ContentWorkflowStatusOption>}
+     * @type {string}
      * @memberof ProjectContentCatalog
      */
-    workflowStatusOptions: Array<ContentWorkflowStatusOption>;
-    /**
-     *
-     * @type {Array<ContentPriorityOption>}
-     * @memberof ProjectContentCatalog
-     */
-    priorityOptions: Array<ContentPriorityOption>;
+    readonly etag: string;
     /**
      *
      * @type {boolean}
      * @memberof ProjectContentCatalog
      */
-    canCreate: boolean;
-    /**
-     *
-     * @type {boolean}
-     * @memberof ProjectContentCatalog
-     */
-    canManageLabels: boolean;
+    readonly canManage: boolean;
 }
 
 /**
@@ -90,11 +57,9 @@ export interface ProjectContentCatalog {
  */
 export function instanceOfProjectContentCatalog(value: object): value is ProjectContentCatalog {
     if (!('items' in value) || value['items'] === undefined) return false;
-    if (!('blueprintOptions' in value) || value['blueprintOptions'] === undefined) return false;
-    if (!('workflowStatusOptions' in value) || value['workflowStatusOptions'] === undefined) return false;
-    if (!('priorityOptions' in value) || value['priorityOptions'] === undefined) return false;
-    if (!('canCreate' in value) || value['canCreate'] === undefined) return false;
-    if (!('canManageLabels' in value) || value['canManageLabels'] === undefined) return false;
+    if (!('rowVersion' in value) || value['rowVersion'] === undefined) return false;
+    if (!('etag' in value) || value['etag'] === undefined) return false;
+    if (!('canManage' in value) || value['canManage'] === undefined) return false;
     return true;
 }
 
@@ -109,11 +74,9 @@ export function ProjectContentCatalogFromJSONTyped(json: any, ignoreDiscriminato
     return {
 
         'items': ((json['items'] as Array<any>).map(ContentFromJSON)),
-        'blueprintOptions': ((json['blueprintOptions'] as Array<any>).map(ContentBlueprintOptionFromJSON)),
-        'workflowStatusOptions': ((json['workflowStatusOptions'] as Array<any>).map(ContentWorkflowStatusOptionFromJSON)),
-        'priorityOptions': ((json['priorityOptions'] as Array<any>).map(ContentPriorityOptionFromJSON)),
-        'canCreate': json['canCreate'],
-        'canManageLabels': json['canManageLabels'],
+        'rowVersion': json['rowVersion'],
+        'etag': json['etag'],
+        'canManage': json['canManage'],
     };
 }
 
@@ -121,7 +84,7 @@ export function ProjectContentCatalogToJSON(json: any): ProjectContentCatalog {
     return ProjectContentCatalogToJSONTyped(json, false);
 }
 
-export function ProjectContentCatalogToJSONTyped(value?: ProjectContentCatalog | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectContentCatalogToJSONTyped(value?: Omit<ProjectContentCatalog, 'rowVersion'|'etag'|'canManage'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -129,10 +92,5 @@ export function ProjectContentCatalogToJSONTyped(value?: ProjectContentCatalog |
     return {
 
         'items': ((value['items'] as Array<any>).map(ContentToJSON)),
-        'blueprintOptions': ((value['blueprintOptions'] as Array<any>).map(ContentBlueprintOptionToJSON)),
-        'workflowStatusOptions': ((value['workflowStatusOptions'] as Array<any>).map(ContentWorkflowStatusOptionToJSON)),
-        'priorityOptions': ((value['priorityOptions'] as Array<any>).map(ContentPriorityOptionToJSON)),
-        'canCreate': value['canCreate'],
-        'canManageLabels': value['canManageLabels'],
     };
 }

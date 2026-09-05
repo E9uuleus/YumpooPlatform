@@ -12,34 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
-import type { ContentViewConfig } from './ContentViewConfig';
+import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
 import {
-    ContentViewConfigFromJSON,
-    ContentViewConfigFromJSONTyped,
-    ContentViewConfigToJSON,
-    ContentViewConfigToJSONTyped,
-} from './ContentViewConfig';
-import type { ContentViewType } from './ContentViewType';
-import {
-    ContentViewTypeFromJSON,
-    ContentViewTypeFromJSONTyped,
-    ContentViewTypeToJSON,
-    ContentViewTypeToJSONTyped,
-} from './ContentViewType';
-import type { ContentStatus } from './ContentStatus';
-import {
-    ContentStatusFromJSON,
-    ContentStatusFromJSONTyped,
-    ContentStatusToJSON,
-    ContentStatusToJSONTyped,
-} from './ContentStatus';
-import type { WorkItemType } from './WorkItemType';
-import {
-    WorkItemTypeFromJSON,
-    WorkItemTypeFromJSONTyped,
-    WorkItemTypeToJSON,
-    WorkItemTypeToJSONTyped,
-} from './WorkItemType';
+    WorkItemLabelColorTokenFromJSON,
+    WorkItemLabelColorTokenFromJSONTyped,
+    WorkItemLabelColorTokenToJSON,
+    WorkItemLabelColorTokenToJSONTyped,
+} from './WorkItemLabelColorToken';
 
 /**
  *
@@ -73,64 +52,40 @@ export interface Content {
     name: string;
     /**
      *
-     * @type {string}
+     * @type {WorkItemLabelColorToken}
      * @memberof Content
      */
-    description: string | null;
-    /**
-     *
-     * @type {WorkItemType}
-     * @memberof Content
-     */
-    workItemType: WorkItemType;
-    /**
-     *
-     * @type {ContentStatus}
-     * @memberof Content
-     */
-    status: ContentStatus;
-    /**
-     *
-     * @type {ContentViewType}
-     * @memberof Content
-     */
-    defaultViewType: ContentViewType;
-    /**
-     *
-     * @type {ContentViewConfig}
-     * @memberof Content
-     */
-    viewConfig: ContentViewConfig;
-    /**
-     *
-     * @type {string}
-     * @memberof Content
-     */
-    appliedTemplateKey: string;
+    colorToken: WorkItemLabelColorToken;
     /**
      *
      * @type {number}
      * @memberof Content
      */
-    appliedTemplateVersion: number;
+    sortOrder: number;
     /**
      *
-     * @type {string}
+     * @type {boolean}
      * @memberof Content
      */
-    appliedBlueprintCode: string;
+    active: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof Content
+     */
+    readonly protectedContent: boolean;
+    /**
+     *
+     * @type {boolean}
+     * @memberof Content
+     */
+    readonly inUse: boolean;
     /**
      *
      * @type {number}
      * @memberof Content
      */
     readonly rowVersion: number;
-    /**
-     *
-     * @type {string}
-     * @memberof Content
-     */
-    readonly etag: string;
     /**
      *
      * @type {Date}
@@ -155,18 +110,6 @@ export interface Content {
      * @memberof Content
      */
     updatedByUserId: string;
-    /**
-     *
-     * @type {Date}
-     * @memberof Content
-     */
-    readonly archivedAt: Date | null;
-    /**
-     *
-     * @type {string}
-     * @memberof Content
-     */
-    readonly archivedByUserId: string | null;
 }
 
 
@@ -179,22 +122,16 @@ export function instanceOfContent(value: object): value is Content {
     if (!('projectId' in value) || value['projectId'] === undefined) return false;
     if (!('code' in value) || value['code'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('workItemType' in value) || value['workItemType'] === undefined) return false;
-    if (!('status' in value) || value['status'] === undefined) return false;
-    if (!('defaultViewType' in value) || value['defaultViewType'] === undefined) return false;
-    if (!('viewConfig' in value) || value['viewConfig'] === undefined) return false;
-    if (!('appliedTemplateKey' in value) || value['appliedTemplateKey'] === undefined) return false;
-    if (!('appliedTemplateVersion' in value) || value['appliedTemplateVersion'] === undefined) return false;
-    if (!('appliedBlueprintCode' in value) || value['appliedBlueprintCode'] === undefined) return false;
+    if (!('colorToken' in value) || value['colorToken'] === undefined) return false;
+    if (!('sortOrder' in value) || value['sortOrder'] === undefined) return false;
+    if (!('active' in value) || value['active'] === undefined) return false;
+    if (!('protectedContent' in value) || value['protectedContent'] === undefined) return false;
+    if (!('inUse' in value) || value['inUse'] === undefined) return false;
     if (!('rowVersion' in value) || value['rowVersion'] === undefined) return false;
-    if (!('etag' in value) || value['etag'] === undefined) return false;
     if (!('createdAt' in value) || value['createdAt'] === undefined) return false;
     if (!('createdByUserId' in value) || value['createdByUserId'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
     if (!('updatedByUserId' in value) || value['updatedByUserId'] === undefined) return false;
-    if (!('archivedAt' in value) || value['archivedAt'] === undefined) return false;
-    if (!('archivedByUserId' in value) || value['archivedByUserId'] === undefined) return false;
     return true;
 }
 
@@ -212,22 +149,16 @@ export function ContentFromJSONTyped(json: any, ignoreDiscriminator: boolean): C
         'projectId': json['projectId'],
         'code': json['code'],
         'name': json['name'],
-        'description': json['description'],
-        'workItemType': WorkItemTypeFromJSON(json['workItemType']),
-        'status': ContentStatusFromJSON(json['status']),
-        'defaultViewType': ContentViewTypeFromJSON(json['defaultViewType']),
-        'viewConfig': ContentViewConfigFromJSON(json['viewConfig']),
-        'appliedTemplateKey': json['appliedTemplateKey'],
-        'appliedTemplateVersion': json['appliedTemplateVersion'],
-        'appliedBlueprintCode': json['appliedBlueprintCode'],
+        'colorToken': WorkItemLabelColorTokenFromJSON(json['colorToken']),
+        'sortOrder': json['sortOrder'],
+        'active': json['active'],
+        'protectedContent': json['protectedContent'],
+        'inUse': json['inUse'],
         'rowVersion': json['rowVersion'],
-        'etag': json['etag'],
         'createdAt': (new Date(json['createdAt'])),
         'createdByUserId': json['createdByUserId'],
         'updatedAt': (new Date(json['updatedAt'])),
         'updatedByUserId': json['updatedByUserId'],
-        'archivedAt': (json['archivedAt'] == null ? null : new Date(json['archivedAt'])),
-        'archivedByUserId': json['archivedByUserId'],
     };
 }
 
@@ -235,7 +166,7 @@ export function ContentToJSON(json: any): Content {
     return ContentToJSONTyped(json, false);
 }
 
-export function ContentToJSONTyped(value?: Omit<Content, 'rowVersion'|'etag'|'createdAt'|'updatedAt'|'archivedAt'|'archivedByUserId'> | null, ignoreDiscriminator: boolean = false): any {
+export function ContentToJSONTyped(value?: Omit<Content, 'protectedContent'|'inUse'|'rowVersion'|'createdAt'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -246,14 +177,9 @@ export function ContentToJSONTyped(value?: Omit<Content, 'rowVersion'|'etag'|'cr
         'projectId': value['projectId'],
         'code': value['code'],
         'name': value['name'],
-        'description': value['description'],
-        'workItemType': WorkItemTypeToJSON(value['workItemType']),
-        'status': ContentStatusToJSON(value['status']),
-        'defaultViewType': ContentViewTypeToJSON(value['defaultViewType']),
-        'viewConfig': ContentViewConfigToJSON(value['viewConfig']),
-        'appliedTemplateKey': value['appliedTemplateKey'],
-        'appliedTemplateVersion': value['appliedTemplateVersion'],
-        'appliedBlueprintCode': value['appliedBlueprintCode'],
+        'colorToken': WorkItemLabelColorTokenToJSON(value['colorToken']),
+        'sortOrder': value['sortOrder'],
+        'active': value['active'],
         'createdByUserId': value['createdByUserId'],
         'updatedByUserId': value['updatedByUserId'],
     };

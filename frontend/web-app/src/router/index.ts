@@ -22,8 +22,6 @@ import ProjectLayout from '../views/projects/ProjectLayout.vue'
 import ProjectOverviewView from '../views/projects/ProjectOverviewView.vue'
 import ProjectMembersView from '../views/projects/ProjectMembersView.vue'
 import ProjectProductsView from '../views/projects/ProjectProductsView.vue'
-import ProjectContentsView from '../views/projects/ProjectContentsView.vue'
-import ContentWorkItemsView from '../views/projects/ContentWorkItemsView.vue'
 import ProjectSettingsView from '../views/projects/ProjectSettingsView.vue'
 import ProjectActivityView from '../views/projects/ProjectActivityView.vue'
 import ProductsView from '../views/products/ProductsView.vue'
@@ -94,8 +92,6 @@ export const routes: RouteRecordRaw[] = [
         meta: { shellSection: 'work' },
         children: [
           { path: 'overview', name: 'project-overview', component: ProjectOverviewView },
-          { path: 'contents', name: 'project-contents', component: ProjectContentsView },
-          { path: 'contents/:contentId', name: 'content-work-items', component: ContentWorkItemsView },
           { path: 'members', name: 'project-members', component: ProjectMembersView },
           { path: 'products', name: 'project-products', component: ProjectProductsView },
           { path: 'activity', name: 'project-activity', component: ProjectActivityView },

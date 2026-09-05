@@ -11,17 +11,21 @@ public final class WorkItemModels {
     public record WorkItemLocator(UUID workItemId, UUID projectId, UUID contentId) {}
 
     public record WorkItemSummary(UUID id, UUID projectId, UUID contentId, String itemNo,
-            String type, String title, String statusCode, String statusCategory, String priority,
+            String contentName, String contentColorToken, String title, String statusCode,
+            String statusCategory, String priority,
             UUID assigneeUserId, String assigneeDisplayName, UUID reporterUserId,
             String reporterDisplayName, String description, String notes,
             LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
+            String dueTime, Instant completedAt,
             long rowVersion, String etag, WorkItemCapabilities capabilities, Instant updatedAt) {}
 
     public record WorkItemDetail(UUID id, UUID projectId, UUID contentId, String itemNo,
-            String type, String title, String statusCode, String statusCategory, String priority,
+            String contentName, String contentColorToken, String title, String statusCode,
+            String statusCategory, String priority,
             UUID assigneeUserId, String assigneeDisplayName, UUID reporterUserId,
             String reporterDisplayName, String description, String notes,
             LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
+            String dueTime, Instant completedAt,
             long rowVersion, String etag, WorkItemCapabilities capabilities,
             Instant createdAt, Instant updatedAt, boolean deleted, Instant deletedAt,
             UUID deletedByUserId, String deleteReason) {}
@@ -42,9 +46,10 @@ public final class WorkItemModels {
     }
 
     public record ProjectWorkItemListItem(UUID id, UUID projectId, UUID contentId,
-            String contentName, String itemNo, String type, String title, String statusCode,
+            String contentName, String contentColorToken, String itemNo, String title, String statusCode,
             String statusCategory, String priority, UUID assigneeUserId,
-            String assigneeDisplayName, LocalDate dueDate, long rowVersion, String etag,
+            String assigneeDisplayName, LocalDate dueDate, String dueTime, Instant completedAt,
+            long rowVersion, String etag,
             WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt) {}
 
     public record WorkItemSubitemList(List<ProjectWorkItemListItem> items) {

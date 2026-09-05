@@ -54,6 +54,10 @@ const envelopePath = resolveContractPath(
 const envelopeSchema = readJson(envelopePath, 'event envelope schema')
 const ajv = new Ajv({ allErrors: true, strict: true, schemas: [envelopeSchema] })
 addFormats(ajv)
+for (const fileName of fs.readdirSync(path.join(eventsRoot, 'schemas'))
+  .filter(fileName => fileName.endsWith('-payload.schema.json'))) {
+  ajv.addSchema(readJson(path.join(eventsRoot, 'schemas', fileName), fileName))
+}
 const eventKeys = new Set()
 const referencedSchemas = new Set()
 const referencedExamples = new Set()

@@ -36,6 +36,24 @@ public class ActivityProjectionContextAdapter implements ActivityProjectionConte
                 .map(ActivityProjectionContextAdapter::map);
     }
 
+    @Override
+    public Optional<ContentReference> content(UUID companyId, UUID projectId, UUID contentId) {
+        return workItems.findContent(companyId, projectId, contentId)
+                .map(value -> new ContentReference(value.id(), value.displayName()));
+    }
+
+    @Override
+    public Optional<LabelReference> status(UUID companyId, UUID projectId, String code) {
+        return workItems.findStatus(companyId, projectId, code)
+                .map(value -> new LabelReference(value.code(), value.displayName(), value.colorToken()));
+    }
+
+    @Override
+    public Optional<LabelReference> priority(UUID companyId, UUID projectId, String code) {
+        return workItems.findPriority(companyId, projectId, code)
+                .map(value -> new LabelReference(value.code(), value.displayName(), value.colorToken()));
+    }
+
     private static WorkItemReference map(
             WorkItemActivitySourceQuery.WorkItemActivityReference reference) {
         return new WorkItemReference(reference.id(), reference.projectId(), reference.itemNo(),

@@ -16,6 +16,14 @@ public interface WorkItemUpdateRepository {
     List<WorkItemUpdate> findOlderWindow(UUID companyId, UUID workItemId,
             UpdateCursor before, int limit);
 
+    List<WorkItemUpdate> findPinned(UUID companyId, UUID workItemId);
+
+    List<WorkItemUpdate> findReplies(UUID companyId, UUID parentUpdateId, UpdateCursor after, int limit);
+
+    long countReplies(UUID companyId, UUID parentUpdateId);
+
+    boolean pin(WorkItemUpdate update, long expectedVersion);
+
     Optional<UpdateLocator> findLocator(UUID companyId, UUID updateId);
 
     Optional<WorkItemUpdate> find(UUID companyId, UUID updateId);

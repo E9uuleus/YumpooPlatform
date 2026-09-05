@@ -24,7 +24,9 @@ for (const fragment of ['WorkItemRelationType', 'findActivePair', 'validateParen
   assert(service.includes(fragment), `关系服务缺少 ${fragment}`)
 }
 for (const fragment of ['CandidateFacts', 'already_related', 'parent_is_child',
-  'child_has_children', 'candidate.type AS type_code', 'parent_item.type AS parent_type',
+  'child_has_children', 'candidate_content.name AS content_name',
+  'candidate_content.color_token AS content_color_token',
+  'parent_content.name AS parent_content_name',
   'ORDER BY relation.created_at DESC, relation.id ASC']) {
   assert(repository.includes(fragment), `关系仓储缺少 ${fragment}`)
 }
@@ -35,8 +37,8 @@ for (const fragment of ['operationId: listWorkItemRelations', 'operationId: list
   'operationId: deleteWorkItemRelation', 'counterpartVisible']) assert(openapi.includes(fragment), `OpenAPI 缺少 ${fragment}`)
 for (const fragment of ['listWorkItemRelations', 'listWorkItemRelationCandidates',
   'createWorkItemRelation', 'changeWorkItemParent', 'deleteWorkItemRelation']) assert(sdk.includes(fragment), `SDK 缺少 ${fragment}`)
-for (const fragment of ['ordinaryRelationsSupportAllRolesAtomicReparentDeletionAndDeletedCounterpart',
-  'REPARENT_REQUIRED', 'project_sort_key', 'workitem.work_item_parent_changed']) assert(integration.includes(fragment), `HTTP 验收缺少 ${fragment}`)
+for (const fragment of ['switchingCategoryPreservesIdentityHierarchyDiscussionAndProjectRanks',
+  'right_work_item_id', 'projectSortBefore', '.isOne()']) assert(integration.includes(fragment), `HTTP 验收缺少 ${fragment}`)
 for (const fragment of ['workitem.work_item_relation_deleted', 'workitem.work_item_parent_changed']) assert(activity.includes(fragment), `Activity 缺少 ${fragment}`)
 for (const fragment of ['WorkItemRelationCandidateEligibilityEnum.ReparentRequired', 'ElMessageBox.confirm', 'deleteWorkItemRelation',
   'mutationKey', '关系事实已刷新', 'counterpart.deleted']) assert(web.includes(fragment), `Web 缺少 ${fragment}`)

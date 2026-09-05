@@ -75,7 +75,7 @@ public final class WorkItemUpdateController {
             String idempotencyHeader) {
         CurrentActor actor = actors.requiredActive();
         UUID key = keys.parseRequired(idempotencyHeader);
-        StoredCommandResult stored = service.publish(new Publish(actor, workItemId, body.bodyHtml(), key,
+        StoredCommandResult stored = service.publish(new Publish(actor, workItemId, body.bodyHtml(), body.parentUpdateId(), key,
                 hasher.hash("publishWorkItemUpdate", Map.of("workItemId", workItemId.toString()),
                         objectMapper.valueToTree(body)))).result();
         HttpHeaders headers = new HttpHeaders();
@@ -99,6 +99,25 @@ public final class WorkItemUpdateController {
                 .eTag(Long.toString(view.rowVersion())).body(view);
     }
 
+    @GetMapping("/work-item-updates/{updateId}/replies")
+    ResponseEntity<WorkItemUpdatePage> replies(@PathVariable UUID updateId,
+            @RequestParam(required = false) String cursor, @RequestParam(required = false) Integer size) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(service.replies(actors.requiredActive(), updateId, cursor, size));
+    }
+
+    @PatchMapping("/work-item-updates/{updateId}/pin")
+    ResponseEntity<WorkItemUpdateView> pin(@PathVariable UUID updateId,
+            @Valid @RequestBody WorkItemUpdatePinRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader) {
+        CurrentActor actor = actors.requiredActive();
+        service.find(actor, updateId);
+        long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        WorkItemUpdateView view = service.pin(new com.yumpoo.platform.workitem.application.WorkItemUpdateCommands.Pin(
+                actor, updateId, expectedVersion, body.pinned()));
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).eTag(Long.toString(view.rowVersion())).body(view);
+    }
+
     @DeleteMapping("/work-item-updates/{updateId}")
     ResponseEntity<WorkItemUpdateView> delete(@PathVariable UUID updateId,
             @Valid @RequestBody WorkItemUpdateDeleteRequest body,
@@ -109,13 +128,11 @@ public final class WorkItemUpdateController {
             service.find(actor, updateId);
             long expectedVersion = ifMatch.parseForVisibleResource(true, ifMatchHeader);
             WorkItemUpdateView view = service.delete(new Delete(actor, updateId,
-                    expectedVersion, body.reason()));
+                    expectedVersion));
             return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                     .eTag(Long.toString(view.rowVersion())).body(view);
         } catch (RuntimeException failure) {
-            if (body.reason() != null) {
-                service.recordModerationFailure(actor, updateId, body.reason(), failure);
-            }
+            service.recordDeleteFailure(actor, updateId, failure);
             throw failure;
         }
     }

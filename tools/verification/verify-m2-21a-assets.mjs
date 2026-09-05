@@ -35,8 +35,8 @@ assert(relationRepository.includes('countActiveChildren'), '关系仓储缺少�
 for (const fragment of ['/subitems")', '/subitems/{subitemId}/order-moves']) {
   assert(controller.includes(fragment), `Controller 缺少 ${fragment}`)
 }
-for (const fragment of ['subitemsAreNestedIdempotentRootFilteredAndSiblingScoped',
-  'INVALID_STATE_TRANSITION', 'workitem.work_item_relation_created']) {
+for (const fragment of ['switchingCategoryPreservesIdentityHierarchyDiscussionAndProjectRanks',
+  '/subitems', 'work_item_relation', 'projectSortBefore']) {
   assert(integration.includes(fragment), `后端集成验收缺少 ${fragment}`)
 }
 for (const fragment of ['operationId: listWorkItemSubitems', 'operationId: createWorkItemSubitem',
@@ -51,7 +51,7 @@ for (const fragment of ['expandedSubitemIds', 'loadSubitems', 'onTableExpandChan
   '--work-item-table-scroll-left', 'syncSubitemFixedColumnScrollPosition',
   'subitemMovableColumnOrder', 'visibleSubitemColumns', 'moveSubitemColumn',
   'monday-add-column-icon', 'M10 2.25C10.4142 2.25',
-  'monday-quick-add__field', 'placeholder="添加工作项"', 'placeholder="Content"',
+  'monday-quick-add__field', 'placeholder="添加工作项"', 'contentId: defaultContentId.value',
   'monday-quick-checkbox', 'translateX(2px)',
   '--work-item-quick-control-height: 26px', '.monday-quick-row:focus-within',
   'background: var(--yp-bg-selected)', 'outline: none !important',
@@ -76,14 +76,14 @@ for (const fragment of ['aria-label', '--work-item-hierarchy-indent, 40px',
   'SUBITEM_ADD_COLUMN_MIN_WIDTH', 'subitem-add-column-header', 'subitem-add-column-button',
   'M10 2.25C10.4142 2.25',
   '--subitem-table-quick-height: var(--subitem-table-row-height)', 'subitem-add__field',
-  'placeholder="添加子项"', 'placeholder="Content"',
+  'placeholder="添加子项"', 'contentId: defaultContentId.value',
   'subitem-quick-checkbox', 'color-mix(in srgb, var(--yp-border-strong) 50%, transparent)',
   '--subitem-quick-control-height: 26px', '.subitem-quick-row:focus-within',
   '.monday-subitem-table.el-table--border::after',
   'translateX(var(--work-item-table-scroll-left, 0px))',
   'createWorkItemSubitem', 'moveWorkItemSubitemOrder']) assert(subtable.includes(fragment), `子表格缺少 ${fragment}`)
 assert(!subtable.includes('subitem-hierarchy-branch--header'), '子表头不应渲染层级连接锚点')
-for (const fragment of ['默认继承父项 Content', '直接兄弟锚点', '不渲染下一级展开入口',
+for (const fragment of ['自动继承父项类别而非首个启用类别', '直接兄弟锚点', '不渲染下一级展开入口',
   '表头不渲染连接锚点', '空子项时让添加行紧接表头', '状态和优先级标签占满对应子项单元格',
   '固定勾选和名称列，并让单行表头整列可拖出表格但仅在当前子表内落下']) {
   assert(subtableTest.includes(fragment), `子表格验收缺少 ${fragment}`)

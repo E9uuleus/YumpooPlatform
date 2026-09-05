@@ -16,8 +16,6 @@ describe('Project 工作台路由', () => {
     expect(detail?.meta?.shellSection).toBe('work')
     expect(detail?.children?.map(route => route.path)).toEqual([
       'overview',
-      'contents',
-      'contents/:contentId',
       'members',
       'products',
       'activity',

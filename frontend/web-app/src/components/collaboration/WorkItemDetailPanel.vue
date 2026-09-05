@@ -3,11 +3,12 @@ import type { ProjectMember } from '@yumpoo/api-client'
 import { ElTabPane as ElTabPaneRaw, ElTabs as ElTabsRaw } from 'element-plus'
 import { computed, ref, type DefineComponent } from 'vue'
 import WorkItemDiscussion from './WorkItemDiscussion.vue'
-import ActivityTimeline from './ActivityTimeline.vue'
+import WorkItemCellActivityLog from './WorkItemCellActivityLog.vue'
 import WorkItemRelations from './WorkItemRelations.vue'
 
 interface DiscussionHandle {
   hasDraft: boolean
+  busy: boolean
   discardDraft: () => void
 }
 
@@ -33,12 +34,13 @@ const tab = computed({
   set: value => emit('update:modelValue', value as 'details' | 'discussion' | 'relations' | 'activity'),
 })
 const hasDraft = computed(() => Boolean(discussion.value?.hasDraft))
+const busy = computed(() => Boolean(discussion.value?.busy))
 
 function discardDraft(): void {
   discussion.value?.discardDraft()
 }
 
-defineExpose({ hasDraft, discardDraft })
+defineExpose({ hasDraft, busy, discardDraft })
 </script>
 
 <template>
@@ -67,7 +69,11 @@ defineExpose({ hasDraft, discardDraft })
         :read-only-reason="readOnlyReason"
       />
     </el-tab-pane>
-    <el-tab-pane label="关系" name="relations" lazy>
+    <el-tab-pane
+      label="关系"
+      name="relations"
+      lazy
+    >
       <work-item-relations
         v-if="tab === 'relations'"
         :work-item-id="workItemId"
@@ -76,8 +82,15 @@ defineExpose({ hasDraft, discardDraft })
         @open-work-item="emit('openWorkItem', $event)"
       />
     </el-tab-pane>
-    <el-tab-pane label="动态" name="activity" lazy>
-      <activity-timeline v-if="tab === 'activity'" :work-item-id="workItemId" compact />
+    <el-tab-pane
+      label="动态"
+      name="activity"
+      lazy
+    >
+      <work-item-cell-activity-log
+        v-if="tab === 'activity'"
+        :work-item-id="workItemId"
+      />
     </el-tab-pane>
   </el-tabs>
 </template>

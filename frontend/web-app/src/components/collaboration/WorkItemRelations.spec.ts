@@ -2,6 +2,7 @@ import {
   WorkItemRelationCandidateEligibilityEnum,
   WorkItemRelationRole,
   WorkItemRelationType,
+  WorkItemLabelColorToken,
   type WorkItemRelation,
   type WorkItemRelationCandidate,
 } from '@yumpoo/api-client'
@@ -33,7 +34,7 @@ function relation(overrides: Partial<WorkItemRelation> = {}): WorkItemRelation {
     counterpartVisible: true,
     counterpart: {
       id: 'item-2', projectId: 'project-1', contentId: 'content-1', itemNo: 'YMP-2',
-      type: 'TASK', title: '对端事项', statusCode: 'TODO', deleted: false,
+      contentName: '任务', contentColorToken: WorkItemLabelColorToken.BrightGreen, title: '对端事项', statusCode: 'TODO', deleted: false,
     },
     status: 'ACTIVE', createdByUserId: 'user-1', createdAt: new Date('2026-08-30T01:00:00Z'),
     deletedByUserId: null, deletedAt: null, deleteReason: null, rowVersion: 0, etag: '"0"',
@@ -46,7 +47,7 @@ function candidate(overrides: Partial<WorkItemRelationCandidate> = {}): WorkItem
   return {
     item: {
       id: 'item-2', projectId: 'project-1', contentId: 'content-1', itemNo: 'YMP-2',
-      type: 'TASK', title: '候选事项', statusCode: 'TODO', deleted: false,
+      contentName: '任务', contentColorToken: WorkItemLabelColorToken.BrightGreen, title: '候选事项', statusCode: 'TODO', deleted: false,
     },
     eligibility: WorkItemRelationCandidateEligibilityEnum.Eligible,
     reasonCode: null,

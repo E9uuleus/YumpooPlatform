@@ -22,12 +22,12 @@ public class ProjectContentInitializationAdapter implements InitializeProjectCon
                 initialization.templateKey(), initialization.templateVersion(),
                 initialization.actorUserId(), initialization.blueprints().stream()
                 .map(blueprint -> new ContentInitializationCommand.Blueprint(
-                        blueprint.contentCode(), blueprint.displayName(), blueprint.workItemType(),
-                        blueprint.defaultViewType()))
+                        blueprint.contentCode(), blueprint.displayName(), blueprint.colorToken(),
+                        blueprint.sortOrder()))
                 .toList());
         return service.initialize(command).stream()
                 .map(content -> new InitializedProjectContent(
-                        content.contentId(), content.code(), content.workItemType()))
+                        content.contentId(), content.code()))
                 .toList();
     }
 }

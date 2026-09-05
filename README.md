@@ -1,5 +1,13 @@
 # YumpooPlatform
 
+## Content 工作项类别重构
+
+V48 起，`Content` 仅表示项目级“工作项类别”目录，不再承载工作项类型、表格/看板视图配置或独立工作区。项目工作项总表是唯一表格/看板入口；根项、子项、创建表单和详情抽屉均可通过普通字段切换类别，类别变化不改变编号、父子关系、讨论、附件、项目顺序或 Project+Status Kanban rank。
+
+目录保留 `GET/POST /api/v1/projects/{projectId}/contents`，并提供嵌套 `PATCH/DELETE /api/v1/projects/{projectId}/contents/{contentId}`；工作项类别通过 `PATCH /api/v1/work-items/{workItemId}/content` 修改。旧 Content 页面、`/api/v1/contents/{contentId}`、archive/restore 和 Content 工作项工作区均已删除。默认“需求 / 任务 / 缺陷”受保护但可改名、改色、排序和停用；新类别由 Project Owner 管理，使用过后只能停用。
+
+历史 M2 小节记录当时的交付切片；其中 Content 工作区、Content View Config、Content 级 rank lane 及 `WorkItemType` 描述已由本节取代，当前实现以 OpenAPI、V48 与现行 Agent Note 为准。
+
 ## M2-24 项目协作阶段收口
 
 M2-24 对 M2 已存在的 Project、Content、Work Item、关系、Activity 与 Product 切片执行综合回归，并交付 Product 治理 Web 闭环。Product 普通归档现在以 `ACTIVE_DEVELOPMENT_SUPPORT_PROJECTS` 阻断有效 DEVELOPMENT/SUPPORT 关系所指向的不同 ACTIVE Project；CompanyAdmin 可填写 10–500 字理由执行显式覆盖，安全记录前后快照和聚合计数，但不修改 Project 或关系事实。Product 归档事件 v1 兼容增加可选 `mode/blockers`，治理理由不进入领域事件。

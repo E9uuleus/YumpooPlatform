@@ -14,11 +14,13 @@ import java.util.UUID;
 @Service
 public class WorkItemReferenceService {
     private final WorkItemRepository workItems;
+    private final ContentRepository contents;
     private final ProjectAccessSnapshotQuery projectAccess;
 
-    public WorkItemReferenceService(WorkItemRepository workItems,
+    public WorkItemReferenceService(WorkItemRepository workItems, ContentRepository contents,
                                     ProjectAccessSnapshotQuery projectAccess) {
         this.workItems = workItems;
+        this.contents = contents;
         this.projectAccess = projectAccess;
     }
 
@@ -40,15 +42,19 @@ public class WorkItemReferenceService {
                 ? workItems.findIncludingDeleted(actor.companyId(), locator.projectId(),
                         locator.contentId(), workItemId)
                 : workItems.find(actor.companyId(), locator.projectId(), locator.contentId(), workItemId);
-        return item.map(Reference::from);
+        return item.map(value -> Reference.from(value, contents.find(actor.companyId(),
+                locator.projectId(), locator.contentId()).orElse(null)));
     }
 
     public record Reference(UUID workItemId, UUID projectId, UUID contentId,
-                            String itemNo, String type, String title, String statusCode,
+                            String contentName, String contentColorToken, String itemNo,
+                            String title, String statusCode,
                             String statusCategory, boolean deleted) {
-        private static Reference from(WorkItem item) {
+        private static Reference from(WorkItem item, com.yumpoo.platform.workitem.domain.Content content) {
             return new Reference(item.id(), item.projectId(), item.contentId(),
-                    item.itemNo(), item.type().name(), item.title(), item.statusCode(),
+                    content == null ? "未知类别" : content.name(),
+                    content == null ? "GRAY" : content.colorToken(), item.itemNo(),
+                    item.title(), item.statusCode(),
                     item.statusCategory().name(), item.deletedAt() != null);
         }
     }

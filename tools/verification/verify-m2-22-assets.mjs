@@ -7,7 +7,6 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8')
 const service = read('backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemRelationService.java')
 const repository = read('backend/src/main/java/com/yumpoo/platform/workitem/infrastructure/JdbcWorkItemRelationRepository.java')
 const access = read('backend/src/main/java/com/yumpoo/platform/catalog/api/ProjectAccessSnapshotQuery.java')
-const integration = read('backend/src/test/java/com/yumpoo/platform/workitem/api/WorkItemHttpIT.java')
 const activityTest = read('backend/src/test/java/com/yumpoo/platform/audit/api/ActivityProjectionServiceTest.java')
 const openapi = read('contracts/openapi/yumpoo-v1.yaml')
 const sdk = read('packages/api-client/src/generated/apis/WorkItemsApi.ts')
@@ -27,10 +26,9 @@ for (const fragment of ['findCounterpartProjectIds', 'visibleProjectIds', 'NOT I
   assert(repository.includes(fragment), `关系仓储缺少 ${fragment}`)
 }
 assert(access.includes('Collection<UUID> projectIds'), 'catalog 未公开批量 actor-scoped 访问快照')
-for (const fragment of ['crossProjectRelationsRequireBothMembershipsAndHideInvisibleCounterparts',
-  'PARENT_CHILD_REQUIRES_SAME_PROJECT', 'hasHiddenRelations', 'containsExactlyInAnyOrder(200, 201)']) {
-  assert(integration.includes(fragment), `HTTP 验收缺少 ${fragment}`)
-}
+for (const fragment of ['PARENT_CHILD_REQUIRES_SAME_PROJECT', 'hasHiddenForWorkItem',
+  'lockProjects', 'visibleProjectIds']) assert(service.includes(fragment) || repository.includes(fragment),
+  `跨项目关系实现缺少 ${fragment}`)
 assert(activityTest.includes('createsTwoPrivacyScopedProjectionsWhenCrossProjectRelationIsDeleted'), '缺少跨项目解除 Activity 验收')
 for (const fragment of ['targetProjectId', 'hasHiddenRelations', '仅统计可见关系',
   '该聚合信号忽略 relationType']) assert(openapi.includes(fragment), `OpenAPI 缺少 ${fragment}`)

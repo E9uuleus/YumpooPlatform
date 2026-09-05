@@ -1,13 +1,15 @@
 import {
   WorkItemStatusCategory,
-  WorkItemType,
+  WorkItemLabelColorToken,
   type ProjectWorkItemListItem,
   type WorkItemDetail,
 } from '@yumpoo/api-client'
 import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { localProblem } from '../../api/problems'
 import ProjectWorkItemSubitemsTable from './ProjectWorkItemSubitemsTable.vue'
+import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 
 const api = vi.hoisted(() => ({
   createWorkItemSubitem: vi.fn(),
@@ -26,7 +28,8 @@ vi.mock('../../api/client', () => ({
 function item(id: string, contentId = 'content-1'): ProjectWorkItemListItem {
   return {
     id, projectId: 'project-1', contentId, contentName: contentId === 'content-1' ? '产品需求' : '任务',
-    itemNo: id.toUpperCase(), type: WorkItemType.Requirement, title: id,
+    contentColorToken: contentId === 'content-1' ? WorkItemLabelColorToken.BrightBlue : WorkItemLabelColorToken.BrightGreen,
+    itemNo: id.toUpperCase(), title: id,
     statusCode: 'BACKLOG', statusCategory: WorkItemStatusCategory.Todo,
     priority: null, assigneeUserId: null, assigneeDisplayName: null, dueDate: null,
     subitemCount: 0, rowVersion: 1, etag: '"1"', updatedAt: new Date('2026-08-25T01:00:00Z'),
@@ -54,8 +57,8 @@ function mountTable(items = [item('child-1'), item('child-2')]) {
         content: 150, dueDate: 140, updatedAt: 170,
       },
       activeContents: [
-        { id: 'content-1', name: '产品需求' },
-        { id: 'content-2', name: '任务' },
+        { id: 'content-1', name: '产品需求', colorToken: WorkItemLabelColorToken.BrightBlue },
+        { id: 'content-2', name: '任务', colorToken: WorkItemLabelColorToken.BrightGreen },
       ],
       members: [], workflowStatuses: [], priorityOptions: [], canCreate: true, editingCell: false,
     },
@@ -77,26 +80,95 @@ describe('项目工作项子表格', () => {
       Promise.resolve(item(subitemId) as unknown as WorkItemDetail))
   })
 
-  it('创建子项时默认继承父项 Content，并允许切换到同项目其他 ACTIVE Content', async () => {
-    const wrapper = mountTable()
-    const view = wrapper.vm as unknown as {
-      quickTitle: string
-      quickContentId: string
-      createQuick: (continueAdding: boolean) => Promise<void>
-    }
+  it('子表复用截止日期组件并完整转发日期和时间，不改变列宽', async () => {
+    const child = { ...item('child-1'), dueDate: new Date('2026-09-03T00:00:00Z'), dueTime: '18:05' }
+    const wrapper = mountTable([child])
+    await wrapper.setProps({ columns: [{ key: 'title', label: '工作项名称' }, { key: 'dueDate', label: '截止日期' }] })
+    await flushPromises()
+    wrapper.getComponent(WorkItemDueDateCell).vm.$emit('change', { dueDate: null, dueTime: null })
+    expect(wrapper.emitted('dueDateChange')).toEqual([[child, { dueDate: null, dueTime: null }]])
+    expect(wrapper.props('columnWidths').dueDate).toBe(140)
+    expect(wrapper.getComponent(WorkItemDueDateCell).attributes('style')).toContain('--deadline-cell-height: 34px')
+    wrapper.unmount()
+  })
 
-    expect(view.quickContentId).toBe('content-1')
-    view.quickTitle = '跨 Content 子项'
-    view.quickContentId = 'content-2'
-    await view.createQuick(false)
+  it('子表换列后只隐藏当前拖动列并同步移动表头与单元格', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    const tableInstance = wrapper.getComponent({ name: 'ElTable' }).vm.$
+    await wrapper.setProps({
+      columns: [
+        { key: 'title', label: '工作项名称' },
+        { key: 'priority', label: '优先级' },
+        { key: 'content', label: '工作项类别' },
+        { key: 'status', label: '状态' },
+      ],
+    })
+    const view = wrapper.vm as unknown as {
+      columnDraggingKey: string | undefined
+      columnDraggingIndex: number
+      columnDropIndex: number | undefined
+    }
+    view.columnDraggingKey = 'content'
+    view.columnDraggingIndex = 1
+    view.columnDropIndex = 0
+    await nextTick()
+
+    for (const cell of wrapper.findAll<HTMLElement>('th.monday-column-header--content, td.monday-column--content')) {
+      expect(cell.element.style.opacity).toBe('0')
+      expect(cell.element.style.transform).toBe('')
+    }
+    for (const cell of wrapper.findAll<HTMLElement>('th.monday-column-header--priority, td.monday-column--priority')) {
+      expect(cell.element.style.opacity).toBe('')
+      expect(cell.element.style.transform).toBe('translateX(150px)')
+    }
+    expect(wrapper.getComponent({ name: 'ElTable' }).vm.$ === tableInstance).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('创建子项只需输入名称，自动继承父项类别而非首个启用类别', async () => {
+    const wrapper = mountTable()
+    await wrapper.setProps({ parent: item('parent-1', 'content-2') })
+    await wrapper.get('.subitem-add').trigger('click')
+    expect(wrapper.find('.subitem-quick-row .el-select').exists()).toBe(false)
+    await wrapper.get('input[placeholder="添加子项"]').setValue('继承父项类别')
+    await wrapper.get('.subitem-quick-submit').trigger('click')
+    await flushPromises()
 
     expect(api.createWorkItemSubitem).toHaveBeenCalledWith(expect.objectContaining({
       parentWorkItemId: 'parent-1',
       workItemSubitemCreateRequest: expect.objectContaining({
-        contentId: 'content-2', title: '跨 Content 子项',
+        contentId: 'content-2', title: '继承父项类别',
       }),
     }))
     expect(wrapper.emitted('created')).toHaveLength(1)
+  })
+
+  it('父项类别已停用时使用首个启用类别，并支持 Shift+Enter 连续创建', async () => {
+    const wrapper = mountTable()
+    await wrapper.setProps({ parent: item('parent-1', 'inactive-content') })
+    await wrapper.get('.subitem-add').trigger('click')
+    const input = wrapper.get('input[placeholder="添加子项"]')
+    await input.trigger('keydown', { key: 'Enter' })
+    expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
+    await input.setValue('连续创建子项')
+    await input.trigger('keydown', { key: 'Enter', shiftKey: true })
+    await flushPromises()
+
+    expect(api.createWorkItemSubitem).toHaveBeenCalledWith(expect.objectContaining({
+      workItemSubitemCreateRequest: expect.objectContaining({
+        contentId: 'content-1', title: '连续创建子项',
+      }),
+    }))
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(true)
+    expect((input.element as HTMLInputElement).value).toBe('')
+  })
+
+  it('没有启用类别时禁用子项创建', async () => {
+    const wrapper = mountTable()
+    await wrapper.setProps({ activeContents: [] })
+    expect(wrapper.get('.subitem-add').attributes('disabled')).toBeDefined()
+    expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
   })
 
   it('按父项独立提交排序规则，并使用直接兄弟锚点移动子项', async () => {
@@ -152,7 +224,7 @@ describe('项目工作项子表格', () => {
     expect(wrapper.get('.subitem-hierarchy-bar').classes()).toContain('subitem-hierarchy-bar--quick')
     expect(wrapper.find('.subitem-quick-row').exists()).toBe(true)
     expect(wrapper.get('input[placeholder="添加子项"]').attributes('aria-label')).toContain('Shift+Enter')
-    expect(wrapper.find('.subitem-quick-content').exists()).toBe(true)
+    expect(wrapper.find('.subitem-quick-row .el-select').exists()).toBe(false)
     expect(wrapper.find('.subitem-quick-row .subitem-quick-checkbox').exists()).toBe(true)
   })
 
@@ -209,7 +281,7 @@ describe('项目工作项子表格', () => {
 
     const tableColumns = wrapper.findAllComponents({ name: 'ElTableColumn' })
     const selectionColumn = tableColumns.find(column => column.props('type') === 'selection')
-    const titleColumn = tableColumns.find(column => column.props('columnKey') === 'title')
+    const titleColumn = tableColumns.find(column => column.props('prop') === 'title')
     const addColumn = tableColumns.find(column => column.props('columnKey') === 'add-column')
     expect(selectionColumn?.props('fixed')).toBe(true)
     expect(selectionColumn?.props('className')).toBe('subitem-selection-column')
@@ -237,7 +309,7 @@ describe('项目工作项子表格', () => {
       onColumnPointerDown: (event: PointerEvent) => void
       onColumnPointerMove: (event: PointerEvent) => void
       onColumnPointerUp: (event: PointerEvent) => void
-      subitemCellStyle: (context: { column: { columnKey?: string } }) => Record<string, string | number>
+      subitemCellStyle: (context: { column: { property?: string } }) => Record<string, string | number>
     }
     const movableHeaders = wrapper.findAll<HTMLTableCellElement>('th.subitem-movable-column-header')
     expect(movableHeaders).toHaveLength(2)
@@ -273,8 +345,8 @@ describe('项目工作项子表格', () => {
     expect(view.columnDraggingKey).toBe('status')
     expect(view.columnDropIndex).toBe(2)
     expect(view.columnDropAllowed).toBe(true)
-    expect(view.subitemCellStyle({ column: { columnKey: 'status' } })).toEqual({ opacity: 0, pointerEvents: 'none' })
-    expect(view.subitemCellStyle({ column: { columnKey: 'priority' } })).toEqual({ transform: 'translateX(-130px)' })
+    expect(view.subitemCellStyle({ column: { property: 'status' } })).toEqual({ opacity: 0, pointerEvents: 'none' })
+    expect(view.subitemCellStyle({ column: { property: 'priority' } })).toEqual({ transform: 'translateX(-130px)' })
     const preview = document.querySelector<HTMLElement>('.subitem-column-drag-preview')
     expect(preview?.style.transform).toBe('rotate(1deg)')
     expect(preview?.style.top).toBe('25px')
@@ -316,6 +388,20 @@ describe('项目工作项子表格', () => {
     } as unknown as PointerEvent)
     await flushPromises()
     expect(wrapper.emitted('moveColumn')?.at(-1)).toEqual(['status', 'priority', 'after'])
+
+    const tableInstance = wrapper.getComponent({ name: 'ElTable' }).vm.$
+    await wrapper.setProps({
+      columns: [
+        { key: 'title', label: '工作项名称' },
+        { key: 'priority', label: '优先级' },
+        { key: 'status', label: '状态' },
+      ],
+    })
+    expect(wrapper.getComponent({ name: 'ElTable' }).vm.$ === tableInstance).toBe(true)
+    expect(wrapper.findAll('th.subitem-movable-column-header').map(header => header.text()))
+      .toEqual(['优先级', '状态'])
+    expect(wrapper.get('.el-table__body tr').findAll('td.subitem-movable-column').map(cell => cell.text()))
+      .toEqual(['—', 'BACKLOG'])
 
     wrapper.findComponent({ name: 'ElTable' }).vm.$emit('header-dragend', 164, 130, { label: '状态' })
     await flushPromises()

@@ -61,8 +61,8 @@ public class ProjectTemplateCatalogAdapter implements
                 view.publishedAt(), view.retiredAt(),
                 view.contentBlueprints().stream().map(blueprint ->
                         new ProjectTemplateSnapshot.ContentBlueprint(
-                                blueprint.contentCode(), blueprint.displayName(), blueprint.workItemType(),
-                                blueprint.defaultViewType(), blueprint.sortOrder())).toList(),
+                                blueprint.contentCode(), blueprint.displayName(), blueprint.colorToken(),
+                                blueprint.sortOrder())).toList(),
                 view.statuses().stream().map(status ->
                         new ProjectTemplateSnapshot.WorkflowStatus(
                                 status.statusCode(), status.displayName(), status.statusCategory(),

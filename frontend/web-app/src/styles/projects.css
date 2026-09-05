@@ -1338,7 +1338,8 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
 }
 
-.el-dropdown__popper .label-more-dropdown-menu {
+.el-dropdown__popper .label-more-dropdown-menu,
+.el-dropdown__popper .content-more-dropdown-menu {
   padding: 4px !important;
   border-radius: 6px !important;
 }

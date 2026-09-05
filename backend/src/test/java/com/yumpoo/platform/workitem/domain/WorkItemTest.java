@@ -17,7 +17,7 @@ class WorkItemTest {
     void creationNormalizesPlainTextAndKeepsFutureFieldsClosed() {
         UUID reporter = UUID.randomUUID();
         WorkItem item = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), 7, "PROJECT_1-7", ContentWorkItemType.TASK,
+                UUID.randomUUID(), 7, "PROJECT_1-7",
                 "  修复登录失败  ", "BACKLOG", WorkItemStatusCategory.TODO,
                 WorkItemPriority.MEDIUM, null, "  仅显示纯文本  ", "   ",
                 null, null, null, RANK, reporter, Instant.EPOCH);
@@ -34,14 +34,14 @@ class WorkItemTest {
     @Test
     void rejectsInvalidNumberAndOversizedPlainText() {
         assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), UUID.randomUUID(), 1, "bad-1", ContentWorkItemType.DEFECT,
+                UUID.randomUUID(), UUID.randomUUID(), 1, "bad-1",
                 "缺陷", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
                 null, null, null, null, null, null, RANK, UUID.randomUUID(), Instant.EPOCH))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("itemNo");
 
         assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1", ContentWorkItemType.DEFECT,
+                UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1",
                 "缺陷", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
                 null, "x".repeat(16_385), null, null, null, null, RANK,
                 UUID.randomUUID(), Instant.EPOCH))
@@ -54,7 +54,7 @@ class WorkItemTest {
         UUID reporter = UUID.randomUUID();
         UUID assignee = UUID.randomUUID();
         WorkItem before = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), 9, "PROJECT_1-9", ContentWorkItemType.TASK,
+                UUID.randomUUID(), 7, "PROJECT_1-7",
                 "原始标题", "BACKLOG", WorkItemStatusCategory.TODO, WorkItemPriority.LOW,
                 null, null, null, null, null, null, RANK, reporter, Instant.EPOCH);
 
@@ -77,7 +77,7 @@ class WorkItemTest {
     void priorityCanBeCreatedAndUpdatedAsNull() {
         UUID actor = UUID.randomUUID();
         WorkItem created = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), 10, "PROJECT_1-10", ContentWorkItemType.TASK,
+                UUID.randomUUID(), 7, "PROJECT_1-7",
                 "暂不定优先级", "BACKLOG", WorkItemStatusCategory.TODO, null,
                 null, null, null, null, null, null, RANK, actor, Instant.EPOCH);
 
@@ -92,7 +92,7 @@ class WorkItemTest {
     @Test
     void rejectsInvertedTimelineOnCreateAndUpdate() {
         assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1", ContentWorkItemType.TASK,
+                UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1",
                 "任务", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.MEDIUM,
                 null, null, null, LocalDate.parse("2026-08-23"),
                 LocalDate.parse("2026-08-22"), null, RANK, UUID.randomUUID(), Instant.EPOCH))
@@ -105,7 +105,7 @@ class WorkItemTest {
         UUID reporter = UUID.randomUUID();
         UUID actor = UUID.randomUUID();
         WorkItem before = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), 11, "PROJECT_1-11", ContentWorkItemType.DEFECT,
+                UUID.randomUUID(), 11, "PROJECT_1-11",
                 "修复并验证", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
                 reporter, "描述", "备注", LocalDate.parse("2026-08-23"),
                 LocalDate.parse("2026-08-24"), LocalDate.parse("2026-08-25"),
@@ -130,7 +130,7 @@ class WorkItemTest {
     @Test
     void statusTransitionRejectsSameEndpoint() {
         WorkItem item = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), 12, "PROJECT_1-12", ContentWorkItemType.TASK,
+                UUID.randomUUID(), 12, "PROJECT_1-12",
                 "保持状态", "BACKLOG", WorkItemStatusCategory.TODO, WorkItemPriority.MEDIUM,
                 null, null, null, null, null, null, RANK, UUID.randomUUID(), Instant.EPOCH);
 
@@ -145,7 +145,7 @@ class WorkItemTest {
         UUID reporter = UUID.randomUUID();
         UUID actor = UUID.randomUUID();
         WorkItem active = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), 15, "PROJECT_1-15", ContentWorkItemType.TASK,
+                UUID.randomUUID(), 15, "PROJECT_1-15",
                 "待清理任务", "IN_PROGRESS", WorkItemStatusCategory.IN_PROGRESS,
                 WorkItemPriority.HIGH, actor, "描述", "备注", null, null, null,
                 RANK, reporter, Instant.EPOCH);
@@ -172,7 +172,7 @@ class WorkItemTest {
     @Test
     void deleteReasonMustContainOneToFiveHundredTrimmedCharacters() {
         WorkItem item = WorkItem.create(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), 16, "PROJECT_1-16", ContentWorkItemType.TASK,
+                UUID.randomUUID(), 16, "PROJECT_1-16",
                 "待删除任务", "BACKLOG", WorkItemStatusCategory.TODO, WorkItemPriority.LOW,
                 null, null, null, null, null, null, RANK, UUID.randomUUID(), Instant.EPOCH);
 

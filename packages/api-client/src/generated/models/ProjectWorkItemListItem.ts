@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
+import {
+    WorkItemLabelColorTokenFromJSON,
+    WorkItemLabelColorTokenFromJSONTyped,
+    WorkItemLabelColorTokenToJSON,
+    WorkItemLabelColorTokenToJSONTyped,
+} from './WorkItemLabelColorToken';
 import type { WorkItemCapabilities } from './WorkItemCapabilities';
 import {
     WorkItemCapabilitiesFromJSON,
@@ -26,13 +33,6 @@ import {
     WorkItemStatusCategoryToJSON,
     WorkItemStatusCategoryToJSONTyped,
 } from './WorkItemStatusCategory';
-import type { WorkItemType } from './WorkItemType';
-import {
-    WorkItemTypeFromJSON,
-    WorkItemTypeFromJSONTyped,
-    WorkItemTypeToJSON,
-    WorkItemTypeToJSONTyped,
-} from './WorkItemType';
 
 /**
  *
@@ -66,16 +66,16 @@ export interface ProjectWorkItemListItem {
     contentName: string;
     /**
      *
+     * @type {WorkItemLabelColorToken}
+     * @memberof ProjectWorkItemListItem
+     */
+    contentColorToken: WorkItemLabelColorToken;
+    /**
+     *
      * @type {string}
      * @memberof ProjectWorkItemListItem
      */
     itemNo: string;
-    /**
-     *
-     * @type {WorkItemType}
-     * @memberof ProjectWorkItemListItem
-     */
-    type: WorkItemType;
     /**
      *
      * @type {string}
@@ -119,6 +119,18 @@ export interface ProjectWorkItemListItem {
      */
     dueDate: Date | null;
     /**
+     * 企业时区的截止时分；更新时省略保留原值，null 移除时间。
+     * @type {string}
+     * @memberof ProjectWorkItemListItem
+     */
+    dueTime?: string | null;
+    /**
+     * 当前 DONE 周期的实际完成时间；历史未记录时为空。
+     * @type {Date}
+     * @memberof ProjectWorkItemListItem
+     */
+    readonly completedAt?: Date | null;
+    /**
      *
      * @type {number}
      * @memberof ProjectWorkItemListItem
@@ -160,8 +172,8 @@ export function instanceOfProjectWorkItemListItem(value: object): value is Proje
     if (!('projectId' in value) || value['projectId'] === undefined) return false;
     if (!('contentId' in value) || value['contentId'] === undefined) return false;
     if (!('contentName' in value) || value['contentName'] === undefined) return false;
+    if (!('contentColorToken' in value) || value['contentColorToken'] === undefined) return false;
     if (!('itemNo' in value) || value['itemNo'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('title' in value) || value['title'] === undefined) return false;
     if (!('statusCode' in value) || value['statusCode'] === undefined) return false;
     if (!('statusCategory' in value) || value['statusCategory'] === undefined) return false;
@@ -191,8 +203,8 @@ export function ProjectWorkItemListItemFromJSONTyped(json: any, ignoreDiscrimina
         'projectId': json['projectId'],
         'contentId': json['contentId'],
         'contentName': json['contentName'],
+        'contentColorToken': WorkItemLabelColorTokenFromJSON(json['contentColorToken']),
         'itemNo': json['itemNo'],
-        'type': WorkItemTypeFromJSON(json['type']),
         'title': json['title'],
         'statusCode': json['statusCode'],
         'statusCategory': WorkItemStatusCategoryFromJSON(json['statusCategory']),
@@ -200,6 +212,8 @@ export function ProjectWorkItemListItemFromJSONTyped(json: any, ignoreDiscrimina
         'assigneeUserId': json['assigneeUserId'],
         'assigneeDisplayName': json['assigneeDisplayName'],
         'dueDate': (json['dueDate'] == null ? null : new Date(json['dueDate'])),
+        ...(json['dueTime'] === undefined ? {} : { 'dueTime': json['dueTime'] }),
+        ...(json['completedAt'] === undefined ? {} : { 'completedAt': json['completedAt'] === null ? null : new Date(json['completedAt']) }),
         'rowVersion': json['rowVersion'],
         'etag': json['etag'],
         'capabilities': WorkItemCapabilitiesFromJSON(json['capabilities']),
@@ -212,7 +226,7 @@ export function ProjectWorkItemListItemToJSON(json: any): ProjectWorkItemListIte
     return ProjectWorkItemListItemToJSONTyped(json, false);
 }
 
-export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemListItem, 'rowVersion'|'etag'|'subitemCount'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemListItem, 'completedAt'|'rowVersion'|'etag'|'subitemCount'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -223,8 +237,8 @@ export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemL
         'projectId': value['projectId'],
         'contentId': value['contentId'],
         'contentName': value['contentName'],
+        'contentColorToken': WorkItemLabelColorTokenToJSON(value['contentColorToken']),
         'itemNo': value['itemNo'],
-        'type': WorkItemTypeToJSON(value['type']),
         'title': value['title'],
         'statusCode': value['statusCode'],
         'statusCategory': WorkItemStatusCategoryToJSON(value['statusCategory']),
@@ -232,6 +246,7 @@ export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemL
         'assigneeUserId': value['assigneeUserId'],
         'assigneeDisplayName': value['assigneeDisplayName'],
         'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),
+        'dueTime': value['dueTime'],
         'capabilities': WorkItemCapabilitiesToJSON(value['capabilities']),
     };
 }

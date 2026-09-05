@@ -33,13 +33,6 @@ import {
     ProjectContentCatalogToJSON,
 } from '../models/index';
 
-export interface ArchiveContentRequest {
-    contentId: string;
-    xXSRFTOKEN: string;
-    ifMatch: string;
-    idempotencyKey: string;
-}
-
 export interface CreateContentRequest {
     projectId: string;
     xXSRFTOKEN: string;
@@ -47,22 +40,19 @@ export interface CreateContentRequest {
     contentCreateRequest: ContentCreateRequest;
 }
 
-export interface GetContentRequest {
+export interface DeleteContentRequest {
+    projectId: string;
     contentId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
 }
 
 export interface ListProjectContentsRequest {
     projectId: string;
 }
 
-export interface RestoreContentRequest {
-    contentId: string;
-    xXSRFTOKEN: string;
-    ifMatch: string;
-    idempotencyKey: string;
-}
-
 export interface UpdateContentRequest {
+    projectId: string;
     contentId: string;
     xXSRFTOKEN: string;
     ifMatch: string;
@@ -73,76 +63,6 @@ export interface UpdateContentRequest {
  *
  */
 export class ContentsApi extends runtime.BaseAPI {
-
-    /**
-     * 归档 ACTIVE Content
-     */
-    async archiveContentRaw(requestParameters: ArchiveContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Content>> {
-        if (requestParameters['contentId'] == null) {
-            throw new runtime.RequiredError(
-                'contentId',
-                'Required parameter "contentId" was null or undefined when calling archiveContent().'
-            );
-        }
-
-        if (requestParameters['xXSRFTOKEN'] == null) {
-            throw new runtime.RequiredError(
-                'xXSRFTOKEN',
-                'Required parameter "xXSRFTOKEN" was null or undefined when calling archiveContent().'
-            );
-        }
-
-        if (requestParameters['ifMatch'] == null) {
-            throw new runtime.RequiredError(
-                'ifMatch',
-                'Required parameter "ifMatch" was null or undefined when calling archiveContent().'
-            );
-        }
-
-        if (requestParameters['idempotencyKey'] == null) {
-            throw new runtime.RequiredError(
-                'idempotencyKey',
-                'Required parameter "idempotencyKey" was null or undefined when calling archiveContent().'
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (requestParameters['xXSRFTOKEN'] != null) {
-            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
-        }
-
-        if (requestParameters['ifMatch'] != null) {
-            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
-        }
-
-        if (requestParameters['idempotencyKey'] != null) {
-            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
-        }
-
-
-        let urlPath = `/contents/{contentId}/archive`;
-        urlPath = urlPath.replace(`{${"contentId"}}`, encodeURIComponent(String(requestParameters['contentId'])));
-
-        const response = await this.request({
-            path: urlPath,
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => ContentFromJSON(jsonValue));
-    }
-
-    /**
-     * 归档 ACTIVE Content
-     */
-    async archiveContent(requestParameters: ArchiveContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Content> {
-        const response = await this.archiveContentRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
 
     /**
      * 从 Project 固定模板蓝图创建 Content
@@ -214,13 +134,34 @@ export class ContentsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 查询 Content 详情与规范化视图配置
+     * 软删除从未使用的自定义工作项类别
      */
-    async getContentRaw(requestParameters: GetContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Content>> {
+    async deleteContentRaw(requestParameters: DeleteContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling deleteContent().'
+            );
+        }
+
         if (requestParameters['contentId'] == null) {
             throw new runtime.RequiredError(
                 'contentId',
-                'Required parameter "contentId" was null or undefined when calling getContent().'
+                'Required parameter "contentId" was null or undefined when calling deleteContent().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling deleteContent().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling deleteContent().'
             );
         }
 
@@ -228,26 +169,34 @@ export class ContentsApi extends runtime.BaseAPI {
 
         const headerParameters: runtime.HTTPHeaders = {};
 
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
 
-        let urlPath = `/contents/{contentId}`;
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/contents/{contentId}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
         urlPath = urlPath.replace(`{${"contentId"}}`, encodeURIComponent(String(requestParameters['contentId'])));
 
         const response = await this.request({
             path: urlPath,
-            method: 'GET',
+            method: 'DELETE',
             headers: headerParameters,
             query: queryParameters,
         }, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) => ContentFromJSON(jsonValue));
+        return new runtime.VoidApiResponse(response);
     }
 
     /**
-     * 查询 Content 详情与规范化视图配置
+     * 软删除从未使用的自定义工作项类别
      */
-    async getContent(requestParameters: GetContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Content> {
-        const response = await this.getContentRaw(requestParameters, initOverrides);
-        return await response.value();
+    async deleteContent(requestParameters: DeleteContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
+        await this.deleteContentRaw(requestParameters, initOverrides);
     }
 
     /**
@@ -288,79 +237,16 @@ export class ContentsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 恢复 ARCHIVED Content
-     */
-    async restoreContentRaw(requestParameters: RestoreContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Content>> {
-        if (requestParameters['contentId'] == null) {
-            throw new runtime.RequiredError(
-                'contentId',
-                'Required parameter "contentId" was null or undefined when calling restoreContent().'
-            );
-        }
-
-        if (requestParameters['xXSRFTOKEN'] == null) {
-            throw new runtime.RequiredError(
-                'xXSRFTOKEN',
-                'Required parameter "xXSRFTOKEN" was null or undefined when calling restoreContent().'
-            );
-        }
-
-        if (requestParameters['ifMatch'] == null) {
-            throw new runtime.RequiredError(
-                'ifMatch',
-                'Required parameter "ifMatch" was null or undefined when calling restoreContent().'
-            );
-        }
-
-        if (requestParameters['idempotencyKey'] == null) {
-            throw new runtime.RequiredError(
-                'idempotencyKey',
-                'Required parameter "idempotencyKey" was null or undefined when calling restoreContent().'
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (requestParameters['xXSRFTOKEN'] != null) {
-            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
-        }
-
-        if (requestParameters['ifMatch'] != null) {
-            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
-        }
-
-        if (requestParameters['idempotencyKey'] != null) {
-            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
-        }
-
-
-        let urlPath = `/contents/{contentId}/restore`;
-        urlPath = urlPath.replace(`{${"contentId"}}`, encodeURIComponent(String(requestParameters['contentId'])));
-
-        const response = await this.request({
-            path: urlPath,
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => ContentFromJSON(jsonValue));
-    }
-
-    /**
-     * 恢复 ARCHIVED Content
-     */
-    async restoreContent(requestParameters: RestoreContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Content> {
-        const response = await this.restoreContentRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
-
-    /**
-     * 完整替换 Content 可变详情与视图配置
+     * 更新工作项类别名称、颜色、顺序或启停状态
      */
     async updateContentRaw(requestParameters: UpdateContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Content>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateContent().'
+            );
+        }
+
         if (requestParameters['contentId'] == null) {
             throw new runtime.RequiredError(
                 'contentId',
@@ -404,7 +290,8 @@ export class ContentsApi extends runtime.BaseAPI {
         }
 
 
-        let urlPath = `/contents/{contentId}`;
+        let urlPath = `/projects/{projectId}/contents/{contentId}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
         urlPath = urlPath.replace(`{${"contentId"}}`, encodeURIComponent(String(requestParameters['contentId'])));
 
         const response = await this.request({
@@ -419,7 +306,7 @@ export class ContentsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 完整替换 Content 可变详情与视图配置
+     * 更新工作项类别名称、颜色、顺序或启停状态
      */
     async updateContent(requestParameters: UpdateContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Content> {
         const response = await this.updateContentRaw(requestParameters, initOverrides);

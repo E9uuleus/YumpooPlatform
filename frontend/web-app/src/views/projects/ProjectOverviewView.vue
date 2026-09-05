@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { Filter as FilterIcon, Hide, Search, Sort, User } from '@element-plus/icons-vue'
 import {
-  ContentStatus,
   AttachmentOwnerType,
-  ContentViewType,
+  WorkItemViewType,
   ProjectActorAccess,
   ProjectLifecycle,
   ProjectMembershipStatus,
@@ -35,7 +34,7 @@ import {
   ElTableColumn,
 } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type CSSProperties, type DefineComponent } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
@@ -47,6 +46,9 @@ import ProjectWorkItemSubitemsTable, {
 } from '../../components/projects/ProjectWorkItemSubitemsTable.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
 import WorkItemLabelPopoverContent from '../../components/projects/WorkItemLabelPopoverContent.vue'
+import WorkItemContentPopoverContent from '../../components/projects/WorkItemContentPopoverContent.vue'
+import WorkItemDueDateCell from '../../components/projects/WorkItemDueDateCell.vue'
+import type { DueDateValue } from '../../components/projects/workItemDueDate'
 import { workItemLabelColorValue } from '../../components/projects/workItemLabelColors'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
@@ -94,12 +96,35 @@ const subitems = reactive<Record<string, SubitemState>>({})
 const expandedSubitemIds = ref<string[]>([])
 const subitemSelections = reactive<Record<string, Set<string>>>({})
 const quickOpen = ref(false)
-const quickContentId = ref('')
 const quickTitle = ref('')
 const quickCreating = ref(false)
 const quickRow = ref<HTMLElement>()
 const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const detailOpen = ref(false)
+const detailPanel = ref<InstanceType<typeof WorkItemDetailPanel>>()
+let leavingDiscussion: Promise<boolean> | undefined
+let detailGeneration = 0
+
+async function beforeDiscussionLeave(): Promise<boolean> {
+  if (detailPanel.value?.busy) {
+    ElMessage.info('讨论正在保存，请稍候再离开。')
+    return false
+  }
+  if (!detailPanel.value?.hasDraft) return true
+  if (leavingDiscussion) return leavingDiscussion
+  leavingDiscussion = ElMessageBox.confirm('离开将丢弃尚未发布或保存的讨论草稿。', '放弃讨论草稿', {
+    confirmButtonText: '放弃草稿', cancelButtonText: '继续编写', type: 'warning',
+  }).then(() => { detailPanel.value?.discardDraft(); return true }, () => false)
+  try { return await leavingDiscussion } finally { leavingDiscussion = undefined }
+}
+
+async function beforeDetailClose(done: () => void): Promise<void> {
+  if (await beforeDiscussionLeave()) done()
+}
+
+onBeforeRouteLeave(beforeDiscussionLeave)
+onBeforeRouteUpdate((to, from) => to.params.projectId !== from.params.projectId
+  || to.query.workItemId !== from.query.workItemId ? beforeDiscussionLeave() : true)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
 const detailTab = ref<'details' | 'discussion' | 'relations' | 'activity'>('details')
@@ -172,7 +197,7 @@ const selectedCellKey = ref<string | undefined>(route.query.workItemId ? `${rout
 const TABLE_SELECTION_COLUMN_WIDTH = 48
 const TABLE_EXPAND_COLUMN_WIDTH = 1
 const TABLE_ADD_COLUMN_MIN_WIDTH = 96
-const DRAWER_MIN_WIDTH = 440
+const DRAWER_MIN_WIDTH = 480
 const DRAWER_VIEWPORT_GUTTER = 60
 const drawerWidth = ref(560)
 const isResizingDrawer = ref(false)
@@ -196,11 +221,14 @@ function onDrawerResizePointerDown(event: PointerEvent): void {
     const delta = startX - e.clientX
     const maxWidth = Math.max(DRAWER_MIN_WIDTH, window.innerWidth - DRAWER_VIEWPORT_GUTTER)
     const nextWidth = Math.max(DRAWER_MIN_WIDTH, Math.min(maxWidth, startWidth + delta))
+    if (nextWidth === drawerWidth.value) return
     drawerWidth.value = nextWidth
+    document.body.style.setProperty('--yp-work-items-drawer-width', `${nextWidth}px`)
   }
 
   const onPointerUp = () => {
     isResizingDrawer.value = false
+    scheduleResponsiveTableLayout()
     window.removeEventListener('pointermove', onPointerMove)
     window.removeEventListener('pointerup', onPointerUp)
     window.removeEventListener('pointercancel', onPointerUp)
@@ -221,10 +249,10 @@ function tableCellClassName({
   column,
 }: {
   row: ProjectWorkItemListItem
-  column: { columnKey?: string }
+  column: { property?: string }
 }): string {
-  if (!column.columnKey || column.columnKey === 'title') return ''
-  return selectedCellKey.value === `${row.id}:${column.columnKey}` ? 'monday-cell--selected' : ''
+  if (!column.property || column.property === 'title') return ''
+  return selectedCellKey.value === `${row.id}:${column.property}` ? 'monday-cell--selected' : ''
 }
 
 function syncProjectPageScrollLayout(): void {
@@ -379,9 +407,9 @@ type MovableColumnKey = Exclude<ColumnKey, 'title'>
 const columns: Array<{ key: ColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
   { key: 'title', label: '工作项名称', defaultWidth: 320, minWidth: 220 },
   { key: 'assignee', label: '处理人', defaultWidth: 90, minWidth: 72 },
-  { key: 'status', label: '状态', defaultWidth: 130, minWidth: 96 },
-  { key: 'priority', label: '优先级', defaultWidth: 120, minWidth: 90 },
-  { key: 'content', label: '工作项类别', defaultWidth: 150, minWidth: 110 },
+  { key: 'status', label: '状态', defaultWidth: 96, minWidth: 96 },
+  { key: 'priority', label: '优先级', defaultWidth: 90, minWidth: 90 },
+  { key: 'content', label: '工作项类别', defaultWidth: 110, minWidth: 110 },
   { key: 'dueDate', label: '截止日期', defaultWidth: 140, minWidth: 112 },
   { key: 'updatedAt', label: '最后更新时间', defaultWidth: 170, minWidth: 135 },
 ]
@@ -420,12 +448,10 @@ const orderedSubitemColumns = computed(() => [
 const visibleColumns = computed(() => orderedColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
 const visibleSubitemColumns = computed(() => orderedSubitemColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
 const movableVisibleColumns = computed(() => visibleColumns.value.filter(item => item.key !== 'title'))
-const tableColumnStructureKey = computed(() => movableColumnOrder.value.join('|'))
 const quickGridStyle = computed(() => ({
   gridTemplateColumns: [`${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
     ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
 }))
-const quickContentColumn = computed(() => Math.max(4, visibleColumns.value.findIndex(item => item.key === 'content') + 3))
 const quickSubmitColumn = computed(() => visibleColumns.value.length + 3)
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
@@ -436,7 +462,8 @@ const filteredMembers = computed(() => {
 })
 
 const contentsById = computed(() => new Map((catalog.value?.items ?? []).map(item => [item.id, item])))
-const activeContents = computed(() => (catalog.value?.items ?? []).filter(item => item.status === ContentStatus.Active))
+const activeContents = computed(() => (catalog.value?.items ?? []).filter(item => item.active))
+const defaultContentId = computed(() => activeContents.value[0]?.id)
 const workflowStatuses = computed(() => [...(labelCatalog.value?.statuses ?? [])]
   .sort((left, right) => left.sortOrder - right.sortOrder)
   .map(status => ({ ...status, statusCode: status.code })))
@@ -448,11 +475,13 @@ const canCreate = computed(() => Boolean(project.value
   && activeContents.value.length
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
-const detailContent = computed(() => detail.value ? contentsById.value.get(detail.value.contentId) : undefined)
-const canPublishDiscussion = computed(() => Boolean(canCreate.value && detailContent.value?.status === ContentStatus.Active))
+const canPublishDiscussion = computed(() => Boolean(project.value
+  && project.value.lifecycle !== ProjectLifecycle.Archived
+  && detail.value?.capabilities?.canDiscuss
+  && (project.value.actorAccess === ProjectActorAccess.Owner
+    || project.value.actorAccess === ProjectActorAccess.Member)))
 const discussionReadOnlyReason = computed(() => {
   if (project.value?.lifecycle === ProjectLifecycle.Archived) return 'Project 已归档，工作项讨论仅可查看。'
-  if (detailContent.value?.status === ContentStatus.Archived) return 'Content 已归档，工作项讨论仅可查看。'
   if (!canPublishDiscussion.value) return '当前角色没有发布讨论的权限。'
   return undefined
 })
@@ -548,7 +577,7 @@ function moveSubitemColumn(source: string, target: string, placement: 'before' |
 }
 
 function contentName(contentId: string): string {
-  return contentsById.value.get(contentId)?.name ?? '未知 Content'
+  return contentsById.value.get(contentId)?.name ?? '未知类别'
 }
 
 function statusLabel(statusCode: string): string {
@@ -597,7 +626,7 @@ function getStatusTone(statusCode: string): string {
 }
 
 function getPriorityPresentation(priority: string | null): { label: string; tone: string } {
-  if (!priority) return { label: '—', tone: 'empty' }
+  if (!priority) return { label: '-', tone: 'empty' }
   const option = priorityOptions.value.find(item => item.code === priority)
   const tokenTone: Record<string, string> = {
     RED: 'urgent', MAGENTA: 'urgent', ORANGE: 'high', AMBER: 'high',
@@ -611,20 +640,6 @@ function getPriorityPresentation(priority: string | null): { label: string; tone
   if (upper === 'MEDIUM') return { label: '中', tone: 'medium' }
   if (upper === 'LOW') return { label: '低', tone: 'low' }
   return { label: priority, tone: 'empty' }
-}
-
-function isOverdue(dueDate: Date | string | null, statusCode: string): boolean {
-  if (!dueDate) return false
-  const option = workflowStatuses.value.find(item => item.statusCode === statusCode)
-  if (option?.statusCategory === 'DONE' || option?.statusCategory === 'CANCELED') {
-    return false
-  }
-  const due = new Date(dueDate)
-  if (Number.isNaN(due.getTime())) return false
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const dueDateOnly = new Date(due.getFullYear(), due.getMonth(), due.getDate())
-  return dueDateOnly < today
 }
 
 function formatDate(value: Date | string | null): string {
@@ -780,7 +795,7 @@ async function loadMembers(requestedProjectId: string, revision: number): Promis
 function listRequest(cursor?: string | null) {
   return {
     projectId: projectId.value, limit: 25,
-    view: ContentViewType.Table,
+    view: WorkItemViewType.Table,
     ...(cursor ? { cursor } : {}),
     ...(searchInput.value.trim() ? { q: searchInput.value.trim() } : {}),
     ...(filters.statuses.size ? { status: filters.statuses } : {}),
@@ -861,7 +876,7 @@ async function loadLane(statusCode: string, cursor: string | null = null, revisi
   try {
     const result = await workItemsApi.listProjectWorkItems({
       projectId: projectId.value,
-      view: ContentViewType.Kanban,
+      view: WorkItemViewType.Kanban,
       status: new Set([statusCode]),
       limit: 25,
       ...(cursor ? { cursor } : {}),
@@ -946,18 +961,16 @@ async function changeView(view: ProjectView): Promise<void> {
 function openQuick(): void {
   if (!canCreate.value) return
   quickOpen.value = true
-  if (!quickContentId.value && activeContents.value.length === 1) quickContentId.value = activeContents.value[0]!.id
   void nextTick(() => quickTitleInput.value?.focus())
 }
 
 function closeQuick(): void {
   quickOpen.value = false
-  quickContentId.value = ''
   quickTitle.value = ''
 }
 
 async function createQuick(continueAdding: boolean): Promise<void> {
-  if (quickCreating.value || !quickContentId.value || !quickTitle.value.trim()) return
+  if (quickCreating.value || !defaultContentId.value || !quickTitle.value.trim()) return
   const csrf = readCsrfToken()
   if (!csrf) {
     error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
@@ -967,10 +980,11 @@ async function createQuick(continueAdding: boolean): Promise<void> {
   error.value = undefined
   try {
     const created = await workItemsApi.createWorkItem({
-      contentId: quickContentId.value,
+      projectId: projectId.value,
       xXSRFTOKEN: csrf,
       idempotencyKey: globalThis.crypto.randomUUID(),
       workItemCreateRequest: {
+        contentId: defaultContentId.value,
         title: quickTitle.value.trim(),
         priority: null,
         assigneeUserId: null,
@@ -1011,23 +1025,28 @@ function onDocumentPointerDown(event: PointerEvent): void {
 }
 
 async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'relations' | 'activity' = 'details'): Promise<void> {
+  const current = ++detailGeneration
   detailOpen.value = true
   detailTab.value = tab
   detailLoading.value = true
   detail.value = undefined
   try {
-    detail.value = await workItemsApi.getWorkItem({ workItemId })
+    const loaded = await workItemsApi.getWorkItem({ workItemId })
+    if (current === detailGeneration) detail.value = loaded
   } catch (reason) {
-    error.value = await toApiProblem(reason)
+    const failure = await toApiProblem(reason)
+    if (current !== detailGeneration) return
+    error.value = failure
     detailOpen.value = false
     await closeDetailRoute()
   } finally {
-    detailLoading.value = false
+    if (current === detailGeneration) detailLoading.value = false
   }
 }
 
 async function openRelatedWorkItem(target: { workItemId: string, projectId: string }): Promise<void> {
   if (target.projectId === projectId.value) {
+    if (!await beforeDiscussionLeave()) return
     await loadDetail(target.workItemId)
     return
   }
@@ -1049,6 +1068,8 @@ async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> 
 }
 
 async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion'): Promise<void> {
+  if (detailOpen.value && detail.value?.id === item.id && detailTab.value === tab) return
+  if (!await beforeDiscussionLeave()) return
   selectCell(item.id, tab === 'details' ? 'title' : 'discussion')
   detailTab.value = tab
   if (String(route.query.workItemId ?? '') === item.id) {
@@ -1074,7 +1095,11 @@ function onLabelsUpdated(next: WorkItemLabelCatalog): void {
   labelCatalog.value = next
 }
 
-function labelPopoverKey(itemId: string, kind: 'status' | 'priority'): string {
+function onContentsUpdated(next: ProjectContentCatalog): void {
+  catalog.value = next
+}
+
+function labelPopoverKey(itemId: string, kind: 'status' | 'priority' | 'content'): string {
   return `${itemId}:${kind}`
 }
 
@@ -1084,7 +1109,7 @@ function setLabelPopoverContentRef(key: string, value: unknown): void {
   else labelPopoverContentRefs.delete(key)
 }
 
-function resetLabelPopoverContent(itemId: string, kind: 'status' | 'priority'): void {
+function resetLabelPopoverContent(itemId: string, kind: 'status' | 'priority' | 'content'): void {
   labelPopoverContentRefs.get(labelPopoverKey(itemId, kind))?.resetEditor()
 }
 
@@ -1144,11 +1169,14 @@ async function transitionItem(item: ProjectWorkItemListItem, statusCode: string)
 
 function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
   const apply = (item: ProjectWorkItemListItem): ProjectWorkItemListItem => item.id !== id ? item : {
-    ...item, statusCode: updatedDetail.statusCode, statusCategory: updatedDetail.statusCategory,
+    ...item, contentId: updatedDetail.contentId, contentName: updatedDetail.contentName,
+    contentColorToken: updatedDetail.contentColorToken,
+    statusCode: updatedDetail.statusCode, statusCategory: updatedDetail.statusCategory,
     priority: updatedDetail.priority,
     assigneeUserId: updatedDetail.assigneeUserId,
     assigneeDisplayName: updatedDetail.assigneeDisplayName,
-    dueDate: updatedDetail.dueDate, updatedAt: updatedDetail.updatedAt,
+    dueDate: updatedDetail.dueDate, dueTime: updatedDetail.dueTime ?? null,
+    completedAt: updatedDetail.completedAt ?? null, updatedAt: updatedDetail.updatedAt,
     rowVersion: updatedDetail.rowVersion, etag: updatedDetail.etag,
     capabilities: updatedDetail.capabilities,
   }
@@ -1158,7 +1186,7 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
   if (detail.value?.id === id) detail.value = { ...detail.value, ...updatedDetail }
 }
 
-async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate', value: string | Date | null): Promise<boolean> {
+async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null, dueTime?: string | null): Promise<boolean> {
   const key = `${item.id}:${field}`
   if (editingCell.value) return false
   const csrf = readCsrfToken()
@@ -1166,12 +1194,15 @@ async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'pri
   editingCell.value = key
   try {
     const common = { workItemId: item.id, xXSRFTOKEN: csrf, ifMatch: item.etag, idempotencyKey: globalThis.crypto.randomUUID() }
-    const updated = field === 'assignee'
+    const updated = field === 'content'
+      ? await workItemsApi.patchWorkItemContent({ ...common, workItemContentPatchRequest: { contentId: value as string } })
+      : field === 'assignee'
       ? await workItemsApi.patchWorkItemAssignee({ ...common, workItemAssigneePatchRequest: { assigneeUserId: value as string | null } })
       : field === 'priority'
         ? await workItemsApi.patchWorkItemPriority({ ...common, workItemPriorityPatchRequest: { priority: value as string | null } })
-        : await workItemsApi.patchWorkItemDueDate({ ...common, workItemDueDatePatchRequest: { dueDate: value as Date | null } })
+        : await workItemsApi.patchWorkItemDueDate({ ...common, workItemDueDatePatchRequest: { dueDate: value as Date | null, ...(dueTime !== undefined ? { dueTime } : {}) } })
     replaceLightItem(item.id, updated)
+    if (field === 'content') catalog.value = await contentsApi.listProjectContents({ projectId: projectId.value })
     return true
   } catch (reason) {
     error.value = await toApiProblem(reason)
@@ -1501,7 +1532,7 @@ function tableColumnDragStyle(columnKey?: string): CSSProperties {
   if (index < 0) return {}
   if (columnKey === draggedKey) return { opacity: 0, pointerEvents: 'none' }
 
-  const draggedWidth = columnWidths[draggedKey]
+  const draggedWidth = tableColumnPointerCandidate?.headerRects[from]?.width || columnWidths[draggedKey]
   if (from < dropIndex && index > from && index < dropIndex) {
     return { transform: `translateX(-${draggedWidth}px)` }
   }
@@ -1511,16 +1542,18 @@ function tableColumnDragStyle(columnKey?: string): CSSProperties {
   return { transform: 'translateX(0px)' }
 }
 
-function tableCellStyle({ column }: { column: { columnKey?: string } }): CSSProperties {
-  return tableColumnDragStyle(column.columnKey)
+function tableCellStyle({ column }: { column: { property?: string } }): CSSProperties {
+  return tableColumnDragStyle(column.property)
 }
 
-function tableHeaderCellStyle({ column }: { column: { columnKey?: string } }): CSSProperties {
-  return tableColumnDragStyle(column.columnKey)
+function tableHeaderCellStyle({ column }: { column: { property?: string } }): CSSProperties {
+  return tableColumnDragStyle(column.property)
 }
 
 function movableHeaderCells(): HTMLTableCellElement[] {
-  return [...(tableRef.value?.$el?.querySelectorAll<HTMLTableCellElement>('.el-table__header-wrapper th.monday-movable-column-header') ?? [])]
+  return [...(tableRef.value?.$el?.querySelectorAll<HTMLTableCellElement>(
+    ':scope > .el-table__inner-wrapper > .el-table__header-wrapper th.monday-movable-column-header',
+  ) ?? [])]
 }
 
 function updateTableColumnDropTarget(clientX: number): void {
@@ -1984,16 +2017,12 @@ function apiDate(value: string | null): Date | null {
   return value ? new Date(`${value}T00:00:00.000Z`) : null
 }
 
-function todayValue(): string {
-  const today = new Date()
-  const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+function onDueDateChange(item: ProjectWorkItemListItem, value: string | null, dueTime?: string | null): void {
+  void patchCell(item, 'dueDate', apiDate(value), dueTime)
 }
 
-function onDueDateChange(item: ProjectWorkItemListItem, value: string | null): void {
-  void patchCell(item, 'dueDate', apiDate(value))
+function onDeadlineChange(item: ProjectWorkItemListItem, value: DueDateValue): void {
+  onDueDateChange(item, value.dueDate, value.dueTime)
 }
 
 watch(projectId, () => { applyRouteState(); void loadWorkspace() }, { immediate: true })
@@ -2013,12 +2042,13 @@ watch(() => route.query.workItemId, value => {
     }
     void loadDetail(String(workItemId), detailTab.value)
   } else {
+    detailGeneration++
     detailOpen.value = false
     detail.value = undefined
   }
 }, { immediate: true })
 watch(assigneeSearch, scheduleMemberSearch)
-watch([detailOpen, drawerWidth], syncProjectPageScrollLayout, { flush: 'post' })
+watch(detailOpen, syncProjectPageScrollLayout, { flush: 'post' })
 watch(tableRef, () => {
   observeProjectPageResizeTargets()
   scheduleResponsiveTableLayout()
@@ -2260,7 +2290,6 @@ onBeforeUnmount(() => {
             @click.capture="onTableClickCapture"
           >
             <el-table
-              :key="tableColumnStructureKey"
               ref="tableRef"
               :data="tableItems"
               :fit="true"
@@ -2272,6 +2301,7 @@ onBeforeUnmount(() => {
               :header-cell-style="tableHeaderCellStyle"
               row-key="id"
               class="monday-table"
+              :class="{ 'monday-table--column-dragging': columnDraggingKey }"
               height="100%"
               empty-text="当前项目暂无工作项"
               border
@@ -2292,6 +2322,7 @@ onBeforeUnmount(() => {
                     :columns="visibleSubitemColumns"
                     :column-widths="columnWidths"
                     :active-contents="activeContents"
+                    :content-catalog="catalog"
                     :members="members"
                     :workflow-statuses="workflowStatuses"
                     :priority-options="priorityOptions"
@@ -2304,6 +2335,8 @@ onBeforeUnmount(() => {
                     @updated="replaceLightItem"
                     @open-detail="openDetail"
                     @patch="patchCell"
+                    @due-date-change="onDeadlineChange"
+                    @contents-updated="onContentsUpdated"
                     @transition="transitionItem"
                     @selection-change="onSubitemSelectionChange"
                     @header-resize="onHeaderDragEnd"
@@ -2427,14 +2460,15 @@ onBeforeUnmount(() => {
                 </template>
               </el-table-column>
 
+              <!-- 按位置复用列；prop 会响应字段变化，column-key 只在 Element Plus 初始化列时读取。 -->
               <el-table-column
-                v-for="column in movableVisibleColumns"
-                :key="column.key"
+                v-for="(column, columnIndex) in movableVisibleColumns"
+                :key="columnIndex"
                 :label="column.label"
-                :column-key="column.key"
+                :prop="column.key"
                 :width="columnWidths[column.key]"
                 align="center"
-                :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' ? ' monday-block-column' : ''}`"
+                :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' || column.key === 'content' ? ' monday-block-column' : ''}`"
                 :label-class-name="`monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key}${columnResizingKey === column.key ? ' monday-column-resizing' : ''}`"
                 resizable
               >
@@ -2542,39 +2576,44 @@ onBeforeUnmount(() => {
                     </el-popover>
                   </template>
 
-                  <span v-else-if="column.key === 'content'" class="monday-content-label">{{ (scope.row as ProjectWorkItemListItem).contentName }}</span>
-
-                  <template v-else-if="column.key === 'dueDate'">
-                    <el-popover placement="bottom" :width="300" trigger="click" popper-class="work-items-popover date-popover">
+                  <template v-else-if="column.key === 'content'">
+                    <el-popover
+                      placement="bottom"
+                      width="auto"
+                      trigger="click"
+                      popper-class="work-items-label-popover content-popover"
+                      @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'content')"
+                    >
                       <template #reference>
                         <button
-                          class="monday-due-date-cell cell-editor-trigger"
+                          class="monday-content-label cell-editor-trigger"
+                          :style="labelCellStyle((scope.row as ProjectWorkItemListItem).contentColorToken)"
                           :disabled="Boolean(editingCell)"
-                          @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'dueDate')"
+                          @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'content')"
                         >
-                          <span
-                            v-if="isOverdue((scope.row as ProjectWorkItemListItem).dueDate, (scope.row as ProjectWorkItemListItem).statusCode)"
-                            class="monday-overdue-badge"
-                            title="已超出截止时间"
-                          >
-                            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                              <circle cx="8" cy="8" r="7" class="overdue-circle" />
-                              <path d="M8 4.2V8.5M8 11.2V11.8" class="overdue-exclamation" stroke-width="1.6" stroke-linecap="round" />
-                            </svg>
-                          </span>
-                          <span
-                            class="due-date-text"
-                            :class="{ 'due-date-text--overdue': isOverdue((scope.row as ProjectWorkItemListItem).dueDate, (scope.row as ProjectWorkItemListItem).statusCode) }"
-                          >
-                            {{ formatDate((scope.row as ProjectWorkItemListItem).dueDate) }}
-                          </span>
+                          <span>{{ (scope.row as ProjectWorkItemListItem).contentName || '—' }}</span>
                         </button>
                       </template>
-                      <div class="date-editor">
-                        <div><el-button @click="onDueDateChange(scope.row as ProjectWorkItemListItem, todayValue())">Today</el-button><el-button text @click="onDueDateChange(scope.row as ProjectWorkItemListItem, null)">清空</el-button></div>
-                        <el-date-picker :model-value="(scope.row as ProjectWorkItemListItem).dueDate ? formatDate((scope.row as ProjectWorkItemListItem).dueDate) : null" type="date" value-format="YYYY-MM-DD" placeholder="选择截止日期" @update:model-value="onDueDateChange(scope.row as ProjectWorkItemListItem, $event as string | null)" />
-                      </div>
+                      <work-item-content-popover-content
+                        :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'content'), element)"
+                        :project-id="projectId"
+                        :catalog="catalog"
+                        :current-value="(scope.row as ProjectWorkItemListItem).contentId"
+                        :can-manage="Boolean(catalog?.canManage)"
+                        @select="patchCell(scope.row as ProjectWorkItemListItem, 'content', $event)"
+                        @updated="onContentsUpdated"
+                      />
                     </el-popover>
+                  </template>
+
+                  <template v-else-if="column.key === 'dueDate'">
+                    <work-item-due-date-cell
+                      :item="scope.row as ProjectWorkItemListItem"
+                      :can-edit="(scope.row as ProjectWorkItemListItem).capabilities.canEditFields"
+                      :busy="Boolean(editingCell)"
+                      @select="selectCell((scope.row as ProjectWorkItemListItem).id, 'dueDate')"
+                      @change="onDeadlineChange(scope.row as ProjectWorkItemListItem, $event)"
+                    />
                   </template>
 
                   <span v-else-if="column.key === 'updatedAt'" class="monday-timestamp">{{ formatTime((scope.row as ProjectWorkItemListItem).updatedAt) }}</span>
@@ -2632,27 +2671,12 @@ onBeforeUnmount(() => {
                     aria-label="工作项名称；Enter 创建，Shift+Enter 创建后继续"
                     @keydown="onQuickKeydown"
                   />
-                  <el-select
-                    v-model="quickContentId"
-                    class="quick-content-field"
-                    :style="{ gridColumn: quickContentColumn }"
-                    :disabled="quickCreating"
-                    filterable
-                    placeholder="Content"
-                  >
-                    <el-option
-                      v-for="item in activeContents"
-                      :key="item.id"
-                      :label="item.name"
-                      :value="item.id"
-                    />
-                  </el-select>
                   <el-button
                     class="quick-submit"
                     :style="{ gridColumn: quickSubmitColumn }"
                     type="primary"
                     :loading="quickCreating"
-                    :disabled="!quickContentId || !quickTitle.trim()"
+                    :disabled="!defaultContentId || !quickTitle.trim()"
                     @click="createQuick(false)"
                   >
                     添加
@@ -2720,13 +2744,14 @@ onBeforeUnmount(() => {
 
     <el-drawer
       :model-value="detailOpen"
+      :before-close="beforeDetailClose"
       :modal="false"
       :modal-penetrable="true"
       append-to-body
       title="工作项详情"
       header-class="work-items-detail-drawer__header"
       modal-class="work-items-drawer-overlay"
-      class="work-items-detail-drawer"
+      :class="['work-items-detail-drawer', { 'work-items-detail-drawer--resizing': isResizingDrawer }]"
       :size="`${drawerWidth}px`"
       @update:model-value="onDetailModelValue"
     >
@@ -2759,7 +2784,9 @@ onBeforeUnmount(() => {
             <h2>{{ detail.title }}</h2>
           </div>
           <work-item-detail-panel
+            ref="detailPanel"
             v-model="detailTab"
+            :before-leave="beforeDiscussionLeave"
             :work-item-id="detail.id"
             :current-project-id="detail.projectId"
             :members="activeMembers"
@@ -2770,6 +2797,24 @@ onBeforeUnmount(() => {
           >
             <template #details>
               <dl class="detail-list">
+                <div>
+                  <dt>工作项类别</dt>
+                  <dd>
+                    <el-popover placement="bottom" width="auto" trigger="click" popper-class="work-items-label-popover content-popover">
+                      <template #reference>
+                        <button class="detail-content-pill" :style="labelCellStyle(detail.contentColorToken)">{{ detail.contentName || '—' }}</button>
+                      </template>
+                      <work-item-content-popover-content
+                        :project-id="projectId"
+                        :catalog="catalog"
+                        :current-value="detail.contentId"
+                        :can-manage="Boolean(catalog?.canManage)"
+                        @select="patchCell(detail as unknown as ProjectWorkItemListItem, 'content', $event)"
+                        @updated="onContentsUpdated"
+                      />
+                    </el-popover>
+                  </dd>
+                </div>
                 <div><dt>状态</dt><dd>{{ statusLabel(detail.statusCode) }}</dd></div>
                 <div><dt>优先级</dt><dd><yp-priority-badge :priority="detail.priority" /></dd></div>
                 <div>
@@ -2780,7 +2825,7 @@ onBeforeUnmount(() => {
                     />
                   </dd>
                 </div>
-                <div><dt>截止日期</dt><dd>{{ formatDate(detail.dueDate) }}</dd></div>
+                <div><dt>截止日期</dt><dd>{{ formatDate(detail.dueDate) }}{{ detail.dueTime ? ` ${detail.dueTime}` : '' }}</dd></div>
                 <div><dt>最后更新时间</dt><dd>{{ formatTime(detail.updatedAt) }}</dd></div>
               </dl>
               <p
@@ -3366,9 +3411,14 @@ onBeforeUnmount(() => {
   will-change: auto;
 }
 
-:deep(.monday-table th.monday-movable-column-header),
-:deep(.monday-table td.monday-movable-column) {
-  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease;
+:deep(.monday-table th.monday-movable-column-header:not(.subitem-movable-column-header)),
+:deep(.monday-table td.monday-movable-column:not(.subitem-movable-column)) {
+  transition: none;
+}
+
+:deep(.monday-table--column-dragging th.monday-movable-column-header:not(.subitem-movable-column-header)),
+:deep(.monday-table--column-dragging td.monday-movable-column:not(.subitem-movable-column)) {
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
   will-change: transform;
 }
 
@@ -3542,6 +3592,10 @@ onBeforeUnmount(() => {
   z-index: 4;
 }
 
+:deep(.monday-table .el-table__body td.el-table-fixed-column--left) {
+  z-index: 5;
+}
+
 .work-item-link.monday-cell--selected,
 .monday-discussion-btn.monday-cell--selected {
   position: relative;
@@ -3651,45 +3705,48 @@ onBeforeUnmount(() => {
 .monday-priority-cell--empty { background: var(--yp-priority-empty); color: var(--yp-priority-empty-foreground); }
 
 .monday-content-label {
-  color: var(--yp-text-secondary);
-  font-size: 13px;
-}
-
-/* 截止日期与超期感叹号警告 */
-.monday-due-date-cell {
-  display: inline-flex;
+  display: flex;
+  width: calc(100% - 48px);
+  height: 26px;
+  min-width: 0;
+  margin: 5px 24px;
+  padding: 0 16px;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  width: 100%;
-  height: 100%;
-  min-height: var(--work-item-table-row-height);
+  border: 0;
+  border-radius: 999px;
   box-sizing: border-box;
+  color: var(--yp-text-inverse);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.monday-overdue-badge {
-  display: inline-flex;
+.monday-content-label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-content-pill {
+  display: flex;
+  min-width: 0;
+  height: 34px;
+  padding: 0 16px;
   align-items: center;
   justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: var(--yp-text-inverse);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.overdue-circle {
-  fill: var(--yp-status-red);
-}
-
-.overdue-exclamation {
-  stroke: var(--yp-text-inverse);
-}
-
-.due-date-text {
-  font-size: 13px;
-  color: var(--yp-text-primary);
-}
-
-.due-date-text--overdue {
-  color: var(--yp-status-red);
-  font-weight: 500;
-}
+.detail-content-pill { width: min(240px, 100%); cursor: pointer; }
 
 .monday-timestamp {
   font-size: 12.5px;
@@ -3816,32 +3873,27 @@ onBeforeUnmount(() => {
   transition: none !important;
 }
 
-.quick-title-field,
-.quick-content-field {
+.quick-title-field {
   align-self: center;
   box-sizing: border-box;
+  grid-column: 3;
   min-width: 0;
-  padding: 0 4px;
+  padding: 0 4px 0 8px;
 }
-.quick-title-field { grid-column: 3; padding-left: 8px; }
-.quick-content-field { grid-column: 5; }
 .quick-submit {
   justify-self: center;
   width: 64px;
   height: var(--work-item-quick-control-height);
   padding: 0 12px;
 }
-:deep(.monday-quick-row .el-input__wrapper),
-:deep(.monday-quick-row .el-select__wrapper) {
+:deep(.monday-quick-row .el-input__wrapper) {
   height: var(--work-item-quick-control-height);
   min-height: var(--work-item-quick-control-height);
 }
-:deep(.monday-quick-row .el-input__wrapper.is-focus),
-:deep(.monday-quick-row .el-select__wrapper.is-focused) {
+:deep(.monday-quick-row .el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px var(--yp-border-default) inset !important;
 }
-:deep(.monday-quick-row .el-input__wrapper:has(input:focus-visible)),
-:deep(.monday-quick-row .el-select__wrapper:has(input:focus-visible)) {
+:deep(.monday-quick-row .el-input__wrapper:has(input:focus-visible)) {
   outline: none !important;
   outline-offset: 0;
 }
@@ -4198,6 +4250,10 @@ onBeforeUnmount(() => {
   pointer-events: auto !important;
   box-shadow: -4px 0 24px color-mix(in srgb, var(--yp-text-primary) 12%, transparent) !important;
   overflow: visible !important;
+}
+
+.work-items-detail-drawer--resizing {
+  transition: none !important;
 }
 
 /* 抽屉左侧拖动手柄 */

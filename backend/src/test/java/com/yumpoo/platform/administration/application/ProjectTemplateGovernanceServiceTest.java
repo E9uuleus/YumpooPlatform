@@ -146,7 +146,7 @@ class ProjectTemplateGovernanceServiceTest {
                 TEMPLATE_ID, "RND", 2, "RND_V2", "PRODUCT_DEVELOPMENT", "产品研发 V2",
                 lifecycle, rowVersion, publishedAt, retiredAt,
                 List.of(new ProjectTemplateSnapshot.ContentBlueprint(
-                        "REQUIREMENTS", "需求", "REQUIREMENT", "TABLE", 10)),
+                        "REQUIREMENTS", "需求", "BRIGHT_BLUE", 10)),
                 List.of(new ProjectTemplateSnapshot.WorkflowStatus(
                         "BACKLOG", "待规划", "TODO", 10, true, false)),
                 List.of());
