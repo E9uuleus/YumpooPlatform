@@ -78,6 +78,7 @@ export function presentDueDate(item: WorkItemDueDateFacts, timezone: string, now
   const done = item.statusCategory === 'DONE'
   const reference = done ? item.completedAt ? new Date(item.completedAt) : null : now
   if (!reference || Number.isNaN(reference.getTime())) return { ...result, tooltip: `完成时间未记录 · ${fullText}` }
+  if (!done && date === today) return { ...result, tone: 'today', tooltip: `今日截止 · ${fullText}` }
   const difference = time
     ? reference.getTime() - dueDateInstant(date, time, timezone)
     : Date.parse(`${companyDate(reference, timezone)}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)
@@ -85,6 +86,5 @@ export function presentDueDate(item: WorkItemDueDateFacts, timezone: string, now
   const duration = days === 0 ? '不足 1 天' : ` ${days} 天`
   if (difference > 0) return { ...result, tone: 'red', tooltip: `逾期${duration} · ${fullText}` }
   if (done) return { ...result, tone: 'green', strike: true, tooltip: `${difference === 0 ? '按时完成' : `提前${duration}`} · ${fullText}` }
-  if (date === today) return { ...result, tone: 'today', tooltip: `今日截止 · ${fullText}` }
   return result
 }

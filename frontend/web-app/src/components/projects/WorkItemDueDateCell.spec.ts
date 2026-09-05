@@ -127,6 +127,15 @@ describe('共享截止日期单元格', () => {
       [{ dueDate: '2026-09-04', dueTime: '18:05' }], [{ dueDate: '2026-09-03', dueTime: null }],
     ])
   })
+  it('已有截止时分改为 Today 后显示今日到期标识', async () => {
+    const wrapper = cell('2026-09-04', '00:00')
+    wrapper.getComponent(Popover).vm.$emit('show')
+    await wrapper.getComponent({ name: 'ElButton' }).trigger('click')
+    expect(wrapper.emitted('change')).toEqual([[{ dueDate: '2026-09-03', dueTime: '00:00' }]])
+    await wrapper.setProps({ item: { dueDate: '2026-09-03', dueTime: '00:00', statusCategory: 'TODO' } })
+    expect(wrapper.find('.deadline-indicator--today').exists()).toBe(true)
+    expect(wrapper.get('.monday-due-date-cell').attributes('aria-description')).toBe('今日截止 · 2026-09-03 00:00')
+  })
   it('清空仅发出一次请求意图，不在成功响应前假清空或触发选择', async () => {
     const wrapper = cell('2026-09-03', '18:05')
     await wrapper.get('.deadline-clear').trigger('click')

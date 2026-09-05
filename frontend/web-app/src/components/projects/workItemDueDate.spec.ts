@@ -54,9 +54,9 @@ describe('截止日期展示', () => {
     expect(result).toMatchObject({ tone, strike })
     expect(result.tooltip).toContain(message)
   })
-  it('今日超过具体截止时刻后由灰转红', () => {
+  it('未完成项今天超过具体截止时刻后仍显示今日截止', () => {
     expect(present({ dueTime: '18:00' }, new Date('2026-09-03T09:59:00Z')).tone).toBe('today')
-    expect(present({ dueTime: '18:00' }, new Date('2026-09-03T10:01:00Z')).tone).toBe('red')
+    expect(present({ dueTime: '18:00' }, new Date('2026-09-03T10:01:00Z'))).toMatchObject({ tone: 'today', tooltip: '今日截止 · 2026-09-03 18:00' })
   })
   it('空值、无效日期和取消状态不误报', () => {
     expect(present({ dueDate: null }).text).toBe('—')
