@@ -283,8 +283,22 @@ describe('WorkItemDiscussion', () => {
     await flushPromises()
     expect(wrapper.findAll('.discussion-update')).toHaveLength(2)
     expect(wrapper.findAll('.discussion-update')[0]!.text()).toContain('旧置顶')
-    api.pin.mockResolvedValue({ ...recent, pinnedAt: new Date(), pinnedByUserId: member.userId, rowVersion: 1, etag: '"1"' })
+    await wrapper.get('.discussion-update__reply').trigger('click'); await flushPromises()
+    const reply = wrapper.getComponent(DiscussionReplyComposer).vm as unknown as {
+      editor: { commands: { setContent: (html: string) => void }, isEditable: boolean, getText: () => string }
+      publish: () => Promise<void>
+    }
+    reply.editor.commands.setContent('<p>置顶期间保留的回复</p>')
+    let resolvePin!: (item: WorkItemUpdate) => void
+    api.pin.mockImplementationOnce(() => new Promise(resolve => { resolvePin = resolve }))
     await clickMenu(wrapper, '置顶')
+    expect(reply.editor.isEditable).toBe(false)
+    await reply.publish()
+    expect(api.publish).not.toHaveBeenCalled()
+    resolvePin({ ...recent, pinnedAt: new Date(), pinnedByUserId: member.userId, rowVersion: 1, etag: '"1"' })
+    await flushPromises()
+    expect(reply.editor.isEditable).toBe(true)
+    expect(reply.editor.getText()).toBe('置顶期间保留的回复')
     expect(api.pin).toHaveBeenCalledWith(expect.objectContaining({ updateId: recent.id, ifMatch: '"0"', workItemUpdatePinRequest: { pinned: true } }))
     expect(api.list).toHaveBeenCalledTimes(2)
     wrapper.unmount()

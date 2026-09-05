@@ -580,7 +580,7 @@ onBeforeUnmount(() => {
             :work-item-id="workItemId"
             :parent-update-id="item.id"
             :members="members"
-            :can-publish="item.capabilities.canReply && !loading"
+            :can-publish="item.capabilities.canReply && !loading && !mutatingId && !savingEdit"
             :draft="replyDrafts[item.id] ?? ''"
             @draft="replyDrafts[item.id] = $event"
             @busy="replyBusy[item.id] = $event"
