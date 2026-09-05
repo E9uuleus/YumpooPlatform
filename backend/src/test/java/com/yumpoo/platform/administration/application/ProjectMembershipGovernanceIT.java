@@ -260,6 +260,7 @@ class ProjectMembershipGovernanceIT {
             """).param("id",id).param("company",COMPANY).param("employment",employment)
             .param("account",account).param("name",name).update();}
     private void clean(){
+        jdbc.sql("DELETE FROM yumpoo.content_catalog_version WHERE company_id=:company").param("company",COMPANY).update();
         jdbc.sql("DELETE FROM yumpoo.governance_issue WHERE company_id=:company").param("company",COMPANY).update();
         jdbc.sql("DELETE FROM yumpoo.content WHERE company_id=:company").param("company",COMPANY).update();
         new TransactionTemplate(transactionManager).executeWithoutResult(status->{

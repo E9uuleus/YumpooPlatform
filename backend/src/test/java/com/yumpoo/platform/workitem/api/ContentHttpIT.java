@@ -101,8 +101,8 @@ class ContentHttpIT {
 
         String etag = json.readTree(get(catalogPath, owner).body()).path("etag").asText();
         String itemPath = catalogPath + "/" + first.path("id").asText();
-        assertThat(mutate("PATCH", itemPath, owner,
-                updateBody("调研", "AQUAMARINE", false, 10), etag, null).statusCode()).isEqualTo(409);
+        assertValidation(mutate("PATCH", itemPath, owner,
+                updateBody("调研", "AQUAMARINE", false, 10), etag, null), "LAST_ACTIVE_CONTENT");
 
         assertThat(mutate("POST", catalogPath, owner,
                 createBody("任务", "BRIGHT_GREEN"), null, UUID.randomUUID()).statusCode()).isEqualTo(201);
@@ -144,15 +144,22 @@ class ContentHttpIT {
                 """).param("id", protectedId).param("companyId", COMPANY_ID)
                 .param("projectId", PROJECT_ID).param("actor", owner.userId()).update();
         etag = json.readTree(get(catalogPath, owner).body()).path("etag").asText();
-        assertThat(mutate("DELETE", catalogPath + "/" + protectedId, owner, "", etag, null)
-                .statusCode()).isEqualTo(409);
+        assertValidation(mutate("DELETE", catalogPath + "/" + protectedId, owner, "", etag, null),
+                "PROTECTED_CONTENT");
 
         UUID usedId = UUID.fromString(json.readTree(mutate("POST", catalogPath, owner,
                 createBody("已使用", "DARK_RED"), null, UUID.randomUUID()).body()).path("id").asText());
         jdbc.sql("UPDATE yumpoo.content SET ever_used=true WHERE id=:id").param("id", usedId).update();
         etag = json.readTree(get(catalogPath, owner).body()).path("etag").asText();
-        assertThat(mutate("DELETE", catalogPath + "/" + usedId, owner, "", etag, null)
-                .statusCode()).isEqualTo(409);
+        assertValidation(mutate("DELETE", catalogPath + "/" + usedId, owner, "", etag, null),
+                "CONTENT_IN_USE");
+    }
+
+    private void assertValidation(HttpResponse<String> response, String fieldCode) {
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(422);
+        JsonNode error = json.readTree(response.body());
+        assertThat(error.path("code").asText()).isEqualTo("VALIDATION_FAILED");
+        assertThat(error.path("fieldErrors").toString()).contains(fieldCode);
     }
 
     private ActorFixture actor(UUID userId) { return new ActorFixture(userId, sessions.issueWebSession(userId, "content-category-http")); }

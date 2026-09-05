@@ -218,6 +218,8 @@ class ProjectCreationHttpIT {
     }
 
     private void cleanUp() {
+        jdbcClient.sql("DELETE FROM yumpoo.content_catalog_version WHERE company_id = :companyId")
+                .param("companyId", COMPANY_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.content WHERE company_id = :companyId")
                 .param("companyId", COMPANY_ID).update();
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
