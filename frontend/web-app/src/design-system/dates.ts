@@ -50,7 +50,7 @@ export function formatChineseTimestamp(value: Date | string, timezone: string): 
 }
 
 /** Monday 风格中文相对时间；now 可注入，便于每分钟刷新及单元测试。 */
-export function formatRelativeTime(value: Date | string, now: Date = new Date()): string {
+export function formatRelativeTime(value: Date | string, now: Date = new Date(), maxUnit?: 'day'): string {
   const elapsedSeconds = Math.max(0, Math.floor((now.getTime() - toDate(value).getTime()) / 1000))
   if (elapsedSeconds < 60) return '刚刚'
   const minutes = Math.floor(elapsedSeconds / 60)
@@ -58,7 +58,7 @@ export function formatRelativeTime(value: Date | string, now: Date = new Date())
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours}小时前`
   const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}天前`
+  if (maxUnit === 'day' || days < 30) return `${days}天前`
   const months = Math.floor(days / 30)
   if (months < 12) return `${months}个月前`
   return `${Math.floor(months / 12)}年前`

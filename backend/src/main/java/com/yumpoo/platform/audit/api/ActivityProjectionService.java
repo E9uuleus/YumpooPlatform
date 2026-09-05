@@ -42,14 +42,16 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "workitem.work_item_deleted", "workitem.work_item_restored",
             "workitem.work_item_relation_created", "workitem.work_item_relation_deleted",
             "workitem.work_item_parent_changed", "workitem.work_item_update_published",
-            "workitem.work_item_update_edited", "workitem.work_item_update_deleted");
+            "workitem.work_item_update_edited", "workitem.work_item_update_deleted",
+            "workitem.work_item_update_pin_changed");
     private static final Set<String> ATTACHMENT_EVENTS = Set.of(
             "filestorage.attachment_available", "filestorage.attachment_deleted");
     private static final Set<String> V2_EVENTS = Set.of(
             "workitem.content_created", "workitem.content_updated", "workitem.content_deleted",
             "workitem.work_item_created", "workitem.work_item_fields_changed",
             "workitem.work_item_status_changed", "workitem.work_item_deleted",
-            "workitem.work_item_restored");
+            "workitem.work_item_restored", "workitem.work_item_update_published",
+            "workitem.work_item_update_edited", "workitem.work_item_update_deleted");
 
     private final ActivityRepository repository;
     private final ActivityProjectionContextPort context;
@@ -193,6 +195,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             safe.put("addedMentionCount", array(payload, "addedMentionedUserIds").size());
             safe.put("removedMentionCount", array(payload, "removedMentionedUserIds").size());
         }
+        if (type.endsWith("update_pin_changed")) safe.put("pinned", payload.path("pinned").asBoolean());
         boolean update = type.contains("work_item_update_");
         UUID entityId = update ? uuid(payload, "updateId") : workItemId;
         append(event, ActivityAudienceType.PROJECT, projectId,

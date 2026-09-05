@@ -1,0 +1,29 @@
+{
+  "eventId": "35000000-0000-4000-8000-000000000001",
+  "eventType": "workitem.work_item_update_pin_changed",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-24T10:00:00Z",
+  "aggregateType": "WorkItemUpdate",
+  "aggregateId": "35000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": {
+    "type": "USER",
+    "userId": "35000000-0000-4000-8000-000000000003"
+  },
+  "requestId": "m2-16-update-publish",
+  "correlationId": "m2-16-update-publish",
+  "causationId": null,
+  "payload": {
+    "updateId": "35000000-0000-4000-8000-000000000002",
+    "workItemId": "35000000-0000-4000-8000-000000000004",
+    "projectId": "35000000-0000-4000-8000-000000000005",
+    "contentId": "35000000-0000-4000-8000-000000000006",
+    "itemNo": "PROJECT_CORE-16",
+    "title": "交付讨论流",
+    "rowVersion": 0,
+    "parentUpdateId": null,
+    "pinned": true,
+    "pinnedByUserId": "35000000-0000-4000-8000-000000000003"
+  }
+}

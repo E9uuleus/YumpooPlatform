@@ -7,6 +7,20 @@
       "newSha256": "b230da6229cddcd2eb5f514465c6da89b4a461bc93e1b109a8d3832f1fb8be1b",
       "reason": "Content 从独立视图工作区重构为项目级工作项类别目录，移除旧页面契约并增加普通字段切换接口。",
       "agentNote": ".agents/notes/implemented/process/2026-09-02-content-category-openapi-breaking-change.md"
+    },
+    {
+      "id": "2026-09-05-discussion-threads-HEAD",
+      "oldSha256": "5a36b39699672901a9784d5688d78504513a4c3131bf74dab3e1d59777513b07",
+      "newSha256": "e281b8a22c90e793ad20db3f91b1f8fff765b8af97e6039dbcba2f78d2c7ce4c",
+      "reason": "两级评论、共享置顶和不限时统一删除；移除旧截止时间和治理删除公开字段，服务端与客户端配套升级。",
+      "agentNote": ".agents/notes/implemented/product/2026-09-05-work-item-discussion-threads.md"
+    },
+    {
+      "id": "2026-09-05-discussion-threads-origin-dev",
+      "oldSha256": "673f9f063f85c7ceed2f7230f38160520b506ac5df7a28e3e6551a60950e8f70",
+      "newSha256": "e281b8a22c90e793ad20db3f91b1f8fff765b8af97e6039dbcba2f78d2c7ce4c",
+      "reason": "两级评论、共享置顶和不限时统一删除；移除旧截止时间和治理删除公开字段，服务端与客户端配套升级。",
+      "agentNote": ".agents/notes/implemented/product/2026-09-05-work-item-discussion-threads.md"
     }
   ]
 }

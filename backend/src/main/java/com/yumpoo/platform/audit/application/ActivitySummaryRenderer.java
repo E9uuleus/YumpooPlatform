@@ -46,6 +46,7 @@ public class ActivitySummaryRenderer {
             case "WORK_ITEM_PARENT_CHANGED" -> "更换事项父项";
             case "WORK_ITEM_UPDATE_PUBLISHED" -> "在事项 " + ref + " 发布了动态";
             case "WORK_ITEM_UPDATE_EDITED" -> "编辑了事项 " + ref + " 的动态";
+            case "WORK_ITEM_UPDATE_PIN_CHANGED" -> (parameters.path("pinned").asBoolean() ? "置顶了" : "取消置顶了") + "事项 " + ref + " 的评论";
             case "WORK_ITEM_UPDATE_DELETED" -> "删除了事项 " + ref + " 的动态";
             case "ATTACHMENT_AVAILABLE" -> "附件 " + ref + " 已可用";
             case "ATTACHMENT_DELETED" -> "删除了附件 " + ref;

@@ -391,3 +391,31 @@ events:
     schema: schemas/filestorage.attachment-deleted-v1.schema.json
     validExamples: [examples/filestorage.attachment-deleted-v1.json]
     invalidExamples: [examples/filestorage.attachment-deleted-v1.invalid.json]
+  - eventType: workitem.work_item_update_published
+    eventVersion: 2
+    schema: schemas/workitem.work-item-update-published-v2.schema.json
+    validExamples:
+      - examples/workitem.work-item-update-published-v2.json
+    invalidExamples:
+      - examples/workitem.work-item-update-published-v2.invalid.json
+  - eventType: workitem.work_item_update_edited
+    eventVersion: 2
+    schema: schemas/workitem.work-item-update-edited-v2.schema.json
+    validExamples:
+      - examples/workitem.work-item-update-edited-v2.json
+    invalidExamples:
+      - examples/workitem.work-item-update-edited-v2.invalid.json
+  - eventType: workitem.work_item_update_deleted
+    eventVersion: 2
+    schema: schemas/workitem.work-item-update-deleted-v2.schema.json
+    validExamples:
+      - examples/workitem.work-item-update-deleted-v2.json
+    invalidExamples:
+      - examples/workitem.work-item-update-deleted-v2.invalid.json
+  - eventType: workitem.work_item_update_pin_changed
+    eventVersion: 1
+    schema: schemas/workitem.work-item-update-pin-changed-v1.schema.json
+    validExamples:
+      - examples/workitem.work-item-update-pin-changed-v1.json
+    invalidExamples:
+      - examples/workitem.work-item-update-pin-changed-v1.invalid.json

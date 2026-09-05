@@ -1130,7 +1130,7 @@ class M017BackupRestoreIT {
                     INSERT INTO yumpoo.work_item_update (
                         id, company_id, project_id, work_item_id,
                         author_user_id, author_display_name, body_html, body_text, status,
-                        edit_deadline_at, row_version, created_at, edited_at, edited_by_user_id,
+                        row_version, created_at, edited_at, edited_by_user_id,
                         deleted_at, deleted_by_user_id, delete_reason
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000818',
@@ -1138,15 +1138,14 @@ class M017BackupRestoreIT {
                         '00000000-0000-4000-8000-000000000802',
                         '00000000-0000-4000-8000-000000000815',
                         '00000000-0000-4000-8000-000000000102', 'M2-17 Author',
-                        NULL, NULL, 'DELETED', ?, 2, ?, ?,
+                        NULL, NULL, 'DELETED', 2, ?, ?,
                         '00000000-0000-4000-8000-000000000102', ?,
                         '00000000-0000-4000-8000-000000000103', '治理删除备份恢复事实'
                     )
                     """)) {
-                update.setObject(1, createdAt.plusMinutes(15));
-                update.setObject(2, createdAt);
-                update.setObject(3, createdAt.plusMinutes(5));
-                update.setObject(4, createdAt.plusHours(1));
+                update.setObject(1, createdAt);
+                update.setObject(2, createdAt.plusMinutes(5));
+                update.setObject(3, createdAt.plusHours(1));
                 assertThat(update.executeUpdate()).isOne();
             }
             try (PreparedStatement mention = connection.prepareStatement("""
@@ -1339,7 +1338,7 @@ class M017BackupRestoreIT {
              ResultSet result = statement.executeQuery("""
                      SELECT concat_ws(':', coalesce(update_record.body_html, '<NULL>'),
                             coalesce(update_record.body_text, '<NULL>'), update_record.status,
-                            update_record.edit_deadline_at, update_record.row_version,
+                            update_record.parent_update_id, update_record.pinned_at, update_record.pinned_by_user_id, update_record.row_version,
                             update_record.edited_at, update_record.edited_by_user_id,
                             update_record.deleted_at, update_record.deleted_by_user_id,
                             update_record.delete_reason, mention.mentioned_user_id,

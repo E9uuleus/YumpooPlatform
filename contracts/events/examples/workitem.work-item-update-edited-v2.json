@@ -1,0 +1,41 @@
+{
+  "eventId": "36000000-0000-4000-8000-000000000001",
+  "eventType": "workitem.work_item_update_edited",
+  "eventVersion": 2,
+  "occurredAt": "2026-08-24T10:10:00Z",
+  "aggregateType": "WorkItemUpdate",
+  "aggregateId": "36000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": {
+    "type": "USER",
+    "userId": "36000000-0000-4000-8000-000000000003"
+  },
+  "requestId": "m2-17-update-edit",
+  "correlationId": "m2-17-update-edit",
+  "causationId": null,
+  "payload": {
+    "updateId": "36000000-0000-4000-8000-000000000002",
+    "workItemId": "36000000-0000-4000-8000-000000000004",
+    "projectId": "36000000-0000-4000-8000-000000000005",
+    "contentId": "36000000-0000-4000-8000-000000000006",
+    "itemNo": "PROJECT_CORE-17",
+    "title": "补齐讨论治理",
+    "authorUserId": "36000000-0000-4000-8000-000000000003",
+    "editedByUserId": "36000000-0000-4000-8000-000000000003",
+    "previousStatus": "PUBLISHED",
+    "status": "EDITED",
+    "previousRowVersion": 0,
+    "rowVersion": 1,
+    "previousBodyTextLength": 8,
+    "bodyTextLength": 12,
+    "mentionedUserIds": [
+      "36000000-0000-4000-8000-000000000007"
+    ],
+    "addedMentionedUserIds": [
+      "36000000-0000-4000-8000-000000000007"
+    ],
+    "removedMentionedUserIds": [],
+    "parentUpdateId": null
+  }
+}

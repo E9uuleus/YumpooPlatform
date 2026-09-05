@@ -2393,7 +2393,7 @@ paths:
       tags: [WorkItemUpdates]
       operationId: listWorkItemUpdates
       summary: 读取 Work Item 讨论窗口
-      description: 首窗为最新记录，窗口内始终按 createdAt、id 升序；nextCursor 仅用于加载更早记录。
+      description: 仅返回未删除主评论。首窗附带全部置顶评论，普通窗口仍包含置顶记录，客户端按 ID 去重；窗口按 createdAt、id 升序，nextCursor 加载更早记录。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: workItemId
@@ -2449,6 +2449,65 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
+  /work-item-updates/{updateId}/pin:
+    patch:
+      tags: [WorkItemUpdates]
+      operationId: pinWorkItemUpdate
+      summary: 置顶或取消置顶主评论
+      description: 可发表评论的项目成员均可操作任意主评论，子评论不可置顶；重复状态不增版。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemUpdatePinRequest' } } }
+      responses:
+        '200':
+          description: 置顶状态已更新或没有变化。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemUpdate' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-item-updates/{updateId}/replies:
+    get:
+      tags: [WorkItemUpdates]
+      operationId: listWorkItemUpdateReplies
+      summary: 按创建时间正序分页读取未删除回复
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 256 }
+        - name: size
+          in: query
+          schema: { type: integer, format: int32, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 正序回复窗口，pinnedItems 恒为空。
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemUpdatePage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
   /work-item-updates/{updateId}:
     get:
       tags: [WorkItemUpdates]
@@ -2474,7 +2533,7 @@ paths:
       tags: [WorkItemUpdates]
       operationId: editWorkItemUpdate
       summary: 编辑 Work Item 讨论
-      description: 仅作者可在服务端 15 分钟窗口内编辑；正文和 Mention 重新净化并原子替换。
+      description: 仅作者可编辑，不限制发布时间；正文和 Mention 重新净化并原子替换。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: updateId
@@ -2504,8 +2563,8 @@ paths:
     delete:
       tags: [WorkItemUpdates]
       operationId: deleteWorkItemUpdate
-      summary: 删除或治理删除 Work Item 讨论
-      description: 无 reason 表示作者窗口内自删；提供 reason 表示当前 ProjectOwner 治理删除，包括归档历史。
+      summary: 删除 Work Item 评论或讨论串
+      description: 作者可不限时删除自己的评论；当前 ProjectOwner 可删除所有评论，包括归档历史。删除主评论会原子删除全部回复。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: updateId
@@ -4202,8 +4261,8 @@ components:
       type: object
       additionalProperties: false
       required: [id, projectId, contentId, workItemId, authorUserId, authorDisplayName,
-        bodyHtml, bodyText, status, editDeadlineAt, rowVersion, etag, createdAt,
-        editedAt, editedByUserId, deletedAt, deletedByUserId, deleteReason, capabilities]
+        bodyHtml, bodyText, status, rowVersion, etag, createdAt,
+        editedAt, editedByUserId, deletedAt, deletedByUserId, parentUpdateId, pinnedAt, pinnedByUserId, replyCount, replies, repliesNextCursor, capabilities]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
@@ -4214,7 +4273,6 @@ components:
         bodyHtml: { type: string, minLength: 1, maxLength: 65536, nullable: true }
         bodyText: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         status: { $ref: '#/components/schemas/WorkItemUpdateStatus' }
-        editDeadlineAt: { type: string, format: date-time, readOnly: true }
         rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
         etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
         createdAt: { type: string, format: date-time, readOnly: true }
@@ -4222,33 +4280,45 @@ components:
         editedByUserId: { type: string, format: uuid, nullable: true, readOnly: true }
         deletedAt: { type: string, format: date-time, nullable: true, readOnly: true }
         deletedByUserId: { type: string, format: uuid, nullable: true, readOnly: true }
-        deleteReason: { type: string, minLength: 1, maxLength: 500, nullable: true, readOnly: true }
+        parentUpdateId: { type: string, format: uuid, nullable: true, readOnly: true }
+        pinnedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+        pinnedByUserId: { type: string, format: uuid, nullable: true, readOnly: true }
+        replyCount: { type: integer, format: int64, minimum: 0, readOnly: true }
+        replies:
+          type: array
+          items: { $ref: '#/components/schemas/WorkItemUpdate' }
+        repliesNextCursor: { type: string, maxLength: 256, nullable: true }
         capabilities: { $ref: '#/components/schemas/WorkItemUpdateCapabilities' }
 
     WorkItemUpdateCapabilities:
       type: object
       additionalProperties: false
-      required: [canEdit, canSelfDelete, canModerateDelete]
+      required: [canEdit, canDelete, canReply, canPin]
       properties:
         canEdit: { type: boolean, readOnly: true }
-        canSelfDelete: { type: boolean, readOnly: true }
-        canModerateDelete: { type: boolean, readOnly: true }
+        canDelete: { type: boolean, readOnly: true }
+        canReply: { type: boolean, readOnly: true }
+        canPin: { type: boolean, readOnly: true }
 
     WorkItemUpdatePage:
       type: object
       additionalProperties: false
-      required: [items, nextCursor]
+      required: [items, nextCursor, pinnedItems]
       properties:
         items:
           type: array
           items: { $ref: '#/components/schemas/WorkItemUpdate' }
         nextCursor: { type: string, maxLength: 256, nullable: true }
+        pinnedItems:
+          type: array
+          items: { $ref: '#/components/schemas/WorkItemUpdate' }
 
     WorkItemUpdateCreateRequest:
       type: object
       additionalProperties: false
       required: [bodyHtml]
       properties:
+        parentUpdateId: { type: string, format: uuid, nullable: true, description: 省略时发布主评论；指定时仅允许回复同一工作项的未删除主评论。 }
         bodyHtml:
           type: string
           description: >-
@@ -4273,12 +4343,14 @@ components:
     WorkItemUpdateDeleteRequest:
       type: object
       additionalProperties: false
+      properties: {}
+
+    WorkItemUpdatePinRequest:
+      type: object
+      additionalProperties: false
+      required: [pinned]
       properties:
-        reason:
-          type: string
-          minLength: 1
-          maxLength: 500
-          description: 提供时表示 ProjectOwner 治理删除；省略时表示作者窗口内自删。
+        pinned: { type: boolean }
 
     WorkItemCreateRequest:
       type: object

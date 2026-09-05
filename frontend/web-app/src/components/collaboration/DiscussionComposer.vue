@@ -10,8 +10,11 @@ const props = withDefaults(defineProps<{
   busy?: boolean
   collapsible?: boolean
   showSubmit?: boolean
+  compact?: boolean
+  placeholder?: string
+  submitLabel?: string
   submitDisabled?: boolean
-}>(), { editor: undefined, busy: false, collapsible: true, showSubmit: true, submitDisabled: false })
+}>(), { editor: undefined, busy: false, collapsible: true, showSubmit: true, submitDisabled: false, compact: false, placeholder: '写下讨论，输入 @ 提及项目成员…', submitLabel: '发布讨论' })
 const emit = defineEmits<{ submit: [] }>()
 type Panel = 'format' | 'color' | 'size' | 'table' | 'link' | 'align' | 'direction' | 'emoji'
 const panelNames: Record<Panel, string> = { format: '正文格式', color: '文字颜色与高亮', size: '字号', table: '表格', link: '链接', align: '对齐', direction: '文字方向', emoji: '表情' }
@@ -49,7 +52,7 @@ const emojis = [
 const filteredEmojis = computed(() => emojis.filter(item => `${item.value} ${item.keywords}`
   .toLocaleLowerCase().includes(emojiQuery.value.toLocaleLowerCase().trim())))
 const empty = computed(() => { void revision.value; return !discussionHasDraft(props.editor) })
-const unavailable = computed(() => props.busy || !props.editor?.isEditable)
+const unavailable = computed(() => { void revision.value; return props.busy || !props.editor?.isEditable })
 const simpleActions = [
   { name: '粗体', symbol: 'B', mark: 'bold', run: (e: Editor) => e.chain().focus().toggleBold().run() },
   { name: '斜体', symbol: 'I', mark: 'italic', run: (e: Editor) => e.chain().focus().toggleItalic().run() },
@@ -74,7 +77,9 @@ const tableActions = [
 function changed() { revision.value++; if (!empty.value) expanded.value = true }
 watch(() => props.editor, (editor, old) => {
   old?.off('transaction', changed)
+  old?.off('update', changed)
   editor?.on('transaction', changed)
+  editor?.on('update', changed)
 }, { immediate: true })
 
 function closePanel() { panel.value = undefined }
@@ -167,6 +172,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   props.editor?.off('transaction', changed)
+  props.editor?.off('update', changed)
   document.removeEventListener('pointerdown', outside)
   window.removeEventListener('resize', position)
   window.removeEventListener('scroll', position, true)
@@ -179,7 +185,7 @@ defineExpose({ closePanel, reset })
   <div
     ref="root"
     class="discussion-composer"
-    :class="{ 'discussion-composer--expanded': expanded }"
+    :class="{ 'discussion-composer--expanded': expanded, 'discussion-composer--compact': compact }"
     :data-revision="revision"
     @focusin="expanded = true"
     @focusout="blur"
@@ -335,7 +341,7 @@ defineExpose({ closePanel, reset })
       <span
         v-if="empty"
         class="discussion-editor__placeholder"
-      >写下讨论，输入 @ 提及项目成员…</span>
+      >{{ placeholder }}</span>
       <editor-content
         v-if="editor"
         :editor="editor"
@@ -375,7 +381,7 @@ defineExpose({ closePanel, reset })
         :aria-busy="busy"
         @click="emit('submit')"
       >
-        {{ busy ? '发布中…' : '发布讨论' }}
+        {{ busy ? '提交中…' : submitLabel }}
       </button>
     </div>
     <teleport to="body">
@@ -608,6 +614,9 @@ defineExpose({ closePanel, reset })
 
 <style scoped>
 .discussion-composer { min-width: 0; border: 1px solid var(--yp-border-strong); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.discussion-composer:not(.discussion-composer--expanded):not(:focus-within):hover { background: var(--yp-bg-sunken); }
+.discussion-composer--compact:not(.discussion-composer--expanded) .discussion-composer__footer { display: none; }
+.discussion-composer--compact:not(.discussion-composer--expanded) .discussion-editor :deep(.ProseMirror) { min-height: 64px; }
 .discussion-composer:focus-within { border-color: var(--yp-action-primary); }
 .discussion-toolbar { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px; border-bottom: 1px solid var(--yp-border-subtle); }
 .discussion-toolbar button, .discussion-composer__insert button { display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 4px; color: var(--yp-text-secondary); background: transparent; font-size: 15px; cursor: pointer; }

@@ -19,6 +19,7 @@ for (const [producer, file] of serviceFiles) {
   const expected = new Set(manifest.events
     .filter((event) => event.producers.includes(producer))
     .map((event) => event.eventType))
+  if (producer === 'WorkItemUpdateService') expected.add('workitem.work_item_update_pin_changed')
   assertSameSet(`${producer} 生产事件`, actual, expected)
 }
 
@@ -29,7 +30,7 @@ const workItemBlock = activitySource.match(
   /private static final Set<String> WORK_ITEM_EVENTS = Set\.of\(([\s\S]*?)\);/u)?.[1]
 assert(workItemBlock, 'ActivityProjectionService 缺少 WORK_ITEM_EVENTS 清单')
 assertSameSet('Activity v1 订阅', matches(workItemBlock, eventPattern),
-  new Set(manifest.events.map((event) => event.eventType)))
+  new Set([...manifest.events.map((event) => event.eventType), 'workitem.work_item_update_pin_changed']))
 
 const frozenBundle = loadCurrentBundle(repositoryRoot, manifest)
 assertSameSet('冻结 v1 Schema 与合法样例',

@@ -314,6 +314,155 @@ class WorkItemHttpIT {
         assertThat(item.path("completedAt").isNull()).isTrue();
     }
 
+    @Test
+    void discussionThreadsEnforcePermissionsDepthAndUnlimitedAuthorEdits() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "讨论串"), null, UUID.randomUUID()));
+        String collection = "/api/v1/work-items/" + item.path("id").asText() + "/updates";
+        JsonNode root = publishComment(collection, member, "主评论", null);
+        String path = "/api/v1/work-item-updates/" + root.path("id").asText();
+        jdbc.sql("UPDATE yumpoo.work_item_update SET created_at=created_at-interval '2 days' WHERE id=:id")
+                .param("id", UUID.fromString(root.path("id").asText())).update();
+        root = ok(mutate("PATCH", path, member, "{\"bodyHtml\":\"<p>两天后编辑</p>\"}", root.path("etag").asText(), null));
+        assertThat(root.has("editDeadlineAt")).isFalse();
+        assertThat(root.path("capabilities").path("canEdit").asBoolean()).isTrue();
+        assertThat(mutate("PATCH", path, owner, "{\"bodyHtml\":\"<p>越权编辑</p>\"}", root.path("etag").asText(), null).statusCode()).isEqualTo(403);
+        JsonNode child = publishComment(collection, owner, "管理员回复", root.path("id").asText());
+        String childPath = "/api/v1/work-item-updates/" + child.path("id").asText();
+        assertThat(mutate("DELETE", childPath, member, "{}", child.path("etag").asText(), null).statusCode()).isEqualTo(403);
+        assertThat(mutate("POST", collection, member, commentBody("第三级", child.path("id").asText()), null, UUID.randomUUID()).statusCode()).isEqualTo(422);
+        assertThat(mutate("PATCH", childPath + "/pin", owner, "{\"pinned\":true}", child.path("etag").asText(), null).statusCode()).isEqualTo(409);
+        JsonNode otherItem = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "其他工作项"), null, UUID.randomUUID()));
+        assertThat(mutate("POST", "/api/v1/work-items/" + otherItem.path("id").asText() + "/updates", member,
+                commentBody("跨工作项", root.path("id").asText()), null, UUID.randomUUID()).statusCode()).isEqualTo(422);
+        JsonNode withReplies = ok(get(path, member));
+        assertThat(withReplies.path("replyCount").asInt()).isOne();
+        assertThat(withReplies.path("replies").get(0).path("id").asText()).isEqualTo(child.path("id").asText());
+        ok(mutate("DELETE", path, member, "{}", root.path("etag").asText(), null));
+        assertThat(ok(get(collection, member)).path("items").size()).isZero();
+        assertThat(ok(get(childPath, owner)).path("bodyHtml").isNull()).isTrue();
+        assertThat(mutate("POST", collection, member, commentBody("已删父评论", root.path("id").asText()), null, UUID.randomUUID()).statusCode()).isEqualTo(409);
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE event_type='workitem.work_item_update_deleted' AND event_version=2")
+                .query(Long.class).single()).isEqualTo(2);
+    }
+
+    @Test
+    void discussionPinAndReplyPaginationAreStableAndIdempotent() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "分页"), null, UUID.randomUUID()));
+        String collection = "/api/v1/work-items/" + item.path("id").asText() + "/updates";
+        JsonNode root = publishComment(collection, owner, "较早主评论", null);
+        String path = "/api/v1/work-item-updates/" + root.path("id").asText();
+        for (int index = 0; index < 22; index++) publishComment(collection, member, "主评论" + index, null);
+        for (int index = 0; index < 22; index++) publishComment(collection, member, "回复" + index, root.path("id").asText());
+        JsonNode pinned = ok(mutate("PATCH", path + "/pin", member, "{\"pinned\":true}", root.path("etag").asText(), null));
+        JsonNode noop = ok(mutate("PATCH", path + "/pin", owner, "{\"pinned\":true}", pinned.path("etag").asText(), null));
+        assertThat(noop.path("etag")).isEqualTo(pinned.path("etag"));
+        assertThat(mutate("PATCH", path + "/pin", member, "{\"pinned\":false}", root.path("etag").asText(), null).statusCode()).isEqualTo(412);
+        JsonNode page = ok(get(collection, member));
+        assertThat(page.path("items").size()).isEqualTo(20);
+        assertThat(page.path("pinnedItems").size()).isOne();
+        JsonNode pinnedView = page.path("pinnedItems").get(0);
+        assertThat(pinnedView.path("replyCount").asInt()).isEqualTo(22);
+        assertThat(pinnedView.path("replies").size()).isEqualTo(20);
+        JsonNode older = ok(get(collection + "?cursor=" + page.path("nextCursor").asText(), member));
+        assertThat(older.path("items").size()).isEqualTo(3);
+        assertThat(older.path("items").get(0).path("id")).isEqualTo(root.path("id"));
+        JsonNode replyPage = ok(get(path + "/replies?cursor=" + pinnedView.path("repliesNextCursor").asText(), member));
+        assertThat(replyPage.path("items").size()).isEqualTo(2);
+        assertThat(replyPage.path("items").get(0).path("bodyText").asText()).isEqualTo("回复20");
+        UUID key = UUID.randomUUID();
+        String body = commentBody("幂等回复", root.path("id").asText());
+        HttpResponse<String> first = mutate("POST", collection, member, body, null, key);
+        assertThat(first.statusCode()).isEqualTo(201);
+        assertThat(mutate("POST", collection, member, body, null, key).body()).isEqualTo(first.body());
+        ok(mutate("PATCH", path + "/pin", member, "{\"pinned\":false}", pinned.path("etag").asText(), null));
+        assertThat(ok(get(collection, member)).path("pinnedItems").size()).isZero();
+    }
+
+    @Test
+    void discussionConcurrentDeleteAndReplyNeverLeaveAnActiveOrphan() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "并发删除"), null, UUID.randomUUID()));
+        String collection = "/api/v1/work-items/" + item.path("id").asText() + "/updates";
+        JsonNode root = publishComment(collection, member, "主评论", null);
+        String path = "/api/v1/work-item-updates/" + root.path("id").asText();
+        var start = new java.util.concurrent.CountDownLatch(1);
+        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            var reply = executor.submit(() -> { start.await(); return mutate("POST", collection, owner,
+                    commentBody("并发回复", root.path("id").asText()), null, UUID.randomUUID()); });
+            var delete = executor.submit(() -> { start.await(); return mutate("DELETE", path, member, "{}", root.path("etag").asText(), null); });
+            start.countDown();
+            assertThat(delete.get().statusCode()).isEqualTo(200);
+            assertThat(reply.get().statusCode()).isIn(201, 409);
+        }
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_update WHERE parent_update_id=:parent AND status<>'DELETED'")
+                .param("parent", UUID.fromString(root.path("id").asText())).query(Long.class).single()).isZero();
+    }
+
+    @Test
+    void archivedProjectAllowsOnlyOwnerDeletionAndNoPin() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "归档权限"), null, UUID.randomUUID()));
+        String collection = "/api/v1/work-items/" + item.path("id").asText() + "/updates";
+        JsonNode root = publishComment(collection, member, "归档前评论", null);
+        String path = "/api/v1/work-item-updates/" + root.path("id").asText();
+        ok(mutate("POST", "/api/v1/work-items/" + item.path("id").asText() + "/transitions", member,
+                "{\"toStatus\":\"" + transitionTo(item, "DONE") + "\"}", item.path("etag").asText(), UUID.randomUUID()));
+        JsonNode project = ok(get("/api/v1/projects/" + PROJECT_ID, owner));
+        ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/archive", owner,
+                "{\"reason\":\"验收归档\"}", project.path("etag").asText(), UUID.randomUUID()));
+        JsonNode view = ok(get(path, member));
+        assertThat(view.path("capabilities").path("canDelete").asBoolean()).isFalse();
+        assertThat(view.path("capabilities").path("canPin").asBoolean()).isFalse();
+        assertThat(mutate("DELETE", path, member, "{}", root.path("etag").asText(), null).statusCode()).isEqualTo(403);
+        assertThat(mutate("PATCH", path + "/pin", owner, "{\"pinned\":true}", root.path("etag").asText(), null).statusCode()).isEqualTo(409);
+        ok(mutate("DELETE", path, owner, "{}", root.path("etag").asText(), null));
+    }
+
+    @Test
+    void discussionCascadeRollsBackWhenAChildOutboxWriteFails() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "事务回滚"), null, UUID.randomUUID()));
+        String collection = "/api/v1/work-items/" + item.path("id").asText() + "/updates";
+        JsonNode root = publishComment(collection, member, "主评论", null);
+        JsonNode child = publishComment(collection, owner, "回复", root.path("id").asText());
+        String path = "/api/v1/work-item-updates/" + root.path("id").asText();
+        jdbc.sql("""
+                CREATE FUNCTION yumpoo.discussion_fail_child_delete() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF NEW.event_type='workitem.work_item_update_deleted'
+                        AND NEW.payload_json->>'parentUpdateId' IS NOT NULL THEN
+                        RAISE EXCEPTION 'discussion rollback probe';
+                    END IF;
+                    RETURN NEW;
+                END $$
+                """).update();
+        jdbc.sql("CREATE TRIGGER discussion_fail_child_delete BEFORE INSERT ON yumpoo.outbox_event "
+                + "FOR EACH ROW EXECUTE FUNCTION yumpoo.discussion_fail_child_delete()").update();
+        try {
+            assertThat(mutate("DELETE", path, member, "{}", root.path("etag").asText(), null).statusCode()).isEqualTo(500);
+            assertThat(ok(get(path, member)).path("bodyText").asText()).isEqualTo("主评论");
+            assertThat(ok(get("/api/v1/work-item-updates/" + child.path("id").asText(), member)).path("bodyText").asText()).isEqualTo("回复");
+            assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.security_audit_event WHERE action='WORK_ITEM_UPDATE_DELETED'")
+                    .query(Long.class).single()).isZero();
+        } finally {
+            jdbc.sql("DROP TRIGGER discussion_fail_child_delete ON yumpoo.outbox_event").update();
+            jdbc.sql("DROP FUNCTION yumpoo.discussion_fail_child_delete()").update();
+        }
+    }
+
+    private String commentBody(String text, String parent) throws Exception {
+        var body = json.createObjectNode().put("bodyHtml", "<p>" + text + "</p>");
+        if (parent != null) body.put("parentUpdateId", parent);
+        return json.writeValueAsString(body);
+    }
+
+    private JsonNode publishComment(String collection, ActorFixture actor, String text, String parent) throws Exception {
+        return created(mutate("POST", collection, actor, commentBody(text, parent), null, UUID.randomUUID()));
+    }
+
     private String transitionTo(JsonNode item, String category) {
         for (JsonNode transition : item.path("capabilities").path("availableTransitions")) {
             if (category.equals(transition.path("statusCategory").asText())) return transition.path("toStatus").asText();

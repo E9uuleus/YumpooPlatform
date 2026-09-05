@@ -2,7 +2,7 @@
 
 Status: implemented
 
-当前前端倒序讨论流、历史加载方向及扩展富文本白名单由[工作项倒序讨论流与受限富文本编辑器](../product/2026-09-05-work-item-discussion-composer.md)部分替代。本文的聚合、授权、生命周期、版本、幂等、墓碑与审计事件约束继续有效；下文相关旧 UI 与格式决定仅保留其原始理由。
+当前前端倒序流与富文本白名单由[编辑器决定](../product/2026-09-05-work-item-discussion-composer.md)部分替代。操作时限、统一删除、两级回复、共享置顶、UI 删除展示及新事件版本由[两级评论决定](../product/2026-09-05-work-item-discussion-threads.md)部分替代。本文继续拥有独立聚合、净化与 Mention 身份、强版本、幂等、事务审计和事件隐私理由；下文时限、治理理由与 v1 描述为被替代决定的历史说明。
 
 ## Problem
 

@@ -26,4 +26,12 @@ describe('日期格式化约定', () => {
     expect(formatRelativeTime('2026-09-01T10:00:00Z', new Date('2026-09-01T10:42:00Z'))).toBe('42分钟前')
     expect(formatRelativeTime('2026-08-30T10:00:00Z', new Date('2026-09-01T10:00:00Z'))).toBe('2天前')
   })
+  it('评论按整数分钟小时天向下取整，超过一年仍以天显示', () => {
+    const start = new Date('2020-01-01T00:00:00Z')
+    for (const [seconds, expected] of [[59, '刚刚'], [60, '1分钟前'], [3599, '59分钟前'], [3600, '1小时前'], [86399, '23小时前'], [86400, '1天前'], [400 * 86400, '400天前']] as const) {
+      expect(formatRelativeTime(start, new Date(start.getTime() + seconds * 1000), 'day')).toBe(expected)
+    }
+    expect(formatRelativeTime(start, new Date(start.getTime() + 400 * 86400 * 1000))).toBe('1年前')
+  })
+
 })

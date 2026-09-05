@@ -174,6 +174,25 @@ class ActivityProjectionServiceTest {
                 .containsExactly("WORK_ITEM_RELATION_DELETED", "WORK_ITEM_PARENT_CHANGED");
     }
 
+    @Test
+    void consumesDiscussionV2AndPinWithoutLeakingBodies() {
+        assertThat(service.subscriptions()).contains(
+                new EventSubscription("workitem.work_item_update_published", 2),
+                new EventSubscription("workitem.work_item_update_edited", 2),
+                new EventSubscription("workitem.work_item_update_deleted", 2),
+                new EventSubscription("workitem.work_item_update_pin_changed", 1));
+        ObjectNode payload = workItem().put("updateId", UUID.randomUUID().toString()).put("pinned", true)
+                .put("bodyHtml", "不能写入动态的正文").putNull("parentUpdateId");
+        service.consume(event("workitem.work_item_update_pin_changed", CUTOVER.plusSeconds(1), payload));
+        payload.putArray("mentionedUserIds");
+        service.consume(new DomainEventEnvelope(UUID.randomUUID(), "workitem.work_item_update_published", 2,
+                CUTOVER.plusSeconds(2), "WorkItemUpdate", ITEM, 1, COMPANY, EventActor.user(ACTOR),
+                "discussion-v2", "discussion-v2", null, payload));
+        ArgumentCaptor<ActivityStoredEvent> captor = ArgumentCaptor.forClass(ActivityStoredEvent.class);
+        verify(repository, org.mockito.Mockito.times(2)).append(captor.capture());
+        assertThat(captor.getAllValues()).allSatisfy(stored -> assertThat(stored.safeParameters().toString()).doesNotContain("bodyHtml", "不能写入"));
+    }
+
     private ObjectNode workItem() {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("workItemId", ITEM.toString());

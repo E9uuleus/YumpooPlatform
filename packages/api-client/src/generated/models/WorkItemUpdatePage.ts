@@ -38,6 +38,12 @@ export interface WorkItemUpdatePage {
      * @memberof WorkItemUpdatePage
      */
     nextCursor: string | null;
+    /**
+     *
+     * @type {Array<WorkItemUpdate>}
+     * @memberof WorkItemUpdatePage
+     */
+    pinnedItems: Array<WorkItemUpdate>;
 }
 
 /**
@@ -46,6 +52,7 @@ export interface WorkItemUpdatePage {
 export function instanceOfWorkItemUpdatePage(value: object): value is WorkItemUpdatePage {
     if (!('items' in value) || value['items'] === undefined) return false;
     if (!('nextCursor' in value) || value['nextCursor'] === undefined) return false;
+    if (!('pinnedItems' in value) || value['pinnedItems'] === undefined) return false;
     return true;
 }
 
@@ -61,6 +68,7 @@ export function WorkItemUpdatePageFromJSONTyped(json: any, ignoreDiscriminator: 
 
         'items': ((json['items'] as Array<any>).map(WorkItemUpdateFromJSON)),
         'nextCursor': json['nextCursor'],
+        'pinnedItems': ((json['pinnedItems'] as Array<any>).map(WorkItemUpdateFromJSON)),
     };
 }
 
@@ -77,5 +85,6 @@ export function WorkItemUpdatePageToJSONTyped(value?: WorkItemUpdatePage | null,
 
         'items': ((value['items'] as Array<any>).map(WorkItemUpdateToJSON)),
         'nextCursor': value['nextCursor'],
+        'pinnedItems': ((value['pinnedItems'] as Array<any>).map(WorkItemUpdateToJSON)),
     };
 }

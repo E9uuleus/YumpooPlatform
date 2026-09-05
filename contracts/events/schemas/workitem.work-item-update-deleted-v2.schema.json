@@ -1,0 +1,110 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/workitem.work-item-update-deleted-v2.schema.json",
+  "title": "Work Item update deleted",
+  "allOf": [
+    {
+      "$ref": "event-envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": {
+          "const": "workitem.work_item_update_deleted"
+        },
+        "eventVersion": {
+          "const": 2
+        },
+        "aggregateType": {
+          "const": "WorkItemUpdate"
+        },
+        "aggregateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "updateId",
+            "workItemId",
+            "projectId",
+            "contentId",
+            "itemNo",
+            "title",
+            "authorUserId",
+            "deletedByUserId",
+            "deletionMode",
+            "previousStatus",
+            "previousRowVersion",
+            "rowVersion",
+            "parentUpdateId"
+          ],
+          "properties": {
+            "updateId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "workItemId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "projectId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "contentId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "itemNo": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "authorUserId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deletedByUserId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "deletionMode": {
+              "enum": [
+                "SELF",
+                "ADMIN",
+                "PARENT_DELETE"
+              ]
+            },
+            "previousStatus": {
+              "enum": [
+                "PUBLISHED",
+                "EDITED"
+              ]
+            },
+            "previousRowVersion": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rowVersion": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "parentUpdateId": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

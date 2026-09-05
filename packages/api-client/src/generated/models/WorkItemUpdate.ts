@@ -89,12 +89,6 @@ export interface WorkItemUpdate {
     status: WorkItemUpdateStatus;
     /**
      *
-     * @type {Date}
-     * @memberof WorkItemUpdate
-     */
-    readonly editDeadlineAt: Date;
-    /**
-     *
      * @type {number}
      * @memberof WorkItemUpdate
      */
@@ -140,7 +134,37 @@ export interface WorkItemUpdate {
      * @type {string}
      * @memberof WorkItemUpdate
      */
-    readonly deleteReason: string | null;
+    readonly parentUpdateId: string | null;
+    /**
+     *
+     * @type {Date}
+     * @memberof WorkItemUpdate
+     */
+    readonly pinnedAt: Date | null;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemUpdate
+     */
+    readonly pinnedByUserId: string | null;
+    /**
+     *
+     * @type {number}
+     * @memberof WorkItemUpdate
+     */
+    readonly replyCount: number;
+    /**
+     *
+     * @type {Array<WorkItemUpdate>}
+     * @memberof WorkItemUpdate
+     */
+    replies: Array<WorkItemUpdate>;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemUpdate
+     */
+    repliesNextCursor: string | null;
     /**
      *
      * @type {WorkItemUpdateCapabilities}
@@ -164,7 +188,6 @@ export function instanceOfWorkItemUpdate(value: object): value is WorkItemUpdate
     if (!('bodyHtml' in value) || value['bodyHtml'] === undefined) return false;
     if (!('bodyText' in value) || value['bodyText'] === undefined) return false;
     if (!('status' in value) || value['status'] === undefined) return false;
-    if (!('editDeadlineAt' in value) || value['editDeadlineAt'] === undefined) return false;
     if (!('rowVersion' in value) || value['rowVersion'] === undefined) return false;
     if (!('etag' in value) || value['etag'] === undefined) return false;
     if (!('createdAt' in value) || value['createdAt'] === undefined) return false;
@@ -172,7 +195,12 @@ export function instanceOfWorkItemUpdate(value: object): value is WorkItemUpdate
     if (!('editedByUserId' in value) || value['editedByUserId'] === undefined) return false;
     if (!('deletedAt' in value) || value['deletedAt'] === undefined) return false;
     if (!('deletedByUserId' in value) || value['deletedByUserId'] === undefined) return false;
-    if (!('deleteReason' in value) || value['deleteReason'] === undefined) return false;
+    if (!('parentUpdateId' in value) || value['parentUpdateId'] === undefined) return false;
+    if (!('pinnedAt' in value) || value['pinnedAt'] === undefined) return false;
+    if (!('pinnedByUserId' in value) || value['pinnedByUserId'] === undefined) return false;
+    if (!('replyCount' in value) || value['replyCount'] === undefined) return false;
+    if (!('replies' in value) || value['replies'] === undefined) return false;
+    if (!('repliesNextCursor' in value) || value['repliesNextCursor'] === undefined) return false;
     if (!('capabilities' in value) || value['capabilities'] === undefined) return false;
     return true;
 }
@@ -196,7 +224,6 @@ export function WorkItemUpdateFromJSONTyped(json: any, ignoreDiscriminator: bool
         'bodyHtml': json['bodyHtml'],
         'bodyText': json['bodyText'],
         'status': WorkItemUpdateStatusFromJSON(json['status']),
-        'editDeadlineAt': (new Date(json['editDeadlineAt'])),
         'rowVersion': json['rowVersion'],
         'etag': json['etag'],
         'createdAt': (new Date(json['createdAt'])),
@@ -204,7 +231,12 @@ export function WorkItemUpdateFromJSONTyped(json: any, ignoreDiscriminator: bool
         'editedByUserId': json['editedByUserId'],
         'deletedAt': (json['deletedAt'] == null ? null : new Date(json['deletedAt'])),
         'deletedByUserId': json['deletedByUserId'],
-        'deleteReason': json['deleteReason'],
+        'parentUpdateId': json['parentUpdateId'],
+        'pinnedAt': (json['pinnedAt'] == null ? null : new Date(json['pinnedAt'])),
+        'pinnedByUserId': json['pinnedByUserId'],
+        'replyCount': json['replyCount'],
+        'replies': ((json['replies'] as Array<any>).map(WorkItemUpdateFromJSON)),
+        'repliesNextCursor': json['repliesNextCursor'],
         'capabilities': WorkItemUpdateCapabilitiesFromJSON(json['capabilities']),
     };
 }
@@ -213,7 +245,7 @@ export function WorkItemUpdateToJSON(json: any): WorkItemUpdate {
     return WorkItemUpdateToJSONTyped(json, false);
 }
 
-export function WorkItemUpdateToJSONTyped(value?: Omit<WorkItemUpdate, 'editDeadlineAt'|'rowVersion'|'etag'|'createdAt'|'editedAt'|'editedByUserId'|'deletedAt'|'deletedByUserId'|'deleteReason'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemUpdateToJSONTyped(value?: Omit<WorkItemUpdate, 'rowVersion'|'etag'|'createdAt'|'editedAt'|'editedByUserId'|'deletedAt'|'deletedByUserId'|'parentUpdateId'|'pinnedAt'|'pinnedByUserId'|'replyCount'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -229,6 +261,8 @@ export function WorkItemUpdateToJSONTyped(value?: Omit<WorkItemUpdate, 'editDead
         'bodyHtml': value['bodyHtml'],
         'bodyText': value['bodyText'],
         'status': WorkItemUpdateStatusToJSON(value['status']),
+        'replies': ((value['replies'] as Array<any>).map(WorkItemUpdateToJSON)),
+        'repliesNextCursor': value['repliesNextCursor'],
         'capabilities': WorkItemUpdateCapabilitiesToJSON(value['capabilities']),
     };
 }

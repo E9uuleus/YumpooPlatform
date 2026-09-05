@@ -40,6 +40,17 @@ function roundtrip() {
 afterEach(() => { wrapper?.unmount(); editor?.destroy(); document.querySelectorAll('[data-discussion-popup]').forEach(item => item.remove()) })
 
 describe('DiscussionComposer', () => {
+  it('可写状态恢复后工具栏同步恢复可用', async () => {
+    await setup()
+    editor.setEditable(false)
+    await flushPromises()
+    expect(wrapper.get('[aria-label="粗体"]').attributes('disabled')).toBeDefined()
+    editor.setEditable(true)
+    await flushPromises()
+    expect(wrapper.get('[aria-label="粗体"]').attributes('disabled')).toBeUndefined()
+    await click('粗体')
+    expect(html()).toContain('<strong>测试文字</strong>')
+  })
   it.each([['粗体', 'strong'], ['斜体', 'em'], ['下划线', 'u'], ['删除线', 's'], ['行内代码', 'code']])('%s 支持选区切换和再次编辑', async (name, tag) => {
     await setup()
     await click(name!)
