@@ -65,13 +65,13 @@ export function verifyContentCategoryRefactorAssets() {
   }
 
   for (const fragment of ['WorkItemContentPopoverContent', 'patchWorkItemContent',
-    '--work-item-table-row-height: 54px', 'height: 34px', 'margin: 10px 24px']) {
+    '--work-item-table-row-height: 36px', 'height: 26px', 'margin: 5px 24px']) {
     assert(overview.includes(fragment), `项目工作项总表缺少 ${fragment}`)
   }
-  for (const fragment of ['WorkItemContentPopoverContent', '--subitem-table-row-height: 54px',
-    'height: 34px', 'margin: 10px 24px']) assert(subitems.includes(fragment), `子项表缺少 ${fragment}`)
+  for (const fragment of ['WorkItemContentPopoverContent', '--subitem-table-row-height: 36px',
+    'height: 26px', 'margin: 5px 24px']) assert(subitems.includes(fragment), `子项表缺少 ${fragment}`)
   for (const fragment of ['canManage', 'protectedContent', 'inUse', 'draggable="true"',
-    'border-radius: 999px', 'height: 34px']) assert(editor.includes(fragment), `类别选择/管理弹窗缺少 ${fragment}`)
+    'border-radius: var(--yp-radius-xs)', 'height: 34px']) assert(editor.includes(fragment), `类别选择/管理弹窗缺少 ${fragment}`)
 
   assert(!routes.includes('projects/:projectId/contents'), '路由仍公开 Content 配置页')
   for (const removed of [
