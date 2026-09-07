@@ -48,6 +48,7 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
         EVENTS.forEach(type -> result.add(new EventSubscription(type, 1)));
         Set.of(CREATED, FIELDS_CHANGED, STATUS_CHANGED)
                 .forEach(type -> result.add(new EventSubscription(type, 2)));
+        result.add(new EventSubscription("workitem.time_tracking_edited", 2));
         return Set.copyOf(result);
     }
 
@@ -56,6 +57,7 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
         if (event.occurredAt().isBefore(repository.acceptedFrom())) return;
         try {
             switch (event.eventType()) {
+                case "workitem.time_tracking_edited" -> timeTrackingEdited(event);
                 case CREATED -> created(event);
                 case FIELDS_CHANGED -> fieldsChanged(event);
                 case ASSIGNED, UNASSIGNED -> assignee(event);
@@ -67,6 +69,21 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
         } catch (IllegalArgumentException failure) {
             throw invalid();
         }
+    }
+
+    private void timeTrackingEdited(DomainEventEnvelope event) {
+        JsonNode payload = event.payload();
+        String before = timeRange(payload, "previousStartedAt", "previousStoppedAt");
+        String after = timeRange(payload, "startedAt", "stoppedAt");
+        if (before.equals(after)) return;
+        String sessionId = uuid(payload, "sessionId").toString();
+        append(event, "TIME_TRACKING", "CHANGED",
+                value("TEXT", sessionId, before, null), value("TEXT", sessionId, after, null));
+    }
+
+    private static String timeRange(JsonNode payload, String startField, String stopField) {
+        return java.time.Instant.parse(text(payload, startField)) + "/"
+                + java.time.Instant.parse(text(payload, stopField));
     }
 
     private void created(DomainEventEnvelope event) {

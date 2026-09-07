@@ -48,7 +48,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "workitem.time_tracking_added", "workitem.time_tracking_edited", "workitem.time_tracking_deleted");
     private static final Set<String> ATTACHMENT_EVENTS = Set.of(
             "filestorage.attachment_available", "filestorage.attachment_deleted");
-    private static final Set<String> V2_EVENTS = Set.of(
+    private static final Set<String> V2_EVENTS = Set.of("workitem.time_tracking_edited",
             "workitem.content_created", "workitem.content_updated", "workitem.content_deleted",
             "workitem.work_item_created", "workitem.work_item_fields_changed",
             "workitem.work_item_status_changed", "workitem.work_item_deleted",

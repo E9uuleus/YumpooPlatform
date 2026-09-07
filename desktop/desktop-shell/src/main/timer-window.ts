@@ -21,7 +21,7 @@ export class TimerWindowController {
   }
 
   install(): void {
-    ipcMain.handle('yumpoo:timer:show', async event => { this.trusted(event, true); await this.show() })
+    ipcMain.handle('yumpoo:timer:show', async event => { this.trusted(event, true); await this.show(true) })
     ipcMain.handle('yumpoo:timer:project', async (event, projectId: unknown) => {
       this.trusted(event, true)
       if (!validTimerId(projectId)) throw new Error('INVALID_TIMER_PROJECT')
@@ -89,14 +89,20 @@ export class TimerWindowController {
     }, 30000)
   }
 
-  private async show(): Promise<void> {
-    if (this.window && !this.window.isDestroyed()) { this.window.showInactive(); return }
+  private async show(activate = false): Promise<void> {
+    const reveal = (window: BrowserWindow) => {
+      if (window.isMinimized()) window.restore()
+      if (activate) { window.show(); window.focus() }
+      else window.showInactive()
+    }
+    if (this.window && !this.window.isDestroyed()) { reveal(this.window); return }
     const window = new BrowserWindow({ ...createWindowOptions(this.preload, app.isPackaged), width: 380, height: 560, minWidth: 320, minHeight: 360, alwaysOnTop: true, title: 'Yumpoo 小计时器' })
     this.window = window
+    window.on('page-title-updated', event => event.preventDefault())
     installSecurityGuards(window.webContents, this.origin)
     window.on('close', event => { if (!this.approvedExit) { event.preventDefault(); window.hide() } })
     window.on('closed', () => { this.window = null })
-    window.once('ready-to-show', () => window.showInactive())
+    window.once('ready-to-show', () => reveal(window))
     await window.loadURL(new URL(`/timer${this.projectId ? `?projectId=${this.projectId}` : ''}`, this.origin).href)
   }
 }

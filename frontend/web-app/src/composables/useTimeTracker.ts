@@ -17,6 +17,12 @@ let cleanup: (() => void) | undefined
 const retries = new Map<string, string>()
 const listeners = new Set<() => void>()
 
+export function formatTrackingDuration(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(seconds / 3600)
+  return `${hours ? `${hours}h ` : ''}${Math.floor(seconds / 60) % 60}m ${seconds % 60}s`
+}
+
 export function formatDuration(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000))
   return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`

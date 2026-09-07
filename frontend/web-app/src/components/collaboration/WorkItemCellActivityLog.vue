@@ -17,6 +17,7 @@ import { formatChineseTimestamp, formatRelativeTime } from '../../design-system/
 import { workItemLabelColorStyle } from '../projects/workItemLabelColors'
 import InlineProblem from '../InlineProblem.vue'
 import YpAssignee from '../yp/YpAssignee.vue'
+import { companyDateTime } from '../timer/timeFormat'
 import YpEmptyState from '../yp/YpEmptyState.vue'
 
 const props = defineProps<{ workItemId: string }>()
@@ -52,7 +53,7 @@ const timeFacetOptions = computed(() => facets.value?.timeRanges.length
   : timeRangeOrder.map(value => ({ value, count: 0, selected: selectedTime.value === value })))
 const columnLabels: Record<string, string> = {
   WORK_ITEM_NAME: '工作项名称', ASSIGNEE: '处理人', STATUS: '状态', PRIORITY: '优先级',
-  DUE_DATE: '截止日期', CONTENT: '工作项类别',
+  DUE_DATE: '截止日期', CONTENT: '工作项类别', TIME_TRACKING: '计时器',
 }
 const activeFilterCount = computed(() => (selectedTime.value ? 1 : 0)
   + selectedActors.value.length + selectedColumns.value.length)
@@ -120,7 +121,13 @@ function clearFilters(): void {
   selectedColumns.value = []
 }
 
-function valueText(value: WorkItemCellActivityValue | null): string {
+function valueText(value: WorkItemCellActivityValue | null, column?: WorkItemCellActivityColumn): string {
+  if (column === 'TIME_TRACKING' && value) {
+    return value.displayName.split('/').map(time => {
+      const date = new Date(time)
+      return Number.isFinite(date.getTime()) ? companyDateTime(date, timezone.value).slice(0, 16).replace('T', ' ') : time
+    }).join(' – ')
+  }
   return value?.displayName ?? ''
 }
 
@@ -140,7 +147,10 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
 </script>
 
 <template>
-  <section class="cell-activity" aria-label="工作项动态">
+  <section
+    class="cell-activity"
+    aria-label="工作项动态"
+  >
     <el-alert
       v-if="historyStartedAt"
       class="cell-activity__cutover"
@@ -167,14 +177,27 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
             :aria-expanded="filterVisible"
           >
             <span>动态筛选<span v-if="activeFilterCount"> / {{ activeFilterCount }}</span></span>
-            <svg class="cell-activity__filter-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+            <svg
+              class="cell-activity__filter-chevron"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+            ><path d="m4 6 4 4 4-4" /></svg>
           </button>
         </template>
         <div class="activity-filter">
           <header class="activity-filter__header">
             <strong>筛选动态</strong>
-            <span class="activity-filter__summary" aria-live="polite">显示 {{ items.length }} 条动态</span>
-            <button type="button" :disabled="!hasFilters" @click="clearFilters">清除</button>
+            <span
+              class="activity-filter__summary"
+              aria-live="polite"
+            >显示 {{ items.length }} 条动态</span>
+            <button
+              type="button"
+              :disabled="!hasFilters"
+              @click="clearFilters"
+            >
+              清除
+            </button>
           </header>
           <div class="activity-filter__columns">
             <section>
@@ -186,7 +209,9 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
                 class="activity-filter__option"
                 :class="{ 'is-selected': selectedTime === option.value }"
                 @click="chooseTime(option.value)"
-              ><span>{{ timeLabels[option.value] }}</span><small>{{ option.count }}</small></button>
+              >
+                <span>{{ timeLabels[option.value] }}</span><small>{{ option.count }}</small>
+              </button>
             </section>
             <section>
               <h3>成员</h3>
@@ -198,7 +223,14 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
                 :class="{ 'is-selected': selectedActors.includes(option.userId) }"
                 :aria-label="`按成员 ${option.displayName} 筛选`"
                 @click="selectedActors = toggle(selectedActors, option.userId)"
-              ><span class="activity-filter__person"><yp-assignee :user-id="option.userId" :display-name="option.displayName" size="table" :show-name="false" /></span><small>{{ option.count }}</small></button>
+              >
+                <span class="activity-filter__person"><yp-assignee
+                  :user-id="option.userId"
+                  :display-name="option.displayName"
+                  size="table"
+                  :show-name="false"
+                /></span><small>{{ option.count }}</small>
+              </button>
             </section>
             <section>
               <h3>字段</h3>
@@ -209,67 +241,240 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
                 class="activity-filter__option"
                 :class="{ 'is-selected': selectedColumns.includes(option.value) }"
                 @click="selectedColumns = toggle(selectedColumns, option.value)"
-              ><span>{{ columnLabels[option.value] }}</span><small>{{ option.count }}</small></button>
+              >
+                <span>{{ columnLabels[option.value] }}</span><small>{{ option.count }}</small>
+              </button>
             </section>
           </div>
         </div>
       </el-popover>
-      <el-tooltip content="刷新动态" placement="top">
-        <el-button class="cell-activity__refresh" :loading="loading" aria-label="刷新动态" @click="load">
-          <refresh-icon v-if="!loading" class="cell-activity__refresh-icon" aria-hidden="true" />
+      <el-tooltip
+        content="刷新动态"
+        placement="top"
+      >
+        <el-button
+          class="cell-activity__refresh"
+          :loading="loading"
+          aria-label="刷新动态"
+          @click="load"
+        >
+          <refresh-icon
+            v-if="!loading"
+            class="cell-activity__refresh-icon"
+            aria-hidden="true"
+          />
         </el-button>
       </el-tooltip>
     </div>
 
-    <div v-if="error" class="cell-activity__error">
-      <inline-problem :problem="error" title="动态加载失败" />
-      <el-button type="primary" plain @click="load">重试</el-button>
+    <div
+      v-if="error"
+      class="cell-activity__error"
+    >
+      <inline-problem
+        :problem="error"
+        title="动态加载失败"
+      />
+      <el-button
+        type="primary"
+        plain
+        @click="load"
+      >
+        重试
+      </el-button>
     </div>
 
-    <div v-loading="loading" class="cell-activity__list" aria-live="polite">
-      <article v-for="item in items" :key="item.id" class="cell-entry">
-        <el-tooltip :content="formatChineseTimestamp(item.occurredAt, timezone)" placement="top">
-          <span class="cell-entry__time" tabindex="0">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></svg>
+    <div
+      v-loading="loading"
+      class="cell-activity__list"
+      aria-live="polite"
+    >
+      <article
+        v-for="item in items"
+        :key="item.id"
+        class="cell-entry"
+      >
+        <el-tooltip
+          :content="formatChineseTimestamp(item.occurredAt, timezone)"
+          placement="top"
+        >
+          <span
+            class="cell-entry__time"
+            tabindex="0"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            ><circle
+              cx="12"
+              cy="12"
+              r="8"
+            /><path d="M12 8v4l3 2" /></svg>
             {{ formatRelativeTime(item.occurredAt, now) }}
           </span>
         </el-tooltip>
         <span class="cell-entry__actor">
-          <yp-assignee :user-id="item.actor.userId" :display-name="item.actor.displayName" size="table" :show-name="false" />
+          <yp-assignee
+            :user-id="item.actor.userId"
+            :display-name="item.actor.displayName"
+            size="table"
+            :show-name="false"
+          />
           <strong>{{ item.actor.displayName }}</strong>
         </span>
         <span class="cell-entry__column">
-          <svg v-if="item.column === 'ASSIGNEE'" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3.5 18c.7-3 2.5-4.5 5.5-4.5s4.8 1.5 5.5 4.5M16 8h5M18.5 5.5v5" /></svg>
-          <svg v-else-if="item.column === 'DUE_DATE'" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>
-          <svg v-else-if="item.column === 'STATUS'" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="m8.5 12 2.2 2.2 4.8-5" /></svg>
-          <svg v-else-if="item.column === 'PRIORITY'" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V4h10l2 3-2 3H6" /></svg>
-          <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM8 9h8M8 13h6" /></svg>
+          <svg
+            v-if="item.column === 'ASSIGNEE'"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          ><circle
+            cx="9"
+            cy="8"
+            r="3"
+          /><path d="M3.5 18c.7-3 2.5-4.5 5.5-4.5s4.8 1.5 5.5 4.5M16 8h5M18.5 5.5v5" /></svg>
+          <svg
+            v-else-if="item.column === 'DUE_DATE'"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          ><rect
+            x="4"
+            y="5"
+            width="16"
+            height="15"
+            rx="2"
+          /><path d="M8 3v4M16 3v4M4 10h16" /></svg>
+          <svg
+            v-else-if="item.column === 'STATUS'"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          ><circle
+            cx="12"
+            cy="12"
+            r="8"
+          /><path d="m8.5 12 2.2 2.2 4.8-5" /></svg>
+          <svg
+            v-else-if="item.column === 'PRIORITY'"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          ><path d="M6 20V4h10l2 3-2 3H6" /></svg>
+          <svg
+            v-else
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          ><path d="M5 5h14v14H5zM8 9h8M8 13h6" /></svg>
           {{ columnLabels[item.column] }}
         </span>
         <div class="cell-entry__change">
-          <span v-if="item.changeType === 'CREATED'" class="cell-entry__verb">新增</span>
-          <span v-else-if="item.changeType === 'ADDED' && !isLabelAddition(item)" class="cell-entry__verb">新增</span>
-          <span v-else-if="item.changeType === 'REMOVED'" class="cell-entry__verb cell-entry__verb--removed">移除</span>
+          <span
+            v-if="item.changeType === 'CREATED'"
+            class="cell-entry__verb"
+          >新增</span>
+          <span
+            v-else-if="item.changeType === 'ADDED' && !isLabelAddition(item)"
+            class="cell-entry__verb"
+          >新增</span>
+          <span
+            v-else-if="item.changeType === 'REMOVED'"
+            class="cell-entry__verb cell-entry__verb--removed"
+          >移除</span>
 
           <template v-if="item.changeType === 'REMOVED'">
-            <yp-assignee v-if="item.beforeValue?.type === 'MEMBER'" :user-id="item.beforeValue.referenceId" :display-name="item.beforeValue.displayName" size="table" />
-            <span v-else-if="item.beforeValue?.type === 'LABEL'" class="cell-entry__label" :title="valueText(item.beforeValue)" :style="workItemLabelColorStyle(item.beforeValue.colorToken ?? undefined)">{{ valueText(item.beforeValue) }}</span>
-            <span v-else class="cell-entry__value" :title="valueText(item.beforeValue)">{{ valueText(item.beforeValue) }}</span>
+            <yp-assignee
+              v-if="item.beforeValue?.type === 'MEMBER'"
+              :user-id="item.beforeValue.referenceId"
+              :display-name="item.beforeValue.displayName"
+              size="table"
+            />
+            <span
+              v-else-if="item.beforeValue?.type === 'LABEL'"
+              class="cell-entry__label"
+              :title="valueText(item.beforeValue, item.column)"
+              :style="workItemLabelColorStyle(item.beforeValue.colorToken ?? undefined)"
+            >{{ valueText(item.beforeValue, item.column) }}</span>
+            <span
+              v-else
+              class="cell-entry__value"
+              :title="valueText(item.beforeValue, item.column)"
+            >{{ valueText(item.beforeValue, item.column) }}</span>
           </template>
           <template v-else-if="item.changeType === 'CHANGED' || isLabelAddition(item)">
-            <span v-if="isLabelAddition(item)" class="cell-entry__label cell-entry__label--empty" title="未设置">-</span>
-            <yp-assignee v-else-if="item.beforeValue?.type === 'MEMBER'" :user-id="item.beforeValue.referenceId" :display-name="item.beforeValue.displayName" size="table" />
-            <span v-else-if="item.beforeValue?.type === 'LABEL'" class="cell-entry__label" :title="valueText(item.beforeValue)" :style="workItemLabelColorStyle(item.beforeValue.colorToken ?? undefined)">{{ valueText(item.beforeValue) }}</span>
-            <span v-else class="cell-entry__value cell-entry__old" :title="valueText(item.beforeValue)">{{ valueText(item.beforeValue) }}</span>
-            <svg class="cell-entry__arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M15 8l4 4-4 4" /></svg>
-            <yp-assignee v-if="item.afterValue?.type === 'MEMBER'" :user-id="item.afterValue.referenceId" :display-name="item.afterValue.displayName" size="table" />
-            <span v-else-if="item.afterValue?.type === 'LABEL'" class="cell-entry__label" :title="valueText(item.afterValue)" :style="workItemLabelColorStyle(item.afterValue.colorToken ?? undefined)">{{ valueText(item.afterValue) }}</span>
-            <span v-else class="cell-entry__value" :title="valueText(item.afterValue)">{{ valueText(item.afterValue) }}</span>
+            <span
+              v-if="isLabelAddition(item)"
+              class="cell-entry__label cell-entry__label--empty"
+              title="未设置"
+            >-</span>
+            <yp-assignee
+              v-else-if="item.beforeValue?.type === 'MEMBER'"
+              :user-id="item.beforeValue.referenceId"
+              :display-name="item.beforeValue.displayName"
+              size="table"
+            />
+            <span
+              v-else-if="item.beforeValue?.type === 'LABEL'"
+              class="cell-entry__label"
+              :title="valueText(item.beforeValue, item.column)"
+              :style="workItemLabelColorStyle(item.beforeValue.colorToken ?? undefined)"
+            >{{ valueText(item.beforeValue, item.column) }}</span>
+            <el-tooltip
+              v-else-if="item.column === 'TIME_TRACKING'"
+              :content="valueText(item.beforeValue, item.column)"
+              placement="top"
+            >
+              <span class="cell-entry__value cell-entry__old">{{ valueText(item.beforeValue, item.column) }}</span>
+            </el-tooltip>
+            <span
+              v-else
+              class="cell-entry__value cell-entry__old"
+              :title="valueText(item.beforeValue, item.column)"
+            >{{ valueText(item.beforeValue, item.column) }}</span>
+            <svg
+              class="cell-entry__arrow"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            ><path d="M5 12h14M15 8l4 4-4 4" /></svg>
+            <yp-assignee
+              v-if="item.afterValue?.type === 'MEMBER'"
+              :user-id="item.afterValue.referenceId"
+              :display-name="item.afterValue.displayName"
+              size="table"
+            />
+            <span
+              v-else-if="item.afterValue?.type === 'LABEL'"
+              class="cell-entry__label"
+              :title="valueText(item.afterValue, item.column)"
+              :style="workItemLabelColorStyle(item.afterValue.colorToken ?? undefined)"
+            >{{ valueText(item.afterValue, item.column) }}</span>
+            <el-tooltip
+              v-else-if="item.column === 'TIME_TRACKING'"
+              :content="valueText(item.afterValue, item.column)"
+              placement="top"
+            >
+              <span class="cell-entry__value">{{ valueText(item.afterValue, item.column) }}</span>
+            </el-tooltip>
+            <span
+              v-else
+              class="cell-entry__value"
+              :title="valueText(item.afterValue, item.column)"
+            >{{ valueText(item.afterValue, item.column) }}</span>
           </template>
           <template v-else>
-            <yp-assignee v-if="item.afterValue?.type === 'MEMBER'" :user-id="item.afterValue.referenceId" :display-name="item.afterValue.displayName" size="table" />
-            <span v-else-if="item.afterValue?.type === 'LABEL'" class="cell-entry__label" :title="valueText(item.afterValue)" :style="workItemLabelColorStyle(item.afterValue.colorToken ?? undefined)">{{ valueText(item.afterValue) }}</span>
-            <span v-else class="cell-entry__value" :title="valueText(item.afterValue)">{{ valueText(item.afterValue) }}</span>
+            <yp-assignee
+              v-if="item.afterValue?.type === 'MEMBER'"
+              :user-id="item.afterValue.referenceId"
+              :display-name="item.afterValue.displayName"
+              size="table"
+            />
+            <span
+              v-else-if="item.afterValue?.type === 'LABEL'"
+              class="cell-entry__label"
+              :title="valueText(item.afterValue, item.column)"
+              :style="workItemLabelColorStyle(item.afterValue.colorToken ?? undefined)"
+            >{{ valueText(item.afterValue, item.column) }}</span>
+            <span
+              v-else
+              class="cell-entry__value"
+              :title="valueText(item.afterValue, item.column)"
+            >{{ valueText(item.afterValue, item.column) }}</span>
           </template>
         </div>
       </article>
@@ -280,7 +485,14 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
         :description="hasFilters ? '调整或清除筛选条件后再试。' : '切点后的字段操作会显示在这里。'"
       />
     </div>
-    <el-button v-if="nextCursor" class="cell-activity__older" :loading="loadingOlder" @click="loadOlder">加载更早动态</el-button>
+    <el-button
+      v-if="nextCursor"
+      class="cell-activity__older"
+      :loading="loadingOlder"
+      @click="loadOlder"
+    >
+      加载更早动态
+    </el-button>
   </section>
 </template>
 

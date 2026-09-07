@@ -3518,7 +3518,7 @@ components:
 
     WorkItemCellActivityColumn:
       type: string
-      enum: [WORK_ITEM_NAME, ASSIGNEE, STATUS, PRIORITY, DUE_DATE, CONTENT]
+      enum: [WORK_ITEM_NAME, ASSIGNEE, STATUS, PRIORITY, DUE_DATE, CONTENT, TIME_TRACKING]
 
     WorkItemCellActivityChangeType:
       type: string

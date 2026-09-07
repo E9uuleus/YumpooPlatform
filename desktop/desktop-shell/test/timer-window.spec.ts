@@ -16,6 +16,10 @@ vi.mock('electron', () => ({
     webContents = { mainFrame: { url: 'https://yumpoo.example/timer' }, send: vi.fn() }
     isDestroyed = () => false
     showInactive = vi.fn()
+    show = vi.fn()
+    focus = vi.fn()
+    isMinimized = vi.fn(() => false)
+    restore = vi.fn()
     hide = vi.fn()
     setAlwaysOnTop = vi.fn()
     loadURL = vi.fn(async () => undefined)
@@ -56,10 +60,15 @@ describe('desktop timer window', () => {
     await mocks.handlers.get('yumpoo:timer:project')?.(event, project)
     expect(mocks.windows).toHaveLength(1)
     expect(mocks.windows[0]?.options).toMatchObject({ alwaysOnTop: true, show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'yumpoo-authenticated' } })
-    const mini = mocks.windows[0]?.instance as { showInactive: ReturnType<typeof vi.fn> }
+    const mini = mocks.windows[0]?.instance as { showInactive: ReturnType<typeof vi.fn>, show: ReturnType<typeof vi.fn>, focus: ReturnType<typeof vi.fn>, isMinimized: ReturnType<typeof vi.fn>, restore: ReturnType<typeof vi.fn> }
     expect(mini.showInactive).not.toHaveBeenCalled()
     await mocks.handlers.get('yumpoo:timer:show')?.(event)
-    expect(mini.showInactive).toHaveBeenCalledOnce()
+    expect(mini.show).toHaveBeenCalledOnce()
+    expect(mini.focus).toHaveBeenCalledOnce()
+    expect(mini.showInactive).not.toHaveBeenCalled()
+    mini.isMinimized.mockReturnValue(true)
+    await mocks.handlers.get('yumpoo:timer:show')?.(event)
+    expect(mini.restore).toHaveBeenCalledOnce()
   })
   it('deduplicates exit and only quits after an acknowledged affirmative response', async () => {
     const { events, main, event } = setup()

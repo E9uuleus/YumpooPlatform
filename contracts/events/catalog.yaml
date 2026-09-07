@@ -454,3 +454,10 @@ events:
       - examples/workitem.time-tracking-deleted-v1.json
     invalidExamples:
       - examples/workitem.time-tracking-deleted-v1.invalid.json
+  - eventType: workitem.time_tracking_edited
+    eventVersion: 2
+    schema: schemas/workitem.time-tracking-edited-v2.schema.json
+    validExamples:
+      - examples/workitem.time-tracking-edited-v2.json
+    invalidExamples:
+      - examples/workitem.time-tracking-edited-v2.invalid.json

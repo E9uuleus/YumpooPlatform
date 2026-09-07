@@ -32,6 +32,7 @@ const EXPECTED_ASAR_ENTRIES = new Set([
   'dist/main/index.js',
   'dist/main/protocol-client.js',
   'dist/main/security-guards.js',
+  'dist/main/timer-window.js',
   'dist/main/url-policy.js',
   'dist/main/window-policy.js',
   'dist/preload',

@@ -492,11 +492,11 @@ class WorkItemHttpIT {
         assertThat(manual.path("durationMs").asLong()).isEqualTo(26 * 3600000L);
         assertThat(mutate("POST", path, member, body, null, UUID.randomUUID()).statusCode()).isEqualTo(422);
         String record = path + "/" + manual.path("id").asText();
-        assertThat(mutate("PATCH", record, member, body, manual.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(422);
-        String corrected = "{\"startedAt\":\"2025-01-01T23:00:00Z\",\"stoppedAt\":\"2025-01-03T02:00:00Z\",\"reason\":\"修正结束时间\"}";
+        String corrected = "{\"startedAt\":\"2025-01-01T23:00:00Z\",\"stoppedAt\":\"2025-01-03T02:00:00Z\"}";
         assertThat(mutate("PATCH", record, owner, corrected, manual.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(403);
         JsonNode edited = ok(mutate("PATCH", record, member, corrected, manual.path("etag").asText(), UUID.randomUUID()));
         assertThat(edited.path("durationMs").asLong()).isEqualTo(27 * 3600000L);
+        assertThat(mutate("DELETE", record, member, "{}", edited.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(422);
         ok(mutate("DELETE", record, member, "{\"reason\":\"验收删除\"}", edited.path("etag").asText(), UUID.randomUUID()));
         assertThat(ok(get(path, member)).path("summary").path("totalDurationMs").asLong()).isZero();
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.security_audit_event WHERE action LIKE 'TIME_TRACKING_%'").query(Long.class).single()).isEqualTo(3);

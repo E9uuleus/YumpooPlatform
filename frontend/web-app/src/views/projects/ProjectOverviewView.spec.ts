@@ -181,7 +181,7 @@ describe('项目级工作项首页', () => {
     await flushPromises()
 
     const labels = wrapper.findAll('.el-table__header th').map(node => node.text()).filter(Boolean)
-    expect(labels).toEqual(['工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '计时', '最后更新时间'])
+    expect(labels).toEqual(['工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '时长追踪', '最后更新时间'])
     for (const [key, width] of [['status', 96], ['priority', 90], ['content', 110]] as const) {
       const column = wrapper.findAllComponents({ name: 'ElTableColumn' })
         .find(candidate => candidate.props('prop') === key)
@@ -297,7 +297,7 @@ describe('项目级工作项首页', () => {
     expect(movableHeaders).toHaveLength(7)
     expect(wrapper.findAll('.monday-column-resize-handle')).toHaveLength(8)
     expect(wrapper.get('th.monday-title-column .monday-title-column-resize-handle').attributes('data-column-key')).toBe('title')
-    expect(movableHeaders.map(header => header.text())).toEqual(['处理人', '状态', '优先级', '工作项类别', '截止日期', '计时', '最后更新时间'])
+    expect(movableHeaders.map(header => header.text())).toEqual(['处理人', '状态', '优先级', '工作项类别', '截止日期', '时长追踪', '最后更新时间'])
     expect(wrapper.get('th.monday-title-column').classes()).not.toContain('monday-movable-column-header')
 
     const widths = [90, 96, 90, 110, 140, 170]
@@ -628,7 +628,7 @@ describe('项目级工作项首页', () => {
 
     expect(wrapper.findAll('.monday-column-quick-sort')).toHaveLength(8)
     expect(wrapper.findAll('.monday-column-quick-sort__label').map(node => node.text())).toEqual([
-      '工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '计时', '最后更新时间',
+      '工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '时长追踪', '最后更新时间',
     ])
     expect(wrapper.findAll('.sort-button .asc-icon')).toHaveLength(8)
     expect(wrapper.findAll('.sort-button .desc-icon')).toHaveLength(8)
