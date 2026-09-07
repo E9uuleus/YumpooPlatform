@@ -28,6 +28,13 @@
       "newSha256": "c50d5f90789e19cdc7f3af0b6a4369ed36cff2f8b0e549bae7ca4683c55a34d7",
       "reason": "仅扩大主项/子项排序正则白名单（TIME_TRACKING，子项补齐 CONTENT）；旧值全部保留。恢复两条旧正则的临时副本已通过完整 openapi-diff，精确哈希限定正则包含关系误报例外。",
       "agentNote": ".agents/notes/implemented/architecture/2026-09-07-work-item-time-tracking.md"
+    },
+    {
+      "id": "2026-09-07-time-tracking-historical-baseline",
+      "oldSha256": "673f9f063f85c7ceed2f7230f38160520b506ac5df7a28e3e6551a60950e8f70",
+      "newSha256": "c50d5f90789e19cdc7f3af0b6a4369ed36cff2f8b0e549bae7ca4683c55a34d7",
+      "reason": "继承已记录的类别重构与两级评论历史兼容例外，并叠加计时排序白名单扩展；精确连接同一历史基线与当前规范，不增加其他破坏变更。",
+      "agentNote": ".agents/notes/implemented/architecture/2026-09-07-work-item-time-tracking.md"
     }
   ]
 }
