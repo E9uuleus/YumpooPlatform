@@ -181,7 +181,7 @@ describe('项目级工作项首页', () => {
     await flushPromises()
 
     const labels = wrapper.findAll('.el-table__header th').map(node => node.text()).filter(Boolean)
-    expect(labels).toEqual(['工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '最后更新时间'])
+    expect(labels).toEqual(['工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '计时', '最后更新时间'])
     for (const [key, width] of [['status', 96], ['priority', 90], ['content', 110]] as const) {
       const column = wrapper.findAllComponents({ name: 'ElTableColumn' })
         .find(candidate => candidate.props('prop') === key)
@@ -294,10 +294,10 @@ describe('项目级工作项首页', () => {
       tableColumnDragStyle: (columnKey?: string) => Record<string, string | number>
     }
     const movableHeaders = wrapper.findAll<HTMLTableCellElement>('th.monday-movable-column-header')
-    expect(movableHeaders).toHaveLength(6)
-    expect(wrapper.findAll('.monday-column-resize-handle')).toHaveLength(7)
+    expect(movableHeaders).toHaveLength(7)
+    expect(wrapper.findAll('.monday-column-resize-handle')).toHaveLength(8)
     expect(wrapper.get('th.monday-title-column .monday-title-column-resize-handle').attributes('data-column-key')).toBe('title')
-    expect(movableHeaders.map(header => header.text())).toEqual(['处理人', '状态', '优先级', '工作项类别', '截止日期', '最后更新时间'])
+    expect(movableHeaders.map(header => header.text())).toEqual(['处理人', '状态', '优先级', '工作项类别', '截止日期', '计时', '最后更新时间'])
     expect(wrapper.get('th.monday-title-column').classes()).not.toContain('monday-movable-column-header')
 
     const widths = [90, 96, 90, 110, 140, 170]
@@ -392,7 +392,7 @@ describe('项目级工作项首页', () => {
       .map(cell => cell.classes().find(name => name.startsWith('monday-column--'))).slice(0, 3))
       .toEqual(['monday-column--assignee', 'monday-column--priority', 'monday-column--status'])
     expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}').order)
-      .toEqual(['assignee', 'priority', 'status', 'content', 'dueDate', 'updatedAt'])
+      .toEqual(['assignee', 'priority', 'status', 'content', 'dueDate', 'timeTracking', 'updatedAt'])
   })
 
   it('换列时保留滚动位置、勾选项和已展开子表中的输入', async () => {
@@ -492,6 +492,16 @@ describe('项目级工作项首页', () => {
     expect(state.listProjectWorkItems).toHaveBeenCalledTimes(1)
   })
 
+  it('恢复旧列偏好时保留已有顺序并追加计时列', async () => {
+    const order = ['updatedAt', 'content', 'assignee', 'status', 'priority', 'dueDate']
+    localStorage.setItem('yumpoo:project-work-items:table:v1', JSON.stringify({ version: 1, order, subitemOrder: order }))
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as { movableColumnOrder: string[]; subitemMovableColumnOrder: string[] }
+    expect(view.movableColumnOrder).toEqual([...order, 'timeTracking'])
+    expect(view.subitemMovableColumnOrder).toEqual([...order, 'timeTracking'])
+  })
+
   it('主表与子工作项分别持久化列顺序', async () => {
     const wrapper = mountView()
     await flushPromises()
@@ -508,8 +518,8 @@ describe('项目级工作项首页', () => {
     expect(view.subitemMovableColumnOrder.slice(0, 3)).toEqual(['assignee', 'priority', 'status'])
     expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}'))
       .toMatchObject({
-        order: ['assignee', 'status', 'priority', 'content', 'dueDate', 'updatedAt'],
-        subitemOrder: ['assignee', 'priority', 'status', 'content', 'dueDate', 'updatedAt'],
+        order: ['assignee', 'status', 'priority', 'content', 'dueDate', 'timeTracking', 'updatedAt'],
+        subitemOrder: ['assignee', 'priority', 'status', 'content', 'dueDate', 'timeTracking', 'updatedAt'],
       })
   })
 
@@ -616,12 +626,12 @@ describe('项目级工作项首页', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(wrapper.findAll('.monday-column-quick-sort')).toHaveLength(7)
+    expect(wrapper.findAll('.monday-column-quick-sort')).toHaveLength(8)
     expect(wrapper.findAll('.monday-column-quick-sort__label').map(node => node.text())).toEqual([
-      '工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '最后更新时间',
+      '工作项名称', '处理人', '状态', '优先级', '工作项类别', '截止日期', '计时', '最后更新时间',
     ])
-    expect(wrapper.findAll('.sort-button .asc-icon')).toHaveLength(7)
-    expect(wrapper.findAll('.sort-button .desc-icon')).toHaveLength(7)
+    expect(wrapper.findAll('.sort-button .asc-icon')).toHaveLength(8)
+    expect(wrapper.findAll('.sort-button .desc-icon')).toHaveLength(8)
     expect(wrapper.find('.clear-button-wrapper').exists()).toBe(false)
     expect(wrapper.findAllComponents({ name: 'ElTooltip' }).map(component => component.props('content')))
       .toContain('按工作项名称排序')

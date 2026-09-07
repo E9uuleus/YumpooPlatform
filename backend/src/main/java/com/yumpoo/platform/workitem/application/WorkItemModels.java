@@ -50,7 +50,19 @@ public final class WorkItemModels {
             String statusCategory, String priority, UUID assigneeUserId,
             String assigneeDisplayName, LocalDate dueDate, String dueTime, Instant completedAt,
             long rowVersion, String etag,
-            WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt) {}
+            WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt, TimeTrackingModels.TimeTrackingSummary timeTracking) {
+        public ProjectWorkItemListItem(UUID id, UUID projectId, UUID contentId,
+            String contentName, String contentColorToken, String itemNo, String title, String statusCode,
+            String statusCategory, String priority, UUID assigneeUserId,
+            String assigneeDisplayName, LocalDate dueDate, String dueTime, Instant completedAt,
+            long rowVersion, String etag,
+            WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt) {
+            this(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,updatedAt,null);
+        }
+        public ProjectWorkItemListItem withTime(TimeTrackingModels.TimeTrackingSummary summary) {
+            return new ProjectWorkItemListItem(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,updatedAt,summary);
+        }
+    }
 
     public record WorkItemSubitemList(List<ProjectWorkItemListItem> items) {
         public WorkItemSubitemList { items = List.copyOf(items); }

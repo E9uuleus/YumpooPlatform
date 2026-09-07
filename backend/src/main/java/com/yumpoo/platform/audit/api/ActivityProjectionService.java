@@ -44,6 +44,8 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "workitem.work_item_parent_changed", "workitem.work_item_update_published",
             "workitem.work_item_update_edited", "workitem.work_item_update_deleted",
             "workitem.work_item_update_pin_changed");
+    private static final Set<String> TIME_EVENTS = Set.of("workitem.time_tracking_started", "workitem.time_tracking_stopped",
+            "workitem.time_tracking_added", "workitem.time_tracking_edited", "workitem.time_tracking_deleted");
     private static final Set<String> ATTACHMENT_EVENTS = Set.of(
             "filestorage.attachment_available", "filestorage.attachment_deleted");
     private static final Set<String> V2_EVENTS = Set.of(
@@ -85,6 +87,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             else if (PROJECT_EVENTS.contains(event.eventType())) appendProject(event);
             else if (CONTENT_EVENTS.contains(event.eventType())) appendContent(event);
             else if (WORK_ITEM_EVENTS.contains(event.eventType())) appendWorkItem(event);
+            else if (TIME_EVENTS.contains(event.eventType())) appendTimeTracking(event);
             else if (ATTACHMENT_EVENTS.contains(event.eventType())) appendAttachment(event);
             else throw invalid();
         } catch (OutboxConsumerException failure) {
@@ -92,6 +95,13 @@ public class ActivityProjectionService implements OutboxEventConsumer {
         } catch (IllegalArgumentException failure) {
             throw invalid();
         }
+    }
+
+    private void appendTimeTracking(DomainEventEnvelope event) {
+        UUID itemId=uuid(event.payload(),"workItemId");
+        String ref=context.workItem(event.companyId(),itemId).map(WorkItemReference::displayRef).orElse("已删除工作项");
+        append(event,ActivityAudienceType.PROJECT,uuid(event.payload(),"projectId"),"WORK_ITEM",itemId,ref,
+                template(event.eventType()),safeRef(ref),itemId,null);
     }
 
     private void appendProduct(DomainEventEnvelope event) {
@@ -279,7 +289,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     private static Set<String> allEvents() {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         result.addAll(PRODUCT_EVENTS); result.addAll(PROJECT_EVENTS); result.addAll(CONTENT_EVENTS);
-        result.addAll(WORK_ITEM_EVENTS); result.addAll(ATTACHMENT_EVENTS);
+        result.addAll(TIME_EVENTS); result.addAll(WORK_ITEM_EVENTS); result.addAll(ATTACHMENT_EVENTS);
         return result;
     }
 

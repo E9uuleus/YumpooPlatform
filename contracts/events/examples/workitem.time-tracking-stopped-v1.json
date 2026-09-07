@@ -1,0 +1,27 @@
+{
+  "eventId": "35000000-0000-4000-8000-000000000001",
+  "eventType": "workitem.time_tracking_stopped",
+  "eventVersion": 1,
+  "occurredAt": "2026-08-24T10:00:00Z",
+  "aggregateType": "TimeTrackingSession",
+  "aggregateId": "35000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": {
+    "type": "USER",
+    "userId": "35000000-0000-4000-8000-000000000003"
+  },
+  "requestId": "m2-16-update-publish",
+  "correlationId": "m2-16-update-publish",
+  "causationId": null,
+  "payload": {
+    "projectId": "35000000-0000-4000-8000-000000000002",
+    "workItemId": "35000000-0000-4000-8000-000000000002",
+    "sessionId": "35000000-0000-4000-8000-000000000002",
+    "userId": "35000000-0000-4000-8000-000000000002",
+    "startedAt": "2026-08-24T09:00:00Z",
+    "stoppedAt": "2026-08-24T10:00:00Z",
+    "source": "TIMER",
+    "rowVersion": 0
+  }
+}

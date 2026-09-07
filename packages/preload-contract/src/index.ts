@@ -32,4 +32,18 @@ export interface DesktopAuthBridge {
 export interface DesktopBridge {
   readonly client: 'electron'
   readonly auth: DesktopAuthBridge
+  readonly timer: DesktopTimerBridge
+}
+
+export interface DesktopTimerBridge {
+  show(): Promise<void>
+  setProject(projectId: string): Promise<void>
+  setAlwaysOnTop(value: boolean): Promise<void>
+  refresh(): Promise<void>
+  onRefresh(listener: () => void): () => void
+  onProject(listener: (projectId: string) => void): () => void
+  onExitRequest(listener: (requestId: string) => void): () => void
+  acknowledgeExit(requestId: string): Promise<void>
+  completeExit(requestId: string, allow: boolean): Promise<void>
+  openWorkItem(projectId: string, workItemId: string): Promise<void>
 }

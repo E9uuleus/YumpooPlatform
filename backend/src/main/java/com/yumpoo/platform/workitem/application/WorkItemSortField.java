@@ -1,6 +1,7 @@
 package com.yumpoo.platform.workitem.application;
 
 public enum WorkItemSortField {
+    TIME_TRACKING,
     CONTENT,
     ITEM_NO,
     TITLE,

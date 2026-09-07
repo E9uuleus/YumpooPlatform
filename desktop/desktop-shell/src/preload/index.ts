@@ -3,6 +3,7 @@ import type {
   DesktopAuthPhase,
   DesktopAuthStatus,
   DesktopBridge,
+  DesktopTimerBridge,
 } from '@yumpoo/preload-contract'
 import { contextBridge, ipcRenderer } from 'electron'
 
@@ -78,9 +79,38 @@ const desktopAuth = Object.freeze({
   },
 })
 
+const desktopTimer: DesktopTimerBridge = Object.freeze({
+  show: async () => { await ipcRenderer.invoke('yumpoo:timer:show') },
+  setProject: async (id: string) => { await ipcRenderer.invoke('yumpoo:timer:project', id) },
+  setAlwaysOnTop: async (value: boolean) => { await ipcRenderer.invoke('yumpoo:timer:pin', value) },
+  refresh: async () => { await ipcRenderer.invoke('yumpoo:timer:refresh') },
+  onRefresh: (listener: () => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
+    const wrapped = () => { listener() }
+    ipcRenderer.on('yumpoo:timer:changed', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:timer:changed', wrapped)
+  },
+  onProject: (listener: (id: string) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
+    const wrapped = (_event: unknown, value: unknown) => { if (typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value)) listener(value) }
+    ipcRenderer.on('yumpoo:timer:project-changed', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:timer:project-changed', wrapped)
+  },
+  onExitRequest: (listener: (id: string) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
+    const wrapped = (_event: unknown, value: unknown) => { if (typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value)) listener(value) }
+    ipcRenderer.on('yumpoo:timer:exit-request', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:timer:exit-request', wrapped)
+  },
+  acknowledgeExit: async (id: string) => { await ipcRenderer.invoke('yumpoo:timer:exit-received', id) },
+  completeExit: async (id: string, allow: boolean) => { await ipcRenderer.invoke('yumpoo:timer:exit-complete', id, allow) },
+  openWorkItem: async (project: string, item: string) => { await ipcRenderer.invoke('yumpoo:timer:open-item', project, item) },
+})
+
 const desktopBridge: DesktopBridge = Object.freeze({
   client: 'electron',
   auth: desktopAuth,
+  timer: desktopTimer,
 })
 
 contextBridge.exposeInMainWorld('yumpooDesktop', desktopBridge)

@@ -12,6 +12,8 @@ servers:
   - url: /api/v1
     description: Yumpoo v1 business API
 tags:
+  - name: TimeTracking
+    description: 工作项原始计时与本人跨端计时器。
   - name: Authentication
     description: Web 企微登录、会话退出与当前主体查询。
   - name: IdentityGovernance
@@ -39,6 +41,306 @@ tags:
   - name: Activity
     description: Project 与 Work Item 的追加式安全动态时间线。
 paths:
+  /me/time-tracker:
+    get:
+      tags: [TimeTracking]
+      operationId: getCurrentTimeTracker
+      summary: getCurrentTimeTracker
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentTimeTracker' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /me/time-tracker/start:
+    post:
+      tags: [TimeTracking]
+      operationId: startTimeTracker
+      summary: startTimeTracker
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeTrackingCommand' }
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentTimeTracker' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /me/time-tracker/switch:
+    post:
+      tags: [TimeTracking]
+      operationId: switchTimeTracker
+      summary: switchTimeTracker
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeTrackingCommand' }
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentTimeTracker' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /me/time-tracker/stop:
+    post:
+      tags: [TimeTracking]
+      operationId: stopTimeTracker
+      summary: stopTimeTracker
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeTrackingCommand' }
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentTimeTracker' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /projects/{projectId}/time-tracking-summaries:
+    get:
+      tags: [TimeTracking]
+      operationId: getTimeTrackingSummaries
+      summary: getTimeTrackingSummaries
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: workItemId
+          in: query
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 100
+            items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeTrackingSummaryPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-items/{workItemId}/time-sessions:
+    get:
+      tags: [TimeTracking]
+      operationId: listTimeSessions
+      summary: listTimeSessions
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 256 }
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeTrackingSessionPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+    post:
+      tags: [TimeTracking]
+      operationId: createTimeSession
+      summary: createTimeSession
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeTrackingCommand' }
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeTrackingSession' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-items/{workItemId}/time-sessions/{sessionId}:
+    patch:
+      tags: [TimeTracking]
+      operationId: editTimeSession
+      summary: editTimeSession
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeTrackingCommand' }
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeTrackingSession' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+    delete:
+      tags: [TimeTracking]
+      operationId: deleteTimeSession
+      summary: deleteTimeSession
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeTrackingCommand' }
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeTrackingSession' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /company:
     get:
       tags: [IdentityAdministration]
@@ -1534,9 +1836,18 @@ paths:
           in: path
           required: true
           schema: { $ref: '#/components/schemas/Uuid' }
+        - name: timeTrackingState
+          in: query
+          schema: { $ref: '#/components/schemas/TimeTrackingState' }
+        - name: timeTrackingMinMs
+          in: query
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: timeTrackingMaxMs
+          in: query
+          schema: { type: integer, format: int64, minimum: 0 }
         - name: cursor
           in: query
-          schema: { type: string, minLength: 1, maxLength: 512 }
+          schema: { type: string, minLength: 1, maxLength: 2048 }
         - name: limit
           in: query
           schema: { type: integer, format: int32, minimum: 1, maximum: 100, default: 25 }
@@ -1597,7 +1908,7 @@ paths:
             maxItems: 3
             items:
               type: string
-              pattern: '^(CONTENT|ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
+              pattern: '^(TIME_TRACKING|CONTENT|ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
       responses:
         '200':
           description: 已先按 Project 可见性与筛选条件裁剪，再稳定分页。
@@ -1799,6 +2110,15 @@ paths:
       summary: 按当前项目查询上下文分页取得筛选选项及动态计数
       security: [{ sessionCookie: [] }]
       parameters:
+        - name: timeTrackingState
+          in: query
+          schema: { $ref: '#/components/schemas/TimeTrackingState' }
+        - name: timeTrackingMinMs
+          in: query
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: timeTrackingMaxMs
+          in: query
+          schema: { type: integer, format: int64, minimum: 0 }
         - $ref: '#/components/parameters/ProjectId'
         - name: field
           in: query
@@ -1886,6 +2206,15 @@ paths:
       description: 仅返回未删除的直接子项；未指定 sort 时按项目共享手工顺序返回。
       security: [{ sessionCookie: [] }]
       parameters:
+        - name: timeTrackingState
+          in: query
+          schema: { $ref: '#/components/schemas/TimeTrackingState' }
+        - name: timeTrackingMinMs
+          in: query
+          schema: { type: integer, format: int64, minimum: 0 }
+        - name: timeTrackingMaxMs
+          in: query
+          schema: { type: integer, format: int64, minimum: 0 }
         - name: parentWorkItemId
           in: path
           required: true
@@ -1899,7 +2228,7 @@ paths:
             maxItems: 3
             items:
               type: string
-              pattern: '^(ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
+              pattern: '^(TIME_TRACKING|CONTENT|ITEM_NO|TITLE|STATUS|PRIORITY|ASSIGNEE|REPORTER|TIMELINE_START_DATE|TIMELINE_END_DATE|DUE_DATE|UPDATED_AT),(ASC|DESC)$'
       responses:
         '200':
           description: 当前调用人可见的直接子项。
@@ -3038,6 +3367,103 @@ components:
       description: 服务端签发的 HttpOnly、Secure、SameSite=Lax Web Session Cookie。
 
   schemas:
+    TimeTrackingState:
+      type: string
+      enum: [RUNNING, STOPPED, EMPTY]
+    TimeTrackingCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        workItemId: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        startedAt: { type: string, format: date-time }
+        stoppedAt: { type: string, format: date-time }
+        reason: { type: string, maxLength: 500 }
+    TimeTrackingSession:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, workItemId, userId, displayName, startedAt, stoppedAt, source, durationMs, rowVersion, etag, canEdit, deleted, changeReason]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid, nullable: true }
+        workItemId: { type: string, format: uuid, nullable: true }
+        userId: { type: string, format: uuid }
+        displayName: { type: string }
+        startedAt: { type: string, format: date-time }
+        stoppedAt: { type: string, format: date-time, nullable: true }
+        source: { type: string, enum: [TIMER, MANUAL] }
+        durationMs: { type: integer, format: int64, minimum: 0 }
+        rowVersion: { type: integer, format: int64, minimum: 0 }
+        etag: { type: string }
+        canEdit: { type: boolean }
+        deleted: { type: boolean }
+        changeReason: { type: string, nullable: true }
+    TimeTrackingRunningSession:
+      type: object
+      additionalProperties: false
+      required: [userId, startedAt]
+      properties:
+        userId: { type: string, format: uuid }
+        startedAt: { type: string, format: date-time }
+    TimeTrackingSummary:
+      type: object
+      additionalProperties: false
+      required: [workItemId, completedDurationMs, totalDurationMs, ownDurationMs, sessionCount, runningSessions]
+      properties:
+        workItemId: { type: string, format: uuid }
+        completedDurationMs: { type: integer, format: int64, minimum: 0 }
+        totalDurationMs: { type: integer, format: int64, minimum: 0 }
+        ownDurationMs: { type: integer, format: int64, minimum: 0 }
+        sessionCount: { type: integer, format: int64, minimum: 0 }
+        runningSessions:
+          type: array
+          items: { $ref: '#/components/schemas/TimeTrackingRunningSession' }
+    RecentTimeTrackingItem:
+      type: object
+      additionalProperties: false
+      required: [workItemId, projectId, title]
+      properties:
+        workItemId: { $ref: '#/components/schemas/Uuid' }
+        projectId: { $ref: '#/components/schemas/Uuid' }
+        title: { type: string }
+    CurrentTimeTracker:
+      type: object
+      additionalProperties: false
+      required: [session, workItemTitle, rowVersion, etag, serverNow, recentItems]
+      properties:
+        recentItems:
+          type: array
+          items: { $ref: '#/components/schemas/RecentTimeTrackingItem' }
+        session:
+          type: object
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/TimeTrackingSession' }]
+        workItemTitle: { type: string, nullable: true }
+        rowVersion: { type: integer, format: int64, minimum: 0 }
+        etag: { type: string }
+        serverNow: { type: string, format: date-time }
+    TimeTrackingSummaryPage:
+      type: object
+      additionalProperties: false
+      required: [items, serverNow, revision]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TimeTrackingSummary' }
+        serverNow: { type: string, format: date-time }
+        revision: { type: integer, format: int64, minimum: 0 }
+    TimeTrackingSessionPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, summary, serverNow, canCreate]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TimeTrackingSession' }
+        nextCursor: { type: string, nullable: true }
+        summary: { $ref: '#/components/schemas/TimeTrackingSummary' }
+        serverNow: { type: string, format: date-time }
+        canCreate: { type: boolean }
     ActivityAudienceType:
       type: string
       enum: [PROJECT, PRODUCT, FEEDBACK]
@@ -4030,6 +4456,10 @@ components:
         statusCategory, priority, assigneeUserId, assigneeDisplayName, dueDate, rowVersion,
         etag, capabilities, subitemCount, updatedAt]
       properties:
+        timeTracking:
+          type: object
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/TimeTrackingSummary' }]
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
         contentId: { $ref: '#/components/schemas/Uuid' }

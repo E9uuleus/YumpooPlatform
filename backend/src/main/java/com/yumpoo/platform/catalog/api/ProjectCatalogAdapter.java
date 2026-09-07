@@ -27,12 +27,7 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     @Override
     public java.util.Optional<ProjectAccessSnapshot> findVisible(
             com.yumpoo.platform.identityaccess.api.CurrentActor actor, java.util.UUID projectId) {
-        try { return java.util.Optional.of(access(membershipService.requireVisible(actor, projectId))); }
-        catch (com.yumpoo.platform.foundation.application.error.ApplicationException exception) {
-            if (exception.errorCode() == com.yumpoo.platform.foundation.application.error.StandardErrorCode.RESOURCE_NOT_FOUND)
-                return java.util.Optional.empty();
-            throw exception;
-        }
+        return java.util.Optional.ofNullable(findVisible(actor, java.util.List.of(projectId)).get(projectId));
     }
 
     @Override

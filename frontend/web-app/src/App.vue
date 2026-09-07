@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TimerHost from './components/timer/TimerHost.vue'
 import type { Language } from 'element-plus/es/locale'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import { ElConfigProvider as ElConfigProviderRaw } from 'element-plus'
@@ -12,5 +13,6 @@ const ElConfigProvider = ElConfigProviderRaw as unknown as DefineComponent<{
 <template>
   <el-config-provider :locale="zhCn">
     <router-view />
+    <TimerHost />
   </el-config-provider>
 </template>

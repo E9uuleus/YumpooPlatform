@@ -23,9 +23,9 @@ const DESKTOP_AREAS = {
 
 const PRELOAD_ENTRY = path.join(DESKTOP_AREAS.preload, 'index.ts')
 const PRELOAD_IPC_CHANNELS = new Map([
-  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start', 'yumpoo:auth:clear'])],
-  ['on', new Set(['yumpoo:auth:status'])],
-  ['removeListener', new Set(['yumpoo:auth:status'])],
+  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start', 'yumpoo:auth:clear', 'yumpoo:timer:show', 'yumpoo:timer:project', 'yumpoo:timer:pin', 'yumpoo:timer:refresh', 'yumpoo:timer:exit-received', 'yumpoo:timer:exit-complete', 'yumpoo:timer:open-item'])],
+  ['on', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:project-changed', 'yumpoo:timer:exit-request'])],
+  ['removeListener', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:project-changed', 'yumpoo:timer:exit-request'])],
 ])
 
 const NODE_MODULES = new Set(
@@ -296,7 +296,8 @@ function createRule() {
           channel?.type === 'Literal' && typeof channel.value === 'string'
             ? channel.value
             : undefined
-        const expectedArguments = method === 'invoke' ? 1 : 2
+        const timerArguments = { 'yumpoo:timer:exit-received': 2, 'yumpoo:timer:project': 2, 'yumpoo:timer:pin': 2, 'yumpoo:timer:exit-complete': 3, 'yumpoo:timer:open-item': 3 }
+        const expectedArguments = method === 'invoke' ? (timerArguments[channelName] ?? 1) : 2
         if (
           !allowedChannels?.has(channelName) ||
           node.arguments.length !== expectedArguments
@@ -304,7 +305,7 @@ function createRule() {
           report(
             node,
             channelName ?? '<dynamic>',
-            'preload ipcRenderer 仅允许固定认证通道、固定方法与固定参数个数',
+            'preload ipcRenderer 仅允许固定认证与计时通道、固定方法与固定参数个数',
           )
         }
       }

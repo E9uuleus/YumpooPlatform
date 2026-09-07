@@ -21,6 +21,13 @@
       "newSha256": "e281b8a22c90e793ad20db3f91b1f8fff765b8af97e6039dbcba2f78d2c7ce4c",
       "reason": "两级评论、共享置顶和不限时统一删除；移除旧截止时间和治理删除公开字段，服务端与客户端配套升级。",
       "agentNote": ".agents/notes/implemented/product/2026-09-05-work-item-discussion-threads.md"
+    },
+    {
+      "id": "2026-09-07-time-tracking-sort-expansion",
+      "oldSha256": "e281b8a22c90e793ad20db3f91b1f8fff765b8af97e6039dbcba2f78d2c7ce4c",
+      "newSha256": "c50d5f90789e19cdc7f3af0b6a4369ed36cff2f8b0e549bae7ca4683c55a34d7",
+      "reason": "仅扩大主项/子项排序正则白名单（TIME_TRACKING，子项补齐 CONTENT）；旧值全部保留。恢复两条旧正则的临时副本已通过完整 openapi-diff，精确哈希限定正则包含关系误报例外。",
+      "agentNote": ".agents/notes/implemented/architecture/2026-09-07-work-item-time-tracking.md"
     }
   ]
 }

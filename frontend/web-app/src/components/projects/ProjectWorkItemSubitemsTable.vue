@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkItemTimerCell from './WorkItemTimerCell.vue'
 import {
   readCsrfToken,
   type ProjectMember,
@@ -35,7 +36,7 @@ export interface ProjectWorkItemSubitemSortRule {
 }
 
 export interface ProjectWorkItemSubitemColumn {
-  key: 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate' | 'updatedAt'
+  key: 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate' | 'timeTracking' | 'updatedAt'
   label: string
 }
 
@@ -133,7 +134,7 @@ const filteredMembers = computed(() => {
 
 const sortFieldByColumn: Record<ProjectWorkItemSubitemColumn['key'], string> = {
   title: 'TITLE', assignee: 'ASSIGNEE', status: 'STATUS', priority: 'PRIORITY',
-  content: 'CONTENT', dueDate: 'DUE_DATE', updatedAt: 'UPDATED_AT',
+  content: 'CONTENT', dueDate: 'DUE_DATE', timeTracking: 'TIME_TRACKING', updatedAt: 'UPDATED_AT',
 }
 
 function statusLabel(code: string): string {
@@ -777,7 +778,8 @@ onBeforeUnmount(() => {
               @change="emit('dueDateChange', row(scope.row), $event)"
             />
 
-            <span v-else-if="column.key === 'updatedAt'" class="subitem-timestamp">{{ formatTime(scope.row.updatedAt) }}</span>
+            <WorkItemTimerCell v-else-if="column.key === 'timeTracking'" :item="scope.row as ProjectWorkItemListItem" :project-id="projectId" />
+                  <span v-else-if="column.key === 'updatedAt'" class="subitem-timestamp">{{ formatTime(scope.row.updatedAt) }}</span>
           </template>
         </el-table-column>
 

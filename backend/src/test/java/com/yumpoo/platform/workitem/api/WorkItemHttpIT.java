@@ -453,6 +453,144 @@ class WorkItemHttpIT {
         }
     }
 
+
+    @Test
+    void timerIsIdempotentAtomicAndIndependentOfWorkItemVersion() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "计时事务"), null, UUID.randomUUID()));
+        String id = item.path("id").asText();
+        String startBody = "{\"workItemId\":\"" + id + "\"}";
+        UUID key = UUID.randomUUID();
+        JsonNode initial = ok(get("/api/v1/me/time-tracker", member));
+        HttpResponse<String> started = mutate("POST", "/api/v1/me/time-tracker/start", member, startBody, initial.path("etag").asText(), key);
+        JsonNode running = ok(started);
+        assertThat(mutate("POST", "/api/v1/me/time-tracker/start", member, startBody, initial.path("etag").asText(), key).body()).isEqualTo(started.body());
+        assertThat(mutate("POST", "/api/v1/me/time-tracker/start", member, startBody, initial.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(412);
+        JsonNode ownerRunning = ok(mutate("POST", "/api/v1/me/time-tracker/start", owner, startBody, "\"0\"", UUID.randomUUID()));
+        JsonNode history = ok(get("/api/v1/work-items/" + id + "/time-sessions", member));
+        assertThat(history.path("items").size()).isEqualTo(2);
+        assertThat(history.path("summary").path("runningSessions").size()).isEqualTo(2);
+        assertThat(ok(get("/api/v1/work-items/" + id, member)).path("etag").asText()).isEqualTo(item.path("etag").asText());
+        JsonNode other = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "切换目标"), null, UUID.randomUUID()));
+        JsonNode switched = ok(mutate("POST", "/api/v1/me/time-tracker/switch", member,
+                "{\"workItemId\":\"" + other.path("id").asText() + "\",\"sessionId\":\"" + running.path("session").path("id").asText() + "\"}", running.path("etag").asText(), UUID.randomUUID()));
+        assertThat(switched.path("session").path("workItemId").asText()).isEqualTo(other.path("id").asText());
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_time_session WHERE user_id=:id AND stopped_at IS NULL")
+                .param("id", member.userId()).query(Long.class).single()).isEqualTo(1);
+        ok(mutate("POST", "/api/v1/me/time-tracker/stop", member, "{\"sessionId\":\"" + switched.path("session").path("id").asText() + "\"}", switched.path("etag").asText(), UUID.randomUUID()));
+        ok(mutate("POST", "/api/v1/me/time-tracker/stop", owner, "{\"sessionId\":\"" + ownerRunning.path("session").path("id").asText() + "\"}", ownerRunning.path("etag").asText(), UUID.randomUUID()));
+    }
+
+    @Test
+    void timerHistoryRejectsOverlapAndAuditsLongSessionCorrection() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "跨日补录"), null, UUID.randomUUID()));
+        String path = "/api/v1/work-items/" + item.path("id").asText() + "/time-sessions";
+        String body = "{\"startedAt\":\"2025-01-01T23:00:00Z\",\"stoppedAt\":\"2025-01-03T01:00:00Z\"}";
+        JsonNode manual = ok(mutate("POST", path, member, body, null, UUID.randomUUID()));
+        assertThat(manual.path("durationMs").asLong()).isEqualTo(26 * 3600000L);
+        assertThat(mutate("POST", path, member, body, null, UUID.randomUUID()).statusCode()).isEqualTo(422);
+        String record = path + "/" + manual.path("id").asText();
+        assertThat(mutate("PATCH", record, member, body, manual.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(422);
+        String corrected = "{\"startedAt\":\"2025-01-01T23:00:00Z\",\"stoppedAt\":\"2025-01-03T02:00:00Z\",\"reason\":\"修正结束时间\"}";
+        assertThat(mutate("PATCH", record, owner, corrected, manual.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(403);
+        JsonNode edited = ok(mutate("PATCH", record, member, corrected, manual.path("etag").asText(), UUID.randomUUID()));
+        assertThat(edited.path("durationMs").asLong()).isEqualTo(27 * 3600000L);
+        ok(mutate("DELETE", record, member, "{\"reason\":\"验收删除\"}", edited.path("etag").asText(), UUID.randomUUID()));
+        assertThat(ok(get(path, member)).path("summary").path("totalDurationMs").asLong()).isZero();
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.security_audit_event WHERE action LIKE 'TIME_TRACKING_%'").query(Long.class).single()).isEqualTo(3);
+    }
+
+    @Test
+    void timerCursorFreezesDurationAndInvalidatesAfterCommands() throws Exception {
+        JsonNode first = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "计时排序一"), null, UUID.randomUUID()));
+        JsonNode second = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "计时排序二"), null, UUID.randomUUID()));
+        ok(mutate("POST", "/api/v1/work-items/" + first.path("id").asText() + "/time-sessions", member,
+                "{\"startedAt\":\"2025-01-01T00:00:00Z\",\"stoppedAt\":\"2025-01-01T01:00:00Z\"}", null, UUID.randomUUID()));
+        String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items?sort=TIME_TRACKING,DESC&limit=1";
+        JsonNode page = ok(get(collection, member));
+        assertThat(page.path("items").get(0).path("id").asText()).isEqualTo(first.path("id").asText());
+        String cursor = page.path("nextCursor").asText();
+        assertThat(ok(get(collection + "&cursor=" + cursor, member)).path("items").get(0).path("id").asText()).isEqualTo(second.path("id").asText());
+        ok(mutate("POST", "/api/v1/me/time-tracker/start", member, "{\"workItemId\":\"" + second.path("id").asText() + "\"}", "\"0\"", UUID.randomUUID()));
+        assertThat(get(collection + "&cursor=" + cursor, member).statusCode()).isEqualTo(422);
+        JsonNode filtered = ok(get("/api/v1/projects/" + PROJECT_ID + "/work-items?timeTrackingMinMs=3600000", member));
+        assertThat(filtered.path("items").size()).isEqualTo(1);
+    }
+
+    @Test
+    void timerCanStopAfterItemDeletionAndProjectArchival() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "关闭前停止"), null, UUID.randomUUID()));
+        String id = item.path("id").asText();
+        JsonNode running = ok(mutate("POST", "/api/v1/me/time-tracker/start", member, "{\"workItemId\":\"" + id + "\"}", "\"0\"", UUID.randomUUID()));
+        ok(mutate("DELETE", "/api/v1/work-items/" + id, member, "{\"reason\":\"计时删除验收\"}", item.path("etag").asText(), UUID.randomUUID()));
+        JsonNode redacted = ok(get("/api/v1/me/time-tracker", member));
+        assertThat(redacted.path("session").path("workItemId").isNull()).isTrue();
+        JsonNode project = ok(get("/api/v1/projects/" + PROJECT_ID, owner));
+        ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/archive", owner, "{\"reason\":\"验收归档\"}", project.path("etag").asText(), UUID.randomUUID()));
+        JsonNode stopped = ok(mutate("POST", "/api/v1/me/time-tracker/stop", member, "{\"sessionId\":\"" + running.path("session").path("id").asText() + "\"}", running.path("etag").asText(), UUID.randomUUID()));
+        assertThat(stopped.path("session").isNull()).isTrue();
+    }
+
+
+    @Test
+    void concurrentDevicesCreateExactlyOneRunningSessionAndRevocationStillAllowsStop() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "并发设备"), null, UUID.randomUUID()));
+        String body = "{\"workItemId\":\"" + item.path("id").asText() + "\"}";
+        ActorFixture secondDevice = actor(member.userId());
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.Callable<HttpResponse<String>> one = () -> { start.await(); return mutate("POST", "/api/v1/me/time-tracker/start", member, body, "\"0\"", UUID.randomUUID()); };
+            java.util.concurrent.Callable<HttpResponse<String>> two = () -> { start.await(); return mutate("POST", "/api/v1/me/time-tracker/start", secondDevice, body, "\"0\"", UUID.randomUUID()); };
+            var first = executor.submit(one); var second = executor.submit(two); start.countDown();
+            assertThat(java.util.List.of(first.get().statusCode(), second.get().statusCode())).containsExactlyInAnyOrder(200, 412);
+            assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_time_session WHERE user_id=:id AND stopped_at IS NULL")
+                    .param("id", member.userId()).query(Long.class).single()).isEqualTo(1);
+        } finally { executor.shutdownNow(); }
+        JsonNode running = ok(get("/api/v1/me/time-tracker", member));
+        jdbc.sql("UPDATE yumpoo.project_membership SET status='REMOVED',removed_at=transaction_timestamp(),removed_by_user_id=:owner,remove_reason='计时撤权验收' WHERE project_id=:project AND user_id=:member")
+                .param("project",PROJECT_ID).param("member",member.userId()).param("owner",owner.userId()).update();
+        JsonNode minimal = ok(get("/api/v1/me/time-tracker", member));
+        assertThat(minimal.path("session").path("projectId").isNull()).isTrue();
+        assertThat(minimal.path("workItemTitle").isNull()).isTrue();
+        ok(mutate("POST", "/api/v1/me/time-tracker/stop", secondDevice, "{\"sessionId\":\"" + running.path("session").path("id").asText() + "\"}", running.path("etag").asText(), UUID.randomUUID()));
+    }
+
+
+    @Test
+    void switchAcrossProjectsStopsThePreviousSessionInTheSameTransaction() throws Exception {
+        UUID otherProject=UUID.randomUUID();
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            jdbc.sql("INSERT INTO yumpoo.project (id,company_id,workspace_id,project_code,name,project_type,lifecycle,owner_user_id,template_key,template_version,row_version,created_at,created_by_user_id,updated_at,updated_by_user_id,activated_at) "
+                    + "SELECT :new,company_id,workspace_id,'TIMER_OTHER','Timer Other',project_type,lifecycle,owner_user_id,template_key,template_version,0,created_at,created_by_user_id,updated_at,updated_by_user_id,activated_at FROM yumpoo.project WHERE id=:original")
+                    .param("new",otherProject).param("original",PROJECT_ID).update();
+            jdbc.sql("INSERT INTO yumpoo.project_membership (id,company_id,project_id,user_id,status,joined_at,joined_by_user_id,row_version) "
+                    + "SELECT gen_random_uuid(),company_id,:new,user_id,'ACTIVE',joined_at,joined_by_user_id,0 FROM yumpoo.project_membership WHERE project_id=:original")
+                    .param("new",otherProject).param("original",PROJECT_ID).update();
+            jdbc.sql("INSERT INTO yumpoo.content_catalog_version(project_id,company_id) VALUES (:p,:c)")
+                    .param("p",otherProject).param("c",COMPANY_ID).update();
+            labels.initialize(COMPANY_ID,otherProject,"RND",1,clock.instant());
+        });
+        JsonNode category=created(mutate("POST","/api/v1/projects/"+otherProject+"/contents",owner,
+                "{\"name\":\"跨项目计时\",\"colorToken\":\"BRIGHT_GREEN\"}",null,UUID.randomUUID()));
+        JsonNode first=created(mutate("POST","/api/v1/projects/"+PROJECT_ID+"/work-items",member,workItemBody(tasksId,"原项目计时"),null,UUID.randomUUID()));
+        JsonNode target=created(mutate("POST","/api/v1/projects/"+otherProject+"/work-items",member,workItemBody(UUID.fromString(category.path("id").asText()),"目标项目计时"),null,UUID.randomUUID()));
+        JsonNode running=ok(mutate("POST","/api/v1/me/time-tracker/start",member,"{\"workItemId\":\""+first.path("id").asText()+"\"}","\"0\"",UUID.randomUUID()));
+        JsonNode switched=ok(mutate("POST","/api/v1/me/time-tracker/switch",member,
+                "{\"workItemId\":\""+target.path("id").asText()+"\",\"sessionId\":\""+running.path("session").path("id").asText()+"\"}",running.path("etag").asText(),UUID.randomUUID()));
+        assertThat(switched.path("session").path("projectId").asText()).isEqualTo(otherProject.toString());
+        assertThat(switched.path("recentItems").size()).isEqualTo(2);
+        assertThat(ok(get("/api/v1/work-items/"+first.path("id").asText()+"/time-sessions",member)).path("items").get(0).path("stoppedAt").isNull()).isFalse();
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_time_session WHERE user_id=:id AND stopped_at IS NULL")
+                .param("id",member.userId()).query(Long.class).single()).isEqualTo(1);
+    }
+
     private String commentBody(String text, String parent) throws Exception {
         var body = json.createObjectNode().put("bodyHtml", "<p>" + text + "</p>");
         if (parent != null) body.put("parentUpdateId", parent);
@@ -559,6 +697,8 @@ class WorkItemHttpIT {
     }
 
     private void cleanUp() {
+        for (String table : java.util.List.of("work_item_time_session", "work_item_timer_state", "work_item_time_revision"))
+            jdbc.sql("DELETE FROM yumpoo." + table + " WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_update_mention WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_update WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_relation WHERE company_id=:id").param("id", COMPANY_ID).update();

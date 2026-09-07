@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
+import WorkItemTimerCell from '../../components/projects/WorkItemTimerCell.vue'
 import { Filter as FilterIcon, Hide, Search, Sort, User } from '@element-plus/icons-vue'
 import {
+  TimeTrackingState,
   AttachmentOwnerType,
   WorkItemViewType,
   ProjectActorAccess,
@@ -79,6 +82,7 @@ const router = useRouter()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 const projectId = computed(() => String(route.params.projectId))
+function openSmallTimer() { window.dispatchEvent(new Event('yumpoo:open-timer')) }
 const selectedView = computed<ProjectView>(() => route.query.view === 'kanban' ? 'kanban' : 'table')
 const project = ref<ProjectDetail>()
 const catalog = ref<ProjectContentCatalog>()
@@ -397,12 +401,17 @@ function onVerticalPageScroll(): void {
 }
 const filters = reactive({
   assignees: new Set<string>(), statuses: new Set<string>(), priorities: new Set<string>(),
+  timeState: '' as '' | TimeTrackingState, timeMin: '', timeMax: '',
   contents: new Set<string>(), dueRange: [] as Date[], updatedAfter: null as Date | null,
 })
 interface SortRule { field: string; direction: 'ASC' | 'DESC' }
 const sortRules = ref<SortRule[]>([])
 const savingSortOrder = ref(false)
-type ColumnKey = 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate' | 'updatedAt'
+const stopTimerUpdates = onTimeTrackingChanged(() => {
+  if (sortRules.value.some(rule => rule.field === 'TIME_TRACKING') || filters.timeState || filters.timeMin !== '' || filters.timeMax !== '') void loadTable()
+})
+onBeforeUnmount(stopTimerUpdates)
+type ColumnKey = 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate' | 'timeTracking' | 'updatedAt'
 type MovableColumnKey = Exclude<ColumnKey, 'title'>
 const columns: Array<{ key: ColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
   { key: 'title', label: '工作项名称', defaultWidth: 320, minWidth: 220 },
@@ -411,6 +420,7 @@ const columns: Array<{ key: ColumnKey; label: string; defaultWidth: number; minW
   { key: 'priority', label: '优先级', defaultWidth: 90, minWidth: 90 },
   { key: 'content', label: '工作项类别', defaultWidth: 110, minWidth: 110 },
   { key: 'dueDate', label: '截止日期', defaultWidth: 140, minWidth: 112 },
+  { key: 'timeTracking', label: '计时', defaultWidth: 190, minWidth: 170 },
   { key: 'updatedAt', label: '最后更新时间', defaultWidth: 170, minWidth: 135 },
 ]
 const sortFieldByColumn: Record<ColumnKey, string> = {
@@ -420,7 +430,7 @@ const sortFieldByColumn: Record<ColumnKey, string> = {
   priority: 'PRIORITY',
   content: 'CONTENT',
   dueDate: 'DUE_DATE',
-  updatedAt: 'UPDATED_AT',
+  timeTracking: 'TIME_TRACKING', updatedAt: 'UPDATED_AT',
 }
 const columnByKey = new Map(columns.map(column => [column.key, column]))
 const defaultMovableColumnOrder = columns.filter(column => column.key !== 'title').map(column => column.key as MovableColumnKey)
@@ -666,6 +676,9 @@ function applyRouteState(): void {
   const dueTo = route.query.dueTo ? new Date(String(route.query.dueTo)) : undefined
   filters.dueRange = dueFrom && dueTo ? [dueFrom, dueTo] : []
   filters.updatedAfter = route.query.updatedAfter ? new Date(String(route.query.updatedAfter)) : null
+  filters.timeState = Object.values(TimeTrackingState).includes(String(route.query.timeState) as TimeTrackingState) ? String(route.query.timeState) as TimeTrackingState : ''
+  filters.timeMin = String(route.query.timeMin ?? '')
+  filters.timeMax = String(route.query.timeMax ?? '')
   const rawSort = route.query.sort
   const sortValues = (Array.isArray(rawSort) ? rawSort : rawSort ? String(rawSort).split(';') : [])
     .filter((value): value is string => Boolean(value))
@@ -698,6 +711,10 @@ async function syncUrl(extra: Record<string, string | undefined> = {}): Promise<
   } else { delete next.dueFrom; delete next.dueTo }
   if (filters.updatedAfter) next.updatedAfter = filters.updatedAfter.toISOString()
   else delete next.updatedAfter
+  for (const key of ['timeState', 'timeMin', 'timeMax'] as const) {
+    if (filters[key] !== '') next[key] = filters[key]
+    else delete next[key]
+  }
   const sortValue = sortRules.value.map(item => `${item.field},${item.direction}`).join(';')
   if (sortValue) next.sort = sortValue
   else delete next.sort
@@ -804,6 +821,9 @@ function listRequest(cursor?: string | null) {
     ...(filters.contents.size ? { contentId: filters.contents } : {}),
     ...(filters.dueRange[0] ? { dueFrom: filters.dueRange[0] } : {}),
     ...(filters.dueRange[1] ? { dueTo: filters.dueRange[1] } : {}),
+    ...(filters.timeState ? { timeTrackingState: filters.timeState } : {}),
+    ...(filters.timeMin !== '' ? { timeTrackingMinMs: Number(filters.timeMin) * 1000 } : {}),
+    ...(filters.timeMax !== '' ? { timeTrackingMaxMs: Number(filters.timeMax) * 1000 } : {}),
     ...(filters.updatedAfter ? { updatedAfter: filters.updatedAfter } : {}),
     ...(sortRules.value.length ? { sort: sortRules.value.map(item => `${item.field},${item.direction}`) } : {}),
   }
@@ -823,7 +843,11 @@ async function loadTable(cursor: string | null = null, append = false, revision 
   } catch (reason) {
     if (revision === loadRevision) {
       const problem = await toApiProblem(reason)
-      if (append) loadingMoreError.value = problem; else error.value = problem
+      if (append && problem.kind === 'response' && JSON.stringify(problem.error).includes('TIME_TRACKING_CURSOR_EXPIRED')) {
+        tableLoading.value = false
+        ElMessage.info('计时记录已变化，已重新加载列表。')
+        await loadTable()
+      } else if (append) loadingMoreError.value = problem; else error.value = problem
     }
   } finally {
     if (revision === loadRevision) tableLoading.value = false
@@ -886,7 +910,10 @@ async function loadLane(statusCode: string, cursor: string | null = null, revisi
       ...(filters.contents.size ? { contentId: filters.contents } : {}),
       ...(filters.dueRange[0] ? { dueFrom: filters.dueRange[0] } : {}),
       ...(filters.dueRange[1] ? { dueTo: filters.dueRange[1] } : {}),
-      ...(filters.updatedAfter ? { updatedAfter: filters.updatedAfter } : {}),
+      ...(filters.timeState ? { timeTrackingState: filters.timeState } : {}),
+    ...(filters.timeMin !== '' ? { timeTrackingMinMs: Number(filters.timeMin) * 1000 } : {}),
+    ...(filters.timeMax !== '' ? { timeTrackingMaxMs: Number(filters.timeMax) * 1000 } : {}),
+    ...(filters.updatedAfter ? { updatedAfter: filters.updatedAfter } : {}),
     }, { signal: activeController?.signal ?? null })
     if (revision !== loadRevision) return
     const merged = cursor ? [...state.items, ...result.items] : result.items
@@ -1750,6 +1777,7 @@ function onTableColumnPointerCancel(event: PointerEvent): void {
 }
 
 function onTableSurfacePointerDown(event: PointerEvent): void {
+  if ((event.target as Element | null)?.closest('.timer-cell')) return
   if ((event.target as HTMLElement | null)?.closest('.subitem-table-shell')) return
   onTableColumnPointerDown(event)
   if (!tableColumnPointerCandidate && !tableColumnResizeCandidate) onTablePointerDown(event)
@@ -1845,6 +1873,7 @@ function suppressClickAfterTableDrag(): void {
 }
 
 function onTableClickCapture(event: MouseEvent): void {
+  if ((event.target as Element | null)?.closest('.timer-cell')) return
   if ((event.target as HTMLElement | null)?.closest('.subitem-table-shell')) return
   if (!suppressTableClick) return
   event.preventDefault()
@@ -1997,6 +2026,7 @@ async function commitTableDrop(): Promise<void> {
 
 function clearFilters(): void {
   filters.assignees = new Set(); filters.statuses = new Set(); filters.priorities = new Set(); filters.contents = new Set()
+  filters.timeState = ''; filters.timeMin = ''; filters.timeMax = ''
   filters.dueRange = []; filters.updatedAfter = null
   void syncUrl()
 }
@@ -2237,6 +2267,8 @@ onBeforeUnmount(() => {
               </div>
               <div class="filter-dates">
                 <el-date-picker v-model="filters.dueRange" type="daterange" start-placeholder="截止日期从" end-placeholder="截止日期到" @change="syncUrl" />
+                <label>计时状态 <el-select v-model="filters.timeState" @change="syncUrl()"><el-option value="" label="全部" /><el-option value="RUNNING" label="计时中" /><el-option value="STOPPED" label="已停止" /><el-option value="EMPTY" label="无记录" /></el-select></label>
+                <label>累计时长（秒） <el-input v-model="filters.timeMin" type="number" min="0" placeholder="最少" @change="syncUrl()" /><el-input v-model="filters.timeMax" type="number" min="0" placeholder="最多" @change="syncUrl()" /></label>
                 <el-date-picker v-model="filters.updatedAfter" type="date" placeholder="最后更新时间晚于" @change="syncUrl" />
               </div>
             </div>
@@ -2254,7 +2286,7 @@ onBeforeUnmount(() => {
                 <el-select v-model="rule.field" @change="syncUrl">
                   <el-option label="工作项名称" value="TITLE" /><el-option label="处理人" value="ASSIGNEE" />
                   <el-option label="状态" value="STATUS" /><el-option label="优先级" value="PRIORITY" />
-                  <el-option label="截止日期" value="DUE_DATE" /><el-option label="最后更新时间" value="UPDATED_AT" />
+                  <el-option label="截止日期" value="DUE_DATE" /><el-option label="累计计时" value="TIME_TRACKING" /><el-option label="最后更新时间" value="UPDATED_AT" />
                 </el-select>
                 <el-select v-model="rule.direction" @change="syncUrl"><el-option label="升序" value="ASC" /><el-option label="降序" value="DESC" /></el-select>
               </div>
@@ -2276,6 +2308,7 @@ onBeforeUnmount(() => {
               </label>
             </div>
           </el-popover>
+          <button class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
         </div>
 
         <div
@@ -2616,6 +2649,7 @@ onBeforeUnmount(() => {
                     />
                   </template>
 
+                  <WorkItemTimerCell v-else-if="column.key === 'timeTracking'" :item="scope.row as ProjectWorkItemListItem" :project-id="projectId" />
                   <span v-else-if="column.key === 'updatedAt'" class="monday-timestamp">{{ formatTime((scope.row as ProjectWorkItemListItem).updatedAt) }}</span>
                 </template>
               </el-table-column>
