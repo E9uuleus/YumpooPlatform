@@ -15,7 +15,12 @@ import static com.yumpoo.platform.workitem.application.WorkItemRepository.Projec
 final class ProjectWorkItemCursorCodec {
     private static final int MAX_CURSOR_LENGTH = 2048;
 
-    record Cursor(String fingerprint, WorkItemViewType view, ProjectCursorAnchor anchor) {}
+    record Cursor(String fingerprint, WorkItemViewType view, ProjectCursorAnchor anchor,
+            Instant timeAsOf, long timeRevision, long timeDurationMs) {
+        Cursor(String fingerprint, WorkItemViewType view, ProjectCursorAnchor anchor) {
+            this(fingerprint,view,anchor,null,0,0);
+        }
+    }
 
     String encode(Cursor cursor) {
         ProjectCursorAnchor anchor = cursor.anchor();
@@ -25,6 +30,7 @@ final class ProjectWorkItemCursorCodec {
                 nullable(anchor.assigneeUserId()), nullable(anchor.reporterUserId()),
                 nullable(anchor.timelineStartDate()), nullable(anchor.timelineEndDate()),
                 nullable(anchor.dueDate()), anchor.updatedAt().toString());
+        if(cursor.timeAsOf()!=null) value=value.replaceFirst("v4", "v5")+"\n"+cursor.timeAsOf()+"\n"+cursor.timeRevision()+"\n"+cursor.timeDurationMs();
         return Base64.getUrlEncoder().withoutPadding()
                 .encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
@@ -35,14 +41,15 @@ final class ProjectWorkItemCursorCodec {
             if (value.length() > MAX_CURSOR_LENGTH) throw new IllegalArgumentException();
             String decoded = new String(Base64.getUrlDecoder().decode(value), StandardCharsets.UTF_8);
             String[] parts = decoded.split("\\n", -1);
-            if (parts.length != 17 || !"v4".equals(parts[0]) || parts[1].isBlank())
+            if (!((parts.length==17 && "v4".equals(parts[0])) || (parts.length==20 && "v5".equals(parts[0]))) || parts[1].isBlank())
                 throw new IllegalArgumentException();
+            if (parts.length==20 && (Long.parseLong(parts[18])<0 || Long.parseLong(parts[19])<0 || Instant.parse(parts[17]).isBefore(Instant.EPOCH))) throw new IllegalArgumentException();
             ProjectCursorAnchor anchor = new ProjectCursorAnchor(
                     UUID.fromString(parts[3]), parts[4], parts[5], Long.parseLong(parts[6]),
                     UUID.fromString(parts[7]), decodedText(parts[8]), decodedText(parts[9]),
                     priority(parts[10]), uuid(parts[11]), uuid(parts[12]), date(parts[13]),
                     date(parts[14]), date(parts[15]), Instant.parse(parts[16]));
-            return new Cursor(parts[1], WorkItemViewType.valueOf(parts[2]), anchor);
+            return new Cursor(parts[1], WorkItemViewType.valueOf(parts[2]), anchor, parts.length==20 ? Instant.parse(parts[17]) : null, parts.length==20 ? Long.parseLong(parts[18]) : 0, parts.length==20 ? Long.parseLong(parts[19]) : 0);
         } catch (RuntimeException exception) {
             throw ApplicationException.validation(new FieldViolation(
                     "cursor", "INVALID_CURSOR", "工作项分页游标无效"));

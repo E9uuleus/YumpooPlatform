@@ -89,8 +89,8 @@ public final class WorkItemController {
         String[] sorts = httpRequest.getParameterValues("sort");
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(service.listProject(actors.requiredActive(), projectId,
-                        new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds, contentIds,
-                                dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts)),
+                        withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds, contentIds,
+                                dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts)), httpRequest),
                         view, CursorPageRequest.of(cursor, limit)));
     }
 
@@ -111,9 +111,9 @@ public final class WorkItemController {
         String[] sorts = httpRequest.getParameterValues("sort");
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(service.listProjectFilterOptions(actors.requiredActive(), projectId, field,
-                        new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds,
+                        withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds,
                                 contentIds, dueFrom, dueTo, updatedAfter,
-                                sorts == null ? null : List.of(sorts)),
+                                sorts == null ? null : List.of(sorts)), httpRequest),
                         CursorPageRequest.of(cursor, limit)));
     }
 
@@ -144,8 +144,8 @@ public final class WorkItemController {
         String[] sorts = httpRequest.getParameterValues("sort");
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(service.listSubitems(actors.requiredActive(), parentWorkItemId,
-                        new WorkItemQuery.Request(null, null, null, null, null,
-                                null, null, null, sorts == null ? null : List.of(sorts))));
+                        withTime(new WorkItemQuery.Request(null, null, null, null, null,
+                                null, null, null, sorts == null ? null : List.of(sorts)), httpRequest)));
     }
 
     @PostMapping("/work-items/{parentWorkItemId}/subitems")
@@ -407,4 +407,17 @@ public final class WorkItemController {
         return new ResponseEntity<>(stored.responseJson(), headers,
                 HttpStatus.valueOf(stored.httpStatus()));
     }
+    private static WorkItemQuery.Request withTime(WorkItemQuery.Request request, HttpServletRequest http) {
+        String state=http.getParameter("timeTrackingState");
+        String min=http.getParameter("timeTrackingMinMs"), max=http.getParameter("timeTrackingMaxMs");
+        if (state==null && min==null && max==null) return request;
+        try {
+            return request.withTime(new WorkItemQuery.TimeFilter(state,min==null ? null : Long.valueOf(min),
+                    max==null ? null : Long.valueOf(max),null,0,0));
+        } catch (NumberFormatException e) {
+            throw com.yumpoo.platform.foundation.application.error.ApplicationException.validation(
+                    new com.yumpoo.platform.foundation.application.error.FieldViolation("timeTrackingMinMs","INVALID_VALUE","时长须为整数毫秒"));
+        }
+    }
+
 }

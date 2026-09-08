@@ -31,6 +31,7 @@ import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemRankPlacement;
 import com.yumpoo.platform.workitem.domain.WorkItemStatusCategory;
 import org.springframework.stereotype.Service;
+import java.time.Instant;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -88,6 +89,7 @@ public class WorkItemService {
     private final TransactionalEventPort events;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final TimeTrackingRepository timeTracking;
     private final ProjectWorkItemCursorCodec projectCursors = new ProjectWorkItemCursorCodec();
     private final ProjectWorkItemFilterCursorCodec projectFilterCursors =
             new ProjectWorkItemFilterCursorCodec();
@@ -98,7 +100,7 @@ public class WorkItemService {
             ProjectActiveMembershipQuery activeMemberships,
             WorkItemLabelRepository labels, MinimalUserSnapshotQuery users,
             IdempotentCommandExecutor idempotency, TransactionalEventPort events,
-            ObjectMapper objectMapper, Clock clock) {
+            ObjectMapper objectMapper, Clock clock, TimeTrackingRepository timeTracking) {
         this.workItems = workItems;
         this.relations = relations;
         this.contents = contents;
@@ -111,6 +113,7 @@ public class WorkItemService {
         this.events = events;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.timeTracking = timeTracking;
     }
 
     @Transactional(readOnly = true)
@@ -147,7 +150,7 @@ public class WorkItemService {
                 response.totalElements(), response.totalPages());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public ProjectWorkItemCursorPage listProject(CurrentActor actor, UUID projectId,
             WorkItemQuery.Request request, String view, CursorPageRequest page) {
         requireActor(actor);
@@ -176,6 +179,17 @@ public class WorkItemService {
         if (decoded != null && (!decoded.fingerprint().equals(fingerprint)
                 || decoded.view() != effectiveView))
             throw validation("cursor", "CURSOR_QUERY_MISMATCH", "游标不属于当前项目查询");
+        Instant timeAsOf=clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        long timeRevision=timeTracking.revision(actor.companyId(),projectId);
+        if(query.usesTimeTracking()) {
+            if(decoded!=null && (decoded.timeAsOf()==null || decoded.timeRevision()!=timeRevision))
+                throw validation("cursor","TIME_TRACKING_CURSOR_EXPIRED","计时记录已变化，请刷新列表");
+            if(decoded!=null) timeAsOf=decoded.timeAsOf();
+            var filter=query.timeTracking();
+            query=query.withTime(new WorkItemQuery.TimeFilter(filter==null ? null : filter.state(),
+                    filter==null ? null : filter.minMs(),filter==null ? null : filter.maxMs(),timeAsOf,timeRevision,
+                    decoded==null ? 0 : decoded.timeDurationMs()));
+        }
         WorkItemRepository.ProjectCursorAnchor anchor = decoded == null ? null : decoded.anchor();
         List<WorkItem> rows = new ArrayList<>(workItems.findProjectCursorPage(project.companyId(),
                 project.projectId(), query, ranks, effectiveView, anchor, page.limit() + 1));
@@ -187,14 +201,18 @@ public class WorkItemService {
         Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), rows);
         Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
                 rows.stream().map(WorkItem::id).toList());
+        Map<UUID,TimeTrackingModels.TimeTrackingSummary> timeSummaries=timeTracking.summaries(actor.companyId(),projectId,
+                actor.userId(),rows.stream().map(WorkItem::id).toList(),timeAsOf).stream()
+                .collect(java.util.stream.Collectors.toMap(TimeTrackingModels.TimeTrackingSummary::workItemId,java.util.function.Function.identity()));
         List<ProjectWorkItemListItem> items = rows.stream()
                 .map(item -> projectListItem(item, contentById.get(item.contentId()), people,
                         canEdit(project, contentById.get(item.contentId())), statusLabels,
-                        subitemCounts.getOrDefault(item.id(), 0L))).toList();
+                        subitemCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList();
         String nextCursor = hasMore && !rows.isEmpty()
                 ? projectCursors.encode(new ProjectWorkItemCursorCodec.Cursor(
                         fingerprint, effectiveView,
-                        WorkItemRepository.ProjectCursorAnchor.from(rows.getLast()))) : null;
+                        WorkItemRepository.ProjectCursorAnchor.from(rows.getLast()),query.usesTimeTracking() ? timeAsOf : null,
+                        timeRevision,timeSummaries.get(rows.getLast().id()).totalDurationMs())) : null;
         return new ProjectWorkItemCursorPage(items, nextCursor);
     }
 
@@ -227,10 +245,13 @@ public class WorkItemService {
         Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), rows);
         Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
                 rows.stream().map(WorkItem::id).toList());
+        Map<UUID,TimeTrackingModels.TimeTrackingSummary> timeSummaries=timeTracking.summaries(actor.companyId(),project.projectId(),
+                actor.userId(),rows.stream().map(WorkItem::id).toList(),clock.instant()).stream()
+                .collect(java.util.stream.Collectors.toMap(TimeTrackingModels.TimeTrackingSummary::workItemId,java.util.function.Function.identity()));
         return new WorkItemSubitemList(rows.stream().map(item -> projectListItem(item,
                 contentById.get(item.contentId()), people,
                 canEdit(project, contentById.get(item.contentId())), statusLabels,
-                subitemCounts.getOrDefault(item.id(), 0L))).toList());
+                subitemCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList());
     }
 
     @Transactional(readOnly = true)
@@ -1133,7 +1154,8 @@ public class WorkItemService {
         String canonical = String.join("\n", projectId.toString(), view.name(),
                 Objects.toString(query.query(), ""), statuses, priorities, assignees, contents,
                 Objects.toString(query.dueFrom(), ""), Objects.toString(query.dueTo(), ""),
-                Objects.toString(query.updatedAfter(), ""), sorts);
+                Objects.toString(query.updatedAfter(), ""), sorts,
+                query.timeTracking()==null ? "" : Objects.toString(query.timeTracking().state(),"")+":"+query.timeTracking().minMs()+":"+query.timeTracking().maxMs());
         try {
             byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
                     .digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));

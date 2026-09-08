@@ -687,7 +687,7 @@ Web 开发服务器默认监听 `http://127.0.0.1:18173`，Vite Preview 默认�
 - 后端 13 个一级模块统一采用 `api/application/domain/infrastructure` 四层；ArchUnit 对层级方向、允许依赖矩阵、跨模块内部实现访问和循环依赖执行硬门禁。
 - Web/renderer 不得导入 Node、Electron 或 desktop-shell 实现；可运行时依赖浏览器 Fetch 边界的 `@yumpoo/api-client`，只能以 type-only 方式读取 `@yumpoo/preload-contract`。
 - OpenAPI 是请求、响应、错误、分页和客户端生成的唯一契约源；生成目录禁止手工修改，漂移由验证脚本阻止。
-- preload 仅在唯一入口通过三个固定认证通道包装 `ipcRenderer`，不暴露原始 IPC 或 Node built-in；Renderer 只看到冻结的 `window.yumpooDesktop` 最小桥。
+- preload 仅在唯一入口通过固定认证和计时通道包装 `ipcRenderer`，不暴露原始 IPC 或 Node built-in；Renderer 只看到冻结的 `window.yumpooDesktop` 最小桥。计时窗口复用认证分区，IPC 校验已登记窗口、主 frame、精确来源及参数；退出停止必须等待服务端确认。
 - Electron main/preload/Web 分离编译；新窗口、权限请求和跨源导航默认拒绝。
 
 ## 当前与后续范围

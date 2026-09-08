@@ -129,6 +129,26 @@ class WorkItemCellActivityProjectionServiceTest {
         assertThat(changes.get(2).beforeValue().path("displayName").asText()).isEqualTo("2026-09-09 09:30");
     }
 
+    @Test
+    void timerEditsKeepBeforeAfterAndIgnoreUnchangedRanges() {
+        ObjectNode payload = base();
+        payload.put("sessionId", ITEM.toString());
+        payload.put("previousStartedAt", "2026-09-01T01:00:00Z");
+        payload.put("previousStoppedAt", "2026-09-01T02:00:00Z");
+        payload.put("startedAt", "2026-09-01T01:00:00Z");
+        payload.put("stoppedAt", "2026-09-01T02:30:00Z");
+        service.consume(event("workitem.time_tracking_edited", 2, CUTOVER.plusSeconds(1), payload));
+        ArgumentCaptor<WorkItemCellActivityStoredEvent> captor = ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
+        verify(repository).append(captor.capture());
+        assertThat(captor.getValue().columnCode()).isEqualTo("TIME_TRACKING");
+        assertThat(captor.getValue().beforeValue().path("displayName").asText()).isEqualTo("2026-09-01T01:00:00Z/2026-09-01T02:00:00Z");
+        assertThat(captor.getValue().afterValue().path("displayName").asText()).endsWith("02:30:00Z");
+        payload.put("previousStoppedAt", "2026-09-01T02:30:00Z");
+        service.consume(event("workitem.time_tracking_edited", 2, CUTOVER.plusSeconds(2), payload));
+        verify(repository, times(1)).append(any());
+        assertThat(service.subscriptions()).noneMatch(subscription -> subscription.eventType().matches("workitem.time_tracking_(started|stopped|added|deleted)"));
+    }
+
     private ObjectNode base() {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("workItemId", ITEM.toString());

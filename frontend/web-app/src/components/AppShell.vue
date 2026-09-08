@@ -54,7 +54,7 @@ const contextNavigationOpen = ref(typeof window === 'undefined'
   ? true
   : (window.matchMedia?.('(min-width: 1280px)').matches ?? true))
 
-const clientLabel = computed(() => session.authentication.value?.client.type === AuthenticationClientType.Electron
+const clientLabel = computed(() => window.yumpooDesktop?.client === 'electron' || session.authentication.value?.client.type === AuthenticationClientType.Electron
   ? 'Electron 在线壳'
   : 'Web 浏览器')
 const activeSection = computed<ShellSection>(() => route.meta.shellSection ?? 'work')

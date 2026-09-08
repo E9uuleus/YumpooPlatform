@@ -48,6 +48,11 @@ public class ActivitySummaryRenderer {
             case "WORK_ITEM_UPDATE_EDITED" -> "编辑了事项 " + ref + " 的动态";
             case "WORK_ITEM_UPDATE_PIN_CHANGED" -> (parameters.path("pinned").asBoolean() ? "置顶了" : "取消置顶了") + "事项 " + ref + " 的评论";
             case "WORK_ITEM_UPDATE_DELETED" -> "删除了事项 " + ref + " 的动态";
+            case "TIME_TRACKING_STARTED" -> "开始计时：" + ref;
+            case "TIME_TRACKING_STOPPED" -> "停止计时：" + ref;
+            case "TIME_TRACKING_ADDED" -> "补录了事项 " + ref + " 的工时";
+            case "TIME_TRACKING_EDITED" -> "修正了事项 " + ref + " 的工时";
+            case "TIME_TRACKING_DELETED" -> "删除了事项 " + ref + " 的工时记录";
             case "ATTACHMENT_AVAILABLE" -> "附件 " + ref + " 已可用";
             case "ATTACHMENT_DELETED" -> "删除了附件 " + ref;
             default -> "更新了 " + ref;

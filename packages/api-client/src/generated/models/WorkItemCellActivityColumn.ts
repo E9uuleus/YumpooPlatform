@@ -23,6 +23,7 @@ export enum WorkItemCellActivityColumn {
     Priority = 'PRIORITY',
     DueDate = 'DUE_DATE',
     Content = 'CONTENT',
+    TimeTracking = 'TIME_TRACKING',
     UnknownDefaultOpenApi = '11184809'
 }
 

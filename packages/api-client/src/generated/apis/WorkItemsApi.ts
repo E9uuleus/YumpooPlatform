@@ -18,6 +18,7 @@ import type {
   ProjectWorkItemCursorPage,
   ProjectWorkItemFilterOptionCursorPage,
   ProjectWorkItemOrderMoveRequest,
+  TimeTrackingState,
   WorkItemAssigneePatchRequest,
   WorkItemContentPatchRequest,
   WorkItemCreateRequest,
@@ -52,6 +53,8 @@ import {
     ProjectWorkItemFilterOptionCursorPageToJSON,
     ProjectWorkItemOrderMoveRequestFromJSON,
     ProjectWorkItemOrderMoveRequestToJSON,
+    TimeTrackingStateFromJSON,
+    TimeTrackingStateToJSON,
     WorkItemAssigneePatchRequestFromJSON,
     WorkItemAssigneePatchRequestToJSON,
     WorkItemContentPatchRequestFromJSON,
@@ -186,6 +189,9 @@ export interface GetWorkItemRequest {
 export interface ListProjectWorkItemFilterOptionsRequest {
     projectId: string;
     field: ListProjectWorkItemFilterOptionsFieldEnum;
+    timeTrackingState?: TimeTrackingState;
+    timeTrackingMinMs?: number;
+    timeTrackingMaxMs?: number;
     cursor?: string;
     limit?: number;
     q?: string;
@@ -201,6 +207,9 @@ export interface ListProjectWorkItemFilterOptionsRequest {
 
 export interface ListProjectWorkItemsRequest {
     projectId: string;
+    timeTrackingState?: TimeTrackingState;
+    timeTrackingMinMs?: number;
+    timeTrackingMaxMs?: number;
     cursor?: string;
     limit?: number;
     view?: WorkItemViewType;
@@ -234,6 +243,9 @@ export interface ListWorkItemRelationsRequest {
 
 export interface ListWorkItemSubitemsRequest {
     parentWorkItemId: string;
+    timeTrackingState?: TimeTrackingState;
+    timeTrackingMinMs?: number;
+    timeTrackingMaxMs?: number;
     sort?: Array<string>;
 }
 
@@ -1157,6 +1169,18 @@ export class WorkItemsApi extends runtime.BaseAPI {
 
         const queryParameters: any = {};
 
+        if (requestParameters['timeTrackingState'] != null) {
+            queryParameters['timeTrackingState'] = requestParameters['timeTrackingState'];
+        }
+
+        if (requestParameters['timeTrackingMinMs'] != null) {
+            queryParameters['timeTrackingMinMs'] = requestParameters['timeTrackingMinMs'];
+        }
+
+        if (requestParameters['timeTrackingMaxMs'] != null) {
+            queryParameters['timeTrackingMaxMs'] = requestParameters['timeTrackingMaxMs'];
+        }
+
         if (requestParameters['field'] != null) {
             queryParameters['field'] = requestParameters['field'];
         }
@@ -1242,6 +1266,18 @@ export class WorkItemsApi extends runtime.BaseAPI {
         }
 
         const queryParameters: any = {};
+
+        if (requestParameters['timeTrackingState'] != null) {
+            queryParameters['timeTrackingState'] = requestParameters['timeTrackingState'];
+        }
+
+        if (requestParameters['timeTrackingMinMs'] != null) {
+            queryParameters['timeTrackingMinMs'] = requestParameters['timeTrackingMinMs'];
+        }
+
+        if (requestParameters['timeTrackingMaxMs'] != null) {
+            queryParameters['timeTrackingMaxMs'] = requestParameters['timeTrackingMaxMs'];
+        }
 
         if (requestParameters['cursor'] != null) {
             queryParameters['cursor'] = requestParameters['cursor'];
@@ -1462,6 +1498,18 @@ export class WorkItemsApi extends runtime.BaseAPI {
         }
 
         const queryParameters: any = {};
+
+        if (requestParameters['timeTrackingState'] != null) {
+            queryParameters['timeTrackingState'] = requestParameters['timeTrackingState'];
+        }
+
+        if (requestParameters['timeTrackingMinMs'] != null) {
+            queryParameters['timeTrackingMinMs'] = requestParameters['timeTrackingMinMs'];
+        }
+
+        if (requestParameters['timeTrackingMaxMs'] != null) {
+            queryParameters['timeTrackingMaxMs'] = requestParameters['timeTrackingMaxMs'];
+        }
 
         if (requestParameters['sort'] != null) {
             queryParameters['sort'] = requestParameters['sort'];

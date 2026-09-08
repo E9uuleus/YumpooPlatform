@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/workitem.time-tracking-started-v1.schema.json",
+  "title": "Work item time tracking started",
+  "allOf": [
+    {
+      "$ref": "event-envelope.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": {
+          "const": "workitem.time_tracking_started"
+        },
+        "eventVersion": {
+          "const": 1
+        },
+        "aggregateType": {
+          "const": "TimeTrackingSession"
+        },
+        "aggregateVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "projectId",
+            "workItemId",
+            "sessionId",
+            "userId",
+            "startedAt",
+            "stoppedAt",
+            "source",
+            "rowVersion"
+          ],
+          "properties": {
+            "projectId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "workItemId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "sessionId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "userId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "startedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "stoppedAt": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "source": {
+              "enum": [
+                "TIMER",
+                "MANUAL"
+              ]
+            },
+            "rowVersion": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  ]
+}

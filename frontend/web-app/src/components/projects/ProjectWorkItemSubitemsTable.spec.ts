@@ -54,7 +54,7 @@ function mountTable(items = [item('child-1'), item('child-2')]) {
       ],
       columnWidths: {
         title: 320, assignee: 90, status: 130, priority: 120,
-        content: 150, dueDate: 140, updatedAt: 170,
+        content: 150, dueDate: 140, timeTracking: 190, updatedAt: 170,
       },
       activeContents: [
         { id: 'content-1', name: '产品需求', colorToken: WorkItemLabelColorToken.BrightBlue },

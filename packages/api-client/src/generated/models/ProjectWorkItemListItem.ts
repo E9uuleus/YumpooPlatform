@@ -19,6 +19,13 @@ import {
     WorkItemLabelColorTokenToJSON,
     WorkItemLabelColorTokenToJSONTyped,
 } from './WorkItemLabelColorToken';
+import type { TimeTrackingSummary } from './TimeTrackingSummary';
+import {
+    TimeTrackingSummaryFromJSON,
+    TimeTrackingSummaryFromJSONTyped,
+    TimeTrackingSummaryToJSON,
+    TimeTrackingSummaryToJSONTyped,
+} from './TimeTrackingSummary';
 import type { WorkItemCapabilities } from './WorkItemCapabilities';
 import {
     WorkItemCapabilitiesFromJSON,
@@ -40,6 +47,12 @@ import {
  * @interface ProjectWorkItemListItem
  */
 export interface ProjectWorkItemListItem {
+    /**
+     *
+     * @type {TimeTrackingSummary}
+     * @memberof ProjectWorkItemListItem
+     */
+    timeTracking?: TimeTrackingSummary | null;
     /**
      * 不透明 UUID；客户端不得从值中推导业务语义。
      * @type {string}
@@ -199,6 +212,7 @@ export function ProjectWorkItemListItemFromJSONTyped(json: any, ignoreDiscrimina
     }
     return {
 
+        ...(json['timeTracking'] === undefined ? {} : { 'timeTracking': json['timeTracking'] === null ? null : TimeTrackingSummaryFromJSON(json['timeTracking']) }),
         'id': json['id'],
         'projectId': json['projectId'],
         'contentId': json['contentId'],
@@ -233,6 +247,7 @@ export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemL
 
     return {
 
+        'timeTracking': TimeTrackingSummaryToJSON(value['timeTracking']),
         'id': value['id'],
         'projectId': value['projectId'],
         'contentId': value['contentId'],

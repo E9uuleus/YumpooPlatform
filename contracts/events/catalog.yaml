@@ -419,3 +419,45 @@ events:
       - examples/workitem.work-item-update-pin-changed-v1.json
     invalidExamples:
       - examples/workitem.work-item-update-pin-changed-v1.invalid.json
+  - eventType: workitem.time_tracking_started
+    eventVersion: 1
+    schema: schemas/workitem.time-tracking-started-v1.schema.json
+    validExamples:
+      - examples/workitem.time-tracking-started-v1.json
+    invalidExamples:
+      - examples/workitem.time-tracking-started-v1.invalid.json
+  - eventType: workitem.time_tracking_stopped
+    eventVersion: 1
+    schema: schemas/workitem.time-tracking-stopped-v1.schema.json
+    validExamples:
+      - examples/workitem.time-tracking-stopped-v1.json
+    invalidExamples:
+      - examples/workitem.time-tracking-stopped-v1.invalid.json
+  - eventType: workitem.time_tracking_added
+    eventVersion: 1
+    schema: schemas/workitem.time-tracking-added-v1.schema.json
+    validExamples:
+      - examples/workitem.time-tracking-added-v1.json
+    invalidExamples:
+      - examples/workitem.time-tracking-added-v1.invalid.json
+  - eventType: workitem.time_tracking_edited
+    eventVersion: 1
+    schema: schemas/workitem.time-tracking-edited-v1.schema.json
+    validExamples:
+      - examples/workitem.time-tracking-edited-v1.json
+    invalidExamples:
+      - examples/workitem.time-tracking-edited-v1.invalid.json
+  - eventType: workitem.time_tracking_deleted
+    eventVersion: 1
+    schema: schemas/workitem.time-tracking-deleted-v1.schema.json
+    validExamples:
+      - examples/workitem.time-tracking-deleted-v1.json
+    invalidExamples:
+      - examples/workitem.time-tracking-deleted-v1.invalid.json
+  - eventType: workitem.time_tracking_edited
+    eventVersion: 2
+    schema: schemas/workitem.time-tracking-edited-v2.schema.json
+    validExamples:
+      - examples/workitem.time-tracking-edited-v2.json
+    invalidExamples:
+      - examples/workitem.time-tracking-edited-v2.invalid.json

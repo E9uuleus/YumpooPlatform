@@ -73,6 +73,19 @@ const global = {
 describe('WorkItemCellActivityLog', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('计时器修改前后范围按公司时区显示到分钟', async () => {
+    const item = entry('timer-edit', WorkItemCellActivityChangeType.Changed, WorkItemCellActivityColumn.TimeTracking)
+    item.beforeValue = { type: WorkItemCellActivityValueType.Text, referenceId: null, colorToken: null, displayName: '2026-09-01T01:00:00Z/2026-09-01T02:00:00Z' }
+    item.afterValue = { type: WorkItemCellActivityValueType.Text, referenceId: null, colorToken: null, displayName: '2026-09-01T01:00:00Z/2026-09-01T02:30:00Z' }
+    api.list.mockResolvedValue(page([item], null))
+    const wrapper = mount(WorkItemCellActivityLog, { props: { workItemId: 'item-1' }, global })
+    await flushPromises()
+    expect(wrapper.text()).toContain('计时器')
+    expect(wrapper.text()).toContain('2026-09-01 09:00 – 2026-09-01 10:00')
+    expect(wrapper.text()).toContain('2026-09-01 09:00 – 2026-09-01 10:30')
+    wrapper.unmount()
+  })
+
   it('渲染替换值、切点提示并加载更早动态', async () => {
     api.list.mockResolvedValueOnce(page([
       entry('46000000-0000-4000-8000-000000000011', WorkItemCellActivityChangeType.Changed,
@@ -107,7 +120,7 @@ describe('WorkItemCellActivityLog', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('今天2')
     expect(wrapper.findAll('.activity-filter__columns section')).toHaveLength(3)
-    expect(wrapper.get('.activity-filter__header').text()).toContain('筛选动态显示 0 条动态清除')
+    expect(wrapper.get('.activity-filter__header').text().replace(/\s/g, '')).toContain('筛选动态显示0条动态清除')
     expect(wrapper.findAll('.activity-filter__columns h3').map(heading => heading.text())).toEqual(['时间', '成员', '字段'])
     const actorOption = wrapper.get('[aria-label="按成员 林晓 筛选"]')
     expect(actorOption.find('.yp-assignee__name').exists()).toBe(false)

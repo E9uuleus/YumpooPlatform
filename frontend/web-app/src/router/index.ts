@@ -7,6 +7,7 @@ import {
   type RouteRecordRaw,
 } from 'vue-router'
 import { consumeReturnPath, rememberReturnPath } from '../auth/navigation'
+import TimerPanel from '../components/timer/TimerPanel.vue'
 import AppShell from '../components/AppShell.vue'
 import { useSession } from '../composables/useSession'
 import LoginView from '../views/auth/LoginView.vue'
@@ -28,6 +29,7 @@ import ProductsView from '../views/products/ProductsView.vue'
 import ProductDetailView from '../views/products/ProductDetailView.vue'
 
 export const routes: RouteRecordRaw[] = [
+  { path: '/timer', name: 'timer', component: TimerPanel },
   {
     path: '/login',
     name: 'login',

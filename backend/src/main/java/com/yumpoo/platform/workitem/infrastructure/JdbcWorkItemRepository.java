@@ -719,6 +719,16 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             parameters.put("updatedAfter",
                     OffsetDateTime.ofInstant(query.updatedAfter(), ZoneOffset.UTC));
         }
+        if (query.timeTracking()!=null) {
+            var time=query.timeTracking();
+            String duration=timeDuration(query,parameters);
+            String sessions="SELECT 1 FROM yumpoo.work_item_time_session ts WHERE ts.company_id=:companyId AND ts.work_item_id=yumpoo.work_item.id AND ts.deleted_at IS NULL";
+            if ("RUNNING".equals(time.state())) sql.append(" AND EXISTS (").append(sessions).append(" AND ts.stopped_at IS NULL)");
+            if ("EMPTY".equals(time.state())) sql.append(" AND NOT EXISTS (").append(sessions).append(")");
+            if ("STOPPED".equals(time.state())) sql.append(" AND EXISTS (").append(sessions).append(") AND NOT EXISTS (").append(sessions).append(" AND ts.stopped_at IS NULL)");
+            if (time.minMs()!=null) { sql.append(" AND ").append(duration).append(">=:timeMin"); parameters.put("timeMin",time.minMs()); }
+            if (time.maxMs()!=null) { sql.append(" AND ").append(duration).append("<=:timeMax"); parameters.put("timeMax",time.maxMs()); }
+        }
         return sql.toString();
     }
 
@@ -731,6 +741,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             switch (sort.field()) {
                 case CONTENT -> addRankedUserOrder(order, parameters, "content_id",
                         "content", ranks.contents(), direction, index);
+                case TIME_TRACKING -> order.add(timeDuration(query,parameters)+" "+direction);
                 case ITEM_NO -> order.add("item_sequence " + direction);
                 case TITLE -> order.add("lower(title) " + direction);
                 case STATUS -> addRankedTextOrder(order, parameters, "status_code",
@@ -755,6 +766,15 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return String.join(", ", order);
     }
 
+    private static String timeDuration(WorkItemQuery query, Map<String,Object> parameters) {
+        String end="CURRENT_TIMESTAMP";
+        if(query.timeTracking()!=null && query.timeTracking().asOf()!=null) {
+            end=":timeAsOf";
+            parameters.put("timeAsOf",OffsetDateTime.ofInstant(query.timeTracking().asOf(),ZoneOffset.UTC));
+        }
+        return "(SELECT COALESCE(SUM(GREATEST(0,EXTRACT(EPOCH FROM (COALESCE(ts.stopped_at,"+end+")-ts.started_at))*1000)),0)::bigint FROM yumpoo.work_item_time_session ts WHERE ts.company_id=:companyId AND ts.work_item_id=yumpoo.work_item.id AND ts.deleted_at IS NULL)";
+    }
+
     private record SeekTerm(String expression, String direction, Object anchorValue) {}
 
     private static List<SeekTerm> projectSortTerms(WorkItemQuery query,
@@ -772,6 +792,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                     terms.add(new SeekTerm("content_id", "ASC",
                             anchor == null ? new UUID(0, 0) : anchor.contentId()));
                 }
+                case TIME_TRACKING -> terms.add(new SeekTerm(timeDuration(query,parameters),direction,query.timeTracking()==null ? 0L : query.timeTracking().anchorDurationMs()));
                 case ITEM_NO -> terms.add(new SeekTerm("item_sequence", direction,
                         anchor == null ? 0L : anchor.itemSequence()));
                 case TITLE -> terms.add(new SeekTerm("lower(title)", direction,

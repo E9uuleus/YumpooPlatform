@@ -1,4 +1,5 @@
 import {
+  TimeTrackingApi,
   AuthenticationApi,
   AdministrationApi,
   IdentityAdministrationApi,
@@ -32,3 +33,5 @@ export const workItemsApi = new WorkItemsApi(yumpooApiClient)
 export const workItemUpdatesApi = new WorkItemUpdatesApi(yumpooApiClient)
 export const attachmentsApi = new AttachmentsApi(yumpooApiClient)
 export const activityApi = new ActivityApi(yumpooApiClient)
+
+export const timeTrackingApi = new TimeTrackingApi(yumpooApiClient)

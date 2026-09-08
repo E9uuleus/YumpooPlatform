@@ -200,6 +200,21 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
     fs.writeFileSync(modelPath, source, 'utf8')
   }
 
+  for (const [model, fields] of [['TimeTrackingCommand', ['startedAt', 'stoppedAt']]]) {
+    const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
+    let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
+    for (const field of fields) source = replaceExactlyOnce(source,
+      `        '${field}': json['${field}'] == null ? undefined : (new Date(json['${field}'])),`,
+      `        ...(json['${field}'] == null ? {} : { '${field}': new Date(json['${field}']) }),`,
+      `${model} 可选时间精确属性兼容`)
+    fs.writeFileSync(modelPath, source, 'utf8')
+  }
+  const timerItemPath = path.join(sourceRoot, 'models', 'ProjectWorkItemListItem.ts')
+  fs.writeFileSync(timerItemPath, replaceExactlyOnce(normalizeText(fs.readFileSync(timerItemPath, 'utf8')),
+    "        'timeTracking': json['timeTracking'] == null ? undefined : TimeTrackingSummaryFromJSON(json['timeTracking']),",
+    "        ...(json['timeTracking'] === undefined ? {} : { 'timeTracking': json['timeTracking'] === null ? null : TimeTrackingSummaryFromJSON(json['timeTracking']) }),",
+    '计时摘要兼容旧工作项响应'), 'utf8')
+
   const attachmentMetadataPath = path.join(sourceRoot, 'models', 'AttachmentMetadata.ts')
   let attachmentMetadata = normalizeText(fs.readFileSync(attachmentMetadataPath, 'utf8'))
   attachmentMetadata = replaceExactlyOnce(

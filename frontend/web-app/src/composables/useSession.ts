@@ -1,3 +1,4 @@
+import { logoutGuard } from './logoutGuard'
 import {
   AuthenticationRole,
   ClientCompatibility,
@@ -99,6 +100,7 @@ export async function ensureAuthentication(force = false): Promise<void> {
 }
 
 export async function logout(): Promise<boolean> {
+  if (logoutGuard.check && !await logoutGuard.check()) return false
   clearActionProblem()
   const csrf = readCsrfToken()
   if (!csrf) {

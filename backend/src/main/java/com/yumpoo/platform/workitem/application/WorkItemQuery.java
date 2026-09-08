@@ -24,8 +24,28 @@ public record WorkItemQuery(
         LocalDate dueFrom,
         LocalDate dueTo,
         Instant updatedAfter,
-        List<Sort> sorts
+        List<Sort> sorts,
+        TimeFilter timeTracking
 ) {
+    public record TimeFilter(String state, Long minMs, Long maxMs, Instant asOf, long revision, long anchorDurationMs) {
+        public TimeFilter {
+            if (state != null && !Set.of("RUNNING", "STOPPED", "EMPTY").contains(state))
+                throw invalid("timeTrackingState", "INVALID_VALUE", "计时状态无效");
+            if ((minMs != null && minMs < 0) || (maxMs != null && maxMs < 0)
+                    || (minMs != null && maxMs != null && minMs > maxMs))
+                throw invalid("timeTrackingMinMs", "INVALID_RANGE", "计时时长范围无效");
+        }
+    }
+    public WorkItemQuery(String query, Set<String> statuses, Set<String> priorities, Set<UUID> assigneeUserIds,
+            Set<UUID> contentIds, LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter, List<Sort> sorts) {
+        this(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,null);
+    }
+    public WorkItemQuery withTime(TimeFilter filter) {
+        return new WorkItemQuery(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,filter);
+    }
+    public boolean usesTimeTracking() {
+        return timeTracking != null || sorts.stream().anyMatch(s -> s.field()==WorkItemSortField.TIME_TRACKING);
+    }
     public WorkItemQuery {
         statuses = Set.copyOf(statuses);
         priorities = Set.copyOf(priorities);
@@ -40,7 +60,16 @@ public record WorkItemQuery(
                           Collection<String> priorities, Collection<UUID> assigneeUserIds,
                           Collection<UUID> contentIds,
                           LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter,
-                          Collection<String> sorts) {}
+                          Collection<String> sorts, TimeFilter timeTracking) {
+        public Request(String query, Collection<String> statuses, Collection<String> priorities,
+                Collection<UUID> assigneeUserIds, Collection<UUID> contentIds, LocalDate dueFrom,
+                LocalDate dueTo, Instant updatedAfter, Collection<String> sorts) {
+            this(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,null);
+        }
+        public Request withTime(TimeFilter filter) {
+            return new Request(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,filter);
+        }
+    }
 
     public static WorkItemQuery parse(Request request, Set<String> allowedStatuses) {
         if (request.dueFrom() != null && request.dueTo() != null
@@ -51,7 +80,7 @@ public record WorkItemQuery(
                 request.assigneeUserIds() == null ? Set.of()
                         : new LinkedHashSet<>(request.assigneeUserIds()),
                 request.contentIds() == null ? Set.of() : new LinkedHashSet<>(request.contentIds()),
-                request.dueFrom(), request.dueTo(), request.updatedAfter(), sorts(request.sorts()));
+                request.dueFrom(), request.dueTo(), request.updatedAfter(), sorts(request.sorts()), request.timeTracking());
     }
 
     private static String normalizeQuery(String value) {

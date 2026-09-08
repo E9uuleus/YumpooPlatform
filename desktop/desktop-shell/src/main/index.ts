@@ -1,3 +1,4 @@
+import { TimerWindowController } from './timer-window'
 import path from 'node:path'
 import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron'
 import type { DesktopAuthStatus } from '@yumpoo/preload-contract'
@@ -27,6 +28,7 @@ const SMOKE_TEST_ARGUMENT = '--smoke-test'
 const SMOKE_TEST_TIMEOUT_MS = 20_000
 const protocolDispatcher = new ProtocolLaunchDispatcher()
 
+let timerController: TimerWindowController | undefined
 let mainWindow: BrowserWindow | null = null
 let webAppUrl: URL | undefined
 let credentialStore: DesktopCredentialStore | undefined
@@ -91,6 +93,11 @@ async function createMainWindow(): Promise<void> {
 
   mainWindow = new BrowserWindow(createWindowOptions(preloadPath, app.isPackaged))
   installSecurityGuards(mainWindow.webContents, webAppUrl.origin)
+  if (!smokeTest) {
+    timerController ??= new TimerWindowController(() => mainWindow, webAppUrl.origin, preloadPath)
+    timerController.install()
+    timerController.attachMain(mainWindow)
+  }
   const restored = await credentialStore?.load(webAppUrl.origin)
   if (restored) {
     await installSessionCookies(mainWindow.webContents.session.cookies, webAppUrl.origin, restored)
