@@ -4,26 +4,30 @@ import { parse as parseYaml } from 'yaml'
 import {
   assert,
   eventEnvelopePath,
-  readFreezeManifest,
 } from './event-contract-compat.mjs'
 import {
   atomicWriteJson,
   gitObject,
   resolveGitCommit,
+  runGit,
 } from '../verification/m0-18-utils.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const reference = process.argv[2] ?? process.env.YUMPOO_M223_BASE_REF ?? 'origin/dev'
 const outputPath = path.resolve(process.argv[3] ?? path.join(repositoryRoot, 'out', 'm2-23', 'event-contract-baseline.json'))
-const manifest = readFreezeManifest(repositoryRoot)
 const baseCommit = resolveGitCommit(repositoryRoot, reference)
 const catalog = parseYaml(gitObject(repositoryRoot, baseCommit, 'contracts/events/catalog.yaml'))
 const envelopeSchema = parseJson(
   gitObject(repositoryRoot, baseCommit, `contracts/events/${eventEnvelopePath}`),
   eventEnvelopePath,
 )
+const supportSchemas = runGit(repositoryRoot, ['ls-tree', '-r', '--name-only', '-z', baseCommit, '--',
+  'contracts/events/schemas'], '读取共享事件 Schema').split('\0')
+  .filter(file => file.endsWith('-payload.schema.json'))
+  .map(file => ({ path: file.slice('contracts/events/'.length), schema: parseJson(gitObject(repositoryRoot, baseCommit, file), file) }))
 
-const events = manifest.events.map((frozen) => {
+assert(Array.isArray(catalog?.events) && catalog.events.length > 0, '事件基线目录不能为空')
+const events = catalog.events.map((frozen) => {
   const matches = catalog?.events?.filter((event) =>
     event.eventType === frozen.eventType && event.eventVersion === frozen.eventVersion) ?? []
   assert(matches.length === 1, `${frozen.eventType}@${frozen.eventVersion} 在基线目录中必须恰好登记一次`)
@@ -55,6 +59,7 @@ atomicWriteJson(outputPath, {
   baseCommit,
   envelopeSchema,
   events,
+  supportSchemas,
 })
 console.log(`M2-23 事件契约基线已从 ${baseCommit} 提取：${outputPath}`)
 

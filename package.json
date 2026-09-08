@@ -8,6 +8,14 @@
     "pnpm": "11.16.x"
   },
   "scripts": {
+    "ci": "node tools/ci/run.mjs",
+    "ci:static": "node tools/ci/run.mjs static",
+    "ci:contracts": "node tools/ci/run.mjs contracts",
+    "ci:backend": "node tools/ci/run.mjs backend",
+    "ci:portable": "node tools/ci/run.mjs portable",
+    "ci:windows": "node tools/ci/run.mjs windows",
+    "test:ci": "node --test --test-isolation=none tools/ci/ci.test.mjs tools/openapi/breaking-change-policy.test.mjs",
+    "test:openapi-compat": "node --test --test-isolation=none tools/openapi/openapi-compat.test.mjs",
     "dev:web": "pnpm --filter @yumpoo/api-client build && pnpm --filter @yumpoo/web-app dev",
     "dev:desktop": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/desktop-shell start",
     "lint:openapi": "node tools/openapi/lint-openapi.mjs",

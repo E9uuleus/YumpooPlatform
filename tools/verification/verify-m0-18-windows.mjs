@@ -39,7 +39,9 @@ try {
   if (validationMode === 'WINDOWS_X64_FULL') {
     runPnpmSync(['run', 'smoke:m0-16:server'], { cwd: repositoryRoot, env: environment })
   }
-  runPnpmSync(['run', 'smoke:desktop'], { cwd: repositoryRoot, env: environment })
+  runSync(process.execPath, [path.join(repositoryRoot, 'tools/verification/smoke-desktop.mjs'), '--handoff', handoffRoot], {
+    cwd: repositoryRoot, env: environment,
+  })
   runPnpmSync(['run', 'verify:m0-16:windows'], { cwd: repositoryRoot, env: environment })
   runSync(process.execPath, [path.join(repositoryRoot, 'tools', 'verification', 'create-m0-18-evidence-pack.mjs')], {
     cwd: repositoryRoot,

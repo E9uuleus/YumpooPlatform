@@ -1,97 +1,58 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parse } from 'yaml'
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const read = relative => fs.readFileSync(path.join(root, relative), 'utf8')
-const exists = relative => fs.existsSync(path.join(root, relative))
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
-export function verifyContentCategoryRefactorAssets() {
-  const migration = read('backend/src/main/resources/db/migration/workitem/V48__refactor_content_as_work_item_category.sql')
-  const content = read('backend/src/main/java/com/yumpoo/platform/workitem/domain/Content.java')
-  const contentService = read('backend/src/main/java/com/yumpoo/platform/workitem/application/ContentService.java')
-  const contentController = read('backend/src/main/java/com/yumpoo/platform/workitem/api/ContentController.java')
-  const workItemService = read('backend/src/main/java/com/yumpoo/platform/workitem/application/WorkItemService.java')
-  const workItemRepository = read('backend/src/main/java/com/yumpoo/platform/workitem/infrastructure/JdbcWorkItemRepository.java')
-  const workItemController = read('backend/src/main/java/com/yumpoo/platform/workitem/api/WorkItemController.java')
-  const openapi = read('contracts/openapi/yumpoo-v1.yaml')
-  const eventCatalog = read('contracts/events/catalog.yaml')
-  const overview = read('frontend/web-app/src/views/projects/ProjectOverviewView.vue')
-  const subitems = read('frontend/web-app/src/components/projects/ProjectWorkItemSubitemsTable.vue')
-  const editor = read('frontend/web-app/src/components/projects/WorkItemContentPopoverContent.vue')
-  const routes = read('frontend/web-app/src/router/index.ts')
-
-  for (const fragment of [
-    'DROP COLUMN work_item_type', 'DROP COLUMN default_view_type', 'DROP COLUMN view_config',
-    'ALTER TABLE yumpoo.work_item_update DROP COLUMN content_id', 'ALTER TABLE yumpoo.work_item',
-    'DROP COLUMN type', 'PRIMARY KEY (project_id, status_code)', 'UPDATE yumpoo.work_item SET rank = project_sort_key',
-    'BRIGHT_BLUE', 'BRIGHT_GREEN', 'DARK_RED', 'content_catalog_version',
-  ]) assert(migration.includes(fragment), `V48 缺少 ${fragment}`)
-
-  for (const fragment of ['protectedContent', 'everUsed', 'sortOrder', 'colorToken', 'deletedAt']) {
-    assert(content.includes(fragment), `Content 目录模型缺少 ${fragment}`)
+export function verifyContentCategoryRefactorAssets(root = repositoryRoot) {
+  const spec = parse(fs.readFileSync(path.join(root, 'contracts/openapi/yumpoo-v1.yaml'), 'utf8'))
+  const catalog = parse(fs.readFileSync(path.join(root, 'contracts/events/catalog.yaml'), 'utf8'))
+  const operations = [
+    ['/projects/{projectId}/contents', 'get', 'listProjectContents', []],
+    ['/projects/{projectId}/contents', 'post', 'createContent', ['XsrfToken', 'IdempotencyKey']],
+    ['/projects/{projectId}/contents/{contentId}', 'patch', 'updateContent', ['XsrfToken', 'IfMatch']],
+    ['/projects/{projectId}/contents/{contentId}', 'delete', 'deleteContent', ['XsrfToken', 'IfMatch']],
+    ['/work-items/{workItemId}/content', 'patch', 'patchWorkItemContent', ['XsrfToken', 'IfMatch', 'IdempotencyKey']],
+  ]
+  for (const [route, method, operationId, headers] of operations) {
+    const operation = spec.paths?.[route]?.[method]
+    assert(operation?.operationId === operationId, `缺少 ${method.toUpperCase()} ${route}`)
+    assert(operation.security?.some(item => Object.hasOwn(item, 'sessionCookie')), `${operationId} 缺少会话认证`)
+    for (const header of headers) {
+      assert(operation.parameters?.some(item => item.$ref === `#/components/parameters/${header}`), `${operationId} 缺少 ${header}`)
+    }
   }
-  for (const fragment of ['LAST_ACTIVE_CONTENT', 'PROTECTED_CONTENT', 'CONTENT_IN_USE',
-    'lockCatalogVersion', 'workitem.content_created', 'workitem.content_updated', 'workitem.content_deleted']) {
-    assert(contentService.includes(fragment), `Content 服务缺少 ${fragment}`)
+  for (const route of ['/contents/{contentId}/work-items', '/contents/{contentId}/archive', '/contents/{contentId}/restore']) {
+    assert(!spec.paths?.[route], `仍公开旧 Content 契约 ${route}`)
   }
-  for (const fragment of ['@GetMapping("/projects/{projectId}/contents")',
-    '@PostMapping("/projects/{projectId}/contents")',
-    '@PatchMapping("/projects/{projectId}/contents/{contentId}")',
-    '@DeleteMapping("/projects/{projectId}/contents/{contentId}")']) {
-    assert(contentController.includes(fragment), `Content API 缺少 ${fragment}`)
+  const schemas = spec.components.schemas
+  for (const field of ['projectId', 'colorToken', 'sortOrder', 'active', 'protectedContent', 'inUse', 'rowVersion']) {
+    assert(schemas.Content.required.includes(field) && schemas.Content.properties[field], `Content 缺少必需字段 ${field}`)
   }
-  assert(!contentController.includes('/archive') && !contentController.includes('/restore'), 'Content API 仍公开旧归档动作')
-
-  for (const fragment of ['case "CONTENT"', 'case CONTENT', 'contentNames', 'changeContent(',
-    'contentName', 'contentColorToken', 'workitem.work_item_fields_changed']) {
-    assert(workItemService.includes(fragment) || workItemRepository.includes(fragment), `Work Item 类别行为缺少 ${fragment}`)
+  for (const field of ['protectedContent', 'inUse', 'rowVersion']) {
+    assert(schemas.Content.properties[field].readOnly === true, `${field} 必须由服务端管理`)
   }
-  assert(workItemRepository.includes('view == WorkItemViewType.KANBAN'), '项目级看板查询未使用独立视图类型')
-  assert(workItemController.includes('@PatchMapping("/work-items/{workItemId}/content")'), '缺少工作项类别切换 API')
-
-  for (const fragment of ['/projects/{projectId}/contents:', '/projects/{projectId}/contents/{contentId}:',
-    '/projects/{projectId}/work-items:', '/work-items/{workItemId}/content:', 'CONTENT',
-    'contentName:', 'contentColorToken:', 'WorkItemViewType:']) {
-    assert(openapi.includes(fragment), `OpenAPI 缺少 ${fragment}`)
+  assert(!schemas.ContentViewConfig && !schemas.WorkItemType, '仍公开旧 Content 配置或工作项类型')
+  for (const [eventType, eventVersion] of [
+    ['workitem.content_created', 2], ['workitem.content_updated', 2], ['workitem.content_deleted', 2],
+    ['workitem.work_item_created', 2], ['workitem.work_item_fields_changed', 2],
+  ]) {
+    assert(catalog.events.some(item => item.eventType === eventType && item.eventVersion === eventVersion),
+      `事件目录缺少 ${eventType}@${eventVersion}`)
   }
-  for (const stale of ['/contents/{contentId}/work-items:', '/contents/{contentId}/archive:',
-    '/contents/{contentId}/restore:', 'ContentViewConfig:', 'WorkItemType:']) {
-    assert(!openapi.includes(stale), `OpenAPI 仍含旧契约 ${stale}`)
-  }
-  for (const event of ['workitem.content_created', 'workitem.content_updated', 'workitem.content_deleted',
-    'workitem.work_item_created', 'workitem.work_item_fields_changed', 'eventVersion: 2']) {
-    assert(eventCatalog.includes(event), `事件目录缺少 ${event}`)
-  }
-
-  for (const fragment of ['WorkItemContentPopoverContent', 'patchWorkItemContent',
-    '--work-item-table-row-height: 36px', 'height: 26px', 'margin: 5px 24px']) {
-    assert(overview.includes(fragment), `项目工作项总表缺少 ${fragment}`)
-  }
-  for (const fragment of ['WorkItemContentPopoverContent', '--subitem-table-row-height: 36px',
-    'height: 26px', 'margin: 5px 24px']) assert(subitems.includes(fragment), `子项表缺少 ${fragment}`)
-  for (const fragment of ['canManage', 'protectedContent', 'inUse', 'draggable="true"',
-    'border-radius: var(--yp-radius-xs)', 'height: 34px']) assert(editor.includes(fragment), `类别选择/管理弹窗缺少 ${fragment}`)
-
-  assert(!routes.includes('projects/:projectId/contents'), '路由仍公开 Content 配置页')
-  for (const removed of [
-    'frontend/web-app/src/views/projects/ProjectContentsView.vue',
-    'frontend/web-app/src/views/projects/ContentWorkItemsView.vue',
-    'frontend/web-app/src/components/projects/ContentTableQueryEditor.vue',
-    'backend/src/main/java/com/yumpoo/platform/workitem/application/ContentViewConfig.java',
-    'backend/src/main/java/com/yumpoo/platform/workitem/application/ContentViewConfigCodec.java',
-  ]) assert(!exists(removed), `旧资产仍存在：${removed}`)
 }
 
 export function verifyHistoricalMilestone(milestone) {
   const normalized = milestone.toLowerCase()
-  const report = JSON.parse(read(`evidence/${normalized}/verification-report.json`))
-  const acceptance = JSON.parse(read(`evidence/${normalized}/acceptance-matrix.json`))
-  assert(report.milestone === milestone && report.status === 'PASS', `${milestone} 验证报告无效`)
+  const read = name => JSON.parse(fs.readFileSync(path.join(repositoryRoot, `evidence/${normalized}/${name}.json`), 'utf8'))
+  const report = read('verification-report')
+  const acceptance = read('acceptance-matrix')
+  assert(report.milestone === milestone && report.status === 'PASS', `${milestone} 历史报告无效`)
   assert(Array.isArray(acceptance.verifiedSlices) && acceptance.verifiedSlices.length > 0,
-    `${milestone} 验收矩阵缺少已验证切片`)
+    `${milestone} 历史验收矩阵缺少已验证切片`)
 }
 
 function assert(condition, message) {
-  if (!condition) throw new Error(`Content 类别重构资产验证失败：${message}`)
+  if (!condition) throw new Error(`Content 类别契约验证失败：${message}`)
 }

@@ -74,24 +74,30 @@ export function loadCurrentBundle(repositoryRoot, manifest = readFreezeManifest(
   const eventsRoot = path.join(repositoryRoot, 'contracts', 'events')
   const catalog = parseYaml(fs.readFileSync(path.join(eventsRoot, 'catalog.yaml'), 'utf8'))
   const envelopeSchema = readJson(path.join(eventsRoot, eventEnvelopePath), eventEnvelopePath)
-  const events = manifest.events.map((frozen) => {
+  const supportSchemas = fs.readdirSync(path.join(eventsRoot, 'schemas'))
+    .filter(file => file.endsWith('-payload.schema.json'))
+    .map(file => ({ path: `schemas/${file}`, schema: readJson(path.join(eventsRoot, 'schemas', file)) }))
+  for (const frozen of manifest.events) {
     const catalogEvent = findCatalogEvent(catalog, frozen)
     assert(catalogEvent.schema === frozen.schema, `${eventKey(frozen)} 目录 Schema 与冻结清单不一致`)
+    validateManifestReferences(frozen, readJson(resolveEventsPath(eventsRoot, catalogEvent.schema)))
+  }
+  const events = catalog.events.map((catalogEvent) => {
+    findCatalogEvent(catalog, catalogEvent)
     const schema = readJson(resolveEventsPath(eventsRoot, catalogEvent.schema), catalogEvent.schema)
     const validExamples = catalogEvent.validExamples.map((relative) => ({
       path: relative,
       value: readJson(resolveEventsPath(eventsRoot, relative), relative),
     }))
-    validateManifestReferences(frozen, schema)
     return {
-      eventType: frozen.eventType,
-      eventVersion: frozen.eventVersion,
+      eventType: catalogEvent.eventType,
+      eventVersion: catalogEvent.eventVersion,
       schemaPath: catalogEvent.schema,
       schema,
       validExamples,
     }
   })
-  return { schemaVersion: 1, envelopeSchema, events }
+  return { schemaVersion: 1, envelopeSchema, events, supportSchemas }
 }
 
 export function assertEventContractsCompatible(baseline, current) {
@@ -99,27 +105,43 @@ export function assertEventContractsCompatible(baseline, current) {
   assert(current?.schemaVersion === 1, '当前契约 bundle schemaVersion 必须为 1')
   compareObjectSchema('事件信封', baseline.envelopeSchema, current.envelopeSchema)
 
+  const ajv = new Ajv({ allErrors: true, strict: true, schemas: [current.envelopeSchema] })
+  addFormats(ajv)
+  for (const item of current.supportSchemas ?? []) ajv.addSchema(item.schema)
+  for (const previous of baseline.supportSchemas ?? []) {
+    const next = current.supportSchemas?.find(item => item.path === previous.path)
+    assert(next, `已移除共享事件载荷 ${previous.path}`)
+    compareObjectSchema(previous.path, previous.schema, next.schema)
+  }
+  for (const event of current.events) {
+    if (event.schema.$id) ajv.addSchema(event.schema)
+  }
+
   const currentByKey = new Map(current.events.map((event) => [eventKey(event), event]))
   for (const previous of baseline.events) {
     const key = eventKey(previous)
     const next = currentByKey.get(key)
     assert(next, `${key} 已从当前事件目录移除`)
-    compareEvent(key, previous, next, current.envelopeSchema)
+    compareEvent(key, previous, next, ajv)
   }
 }
 
-function compareEvent(key, previous, next, currentEnvelope) {
+function compareEvent(key, previous, next, ajv) {
   const previousLayer = eventLayer(previous.schema, key)
   const nextLayer = eventLayer(next.schema, key)
   assert(nextLayer.properties.eventType?.const === previousLayer.properties.eventType?.const, `${key} eventType 被改变`)
   assert(nextLayer.properties.eventVersion?.const === previousLayer.properties.eventVersion?.const, `${key} eventVersion 被改变`)
   assert(nextLayer.properties.aggregateType?.const === previousLayer.properties.aggregateType?.const, `${key} aggregateType 被改变`)
   assert(canonical(nextLayer.properties.aggregateVersion) === canonical(previousLayer.properties.aggregateVersion), `${key} aggregateVersion 约束被改变`)
-  compareObjectSchema(`${key} payload`, previousLayer.properties.payload, nextLayer.properties.payload)
+  const previousPayload = previousLayer.properties.payload
+  const nextPayload = nextLayer.properties.payload
+  if (previousPayload.$ref || nextPayload.$ref) {
+    assert(canonical(previousPayload) === canonical(nextPayload), `${key} payload 引用被改变`)
+  } else {
+    compareObjectSchema(`${key} payload`, previousPayload, nextPayload)
+  }
 
-  const ajv = new Ajv({ allErrors: true, strict: true, schemas: [currentEnvelope] })
-  addFormats(ajv)
-  const validate = ajv.compile(next.schema)
+  const validate = (next.schema.$id && ajv.getSchema(next.schema.$id)) || ajv.compile(next.schema)
   for (const example of previous.validExamples) {
     assert(validate(example.value), `${key} 不再兼容历史样例 ${example.path}：${ajv.errorsText(validate.errors)}`)
   }
@@ -133,9 +155,16 @@ function compareObjectSchema(label, previous, next) {
   assert(JSON.stringify(previousRequired) === JSON.stringify(nextRequired), `${label} required 字段集合被改变`)
   const previousProperties = previous.properties ?? {}
   const nextProperties = next.properties ?? {}
+  const constraints = schema => Object.fromEntries(Object.entries(schema)
+    .filter(([key]) => !['properties', 'required'].includes(key)))
+  assert(canonical(constraints(previous)) === canonical(constraints(next)), `${label} 对象约束被改变`)
   for (const [name, definition] of Object.entries(previousProperties)) {
     assert(Object.hasOwn(nextProperties, name), `${label} 删除了既有字段 ${name}`)
-    assert(canonical(definition) === canonical(nextProperties[name]), `${label} 改变了既有字段 ${name} 的约束`)
+    if (definition.type === 'object' && definition.properties && nextProperties[name].properties) {
+      compareObjectSchema(`${label}.${name}`, definition, nextProperties[name])
+    } else {
+      assert(canonical(definition) === canonical(nextProperties[name]), `${label} 改变了既有字段 ${name} 的约束`)
+    }
   }
   for (const name of Object.keys(nextProperties)) {
     if (!Object.hasOwn(previousProperties, name)) {
@@ -194,15 +223,18 @@ function equalStringSets(left, right) {
   return JSON.stringify(sortedStrings(left)) === JSON.stringify(sortedStrings(right))
 }
 
-function canonical(value, key = '') {
+function canonical(value, key = '', data = false) {
   if (Array.isArray(value)) {
-    const entries = value.map((entry) => canonical(entry))
+    const entries = value.map((entry) => canonical(entry, '', data))
     if (['enum', 'required', 'type'].includes(key)) entries.sort((left, right) => left.localeCompare(right, 'en'))
     return `[${entries.join(',')}]`
   }
   if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort((left, right) => left.localeCompare(right, 'en'))
-      .map((name) => `${JSON.stringify(name)}:${canonical(value[name], name)}`).join(',')}}`
+    const schemaMap = ['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'mapping'].includes(key)
+    return `{${Object.keys(value).filter(name => data || schemaMap || !['description', 'title', 'examples', 'example', '$comment'].includes(name))
+      .sort((left, right) => left.localeCompare(right, 'en'))
+      .map((name) => `${JSON.stringify(name)}:${canonical(value[name], schemaMap ? '' : name,
+        data || (!schemaMap && ['enum', 'const', 'default'].includes(name)))}`).join(',')}}`
   }
   return JSON.stringify(value)
 }

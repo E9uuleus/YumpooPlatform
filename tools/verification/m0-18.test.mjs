@@ -5,7 +5,6 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import YAML from 'yaml'
 import { extractOpenApiBaseline } from '../openapi/extract-openapi-baseline.mjs'
 import { assertEvidenceReportDigests, assertNoSensitiveMaterial } from './create-m0-18-evidence-pack.mjs'
 import { verifyServerSmokeReceipt } from './m0-18-server-smoke-receipt.mjs'
@@ -99,15 +98,12 @@ test('OpenAPI compatibility check fails when no baseline is supplied', () => {
   assert.match(`${result.stdout}\n${result.stderr}`, /必须显式传入历史基线/u)
 })
 
-test('OpenAPI compatibility gate only relaxes approved enum evolution', () => {
+test('OpenAPI compatibility keeps incompatible changes fatal without global rule exceptions', () => {
   const source = fs.readFileSync(path.join(repositoryRoot, 'tools', 'openapi', 'openapi-diff-pom.xml'), 'utf8')
   assert.match(source, /<failOnIncompatible>true<\/failOnIncompatible>/u)
   assert.deepEqual(
     source.match(/<incompatible\.[^>]+>false<\/incompatible\.[^>]+>/gu) ?? [],
-    [
-      '<incompatible.request.enum.decreased>false</incompatible.request.enum.decreased>',
-      '<incompatible.response.enum.increased>false</incompatible.response.enum.increased>',
-    ],
+    [],
   )
 })
 
@@ -276,7 +272,7 @@ test('portable handoff rejects tampering, missing and extra files', (context) =>
   assert.throws(() => assertExactPayload(fixture.root, fixture.manifest, 'portable-handoff.json', fixture.commit), /M0-18/u)
 })
 
-test('portable handoff rejects Windows case collisions', { skip: process.platform === 'win32' }, (context) => {
+test('portable handoff rejects Windows case collisions', { skip: process.platform === 'win32' ? '由必需 Linux job 构造大小写碰撞文件；Windows 文件系统不支持此夹具' : false }, (context) => {
   const fixture = handoffFixture(context)
   fs.writeFileSync(path.join(fixture.root, 'web', 'INDEX.HTML'), 'collision', 'utf8')
   assert.throws(
@@ -285,7 +281,7 @@ test('portable handoff rejects Windows case collisions', { skip: process.platfor
   )
 })
 
-test('portable handoff rejects symbolic links', { skip: process.platform === 'win32' }, (context) => {
+test('portable handoff rejects symbolic links', { skip: process.platform === 'win32' ? '由必需 Linux job 构造符号链接；Windows 需要额外 OS 权限' : false }, (context) => {
   const fixture = handoffFixture(context)
   fs.symlinkSync(path.join(fixture.root, 'server', 'yumpoo-server.jar'), path.join(fixture.root, 'web', 'jar-link'))
   assert.throws(() => collectRegularFiles(fixture.root), /M0-18/u)
@@ -338,7 +334,8 @@ test('full M0-18 runtime chain is Windows x64 only', () => {
   assert.doesNotMatch(full, /smoke:m0-16:server/u)
   assert.doesNotMatch(portable, /smoke:m0-16:server|smoke:desktop/u)
   assert.match(windows, /validationMode === 'WINDOWS_X64_FULL'[\s\S]+smoke:m0-16:server/u)
-  assert.match(windows, /smoke:desktop/u)
+  assert.match(windows, /smoke-desktop\.mjs/u)
+  assert.match(windows, /'--handoff', handoffRoot/u)
   assert.match(evidencePack, /YUMPOO_M017_OUTPUT_ROOT/u)
   assert.match(serverSmoke, /process\.platform === 'win32' && process\.arch === 'x64'/u)
   assert.doesNotMatch(serverSmoke, /\bss\b|parseSsListeners/u)
@@ -373,60 +370,6 @@ test('M1-13 portable phase clears controlled fixture environment overrides', () 
   assert.equal(inherited.YUMPOO_CONTROLLED_AUTH_ENABLED, 'true')
 })
 
-test('workflow locks M1-15 gates, M0 handoff, fail-closed dependency and immutable action SHAs', () => {
-  const workflowPath = path.join(repositoryRoot, '.github', 'workflows', 'm0-18-ci.yml')
-  const source = fs.readFileSync(workflowPath, 'utf8')
-  const workflow = YAML.parse(source)
-  assert.equal(workflow.name, 'M1-15 CI')
-  assert.deepEqual(Object.keys(workflow.on).sort(), ['pull_request', 'push'])
-  assert.deepEqual(workflow.on.pull_request.branches, ['dev'])
-  assert.deepEqual(workflow.on.push.branches, ['dev'])
-  assert.deepEqual(workflow.permissions, { contents: 'read' })
-  assert.deepEqual(Object.keys(workflow.jobs).sort(), ['linux', 'windows'])
-  assert.equal(workflow.jobs.linux.name, 'M0 Portable Gate')
-  assert.equal(workflow.jobs.linux['runs-on'], 'ubuntu-24.04')
-  assert.equal(workflow.jobs.linux['timeout-minutes'], 60)
-  assert.equal(workflow.jobs.windows.name, 'M0 Windows x64 Gate')
-  assert.equal(workflow.jobs.windows['runs-on'], 'windows-2022')
-  assert.equal(workflow.jobs.windows['timeout-minutes'], 45)
-  assert.deepEqual(workflow.jobs.windows.needs, ['linux'])
-  assert.equal(workflow.jobs.windows.if, '${{ always() }}')
-  assert.match(source, /needs\.linux\.result[^\n]+success/u)
-  assert.doesNotMatch(source, /^\s*(?:paths|paths-ignore):/mu)
-  assert.doesNotMatch(source, /pull_request_target|continue-on-error|workflow_dispatch/u)
-  assert.doesNotMatch(source, /xvfb-run|smoke:m0-16:server/u)
-  assert.match(source, /run:\s+pnpm verify:m1-13/u)
-  assert.match(source, /verify-m1-15-assets\.mjs/u)
-  assert.match(source, /verify-m1-15-powershell\.mjs/u)
-  assert.match(source, /mvnw\.cmd -q -f \.\\backend\\pom\.xml -DskipTests package/u)
-  assert.match(source, /pnpm package:m1-15:win/u)
-  assert.match(source, /pnpm verify:m1-15:package/u)
-  assert.match(source, /path:\s+out\/m1-13\/verification-report\.json/u)
-  assert.match(source, /YUMPOO_M018_VALIDATION_MODE:\s+WINDOWS_X64_CI_STAGE/u)
-  assert.match(source, /out\/m0-17\/backup-set\/manifest\.json/u)
-  assert.match(source, /out\/m0-17\/retention-plan\.json/u)
-  assert.match(source, /out\/m0-17\/verification-report\.json/u)
-  assert.match(source, /YUMPOO_M017_OUTPUT_ROOT:[^\n]+\\out\\m0-17/u)
-  assert.match(source, /YUMPOO_M018_HANDOFF_ROOT:[^\n]+\\out\\m0-18\\portable-handoff/u)
-  assert.doesNotMatch(source, /^\s*strategy:/mu)
-  assert.match(source, /retention-days:\s+1/u)
-  assert.match(source, /retention-days:\s+30/u)
-  assert.equal((source.match(/if-no-files-found:\s+error/gu) ?? []).length, 4)
-
-  const uses = [...source.matchAll(/uses:\s+([^@\s]+)@([^\s]+)/gu)]
-  assert.equal(uses.length, 13)
-  assert(uses.every((match) => /^[0-9a-f]{40}$/u.test(match[2])))
-  for (const sha of [
-    '3d3c42e5aac5ba805825da76410c181273ba90b1',
-    '820762786026740c76f36085b0efc47a31fe5020',
-    'b6effb05e454b25005698d916606bdc6ffcbf961',
-    '0977fd99725f1db4007ccb2928dbb4e90d06cc86',
-    '043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
-    '3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
-  ]) {
-    assert.match(source, new RegExp(sha, 'u'))
-  }
-})
 
 function handoffFixture(context) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-m018-handoff-'))

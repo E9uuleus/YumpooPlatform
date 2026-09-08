@@ -4,16 +4,21 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { quotePowerShellLiteral, sha256 } from './m0-16-utils.mjs'
 import { gitHead } from './m0-18-utils.mjs'
+import { verifyM018Handoff } from './verify-m0-18-handoff.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const out = path.join(root, 'out', 'm1-15')
 const stage = path.join(out, 'server-staging')
 const serverZip = path.join(out, 'yumpoo-windows-server-m1-15.zip')
 const deployment = path.join(root, 'deployment', 'windows')
+const handoff = process.env.YUMPOO_M018_HANDOFF_ROOT
+if (handoff) verifyM018Handoff(root, path.resolve(handoff))
+const jar = handoff ? path.join(handoff, 'server/yumpoo-server.jar') : path.join(root, 'backend/target/yumpoo-server.jar')
+const web = handoff ? path.join(handoff, 'web') : path.join(root, 'frontend/web-app/dist')
 
 assert(process.platform === 'win32' && process.arch === 'x64', '只能在 Windows x64 上组装')
-requireFile(path.join(root, 'backend', 'target', 'yumpoo-server.jar'), '当前后端 JAR')
-requireDirectory(path.join(root, 'frontend', 'web-app', 'dist'), '当前 Web dist')
+requireFile(jar, '已验证后端 JAR')
+requireDirectory(web, '已验证 Web dist')
 
 fs.mkdirSync(out, { recursive: true })
 for (const target of [stage, serverZip, `${serverZip}.sha256`]) {
@@ -58,8 +63,8 @@ try {
 function assembleServer() {
   fs.mkdirSync(path.join(stage, 'server'), { recursive: true })
   fs.mkdirSync(path.join(stage, 'windows'), { recursive: true })
-  fs.copyFileSync(path.join(root, 'backend', 'target', 'yumpoo-server.jar'), path.join(stage, 'server', 'yumpoo-server.jar'))
-  copyTree(path.join(root, 'frontend', 'web-app', 'dist'), path.join(stage, 'web'), { rejectSourceMaps: true })
+  fs.copyFileSync(jar, path.join(stage, 'server', 'yumpoo-server.jar'))
+  copyTree(web, path.join(stage, 'web'), { rejectSourceMaps: true })
   for (const file of [
     'RUNBOOK.md',
     'deployment-checklist-m1-15.json',

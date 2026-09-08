@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { assertEventContractsCompatible } from './event-contract-compat.mjs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { assertEventContractsCompatible, loadCurrentBundle } from './event-contract-compat.mjs'
+import { assertRegisteredInventory } from './event-inventory-policy.mjs'
 
 const envelope = {
   $id: 'event-envelope.schema.json',
@@ -86,6 +89,42 @@ function incompatible(current, pattern) {
 }
 
 test('原契约保持兼容', () => compatible(bundle()))
+
+test('当前事件库存可以登记新增事件，未登记生产者事件和丢失冻结核心仍失败', () => {
+  const frozen = new Set(['core'])
+  const registered = new Set(['core', 'additional'])
+  assert.doesNotThrow(() => assertRegisteredInventory('producer', new Set(['core', 'additional']), frozen, registered))
+  assert.throws(() => assertRegisteredInventory('producer', new Set(['core', 'unknown']), frozen, registered), /未登记事件=\[unknown\]/u)
+  assert.throws(() => assertRegisteredInventory('producer', new Set(['additional']), frozen, registered), /缺少冻结事件=\[core\]/u)
+})
+
+test('注释调整与嵌套可选字段演进通过，对象约束收紧仍失败', () => {
+  const baseline = bundle()
+  baseline.events[0].schema.allOf[1].properties.payload.properties.metadata = {
+    type: 'object', additionalProperties: false, properties: { description: { type: 'string' } },
+  }
+  const current = structuredClone(baseline)
+  const payload = current.events[0].schema.allOf[1].properties.payload
+  payload.description = '说明可更新'
+  payload.properties.metadata.properties.optionalNote = { type: 'string' }
+  assert.doesNotThrow(() => assertEventContractsCompatible(baseline, current))
+  payload.minProperties = 3
+  assert.throws(() => assertEventContractsCompatible(baseline, current), /对象约束被改变/u)
+  delete payload.minProperties
+  payload.properties.metadata.properties.description.maxLength = 3
+  assert.throws(() => assertEventContractsCompatible(baseline, current), /description 的约束/u)
+})
+
+test('完整目录保护冻结清单以外的 Content、附件和计时版本', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+  const baseline = loadCurrentBundle(root)
+  assert(baseline.events.some(event => event.eventType === 'workitem.content_deleted' && event.eventVersion === 2))
+  assert(baseline.events.some(event => event.eventType.startsWith('filestorage.')))
+  const current = structuredClone(baseline)
+  assert.doesNotThrow(() => assertEventContractsCompatible(baseline, current))
+  current.events = current.events.filter(event => event.eventType !== 'workitem.content_deleted')
+  assert.throws(() => assertEventContractsCompatible(baseline, current), /workitem.content_deleted@2 已从当前事件目录移除/u)
+})
 
 test('同一 v1 新增可选字段保持兼容', () => {
   const schema = eventSchema({
