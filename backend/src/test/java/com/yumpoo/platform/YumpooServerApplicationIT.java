@@ -34,6 +34,8 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.yumpoo.platform.testing.MigrationAssertions.assertMigrateToLatest;
+import static com.yumpoo.platform.testing.MigrationAssertions.migrationVersions;
 
 @Import(PostgreSqlTestContainerConfiguration.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -129,7 +131,7 @@ class YumpooServerApplicationIT {
     }
 
     @Test
-    void emptyDatabaseMigrationCreatesThePlatformSchemaAndFoundationTables() {
+    void emptyDatabaseMigrationCreatesThePlatformSchemaAndFoundationTables() throws IOException {
         Configuration configuration = flyway.getConfiguration();
         List<String> successfulMigrationVersions = jdbcTemplate.queryForList(
                 "SELECT version FROM yumpoo.flyway_schema_history "
@@ -298,9 +300,7 @@ class YumpooServerApplicationIT {
         assertThat(configuration.isValidateOnMigrate()).isTrue();
         assertThat(configuration.isCleanDisabled()).isTrue();
         assertThat(configuration.isBaselineOnMigrate()).isFalse();
-        assertThat(successfulMigrationVersions).containsExactly(
-                "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "51", "52"
-        );
+        assertThat(successfulMigrationVersions).containsExactlyElementsOf(migrationVersions());
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT checksum FROM yumpoo.flyway_schema_history WHERE version = '46'
                 """, Integer.class)).isEqualTo(1108579806);
@@ -593,9 +593,7 @@ class YumpooServerApplicationIT {
                     "idx_work_item_content_due_date");
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
-            MigrateResult upgraded = latest.migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(23);
-            assertThat(upgraded.targetSchemaVersion).hasToString("52");
+            assertMigrateToLatest(latest);
             assertThat(workItemIndexes(jdbcUrl)).contains(
                     "idx_work_item_content_page",
                     "idx_work_item_content_status_page",
@@ -727,9 +725,7 @@ class YumpooServerApplicationIT {
                 connection.commit();
             }
 
-            MigrateResult upgraded = migrationFlyway(jdbcUrl, null).migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(5);
-            assertThat(upgraded.targetSchemaVersion).hasToString("52");
+            assertMigrateToLatest(migrationFlyway(jdbcUrl, null));
             try (Connection connection = DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(), postgresContainer.getPassword());
                  Statement statement = connection.createStatement()) {
@@ -805,9 +801,7 @@ class YumpooServerApplicationIT {
                         """);
             }
 
-            MigrateResult upgraded = migrationFlyway(jdbcUrl, null).migrate();
-            assertThat(upgraded.migrationsExecuted).isEqualTo(15);
-            assertThat(upgraded.targetSchemaVersion).hasToString("52");
+            assertMigrateToLatest(migrationFlyway(jdbcUrl, null));
             assertThat(migrationFlyway(jdbcUrl, null).validateWithResult().validationSuccessful).isTrue();
             try (Connection connection=DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(),postgresContainer.getPassword());
@@ -838,6 +832,35 @@ class YumpooServerApplicationIT {
                 ('43000000-0000-4000-8000-000000000001', 'ARCHIVE_FIRST', 0, 'ARCHIVED'),
                 ('43000000-0000-4000-8000-000000000002', 'ARCHIVE_SECOND', 10, 'ARCHIVED')
                 """, "43000000-0000-4000-8000-000000000001", false);
+    }
+
+    @Test
+    void additionalForwardMigrationIsDiscoveredWithoutUpdatingVersionAssertions(@TempDir Path extraMigrations) throws Exception {
+        String database = "yumpoo_ci_" + UUID.randomUUID().toString().replace("-", "");
+        Container.ExecResult created = postgresContainer.execInContainer(
+                "createdb", "-U", postgresContainer.getUsername(), database);
+        assertThat(created.getExitCode()).as(created.getStderr()).isZero();
+        String jdbcUrl = postgresContainer.getJdbcUrl().replace(
+                "/" + postgresContainer.getDatabaseName(), "/" + database);
+        try {
+            migrationFlyway(jdbcUrl, null).migrate();
+            Files.writeString(extraMigrations.resolve("V1000__forward_evolution_probe.sql"),
+                    "CREATE TABLE yumpoo.forward_evolution_probe (id integer PRIMARY KEY);\n", StandardCharsets.UTF_8);
+            Flyway extended = Flyway.configure().configuration(migrationFlyway(jdbcUrl, null).getConfiguration())
+                    .locations("classpath:db/migration", "filesystem:" + extraMigrations.toAbsolutePath()).load();
+            assertMigrateToLatest(extended);
+            try (Connection connection = DriverManager.getConnection(jdbcUrl,
+                    postgresContainer.getUsername(), postgresContainer.getPassword());
+                 Statement statement = connection.createStatement();
+                 ResultSet result = statement.executeQuery("SELECT count(*) FROM yumpoo.forward_evolution_probe")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getInt(1)).isZero();
+            }
+        } finally {
+            Container.ExecResult dropped = postgresContainer.execInContainer(
+                    "dropdb", "--force", "-U", postgresContainer.getUsername(), database);
+            assertThat(dropped.getExitCode()).as(dropped.getStderr()).isZero();
+        }
     }
 
     @Test
@@ -881,10 +904,7 @@ class YumpooServerApplicationIT {
                     .contains("actor_user_id, content_id, column_code");
 
             Flyway latest = migrationFlyway(jdbcUrl, null);
-            MigrateResult upgraded = latest.migrate();
-
-            assertThat(upgraded.migrationsExecuted).isEqualTo(6);
-            assertThat(upgraded.targetSchemaVersion).hasToString("52");
+            assertMigrateToLatest(latest);
             assertThat(latest.validateWithResult().validationSuccessful).isTrue();
             assertThat(cellActivityFacetIndexDefinition(jdbcUrl))
                     .contains("actor_user_id, column_code")
@@ -1023,7 +1043,7 @@ class YumpooServerApplicationIT {
                 }
                 connection.commit();
             }
-            assertThat(migrationFlyway(jdbcUrl, null).migrate().targetSchemaVersion).hasToString("52");
+            assertMigrateToLatest(migrationFlyway(jdbcUrl, null));
             try (Connection connection = DriverManager.getConnection(jdbcUrl,
                     postgresContainer.getUsername(), postgresContainer.getPassword());
                  Statement statement = connection.createStatement()) {

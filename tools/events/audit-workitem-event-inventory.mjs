@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assert, loadCurrentBundle, readFreezeManifest } from './event-contract-compat.mjs'
+import { assertRegisteredInventory } from './event-inventory-policy.mjs'
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const manifest = readFreezeManifest(repositoryRoot)
@@ -13,14 +14,17 @@ const serviceFiles = new Map([
   ['WorkItemRelationService', path.join(applicationRoot, 'WorkItemRelationService.java')],
 ])
 const eventPattern = /workitem\.work_item_[a-z0-9_]+/gu
+const currentBundle = loadCurrentBundle(repositoryRoot, manifest)
+const registered = new Set(currentBundle.events.map(event => event.eventType))
+const produced = new Set()
 
 for (const [producer, file] of serviceFiles) {
   const actual = matches(read(file), eventPattern)
   const expected = new Set(manifest.events
     .filter((event) => event.producers.includes(producer))
     .map((event) => event.eventType))
-  if (producer === 'WorkItemUpdateService') expected.add('workitem.work_item_update_pin_changed')
-  assertSameSet(`${producer} 生产事件`, actual, expected)
+  assertRegisteredInventory(`${producer} 生产事件`, actual, expected, registered)
+  for (const type of actual) produced.add(type)
 }
 
 const activityFile = path.join(repositoryRoot, 'backend', 'src', 'main', 'java',
@@ -29,13 +33,7 @@ const activitySource = read(activityFile)
 const workItemBlock = activitySource.match(
   /private static final Set<String> WORK_ITEM_EVENTS = Set\.of\(([\s\S]*?)\);/u)?.[1]
 assert(workItemBlock, 'ActivityProjectionService 缺少 WORK_ITEM_EVENTS 清单')
-assertSameSet('Activity v1 订阅', matches(workItemBlock, eventPattern),
-  new Set([...manifest.events.map((event) => event.eventType), 'workitem.work_item_update_pin_changed']))
-
-const frozenBundle = loadCurrentBundle(repositoryRoot, manifest)
-assertSameSet('冻结 v1 Schema 与合法样例',
-  new Set(frozenBundle.events.map((event) => event.eventType)),
-  new Set(manifest.events.map((event) => event.eventType)))
+assertSameSet('Activity 订阅与当前生产事件', matches(workItemBlock, eventPattern), produced)
 
 console.log('M2-23 已对账 14 个冻结事件的生产者、Activity 订阅、Schema 与合法样例。')
 

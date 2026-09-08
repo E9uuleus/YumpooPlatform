@@ -1,5 +1,9 @@
 # YumpooPlatform
 
+## 开发与 PR 验证
+
+普通迭代使用 `pnpm ci`；快速反馈可先运行 `pnpm ci:static`。向 `dev` 开 PR 后，CI 自动执行契约、业务/安全/迁移回归与 Windows 交付，最终门禁要求所有必需任务完整成功。无需刷新历史验收哈希或串联里程碑脚本。入口、基线/例外边界、故障定位及远端规则见 [CI 与 PR](.github/CI.md)；下方里程碑章节保留切片背景。
+
 ## Content 工作项类别重构
 
 V48 起，`Content` 仅表示项目级“工作项类别”目录，不再承载工作项类型、表格/看板视图配置或独立工作区。项目工作项总表是唯一表格/看板入口；根项、子项、创建表单和详情抽屉均可通过普通字段切换类别，类别变化不改变编号、父子关系、讨论、附件、项目顺序或 Project+Status Kanban rank。
@@ -440,7 +444,7 @@ pnpm test:m0-18
 pnpm verify:m0-18
 ```
 
-也可按 CI 边界分别运行 `pnpm verify:m0-18:portable` 与 `pnpm verify:m0-18:windows`，但二者是 CI 分段入口，不能替代 Windows x64 上的 `pnpm verify:m0-18`。`M0 Portable Gate` 在 Ubuntu 24.04 只执行可移植门禁：OpenAPI 兼容性、Maven Verify、Flyway/Testcontainers、ArchUnit、Node 构建与测试、100 MiB 探针和备份恢复；它随后用逐文件大小与 SHA-256 manifest 交付已测试的 JAR/Web 字节，不声明 Linux 运行时或生产等价性。`M0 Windows x64 Gate` 必须等待 portable 成功，复核同一提交和 handoff 精确文件集后，在 Windows 2022 执行真实 Electron smoke、Electron Windows 打包、ASAR 白名单、M0-16 ZIP 组装及复核。packaged-JAR、回环监听、外部配置、目录/数据库故障语义与脱敏拒启 smoke 只由完整 Windows x64 入口执行。
+当前 PR CI 使用 `ci:static`、`ci:backend`、`ci:portable` 和 `ci:windows`，旧 M0 入口仍可复现完整 Windows x64 验收。`M0 Portable Gate` 在 Ubuntu 24.04 执行 OpenAPI 兼容性、Maven Verify、Flyway/Testcontainers、ArchUnit、Node 构建与测试、100 MiB 探针、备份恢复和 packaged HTTP；随后用逐文件大小与 SHA-256 manifest 交付已测试的 JAR/Web 字节。`Windows Delivery` 在 Windows 2022 复核同一提交和 handoff，执行真实 Electron smoke、Windows 打包、ASAR 白名单和 ZIP 复核；最终 `M0 Windows x64 Gate` 汇总所有必需任务，任何失败、取消或漏跑均不能成功。完整的回环监听、外部配置、目录/数据库故障语义与脱敏拒启 server smoke 仍只由 `WINDOWS_X64_FULL` 入口执行，不将 CI 分段报告冒充生产等价验收。
 
 最终开发证据写入忽略目录 `out/m0-18/evidence-pack` 并由 CI 作为 30 天 artifact 上传。报告以 `validationMode` 区分 `WINDOWS_X64_FULL` 与 `WINDOWS_X64_CI_STAGE`；FULL 报告还必须消费绑定当前提交与 JAR 摘要的 server-smoke receipt。CI 分段报告必须把 `serverSmoke` 记为 `NOT_RUN`、使用 `pnpm verify:m0-18:windows` 作为复现命令，并带上 `WINDOWS_FULL_CHAIN_NOT_RUN` 限制，绝不冒充完整验证。包内只允许 verification report、延期清单、portable handoff manifest、M0-15/M0-16 manifest、ZIP 摘要和 M0-17 三份安全元数据；JAR、ZIP、附件、dump、日志、测试 XML、绝对路径、环境变量和任何凭据均被拒绝。动态 `PASS` 报告绑定实际测试提交，不进入 Git。
 

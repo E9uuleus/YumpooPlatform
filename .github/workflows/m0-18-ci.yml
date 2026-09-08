@@ -1,18 +1,22 @@
-name: M1-15 CI
+name: Platform CI
 
 on:
   pull_request:
-    branches:
-      - dev
+    branches: [dev]
   push:
-    branches:
-      - dev
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Git commit or ref used as the compatibility baseline
+        required: true
+        default: origin/dev
 
 permissions:
   contents: read
 
 concurrency:
-  group: m1-15-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: platform-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -20,8 +24,12 @@ jobs:
     name: M0 Portable Gate
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      YUMPOO_CI_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || inputs.base_ref }}
+      YUMPOO_M018_HEAD_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     outputs:
       handoff-digest: ${{ steps.handoff_upload.outputs.artifact-digest }}
+      completed: ${{ steps.completed.outputs.completed }}
     steps:
       - name: Checkout tested commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -46,68 +54,18 @@ jobs:
           cache: maven
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      - name: Verify Agent Notes and documentation
-        env:
-          AGENT_NOTE_ARCHIVE_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          pnpm run doc-sync
-          pnpm run test:agent-notes
+      - name: Contracts, policy, frontend and desktop regression
+        run: pnpm ci:static
       - name: Preflight Linux-container Docker
         run: |
           docker version
           docker info
           docker pull postgres:17.10-alpine
-      - name: Run M1 identity acceptance gate
-        env:
-          YUMPOO_M018_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-          YUMPOO_M018_HEAD_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          YUMPOO_M018_TESTED_COMMIT: ${{ github.sha }}
-        run: pnpm verify:m1-13
-      - name: Verify M1-15 bootstrap and deployment contracts
-        run: |
-          node tools/verification/verify-m1-15-assets.mjs
-          node tools/verification/verify-m1-15-deployment-assets.mjs
-      - name: Verify M2-01 fixed template catalog assets
-        run: pnpm verify:m2-01:assets
-      - name: Verify M2-02 MAIN workspace assets
-        run: pnpm verify:m2-02:assets
-      - name: Verify M2-03 Product lifecycle assets
-        run: pnpm verify:m2-03:assets
-      - name: Verify M2-04 Project creation assets
-        run: pnpm verify:m2-04:assets
-      - name: Verify M2-06 Project query assets
-        run: pnpm verify:m2-06:assets
-      - name: Verify M2-08 Project lifecycle assets
-        run: pnpm verify:m2-08:assets
-      - name: Verify M2-10 Work Item core assets
-        run: pnpm verify:m2-10:assets
-      - name: Verify M2-11 Work Item collaboration assets
-        run: pnpm verify:m2-11:assets
-      - name: Verify M2-12 Work Item transition assets
-        run: pnpm verify:m2-12:assets
-      - name: Verify M2-13 Work Item query assets
-        run: pnpm verify:m2-13:assets
-      - name: Verify M2-14 Kanban rank and controlled drag assets
-        run: pnpm verify:m2-14:assets
-      - name: Verify M2-19A table routing, date and label catalog assets
-        run: pnpm verify:m2-19a:assets
-      - name: Verify M2-21A project work item subitem assets
-        run: pnpm verify:m2-21a:assets
-      - name: Verify M2-21 work item relation assets
-        run: pnpm verify:m2-21:assets
-      - name: Verify M2-22 cross-project relation assets
-        run: pnpm verify:m2-22:assets
-      - name: Verify M2-23 Work Item event freeze and compatibility
-        env:
-          YUMPOO_M223_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: pnpm verify:m2-23:assets
-      - name: Verify M2-24 final acceptance assets
-        env:
-          YUMPOO_M224_BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: pnpm verify:m2-24:assets
-      - name: Verify Content category refactor assets
-        run: pnpm verify:content-category-refactor:assets
-      - name: Upload M1-13 verification report
+      - name: Backend, migrations, security and backup restore
+        run: pnpm ci:backend
+      - name: Packaged HTTP and portable handoff
+        run: pnpm ci:portable
+      - name: Upload portable HTTP report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: m1-13-verification-${{ github.sha }}-${{ github.run_attempt }}
@@ -126,21 +84,29 @@ jobs:
             out/m0-17/verification-report.json
           if-no-files-found: error
           retention-days: 1
+      - name: Record complete portable execution
+        id: completed
+        run: echo "completed=true" >> "$GITHUB_OUTPUT"
+      - name: Upload diagnostics even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            out/ci/*.json
+            backend/target/surefire-reports/
+            backend/target/failsafe-reports/
+          if-no-files-found: warn
+          retention-days: 14
 
-  windows:
-    name: M0 Windows x64 Gate
-    needs:
-      - linux
-    if: ${{ always() }}
+  windows_delivery:
+    name: Windows Delivery
+    needs: [linux]
     runs-on: windows-2022
     timeout-minutes: 45
+    outputs:
+      completed: ${{ steps.completed.outputs.completed }}
     steps:
-      - name: Fail closed when portable gate did not pass
-        shell: powershell
-        run: |
-          if ('${{ needs.linux.result }}' -ne 'success') {
-            throw 'M0 Portable Gate did not succeed; Windows x64 gate fails closed.'
-          }
       - name: Checkout the same tested commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -161,7 +127,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: maven
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Download exact portable handoff
@@ -169,25 +134,12 @@ jobs:
         with:
           name: m0-18-portable-${{ github.run_id }}-${{ github.run_attempt }}
           path: out
-      - name: Run Windows packaging and evidence gate
+      - name: Windows packaging, PowerShell and payload integrity
         env:
-          YUMPOO_M018_HANDOFF_ROOT: ${{ github.workspace }}\out\m0-18\portable-handoff
-          YUMPOO_M017_OUTPUT_ROOT: ${{ github.workspace }}\out\m0-17
           YUMPOO_M018_HANDOFF_ARTIFACT_NAME: m0-18-portable-${{ github.run_id }}-${{ github.run_attempt }}
           YUMPOO_M018_HANDOFF_ARTIFACT_DIGEST: ${{ needs.linux.outputs.handoff-digest }}
-          YUMPOO_M018_VALIDATION_MODE: WINDOWS_X64_CI_STAGE
-        run: pnpm verify:m0-18:windows
-      - name: Verify M1-15 PowerShell behavior
-        run: node tools/verification/verify-m1-15-powershell.mjs
-      - name: Build and verify M1-15 server package
-        shell: powershell
-        run: |
-          pnpm build
-          & .\backend\mvnw.cmd -q -f .\backend\pom.xml -DskipTests package
-          if ($LASTEXITCODE -ne 0) { throw 'M1-15 backend package failed' }
-          pnpm package:m1-15:win
-          pnpm verify:m1-15:package
-      - name: Upload M1-15 server package report
+        run: pnpm ci:windows
+      - name: Upload Windows server package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: m1-15-server-${{ github.sha }}-${{ github.run_attempt }}
@@ -198,10 +150,40 @@ jobs:
             out/m1-15/verification-report.json
           if-no-files-found: error
           retention-days: 30
-      - name: Upload final M0-18 evidence pack
+      - name: Upload final evidence pack
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: m0-18-evidence-${{ github.sha }}-${{ github.run_attempt }}
           path: out/m0-18/evidence-pack
           if-no-files-found: error
           retention-days: 30
+      - name: Record complete Windows execution
+        id: completed
+        run: '"completed=true" >> $env:GITHUB_OUTPUT'
+      - name: Upload Windows diagnostics even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: out/ci/*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows:
+    name: M0 Windows x64 Gate
+    needs: [linux, windows_delivery]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout merge gate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Reject a cancelled workflow
+        if: ${{ cancelled() }}
+        run: exit 1
+      - name: Require every mandatory job and completion receipt
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node tools/ci/gate.mjs
