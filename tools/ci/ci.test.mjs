@@ -20,9 +20,6 @@ const passed = () => Object.fromEntries(requiredJobs.map(id => [id, { result: 's
 
 test('merge gate accepts only complete successful executions', () => {
   assert.doesNotThrow(() => assertRequiredJobs(passed()))
-  for (const cancelled of ['true', 'unknown', '']) {
-    assert.throws(() => assertRequiredJobs(passed(), requiredJobs, cancelled), /取消/u)
-  }
   for (const id of requiredJobs) {
     for (const result of ['failure', 'cancelled', 'skipped', 'timed_out', 'neutral', 'pending', undefined]) {
       const needs = passed()
@@ -49,6 +46,8 @@ test('workflow preserves mandatory gates, immutable actions and exact artifact h
   const brokenVariants = [
     value => { value.jobs.windows.needs = ['linux'] },
     value => { delete value.jobs.windows.if },
+    value => { value.jobs.windows.steps = value.jobs.windows.steps.filter(step => step.if !== '${{ cancelled() }}') },
+    value => { value.jobs.windows.steps.find(step => step.run === 'node tools/ci/gate.mjs').env.WORKFLOW_CANCELLED = '${{ cancelled() }}' },
     value => { value.jobs.windows_delivery.if = '${{ false }}' },
     value => { value.jobs.linux.steps.find(step => step.run === 'pnpm ci:backend').if = '${{ false }}' },
     value => { value.jobs.linux.steps.find(step => step.run === 'pnpm ci:backend')['continue-on-error'] = true },

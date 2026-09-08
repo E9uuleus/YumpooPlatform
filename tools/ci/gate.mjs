@@ -3,8 +3,7 @@ import path from 'node:path'
 
 export const requiredJobs = ['linux', 'windows_delivery']
 
-export function assertRequiredJobs(needs, required = requiredJobs, cancelled = 'false') {
-  if (cancelled !== 'false') throw new Error('工作流已取消或未提供取消状态')
+export function assertRequiredJobs(needs, required = requiredJobs) {
   if (!needs || typeof needs !== 'object' || Array.isArray(needs)
     || Object.keys(needs).sort().join(',') !== [...required].sort().join(',')) {
     throw new Error('合并门禁的依赖集合缺失或发生未登记变更')
@@ -18,7 +17,7 @@ export function assertRequiredJobs(needs, required = requiredJobs, cancelled = '
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    assertRequiredJobs(JSON.parse(process.env.NEEDS_JSON), requiredJobs, process.env.WORKFLOW_CANCELLED ?? 'unknown')
+    assertRequiredJobs(JSON.parse(process.env.NEEDS_JSON))
     console.log('所有必需任务及完成凭据均已通过。')
   } catch (error) {
     console.error(error.message)

@@ -180,8 +180,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Reject a cancelled workflow
+        if: ${{ cancelled() }}
+        run: exit 1
       - name: Require every mandatory job and completion receipt
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          WORKFLOW_CANCELLED: ${{ cancelled() }}
         run: node tools/ci/gate.mjs

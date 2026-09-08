@@ -12,8 +12,10 @@ export function assertWorkflowSafety(workflow) {
   assert.equal(gate.if, '${{ always() }}')
   assert.deepEqual([...gate.needs].sort(), [...requiredJobs].sort())
   assert.deepEqual(Object.keys(workflow.jobs).filter(id => id !== 'windows').sort(), [...requiredJobs].sort(), '新增任务也必须进入合并门禁')
-  assert(gate.steps.some(step => step.run === 'node tools/ci/gate.mjs'
-    && step.env?.NEEDS_JSON === '${{ toJSON(needs) }}' && step.env.WORKFLOW_CANCELLED === '${{ cancelled() }}' && !step.if))
+  const gateIndex = gate.steps.findIndex(step => step.run === 'node tools/ci/gate.mjs'
+    && step.env?.NEEDS_JSON === '${{ toJSON(needs) }}' && !step.if)
+  const cancellationIndex = gate.steps.findIndex(step => step.if === '${{ cancelled() }}' && step.run === 'exit 1')
+  assert(gateIndex >= 0 && cancellationIndex >= 0 && cancellationIndex < gateIndex, '取消状态必须在正常门禁前明确失败')
   for (const [id, commands] of Object.entries({
     linux: ['pnpm ci:static', 'pnpm ci:backend', 'pnpm ci:portable'],
     windows_delivery: ['pnpm ci:windows'],
@@ -32,6 +34,8 @@ export function assertWorkflowSafety(workflow) {
   for (const job of Object.values(workflow.jobs)) {
     assert(!job['continue-on-error'])
     for (const step of job.steps) {
+      assert(!/\b(always|cancelled|success|failure)\s*\(/u.test(JSON.stringify([step.env, step.run, step.with])),
+        'Actions 状态函数只能在 if 上下文使用')
       assert(!step['continue-on-error'], '必需步骤的失败不能被吞掉')
       if (step.uses) assert(/^[^@]+@[0-9a-f]{40}$/u.test(step.uses), 'Action 必须固定 commit')
       if (step.uses?.startsWith('actions/checkout@')) assert.equal(step.with['persist-credentials'], false)
