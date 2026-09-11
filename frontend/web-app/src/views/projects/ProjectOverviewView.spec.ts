@@ -834,6 +834,19 @@ describe('项目级工作项首页', () => {
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
 
+  it('应用类别目录后立即更新表格名称和颜色，无需重载工作项', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const listCalls = state.listProjectWorkItems.mock.calls.length
+    const next = catalog()
+    next.items[0] = { ...next.items[0]!, name: '更新后的类别', colorToken: WorkItemLabelColorToken.BrightGreen }
+    wrapper.findComponent({ name: 'WorkItemContentPopoverContent' }).vm.$emit('updated', next)
+    await flushPromises()
+    expect(wrapper.get('.monday-content-label').text()).toBe('更新后的类别')
+    expect(wrapper.get('.monday-content-label').attributes('style')).toContain('--yp-label-bright-green')
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(listCalls)
+  })
+
   it('名称、讨论和更新时间打开同一详情抽屉的对应区域', async () => {
     const wrapper = mountView()
     await flushPromises()

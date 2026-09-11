@@ -79,6 +79,11 @@ const props = defineProps<{
 
 const vLoading = ElLoading.directive
 
+function contentLabel(item: ProjectWorkItemListItem) {
+  return props.contentCatalog?.items.find(content => content.id === item.contentId)
+    ?? { name: item.contentName, colorToken: item.contentColorToken }
+}
+
 const emit = defineEmits<{
   retry: []
   sortChange: [rules: ProjectWorkItemSubitemSortRule[]]
@@ -754,8 +759,8 @@ onBeforeUnmount(() => {
 
             <el-popover v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click">
               <template #reference>
-                <button class="subitem-content-pill" :style="labelCellStyle(scope.row.contentColorToken)" :disabled="editingCell">
-                  {{ scope.row.contentName || '—' }}
+                <button class="subitem-content-pill" :style="labelCellStyle(contentLabel(scope.row as ProjectWorkItemListItem).colorToken)" :disabled="editingCell">
+                  {{ contentLabel(scope.row as ProjectWorkItemListItem).name || '—' }}
                 </button>
               </template>
               <work-item-content-popover-content

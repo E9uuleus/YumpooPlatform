@@ -590,6 +590,10 @@ function contentName(contentId: string): string {
   return contentsById.value.get(contentId)?.name ?? '未知类别'
 }
 
+function contentLabel(item: Pick<ProjectWorkItemListItem, 'contentId' | 'contentName' | 'contentColorToken'>) {
+  return contentsById.value.get(item.contentId) ?? { name: item.contentName, colorToken: item.contentColorToken }
+}
+
 function statusLabel(statusCode: string): string {
   return workflowStatuses.value.find(item => item.statusCode === statusCode)?.displayName ?? statusCode
 }
@@ -2651,11 +2655,11 @@ onBeforeUnmount(() => {
                       <template #reference>
                         <button
                           class="monday-content-label cell-editor-trigger"
-                          :style="labelCellStyle((scope.row as ProjectWorkItemListItem).contentColorToken)"
+                          :style="labelCellStyle(contentLabel(scope.row as ProjectWorkItemListItem).colorToken)"
                           :disabled="Boolean(editingCell)"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'content')"
                         >
-                          <span>{{ (scope.row as ProjectWorkItemListItem).contentName || '—' }}</span>
+                          <span>{{ contentLabel(scope.row as ProjectWorkItemListItem).name || '—' }}</span>
                         </button>
                       </template>
                       <work-item-content-popover-content
@@ -2872,7 +2876,7 @@ onBeforeUnmount(() => {
                   <dd>
                     <el-popover placement="bottom" width="auto" trigger="click" popper-class="work-items-label-popover content-popover">
                       <template #reference>
-                        <button class="detail-content-pill" :style="labelCellStyle(detail.contentColorToken)">{{ detail.contentName || '—' }}</button>
+                        <button class="detail-content-pill" :style="labelCellStyle(contentLabel(detail).colorToken)">{{ contentLabel(detail).name || '—' }}</button>
                       </template>
                       <work-item-content-popover-content
                         :project-id="projectId"

@@ -417,6 +417,7 @@ function onDrop(targetIndex: number): void {
                 :width="156"
                 trigger="click"
                 popper-class="color-picker-popover"
+                :teleported="false"
               >
                 <template #reference>
                   <button
