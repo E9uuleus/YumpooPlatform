@@ -1005,7 +1005,7 @@ describe('项目级工作项首页', () => {
     expect(wrapper.find('.quick-row').exists()).toBe(true)
   })
 
-  it('点击新增行外自动创建，失败时保留草稿以便重试', async () => {
+  it('点击新增行外关闭输入且不自动创建', async () => {
     state.createWorkItem.mockRejectedValue(new Error('network error'))
     const wrapper = mountView()
     await flushPromises()
@@ -1016,9 +1016,51 @@ describe('项目级工作项首页', () => {
     document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     await flushPromises()
 
-    expect(state.createWorkItem).toHaveBeenCalledTimes(1)
-    expect(wrapper.find('.quick-row').exists()).toBe(true)
-    expect((input.element as HTMLInputElement).value).toBe('保留的草稿')
+    expect(state.createWorkItem).not.toHaveBeenCalled()
+    expect(wrapper.find('.quick-row').exists()).toBe(false)
+  })
+
+  it('新增后保留多页旧行直到后台查询完成，再原位替换', async () => {
+    const original = Array.from({ length: 3 }, (_, index) => item(`original-${index}`))
+    state.listProjectWorkItems.mockResolvedValueOnce(page(original))
+    const wrapper = mountView()
+    await flushPromises()
+    let resolveRefresh: ((value: ProjectWorkItemCursorPage) => void) | undefined
+    state.listProjectWorkItems.mockImplementationOnce(() => new Promise<ProjectWorkItemCursorPage>(resolve => { resolveRefresh = resolve }))
+    state.listProjectWorkItems.mockResolvedValueOnce(page(original.slice(1)))
+    await wrapper.get('.quick-add').trigger('click')
+    const input = wrapper.get('input[placeholder="添加工作项"]')
+    await input.setValue('新增刷新验证')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.find('.quick-row').exists()).toBe(false)
+    expect(wrapper.findAll('.el-table__body .el-table__row')).toHaveLength(3)
+    expect(wrapper.get('.table-surface').attributes('aria-busy')).toBe('true')
+    expect(wrapper.find('.table-surface .el-loading-mask').exists()).toBe(false)
+    resolveRefresh?.({ ...page([item('new'), ...original.slice(0, 1)]), nextCursor: 'refresh-page-2' })
+    await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: 'refresh-page-2' }), expect.anything(),
+    )
+    expect(wrapper.findAll('.el-table__body .el-table__row')).toHaveLength(4)
+    expect(wrapper.get('.table-surface').attributes('aria-busy')).toBe('false')
+  })
+
+  it('空表可直接添加，空输入点击行外关闭，输入法确认不提交', async () => {
+    state.listProjectWorkItems.mockResolvedValue(page([]))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('.monday-table--empty .quick-add').exists()).toBe(true)
+    await wrapper.get('.quick-add').trigger('click')
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('.quick-row').exists()).toBe(false)
+    await wrapper.get('.quick-add').trigger('click')
+    const input = wrapper.get('input[placeholder="添加工作项"]')
+    await input.setValue('中文输入')
+    await input.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(state.createWorkItem).not.toHaveBeenCalled()
+    expect(wrapper.get('.quick-hint').text()).toContain('Shift+Enter')
   })
 
   it('没有 ACTIVE Content 时禁用快速添加', async () => {

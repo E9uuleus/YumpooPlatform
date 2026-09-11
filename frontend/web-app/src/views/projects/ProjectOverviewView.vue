@@ -462,7 +462,6 @@ const quickGridStyle = computed(() => ({
   gridTemplateColumns: [`${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
     ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
 }))
-const quickSubmitColumn = computed(() => visibleColumns.value.length + 3)
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -1032,27 +1031,34 @@ async function createQuick(continueAdding: boolean): Promise<void> {
       await nextTick()
       quickTitleInput.value?.focus()
     } else closeQuick()
-    await refreshCurrentView()
+    if (selectedView.value === 'table') await reloadSortedTableInPlace()
+    else await refreshCurrentView()
   } catch (reason) {
     error.value = await toApiProblem(reason)
     await nextTick()
     quickTitleInput.value?.focus()
   } finally {
     quickCreating.value = false
+    if (continueAdding && quickOpen.value) {
+      await nextTick()
+      quickTitleInput.value?.focus()
+    }
   }
 }
 
 function onQuickKeydown(rawEvent: Event | KeyboardEvent): void {
   const event = rawEvent as KeyboardEvent
+  if (event.isComposing || event.keyCode === 229) return
+  if (event.key === 'Escape') { closeQuick(); return }
   if (event.key !== 'Enter') return
   event.preventDefault()
   void createQuick(event.shiftKey)
 }
 
 function onDocumentPointerDown(event: PointerEvent): void {
-  if (!quickOpen.value || quickCreating.value || !quickTitle.value.trim()) return
+  if (!quickOpen.value || quickCreating.value) return
   if (quickRow.value?.contains(event.target as Node)) return
-  void createQuick(false)
+  closeQuick()
 }
 
 async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'relations' | 'activity' = 'details'): Promise<void> {
@@ -2348,7 +2354,7 @@ onBeforeUnmount(() => {
 
         <div
           v-if="selectedView === 'table'"
-          v-loading="tableLoading"
+          v-loading="tableLoading && !tableItems.length"
           :aria-busy="tableLoading || tableSorting"
           class="table-surface monday-table-surface"
         >
@@ -2369,7 +2375,7 @@ onBeforeUnmount(() => {
               :header-cell-style="tableHeaderCellStyle"
               row-key="id"
               class="monday-table"
-              :class="{ 'monday-table--column-dragging': columnDraggingKey }"
+              :class="{ 'monday-table--column-dragging': columnDraggingKey, 'monday-table--empty': !tableItems.length }"
               height="100%"
               empty-text="当前项目暂无工作项"
               border
@@ -2734,26 +2740,29 @@ onBeforeUnmount(() => {
                   :style="quickGridStyle"
                 >
                   <span class="monday-quick-checkbox" aria-hidden="true" />
-                  <el-input
-                    ref="quickTitleInput"
-                    v-model="quickTitle"
-                    class="quick-title-field"
-                    maxlength="300"
-                    :disabled="quickCreating"
-                    placeholder="添加工作项"
-                    aria-label="工作项名称；Enter 创建，Shift+Enter 创建后继续"
-                    @keydown="onQuickKeydown"
-                  />
-                  <el-button
-                    class="quick-submit"
-                    :style="{ gridColumn: quickSubmitColumn }"
-                    type="primary"
-                    :loading="quickCreating"
-                    :disabled="!defaultContentId || !quickTitle.trim()"
-                    @click="createQuick(false)"
-                  >
-                    添加
-                  </el-button>
+                  <div class="quick-controls">
+                    <el-input
+                      ref="quickTitleInput"
+                      v-model="quickTitle"
+                      class="quick-title-field"
+                      maxlength="300"
+                      :disabled="quickCreating"
+                      placeholder="添加工作项"
+                      aria-label="工作项名称；Enter 创建，Shift+Enter 创建后继续"
+                      @keydown="onQuickKeydown"
+                    />
+                    <el-button
+                      class="quick-submit"
+                      size="small"
+                      type="primary"
+                      :loading="quickCreating"
+                      :disabled="!defaultContentId || !quickTitle.trim()"
+                      @click="createQuick(false)"
+                    >
+                      添加
+                    </el-button>
+                    <span class="quick-hint">Enter 新增 · Shift+Enter 连续添加</span>
+                  </div>
                 </div>
                 <button
                   v-else
@@ -3990,18 +3999,30 @@ onBeforeUnmount(() => {
   transition: none !important;
 }
 
+:deep(.monday-table--empty .el-table__empty-block) { display: none; }
+
+.quick-controls {
+  grid-column: 3 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+}
+.quick-hint { color: var(--yp-text-muted); font-size: 12px; white-space: nowrap; }
 .quick-title-field {
+  width: 280px;
+  flex: 0 1 280px;
   align-self: center;
   box-sizing: border-box;
-  grid-column: 3;
   min-width: 0;
-  padding: 0 4px 0 8px;
 }
-.quick-submit {
+.monday-quick-row .quick-submit {
   justify-self: center;
-  width: 64px;
+  width: 48px;
+  flex-shrink: 0;
   height: var(--work-item-quick-control-height);
-  padding: 0 12px;
+  min-height: var(--work-item-quick-control-height);
+  padding: 0 8px;
 }
 :deep(.monday-quick-row .el-input__wrapper) {
   height: var(--work-item-quick-control-height);
