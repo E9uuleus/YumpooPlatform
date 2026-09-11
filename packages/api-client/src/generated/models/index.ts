@@ -126,6 +126,8 @@ export * from './TimeTrackingSessionPage';
 export * from './TimeTrackingState';
 export * from './TimeTrackingSummary';
 export * from './TimeTrackingSummaryPage';
+export * from './TimerCandidate';
+export * from './TimerCandidatePage';
 export * from './WeComDirectoryStatus';
 export * from './WeComIntegrationStatus';
 export * from './WeComOAuthStatus';

@@ -28,6 +28,13 @@ public class TimeTrackingController {
         var state=service.current(actors.requiredActive());
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).eTag(state.etag()).body(state);
     }
+    @GetMapping("/me/time-tracker/candidates")
+    ResponseEntity<TimerCandidatePage> candidates(@RequestParam(required=false) String q,
+            @RequestParam(defaultValue="PERSONAL") String scope, @RequestParam(defaultValue="0") int offset,
+            @RequestParam(defaultValue="25") int limit) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(service.candidates(actors.requiredActive(), q, scope, offset, limit));
+    }
     @GetMapping("/projects/{projectId}/time-tracking-summaries")
     ResponseEntity<SummaryPage> summaries(@PathVariable UUID projectId,@RequestParam List<UUID> workItemId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.summaries(actors.requiredActive(),projectId,workItemId));

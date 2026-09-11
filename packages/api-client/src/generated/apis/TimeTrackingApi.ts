@@ -20,6 +20,7 @@ import type {
   TimeTrackingSession,
   TimeTrackingSessionPage,
   TimeTrackingSummaryPage,
+  TimerCandidatePage,
 } from '../models/index';
 import {
     CurrentTimeTrackerFromJSON,
@@ -34,6 +35,8 @@ import {
     TimeTrackingSessionPageToJSON,
     TimeTrackingSummaryPageFromJSON,
     TimeTrackingSummaryPageToJSON,
+    TimerCandidatePageFromJSON,
+    TimerCandidatePageToJSON,
 } from '../models/index';
 
 export interface CreateTimeSessionRequest {
@@ -69,6 +72,13 @@ export interface GetTimeTrackingSummariesRequest {
 export interface ListTimeSessionsRequest {
     workItemId: string;
     cursor?: string;
+}
+
+export interface ListTimerCandidatesRequest {
+    q?: string;
+    scope?: ListTimerCandidatesScopeEnum;
+    offset?: number;
+    limit?: number;
 }
 
 export interface StartTimeTrackerRequest {
@@ -461,6 +471,53 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+     * 跨项目查找本人可计时的工作项
+     */
+    async listTimerCandidatesRaw(requestParameters: ListTimerCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimerCandidatePage>> {
+        const queryParameters: any = {};
+
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['scope'] != null) {
+            queryParameters['scope'] = requestParameters['scope'];
+        }
+
+        if (requestParameters['offset'] != null) {
+            queryParameters['offset'] = requestParameters['offset'];
+        }
+
+        if (requestParameters['limit'] != null) {
+            queryParameters['limit'] = requestParameters['limit'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/me/time-tracker/candidates`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TimerCandidatePageFromJSON(jsonValue));
+    }
+
+    /**
+     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+     * 跨项目查找本人可计时的工作项
+     */
+    async listTimerCandidates(requestParameters: ListTimerCandidatesRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimerCandidatePage> {
+        const response = await this.listTimerCandidatesRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * startTimeTracker
      */
     async startTimeTrackerRaw(requestParameters: StartTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
@@ -676,4 +733,14 @@ export class TimeTrackingApi extends runtime.BaseAPI {
         return await response.value();
     }
 
+}
+
+/**
+  * @export
+  * @enum {string}
+  */
+export enum ListTimerCandidatesScopeEnum {
+    Personal = 'PERSONAL',
+    All = 'ALL',
+    UnknownDefaultOpenApi = '11184809'
 }

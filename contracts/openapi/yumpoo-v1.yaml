@@ -41,6 +41,37 @@ tags:
   - name: Activity
     description: Project 与 Work Item 的追加式安全动态时间线。
 paths:
+  /me/time-tracker/candidates:
+    get:
+      tags: [TimeTracking]
+      operationId: listTimerCandidates
+      summary: 跨项目查找本人可计时的工作项
+      description: 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 200 }
+        - name: scope
+          in: query
+          schema: { type: string, enum: [PERSONAL, ALL], default: PERSONAL }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 100000, default: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 25 }
+      responses:
+        '200':
+          description: 可计时候选项，服务端按权限筛选后分页。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimerCandidatePage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /me/time-tracker:
     get:
       tags: [TimeTracking]
@@ -3418,6 +3449,31 @@ components:
         runningSessions:
           type: array
           items: { $ref: '#/components/schemas/TimeTrackingRunningSession' }
+    TimerCandidatePage:
+      type: object
+      required: [items, nextOffset]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/TimerCandidate' }
+        nextOffset: { type: integer, nullable: true }
+    TimerCandidate:
+      type: object
+      required: [workItemId, projectId, projectName, itemNo, title, contentName, statusCategory, assignedToMe, lastTrackedAt, ownDurationMs]
+      properties:
+        workItemId: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        projectName: { type: string }
+        itemNo: { type: string }
+        title: { type: string }
+        contentName: { type: string }
+        contentCode: { type: string, description: 稳定的工作项类别代码，用于类别图标映射。 }
+        contentColorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        statusCategory: { type: string }
+        assignedToMe: { type: boolean }
+        lastTrackedAt: { type: string, format: date-time, nullable: true }
+        ownDurationMs: { type: integer, format: int64, minimum: 0 }
     RecentTimeTrackingItem:
       type: object
       additionalProperties: false

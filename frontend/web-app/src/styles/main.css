@@ -745,3 +745,4 @@ code {
     animation-iteration-count: 1 !important;
   }
 }
+html.timer-surface,html.timer-surface body,html.timer-surface #app{min-width:0;min-height:100%;margin:0;background:transparent;overflow:hidden}

@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ProjectMembershipRepository {
+    List<ProjectMembershipModels.WritableProject> findWritableProjects(CurrentActor actor);
     boolean insert(ProjectMembership membership);
     Optional<ProjectMembership> find(UUID companyId, UUID projectId, UUID userId);
     Optional<ProjectMembership> lock(UUID companyId, UUID projectId, UUID userId);

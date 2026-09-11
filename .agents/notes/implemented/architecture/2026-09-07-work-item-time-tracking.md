@@ -16,7 +16,7 @@ Status: implemented
 
 计时在关闭页面、退出应用、断网和休眠后持续，直到主动停止。Web 原生关闭提示只提供浏览器允许的离开/留下语义；应用内登出与桌面退出提供停止并退出、继续计时并退出、取消。停止失败保留应用；桌面主进程通过带请求标识的握手去重退出，收到 renderer 的服务器确认结果后才退出。
 
-桌面小窗口复用认证 session partition，保持 sandbox、contextIsolation 和关闭 Node integration。它进入项目时默认置顶、不抢焦点，主动从工具栏打开时恢复并聚焦，关闭只隐藏，同项目路由切换不重新弹出；只有登记的主窗口与计时窗口主 frame 可以调用固定白名单通道。Web 在用户操作中尝试 Document Picture-in-Picture，再使用同源普通弹窗，并保留页内入口；浏览器能力不等同于桌面置顶保证。
+桌面小窗口复用认证 session partition，保持 sandbox、contextIsolation 和关闭 Node integration；只有登记的主窗口与计时窗口主 frame 可以调用固定白名单通道。当前入口、紧凑/展开交互、托盘常驻及主窗口隐藏语义由[个人跨项目工作选择器决策](../product/2026-09-08-timer-work-picker.md)接管；Web 使用画中画或页内非模态浮窗。该部分取代不改变本记录拥有的服务端计时事实、权限和显式退出语义。
 
 `TimeTrackingRecordQuery` 是面向后续 Worklog 的 actor-scoped 分页只读端口，不公开计时写入口。本决策补充 [M3 公开端口约定](2026-08-31-m2-exit-and-m3-public-ports.md)，不改变已有 Project/Product 锁序、审批 blocker 的归属或部署完成定义。
 

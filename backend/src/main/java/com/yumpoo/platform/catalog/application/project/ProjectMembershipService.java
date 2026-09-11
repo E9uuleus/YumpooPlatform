@@ -47,6 +47,11 @@ public class ProjectMembershipService {
     }
 
     @Transactional(readOnly = true)
+    public List<WritableProject> findWritableProjects(CurrentActor actor) {
+        return membershipRepository.findWritableProjects(actor);
+    }
+
+    @Transactional(readOnly = true)
     public Map<UUID, Access> findVisible(CurrentActor actor, Collection<UUID> projectIds) {
         return membershipRepository.findVisible(actor, projectIds);
     }

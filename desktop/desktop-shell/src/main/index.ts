@@ -218,7 +218,7 @@ if (!ownsSingleInstance) {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       void createMainWindow().catch(failStartup)
-    }
+    } else timerController?.showMain()
   })
 
   app.on('window-all-closed', () => {

@@ -36,14 +36,52 @@ export interface DesktopBridge {
 }
 
 export interface DesktopTimerBridge {
-  show(): Promise<void>
-  setProject(projectId: string): Promise<void>
+  show(mode?: TimerWindowMode, activate?: boolean): Promise<void>
+  hide(): Promise<void>
+  setMode(mode: TimerWindowMode): Promise<void>
+  getWindowState(): Promise<{ mode: TimerWindowMode; pinned: boolean; surface: 'main' | 'timer'; savedAt: number; orb: TimerOrbLayout; hovered?: boolean }>
+  setOrbLayout(change: TimerOrbChange): Promise<TimerOrbLayout>
   setAlwaysOnTop(value: boolean): Promise<void>
   refresh(): Promise<void>
+  publishState(state: DesktopTimerState): Promise<void>
+  onCommand(listener: (command: DesktopTimerCommand) => void): () => void
+  completeCommand(requestId: string, success: boolean): Promise<void>
+  onCommandFailed(listener: () => void): () => void
+  onMode(listener: (mode: TimerWindowMode) => void): () => void
+  onOrbHover(listener: (hovered: boolean) => void): () => void
   onRefresh(listener: () => void): () => void
-  onProject(listener: (projectId: string) => void): () => void
   onExitRequest(listener: (requestId: string) => void): () => void
   acknowledgeExit(requestId: string): Promise<void>
   completeExit(requestId: string, allow: boolean): Promise<void>
   openWorkItem(projectId: string, workItemId: string): Promise<void>
 }
+
+export type TimerWindowMode = 'compact' | 'picker'
+
+export interface TimerOrbLayout {
+  canvas?: { width: number; height: number; left: number; top: number }
+  titleVisible?: boolean
+  size: number
+  side: 'left' | 'right' | null
+  detailWidth: number
+}
+
+export interface TimerOrbChange {
+  titleVisible?: boolean
+  size?: number
+  details?: boolean
+}
+
+export interface DesktopTimerState {
+  accountId: string | null
+  rowVersion: number
+  connected: boolean
+  busy: boolean
+  savedAt: number
+  running: { sessionId: string; workItemId: string | null; title: string; startedAt: string } | null
+  recent: { workItemId: string; title: string } | null
+}
+
+export type DesktopTimerCommand =
+  | { requestId: string; action: 'stop'; sessionId: string }
+  | { requestId: string; action: 'start'; workItemId: string }

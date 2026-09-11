@@ -1,11 +1,14 @@
 import { computed, ref, shallowRef } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { readCsrfToken, type CurrentTimeTracker, type TimeTrackingSummary, type TimeTrackingCommand } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../api/client'
 
 const current = shallowRef<CurrentTimeTracker>()
 const now = ref(Date.now())
 const busy = ref(false)
+const problem = ref('')
+const connected = ref(false)
+const savedAt = ref(0)
 const summaries = ref<Record<string, { value: TimeTrackingSummary; at: number }>>({})
 const observed = new Map<string, { projectId: string; count: number }>()
 let enabled = false
@@ -29,8 +32,8 @@ export function formatDuration(ms: number): string {
 }
 
 export function useTimeTracker() {
-  return { current, now, busy, refresh, toggle, stop, notify, summaries,
-    runningDuration: computed(() => current.value?.session ? now.value - current.value.session.startedAt.getTime() : 0) }
+  return { current, now, busy, problem, connected, savedAt, refresh, toggle, start, stop, notify, summaries,
+    runningDuration: computed(() => current.value?.session ? Math.max(0, now.value - current.value.session.startedAt.getTime()) : 0) }
 }
 
 export function observeTimer(workItemId: string, projectId: string, initial?: TimeTrackingSummary | null): () => void {
@@ -54,17 +57,27 @@ export function activateTimeTracker(active: boolean): void {
   generation++
   enabled = active
   refreshPromise = undefined
+  current.value = undefined
+  summaries.value = {}
+  retries.clear()
+  busy.value = false
+  problem.value = ''
+  connected.value = false
+  savedAt.value = 0
+  offset = 0
   if (!active) {
-    current.value = undefined
-    summaries.value = {}
-    retries.clear()
     return
   }
   channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('yumpoo-time-tracker')
-  const invalidate = () => { void refresh().catch(() => undefined); listeners.forEach(listener => listener()) }
+  const invalidate = () => {
+    const pending = refreshPromise
+    if (pending) void pending.catch(() => undefined).then(() => refresh()).catch(() => undefined)
+    else void refresh().catch(() => undefined)
+    listeners.forEach(listener => listener())
+  }
   if (channel) channel.onmessage = invalidate
   const tick = window.setInterval(() => { now.value = Date.now() + offset }, 1000)
-  const poll = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh().catch(() => undefined) }, 5000)
+  const poll = window.setInterval(() => { if (window.yumpooDesktop || document.visibilityState === 'visible') void refresh().catch(() => undefined) }, 5000)
   const focus = () => { if (document.visibilityState === 'visible') void refresh().catch(() => undefined) }
   window.addEventListener('focus', focus)
   window.addEventListener('online', focus)
@@ -83,9 +96,12 @@ async function refresh(): Promise<void> {
   if (refreshPromise) return refreshPromise
   const epoch = generation
   const operation = (async () => {
-    const result = await timeTrackingApi.getCurrentTimeTracker()
+    let result: CurrentTimeTracker
+    try { result = await timeTrackingApi.getCurrentTimeTracker() }
+    catch (error) { if (epoch === generation) connected.value = false; throw error }
     if (epoch !== generation) return
-    if (!current.value || result.rowVersion >= current.value.rowVersion) current.value = result
+    connected.value = true
+    acceptCurrent(result)
     offset = result.serverNow.getTime() - Date.now()
     now.value = Date.now() + offset
     const projects = new Map<string, string[]>()
@@ -100,6 +116,14 @@ async function refresh(): Promise<void> {
   })()
   refreshPromise = operation
   try { await operation } finally { if (refreshPromise === operation) refreshPromise = undefined }
+}
+
+function acceptCurrent(result: CurrentTimeTracker): void {
+  const previous = current.value
+  if (previous && result.rowVersion < previous.rowVersion) return
+  if (result.session) savedAt.value = 0
+  else if (previous?.session && result.rowVersion > previous.rowVersion) savedAt.value = Date.now()
+  current.value = result
 }
 
 function notify(): void {
@@ -142,30 +166,55 @@ async function command(action: 'start' | 'switch' | 'stop', body: TimeTrackingCo
     ifMatch: snapshot.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: body,
   }))
   if (epoch !== generation) return
-  if (!current.value || result.rowVersion >= current.value.rowVersion) current.value = result
-  await refresh()
+  acceptCurrent(result)
+  // The command response is authoritative even if the following calibration fails.
+  void refresh().catch(() => undefined)
 }
 
-async function toggle(workItemId: string, confirmSwitch?: () => Promise<boolean>): Promise<void> {
-  if (busy.value) return
+async function run(action: () => Promise<void>): Promise<boolean> {
+  if (busy.value || !enabled) return false
+  const epoch = generation
   busy.value = true
+  problem.value = ''
   try {
     await refresh()
-    const running = current.value?.session
-    if (running?.workItemId === workItemId) await command('stop', { sessionId: running.id })
-    else if (running) {
-      if (confirmSwitch) { if (!await confirmSwitch()) return }
-      else await ElMessageBox.confirm(`正在计时「${current.value?.workItemTitle ?? '不可见工作项'}」，停止并切换到此工作项？`, '切换计时', { confirmButtonText: '停止并切换', cancelButtonText: '取消' })
-      await command('switch', { workItemId, sessionId: running.id })
-    } else await command('start', { workItemId })
+    if (epoch !== generation) return false
+    await action()
+    return epoch === generation
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error('计时操作未完成，请核对状态后重试。')
-  } finally { busy.value = false }
+    if (epoch === generation) {
+      const status = (error as { response?: Response }).response?.status
+      problem.value = status === 409 || status === 412 || (error as Error).message === 'TIMER_CHANGED'
+        ? '计时已在其他窗口变化，已刷新，请重新选择。'
+        : '操作尚未确认，请检查连接后重试。已有计时会继续保留。'
+      ElMessage.error(problem.value)
+    }
+    return false
+  } finally { if (epoch === generation) busy.value = false }
 }
 
-async function stop(): Promise<void> {
-  await refresh()
-  if (current.value?.session) await command('stop', { sessionId: current.value.session.id })
+async function start(workItemId: string): Promise<boolean> {
+  const success = await run(async () => {
+    const running = current.value?.session
+    if (running?.workItemId === workItemId) return
+    await command(running ? 'switch' : 'start', { workItemId, ...(running ? { sessionId: running.id } : {}) })
+  })
+  if (success) window.dispatchEvent(new Event('yumpoo:timer-started'))
+  return success
+}
+
+function toggle(workItemId: string): Promise<boolean> {
+  const running = current.value?.session
+  return running?.workItemId === workItemId ? stop(running.id) : start(workItemId)
+}
+
+function stop(expectedSessionId = current.value?.session?.id): Promise<boolean> {
+  return run(async () => {
+    const running = current.value?.session
+    if (!running) return
+    if (!expectedSessionId || running.id !== expectedSessionId) throw new Error('TIMER_CHANGED')
+    await command('stop', { sessionId: running.id })
+  })
 }
 
 export const timerExitPrompt = ref(false)
@@ -186,8 +235,9 @@ export function confirmTimerExit(): Promise<boolean> {
     const choice = await new Promise<'stop' | 'continue' | 'cancel'>(resolve => { resolveExit = resolve })
     if (choice === 'cancel') return false
     if (choice === 'continue') return true
-    try { await stop(); return true }
-    catch { ElMessage.error('停止失败，尚未退出。请重试或明确选择继续计时并退出。'); return false }
+    if (await stop()) return true
+    ElMessage.error('停止失败，尚未退出。请重试或明确选择继续计时并退出。')
+    return false
   })()
   exitPromise = operation
   void operation.finally(() => { exitPromise = undefined })

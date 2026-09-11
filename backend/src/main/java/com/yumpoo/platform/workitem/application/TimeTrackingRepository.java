@@ -8,6 +8,8 @@ import java.util.UUID;
 import static com.yumpoo.platform.workitem.application.TimeTrackingModels.*;
 
 public interface TimeTrackingRepository {
+    List<TimerCandidate> candidates(UUID companyId, UUID userId, Collection<UUID> projectIds,
+            Collection<UUID> matchingProjectIds, String query, boolean personal, int offset, int limit, Instant now);
     List<RecentTimeTrackingItem> recentItems(UUID companyId, UUID userId);
     List<UUID> visibleItemIds(UUID companyId, UUID projectId, Collection<UUID> ids);
     long stateVersion(UUID companyId, UUID userId, boolean lock);

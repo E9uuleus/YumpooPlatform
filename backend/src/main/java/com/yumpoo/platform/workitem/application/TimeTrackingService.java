@@ -44,6 +44,25 @@ public class TimeTrackingService {
         return currentView(actor);
     }
 
+    @Transactional(readOnly=true, isolation=Isolation.REPEATABLE_READ)
+    public TimerCandidatePage candidates(CurrentActor actor, String query, String scope, int offset, int limit) {
+        String normalized=query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
+        if(normalized.length()>200) throw validation("q", "INVALID_LENGTH", "搜索词最多 200 字");
+        if(!Set.of("PERSONAL", "ALL").contains(scope)) throw validation("scope", "INVALID_VALUE", "无效的工作项范围");
+        if(offset<0 || offset>100000 || limit<1 || limit>50) throw validation("offset", "INVALID_PAGE", "无效的分页参数");
+        var projects=access.findWritableProjects(actor);
+        if(projects.isEmpty()) return new TimerCandidatePage(List.of(), null);
+        var names=projects.stream().collect(java.util.stream.Collectors.toMap(
+                ProjectAccessSnapshotQuery.WritableProject::projectId, ProjectAccessSnapshotQuery.WritableProject::name));
+        var matching=projects.stream().filter(p -> !normalized.isEmpty()
+                && (p.name().toLowerCase(Locale.ROOT).contains(normalized) || p.code().toLowerCase(Locale.ROOT).contains(normalized)))
+                .map(ProjectAccessSnapshotQuery.WritableProject::projectId).toList();
+        var rows=timers.candidates(actor.companyId(), actor.userId(), names.keySet(), matching, normalized,
+                scope.equals("PERSONAL"), offset, limit+1, now());
+        return new TimerCandidatePage(rows.stream().limit(limit).map(row -> row.withProjectName(names.get(row.projectId()))).toList(),
+                rows.size()>limit ? offset+limit : null);
+    }
+
     private CurrentTimeTracker currentView(CurrentActor actor) {
         long version=timers.stateVersion(actor.companyId(),actor.userId(),false);
         Instant now=now();
