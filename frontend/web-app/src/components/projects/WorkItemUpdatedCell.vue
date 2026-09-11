@@ -21,7 +21,9 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 <template>
   <el-tooltip
     :content="tooltip"
-    placement="top"
+    placement="left"
+    :fallback-placements="['right']"
+    :show-after="250"
   >
     <button
       class="work-item-updated-cell"

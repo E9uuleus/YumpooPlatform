@@ -50,17 +50,17 @@ public final class WorkItemModels {
             String statusCategory, String priority, UUID assigneeUserId,
             String assigneeDisplayName, LocalDate dueDate, String dueTime, Instant completedAt,
             long rowVersion, String etag,
-            WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName, TimeTrackingModels.TimeTrackingSummary timeTracking) {
+            WorkItemCapabilities capabilities, long subitemCount, long discussionCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName, TimeTrackingModels.TimeTrackingSummary timeTracking) {
         public ProjectWorkItemListItem(UUID id, UUID projectId, UUID contentId,
             String contentName, String contentColorToken, String itemNo, String title, String statusCode,
             String statusCategory, String priority, UUID assigneeUserId,
             String assigneeDisplayName, LocalDate dueDate, String dueTime, Instant completedAt,
             long rowVersion, String etag,
-            WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName) {
-            this(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,updatedAt,updatedByUserId,updatedByDisplayName,null);
+            WorkItemCapabilities capabilities, long subitemCount, long discussionCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName) {
+            this(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,discussionCount,updatedAt,updatedByUserId,updatedByDisplayName,null);
         }
         public ProjectWorkItemListItem withTime(TimeTrackingModels.TimeTrackingSummary summary) {
-            return new ProjectWorkItemListItem(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,updatedAt,updatedByUserId,updatedByDisplayName,summary);
+            return new ProjectWorkItemListItem(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,discussionCount,updatedAt,updatedByUserId,updatedByDisplayName,summary);
         }
     }
 

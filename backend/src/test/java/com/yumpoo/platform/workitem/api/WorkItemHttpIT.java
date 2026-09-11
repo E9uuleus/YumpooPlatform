@@ -347,6 +347,39 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void discussionCountsIncludeOnlyActiveRootThreadsInProjectAndSubitemLists() throws Exception {
+        String projectItems = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+        JsonNode item = created(mutate("POST", projectItems, member,
+                workItemBody(tasksId, "讨论数量"), null, UUID.randomUUID()));
+        assertThat(ok(get(projectItems, member)).path("items").get(0).path("discussionCount").asLong()).isZero();
+        String itemId = item.path("id").asText();
+        String collection = "/api/v1/work-items/" + itemId + "/updates";
+        JsonNode root = publishComment(collection, member, "主讨论", null);
+        JsonNode otherRoot = publishComment(collection, owner, "另一条讨论", null);
+        publishComment(collection, owner, "回复不重复计数", root.path("id").asText());
+        assertThat(ok(get(projectItems, member)).path("items").get(0).path("discussionCount").asLong()).isEqualTo(2);
+
+        String subitemsPath = "/api/v1/work-items/" + itemId + "/subitems";
+        JsonNode child = created(mutate("POST", subitemsPath, member,
+                subitemBody(tasksId, "子项讨论数量"), null, UUID.randomUUID()));
+        publishComment("/api/v1/work-items/" + child.path("id").asText() + "/updates", member, "子项讨论", null);
+        assertThat(ok(get(subitemsPath, member)).path("items").get(0).path("discussionCount").asLong()).isOne();
+        JsonNode projectRows = ok(get(projectItems, member)).path("items");
+        for (JsonNode row : projectRows) {
+            if (row.path("id").asText().equals(itemId)) assertThat(row.path("discussionCount").asLong()).isEqualTo(2);
+        }
+        for (JsonNode discussion : java.util.List.of(root, otherRoot)) {
+            ok(mutate("DELETE", "/api/v1/work-item-updates/" + discussion.path("id").asText(), owner,
+                    "{}", discussion.path("etag").asText(), null));
+        }
+        projectRows = ok(get(projectItems, member)).path("items");
+        for (JsonNode row : projectRows) {
+            if (row.path("id").asText().equals(itemId)) assertThat(row.path("discussionCount").asLong()).isZero();
+        }
+        assertThat(ok(get(subitemsPath, member)).path("items").get(0).path("discussionCount").asLong()).isOne();
+    }
+
+    @Test
     void discussionThreadsEnforcePermissionsDepthAndUnlimitedAuthorEdits() throws Exception {
         JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
                 workItemBody(tasksId, "讨论串"), null, UUID.randomUUID()));

@@ -24,6 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: 'details' | 'discussion' | 'relations' | 'activity']
   'relationsChanged': [affectedWorkItemIds: string[]]
+  'discussionChanged': [workItemId: string]
   'openWorkItem': [target: { workItemId: string, projectId: string }]
 }>()
 const ElTabs = ElTabsRaw as unknown as DefineComponent
@@ -67,6 +68,7 @@ defineExpose({ hasDraft, busy, discardDraft })
         :members="members"
         :can-publish="canPublish"
         :read-only-reason="readOnlyReason"
+        @changed="emit('discussionChanged', $event)"
       />
     </el-tab-pane>
     <el-tab-pane

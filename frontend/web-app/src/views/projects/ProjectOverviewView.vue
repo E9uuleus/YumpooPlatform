@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
 import WorkItemTimerCell from '../../components/projects/WorkItemTimerCell.vue'
+import WorkItemDiscussionIcon from '../../components/projects/WorkItemDiscussionIcon.vue'
 import WorkItemUpdatedCell from '../../components/projects/WorkItemUpdatedCell.vue'
 import { Filter as FilterIcon, Hide, Search, Sort, User } from '@element-plus/icons-vue'
 import {
@@ -1092,6 +1093,15 @@ async function openRelatedWorkItem(target: { workItemId: string, projectId: stri
     params: { projectId: target.projectId },
     query: { workItemId: target.workItemId },
   })
+}
+
+async function onDiscussionChanged(workItemId: string): Promise<void> {
+  const parents = Object.keys(subitems).filter(id => subitems[id]!.items.some(item => item.id === workItemId))
+  parents.forEach(id => { subitems[id]!.loaded = false })
+  await Promise.all([
+    selectedView.value === 'table' ? reloadSortedTableInPlace() : refreshCurrentView(),
+    ...parents.filter(id => expandedSubitemIds.value.includes(id)).map(id => loadSubitems(id, true)),
+  ])
 }
 
 async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> {
@@ -2504,31 +2514,11 @@ onBeforeUnmount(() => {
                     <button
                       class="monday-discussion-btn"
                       :class="{ 'monday-cell--selected': selectedCellKey === `${(scope.row as ProjectWorkItemListItem).id}:discussion` }"
-                      aria-label="打开协作讨论"
+                      :aria-label="(scope.row as ProjectWorkItemListItem).discussionCount ? `打开协作讨论，${(scope.row as ProjectWorkItemListItem).discussionCount}条讨论` : '打开协作讨论'"
                       title="打开协作讨论"
                       @click.stop="openDetail(scope.row as ProjectWorkItemListItem, 'discussion')"
                     >
-                      <svg
-                        width="17"
-                        height="17"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        class="discussion-bubble-icon"
-                      >
-                        <path
-                          d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 13.8214 3.54139 15.5165 4.4741 16.9366L3.25 21L7.54583 19.8665C8.89531 20.5902 10.4079 21 12 21Z"
-                          stroke="currentColor"
-                          stroke-width="1.6"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        />
-                        <path
-                          d="M12 8.5V15.5M8.5 12H15.5"
-                          stroke="currentColor"
-                          stroke-width="1.6"
-                          stroke-linecap="round"
-                        />
-                      </svg>
+                      <WorkItemDiscussionIcon :count="(scope.row as ProjectWorkItemListItem).discussionCount" />
                     </button>
                   </div>
                 </template>
@@ -2876,6 +2866,7 @@ onBeforeUnmount(() => {
             :can-publish="canPublishDiscussion"
             :read-only-reason="discussionReadOnlyReason"
             @relations-changed="onRelationsChanged"
+            @discussion-changed="onDiscussionChanged"
             @open-work-item="openRelatedWorkItem"
           >
             <template #details>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
 import {
@@ -701,11 +702,8 @@ onBeforeUnmount(() => {
               <button class="subitem-link" @click.stop="openItem(scope.row, 'details')">
                 {{ scope.row.title }}
               </button>
-              <button class="subitem-discussion" aria-label="打开协作讨论" @click.stop="openItem(scope.row, 'discussion')">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 13.8214 3.54139 15.5165 4.4741 16.9366L3.25 21L7.54583 19.8665C8.89531 20.5902 10.4079 21 12 21Z" stroke="currentColor" stroke-width="1.6" />
-                  <path d="M12 8.5V15.5M8.5 12H15.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-                </svg>
+              <button class="subitem-discussion" :aria-label="scope.row.discussionCount ? `打开协作讨论，${scope.row.discussionCount}条讨论` : '打开协作讨论'" @click.stop="openItem(scope.row, 'discussion')">
+                <WorkItemDiscussionIcon :count="scope.row.discussionCount" />
               </button>
             </div>
 
@@ -1175,7 +1173,7 @@ onBeforeUnmount(() => {
 .subitem-title-cell { width: 100%; height: 34px; display: flex; align-items: center; min-width: 0; }
 .subitem-link { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: transparent; color: var(--yp-text-primary); cursor: pointer; }
 .subitem-link:hover { color: var(--yp-link); text-decoration: underline; }
-.subitem-discussion { width: 32px; height: 32px; border: 0; background: transparent; color: var(--yp-text-secondary); cursor: pointer; }
+.subitem-discussion { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 32px; padding: 0; border: 0; background: transparent; color: var(--yp-text-secondary); cursor: pointer; }
 .subitem-cell-button, .subitem-block-cell { width: 100%; height: 100%; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .subitem-block-cell { display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 0 var(--yp-space-2); color: var(--yp-text-inverse); }
 .subitem-popover-stack { display: grid; gap: 6px; }

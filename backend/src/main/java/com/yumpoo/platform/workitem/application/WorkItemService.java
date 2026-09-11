@@ -79,6 +79,7 @@ public class WorkItemService {
 
     private final WorkItemRepository workItems;
     private final WorkItemRelationRepository relations;
+    private final WorkItemUpdateRepository updates;
     private final ContentRepository contents;
     private final ProjectAccessSnapshotQuery access;
     private final ProjectFactWriteGuard writeGuard;
@@ -95,7 +96,7 @@ public class WorkItemService {
             new ProjectWorkItemFilterCursorCodec();
 
     public WorkItemService(WorkItemRepository workItems, WorkItemRelationRepository relations,
-            ContentRepository contents,
+            ContentRepository contents, WorkItemUpdateRepository updates,
             ProjectAccessSnapshotQuery access, ProjectFactWriteGuard writeGuard,
             ProjectActiveMembershipQuery activeMemberships,
             WorkItemLabelRepository labels, MinimalUserSnapshotQuery users,
@@ -103,6 +104,7 @@ public class WorkItemService {
             ObjectMapper objectMapper, Clock clock, TimeTrackingRepository timeTracking) {
         this.workItems = workItems;
         this.relations = relations;
+        this.updates = updates;
         this.contents = contents;
         this.access = access;
         this.writeGuard = writeGuard;
@@ -199,6 +201,8 @@ public class WorkItemService {
         contents.findAll(project.companyId(), project.projectId())
                 .forEach(content -> contentById.put(content.id(), content));
         Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), rows);
+        Map<UUID, Long> discussionCounts = updates.countActiveDiscussions(project.companyId(),
+                rows.stream().map(WorkItem::id).toList());
         Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
                 rows.stream().map(WorkItem::id).toList());
         Map<UUID,TimeTrackingModels.TimeTrackingSummary> timeSummaries=timeTracking.summaries(actor.companyId(),projectId,
@@ -207,7 +211,8 @@ public class WorkItemService {
         List<ProjectWorkItemListItem> items = rows.stream()
                 .map(item -> projectListItem(item, contentById.get(item.contentId()), people,
                         canEdit(project, contentById.get(item.contentId())), statusLabels,
-                        subitemCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList();
+                        subitemCounts.getOrDefault(item.id(), 0L),
+                        discussionCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList();
         String nextCursor = hasMore && !rows.isEmpty()
                 ? projectCursors.encode(new ProjectWorkItemCursorCodec.Cursor(
                         fingerprint, effectiveView,
@@ -243,6 +248,8 @@ public class WorkItemService {
         contents.findAll(project.companyId(), project.projectId())
                 .forEach(content -> contentById.put(content.id(), content));
         Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), rows);
+        Map<UUID, Long> discussionCounts = updates.countActiveDiscussions(project.companyId(),
+                rows.stream().map(WorkItem::id).toList());
         Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
                 rows.stream().map(WorkItem::id).toList());
         Map<UUID,TimeTrackingModels.TimeTrackingSummary> timeSummaries=timeTracking.summaries(actor.companyId(),project.projectId(),
@@ -251,7 +258,8 @@ public class WorkItemService {
         return new WorkItemSubitemList(rows.stream().map(item -> projectListItem(item,
                 contentById.get(item.contentId()), people,
                 canEdit(project, contentById.get(item.contentId())), statusLabels,
-                subitemCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList());
+                subitemCounts.getOrDefault(item.id(), 0L),
+                        discussionCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList());
     }
 
     @Transactional(readOnly = true)
@@ -1096,7 +1104,7 @@ public class WorkItemService {
 
     private static ProjectWorkItemListItem projectListItem(WorkItem item, Content content,
             Map<UUID, MinimalUserSnapshot> people, boolean canEditFields,
-            List<WorkItemLabelModels.StatusLabel> statusLabels, long subitemCount) {
+            List<WorkItemLabelModels.StatusLabel> statusLabels, long subitemCount, long discussionCount) {
         return new ProjectWorkItemListItem(item.id(), item.projectId(), item.contentId(),
                 content == null ? "未知类别" : content.name(),
                 content == null ? "GRAY" : content.colorToken(), item.itemNo(),
@@ -1105,7 +1113,7 @@ public class WorkItemService {
                 item.rowVersion(), StrongEtag.format(item.rowVersion()),
                 new WorkItemCapabilities(canEditFields, canEditFields, canEditFields,
                         canEditFields, canEditFields, false,
-                        availableTransitions(item, canEditFields, statusLabels)), subitemCount,
+                        availableTransitions(item, canEditFields, statusLabels)), subitemCount, discussionCount,
                 item.updatedAt(), item.updatedByUserId(), updatedByDisplayName(item, people));
     }
 

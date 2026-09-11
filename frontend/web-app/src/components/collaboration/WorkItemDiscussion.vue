@@ -32,6 +32,8 @@ const props = defineProps<{
   readOnlyReason?: string | undefined
 }>()
 
+const emit = defineEmits<{ changed: [workItemId: string] }>()
+
 const items = ref<WorkItemUpdate[]>([])
 const nextCursor = ref<string | null>(null)
 const loading = ref(false)
@@ -346,6 +348,7 @@ async function deleteUpdate(item: WorkItemUpdate): Promise<void> {
     })
     if (current !== generation || disposed) return
     mergeUpdates([deleted])
+    if (!item.parentUpdateId) emit('changed', props.workItemId)
     if (editingItemId.value === item.id) editDialogVisible.value = false
     ElMessage.success(item.parentUpdateId ? '回复已删除' : '讨论串已删除')
   } catch (mutationReason) {
@@ -393,6 +396,7 @@ async function publish(): Promise<void> {
     })
     if (current !== generation || disposed) return
     mergeUpdates([published])
+    emit('changed', props.workItemId)
     editor.value.commands.clearContent(true)
     publishKey = crypto.randomUUID()
     publishKeyBody = editor.value.getHTML()

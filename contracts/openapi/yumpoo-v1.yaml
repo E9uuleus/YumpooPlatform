@@ -4537,6 +4537,12 @@ components:
         etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
         capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
         subitemCount: { type: integer, format: int64, minimum: 0, readOnly: true }
+        discussionCount:
+          type: integer
+          format: int64
+          minimum: 0
+          readOnly: true
+          description: 未删除的顶层讨论串数量，不含回复；旧响应省略时按 0 展示。
         updatedAt: { type: string, format: date-time, readOnly: true }
         updatedByUserId: { type: string, format: uuid, readOnly: true, example: '46000000-0000-4000-8000-000000000004' }
         updatedByDisplayName: { type: string, minLength: 1, readOnly: true, example: '林晓' }

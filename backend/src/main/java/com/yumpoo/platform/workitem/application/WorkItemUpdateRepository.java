@@ -22,6 +22,8 @@ public interface WorkItemUpdateRepository {
 
     long countReplies(UUID companyId, UUID parentUpdateId);
 
+    Map<UUID, Long> countActiveDiscussions(UUID companyId, List<UUID> workItemIds);
+
     boolean pin(WorkItemUpdate update, long expectedVersion);
 
     Optional<UpdateLocator> findLocator(UUID companyId, UUID updateId);

@@ -193,6 +193,7 @@ describe('WorkItemDiscussion', () => {
     await wrapper.get('.discussion-submit').trigger('click')
     await flushPromises()
     expect(api.publish).toHaveBeenCalledTimes(2)
+    expect(wrapper.emitted('changed')).toEqual([['35000000-0000-4000-8000-000000000026']])
     expect(api.publish.mock.calls[1]?.[0].idempotencyKey).toBe(firstKey)
     expect(wrapper.html()).toContain('服务端净化正文')
     expect(wrapper.html()).not.toContain('onclick="evil()"')
@@ -268,6 +269,7 @@ describe('WorkItemDiscussion', () => {
       ifMatch: '"0"',
       body: {},
     })
+    expect(wrapper.emitted('changed')).toEqual([[wrapper.props('workItemId')]])
     expect(wrapper.text()).not.toContain('此讨论已删除')
     expect(wrapper.html()).not.toContain('<p>可操作讨论</p>')
     expect(wrapper.findAll('.discussion-update')[0]!.text()).toContain('后续讨论')
