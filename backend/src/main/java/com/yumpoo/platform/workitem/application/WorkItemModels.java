@@ -28,7 +28,7 @@ public final class WorkItemModels {
             String dueTime, Instant completedAt,
             long rowVersion, String etag, WorkItemCapabilities capabilities,
             Instant createdAt, Instant updatedAt, boolean deleted, Instant deletedAt,
-            UUID deletedByUserId, String deleteReason) {}
+            UUID deletedByUserId, String deleteReason, UUID updatedByUserId, String updatedByDisplayName) {}
 
     public record WorkItemTransitionOption(String toStatus, String displayName,
             String statusCategory, boolean requiresResolution) {}
@@ -50,17 +50,17 @@ public final class WorkItemModels {
             String statusCategory, String priority, UUID assigneeUserId,
             String assigneeDisplayName, LocalDate dueDate, String dueTime, Instant completedAt,
             long rowVersion, String etag,
-            WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt, TimeTrackingModels.TimeTrackingSummary timeTracking) {
+            WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName, TimeTrackingModels.TimeTrackingSummary timeTracking) {
         public ProjectWorkItemListItem(UUID id, UUID projectId, UUID contentId,
             String contentName, String contentColorToken, String itemNo, String title, String statusCode,
             String statusCategory, String priority, UUID assigneeUserId,
             String assigneeDisplayName, LocalDate dueDate, String dueTime, Instant completedAt,
             long rowVersion, String etag,
-            WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt) {
-            this(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,updatedAt,null);
+            WorkItemCapabilities capabilities, long subitemCount, Instant updatedAt, UUID updatedByUserId, String updatedByDisplayName) {
+            this(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,updatedAt,updatedByUserId,updatedByDisplayName,null);
         }
         public ProjectWorkItemListItem withTime(TimeTrackingModels.TimeTrackingSummary summary) {
-            return new ProjectWorkItemListItem(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,updatedAt,summary);
+            return new ProjectWorkItemListItem(id,projectId,contentId,contentName,contentColorToken,itemNo,title,statusCode,statusCategory,priority,assigneeUserId,assigneeDisplayName,dueDate,dueTime,completedAt,rowVersion,etag,capabilities,subitemCount,updatedAt,updatedByUserId,updatedByDisplayName,summary);
         }
     }
 

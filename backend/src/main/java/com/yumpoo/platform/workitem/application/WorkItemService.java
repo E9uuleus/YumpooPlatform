@@ -1036,6 +1036,7 @@ public class WorkItemService {
         Set<UUID> userIds = new LinkedHashSet<>();
         for (WorkItem item : rows) {
             userIds.add(item.reporterUserId());
+            userIds.add(item.updatedByUserId());
             if (item.assigneeUserId() != null) userIds.add(item.assigneeUserId());
         }
         return users.findByUserIds(companyId, userIds);
@@ -1105,7 +1106,12 @@ public class WorkItemService {
                 new WorkItemCapabilities(canEditFields, canEditFields, canEditFields,
                         canEditFields, canEditFields, false,
                         availableTransitions(item, canEditFields, statusLabels)), subitemCount,
-                item.updatedAt());
+                item.updatedAt(), item.updatedByUserId(), updatedByDisplayName(item, people));
+    }
+
+    private static String updatedByDisplayName(WorkItem item, Map<UUID, MinimalUserSnapshot> people) {
+        var person = people.get(item.updatedByUserId());
+        return person == null ? "历史成员" : person.displayName();
     }
 
     private WorkItemDetail detail(WorkItem item,
@@ -1126,7 +1132,7 @@ public class WorkItemService {
                         canEditFields && item.deleted(),
                         availableTransitions(item, canEditFields && !item.deleted(), statusLabels)),
                 item.createdAt(), item.updatedAt(), item.deleted(), item.deletedAt(),
-                item.deletedByUserId(), item.deleteReason());
+                item.deletedByUserId(), item.deleteReason(), item.updatedByUserId(), updatedByDisplayName(item, people));
     }
 
     private static List<WorkItemTransitionOption> availableTransitions(WorkItem item,

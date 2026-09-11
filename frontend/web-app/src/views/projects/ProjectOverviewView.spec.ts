@@ -834,7 +834,7 @@ describe('项目级工作项首页', () => {
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
 
-  it('名称和讨论按钮打开同一详情抽屉的对应区域', async () => {
+  it('名称、讨论和更新时间打开同一详情抽屉的对应区域', async () => {
     const wrapper = mountView()
     await flushPromises()
 
@@ -848,6 +848,11 @@ describe('项目级工作项首页', () => {
     await flushPromises()
     expect(state.getWorkItem).toHaveBeenCalledTimes(2)
     expect((wrapper.vm as unknown as { detailTab: string }).detailTab).toBe('discussion')
+
+    await wrapper.get('button.work-item-updated-cell').trigger('click')
+    await flushPromises()
+    expect(state.getWorkItem).toHaveBeenCalledTimes(3)
+    expect((wrapper.vm as unknown as { detailTab: string }).detailTab).toBe('activity')
   })
 
   it('直达 workItemId 路由恢复抽屉且不重复加载项目列表', async () => {
@@ -1489,9 +1494,13 @@ describe('项目级工作项首页', () => {
     expect(view.drawerWidth).toBe(480)
     window.dispatchEvent(new MouseEvent('pointerup'))
 
-    view.detailOpen = false
+    drawer.vm.$emit('close')
     await nextTick()
+    expect(view.detailOpen).toBe(false)
     expect(document.body.classList.contains('yp-work-items-drawer-open')).toBe(false)
+    expect(document.body.style.getPropertyValue('--yp-work-items-drawer-inset')).toBe('0px')
+    drawer.vm.$emit('update:modelValue', false)
+    await nextTick()
     expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('')
   })
 

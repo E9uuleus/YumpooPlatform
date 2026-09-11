@@ -5,6 +5,7 @@ vi.mock('../../api/client', () => ({ timeTrackingApi: api }))
 vi.mock('../../composables/useSession', () => ({ useSession: () => ({ authentication: { value: { company: { timezone: 'Asia/Shanghai' } } } }) }))
 vi.mock('../../composables/useTimeTracker', () => ({ formatDuration: () => '0:00:01', timerMutation: (_: string, call: (key: string, csrf: string) => unknown) => call('key', 'csrf') }))
 import TimeSessionDialog from './TimeSessionDialog.vue'
+import { ElMessage } from 'element-plus'
 const record = (id: string, canEdit = true) => ({ id, source: 'MANUAL', rowVersion: 0, displayName: '测试成员', startedAt: new Date('2026-08-01T01:00:00Z'), stoppedAt: new Date('2026-08-01T01:00:01Z'), durationMs: 1000, canEdit, etag: id })
 const page = (items = [record('one')], nextCursor: string | null = null) => ({ items, nextCursor, canCreate: true, summary: { totalDurationMs: 1000 } })
 async function setup() {
@@ -14,6 +15,32 @@ async function setup() {
 }
 beforeEach(() => { vi.resetAllMocks(); api.listTimeSessions.mockResolvedValue(page()); api.deleteTimeSession.mockResolvedValue({}) })
 describe('计时日志分页与写入', () => {
+  it('单条直接删除无需原因，请求期间阻止重复点击', async () => {
+    const wrapper = await setup()
+    let resolve!: (value: unknown) => void
+    api.deleteTimeSession.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+    await wrapper.get('.delete-button').trigger('click')
+    await wrapper.get('.delete-button').trigger('click')
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(api.deleteTimeSession).toHaveBeenCalledTimes(1)
+    expect(api.deleteTimeSession.mock.calls[0]?.[0]).toMatchObject({ sessionId: 'one', ifMatch: 'one', timeTrackingCommand: {} })
+    resolve({})
+    await flushPromises()
+    wrapper.unmount()
+  })
+  it('批量删除部分失败时报告已完成数量并重新加载', async () => {
+    const message = vi.spyOn(ElMessage, 'error')
+    const wrapper = await setup()
+    api.listTimeSessions.mockResolvedValueOnce(page([record('one'), record('two')])).mockResolvedValueOnce(page([record('two')]))
+    api.deleteTimeSession.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('conflict'))
+    await wrapper.get('header button').trigger('click')
+    await flushPromises()
+    expect(message).toHaveBeenCalledWith('已清除 1 条记录，其余未完成，请刷新后重试。')
+    expect(wrapper.findAll('.log-row')).toHaveLength(1)
+    expect(wrapper.get('.delete-button').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+    message.mockRestore()
+  })
   it('滚动触底追加下一页，并阻止重复加载', async () => {
     api.listTimeSessions.mockResolvedValueOnce(page([record('one')], 'next'))
     const wrapper = await setup()
@@ -32,8 +59,6 @@ describe('计时日志分页与写入', () => {
     const wrapper = await setup()
     api.listTimeSessions.mockResolvedValueOnce(page([record('one'), record('other', false)], 'next')).mockResolvedValueOnce(page([record('two')])).mockResolvedValueOnce(page([]))
     await wrapper.get('header button').trigger('click')
-    await wrapper.get('input').setValue('验收清理')
-    await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(api.deleteTimeSession.mock.calls.map(call => call[0].sessionId)).toEqual(['one', 'two'])
     expect(wrapper.text()).toContain('暂无计时记录')

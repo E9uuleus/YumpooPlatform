@@ -157,9 +157,9 @@ public class TimeTrackingService {
                 requireVersion(before.rowVersion(),expectedVersion);
                 if(before.stoppedAt()==null || before.deletedAt()!=null) throw invalid("SESSION_NOT_EDITABLE");
             }
-            String reason=input.reason()==null ? null : input.reason().strip();
-            if((delete && (reason==null || reason.isEmpty())) || (reason!=null && reason.length()>500))
-                throw validation("reason","INVALID_LENGTH","删除须填写 1–500 字原因");
+            String reason=input.reason()==null || input.reason().isBlank() ? null : input.reason().strip();
+            if(reason!=null && reason.length()>500)
+                throw validation("reason","INVALID_LENGTH","原因最多 500 字");
             Instant start=delete ? before.startedAt() : input.startedAt();
             Instant stop=delete ? before.stoppedAt() : input.stoppedAt();
             if(start!=null) start=start.truncatedTo(ChronoUnit.MILLIS);
@@ -185,12 +185,15 @@ public class TimeTrackingService {
         payload.put("sessionId",after.id()); payload.put("userId",after.userId());
         payload.put("startedAt",after.startedAt()); payload.put("stoppedAt",after.stoppedAt());
         payload.put("source",after.source()); payload.put("rowVersion",after.rowVersion());
-        if (action.equals("edited")) {
+        boolean detailedEvent = action.equals("edited") || action.equals("deleted");
+        if (detailedEvent) {
             payload.put("contentId", items.findLocator(actor.companyId(), after.workItemId()).orElseThrow().contentId());
+        }
+        if (action.equals("edited")) {
             payload.put("previousStartedAt", before.startedAt());
             payload.put("previousStoppedAt", before.stoppedAt());
         }
-        events.append(new EventDraft("workitem.time_tracking_"+action,action.equals("edited") ? 2 : 1,"TimeTrackingSession",after.id(),after.rowVersion(),actor.companyId(),EventActor.user(actor.userId()),json.valueToTree(payload)));
+        events.append(new EventDraft("workitem.time_tracking_"+action,detailedEvent ? 2 : 1,"TimeTrackingSession",after.id(),after.rowVersion(),actor.companyId(),EventActor.user(actor.userId()),json.valueToTree(payload)));
         audits.append(new SecurityAuditDraft(actor.companyId(),"time-tracking:"+after.id()+":"+after.rowVersion(),
                 "TIME_TRACKING_"+action.toUpperCase(Locale.ROOT),SecurityAuditOutcome.SUCCEEDED,
                 SecurityAuditActor.user(actor.userId(),actor.platformRoles().stream().map(Enum::name).collect(java.util.stream.Collectors.toSet())),

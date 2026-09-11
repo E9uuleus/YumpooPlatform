@@ -4462,6 +4462,8 @@ components:
         capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
         createdAt: { type: string, format: date-time, readOnly: true }
         updatedAt: { type: string, format: date-time, readOnly: true }
+        updatedByUserId: { type: string, format: uuid, readOnly: true, example: '46000000-0000-4000-8000-000000000004' }
+        updatedByDisplayName: { type: string, minLength: 1, readOnly: true, example: '林晓' }
         deleted: { type: boolean, readOnly: true }
         deletedAt: { type: string, format: date-time, nullable: true, readOnly: true }
         deletedByUserId: { type: string, format: uuid, nullable: true, readOnly: true }
@@ -4536,6 +4538,8 @@ components:
         capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
         subitemCount: { type: integer, format: int64, minimum: 0, readOnly: true }
         updatedAt: { type: string, format: date-time, readOnly: true }
+        updatedByUserId: { type: string, format: uuid, readOnly: true, example: '46000000-0000-4000-8000-000000000004' }
+        updatedByDisplayName: { type: string, minLength: 1, readOnly: true, example: '林晓' }
 
     ProjectWorkItemCursorPage:
       type: object

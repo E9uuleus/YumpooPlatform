@@ -38,6 +38,7 @@ class ActivityProjectionIT {
     private static final UUID PROJECT = UUID.fromString("44000000-0000-4000-8000-000000000101");
 
     @Autowired private ActivityProjectionService projection;
+    @Autowired private com.yumpoo.platform.audit.api.WorkItemCellActivityProjectionService cellProjection;
     @Autowired private ActivityRepository repository;
     @Autowired private WorkItemCellActivityRepository cellRepository;
     @Autowired private JdbcClient jdbc;
@@ -49,6 +50,30 @@ class ActivityProjectionIT {
                 .param("company", COMPANY).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_cell_activity WHERE company_id = :company")
                 .param("company", COMPANY).update();
+    }
+
+    @Test
+    void timerDeletionV2IsProjectedOnceIntoBothActivityStreams() {
+        UUID itemId = UUID.randomUUID(), sessionId = UUID.randomUUID(), actorId = UUID.randomUUID();
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("projectId", PROJECT.toString());
+        payload.put("contentId", UUID.randomUUID().toString());
+        payload.put("workItemId", itemId.toString());
+        payload.put("sessionId", sessionId.toString());
+        payload.put("startedAt", "2026-09-01T01:00:00Z");
+        payload.put("stoppedAt", "2026-09-01T02:00:00Z");
+        Instant occurredAt = Instant.now();
+        var event = new DomainEventEnvelope(UUID.randomUUID(), "workitem.time_tracking_deleted", 2,
+                occurredAt, "TimeTrackingSession", sessionId, 1, COMPANY, EventActor.user(actorId),
+                "timer-delete-test", "timer-delete-test", null, payload);
+        projection.consume(event);
+        projection.consume(event);
+        cellProjection.consume(event);
+        cellProjection.consume(event);
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.activity_event WHERE event_id=:event")
+                .param("event", event.eventId()).query(Long.class).single()).isOne();
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_cell_activity WHERE event_id=:event AND column_code='TIME_TRACKING' AND change_type='REMOVED' AND actor_user_id=:actor")
+                .param("event", event.eventId()).param("actor", actorId).query(Long.class).single()).isOne();
     }
 
     @Test

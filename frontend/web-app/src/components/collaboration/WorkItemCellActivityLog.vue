@@ -376,11 +376,14 @@ onBeforeUnmount(() => { if (minuteTimer) clearInterval(minuteTimer) })
           <span
             v-else-if="item.changeType === 'REMOVED'"
             class="cell-entry__verb cell-entry__verb--removed"
-          >移除</span>
+          >{{ item.column === 'TIME_TRACKING' ? '删除计时记录' : '移除' }}</span>
 
           <template v-if="item.changeType === 'REMOVED'">
+            <el-tooltip v-if="item.column === 'TIME_TRACKING'" :content="valueText(item.beforeValue, item.column)" placement="top">
+              <span class="cell-entry__value">{{ valueText(item.beforeValue, item.column) }}</span>
+            </el-tooltip>
             <yp-assignee
-              v-if="item.beforeValue?.type === 'MEMBER'"
+              v-else-if="item.beforeValue?.type === 'MEMBER'"
               :user-id="item.beforeValue.referenceId"
               :display-name="item.beforeValue.displayName"
               size="table"

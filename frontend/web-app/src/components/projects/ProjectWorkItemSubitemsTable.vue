@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
+import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
 import {
   readCsrfToken,
   type ProjectMember,
@@ -83,7 +84,7 @@ const emit = defineEmits<{
   sortChange: [rules: ProjectWorkItemSubitemSortRule[]]
   created: [parent: ProjectWorkItemListItem]
   updated: [id: string, detail: WorkItemDetail]
-  openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion']
+  openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity']
   patch: [item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null]
   dueDateChange: [item: ProjectWorkItemListItem, value: DueDateValue]
   contentsUpdated: [catalog: ProjectContentCatalog]
@@ -160,10 +161,6 @@ function priorityPresentation(priority: string | null): { label: string; tone: s
 function priorityStyle(priority: string | null): CSSProperties {
   const token = props.priorityOptions.find(item => item.code === priority)?.colorToken
   return token ? { backgroundColor: workItemLabelColorValue(token), color: 'var(--yp-text-inverse)' } : {}
-}
-
-function formatTime(value: Date | string): string {
-  return new Date(value).toLocaleString('zh-CN')
 }
 
 function sortDirection(key: ProjectWorkItemSubitemColumn['key']): 'ASC' | 'DESC' | undefined {
@@ -779,7 +776,11 @@ onBeforeUnmount(() => {
             />
 
             <WorkItemTimerCell v-else-if="column.key === 'timeTracking'" :item="scope.row as ProjectWorkItemListItem" :project-id="projectId" />
-                  <span v-else-if="column.key === 'updatedAt'" class="subitem-timestamp">{{ formatTime(scope.row.updatedAt) }}</span>
+                  <WorkItemUpdatedCell
+                    v-else-if="column.key === 'updatedAt'"
+                    :item="scope.row as ProjectWorkItemListItem"
+                    @open-activity="emit('openDetail', scope.row as ProjectWorkItemListItem, 'activity')"
+                  />
           </template>
         </el-table-column>
 
@@ -1002,6 +1003,11 @@ onBeforeUnmount(() => {
 :deep(.monday-subitem-table .el-table__cell) { box-sizing: border-box; height: var(--subitem-table-row-height); padding: 0; border-color: var(--yp-border-subtle); }
 :deep(.monday-subitem-table .cell) { padding: 0 8px; display: flex; align-items: center; justify-content: center; }
 :deep(.monday-subitem-table .el-table__body .cell) { height: 34px; }
+:deep(.monday-subitem-table td.monday-column--updatedAt > .cell) {
+  --work-item-updated-cell-padding: 12px;
+  height: var(--subitem-table-row-height);
+  padding: 0;
+}
 :deep(.monday-subitem-table td.subitem-block-column > .cell) {
   height: var(--subitem-table-row-height);
   padding: 0;
@@ -1170,7 +1176,6 @@ onBeforeUnmount(() => {
 .subitem-popover-stack { display: grid; gap: 6px; }
 .subitem-option { min-height: 34px; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .subitem-option:hover { background: var(--yp-bg-sunken); }
-.subitem-timestamp { color: var(--yp-text-secondary); font-size: 12px; }
 .subitem-quick-row {
   --subitem-quick-control-height: 26px;
   display: grid;

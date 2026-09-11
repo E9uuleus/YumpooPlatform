@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
 import WorkItemTimerCell from '../../components/projects/WorkItemTimerCell.vue'
+import WorkItemUpdatedCell from '../../components/projects/WorkItemUpdatedCell.vue'
 import { Filter as FilterIcon, Hide, Search, Sort, User } from '@element-plus/icons-vue'
 import {
   TimeTrackingState,
@@ -205,13 +206,12 @@ const DRAWER_MIN_WIDTH = 480
 const DRAWER_VIEWPORT_GUTTER = 60
 const drawerWidth = ref(560)
 const isResizingDrawer = ref(false)
-const pageScrollbarRight = computed(() => detailOpen.value ? drawerWidth.value : 0)
 const horizontalPageScrollbarStyle = computed<CSSProperties>(() => ({
   left: `${pageScrollbarLeft.value}px`,
-  right: `${pageScrollbarRight.value}px`,
+  right: 'var(--yp-work-items-drawer-inset, 0px)',
 }))
 const verticalPageScrollbarStyle = computed<CSSProperties>(() => ({
-  right: `${pageScrollbarRight.value}px`,
+  right: 'var(--yp-work-items-drawer-inset, 0px)',
 }))
 
 function onDrawerResizePointerDown(event: PointerEvent): void {
@@ -228,6 +228,7 @@ function onDrawerResizePointerDown(event: PointerEvent): void {
     if (nextWidth === drawerWidth.value) return
     drawerWidth.value = nextWidth
     document.body.style.setProperty('--yp-work-items-drawer-width', `${nextWidth}px`)
+    document.body.style.setProperty('--yp-work-items-drawer-inset', `${nextWidth}px`)
   }
 
   const onPointerUp = () => {
@@ -263,9 +264,8 @@ function syncProjectPageScrollLayout(): void {
   document.body.classList.toggle('yp-work-items-drawer-open', detailOpen.value)
   if (detailOpen.value) {
     document.body.style.setProperty('--yp-work-items-drawer-width', `${drawerWidth.value}px`)
-  } else {
-    document.body.style.removeProperty('--yp-work-items-drawer-width')
   }
+  document.body.style.setProperty('--yp-work-items-drawer-inset', detailOpen.value ? `${drawerWidth.value}px` : '0px')
   scheduleResponsiveTableLayout()
 }
 
@@ -1094,10 +1094,10 @@ async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> 
     .map(id => loadSubitems(id, true)))
 }
 
-async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion'): Promise<void> {
+async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity'): Promise<void> {
   if (detailOpen.value && detail.value?.id === item.id && detailTab.value === tab) return
   if (!await beforeDiscussionLeave()) return
-  selectCell(item.id, tab === 'details' ? 'title' : 'discussion')
+  selectCell(item.id, tab === 'details' ? 'title' : tab === 'activity' ? 'updatedAt' : 'discussion')
   detailTab.value = tab
   if (String(route.query.workItemId ?? '') === item.id) {
     await loadDetail(item.id, tab)
@@ -1115,7 +1115,10 @@ async function closeDetailRoute(): Promise<void> {
 
 function onDetailModelValue(value: boolean): void {
   detailOpen.value = value
-  if (!value) void closeDetailRoute()
+  if (!value) {
+    document.body.style.removeProperty('--yp-work-items-drawer-width')
+    void closeDetailRoute()
+  }
 }
 
 function onLabelsUpdated(next: WorkItemLabelCatalog): void {
@@ -1195,17 +1198,25 @@ async function transitionItem(item: ProjectWorkItemListItem, statusCode: string)
 }
 
 function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
-  const apply = (item: ProjectWorkItemListItem): ProjectWorkItemListItem => item.id !== id ? item : {
-    ...item, contentId: updatedDetail.contentId, contentName: updatedDetail.contentName,
-    contentColorToken: updatedDetail.contentColorToken,
-    statusCode: updatedDetail.statusCode, statusCategory: updatedDetail.statusCategory,
-    priority: updatedDetail.priority,
-    assigneeUserId: updatedDetail.assigneeUserId,
-    assigneeDisplayName: updatedDetail.assigneeDisplayName,
-    dueDate: updatedDetail.dueDate, dueTime: updatedDetail.dueTime ?? null,
-    completedAt: updatedDetail.completedAt ?? null, updatedAt: updatedDetail.updatedAt,
-    rowVersion: updatedDetail.rowVersion, etag: updatedDetail.etag,
-    capabilities: updatedDetail.capabilities,
+  const apply = (item: ProjectWorkItemListItem): ProjectWorkItemListItem => {
+    if (item.id !== id) return item
+    const updated = {
+      ...item, contentId: updatedDetail.contentId, contentName: updatedDetail.contentName,
+      contentColorToken: updatedDetail.contentColorToken,
+      statusCode: updatedDetail.statusCode, statusCategory: updatedDetail.statusCategory,
+      priority: updatedDetail.priority,
+      assigneeUserId: updatedDetail.assigneeUserId,
+      assigneeDisplayName: updatedDetail.assigneeDisplayName,
+      dueDate: updatedDetail.dueDate, dueTime: updatedDetail.dueTime ?? null,
+      completedAt: updatedDetail.completedAt ?? null, updatedAt: updatedDetail.updatedAt,
+      ...(updatedDetail.updatedByUserId ? { updatedByUserId: updatedDetail.updatedByUserId } : {}),
+      ...(updatedDetail.updatedByDisplayName ? { updatedByDisplayName: updatedDetail.updatedByDisplayName } : {}),
+      rowVersion: updatedDetail.rowVersion, etag: updatedDetail.etag,
+      capabilities: updatedDetail.capabilities,
+    }
+    if (!updatedDetail.updatedByUserId) delete updated.updatedByUserId
+    if (!updatedDetail.updatedByDisplayName) delete updated.updatedByDisplayName
+    return updated
   }
   tableItems.value = tableItems.value.map(apply)
   Object.values(lanes).forEach(state => { state.items = state.items.map(apply) })
@@ -2079,6 +2090,7 @@ watch(() => route.query.workItemId, value => {
 }, { immediate: true })
 watch(assigneeSearch, scheduleMemberSearch)
 watch(detailOpen, syncProjectPageScrollLayout, { flush: 'post' })
+watch(isResizingDrawer, value => document.body.classList.toggle('yp-work-items-drawer-resizing', value), { flush: 'sync' })
 watch(tableRef, () => {
   observeProjectPageResizeTargets()
   scheduleResponsiveTableLayout()
@@ -2123,8 +2135,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocumentPointerDown)
   window.removeEventListener('resize', scheduleResponsiveTableLayout)
   bindTableScrollElement(undefined)
-  document.body.classList.remove('yp-project-overview-scroll', 'yp-work-items-drawer-open')
+  document.body.classList.remove('yp-project-overview-scroll', 'yp-work-items-drawer-open', 'yp-work-items-drawer-resizing')
   document.body.style.removeProperty('--yp-work-items-drawer-width')
+  document.body.style.removeProperty('--yp-work-items-drawer-inset')
   clearTablePointerTracking()
   clearTableColumnPointerTracking()
   clearTableColumnResizeTracking()
@@ -2668,7 +2681,11 @@ onBeforeUnmount(() => {
                   </template>
 
                   <WorkItemTimerCell v-else-if="column.key === 'timeTracking'" :item="scope.row as ProjectWorkItemListItem" :project-id="projectId" />
-                  <span v-else-if="column.key === 'updatedAt'" class="monday-timestamp">{{ formatTime((scope.row as ProjectWorkItemListItem).updatedAt) }}</span>
+                  <WorkItemUpdatedCell
+                    v-else-if="column.key === 'updatedAt'"
+                    :item="scope.row as ProjectWorkItemListItem"
+                    @open-activity="openDetail(scope.row as ProjectWorkItemListItem, 'activity')"
+                  />
                 </template>
               </el-table-column>
 
@@ -2805,6 +2822,7 @@ onBeforeUnmount(() => {
       modal-class="work-items-drawer-overlay"
       :class="['work-items-detail-drawer', { 'work-items-detail-drawer--resizing': isResizingDrawer }]"
       :size="`${drawerWidth}px`"
+      @close="detailOpen = false"
       @update:model-value="onDetailModelValue"
     >
       <div
@@ -3271,6 +3289,18 @@ onBeforeUnmount(() => {
 :deep(.monday-table .el-table__header th.el-table-fixed-column--left) {
   z-index: 10;
 }
+:deep(.monday-table .el-table__header th.el-table-fixed-column--left)::after {
+  content: '';
+  position: absolute;
+  inset: calc(-1 * var(--work-item-sort-overflow-space) - 1px) 0 auto;
+  height: var(--work-item-sort-overflow-space);
+  background: var(--yp-bg-surface);
+  pointer-events: auto;
+}
+:deep(.monday-table .el-table__header th.el-table-fixed-column--left > .cell) {
+  position: relative;
+  z-index: 1;
+}
 
 :deep(.monday-table th.monday-sortable-column-header:hover),
 :deep(.monday-table th.monday-sortable-column-header:focus-within),
@@ -3575,6 +3605,12 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 
+:deep(.monday-table td.monday-column--updatedAt > .cell) {
+  --work-item-updated-cell-padding: calc(var(--yp-space-3) + 4px);
+  padding: 0;
+  height: var(--work-item-table-row-height);
+}
+
 :deep(.monday-table td.monday-column--timeTracking > .cell),
 :deep(.monday-table td.monday-block-column > .cell),
 :deep(.monday-table td.monday-title-column > .cell) {
@@ -3829,11 +3865,6 @@ onBeforeUnmount(() => {
 }
 
 .detail-content-pill { width: min(240px, 100%); cursor: pointer; }
-
-.monday-timestamp {
-  font-size: 12.5px;
-  color: var(--yp-text-muted);
-}
 
 /* 快速新增 */
 .monday-quick-add {
@@ -4323,12 +4354,15 @@ onBeforeUnmount(() => {
 
 /* 抽屉无蒙版交互穿透 */
 .work-items-drawer-overlay {
+  --el-transition-duration: var(--yp-work-items-drawer-duration, 300ms);
   pointer-events: none !important;
   background: transparent !important;
 }
 
 .work-items-drawer-overlay .el-drawer,
 .work-items-detail-drawer {
+  transform: translateX(calc(var(--yp-work-items-drawer-width, 560px) - var(--yp-work-items-drawer-inset, 0px))) !important;
+  transition: none !important;
   pointer-events: auto !important;
   box-shadow: -4px 0 24px color-mix(in srgb, var(--yp-text-primary) 12%, transparent) !important;
   overflow: visible !important;

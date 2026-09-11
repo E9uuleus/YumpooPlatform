@@ -146,7 +146,26 @@ class WorkItemCellActivityProjectionServiceTest {
         payload.put("previousStoppedAt", "2026-09-01T02:30:00Z");
         service.consume(event("workitem.time_tracking_edited", 2, CUTOVER.plusSeconds(2), payload));
         verify(repository, times(1)).append(any());
-        assertThat(service.subscriptions()).noneMatch(subscription -> subscription.eventType().matches("workitem.time_tracking_(started|stopped|added|deleted)"));
+        assertThat(service.subscriptions()).noneMatch(subscription -> subscription.eventType().matches("workitem.time_tracking_(started|stopped|added)"));
+    }
+
+    @Test
+    void deletionKeepsActorTimeAndRemovedSessionSnapshot() {
+        ObjectNode payload = base();
+        payload.put("sessionId", ITEM.toString());
+        payload.put("startedAt", "2026-09-01T01:00:00Z");
+        payload.put("stoppedAt", "2026-09-01T02:00:00Z");
+        var occurredAt = CUTOVER.plusSeconds(1);
+        service.consume(event("workitem.time_tracking_deleted", 2, occurredAt, payload));
+        var captured = ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
+        verify(repository).append(captured.capture());
+        var row = captured.getValue();
+        assertThat(row.columnCode()).isEqualTo("TIME_TRACKING");
+        assertThat(row.changeType()).isEqualTo("REMOVED");
+        assertThat(row.afterValue()).isNull();
+        assertThat(row.beforeValue().path("displayName").asText()).isEqualTo("2026-09-01T01:00:00Z/2026-09-01T02:00:00Z");
+        assertThat(row.actorUserId()).isEqualTo(ACTOR);
+        assertThat(row.occurredAt()).isEqualTo(occurredAt);
     }
 
     private ObjectNode base() {

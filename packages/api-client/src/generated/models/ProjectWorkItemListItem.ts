@@ -173,6 +173,18 @@ export interface ProjectWorkItemListItem {
      * @memberof ProjectWorkItemListItem
      */
     readonly updatedAt: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof ProjectWorkItemListItem
+     */
+    readonly updatedByUserId?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ProjectWorkItemListItem
+     */
+    readonly updatedByDisplayName?: string;
 }
 
 
@@ -233,6 +245,8 @@ export function ProjectWorkItemListItemFromJSONTyped(json: any, ignoreDiscrimina
         'capabilities': WorkItemCapabilitiesFromJSON(json['capabilities']),
         'subitemCount': json['subitemCount'],
         'updatedAt': (new Date(json['updatedAt'])),
+        'updatedByUserId': json['updatedByUserId'] == null ? undefined : json['updatedByUserId'],
+        'updatedByDisplayName': json['updatedByDisplayName'] == null ? undefined : json['updatedByDisplayName'],
     };
 }
 
@@ -240,7 +254,7 @@ export function ProjectWorkItemListItemToJSON(json: any): ProjectWorkItemListIte
     return ProjectWorkItemListItemToJSONTyped(json, false);
 }
 
-export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemListItem, 'completedAt'|'rowVersion'|'etag'|'subitemCount'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemListItem, 'completedAt'|'rowVersion'|'etag'|'subitemCount'|'updatedAt'|'updatedByUserId'|'updatedByDisplayName'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

@@ -77,6 +77,38 @@ class WorkItemHttpIT {
     void tearDown() { cleanUp(); }
 
     @Test
+    void lastUpdaterIsReturnedInDetailsListsAndSubitemsIndependentlyOfAssignee() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "更新成员"), null, UUID.randomUUID()));
+        assertThat(item.path("updatedByUserId").asText()).isEqualTo(member.userId().toString());
+        String id = item.path("id").asText();
+        var patch = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "由负责人更新"));
+        patch.remove("contentId");
+        JsonNode changed = ok(mutate("PATCH", "/api/v1/work-items/" + id, owner,
+                json.writeValueAsString(patch), item.path("etag").asText(), null));
+        assertThat(changed.path("updatedByUserId").asText()).isEqualTo(owner.userId().toString());
+        assertThat(changed.path("updatedByDisplayName").asText()).isEqualTo("Work Category Owner");
+        JsonNode listed = ok(get("/api/v1/projects/" + PROJECT_ID + "/work-items", member)).path("items").get(0);
+        assertThat(listed.path("updatedByUserId")).isEqualTo(changed.path("updatedByUserId"));
+        assertThat(listed.path("updatedByDisplayName")).isEqualTo(changed.path("updatedByDisplayName"));
+        assertThat(listed.path("assigneeUserId").isNull()).isTrue();
+        JsonNode child = created(mutate("POST", "/api/v1/work-items/" + id + "/subitems", member,
+                subitemBody(tasksId, "更新成员子项"), null, UUID.randomUUID()));
+        JsonNode children = ok(get("/api/v1/work-items/" + id + "/subitems", owner)).path("items");
+        assertThat(children.get(0).path("updatedByUserId")).isEqualTo(child.path("updatedByUserId"));
+        assertThat(children.get(0).path("updatedByDisplayName").asText()).isEqualTo("Work Category Member");
+        jdbc.sql("UPDATE yumpoo.identity_user SET account_status='DISABLED', account_disabled_at=transaction_timestamp(), account_disabled_by_user_id=id, account_disabled_reason='Last updater verification', updated_at=transaction_timestamp() WHERE id=:id")
+                .param("id", owner.userId()).update();
+        try {
+            JsonNode read = ok(get("/api/v1/work-items/" + id, member));
+            assertThat(read.path("updatedByDisplayName").asText()).isEqualTo("Work Category Owner");
+        } finally {
+            jdbc.sql("UPDATE yumpoo.identity_user SET account_status='ENABLED', account_disabled_at=NULL, account_disabled_by_user_id=NULL, account_disabled_reason=NULL WHERE id=:id")
+                    .param("id", owner.userId()).update();
+        }
+    }
+
+    @Test
     void discussionFormatsSurvivePublishReadEditAndRejectStaleVersionOrForgedMention() throws Exception {
         JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
                 workItemBody(tasksId, "富文本讨论验收"), null, UUID.randomUUID()));
@@ -496,8 +528,11 @@ class WorkItemHttpIT {
         assertThat(mutate("PATCH", record, owner, corrected, manual.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(403);
         JsonNode edited = ok(mutate("PATCH", record, member, corrected, manual.path("etag").asText(), UUID.randomUUID()));
         assertThat(edited.path("durationMs").asLong()).isEqualTo(27 * 3600000L);
-        assertThat(mutate("DELETE", record, member, "{}", edited.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(422);
-        ok(mutate("DELETE", record, member, "{\"reason\":\"验收删除\"}", edited.path("etag").asText(), UUID.randomUUID()));
+        assertThat(mutate("DELETE", record, owner, "{}", edited.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(403);
+        assertThat(mutate("DELETE", record, member, "{}", manual.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(412);
+        UUID deletionKey = UUID.randomUUID();
+        JsonNode deleted = ok(mutate("DELETE", record, member, "{}", edited.path("etag").asText(), deletionKey));
+        assertThat(ok(mutate("DELETE", record, member, "{}", edited.path("etag").asText(), deletionKey))).isEqualTo(deleted);
         assertThat(ok(get(path, member)).path("summary").path("totalDurationMs").asLong()).isZero();
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.security_audit_event WHERE action LIKE 'TIME_TRACKING_%'").query(Long.class).single()).isEqualTo(3);
     }

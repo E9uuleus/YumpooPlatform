@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElButton, ElMessage, ElTooltip } from 'element-plus'
+import { ElMessage, ElTooltip } from 'element-plus'
 import type { ErrorResponse, TimeTrackingSession, TimeTrackingSessionPage } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../../api/client'
 import { useSession } from '../../composables/useSession'
@@ -15,8 +15,6 @@ const timezone = computed(() => session.authentication.value?.company.timezone ?
 const page = ref<TimeTrackingSessionPage>()
 const records = ref<TimeTrackingSession[]>([])
 const loading = ref(false)
-const deleting = ref<TimeTrackingSession | 'all'>()
-const deleteReason = ref('')
 const mutating = ref(false)
 const problem = ref('')
 const editing = ref<TimeTrackingSession>()
@@ -67,16 +65,13 @@ async function save() {
   }
   finally { loading.value = false }
 }
-function requestRemove(record: TimeTrackingSession | 'all') {
-  deleting.value = record; deleteReason.value = ''; form.value = false
-}
-async function remove() {
-  if (!deleting.value || !deleteReason.value.trim() || mutating.value) return
+async function remove(target: TimeTrackingSession | 'all') {
+  if (loading.value || mutating.value) return
   mutating.value = true
   let removed = 0
   try {
     let targets: TimeTrackingSession[]
-    if (deleting.value === 'all') {
+    if (target === 'all') {
       targets = []
       let cursor: string | undefined
       do {
@@ -84,12 +79,11 @@ async function remove() {
         targets.push(...result.items.filter(record => record.canEdit && record.stoppedAt))
         cursor = result.nextCursor ?? undefined
       } while (cursor)
-    } else targets = [deleting.value]
+    } else targets = [target]
     for (const record of targets) {
-      await timerMutation(JSON.stringify(['delete', record.id, record.etag, deleteReason.value]), (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.deleteTimeSession({ workItemId: props.workItemId, sessionId: record.id, ifMatch: record.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: { reason: deleteReason.value.trim() } }))
+      await timerMutation(JSON.stringify(['delete', record.id, record.etag]), (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.deleteTimeSession({ workItemId: props.workItemId, sessionId: record.id, ifMatch: record.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: {} }))
       removed++
     }
-    deleting.value = undefined
     ElMessage.success(removed ? `已清除 ${removed} 条计时记录` : '没有可清除的已停止记录')
   } catch { ElMessage.error(`已清除 ${removed} 条记录，其余未完成，请刷新后重试。`) }
   finally { mutating.value = false; await load() }
@@ -134,7 +128,7 @@ onMounted(() => load())
         v-else
         class="plain-button"
         :disabled="loading || mutating || !records.length"
-        @click="requestRemove('all')"
+        @click="remove('all')"
       >
         清除
       </button>
@@ -147,7 +141,7 @@ onMounted(() => load())
         v-if="page?.canCreate"
         class="plain-button"
         :disabled="loading || mutating"
-        @click="deleting = undefined; edit()"
+        @click="edit()"
       >
         <span aria-hidden="true">＋</span> 手动添加时长记录
       </button>
@@ -156,37 +150,8 @@ onMounted(() => load())
       class="log-body"
       @scroll="onScroll"
     >
-      <form
-        v-if="deleting"
-        class="session-form"
-        @submit.prevent="remove"
-      >
-        <p>{{ deleting === 'all' ? '清除本人所有可编辑的已停止记录（包含尚未加载的记录）。' : '删除这条计时记录。' }}删除后保留审计。</p>
-        <label>删除原因<input
-          v-model="deleteReason"
-          maxlength="500"
-          required
-          :disabled="mutating"
-        ></label>
-        <div>
-          <el-button
-            native-type="submit"
-            type="primary"
-            :loading="mutating"
-          >
-            确认{{ deleting === 'all' ? '清除' : '删除' }}
-          </el-button><button
-            type="button"
-            class="plain-button"
-            :disabled="mutating"
-            @click="deleting = undefined"
-          >
-            取消
-          </button>
-        </div>
-      </form>
       <TimeSessionForm
-        v-else-if="form"
+        v-if="form"
         v-model:start="start"
         v-model:end="end"
         :timezone="timezone"
@@ -214,7 +179,7 @@ onMounted(() => load())
           <button
             class="plain-button record-date"
             :class="{ 'is-edited': record.rowVersion > (record.source === 'TIMER' ? 1 : 0) }"
-            :disabled="!record.canEdit"
+            :disabled="!record.canEdit || loading || mutating"
             aria-label="编辑记录日期"
             @click="edit(record)"
           >
@@ -223,7 +188,7 @@ onMounted(() => load())
           <button
             class="plain-button time-range"
             :class="{ 'is-edited': record.rowVersion > (record.source === 'TIMER' ? 1 : 0) }"
-            :disabled="!record.canEdit"
+            :disabled="!record.canEdit || loading || mutating"
             aria-label="编辑开始结束时间"
             @click="edit(record)"
           >
@@ -231,7 +196,7 @@ onMounted(() => load())
           </button>
           <button
             class="plain-button record-duration"
-            :disabled="!record.canEdit"
+            :disabled="!record.canEdit || loading || mutating"
             @click="edit(record)"
           >
             {{ formatDuration(record.durationMs).padStart(8, '0') }}
@@ -239,8 +204,9 @@ onMounted(() => load())
           <button
             v-if="record.canEdit"
             class="plain-button delete-button"
+            :disabled="loading || mutating"
             :aria-label="`删除 ${record.displayName} 的计时记录`"
-            @click="requestRemove(record)"
+            @click="remove(record)"
           >
             <svg
               viewBox="0 0 24 24"
@@ -297,7 +263,6 @@ header{display:flex;align-items:center;justify-content:space-between;padding:18p
 .member-badge{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;background:#09b9b2;color:white;font-size:14px;font-weight:600}.time-range{text-align:center}.record-duration{padding:6px 0;font-variant-numeric:tabular-nums}.record-duration:disabled{opacity:1}
 .delete-button{padding:5px;display:grid;place-items:center}.delete-button svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .log-status{text-align:center;color:var(--el-text-color-secondary);padding:16px 0}.load-more{display:block;margin:8px auto}
-.session-form{display:grid;gap:14px;padding:14px 2px}.session-form p{margin:0;line-height:1.6}label{display:grid;gap:6px}input{min-width:0;padding:7px;border:1px solid var(--el-border-color);border-radius:5px;background:var(--el-bg-color);color:inherit;font:inherit}
 .time-log--adding{height:460px}.time-log--full-calendar{height:580px}
 .time-log--adding .log-body{padding:0 10px;scrollbar-gutter:auto}
 @media(max-width:400px){.log-row{grid-template-columns:24px 40px minmax(95px,1fr) 65px 24px;gap:3px;font-size:12px}.log-body{padding-inline:8px}}

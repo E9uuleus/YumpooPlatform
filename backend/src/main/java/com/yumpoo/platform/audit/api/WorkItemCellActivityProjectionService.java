@@ -49,6 +49,7 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
         Set.of(CREATED, FIELDS_CHANGED, STATUS_CHANGED)
                 .forEach(type -> result.add(new EventSubscription(type, 2)));
         result.add(new EventSubscription("workitem.time_tracking_edited", 2));
+        result.add(new EventSubscription("workitem.time_tracking_deleted", 2));
         return Set.copyOf(result);
     }
 
@@ -58,6 +59,9 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
         try {
             switch (event.eventType()) {
                 case "workitem.time_tracking_edited" -> timeTrackingEdited(event);
+                case "workitem.time_tracking_deleted" -> append(event, "TIME_TRACKING", "REMOVED",
+                        value("TEXT", uuid(event.payload(), "sessionId").toString(),
+                                timeRange(event.payload(), "startedAt", "stoppedAt"), null), null);
                 case CREATED -> created(event);
                 case FIELDS_CHANGED -> fieldsChanged(event);
                 case ASSIGNED, UNASSIGNED -> assignee(event);
