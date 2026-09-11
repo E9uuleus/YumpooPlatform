@@ -29,7 +29,7 @@ import ProductsView from '../views/products/ProductsView.vue'
 import ProductDetailView from '../views/products/ProductDetailView.vue'
 
 export const routes: RouteRecordRaw[] = [
-  { path: '/timer', name: 'timer', component: TimerPanel },
+  { path: '/timer', name: 'timer', component: TimerPanel, props: route => ({ initialExpanded: route.query.mode !== 'compact' }) },
   {
     path: '/login',
     name: 'login',

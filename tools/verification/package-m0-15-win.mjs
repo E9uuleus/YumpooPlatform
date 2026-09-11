@@ -26,6 +26,7 @@ const asarModuleUrl = pathToFileURL(
 const EXPECTED_ASAR_ENTRIES = new Set([
   'dist',
   'dist/main',
+  'dist/main/application-icon.js',
   'dist/main/auth-ipc.js',
   'dist/main/credential-store.js',
   'dist/main/desktop-auth.js',

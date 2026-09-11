@@ -9,6 +9,7 @@ public final class ProjectMembershipModels {
     private ProjectMembershipModels() {}
 
     public enum ListStatus { ACTIVE, REMOVED, ALL }
+    public record WritableProject(UUID projectId, String name, String code) {}
     public enum ActorAccess { MEMBER, OWNER, COMPANY_ADMIN_READ_ONLY }
     public record Access(UUID projectId, UUID companyId, String lifecycle,
                          ActorAccess actorAccess, String templateKey, int templateVersion,

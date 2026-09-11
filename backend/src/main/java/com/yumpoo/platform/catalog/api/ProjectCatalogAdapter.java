@@ -31,6 +31,14 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     }
 
     @Override
+    public java.util.List<ProjectAccessSnapshotQuery.WritableProject> findWritableProjects(
+            com.yumpoo.platform.identityaccess.api.CurrentActor actor) {
+        return membershipService.findWritableProjects(actor).stream()
+                .map(p -> new ProjectAccessSnapshotQuery.WritableProject(p.projectId(), p.name(), p.code()))
+                .toList();
+    }
+
+    @Override
     public java.util.Map<java.util.UUID, ProjectAccessSnapshot> findVisible(
             com.yumpoo.platform.identityaccess.api.CurrentActor actor,
             java.util.Collection<java.util.UUID> projectIds) {

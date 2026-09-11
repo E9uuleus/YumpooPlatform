@@ -15,6 +15,41 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
     private final JdbcClient jdbc;
     public JdbcTimeTrackingRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
 
+    public List<TimerCandidate> candidates(UUID companyId, UUID userId, Collection<UUID> projectIds,
+            Collection<UUID> matchingProjectIds, String query, boolean personal, int offset, int limit, Instant now) {
+        if(projectIds.isEmpty()) return List.of();
+        String projectMatch=matchingProjectIds.isEmpty() ? "" : " OR w.project_id IN (:matchingProjects)";
+        var statement=jdbc.sql("""
+            WITH own AS (
+              SELECT work_item_id, MAX(started_at) FILTER (WHERE source='TIMER') AS last_tracked_at,
+                SUM(GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(stopped_at,:now)-started_at))*1000))::bigint AS duration
+              FROM yumpoo.work_item_time_session
+              WHERE company_id=:company AND user_id=:user AND deleted_at IS NULL AND project_id IN (:projects)
+              GROUP BY work_item_id)
+            SELECT w.id, w.project_id, w.item_no, w.title, c.name AS content_name, c.code AS content_code,
+              c.color_token AS content_color_token, w.status_category,
+              COALESCE(w.assignee_user_id=:user,false) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration
+            FROM yumpoo.work_item w JOIN yumpoo.content c ON c.id=w.content_id AND c.company_id=w.company_id
+            LEFT JOIN own ON own.work_item_id=w.id
+            WHERE w.company_id=:company AND w.project_id IN (:projects) AND w.deleted_at IS NULL
+              AND (:personal=false OR w.assignee_user_id=:user OR own.last_tracked_at IS NOT NULL)
+              AND (:empty OR lower(w.title) LIKE :query ESCAPE '\\' OR lower(w.item_no) LIKE :query ESCAPE '\\'
+            """ + projectMatch + """
+              )
+            ORDER BY own.last_tracked_at DESC NULLS LAST, assigned DESC, w.updated_at DESC, w.id
+            LIMIT :limit OFFSET :offset
+            """).param("company",companyId).param("user",userId).param("projects",projectIds)
+                .param("personal",personal).param("empty",query.isEmpty())
+                .param("query","%"+query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%")
+                .param("now",Timestamp.from(now)).param("limit",limit).param("offset",offset);
+        if(!matchingProjectIds.isEmpty()) statement.param("matchingProjects",matchingProjectIds);
+        return statement.query((rs,n) -> new TimerCandidate(rs.getObject("id",UUID.class),
+                rs.getObject("project_id",UUID.class), "", rs.getString("item_no"), rs.getString("title"),
+                rs.getString("content_name"), rs.getString("content_code"), rs.getString("content_color_token"),
+                rs.getString("status_category"), rs.getBoolean("assigned"),
+                instant(rs,"last_tracked_at"), rs.getLong("duration"))).list();
+    }
+
     public List<RecentTimeTrackingItem> recentItems(UUID companyId, UUID userId) {
         return jdbc.sql("""
             WITH recent AS (SELECT work_item_id,project_id,started_at FROM yumpoo.work_item_time_session

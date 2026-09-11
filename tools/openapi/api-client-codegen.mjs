@@ -215,6 +215,17 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
     "        ...(json['timeTracking'] === undefined ? {} : { 'timeTracking': json['timeTracking'] === null ? null : TimeTrackingSummaryFromJSON(json['timeTracking']) }),",
     '计时摘要兼容旧工作项响应'), 'utf8')
 
+  const timerCandidatePath = path.join(sourceRoot, 'models', 'TimerCandidate.ts')
+  let timerCandidate = normalizeText(fs.readFileSync(timerCandidatePath, 'utf8'))
+  for (const [field, conversion] of [['contentCode', "json['contentCode']"],
+    ['contentColorToken', "WorkItemLabelColorTokenFromJSON(json['contentColorToken'])"]]) {
+    timerCandidate = replaceExactlyOnce(timerCandidate,
+      `        '${field}': json['${field}'] == null ? undefined : ${conversion},`,
+      `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`,
+      `计时候选 ${field} 兼容旧响应与精确可选属性`)
+  }
+  fs.writeFileSync(timerCandidatePath, timerCandidate, 'utf8')
+
   const attachmentMetadataPath = path.join(sourceRoot, 'models', 'AttachmentMetadata.ts')
   let attachmentMetadata = normalizeText(fs.readFileSync(attachmentMetadataPath, 'utf8'))
   attachmentMetadata = replaceExactlyOnce(

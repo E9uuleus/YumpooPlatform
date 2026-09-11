@@ -581,14 +581,45 @@ class WorkItemHttpIT {
                 "{\"name\":\"跨项目计时\",\"colorToken\":\"BRIGHT_GREEN\"}",null,UUID.randomUUID()));
         JsonNode first=created(mutate("POST","/api/v1/projects/"+PROJECT_ID+"/work-items",member,workItemBody(tasksId,"原项目计时"),null,UUID.randomUUID()));
         JsonNode target=created(mutate("POST","/api/v1/projects/"+otherProject+"/work-items",member,workItemBody(UUID.fromString(category.path("id").asText()),"目标项目计时"),null,UUID.randomUUID()));
+        String candidates="/api/v1/me/time-tracker/candidates";
+        assertThat(ok(get(candidates,member)).path("items").size()).isZero();
+        jdbc.sql("UPDATE yumpoo.work_item SET assignee_user_id=:user WHERE id=:item")
+                .param("user",member.userId()).param("item",UUID.fromString(first.path("id").asText())).update();
+        assertThat(ok(get(candidates,member)).path("items").get(0).path("workItemId").asText()).isEqualTo(first.path("id").asText());
+        JsonNode search=ok(get(candidates+"?scope=ALL&q=Timer%20Other",member));
+        assertThat(search.path("items").size()).isEqualTo(1);
+        assertThat(search.path("items").get(0).path("projectName").asText()).isEqualTo("Timer Other");
+        assertThat(search.path("items").get(0).path("contentCode").asText()).isEqualTo(category.path("code").asText()).isNotBlank();
+        assertThat(search.path("items").get(0).path("contentColorToken").asText()).isEqualTo("BRIGHT_GREEN");
+        assertThat(search.path("items").get(0).path("workItemId").asText()).isEqualTo(target.path("id").asText());
+        assertThat(ok(get(candidates+"?scope=ALL&q=%25",member)).path("items").size()).isZero();
+        assertThat(get(candidates+"?limit=51",member).statusCode()).isEqualTo(422);
         JsonNode running=ok(mutate("POST","/api/v1/me/time-tracker/start",member,"{\"workItemId\":\""+first.path("id").asText()+"\"}","\"0\"",UUID.randomUUID()));
         JsonNode switched=ok(mutate("POST","/api/v1/me/time-tracker/switch",member,
                 "{\"workItemId\":\""+target.path("id").asText()+"\",\"sessionId\":\""+running.path("session").path("id").asText()+"\"}",running.path("etag").asText(),UUID.randomUUID()));
         assertThat(switched.path("session").path("projectId").asText()).isEqualTo(otherProject.toString());
         assertThat(switched.path("recentItems").size()).isEqualTo(2);
+        JsonNode personal=ok(get(candidates,member));
+        assertThat(personal.path("items").size()).isEqualTo(2);
+        assertThat(personal.path("items").get(0).path("workItemId").asText()).isEqualTo(target.path("id").asText());
+        JsonNode firstPage=ok(get(candidates+"?limit=1",member));
+        assertThat(firstPage.path("nextOffset").asInt()).isEqualTo(1);
+        JsonNode secondPage=ok(get(candidates+"?limit=1&offset=1",member));
+        assertThat(secondPage.path("items").get(0).path("workItemId").asText()).isEqualTo(first.path("id").asText());
+        assertThat(secondPage.path("nextOffset").isNull()).isTrue();
         assertThat(ok(get("/api/v1/work-items/"+first.path("id").asText()+"/time-sessions",member)).path("items").get(0).path("stoppedAt").isNull()).isFalse();
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_time_session WHERE user_id=:id AND stopped_at IS NULL")
                 .param("id",member.userId()).query(Long.class).single()).isEqualTo(1);
+        jdbc.sql("UPDATE yumpoo.project_membership SET status='REMOVED',removed_at=transaction_timestamp(),removed_by_user_id=:owner,remove_reason='候选权限验收' WHERE project_id=:project AND user_id=:member")
+                .param("project",otherProject).param("member",member.userId()).param("owner",owner.userId()).update();
+        assertThat(ok(get(candidates+"?scope=ALL&q=Timer%20Other",member)).path("items").size()).isZero();
+        assertThat(ok(get(candidates,member)).path("items").size()).isEqualTo(1);
+        ok(mutate("POST","/api/v1/me/time-tracker/stop",member,"{\"sessionId\":\""+switched.path("session").path("id").asText()+"\"}",switched.path("etag").asText(),UUID.randomUUID()));
+        ok(mutate("POST","/api/v1/work-items/"+first.path("id").asText()+"/transitions",member,
+                "{\"toStatus\":\""+transitionTo(first,"DONE")+"\"}",first.path("etag").asText(),UUID.randomUUID()));
+        JsonNode project=ok(get("/api/v1/projects/"+PROJECT_ID,owner));
+        ok(mutate("POST","/api/v1/projects/"+PROJECT_ID+"/archive",owner,"{\"reason\":\"候选归档验收\"}",project.path("etag").asText(),UUID.randomUUID()));
+        assertThat(ok(get(candidates+"?scope=ALL",member)).path("items").size()).isZero();
     }
 
     private String commentBody(String text, String parent) throws Exception {

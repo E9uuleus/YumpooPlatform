@@ -4,6 +4,10 @@ import type {
   DesktopAuthStatus,
   DesktopBridge,
   DesktopTimerBridge,
+  DesktopTimerState,
+  DesktopTimerCommand,
+  TimerWindowMode,
+  TimerOrbChange,
 } from '@yumpoo/preload-contract'
 import { contextBridge, ipcRenderer } from 'electron'
 
@@ -80,21 +84,46 @@ const desktopAuth = Object.freeze({
 })
 
 const desktopTimer: DesktopTimerBridge = Object.freeze({
-  show: async () => { await ipcRenderer.invoke('yumpoo:timer:show') },
-  setProject: async (id: string) => { await ipcRenderer.invoke('yumpoo:timer:project', id) },
+  show: async (mode: TimerWindowMode = 'picker', activate = true) => { await ipcRenderer.invoke('yumpoo:timer:show', mode, activate) },
+  hide: async () => { await ipcRenderer.invoke('yumpoo:timer:hide') },
+  setMode: async (mode: TimerWindowMode) => { await ipcRenderer.invoke('yumpoo:timer:mode', mode) },
+  getWindowState: async () => ipcRenderer.invoke('yumpoo:timer:window-state'),
+  setOrbLayout: async (change: TimerOrbChange) => ipcRenderer.invoke('yumpoo:timer:orb-layout', change),
   setAlwaysOnTop: async (value: boolean) => { await ipcRenderer.invoke('yumpoo:timer:pin', value) },
+  publishState: async (state: DesktopTimerState) => { await ipcRenderer.invoke('yumpoo:timer:state', state) },
+  onCommand: (listener: (command: DesktopTimerCommand) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
+    const wrapped = (_event: unknown, value: DesktopTimerCommand) => {
+      if (value && typeof value.requestId === 'string' && (value.action === 'start' || value.action === 'stop')) listener(value)
+    }
+    ipcRenderer.on('yumpoo:timer:command', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:timer:command', wrapped)
+  },
+  completeCommand: async (id: string, success: boolean) => { await ipcRenderer.invoke('yumpoo:timer:command-complete', id, success) },
+  onCommandFailed: (listener: () => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
+    const wrapped = () => listener()
+    ipcRenderer.on('yumpoo:timer:command-failed', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:timer:command-failed', wrapped)
+  },
+  onMode: (listener: (mode: TimerWindowMode) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
+    const wrapped = (_event: unknown, mode: unknown) => { if (mode === 'compact' || mode === 'picker') listener(mode) }
+    ipcRenderer.on('yumpoo:timer:mode-changed', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:timer:mode-changed', wrapped)
+  },
   refresh: async () => { await ipcRenderer.invoke('yumpoo:timer:refresh') },
+  onOrbHover: (listener: (hovered: boolean) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
+    const wrapped = (_event: unknown, hovered: unknown) => { if (typeof hovered === 'boolean') listener(hovered) }
+    ipcRenderer.on('yumpoo:timer:orb-hover', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:timer:orb-hover', wrapped)
+  },
   onRefresh: (listener: () => void) => {
     if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
     const wrapped = () => { listener() }
     ipcRenderer.on('yumpoo:timer:changed', wrapped)
     return () => ipcRenderer.removeListener('yumpoo:timer:changed', wrapped)
-  },
-  onProject: (listener: (id: string) => void) => {
-    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
-    const wrapped = (_event: unknown, value: unknown) => { if (typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value)) listener(value) }
-    ipcRenderer.on('yumpoo:timer:project-changed', wrapped)
-    return () => ipcRenderer.removeListener('yumpoo:timer:project-changed', wrapped)
   },
   onExitRequest: (listener: (id: string) => void) => {
     if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')

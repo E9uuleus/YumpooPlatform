@@ -30,6 +30,17 @@ public final class TimeTrackingModels {
 
     public record RecentTimeTrackingItem(UUID workItemId, UUID projectId, String title) {}
 
+    public record TimerCandidate(UUID workItemId, UUID projectId, String projectName, String itemNo,
+            String title, String contentName, String contentCode, String contentColorToken, String statusCategory, boolean assignedToMe,
+            Instant lastTrackedAt, long ownDurationMs) {
+        public TimerCandidate withProjectName(String name) {
+            return new TimerCandidate(workItemId, projectId, name, itemNo, title, contentName, contentCode, contentColorToken,
+                    statusCategory, assignedToMe, lastTrackedAt, ownDurationMs);
+        }
+    }
+
+    public record TimerCandidatePage(List<TimerCandidate> items, Integer nextOffset) {}
+
     public record CurrentTimeTracker(TimeTrackingSession session, String workItemTitle,
             long rowVersion, String etag, Instant serverNow, List<RecentTimeTrackingItem> recentItems) {
         public static CurrentTimeTracker of(TimeTrackingSession session, String title,

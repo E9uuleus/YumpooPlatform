@@ -11,4 +11,5 @@ import './styles/main.css'
 import './styles/projects.css'
 
 initializeAppearance()
+if (window.yumpooDesktop && window.location.pathname === '/timer') document.documentElement.classList.add('timer-surface')
 createApp(App).use(router).mount('#app')

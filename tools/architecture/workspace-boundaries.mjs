@@ -23,9 +23,9 @@ const DESKTOP_AREAS = {
 
 const PRELOAD_ENTRY = path.join(DESKTOP_AREAS.preload, 'index.ts')
 const PRELOAD_IPC_CHANNELS = new Map([
-  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start', 'yumpoo:auth:clear', 'yumpoo:timer:show', 'yumpoo:timer:project', 'yumpoo:timer:pin', 'yumpoo:timer:refresh', 'yumpoo:timer:exit-received', 'yumpoo:timer:exit-complete', 'yumpoo:timer:open-item'])],
-  ['on', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:project-changed', 'yumpoo:timer:exit-request'])],
-  ['removeListener', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:project-changed', 'yumpoo:timer:exit-request'])],
+  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start', 'yumpoo:auth:clear', 'yumpoo:timer:show', 'yumpoo:timer:hide', 'yumpoo:timer:mode', 'yumpoo:timer:window-state', 'yumpoo:timer:orb-layout', 'yumpoo:timer:state', 'yumpoo:timer:command-complete', 'yumpoo:timer:pin', 'yumpoo:timer:refresh', 'yumpoo:timer:exit-received', 'yumpoo:timer:exit-complete', 'yumpoo:timer:open-item'])],
+  ['on', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-request'])],
+  ['removeListener', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-request'])],
 ])
 
 const NODE_MODULES = new Set(
@@ -296,7 +296,7 @@ function createRule() {
           channel?.type === 'Literal' && typeof channel.value === 'string'
             ? channel.value
             : undefined
-        const timerArguments = { 'yumpoo:timer:exit-received': 2, 'yumpoo:timer:project': 2, 'yumpoo:timer:pin': 2, 'yumpoo:timer:exit-complete': 3, 'yumpoo:timer:open-item': 3 }
+        const timerArguments = { 'yumpoo:timer:show': 3, 'yumpoo:timer:mode': 2, 'yumpoo:timer:orb-layout': 2, 'yumpoo:timer:state': 2, 'yumpoo:timer:command-complete': 3, 'yumpoo:timer:exit-received': 2, 'yumpoo:timer:pin': 2, 'yumpoo:timer:exit-complete': 3, 'yumpoo:timer:open-item': 3 }
         const expectedArguments = method === 'invoke' ? (timerArguments[channelName] ?? 1) : 2
         if (
           !allowedChannels?.has(channelName) ||

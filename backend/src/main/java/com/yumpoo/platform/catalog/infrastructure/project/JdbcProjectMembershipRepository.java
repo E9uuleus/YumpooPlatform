@@ -184,6 +184,20 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
     }
 
     @Override
+    public List<com.yumpoo.platform.catalog.application.project.ProjectMembershipModels.WritableProject>
+            findWritableProjects(CurrentActor actor) {
+        return jdbcClient.sql("""
+                SELECT p.id, p.name, p.project_code AS code FROM yumpoo.project p
+                JOIN yumpoo.project_membership m ON m.project_id=p.id AND m.company_id=p.company_id
+                  AND m.user_id=:userId AND m.status='ACTIVE'
+                WHERE p.company_id=:companyId AND p.lifecycle<>'ARCHIVED'
+                ORDER BY p.id
+                """).param("companyId", actor.companyId()).param("userId", actor.userId())
+                .query((rs, n) -> new com.yumpoo.platform.catalog.application.project.ProjectMembershipModels.WritableProject(
+                        rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("code"))).list();
+    }
+
+    @Override
     public Map<UUID, Access> findVisible(CurrentActor actor, Collection<UUID> projectIds) {
         if (projectIds.isEmpty()) return Map.of();
         boolean admin = actor.hasRole(PlatformRoleCode.COMPANY_ADMIN);

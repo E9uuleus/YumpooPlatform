@@ -13,6 +13,10 @@ import java.util.UUID;
  */
 public interface ProjectAccessSnapshotQuery {
 
+    record WritableProject(UUID projectId, String name, String code) {}
+
+    java.util.List<WritableProject> findWritableProjects(CurrentActor actor);
+
     Optional<ProjectAccessSnapshot> findVisible(CurrentActor actor, UUID projectId);
 
     Map<UUID, ProjectAccessSnapshot> findVisible(CurrentActor actor,
