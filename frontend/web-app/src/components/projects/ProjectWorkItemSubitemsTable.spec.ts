@@ -4,12 +4,14 @@ import {
   type ProjectWorkItemListItem,
   type WorkItemDetail,
 } from '@yumpoo/api-client'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { localProblem } from '../../api/problems'
 import ProjectWorkItemSubitemsTable from './ProjectWorkItemSubitemsTable.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
+
+enableAutoUnmount(afterEach)
 
 const api = vi.hoisted(() => ({
   createWorkItemSubitem: vi.fn(),
@@ -162,6 +164,49 @@ describe('项目工作项子表格', () => {
     }))
     expect(wrapper.find('.subitem-quick-row').exists()).toBe(true)
     expect((input.element as HTMLInputElement).value).toBe('')
+  })
+
+  it('空输入和草稿都可点击行外关闭，输入法确认不会创建', async () => {
+    const wrapper = mountTable([])
+    await wrapper.get('.subitem-add').trigger('click')
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(false)
+    await wrapper.get('.subitem-add').trigger('click')
+    const input = wrapper.get('input[placeholder="添加子项"]')
+    await input.setValue('输入法草稿')
+    await input.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
+    expect(wrapper.get('.subitem-quick-hint').text()).toBe('Enter 新增 · Shift+Enter 连续添加')
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(false)
+    await wrapper.get('.subitem-add').trigger('click')
+    expect((wrapper.get('input[placeholder="添加子项"]').element as HTMLInputElement).value).toBe('')
+    await wrapper.get('input[placeholder="添加子项"]').trigger('keydown', { key: 'Escape' })
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(false)
+  })
+
+  it('提交中防止重复创建，失败保留草稿，Enter 重试成功后收起', async () => {
+    let rejectCreate: ((reason: Error) => void) | undefined
+    api.createWorkItemSubitem.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectCreate = reject }))
+    const wrapper = mountTable()
+    await wrapper.get('.subitem-add').trigger('click')
+    const input = wrapper.get('input[placeholder="添加子项"]')
+    await input.setValue('待创建子项')
+    await input.trigger('keydown', { key: 'Enter' })
+    await input.trigger('keydown', { key: 'Enter' })
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(api.createWorkItemSubitem).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(true)
+    rejectCreate?.(new Error('network error'))
+    await flushPromises()
+    expect((input.element as HTMLInputElement).value).toBe('待创建子项')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(false)
+    expect(wrapper.emitted('created')).toHaveLength(1)
   })
 
   it('没有启用类别时禁用子项创建', async () => {

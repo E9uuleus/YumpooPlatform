@@ -248,10 +248,6 @@
     max-width: none;
     margin: 0;
   }
-
-  body.yp-project-overview-scroll .monday-table-surface {
-    margin-right: max(0px, calc(var(--yp-work-items-drawer-inset, 0px) - var(--project-page-inline-gutter)));
-  }
 }
 
 .project-workspace,

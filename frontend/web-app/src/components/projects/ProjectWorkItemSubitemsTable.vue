@@ -20,7 +20,7 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, ref, type CSSProperties } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, type CSSProperties } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
@@ -106,6 +106,7 @@ const defaultContentId = computed(() => props.activeContents.find(content => con
   ?? props.activeContents[0]?.id)
 const quickCreating = ref(false)
 const quickError = ref<ApiProblem>()
+const quickRow = ref<HTMLElement>()
 const quickTitleInput = ref<{ focus: () => void }>()
 const assigneeSearch = ref('')
 const draggingItem = ref<ProjectWorkItemListItem>()
@@ -244,11 +245,15 @@ async function createQuick(continueAdding: boolean): Promise<void> {
     })
     emit('created', props.parent)
     if (continueAdding) quickTitle.value = ''
-    else { quickOpen.value = false; quickTitle.value = '' }
+    else closeQuick()
   } catch (reason) {
     quickError.value = await toApiProblem(reason)
   } finally {
     quickCreating.value = false
+    if (quickOpen.value) {
+      await nextTick()
+      quickTitleInput.value?.focus()
+    }
   }
 }
 
@@ -258,8 +263,20 @@ function openQuick(): void {
   void nextTick(() => quickTitleInput.value?.focus())
 }
 
+function closeQuick(): void {
+  quickOpen.value = false
+  quickTitle.value = ''
+}
+
+function onDocumentPointerDown(event: PointerEvent): void {
+  if (!quickOpen.value || quickCreating.value || quickRow.value?.contains(event.target as Node)) return
+  closeQuick()
+}
+
 function onQuickKeydown(rawEvent: Event | KeyboardEvent): void {
   const event = rawEvent as KeyboardEvent
+  if (event.isComposing || event.keyCode === 229) return
+  if (event.key === 'Escape') { closeQuick(); return }
   if (event.key !== 'Enter') return
   event.preventDefault()
   void createQuick(event.shiftKey)
@@ -590,7 +607,9 @@ function onColumnPointerCancel(event: PointerEvent): void {
   resetColumnDrag()
 }
 
+onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDown))
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
   clearColumnPointerTracking()
   removeColumnDragPreview()
 })
@@ -821,19 +840,22 @@ onBeforeUnmount(() => {
         </el-table-column>
 
         <template #append>
-          <div v-if="quickOpen" class="subitem-quick-row">
+          <div v-if="quickOpen" ref="quickRow" class="subitem-quick-row">
             <span class="subitem-quick-checkbox" aria-hidden="true" />
-            <el-input
-              ref="quickTitleInput"
-              v-model="quickTitle"
-              class="subitem-quick-title"
-              maxlength="300"
-              :disabled="quickCreating"
-              placeholder="添加子项"
-              aria-label="子项名称；Enter 创建，Shift+Enter 创建后继续"
-              @keydown="onQuickKeydown"
-            />
-            <el-button class="subitem-quick-submit" type="primary" :loading="quickCreating" :disabled="!quickTitle.trim() || !defaultContentId" @click="createQuick(false)">添加</el-button>
+            <div class="subitem-quick-controls">
+              <el-input
+                ref="quickTitleInput"
+                v-model="quickTitle"
+                class="subitem-quick-title"
+                maxlength="300"
+                :disabled="quickCreating"
+                placeholder="添加子项"
+                aria-label="子项名称；Enter 创建，Shift+Enter 创建后继续"
+                @keydown="onQuickKeydown"
+              />
+              <el-button class="subitem-quick-submit" size="small" type="primary" :loading="quickCreating" :disabled="!quickTitle.trim() || !defaultContentId" @click="createQuick(false)">添加</el-button>
+              <span class="subitem-quick-hint">Enter 新增 · Shift+Enter 连续添加</span>
+            </div>
           </div>
           <button v-else class="subitem-add" :disabled="!canCreate || !defaultContentId" @click="openQuick">
             <span class="subitem-quick-checkbox" aria-hidden="true" />
@@ -1184,17 +1206,19 @@ onBeforeUnmount(() => {
   display: grid;
   height: var(--subitem-table-quick-height);
   min-width: max-content;
-  grid-template-columns: 48px var(--subitem-title-column-width, 320px) 72px;
+  grid-template-columns: 48px 1fr;
   gap: 0;
   align-items: center;
   box-sizing: border-box;
-  padding: 3px 12px 3px 0;
+  padding: 0;
   border-top: 1px solid var(--yp-border-subtle);
   background: transparent;
   transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 .subitem-quick-row:focus-within { background: var(--yp-bg-selected); }
-.subitem-quick-title { box-sizing: border-box; min-width: 0; padding: 0 4px 0 8px; }
+.subitem-quick-controls { display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+.subitem-quick-title { width: 280px; flex: 0 1 280px; box-sizing: border-box; min-width: 0; }
+.subitem-quick-hint { color: var(--yp-text-muted); font-size: 12px; white-space: nowrap; }
 .subitem-quick-checkbox {
   width: 16px;
   height: 16px;
@@ -1207,10 +1231,12 @@ onBeforeUnmount(() => {
   transform: translateX(2px);
   pointer-events: none;
 }
-.subitem-quick-submit {
-  width: 64px;
+.subitem-quick-row .subitem-quick-submit {
+  width: 48px;
+  flex-shrink: 0;
   height: var(--subitem-quick-control-height);
-  padding: 0 12px;
+  min-height: var(--subitem-quick-control-height);
+  padding: 0 8px;
 }
 :deep(.subitem-quick-row .el-input__wrapper) {
   height: var(--subitem-quick-control-height);

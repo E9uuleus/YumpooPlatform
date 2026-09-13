@@ -71,6 +71,7 @@ interface SubitemState {
   items: ProjectWorkItemListItem[]
   loading: boolean
   loaded: boolean
+  reloadRequested?: boolean
   error?: ApiProblem
   sortRules: ProjectWorkItemSubitemSortRule[]
 }
@@ -155,6 +156,7 @@ const horizontalOverflow = ref(false)
 const horizontalScrollExtent = ref(1)
 const verticalScrollExtent = ref(1)
 const pageScrollbarLeft = ref(0)
+const pageScrollbarTop = ref(0)
 let tableDragPreview: HTMLElement | undefined
 let tableColumnDragPreview: HTMLElement | undefined
 let tableScrollElement: HTMLElement | undefined
@@ -209,9 +211,11 @@ const drawerWidth = ref(560)
 const isResizingDrawer = ref(false)
 const horizontalPageScrollbarStyle = computed<CSSProperties>(() => ({
   left: `${pageScrollbarLeft.value}px`,
-  right: 'var(--yp-work-items-drawer-inset, 0px)',
+  right: 'calc(var(--yp-work-items-drawer-inset, 0px) + 12px)',
 }))
 const verticalPageScrollbarStyle = computed<CSSProperties>(() => ({
+  top: `${pageScrollbarTop.value}px`,
+  bottom: horizontalOverflow.value ? '12px' : '0px',
   right: 'var(--yp-work-items-drawer-inset, 0px)',
 }))
 
@@ -326,6 +330,7 @@ function syncPageScrollbars(): void {
     && getComputedStyle(contextNavigation).display !== 'none')
   pageScrollbarLeft.value = Math.max(0, Math.round(contextVisible ? contextRect!.right : (appMainRect?.left ?? 0)))
 
+  pageScrollbarTop.value = Math.max(0, Math.round(tableScrollElement?.getBoundingClientRect().top ?? 0))
   const horizontal = horizontalPageScrollbar.value
   const vertical = verticalPageScrollbar.value
   if (!tableScrollElement || !horizontal || !vertical) return
@@ -383,6 +388,8 @@ function observeProjectPageResizeTargets(): void {
   const appMain = document.querySelector<HTMLElement>('.app-shell--workspace .app-main')
   if (appMain) projectPageResizeObserver.observe(appMain)
   if (tableRef.value?.$el) projectPageResizeObserver.observe(tableRef.value.$el)
+  if (horizontalPageScrollbar.value) projectPageResizeObserver.observe(horizontalPageScrollbar.value)
+  if (verticalPageScrollbar.value) projectPageResizeObserver.observe(verticalPageScrollbar.value)
 }
 
 function onHorizontalPageScroll(): void {
@@ -512,7 +519,11 @@ function subitemState(parentId: string): SubitemState {
 
 async function loadSubitems(parentId: string, force = false): Promise<void> {
   const state = subitemState(parentId)
-  if (state.loading || (state.loaded && !force)) return
+  if (state.loading) {
+    if (force) state.reloadRequested = true
+    return
+  }
+  if (state.loaded && !force) return
   state.loading = true
   delete state.error
   try {
@@ -522,6 +533,7 @@ async function loadSubitems(parentId: string, force = false): Promise<void> {
         ? { sort: state.sortRules.map(rule => `${rule.field},${rule.direction}`) }
         : {}),
     })
+    if (subitems[parentId] !== state) return
     state.items = result.items
     state.loaded = true
   } catch (reason) {
@@ -529,6 +541,10 @@ async function loadSubitems(parentId: string, force = false): Promise<void> {
   } finally {
     state.loading = false
     schedulePageScrollbarSync()
+    if (state.reloadRequested && subitems[parentId] === state) {
+      delete state.reloadRequested
+      await loadSubitems(parentId, true)
+    }
   }
 }
 
@@ -564,8 +580,6 @@ function bumpSubitemCount(parentId: string, delta: number): void {
 
 function onSubitemCreated(parent: ProjectWorkItemListItem): void {
   bumpSubitemCount(parent.id, 1)
-  const state = subitemState(parent.id)
-  state.loaded = false
   void loadSubitems(parent.id, true)
   ElMessage.success('子项已创建')
 }
@@ -2400,7 +2414,7 @@ onBeforeUnmount(() => {
                     :project-id="projectId"
                     :parent="scope.row as ProjectWorkItemListItem"
                     :items="subitemState((scope.row as ProjectWorkItemListItem).id).items"
-                    :loading="subitemState((scope.row as ProjectWorkItemListItem).id).loading"
+                    :loading="subitemState((scope.row as ProjectWorkItemListItem).id).loading && !subitemState((scope.row as ProjectWorkItemListItem).id).loaded"
                     :error="subitemState((scope.row as ProjectWorkItemListItem).id).error"
                     :sort-rules="subitemState((scope.row as ProjectWorkItemListItem).id).sortRules"
                     :columns="visibleSubitemColumns"
@@ -3293,7 +3307,7 @@ onBeforeUnmount(() => {
 :deep(.monday-table .el-table__header th.el-table-fixed-column--left) {
   z-index: 10;
 }
-:deep(.monday-table .el-table__header th.el-table-fixed-column--left)::after {
+:deep(.monday-table > .el-table__inner-wrapper > .el-table__header-wrapper th.el-table-fixed-column--left)::after {
   content: '';
   position: absolute;
   inset: calc(-1 * var(--work-item-sort-overflow-space) - 1px) 0 auto;

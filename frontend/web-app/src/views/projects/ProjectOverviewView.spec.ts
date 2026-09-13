@@ -240,6 +240,31 @@ describe('项目级工作项首页', () => {
     expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(1)
   })
 
+  it('连续创建子项时保留旧行并补查刷新期间的新建结果', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as {
+      loadSubitems: (id: string, force?: boolean) => Promise<void>
+      onSubitemCreated: (parent: ProjectWorkItemListItem) => void
+      subitemState: (id: string) => { items: ProjectWorkItemListItem[], loaded: boolean, loading: boolean }
+    }
+    state.listWorkItemSubitems.mockResolvedValueOnce({ items: [item('old-child')] })
+    await view.loadSubitems('parent')
+    let resolveRefresh: ((value: { items: ProjectWorkItemListItem[] }) => void) | undefined
+    state.listWorkItemSubitems.mockImplementationOnce(() => new Promise(resolve => { resolveRefresh = resolve }))
+    state.listWorkItemSubitems.mockResolvedValueOnce({ items: [item('old-child'), item('child-1'), item('child-2')] })
+    view.onSubitemCreated(item('parent'))
+    view.onSubitemCreated(item('parent'))
+    expect(view.subitemState('parent').loaded).toBe(true)
+    expect(view.subitemState('parent').items.map(item => item.id)).toEqual(['old-child'])
+    expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(2)
+    resolveRefresh?.({ items: [item('old-child'), item('child-1')] })
+    await flushPromises()
+    expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(3)
+    expect(view.subitemState('parent').items.map(item => item.id)).toEqual(['old-child', 'child-1', 'child-2'])
+    expect(view.subitemState('parent').loading).toBe(false)
+  })
+
   it('恢复已有自定义列宽，并将低于最小值的已保存列宽限制到最小值', async () => {
     localStorage.setItem('yumpoo:project-work-items:table:v1', JSON.stringify({
       version: 1, widths: { status: 155, priority: 188, content: 80 },
