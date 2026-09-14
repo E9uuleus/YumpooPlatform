@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ElInput, ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { readCsrfToken, type ProjectWorkItemListItem, type WorkItemDetail } from '@yumpoo/api-client'
 import { workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
@@ -18,18 +18,17 @@ const emit = defineEmits<{
   cancel: []
 }>()
 const root = ref<HTMLElement>()
-const input = ref<InstanceType<typeof ElInput>>()
+const input = ref<HTMLInputElement>()
 const editing = ref(Boolean(props.create))
 const saving = ref(false)
 const composing = ref(false)
-let saveAfterComposition = false
 const title = ref(props.item.title)
 let disposed = false
 
 async function focus(select = false): Promise<void> {
   await nextTick()
   if (disposed) return
-  input.value?.input?.focus({ preventScroll: true })
+  input.value?.focus({ preventScroll: true })
   if (select) input.value?.select()
 }
 
@@ -53,8 +52,7 @@ function cancel(): void {
 }
 
 async function save(): Promise<void> {
-  if (!editing.value || saving.value || disposed) return
-  if (composing.value) { saveAfterComposition = true; return }
+  if (!editing.value || saving.value || composing.value || disposed) return
   const value = title.value.trim()
   if (!value) { cancel(); return }
   if (!props.create && value === props.item.title) { finish(); return }
@@ -91,15 +89,12 @@ function outside(event: PointerEvent): void {
   if (!root.value?.contains(event.target as Node)) void save()
 }
 
-function compositionEnd(event: CompositionEvent): void {
-  title.value = (event.target as HTMLInputElement).value
+function compositionEnd(): void {
   composing.value = false
-  if (saveAfterComposition || document.activeElement !== input.value?.input) void nextTick(save)
-  saveAfterComposition = false
+  if (document.activeElement !== input.value) void nextTick(save)
 }
 
-function keydown(rawEvent: Event | KeyboardEvent): void {
-  const event = rawEvent as KeyboardEvent
+function keydown(event: KeyboardEvent): void {
   if (event.isComposing || event.keyCode === 229) return
   if (event.key === 'Enter') { event.preventDefault(); void save() }
   if (event.key === 'Escape') { event.preventDefault(); cancel() }
@@ -128,13 +123,13 @@ onBeforeUnmount(() => {
     :aria-busy="saving"
   >
     <slot name="prefix" />
-    <el-input
+    <input
       v-if="editing"
       ref="input"
       v-model="title"
       class="work-item-name-input"
       :aria-label="create ? '新工作项名称' : '工作项名称'"
-      :placeholder="create ? '*新工作项' : ''"
+      :placeholder="create ? '*新工作项' : undefined"
       maxlength="300"
       :readonly="saving"
       @pointerdown.stop
@@ -144,7 +139,7 @@ onBeforeUnmount(() => {
       @blur="save"
       @compositionstart="composing = true"
       @compositionend="compositionEnd"
-    />
+    >
     <template v-else>
       <button
         type="button"
@@ -160,7 +155,6 @@ onBeforeUnmount(() => {
         type="button"
         class="work-item-detail-button"
         :aria-label="`打开工作项详情：${item.title}`"
-        title="打开工作项详情"
         @pointerdown.stop
         @dragstart.stop.prevent
         @click.stop="emit('open')"
@@ -191,9 +185,7 @@ onBeforeUnmount(() => {
 .work-item-title-text:disabled { cursor: inherit; }
 .work-item-title-text:focus-visible { outline: 1px solid var(--yp-action-primary); outline-offset: 2px; }
 .work-item-name-input { display: block; flex: 1 1 auto; width: 0; min-width: 0; height: 100%; margin: 0; padding: 0; border: 0; outline: none; box-shadow: none; border-radius: 0; background: var(--yp-bg-surface); color: var(--yp-text-primary); font: inherit; font-size: 13.5px; font-weight: 500; cursor: text; }
-.work-item-name-input :deep(.el-input__inner)::placeholder { color: color-mix(in srgb, var(--yp-text-muted) 60%, var(--yp-bg-surface)); opacity: 1; }
-.work-item-name-input :deep(.el-input__wrapper) { padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.work-item-name-input :deep(.el-input__inner) { height: 100%; font: inherit; }
+.work-item-name-input::placeholder { color: color-mix(in srgb, var(--yp-text-muted) 60%, var(--yp-bg-surface)); opacity: 1; }
 .work-item-detail-button { display: inline-flex; flex: 0 0 24px; width: 24px; height: 24px; align-items: center; justify-content: center; margin-left: auto; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--yp-text-secondary); cursor: pointer; opacity: 0; }
 .work-item-name-cell:hover .work-item-detail-button, .work-item-name-cell:focus-within .work-item-detail-button { opacity: 1; }
 .work-item-detail-button:hover { background: var(--yp-bg-selected); color: var(--yp-action-primary); }

@@ -91,8 +91,7 @@ describe('工作项名称单元格', () => {
     await wrapper.get('.work-item-title-text').trigger('click')
     const input = wrapper.get('input')
     await input.trigger('compositionstart')
-    input.element.value = '中文完整名称'
-    await input.trigger('input')
+    await input.setValue('中文完整名称')
     document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     await input.trigger('blur')
     expect(api.updateWorkItem).not.toHaveBeenCalled()

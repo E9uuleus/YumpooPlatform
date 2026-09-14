@@ -55,7 +55,8 @@ defineProps<{ item: ProjectWorkItemListItem; column: string; statusLabel: string
 
 <style>
 tr.work-item-draft-row > td.el-table__cell { position: relative; }
-tr.work-item-draft-row > td.el-table__cell::after, tr.work-item-draft-row .monday-discussion-btn::after, tr.work-item-draft-row .subitem-discussion::after { position: absolute; z-index: 9; inset: 0; background: rgb(255 255 255 / 68%); content: ''; cursor: default; }
-tr.work-item-draft-row > td.monday-title-column::after { display: none; }
+tr.work-item-draft-row > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column):not(.monday-title-column)::after,
+tr.work-item-draft-row .monday-discussion-btn::after,
+tr.work-item-draft-row .subitem-discussion::after { position: absolute; z-index: 9; inset: 0; background: rgb(255 255 255 / 68%); content: ''; cursor: default; }
 tr.work-item-draft-row .monday-discussion-btn, tr.work-item-draft-row .subitem-discussion { position: relative; }
 </style>

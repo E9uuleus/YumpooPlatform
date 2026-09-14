@@ -125,6 +125,7 @@ const columnDraggingIndex = ref(-1)
 const columnDropIndex = ref<number>()
 const columnDropAllowed = ref(false)
 const subitemTableRef = ref<{ $el: HTMLElement }>()
+const subitemScrollLeft = ref(0)
 const savingSortOrder = ref(false)
 const nameEditingId = ref('')
 const { draft: inlineDraft, rows: displayItems, isDraft, start: createBelow, save: saveInlineDraft, cancel: cancelInlineDraft } = useWorkItemInlineCreate({
@@ -153,6 +154,7 @@ const COLUMN_DRAG_POINTER_THRESHOLD = 5
 const COLUMN_DRAG_TILT_DEGREES = 1
 const COLUMN_RESIZE_HANDLE_WIDTH = 8
 const SUBITEM_ADD_COLUMN_MIN_WIDTH = 96
+const SUBITEM_MENU_COLUMN_WIDTH = 72
 
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -640,7 +642,11 @@ onBeforeUnmount(() => {
 <template>
   <section
     class="subitem-table-shell"
-    :style="{ '--subitem-title-column-width': `${columnWidths.title}px` }"
+    :style="{
+      '--subitem-title-column-width': `${columnWidths.title}px`,
+      '--subitem-table-scroll-left': `${subitemScrollLeft}px`,
+      '--subitem-menu-column-width': `${SUBITEM_MENU_COLUMN_WIDTH}px`,
+    }"
     :aria-label="`${parent.title} 的子项`"
     @pointerdown="onColumnPointerDown"
   >
@@ -685,11 +691,12 @@ onBeforeUnmount(() => {
         border
         :cell-style="subitemCellStyle"
         :header-cell-style="subitemHeaderCellStyle"
+        @scroll="subitemScrollLeft = $event.scrollLeft"
         @selection-change="$emit('selectionChange', parent.id, $event)"
         @header-dragend="(newWidth: number, oldWidth: number, column: { label: string }) => $emit('headerResize', newWidth, oldWidth, column)"
       >
         <el-table-column
-          width="32"
+          :width="SUBITEM_MENU_COLUMN_WIDTH"
           fixed
           class-name="work-item-menu-column"
           label-class-name="work-item-menu-column"
@@ -945,9 +952,9 @@ onBeforeUnmount(() => {
   --subitem-table-row-height: 36px;
   --subitem-table-empty-height: 60px;
   --subitem-table-quick-height: var(--subitem-table-row-height);
+  --subitem-quick-scroll-left: calc(var(--work-item-table-scroll-left, 0px) + var(--subitem-table-scroll-left, 0px));
   position: relative;
-  width: calc(100% - var(--subitem-hierarchy-indent));
-  margin-left: var(--subitem-hierarchy-indent);
+  width: 100%;
   box-sizing: border-box;
   background: var(--yp-bg-surface);
 }
@@ -962,7 +969,7 @@ onBeforeUnmount(() => {
   z-index: 2;
   right: 0;
   bottom: 0;
-  left: calc(32px + var(--subitem-hierarchy-bar-width));
+  left: calc(var(--subitem-menu-column-width) + var(--subitem-hierarchy-bar-width) + var(--work-item-table-scroll-left, 0px));
   height: 1px;
   background: var(--yp-monday-grid-border, var(--yp-border-subtle));
   content: '';
@@ -974,13 +981,14 @@ onBeforeUnmount(() => {
   z-index: 7;
   top: 0;
   bottom: var(--subitem-hierarchy-line-width);
-  left: 32px;
+  left: var(--subitem-menu-column-width);
   display: flex;
   width: var(--subitem-hierarchy-bar-width);
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--subitem-hierarchy-corner-radius) 0 0 var(--subitem-hierarchy-corner-radius);
   pointer-events: none;
+  transform: translateX(var(--work-item-table-scroll-left, 0px));
 }
 
 .subitem-hierarchy-bar__main {
@@ -1005,13 +1013,14 @@ onBeforeUnmount(() => {
   z-index: 2;
   top: var(--subitem-table-header-height);
   left: calc(
-    32px - var(--subitem-hierarchy-indent) + var(--subitem-hierarchy-bar-center) -
+    var(--subitem-menu-column-width) - var(--subitem-hierarchy-indent) + var(--subitem-hierarchy-bar-center) -
       (var(--subitem-hierarchy-line-width) / 2)
   );
   display: flex;
   width: calc(var(--subitem-hierarchy-indent) + (var(--subitem-hierarchy-line-width) / 2));
   flex-direction: column;
   pointer-events: none;
+  transform: translateX(var(--work-item-table-scroll-left, 0px));
 }
 
 .subitem-hierarchy-branch {
@@ -1094,12 +1103,21 @@ onBeforeUnmount(() => {
 :deep(.monday-subitem-table .el-table__cell) { box-sizing: border-box; height: var(--subitem-table-row-height); padding: 0; border-color: var(--yp-border-subtle); }
 :deep(.monday-subitem-table .cell) { padding: 0 8px; display: flex; align-items: center; justify-content: center; }
 :deep(.monday-subitem-table .el-table__body .cell) { height: 34px; }
+:deep(.monday-subitem-table .el-table__body td.work-item-menu-column > .cell) {
+  padding: 0;
+  justify-content: flex-start;
+}
+:deep(.monday-subitem-table .work-item-row-actions) {
+  width: 32px;
+  flex: 0 0 32px;
+}
 :deep(.monday-subitem-table td.monday-column--updatedAt > .cell) {
   --work-item-updated-cell-padding: 12px;
   height: var(--subitem-table-row-height);
   padding: 0;
 }
-:deep(.monday-subitem-table td.subitem-block-column > .cell) {
+:deep(.monday-subitem-table td.subitem-block-column > .cell),
+:deep(.monday-subitem-table td.subitem-title-column > .cell) {
   height: var(--subitem-table-row-height);
   padding: 0;
 }
@@ -1135,7 +1153,7 @@ onBeforeUnmount(() => {
   justify-content: flex-start;
   padding: 0 0 0 10px;
 }
-:deep(.monday-subitem-table th.el-table__cell) {
+:deep(.monday-subitem-table th.el-table__cell:not(.work-item-menu-column)) {
   border-top: 1px solid var(--yp-monday-grid-border, var(--yp-border-subtle)) !important;
 }
 :deep(.monday-subitem-table .subitem-selection-column) {
@@ -1258,8 +1276,8 @@ onBeforeUnmount(() => {
   cursor: col-resize;
 }
 .monday-title-column-resize-handle { overflow: visible; }
-.subitem-title-cell { width: 100%; height: 34px; display: flex; align-items: center; min-width: 0; }
-.subitem-discussion { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 32px; padding: 0; border: 0; background: transparent; color: var(--yp-text-secondary); cursor: pointer; }
+.subitem-title-cell { width: 100%; height: 100%; display: flex; align-items: center; min-width: 0; }
+.subitem-discussion { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 100%; box-sizing: border-box; padding: 0; border: 0; border-left: 1px solid var(--yp-monday-grid-border, var(--yp-border-subtle)); border-radius: 0; background: transparent; color: var(--yp-text-secondary); cursor: pointer; }
 .subitem-cell-button, .subitem-block-cell { width: 100%; height: 100%; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .subitem-block-cell { display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 0 var(--yp-space-2); color: var(--yp-text-inverse); }
 .subitem-popover-stack { display: grid; gap: 6px; }
@@ -1270,19 +1288,51 @@ onBeforeUnmount(() => {
   display: grid;
   height: var(--subitem-table-quick-height);
   min-width: max-content;
-  grid-template-columns: 32px 48px var(--subitem-title-column-width, 320px) 1fr;
+  grid-template-columns: var(--subitem-menu-column-width) 48px var(--subitem-title-column-width, 320px) 1fr;
   gap: 0;
   align-items: center;
   box-sizing: border-box;
   padding: 0;
-  border-top: 1px solid var(--yp-border-subtle);
+  border-top: 1px solid transparent;
   background: transparent;
   transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
-.subitem-quick-row:focus-within { background: var(--yp-bg-selected); }
+.subitem-add,
+.subitem-quick-row {
+  --subitem-quick-start: calc(var(--subitem-menu-column-width) + var(--subitem-quick-scroll-left));
+  position: relative;
+}
+.subitem-quick-row:focus-within {
+  background: linear-gradient(to right, transparent var(--subitem-quick-start), var(--yp-bg-selected) var(--subitem-quick-start));
+}
+.subitem-add::before,
+.subitem-quick-row::before {
+  position: absolute;
+  top: -1px;
+  right: 0;
+  left: var(--subitem-quick-start);
+  height: 1px;
+  background: var(--yp-border-subtle);
+  content: '';
+  pointer-events: none;
+}
+.subitem-add__field,
+.subitem-quick-controls {
+  transform: translateX(var(--subitem-quick-scroll-left));
+}
 .subitem-quick-controls { grid-column: 4; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
 .subitem-quick-title.subitem-add__field { width: 100%; min-width: 0; margin: 0; outline: none; border-color: var(--yp-action-primary); background: var(--yp-bg-surface); color: var(--yp-text-primary); }
-.subitem-quick-title::placeholder { color: var(--yp-text-secondary); opacity: 1; }
+.subitem-quick-title :deep(.el-input__wrapper) {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+}
+.subitem-quick-title :deep(.el-input__inner) { height: 100%; min-height: 0; color: inherit; font: inherit; }
+.subitem-quick-title :deep(.el-input__inner)::placeholder { color: var(--yp-text-secondary); opacity: 1; }
 .subitem-quick-hint { color: var(--yp-text-muted); font-size: 12px; white-space: nowrap; }
 .subitem-quick-checkbox {
   grid-column: 2;
@@ -1294,7 +1344,7 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--yp-border-strong) 50%, transparent);
   border-radius: 2px;
   background: var(--yp-bg-surface);
-  transform: translateX(2px);
+  transform: translateX(calc(var(--subitem-quick-scroll-left) + 2px));
   pointer-events: none;
 }
 .subitem-quick-row .subitem-quick-submit {
@@ -1308,12 +1358,12 @@ onBeforeUnmount(() => {
   display: grid;
   width: 100%;
   height: var(--subitem-table-row-height);
-  grid-template-columns: 32px 48px var(--subitem-title-column-width, 320px) 1fr;
+  grid-template-columns: var(--subitem-menu-column-width) 48px var(--subitem-title-column-width, 320px) 1fr;
   align-items: center;
   box-sizing: border-box;
   padding: 0;
   border: 0;
-  border-top: 1px solid var(--yp-border-subtle);
+  border-top: 1px solid transparent;
   background: transparent;
   color: var(--yp-text-secondary);
   font: inherit;
