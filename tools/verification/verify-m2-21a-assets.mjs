@@ -52,18 +52,24 @@ for (const fragment of ['expandedSubitemIds', 'loadSubitems', 'onTableExpandChan
   'subitemMovableColumnOrder', 'visibleSubitemColumns', 'moveSubitemColumn',
   'monday-add-column-icon', 'M10 2.25C10.4142 2.25',
   'monday-quick-add__field', 'placeholder="添加工作项"', 'contentId: defaultContentId.value',
-  'monday-quick-checkbox', 'translateX(2px)',
+  'monday-quick-checkbox', 'translateX(var(--work-item-table-scroll-left, 0px))',
   '--work-item-quick-control-height: 26px', '.monday-quick-row:focus-within',
-  'background: var(--yp-bg-selected)', 'outline: none !important',
+  'background: linear-gradient(to right, transparent var(--work-item-quick-start), var(--yp-bg-selected) var(--work-item-quick-start))',
+  '.quick-title-field :deep(.el-input__wrapper)',
   'height: var(--work-item-table-row-height)']) {
   assert(overview.includes(fragment), `项目表格缺少 ${fragment}`)
 }
+assert(/\.monday-quick-checkbox\s*\{[^}]*grid-column:\s*3;/u.test(overview),
+  '添加行复选框应位于行菜单与展开列之后的选择列')
+assert(/\.quick-title-field :deep\(\.el-input__wrapper\)\s*\{[^}]*outline:\s*none;/u.test(overview),
+  '添加行输入框应由外层边框显示焦点，避免叠加内部 outline')
 for (const fragment of ['aria-label', '--work-item-hierarchy-indent, 40px',
   '--work-item-hierarchy-line-width, 1px', '--work-item-hierarchy-bar-width, 6px',
   '--subitem-hierarchy-corner-radius', 'border-bottom-left-radius: var(--subitem-hierarchy-corner-radius)',
   '.subitem-table-frame::after', 'background-position: var(--subitem-hierarchy-bar-width) top',
   'background: var(--yp-monday-grid-border, var(--yp-border-subtle))',
-  'left: var(--subitem-hierarchy-bar-width)', 'bottom: var(--subitem-hierarchy-line-width)',
+  'left: calc(var(--subitem-menu-column-width) + var(--subitem-hierarchy-bar-width) + var(--work-item-table-scroll-left, 0px))',
+  'bottom: var(--subitem-hierarchy-line-width)',
   'monday-subitem-table--empty', 'subitem-hierarchy-bar__trailing',
   '--subitem-add-row-accent: rgba(87, 155, 252, 0.5)',
   'subitem-hierarchy-branch--add::before', 'border-color: var(--subitem-add-row-accent)',
