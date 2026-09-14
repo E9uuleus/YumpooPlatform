@@ -13,6 +13,7 @@ const props = defineProps<{
   sorted: boolean
   disabled?: boolean
   beforeRemove?: (() => Promise<boolean>) | undefined
+  orderItems?: ((item: ProjectWorkItemListItem, edge: 'top' | 'bottom') => Promise<ProjectWorkItemListItem[]>) | undefined
 }>()
 const emit = defineEmits<{
   open: [item: ProjectWorkItemListItem]
@@ -110,7 +111,9 @@ async function moveTo(edge: 'top' | 'bottom'): Promise<void> {
   if (props.sorted || !props.item.capabilities.canMoveInProjectOrder) return
   await run(async () => {
     let siblings: ProjectWorkItemListItem[] = []
-    if (props.parentId) {
+    if (props.orderItems) {
+      siblings = await props.orderItems(props.item, edge)
+    } else if (props.parentId) {
       siblings = (await workItemsApi.listWorkItemSubitems({ parentWorkItemId: props.parentId })).items
     } else {
       let cursor: string | null = null

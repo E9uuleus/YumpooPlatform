@@ -77,6 +77,36 @@ class WorkItemHttpIT {
     void tearDown() { cleanUp(); }
 
     @Test
+    void emptyGroupsIntersectFiltersAndBindCursorsToTheEmptyField() throws Exception {
+        String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+        JsonNode first = created(mutate("POST", collection, member, workItemBody(tasksId, "空值一"), null, UUID.randomUUID()));
+        created(mutate("POST", collection, member, workItemBody(tasksId, "空值二"), null, UUID.randomUUID()));
+        var filled = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(requirementsId, "已设置"));
+        filled.put("assigneeUserId", member.userId().toString()).put("dueDate", "2026-09-14").put("priority", "HIGH");
+        created(mutate("POST", collection, member, json.writeValueAsString(filled), null, UUID.randomUUID()));
+        created(mutate("POST", "/api/v1/work-items/" + first.path("id").asText() + "/subitems", member,
+                subitemBody(tasksId, "子项不参与分组"), null, UUID.randomUUID()));
+        for (String field : new String[] { "ASSIGNEE", "PRIORITY", "DUE_DATE" }) {
+            JsonNode all = ok(get(collection + "?emptyField=" + field, member));
+            assertThat(all.path("items").size()).isEqualTo(2);
+            JsonNode page = ok(get(collection + "?emptyField=" + field + "&limit=1", member));
+            String cursor = page.path("nextCursor").asText();
+            assertThat(cursor).isNotBlank().isNotEqualTo("null");
+            JsonNode next = ok(get(collection + "?emptyField=" + field + "&limit=1&cursor=" + cursor, member));
+            assertThat(next.path("items").size()).isEqualTo(1);
+            assertThat(next.path("items").get(0).path("id")).isNotEqualTo(page.path("items").get(0).path("id"));
+            assertThat(get(collection + "?limit=1&cursor=" + cursor, member).statusCode()).isEqualTo(422);
+            String other = field.equals("ASSIGNEE") ? "PRIORITY" : "ASSIGNEE";
+            assertThat(get(collection + "?emptyField=" + other + "&limit=1&cursor=" + cursor, member).statusCode()).isEqualTo(422);
+            assertThat(ok(get(collection + "?emptyField=" + field + "&contentId=" + requirementsId, member)).path("items").size()).isZero();
+        }
+        assertThat(ok(get(collection + "?emptyField=ASSIGNEE&assigneeUserId=" + member.userId(), member)).path("items").size()).isZero();
+        assertThat(ok(get(collection + "?emptyField=PRIORITY&priority=HIGH", member)).path("items").size()).isZero();
+        assertThat(ok(get(collection + "?emptyField=DUE_DATE&dueFrom=2026-09-01", member)).path("items").size()).isZero();
+        assertThat(get(collection + "?emptyField=STATUS", member).statusCode()).isEqualTo(422);
+    }
+
+    @Test
     void lastUpdaterIsReturnedInDetailsListsAndSubitemsIndependentlyOfAssignee() throws Exception {
         JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
                 workItemBody(tasksId, "更新成员"), null, UUID.randomUUID()));

@@ -54,6 +54,28 @@ describe('工作项名称单元格', () => {
     expect(wrapper.find('input').exists()).toBe(false)
   })
 
+  it('点击分组和排序控件保留草稿，后续点击普通区域仍可保存', async () => {
+    const create = vi.fn().mockResolvedValue(true)
+    const wrapper = mount(WorkItemNameCell, { props: { item, create }, attachTo: document.body })
+    await wrapper.get('input').setValue('等待分组的草稿')
+    const control = document.createElement('button')
+    control.setAttribute('data-work-item-view-control', '')
+    document.body.append(control)
+    try {
+      control.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+      await wrapper.get('input').trigger('blur', { relatedTarget: control })
+      await flushPromises()
+      expect(create).not.toHaveBeenCalled()
+      expect(wrapper.get('input').element.value).toBe('等待分组的草稿')
+      control.className = 'work-item-grouping-options'
+      control.removeAttribute('data-work-item-view-control')
+      control.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+      await flushPromises(); expect(create).not.toHaveBeenCalled()
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+      await flushPromises(); expect(create).toHaveBeenCalledOnce()
+    } finally { control.remove() }
+  })
+
   it('中文输入中的 Enter 不提交，Escape、空名称和未修改名称不写入', async () => {
     const wrapper = mount(WorkItemNameCell, { props: { item } })
     await wrapper.get('.work-item-title-text').trigger('click')

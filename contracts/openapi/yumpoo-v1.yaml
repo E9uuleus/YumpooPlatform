@@ -1886,6 +1886,10 @@ paths:
           in: query
           description: TABLE 使用白名单排序；KANBAN 要求单一 status 且固定按项目级状态泳道 rank 排序。
           schema: { $ref: '#/components/schemas/WorkItemViewType' }
+        - name: emptyField
+          in: query
+          description: 仅返回指定字段为空的工作项，与其他筛选条件取交集；游标绑定该条件。
+          schema: { type: string, enum: [ASSIGNEE, PRIORITY, DUE_DATE] }
         - name: status
           in: query
           style: form

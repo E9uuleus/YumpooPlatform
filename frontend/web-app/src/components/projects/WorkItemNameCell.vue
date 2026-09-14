@@ -4,6 +4,7 @@ import { ElInput, ElMessage, type InputInstance } from 'element-plus'
 import { readCsrfToken, type ProjectWorkItemListItem, type WorkItemDetail } from '@yumpoo/api-client'
 import { workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
+import { isWorkItemViewControl } from './workItemViewControls'
 
 const props = defineProps<{
   item: ProjectWorkItemListItem
@@ -24,6 +25,7 @@ const saving = ref(false)
 const composing = ref(false)
 const title = ref(props.item.title)
 let disposed = false
+let viewControlInteraction = false
 
 async function focus(select = false): Promise<void> {
   await nextTick()
@@ -86,7 +88,13 @@ async function save(): Promise<void> {
 }
 
 function outside(event: PointerEvent): void {
+  viewControlInteraction = isWorkItemViewControl(event.target)
+  if (viewControlInteraction) return
   if (!root.value?.contains(event.target as Node)) void save()
+}
+
+function blur(event: FocusEvent): void {
+  if (!viewControlInteraction && !isWorkItemViewControl(event.relatedTarget)) void save()
 }
 
 async function compositionEnd(): Promise<void> {
@@ -94,7 +102,7 @@ async function compositionEnd(): Promise<void> {
   await nextTick()
   await nextTick()
   composing.value = false
-  if (document.activeElement !== input.value?.input) void save()
+  if (!viewControlInteraction && document.activeElement !== input.value?.input) void save()
 }
 
 function keydown(event: Event | KeyboardEvent): void {
@@ -140,7 +148,8 @@ onBeforeUnmount(() => {
       @click.stop
       @dragstart.stop.prevent
       @keydown.stop="keydown"
-      @blur="save"
+      @blur="blur"
+      @focus="viewControlInteraction = false"
       @compositionstart="composing = true"
       @compositionend="compositionEnd"
     />

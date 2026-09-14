@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
 import WorkItemRowActions from './WorkItemRowActions.vue'
@@ -291,6 +292,7 @@ function closeQuick(): void {
 }
 
 function onDocumentPointerDown(event: PointerEvent): void {
+  if (isWorkItemViewControl(event.target)) return
   if (!quickOpen.value || quickCreating.value || quickRow.value?.contains(event.target as Node)) return
   closeQuick()
 }
@@ -945,7 +947,7 @@ onBeforeUnmount(() => {
   --subitem-hierarchy-bar-width: var(--work-item-hierarchy-bar-width, 6px);
   --subitem-hierarchy-bar-center: var(--work-item-hierarchy-bar-center, 3px);
   --subitem-hierarchy-corner-radius: var(--work-item-hierarchy-corner-radius, var(--subitem-hierarchy-bar-width));
-  --subitem-add-row-accent: rgba(87, 155, 252, 0.5);
+  --subitem-add-row-accent: color-mix(in srgb, var(--work-item-group-accent, rgb(87, 155, 252)) 50%, transparent);
   --subitem-table-header-height: 38px;
   --subitem-table-row-height: 36px;
   --subitem-table-empty-height: 60px;

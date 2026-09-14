@@ -90,7 +90,8 @@ public final class WorkItemController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(service.listProject(actors.requiredActive(), projectId,
                         withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds, contentIds,
-                                dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts)), httpRequest),
+                                dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts))
+                                .withEmptyField(httpRequest.getParameter("emptyField")), httpRequest),
                         view, CursorPageRequest.of(cursor, limit)));
     }
 

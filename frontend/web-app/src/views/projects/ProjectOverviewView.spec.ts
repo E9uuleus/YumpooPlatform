@@ -179,6 +179,125 @@ describe('项目级工作项首页', () => {
 
   afterEach(() => vi.restoreAllMocks())
 
+  it('分组与折叠保留同一个主表、勾选和子表草稿，展示行不进入选择或排序请求', async () => {
+    const parent = { ...item('parent-1'), subitemCount: 1 }
+    const done = { ...item('done'), statusCode: 'DONE' }
+    state.listProjectWorkItems.mockResolvedValue(page([parent, done]))
+    state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [
+      { value: 'BACKLOG', label: '待开始', count: 1 }, { value: 'DONE', label: '已完成', count: 1 },
+    ], nextCursor: null })
+    state.listWorkItemSubitems.mockResolvedValue({ items: [item('child-1')] })
+    const wrapper = mountView()
+    await flushPromises()
+    const table = wrapper.getComponent({ name: 'ElTable' }).vm.$
+    await wrapper.findAll('button[aria-label="展开子项"]')[0]!.trigger('click')
+    await flushPromises()
+    const subtable = wrapper.getComponent({ name: 'ProjectWorkItemSubitemsTable' })
+    const subtableInstance = subtable.vm.$
+    await subtable.get('.subitem-add').trigger('click')
+    await subtable.get('.subitem-quick-title input').setValue('分组前的子项草稿')
+    const control = document.createElement('button')
+    control.setAttribute('data-work-item-view-control', '')
+    document.body.append(control)
+    control.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    control.remove()
+    await flushPromises()
+    expect(subtable.get<HTMLInputElement>('.subitem-quick-title input').element.value).toBe('分组前的子项草稿')
+    await wrapper.findAll<HTMLInputElement>('.work-item-table-row .el-checkbox__original')[0]!.setValue(true)
+    const view = wrapper.vm as unknown as { changeGrouping: (field: string) => Promise<void>; selectedWorkItemIds: Set<string> }
+    await view.changeGrouping('STATUS'); await flushPromises()
+    expect(wrapper.findAll('.work-item-group-heading')).toHaveLength(2)
+    expect(wrapper.getComponent({ name: 'ElTable' }).vm.$).toBe(table)
+    expect(wrapper.getComponent({ name: 'ProjectWorkItemSubitemsTable' }).vm.$).toBe(subtableInstance)
+    expect([...view.selectedWorkItemIds]).toEqual([parent.id])
+    expect(wrapper.findAll('.work-item-group-heading .el-checkbox')).toHaveLength(0)
+    await wrapper.get('button[aria-label="收起分组：待开始"]').trigger('click')
+    expect(wrapper.get('.work-item-group-heading').classes()).toContain('work-item-group-collapsed')
+    expect(wrapper.getComponent({ name: 'ProjectWorkItemSubitemsTable' }).vm.$).toBe(subtableInstance)
+    await wrapper.get('button[aria-label="展开分组：待开始"]').trigger('click')
+    expect(subtable.get<HTMLInputElement>('.subitem-quick-title input').element.value).toBe('分组前的子项草稿')
+    await view.changeGrouping(''); await flushPromises()
+    expect(wrapper.find('.work-item-group-heading').exists()).toBe(false)
+    expect(wrapper.getComponent({ name: 'ElTable' }).vm.$).toBe(table)
+    expect([...view.selectedWorkItemIds]).toEqual([parent.id])
+    expect(state.moveProjectWorkItemOrder).not.toHaveBeenCalled()
+  })
+
+  it('分组态只向顺序接口提交本组锚点，拒绝跨组拖动和保存全局排序', async () => {
+    const first = item('a1'), second = item('a2'), other = { ...item('b1'), statusCode: 'DONE' }
+    state.listProjectWorkItems.mockImplementation(async (request: { status?: Set<string> }) =>
+      page(request.status?.has('BACKLOG') ? [first, second] : request.status?.has('DONE') ? [other] : [first, second, other]))
+    state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [
+      { value: 'BACKLOG', label: '待开始', count: 2 }, { value: 'DONE', label: '已完成', count: 1 },
+    ], nextCursor: null })
+    state.moveProjectWorkItemOrder.mockResolvedValue(first)
+    const wrapper = mountView(); await flushPromises()
+    const view = wrapper.vm as unknown as {
+      changeGrouping: (field: string) => Promise<void>; grouping: { load: (key: string) => Promise<void> }
+      tableDragging: ProjectWorkItemListItem; tableDropIndex: number; commitTableDrop: () => Promise<void>
+      saveSortedWorkItemOrder: () => Promise<void>; sortRules: Array<{ field: string; direction: string }>
+    }
+    await view.changeGrouping('STATUS'); await view.grouping.load('BACKLOG'); await view.grouping.load('DONE')
+    view.tableDragging = first; view.tableDropIndex = 3; await view.commitTableDrop()
+    expect(state.moveProjectWorkItemOrder).not.toHaveBeenCalled()
+    view.tableDragging = first; view.tableDropIndex = 2; await view.commitTableDrop()
+    expect(state.moveProjectWorkItemOrder).toHaveBeenCalledWith(expect.objectContaining({ workItemId: first.id,
+      projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: second.id, nextVisibleWorkItemId: null } }))
+    state.moveProjectWorkItemOrder.mockClear()
+    view.sortRules = [{ field: 'TITLE', direction: 'ASC' }]; await flushPromises()
+    await view.saveSortedWorkItemOrder()
+    expect(state.moveProjectWorkItemOrder).not.toHaveBeenCalled()
+    expect(wrapper.find('[aria-label="保存工作项名称排序后的工作项顺序"]').exists()).toBe(false)
+  })
+
+  it('重复表头复用列宽与换列能力，保持所有表段列序一致', async () => {
+    state.listProjectWorkItems.mockResolvedValue(page([item(), { ...item('done'), statusCode: 'DONE' }]))
+    state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [
+      { value: 'BACKLOG', label: '待开始', count: 1 }, { value: 'DONE', label: '已完成', count: 1 },
+    ], nextCursor: null })
+    const wrapper = mountView(); await flushPromises()
+    const view = wrapper.vm as unknown as {
+      changeGrouping: (field: string) => Promise<void>; columnWidths: Record<string, number>
+      onTableColumnResizePointerDown: (event: PointerEvent, handle: HTMLElement) => void
+      onTableColumnResizePointerMove: (event: PointerEvent) => void
+      onTableColumnResizePointerUp: (event: PointerEvent) => void
+      columnDraggingKey: string; columnDraggingIndex: number; columnDropIndex: number
+      commitTableColumnDrop: () => void
+    }
+    await view.changeGrouping('STATUS'); await flushPromises()
+    const width = view.columnWidths.title!
+    const event = { pointerId: 99, clientX: 100, preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as PointerEvent
+    const handle = wrapper.get<HTMLElement>('.work-item-group-columns [data-column-key="title"]').element
+    view.onTableColumnResizePointerDown(event, handle)
+    view.onTableColumnResizePointerMove({ ...event, clientX: 180 })
+    view.onTableColumnResizePointerUp({ ...event, clientX: 180 })
+    expect(view.columnWidths.title).toBe(width + 80)
+    view.columnDraggingKey = 'status'; view.columnDraggingIndex = 1; view.columnDropIndex = 3
+    view.commitTableColumnDrop(); await flushPromises()
+    for (const row of wrapper.findAll('.work-item-group-columns')) {
+      expect(row.findAll('.monday-movable-column-header').map(cell => cell.text()).slice(0, 3)).toEqual(['处理人', '优先级', '状态'])
+    }
+  })
+
+  it('分组保留发起位置的根项草稿，切换字段不重建输入框', async () => {
+    const anchor = { ...item('anchor'), statusCode: 'DONE', title: '草稿锚点' }
+    state.listProjectWorkItems.mockResolvedValue(page([anchor]))
+    state.listProjectWorkItemFilterOptions.mockImplementation(async ({ field }: { field: string }) => ({
+      items: [{ value: field === 'STATUS' ? 'DONE' : '__NULL__', label: '分组', count: 1 }], nextCursor: null,
+    }))
+    const wrapper = mountView(); await flushPromises()
+    const view = wrapper.vm as unknown as { changeGrouping: (field: string) => Promise<void> }
+    await view.changeGrouping('STATUS'); await flushPromises()
+    wrapper.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('createBelow', anchor)
+    await flushPromises()
+    const input = wrapper.get<HTMLInputElement>('.work-item-draft-row .work-item-name-input input')
+    await input.setValue('未保存的根项')
+    await view.changeGrouping('ASSIGNEE'); await flushPromises()
+    expect(wrapper.get<HTMLInputElement>('.work-item-draft-row .work-item-name-input input').element === input.element).toBe(true)
+    expect(input.element.value).toBe('未保存的根项')
+    expect(state.createWorkItem).not.toHaveBeenCalled()
+  })
+
   it('文字编辑保存后同步主表名称，单元格空白不打开详情', async () => {
     state.updateWorkItem.mockResolvedValue({ ...item(), title: '已修改的名称' })
     const wrapper = mountView()

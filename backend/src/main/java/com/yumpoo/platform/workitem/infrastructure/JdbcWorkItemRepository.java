@@ -715,6 +715,15 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             sql.append(" AND assignee_user_id IN (:assigneeUserIds)");
             parameters.put("assigneeUserIds", query.assigneeUserIds());
         }
+        if (query.emptyField() != null) {
+            String column = switch (query.emptyField()) {
+                case "ASSIGNEE" -> "assignee_user_id";
+                case "PRIORITY" -> "priority";
+                case "DUE_DATE" -> "due_date";
+                default -> throw new IllegalArgumentException("unsupported empty field");
+            };
+            sql.append(" AND ").append(column).append(" IS NULL");
+        }
         if (!query.contentIds().isEmpty()) {
             sql.append(" AND content_id IN (:contentIds)");
             parameters.put("contentIds", query.contentIds());
