@@ -89,9 +89,11 @@ describe('工作项名称单元格', () => {
   it('点击外部时等待输入法组合结束，避免保存尚未确认的旧文本', async () => {
     const wrapper = mount(WorkItemNameCell, { props: { item } })
     await wrapper.get('.work-item-title-text').trigger('click')
+    await flushPromises()
     const input = wrapper.get('input')
     await input.trigger('compositionstart')
-    await input.setValue('中文完整名称')
+    input.element.value = '中文完整名称'
+    await input.trigger('input', { isComposing: true })
     document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     await input.trigger('blur')
     expect(api.updateWorkItem).not.toHaveBeenCalled()
@@ -99,6 +101,25 @@ describe('工作项名称单元格', () => {
     await flushPromises()
     expect(api.updateWorkItem).toHaveBeenCalledWith(expect.objectContaining({
       workItemUpdateRequest: expect.objectContaining({ title: '中文完整名称' }),
+    }))
+  })
+
+  it('输入法确认后焦点仍在输入框时继续编辑，离开后才保存', async () => {
+    const wrapper = mount(WorkItemNameCell, { props: { item }, attachTo: document.body })
+    await wrapper.get('.work-item-title-text').trigger('click')
+    await flushPromises()
+    const input = wrapper.get('input')
+    await input.trigger('compositionstart')
+    input.element.value = '继续编辑中文'
+    await input.trigger('input', { isComposing: true })
+    await input.trigger('compositionend')
+    await flushPromises()
+    expect(document.activeElement).toBe(input.element)
+    expect(api.updateWorkItem).not.toHaveBeenCalled()
+    input.element.blur()
+    await flushPromises()
+    expect(api.updateWorkItem).toHaveBeenCalledWith(expect.objectContaining({
+      workItemUpdateRequest: expect.objectContaining({ title: '继续编辑中文' }),
     }))
   })
 

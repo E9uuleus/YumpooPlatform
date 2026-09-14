@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElInput, ElMessage, type InputInstance } from 'element-plus'
 import { readCsrfToken, type ProjectWorkItemListItem, type WorkItemDetail } from '@yumpoo/api-client'
 import { workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
@@ -18,7 +18,7 @@ const emit = defineEmits<{
   cancel: []
 }>()
 const root = ref<HTMLElement>()
-const input = ref<HTMLInputElement>()
+const input = ref<InputInstance>()
 const editing = ref(Boolean(props.create))
 const saving = ref(false)
 const composing = ref(false)
@@ -28,7 +28,7 @@ let disposed = false
 async function focus(select = false): Promise<void> {
   await nextTick()
   if (disposed) return
-  input.value?.focus({ preventScroll: true })
+  input.value?.input?.focus({ preventScroll: true })
   if (select) input.value?.select()
 }
 
@@ -89,12 +89,16 @@ function outside(event: PointerEvent): void {
   if (!root.value?.contains(event.target as Node)) void save()
 }
 
-function compositionEnd(): void {
+async function compositionEnd(): Promise<void> {
+  // ElInput 在 compositionend 发出后才排队更新 v-model，保存需等该更新完成。
+  await nextTick()
+  await nextTick()
   composing.value = false
-  if (document.activeElement !== input.value) void nextTick(save)
+  if (document.activeElement !== input.value?.input) void save()
 }
 
-function keydown(event: KeyboardEvent): void {
+function keydown(event: Event | KeyboardEvent): void {
+  if (!(event instanceof KeyboardEvent)) return
   if (event.isComposing || event.keyCode === 229) return
   if (event.key === 'Enter') { event.preventDefault(); void save() }
   if (event.key === 'Escape') { event.preventDefault(); cancel() }
@@ -123,13 +127,13 @@ onBeforeUnmount(() => {
     :aria-busy="saving"
   >
     <slot name="prefix" />
-    <input
+    <el-input
       v-if="editing"
       ref="input"
       v-model="title"
       class="work-item-name-input"
       :aria-label="create ? '新工作项名称' : '工作项名称'"
-      :placeholder="create ? '*新工作项' : undefined"
+      :placeholder="create ? '*新工作项' : ''"
       maxlength="300"
       :readonly="saving"
       @pointerdown.stop
@@ -139,7 +143,7 @@ onBeforeUnmount(() => {
       @blur="save"
       @compositionstart="composing = true"
       @compositionend="compositionEnd"
-    >
+    />
     <template v-else>
       <button
         type="button"
@@ -184,8 +188,9 @@ onBeforeUnmount(() => {
 .work-item-title-text { flex: 0 1 auto; min-width: 0; width: max-content; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13.5px; font-weight: 500; line-height: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
 .work-item-title-text:disabled { cursor: inherit; }
 .work-item-title-text:focus-visible { outline: 1px solid var(--yp-action-primary); outline-offset: 2px; }
-.work-item-name-input { display: block; flex: 1 1 auto; width: 0; min-width: 0; height: 100%; margin: 0; padding: 0; border: 0; outline: none; box-shadow: none; border-radius: 0; background: var(--yp-bg-surface); color: var(--yp-text-primary); font: inherit; font-size: 13.5px; font-weight: 500; cursor: text; }
-.work-item-name-input::placeholder { color: color-mix(in srgb, var(--yp-text-muted) 60%, var(--yp-bg-surface)); opacity: 1; }
+.work-item-name-input { flex: 1 1 auto; width: 0; min-width: 0; height: 100%; --el-input-bg-color: var(--yp-bg-surface); --el-input-text-color: var(--yp-text-primary); --el-input-placeholder-color: color-mix(in srgb, var(--yp-text-muted) 60%, var(--yp-bg-surface)); }
+.work-item-name-input :deep(.el-input__wrapper) { padding: 0; border-radius: 0; box-shadow: none; }
+.work-item-name-input :deep(.el-input__inner) { height: 100%; font: inherit; font-size: 13.5px; font-weight: 500; cursor: text; }
 .work-item-detail-button { display: inline-flex; flex: 0 0 24px; width: 24px; height: 24px; align-items: center; justify-content: center; margin-left: auto; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--yp-text-secondary); cursor: pointer; opacity: 0; }
 .work-item-name-cell:hover .work-item-detail-button, .work-item-name-cell:focus-within .work-item-detail-button { opacity: 1; }
 .work-item-detail-button:hover { background: var(--yp-bg-selected); color: var(--yp-action-primary); }
