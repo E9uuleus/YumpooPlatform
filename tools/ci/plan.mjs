@@ -32,6 +32,7 @@ export const nodeSteps = [
 ]
 
 export const assetSteps = [
+  node('brand-assets', 'tools/branding/generate-assets.mjs', '--check'),
   ...['m0-12', 'm0-13', 'm0-14'].map(milestone =>
     node(`${milestone}-live-evidence`, `tools/verification/verify-${milestone}-live.mjs`, '--validate-evidence')),
   node('m0-17-evidence', 'tools/verification/verify-m0-17.mjs', '--validate-contracts'),

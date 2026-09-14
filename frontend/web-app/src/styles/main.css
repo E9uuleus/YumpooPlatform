@@ -110,10 +110,7 @@ code {
   width: 40px;
   height: 40px;
   margin-top: var(--yp-space-3);
-  color: var(--yp-status-blue-foreground);
-  background: var(--yp-action-primary);
-  font-size: 20px;
-  font-weight: 700;
+  background: transparent;
 }
 
 .module-rail__items {

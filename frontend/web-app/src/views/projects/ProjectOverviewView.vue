@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vBrandLoading as vLoading } from '../../brand/loading'
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
 import WorkItemTimerCell from '../../components/projects/WorkItemTimerCell.vue'
 import WorkItemDiscussionIcon from '../../components/projects/WorkItemDiscussionIcon.vue'
@@ -33,7 +34,6 @@ import {
   ElCheckbox,
   ElIcon,
   ElInput,
-  ElLoading,
   ElMessage,
   ElMessageBox,
   ElOption as ElOptionRaw,
@@ -101,7 +101,6 @@ const loading = ref(false)
 const tableLoading = ref(false)
 const tableSorting = ref(false)
 const error = ref<ApiProblem>()
-const vLoading = ElLoading.directive
 const lanes = reactive<Record<string, KanbanLane>>({})
 const subitems = reactive<Record<string, SubitemState>>({})
 const expandedSubitemIds = ref<string[]>([])
@@ -3882,7 +3881,6 @@ onBeforeUnmount(() => {
 }
 
 :deep(.monday-table .el-table__body td.el-table__cell.monday-cell--selected::after),
-.work-item-link.monday-cell--selected::after,
 .monday-discussion-btn.monday-cell--selected::after {
   position: absolute;
   z-index: 8;

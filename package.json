@@ -8,6 +8,8 @@
     "pnpm": "11.16.x"
   },
   "scripts": {
+    "generate:brand-assets": "node tools/branding/generate-assets.mjs",
+    "check:brand-assets": "node tools/branding/generate-assets.mjs --check",
     "ci": "node tools/ci/run.mjs",
     "ci:static": "node tools/ci/run.mjs static",
     "ci:contracts": "node tools/ci/run.mjs contracts",
@@ -154,6 +156,7 @@
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "2.40.1",
     "@redocly/cli": "2.41.2",
+    "@resvg/resvg-js": "2.6.2",
     "@typescript-eslint/eslint-plugin": "8.66.0",
     "@typescript-eslint/parser": "8.66.0",
     "ajv": "8.17.1",

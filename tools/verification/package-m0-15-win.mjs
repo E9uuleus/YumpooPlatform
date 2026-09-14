@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gitHead } from './m0-18-utils.mjs'
 import { runPnpmSync } from './process-utils.mjs'
+import { verifyExecutableIcons } from '../../desktop/desktop-shell/icon-resources.cjs'
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -24,6 +25,8 @@ const asarModuleUrl = pathToFileURL(
   path.join(desktopRoot, 'node_modules', '@electron', 'asar', 'lib', 'asar.js'),
 ).href
 const EXPECTED_ASAR_ENTRIES = new Set([
+  'assets',
+  'assets/application.png',
   'dist',
   'dist/main',
   'dist/main/application-icon.js',
@@ -52,7 +55,7 @@ if (
 }
 
 const electronVersion = await readElectronVersion()
-const { listPackage } = await import(asarModuleUrl)
+const { listPackage, extractFile } = await import(asarModuleUrl)
 
 runPnpmSync(['--filter', '@yumpoo/desktop-shell', 'run', 'package:win'], {
   cwd: repositoryRoot,
@@ -75,6 +78,10 @@ const executable = path.join(packageDirectory, 'YumpooDesktop.exe')
 const asarArchive = path.join(packageDirectory, 'resources', 'app.asar')
 await requireFile(executable)
 await requireFile(asarArchive)
+await verifyExecutableIcons(executable, path.join(desktopRoot, 'assets', 'application.ico'))
+if (!extractFile(asarArchive, 'assets/application.png').equals(await readFile(path.join(desktopRoot, 'assets', 'application.png')))) {
+  throw new Error('Electron app.asar 中的窗口和托盘图标与品牌母版不一致')
+}
 
 const asarEntries = new Set(
   listPackage(asarArchive, { isPack: false })

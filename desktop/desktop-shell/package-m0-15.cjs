@@ -9,6 +9,7 @@ const {
   stat,
 } = require('node:fs/promises')
 const { pathToFileURL } = require('node:url')
+const { replaceExecutableIcons } = require('./icon-resources.cjs')
 
 const desktopOutputRoot = path.resolve(__dirname, 'out')
 const outputRoot = process.env.YUMPOO_M015_OUTPUT_ROOT
@@ -67,9 +68,18 @@ async function packageApplication() {
       path.join(packageDirectory, 'YumpooDesktop.exe'),
     )
     await rm(path.join(packageDirectory, 'resources', 'default_app.asar'))
+    await replaceExecutableIcons(
+      path.join(packageDirectory, 'YumpooDesktop.exe'),
+      path.join(__dirname, 'assets', 'application.ico'),
+    )
 
     stagingDirectory = await mkdtemp(stagingPrefix)
     await mkdir(path.join(stagingDirectory, 'dist'), { recursive: true })
+    await mkdir(path.join(stagingDirectory, 'assets'))
+    await cp(
+      path.join(__dirname, 'assets', 'application.png'),
+      path.join(stagingDirectory, 'assets', 'application.png'),
+    )
     await cp(
       path.join(__dirname, 'dist', 'main'),
       path.join(stagingDirectory, 'dist', 'main'),
