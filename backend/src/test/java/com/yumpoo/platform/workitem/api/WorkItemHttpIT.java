@@ -77,6 +77,102 @@ class WorkItemHttpIT {
     void tearDown() { cleanUp(); }
 
     @Test
+    void lastUpdaterIsReturnedInDetailsListsAndSubitemsIndependentlyOfAssignee() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "更新成员"), null, UUID.randomUUID()));
+        assertThat(item.path("updatedByUserId").asText()).isEqualTo(member.userId().toString());
+        String id = item.path("id").asText();
+        var patch = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "由负责人更新"));
+        patch.remove("contentId");
+        JsonNode changed = ok(mutate("PATCH", "/api/v1/work-items/" + id, owner,
+                json.writeValueAsString(patch), item.path("etag").asText(), null));
+        assertThat(changed.path("updatedByUserId").asText()).isEqualTo(owner.userId().toString());
+        assertThat(changed.path("updatedByDisplayName").asText()).isEqualTo("Work Category Owner");
+        JsonNode listed = ok(get("/api/v1/projects/" + PROJECT_ID + "/work-items", member)).path("items").get(0);
+        assertThat(listed.path("updatedByUserId")).isEqualTo(changed.path("updatedByUserId"));
+        assertThat(listed.path("updatedByDisplayName")).isEqualTo(changed.path("updatedByDisplayName"));
+        assertThat(listed.path("assigneeUserId").isNull()).isTrue();
+        JsonNode child = created(mutate("POST", "/api/v1/work-items/" + id + "/subitems", member,
+                subitemBody(tasksId, "更新成员子项"), null, UUID.randomUUID()));
+        JsonNode children = ok(get("/api/v1/work-items/" + id + "/subitems", owner)).path("items");
+        assertThat(children.get(0).path("updatedByUserId")).isEqualTo(child.path("updatedByUserId"));
+        assertThat(children.get(0).path("updatedByDisplayName").asText()).isEqualTo("Work Category Member");
+        jdbc.sql("UPDATE yumpoo.identity_user SET account_status='DISABLED', account_disabled_at=transaction_timestamp(), account_disabled_by_user_id=id, account_disabled_reason='Last updater verification', updated_at=transaction_timestamp() WHERE id=:id")
+                .param("id", owner.userId()).update();
+        try {
+            JsonNode read = ok(get("/api/v1/work-items/" + id, member));
+            assertThat(read.path("updatedByDisplayName").asText()).isEqualTo("Work Category Owner");
+        } finally {
+            jdbc.sql("UPDATE yumpoo.identity_user SET account_status='ENABLED', account_disabled_at=NULL, account_disabled_by_user_id=NULL, account_disabled_reason=NULL WHERE id=:id")
+                    .param("id", owner.userId()).update();
+        }
+    }
+
+    @Test
+    void archiveIsIndependentOfDeletionAndPreservesHierarchyOrderAndOptimisticConcurrency() throws Exception {
+        String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+        JsonNode parent = created(mutate("POST", collection, member,
+                workItemBody(tasksId, "归档父项"), null, UUID.randomUUID()));
+        String parentId = parent.path("id").asText();
+        JsonNode child = created(mutate("POST", "/api/v1/work-items/" + parentId + "/subitems", member,
+                subitemBody(tasksId, "保留的子项"), null, UUID.randomUUID()));
+        String childId = child.path("id").asText();
+        String path = "/api/v1/work-items/" + parentId;
+        UUID key = UUID.randomUUID();
+        HttpResponse<String> response = mutate("POST", path + "/archive", member, "", parent.path("etag").asText(), key);
+        JsonNode archived = ok(response);
+        assertThat(archived.path("archived").asBoolean()).isTrue();
+        assertThat(archived.path("deleted").asBoolean()).isFalse();
+        assertThat(archived.path("statusCode")).isEqualTo(parent.path("statusCode"));
+        assertThat(archived.path("capabilities").path("canEditFields").asBoolean()).isFalse();
+        assertThat(archived.path("capabilities").path("canDiscuss").asBoolean()).isFalse();
+        assertThat(mutate("POST", path + "/archive", member, "", parent.path("etag").asText(), key).body())
+                .isEqualTo(response.body());
+        assertThat(ok(get(path, member)).path("archived").asBoolean()).isTrue();
+        assertThat(ok(get(collection, member)).path("items")).isEmpty();
+        assertThat(mutate("POST", path + "/unarchive", member, "", parent.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(412);
+        assertThat(mutate("POST", path + "/subitems", member, subitemBody(tasksId, "不允许新增"), null, UUID.randomUUID()).statusCode()).isEqualTo(404);
+        JsonNode restored = ok(mutate("POST", path + "/unarchive", member, "", archived.path("etag").asText(), UUID.randomUUID()));
+        assertThat(restored.path("archived").asBoolean()).isFalse();
+        JsonNode listed = ok(get(collection, member)).path("items").get(0);
+        assertThat(listed.path("id").asText()).isEqualTo(parentId);
+        assertThat(listed.path("subitemCount").asInt()).isEqualTo(1);
+        assertThat(ok(get(path + "/subitems", member)).path("items").get(0).path("id").asText()).isEqualTo(childId);
+
+        String childPath = "/api/v1/work-items/" + childId;
+        JsonNode archivedChild = ok(mutate("POST", childPath + "/archive", member, "", child.path("etag").asText(), UUID.randomUUID()));
+        assertThat(ok(get(path + "/subitems", member)).path("items")).isEmpty();
+        assertThat(ok(get(collection, member)).path("items").get(0).path("subitemCount").asInt()).isZero();
+        JsonNode deleted = ok(mutate("DELETE", childPath, member, "{\"reason\":\"归档后删除\"}", archivedChild.path("etag").asText(), UUID.randomUUID()));
+        assertThat(deleted.path("deleted").asBoolean()).isTrue();
+        assertThat(deleted.path("archived").asBoolean()).isTrue();
+        assertThat(mutate("POST", childPath + "/unarchive", member, "", deleted.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(404);
+    }
+
+    @Test
+    void archiveHidesTimerCandidatesAndKeepsAnExistingTimerStoppable() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "归档计时工作项"), null, UUID.randomUUID()));
+        String id = item.path("id").asText();
+        String path = "/api/v1/work-items/" + id;
+        String startBody = "{\"workItemId\":\"" + id + "\"}";
+        JsonNode running = ok(mutate("POST", "/api/v1/me/time-tracker/start", member,
+                startBody, "\"0\"", UUID.randomUUID()));
+        JsonNode archived = ok(mutate("POST", path + "/archive", member, "", item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(ok(get("/api/v1/me/time-tracker/candidates?scope=ALL", member)).path("items")).isEmpty();
+        JsonNode current = ok(get("/api/v1/me/time-tracker", member));
+        assertThat(current.path("session").path("id").asText()).isEqualTo(running.path("session").path("id").asText());
+        assertThat(current.path("recentItems")).isEmpty();
+        assertThat(ok(get(path + "/time-sessions", member)).path("canCreate").asBoolean()).isFalse();
+        assertThat(mutate("POST", "/api/v1/me/time-tracker/start", owner, startBody, "\"0\"", UUID.randomUUID()).statusCode()).isEqualTo(404);
+        ok(mutate("POST", "/api/v1/me/time-tracker/stop", member,
+                "{\"sessionId\":\"" + running.path("session").path("id").asText() + "\"}", running.path("etag").asText(), UUID.randomUUID()));
+        ok(mutate("POST", path + "/unarchive", member, "", archived.path("etag").asText(), UUID.randomUUID()));
+        assertThat(ok(get(path + "/time-sessions", member)).path("canCreate").asBoolean()).isTrue();
+        assertThat(ok(get("/api/v1/me/time-tracker/candidates?scope=ALL", member)).path("items").get(0).path("workItemId").asText()).isEqualTo(id);
+    }
+
+    @Test
     void discussionFormatsSurvivePublishReadEditAndRejectStaleVersionOrForgedMention() throws Exception {
         JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
                 workItemBody(tasksId, "富文本讨论验收"), null, UUID.randomUUID()));
@@ -315,6 +411,39 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void discussionCountsIncludeOnlyActiveRootThreadsInProjectAndSubitemLists() throws Exception {
+        String projectItems = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+        JsonNode item = created(mutate("POST", projectItems, member,
+                workItemBody(tasksId, "讨论数量"), null, UUID.randomUUID()));
+        assertThat(ok(get(projectItems, member)).path("items").get(0).path("discussionCount").asLong()).isZero();
+        String itemId = item.path("id").asText();
+        String collection = "/api/v1/work-items/" + itemId + "/updates";
+        JsonNode root = publishComment(collection, member, "主讨论", null);
+        JsonNode otherRoot = publishComment(collection, owner, "另一条讨论", null);
+        publishComment(collection, owner, "回复不重复计数", root.path("id").asText());
+        assertThat(ok(get(projectItems, member)).path("items").get(0).path("discussionCount").asLong()).isEqualTo(2);
+
+        String subitemsPath = "/api/v1/work-items/" + itemId + "/subitems";
+        JsonNode child = created(mutate("POST", subitemsPath, member,
+                subitemBody(tasksId, "子项讨论数量"), null, UUID.randomUUID()));
+        publishComment("/api/v1/work-items/" + child.path("id").asText() + "/updates", member, "子项讨论", null);
+        assertThat(ok(get(subitemsPath, member)).path("items").get(0).path("discussionCount").asLong()).isOne();
+        JsonNode projectRows = ok(get(projectItems, member)).path("items");
+        for (JsonNode row : projectRows) {
+            if (row.path("id").asText().equals(itemId)) assertThat(row.path("discussionCount").asLong()).isEqualTo(2);
+        }
+        for (JsonNode discussion : java.util.List.of(root, otherRoot)) {
+            ok(mutate("DELETE", "/api/v1/work-item-updates/" + discussion.path("id").asText(), owner,
+                    "{}", discussion.path("etag").asText(), null));
+        }
+        projectRows = ok(get(projectItems, member)).path("items");
+        for (JsonNode row : projectRows) {
+            if (row.path("id").asText().equals(itemId)) assertThat(row.path("discussionCount").asLong()).isZero();
+        }
+        assertThat(ok(get(subitemsPath, member)).path("items").get(0).path("discussionCount").asLong()).isOne();
+    }
+
+    @Test
     void discussionThreadsEnforcePermissionsDepthAndUnlimitedAuthorEdits() throws Exception {
         JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
                 workItemBody(tasksId, "讨论串"), null, UUID.randomUUID()));
@@ -496,8 +625,11 @@ class WorkItemHttpIT {
         assertThat(mutate("PATCH", record, owner, corrected, manual.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(403);
         JsonNode edited = ok(mutate("PATCH", record, member, corrected, manual.path("etag").asText(), UUID.randomUUID()));
         assertThat(edited.path("durationMs").asLong()).isEqualTo(27 * 3600000L);
-        assertThat(mutate("DELETE", record, member, "{}", edited.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(422);
-        ok(mutate("DELETE", record, member, "{\"reason\":\"验收删除\"}", edited.path("etag").asText(), UUID.randomUUID()));
+        assertThat(mutate("DELETE", record, owner, "{}", edited.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(403);
+        assertThat(mutate("DELETE", record, member, "{}", manual.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(412);
+        UUID deletionKey = UUID.randomUUID();
+        JsonNode deleted = ok(mutate("DELETE", record, member, "{}", edited.path("etag").asText(), deletionKey));
+        assertThat(ok(mutate("DELETE", record, member, "{}", edited.path("etag").asText(), deletionKey))).isEqualTo(deleted);
         assertThat(ok(get(path, member)).path("summary").path("totalDurationMs").asLong()).isZero();
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.security_audit_event WHERE action LIKE 'TIME_TRACKING_%'").query(Long.class).single()).isEqualTo(3);
     }

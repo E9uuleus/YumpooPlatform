@@ -4,16 +4,20 @@ import {
   type ProjectWorkItemListItem,
   type WorkItemDetail,
 } from '@yumpoo/api-client'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { localProblem } from '../../api/problems'
 import ProjectWorkItemSubitemsTable from './ProjectWorkItemSubitemsTable.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 
+enableAutoUnmount(afterEach)
+
 const api = vi.hoisted(() => ({
   createWorkItemSubitem: vi.fn(),
   moveWorkItemSubitemOrder: vi.fn(),
+  getWorkItem: vi.fn(),
+  updateWorkItem: vi.fn(),
 }))
 
 vi.mock('@yumpoo/api-client', async importOriginal => ({
@@ -78,6 +82,47 @@ describe('项目工作项子表格', () => {
     api.createWorkItemSubitem.mockResolvedValue(item('created') as unknown as WorkItemDetail)
     api.moveWorkItemSubitemOrder.mockImplementation(({ subitemId }: { subitemId: string }) =>
       Promise.resolve(item(subitemId) as unknown as WorkItemDetail))
+  })
+
+  it('在子项下方插入同级草稿，失焦后创建并在当前父项内定位', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    wrapper.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('createBelow', item('child-1'))
+    await flushPromises()
+    expect(wrapper.findAll('.subitem-hierarchy-branch--data')).toHaveLength(3)
+    const rows = wrapper.findAll('.monday-subitem-table tr.el-table__row')
+    expect(rows[1]!.classes()).toContain('work-item-draft-row')
+    expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
+    await wrapper.get('.work-item-name-input input').trigger('blur')
+    await flushPromises()
+    expect(wrapper.find('.work-item-draft-row').exists()).toBe(false)
+    expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
+    wrapper.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('createBelow', item('child-1'))
+    await flushPromises()
+    await wrapper.get('.work-item-name-input input').setValue('新同级子项')
+    await wrapper.get('.work-item-name-input input').trigger('blur')
+    await flushPromises()
+    expect(api.createWorkItemSubitem).toHaveBeenCalledWith(expect.objectContaining({ parentWorkItemId: 'parent-1',
+      workItemSubitemCreateRequest: expect.objectContaining({ title: '新同级子项', priority: null, assigneeUserId: null }) }))
+    expect(api.moveWorkItemSubitemOrder).toHaveBeenCalledWith(expect.objectContaining({ parentWorkItemId: 'parent-1', subitemId: 'created',
+      projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: 'child-1', nextVisibleWorkItemId: null } }))
+    expect(wrapper.emitted('created')).toHaveLength(1)
+  })
+
+  it('编辑子项名称时暂停行拖动，保存后通知主表更新', async () => {
+    api.getWorkItem.mockResolvedValue(item('child-1'))
+    api.updateWorkItem.mockResolvedValue({ ...item('child-1'), title: '修改子项名称' })
+    const wrapper = mountTable()
+    await flushPromises()
+    const row = wrapper.get('.subitem-title-cell')
+    await row.get('.work-item-title-text').trigger('click')
+    expect(row.attributes('draggable')).toBe('false')
+    await row.get('.work-item-name-input input').setValue('修改子项名称')
+    await row.get('.work-item-name-input input').trigger('blur')
+    await flushPromises()
+    expect(wrapper.emitted('updated')?.[0]).toEqual(['child-1', expect.objectContaining({ title: '修改子项名称' })])
+    expect(row.attributes('draggable')).toBe('true')
+    expect(wrapper.emitted('openDetail')).toBeUndefined()
   })
 
   it('子表复用截止日期组件并完整转发日期和时间，不改变列宽', async () => {
@@ -162,6 +207,49 @@ describe('项目工作项子表格', () => {
     }))
     expect(wrapper.find('.subitem-quick-row').exists()).toBe(true)
     expect((input.element as HTMLInputElement).value).toBe('')
+  })
+
+  it('空输入和草稿都可点击行外关闭，输入法确认不会创建', async () => {
+    const wrapper = mountTable([])
+    await wrapper.get('.subitem-add').trigger('click')
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(false)
+    await wrapper.get('.subitem-add').trigger('click')
+    const input = wrapper.get('input[placeholder="添加子项"]')
+    await input.setValue('输入法草稿')
+    await input.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
+    expect(wrapper.get('.subitem-quick-hint').text()).toBe('Enter 新增 · Shift+Enter 连续添加')
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(false)
+    await wrapper.get('.subitem-add').trigger('click')
+    expect((wrapper.get('input[placeholder="添加子项"]').element as HTMLInputElement).value).toBe('')
+    await wrapper.get('input[placeholder="添加子项"]').trigger('keydown', { key: 'Escape' })
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(false)
+  })
+
+  it('提交中防止重复创建，失败保留草稿，Enter 重试成功后收起', async () => {
+    let rejectCreate: ((reason: Error) => void) | undefined
+    api.createWorkItemSubitem.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectCreate = reject }))
+    const wrapper = mountTable()
+    await wrapper.get('.subitem-add').trigger('click')
+    const input = wrapper.get('input[placeholder="添加子项"]')
+    await input.setValue('待创建子项')
+    await input.trigger('keydown', { key: 'Enter' })
+    await input.trigger('keydown', { key: 'Enter' })
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(api.createWorkItemSubitem).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(true)
+    rejectCreate?.(new Error('network error'))
+    await flushPromises()
+    expect((input.element as HTMLInputElement).value).toBe('待创建子项')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.find('.subitem-quick-row').exists()).toBe(false)
+    expect(wrapper.emitted('created')).toHaveLength(1)
   })
 
   it('没有启用类别时禁用子项创建', async () => {

@@ -269,7 +269,7 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
                    AND parent_item.id=active_parent.left_work_item_id
                   LEFT JOIN yumpoo.content parent_content ON parent_content.id=parent_item.content_id
                  WHERE candidate.company_id=:companyId AND candidate.project_id=:projectId
-                   AND candidate.id<>:excludedWorkItemId AND candidate.deleted_at IS NULL
+                    AND candidate.id<>:excludedWorkItemId AND candidate.deleted_at IS NULL AND NOT candidate.archived
                    AND (lower(candidate.title) LIKE :query ESCAPE '\\'
                         OR lower(candidate.item_no) LIKE :query ESCAPE '\\')
                  ORDER BY candidate.item_sequence DESC, candidate.id ASC
@@ -291,7 +291,7 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
         return jdbc.sql("""
                 SELECT count(*) FROM yumpoo.work_item
                  WHERE company_id=:companyId AND project_id=:projectId
-                   AND id<>:excludedWorkItemId AND deleted_at IS NULL
+                    AND id<>:excludedWorkItemId AND deleted_at IS NULL AND NOT archived
                    AND (lower(title) LIKE :query ESCAPE '\\'
                         OR lower(item_no) LIKE :query ESCAPE '\\')
                 """).param("companyId", companyId).param("projectId", projectId)
@@ -351,7 +351,7 @@ public class JdbcWorkItemRelationRepository implements WorkItemRelationRepositor
                    AND child.company_id=relation.company_id
                  WHERE relation.company_id=:companyId
                    AND relation.relation_type='PARENT_CHILD'
-                   AND relation.deleted_at IS NULL AND child.deleted_at IS NULL
+                    AND relation.deleted_at IS NULL AND child.deleted_at IS NULL AND NOT child.archived
                    AND relation.left_work_item_id IN (:parentIds)
                  GROUP BY relation.left_work_item_id
                 """).param("companyId", companyId).param("parentIds", parentWorkItemIds)

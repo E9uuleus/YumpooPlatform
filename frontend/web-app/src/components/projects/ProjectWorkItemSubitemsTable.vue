@@ -1,5 +1,11 @@
 <script setup lang="ts">
+import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
+import WorkItemRowActions from './WorkItemRowActions.vue'
+import WorkItemNameCell from './WorkItemNameCell.vue'
+import WorkItemDraftCell from './WorkItemDraftCell.vue'
+import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
+import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
 import {
   readCsrfToken,
   type ProjectMember,
@@ -18,7 +24,7 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, ref, type CSSProperties } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, type CSSProperties } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
@@ -74,16 +80,27 @@ const props = defineProps<{
   labelCatalog?: WorkItemLabelCatalog | undefined
   canCreate: boolean
   editingCell: boolean
+  selectedCellKey?: string | undefined
+  beforeRemove?: ((item: ProjectWorkItemListItem) => Promise<boolean>) | undefined
 }>()
 
 const vLoading = ElLoading.directive
 
+function contentLabel(item: ProjectWorkItemListItem) {
+  return props.contentCatalog?.items.find(content => content.id === item.contentId)
+    ?? { name: item.contentName, colorToken: item.contentColorToken }
+}
+
 const emit = defineEmits<{
   retry: []
+  rowChanged: [affectedIds: string[]]
+  rowMoved: [item: ProjectWorkItemListItem, parentId: string]
+  selectCell: [rowId: string, cellKey: string]
+  rowRemoved: [item: ProjectWorkItemListItem]
   sortChange: [rules: ProjectWorkItemSubitemSortRule[]]
   created: [parent: ProjectWorkItemListItem]
   updated: [id: string, detail: WorkItemDetail]
-  openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion']
+  openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity']
   patch: [item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null]
   dueDateChange: [item: ProjectWorkItemListItem, value: DueDateValue]
   contentsUpdated: [catalog: ProjectContentCatalog]
@@ -99,7 +116,8 @@ const defaultContentId = computed(() => props.activeContents.find(content => con
   ?? props.activeContents[0]?.id)
 const quickCreating = ref(false)
 const quickError = ref<ApiProblem>()
-const quickTitleInput = ref<{ focus: () => void }>()
+const quickRow = ref<HTMLElement>()
+const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const assigneeSearch = ref('')
 const draggingItem = ref<ProjectWorkItemListItem>()
 const columnDraggingKey = ref<string>()
@@ -107,7 +125,18 @@ const columnDraggingIndex = ref(-1)
 const columnDropIndex = ref<number>()
 const columnDropAllowed = ref(false)
 const subitemTableRef = ref<{ $el: HTMLElement }>()
+const subitemScrollLeft = ref(0)
 const savingSortOrder = ref(false)
+const nameEditingId = ref('')
+const { draft: inlineDraft, rows: displayItems, isDraft, start: createBelow, save: saveInlineDraft, cancel: cancelInlineDraft } = useWorkItemInlineCreate({
+  contextId: () => props.parent.id,
+  items: () => props.items,
+  canCreate: () => props.canCreate && !props.sortRules.length && !props.editingCell && !props.loading,
+  content: () => props.activeContents.find(content => content.id === defaultContentId.value),
+  status: () => props.workflowStatuses.find(status => status.active && status.statusCode === 'NOT_STARTED'),
+  parentId: () => props.parent.id,
+  created: () => emit('created', props.parent),
+})
 let columnDragPreview: HTMLElement | undefined
 let columnDragPointerOffset = { x: 0, y: 0 }
 let columnDragSourceElements: HTMLElement[] = []
@@ -125,6 +154,7 @@ const COLUMN_DRAG_POINTER_THRESHOLD = 5
 const COLUMN_DRAG_TILT_DEGREES = 1
 const COLUMN_RESIZE_HANDLE_WIDTH = 8
 const SUBITEM_ADD_COLUMN_MIN_WIDTH = 96
+const SUBITEM_MENU_COLUMN_WIDTH = 72
 
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -160,10 +190,6 @@ function priorityPresentation(priority: string | null): { label: string; tone: s
 function priorityStyle(priority: string | null): CSSProperties {
   const token = props.priorityOptions.find(item => item.code === priority)?.colorToken
   return token ? { backgroundColor: workItemLabelColorValue(token), color: 'var(--yp-text-inverse)' } : {}
-}
-
-function formatTime(value: Date | string): string {
-  return new Date(value).toLocaleString('zh-CN')
 }
 
 function sortDirection(key: ProjectWorkItemSubitemColumn['key']): 'ASC' | 'DESC' | undefined {
@@ -241,11 +267,15 @@ async function createQuick(continueAdding: boolean): Promise<void> {
     })
     emit('created', props.parent)
     if (continueAdding) quickTitle.value = ''
-    else { quickOpen.value = false; quickTitle.value = '' }
+    else closeQuick()
   } catch (reason) {
     quickError.value = await toApiProblem(reason)
   } finally {
     quickCreating.value = false
+    if (quickOpen.value) {
+      await nextTick()
+      quickTitleInput.value?.focus()
+    }
   }
 }
 
@@ -255,8 +285,22 @@ function openQuick(): void {
   void nextTick(() => quickTitleInput.value?.focus())
 }
 
+defineExpose({ openQuick })
+
+function closeQuick(): void {
+  quickOpen.value = false
+  quickTitle.value = ''
+}
+
+function onDocumentPointerDown(event: PointerEvent): void {
+  if (!quickOpen.value || quickCreating.value || quickRow.value?.contains(event.target as Node)) return
+  closeQuick()
+}
+
 function onQuickKeydown(rawEvent: Event | KeyboardEvent): void {
   const event = rawEvent as KeyboardEvent
+  if (event.isComposing || event.keyCode === 229) return
+  if (event.key === 'Escape') { closeQuick(); return }
   if (event.key !== 'Enter') return
   event.preventDefault()
   void createQuick(event.shiftKey)
@@ -587,7 +631,9 @@ function onColumnPointerCancel(event: PointerEvent): void {
   resetColumnDrag()
 }
 
+onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDown))
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown)
   clearColumnPointerTracking()
   removeColumnDragPreview()
 })
@@ -596,7 +642,11 @@ onBeforeUnmount(() => {
 <template>
   <section
     class="subitem-table-shell"
-    :style="{ '--subitem-title-column-width': `${columnWidths.title}px` }"
+    :style="{
+      '--subitem-title-column-width': `${columnWidths.title}px`,
+      '--subitem-table-scroll-left': `${subitemScrollLeft}px`,
+      '--subitem-menu-column-width': `${SUBITEM_MENU_COLUMN_WIDTH}px`,
+    }"
     :aria-label="`${parent.title} 的子项`"
     @pointerdown="onColumnPointerDown"
   >
@@ -612,9 +662,9 @@ onBeforeUnmount(() => {
         <span class="subitem-hierarchy-bar__trailing" />
       </div>
       <div class="subitem-hierarchy-branches" aria-hidden="true">
-        <template v-if="items.length">
+        <template v-if="displayItems.length">
           <span
-            v-for="item in items"
+            v-for="item in displayItems"
             :key="item.id"
             class="subitem-hierarchy-branch subitem-hierarchy-branch--data"
           />
@@ -629,7 +679,8 @@ onBeforeUnmount(() => {
       <el-table
         ref="subitemTableRef"
         v-loading="loading"
-        :data="items"
+        :data="displayItems"
+        :row-class-name="({ row: item }: { row: ProjectWorkItemListItem }) => isDraft(item) ? 'work-item-draft-row' : ''"
         row-key="id"
         class="monday-subitem-table"
         :class="{
@@ -640,11 +691,36 @@ onBeforeUnmount(() => {
         border
         :cell-style="subitemCellStyle"
         :header-cell-style="subitemHeaderCellStyle"
+        @scroll="subitemScrollLeft = $event.scrollLeft"
         @selection-change="$emit('selectionChange', parent.id, $event)"
         @header-dragend="(newWidth: number, oldWidth: number, column: { label: string }) => $emit('headerResize', newWidth, oldWidth, column)"
       >
         <el-table-column
+          :width="SUBITEM_MENU_COLUMN_WIDTH"
+          fixed
+          class-name="work-item-menu-column"
+          label-class-name="work-item-menu-column"
+        >
+          <template #default="scope">
+            <work-item-row-actions
+              v-if="!isDraft(row(scope.row))"
+              :item="row(scope.row)"
+              :parent-id="parent.id"
+              :can-create="canCreate"
+              :sorted="Boolean(sortRules.length)"
+              :disabled="editingCell || loading || savingSortOrder"
+              :before-remove="beforeRemove ? () => beforeRemove!(row(scope.row)) : undefined"
+              @open="openItem($event, 'details')"
+              @create-below="createBelow"
+              @moved="$emit('rowMoved', $event, parent.id)"
+              @changed="$emit('rowChanged', $event)"
+              @removed="$emit('rowRemoved', $event)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column
           type="selection"
+          :selectable="(item: ProjectWorkItemListItem) => !isDraft(item)"
           width="48"
           reserve-selection
           fixed
@@ -690,23 +766,39 @@ onBeforeUnmount(() => {
             <div
               v-if="column.key === 'title'"
               class="subitem-title-cell"
-              :draggable="scope.row.capabilities.canMoveInProjectOrder && !sortRules.length"
+              :draggable="scope.row.capabilities.canMoveInProjectOrder && !sortRules.length && !inlineDraft && nameEditingId !== scope.row.id"
               @dragstart="onRowDragStart(scope.row)"
               @dragend="draggingItem = undefined"
               @dragover.prevent
               @drop.prevent="dropBefore(scope.row)"
             >
-              <button class="subitem-link" @click.stop="openItem(scope.row, 'details')">
-                {{ scope.row.title }}
-              </button>
-              <button class="subitem-discussion" aria-label="打开协作讨论" @click.stop="openItem(scope.row, 'discussion')">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 13.8214 3.54139 15.5165 4.4741 16.9366L3.25 21L7.54583 19.8665C8.89531 20.5902 10.4079 21 12 21Z" stroke="currentColor" stroke-width="1.6" />
-                  <path d="M12 8.5V15.5M8.5 12H15.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-                </svg>
+              <work-item-name-cell
+                :item="row(scope.row)"
+                :disabled="editingCell"
+                :selected="selectedCellKey === `${scope.row.id}:title`"
+                :create="isDraft(row(scope.row)) ? saveInlineDraft : undefined"
+                @open="openItem(scope.row, 'details')"
+                @updated="(id, detail) => emit('updated', id, detail)"
+                @editing="active => { nameEditingId = active ? scope.row.id : ''; if (active) emit('selectCell', scope.row.id, 'title') }"
+                @cancel="cancelInlineDraft"
+              />
+              <button
+                class="subitem-discussion"
+                :disabled="isDraft(row(scope.row))"
+                :aria-label="scope.row.discussionCount ? `打开协作讨论，${scope.row.discussionCount}条讨论` : '打开协作讨论'"
+                @click.stop="openItem(scope.row, 'discussion')"
+              >
+                <WorkItemDiscussionIcon :count="scope.row.discussionCount" />
               </button>
             </div>
 
+            <work-item-draft-cell
+              v-else-if="isDraft(row(scope.row))"
+              :item="row(scope.row)"
+              :column="column.key"
+              :status-label="statusLabel(scope.row.statusCode) || '—'"
+              :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
+            />
             <el-popover v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click" @show="assigneeSearch = ''">
               <template #reference>
                 <button class="subitem-cell-button" :disabled="editingCell">
@@ -757,8 +849,8 @@ onBeforeUnmount(() => {
 
             <el-popover v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click">
               <template #reference>
-                <button class="subitem-content-pill" :style="labelCellStyle(scope.row.contentColorToken)" :disabled="editingCell">
-                  {{ scope.row.contentName || '—' }}
+                <button class="subitem-content-pill" :style="labelCellStyle(contentLabel(scope.row as ProjectWorkItemListItem).colorToken)" :disabled="editingCell">
+                  {{ contentLabel(scope.row as ProjectWorkItemListItem).name || '—' }}
                 </button>
               </template>
               <work-item-content-popover-content
@@ -779,7 +871,11 @@ onBeforeUnmount(() => {
             />
 
             <WorkItemTimerCell v-else-if="column.key === 'timeTracking'" :item="scope.row as ProjectWorkItemListItem" :project-id="projectId" />
-                  <span v-else-if="column.key === 'updatedAt'" class="subitem-timestamp">{{ formatTime(scope.row.updatedAt) }}</span>
+            <WorkItemUpdatedCell
+              v-else-if="column.key === 'updatedAt'"
+              :item="scope.row as ProjectWorkItemListItem"
+              @open-activity="emit('openDetail', scope.row as ProjectWorkItemListItem, 'activity')"
+            />
           </template>
         </el-table-column>
 
@@ -817,19 +913,22 @@ onBeforeUnmount(() => {
         </el-table-column>
 
         <template #append>
-          <div v-if="quickOpen" class="subitem-quick-row">
+          <div v-if="quickOpen" ref="quickRow" class="subitem-quick-row">
             <span class="subitem-quick-checkbox" aria-hidden="true" />
             <el-input
               ref="quickTitleInput"
               v-model="quickTitle"
-              class="subitem-quick-title"
+              class="subitem-quick-title subitem-add__field"
               maxlength="300"
               :disabled="quickCreating"
               placeholder="添加子项"
               aria-label="子项名称；Enter 创建，Shift+Enter 创建后继续"
               @keydown="onQuickKeydown"
             />
-            <el-button class="subitem-quick-submit" type="primary" :loading="quickCreating" :disabled="!quickTitle.trim() || !defaultContentId" @click="createQuick(false)">添加</el-button>
+            <div class="subitem-quick-controls">
+              <el-button class="subitem-quick-submit" size="small" type="primary" :loading="quickCreating" :disabled="!quickTitle.trim() || !defaultContentId" @click="createQuick(false)">添加</el-button>
+              <span class="subitem-quick-hint">Enter 新增 · Shift+Enter 连续添加</span>
+            </div>
           </div>
           <button v-else class="subitem-add" :disabled="!canCreate || !defaultContentId" @click="openQuick">
             <span class="subitem-quick-checkbox" aria-hidden="true" />
@@ -853,9 +952,9 @@ onBeforeUnmount(() => {
   --subitem-table-row-height: 36px;
   --subitem-table-empty-height: 60px;
   --subitem-table-quick-height: var(--subitem-table-row-height);
+  --subitem-quick-scroll-left: calc(var(--work-item-table-scroll-left, 0px) + var(--subitem-table-scroll-left, 0px));
   position: relative;
-  width: calc(100% - var(--subitem-hierarchy-indent));
-  margin-left: var(--subitem-hierarchy-indent);
+  width: 100%;
   box-sizing: border-box;
   background: var(--yp-bg-surface);
 }
@@ -870,7 +969,7 @@ onBeforeUnmount(() => {
   z-index: 2;
   right: 0;
   bottom: 0;
-  left: var(--subitem-hierarchy-bar-width);
+  left: calc(var(--subitem-menu-column-width) + var(--subitem-hierarchy-bar-width) + var(--work-item-table-scroll-left, 0px));
   height: 1px;
   background: var(--yp-monday-grid-border, var(--yp-border-subtle));
   content: '';
@@ -882,13 +981,14 @@ onBeforeUnmount(() => {
   z-index: 7;
   top: 0;
   bottom: var(--subitem-hierarchy-line-width);
-  left: 0;
+  left: var(--subitem-menu-column-width);
   display: flex;
   width: var(--subitem-hierarchy-bar-width);
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--subitem-hierarchy-corner-radius) 0 0 var(--subitem-hierarchy-corner-radius);
   pointer-events: none;
+  transform: translateX(var(--work-item-table-scroll-left, 0px));
 }
 
 .subitem-hierarchy-bar__main {
@@ -913,13 +1013,14 @@ onBeforeUnmount(() => {
   z-index: 2;
   top: var(--subitem-table-header-height);
   left: calc(
-    -1 * var(--subitem-hierarchy-indent) + var(--subitem-hierarchy-bar-center) -
+    var(--subitem-menu-column-width) - var(--subitem-hierarchy-indent) + var(--subitem-hierarchy-bar-center) -
       (var(--subitem-hierarchy-line-width) / 2)
   );
   display: flex;
   width: calc(var(--subitem-hierarchy-indent) + (var(--subitem-hierarchy-line-width) / 2));
   flex-direction: column;
   pointer-events: none;
+  transform: translateX(var(--work-item-table-scroll-left, 0px));
 }
 
 .subitem-hierarchy-branch {
@@ -1002,7 +1103,21 @@ onBeforeUnmount(() => {
 :deep(.monday-subitem-table .el-table__cell) { box-sizing: border-box; height: var(--subitem-table-row-height); padding: 0; border-color: var(--yp-border-subtle); }
 :deep(.monday-subitem-table .cell) { padding: 0 8px; display: flex; align-items: center; justify-content: center; }
 :deep(.monday-subitem-table .el-table__body .cell) { height: 34px; }
-:deep(.monday-subitem-table td.subitem-block-column > .cell) {
+:deep(.monday-subitem-table .el-table__body td.work-item-menu-column > .cell) {
+  padding: 0;
+  justify-content: flex-start;
+}
+:deep(.monday-subitem-table .work-item-row-actions) {
+  width: 32px;
+  flex: 0 0 32px;
+}
+:deep(.monday-subitem-table td.monday-column--updatedAt > .cell) {
+  --work-item-updated-cell-padding: 12px;
+  height: var(--subitem-table-row-height);
+  padding: 0;
+}
+:deep(.monday-subitem-table td.subitem-block-column > .cell),
+:deep(.monday-subitem-table td.subitem-title-column > .cell) {
   height: var(--subitem-table-row-height);
   padding: 0;
 }
@@ -1038,7 +1153,7 @@ onBeforeUnmount(() => {
   justify-content: flex-start;
   padding: 0 0 0 10px;
 }
-:deep(.monday-subitem-table th.el-table__cell) {
+:deep(.monday-subitem-table th.el-table__cell:not(.work-item-menu-column)) {
   border-top: 1px solid var(--yp-monday-grid-border, var(--yp-border-subtle)) !important;
 }
 :deep(.monday-subitem-table .subitem-selection-column) {
@@ -1161,33 +1276,66 @@ onBeforeUnmount(() => {
   cursor: col-resize;
 }
 .monday-title-column-resize-handle { overflow: visible; }
-.subitem-title-cell { width: 100%; height: 34px; display: flex; align-items: center; min-width: 0; }
-.subitem-link { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: transparent; color: var(--yp-text-primary); cursor: pointer; }
-.subitem-link:hover { color: var(--yp-link); text-decoration: underline; }
-.subitem-discussion { width: 32px; height: 32px; border: 0; background: transparent; color: var(--yp-text-secondary); cursor: pointer; }
+.subitem-title-cell { width: 100%; height: 100%; display: flex; align-items: center; min-width: 0; }
+.subitem-discussion { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 100%; box-sizing: border-box; padding: 0; border: 0; border-left: 1px solid var(--yp-monday-grid-border, var(--yp-border-subtle)); border-radius: 0; background: transparent; color: var(--yp-text-secondary); cursor: pointer; }
 .subitem-cell-button, .subitem-block-cell { width: 100%; height: 100%; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .subitem-block-cell { display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 0 var(--yp-space-2); color: var(--yp-text-inverse); }
 .subitem-popover-stack { display: grid; gap: 6px; }
 .subitem-option { min-height: 34px; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .subitem-option:hover { background: var(--yp-bg-sunken); }
-.subitem-timestamp { color: var(--yp-text-secondary); font-size: 12px; }
 .subitem-quick-row {
   --subitem-quick-control-height: 26px;
   display: grid;
   height: var(--subitem-table-quick-height);
   min-width: max-content;
-  grid-template-columns: 48px var(--subitem-title-column-width, 320px) 72px;
+  grid-template-columns: var(--subitem-menu-column-width) 48px var(--subitem-title-column-width, 320px) 1fr;
   gap: 0;
   align-items: center;
   box-sizing: border-box;
-  padding: 3px 12px 3px 0;
-  border-top: 1px solid var(--yp-border-subtle);
+  padding: 0;
+  border-top: 1px solid transparent;
   background: transparent;
   transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
-.subitem-quick-row:focus-within { background: var(--yp-bg-selected); }
-.subitem-quick-title { box-sizing: border-box; min-width: 0; padding: 0 4px 0 8px; }
+.subitem-add,
+.subitem-quick-row {
+  --subitem-quick-start: calc(var(--subitem-menu-column-width) + var(--subitem-quick-scroll-left));
+  position: relative;
+}
+.subitem-quick-row:focus-within {
+  background: linear-gradient(to right, transparent var(--subitem-quick-start), var(--yp-bg-selected) var(--subitem-quick-start));
+}
+.subitem-add::before,
+.subitem-quick-row::before {
+  position: absolute;
+  top: -1px;
+  right: 0;
+  left: var(--subitem-quick-start);
+  height: 1px;
+  background: var(--yp-border-subtle);
+  content: '';
+  pointer-events: none;
+}
+.subitem-add__field,
+.subitem-quick-controls {
+  transform: translateX(var(--subitem-quick-scroll-left));
+}
+.subitem-quick-controls { grid-column: 4; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+.subitem-quick-title.subitem-add__field { width: 100%; min-width: 0; margin: 0; outline: none; border-color: var(--yp-action-primary); background: var(--yp-bg-surface); color: var(--yp-text-primary); }
+.subitem-quick-title :deep(.el-input__wrapper) {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+}
+.subitem-quick-title :deep(.el-input__inner) { height: 100%; min-height: 0; color: inherit; font: inherit; }
+.subitem-quick-title :deep(.el-input__inner)::placeholder { color: var(--yp-text-secondary); opacity: 1; }
+.subitem-quick-hint { color: var(--yp-text-muted); font-size: 12px; white-space: nowrap; }
 .subitem-quick-checkbox {
+  grid-column: 2;
   width: 16px;
   height: 16px;
   align-self: center;
@@ -1196,35 +1344,26 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--yp-border-strong) 50%, transparent);
   border-radius: 2px;
   background: var(--yp-bg-surface);
-  transform: translateX(2px);
+  transform: translateX(calc(var(--subitem-quick-scroll-left) + 2px));
   pointer-events: none;
 }
-.subitem-quick-submit {
-  width: 64px;
-  height: var(--subitem-quick-control-height);
-  padding: 0 12px;
-}
-:deep(.subitem-quick-row .el-input__wrapper) {
+.subitem-quick-row .subitem-quick-submit {
+  width: 48px;
+  flex-shrink: 0;
   height: var(--subitem-quick-control-height);
   min-height: var(--subitem-quick-control-height);
-}
-:deep(.subitem-quick-row .el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px var(--yp-border-default) inset !important;
-}
-:deep(.subitem-quick-row .el-input__wrapper:has(input:focus-visible)) {
-  outline: none !important;
-  outline-offset: 0;
+  padding: 0 8px;
 }
 .subitem-add {
   display: grid;
   width: 100%;
   height: var(--subitem-table-row-height);
-  grid-template-columns: 48px var(--subitem-title-column-width, 320px) 1fr;
+  grid-template-columns: var(--subitem-menu-column-width) 48px var(--subitem-title-column-width, 320px) 1fr;
   align-items: center;
   box-sizing: border-box;
   padding: 0;
   border: 0;
-  border-top: 1px solid var(--yp-border-subtle);
+  border-top: 1px solid transparent;
   background: transparent;
   color: var(--yp-text-secondary);
   font: inherit;
@@ -1233,12 +1372,13 @@ onBeforeUnmount(() => {
 .subitem-add__field {
   display: flex;
   height: 26px;
-  grid-column: 2;
+  grid-column: 3;
   align-items: center;
   box-sizing: border-box;
   padding: 0 8px;
   border: 1px solid transparent;
   border-radius: var(--yp-radius-sm, 4px);
+  font: inherit;
   text-align: left;
   transition: border-color var(--yp-motion-fast) var(--yp-ease-standard),
               background-color var(--yp-motion-fast) var(--yp-ease-standard),

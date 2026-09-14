@@ -40,6 +40,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "workitem.work_item_assigned", "workitem.work_item_unassigned",
             "workitem.work_item_status_changed", "workitem.work_item_rank_changed",
             "workitem.work_item_deleted", "workitem.work_item_restored",
+            "workitem.work_item_archived", "workitem.work_item_unarchived",
             "workitem.work_item_relation_created", "workitem.work_item_relation_deleted",
             "workitem.work_item_parent_changed", "workitem.work_item_update_published",
             "workitem.work_item_update_edited", "workitem.work_item_update_deleted",
@@ -48,7 +49,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "workitem.time_tracking_added", "workitem.time_tracking_edited", "workitem.time_tracking_deleted");
     private static final Set<String> ATTACHMENT_EVENTS = Set.of(
             "filestorage.attachment_available", "filestorage.attachment_deleted");
-    private static final Set<String> V2_EVENTS = Set.of("workitem.time_tracking_edited",
+    private static final Set<String> V2_EVENTS = Set.of("workitem.time_tracking_edited", "workitem.time_tracking_deleted",
             "workitem.content_created", "workitem.content_updated", "workitem.content_deleted",
             "workitem.work_item_created", "workitem.work_item_fields_changed",
             "workitem.work_item_status_changed", "workitem.work_item_deleted",

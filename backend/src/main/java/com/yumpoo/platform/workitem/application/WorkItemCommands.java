@@ -51,4 +51,7 @@ public final class WorkItemCommands {
 
     public record Restore(CurrentActor actor, UUID workItemId, long expectedVersion,
             UUID idempotencyKey, RequestHash requestHash) {}
+
+    public record Archive(CurrentActor actor, UUID workItemId, long expectedVersion,
+            boolean archived, UUID idempotencyKey, RequestHash requestHash) {}
 }

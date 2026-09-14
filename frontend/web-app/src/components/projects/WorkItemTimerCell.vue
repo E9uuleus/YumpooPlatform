@@ -4,6 +4,7 @@ import type { ProjectWorkItemListItem } from '@yumpoo/api-client'
 import { ElPopover } from 'element-plus'
 import { formatTrackingDuration, observeTimer, useTimeTracker } from '../../composables/useTimeTracker'
 import TimeSessionDialog from '../timer/TimeSessionDialog.vue'
+import './workItemTimer.css'
 
 const props = defineProps<{ item: ProjectWorkItemListItem; projectId: string; disabled?: boolean }>()
 const tracker = useTimeTracker()
@@ -101,10 +102,8 @@ const total = computed(() => {
 </template>
 
 <style scoped>
-.timer-cell{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:var(--work-item-table-row-height,40px);padding:0 0 0 34px;box-sizing:border-box;font-variant-numeric:tabular-nums;white-space:nowrap;cursor:pointer}
-.timer-toggle{position:absolute;left:8px;display:grid;place-items:center;width:20px;height:20px;border:0;border-radius:5px;background:var(--el-color-primary);color:var(--yp-text-inverse);cursor:pointer;padding:3px}
+.timer-cell,.timer-toggle{cursor:pointer}
 .timer-toggle:hover{background:var(--el-color-primary-dark-2)}.timer-toggle:disabled{cursor:default}.timer-toggle.is-unavailable{opacity:.45}
-.timer-toggle svg{width:14px;height:14px;fill:currentColor}.duration{font-size:13px;text-align:center}
 .timer-cell:focus-visible{outline:2px solid var(--el-color-primary);outline-offset:-2px}
 :global(.time-log-popover.el-popover){padding:0;max-width:calc(100vw - 24px);box-sizing:border-box;border-radius:10px}
 </style>

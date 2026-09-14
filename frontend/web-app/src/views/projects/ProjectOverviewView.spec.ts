@@ -40,6 +40,7 @@ const state = vi.hoisted(() => ({
   createWorkItem: vi.fn(),
   createWorkItemSubitem: vi.fn(),
   getWorkItem: vi.fn(),
+  updateWorkItem: vi.fn(),
   transitionWorkItem: vi.fn(),
   routeLeave: vi.fn(),
   routeUpdate: vi.fn(),
@@ -71,6 +72,7 @@ vi.mock('../../api/client', () => ({
     createWorkItem: state.createWorkItem,
     createWorkItemSubitem: state.createWorkItemSubitem,
     getWorkItem: state.getWorkItem,
+    updateWorkItem: state.updateWorkItem,
     transitionWorkItem: state.transitionWorkItem,
   },
 }))
@@ -172,9 +174,161 @@ describe('项目级工作项首页', () => {
     state.createWorkItem.mockResolvedValue({ ...item('created'), itemNo: 'WI-2' } as unknown as WorkItemDetail)
     state.createWorkItemSubitem.mockResolvedValue({ ...item('subitem-created'), itemNo: 'WI-3' } as unknown as WorkItemDetail)
     state.getWorkItem.mockResolvedValue(item() as unknown as WorkItemDetail)
+    state.moveProjectWorkItemOrder.mockResolvedValue({ ...item('created'), itemNo: 'WI-2' } as unknown as WorkItemDetail)
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it('文字编辑保存后同步主表名称，单元格空白不打开详情', async () => {
+    state.updateWorkItem.mockResolvedValue({ ...item(), title: '已修改的名称' })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('.work-item-link').trigger('click')
+    expect(state.push).not.toHaveBeenCalled()
+    expect(wrapper.find('.work-item-name-input input').exists()).toBe(false)
+    await wrapper.get('.work-item-title-text').trigger('click')
+    await wrapper.get('.work-item-name-input input').setValue('已修改的名称')
+    await wrapper.get('.work-item-name-input input').trigger('blur')
+    await flushPromises()
+    expect(wrapper.get('.work-item-title-text').text()).toBe('已修改的名称')
+    expect(state.push).not.toHaveBeenCalled()
+  })
+
+  it('置底后加载包含目标的后续页，并保持目标名称单元格选中', async () => {
+    const target = { ...item(), title: '移动的工作项' }
+    state.listProjectWorkItems.mockResolvedValueOnce(page([target]))
+    const wrapper = mountView()
+    await flushPromises()
+    state.listProjectWorkItems.mockResolvedValueOnce({ items: [item('other')], nextCursor: 'next-page' })
+      .mockResolvedValueOnce(page([target]))
+    wrapper.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('moved', target)
+    await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'next-page' }), expect.anything())
+    expect(wrapper.get('.work-item-name-cell.monday-cell--selected').text()).toBe(target.title)
+    expect(wrapper.findAll('.work-item-title-text').map(cell => cell.text())).toEqual([item('other').title, target.title])
+  })
+
+  it('子项移动后刷新同级顺序并保持子项名称选中', async () => {
+    const parent = { ...item(), subitemCount: 2 }
+    const first = { ...item('child-1'), title: '子项一' }
+    const second = { ...item('child-2'), title: '子项二' }
+    state.listProjectWorkItems.mockResolvedValue(page([parent]))
+    state.listWorkItemSubitems.mockResolvedValue({ items: [first, second] })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('.subitem-expand-button').trigger('click')
+    await flushPromises()
+    const subtable = wrapper.findComponent({ name: 'ProjectWorkItemSubitemsTable' })
+    state.listWorkItemSubitems.mockResolvedValue({ items: [second, first] })
+    subtable.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('moved', first)
+    await flushPromises()
+    expect(subtable.get('.work-item-name-cell.monday-cell--selected').text()).toBe(first.title)
+    expect(subtable.findAll('.work-item-title-text').map(cell => cell.text())).toEqual([second.title, first.title])
+  })
+
+  it('在指定行下插入空白草稿，输入后外部点击才创建并按返回版本定位', async () => {
+    state.getProjectWorkItemLabels.mockResolvedValue({ statuses: [
+      { code: 'CUSTOM_TODO', displayName: '自定义待办', colorToken: 'BLUE', statusCategory: 'TODO', sortOrder: 1, active: true },
+      { code: 'NOT_STARTED', displayName: '未开始', colorToken: 'GRAY', statusCategory: 'TODO', sortOrder: 10, active: true },
+    ], priorities: [], rowVersion: 0, etag: '"0"', canManage: true })
+    const first = { ...item(), title: '第一行', priority: 'HIGH', assigneeUserId: 'owner-1' }
+    const second = { ...item('second'), title: '第二行' }
+    state.listProjectWorkItems.mockResolvedValue(page([first, second]))
+    const wrapper = mountView()
+    await flushPromises()
+    wrapper.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('createBelow', first)
+    await flushPromises()
+    const rows = wrapper.findAll('tr.work-item-table-row')
+    expect(rows).toHaveLength(3)
+    expect(rows[1]!.classes()).toContain('work-item-draft-row')
+    expect(rows[2]!.text()).toContain('第二行')
+    expect(rows[1]!.get<HTMLInputElement>('.work-item-name-input input').element.value).toBe('')
+    expect(rows[1]!.get('.work-item-name-input input').attributes('placeholder')).toBe('*新工作项')
+    expect(rows[1]!.find('.work-item-row-menu-trigger').exists()).toBe(false)
+    expect(rows[1]!.find('[aria-label="查看计时日志"]').exists()).toBe(false)
+    expect(rows[1]!.get('.monday-column--status').text()).toBe('未开始')
+    expect(rows[1]!.get('input[type="checkbox"]').attributes('disabled')).toBeDefined()
+    expect(state.createWorkItem).not.toHaveBeenCalled()
+    await rows[1]!.get('.work-item-name-input input').setValue('下方新行')
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(state.createWorkItem).toHaveBeenCalledTimes(1)
+    expect(state.createWorkItem).toHaveBeenCalledWith(expect.objectContaining({ workItemCreateRequest: {
+      title: '下方新行', contentId: 'content-1', priority: null, assigneeUserId: null, description: null,
+      notes: null, timelineStartDate: null, timelineEndDate: null, dueDate: null,
+    } }))
+    expect(state.moveProjectWorkItemOrder).toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'created', ifMatch: '"1"',
+      projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: first.id, nextVisibleWorkItemId: null } }))
+    expect(wrapper.find('.work-item-draft-row').exists()).toBe(false)
+  })
+
+  it('草稿可取消；创建失败保留名称且重复失焦不产生并发创建', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const menu = wrapper.findComponent({ name: 'WorkItemRowActions' })
+    menu.vm.$emit('createBelow', item())
+    await flushPromises()
+    await wrapper.get('.work-item-name-input input').trigger('keydown', { key: 'Escape' })
+    expect(wrapper.find('.work-item-draft-row').exists()).toBe(false)
+    expect(state.createWorkItem).not.toHaveBeenCalled()
+    menu.vm.$emit('createBelow', item())
+    await flushPromises()
+    await wrapper.get('.work-item-name-input input').trigger('blur')
+    expect(wrapper.find('.work-item-draft-row').exists()).toBe(false)
+    expect(state.createWorkItem).not.toHaveBeenCalled()
+    menu.vm.$emit('createBelow', item())
+    await flushPromises()
+    let rejectCreate!: (reason: Error) => void
+    state.createWorkItem.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectCreate = reject }))
+    const input = wrapper.get<HTMLInputElement>('.work-item-name-input input')
+    await input.setValue('失败后保留')
+    await input.trigger('blur')
+    await input.trigger('blur')
+    expect(state.createWorkItem).toHaveBeenCalledTimes(1)
+    rejectCreate(new Error('offline'))
+    await flushPromises()
+    expect(input.element.value).toBe('失败后保留')
+    expect(wrapper.find('.work-item-draft-row').exists()).toBe(true)
+    const requestKey = state.createWorkItem.mock.calls[0]![0].idempotencyKey
+    await input.trigger('blur')
+    await flushPromises()
+    expect(state.createWorkItem.mock.calls[1]![0].idempotencyKey).toBe(requestKey)
+    expect(wrapper.find('.work-item-draft-row').exists()).toBe(false)
+  })
+
+  it('创建成功但定位失败时仍结束草稿，避免重复创建', async () => {
+    vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({ close() {} }))
+    state.moveProjectWorkItemOrder.mockRejectedValue(new Error('conflict'))
+    const wrapper = mountView()
+    await flushPromises()
+    wrapper.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('createBelow', item())
+    await flushPromises()
+    await wrapper.get('.work-item-name-input input').setValue('定位失败仍保留')
+    await wrapper.get('.work-item-name-input input').trigger('blur')
+    await flushPromises()
+    expect(state.createWorkItem).toHaveBeenCalledTimes(1)
+    expect(ElMessage.warning).toHaveBeenCalledWith(expect.stringContaining('已创建 WI-2'))
+    expect(wrapper.find('.work-item-draft-row').exists()).toBe(false)
+  })
+
+  it('创建请求未返回时切换项目，不把草稿或迟到的新行插入另一个项目', async () => {
+    let resolveCreate!: (created: WorkItemDetail) => void
+    state.createWorkItem.mockImplementationOnce(() => new Promise(resolve => { resolveCreate = resolve }))
+    const wrapper = mountView()
+    await flushPromises()
+    wrapper.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('createBelow', item())
+    await flushPromises()
+    await wrapper.get('.work-item-name-input input').setValue('切换前提交')
+    await wrapper.get('.work-item-name-input input').trigger('blur')
+    const other = { ...item('other-project-row'), projectId: 'project-2', title: '另一个项目的工作项' }
+    state.listProjectWorkItems.mockResolvedValue(page([other]))
+    state.route.params.projectId = 'project-2'
+    await flushPromises()
+    expect(wrapper.find('.work-item-draft-row').exists()).toBe(false)
+    resolveCreate({ ...item('created'), itemNo: 'WI-2' } as unknown as WorkItemDetail)
+    await flushPromises()
+    expect(wrapper.findAll('.work-item-title-text').map(node => node.text())).toEqual(['另一个项目的工作项'])
+  })
 
   it('按固定顺序展示业务列和不可拖拽的新增列入口，并将 Content 映射为类别名称', async () => {
     const wrapper = mountView()
@@ -238,6 +392,31 @@ describe('项目级工作项首页', () => {
     await wrapper.get('button[aria-label="展开子项"]').trigger('click')
     await flushPromises()
     expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(1)
+  })
+
+  it('连续创建子项时保留旧行并补查刷新期间的新建结果', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as {
+      loadSubitems: (id: string, force?: boolean) => Promise<void>
+      onSubitemCreated: (parent: ProjectWorkItemListItem) => void
+      subitemState: (id: string) => { items: ProjectWorkItemListItem[], loaded: boolean, loading: boolean }
+    }
+    state.listWorkItemSubitems.mockResolvedValueOnce({ items: [item('old-child')] })
+    await view.loadSubitems('parent')
+    let resolveRefresh: ((value: { items: ProjectWorkItemListItem[] }) => void) | undefined
+    state.listWorkItemSubitems.mockImplementationOnce(() => new Promise(resolve => { resolveRefresh = resolve }))
+    state.listWorkItemSubitems.mockResolvedValueOnce({ items: [item('old-child'), item('child-1'), item('child-2')] })
+    view.onSubitemCreated(item('parent'))
+    view.onSubitemCreated(item('parent'))
+    expect(view.subitemState('parent').loaded).toBe(true)
+    expect(view.subitemState('parent').items.map(item => item.id)).toEqual(['old-child'])
+    expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(2)
+    resolveRefresh?.({ items: [item('old-child'), item('child-1')] })
+    await flushPromises()
+    expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(3)
+    expect(view.subitemState('parent').items.map(item => item.id)).toEqual(['old-child', 'child-1', 'child-2'])
+    expect(view.subitemState('parent').loading).toBe(false)
   })
 
   it('恢复已有自定义列宽，并将低于最小值的已保存列宽限制到最小值', async () => {
@@ -834,11 +1013,24 @@ describe('项目级工作项首页', () => {
     }), expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
 
-  it('名称和讨论按钮打开同一详情抽屉的对应区域', async () => {
+  it('应用类别目录后立即更新表格名称和颜色，无需重载工作项', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    const listCalls = state.listProjectWorkItems.mock.calls.length
+    const next = catalog()
+    next.items[0] = { ...next.items[0]!, name: '更新后的类别', colorToken: WorkItemLabelColorToken.BrightGreen }
+    wrapper.findComponent({ name: 'WorkItemContentPopoverContent' }).vm.$emit('updated', next)
+    await flushPromises()
+    expect(wrapper.get('.monday-content-label').text()).toBe('更新后的类别')
+    expect(wrapper.get('.monday-content-label').attributes('style')).toContain('--yp-label-bright-green')
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(listCalls)
+  })
+
+  it('名称右侧详情按钮、讨论和更新时间打开同一详情抽屉的对应区域', async () => {
     const wrapper = mountView()
     await flushPromises()
 
-    await wrapper.get('.work-item-link').trigger('click')
+    await wrapper.get('.work-item-detail-button').trigger('click')
     await flushPromises()
     expect(state.push).toHaveBeenCalledWith({ query: { workItemId: 'item-1' } })
     expect(state.getWorkItem).toHaveBeenLastCalledWith({ workItemId: 'item-1' })
@@ -848,6 +1040,11 @@ describe('项目级工作项首页', () => {
     await flushPromises()
     expect(state.getWorkItem).toHaveBeenCalledTimes(2)
     expect((wrapper.vm as unknown as { detailTab: string }).detailTab).toBe('discussion')
+
+    await wrapper.get('button.work-item-updated-cell').trigger('click')
+    await flushPromises()
+    expect(state.getWorkItem).toHaveBeenCalledTimes(3)
+    expect((wrapper.vm as unknown as { detailTab: string }).detailTab).toBe('activity')
   })
 
   it('直达 workItemId 路由恢复抽屉且不重复加载项目列表', async () => {
@@ -987,7 +1184,7 @@ describe('项目级工作项首页', () => {
     expect(wrapper.find('.quick-row').exists()).toBe(true)
   })
 
-  it('点击新增行外自动创建，失败时保留草稿以便重试', async () => {
+  it('点击新增行外关闭输入且不自动创建', async () => {
     state.createWorkItem.mockRejectedValue(new Error('network error'))
     const wrapper = mountView()
     await flushPromises()
@@ -998,9 +1195,51 @@ describe('项目级工作项首页', () => {
     document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     await flushPromises()
 
-    expect(state.createWorkItem).toHaveBeenCalledTimes(1)
-    expect(wrapper.find('.quick-row').exists()).toBe(true)
-    expect((input.element as HTMLInputElement).value).toBe('保留的草稿')
+    expect(state.createWorkItem).not.toHaveBeenCalled()
+    expect(wrapper.find('.quick-row').exists()).toBe(false)
+  })
+
+  it('新增后保留多页旧行直到后台查询完成，再原位替换', async () => {
+    const original = Array.from({ length: 3 }, (_, index) => item(`original-${index}`))
+    state.listProjectWorkItems.mockResolvedValueOnce(page(original))
+    const wrapper = mountView()
+    await flushPromises()
+    let resolveRefresh: ((value: ProjectWorkItemCursorPage) => void) | undefined
+    state.listProjectWorkItems.mockImplementationOnce(() => new Promise<ProjectWorkItemCursorPage>(resolve => { resolveRefresh = resolve }))
+    state.listProjectWorkItems.mockResolvedValueOnce(page(original.slice(1)))
+    await wrapper.get('.quick-add').trigger('click')
+    const input = wrapper.get('input[placeholder="添加工作项"]')
+    await input.setValue('新增刷新验证')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.find('.quick-row').exists()).toBe(false)
+    expect(wrapper.findAll('.el-table__body .el-table__row')).toHaveLength(3)
+    expect(wrapper.get('.table-surface').attributes('aria-busy')).toBe('true')
+    expect(wrapper.find('.table-surface .el-loading-mask').exists()).toBe(false)
+    resolveRefresh?.({ ...page([item('new'), ...original.slice(0, 1)]), nextCursor: 'refresh-page-2' })
+    await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: 'refresh-page-2' }), expect.anything(),
+    )
+    expect(wrapper.findAll('.el-table__body .el-table__row')).toHaveLength(4)
+    expect(wrapper.get('.table-surface').attributes('aria-busy')).toBe('false')
+  })
+
+  it('空表可直接添加，空输入点击行外关闭，输入法确认不提交', async () => {
+    state.listProjectWorkItems.mockResolvedValue(page([]))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('.monday-table--empty .quick-add').exists()).toBe(true)
+    await wrapper.get('.quick-add').trigger('click')
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('.quick-row').exists()).toBe(false)
+    await wrapper.get('.quick-add').trigger('click')
+    const input = wrapper.get('input[placeholder="添加工作项"]')
+    await input.setValue('中文输入')
+    await input.trigger('keydown', { key: 'Enter', isComposing: true })
+    expect(state.createWorkItem).not.toHaveBeenCalled()
+    expect(wrapper.get('.quick-hint').text()).toContain('Shift+Enter')
   })
 
   it('没有 ACTIVE Content 时禁用快速添加', async () => {
@@ -1271,6 +1510,13 @@ describe('项目级工作项首页', () => {
     } as unknown as PointerEvent)
     expect(view.tableDragging).toBeUndefined()
 
+    for (const selector of ['.work-item-detail-button', '.subitem-expand-button']) {
+      view.onTablePointerDown({ isPrimary: true, button: 0, pointerId: 8, clientX: 120, clientY: 220,
+        target: wrapper.get(selector).element } as unknown as PointerEvent)
+      view.onTablePointerMove({ pointerId: 8, clientX: 150, clientY: 250, preventDefault: vi.fn() } as unknown as PointerEvent)
+      expect(view.tableDragging).toBeUndefined()
+    }
+
     // 复选框本体及其留白区域均可作为拖拽起点，移动后不触发勾选点击
     const checkbox = wrapper.find('.el-table__body .monday-selection-column .el-checkbox__inner').element
     view.onTablePointerDown({
@@ -1489,9 +1735,13 @@ describe('项目级工作项首页', () => {
     expect(view.drawerWidth).toBe(480)
     window.dispatchEvent(new MouseEvent('pointerup'))
 
-    view.detailOpen = false
+    drawer.vm.$emit('close')
     await nextTick()
+    expect(view.detailOpen).toBe(false)
     expect(document.body.classList.contains('yp-work-items-drawer-open')).toBe(false)
+    expect(document.body.style.getPropertyValue('--yp-work-items-drawer-inset')).toBe('0px')
+    drawer.vm.$emit('update:modelValue', false)
+    await nextTick()
     expect(document.body.style.getPropertyValue('--yp-work-items-drawer-width')).toBe('')
   })
 

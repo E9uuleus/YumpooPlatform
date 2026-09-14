@@ -41,6 +41,8 @@ public class ActivitySummaryRenderer {
             case "WORK_ITEM_RANK_CHANGED" -> "调整了事项 " + ref + " 的顺序";
             case "WORK_ITEM_DELETED" -> "删除了事项 " + ref;
             case "WORK_ITEM_RESTORED" -> "恢复了事项 " + ref;
+            case "WORK_ITEM_ARCHIVED" -> "归档了事项 " + ref;
+            case "WORK_ITEM_UNARCHIVED" -> "取消归档事项 " + ref;
             case "WORK_ITEM_RELATION_CREATED" -> "创建了事项关系";
             case "WORK_ITEM_RELATION_DELETED" -> "解除事项关系";
             case "WORK_ITEM_PARENT_CHANGED" -> "更换事项父项";

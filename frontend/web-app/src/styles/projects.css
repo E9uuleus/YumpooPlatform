@@ -248,10 +248,6 @@
     max-width: none;
     margin: 0;
   }
-
-  body.yp-project-overview-scroll.yp-work-items-drawer-open .monday-table-surface {
-    margin-right: max(0px, calc(var(--yp-work-items-drawer-width, 560px) - var(--project-page-inline-gutter)));
-  }
 }
 
 .project-workspace,
@@ -1342,4 +1338,19 @@
 .el-dropdown__popper .content-more-dropdown-menu {
   padding: 4px !important;
   border-radius: 6px !important;
+}
+
+@property --yp-work-items-drawer-inset {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+body.yp-project-overview-scroll {
+  transition: --yp-work-items-drawer-inset var(--yp-work-items-drawer-duration, 300ms) ease;
+}
+body.yp-work-items-drawer-resizing {
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.yp-project-overview-scroll { --yp-work-items-drawer-duration: 0ms; }
 }

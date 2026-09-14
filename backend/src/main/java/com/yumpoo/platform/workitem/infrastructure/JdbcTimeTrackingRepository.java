@@ -31,7 +31,7 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
               COALESCE(w.assignee_user_id=:user,false) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration
             FROM yumpoo.work_item w JOIN yumpoo.content c ON c.id=w.content_id AND c.company_id=w.company_id
             LEFT JOIN own ON own.work_item_id=w.id
-            WHERE w.company_id=:company AND w.project_id IN (:projects) AND w.deleted_at IS NULL
+            WHERE w.company_id=:company AND w.project_id IN (:projects) AND w.deleted_at IS NULL AND NOT w.archived
               AND (:personal=false OR w.assignee_user_id=:user OR own.last_tracked_at IS NOT NULL)
               AND (:empty OR lower(w.title) LIKE :query ESCAPE '\\' OR lower(w.item_no) LIKE :query ESCAPE '\\'
             """ + projectMatch + """
@@ -56,7 +56,7 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
               WHERE company_id=:c AND user_id=:u AND deleted_at IS NULL AND source='TIMER'
               ORDER BY started_at DESC LIMIT 100)
             SELECT r.work_item_id,r.project_id,w.title FROM recent r
-            JOIN yumpoo.work_item w ON w.id=r.work_item_id AND w.company_id=:c AND w.deleted_at IS NULL
+            JOIN yumpoo.work_item w ON w.id=r.work_item_id AND w.company_id=:c AND w.deleted_at IS NULL AND NOT w.archived
             GROUP BY r.work_item_id,r.project_id,w.title ORDER BY MAX(r.started_at) DESC LIMIT 30
             """).param("c",companyId).param("u",userId)
                 .query((rs,n) -> new RecentTimeTrackingItem(rs.getObject("work_item_id",UUID.class),rs.getObject("project_id",UUID.class),rs.getString("title"))).list();

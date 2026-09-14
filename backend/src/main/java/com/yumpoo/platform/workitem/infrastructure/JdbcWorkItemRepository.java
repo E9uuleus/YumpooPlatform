@@ -34,7 +34,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             status_code, status_category, priority, assignee_user_id, reporter_user_id,
             description, notes, timeline_start_date, timeline_end_date, due_date, due_time, completed_at, rank,
             project_sort_key, row_version, created_at, created_by_user_id, updated_at, updated_by_user_id,
-            deleted_at, deleted_by_user_id, delete_reason
+            deleted_at, deleted_by_user_id, delete_reason, archived
             """;
 
     private final JdbcClient jdbc;
@@ -258,6 +258,18 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
+    public Optional<WorkItem> archive(WorkItem item, long expectedVersion) {
+        return jdbc.sql("UPDATE yumpoo.work_item SET archived=:archived, "
+                        + "updated_at=:updatedAt, updated_by_user_id=:actor, row_version=row_version+1 "
+                        + "WHERE company_id=:companyId AND project_id=:projectId AND id=:id "
+                        + "AND deleted_at IS NULL AND row_version=:version RETURNING " + COLUMNS)
+                .param("archived", item.archived()).param("updatedAt", item.updatedAt().atOffset(ZoneOffset.UTC))
+                .param("actor", item.updatedByUserId()).param("companyId", item.companyId())
+                .param("projectId", item.projectId()).param("id", item.id()).param("version", expectedVersion)
+                .query(JdbcWorkItemRepository::map).optional();
+    }
+
+    @Override
     public Optional<WorkItem> changeContent(WorkItem item, long expectedVersion) {
         return jdbc.sql("""
                 UPDATE yumpoo.work_item
@@ -345,7 +357,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     public Optional<WorkItem> lockProjectItem(UUID companyId, UUID projectId, UUID workItemId) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item "
                         + "WHERE company_id=:companyId AND project_id=:projectId "
-                        + "AND id=:workItemId AND deleted_at IS NULL FOR UPDATE")
+                        + "AND id=:workItemId AND deleted_at IS NULL AND NOT archived FOR UPDATE")
                 .param("companyId", companyId).param("projectId", projectId)
                 .param("workItemId", workItemId).query(JdbcWorkItemRepository::map).optional();
     }
@@ -461,6 +473,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item WHERE company_id=:companyId "
                         + "AND project_id=:projectId AND content_id=:contentId AND id=:workItemId "
                         + (includeDeleted ? "" : "AND deleted_at IS NULL ")
+                        + (lock && !includeDeleted ? "AND NOT archived " : "")
                         + (lock ? "FOR UPDATE" : ""))
                 .param("companyId", companyId).param("projectId", projectId)
                 .param("contentId", contentId).param("workItemId", workItemId)
@@ -677,7 +690,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         StringBuilder sql = new StringBuilder(" WHERE company_id=:companyId")
                 .append(" AND project_id=:projectId")
                 .append(contentScoped ? " AND content_id=:contentId" : "")
-                .append(" AND deleted_at IS NULL");
+                .append(" AND deleted_at IS NULL AND NOT archived");
         if (rootsOnly) {
             sql.append(" AND NOT EXISTS (SELECT 1 FROM yumpoo.work_item_relation relation ")
                     .append("WHERE relation.company_id=:companyId ")
@@ -975,7 +988,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
                 rs.getObject("created_by_user_id", UUID.class), rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
                 rs.getObject("updated_by_user_id", UUID.class), deleted == null ? null : deleted.toInstant(),
-                rs.getObject("deleted_by_user_id", UUID.class), rs.getString("delete_reason"));
+                rs.getObject("deleted_by_user_id", UUID.class), rs.getString("delete_reason"), rs.getBoolean("archived"));
     }
 
     private static JdbcClient.StatementSpec nullable(JdbcClient.StatementSpec statement,

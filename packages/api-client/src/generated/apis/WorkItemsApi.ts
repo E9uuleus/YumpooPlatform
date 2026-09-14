@@ -105,6 +105,13 @@ import {
     WorkItemViewTypeToJSON,
 } from '../models/index';
 
+export interface ArchiveWorkItemRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+}
+
 export interface ChangeWorkItemParentRequest {
     relationId: string;
     xXSRFTOKEN: string;
@@ -322,6 +329,13 @@ export interface TransitionWorkItemRequest {
     workItemTransitionRequest: WorkItemTransitionRequest;
 }
 
+export interface UnarchiveWorkItemRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+}
+
 export interface UpdateProjectWorkItemPriorityLabelRequest {
     projectId: string;
     code: string;
@@ -349,6 +363,78 @@ export interface UpdateWorkItemRequest {
  *
  */
 export class WorkItemsApi extends runtime.BaseAPI {
+
+    /**
+     * 仅改变归档标记，保留业务状态、排序、讨论和父子关系。归档项不出现在活动列表中，仍可通过详情链接查看和取消归档。
+     * 归档工作项
+     */
+    async archiveWorkItemRaw(requestParameters: ArchiveWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling archiveWorkItem().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling archiveWorkItem().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling archiveWorkItem().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling archiveWorkItem().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/archive`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅改变归档标记，保留业务状态、排序、讨论和父子关系。归档项不出现在活动列表中，仍可通过详情链接查看和取消归档。
+     * 归档工作项
+     */
+    async archiveWorkItem(requestParameters: ArchiveWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.archiveWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * 原子更换 Work Item 父项
@@ -2275,6 +2361,78 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async transitionWorkItem(requestParameters: TransitionWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.transitionWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅改变归档标记，保留业务状态、排序、讨论和父子关系。归档项不出现在活动列表中，仍可通过详情链接查看和取消归档。
+     * 取消归档工作项
+     */
+    async unarchiveWorkItemRaw(requestParameters: UnarchiveWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling unarchiveWorkItem().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling unarchiveWorkItem().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling unarchiveWorkItem().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling unarchiveWorkItem().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/unarchive`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅改变归档标记，保留业务状态、排序、讨论和父子关系。归档项不出现在活动列表中，仍可通过详情链接查看和取消归档。
+     * 取消归档工作项
+     */
+    async unarchiveWorkItem(requestParameters: UnarchiveWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.unarchiveWorkItemRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

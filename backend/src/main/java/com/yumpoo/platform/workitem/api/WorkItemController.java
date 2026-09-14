@@ -399,6 +399,32 @@ public final class WorkItemController {
         return storedResponse(stored);
     }
 
+    @PostMapping("/work-items/{workItemId}/archive")
+    ResponseEntity<String> archive(@PathVariable UUID workItemId,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
+        return changeArchive(workItemId, true, ifMatchHeader, idempotencyHeader);
+    }
+
+    @PostMapping("/work-items/{workItemId}/unarchive")
+    ResponseEntity<String> unarchive(@PathVariable UUID workItemId,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
+        return changeArchive(workItemId, false, ifMatchHeader, idempotencyHeader);
+    }
+
+    private ResponseEntity<String> changeArchive(UUID workItemId, boolean archived,
+            String ifMatchHeader, String idempotencyHeader) {
+        CurrentActor actor = actors.requiredActive();
+        service.find(actor, workItemId);
+        long version = ifMatch.parseForVisibleResource(true, ifMatchHeader);
+        String operation = archived ? "archiveWorkItem" : "unarchiveWorkItem";
+        return storedResponse(service.archive(new com.yumpoo.platform.workitem.application.WorkItemCommands.Archive(
+                actor, workItemId, version, archived, keys.parseRequired(idempotencyHeader),
+                hasher.hash(operation, Map.of("workItemId", workItemId.toString(),
+                        "ifMatch", Long.toString(version)), objectMapper.nullNode()))).result());
+    }
+
     private static ResponseEntity<String> storedResponse(StoredCommandResult stored) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);

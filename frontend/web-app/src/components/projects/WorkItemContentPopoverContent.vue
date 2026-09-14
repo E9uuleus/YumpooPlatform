@@ -219,7 +219,6 @@ async function applyChanges(): Promise<void> {
     }
     emit('updated', catalog)
     resetEditor()
-    ElMessage.success('工作项类别已更新')
   } catch (reason) {
     ElMessage.error(problemMessage(await toApiProblem(reason)))
   } finally {
@@ -276,7 +275,7 @@ async function applyChanges(): Promise<void> {
             </button>
 
             <div class="label-card-box content-card-box" :class="{ 'label-card-box--inactive': !item.active }">
-              <el-popover placement="bottom-start" :width="156" trigger="click" popper-class="color-picker-popover">
+              <el-popover placement="bottom-start" :width="156" trigger="click" popper-class="color-picker-popover" :teleported="false">
                 <template #reference>
                   <button class="color-square-btn" :style="colorStyle(item.colorToken)" type="button" title="选择颜色">
                     <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="var(--yp-text-inverse)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">

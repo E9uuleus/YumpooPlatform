@@ -107,6 +107,23 @@ public class JdbcWorkItemUpdateRepository implements WorkItemUpdateRepository {
     }
 
     @Override
+    public Map<UUID, Long> countActiveDiscussions(UUID companyId, List<UUID> workItemIds) {
+        if (workItemIds.isEmpty()) return Map.of();
+        Map<UUID, Long> counts = new LinkedHashMap<>();
+        jdbc.sql("""
+                SELECT work_item_id, count(*) AS discussion_count
+                FROM yumpoo.work_item_update
+                WHERE company_id=:companyId AND work_item_id IN (:workItemIds)
+                  AND parent_update_id IS NULL AND status<>'DELETED'
+                GROUP BY work_item_id
+                """).param("companyId", companyId).param("workItemIds", workItemIds)
+                .query((rs, row) -> Map.entry(rs.getObject("work_item_id", UUID.class),
+                        rs.getLong("discussion_count"))).list()
+                .forEach(entry -> counts.put(entry.getKey(), entry.getValue()));
+        return Map.copyOf(counts);
+    }
+
+    @Override
     public boolean pin(WorkItemUpdate update, long expectedVersion) {
         return jdbc.sql("UPDATE yumpoo.work_item_update SET pinned_at=:pinnedAt, pinned_by_user_id=:actor,"
                 + " row_version=:version WHERE company_id=:companyId AND id=:id AND row_version=:expected"

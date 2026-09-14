@@ -17,7 +17,8 @@ public record WorkItem(
         String rank, String projectSortKey,
         long rowVersion,
         Instant createdAt, UUID createdByUserId, Instant updatedAt,
-        UUID updatedByUserId, Instant deletedAt, UUID deletedByUserId, String deleteReason
+        UUID updatedByUserId, Instant deletedAt, UUID deletedByUserId, String deleteReason,
+        boolean archived
 ) {
     private static final Pattern ITEM_NO = Pattern.compile("^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$");
     private static final Pattern STATUS = Pattern.compile("^[A-Z][A-Z0-9_]{1,31}$");
@@ -98,7 +99,7 @@ public record WorkItem(
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime,
                 statusCategory == WorkItemStatusCategory.DONE ? now : null, rank,
-                projectSortKey, 0, now, reporterUserId, now, reporterUserId, null, null, null);
+                projectSortKey, 0, now, reporterUserId, now, reporterUserId, null, null, null, false);
     }
 
     public WorkItem updateFields(String nextTitle, String nextPriority,
@@ -122,7 +123,7 @@ public record WorkItem(
                 reporterUserId, nextDescription, nextNotes, nextTimelineStartDate,
                 nextTimelineEndDate, nextDueDate, nextDueTime, completedAt, rank,
                 projectSortKey, rowVersion, createdAt,
-                createdByUserId, now, actorUserId, deletedAt, deletedByUserId, deleteReason);
+                createdByUserId, now, actorUserId, deletedAt, deletedByUserId, deleteReason, archived);
     }
 
     public WorkItem changeContent(UUID nextContentId, UUID actorUserId, Instant now) {
@@ -135,7 +136,7 @@ public record WorkItem(
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt, rank,
                 projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
-                deletedAt, deletedByUserId, deleteReason);
+                deletedAt, deletedByUserId, deleteReason, archived);
     }
 
     public WorkItem move(String nextStatusCode, WorkItemStatusCategory nextStatusCategory,
@@ -154,7 +155,7 @@ public record WorkItem(
                         ? (statusCategory == WorkItemStatusCategory.DONE ? completedAt : now) : null,
                 nextRank, projectSortKey, rowVersion, createdAt, createdByUserId,
                 now, actorUserId,
-                deletedAt, deletedByUserId, deleteReason);
+                deletedAt, deletedByUserId, deleteReason, archived);
     }
 
     public WorkItem reorder(String nextRank, UUID actorUserId, Instant now) {
@@ -166,7 +167,7 @@ public record WorkItem(
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt, nextRank,
                 projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId, deletedAt,
-                deletedByUserId, deleteReason);
+                deletedByUserId, deleteReason, archived);
     }
 
     public WorkItem reorderProject(String nextProjectSortKey, UUID actorUserId) {
@@ -176,7 +177,7 @@ public record WorkItem(
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt, rank,
                 nextProjectSortKey, rowVersion, createdAt, createdByUserId, updatedAt,
-                actorUserId, deletedAt, deletedByUserId, deleteReason);
+                actorUserId, deletedAt, deletedByUserId, deleteReason, archived);
     }
 
     public WorkItem softDelete(String reason, UUID actorUserId, Instant now) {
@@ -188,7 +189,7 @@ public record WorkItem(
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt, rank,
                 projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
-                now, actorUserId, reason);
+                now, actorUserId, reason, archived);
     }
 
     public WorkItem restore(String nextRank, UUID actorUserId, Instant now) {
@@ -205,7 +206,19 @@ public record WorkItem(
                 title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt, nextRank,
                 nextProjectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
-                null, null, null);
+                null, null, null, archived);
+    }
+
+    public WorkItem archive(boolean nextArchived, UUID actorUserId, Instant now) {
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (deleted()) throw new IllegalStateException("deleted work item cannot change archive state");
+        if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
+                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt,
+                rank, projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
+                deletedAt, deletedByUserId, deleteReason, nextArchived);
     }
 
     public boolean deleted() {

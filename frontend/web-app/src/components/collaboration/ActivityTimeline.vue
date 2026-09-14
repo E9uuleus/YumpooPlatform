@@ -46,6 +46,8 @@ const eventOptions = [
   ['workitem.time_tracking_edited', '修正工时'],
   ['workitem.time_tracking_deleted', '删除工时'],
   ['workitem.work_item_created', '创建事项'],
+  ['workitem.work_item_archived', '归档事项'],
+  ['workitem.work_item_unarchived', '取消归档'],
   ['workitem.work_item_fields_changed', '修改事项'],
   ['workitem.work_item_status_changed', '状态变化'],
   ['workitem.work_item_update_published', '事项讨论'],

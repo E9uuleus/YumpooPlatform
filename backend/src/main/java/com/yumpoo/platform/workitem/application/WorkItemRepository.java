@@ -47,6 +47,7 @@ public interface WorkItemRepository {
     Optional<WorkItem> transition(WorkItem workItem, long expectedVersion);
     Optional<WorkItem> softDelete(WorkItem workItem, long expectedVersion);
     Optional<WorkItem> restore(WorkItem workItem, long expectedVersion);
+    Optional<WorkItem> archive(WorkItem workItem, long expectedVersion);
     void lockRankLanes(UUID companyId, UUID projectId, Collection<String> statuses);
     List<RankedWorkItem> findRankOrder(UUID companyId, UUID projectId,
             String statusCode);

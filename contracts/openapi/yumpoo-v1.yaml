@@ -2748,6 +2748,64 @@ paths:
         '412': { $ref: '#/components/responses/VersionConflict' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /work-items/{workItemId}/archive:
+    post:
+      tags: [WorkItems]
+      operationId: archiveWorkItem
+      summary: 归档工作项
+      description: 仅改变归档标记，保留业务状态、排序、讨论和父子关系。归档项不出现在活动列表中，仍可通过详情链接查看和取消归档。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 归档状态已更新，或返回同一幂等命令保存的结果。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-items/{workItemId}/unarchive:
+    post:
+      tags: [WorkItems]
+      operationId: unarchiveWorkItem
+      summary: 取消归档工作项
+      description: 仅改变归档标记，保留业务状态、排序、讨论和父子关系。归档项不出现在活动列表中，仍可通过详情链接查看和取消归档。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 归档状态已更新，或返回同一幂等命令保存的结果。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /work-items/{workItemId}/updates:
     get:
       tags: [WorkItemUpdates]
@@ -4462,6 +4520,9 @@ components:
         capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
         createdAt: { type: string, format: date-time, readOnly: true }
         updatedAt: { type: string, format: date-time, readOnly: true }
+        updatedByUserId: { type: string, format: uuid, readOnly: true, example: '46000000-0000-4000-8000-000000000004' }
+        updatedByDisplayName: { type: string, minLength: 1, readOnly: true, example: '林晓' }
+        archived: { type: boolean, readOnly: true, description: 是否已归档；旧服务未提供时视为 false。 }
         deleted: { type: boolean, readOnly: true }
         deletedAt: { type: string, format: date-time, nullable: true, readOnly: true }
         deletedByUserId: { type: string, format: uuid, nullable: true, readOnly: true }
@@ -4535,7 +4596,15 @@ components:
         etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
         capabilities: { $ref: '#/components/schemas/WorkItemCapabilities' }
         subitemCount: { type: integer, format: int64, minimum: 0, readOnly: true }
+        discussionCount:
+          type: integer
+          format: int64
+          minimum: 0
+          readOnly: true
+          description: 未删除的顶层讨论串数量，不含回复；旧响应省略时按 0 展示。
         updatedAt: { type: string, format: date-time, readOnly: true }
+        updatedByUserId: { type: string, format: uuid, readOnly: true, example: '46000000-0000-4000-8000-000000000004' }
+        updatedByDisplayName: { type: string, minLength: 1, readOnly: true, example: '林晓' }
 
     ProjectWorkItemCursorPage:
       type: object

@@ -198,6 +198,24 @@ export interface WorkItemDetail {
     readonly updatedAt: Date;
     /**
      *
+     * @type {string}
+     * @memberof WorkItemDetail
+     */
+    readonly updatedByUserId?: string;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemDetail
+     */
+    readonly updatedByDisplayName?: string;
+    /**
+     * 是否已归档；旧服务未提供时视为 false。
+     * @type {boolean}
+     * @memberof WorkItemDetail
+     */
+    readonly archived?: boolean;
+    /**
+     *
      * @type {boolean}
      * @memberof WorkItemDetail
      */
@@ -295,6 +313,9 @@ export function WorkItemDetailFromJSONTyped(json: any, ignoreDiscriminator: bool
         'capabilities': WorkItemCapabilitiesFromJSON(json['capabilities']),
         'createdAt': (new Date(json['createdAt'])),
         'updatedAt': (new Date(json['updatedAt'])),
+        'updatedByUserId': json['updatedByUserId'] == null ? undefined : json['updatedByUserId'],
+        'updatedByDisplayName': json['updatedByDisplayName'] == null ? undefined : json['updatedByDisplayName'],
+        'archived': json['archived'] == null ? undefined : json['archived'],
         'deleted': json['deleted'],
         'deletedAt': (json['deletedAt'] == null ? null : new Date(json['deletedAt'])),
         'deletedByUserId': json['deletedByUserId'],
@@ -306,7 +327,7 @@ export function WorkItemDetailToJSON(json: any): WorkItemDetail {
     return WorkItemDetailToJSONTyped(json, false);
 }
 
-export function WorkItemDetailToJSONTyped(value?: Omit<WorkItemDetail, 'completedAt'|'rowVersion'|'etag'|'createdAt'|'updatedAt'|'deleted'|'deletedAt'|'deletedByUserId'|'deleteReason'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemDetailToJSONTyped(value?: Omit<WorkItemDetail, 'completedAt'|'rowVersion'|'etag'|'createdAt'|'updatedAt'|'updatedByUserId'|'updatedByDisplayName'|'archived'|'deleted'|'deletedAt'|'deletedByUserId'|'deleteReason'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

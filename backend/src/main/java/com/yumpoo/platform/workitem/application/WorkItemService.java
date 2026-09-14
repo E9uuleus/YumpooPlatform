@@ -79,6 +79,7 @@ public class WorkItemService {
 
     private final WorkItemRepository workItems;
     private final WorkItemRelationRepository relations;
+    private final WorkItemUpdateRepository updates;
     private final ContentRepository contents;
     private final ProjectAccessSnapshotQuery access;
     private final ProjectFactWriteGuard writeGuard;
@@ -95,7 +96,7 @@ public class WorkItemService {
             new ProjectWorkItemFilterCursorCodec();
 
     public WorkItemService(WorkItemRepository workItems, WorkItemRelationRepository relations,
-            ContentRepository contents,
+            ContentRepository contents, WorkItemUpdateRepository updates,
             ProjectAccessSnapshotQuery access, ProjectFactWriteGuard writeGuard,
             ProjectActiveMembershipQuery activeMemberships,
             WorkItemLabelRepository labels, MinimalUserSnapshotQuery users,
@@ -103,6 +104,7 @@ public class WorkItemService {
             ObjectMapper objectMapper, Clock clock, TimeTrackingRepository timeTracking) {
         this.workItems = workItems;
         this.relations = relations;
+        this.updates = updates;
         this.contents = contents;
         this.access = access;
         this.writeGuard = writeGuard;
@@ -199,6 +201,8 @@ public class WorkItemService {
         contents.findAll(project.companyId(), project.projectId())
                 .forEach(content -> contentById.put(content.id(), content));
         Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), rows);
+        Map<UUID, Long> discussionCounts = updates.countActiveDiscussions(project.companyId(),
+                rows.stream().map(WorkItem::id).toList());
         Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
                 rows.stream().map(WorkItem::id).toList());
         Map<UUID,TimeTrackingModels.TimeTrackingSummary> timeSummaries=timeTracking.summaries(actor.companyId(),projectId,
@@ -207,7 +211,8 @@ public class WorkItemService {
         List<ProjectWorkItemListItem> items = rows.stream()
                 .map(item -> projectListItem(item, contentById.get(item.contentId()), people,
                         canEdit(project, contentById.get(item.contentId())), statusLabels,
-                        subitemCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList();
+                        subitemCounts.getOrDefault(item.id(), 0L),
+                        discussionCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList();
         String nextCursor = hasMore && !rows.isEmpty()
                 ? projectCursors.encode(new ProjectWorkItemCursorCodec.Cursor(
                         fingerprint, effectiveView,
@@ -243,6 +248,8 @@ public class WorkItemService {
         contents.findAll(project.companyId(), project.projectId())
                 .forEach(content -> contentById.put(content.id(), content));
         Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), rows);
+        Map<UUID, Long> discussionCounts = updates.countActiveDiscussions(project.companyId(),
+                rows.stream().map(WorkItem::id).toList());
         Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
                 rows.stream().map(WorkItem::id).toList());
         Map<UUID,TimeTrackingModels.TimeTrackingSummary> timeSummaries=timeTracking.summaries(actor.companyId(),project.projectId(),
@@ -251,7 +258,8 @@ public class WorkItemService {
         return new WorkItemSubitemList(rows.stream().map(item -> projectListItem(item,
                 contentById.get(item.contentId()), people,
                 canEdit(project, contentById.get(item.contentId())), statusLabels,
-                subitemCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList());
+                subitemCounts.getOrDefault(item.id(), 0L),
+                        discussionCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList());
     }
 
     @Transactional(readOnly = true)
@@ -709,6 +717,38 @@ public class WorkItemService {
                 command.requestHash()), () -> delete(command, locator, reason));
     }
 
+    public IdempotencyExecutionResult archive(WorkItemCommands.Archive command) {
+        requireActor(command.actor());
+        WorkItemLocator locator = workItems.findLocator(command.actor().companyId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireWritableAccess(visible(command.actor(), locator.projectId()).actorAccess());
+        String operation = command.archived() ? "archiveWorkItem" : "unarchiveWorkItem";
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
+                command.actor().userId(), "POST", operation, command.idempotencyKey()), command.requestHash()), () -> {
+            ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(command.actor(), locator.projectId());
+            requireWritableAccess(project.actorAccess());
+            contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            WorkItem before = workItems.lockIncludingDeleted(project.companyId(), project.projectId(),
+                            locator.contentId(), command.workItemId())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            requireVersion(before, command.expectedVersion());
+            if (before.deleted()) throw invalidLifecycle("WORK_ITEM_ALREADY_DELETED");
+            WorkItem after = before;
+            if (before.archived() != command.archived()) {
+                after = workItems.archive(before.archive(command.archived(), command.actor().userId(), clock.instant()),
+                                command.expectedVersion())
+                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+                Map<String, Object> payload = lifecycleEventPayload(after);
+                payload.put("archived", after.archived());
+                append(command.archived() ? "workitem.work_item_archived" : "workitem.work_item_unarchived",
+                        after, command.actor(), payload);
+            }
+            return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
+                    labels.statuses(project.companyId(), project.projectId())));
+        });
+    }
+
     private StoredCommandResult delete(Delete command, WorkItemLocator locator, String reason) {
         ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
                 command.actor(), locator.projectId());
@@ -1036,6 +1076,7 @@ public class WorkItemService {
         Set<UUID> userIds = new LinkedHashSet<>();
         for (WorkItem item : rows) {
             userIds.add(item.reporterUserId());
+            userIds.add(item.updatedByUserId());
             if (item.assigneeUserId() != null) userIds.add(item.assigneeUserId());
         }
         return users.findByUserIds(companyId, userIds);
@@ -1095,7 +1136,7 @@ public class WorkItemService {
 
     private static ProjectWorkItemListItem projectListItem(WorkItem item, Content content,
             Map<UUID, MinimalUserSnapshot> people, boolean canEditFields,
-            List<WorkItemLabelModels.StatusLabel> statusLabels, long subitemCount) {
+            List<WorkItemLabelModels.StatusLabel> statusLabels, long subitemCount, long discussionCount) {
         return new ProjectWorkItemListItem(item.id(), item.projectId(), item.contentId(),
                 content == null ? "未知类别" : content.name(),
                 content == null ? "GRAY" : content.colorToken(), item.itemNo(),
@@ -1104,8 +1145,13 @@ public class WorkItemService {
                 item.rowVersion(), StrongEtag.format(item.rowVersion()),
                 new WorkItemCapabilities(canEditFields, canEditFields, canEditFields,
                         canEditFields, canEditFields, false,
-                        availableTransitions(item, canEditFields, statusLabels)), subitemCount,
-                item.updatedAt());
+                        availableTransitions(item, canEditFields, statusLabels)), subitemCount, discussionCount,
+                item.updatedAt(), item.updatedByUserId(), updatedByDisplayName(item, people));
+    }
+
+    private static String updatedByDisplayName(WorkItem item, Map<UUID, MinimalUserSnapshot> people) {
+        var person = people.get(item.updatedByUserId());
+        return person == null ? "历史成员" : person.displayName();
     }
 
     private WorkItemDetail detail(WorkItem item,
@@ -1120,13 +1166,13 @@ public class WorkItemService {
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
                 item.dueDate(), dueTimeText(item), item.completedAt(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
-                new WorkItemCapabilities(canEditFields && !item.deleted(),
-                        canEditFields && !item.deleted(), canEditFields && !item.deleted(),
-                        canEditFields && !item.deleted(), canEditFields && !item.deleted(),
+                new WorkItemCapabilities(canEditFields && !item.deleted() && !item.archived(),
+                        canEditFields && !item.deleted() && !item.archived(), canEditFields && !item.deleted() && !item.archived(),
+                        canEditFields && !item.deleted() && !item.archived(), canEditFields && !item.deleted(),
                         canEditFields && item.deleted(),
-                        availableTransitions(item, canEditFields && !item.deleted(), statusLabels)),
+                        availableTransitions(item, canEditFields && !item.deleted() && !item.archived(), statusLabels)),
                 item.createdAt(), item.updatedAt(), item.deleted(), item.deletedAt(),
-                item.deletedByUserId(), item.deleteReason());
+                item.deletedByUserId(), item.deleteReason(), item.updatedByUserId(), updatedByDisplayName(item, people), item.archived());
     }
 
     private static List<WorkItemTransitionOption> availableTransitions(WorkItem item,

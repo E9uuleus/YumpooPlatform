@@ -73,6 +73,19 @@ const global = {
 describe('WorkItemCellActivityLog', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('删除记录显示操作成员、时间及被删除范围', async () => {
+    const item = entry('timer-delete', WorkItemCellActivityChangeType.Removed, WorkItemCellActivityColumn.TimeTracking)
+    item.beforeValue = { type: WorkItemCellActivityValueType.Text, referenceId: null, colorToken: null, displayName: '2026-09-01T01:00:00Z/2026-09-01T02:00:00Z' }
+    api.list.mockResolvedValue(page([item], null))
+    const wrapper = mount(WorkItemCellActivityLog, { props: { workItemId: 'item' }, global })
+    await flushPromises()
+    expect(wrapper.text()).toContain('林晓')
+    expect(wrapper.text()).toContain('删除计时记录')
+    expect(wrapper.text()).toContain('2026-09-01 09:00 – 2026-09-01 10:00')
+    expect(wrapper.text()).toContain('2分钟前')
+    wrapper.unmount()
+  })
+
   it('计时器修改前后范围按公司时区显示到分钟', async () => {
     const item = entry('timer-edit', WorkItemCellActivityChangeType.Changed, WorkItemCellActivityColumn.TimeTracking)
     item.beforeValue = { type: WorkItemCellActivityValueType.Text, referenceId: null, colorToken: null, displayName: '2026-09-01T01:00:00Z/2026-09-01T02:00:00Z' }
