@@ -103,7 +103,8 @@ public class TimeTrackingService {
             rows=rows.subList(0,50); Session last=rows.getLast();
             next=Base64.getUrlEncoder().withoutPadding().encodeToString((itemId+"|"+last.startedAt()+"|"+last.id()).getBytes(StandardCharsets.UTF_8));
         }
-        boolean writable=canWrite(project); Instant now=now();
+        boolean writable=canWrite(project) && items.find(actor.companyId(),locator.projectId(),locator.contentId(),itemId)
+                .filter(item -> !item.archived()).isPresent(); Instant now=now();
         var names=users.findByUserIds(actor.companyId(),rows.stream().map(Session::userId).collect(java.util.stream.Collectors.toSet()));
         return new SessionPage(rows.stream().map(s -> view(s,actor,writable,now,true,names)).toList(),next,
                 timers.summaries(actor.companyId(),locator.projectId(),actor.userId(),List.of(itemId),now).getFirst(),now,writable);

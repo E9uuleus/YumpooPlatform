@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
+import WorkItemRowActions from './WorkItemRowActions.vue'
+import WorkItemNameCell from './WorkItemNameCell.vue'
+import WorkItemDraftCell from './WorkItemDraftCell.vue'
+import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
 import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
 import {
@@ -76,6 +80,8 @@ const props = defineProps<{
   labelCatalog?: WorkItemLabelCatalog | undefined
   canCreate: boolean
   editingCell: boolean
+  selectedCellKey?: string | undefined
+  beforeRemove?: ((item: ProjectWorkItemListItem) => Promise<boolean>) | undefined
 }>()
 
 const vLoading = ElLoading.directive
@@ -87,6 +93,10 @@ function contentLabel(item: ProjectWorkItemListItem) {
 
 const emit = defineEmits<{
   retry: []
+  rowChanged: [affectedIds: string[]]
+  rowMoved: [item: ProjectWorkItemListItem, parentId: string]
+  selectCell: [rowId: string, cellKey: string]
+  rowRemoved: [item: ProjectWorkItemListItem]
   sortChange: [rules: ProjectWorkItemSubitemSortRule[]]
   created: [parent: ProjectWorkItemListItem]
   updated: [id: string, detail: WorkItemDetail]
@@ -107,7 +117,7 @@ const defaultContentId = computed(() => props.activeContents.find(content => con
 const quickCreating = ref(false)
 const quickError = ref<ApiProblem>()
 const quickRow = ref<HTMLElement>()
-const quickTitleInput = ref<{ focus: () => void }>()
+const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const assigneeSearch = ref('')
 const draggingItem = ref<ProjectWorkItemListItem>()
 const columnDraggingKey = ref<string>()
@@ -116,6 +126,16 @@ const columnDropIndex = ref<number>()
 const columnDropAllowed = ref(false)
 const subitemTableRef = ref<{ $el: HTMLElement }>()
 const savingSortOrder = ref(false)
+const nameEditingId = ref('')
+const { draft: inlineDraft, rows: displayItems, isDraft, start: createBelow, save: saveInlineDraft, cancel: cancelInlineDraft } = useWorkItemInlineCreate({
+  contextId: () => props.parent.id,
+  items: () => props.items,
+  canCreate: () => props.canCreate && !props.sortRules.length && !props.editingCell && !props.loading,
+  content: () => props.activeContents.find(content => content.id === defaultContentId.value),
+  status: () => props.workflowStatuses.find(status => status.active && status.statusCode === 'NOT_STARTED'),
+  parentId: () => props.parent.id,
+  created: () => emit('created', props.parent),
+})
 let columnDragPreview: HTMLElement | undefined
 let columnDragPointerOffset = { x: 0, y: 0 }
 let columnDragSourceElements: HTMLElement[] = []
@@ -262,6 +282,8 @@ function openQuick(): void {
   quickOpen.value = true
   void nextTick(() => quickTitleInput.value?.focus())
 }
+
+defineExpose({ openQuick })
 
 function closeQuick(): void {
   quickOpen.value = false
@@ -634,9 +656,9 @@ onBeforeUnmount(() => {
         <span class="subitem-hierarchy-bar__trailing" />
       </div>
       <div class="subitem-hierarchy-branches" aria-hidden="true">
-        <template v-if="items.length">
+        <template v-if="displayItems.length">
           <span
-            v-for="item in items"
+            v-for="item in displayItems"
             :key="item.id"
             class="subitem-hierarchy-branch subitem-hierarchy-branch--data"
           />
@@ -651,7 +673,8 @@ onBeforeUnmount(() => {
       <el-table
         ref="subitemTableRef"
         v-loading="loading"
-        :data="items"
+        :data="displayItems"
+        :row-class-name="({ row: item }: { row: ProjectWorkItemListItem }) => isDraft(item) ? 'work-item-draft-row' : ''"
         row-key="id"
         class="monday-subitem-table"
         :class="{
@@ -666,7 +689,31 @@ onBeforeUnmount(() => {
         @header-dragend="(newWidth: number, oldWidth: number, column: { label: string }) => $emit('headerResize', newWidth, oldWidth, column)"
       >
         <el-table-column
+          width="32"
+          fixed
+          class-name="work-item-menu-column"
+          label-class-name="work-item-menu-column"
+        >
+          <template #default="scope">
+            <work-item-row-actions
+              v-if="!isDraft(row(scope.row))"
+              :item="row(scope.row)"
+              :parent-id="parent.id"
+              :can-create="canCreate"
+              :sorted="Boolean(sortRules.length)"
+              :disabled="editingCell || loading || savingSortOrder"
+              :before-remove="beforeRemove ? () => beforeRemove!(row(scope.row)) : undefined"
+              @open="openItem($event, 'details')"
+              @create-below="createBelow"
+              @moved="$emit('rowMoved', $event, parent.id)"
+              @changed="$emit('rowChanged', $event)"
+              @removed="$emit('rowRemoved', $event)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column
           type="selection"
+          :selectable="(item: ProjectWorkItemListItem) => !isDraft(item)"
           width="48"
           reserve-selection
           fixed
@@ -712,20 +759,39 @@ onBeforeUnmount(() => {
             <div
               v-if="column.key === 'title'"
               class="subitem-title-cell"
-              :draggable="scope.row.capabilities.canMoveInProjectOrder && !sortRules.length"
+              :draggable="scope.row.capabilities.canMoveInProjectOrder && !sortRules.length && !inlineDraft && nameEditingId !== scope.row.id"
               @dragstart="onRowDragStart(scope.row)"
               @dragend="draggingItem = undefined"
               @dragover.prevent
               @drop.prevent="dropBefore(scope.row)"
             >
-              <button class="subitem-link" @click.stop="openItem(scope.row, 'details')">
-                {{ scope.row.title }}
-              </button>
-              <button class="subitem-discussion" :aria-label="scope.row.discussionCount ? `打开协作讨论，${scope.row.discussionCount}条讨论` : '打开协作讨论'" @click.stop="openItem(scope.row, 'discussion')">
+              <work-item-name-cell
+                :item="row(scope.row)"
+                :disabled="editingCell"
+                :selected="selectedCellKey === `${scope.row.id}:title`"
+                :create="isDraft(row(scope.row)) ? saveInlineDraft : undefined"
+                @open="openItem(scope.row, 'details')"
+                @updated="(id, detail) => emit('updated', id, detail)"
+                @editing="active => { nameEditingId = active ? scope.row.id : ''; if (active) emit('selectCell', scope.row.id, 'title') }"
+                @cancel="cancelInlineDraft"
+              />
+              <button
+                class="subitem-discussion"
+                :disabled="isDraft(row(scope.row))"
+                :aria-label="scope.row.discussionCount ? `打开协作讨论，${scope.row.discussionCount}条讨论` : '打开协作讨论'"
+                @click.stop="openItem(scope.row, 'discussion')"
+              >
                 <WorkItemDiscussionIcon :count="scope.row.discussionCount" />
               </button>
             </div>
 
+            <work-item-draft-cell
+              v-else-if="isDraft(row(scope.row))"
+              :item="row(scope.row)"
+              :column="column.key"
+              :status-label="statusLabel(scope.row.statusCode) || '—'"
+              :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
+            />
             <el-popover v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click" @show="assigneeSearch = ''">
               <template #reference>
                 <button class="subitem-cell-button" :disabled="editingCell">
@@ -798,11 +864,11 @@ onBeforeUnmount(() => {
             />
 
             <WorkItemTimerCell v-else-if="column.key === 'timeTracking'" :item="scope.row as ProjectWorkItemListItem" :project-id="projectId" />
-                  <WorkItemUpdatedCell
-                    v-else-if="column.key === 'updatedAt'"
-                    :item="scope.row as ProjectWorkItemListItem"
-                    @open-activity="emit('openDetail', scope.row as ProjectWorkItemListItem, 'activity')"
-                  />
+            <WorkItemUpdatedCell
+              v-else-if="column.key === 'updatedAt'"
+              :item="scope.row as ProjectWorkItemListItem"
+              @open-activity="emit('openDetail', scope.row as ProjectWorkItemListItem, 'activity')"
+            />
           </template>
         </el-table-column>
 
@@ -842,17 +908,17 @@ onBeforeUnmount(() => {
         <template #append>
           <div v-if="quickOpen" ref="quickRow" class="subitem-quick-row">
             <span class="subitem-quick-checkbox" aria-hidden="true" />
+            <el-input
+              ref="quickTitleInput"
+              v-model="quickTitle"
+              class="subitem-quick-title subitem-add__field"
+              maxlength="300"
+              :disabled="quickCreating"
+              placeholder="添加子项"
+              aria-label="子项名称；Enter 创建，Shift+Enter 创建后继续"
+              @keydown="onQuickKeydown"
+            />
             <div class="subitem-quick-controls">
-              <el-input
-                ref="quickTitleInput"
-                v-model="quickTitle"
-                class="subitem-quick-title"
-                maxlength="300"
-                :disabled="quickCreating"
-                placeholder="添加子项"
-                aria-label="子项名称；Enter 创建，Shift+Enter 创建后继续"
-                @keydown="onQuickKeydown"
-              />
               <el-button class="subitem-quick-submit" size="small" type="primary" :loading="quickCreating" :disabled="!quickTitle.trim() || !defaultContentId" @click="createQuick(false)">添加</el-button>
               <span class="subitem-quick-hint">Enter 新增 · Shift+Enter 连续添加</span>
             </div>
@@ -896,7 +962,7 @@ onBeforeUnmount(() => {
   z-index: 2;
   right: 0;
   bottom: 0;
-  left: var(--subitem-hierarchy-bar-width);
+  left: calc(32px + var(--subitem-hierarchy-bar-width));
   height: 1px;
   background: var(--yp-monday-grid-border, var(--yp-border-subtle));
   content: '';
@@ -908,7 +974,7 @@ onBeforeUnmount(() => {
   z-index: 7;
   top: 0;
   bottom: var(--subitem-hierarchy-line-width);
-  left: 0;
+  left: 32px;
   display: flex;
   width: var(--subitem-hierarchy-bar-width);
   flex-direction: column;
@@ -939,7 +1005,7 @@ onBeforeUnmount(() => {
   z-index: 2;
   top: var(--subitem-table-header-height);
   left: calc(
-    -1 * var(--subitem-hierarchy-indent) + var(--subitem-hierarchy-bar-center) -
+    32px - var(--subitem-hierarchy-indent) + var(--subitem-hierarchy-bar-center) -
       (var(--subitem-hierarchy-line-width) / 2)
   );
   display: flex;
@@ -1193,8 +1259,6 @@ onBeforeUnmount(() => {
 }
 .monday-title-column-resize-handle { overflow: visible; }
 .subitem-title-cell { width: 100%; height: 34px; display: flex; align-items: center; min-width: 0; }
-.subitem-link { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: transparent; color: var(--yp-text-primary); cursor: pointer; }
-.subitem-link:hover { color: var(--yp-link); text-decoration: underline; }
 .subitem-discussion { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 32px; padding: 0; border: 0; background: transparent; color: var(--yp-text-secondary); cursor: pointer; }
 .subitem-cell-button, .subitem-block-cell { width: 100%; height: 100%; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .subitem-block-cell { display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 0 var(--yp-space-2); color: var(--yp-text-inverse); }
@@ -1206,7 +1270,7 @@ onBeforeUnmount(() => {
   display: grid;
   height: var(--subitem-table-quick-height);
   min-width: max-content;
-  grid-template-columns: 48px 1fr;
+  grid-template-columns: 32px 48px var(--subitem-title-column-width, 320px) 1fr;
   gap: 0;
   align-items: center;
   box-sizing: border-box;
@@ -1216,10 +1280,12 @@ onBeforeUnmount(() => {
   transition: background-color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 .subitem-quick-row:focus-within { background: var(--yp-bg-selected); }
-.subitem-quick-controls { display: flex; align-items: center; gap: 8px; padding: 0 8px; }
-.subitem-quick-title { width: 280px; flex: 0 1 280px; box-sizing: border-box; min-width: 0; }
+.subitem-quick-controls { grid-column: 4; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+.subitem-quick-title.subitem-add__field { width: 100%; min-width: 0; margin: 0; outline: none; border-color: var(--yp-action-primary); background: var(--yp-bg-surface); color: var(--yp-text-primary); }
+.subitem-quick-title::placeholder { color: var(--yp-text-secondary); opacity: 1; }
 .subitem-quick-hint { color: var(--yp-text-muted); font-size: 12px; white-space: nowrap; }
 .subitem-quick-checkbox {
+  grid-column: 2;
   width: 16px;
   height: 16px;
   align-self: center;
@@ -1238,22 +1304,11 @@ onBeforeUnmount(() => {
   min-height: var(--subitem-quick-control-height);
   padding: 0 8px;
 }
-:deep(.subitem-quick-row .el-input__wrapper) {
-  height: var(--subitem-quick-control-height);
-  min-height: var(--subitem-quick-control-height);
-}
-:deep(.subitem-quick-row .el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px var(--yp-border-default) inset !important;
-}
-:deep(.subitem-quick-row .el-input__wrapper:has(input:focus-visible)) {
-  outline: none !important;
-  outline-offset: 0;
-}
 .subitem-add {
   display: grid;
   width: 100%;
   height: var(--subitem-table-row-height);
-  grid-template-columns: 48px var(--subitem-title-column-width, 320px) 1fr;
+  grid-template-columns: 32px 48px var(--subitem-title-column-width, 320px) 1fr;
   align-items: center;
   box-sizing: border-box;
   padding: 0;
@@ -1267,12 +1322,13 @@ onBeforeUnmount(() => {
 .subitem-add__field {
   display: flex;
   height: 26px;
-  grid-column: 2;
+  grid-column: 3;
   align-items: center;
   box-sizing: border-box;
   padding: 0 8px;
   border: 1px solid transparent;
   border-radius: var(--yp-radius-sm, 4px);
+  font: inherit;
   text-align: left;
   transition: border-color var(--yp-motion-fast) var(--yp-ease-standard),
               background-color var(--yp-motion-fast) var(--yp-ease-standard),

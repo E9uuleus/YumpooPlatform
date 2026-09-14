@@ -28,7 +28,8 @@ public final class WorkItemModels {
             String dueTime, Instant completedAt,
             long rowVersion, String etag, WorkItemCapabilities capabilities,
             Instant createdAt, Instant updatedAt, boolean deleted, Instant deletedAt,
-            UUID deletedByUserId, String deleteReason, UUID updatedByUserId, String updatedByDisplayName) {}
+            UUID deletedByUserId, String deleteReason, UUID updatedByUserId, String updatedByDisplayName,
+            boolean archived) {}
 
     public record WorkItemTransitionOption(String toStatus, String displayName,
             String statusCategory, boolean requiresResolution) {}

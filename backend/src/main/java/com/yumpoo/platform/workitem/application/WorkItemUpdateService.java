@@ -113,7 +113,7 @@ public class WorkItemUpdateService {
         ProjectAccessSnapshot project = visible(actor, locator.projectId());
         Content content = contents.find(project.companyId(), project.projectId(), locator.contentId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        workItems.find(project.companyId(), project.projectId(), locator.contentId(), workItemId)
+        WorkItem item = workItems.find(project.companyId(), project.projectId(), locator.contentId(), workItemId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         int pageSize = pageSize(size);
         UpdateCursor before = cursors.decode(cursor);
@@ -125,7 +125,7 @@ public class WorkItemUpdateService {
         String nextCursor = hasMore && !rows.isEmpty()
                 ? cursors.encode(new UpdateCursor(rows.getFirst().createdAt(), rows.getFirst().id()))
                 : null;
-        boolean writable = project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+        boolean writable = !item.archived() && project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
         boolean owner = project.actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER;
         return new WorkItemUpdatePage(rows.stream()
@@ -139,7 +139,7 @@ public class WorkItemUpdateService {
         ReadContext context = visibleUpdate(actor, updateId);
         WorkItemUpdate update = updates.find(context.project().companyId(), updateId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        boolean writable = context.project().lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+        boolean writable = !context.item().archived() && context.project().lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
                 && context.project().actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
         return view(update, actor, writable,
                 context.project().actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER);
@@ -267,7 +267,7 @@ public class WorkItemUpdateService {
         WorkItemUpdate parent = updates.find(context.project().companyId(), updateId)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireReplyParent(parent, parent.workItemId());
-        boolean writable = context.project().lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
+        boolean writable = !context.item().archived() && context.project().lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
                 && context.project().actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
         return replyPage(parent, actor, writable,
                 context.project().actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER, cursor, pageSize(size));

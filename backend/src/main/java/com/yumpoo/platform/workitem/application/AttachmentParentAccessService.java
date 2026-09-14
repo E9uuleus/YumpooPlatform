@@ -56,17 +56,17 @@ public class AttachmentParentAccessService {
             ProjectAccessSnapshot project=visible(actor,locator.projectId());
             Content content=contents.find(project.companyId(),project.projectId(),locator.contentId()).orElseThrow(AttachmentParentAccessService::notFound);
             WorkItem item=workItems.find(project.companyId(),project.projectId(),locator.contentId(),ownerId).orElseThrow(AttachmentParentAccessService::notFound);
-            if(write) requireWritable(project,content);
+            if(write) requireWritable(project,content,item);
             return new Context(project.companyId(),project.projectId(),item.contentId(),item.id(),null);
         }
         if("WORK_ITEM_UPDATE".equals(ownerType)) {
             UpdateLocator locator=updates.findLocator(actor.companyId(),ownerId).orElseThrow(AttachmentParentAccessService::notFound);
             ProjectAccessSnapshot project=visible(actor,locator.projectId());
             Content content=contents.find(project.companyId(),project.projectId(),locator.contentId()).orElseThrow(AttachmentParentAccessService::notFound);
-            workItems.find(project.companyId(),project.projectId(),locator.contentId(),locator.workItemId()).orElseThrow(AttachmentParentAccessService::notFound);
+            WorkItem item=workItems.find(project.companyId(),project.projectId(),locator.contentId(),locator.workItemId()).orElseThrow(AttachmentParentAccessService::notFound);
             WorkItemUpdate update=updates.find(project.companyId(),ownerId).orElseThrow(AttachmentParentAccessService::notFound);
             if(update.status()==WorkItemUpdateStatus.DELETED) throw notFound();
-            if(write) requireWritable(project,content);
+            if(write) requireWritable(project,content,item);
             return new Context(project.companyId(),project.projectId(),locator.contentId(),locator.workItemId(),ownerId);
         }
         throw notFound();
@@ -75,10 +75,10 @@ public class AttachmentParentAccessService {
     private ProjectAccessSnapshot visible(CurrentActor actor,UUID projectId) {
         return access.findVisible(actor,projectId).orElseThrow(AttachmentParentAccessService::notFound);
     }
-    private static void requireWritable(ProjectAccessSnapshot project,Content content) {
+    private static void requireWritable(ProjectAccessSnapshot project,Content content,WorkItem item) {
         if(project.actorAccess()==ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
-        if(project.lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED)
+        if(project.lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED || item.archived())
             throw notWritable();
     }
     private static ApplicationException notFound(){return new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);}

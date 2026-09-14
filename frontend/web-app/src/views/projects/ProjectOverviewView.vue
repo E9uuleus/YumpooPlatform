@@ -2,6 +2,10 @@
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
 import WorkItemTimerCell from '../../components/projects/WorkItemTimerCell.vue'
 import WorkItemDiscussionIcon from '../../components/projects/WorkItemDiscussionIcon.vue'
+import WorkItemRowActions from '../../components/projects/WorkItemRowActions.vue'
+import WorkItemNameCell from '../../components/projects/WorkItemNameCell.vue'
+import WorkItemDraftCell from '../../components/projects/WorkItemDraftCell.vue'
+import { useWorkItemInlineCreate } from '../../components/projects/useWorkItemInlineCreate'
 import WorkItemUpdatedCell from '../../components/projects/WorkItemUpdatedCell.vue'
 import { Filter as FilterIcon, Hide, Search, Sort, User } from '@element-plus/icons-vue'
 import {
@@ -41,7 +45,7 @@ import {
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type CSSProperties, type DefineComponent } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
-import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
+import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
 import LazyAttachmentPanel from '../../components/collaboration/LazyAttachmentPanel.vue'
@@ -102,6 +106,8 @@ const lanes = reactive<Record<string, KanbanLane>>({})
 const subitems = reactive<Record<string, SubitemState>>({})
 const expandedSubitemIds = ref<string[]>([])
 const subitemSelections = reactive<Record<string, Set<string>>>({})
+const subitemTableHandles = new Map<string, { openQuick: () => void }>()
+const restoringArchive = ref(false)
 const quickOpen = ref(false)
 const quickTitle = ref('')
 const quickCreating = ref(false)
@@ -204,6 +210,7 @@ const selectedRowId = ref<string | undefined>(route.query.workItemId ? String(ro
 const selectedCellKey = ref<string | undefined>(route.query.workItemId ? `${route.query.workItemId}:title` : undefined)
 const TABLE_SELECTION_COLUMN_WIDTH = 48
 const TABLE_EXPAND_COLUMN_WIDTH = 1
+const TABLE_MENU_COLUMN_WIDTH = 32
 const TABLE_ADD_COLUMN_MIN_WIDTH = 96
 const DRAWER_MIN_WIDTH = 480
 const DRAWER_VIEWPORT_GUTTER = 60
@@ -467,7 +474,8 @@ const visibleColumns = computed(() => orderedColumns.value.filter(item => item.k
 const visibleSubitemColumns = computed(() => orderedSubitemColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
 const movableVisibleColumns = computed(() => visibleColumns.value.filter(item => item.key !== 'title'))
 const quickGridStyle = computed(() => ({
-  gridTemplateColumns: [`${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
+  '--work-item-menu-column-width': `${TABLE_MENU_COLUMN_WIDTH}px`,
+  gridTemplateColumns: [`${TABLE_MENU_COLUMN_WIDTH}px`, `${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
     ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
 }))
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
@@ -492,12 +500,26 @@ const canCreate = computed(() => Boolean(project.value
   && activeContents.value.length
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
+const { draft: inlineDraft, rows: displayTableItems, isDraft, start: createBelow, save: saveInlineDraft, cancel: cancelInlineDraft } = useWorkItemInlineCreate({
+  contextId: () => projectId.value,
+  items: () => tableItems.value,
+  canCreate: () => canCreate.value && !hasExplicitSort.value && !editingCell.value && !tableSorting.value,
+  content: () => activeContents.value[0],
+  status: () => workflowStatuses.value.find(status => status.active && status.statusCode === 'NOT_STARTED'),
+  created: (created, anchorId) => {
+    const next = [...tableItems.value]
+    next.splice(next.findIndex(item => item.id === anchorId) + 1, 0, { ...created, subitemCount: 0, discussionCount: 0 })
+    tableItems.value = next
+    void reloadSortedTableInPlace()
+  },
+})
 const canPublishDiscussion = computed(() => Boolean(project.value
   && project.value.lifecycle !== ProjectLifecycle.Archived
   && detail.value?.capabilities?.canDiscuss
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
 const discussionReadOnlyReason = computed(() => {
+  if (detail.value?.archived) return '工作项已归档，恢复后可继续编辑和讨论。'
   if (project.value?.lifecycle === ProjectLifecycle.Archived) return 'Project 已归档，工作项讨论仅可查看。'
   if (!canPublishDiscussion.value) return '当前角色没有发布讨论的权限。'
   return undefined
@@ -561,6 +583,57 @@ function onTableExpandChange(row: ProjectWorkItemListItem,
 
 function toggleSubitems(row: ProjectWorkItemListItem): void {
   tableRef.value?.toggleRowExpansion(row, !expandedSubitemIds.value.includes(row.id))
+}
+
+function setSubitemTableHandle(id: string, handle: unknown): void {
+  if (handle) subitemTableHandles.set(id, handle as { openQuick: () => void })
+  else subitemTableHandles.delete(id)
+}
+
+async function addSubitem(row: ProjectWorkItemListItem): Promise<void> {
+  if (!canCreate.value) return
+  tableRef.value?.toggleRowExpansion(row, true)
+  await nextTick()
+  subitemTableHandles.get(row.id)?.openQuick()
+}
+
+async function beforeRowRemove(row: ProjectWorkItemListItem): Promise<boolean> {
+  return detailOpen.value && detail.value?.id === row.id ? beforeDiscussionLeave() : true
+}
+
+async function onRowRemoved(row: ProjectWorkItemListItem): Promise<void> {
+  selectedWorkItemIds.value.delete(row.id)
+  Object.values(subitemSelections).forEach(selection => selection.delete(row.id))
+  delete subitemSelections[row.id]
+  expandedSubitemIds.value = expandedSubitemIds.value.filter(id => id !== row.id)
+  if (detail.value?.id === row.id) {
+    detailOpen.value = false
+    await closeDetailRoute()
+  }
+}
+
+async function restoreArchivedItem(): Promise<void> {
+  if (!detail.value?.archived || !detail.value.capabilities.canDelete || restoringArchive.value) return
+  const csrf = readCsrfToken()
+  if (!csrf) { error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
+  restoringArchive.value = true
+  const restoringItem = detail.value
+  try {
+    const restored = await workItemsApi.unarchiveWorkItem({ workItemId: restoringItem.id, xXSRFTOKEN: csrf,
+      ifMatch: restoringItem.etag, idempotencyKey: crypto.randomUUID() })
+    if (detail.value?.id === restoringItem.id) detail.value = restored
+    await onRelationsChanged([restoringItem.id, ...expandedSubitemIds.value])
+    ElMessage.success('工作项已恢复')
+  } catch (reason) {
+    error.value = await toApiProblem(reason)
+    if (isProblemStatus(error.value, 409) || isProblemStatus(error.value, 412)) {
+      try {
+        const latest = await workItemsApi.getWorkItem({ workItemId: restoringItem.id })
+        if (detail.value?.id === restoringItem.id) detail.value = latest
+      } catch { /* Keep the original mutation error visible. */ }
+    }
+  }
+  finally { restoringArchive.value = false }
 }
 
 function onSubitemSortChange(parentId: string, rules: ProjectWorkItemSubitemSortRule[]): void {
@@ -872,7 +945,7 @@ async function loadTable(cursor: string | null = null, append = false, revision 
   }
 }
 
-async function reloadSortedTableInPlace(): Promise<void> {
+async function reloadSortedTableInPlace(revealWorkItemId?: string): Promise<void> {
   const revision = ++loadRevision
   activeController?.abort()
   const controller = new AbortController()
@@ -895,7 +968,8 @@ async function reloadSortedTableInPlace(): Promise<void> {
       if (revision !== loadRevision) return
       result.items.forEach(item => loaded.set(item.id, item))
       nextCursor = result.nextCursor
-      if (!nextCursor || loaded.size >= minimumItemCount || nextCursor === cursor) break
+      if (!nextCursor || nextCursor === cursor
+        || (loaded.size >= minimumItemCount && (!revealWorkItemId || loaded.has(revealWorkItemId)))) break
       cursor = nextCursor
     }
 
@@ -1122,10 +1196,20 @@ async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> 
   for (const id of affectedWorkItemIds) {
     if (subitems[id]) subitems[id].loaded = false
   }
-  await refreshCurrentView()
+  if (selectedView.value === 'table') await reloadSortedTableInPlace()
+  else await refreshCurrentView()
   await Promise.all(expandedSubitemIds.value
     .filter(id => affectedWorkItemIds.includes(id))
     .map(id => loadSubitems(id, true)))
+}
+
+async function onRowMoved(item: ProjectWorkItemListItem, parentId?: string): Promise<void> {
+  selectCell(item.id, 'title')
+  if (parentId) await loadSubitems(parentId, true)
+  else await reloadSortedTableInPlace(item.id)
+  await nextTick()
+  tableRef.value?.$el.querySelector<HTMLElement>('.work-item-name-cell.monday-cell--selected')
+    ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
 }
 
 async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity'): Promise<void> {
@@ -1235,7 +1319,7 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
   const apply = (item: ProjectWorkItemListItem): ProjectWorkItemListItem => {
     if (item.id !== id) return item
     const updated = {
-      ...item, contentId: updatedDetail.contentId, contentName: updatedDetail.contentName,
+      ...item, title: updatedDetail.title, contentId: updatedDetail.contentId, contentName: updatedDetail.contentName,
       contentColorToken: updatedDetail.contentColorToken,
       statusCode: updatedDetail.statusCode, statusCategory: updatedDetail.statusCategory,
       priority: updatedDetail.priority,
@@ -1842,6 +1926,7 @@ function onTableSelectionChange(rows: ProjectWorkItemListItem[]): void {
 
 function tableRowClassName({ row }: { row: ProjectWorkItemListItem; rowIndex: number }): string {
   const classes = ['work-item-table-row']
+  if (isDraft(row)) classes.push('work-item-draft-row')
   if (row.capabilities.canMoveInProjectOrder) classes.push('work-item-table-row--movable')
   if (tableDragging.value?.id === row.id) classes.push('work-item-table-row--dragging')
   if (tableSorting.value) classes.push('work-item-table-row--sorting')
@@ -1898,7 +1983,7 @@ function animateTableReorder(previous: Map<string, number>): void {
 function rowIndexFromTarget(target: EventTarget | null): number {
   const row = (target as HTMLElement | null)?.closest('tr.work-item-table-row')
   if (!row) return -1
-  return [...row.parentElement!.children].indexOf(row)
+  return [...row.parentElement!.children].filter(element => element.classList.contains('work-item-table-row')).indexOf(row)
 }
 
 function clearTablePointerTracking(): void {
@@ -1956,9 +2041,9 @@ function updateTableDropTarget(clientY: number): void {
 }
 
 function onTablePointerDown(event: PointerEvent): void {
-  if (!event.isPrimary || event.button !== 0 || tableDragging.value) return
+  if (!event.isPrimary || event.button !== 0 || tableDragging.value || inlineDraft.value) return
   const target = event.target as HTMLElement | null
-  if (target?.closest('.subitem-expand-button, .monday-subitems-counter-component')) return
+  if (target?.closest('.subitem-expand-button, .monday-subitems-counter-component, .work-item-name-cell--editing, .work-item-detail-button')) return
   const dragArea = target?.closest('.work-item-link, .monday-selection-column')
   if (!dragArea) return
   const index = rowIndexFromTarget(target)
@@ -2389,7 +2474,7 @@ onBeforeUnmount(() => {
           >
             <el-table
               ref="tableRef"
-              :data="tableItems"
+              :data="displayTableItems"
               :fit="true"
               :expand-row-keys="expandedSubitemIds"
               :row-class-name="tableRowClassName"
@@ -2407,11 +2492,36 @@ onBeforeUnmount(() => {
               @selection-change="onTableSelectionChange"
               @expand-change="onTableExpandChange"
             >
+              <el-table-column
+                :width="TABLE_MENU_COLUMN_WIDTH"
+                fixed
+                class-name="work-item-menu-column"
+                label-class-name="work-item-menu-column"
+              >
+                <template #default="scope">
+                  <work-item-row-actions
+                    v-if="!isDraft(scope.row as ProjectWorkItemListItem)"
+                    :item="scope.row as ProjectWorkItemListItem"
+                    :can-create="canCreate"
+                    :sorted="hasExplicitSort"
+                    :disabled="Boolean(editingCell) || tableSorting || savingSortOrder"
+                    :before-remove="() => beforeRowRemove(scope.row as ProjectWorkItemListItem)"
+                    @open="openDetail($event, 'details')"
+                    @add-subitem="addSubitem"
+                    @create-below="createBelow"
+                    @moved="onRowMoved"
+                    @changed="onRelationsChanged"
+                    @removed="onRowRemoved"
+                  />
+                </template>
+              </el-table-column>
               <el-table-column type="expand" :width="TABLE_EXPAND_COLUMN_WIDTH" fixed class-name="monday-expand-column">
                 <template #default="scope">
                   <project-work-item-subitems-table
                     v-if="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
+                    :ref="value => setSubitemTableHandle(scope.row.id, value)"
                     :project-id="projectId"
+                    :selected-cell-key="selectedCellKey"
                     :parent="scope.row as ProjectWorkItemListItem"
                     :items="subitemState((scope.row as ProjectWorkItemListItem).id).items"
                     :loading="subitemState((scope.row as ProjectWorkItemListItem).id).loading && !subitemState((scope.row as ProjectWorkItemListItem).id).loaded"
@@ -2427,6 +2537,11 @@ onBeforeUnmount(() => {
                     :label-catalog="labelCatalog"
                     :can-create="canCreate"
                     :editing-cell="Boolean(editingCell)"
+                    :before-remove="beforeRowRemove"
+                    @row-changed="onRelationsChanged"
+                    @row-moved="onRowMoved"
+                    @select-cell="selectCell"
+                    @row-removed="onRowRemoved"
                     @retry="loadSubitems((scope.row as ProjectWorkItemListItem).id, true)"
                     @sort-change="onSubitemSortChange((scope.row as ProjectWorkItemListItem).id, $event)"
                     @created="onSubitemCreated"
@@ -2444,6 +2559,7 @@ onBeforeUnmount(() => {
               </el-table-column>
               <el-table-column
                 type="selection"
+                :selectable="(row: ProjectWorkItemListItem) => !isDraft(row)"
                 :width="TABLE_SELECTION_COLUMN_WIDTH"
                 fixed
                 reserve-selection
@@ -2477,56 +2593,70 @@ onBeforeUnmount(() => {
                 </template>
                 <template #default="scope">
                   <div class="title-cell">
-                    <div
+                    <work-item-name-cell
                       class="work-item-link"
-                      :class="{ 'monday-cell--selected': selectedCellKey === `${(scope.row as ProjectWorkItemListItem).id}:title` }"
-                      tabindex="0"
-                      role="button"
-                      @click.stop="openDetail(scope.row as ProjectWorkItemListItem, 'details')"
+                      :item="scope.row as ProjectWorkItemListItem"
+                      :selected="selectedCellKey === `${scope.row.id}:title`"
+                      :disabled="Boolean(editingCell)"
+                      :create="isDraft(scope.row as ProjectWorkItemListItem) ? saveInlineDraft : undefined"
+                      @open="openDetail(scope.row as ProjectWorkItemListItem, 'details')"
+                      @updated="replaceLightItem"
+                      @editing="active => { if (active) selectCell(scope.row.id, 'title') }"
+                      @cancel="cancelInlineDraft"
                     >
-                      <button
-                        class="subitem-expand-button"
-                        :class="{
-                          'subitem-expand-button--has-subitems': (scope.row as ProjectWorkItemListItem).subitemCount > 0,
-                          'subitem-expand-button--empty': (scope.row as ProjectWorkItemListItem).subitemCount === 0,
-                        }"
-                        type="button"
-                        :aria-label="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id) ? '收起子项' : '展开子项'"
-                        :aria-expanded="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
-                        @click.stop="toggleSubitems(scope.row as ProjectWorkItemListItem)"
-                      >
-                        <svg
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          width="16"
-                          height="16"
-                          aria-hidden="true"
-                          class="icon_35ca7030fb monday-expand-icon"
-                          data-testid="icon"
-                          data-vibe="Icon"
+                      <template #prefix>
+                        <button
+                          v-if="!isDraft(scope.row as ProjectWorkItemListItem)"
+                          class="subitem-expand-button"
+                          :class="{
+                            'subitem-expand-button--has-subitems': (scope.row as ProjectWorkItemListItem).subitemCount > 0,
+                            'subitem-expand-button--empty': (scope.row as ProjectWorkItemListItem).subitemCount === 0,
+                          }"
+                          type="button"
+                          :aria-label="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id) ? '收起子项' : '展开子项'"
+                          :aria-expanded="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
+                          @click.stop="toggleSubitems(scope.row as ProjectWorkItemListItem)"
                         >
-                          <path
+                          <svg
+                            viewBox="0 0 20 20"
                             fill="currentColor"
-                            d="M12.76 10.56a.77.77 0 0 0 0-1.116L8.397 5.233a.84.84 0 0 0-1.157 0 .77.77 0 0 0 0 1.116l3.785 3.653-3.785 3.652a.77.77 0 0 0 0 1.117.84.84 0 0 0 1.157 0l4.363-4.211Z"
-                          />
-                        </svg>
-                      </button>
-                      <span class="work-item-title-text">{{ (scope.row as ProjectWorkItemListItem).title }}</span>
-                      <div
-                        v-if="(scope.row as ProjectWorkItemListItem).subitemCount > 0"
-                        data-testid="clickable"
-                        tabindex="0"
-                        role="button"
-                        :aria-label="`${(scope.row as ProjectWorkItemListItem).subitemCount} Subitems`"
-                        :aria-expanded="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
-                        class="clickable_b3ab95e8e9 monday-subitems-counter-component name-cell-component__subitems-counter disableTextSelection_fae179dda6"
-                        @click.stop="toggleSubitems(scope.row as ProjectWorkItemListItem)"
-                      >
-                        <div class="monday-subitems-counter-component__subitems-count">{{ (scope.row as ProjectWorkItemListItem).subitemCount }}</div>
-                      </div>
-                    </div>
+                            width="16"
+                            height="16"
+                            aria-hidden="true"
+                            class="icon_35ca7030fb monday-expand-icon"
+                            data-testid="icon"
+                            data-vibe="Icon"
+                          >
+                            <path
+                              fill="currentColor"
+                              d="M12.76 10.56a.77.77 0 0 0 0-1.116L8.397 5.233a.84.84 0 0 0-1.157 0 .77.77 0 0 0 0 1.116l3.785 3.653-3.785 3.652a.77.77 0 0 0 0 1.117.84.84 0 0 0 1.157 0l4.363-4.211Z"
+                            />
+                          </svg>
+                        </button>
+                        <span
+                          v-else
+                          class="draft-title-indent"
+                          aria-hidden="true"
+                        />
+                      </template>
+                      <template #suffix>
+                        <div
+                          v-if="(scope.row as ProjectWorkItemListItem).subitemCount > 0"
+                          data-testid="clickable"
+                          tabindex="0"
+                          role="button"
+                          :aria-label="`${(scope.row as ProjectWorkItemListItem).subitemCount} Subitems`"
+                          :aria-expanded="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
+                          class="clickable_b3ab95e8e9 monday-subitems-counter-component name-cell-component__subitems-counter disableTextSelection_fae179dda6"
+                          @click.stop="toggleSubitems(scope.row as ProjectWorkItemListItem)"
+                        >
+                          <div class="monday-subitems-counter-component__subitems-count">{{ (scope.row as ProjectWorkItemListItem).subitemCount }}</div>
+                        </div>
+                      </template>
+                    </work-item-name-cell>
                     <button
                       class="monday-discussion-btn"
+                      :disabled="isDraft(scope.row as ProjectWorkItemListItem)"
                       :class="{ 'monday-cell--selected': selectedCellKey === `${(scope.row as ProjectWorkItemListItem).id}:discussion` }"
                       :aria-label="(scope.row as ProjectWorkItemListItem).discussionCount ? `打开协作讨论，${(scope.row as ProjectWorkItemListItem).discussionCount}条讨论` : '打开协作讨论'"
                       title="打开协作讨论"
@@ -2566,7 +2696,14 @@ onBeforeUnmount(() => {
                   />
                 </template>
                 <template #default="scope">
-                  <template v-if="column.key === 'assignee'">
+                  <work-item-draft-cell
+                    v-if="isDraft(scope.row as ProjectWorkItemListItem)"
+                    :item="scope.row as ProjectWorkItemListItem"
+                    :column="column.key"
+                    :status-label="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.displayName ?? '—'"
+                    :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
+                  />
+                  <template v-else-if="column.key === 'assignee'">
                     <el-popover placement="bottom" :width="360" trigger="click" popper-class="work-items-popover" @show="assigneeSearch = ''">
                       <template #reference>
                         <button
@@ -2744,17 +2881,17 @@ onBeforeUnmount(() => {
                   :style="quickGridStyle"
                 >
                   <span class="monday-quick-checkbox" aria-hidden="true" />
+                  <el-input
+                    ref="quickTitleInput"
+                    v-model="quickTitle"
+                    class="quick-title-field monday-quick-add__field"
+                    maxlength="300"
+                    :disabled="quickCreating"
+                    placeholder="添加工作项"
+                    aria-label="工作项名称；Enter 创建，Shift+Enter 创建后继续"
+                    @keydown="onQuickKeydown"
+                  />
                   <div class="quick-controls">
-                    <el-input
-                      ref="quickTitleInput"
-                      v-model="quickTitle"
-                      class="quick-title-field"
-                      maxlength="300"
-                      :disabled="quickCreating"
-                      placeholder="添加工作项"
-                      aria-label="工作项名称；Enter 创建，Shift+Enter 创建后继续"
-                      @keydown="onQuickKeydown"
-                    />
                     <el-button
                       class="quick-submit"
                       size="small"
@@ -2866,6 +3003,19 @@ onBeforeUnmount(() => {
         class="detail-panel"
       >
         <template v-if="detail">
+          <div
+            v-if="detail.archived"
+            class="work-item-archive-notice"
+          >
+            <span>此工作项已归档</span>
+            <el-button
+              v-if="detail.capabilities.canDelete"
+              :loading="restoringArchive"
+              @click="restoreArchivedItem"
+            >
+              恢复工作项
+            </el-button>
+          </div>
           <div class="detail-heading">
             <small>{{ contentName(detail.contentId) }} · {{ detail.itemNo }}</small>
             <h2>{{ detail.title }}</h2>
@@ -3660,13 +3810,13 @@ onBeforeUnmount(() => {
   transition: color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
-:deep(.monday-table .work-item-table-row--movable) .work-item-link {
+:deep(.monday-table .work-item-table-row--movable) .work-item-link:not(.work-item-name-cell--editing) {
   cursor: grab;
   user-select: none;
   touch-action: none;
 }
 
-:deep(.monday-table .work-item-table-row--movable) .work-item-link:active {
+:deep(.monday-table .work-item-table-row--movable) .work-item-link:not(.work-item-name-cell--editing):active {
   cursor: grabbing;
 }
 
@@ -3675,14 +3825,7 @@ onBeforeUnmount(() => {
   outline: none;
 }
 
-.work-item-title-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-  font-size: 13.5px;
-  color: var(--yp-text-primary);
-}
+.draft-title-indent { flex: 0 0 24px; }
 
 /* Monday 讨论气泡按钮与分割线 */
 .monday-discussion-btn {
@@ -3896,6 +4039,7 @@ onBeforeUnmount(() => {
   border: 0;
   color: var(--yp-text-secondary);
   background: transparent;
+  font: inherit;
   font-size: 13px;
   cursor: pointer;
   transition: color var(--yp-motion-fast) var(--yp-ease-standard);
@@ -3904,12 +4048,14 @@ onBeforeUnmount(() => {
 .monday-quick-add__field {
   display: flex;
   height: 26px;
-  grid-column: 3;
+  grid-column: 4;
   align-items: center;
   box-sizing: border-box;
-  padding: 0 8px;
+  padding: 0 8px 0 32px;
   border: 1px solid transparent;
   border-radius: var(--yp-radius-sm, 4px);
+  font: inherit;
+  font-size: 13px;
   text-align: left;
   transition: border-color var(--yp-motion-fast) var(--yp-ease-standard),
               background-color var(--yp-motion-fast) var(--yp-ease-standard),
@@ -3919,14 +4065,13 @@ onBeforeUnmount(() => {
 .monday-quick-checkbox {
   width: 16px;
   height: 16px;
-  grid-column: 2;
+  grid-column: 3;
   align-self: center;
   justify-self: center;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--yp-border-strong) 50%, transparent);
   border-radius: 2px;
   background: var(--yp-bg-surface);
-  transform: translateX(2px);
   pointer-events: none;
 }
 
@@ -3976,7 +4121,7 @@ onBeforeUnmount(() => {
   z-index: 2;
   top: -1px;
   bottom: -1px;
-  left: 0;
+  left: var(--work-item-menu-column-width);
   width: 6px;
   border-radius: 0 0 0 6px;
   background: var(--work-item-quick-add-accent);
@@ -4007,7 +4152,7 @@ onBeforeUnmount(() => {
 :deep(.monday-table--empty .el-table__empty-block) { display: none; }
 
 .quick-controls {
-  grid-column: 3 / -1;
+  grid-column: 5 / -1;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -4015,12 +4160,15 @@ onBeforeUnmount(() => {
 }
 .quick-hint { color: var(--yp-text-muted); font-size: 12px; white-space: nowrap; }
 .quick-title-field {
-  width: 280px;
-  flex: 0 1 280px;
-  align-self: center;
-  box-sizing: border-box;
+  width: 100%;
   min-width: 0;
+  margin: 0;
+  outline: none;
+  border-color: var(--yp-action-primary);
+  background: var(--yp-bg-surface);
+  color: var(--yp-text-primary);
 }
+.quick-title-field::placeholder { color: var(--yp-text-secondary); opacity: 1; }
 .monday-quick-row .quick-submit {
   justify-self: center;
   width: 48px;
@@ -4028,17 +4176,6 @@ onBeforeUnmount(() => {
   height: var(--work-item-quick-control-height);
   min-height: var(--work-item-quick-control-height);
   padding: 0 8px;
-}
-:deep(.monday-quick-row .el-input__wrapper) {
-  height: var(--work-item-quick-control-height);
-  min-height: var(--work-item-quick-control-height);
-}
-:deep(.monday-quick-row .el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px var(--yp-border-default) inset !important;
-}
-:deep(.monday-quick-row .el-input__wrapper:has(input:focus-visible)) {
-  outline: none !important;
-  outline-offset: 0;
 }
 
 .monday-subitems-counter-component {
@@ -4166,7 +4303,7 @@ onBeforeUnmount(() => {
   z-index: 4;
   top: -1px;
   bottom: -1px;
-  left: var(--work-item-hierarchy-spine-offset);
+  left: calc(32px + var(--work-item-hierarchy-spine-offset));
   width: var(--work-item-hierarchy-line-width);
   border-radius: var(--work-item-hierarchy-line-width);
   background: var(--work-item-group-accent);
@@ -4229,6 +4366,18 @@ onBeforeUnmount(() => {
 
 .detail-heading h2 {
   margin: var(--yp-space-1) 0 var(--yp-space-4);
+}
+
+.work-item-archive-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  background: var(--yp-bg-sunken);
+  color: var(--yp-text-secondary);
 }
 
 .detail-heading small {

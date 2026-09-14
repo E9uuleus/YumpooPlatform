@@ -468,3 +468,13 @@ events:
       - examples/workitem.time-tracking-deleted-v2.json
     invalidExamples:
       - examples/workitem.time-tracking-deleted-v2.invalid.json
+  - eventType: workitem.work_item_archived
+    eventVersion: 1
+    schema: schemas/workitem.work-item-archived-v1.schema.json
+    validExamples: [examples/workitem.work-item-archived-v1.json]
+    invalidExamples: [examples/workitem.work-item-archived-v1.invalid.json]
+  - eventType: workitem.work_item_unarchived
+    eventVersion: 1
+    schema: schemas/workitem.work-item-unarchived-v1.schema.json
+    validExamples: [examples/workitem.work-item-unarchived-v1.json]
+    invalidExamples: [examples/workitem.work-item-unarchived-v1.invalid.json]

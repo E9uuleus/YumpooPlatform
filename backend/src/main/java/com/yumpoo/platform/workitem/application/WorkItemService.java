@@ -717,6 +717,38 @@ public class WorkItemService {
                 command.requestHash()), () -> delete(command, locator, reason));
     }
 
+    public IdempotencyExecutionResult archive(WorkItemCommands.Archive command) {
+        requireActor(command.actor());
+        WorkItemLocator locator = workItems.findLocator(command.actor().companyId(), command.workItemId())
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireWritableAccess(visible(command.actor(), locator.projectId()).actorAccess());
+        String operation = command.archived() ? "archiveWorkItem" : "unarchiveWorkItem";
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
+                command.actor().userId(), "POST", operation, command.idempotencyKey()), command.requestHash()), () -> {
+            ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(command.actor(), locator.projectId());
+            requireWritableAccess(project.actorAccess());
+            contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            WorkItem before = workItems.lockIncludingDeleted(project.companyId(), project.projectId(),
+                            locator.contentId(), command.workItemId())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            requireVersion(before, command.expectedVersion());
+            if (before.deleted()) throw invalidLifecycle("WORK_ITEM_ALREADY_DELETED");
+            WorkItem after = before;
+            if (before.archived() != command.archived()) {
+                after = workItems.archive(before.archive(command.archived(), command.actor().userId(), clock.instant()),
+                                command.expectedVersion())
+                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
+                Map<String, Object> payload = lifecycleEventPayload(after);
+                payload.put("archived", after.archived());
+                append(command.archived() ? "workitem.work_item_archived" : "workitem.work_item_unarchived",
+                        after, command.actor(), payload);
+            }
+            return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
+                    labels.statuses(project.companyId(), project.projectId())));
+        });
+    }
+
     private StoredCommandResult delete(Delete command, WorkItemLocator locator, String reason) {
         ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
                 command.actor(), locator.projectId());
@@ -1134,13 +1166,13 @@ public class WorkItemService {
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
                 item.dueDate(), dueTimeText(item), item.completedAt(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
-                new WorkItemCapabilities(canEditFields && !item.deleted(),
-                        canEditFields && !item.deleted(), canEditFields && !item.deleted(),
-                        canEditFields && !item.deleted(), canEditFields && !item.deleted(),
+                new WorkItemCapabilities(canEditFields && !item.deleted() && !item.archived(),
+                        canEditFields && !item.deleted() && !item.archived(), canEditFields && !item.deleted() && !item.archived(),
+                        canEditFields && !item.deleted() && !item.archived(), canEditFields && !item.deleted(),
                         canEditFields && item.deleted(),
-                        availableTransitions(item, canEditFields && !item.deleted(), statusLabels)),
+                        availableTransitions(item, canEditFields && !item.deleted() && !item.archived(), statusLabels)),
                 item.createdAt(), item.updatedAt(), item.deleted(), item.deletedAt(),
-                item.deletedByUserId(), item.deleteReason(), item.updatedByUserId(), updatedByDisplayName(item, people));
+                item.deletedByUserId(), item.deleteReason(), item.updatedByUserId(), updatedByDisplayName(item, people), item.archived());
     }
 
     private static List<WorkItemTransitionOption> availableTransitions(WorkItem item,

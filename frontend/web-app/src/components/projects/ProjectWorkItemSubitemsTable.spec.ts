@@ -16,6 +16,8 @@ enableAutoUnmount(afterEach)
 const api = vi.hoisted(() => ({
   createWorkItemSubitem: vi.fn(),
   moveWorkItemSubitemOrder: vi.fn(),
+  getWorkItem: vi.fn(),
+  updateWorkItem: vi.fn(),
 }))
 
 vi.mock('@yumpoo/api-client', async importOriginal => ({
@@ -80,6 +82,47 @@ describe('项目工作项子表格', () => {
     api.createWorkItemSubitem.mockResolvedValue(item('created') as unknown as WorkItemDetail)
     api.moveWorkItemSubitemOrder.mockImplementation(({ subitemId }: { subitemId: string }) =>
       Promise.resolve(item(subitemId) as unknown as WorkItemDetail))
+  })
+
+  it('在子项下方插入同级草稿，失焦后创建并在当前父项内定位', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    wrapper.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('createBelow', item('child-1'))
+    await flushPromises()
+    expect(wrapper.findAll('.subitem-hierarchy-branch--data')).toHaveLength(3)
+    const rows = wrapper.findAll('.monday-subitem-table tr.el-table__row')
+    expect(rows[1]!.classes()).toContain('work-item-draft-row')
+    expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
+    await wrapper.get('.work-item-name-input input').trigger('blur')
+    await flushPromises()
+    expect(wrapper.find('.work-item-draft-row').exists()).toBe(false)
+    expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
+    wrapper.findComponent({ name: 'WorkItemRowActions' }).vm.$emit('createBelow', item('child-1'))
+    await flushPromises()
+    await wrapper.get('.work-item-name-input input').setValue('新同级子项')
+    await wrapper.get('.work-item-name-input input').trigger('blur')
+    await flushPromises()
+    expect(api.createWorkItemSubitem).toHaveBeenCalledWith(expect.objectContaining({ parentWorkItemId: 'parent-1',
+      workItemSubitemCreateRequest: expect.objectContaining({ title: '新同级子项', priority: null, assigneeUserId: null }) }))
+    expect(api.moveWorkItemSubitemOrder).toHaveBeenCalledWith(expect.objectContaining({ parentWorkItemId: 'parent-1', subitemId: 'created',
+      projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: 'child-1', nextVisibleWorkItemId: null } }))
+    expect(wrapper.emitted('created')).toHaveLength(1)
+  })
+
+  it('编辑子项名称时暂停行拖动，保存后通知主表更新', async () => {
+    api.getWorkItem.mockResolvedValue(item('child-1'))
+    api.updateWorkItem.mockResolvedValue({ ...item('child-1'), title: '修改子项名称' })
+    const wrapper = mountTable()
+    await flushPromises()
+    const row = wrapper.get('.subitem-title-cell')
+    await row.get('.work-item-title-text').trigger('click')
+    expect(row.attributes('draggable')).toBe('false')
+    await row.get('.work-item-name-input input').setValue('修改子项名称')
+    await row.get('.work-item-name-input input').trigger('blur')
+    await flushPromises()
+    expect(wrapper.emitted('updated')?.[0]).toEqual(['child-1', expect.objectContaining({ title: '修改子项名称' })])
+    expect(row.attributes('draggable')).toBe('true')
+    expect(wrapper.emitted('openDetail')).toBeUndefined()
   })
 
   it('子表复用截止日期组件并完整转发日期和时间，不改变列宽', async () => {

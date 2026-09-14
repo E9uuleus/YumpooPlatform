@@ -40,6 +40,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "workitem.work_item_assigned", "workitem.work_item_unassigned",
             "workitem.work_item_status_changed", "workitem.work_item_rank_changed",
             "workitem.work_item_deleted", "workitem.work_item_restored",
+            "workitem.work_item_archived", "workitem.work_item_unarchived",
             "workitem.work_item_relation_created", "workitem.work_item_relation_deleted",
             "workitem.work_item_parent_changed", "workitem.work_item_update_published",
             "workitem.work_item_update_edited", "workitem.work_item_update_deleted",

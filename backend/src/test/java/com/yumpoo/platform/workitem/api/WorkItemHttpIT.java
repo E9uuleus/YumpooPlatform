@@ -109,6 +109,70 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void archiveIsIndependentOfDeletionAndPreservesHierarchyOrderAndOptimisticConcurrency() throws Exception {
+        String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+        JsonNode parent = created(mutate("POST", collection, member,
+                workItemBody(tasksId, "归档父项"), null, UUID.randomUUID()));
+        String parentId = parent.path("id").asText();
+        JsonNode child = created(mutate("POST", "/api/v1/work-items/" + parentId + "/subitems", member,
+                subitemBody(tasksId, "保留的子项"), null, UUID.randomUUID()));
+        String childId = child.path("id").asText();
+        String path = "/api/v1/work-items/" + parentId;
+        UUID key = UUID.randomUUID();
+        HttpResponse<String> response = mutate("POST", path + "/archive", member, "", parent.path("etag").asText(), key);
+        JsonNode archived = ok(response);
+        assertThat(archived.path("archived").asBoolean()).isTrue();
+        assertThat(archived.path("deleted").asBoolean()).isFalse();
+        assertThat(archived.path("statusCode")).isEqualTo(parent.path("statusCode"));
+        assertThat(archived.path("capabilities").path("canEditFields").asBoolean()).isFalse();
+        assertThat(archived.path("capabilities").path("canDiscuss").asBoolean()).isFalse();
+        assertThat(mutate("POST", path + "/archive", member, "", parent.path("etag").asText(), key).body())
+                .isEqualTo(response.body());
+        assertThat(ok(get(path, member)).path("archived").asBoolean()).isTrue();
+        assertThat(ok(get(collection, member)).path("items")).isEmpty();
+        assertThat(mutate("POST", path + "/unarchive", member, "", parent.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(412);
+        assertThat(mutate("POST", path + "/subitems", member, subitemBody(tasksId, "不允许新增"), null, UUID.randomUUID()).statusCode()).isEqualTo(404);
+        JsonNode restored = ok(mutate("POST", path + "/unarchive", member, "", archived.path("etag").asText(), UUID.randomUUID()));
+        assertThat(restored.path("archived").asBoolean()).isFalse();
+        JsonNode listed = ok(get(collection, member)).path("items").get(0);
+        assertThat(listed.path("id").asText()).isEqualTo(parentId);
+        assertThat(listed.path("subitemCount").asInt()).isEqualTo(1);
+        assertThat(ok(get(path + "/subitems", member)).path("items").get(0).path("id").asText()).isEqualTo(childId);
+
+        String childPath = "/api/v1/work-items/" + childId;
+        JsonNode archivedChild = ok(mutate("POST", childPath + "/archive", member, "", child.path("etag").asText(), UUID.randomUUID()));
+        assertThat(ok(get(path + "/subitems", member)).path("items")).isEmpty();
+        assertThat(ok(get(collection, member)).path("items").get(0).path("subitemCount").asInt()).isZero();
+        JsonNode deleted = ok(mutate("DELETE", childPath, member, "{\"reason\":\"归档后删除\"}", archivedChild.path("etag").asText(), UUID.randomUUID()));
+        assertThat(deleted.path("deleted").asBoolean()).isTrue();
+        assertThat(deleted.path("archived").asBoolean()).isTrue();
+        assertThat(mutate("POST", childPath + "/unarchive", member, "", deleted.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(404);
+    }
+
+    @Test
+    void archiveHidesTimerCandidatesAndKeepsAnExistingTimerStoppable() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "归档计时工作项"), null, UUID.randomUUID()));
+        String id = item.path("id").asText();
+        String path = "/api/v1/work-items/" + id;
+        String startBody = "{\"workItemId\":\"" + id + "\"}";
+        JsonNode running = ok(mutate("POST", "/api/v1/me/time-tracker/start", member,
+                startBody, "\"0\"", UUID.randomUUID()));
+        JsonNode archived = ok(mutate("POST", path + "/archive", member, "", item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(ok(get("/api/v1/me/time-tracker/candidates?scope=ALL", member)).path("items")).isEmpty();
+        JsonNode current = ok(get("/api/v1/me/time-tracker", member));
+        assertThat(current.path("session").path("id").asText()).isEqualTo(running.path("session").path("id").asText());
+        assertThat(current.path("recentItems")).isEmpty();
+        assertThat(ok(get(path + "/time-sessions", member)).path("canCreate").asBoolean()).isFalse();
+        assertThat(mutate("POST", "/api/v1/me/time-tracker/start", owner, startBody, "\"0\"", UUID.randomUUID()).statusCode()).isEqualTo(404);
+        ok(mutate("POST", "/api/v1/me/time-tracker/stop", member,
+                "{\"sessionId\":\"" + running.path("session").path("id").asText() + "\"}", running.path("etag").asText(), UUID.randomUUID()));
+        ok(mutate("POST", path + "/unarchive", member, "", archived.path("etag").asText(), UUID.randomUUID()));
+        assertThat(ok(get(path + "/time-sessions", member)).path("canCreate").asBoolean()).isTrue();
+        assertThat(ok(get("/api/v1/me/time-tracker/candidates?scope=ALL", member)).path("items").get(0).path("workItemId").asText()).isEqualTo(id);
+    }
+
+    @Test
     void discussionFormatsSurvivePublishReadEditAndRejectStaleVersionOrForgedMention() throws Exception {
         JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
                 workItemBody(tasksId, "富文本讨论验收"), null, UUID.randomUUID()));
