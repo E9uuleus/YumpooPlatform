@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vBrandLoading as vLoading } from '../../brand/loading'
 import { Plus } from '@element-plus/icons-vue'
 import {
   AccountStatus, EmploymentStatus, ProjectActorAccess, ProjectLifecycleFilter, ProjectType,
@@ -6,7 +7,7 @@ import {
 } from '@yumpoo/api-client'
 import {
   ElButton, ElCheckbox, ElCheckboxGroup, ElDrawer, ElForm, ElFormItem, ElIcon, ElInput,
-  ElLoading, ElMessage, ElMessageBox, ElOption as ElOptionRaw, ElPagination, ElSelect as ElSelectRaw,
+  ElMessage, ElMessageBox, ElOption as ElOptionRaw, ElPagination, ElSelect as ElSelectRaw,
   ElTable, ElTableColumn, ElTooltip, type FormInstance, type FormRules,
 } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, type DefineComponent } from 'vue'
@@ -27,7 +28,6 @@ import type { ActiveFilter } from '../../design-system/types'
 
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
-const vLoading = ElLoading.directive
 type ModifiedPreset = 'TODAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS'
 type ProjectCatalogView = 'recent' | 'content'
 

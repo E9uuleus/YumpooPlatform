@@ -21,6 +21,7 @@ import type { ShellSection } from '../router/shell-navigation'
 import InlineProblem from './InlineProblem.vue'
 import YpAssignee from './yp/YpAssignee.vue'
 import YpThemeSwitcher from './yp/YpThemeSwitcher.vue'
+import brandLogo from '../assets/brand/logo.svg'
 
 interface ModuleItem {
   section: ShellSection
@@ -232,7 +233,12 @@ onBeforeUnmount(() => {
         aria-label="返回工作台"
         @click="navigate('workspace')"
       >
-        Y
+        <img
+          :src="brandLogo"
+          width="40"
+          height="40"
+          alt="YumpooPlatform"
+        >
       </button>
       <nav
         class="module-rail__items"

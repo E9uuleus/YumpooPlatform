@@ -1,0 +1,14 @@
+.yp-brand-loading .el-loading-spinner { margin-top: 0; transform: translateY(-50%); }
+.yp-brand-loading .el-loading-spinner .circular { width: 64px; height: 64px; overflow: visible; animation: none; }
+.yp-brand-loading .el-loading-spinner .el-loading-text { margin: 10px 0 0; color: var(--yp-text-secondary); font-size: 12px; }
+.yp-brand-loading .logo-cloud { animation: yp-brand-cloud 2.4s ease-in-out infinite; }
+.yp-brand-loading .logo-center { animation: yp-brand-center 2.4s ease-in-out infinite; }
+.yp-brand-loading .logo-left { animation: yp-brand-left 2.4s ease-in-out infinite; }
+.yp-brand-loading .logo-right { animation: yp-brand-right 2.4s ease-in-out infinite; }
+.yp-brand-loading .logo-breath { transform-origin: 718px 558px; animation: yp-brand-breath 2.4s ease-in-out infinite; }
+@keyframes yp-brand-cloud { 0%, 100% { opacity: .35; } 23%, 76% { opacity: 1; } }
+@keyframes yp-brand-center { 0%, 10%, 100% { opacity: .18; transform: translateY(16px); } 30%, 76% { opacity: 1; transform: translateY(0); } }
+@keyframes yp-brand-left { 0%, 19%, 100% { opacity: .18; transform: translateY(16px); } 39%, 76% { opacity: 1; transform: translateY(0); } }
+@keyframes yp-brand-right { 0%, 28%, 100% { opacity: .18; transform: translateY(16px); } 48%, 76% { opacity: 1; transform: translateY(0); } }
+@keyframes yp-brand-breath { 0%, 48%, 100% { transform: scale(1); } 68% { transform: scale(1.025); } }
+@media (prefers-reduced-motion: reduce) { .yp-brand-loading .el-loading-spinner g { animation: none; opacity: 1; transform: none; } }

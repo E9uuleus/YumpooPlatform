@@ -14,7 +14,7 @@ vi.mock('electron', () => ({
   app: { isPackaged: false, quit: mocks.quit, on: (name: string, fn: (...args: unknown[]) => void) => mocks.appEvents.set(name, fn) },
   ipcMain: { handle: (name: string, fn: (...args: unknown[]) => unknown) => mocks.handlers.set(name, fn) },
   dialog: { showMessageBox: vi.fn(async () => ({ response: 0 })) },
-  nativeImage: { createFromBitmap: vi.fn(() => ({})) },
+  nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => false })) },
   Menu: { buildFromTemplate: (items: MenuItem[]) => { mocks.menu = items; return items } },
   Tray: class {
     setToolTip = mocks.tooltip

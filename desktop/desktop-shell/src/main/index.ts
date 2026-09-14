@@ -1,4 +1,5 @@
 import { TimerWindowController } from './timer-window'
+import { applicationIcon } from './application-icon'
 import path from 'node:path'
 import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron'
 import type { DesktopAuthStatus } from '@yumpoo/preload-contract'
@@ -91,7 +92,10 @@ async function createMainWindow(): Promise<void> {
   const smokeTest = process.argv.includes(SMOKE_TEST_ARGUMENT)
   const preloadPath = path.join(__dirname, '..', 'preload', 'index.js')
 
-  mainWindow = new BrowserWindow(createWindowOptions(preloadPath, app.isPackaged))
+  mainWindow = new BrowserWindow({
+    ...createWindowOptions(preloadPath, app.isPackaged),
+    icon: applicationIcon(),
+  })
   installSecurityGuards(mainWindow.webContents, webAppUrl.origin)
   if (!smokeTest) {
     timerController ??= new TimerWindowController(() => mainWindow, webAppUrl.origin, preloadPath)

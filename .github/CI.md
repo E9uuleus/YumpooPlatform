@@ -5,10 +5,10 @@
 ```powershell
 git fetch origin dev
 pnpm install --frozen-lockfile
-pnpm ci
+pnpm run ci
 ```
 
-日常快速反馈可先运行 `pnpm ci:static`；涉及后端时运行 `pnpm ci:backend`。`pnpm ci` 按相同顺序执行全部本机可运行阶段。需要 Node/pnpm 的仓库固定版本、Java 21 和 Linux-container Docker；Windows 交付阶段还需要 Windows x64、PowerShell 和 Electron。Linux 本地不会运行 Windows 阶段，PR 的 Windows Delivery 始终必需。
+日常快速反馈可先运行 `pnpm ci:static`；涉及后端时运行 `pnpm ci:backend`。`pnpm run ci` 按相同顺序执行全部本机可运行阶段，显式 `run` 避免与 pnpm 内置的清理安装命令 `ci` 冲突。需要 Node/pnpm 的仓库固定版本、Java 21 和 Linux-container Docker；Windows 交付阶段还需要 Windows x64、PowerShell 和 Electron。Linux 本地不会运行 Windows 阶段，PR 的 Windows Delivery 始终必需。
 
 旧 `verify:m*` 命令保留切片复现用途。普通 PR 使用统一入口，不需要串联里程碑命令、手工修改验收报告或刷新历史哈希。
 

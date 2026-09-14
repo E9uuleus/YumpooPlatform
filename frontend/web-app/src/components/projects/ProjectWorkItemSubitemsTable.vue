@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vBrandLoading as vLoading } from '../../brand/loading'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
 import WorkItemRowActions from './WorkItemRowActions.vue'
 import WorkItemNameCell from './WorkItemNameCell.vue'
@@ -18,7 +19,6 @@ import {
 import {
   ElButton,
   ElInput,
-  ElLoading,
   ElMessage,
   ElPopover,
   ElTable,
@@ -83,8 +83,6 @@ const props = defineProps<{
   selectedCellKey?: string | undefined
   beforeRemove?: ((item: ProjectWorkItemListItem) => Promise<boolean>) | undefined
 }>()
-
-const vLoading = ElLoading.directive
 
 function contentLabel(item: ProjectWorkItemListItem) {
   return props.contentCatalog?.items.find(content => content.id === item.contentId)
