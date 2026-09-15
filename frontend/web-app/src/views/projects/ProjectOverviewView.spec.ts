@@ -179,6 +179,59 @@ describe('项目级工作项首页', () => {
 
   afterEach(() => vi.restoreAllMocks())
 
+  it('每个分组末尾独立新增，折叠与切换分组保留草稿，新增行继承颜色并带遮罩', async () => {
+    state.listProjectWorkItems.mockResolvedValue(page([item(), { ...item('done'), statusCode: 'DONE' }]))
+    state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [
+      { value: 'BACKLOG', label: '待开始', count: 1 }, { value: 'DONE', label: '已完成', count: 1 },
+    ], nextCursor: null })
+    const wrapper = mountView(); await flushPromises()
+    const view = wrapper.vm as unknown as { changeGrouping: (field: string) => Promise<void>; onDocumentPointerDown: (event: PointerEvent) => void }
+    await wrapper.get('.el-table__append-wrapper .quick-add').trigger('click')
+    await wrapper.get('.el-table__append-wrapper input').setValue('平铺草稿')
+    await view.changeGrouping('STATUS'); await flushPromises()
+    expect(wrapper.find('.el-table__append-wrapper .quick-add').exists()).toBe(false)
+    const footers = wrapper.findAll('.work-item-group-add')
+    expect(footers).toHaveLength(2)
+    for (const footer of footers) {
+      expect(footer.element.nextElementSibling?.classList.contains('work-item-group-spacer') ?? true).toBe(true)
+      expect(footer.get('.work-item-group-add-mask').attributes('aria-hidden')).toBe('true')
+    }
+    expect(footers[0]!.attributes('style')).toBe(wrapper.get('.work-item-group-columns').attributes('style'))
+    await wrapper.get('[aria-label="添加工作项到待开始"]').trigger('click')
+    view.onDocumentPointerDown({ target: wrapper.get('.work-item-group-add input').element } as unknown as PointerEvent)
+    await wrapper.get('.work-item-group-add input').setValue('待开始草稿')
+    await wrapper.get('[aria-label="添加工作项到已完成"]').trigger('click')
+    await wrapper.findAll('.work-item-group-add input')[1]!.setValue('已完成草稿')
+    await wrapper.get('[aria-label="收起分组：待开始"]').trigger('click')
+    expect(wrapper.get('.work-item-group-add').classes()).toContain('work-item-group-collapsed')
+    await wrapper.get('[aria-label="展开分组：待开始"]').trigger('click')
+    await view.changeGrouping(''); await flushPromises()
+    expect(wrapper.get<HTMLInputElement>('.el-table__append-wrapper input').element.value).toBe('平铺草稿')
+    await view.changeGrouping('STATUS'); await flushPromises()
+    expect(wrapper.findAll<HTMLInputElement>('.work-item-group-add input').map(input => input.element.value))
+      .toEqual(['待开始草稿', '已完成草稿'])
+    expect(state.createWorkItem).not.toHaveBeenCalled()
+  })
+
+  it('从类别组末尾新增时使用所在类别，停用类别仍显示禁用的末尾入口', async () => {
+    const contents = catalog()
+    contents.items.push({ ...contents.items[0]!, id: 'content-2', name: '任务', sortOrder: 20 },
+      { ...contents.items[0]!, id: 'inactive', name: '停用类别', active: false, sortOrder: 30 })
+    state.listProjectContents.mockResolvedValue(contents)
+    state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [
+      { value: 'content-1', label: '产品需求', count: 1 }, { value: 'content-2', label: '任务', count: 1 },
+      { value: 'inactive', label: '停用类别', count: 1 },
+    ], nextCursor: null })
+    const wrapper = mountView(); await flushPromises()
+    await (wrapper.vm as unknown as { changeGrouping: (field: string) => Promise<void> }).changeGrouping('CONTENT')
+    await flushPromises()
+    expect(wrapper.get('[aria-label="添加工作项到停用类别"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[aria-label="添加工作项到任务"]').trigger('click')
+    const input = wrapper.get('.work-item-group-add input')
+    await input.setValue('按类别新增'); await input.trigger('keydown', { key: 'Enter' }); await flushPromises()
+    expect(state.createWorkItem).toHaveBeenCalledWith(expect.objectContaining({ workItemCreateRequest: expect.objectContaining({ contentId: 'content-2', title: '按类别新增' }) }))
+  })
+
   it('分组与折叠保留同一个主表、勾选和子表草稿，展示行不进入选择或排序请求', async () => {
     const parent = { ...item('parent-1'), subitemCount: 1 }
     const done = { ...item('done'), statusCode: 'DONE' }

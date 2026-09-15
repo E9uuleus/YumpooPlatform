@@ -238,7 +238,7 @@ export function useWorkItemGrouping(options: Options) {
 
 export interface WorkItemGroupDisplayRow {
   id: string
-  groupRowKind: 'heading' | 'columns' | 'load' | 'spacer' | 'subitems'
+  groupRowKind: 'heading' | 'columns' | 'load' | 'spacer' | 'subitems' | 'add'
   group: WorkItemGroup
   parent?: ProjectWorkItemListItem
 }

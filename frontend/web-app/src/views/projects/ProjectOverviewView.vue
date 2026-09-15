@@ -64,7 +64,8 @@ import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import WorkItemGroupingPopover from '../../components/projects/WorkItemGroupingPopover.vue'
 import { useWorkItemGrouping, isGroupDisplayRow, type WorkItemGroupDisplayRow } from '../../components/projects/useWorkItemGrouping'
-import { type GroupField, type WorkItemGroup } from '../../components/projects/workItemGrouping'
+import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from '../../components/projects/workItemGrouping'
+import { useWorkItemGroupCreate } from '../../components/projects/useWorkItemGroupCreate'
 import { useSession } from '../../composables/useSession'
 import { useWorkItemDueClock } from '../../components/projects/useWorkItemDueClock'
 import { companyDate } from '../../components/projects/workItemDueDate'
@@ -536,6 +537,22 @@ const grouping = useWorkItemGrouping({
 const { active: grouped, field: groupingField, order: groupingOrder, showEmpty: showEmptyGroups,
   groups: workItemGroups, countsReady: groupCountsReady, error: groupingError, loading: groupsLoading } = grouping
 const groupingSwitching = ref(false)
+function groupCreateDisabledReason(group: WorkItemGroup): string {
+  if (!canCreate.value) return '当前无法添加工作项'
+  if (group.key === EMPTY_GROUP) return ''
+  switch (groupingField.value) {
+    case 'CONTENT': return activeContents.value.some(item => item.id === group.key) ? '' : '此类别已停用'
+    case 'STATUS': return workflowStatuses.value.some(item => item.code === group.key && item.active) ? '' : '此状态已停用'
+    case 'PRIORITY': return priorityOptions.value.some(item => item.code === group.key && item.active) ? '' : '此优先级已停用'
+    case 'ASSIGNEE': return activeMembers.value.some(item => item.userId === group.key) ? '' : '此处理人已不在项目中'
+    case 'DUE_DATE': return group.from && group.to && group.from > group.to ? '当前日期下此分组没有可用日期' : ''
+    default: return ''
+  }
+}
+const groupCreate = useWorkItemGroupCreate({
+  projectId: () => projectId.value, field: () => groupingField.value, contentId: () => defaultContentId.value,
+  disabledReason: groupCreateDisabledReason, changed: () => reloadSortedTableInPlace(),
+})
 type TableDisplayRow = ProjectWorkItemListItem | WorkItemGroupDisplayRow
 function groupKeyForRow(row: TableDisplayRow): string {
   if (isGroupDisplayRow(row)) return row.group.key
@@ -560,6 +577,7 @@ const displayTableItems = computed<TableDisplayRow[]>(() => {
     add('heading'); add('columns')
     result.push(...withSubitems(rows.get(group.key) ?? [], group))
     add('load')
+    add('add')
   })
   return result
 })
@@ -591,7 +609,7 @@ function loadVisibleGroups(): void {
 }
 function groupSpan({ row, columnIndex }: { row: TableDisplayRow; columnIndex: number }): { rowspan: number; colspan: number } | undefined {
   if (!isGroupDisplayRow(row) || row.groupRowKind === 'columns') return
-  const first = row.groupRowKind === 'spacer' || row.groupRowKind === 'subitems' ? 0 : 2
+  const first = ['spacer', 'subitems', 'add'].includes(row.groupRowKind) ? 0 : 2
   if (columnIndex < first) return
   return { rowspan: columnIndex === first ? 1 : 0, colspan: columnIndex === first ? visibleColumns.value.length + 4 - first : 0 }
 }
@@ -1278,7 +1296,7 @@ function onQuickKeydown(rawEvent: Event | KeyboardEvent): void {
 
 function onDocumentPointerDown(event: PointerEvent): void {
   if (isWorkItemViewControl(event.target)) return
-  if (!quickOpen.value || quickCreating.value) return
+  if (grouped.value || !quickOpen.value || quickCreating.value) return
   if (quickRow.value?.contains(event.target as Node)) return
   closeQuick()
 }
@@ -2710,6 +2728,33 @@ onBeforeUnmount(() => {
                 label-class-name="work-item-menu-column"
               >
                 <template #default="scope">
+                  <div v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'add'" class="work-item-group-create">
+                    <div v-if="groupCreate.draft(scope.row.group).open" class="quick-row monday-quick-row work-item-group-quick" :style="quickGridStyle">
+                      <span class="monday-quick-checkbox" aria-hidden="true" />
+                      <el-input :ref="value => groupCreate.setInput((scope.row as WorkItemGroupDisplayRow).group, value)"
+                        v-model="groupCreate.draft(scope.row.group).title" class="quick-title-field monday-quick-add__field"
+                        maxlength="300" :disabled="groupCreate.draft(scope.row.group).saving || Boolean(groupCreate.draft(scope.row.group).request)"
+                        placeholder="添加工作项" :aria-label="`添加工作项到${scope.row.group.label}；Enter 创建，Shift+Enter 连续添加`"
+                        @keydown="groupCreate.keydown(scope.row.group, $event)" />
+                      <div class="quick-controls">
+                        <el-button class="quick-submit" size="small" type="primary" :loading="groupCreate.draft(scope.row.group).saving"
+                          :disabled="!groupCreate.draft(scope.row.group).title.trim() || Boolean(groupCreateDisabledReason(scope.row.group))"
+                          @click="groupCreate.save(scope.row.group)">
+                          {{ groupCreate.draft(scope.row.group).error ? '重试' : '添加' }}
+                        </el-button>
+                        <span class="quick-hint">Enter 新增 · Shift+Enter 连续添加</span>
+                      </div>
+                      <span class="work-item-group-add-mask" aria-hidden="true" />
+                    </div>
+                    <button v-else class="quick-add monday-quick-add work-item-group-quick" :style="quickGridStyle"
+                      :disabled="Boolean(groupCreateDisabledReason(scope.row.group))" :title="groupCreateDisabledReason(scope.row.group) || undefined"
+                      :aria-label="`添加工作项到${scope.row.group.label}`" @click="groupCreate.open(scope.row.group)">
+                      <span class="monday-quick-checkbox" aria-hidden="true" />
+                      <span class="monday-quick-add__field">添加工作项</span>
+                      <span class="work-item-group-add-mask" aria-hidden="true" />
+                    </button>
+                    <inline-problem v-if="groupCreate.draft(scope.row.group).error" class="work-item-group-create-error" :problem="groupCreate.draft(scope.row.group).error!" />
+                  </div>
                   <project-work-item-subitems-table
                     v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'subitems'"
                     :style="grouped ? { '--work-item-group-accent': workItemGroups.find(group => group.key === groupKeyForRow(scope.row.parent as ProjectWorkItemListItem))?.color } : undefined"
@@ -3136,7 +3181,7 @@ onBeforeUnmount(() => {
                 <inline-problem v-if="groupingError" :problem="groupingError" />
                 <button v-if="groupingError" class="text-button" @click="grouping.refresh()">重试加载分组</button>
                 <div
-                  v-if="quickOpen"
+                  v-if="!grouped && quickOpen"
                   ref="quickRow"
                   class="quick-row monday-quick-row"
                   :style="quickGridStyle"
@@ -3167,7 +3212,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <button
-                  v-else
+                  v-else-if="!grouped"
                   class="quick-add monday-quick-add"
                   :style="quickGridStyle"
                   :disabled="!canCreate"
@@ -3391,7 +3436,7 @@ onBeforeUnmount(() => {
 .work-item-group-name { font-size: 16px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .work-item-group-toggle small { flex: none; font-size: 12px; color: var(--yp-text-secondary); font-weight: 400; }
 .work-item-group-load { display: flex; gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
-.work-item-group-load--complete { min-height: 6px; height: 6px; padding: 0; }
+.work-item-group-load--complete { min-height: 0; height: 0; padding: 0; }
 :deep(.monday-table--grouped.el-table > .el-table__inner-wrapper > .el-table__body-wrapper) { height: 100% !important; }
 :deep(.monday-table--grouped > .el-table__inner-wrapper > .el-table__body-wrapper > .el-scrollbar > .el-scrollbar__wrap > .el-scrollbar__view > table > tbody > tr.work-item-group-collapsed:not(.work-item-group-heading):not(.work-item-group-spacer)),
 :deep(.monday-table--grouped tr.work-item-table-row.work-item-group-collapsed + tr:has(> .el-table__expanded-cell)) { display: none; }
@@ -3421,10 +3466,30 @@ onBeforeUnmount(() => {
 :deep(.monday-table--grouped tr.work-item-group-columns td.monday-movable-column-header > .cell) { overflow: visible; }
 :deep(.monday-table--grouped tr.work-item-group-load > td.el-table__cell) { padding: 0; height: auto; }
 :deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { min-height: 0 !important; height: auto !important; }
-:deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column),
-:deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column)::before { border-bottom-left-radius: var(--work-item-hierarchy-corner-radius); }
-:deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column)::before { bottom: 0; }
 :deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { padding: 0; }
+:deep(.monday-table--grouped tr.work-item-group-load:has(.work-item-group-load--complete) > td) { border-bottom: 0; }
+:deep(.monday-table--grouped tr.work-item-group-add > td.work-item-menu-column) {
+  position: relative !important; left: auto !important; height: auto; padding: 0; border: 0;
+  background: var(--yp-bg-surface) !important;
+}
+:deep(.monday-table--grouped tr.work-item-group-add > td > .cell) {
+  display: block; height: auto !important; min-height: 0 !important; padding: 0; overflow: visible;
+}
+.work-item-group-create { width: 100%; }
+.work-item-group-quick { --work-item-quick-add-accent: var(--work-item-group-accent); }
+.monday-quick-add.work-item-group-quick::before,
+.monday-quick-row.work-item-group-quick::before { opacity: 1; }
+.work-item-group-quick .monday-quick-add__field,
+.work-item-group-quick .quick-controls { position: relative; z-index: 4; }
+.work-item-group-add-mask {
+  position: absolute; z-index: 3; top: 0; right: 0; bottom: -1px; left: var(--work-item-quick-start);
+  border-bottom-left-radius: var(--work-item-hierarchy-corner-radius);
+  background: color-mix(in srgb, var(--yp-bg-surface) 50%, transparent); pointer-events: none;
+}
+.work-item-group-create-error {
+  margin: 0 12px 0 calc(81px + var(--work-item-table-scroll-left, 0px));
+  max-width: min(540px, calc(100vw - 220px)); white-space: normal;
+}
 :deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed > .monday-selection-column) {
   border: 1px solid var(--yp-monday-grid-border); border-radius: var(--work-item-hierarchy-corner-radius);
   background: var(--work-item-table-cell-bg) !important;
@@ -3465,6 +3530,14 @@ onBeforeUnmount(() => {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
+}
+
+.project-overview-stack:has(.monday-table-surface) {
+  margin-left: -32px;
+  padding-left: 32px;
+  width: calc(100% + 32px);
+  max-width: calc(100% + 32px);
+  box-sizing: border-box;
 }
 
 .work-items-toolbar {
@@ -3592,6 +3665,9 @@ onBeforeUnmount(() => {
   box-shadow: none;
   overflow: visible !important;
   padding-top: 14px;
+  margin-left: -32px;
+  width: calc(100% + 32px);
+  max-width: none;
 }
 
 .monday-table-wrapper {
