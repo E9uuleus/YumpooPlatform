@@ -2789,6 +2789,7 @@ onBeforeUnmount(() => {
                     @patch="patchCell"
                     @due-date-change="onDeadlineChange"
                     @contents-updated="onContentsUpdated"
+                    @labels-updated="onLabelsUpdated"
                     @transition="transitionItem"
                     @selection-change="onSubitemSelectionChange"
                     @header-resize="onHeaderDragEnd"
@@ -3433,7 +3434,7 @@ onBeforeUnmount(() => {
 }
 .work-item-group-toggle svg { flex: none; transition: transform 140ms ease; }
 .work-item-group-toggle svg.expanded { transform: rotate(90deg); }
-.work-item-group-name { font-size: 16px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.work-item-group-name { color: var(--work-item-group-accent); font-size: 16px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .work-item-group-toggle small { flex: none; font-size: 12px; color: var(--yp-text-secondary); font-weight: 400; }
 .work-item-group-load { display: flex; gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
 .work-item-group-load--complete { min-height: 0; height: 0; padding: 0; }

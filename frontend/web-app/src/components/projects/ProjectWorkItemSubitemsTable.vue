@@ -103,6 +103,7 @@ const emit = defineEmits<{
   patch: [item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null]
   dueDateChange: [item: ProjectWorkItemListItem, value: DueDateValue]
   contentsUpdated: [catalog: ProjectContentCatalog]
+  labelsUpdated: [catalog: WorkItemLabelCatalog]
   transition: [item: ProjectWorkItemListItem, statusCode: string]
   selectionChange: [parentId: string, rows: ProjectWorkItemListItem[]]
   headerResize: [newWidth: number, oldWidth: number, column: { label: string }]
@@ -827,6 +828,7 @@ onBeforeUnmount(() => {
                 :can-manage="Boolean(labelCatalog?.canManage)"
                 :available-transitions="scope.row.capabilities.availableTransitions"
                 @select-status="transitionItem(scope.row, $event)"
+                @updated="emit('labelsUpdated', $event)"
               />
             </el-popover>
 
@@ -844,6 +846,7 @@ onBeforeUnmount(() => {
                 :current-value="scope.row.priority"
                 :can-manage="Boolean(labelCatalog?.canManage)"
                 @select-priority="patchItem(scope.row, 'priority', $event)"
+                @updated="emit('labelsUpdated', $event)"
               />
             </el-popover>
 
