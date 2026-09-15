@@ -4,11 +4,12 @@ import { computed } from 'vue'
 
 type SortDirection = 'ASC' | 'DESC'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   label: string
   direction: SortDirection | undefined
   saving: boolean
-}>()
+  allowSave?: boolean
+}>(), { allowSave: true })
 
 const emit = defineEmits<{
   sort: []
@@ -61,7 +62,7 @@ const tooltipText = computed(() => props.direction === 'ASC'
           清除
         </button>
       </span>
-      <span v-if="active" class="save-button-wrapper">
+      <span v-if="active && allowSave !== false" class="save-button-wrapper">
         <button
           type="button"
           class="save-button"

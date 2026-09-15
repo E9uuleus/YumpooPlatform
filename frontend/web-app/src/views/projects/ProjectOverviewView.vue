@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWorkItemViewControl } from '../../components/projects/workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
 import WorkItemTimerCell from '../../components/projects/WorkItemTimerCell.vue'
@@ -61,6 +62,13 @@ import type { DueDateValue } from '../../components/projects/workItemDueDate'
 import { workItemLabelColorValue } from '../../components/projects/workItemLabelColors'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
+import WorkItemGroupingPopover from '../../components/projects/WorkItemGroupingPopover.vue'
+import { useWorkItemGrouping, isGroupDisplayRow, type WorkItemGroupDisplayRow } from '../../components/projects/useWorkItemGrouping'
+import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from '../../components/projects/workItemGrouping'
+import { useWorkItemGroupCreate } from '../../components/projects/useWorkItemGroupCreate'
+import { useSession } from '../../composables/useSession'
+import { useWorkItemDueClock } from '../../components/projects/useWorkItemDueClock'
+import { companyDate } from '../../components/projects/workItemDueDate'
 
 type ProjectView = 'table' | 'kanban'
 
@@ -152,7 +160,7 @@ const selectedWorkItemIds = ref(new Set<string>())
 const tableRef = ref<{
   $el: HTMLElement
   doLayout: () => void
-  toggleRowExpansion: (row: ProjectWorkItemListItem, expanded?: boolean) => void
+  toggleRowSelection: (row: ProjectWorkItemListItem, selected?: boolean) => void
 }>()
 const tableSentinel = ref<HTMLElement>()
 const horizontalPageScrollbar = ref<HTMLElement>()
@@ -189,7 +197,7 @@ let tableColumnPointerCandidate: {
 } | undefined
 let tableColumnResizeCandidate: {
   pointerId: number
-  key: MovableColumnKey
+  key: ColumnKey
   minWidth: number
   startWidth: number
   startX: number
@@ -499,7 +507,7 @@ const canCreate = computed(() => Boolean(project.value
   && activeContents.value.length
   && (project.value.actorAccess === ProjectActorAccess.Owner
     || project.value.actorAccess === ProjectActorAccess.Member)))
-const { draft: inlineDraft, rows: displayTableItems, isDraft, start: createBelow, save: saveInlineDraft, cancel: cancelInlineDraft } = useWorkItemInlineCreate({
+const { draft: inlineDraft, rows: displayWorkItemRows, isDraft, start: createBelow, save: saveInlineDraft, cancel: cancelInlineDraft } = useWorkItemInlineCreate({
   contextId: () => projectId.value,
   items: () => tableItems.value,
   canCreate: () => canCreate.value && !hasExplicitSort.value && !editingCell.value && !tableSorting.value,
@@ -512,6 +520,143 @@ const { draft: inlineDraft, rows: displayTableItems, isDraft, start: createBelow
     void reloadSortedTableInPlace()
   },
 })
+const session = useSession()
+const groupingClock = useWorkItemDueClock()
+const grouping = useWorkItemGrouping({
+  items: tableItems,
+  preferenceKey: () => `yumpoo:project-work-items:grouping:v1:${session.authentication.value?.company.id ?? 'unknown'}:${session.authentication.value?.user.id ?? 'unknown'}:${projectId.value}`,
+  request: () => listRequest(null),
+  sources: () => ({ members: members.value, statuses: labelCatalog.value?.statuses ?? [],
+    priorities: labelCatalog.value?.priorities ?? [], contents: catalog.value?.items ?? [] }),
+  today: () => companyDate(groupingClock.value, session.authentication.value?.company.timezone ?? 'Asia/Shanghai'),
+  ready: () => Boolean(project.value && selectedView.value === 'table'),
+  restore: () => reloadSortedTableInPlace(selectedRowId.value),
+  protectedIds: () => new Set([...expandedSubitemIds.value, ...selectedWorkItemIds.value,
+    ...[selectedRowId.value, inlineDraft.value?.anchorId].filter((id): id is string => Boolean(id))]),
+})
+const { active: grouped, field: groupingField, order: groupingOrder, showEmpty: showEmptyGroups,
+  groups: workItemGroups, countsReady: groupCountsReady, error: groupingError, loading: groupsLoading } = grouping
+const groupingSwitching = ref(false)
+function groupCreateDisabledReason(group: WorkItemGroup): string {
+  if (!canCreate.value) return '当前无法添加工作项'
+  if (group.key === EMPTY_GROUP) return ''
+  switch (groupingField.value) {
+    case 'CONTENT': return activeContents.value.some(item => item.id === group.key) ? '' : '此类别已停用'
+    case 'STATUS': return workflowStatuses.value.some(item => item.code === group.key && item.active) ? '' : '此状态已停用'
+    case 'PRIORITY': return priorityOptions.value.some(item => item.code === group.key && item.active) ? '' : '此优先级已停用'
+    case 'ASSIGNEE': return activeMembers.value.some(item => item.userId === group.key) ? '' : '此处理人已不在项目中'
+    case 'DUE_DATE': return group.from && group.to && group.from > group.to ? '当前日期下此分组没有可用日期' : ''
+    default: return ''
+  }
+}
+const groupCreate = useWorkItemGroupCreate({
+  projectId: () => projectId.value, field: () => groupingField.value, contentId: () => defaultContentId.value,
+  disabledReason: groupCreateDisabledReason, changed: () => reloadSortedTableInPlace(),
+})
+type TableDisplayRow = ProjectWorkItemListItem | WorkItemGroupDisplayRow
+function groupKeyForRow(row: TableDisplayRow): string {
+  if (isGroupDisplayRow(row)) return row.group.key
+  const anchor = isDraft(row) ? tableItems.value.find(item => item.id === inlineDraft.value?.anchorId) : undefined
+  return grouping.keyOf(anchor ?? row)
+}
+const displayTableItems = computed<TableDisplayRow[]>(() => {
+  const withSubitems = (items: ProjectWorkItemListItem[], group: WorkItemGroup): TableDisplayRow[] => items.flatMap(item =>
+    expandedSubitemIds.value.includes(item.id)
+      ? [item, { id: `subitems:${item.id}`, groupRowKind: 'subitems', group, parent: item } as WorkItemGroupDisplayRow] : [item])
+  if (!grouped.value) return withSubitems(displayWorkItemRows.value, { key: '', label: '', color: 'rgb(87, 155, 252)', rank: 0, count: 0 })
+  const result: TableDisplayRow[] = []
+  const rows = new Map<string, ProjectWorkItemListItem[]>()
+  for (const item of displayWorkItemRows.value) {
+    const key = groupKeyForRow(item)
+    if (!rows.has(key)) rows.set(key, [])
+    rows.get(key)!.push(item)
+  }
+  workItemGroups.value.forEach((group, index) => {
+    const add = (kind: WorkItemGroupDisplayRow['groupRowKind']) => result.push({ id: `group:${groupingField.value}:${group.key}:${kind}`, groupRowKind: kind, group })
+    if (index) add('spacer')
+    add('heading'); add('columns')
+    result.push(...withSubitems(rows.get(group.key) ?? [], group))
+    add('load')
+    add('add')
+  })
+  return result
+})
+const groupSentinels = new Map<string, HTMLElement>()
+const groupHeadings = new Map<string, HTMLElement>()
+let groupObserver: IntersectionObserver | undefined
+function setGroupSentinel(key: string, element: unknown, heading = false): void {
+  const targets = heading ? groupHeadings : groupSentinels
+  const previous = targets.get(key)
+  if (previous === element) return
+  if (previous) groupObserver?.unobserve(previous)
+  if (element instanceof HTMLElement) {
+    element.dataset.groupKey = key
+    targets.set(key, element)
+    groupObserver?.observe(element)
+  } else targets.delete(key)
+}
+function loadVisibleGroups(): void {
+  if (!grouped.value || !groupCountsReady.value) return
+  const root = resolveTableScrollElement()?.getBoundingClientRect()
+  groupSentinels.forEach((element, key) => {
+    if (grouping.isCollapsed(key) || grouping.page(key).error) return
+    const rect = element.getBoundingClientRect()
+    const start = groupHeadings.get(key)?.getBoundingClientRect()
+    const groupTop = grouping.page(key).loaded ? rect.top : start?.top ?? rect.top
+    if (rect.height > 0 && rect.bottom >= (root?.top ?? 0) - 240 && groupTop <= (root?.bottom ?? window.innerHeight) + 240)
+      void grouping.load(key)
+  })
+}
+function groupSpan({ row, columnIndex }: { row: TableDisplayRow; columnIndex: number }): { rowspan: number; colspan: number } | undefined {
+  if (!isGroupDisplayRow(row) || row.groupRowKind === 'columns') return
+  const first = ['spacer', 'subitems', 'add'].includes(row.groupRowKind) ? 0 : 2
+  if (columnIndex < first) return
+  return { rowspan: columnIndex === first ? 1 : 0, colspan: columnIndex === first ? visibleColumns.value.length + 4 - first : 0 }
+}
+function groupRowClasses(context: { row: TableDisplayRow; rowIndex: number }): string {
+  const { row } = context
+  if (!grouped.value && !isGroupDisplayRow(row)) return tableRowClassName({ ...context, row })
+  const key = groupKeyForRow(row)
+  const hidden = grouping.isCollapsed(key) ? ' work-item-group-collapsed' : ''
+  if (isGroupDisplayRow(row)) return `work-item-group-${row.groupRowKind}${hidden}`
+  return `${tableRowClassName({ ...context, row })}${hidden}`
+}
+function groupRowStyles(context: { row: TableDisplayRow; rowIndex: number }): CSSProperties {
+  const { row } = context
+  if (!grouped.value && !isGroupDisplayRow(row)) return tableRowStyle({ row, rowIndex: tableItems.value.findIndex(item => item.id === row.id) })
+  const key = groupKeyForRow(row)
+  const group = workItemGroups.value.find(candidate => candidate.key === key)
+  const style: CSSProperties = { '--work-item-group-accent': group?.color }
+  if (isGroupDisplayRow(row)) return style
+  return { ...style, ...tableRowStyle({ row, rowIndex: tableItems.value.findIndex(item => item.id === row.id) }) }
+}
+function groupCellClasses(context: { row: TableDisplayRow; column: { property?: string } }): string {
+  if (isGroupDisplayRow(context.row) && context.row.groupRowKind === 'subitems') return 'el-table__expanded-cell'
+  if (isGroupDisplayRow(context.row)) return context.row.groupRowKind === 'columns'
+    ? `work-item-group-column-header monday-sortable-column-header${context.column.property && context.column.property !== 'title' ? ' monday-movable-column-header' : ''}` : ''
+  return tableCellClassName({ ...context, row: context.row })
+}
+function groupSelection(group: WorkItemGroup): { checked: boolean; mixed: boolean } {
+  const items = grouping.page(group.key).items
+  const count = items.filter(item => selectedWorkItemIds.value.has(item.id)).length
+  return { checked: items.length > 0 && count === items.length, mixed: count > 0 && count < items.length }
+}
+function selectGroupRows(group: WorkItemGroup, checked: boolean): void {
+  grouping.page(group.key).items.forEach(item => tableRef.value?.toggleRowSelection(item, checked))
+}
+async function changeGrouping(field: GroupField | ''): Promise<void> {
+  loadRevision++
+  activeController?.abort()
+  activeController = new AbortController()
+  tableLoading.value = false; tableSorting.value = false
+  clearTablePointerTracking(); resetTableDragState()
+  groupingSwitching.value = true
+  try {
+    await grouping.setField(field)
+    scheduleResponsiveTableLayout()
+    await nextTick()
+  } finally { groupingSwitching.value = false }
+}
 const canPublishDiscussion = computed(() => Boolean(project.value
   && project.value.lifecycle !== ProjectLifecycle.Archived
   && detail.value?.capabilities?.canDiscuss
@@ -569,9 +714,10 @@ async function loadSubitems(parentId: string, force = false): Promise<void> {
   }
 }
 
-function onTableExpandChange(row: ProjectWorkItemListItem,
-  expanded: ProjectWorkItemListItem[] | boolean): void {
-  const expandedRows = Array.isArray(expanded) ? expanded : expanded
+function onTableExpandChange(row: TableDisplayRow,
+  expanded: TableDisplayRow[] | boolean): void {
+  if (isGroupDisplayRow(row)) return
+  const expandedRows = Array.isArray(expanded) ? expanded.filter(item => !isGroupDisplayRow(item)) : expanded
     ? [...tableItems.value.filter(item => expandedSubitemIds.value.includes(item.id)), row]
     : tableItems.value.filter(item => item.id !== row.id
       && expandedSubitemIds.value.includes(item.id))
@@ -581,7 +727,7 @@ function onTableExpandChange(row: ProjectWorkItemListItem,
 }
 
 function toggleSubitems(row: ProjectWorkItemListItem): void {
-  tableRef.value?.toggleRowExpansion(row, !expandedSubitemIds.value.includes(row.id))
+  onTableExpandChange(row, !expandedSubitemIds.value.includes(row.id))
 }
 
 function setSubitemTableHandle(id: string, handle: unknown): void {
@@ -591,7 +737,7 @@ function setSubitemTableHandle(id: string, handle: unknown): void {
 
 async function addSubitem(row: ProjectWorkItemListItem): Promise<void> {
   if (!canCreate.value) return
-  tableRef.value?.toggleRowExpansion(row, true)
+  onTableExpandChange(row, true)
   await nextTick()
   subitemTableHandles.get(row.id)?.openQuick()
 }
@@ -920,6 +1066,7 @@ function listRequest(cursor?: string | null) {
 }
 
 async function loadTable(cursor: string | null = null, append = false, revision = loadRevision): Promise<void> {
+  if (grouped.value && selectedView.value === 'table') { await grouping.refresh(); return }
   if (tableLoading.value || tableSorting.value) return
   tableLoading.value = true
   loadingMoreError.value = undefined
@@ -945,6 +1092,7 @@ async function loadTable(cursor: string | null = null, append = false, revision 
 }
 
 async function reloadSortedTableInPlace(revealWorkItemId?: string): Promise<void> {
+  if (grouped.value && selectedView.value === 'table') { await grouping.refresh(); return }
   const revision = ++loadRevision
   activeController?.abort()
   const controller = new AbortController()
@@ -968,7 +1116,9 @@ async function reloadSortedTableInPlace(revealWorkItemId?: string): Promise<void
       result.items.forEach(item => loaded.set(item.id, item))
       nextCursor = result.nextCursor
       if (!nextCursor || nextCursor === cursor
-        || (loaded.size >= minimumItemCount && (!revealWorkItemId || loaded.has(revealWorkItemId)))) break
+        || (loaded.size >= minimumItemCount && (!revealWorkItemId || loaded.has(revealWorkItemId))
+          && expandedSubitemIds.value.every(id => loaded.has(id))
+          && (!inlineDraft.value?.anchorId || loaded.has(inlineDraft.value.anchorId)))) break
       cursor = nextCursor
     }
 
@@ -1035,6 +1185,7 @@ async function refreshCurrentView(): Promise<void> {
 }
 
 async function loadWorkspace(): Promise<void> {
+  grouping.stop()
   const revision = ++loadRevision
   activeController?.abort()
   activeController = new AbortController()
@@ -1144,7 +1295,8 @@ function onQuickKeydown(rawEvent: Event | KeyboardEvent): void {
 }
 
 function onDocumentPointerDown(event: PointerEvent): void {
-  if (!quickOpen.value || quickCreating.value) return
+  if (isWorkItemViewControl(event.target)) return
+  if (grouped.value || !quickOpen.value || quickCreating.value) return
   if (quickRow.value?.contains(event.target as Node)) return
   closeQuick()
 }
@@ -1339,6 +1491,7 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
   Object.values(lanes).forEach(state => { state.items = state.items.map(apply) })
   Object.values(subitems).forEach(state => { state.items = state.items.map(apply) })
   if (detail.value?.id === id) detail.value = { ...detail.value, ...updatedDetail }
+  if (grouped.value && tableItems.value.some(item => item.id === id)) void grouping.changed()
 }
 
 async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null, dueTime?: string | null): Promise<boolean> {
@@ -1417,6 +1570,7 @@ async function loadAllSortedWorkItems(): Promise<boolean> {
 }
 
 async function saveSortedWorkItemOrder(): Promise<void> {
+  if (grouped.value) return
   if (savingSortOrder.value || !sortRules.value.length) return
   if (tableLoading.value || tableSorting.value) {
     ElMessage.info('排序结果仍在加载，请稍后再保存工作项顺序')
@@ -1705,7 +1859,11 @@ function tableHeaderCellStyle({ column }: { column: { property?: string } }): CS
   return tableColumnDragStyle(column.property)
 }
 
-function movableHeaderCells(): HTMLTableCellElement[] {
+function movableHeaderCells(source?: HTMLTableCellElement): HTMLTableCellElement[] {
+  if (grouped.value) {
+    const row = source?.parentElement ?? tableRef.value?.$el?.querySelector('.work-item-group-columns:not(.work-item-group-collapsed)')
+    return [...(row?.querySelectorAll<HTMLTableCellElement>('td.monday-movable-column-header') ?? [])]
+  }
   return [...(tableRef.value?.$el?.querySelectorAll<HTMLTableCellElement>(
     ':scope > .el-table__inner-wrapper > .el-table__header-wrapper th.monday-movable-column-header',
   ) ?? [])]
@@ -1753,9 +1911,9 @@ function applyTableColumnResize(clientX: number): void {
 function onTableColumnResizePointerDown(event: PointerEvent, handle: HTMLElement): void {
   const columnKey = handle.dataset.columnKey as ColumnKey | undefined
   const config = columnKey ? columnByKey.get(columnKey) : undefined
-  const header = handle.closest<HTMLTableCellElement>('th.monday-movable-column-header')
-  if (!columnKey || !config || columnKey === 'title' || !header) return
-  const key = columnKey as MovableColumnKey
+  const header = handle.closest<HTMLTableCellElement>(grouped.value ? '.work-item-group-column-header' : '.monday-movable-column-header')
+  if (!columnKey || !config || (columnKey === 'title' && !grouped.value) || !header) return
+  const key = columnKey
 
   clearTableColumnPointerTracking()
   clearTableColumnResizeTracking()
@@ -1767,7 +1925,7 @@ function onTableColumnResizePointerDown(event: PointerEvent, handle: HTMLElement
     startWidth: renderedWidth > 0 ? renderedWidth : columnWidths[key],
     startX: event.clientX,
   }
-  columnResizingKey.value = key
+  if (key !== 'title') columnResizingKey.value = key
   event.preventDefault()
   event.stopPropagation()
   document.body.style.cursor = 'col-resize'
@@ -1812,11 +1970,11 @@ function onTableColumnPointerDown(event: PointerEvent): void {
     return
   }
   if (target?.closest('.sort-by-column')) return
-  const header = target?.closest<HTMLTableCellElement>('th.monday-movable-column-header')
+  const header = target?.closest<HTMLTableCellElement>('.monday-movable-column-header')
   if (!header) return
   const rect = header.getBoundingClientRect()
   if (rect.width > 0 && rect.right - event.clientX < TABLE_COLUMN_RESIZE_HANDLE_WIDTH) return
-  const headers = movableHeaderCells()
+  const headers = movableHeaderCells(header)
   const index = headers.indexOf(header)
   const key = movableVisibleColumns.value[index]?.key as MovableColumnKey | undefined
   if (!key) return
@@ -1919,8 +2077,8 @@ function isRowSelected(rowId: string): boolean {
   return false
 }
 
-function onTableSelectionChange(rows: ProjectWorkItemListItem[]): void {
-  selectedWorkItemIds.value = new Set(rows.map(row => row.id))
+function onTableSelectionChange(rows: TableDisplayRow[]): void {
+  selectedWorkItemIds.value = new Set(rows.filter(row => !isGroupDisplayRow(row) && !isDraft(row)).map(row => row.id))
 }
 
 function tableRowClassName({ row }: { row: ProjectWorkItemListItem; rowIndex: number }): string {
@@ -1959,16 +2117,19 @@ function captureTablePositions(): Map<string, number> {
   const rows = tableRef.value?.$el?.querySelectorAll(
     '.el-table__body-wrapper tbody tr.work-item-table-row',
   ) as NodeListOf<HTMLElement> | undefined
-  return new Map(tableItems.value.map((item, index) => [item.id, rows?.[index]?.getBoundingClientRect().top ?? 0]))
+  return new Map([...(rows ?? [])].flatMap(row => {
+    const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
+    return id ? [[id, row.getBoundingClientRect().top] as const] : []
+  }))
 }
 
 function animateTableReorder(previous: Map<string, number>): void {
   const rows = tableRef.value?.$el?.querySelectorAll(
     '.el-table__body-wrapper tbody tr.work-item-table-row',
   ) as NodeListOf<HTMLElement> | undefined
-  tableItems.value.forEach((item, index) => {
-    const row = rows?.[index]
-    const before = previous.get(item.id)
+  rows?.forEach(row => {
+    const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
+    const before = id ? previous.get(id) : undefined
     if (!row || before === undefined) return
     const delta = before - row.getBoundingClientRect().top
     if (Math.abs(delta) < 1) return
@@ -1982,7 +2143,8 @@ function animateTableReorder(previous: Map<string, number>): void {
 function rowIndexFromTarget(target: EventTarget | null): number {
   const row = (target as HTMLElement | null)?.closest('tr.work-item-table-row')
   if (!row) return -1
-  return [...row.parentElement!.children].filter(element => element.classList.contains('work-item-table-row')).indexOf(row)
+  const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
+  return tableItems.value.findIndex(item => item.id === id)
 }
 
 function clearTablePointerTracking(): void {
@@ -2016,6 +2178,22 @@ function updateTableDropTarget(clientY: number): void {
   const rows = [...(tableRef.value?.$el?.querySelectorAll<HTMLElement>(
     '.el-table__body-wrapper tbody tr.work-item-table-row',
   ) ?? [])]
+  if (grouped.value && tableDragging.value) {
+    const key = grouping.keyOf(tableDragging.value)
+    const groupRows = rows.filter(row => {
+      const id = row.querySelector<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
+      return grouping.page(key).items.some(item => item.id === id) && row.getBoundingClientRect().height > 0
+    })
+    const first = groupRows[0]?.getBoundingClientRect()
+    const last = groupRows.at(-1)?.getBoundingClientRect()
+    if (!first || !last || clientY < first.top - 16 || clientY > last.bottom + 16) {
+      tableDropIndex.value = undefined
+      return
+    }
+    const row = groupRows.find(candidate => clientY < candidate.getBoundingClientRect().top + candidate.getBoundingClientRect().height / 2)
+    tableDropIndex.value = row ? rowIndexFromTarget(row) : rowIndexFromTarget(groupRows.at(-1)!) + 1
+    return
+  }
   const hasMeasuredRows = rows.some(row => row.getBoundingClientRect().height > 0)
   if (hasMeasuredRows) {
     const target = rows.findIndex(row => clientY < row.getBoundingClientRect().top
@@ -2049,6 +2227,7 @@ function onTablePointerDown(event: PointerEvent): void {
   const item = tableItems.value[index]
   const row = target?.closest('tr.work-item-table-row') as HTMLElement | null
   if (!row || !item?.capabilities.canMoveInProjectOrder) return
+  if (grouped.value && (!groupCountsReady.value || !grouping.page(grouping.keyOf(item)).loaded)) return
 
   clearTablePointerTracking()
   tablePointerCandidate = {
@@ -2117,11 +2296,24 @@ async function commitTableDrop(): Promise<void> {
   let target = tableDropIndex.value
   resetTableDragState()
   if (!item || target === undefined) return
-  const original = [...tableItems.value]
+  const groupKey = grouped.value ? grouping.keyOf(item) : undefined
+  const original = groupKey === undefined ? [...tableItems.value] : [...grouping.page(groupKey).items]
+  if (groupKey !== undefined) {
+    const offset = tableItems.value.findIndex(candidate => candidate.id === original[0]?.id)
+    target -= offset
+    if (offset < 0 || target < 0 || target > original.length) return
+  }
+  const applyOrder = (items: ProjectWorkItemListItem[]) => {
+    if (groupKey === undefined) tableItems.value = items
+    else grouping.replaceOrder(groupKey, items)
+  }
   const from = original.findIndex(candidate => candidate.id === item.id)
   if (from < 0) return
-  if (target === original.length && tableNextCursor.value) {
-    ElMessage.info('正在加载更远的工作项，请稍后继续拖动。'); await loadTable(tableNextCursor.value, true); return
+  if (target === original.length && (groupKey === undefined ? tableNextCursor.value : grouping.page(groupKey).nextCursor)) {
+    ElMessage.info('正在加载更远的工作项，请稍后继续拖动。')
+    if (groupKey === undefined) await loadTable(tableNextCursor.value, true)
+    else await grouping.load(groupKey)
+    return
   }
   const reordered = [...original]
   reordered.splice(from, 1)
@@ -2130,11 +2322,11 @@ async function commitTableDrop(): Promise<void> {
   reordered.splice(target, 0, item)
   if (reordered.map(row => row.id).join() === original.map(row => row.id).join()) return
   const previousPositions = captureTablePositions()
-  tableItems.value = reordered
+  applyOrder(reordered)
   await nextTick()
   animateTableReorder(previousPositions)
   const csrf = readCsrfToken()
-  if (!csrf) { tableItems.value = original; error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
+  if (!csrf) { applyOrder(original); error.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
   try {
     const updated = await workItemsApi.moveProjectWorkItemOrder({
       projectId: projectId.value, workItemId: item.id, xXSRFTOKEN: csrf, ifMatch: item.etag,
@@ -2147,7 +2339,7 @@ async function commitTableDrop(): Promise<void> {
     replaceLightItem(item.id, updated)
     ElMessage.success('工作项顺序已更新')
   } catch (reason) {
-    tableItems.value = original
+    applyOrder(original)
     error.value = await toApiProblem(reason)
     await loadTable(null, false)
   }
@@ -2161,6 +2353,12 @@ function clearFilters(): void {
 }
 
 function resetCurrentData(): void {
+  grouping.stop()
+  if (grouped.value && selectedView.value === 'table') {
+    loadRevision++; activeController?.abort(); tableLoading.value = false; tableSorting.value = false
+    void grouping.refresh()
+    return
+  }
   const revision = ++loadRevision
   activeController?.abort(); activeController = new AbortController()
   selectedWorkItemIds.value = new Set()
@@ -2213,6 +2411,29 @@ watch(tableRef, () => {
   observeProjectPageResizeTargets()
   scheduleResponsiveTableLayout()
 }, { flush: 'post' })
+watch([displayTableItems, () => [...grouping.collapsed.value].join('|'), groupCountsReady], () => {
+  schedulePageScrollbarSync()
+  void nextTick(loadVisibleGroups)
+}, { flush: 'post' })
+watch(displayTableItems, () => {
+  if (!grouped.value && !groupingSwitching.value) return
+  const scroll = resolveTableScrollElement()
+  if (!scroll) return
+  const top = scroll.getBoundingClientRect().top
+  const cells = [...scroll.querySelectorAll<HTMLElement>('[data-work-item-id]')]
+  const anchor = cells.find(cell => cell.getBoundingClientRect().height > 0 && cell.getBoundingClientRect().bottom > top)
+  const id = anchor?.dataset.workItemId
+  const position = anchor?.getBoundingClientRect().top
+  const left = scroll.scrollLeft
+  const atTop = scroll.scrollTop < 1
+  void nextTick(() => {
+    scroll.scrollLeft = left
+    const next = [...scroll.querySelectorAll<HTMLElement>('[data-work-item-id]')].find(cell => cell.dataset.workItemId === id)
+    if (atTop) scroll.scrollTop = 0
+    else if (next && next.getBoundingClientRect().height && position !== undefined)
+      scroll.scrollTop += next.getBoundingClientRect().top - position
+  })
+}, { flush: 'pre' })
 watch([
   tableRef,
   () => selectedView.value,
@@ -2231,9 +2452,14 @@ onMounted(() => {
   loadTablePrefs()
   document.addEventListener('pointerdown', onDocumentPointerDown)
   tableObserver = new IntersectionObserver(entries => {
-    if (entries.some(entry => entry.isIntersecting) && tableNextCursor.value && !tableLoading.value && !tableSorting.value)
+    if (!grouped.value && entries.some(entry => entry.isIntersecting) && tableNextCursor.value && !tableLoading.value && !tableSorting.value)
       void loadTable(tableNextCursor.value, true)
   }, { rootMargin: '320px 0px' })
+  groupObserver = new IntersectionObserver(entries => {
+    if (entries.some(entry => entry.isIntersecting)) loadVisibleGroups()
+  }, { rootMargin: '240px 0px' })
+  groupSentinels.forEach(element => groupObserver?.observe(element))
+  groupHeadings.forEach(element => groupObserver?.observe(element))
   kanbanObserver = new IntersectionObserver(entries => {
     entries.filter(entry => entry.isIntersecting).forEach(entry => {
       const status = (entry.target as HTMLElement).dataset.status
@@ -2244,6 +2470,7 @@ onMounted(() => {
   watch(tableSentinel, (next, previous) => { if (previous) tableObserver?.unobserve(previous); if (next) tableObserver?.observe(next) }, { immediate: true })
 })
 onBeforeUnmount(() => {
+  groupObserver?.disconnect()
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
   if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
   if (suppressTableClickTimer) window.clearTimeout(suppressTableClickTimer)
@@ -2321,7 +2548,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="work-items-toolbar" aria-label="工作项工具栏">
+        <div class="work-items-toolbar" aria-label="工作项工具栏" data-work-item-view-control>
           <div class="toolbar-search" :class="{ 'toolbar-search--expanded': searchExpanded }">
             <el-input
               v-if="searchExpanded"
@@ -2339,7 +2566,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <el-popover placement="bottom-start" :width="360" trigger="click" popper-class="work-items-popover" @show="loadFilterOptions">
+          <el-popover placement="bottom-start" :width="360" trigger="click" popper-class="work-items-popover work-item-view-control" @show="loadFilterOptions">
             <template #reference>
               <button class="toolbar-button" :class="{ active: filters.assignees.size }">
                 <el-icon><user /></el-icon><span>处理人</span>
@@ -2423,7 +2650,7 @@ onBeforeUnmount(() => {
             </div>
           </el-popover>
 
-          <el-popover placement="bottom-start" :width="420" trigger="click" :disabled="selectedView === 'kanban' || savingSortOrder" popper-class="work-items-popover">
+          <el-popover placement="bottom-start" :width="420" trigger="click" :disabled="selectedView === 'kanban' || savingSortOrder" popper-class="work-items-popover work-item-view-control">
             <template #reference>
               <button class="toolbar-button" :disabled="selectedView === 'kanban' || savingSortOrder" :class="{ active: sortRules.length }">
                 <el-icon><sort /></el-icon><span>排序<span v-if="sortRules.length"> / {{ sortRules.length }}</span></span>
@@ -2432,18 +2659,18 @@ onBeforeUnmount(() => {
             <div class="sort-popover">
               <header><strong>排序方式</strong><button class="text-button" @click="clearAllSorts">清除</button></header>
               <div v-for="(rule, index) in sortRules" :key="index" class="sort-rule">
-                <el-select v-model="rule.field" @change="syncUrl">
+                <el-select v-model="rule.field" popper-class="work-item-view-control" @change="syncUrl">
                   <el-option label="工作项名称" value="TITLE" /><el-option label="处理人" value="ASSIGNEE" />
                   <el-option label="状态" value="STATUS" /><el-option label="优先级" value="PRIORITY" />
                   <el-option label="截止日期" value="DUE_DATE" /><el-option label="累计计时" value="TIME_TRACKING" /><el-option label="最后更新时间" value="UPDATED_AT" />
                 </el-select>
-                <el-select v-model="rule.direction" @change="syncUrl"><el-option label="升序" value="ASC" /><el-option label="降序" value="DESC" /></el-select>
+                <el-select v-model="rule.direction" popper-class="work-item-view-control" @change="syncUrl"><el-option label="升序" value="ASC" /><el-option label="降序" value="DESC" /></el-select>
               </div>
               <button v-if="sortRules.length < 3" class="popover-add" @click="setSortCount(sortRules.length + 1)">+ 新增排序</button>
             </div>
           </el-popover>
 
-          <el-popover placement="bottom-start" :width="320" trigger="click" :disabled="selectedView === 'kanban'" popper-class="work-items-popover">
+          <el-popover placement="bottom-start" :width="320" trigger="click" :disabled="selectedView === 'kanban'" popper-class="work-items-popover work-item-view-control">
             <template #reference>
               <button class="toolbar-button" :disabled="selectedView === 'kanban'">
                 <el-icon><hide /></el-icon><span>隐藏</span>
@@ -2457,13 +2684,16 @@ onBeforeUnmount(() => {
               </label>
             </div>
           </el-popover>
+          <work-item-grouping-popover :field="groupingField" :order="groupingOrder" :show-empty="showEmptyGroups"
+            :disabled="selectedView === 'kanban' || savingSortOrder"
+            @field="changeGrouping" @order="groupingOrder = $event" @show-empty="showEmptyGroups = $event" />
           <button class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
         </div>
 
         <div
           v-if="selectedView === 'table'"
-          v-loading="tableLoading && !tableItems.length"
-          :aria-busy="tableLoading || tableSorting"
+          v-loading="tableLoading && !tableItems.length && !grouped"
+          :aria-busy="tableLoading || tableSorting || groupsLoading"
           class="table-surface monday-table-surface"
         >
           <div
@@ -2475,21 +2705,21 @@ onBeforeUnmount(() => {
               ref="tableRef"
               :data="displayTableItems"
               :fit="true"
-              :expand-row-keys="expandedSubitemIds"
-              :row-class-name="tableRowClassName"
-              :row-style="tableRowStyle"
-              :cell-class-name="tableCellClassName"
+              :row-class-name="groupRowClasses"
+              :row-style="groupRowStyles"
+              :cell-class-name="groupCellClasses"
+              :span-method="groupSpan"
+              :show-header="!grouped"
               :cell-style="tableCellStyle"
               :header-cell-style="tableHeaderCellStyle"
               row-key="id"
               class="monday-table"
-              :class="{ 'monday-table--column-dragging': columnDraggingKey, 'monday-table--empty': !tableItems.length }"
+              :class="{ 'monday-table--column-dragging': columnDraggingKey, 'monday-table--empty': !displayTableItems.length, 'monday-table--grouped': grouped }"
               height="100%"
               empty-text="当前项目暂无工作项"
               border
               @header-dragend="onHeaderDragEnd"
               @selection-change="onTableSelectionChange"
-              @expand-change="onTableExpandChange"
             >
               <el-table-column
                 :width="TABLE_MENU_COLUMN_WIDTH"
@@ -2498,34 +2728,44 @@ onBeforeUnmount(() => {
                 label-class-name="work-item-menu-column"
               >
                 <template #default="scope">
-                  <work-item-row-actions
-                    v-if="!isDraft(scope.row as ProjectWorkItemListItem)"
-                    :item="scope.row as ProjectWorkItemListItem"
-                    :can-create="canCreate"
-                    :sorted="hasExplicitSort"
-                    :disabled="Boolean(editingCell) || tableSorting || savingSortOrder"
-                    :before-remove="() => beforeRowRemove(scope.row as ProjectWorkItemListItem)"
-                    @open="openDetail($event, 'details')"
-                    @add-subitem="addSubitem"
-                    @create-below="createBelow"
-                    @moved="onRowMoved"
-                    @changed="onRelationsChanged"
-                    @removed="onRowRemoved"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column type="expand" :width="TABLE_EXPAND_COLUMN_WIDTH" fixed class-name="monday-expand-column">
-                <template #default="scope">
+                  <div v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'add'" class="work-item-group-create">
+                    <div v-if="groupCreate.draft(scope.row.group).open" class="quick-row monday-quick-row work-item-group-quick" :style="quickGridStyle">
+                      <span class="monday-quick-checkbox" aria-hidden="true" />
+                      <el-input :ref="value => groupCreate.setInput((scope.row as WorkItemGroupDisplayRow).group, value)"
+                        v-model="groupCreate.draft(scope.row.group).title" class="quick-title-field monday-quick-add__field"
+                        maxlength="300" :disabled="groupCreate.draft(scope.row.group).saving || Boolean(groupCreate.draft(scope.row.group).request)"
+                        placeholder="添加工作项" :aria-label="`添加工作项到${scope.row.group.label}；Enter 创建，Shift+Enter 连续添加`"
+                        @keydown="groupCreate.keydown(scope.row.group, $event)" />
+                      <div class="quick-controls">
+                        <el-button class="quick-submit" size="small" type="primary" :loading="groupCreate.draft(scope.row.group).saving"
+                          :disabled="!groupCreate.draft(scope.row.group).title.trim() || Boolean(groupCreateDisabledReason(scope.row.group))"
+                          @click="groupCreate.save(scope.row.group)">
+                          {{ groupCreate.draft(scope.row.group).error ? '重试' : '添加' }}
+                        </el-button>
+                        <span class="quick-hint">Enter 新增 · Shift+Enter 连续添加</span>
+                      </div>
+                      <span class="work-item-group-add-mask" aria-hidden="true" />
+                    </div>
+                    <button v-else class="quick-add monday-quick-add work-item-group-quick" :style="quickGridStyle"
+                      :disabled="Boolean(groupCreateDisabledReason(scope.row.group))" :title="groupCreateDisabledReason(scope.row.group) || undefined"
+                      :aria-label="`添加工作项到${scope.row.group.label}`" @click="groupCreate.open(scope.row.group)">
+                      <span class="monday-quick-checkbox" aria-hidden="true" />
+                      <span class="monday-quick-add__field">添加工作项</span>
+                      <span class="work-item-group-add-mask" aria-hidden="true" />
+                    </button>
+                    <inline-problem v-if="groupCreate.draft(scope.row.group).error" class="work-item-group-create-error" :problem="groupCreate.draft(scope.row.group).error!" />
+                  </div>
                   <project-work-item-subitems-table
-                    v-if="expandedSubitemIds.includes((scope.row as ProjectWorkItemListItem).id)"
-                    :ref="value => setSubitemTableHandle(scope.row.id, value)"
+                    v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'subitems'"
+                    :style="grouped ? { '--work-item-group-accent': workItemGroups.find(group => group.key === groupKeyForRow(scope.row.parent as ProjectWorkItemListItem))?.color } : undefined"
+                    :ref="value => setSubitemTableHandle(scope.row.parent!.id, value)"
                     :project-id="projectId"
                     :selected-cell-key="selectedCellKey"
-                    :parent="scope.row as ProjectWorkItemListItem"
-                    :items="subitemState((scope.row as ProjectWorkItemListItem).id).items"
-                    :loading="subitemState((scope.row as ProjectWorkItemListItem).id).loading && !subitemState((scope.row as ProjectWorkItemListItem).id).loaded"
-                    :error="subitemState((scope.row as ProjectWorkItemListItem).id).error"
-                    :sort-rules="subitemState((scope.row as ProjectWorkItemListItem).id).sortRules"
+                    :parent="scope.row.parent as ProjectWorkItemListItem"
+                    :items="subitemState((scope.row.parent as ProjectWorkItemListItem).id).items"
+                    :loading="subitemState((scope.row.parent as ProjectWorkItemListItem).id).loading && !subitemState((scope.row.parent as ProjectWorkItemListItem).id).loaded"
+                    :error="subitemState((scope.row.parent as ProjectWorkItemListItem).id).error"
+                    :sort-rules="subitemState((scope.row.parent as ProjectWorkItemListItem).id).sortRules"
                     :columns="visibleSubitemColumns"
                     :column-widths="columnWidths"
                     :active-contents="activeContents"
@@ -2541,30 +2781,78 @@ onBeforeUnmount(() => {
                     @row-moved="onRowMoved"
                     @select-cell="selectCell"
                     @row-removed="onRowRemoved"
-                    @retry="loadSubitems((scope.row as ProjectWorkItemListItem).id, true)"
-                    @sort-change="onSubitemSortChange((scope.row as ProjectWorkItemListItem).id, $event)"
+                    @retry="loadSubitems((scope.row.parent as ProjectWorkItemListItem).id, true)"
+                    @sort-change="onSubitemSortChange((scope.row.parent as ProjectWorkItemListItem).id, $event)"
                     @created="onSubitemCreated"
                     @updated="replaceLightItem"
                     @open-detail="openDetail"
                     @patch="patchCell"
                     @due-date-change="onDeadlineChange"
                     @contents-updated="onContentsUpdated"
+                    @labels-updated="onLabelsUpdated"
                     @transition="transitionItem"
                     @selection-change="onSubitemSelectionChange"
                     @header-resize="onHeaderDragEnd"
                     @move-column="moveSubitemColumn"
                   />
+                  <work-item-row-actions
+                    v-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem)"
+                    :item="scope.row as ProjectWorkItemListItem"
+                    :can-create="canCreate"
+                    :sorted="hasExplicitSort"
+                    :order-items="grouped ? grouping.edgeItems : undefined"
+                    :disabled="Boolean(editingCell) || tableSorting || savingSortOrder || (grouped && groupsLoading)"
+                    :before-remove="() => beforeRowRemove(scope.row as ProjectWorkItemListItem)"
+                    @open="openDetail($event, 'details')"
+                    @add-subitem="addSubitem"
+                    @create-below="createBelow"
+                    @moved="onRowMoved"
+                    @changed="onRelationsChanged"
+                    @removed="onRowRemoved"
+                  />
                 </template>
               </el-table-column>
+              <el-table-column :width="TABLE_EXPAND_COLUMN_WIDTH" fixed class-name="monday-expand-column" />
               <el-table-column
                 type="selection"
-                :selectable="(row: ProjectWorkItemListItem) => !isDraft(row)"
+                :selectable="(row: TableDisplayRow) => !isGroupDisplayRow(row) && !isDraft(row)"
                 :width="TABLE_SELECTION_COLUMN_WIDTH"
                 fixed
                 reserve-selection
                 class-name="monday-selection-column"
                 label-class-name="monday-selection-column"
-              />
+              >
+                <template #default="scope">
+                  <template v-if="isGroupDisplayRow(scope.row)">
+                    <button v-if="scope.row.groupRowKind === 'heading'" type="button" class="work-item-group-toggle"
+                      data-work-item-view-control
+                      :ref="value => setGroupSentinel((scope.row as WorkItemGroupDisplayRow).group.key, value, true)"
+                      :aria-expanded="!grouping.isCollapsed(scope.row.group.key)"
+                      :aria-label="`${grouping.isCollapsed(scope.row.group.key) ? '展开' : '收起'}分组：${scope.row.group.label}`"
+                      @click.stop="grouping.toggle(scope.row.group.key)">
+                      <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor" aria-hidden="true" :class="{ expanded: !grouping.isCollapsed(scope.row.group.key) }">
+                        <path d="M12.76 10.56a.77.77 0 0 0 0-1.116L8.397 5.233a.84.84 0 0 0-1.157 0 .77.77 0 0 0 0 1.116l3.785 3.653-3.785 3.652a.77.77 0 0 0 0 1.117.84.84 0 0 0 1.157 0l4.363-4.211Z" />
+                      </svg>
+                      <span class="work-item-group-name">{{ scope.row.group.label }}</span>
+                      <small>{{ groupCountsReady ? scope.row.group.count : '…' }} 个工作项</small>
+                    </button>
+                    <el-checkbox v-else-if="scope.row.groupRowKind === 'columns'" :model-value="groupSelection(scope.row.group).checked"
+                      :indeterminate="groupSelection(scope.row.group).mixed" :disabled="!grouping.page(scope.row.group.key).items.length"
+                      :aria-label="`选择${scope.row.group.label}已加载工作项`" @change="selectGroupRows(scope.row.group, Boolean($event))" />
+                    <div v-else-if="scope.row.groupRowKind === 'load'" :ref="element => isGroupDisplayRow(scope.row) && setGroupSentinel(scope.row.group.key, element)"
+                      class="work-item-group-load" :class="{ 'work-item-group-load--complete': scope.row.group.count > 0 && grouping.page(scope.row.group.key).loaded && !grouping.page(scope.row.group.key).nextCursor && !grouping.page(scope.row.group.key).error }">
+                      <template v-if="grouping.page(scope.row.group.key).error">
+                        <span>此分组加载失败</span><el-button text size="small" @click="grouping.load(scope.row.group.key)">重试</el-button>
+                      </template>
+                      <span v-else-if="scope.row.group.count === 0 && groupCountsReady">暂无工作项</span>
+                      <button v-else-if="!grouping.page(scope.row.group.key).loaded || grouping.page(scope.row.group.key).nextCursor"
+                        class="text-button" :disabled="!groupCountsReady || grouping.page(scope.row.group.key).loading" @click="grouping.load(scope.row.group.key)">
+                        {{ grouping.page(scope.row.group.key).loading || !groupCountsReady ? '正在加载…' : '加载更多工作项' }}
+                      </button>
+                    </div>
+                  </template>
+                </template>
+              </el-table-column>
               <el-table-column
                 label="工作项名称"
                 column-key="title"
@@ -2591,7 +2879,13 @@ onBeforeUnmount(() => {
                   />
                 </template>
                 <template #default="scope">
-                  <div class="title-cell">
+                  <template v-if="isGroupDisplayRow(scope.row)">
+                    <monday-column-quick-sort v-if="scope.row.groupRowKind === 'columns'" label="工作项名称"
+                      :direction="sortDirectionForColumn('title')" :saving="tableSorting" :allow-save="false"
+                      @sort="applyColumnQuickSort('title')" @clear="clearColumnSort('title')" />
+                    <span class="monday-column-resize-handle monday-title-column-resize-handle" data-column-key="title" aria-hidden="true" />
+                  </template>
+                  <div v-else class="title-cell" :data-work-item-id="scope.row.id">
                     <work-item-name-cell
                       class="work-item-link"
                       :item="scope.row as ProjectWorkItemListItem"
@@ -2695,8 +2989,14 @@ onBeforeUnmount(() => {
                   />
                 </template>
                 <template #default="scope">
+                  <template v-if="isGroupDisplayRow(scope.row)">
+                    <monday-column-quick-sort v-if="scope.row.groupRowKind === 'columns'" :label="column.label"
+                      :direction="sortDirectionForColumn(column.key)" :saving="tableSorting" :allow-save="false"
+                      @sort="applyColumnQuickSort(column.key)" @clear="clearColumnSort(column.key)" />
+                    <span class="monday-column-resize-handle" :data-column-key="column.key" aria-hidden="true" />
+                  </template>
                   <work-item-draft-cell
-                    v-if="isDraft(scope.row as ProjectWorkItemListItem)"
+                    v-else-if="isDraft(scope.row as ProjectWorkItemListItem)"
                     :item="scope.row as ProjectWorkItemListItem"
                     :column="column.key"
                     :status-label="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.displayName ?? '—'"
@@ -2870,11 +3170,19 @@ onBeforeUnmount(() => {
                     </svg>
                   </button>
                 </template>
+                <template #default="scope">
+                  <button v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'" type="button"
+                    class="monday-add-column-icon" aria-label="添加列（功能预留）" title="添加列（功能预留）">
+                    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+                  </button>
+                </template>
               </el-table-column>
 
               <template #append>
+                <inline-problem v-if="groupingError" :problem="groupingError" />
+                <button v-if="groupingError" class="text-button" @click="grouping.refresh()">重试加载分组</button>
                 <div
-                  v-if="quickOpen"
+                  v-if="!grouped && quickOpen"
                   ref="quickRow"
                   class="quick-row monday-quick-row"
                   :style="quickGridStyle"
@@ -2905,7 +3213,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <button
-                  v-else
+                  v-else-if="!grouped"
                   class="quick-add monday-quick-add"
                   :style="quickGridStyle"
                   :disabled="!canCreate"
@@ -2915,8 +3223,8 @@ onBeforeUnmount(() => {
                   <span class="monday-quick-add__field">添加工作项</span>
                 </button>
                 <div ref="tableSentinel" class="cursor-sentinel" aria-hidden="true" />
-                <div v-if="tableLoading && tableItems.length" class="incremental-state">正在加载更多工作项…</div>
-                <div v-else-if="loadingMoreError" class="incremental-state incremental-state--error">
+                <div v-if="!grouped && tableLoading && tableItems.length" class="incremental-state">正在加载更多工作项…</div>
+                <div v-else-if="!grouped && loadingMoreError" class="incremental-state incremental-state--error">
                   <span>加载更多失败</span><el-button text @click="loadTable(tableNextCursor, true)">重试</el-button>
                 </div>
               </template>
@@ -3119,6 +3427,78 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.work-item-group-toggle {
+  display: flex; align-items: center; gap: 10px; width: min(540px, calc(100vw - 200px));
+  height: 38px; padding: 0 14px 0 10px; border: 0; background: transparent;
+  color: var(--yp-text-primary); text-align: left; cursor: pointer;
+}
+.work-item-group-toggle svg { flex: none; transition: transform 140ms ease; }
+.work-item-group-toggle svg.expanded { transform: rotate(90deg); }
+.work-item-group-name { color: var(--work-item-group-accent); font-size: 16px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.work-item-group-toggle small { flex: none; font-size: 12px; color: var(--yp-text-secondary); font-weight: 400; }
+.work-item-group-load { display: flex; gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
+.work-item-group-load--complete { min-height: 0; height: 0; padding: 0; }
+:deep(.monday-table--grouped.el-table > .el-table__inner-wrapper > .el-table__body-wrapper) { height: 100% !important; }
+:deep(.monday-table--grouped > .el-table__inner-wrapper > .el-table__body-wrapper > .el-scrollbar > .el-scrollbar__wrap > .el-scrollbar__view > table > tbody > tr.work-item-group-collapsed:not(.work-item-group-heading):not(.work-item-group-spacer)),
+:deep(.monday-table--grouped tr.work-item-table-row.work-item-group-collapsed + tr:has(> .el-table__expanded-cell)) { display: none; }
+:deep(.monday-table--grouped tr.work-item-group-heading > td.el-table__cell),
+:deep(.monday-table--grouped tr.work-item-group-spacer > td.el-table__cell) { border: 0; background: var(--yp-bg-surface) !important; padding: 0; }
+:deep(.monday-table--grouped tr.work-item-group-heading > td > .cell) { padding: 0; height: 38px; }
+:deep(.monday-table--grouped tr.work-item-group-heading > .monday-selection-column),
+:deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column) { position: relative !important; left: auto !important; }
+:deep(.monday-table--grouped tr.work-item-group-heading > .monday-selection-column)::before,
+:deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column)::before,
+.work-item-group-toggle, .work-item-group-load { transform: translateX(var(--work-item-table-scroll-left, 0px)); }
+:deep(.monday-table--grouped tr.work-item-group-heading > td > .cell),
+:deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { justify-content: flex-start !important; }
+:deep(.monday-table--grouped tr.work-item-group-heading:not(.work-item-group-collapsed) > .monday-selection-column)::before { display: none; }
+:deep(.monday-table--grouped tr.work-item-group-spacer > td.el-table__cell),
+:deep(.monday-table--grouped tr.work-item-group-spacer > td > .cell) { height: 24px; line-height: 0; padding: 0; }
+:deep(.monday-table--grouped tr.work-item-group-columns > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
+  height: var(--work-item-table-header-height); padding: 0;
+  border-top: 1px solid var(--yp-monday-grid-border); background: var(--work-item-table-cell-bg);
+  color: var(--yp-text-secondary); font-size: 13px; font-weight: 500;
+}
+:deep(.monday-table--grouped tr.work-item-group-columns > .monday-selection-column)::before { top: 0; border-top-left-radius: var(--work-item-hierarchy-corner-radius); }
+:deep(.monday-table--grouped tr.work-item-group-columns > .monday-selection-column) { border-top-left-radius: var(--work-item-hierarchy-corner-radius); }
+:deep(.monday-table--grouped tr.work-item-group-columns .monday-column-quick-sort) { height: var(--work-item-table-header-height); }
+:deep(.monday-table--grouped tr.work-item-group-columns > td > .cell) { padding: 0; overflow: visible; }
+:deep(.monday-table--grouped tr.work-item-group-columns td.monday-movable-column-header) { position: relative; cursor: grab; touch-action: none; user-select: none; }
+:deep(.monday-table--grouped tr.work-item-group-columns td.monday-movable-column-header > .cell) { overflow: visible; }
+:deep(.monday-table--grouped tr.work-item-group-load > td.el-table__cell) { padding: 0; height: auto; }
+:deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { min-height: 0 !important; height: auto !important; }
+:deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { padding: 0; }
+:deep(.monday-table--grouped tr.work-item-group-load:has(.work-item-group-load--complete) > td) { border-bottom: 0; }
+:deep(.monday-table--grouped tr.work-item-group-add > td.work-item-menu-column) {
+  position: relative !important; left: auto !important; height: auto; padding: 0; border: 0;
+  background: var(--yp-bg-surface) !important;
+}
+:deep(.monday-table--grouped tr.work-item-group-add > td > .cell) {
+  display: block; height: auto !important; min-height: 0 !important; padding: 0; overflow: visible;
+}
+.work-item-group-create { width: 100%; }
+.work-item-group-quick { --work-item-quick-add-accent: var(--work-item-group-accent); }
+.monday-quick-add.work-item-group-quick::before,
+.monday-quick-row.work-item-group-quick::before { opacity: 1; }
+.work-item-group-quick .monday-quick-add__field,
+.work-item-group-quick .quick-controls { position: relative; z-index: 4; }
+.work-item-group-add-mask {
+  position: absolute; z-index: 3; top: 0; right: 0; bottom: -1px; left: var(--work-item-quick-start);
+  border-bottom-left-radius: var(--work-item-hierarchy-corner-radius);
+  background: color-mix(in srgb, var(--yp-bg-surface) 50%, transparent); pointer-events: none;
+}
+.work-item-group-create-error {
+  margin: 0 12px 0 calc(81px + var(--work-item-table-scroll-left, 0px));
+  max-width: min(540px, calc(100vw - 220px)); white-space: normal;
+}
+:deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed > .monday-selection-column) {
+  border: 1px solid var(--yp-monday-grid-border); border-radius: var(--work-item-hierarchy-corner-radius);
+  background: var(--work-item-table-cell-bg) !important;
+}
+:deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed > .monday-selection-column)::before {
+  top: -1px; bottom: -1px; border-radius: var(--work-item-hierarchy-corner-radius) 0 0 var(--work-item-hierarchy-corner-radius);
+}
+@media (prefers-reduced-motion: reduce) { .work-item-group-toggle svg { transition: none; } }
 .work-items-home {
   display: flex;
   min-width: 0;
@@ -3153,6 +3533,14 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+.project-overview-stack:has(.monday-table-surface) {
+  margin-left: -32px;
+  padding-left: 32px;
+  width: calc(100% + 32px);
+  max-width: calc(100% + 32px);
+  box-sizing: border-box;
+}
+
 .work-items-toolbar {
   display: flex;
   min-width: 0;
@@ -3162,7 +3550,7 @@ onBeforeUnmount(() => {
   overflow-x: auto;
 }
 
-.toolbar-button {
+.toolbar-button, :deep(.grouping-toolbar-button) {
   display: inline-flex;
   height: 36px;
   flex: 0 0 auto;
@@ -3178,8 +3566,8 @@ onBeforeUnmount(() => {
   transition: background var(--yp-motion-fast) var(--yp-ease-standard), color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
-.toolbar-button:hover:not(:disabled), .toolbar-button.active { background: var(--yp-bg-hover); color: var(--yp-action-primary); }
-.toolbar-button:disabled { color: var(--yp-text-disabled); cursor: not-allowed; }
+.toolbar-button:hover:not(:disabled), .toolbar-button.active, :deep(.grouping-toolbar-button:hover:not(:disabled)), :deep(.grouping-toolbar-button.active) { background: var(--yp-bg-hover); color: var(--yp-action-primary); }
+.toolbar-button:disabled, :deep(.grouping-toolbar-button:disabled) { color: var(--yp-text-disabled); cursor: not-allowed; }
 .toolbar-count { min-width: 18px; padding: 1px 5px; border-radius: var(--yp-radius-pill); color: var(--yp-priority-foreground); background: var(--yp-action-primary); font-size: 11px; }
 .toolbar-search { width: 94px; flex: 0 0 auto; transition: width 100ms cubic-bezier(0, 0, .35, 1); }
 .toolbar-search > .toolbar-button { width: 100%; }
@@ -3278,6 +3666,9 @@ onBeforeUnmount(() => {
   box-shadow: none;
   overflow: visible !important;
   padding-top: 14px;
+  margin-left: -32px;
+  width: calc(100% + 32px);
+  max-width: none;
 }
 
 .monday-table-wrapper {

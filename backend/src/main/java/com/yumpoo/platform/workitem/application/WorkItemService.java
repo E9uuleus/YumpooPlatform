@@ -1202,6 +1202,7 @@ public class WorkItemService {
                 Objects.toString(query.dueFrom(), ""), Objects.toString(query.dueTo(), ""),
                 Objects.toString(query.updatedAfter(), ""), sorts,
                 query.timeTracking()==null ? "" : Objects.toString(query.timeTracking().state(),"")+":"+query.timeTracking().minMs()+":"+query.timeTracking().maxMs());
+        if (query.emptyField() != null) canonical += "\nemptyField=" + query.emptyField();
         try {
             byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
                     .digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));

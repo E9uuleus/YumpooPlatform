@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
 import WorkItemRowActions from './WorkItemRowActions.vue'
@@ -102,6 +103,7 @@ const emit = defineEmits<{
   patch: [item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null]
   dueDateChange: [item: ProjectWorkItemListItem, value: DueDateValue]
   contentsUpdated: [catalog: ProjectContentCatalog]
+  labelsUpdated: [catalog: WorkItemLabelCatalog]
   transition: [item: ProjectWorkItemListItem, statusCode: string]
   selectionChange: [parentId: string, rows: ProjectWorkItemListItem[]]
   headerResize: [newWidth: number, oldWidth: number, column: { label: string }]
@@ -291,6 +293,7 @@ function closeQuick(): void {
 }
 
 function onDocumentPointerDown(event: PointerEvent): void {
+  if (isWorkItemViewControl(event.target)) return
   if (!quickOpen.value || quickCreating.value || quickRow.value?.contains(event.target as Node)) return
   closeQuick()
 }
@@ -825,6 +828,7 @@ onBeforeUnmount(() => {
                 :can-manage="Boolean(labelCatalog?.canManage)"
                 :available-transitions="scope.row.capabilities.availableTransitions"
                 @select-status="transitionItem(scope.row, $event)"
+                @updated="emit('labelsUpdated', $event)"
               />
             </el-popover>
 
@@ -842,6 +846,7 @@ onBeforeUnmount(() => {
                 :current-value="scope.row.priority"
                 :can-manage="Boolean(labelCatalog?.canManage)"
                 @select-priority="patchItem(scope.row, 'priority', $event)"
+                @updated="emit('labelsUpdated', $event)"
               />
             </el-popover>
 
@@ -945,7 +950,7 @@ onBeforeUnmount(() => {
   --subitem-hierarchy-bar-width: var(--work-item-hierarchy-bar-width, 6px);
   --subitem-hierarchy-bar-center: var(--work-item-hierarchy-bar-center, 3px);
   --subitem-hierarchy-corner-radius: var(--work-item-hierarchy-corner-radius, var(--subitem-hierarchy-bar-width));
-  --subitem-add-row-accent: rgba(87, 155, 252, 0.5);
+  --subitem-add-row-accent: color-mix(in srgb, var(--work-item-group-accent, rgb(87, 155, 252)) 50%, transparent);
   --subitem-table-header-height: 38px;
   --subitem-table-row-height: 36px;
   --subitem-table-empty-height: 60px;

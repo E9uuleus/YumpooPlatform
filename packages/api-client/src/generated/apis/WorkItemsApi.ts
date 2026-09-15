@@ -220,6 +220,7 @@ export interface ListProjectWorkItemsRequest {
     cursor?: string;
     limit?: number;
     view?: WorkItemViewType;
+    emptyField?: ListProjectWorkItemsEmptyFieldEnum;
     status?: Set<string>;
     q?: string;
     priority?: Set<string>;
@@ -1375,6 +1376,10 @@ export class WorkItemsApi extends runtime.BaseAPI {
 
         if (requestParameters['view'] != null) {
             queryParameters['view'] = requestParameters['view'];
+        }
+
+        if (requestParameters['emptyField'] != null) {
+            queryParameters['emptyField'] = requestParameters['emptyField'];
         }
 
         if (requestParameters['status'] != null) {
@@ -2675,5 +2680,15 @@ export enum ListProjectWorkItemFilterOptionsFieldEnum {
     Content = 'CONTENT',
     DueDate = 'DUE_DATE',
     UpdatedAt = 'UPDATED_AT',
+    UnknownDefaultOpenApi = '11184809'
+}
+/**
+  * @export
+  * @enum {string}
+  */
+export enum ListProjectWorkItemsEmptyFieldEnum {
+    Assignee = 'ASSIGNEE',
+    Priority = 'PRIORITY',
+    DueDate = 'DUE_DATE',
     UnknownDefaultOpenApi = '11184809'
 }

@@ -25,7 +25,8 @@ public record WorkItemQuery(
         LocalDate dueTo,
         Instant updatedAfter,
         List<Sort> sorts,
-        TimeFilter timeTracking
+        TimeFilter timeTracking,
+        String emptyField
 ) {
     public record TimeFilter(String state, Long minMs, Long maxMs, Instant asOf, long revision, long anchorDurationMs) {
         public TimeFilter {
@@ -40,13 +41,20 @@ public record WorkItemQuery(
             Set<UUID> contentIds, LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter, List<Sort> sorts) {
         this(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,null);
     }
+    public WorkItemQuery(String query, Set<String> statuses, Set<String> priorities, Set<UUID> assigneeUserIds,
+            Set<UUID> contentIds, LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter,
+            List<Sort> sorts, TimeFilter timeTracking) {
+        this(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,null);
+    }
     public WorkItemQuery withTime(TimeFilter filter) {
-        return new WorkItemQuery(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,filter);
+        return new WorkItemQuery(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,filter,emptyField);
     }
     public boolean usesTimeTracking() {
         return timeTracking != null || sorts.stream().anyMatch(s -> s.field()==WorkItemSortField.TIME_TRACKING);
     }
     public WorkItemQuery {
+        if (emptyField != null && !Set.of("ASSIGNEE", "PRIORITY", "DUE_DATE").contains(emptyField))
+            throw invalid("emptyField", "INVALID_VALUE", "空值筛选字段无效");
         statuses = Set.copyOf(statuses);
         priorities = Set.copyOf(priorities);
         assigneeUserIds = Set.copyOf(assigneeUserIds);
@@ -60,14 +68,22 @@ public record WorkItemQuery(
                           Collection<String> priorities, Collection<UUID> assigneeUserIds,
                           Collection<UUID> contentIds,
                           LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter,
-                          Collection<String> sorts, TimeFilter timeTracking) {
+                          Collection<String> sorts, TimeFilter timeTracking, String emptyField) {
+        public Request(String query, Collection<String> statuses, Collection<String> priorities,
+                Collection<UUID> assigneeUserIds, Collection<UUID> contentIds, LocalDate dueFrom,
+                LocalDate dueTo, Instant updatedAfter, Collection<String> sorts, TimeFilter timeTracking) {
+            this(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,null);
+        }
         public Request(String query, Collection<String> statuses, Collection<String> priorities,
                 Collection<UUID> assigneeUserIds, Collection<UUID> contentIds, LocalDate dueFrom,
                 LocalDate dueTo, Instant updatedAfter, Collection<String> sorts) {
             this(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,null);
         }
         public Request withTime(TimeFilter filter) {
-            return new Request(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,filter);
+            return new Request(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,filter,emptyField);
+        }
+        public Request withEmptyField(String field) {
+            return new Request(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,field);
         }
     }
 
@@ -80,7 +96,7 @@ public record WorkItemQuery(
                 request.assigneeUserIds() == null ? Set.of()
                         : new LinkedHashSet<>(request.assigneeUserIds()),
                 request.contentIds() == null ? Set.of() : new LinkedHashSet<>(request.contentIds()),
-                request.dueFrom(), request.dueTo(), request.updatedAfter(), sorts(request.sorts()), request.timeTracking());
+                request.dueFrom(), request.dueTo(), request.updatedAfter(), sorts(request.sorts()), request.timeTracking(), request.emptyField());
     }
 
     private static String normalizeQuery(String value) {
