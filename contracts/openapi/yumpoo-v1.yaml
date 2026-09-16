@@ -12,6 +12,8 @@ servers:
   - url: /api/v1
     description: Yumpoo v1 business API
 tags:
+  - name: Dashboards
+    description: 用户私有仪表板、跨项目统计与布局配置。
   - name: TimeTracking
     description: 工作项原始计时与本人跨端计时器。
   - name: Authentication
@@ -41,6 +43,279 @@ tags:
   - name: Activity
     description: Project 与 Work Item 的追加式安全动态时间线。
 paths:
+  /me/dashboards:
+    get:
+      tags:
+        - Dashboards
+      operationId: listDashboards
+      summary: 查询本人私人仪表板
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: 查询本人私人仪表板
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardList"
+        "400": &a1
+          $ref: "#/components/responses/ValidationFailed"
+        "401": &a2
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403": &a3
+          $ref: "#/components/responses/Forbidden"
+        "404": &a4
+          $ref: "#/components/responses/ResourceNotFound"
+        "409": &a5
+          $ref: "#/components/responses/Conflict"
+        "412": &a6
+          $ref: "#/components/responses/VersionConflict"
+        "422": &a7
+          $ref: "#/components/responses/ValidationFailed"
+        "428": &a8
+          $ref: "#/components/responses/PreconditionRequired"
+    post:
+      tags:
+        - Dashboards
+      operationId: createDashboard
+      summary: 创建私人仪表板
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardWrite"
+      responses:
+        "201":
+          description: 创建私人仪表板
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardView"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+  /me/dashboard-projects:
+    get:
+      tags:
+        - Dashboards
+      operationId: listDashboardProjects
+      summary: 查询本人有效成员关系内的项目
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+        - name: includeArchived
+          in: query
+          schema:
+            type: boolean
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            maximum: 100000
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: 查询本人有效成员关系内的项目
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardProjectPage"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+  /me/dashboards/{id}:
+    get:
+      tags:
+        - Dashboards
+      operationId: getDashboard
+      summary: 读取本人仪表板
+      security:
+        - sessionCookie: []
+      parameters:
+        - &a9
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 读取本人仪表板
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardView"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+    patch:
+      tags:
+        - Dashboards
+      operationId: updateDashboard
+      summary: 更新本人仪表板完整配置
+      security:
+        - sessionCookie: []
+      parameters:
+        - *a9
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardWrite"
+      responses:
+        "200":
+          description: 更新本人仪表板完整配置
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardView"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+    delete:
+      tags:
+        - Dashboards
+      operationId: deleteDashboard
+      summary: 删除本人仪表板
+      security:
+        - sessionCookie: []
+      parameters:
+        - *a9
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: 删除本人仪表板
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardDeleted"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+  /me/dashboards/{id}/query:
+    post:
+      tags:
+        - Dashboards
+      operationId: queryDashboard
+      summary: 按统一筛选统计有权限的已连接项目
+      security:
+        - sessionCookie: []
+      parameters:
+        - *a9
+        - $ref: "#/components/parameters/XsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardQuery"
+      responses:
+        "200":
+          description: 按统一筛选统计有权限的已连接项目
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSnapshot"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+  /me/dashboards/{id}/items/query:
+    post:
+      tags:
+        - Dashboards
+      operationId: queryDashboardItems
+      summary: 分页查询统计对应的工作项明细
+      security:
+        - sessionCookie: []
+      parameters:
+        - *a9
+        - $ref: "#/components/parameters/XsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardItemsQuery"
+      responses:
+        "200":
+          description: 分页查询统计对应的工作项明细
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardItemPage"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
   /me/time-tracker/candidates:
     get:
       tags: [TimeTracking]
@@ -3460,6 +3735,389 @@ components:
       description: 服务端签发的 HttpOnly、Secure、SameSite=Lax Web Session Cookie。
 
   schemas:
+    DashboardPosition:
+      type: object
+      required:
+        - x
+        - y
+        - w
+        - h
+      properties:
+        x: &a1
+          type: integer
+          format: int64
+          minimum: 0
+        y: *a1
+        w:
+          type: integer
+          format: int64
+          minimum: 1
+        h:
+          type: integer
+          format: int64
+          minimum: 1
+    DashboardWidget:
+      type: object
+      required:
+        - id
+        - kind
+        - title
+        - metric
+        - grouping
+        - sort
+        - showLegend
+        - showValues
+        - wide
+        - medium
+      properties:
+        id: &a3
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+            - METRIC
+            - STATUS
+            - PROJECT_WORKLOAD
+            - MEMBER_WORKLOAD
+            - PROJECT_TIME
+        title:
+          type: string
+          minLength: 1
+          maxLength: 80
+        metric:
+          type: string
+          enum:
+            - TOTAL
+            - IN_PROGRESS
+            - DONE
+            - COMPLETION_RATE
+            - DURATION
+        grouping:
+          type: string
+          enum:
+            - STATUS
+            - CATEGORY
+        sort:
+          type: string
+          enum:
+            - ASC
+            - DESC
+        showLegend: &a2
+          type: boolean
+        showValues: *a2
+        wide:
+          $ref: "#/components/schemas/DashboardPosition"
+        medium:
+          $ref: "#/components/schemas/DashboardPosition"
+    DashboardFilters:
+      type: object
+      required:
+        - projectIds
+        - assignees
+        - statuses
+        - priorities
+        - contentIds
+        - categories
+        - dueFrom
+        - dueTo
+        - includeArchived
+        - query
+        - hasTime
+      properties:
+        projectIds:
+          type: array
+          items: *a3
+        assignees:
+          type: array
+          items: &a4
+            type: string
+        statuses:
+          type: array
+          items: *a4
+        priorities:
+          type: array
+          items: *a4
+        contentIds:
+          type: array
+          items: *a3
+        categories:
+          type: array
+          items: *a4
+        dueFrom:
+          type: string
+          format: date
+          nullable: true
+        dueTo:
+          type: string
+          format: date
+          nullable: true
+        includeArchived: *a2
+        query:
+          type: string
+          maxLength: 200
+        hasTime: *a2
+    DashboardConfiguration:
+      type: object
+      required:
+        - projectIds
+        - widgets
+        - filters
+      properties:
+        projectIds:
+          type: array
+          items: *a3
+          maxItems: 100
+        widgets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardWidget"
+          maxItems: 40
+        filters:
+          $ref: "#/components/schemas/DashboardFilters"
+    DashboardWrite:
+      type: object
+      required:
+        - name
+        - configuration
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        configuration:
+          $ref: "#/components/schemas/DashboardConfiguration"
+    DashboardConnection:
+      type: object
+      required:
+        - id
+        - name
+        - code
+        - lifecycle
+        - available
+      properties:
+        id: *a3
+        name:
+          type: string
+          nullable: true
+        code:
+          type: string
+          nullable: true
+        lifecycle:
+          type: string
+          nullable: true
+        available: *a2
+    DashboardProject:
+      type: object
+      required:
+        - id
+        - name
+        - code
+        - lifecycle
+      properties:
+        id: *a3
+        name: *a4
+        code: *a4
+        lifecycle: *a4
+    DashboardProjectPage:
+      type: object
+      required:
+        - items
+        - totalElements
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardProject"
+        totalElements: *a1
+    DashboardView:
+      type: object
+      required:
+        - id
+        - name
+        - configuration
+        - projects
+        - version
+        - etag
+        - updatedAt
+      properties:
+        id: *a3
+        name: *a4
+        configuration:
+          $ref: "#/components/schemas/DashboardConfiguration"
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardConnection"
+        version: *a1
+        etag: *a4
+        updatedAt: &a5
+          type: string
+          format: date-time
+    DashboardSummary:
+      type: object
+      required:
+        - id
+        - name
+        - projectCount
+        - widgetCount
+        - updatedAt
+      properties:
+        id: *a3
+        name: *a4
+        projectCount: *a1
+        widgetCount: *a1
+        updatedAt: *a5
+    DashboardList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardSummary"
+    DashboardQuery:
+      type: object
+      required:
+        - filters
+      properties:
+        filters:
+          $ref: "#/components/schemas/DashboardFilters"
+    DashboardItemsQuery:
+      type: object
+      required:
+        - filters
+        - offset
+        - limit
+      properties:
+        filters:
+          $ref: "#/components/schemas/DashboardFilters"
+        offset:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 100000
+        limit:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 100
+    DashboardBucket:
+      type: object
+      required:
+        - kind
+        - key
+        - projectId
+        - userId
+        - label
+        - code
+        - category
+        - colorToken
+        - count
+        - inProgress
+        - done
+        - durationMs
+      properties:
+        kind: *a4
+        key: *a4
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        label:
+          type: string
+          nullable: true
+        code:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        colorToken:
+          type: string
+          nullable: true
+        count: *a1
+        inProgress: *a1
+        done: *a1
+        durationMs: *a1
+    DashboardSnapshot:
+      type: object
+      required:
+        - buckets
+        - options
+        - asOf
+        - projects
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardBucket"
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardBucket"
+        asOf: *a5
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardConnection"
+    DashboardItem:
+      type: object
+      required:
+        - id
+        - projectId
+        - itemNo
+        - title
+        - assigneeUserId
+        - assigneeName
+        - statusCode
+        - statusName
+        - statusCategory
+        - colorToken
+        - durationMs
+        - updatedAt
+      properties:
+        id: *a3
+        projectId: *a3
+        itemNo: *a4
+        title: *a4
+        assigneeUserId:
+          type: string
+          format: uuid
+          nullable: true
+        assigneeName:
+          type: string
+          nullable: true
+        statusCode: *a4
+        statusName: *a4
+        statusCategory: *a4
+        colorToken: *a4
+        durationMs: *a1
+        updatedAt: *a5
+    DashboardItemPage:
+      type: object
+      required:
+        - items
+        - totalElements
+        - asOf
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardItem"
+        totalElements: *a1
+        asOf: *a5
+    DashboardDeleted:
+      type: object
+      required:
+        - deleted
+      properties:
+        deleted: *a2
     TimeTrackingState:
       type: string
       enum: [RUNNING, STOPPED, EMPTY]

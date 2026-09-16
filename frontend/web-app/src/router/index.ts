@@ -76,6 +76,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { shellSection: 'work' },
       },
       {
+        path: 'workspace/:workspaceSlug/dashboards/:dashboardId?',
+        name: 'dashboards',
+        component: () => import('../views/DashboardsView.vue'),
+        meta: { shellSection: 'work' },
+      },
+      {
         path: 'products',
         name: 'products',
         component: ProductsView,
@@ -203,8 +209,8 @@ export function sessionDestination(to: RouteLocationNormalized) {
   if (to.name === 'workspace-root' || to.name === 'workspace-entry') {
     return { name: 'workspace', params: { workspaceSlug }, replace: true }
   }
-  if (to.name === 'workspace' && to.params.workspaceSlug !== workspaceSlug) {
-    return { name: 'workspace', params: { workspaceSlug }, replace: true }
+  if ((to.name === 'workspace' || to.name === 'dashboards') && to.params.workspaceSlug !== workspaceSlug) {
+    return { name: to.name, params: { ...to.params, workspaceSlug }, replace: true }
   }
   return true
 }

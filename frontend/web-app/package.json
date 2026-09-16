@@ -27,7 +27,9 @@
     "@tiptap/suggestion": "3.30.3",
     "@tiptap/vue-3": "3.30.3",
     "@yumpoo/api-client": "workspace:*",
+    "echarts": "6.1.0",
     "element-plus": "2.14.4",
+    "gridstack": "13.3.0",
     "vue": "3.5.41",
     "vue-router": "4.6.4"
   },

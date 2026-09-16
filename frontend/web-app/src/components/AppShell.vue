@@ -101,9 +101,9 @@ const contextItems = computed<ContextItem[]>(() => {
 
 function navigate(name: string, params?: Record<string, string>): void {
   mobileNavigationOpen.value = false
-  if (name === 'workspace') {
+  if (name === 'workspace' || name === 'dashboards') {
     const workspaceSlug = session.authentication.value?.user.workspaceSlug
-    if (workspaceSlug) void router.push({ name: 'workspace', params: { workspaceSlug } })
+    if (workspaceSlug) void router.push({ name, params: { workspaceSlug } })
     return
   }
   void router.push(params ? { name, params } : { name })
@@ -412,6 +412,7 @@ onBeforeUnmount(() => {
         aria-label="当前区域导航"
       >
         <template v-if="isWorkspaceSection">
+          <button type="button" :class="{ active: route.name === 'dashboards' }" :aria-current="route.name === 'dashboards' ? 'page' : undefined" @click="navigate('dashboards')"><el-icon aria-hidden="true"><grid /></el-icon><span>仪表板</span></button>
           <button
             class="project-navigation__toggle"
             type="button"
@@ -641,6 +642,7 @@ onBeforeUnmount(() => {
         aria-label="移动端当前区域导航"
       >
         <template v-if="isWorkspaceSection">
+          <button type="button" :class="{ active: route.name === 'dashboards' }" :aria-current="route.name === 'dashboards' ? 'page' : undefined" @click="navigate('dashboards')"><el-icon aria-hidden="true"><grid /></el-icon><span>仪表板</span></button>
           <button type="button" class="project-navigation__toggle" :aria-expanded="projectNavigationOpen" @click="projectNavigationOpen = !projectNavigationOpen">
             <span>项目</span>
             <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true" class="project-navigation__chevron"><path d="M9.442 12.76a.77.77 0 0 0 1.116 0l4.21-4.363a.84.84 0 0 0 0-1.157.77.77 0 0 0-1.116 0L10 11.025 6.348 7.24a.77.77 0 0 0-1.117 0 .84.84 0 0 0 0 1.157l4.21 4.363Z" /></svg>

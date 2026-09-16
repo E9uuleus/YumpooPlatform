@@ -342,6 +342,7 @@ class YumpooServerApplicationIT {
                 "login_session",
                 "outbox_consumer_receipt",
                 "outbox_event",
+                "personal_dashboard",
                 "platform_role_assignment",
                 "product",
                 "project",
