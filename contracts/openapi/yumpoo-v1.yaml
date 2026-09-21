@@ -316,6 +316,38 @@ paths:
         "412": *a6
         "422": *a7
         "428": *a8
+  /me/dashboards/{id}/table/query:
+    post:
+      tags:
+        - Dashboards
+      operationId: queryDashboardTable
+      summary: 查询图表范围内的项目工作项表格、分组选项或子项
+      security:
+        - sessionCookie: []
+      parameters:
+        - *a9
+        - $ref: "#/components/parameters/XsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardTableQuery"
+      responses:
+        "200":
+          description: 查询图表范围内的项目工作项表格、分组选项或子项
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardTablePage"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
   /me/time-tracker/candidates:
     get:
       tags: [TimeTracking]
@@ -3735,6 +3767,261 @@ components:
       description: 服务端签发的 HttpOnly、Secure、SameSite=Lax Web Session Cookie。
 
   schemas:
+    DashboardChartMeasure:
+      type: object
+      required:
+        - metric
+        - calculation
+      properties:
+        metric:
+          type: string
+          enum:
+            - TOTAL
+            - IN_PROGRESS
+            - DONE
+            - COMPLETION_RATE
+            - DURATION
+        calculation:
+          type: string
+          enum:
+            - SUM
+            - AVG
+            - MEDIAN
+            - MIN
+            - MAX
+    DashboardChartLabel:
+      type: object
+      required:
+        - key
+        - name
+        - color
+        - order
+      properties:
+        key:
+          type: string
+          maxLength: 2000
+        name:
+          type: string
+          maxLength: 80
+        color:
+          type: string
+          pattern: ^$|^#[a-fA-F0-9]{6}$
+        order:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 5000
+    DashboardChart:
+      type: object
+      required:
+        - type
+        - dimension
+        - series
+        - dateInterval
+        - timezone
+        - measure
+        - stacked
+        - showLegend
+        - showValues
+        - valueFormat
+        - sort
+        - limit
+        - showEmpty
+        - labels
+        - detailColumns
+      properties:
+        type:
+          type: string
+          enum:
+            - NUMBER
+            - COLUMN
+            - BAR
+            - LINE
+            - AREA
+            - PIE
+            - DONUT
+            - BUBBLE
+        dimension:
+          type: string
+          enum:
+            - NONE
+            - PROJECT
+            - CONTENT
+            - STATUS
+            - CATEGORY
+            - PRIORITY
+            - ASSIGNEE
+            - REPORTER
+            - CREATED
+            - UPDATED
+            - COMPLETED
+            - DUE
+            - TIMELINE_START
+            - TIMELINE_END
+        series:
+          type: string
+          enum:
+            - NONE
+            - PROJECT
+            - CONTENT
+            - STATUS
+            - CATEGORY
+            - PRIORITY
+            - ASSIGNEE
+            - REPORTER
+            - CREATED
+            - UPDATED
+            - COMPLETED
+            - DUE
+            - TIMELINE_START
+            - TIMELINE_END
+        dateInterval:
+          type: string
+          enum:
+            - DAY
+            - WEEK
+            - MONTH
+        timezone:
+          type: string
+        measure:
+          $ref: "#/components/schemas/DashboardChartMeasure"
+        xMeasure:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/DashboardChartMeasure"
+        sizeMeasure:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/DashboardChartMeasure"
+        stacked:
+          type: boolean
+        showLegend:
+          type: boolean
+        showValues:
+          type: boolean
+        valueFormat:
+          type: string
+          enum:
+            - VALUE
+            - PERCENT
+        sort:
+          type: string
+          enum:
+            - VALUE_ASC
+            - VALUE_DESC
+            - NAME_ASC
+            - NAME_DESC
+            - CUSTOM
+        limit:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 5000
+        showEmpty:
+          type: boolean
+        projectIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          nullable: true
+          maxItems: 100
+        filters:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/DashboardFilters"
+        labels:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardChartLabel"
+          maxItems: 500
+        detailColumns:
+          type: array
+          items:
+            type: string
+            enum:
+              - project
+              - content
+              - assignee
+              - reporter
+              - status
+              - priority
+              - duration
+              - due
+              - timeline
+              - created
+              - updated
+              - completed
+    DashboardChartSelection:
+      type: object
+      required: []
+      properties:
+        key:
+          type: string
+          nullable: true
+          maxLength: 2000
+        seriesKey:
+          type: string
+          nullable: true
+          maxLength: 2000
+    DashboardChartPoint:
+      type: object
+      required:
+        - key
+        - label
+        - colorToken
+        - seriesKey
+        - seriesLabel
+        - seriesColorToken
+        - count
+        - value
+        - xValue
+        - sizeValue
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        colorToken:
+          type: string
+        seriesKey:
+          type: string
+        seriesLabel:
+          type: string
+        seriesColorToken:
+          type: string
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+        value:
+          type: number
+          format: double
+        xValue:
+          type: number
+          format: double
+        sizeValue:
+          type: number
+          format: double
+        categoryValue:
+          type: number
+          format: double
+          description: 按分类独立计算的数值，用于系列拆分时排序，不累加平均值、中位数或完成率。
+    DashboardChartResult:
+      type: object
+      required:
+        - id
+        - points
+      properties:
+        id:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardChartPoint"
     DashboardPosition:
       type: object
       required:
@@ -3781,6 +4068,7 @@ components:
             - PROJECT_WORKLOAD
             - MEMBER_WORKLOAD
             - PROJECT_TIME
+            - CHART
         title:
           type: string
           minLength: 1
@@ -3810,6 +4098,11 @@ components:
           $ref: "#/components/schemas/DashboardPosition"
         medium:
           $ref: "#/components/schemas/DashboardPosition"
+        chart:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/DashboardChart"
     DashboardFilters:
       type: object
       required:
@@ -3984,6 +4277,66 @@ components:
       properties:
         filters:
           $ref: "#/components/schemas/DashboardFilters"
+        widgets:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardWidget"
+          maxItems: 40
+    DashboardTableQuery:
+      type: object
+      required: [widget, projectId, table]
+      properties:
+        filters:
+          $ref: "#/components/schemas/DashboardFilters"
+        widget:
+          $ref: "#/components/schemas/DashboardWidget"
+        selection:
+          $ref: "#/components/schemas/DashboardChartSelection"
+        projectId: {type: string, format: uuid}
+        table:
+          $ref: "#/components/schemas/DashboardTableCriteria"
+    DashboardTableCriteria:
+      type: object
+      description: 复用项目工作项查询语义；图表条件与表格条件取交集，field 查询分组选项，parentWorkItemId 查询匹配子项。主表保留命中子项的父项作为上下文。
+      properties:
+        q: {type: string, maxLength: 200}
+        status: {type: array, items: {type: string}}
+        priority: {type: array, items: {type: string}}
+        assigneeUserId: {type: array, items: {type: string, format: uuid}}
+        contentId: {type: array, items: {type: string, format: uuid}}
+        dueFrom: {type: string, format: date}
+        dueTo: {type: string, format: date}
+        updatedAfter: {type: string, format: date-time}
+        sort: {type: array, maxItems: 3, items: {type: string}}
+        timeTrackingState: {type: string, enum: [RUNNING, STOPPED, EMPTY]}
+        timeTrackingMinMs: {type: integer, format: int64, minimum: 0}
+        timeTrackingMaxMs: {type: integer, format: int64, minimum: 0}
+        emptyField: {type: string, enum: [ASSIGNEE, PRIORITY, DUE_DATE]}
+        cursor: {type: string}
+        limit: {type: integer, minimum: 1, maximum: 100, default: 25}
+        field: {type: string, enum: [TITLE, ASSIGNEE, STATUS, PRIORITY, CONTENT, DUE_DATE, UPDATED_AT]}
+        parentWorkItemId: {type: string, format: uuid}
+    DashboardTablePage:
+      type: object
+      required: [items, options, nextCursor, contextIds, subitemCounts]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectWorkItemListItem"
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectWorkItemFilterOption"
+        nextCursor: {type: string, nullable: true}
+        contextIds:
+          type: array
+          description: 本身未命中图表条件、仅承载匹配子项的父项标识，不计入图表数量。
+          items: {type: string, format: uuid}
+        subitemCounts:
+          type: object
+          description: 当前图表范围内的子项数量；缺失键为零。items 中的真实数量继续用于结构操作校验。
+          additionalProperties: {type: integer, format: int64, minimum: 0}
     DashboardItemsQuery:
       type: object
       required:
@@ -4003,6 +4356,16 @@ components:
           format: int64
           minimum: 1
           maximum: 100
+        widget:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/DashboardWidget"
+        selection:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/DashboardChartSelection"
     DashboardBucket:
       type: object
       required:
@@ -4066,6 +4429,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DashboardConnection"
+        charts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardChartResult"
     DashboardItem:
       type: object
       required:
@@ -4082,6 +4449,8 @@ components:
         - durationMs
         - updatedAt
       properties:
+        workItem:
+          $ref: "#/components/schemas/ProjectWorkItemListItem"
         id: *a3
         projectId: *a3
         itemNo: *a4
@@ -4099,6 +4468,46 @@ components:
         colorToken: *a4
         durationMs: *a1
         updatedAt: *a5
+        contentId:
+          type: string
+          format: uuid
+          nullable: true
+        reporterUserId:
+          type: string
+          format: uuid
+          nullable: true
+        contentName:
+          type: string
+          nullable: true
+        priority:
+          type: string
+          nullable: true
+        priorityName:
+          type: string
+          nullable: true
+        reporterName:
+          type: string
+          nullable: true
+        dueDate:
+          type: string
+          format: date
+          nullable: true
+        timelineStartDate:
+          type: string
+          format: date
+          nullable: true
+        timelineEndDate:
+          type: string
+          format: date
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
     DashboardItemPage:
       type: object
       required:

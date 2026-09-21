@@ -221,6 +221,7 @@ onBeforeUnmount(() => {
     :class="{
       'app-shell--context-open': contextNavigationOpen,
       'app-shell--workspace': isWorkspaceSection,
+      'app-shell--dashboard': route.name === 'dashboards',
     }"
   >
     <aside
@@ -529,7 +530,7 @@ onBeforeUnmount(() => {
       </nav>
     </aside>
 
-    <main class="app-main">
+    <main class="app-main" :class="{ 'app-main--dashboard': route.name === 'dashboards' }">
       <inline-problem
         v-if="session.actionProblem.value"
         :problem="session.actionProblem.value"

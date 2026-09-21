@@ -12,12 +12,26 @@
  */
 
 import { mapValues } from '../runtime';
+import type { ProjectWorkItemListItem } from './ProjectWorkItemListItem';
+import {
+    ProjectWorkItemListItemFromJSON,
+    ProjectWorkItemListItemFromJSONTyped,
+    ProjectWorkItemListItemToJSON,
+    ProjectWorkItemListItemToJSONTyped,
+} from './ProjectWorkItemListItem';
+
 /**
  *
  * @export
  * @interface DashboardItem
  */
 export interface DashboardItem {
+    /**
+     *
+     * @type {ProjectWorkItemListItem}
+     * @memberof DashboardItem
+     */
+    workItem?: ProjectWorkItemListItem;
     /**
      *
      * @type {string}
@@ -90,6 +104,72 @@ export interface DashboardItem {
      * @memberof DashboardItem
      */
     updatedAt: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof DashboardItem
+     */
+    contentId?: string | null;
+    /**
+     *
+     * @type {string}
+     * @memberof DashboardItem
+     */
+    reporterUserId?: string | null;
+    /**
+     *
+     * @type {string}
+     * @memberof DashboardItem
+     */
+    contentName?: string | null;
+    /**
+     *
+     * @type {string}
+     * @memberof DashboardItem
+     */
+    priority?: string | null;
+    /**
+     *
+     * @type {string}
+     * @memberof DashboardItem
+     */
+    priorityName?: string | null;
+    /**
+     *
+     * @type {string}
+     * @memberof DashboardItem
+     */
+    reporterName?: string | null;
+    /**
+     *
+     * @type {Date}
+     * @memberof DashboardItem
+     */
+    dueDate?: Date | null;
+    /**
+     *
+     * @type {Date}
+     * @memberof DashboardItem
+     */
+    timelineStartDate?: Date | null;
+    /**
+     *
+     * @type {Date}
+     * @memberof DashboardItem
+     */
+    timelineEndDate?: Date | null;
+    /**
+     *
+     * @type {Date}
+     * @memberof DashboardItem
+     */
+    createdAt?: Date | null;
+    /**
+     *
+     * @type {Date}
+     * @memberof DashboardItem
+     */
+    completedAt?: Date | null;
 }
 
 /**
@@ -121,6 +201,7 @@ export function DashboardItemFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
 
+        ...(json['workItem'] == null ? {} : { 'workItem': ProjectWorkItemListItemFromJSON(json['workItem']) }),
         'id': json['id'],
         'projectId': json['projectId'],
         'itemNo': json['itemNo'],
@@ -133,6 +214,17 @@ export function DashboardItemFromJSONTyped(json: any, ignoreDiscriminator: boole
         'colorToken': json['colorToken'],
         'durationMs': json['durationMs'],
         'updatedAt': (new Date(json['updatedAt'])),
+        ...(json['contentId'] === undefined ? {} : { 'contentId': json['contentId'] === null ? null : json['contentId'] }),
+        ...(json['reporterUserId'] === undefined ? {} : { 'reporterUserId': json['reporterUserId'] === null ? null : json['reporterUserId'] }),
+        ...(json['contentName'] === undefined ? {} : { 'contentName': json['contentName'] === null ? null : json['contentName'] }),
+        ...(json['priority'] === undefined ? {} : { 'priority': json['priority'] === null ? null : json['priority'] }),
+        ...(json['priorityName'] === undefined ? {} : { 'priorityName': json['priorityName'] === null ? null : json['priorityName'] }),
+        ...(json['reporterName'] === undefined ? {} : { 'reporterName': json['reporterName'] === null ? null : json['reporterName'] }),
+        ...(json['dueDate'] === undefined ? {} : { 'dueDate': json['dueDate'] === null ? null : (new Date(json['dueDate'])) }),
+        ...(json['timelineStartDate'] === undefined ? {} : { 'timelineStartDate': json['timelineStartDate'] === null ? null : (new Date(json['timelineStartDate'])) }),
+        ...(json['timelineEndDate'] === undefined ? {} : { 'timelineEndDate': json['timelineEndDate'] === null ? null : (new Date(json['timelineEndDate'])) }),
+        ...(json['createdAt'] === undefined ? {} : { 'createdAt': json['createdAt'] === null ? null : (new Date(json['createdAt'])) }),
+        ...(json['completedAt'] === undefined ? {} : { 'completedAt': json['completedAt'] === null ? null : (new Date(json['completedAt'])) }),
     };
 }
 
@@ -147,6 +239,7 @@ export function DashboardItemToJSONTyped(value?: DashboardItem | null, ignoreDis
 
     return {
 
+        'workItem': ProjectWorkItemListItemToJSON(value['workItem']),
         'id': value['id'],
         'projectId': value['projectId'],
         'itemNo': value['itemNo'],
@@ -159,5 +252,16 @@ export function DashboardItemToJSONTyped(value?: DashboardItem | null, ignoreDis
         'colorToken': value['colorToken'],
         'durationMs': value['durationMs'],
         'updatedAt': value['updatedAt'].toISOString(),
+        'contentId': value['contentId'],
+        'reporterUserId': value['reporterUserId'],
+        'contentName': value['contentName'],
+        'priority': value['priority'],
+        'priorityName': value['priorityName'],
+        'reporterName': value['reporterName'],
+        'dueDate': value['dueDate'] == null ? value['dueDate'] : value['dueDate'].toISOString().substring(0,10),
+        'timelineStartDate': value['timelineStartDate'] == null ? value['timelineStartDate'] : value['timelineStartDate'].toISOString().substring(0,10),
+        'timelineEndDate': value['timelineEndDate'] == null ? value['timelineEndDate'] : value['timelineEndDate'].toISOString().substring(0,10),
+        'createdAt': value['createdAt'] == null ? value['createdAt'] : value['createdAt'].toISOString(),
+        'completedAt': value['completedAt'] == null ? value['completedAt'] : value['completedAt'].toISOString(),
     };
 }

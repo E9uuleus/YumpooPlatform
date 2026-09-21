@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { DashboardChart } from './DashboardChart';
+import {
+    DashboardChartFromJSON,
+    DashboardChartFromJSONTyped,
+    DashboardChartToJSON,
+    DashboardChartToJSONTyped,
+} from './DashboardChart';
 import type { DashboardPosition } from './DashboardPosition';
 import {
     DashboardPositionFromJSON,
@@ -86,6 +93,12 @@ export interface DashboardWidget {
      * @memberof DashboardWidget
      */
     medium: DashboardPosition;
+    /**
+     *
+     * @type {DashboardChart}
+     * @memberof DashboardWidget
+     */
+    chart?: DashboardChart | null;
 }
 
 /**
@@ -98,6 +111,7 @@ export enum DashboardWidgetKindEnum {
     ProjectWorkload = 'PROJECT_WORKLOAD',
     MemberWorkload = 'MEMBER_WORKLOAD',
     ProjectTime = 'PROJECT_TIME',
+    Chart = 'CHART',
     UnknownDefaultOpenApi = '11184809'
 }
 /**
@@ -169,6 +183,7 @@ export function DashboardWidgetFromJSONTyped(json: any, ignoreDiscriminator: boo
         'showValues': json['showValues'],
         'wide': DashboardPositionFromJSON(json['wide']),
         'medium': DashboardPositionFromJSON(json['medium']),
+        ...(json['chart'] === undefined ? {} : { 'chart': json['chart'] === null ? null : DashboardChartFromJSON(json['chart']) }),
     };
 }
 
@@ -193,5 +208,6 @@ export function DashboardWidgetToJSONTyped(value?: DashboardWidget | null, ignor
         'showValues': value['showValues'],
         'wide': DashboardPositionToJSON(value['wide']),
         'medium': DashboardPositionToJSON(value['medium']),
+        'chart': DashboardChartToJSON(value['chart']),
     };
 }

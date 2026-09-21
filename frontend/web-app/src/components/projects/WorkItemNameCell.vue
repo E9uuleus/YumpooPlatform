@@ -8,6 +8,7 @@ import { isWorkItemViewControl } from './workItemViewControls'
 
 const props = defineProps<{
   item: ProjectWorkItemListItem
+  strictVersion?: boolean
   disabled?: boolean
   selected?: boolean
   create?: ((title: string) => Promise<boolean>) | undefined
@@ -67,6 +68,10 @@ async function save(): Promise<void> {
       if (!token) throw new Error('缺少 CSRF 凭据，请刷新后重试。')
       // 列表没有描述、备注和时间线；完整更新必须保留最新详情中的这些字段。
       const current = await workItemsApi.getWorkItem({ workItemId: props.item.id })
+      if (props.strictVersion && current.etag !== props.item.etag) {
+        emit('updated', props.item.id, current); finish()
+        ElMessage.warning('此工作项已更新，已载入最新内容，请确认后重新编辑。'); return
+      }
       const updated = await workItemsApi.updateWorkItem({
         workItemId: props.item.id, xXSRFTOKEN: token, ifMatch: current.etag,
         workItemUpdateRequest: {
@@ -80,7 +85,11 @@ async function save(): Promise<void> {
     }
     finish()
   } catch (reason) {
-    ElMessage.error(problemMessage(await toApiProblem(reason)))
+    const problem = await toApiProblem(reason)
+    ElMessage.error(problemMessage(problem))
+    if (!props.create && problem.kind === 'response' && problem.status === 412) {
+      try { emit('updated', props.item.id, await workItemsApi.getWorkItem({ workItemId: props.item.id })); finish() } catch { /* Keep the draft available if reloading fails. */ }
+    }
   } finally {
     saving.value = false
     if (editing.value) void focus()

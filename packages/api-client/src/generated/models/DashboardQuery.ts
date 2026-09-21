@@ -19,6 +19,13 @@ import {
     DashboardFiltersToJSON,
     DashboardFiltersToJSONTyped,
 } from './DashboardFilters';
+import type { DashboardWidget } from './DashboardWidget';
+import {
+    DashboardWidgetFromJSON,
+    DashboardWidgetFromJSONTyped,
+    DashboardWidgetToJSON,
+    DashboardWidgetToJSONTyped,
+} from './DashboardWidget';
 
 /**
  *
@@ -32,6 +39,12 @@ export interface DashboardQuery {
      * @memberof DashboardQuery
      */
     filters: DashboardFilters;
+    /**
+     *
+     * @type {Array<DashboardWidget>}
+     * @memberof DashboardQuery
+     */
+    widgets?: Array<DashboardWidget>;
 }
 
 /**
@@ -53,6 +66,7 @@ export function DashboardQueryFromJSONTyped(json: any, ignoreDiscriminator: bool
     return {
 
         'filters': DashboardFiltersFromJSON(json['filters']),
+        ...(json['widgets'] == null ? {} : { 'widgets': ((json['widgets'] as Array<any>).map(DashboardWidgetFromJSON)) }),
     };
 }
 
@@ -68,5 +82,6 @@ export function DashboardQueryToJSONTyped(value?: DashboardQuery | null, ignoreD
     return {
 
         'filters': DashboardFiltersToJSON(value['filters']),
+        'widgets': value['widgets'] == null ? undefined : ((value['widgets'] as Array<any>).map(DashboardWidgetToJSON)),
     };
 }

@@ -19,6 +19,20 @@ import {
     DashboardFiltersToJSON,
     DashboardFiltersToJSONTyped,
 } from './DashboardFilters';
+import type { DashboardWidget } from './DashboardWidget';
+import {
+    DashboardWidgetFromJSON,
+    DashboardWidgetFromJSONTyped,
+    DashboardWidgetToJSON,
+    DashboardWidgetToJSONTyped,
+} from './DashboardWidget';
+import type { DashboardChartSelection } from './DashboardChartSelection';
+import {
+    DashboardChartSelectionFromJSON,
+    DashboardChartSelectionFromJSONTyped,
+    DashboardChartSelectionToJSON,
+    DashboardChartSelectionToJSONTyped,
+} from './DashboardChartSelection';
 
 /**
  *
@@ -44,6 +58,18 @@ export interface DashboardItemsQuery {
      * @memberof DashboardItemsQuery
      */
     limit: number;
+    /**
+     *
+     * @type {DashboardWidget}
+     * @memberof DashboardItemsQuery
+     */
+    widget?: DashboardWidget | null;
+    /**
+     *
+     * @type {DashboardChartSelection}
+     * @memberof DashboardItemsQuery
+     */
+    selection?: DashboardChartSelection | null;
 }
 
 /**
@@ -69,6 +95,8 @@ export function DashboardItemsQueryFromJSONTyped(json: any, ignoreDiscriminator:
         'filters': DashboardFiltersFromJSON(json['filters']),
         'offset': json['offset'],
         'limit': json['limit'],
+        ...(json['widget'] === undefined ? {} : { 'widget': json['widget'] === null ? null : DashboardWidgetFromJSON(json['widget']) }),
+        ...(json['selection'] === undefined ? {} : { 'selection': json['selection'] === null ? null : DashboardChartSelectionFromJSON(json['selection']) }),
     };
 }
 
@@ -86,5 +114,7 @@ export function DashboardItemsQueryToJSONTyped(value?: DashboardItemsQuery | nul
         'filters': DashboardFiltersToJSON(value['filters']),
         'offset': value['offset'],
         'limit': value['limit'],
+        'widget': DashboardWidgetToJSON(value['widget']),
+        'selection': DashboardChartSelectionToJSON(value['selection']),
     };
 }

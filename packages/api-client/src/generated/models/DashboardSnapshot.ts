@@ -19,6 +19,13 @@ import {
     DashboardBucketToJSON,
     DashboardBucketToJSONTyped,
 } from './DashboardBucket';
+import type { DashboardChartResult } from './DashboardChartResult';
+import {
+    DashboardChartResultFromJSON,
+    DashboardChartResultFromJSONTyped,
+    DashboardChartResultToJSON,
+    DashboardChartResultToJSONTyped,
+} from './DashboardChartResult';
 import type { DashboardConnection } from './DashboardConnection';
 import {
     DashboardConnectionFromJSON,
@@ -57,6 +64,12 @@ export interface DashboardSnapshot {
      * @memberof DashboardSnapshot
      */
     projects: Array<DashboardConnection>;
+    /**
+     *
+     * @type {Array<DashboardChartResult>}
+     * @memberof DashboardSnapshot
+     */
+    charts?: Array<DashboardChartResult>;
 }
 
 /**
@@ -84,6 +97,7 @@ export function DashboardSnapshotFromJSONTyped(json: any, ignoreDiscriminator: b
         'options': ((json['options'] as Array<any>).map(DashboardBucketFromJSON)),
         'asOf': (new Date(json['asOf'])),
         'projects': ((json['projects'] as Array<any>).map(DashboardConnectionFromJSON)),
+        ...(json['charts'] == null ? {} : { 'charts': ((json['charts'] as Array<any>).map(DashboardChartResultFromJSON)) }),
     };
 }
 
@@ -102,5 +116,6 @@ export function DashboardSnapshotToJSONTyped(value?: DashboardSnapshot | null, i
         'options': ((value['options'] as Array<any>).map(DashboardBucketToJSON)),
         'asOf': value['asOf'].toISOString(),
         'projects': ((value['projects'] as Array<any>).map(DashboardConnectionToJSON)),
+        'charts': value['charts'] == null ? undefined : ((value['charts'] as Array<any>).map(DashboardChartResultToJSON)),
     };
 }

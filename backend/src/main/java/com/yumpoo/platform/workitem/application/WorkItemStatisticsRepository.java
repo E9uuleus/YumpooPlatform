@@ -14,7 +14,9 @@ public interface WorkItemStatisticsRepository {
     }
     record Item(UUID id, UUID projectId, String itemNo, String title, UUID assigneeUserId,
             String statusCode, String statusName, String statusCategory, String colorToken,
-            long durationMs, Instant updatedAt) {}
+            long durationMs, Instant updatedAt, UUID contentId, String contentName, String priority,
+            String priorityName, UUID reporterUserId, java.time.LocalDate dueDate, java.time.LocalDate timelineStartDate,
+            java.time.LocalDate timelineEndDate, Instant createdAt, Instant completedAt) {}
     List<Bucket> aggregate(UUID companyId, StatisticsFilter filter, Instant asOf, boolean options);
     List<Item> items(UUID companyId, StatisticsFilter filter, Instant asOf, int offset, int limit);
     long count(UUID companyId, StatisticsFilter filter, Instant asOf);

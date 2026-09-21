@@ -65,6 +65,10 @@ public class DashboardController {
     ResponseEntity<WorkItemStatisticsQuery.Page> items(@PathVariable UUID id, @RequestBody ItemsQuery body) {
         return response(service.items(actors.requiredActive(), id, body));
     }
+    @PostMapping("/me/dashboards/{id}/table/query")
+    ResponseEntity<WorkItemStatisticsQuery.TablePage> table(@PathVariable UUID id, @RequestBody TableQuery body) {
+        return response(service.table(actors.requiredActive(), id, body));
+    }
     private ResponseEntity<String> command(String method, UUID id, Write body, String match, String key) {
         var actor = actors.requiredActive();
         if (id != null) service.requireOwned(actor, id, method.equals("DELETE"));

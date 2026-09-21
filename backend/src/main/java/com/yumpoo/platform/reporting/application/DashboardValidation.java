@@ -22,12 +22,14 @@ final class DashboardValidation {
         for (Widget w : c.widgets()) {
             if (w == null || w.id() == null || !ids.add(w.id())) throw invalid("widgets", "组件标识重复或缺失");
             try { UUID.fromString(w.id()); } catch (IllegalArgumentException ex) { throw invalid("widgets", "组件标识无效"); }
-            if (w.kind() == null || !Set.of("METRIC", "STATUS", "PROJECT_WORKLOAD", "MEMBER_WORKLOAD", "PROJECT_TIME").contains(w.kind())
+            if (w.kind() == null || !Set.of("METRIC", "STATUS", "PROJECT_WORKLOAD", "MEMBER_WORKLOAD", "PROJECT_TIME", "CHART").contains(w.kind())
                     || w.title() == null || w.title().isBlank() || w.title().length() > 80
                     || w.metric() == null || !Set.of("TOTAL", "IN_PROGRESS", "DONE", "COMPLETION_RATE", "DURATION").contains(w.metric())
                     || w.grouping() == null || !Set.of("STATUS", "CATEGORY").contains(w.grouping())
                     || w.sort() == null || !Set.of("DESC", "ASC").contains(w.sort()))
                 throw invalid("widgets", "组件类型或设置无效");
+            if (w.kind().equals("CHART") && w.chart() == null) throw invalid("chart", "自定义图表需要图表设置");
+            DashboardCharts.validate(w, statistics);
             position(w.wide(), 12, w.kind().equals("METRIC"));
             position(w.medium(), 6, w.kind().equals("METRIC"));
         }
@@ -42,8 +44,8 @@ final class DashboardValidation {
     }
     private static <T> List<T> values(List<T> values) { return values == null ? List.of() : values.stream().distinct().toList(); }
     private static void position(Position p, int columns, boolean metric) {
-        if (p == null || p.x() < 0 || p.y() < 0 || p.y() > 10000 || p.w() < (metric ? 3 : 4)
-                || p.h() < (metric ? 4 : 7) || p.h() > 100 || p.w() > columns || p.x() > columns - p.w())
+        if (p == null || p.x() < 0 || p.y() < 0 || p.y() > 10000 || p.w() < 1
+                || p.h() < 3 || p.h() > 100 || p.w() > columns || p.x() > columns - p.w())
             throw invalid("widgets", "组件位置或尺寸超出画布范围");
     }
     private static void overlaps(List<Position> positions) {

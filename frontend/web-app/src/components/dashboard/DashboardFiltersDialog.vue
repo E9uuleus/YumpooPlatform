@@ -4,7 +4,7 @@ import { computed, ref, watch } from 'vue'
 import type { DashboardBucket, DashboardConnection, DashboardFilters } from '@yumpoo/api-client'
 import { clone, emptyFilters, categories } from './dashboardModel'
 import YpAssignee from '../yp/YpAssignee.vue'
-const props = defineProps<{ modelValue: boolean; filters: DashboardFilters; options: DashboardBucket[]; projects: DashboardConnection[]; initialField?: string; userId?: string | undefined }>()
+const props = defineProps<{ modelValue: boolean; filters: DashboardFilters; options: DashboardBucket[]; projects: DashboardConnection[]; initialField?: string; userId?: string | undefined; title?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; apply: [value: DashboardFilters] }>()
 const draft = ref(emptyFilters()), active = ref('assignees'), query = ref('')
 const fields = [{ key: 'assignees', title: '处理人', kind: 'MEMBER' }, { key: 'projectIds', title: '项目', kind: 'PROJECT' }, { key: 'statuses', title: '状态', kind: 'STATUS' }, { key: 'categories', title: '状态分类', kind: 'CATEGORY' }, { key: 'priorities', title: '优先级', kind: 'PRIORITY' }, { key: 'contentIds', title: '工作项类型', kind: 'CONTENT' }, { key: 'due', title: '截止日期', kind: '' }, { key: 'other', title: '其他', kind: '' }]
@@ -27,14 +27,11 @@ watch(active, () => { query.value = '' })
   <el-dialog
     append-to-body
     :model-value="modelValue"
-    title="筛选仪表板"
+    :title="title || '筛选仪表板'"
     width="640px"
     class="dashboard-dialog"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <p class="dialog-intro">
-      所有图表应用相同筛选。同一字段多选取并集，不同字段之间取交集。
-    </p>
     <div class="dashboard-filter-body">
       <nav aria-label="筛选字段">
         <button

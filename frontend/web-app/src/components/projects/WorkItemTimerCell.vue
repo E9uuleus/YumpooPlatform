@@ -7,6 +7,8 @@ import TimeSessionDialog from '../timer/TimeSessionDialog.vue'
 import './workItemTimer.css'
 
 const props = defineProps<{ item: ProjectWorkItemListItem; projectId: string; disabled?: boolean }>()
+const emit = defineEmits<{ changed: [] }>()
+async function toggle() { if (await tracker.toggle(props.item.id)) emit('changed') }
 const tracker = useTimeTracker()
 const open = ref(false)
 const anchor = ref<HTMLElement>()
@@ -75,7 +77,7 @@ const total = computed(() => {
           :disabled="tracker.busy.value || unavailable"
           :aria-label="running ? '暂停计时' : '开始计时'"
           :title="running ? '暂停本人计时' : '开始本人计时'"
-          @click.stop="tracker.toggle(item.id)"
+          @click.stop="toggle"
           @keydown.stop
         >
           <svg
@@ -97,6 +99,7 @@ const total = computed(() => {
       :title="item.title"
       @close="open = false"
       @resize="panelHeight = $event"
+      @changed="emit('changed')"
     />
   </el-popover>
 </template>

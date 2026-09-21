@@ -49,17 +49,25 @@ public class JdbcWorkItemStatisticsRepository implements WorkItemStatisticsRepos
         String order = filter.hasTime() ? "duration_ms DESC,updated_at DESC,id" : "updated_at DESC,id";
         return jdbc.sql(base.sql() + "SELECT * FROM filtered ORDER BY " + order + " LIMIT :limit OFFSET :offset")
                 .params(base.parameters()).param("offset", offset).param("limit", limit)
-                .query((rs, n) -> new Item(rs.getObject("id", UUID.class), rs.getObject("project_id", UUID.class),
-                        rs.getString("item_no"), rs.getString("title"), rs.getObject("assignee_user_id", UUID.class),
-                        rs.getString("status_code"), rs.getString("status_name"), rs.getString("status_category"),
-                        rs.getString("status_color"), rs.getLong("duration_ms"), rs.getTimestamp("updated_at").toInstant())).list();
+                .query(JdbcWorkItemStatisticsRepository::item).list();
     }
     public long count(UUID company, StatisticsFilter filter, Instant asOf) {
         Query base = base(company, filter, asOf, true);
         return jdbc.sql(base.sql() + "SELECT COUNT(*) FROM filtered").params(base.parameters()).query(Long.class).single();
     }
-    private record Query(String sql, Map<String, Object> parameters) {}
-    private static Query base(UUID company, StatisticsFilter f, Instant asOf, boolean withTime) {
+    static Item item(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
+        var completed = rs.getTimestamp("completed_at");
+        return new Item(rs.getObject("id", UUID.class), rs.getObject("project_id", UUID.class), rs.getString("item_no"),
+                rs.getString("title"), rs.getObject("assignee_user_id", UUID.class), rs.getString("status_code"),
+                rs.getString("status_name"), rs.getString("status_category"), rs.getString("status_color"), rs.getLong("duration_ms"),
+                rs.getTimestamp("updated_at").toInstant(), rs.getObject("content_id", UUID.class), rs.getString("content_name"),
+                rs.getString("priority"), rs.getString("priority_name"), rs.getObject("reporter_user_id", UUID.class),
+                rs.getObject("due_date", java.time.LocalDate.class), rs.getObject("timeline_start_date", java.time.LocalDate.class),
+                rs.getObject("timeline_end_date", java.time.LocalDate.class), rs.getTimestamp("created_at").toInstant(),
+                completed == null ? null : completed.toInstant());
+    }
+    record Query(String sql, Map<String, Object> parameters) {}
+    static Query base(UUID company, StatisticsFilter f, Instant asOf, boolean withTime) {
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("company", company); p.put("projects", f.projectIds()); p.put("archived", f.includeArchived());
         p.put("asOf", Timestamp.from(asOf));

@@ -1,6 +1,8 @@
 import type { DashboardBucket, DashboardConfiguration, DashboardConnection, DashboardFilters, DashboardWidget } from '@yumpoo/api-client'
+import { defaultChart } from './chartModel'
 
 export const widgetCatalog = [
+  { kind: 'CHART', title: '自定义图表', description: '', icon: 'custom' },
   { kind: 'METRIC', title: '指标卡', description: '用一个关键数字掌握进展', icon: 'number' },
   { kind: 'STATUS', title: '状态分布', description: '工作项数量、占比与状态一目了然', icon: 'donut' },
   { kind: 'PROJECT_WORKLOAD', title: '项目工作量', description: '比较各项目的工作量与状态组成', icon: 'stack' },
@@ -21,7 +23,8 @@ export function newWidget(kind: `${DashboardWidget['kind']}`, existing: Dashboar
   return { id: crypto.randomUUID(), kind: kind as DashboardWidget['kind'], title: widgetCatalog.find(c => c.kind === kind)!.title,
     metric: 'TOTAL' as DashboardWidget['metric'], grouping: 'STATUS' as DashboardWidget['grouping'], sort: 'DESC' as DashboardWidget['sort'], showLegend: true, showValues: true,
     wide: { x: 0, y: Math.max(0, ...existing.map(w => w.wide.y + w.wide.h)), w: metric ? 3 : 6, h: metric ? 4 : 9 },
-    medium: { x: 0, y: Math.max(0, ...existing.map(w => w.medium.y + w.medium.h)), w: metric ? 3 : 6, h: metric ? 4 : 9 } }
+    medium: { x: 0, y: Math.max(0, ...existing.map(w => w.medium.y + w.medium.h)), w: metric ? 3 : 6, h: metric ? 4 : 9 },
+    ...(kind === 'CHART' ? { chart: defaultChart(), title: '图表' } : {}) }
 }
 export function defaultConfiguration(blank = false): DashboardConfiguration {
   const widgets: DashboardWidget[] = []

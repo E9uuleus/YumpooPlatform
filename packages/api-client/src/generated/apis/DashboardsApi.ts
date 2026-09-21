@@ -21,6 +21,8 @@ import type {
   DashboardProjectPage,
   DashboardQuery,
   DashboardSnapshot,
+  DashboardTablePage,
+  DashboardTableQuery,
   DashboardView,
   DashboardWrite,
   ErrorResponse,
@@ -40,6 +42,10 @@ import {
     DashboardQueryToJSON,
     DashboardSnapshotFromJSON,
     DashboardSnapshotToJSON,
+    DashboardTablePageFromJSON,
+    DashboardTablePageToJSON,
+    DashboardTableQueryFromJSON,
+    DashboardTableQueryToJSON,
     DashboardViewFromJSON,
     DashboardViewToJSON,
     DashboardWriteFromJSON,
@@ -82,6 +88,12 @@ export interface QueryDashboardItemsRequest {
     id: string;
     xXSRFTOKEN: string;
     dashboardItemsQuery: DashboardItemsQuery;
+}
+
+export interface QueryDashboardTableRequest {
+    id: string;
+    xXSRFTOKEN: string;
+    dashboardTableQuery: DashboardTableQuery;
 }
 
 export interface UpdateDashboardRequest {
@@ -452,6 +464,64 @@ export class DashboardsApi extends runtime.BaseAPI {
      */
     async queryDashboardItems(requestParameters: QueryDashboardItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<DashboardItemPage> {
         const response = await this.queryDashboardItemsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 查询图表范围内的项目工作项表格、分组选项或子项
+     */
+    async queryDashboardTableRaw(requestParameters: QueryDashboardTableRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<DashboardTablePage>> {
+        if (requestParameters['id'] == null) {
+            throw new runtime.RequiredError(
+                'id',
+                'Required parameter "id" was null or undefined when calling queryDashboardTable().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling queryDashboardTable().'
+            );
+        }
+
+        if (requestParameters['dashboardTableQuery'] == null) {
+            throw new runtime.RequiredError(
+                'dashboardTableQuery',
+                'Required parameter "dashboardTableQuery" was null or undefined when calling queryDashboardTable().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+
+        let urlPath = `/me/dashboards/{id}/table/query`;
+        urlPath = urlPath.replace(`{${"id"}}`, encodeURIComponent(String(requestParameters['id'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: DashboardTableQueryToJSON(requestParameters['dashboardTableQuery']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => DashboardTablePageFromJSON(jsonValue));
+    }
+
+    /**
+     * 查询图表范围内的项目工作项表格、分组选项或子项
+     */
+    async queryDashboardTable(requestParameters: QueryDashboardTableRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<DashboardTablePage> {
+        const response = await this.queryDashboardTableRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

@@ -9,7 +9,7 @@ import TimeSessionForm from './TimeSessionForm.vue'
 import { companyDateTime, parseCompanyDateTime } from './timeFormat'
 
 const props = defineProps<{ workItemId: string; title: string }>()
-const emit = defineEmits<{ close: []; resize: [height: number] }>()
+const emit = defineEmits<{ close: []; changed: []; resize: [height: number] }>()
 const session = useSession()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'UTC')
 const page = ref<TimeTrackingSessionPage>()
@@ -52,7 +52,7 @@ async function save() {
       const args = { workItemId: props.workItemId, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: body }
       return record ? timeTrackingApi.editTimeSession({ ...args, sessionId: record.id, ifMatch: record.etag }) : timeTrackingApi.createTimeSession(args)
     })
-    form.value = false; loading.value = false; await load()
+    emit('changed'); form.value = false; loading.value = false; await load()
   } catch (error) {
     saveProblem.value = error instanceof Error && !('response' in error) ? error.message : '保存失败，请重试。'
     const response = (error as { response?: Response }).response
@@ -86,7 +86,7 @@ async function remove(target: TimeTrackingSession | 'all') {
     }
     ElMessage.success(removed ? `已清除 ${removed} 条计时记录` : '没有可清除的已停止记录')
   } catch { ElMessage.error(`已清除 ${removed} 条记录，其余未完成，请刷新后重试。`) }
-  finally { mutating.value = false; await load() }
+  finally { if (removed) emit('changed'); mutating.value = false; await load() }
 }
 function loadMore() {
   if (page.value?.nextCursor && !loading.value && !mutating.value) void load(page.value.nextCursor)

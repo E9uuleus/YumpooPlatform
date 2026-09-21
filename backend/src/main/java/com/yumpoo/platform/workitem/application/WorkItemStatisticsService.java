@@ -29,12 +29,12 @@ public class WorkItemStatisticsService {
         this.repository = repository; this.projects = projects; this.users = users; this.clock = clock;
     }
     public record Snapshot(List<Bucket> buckets, List<Bucket> options, Instant asOf) {}
-    public record ItemRow(Item item, String assigneeName) {}
+    public record ItemRow(Item item, String assigneeName, String reporterName) {}
     public record Page(List<ItemRow> items, long totalElements, Instant asOf) {}
     public record Request(List<UUID> projectIds, List<String> assignees, List<String> statuses,
             List<String> priorities, List<UUID> contentIds, List<String> categories, java.time.LocalDate dueFrom,
             java.time.LocalDate dueTo, boolean includeArchived, String query, boolean hasTime) {
-        private StatisticsFilter filter() {
+        StatisticsFilter filter() {
             return new StatisticsFilter(projectIds, assignees, statuses, priorities, contentIds, categories,
                     dueFrom, dueTo, includeArchived, query, hasTime);
         }
@@ -65,9 +65,9 @@ public class WorkItemStatisticsService {
         if (allowed.isEmpty()) return new Page(List.of(), 0, now);
         var filter = requested.within(allowed);
         var rows = repository.items(actor.companyId(), filter, now, offset, limit);
-        var people = users.findByUserIds(actor.companyId(), rows.stream().map(Item::assigneeUserId)
+        var people = users.findByUserIds(actor.companyId(), rows.stream().flatMap(row -> java.util.stream.Stream.of(row.assigneeUserId(), row.reporterUserId()))
                 .filter(java.util.Objects::nonNull).distinct().toList());
-        return new Page(rows.stream().map(row -> new ItemRow(row, name(row.assigneeUserId(), people))).toList(),
+        return new Page(rows.stream().map(row -> new ItemRow(row, name(row.assigneeUserId(), people), name(row.reporterUserId(), people))).toList(),
                 repository.count(actor.companyId(), filter, now), now);
     }
     private static List<Bucket> names(List<Bucket> rows, Map<UUID, MinimalUserSnapshot> people) {
