@@ -26,7 +26,8 @@ public record WorkItemQuery(
         Instant updatedAfter,
         List<Sort> sorts,
         TimeFilter timeTracking,
-        String emptyField
+        String emptyField,
+        ChartStatistics.TableScope scope
 ) {
     public record TimeFilter(String state, Long minMs, Long maxMs, Instant asOf, long revision, long anchorDurationMs) {
         public TimeFilter {
@@ -46,11 +47,19 @@ public record WorkItemQuery(
             List<Sort> sorts, TimeFilter timeTracking) {
         this(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,null);
     }
+    public WorkItemQuery(String query, Set<String> statuses, Set<String> priorities, Set<UUID> assigneeUserIds,
+            Set<UUID> contentIds, LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter,
+            List<Sort> sorts, TimeFilter timeTracking, String emptyField) {
+        this(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,emptyField,null);
+    }
+    public WorkItemQuery withScope(ChartStatistics.TableScope value) {
+        return new WorkItemQuery(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,emptyField,value);
+    }
     public WorkItemQuery withTime(TimeFilter filter) {
-        return new WorkItemQuery(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,filter,emptyField);
+        return new WorkItemQuery(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,filter,emptyField,scope);
     }
     public boolean usesTimeTracking() {
-        return timeTracking != null || sorts.stream().anyMatch(s -> s.field()==WorkItemSortField.TIME_TRACKING);
+        return scope != null || timeTracking != null || sorts.stream().anyMatch(s -> s.field()==WorkItemSortField.TIME_TRACKING);
     }
     public WorkItemQuery {
         if (emptyField != null && !Set.of("ASSIGNEE", "PRIORITY", "DUE_DATE").contains(emptyField))
@@ -68,7 +77,14 @@ public record WorkItemQuery(
                           Collection<String> priorities, Collection<UUID> assigneeUserIds,
                           Collection<UUID> contentIds,
                           LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter,
-                          Collection<String> sorts, TimeFilter timeTracking, String emptyField) {
+                          Collection<String> sorts, TimeFilter timeTracking, String emptyField, ChartStatistics.TableScope scope) {
+        public Request(String query, Collection<String> statuses, Collection<String> priorities, Collection<UUID> assigneeUserIds,
+                Collection<UUID> contentIds, LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter, Collection<String> sorts, TimeFilter timeTracking, String emptyField) {
+            this(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,emptyField,null);
+        }
+        public Request withScope(ChartStatistics.TableScope value) {
+            return new Request(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,emptyField,value);
+        }
         public Request(String query, Collection<String> statuses, Collection<String> priorities,
                 Collection<UUID> assigneeUserIds, Collection<UUID> contentIds, LocalDate dueFrom,
                 LocalDate dueTo, Instant updatedAfter, Collection<String> sorts, TimeFilter timeTracking) {
@@ -80,10 +96,10 @@ public record WorkItemQuery(
             this(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,null);
         }
         public Request withTime(TimeFilter filter) {
-            return new Request(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,filter,emptyField);
+            return new Request(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,filter,emptyField,scope);
         }
         public Request withEmptyField(String field) {
-            return new Request(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,field);
+            return new Request(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,field,scope);
         }
     }
 
@@ -96,7 +112,7 @@ public record WorkItemQuery(
                 request.assigneeUserIds() == null ? Set.of()
                         : new LinkedHashSet<>(request.assigneeUserIds()),
                 request.contentIds() == null ? Set.of() : new LinkedHashSet<>(request.contentIds()),
-                request.dueFrom(), request.dueTo(), request.updatedAfter(), sorts(request.sorts()), request.timeTracking(), request.emptyField());
+                request.dueFrom(), request.dueTo(), request.updatedAfter(), sorts(request.sorts()), request.timeTracking(), request.emptyField(), request.scope());
     }
 
     private static String normalizeQuery(String value) {

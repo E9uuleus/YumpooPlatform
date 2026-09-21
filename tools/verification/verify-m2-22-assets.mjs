@@ -35,7 +35,7 @@ for (const fragment of ['targetProjectId', 'hasHiddenRelations', '仅统计可�
 for (const fragment of ['targetProjectId', 'ListWorkItemRelationCandidatesRequest']) assert(sdk.includes(fragment), `SDK 缺少 ${fragment}`)
 for (const fragment of ['ProjectActorAccess.Owner', 'targetProjectId', '存在关联项不可见',
   "name: 'project-overview'", 'relation.capabilities.canDelete']) assert(web.includes(fragment) ||
-  read('frontend/web-app/src/views/projects/ProjectOverviewView.vue').includes(fragment), `Web 缺少 ${fragment}`)
+  read('frontend/web-app/src/components/projects/ProjectWorkItems.vue').includes(fragment), `Web 缺少 ${fragment}`)
 for (const fragment of ['切换目标项目会清空候选', '单一匿名占位', 'targetProjectId: \'project-2\'']) assert(webTest.includes(fragment), `Web 验收缺少 ${fragment}`)
 for (const fragment of ['分页与计数前', 'COMPANY_ADMIN', 'Project UUID', '不读取 membership 表']) assert(note.includes(fragment), `Agent Note 缺少 ${fragment}`)
 assert(readme.includes('## M2-22 跨项目普通关系与不可见端占位'), 'README 未同步 M2-22')

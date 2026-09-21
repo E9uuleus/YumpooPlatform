@@ -192,32 +192,18 @@ public class WorkItemService {
                     filter==null ? null : filter.minMs(),filter==null ? null : filter.maxMs(),timeAsOf,timeRevision,
                     decoded==null ? 0 : decoded.timeDurationMs()));
         }
+        if (query.scope() != null) query = query.withScope(query.scope().at(timeAsOf));
         WorkItemRepository.ProjectCursorAnchor anchor = decoded == null ? null : decoded.anchor();
         List<WorkItem> rows = new ArrayList<>(workItems.findProjectCursorPage(project.companyId(),
                 project.projectId(), query, ranks, effectiveView, anchor, page.limit() + 1));
         boolean hasMore = rows.size() > page.limit();
         if (hasMore) rows = new ArrayList<>(rows.subList(0, page.limit()));
-        Map<UUID, Content> contentById = new LinkedHashMap<>();
-        contents.findAll(project.companyId(), project.projectId())
-                .forEach(content -> contentById.put(content.id(), content));
-        Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), rows);
-        Map<UUID, Long> discussionCounts = updates.countActiveDiscussions(project.companyId(),
-                rows.stream().map(WorkItem::id).toList());
-        Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
-                rows.stream().map(WorkItem::id).toList());
-        Map<UUID,TimeTrackingModels.TimeTrackingSummary> timeSummaries=timeTracking.summaries(actor.companyId(),projectId,
-                actor.userId(),rows.stream().map(WorkItem::id).toList(),timeAsOf).stream()
-                .collect(java.util.stream.Collectors.toMap(TimeTrackingModels.TimeTrackingSummary::workItemId,java.util.function.Function.identity()));
-        List<ProjectWorkItemListItem> items = rows.stream()
-                .map(item -> projectListItem(item, contentById.get(item.contentId()), people,
-                        canEdit(project, contentById.get(item.contentId())), statusLabels,
-                        subitemCounts.getOrDefault(item.id(), 0L),
-                        discussionCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList();
+        List<ProjectWorkItemListItem> items = tableItems(actor, project, rows, timeAsOf);
         String nextCursor = hasMore && !rows.isEmpty()
                 ? projectCursors.encode(new ProjectWorkItemCursorCodec.Cursor(
                         fingerprint, effectiveView,
                         WorkItemRepository.ProjectCursorAnchor.from(rows.getLast()),query.usesTimeTracking() ? timeAsOf : null,
-                        timeRevision,timeSummaries.get(rows.getLast().id()).totalDurationMs())) : null;
+                        timeRevision,items.getLast().timeTracking().totalDurationMs())) : null;
         return new ProjectWorkItemCursorPage(items, nextCursor);
     }
 
@@ -1134,6 +1120,37 @@ public class WorkItemService {
                         availableTransitions(item, canEditFields, statusLabels)), item.updatedAt());
     }
 
+    @Transactional(readOnly = true)
+    public List<ProjectWorkItemListItem> tableItemsByIds(CurrentActor actor, UUID projectId, List<UUID> ids, Instant asOf) {
+        requireActor(actor);
+        if (ids.isEmpty()) return List.of();
+        if (ids.size() > 100) throw validation("ids", "TOO_MANY", "每次最多读取 100 个工作项");
+        var project = visible(actor, projectId);
+        return tableItems(actor, project, workItems.findByIds(actor.companyId(), projectId, ids), asOf);
+    }
+
+    private List<ProjectWorkItemListItem> tableItems(CurrentActor actor, ProjectAccessSnapshot project,
+            List<WorkItem> rows, Instant timeAsOf) {
+        UUID projectId = project.projectId();
+        var statusLabels = labels.statuses(project.companyId(), projectId);
+        Map<UUID, Content> contentById = new LinkedHashMap<>();
+        contents.findAll(project.companyId(), project.projectId())
+                .forEach(content -> contentById.put(content.id(), content));
+        Map<UUID, MinimalUserSnapshot> people = people(project.companyId(), rows);
+        Map<UUID, Long> discussionCounts = updates.countActiveDiscussions(project.companyId(),
+                rows.stream().map(WorkItem::id).toList());
+        Map<UUID, Long> subitemCounts = relations.countActiveChildren(project.companyId(),
+                rows.stream().map(WorkItem::id).toList());
+        Map<UUID,TimeTrackingModels.TimeTrackingSummary> timeSummaries=timeTracking.summaries(actor.companyId(),projectId,
+                actor.userId(),rows.stream().map(WorkItem::id).toList(),timeAsOf).stream()
+                .collect(java.util.stream.Collectors.toMap(TimeTrackingModels.TimeTrackingSummary::workItemId,java.util.function.Function.identity()));
+        return rows.stream()
+                .map(item -> projectListItem(item, contentById.get(item.contentId()), people,
+                        canEdit(project, contentById.get(item.contentId())) && !item.archived(), statusLabels,
+                        subitemCounts.getOrDefault(item.id(), 0L),
+                        discussionCounts.getOrDefault(item.id(), 0L)).withTime(timeSummaries.get(item.id()))).toList();
+    }
+
     private static ProjectWorkItemListItem projectListItem(WorkItem item, Content content,
             Map<UUID, MinimalUserSnapshot> people, boolean canEditFields,
             List<WorkItemLabelModels.StatusLabel> statusLabels, long subitemCount, long discussionCount) {
@@ -1203,6 +1220,7 @@ public class WorkItemService {
                 Objects.toString(query.updatedAfter(), ""), sorts,
                 query.timeTracking()==null ? "" : Objects.toString(query.timeTracking().state(),"")+":"+query.timeTracking().minMs()+":"+query.timeTracking().maxMs());
         if (query.emptyField() != null) canonical += "\nemptyField=" + query.emptyField();
+        if (query.scope() != null) canonical += "\nchart=" + query.scope().fingerprint();
         try {
             byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
                     .digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));

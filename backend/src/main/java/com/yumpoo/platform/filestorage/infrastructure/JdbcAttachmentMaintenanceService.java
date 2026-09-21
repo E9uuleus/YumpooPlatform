@@ -12,6 +12,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.io.IOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -113,7 +114,7 @@ public final class JdbcAttachmentMaintenanceService {
                         WHERE t.attachment_id=a.id AND t.generation=a.scan_generation
                           AND t.status='RUNNING' AND t.lease_until > :now)
                  ORDER BY a.id::text LIMIT :limit
-                """).param("cursor",run.cursor()).param("now",utc(now))
+                """).param("cursor",run.cursor(),Types.VARCHAR).param("now",utc(now))
                 .param("limit",properties.getMaintenanceBatchSize())
                 .query((rs,row)->new Expired(rs.getObject(1,UUID.class),rs.getObject(2,UUID.class),
                         rs.getObject(3,UUID.class),rs.getLong(4))).list();
@@ -195,7 +196,7 @@ public final class JdbcAttachmentMaintenanceService {
                 SELECT storage_key,sha256,size_bytes FROM yumpoo.attachment_blob
                  WHERE (:cursor IS NULL OR storage_key>:cursor)
                    AND presence_status<>'DELETED' ORDER BY storage_key LIMIT :limit
-                """).param("cursor",run.cursor()).param("limit",properties.getMaintenanceBatchSize())
+                """).param("cursor",run.cursor(),Types.VARCHAR).param("limit",properties.getMaintenanceBatchSize())
                 .query((rs,row)->new Blob(rs.getString(1),rs.getString(2),rs.getLong(3))).list();
         long issues=0;
         for(Blob row:rows) {
@@ -237,7 +238,7 @@ public final class JdbcAttachmentMaintenanceService {
                  WHERE (q.reserved_bytes<>coalesce(e.reserved,0) OR q.available_bytes<>coalesce(e.available,0))
                    AND (:cursor IS NULL OR q.company_id||':'||q.scope_type||':'||q.scope_id>:cursor)
                  ORDER BY 1 LIMIT :limit
-                """).param("cursor",run.cursor()).param("limit",properties.getMaintenanceBatchSize())
+                """).param("cursor",run.cursor(),Types.VARCHAR).param("limit",properties.getMaintenanceBatchSize())
                 .query(String.class).list();
         mismatches.forEach(key->observe("QUOTA_MISMATCH","QUOTA",key,null,null,now,null));
         return batch(mismatches,mismatches.size(),mismatches.size(),0);
@@ -253,7 +254,7 @@ public final class JdbcAttachmentMaintenanceService {
                         OR (t.status='RUNNING' AND t.lease_until<:cutoff))
                    AND (:cursor IS NULL OR t.id::text>:cursor)
                  ORDER BY t.id::text LIMIT :limit
-                """).param("cutoff",utc(now.minus(STALE_AFTER))).param("cursor",run.cursor())
+                """).param("cutoff",utc(now.minus(STALE_AFTER))).param("cursor",run.cursor(),Types.VARCHAR)
                 .param("limit",properties.getMaintenanceBatchSize()).query(String.class).list();
         rows.forEach(key->observe("STALE_SCAN_TASK","SCAN_TASK",key,null,null,now,null));
         return batch(rows,rows.size(),rows.size(),0);

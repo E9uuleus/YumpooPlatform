@@ -17,7 +17,8 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { defineComponent, nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import ProjectOverviewView from './ProjectOverviewView.vue'
+import type { WorkItemTableSource } from '../../components/projects/workItemTableSource'
+import ProjectOverviewView from '../../components/projects/ProjectWorkItems.vue'
 
 enableAutoUnmount(afterEach)
 
@@ -126,8 +127,9 @@ function page(items = [item()]): ProjectWorkItemCursorPage {
   return { items, nextCursor: null }
 }
 
-function mountView(discussion?: { hasDraft: boolean, busy: boolean, discardDraft: () => void }) {
+function mountView(discussion?: { hasDraft: boolean, busy: boolean, discardDraft: () => void }, props: { embeddedProjectId?: string; preferenceScope?: string; source?: WorkItemTableSource } = {}) {
   return mount(ProjectOverviewView, {
+    props,
     global: {
       stubs: {
         InlineProblem: true,
@@ -178,6 +180,51 @@ describe('项目级工作项首页', () => {
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it('仪表板嵌入复用原表格，并隔离路由和列偏好', async () => {
+    const source: WorkItemTableSource = {
+      listProjectWorkItems: vi.fn().mockResolvedValue(page([{ ...item(), subitemCount: 2 }])),
+      listProjectWorkItemFilterOptions: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+      listWorkItemSubitems: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+      subitemCount: () => 1,
+    }
+    const projectPrefs = JSON.stringify({ version: 1, widths: { title: 410 }, hidden: ['priority'], order: ['status', 'assignee'] })
+    localStorage.setItem('yumpoo:project-work-items:table:v1', projectPrefs)
+    const wrapper = mountView(undefined, { embeddedProjectId: 'project-1', preferenceScope: 'dashboard:one', source })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="project-name"]').exists()).toBe(false)
+    expect(wrapper.find('.monday-view-header').exists()).toBe(false)
+    expect(wrapper.find('.monday-table').exists()).toBe(true)
+    expect(source.listProjectWorkItems).toHaveBeenCalled()
+    expect(state.listProjectWorkItems).not.toHaveBeenCalled()
+    expect(wrapper.find('[aria-label="1 Subitems"]').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'WorkItemRowActions' }).props('item').subitemCount).toBe(2)
+    const vm = wrapper.vm as unknown as { searchInput: string; syncUrl: () => Promise<void>; toggleColumn: (key: string, visible: boolean) => void; columnWidths: { title: number }; openDetail: (row: ProjectWorkItemListItem, tab: string) => Promise<void> }
+    expect(vm.columnWidths.title).toBe(410)
+    vm.searchInput = 'embedded search'
+    await vm.syncUrl(); await flushPromises()
+    expect(source.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'embedded search' }), expect.anything())
+    vm.toggleColumn('status', false)
+    expect(localStorage.getItem('yumpoo:project-work-items:table:v1')).toBe(projectPrefs)
+    expect(localStorage.getItem('dashboard:one:columns')).toContain('status')
+    await vm.openDetail(item(), 'details'); await flushPromises()
+    expect(JSON.parse(localStorage.getItem('dashboard:one:query')!)).not.toHaveProperty('workItemId')
+    expect(state.push).not.toHaveBeenCalled()
+    expect(state.replace).not.toHaveBeenCalled()
+    expect(state.route.query).toEqual({})
+    expect(document.body.classList.contains('yp-project-overview-scroll')).toBe(false)
+    expect(document.body.classList.contains('yp-work-items-drawer-open')).toBe(false)
+  })
+
+  it('嵌入表格的未完成输入阻止关闭，完成后解除', async () => {
+    const wrapper = mountView(undefined, { embeddedProjectId: 'project-1', preferenceScope: 'dashboard:two' })
+    await flushPromises()
+    const vm = wrapper.vm as unknown as { quickTitle: string; canClose: () => Promise<boolean> }
+    vm.quickTitle = '尚未创建'
+    expect(await vm.canClose()).toBe(false)
+    vm.quickTitle = ''
+    expect(await vm.canClose()).toBe(true)
+  })
 
   it('每个分组末尾独立新增，折叠与切换分组保留草稿，新增行继承颜色并带遮罩', async () => {
     state.listProjectWorkItems.mockResolvedValue(page([item(), { ...item('done'), statusCode: 'DONE' }]))

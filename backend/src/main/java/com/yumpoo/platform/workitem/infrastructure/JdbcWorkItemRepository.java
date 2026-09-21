@@ -44,6 +44,15 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     }
 
     @Override
+    public List<WorkItem> findByIds(UUID companyId, UUID projectId, Collection<UUID> ids) {
+        if (ids.isEmpty()) return List.of();
+        return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item WHERE company_id=:companyId"
+                        + " AND project_id=:projectId AND id IN (:ids) AND deleted_at IS NULL")
+                .param("companyId", companyId).param("projectId", projectId).param("ids", ids)
+                .query(JdbcWorkItemRepository::map).list();
+    }
+
+    @Override
     public long nextSequence(UUID companyId, UUID projectId) {
         return jdbc.sql("""
                 INSERT INTO yumpoo.work_item_project_counter (project_id, company_id, last_sequence)
@@ -690,13 +699,32 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         StringBuilder sql = new StringBuilder(" WHERE company_id=:companyId")
                 .append(" AND project_id=:projectId")
                 .append(contentScoped ? " AND content_id=:contentId" : "")
-                .append(" AND deleted_at IS NULL AND NOT archived");
+                .append(" AND deleted_at IS NULL")
+                .append(query.scope() == null ? " AND NOT archived" : "");
         if (rootsOnly) {
             sql.append(" AND NOT EXISTS (SELECT 1 FROM yumpoo.work_item_relation relation ")
                     .append("WHERE relation.company_id=:companyId ")
                     .append("AND relation.relation_type='PARENT_CHILD' ")
                     .append("AND relation.right_work_item_id=yumpoo.work_item.id ")
                     .append("AND relation.deleted_at IS NULL)");
+        }
+        if (query.scope() != null) {
+            var scope = query.scope();
+            var chart = JdbcWorkItemChartRepository.base((UUID) parameters.get("companyId"),
+                    scope.global(), scope.local(), scope.chart(), scope.selection(), scope.asOf(), true);
+            String scopedSql = chart.sql();
+            for (var entry : chart.parameters().entrySet()) {
+                scopedSql = scopedSql.replaceAll("(?<!:):" + java.util.regex.Pattern.quote(entry.getKey()) + "\\b", ":chart_" + entry.getKey());
+                parameters.put("chart_" + entry.getKey(), entry.getValue());
+            }
+            String ids = scopedSql + "SELECT id FROM scoped";
+            if (rootsOnly) {
+                ids += " UNION SELECT relation.left_work_item_id FROM yumpoo.work_item_relation relation "
+                        + "JOIN scoped child ON child.id=relation.right_work_item_id "
+                        + "WHERE relation.company_id=:companyId AND relation.relation_type='PARENT_CHILD' "
+                        + "AND relation.deleted_at IS NULL";
+            }
+            sql.append(" AND id IN (").append(ids).append(")");
         }
         if (query.query() != null) {
             sql.append(" AND (lower(title) LIKE :titleQuery ESCAPE '\\' "

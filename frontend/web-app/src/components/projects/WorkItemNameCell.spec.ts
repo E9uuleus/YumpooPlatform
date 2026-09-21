@@ -24,6 +24,16 @@ describe('工作项名称单元格', () => {
   })
   afterEach(() => vi.restoreAllMocks())
 
+  it('严格版本模式发现新版本时载入最新事项并停止写入', async () => {
+    vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({ close() {} }))
+    const wrapper = mount(WorkItemNameCell, { props: { item, strictVersion: true } })
+    await wrapper.get('.work-item-title-text').trigger('click')
+    await wrapper.get('input').setValue('我的名称')
+    await wrapper.get('input').trigger('keydown', { key: 'Enter' }); await flushPromises()
+    expect(api.updateWorkItem).not.toHaveBeenCalled()
+    expect(wrapper.emitted('updated')?.[0]).toEqual([item.id, detail])
+    expect(wrapper.find('input').exists()).toBe(false)
+  })
   it('只有文字启动编辑，空白和展开子项不启动；详情按钮独立打开详情', async () => {
     const wrapper = mount(WorkItemNameCell, { props: { item }, slots: { prefix: '<button class="expand">展开</button>' } })
     await wrapper.trigger('click')

@@ -65,6 +65,7 @@ interface PriorityOption {
 }
 
 const props = defineProps<{
+  strictVersion?: boolean
   projectId: string
   parent: ProjectWorkItemListItem
   items: ProjectWorkItemListItem[]
@@ -91,6 +92,7 @@ function contentLabel(item: ProjectWorkItemListItem) {
 }
 
 const emit = defineEmits<{
+  timerChanged: []
   retry: []
   rowChanged: [affectedIds: string[]]
   rowMoved: [item: ProjectWorkItemListItem, parentId: string]
@@ -285,7 +287,7 @@ function openQuick(): void {
   void nextTick(() => quickTitleInput.value?.focus())
 }
 
-defineExpose({ openQuick })
+defineExpose({ openQuick, canClose: () => !quickCreating.value && !quickTitle.value.trim() && !inlineDraft.value && !nameEditingId.value && !props.editingCell && !savingSortOrder.value })
 
 function closeQuick(): void {
   quickOpen.value = false
@@ -709,6 +711,7 @@ onBeforeUnmount(() => {
               :parent-id="parent.id"
               :can-create="canCreate"
               :sorted="Boolean(sortRules.length)"
+              :order-items="async () => items"
               :disabled="editingCell || loading || savingSortOrder"
               :before-remove="beforeRemove ? () => beforeRemove!(row(scope.row)) : undefined"
               @open="openItem($event, 'details')"
@@ -775,6 +778,7 @@ onBeforeUnmount(() => {
             >
               <work-item-name-cell
                 :item="row(scope.row)"
+                :strict-version="strictVersion"
                 :disabled="editingCell"
                 :selected="selectedCellKey === `${scope.row.id}:title`"
                 :create="isDraft(row(scope.row)) ? saveInlineDraft : undefined"
@@ -873,7 +877,7 @@ onBeforeUnmount(() => {
               @change="emit('dueDateChange', row(scope.row), $event)"
             />
 
-            <WorkItemTimerCell v-else-if="column.key === 'timeTracking'" :item="scope.row as ProjectWorkItemListItem" :project-id="projectId" />
+            <WorkItemTimerCell v-else-if="column.key === 'timeTracking'" :item="scope.row as ProjectWorkItemListItem" :project-id="projectId" @changed="emit('timerChanged')" />
             <WorkItemUpdatedCell
               v-else-if="column.key === 'updatedAt'"
               :item="scope.row as ProjectWorkItemListItem"

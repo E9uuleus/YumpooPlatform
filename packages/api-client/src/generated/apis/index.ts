@@ -4,6 +4,7 @@ export * from './AdministrationApi';
 export * from './AttachmentsApi';
 export * from './AuthenticationApi';
 export * from './ContentsApi';
+export * from './DashboardsApi';
 export * from './IdentityAdministrationApi';
 export * from './IdentityGovernanceApi';
 export * from './ProductsApi';

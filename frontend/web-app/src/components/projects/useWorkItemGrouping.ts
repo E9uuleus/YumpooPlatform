@@ -1,6 +1,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch, type Ref } from 'vue'
 import { ListProjectWorkItemFilterOptionsFieldEnum, type ListProjectWorkItemsRequest,
   type ProjectWorkItemListItem, type ProjectWorkItemFilterOption } from '@yumpoo/api-client'
+import type { WorkItemTableSource } from './workItemTableSource'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import { buildWorkItemGroups, EMPTY_GROUP, groupingFields, groupListRequest, groupOrders,
@@ -14,6 +15,8 @@ interface GroupPage {
   error: ApiProblem | undefined
 }
 interface Options {
+  source?: () => WorkItemTableSource
+  fallbackPreferenceKey?: () => string
   items: Ref<ProjectWorkItemListItem[]>
   preferenceKey: () => string
   request: () => ListProjectWorkItemsRequest
@@ -103,7 +106,7 @@ export function useWorkItemGrouping(options: Options) {
       do {
         const { view: _view, emptyField: _empty, ...context } = base
         void _view; void _empty
-        const result = await workItemsApi.listProjectWorkItemFilterOptions({ ...context, ...(cursor ? { cursor } : {}),
+        const result = await (options.source?.() ?? workItemsApi).listProjectWorkItemFilterOptions({ ...context, ...(cursor ? { cursor } : {}),
           field: requestedField as ListProjectWorkItemFilterOptionsFieldEnum, limit: 100 }, { signal })
         if (current !== revision || stopped) return
         loaded.push(...result.items)
@@ -149,7 +152,7 @@ export function useWorkItemGrouping(options: Options) {
         let next = cursor
         const seen = new Set<string>()
         do {
-          const result = await workItemsApi.listProjectWorkItems({ ...request, ...(next ? { cursor: next } : {}) }, { signal })
+          const result = await (options.source?.() ?? workItemsApi).listProjectWorkItems({ ...request, ...(next ? { cursor: next } : {}) }, { signal })
           if (current !== revision || stopped) return
           result.items.forEach(item => { items.set(item.id, item); retained.delete(item.id) })
           next = result.nextCursor
@@ -215,7 +218,7 @@ export function useWorkItemGrouping(options: Options) {
     facets.value = []
     Object.keys(pages).forEach(key => delete pages[key])
     try {
-      const saved = JSON.parse(localStorage.getItem(options.preferenceKey()) ?? '{}') as Record<string, unknown>
+      const saved = JSON.parse(localStorage.getItem(options.preferenceKey()) ?? (options.fallbackPreferenceKey ? localStorage.getItem(options.fallbackPreferenceKey()) : null) ?? '{}') as Record<string, unknown>
       if (groupingFields.some(option => option.value === saved.field)) field.value = saved.field as GroupField
       order.value = groupOrders(field.value).find(option => option.value === saved.order)?.value ?? groupOrders(field.value)[0]!.value
       showEmpty.value = saved.showEmpty === true

@@ -37,6 +37,7 @@ public interface WorkItemRepository {
     Optional<WorkItemModels.WorkItemLocator> findLocatorIncludingDeleted(UUID companyId,
             UUID workItemId);
     Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId, UUID workItemId);
+    List<WorkItem> findByIds(UUID companyId, UUID projectId, Collection<UUID> ids);
     Optional<WorkItem> findIncludingDeleted(UUID companyId, UUID projectId, UUID contentId,
             UUID workItemId);
     Optional<WorkItem> lock(UUID companyId, UUID projectId, UUID contentId, UUID workItemId);
