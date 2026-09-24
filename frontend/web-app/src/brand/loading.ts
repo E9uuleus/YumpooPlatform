@@ -7,14 +7,31 @@ const loading = ElLoading.directive as ObjectDirective<HTMLElement, boolean>
 const attributes = new WeakMap<HTMLElement, Map<string, string | null>>()
 let nextId = 0
 
+// 头、身体拆成独立切片，才能分别做弹跳和落地形变；品牌资产本身保持不变。
+const logoMarkup = (() => {
+  const texture = logo.match(/<image\b[^>]*\/>/u)?.[0] ?? ''
+  const shapes = new Map(Array.from(logo.matchAll(/<clipPath id="yp-brand-(\w+)">([\s\S]*?)<\/clipPath>/gu),
+    ([, name, body]) => [name, Array.from((body ?? '').matchAll(/<path\b[^>]*\/>/gu), ([path]) => path)]))
+  const pieces: Array<[string, string | undefined]> = [['cloud', shapes.get('cloud')?.[0]]]
+  for (const person of ['left', 'center', 'right']) {
+    const [head, body] = shapes.get(person) ?? []
+    pieces.push([`${person}-body`, body], [`${person}-head`, head])
+  }
+  const clips = pieces.map(([name, path]) => `<clipPath id="yp-brand-${name}">${path ?? ''}</clipPath>`).join('')
+  const groups = pieces.map(([name]) => `<g class="yp-loader-piece yp-loader-${name}"><g clip-path="url(#yp-brand-${name})">`
+    + '<use href="#yp-brand-texture"/><rect class="yp-loader-shine" x="0" y="100" width="220" height="900" fill="url(#yp-brand-shine)"/></g></g>').join('')
+  return `<defs>${texture}${clips}<linearGradient id="yp-brand-shine"><stop offset="0" stop-color="#fff" stop-opacity="0"/>`
+    + '<stop offset=".5" stop-color="#fff" stop-opacity=".65"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>'
+    + `<g class="yp-loader-stage">${groups}</g>`
+})()
+
 function decorate(el: HTMLElement): void {
   const previous = new Map<string, string | null>()
   const set = (name: string, value: string) => {
     previous.set(name, el.getAttribute(name))
     el.setAttribute(name, value)
   }
-  const markup = logo.replace(/^<svg\b[^>]*>/u, '').replace(/<\/svg>\s*$/u, '')
-    .replaceAll('yp-brand-', `yp-brand-${++nextId}-`)
+  const markup = logoMarkup.replaceAll('yp-brand-', `yp-brand-${++nextId}-`)
   set('element-loading-svg', markup)
   set('element-loading-svg-view-box', '125 123 1187 871')
   set('element-loading-custom-class', [el.getAttribute('element-loading-custom-class'), 'yp-brand-loading'].filter(Boolean).join(' '))

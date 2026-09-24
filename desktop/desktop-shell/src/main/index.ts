@@ -1,4 +1,5 @@
 import { TimerWindowController } from './timer-window'
+import { TimerPreferenceStore } from './timer-preferences'
 import { applicationIcon } from './application-icon'
 import path from 'node:path'
 import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron'
@@ -98,7 +99,7 @@ async function createMainWindow(): Promise<void> {
   })
   installSecurityGuards(mainWindow.webContents, webAppUrl.origin)
   if (!smokeTest) {
-    timerController ??= new TimerWindowController(() => mainWindow, webAppUrl.origin, preloadPath)
+    timerController ??= new TimerWindowController(() => mainWindow, webAppUrl.origin, preloadPath, new TimerPreferenceStore(app.getPath('userData')))
     timerController.install()
     timerController.attachMain(mainWindow)
   }

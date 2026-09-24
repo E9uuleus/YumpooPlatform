@@ -15,3 +15,17 @@ export function parseCompanyDateTime(value: string, timezone: string): Date {
   }
   throw new Error('该时间在公司时区不存在，请检查夏令时切换')
 }
+
+const pad = (value: number) => String(value).padStart(2, '0')
+
+/** Compact orb label: minutes and seconds within the first hour, then hours and minutes (`1h25`) so it never reads as mm:ss. */
+export function orbDuration(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000)), hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds / 60) % 60
+  return hours ? `${hours}h${pad(minutes)}` : `${pad(minutes)}:${pad(seconds % 60)}`
+}
+
+/** Two stacked lines for the narrow edge tab. */
+export function dockDuration(ms: number): [string, string] {
+  const seconds = Math.max(0, Math.floor(ms / 1000)), hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds / 60) % 60
+  return hours ? [`${hours}h`, `${pad(minutes)}m`] : [`${minutes}m`, `${pad(seconds % 60)}s`]
+}

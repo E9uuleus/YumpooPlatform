@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElButton, ElDialog } from 'element-plus'
 import type { DesktopTimerState, TimerOrbLayout } from '@yumpoo/preload-contract'
 import { useSession } from '../../composables/useSession'
-import { activateTimeTracker, timerExitPrompt, chooseTimerExit, confirmTimerExit, formatDuration, useTimeTracker } from '../../composables/useTimeTracker'
+import { activateTimeTracker, timerExitPrompt, chooseTimerExit, confirmTimerExit, formatDuration, timerClockOffset, useTimeTracker } from '../../composables/useTimeTracker'
 import { logoutGuard } from '../../composables/logoutGuard'
 import TimerPanel from './TimerPanel.vue'
 import TimerIcon from './TimerIcon.vue'
@@ -15,7 +15,7 @@ const tracker = useTimeTracker()
 const desktop = window.yumpooDesktop?.timer
 const inline = ref(false)
 const expanded = ref(true)
-const orb = ref<TimerOrbLayout>({ size: 176, side: null, detailWidth: 0 })
+const orb = ref<TimerOrbLayout>({ size: 64, side: null, detailWidth: 0 })
 const surface = ref<'main' | 'timer'>()
 const floating = ref<HTMLElement>()
 const position = ref<{ left: number; top: number }>()
@@ -43,6 +43,7 @@ const desktopState = computed(() => {
     savedAt: tracker.savedAt.value,
     running: running ? { sessionId: running.id, workItemId: running.workItemId, title: current?.workItemTitle ?? '不可见工作项', startedAt: running.startedAt.toISOString() } : null,
     recent: recent ? { workItemId: recent.workItemId, title: recent.title } : null,
+    clockOffsetMs: Math.round(timerClockOffset()),
   } satisfies DesktopTimerState
 })
 watch([surface, desktopState], ([owner, state]) => {
@@ -100,7 +101,7 @@ async function open() {
   if (api && window.isSecureContext) {
     opening = true
     try {
-      const target = await api.requestWindow({ width: 392, height: 520 })
+      const target = await api.requestWindow({ width: 360, height: 480 })
       if (disposed || !authenticated.value || request !== openRevision) { target.close(); return }
       pipWindow = target
       for (const style of document.querySelectorAll('style, link[rel="stylesheet"]')) target.document.head.append(style.cloneNode(true))
@@ -140,29 +141,29 @@ function resizePip(value: boolean) {
   if (expanded.value === value) return
   if (expanded.value !== value && position.value && floating.value) {
     const rect = floating.value.getBoundingClientRect()
-    const width = value ? Math.min(392, window.innerWidth - 24) : orb.value.size
-    const height = value ? Math.min(520, window.innerHeight - 32) : orb.value.size
+    const width = value ? Math.min(360, window.innerWidth - 24) : orb.value.size
+    const height = value ? Math.min(480, window.innerHeight - 32) : orb.value.size
     const right = expanded.value ? rect.right : rect.left + (orb.value.side === 'left' ? orb.value.detailWidth : 0) + orb.value.size
     position.value = { left: right - width, top: rect.bottom - height }
   }
-  orb.value = { ...orb.value, side: null, detailWidth: 0, ...(value ? { titleVisible: false } : {}) }
+  orb.value = { ...orb.value, side: null, detailWidth: 0 }
   expanded.value = value
-  try { pipWindow?.resizeTo(value ? 392 : orb.value.size, value ? 520 : orb.value.size + (orb.value.titleVisible ? 40 : 0)) } catch { /* Some browsers constrain PiP resizing. */ }
+  try { pipWindow?.resizeTo(value ? 360 : orb.value.size, value ? 480 : orb.value.size) } catch { /* Some browsers constrain PiP resizing. */ }
   void nextTick(constrainPosition)
 }
 function layoutOrb(layout: TimerOrbLayout) {
   if (floating.value && !expanded.value) {
     const rect = floating.value.getBoundingClientRect()
     const circleX = rect.left + (orb.value.side === 'left' ? orb.value.detailWidth : 0)
-    position.value = { left: circleX - (layout.side === 'left' ? layout.detailWidth : 0), top: rect.bottom - layout.size - (layout.titleVisible ? 40 : 0) }
+    position.value = { left: circleX - (layout.side === 'left' ? layout.detailWidth : 0), top: rect.bottom - layout.size }
   }
   orb.value = layout
-  try { pipWindow?.resizeTo(layout.size + layout.detailWidth, layout.size + (layout.titleVisible ? 40 : 0)) } catch { /* The browser may constrain the requested window size. */ }
+  try { pipWindow?.resizeTo(layout.size + layout.detailWidth, layout.size) } catch { /* The browser may constrain the requested window size. */ }
   void nextTick(constrainPosition)
 }
 function constrainPosition() {
   if (!expanded.value && floating.value) {
-    const size = Math.min(orb.value.size, Math.max(128, window.innerWidth - 176), window.innerHeight - 16 - (orb.value.titleVisible ? 40 : 0))
+    const size = Math.min(orb.value.size, Math.max(56, window.innerWidth - 176), window.innerHeight - 16)
     const detailWidth = orb.value.side ? Math.min(orb.value.detailWidth, Math.max(0, window.innerWidth - size - 16)) : 0
     if (size !== orb.value.size || detailWidth !== orb.value.detailWidth) {
       orb.value = { ...orb.value, size, detailWidth }
@@ -235,7 +236,7 @@ function drag(event: PointerEvent) {
     ref="floating"
     class="timer-floating"
     :class="{ 'is-orb': !expanded }"
-    :style="{ ...(position ? { left: `${position.left}px`, top: `${position.top}px`, right: 'auto', bottom: 'auto' } : {}), ...(!expanded ? { width: `${orb.size + orb.detailWidth}px`, height: `${orb.size + (orb.titleVisible ? 40 : 0)}px` } : {}) }"
+    :style="{ ...(position ? { left: `${position.left}px`, top: `${position.top}px`, right: 'auto', bottom: 'auto' } : {}), ...(!expanded ? { width: `${orb.size + orb.detailWidth}px`, height: `${orb.size}px` } : {}) }"
   >
     <TimerPanel
       floating
@@ -263,7 +264,7 @@ function drag(event: PointerEvent) {
 </template>
 
 <style scoped>
-.global-timer-entry{position:fixed;right:24px;bottom:22px;z-index:1000;display:flex;align-items:center;gap:9px;padding:11px 14px;border:1px solid var(--yp-border-subtle);border-radius:12px;background:var(--yp-bg-surface);color:var(--yp-text-primary);box-shadow:var(--yp-shadow-popover);font:600 13px var(--yp-font-family);font-variant-numeric:tabular-nums;cursor:pointer}.global-timer-entry:hover{border-color:var(--yp-action-primary)}.global-timer-entry>svg{color:var(--yp-action-primary)}.global-timer-entry.is-running>svg{color:var(--el-color-success)}.global-timer-entry:focus-visible{outline:2px solid var(--yp-action-primary);outline-offset:3px}.timer-floating{position:fixed;right:24px;bottom:22px;width:min(392px,calc(100vw - 24px));z-index:1001;box-shadow:var(--yp-shadow-overlay);border-radius:14px}.timer-floating :deep(.timer-panel){max-height:calc(100dvh - 32px)}.timer-floating :deep(.panel-header){cursor:grab}.timer-floating :deep(.panel-header:active){cursor:grabbing}
+.global-timer-entry{position:fixed;right:24px;bottom:22px;z-index:1000;display:flex;align-items:center;gap:9px;padding:11px 14px;border:1px solid var(--yp-border-subtle);border-radius:12px;background:var(--yp-bg-surface);color:var(--yp-text-primary);box-shadow:var(--yp-shadow-popover);font:600 13px var(--yp-font-family);font-variant-numeric:tabular-nums;cursor:pointer}.global-timer-entry:hover{border-color:var(--yp-action-primary)}.global-timer-entry>svg{color:var(--yp-action-primary)}.global-timer-entry.is-running>svg{color:var(--el-color-success)}.global-timer-entry:focus-visible{outline:2px solid var(--yp-action-primary);outline-offset:3px}.timer-floating{position:fixed;right:24px;bottom:22px;width:min(360px,calc(100vw - 24px));z-index:1001;box-shadow:var(--yp-shadow-overlay);border-radius:16px}.timer-floating :deep(.timer-panel){max-height:calc(100dvh - 32px)}.timer-floating :deep(.panel-header){cursor:grab}.timer-floating :deep(.panel-header:active){cursor:grabbing}
 @media(max-width:440px){.timer-floating,.global-timer-entry{right:12px;bottom:12px}}
-.timer-floating.is-orb{width:176px;height:176px;box-shadow:none;border-radius:50%}.timer-floating{transform-origin:bottom right;animation:timer-appear .24s cubic-bezier(.2,.8,.2,1)}.global-timer-entry{transition:transform .18s,box-shadow .18s}.global-timer-entry:active{transform:scale(.95)}@keyframes timer-appear{from{opacity:0;transform:scale(.9) translateY(8px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.timer-floating{animation:none}.global-timer-entry{transition:none}}
+.timer-floating.is-orb{box-shadow:none;border-radius:50%}.timer-floating{transform-origin:bottom right;animation:timer-appear .24s cubic-bezier(.2,.8,.2,1)}.global-timer-entry{transition:transform .18s,box-shadow .18s}.global-timer-entry:active{transform:scale(.95)}@keyframes timer-appear{from{opacity:0;transform:scale(.9) translateY(8px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.timer-floating{animation:none}.global-timer-entry{transition:none}}
 </style>

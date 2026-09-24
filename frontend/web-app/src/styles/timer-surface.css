@@ -1,0 +1,23 @@
+/* Shared look for the orb, dock, work panel and quick panel; derived from theme tokens so all windows follow light, dark and night. */
+:root {
+  --yp-timer-accent: var(--yp-action-primary);
+  --yp-timer-saved: var(--yp-status-green);
+  --yp-timer-offline: var(--yp-status-orange);
+  --yp-timer-surface: color-mix(in srgb, var(--yp-bg-raised) 96%, transparent);
+  --yp-timer-sunken: color-mix(in srgb, var(--yp-text-primary) 4%, var(--yp-bg-raised));
+  --yp-timer-hover: color-mix(in srgb, var(--yp-text-primary) 6%, transparent);
+  --yp-timer-chip: var(--yp-bg-raised);
+  --yp-timer-hairline: color-mix(in srgb, var(--yp-text-primary) 11%, transparent);
+  --yp-timer-highlight: inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent);
+  --yp-timer-shadow: 0 1px 2px color-mix(in srgb, #0b1220 10%, transparent), 0 8px 22px -6px color-mix(in srgb, #0b1220 22%, transparent);
+  --yp-timer-shadow-soft: 0 1px 2px color-mix(in srgb, #0b1220 8%, transparent), 0 4px 10px -4px color-mix(in srgb, #0b1220 18%, transparent);
+  --yp-timer-radius: 14px;
+  --yp-timer-ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+:root.dark {
+  --yp-timer-chip: color-mix(in srgb, var(--yp-text-primary) 13%, var(--yp-bg-raised));
+  --yp-timer-highlight: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+  --yp-timer-shadow: 0 1px 2px color-mix(in srgb, #000 40%, transparent), 0 8px 22px -6px color-mix(in srgb, #000 55%, transparent);
+  --yp-timer-shadow-soft: 0 1px 2px color-mix(in srgb, #000 35%, transparent), 0 4px 10px -4px color-mix(in srgb, #000 45%, transparent);
+}

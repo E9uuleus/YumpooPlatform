@@ -9,7 +9,7 @@ vi.mock('../../composables/useSession', async () => {
 vi.mock('../../composables/useTimeTracker', async () => {
   const { ref } = await import('vue')
   const tracker = { current: ref({ session: null, recentItems: [] }), runningDuration: ref(0), savedAt: ref(0), connected: ref(true), busy: ref(false), refresh: vi.fn(async () => undefined) }
-  return { activateTimeTracker: vi.fn(), confirmTimerExit: vi.fn(), formatDuration: () => '0:00:00',
+  return { activateTimeTracker: vi.fn(), confirmTimerExit: vi.fn(), formatDuration: () => '0:00:00', timerClockOffset: () => 1234.4,
     timerExitPrompt: ref(false), chooseTimerExit: vi.fn(),
     useTimeTracker: () => tracker }
 })
@@ -45,7 +45,7 @@ describe('shared timer surfaces', () => {
     const requestWindow = vi.fn(async () => ({ document: pipDocument, addEventListener: (name: string, fn: () => void) => events.set(name, fn), close: vi.fn(), closed: false, resizeTo: vi.fn() }))
     vi.stubGlobal('documentPictureInPicture', { requestWindow })
     const wrapper = await host(); await wrapper.get('button').trigger('click'); await flushPromises()
-    expect(requestWindow).toHaveBeenCalledWith({ width: 392, height: 520 })
+    expect(requestWindow).toHaveBeenCalledWith({ width: 360, height: 480 })
     expect(pipDocument.body.textContent).toContain('计时面板')
     expect(wrapper.find('.timer-floating').exists()).toBe(false)
     events.get('pagehide')?.(); await flushPromises()
@@ -70,11 +70,11 @@ describe('shared timer surfaces', () => {
     useTimeTracker().savedAt.value = Date.now(); await flushPromises()
     expect(wrapper.get('.timer-floating').classes()).toContain('is-orb')
   })
-  it('keeps compact details and title geometry when a start event repeats the current mode', async () => {
+  it('keeps compact details geometry when a start event repeats the current mode', async () => {
     const wrapper = await host()
     window.dispatchEvent(new Event('yumpoo:timer-started')); await flushPromises()
     const panel = wrapper.findComponent({ name: 'TimerPanel' })
-    const layout = { size: 176, side: 'left', detailWidth: 224, titleVisible: true }
+    const layout = { size: 64, side: 'left', detailWidth: 216 }
     panel.vm.$emit('orb', layout); await flushPromises()
     window.dispatchEvent(new Event('yumpoo:timer-started')); await flushPromises()
     panel.vm.$emit('mode', false); await flushPromises()
@@ -84,7 +84,7 @@ describe('shared timer surfaces', () => {
     const wrapper = await host()
     window.dispatchEvent(new Event('yumpoo:timer-started')); await flushPromises()
     const floating = wrapper.get('.timer-floating')
-    let rect = { left: 700, top: 400, right: 876, bottom: 576, width: 176, height: 176 }
+    let rect = { left: 700, top: 400, right: 764, bottom: 464, width: 64, height: 64 }
     vi.spyOn(floating.element, 'getBoundingClientRect').mockImplementation(() => {
       const style = (floating.element as HTMLElement).style
       const width = parseFloat(style.width) || rect.width, height = parseFloat(style.height) || rect.height
@@ -97,19 +97,19 @@ describe('shared timer surfaces', () => {
     await flushPromises()
     expect(floating.attributes('style')).toContain('left: 620px')
     expect(floating.attributes('style')).toContain('top: 350px')
-    rect = { left: 620, top: 350, right: 796, bottom: 526, width: 176, height: 176 }
+    rect = { left: 620, top: 350, right: 684, bottom: 414, width: 64, height: 64 }
     const panel = wrapper.findComponent({ name: 'TimerPanel' })
-    panel.vm.$emit('orb', { size: 224, side: 'left', detailWidth: 200 }); await flushPromises()
+    panel.vm.$emit('orb', { size: 80, side: 'left', detailWidth: 200 }); await flushPromises()
     expect(floating.attributes('style')).toContain('left: 420px')
-    expect(floating.attributes('style')).toContain('top: 302px')
-    expect(floating.attributes('style')).toContain('width: 424px')
-    rect = { left: 420, top: 302, right: 844, bottom: 526, width: 424, height: 224 }
-    panel.vm.$emit('orb', { size: 224, side: null, detailWidth: 0 }); await flushPromises()
+    expect(floating.attributes('style')).toContain('top: 334px')
+    expect(floating.attributes('style')).toContain('width: 280px')
+    rect = { left: 420, top: 334, right: 700, bottom: 414, width: 280, height: 80 }
+    panel.vm.$emit('orb', { size: 80, side: null, detailWidth: 0 }); await flushPromises()
     expect(floating.attributes('style')).toContain('left: 620px')
-    expect(floating.attributes('style')).toContain('width: 224px')
-    vi.stubGlobal('innerWidth', 360)
-    panel.vm.$emit('orb', { size: 224, side: 'left', detailWidth: 200 }); await flushPromises()
-    expect(floating.attributes('style')).toContain('width: 344px')
+    expect(floating.attributes('style')).toContain('width: 80px')
+    vi.stubGlobal('innerWidth', 260)
+    panel.vm.$emit('orb', { size: 80, side: 'left', detailWidth: 200 }); await flushPromises()
+    expect(floating.attributes('style')).toContain('width: 244px')
     expect(floating.attributes('style')).toContain('left: 8px')
   })
   it('uses native window capabilities before any browser fallback', async () => {
@@ -117,6 +117,7 @@ describe('shared timer surfaces', () => {
     vi.stubGlobal('yumpooDesktop', { timer })
     const wrapper = await host(); await wrapper.get('button').trigger('click'); await flushPromises()
     expect(timer.show).toHaveBeenCalledWith('picker')
+    expect(timer.publishState).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: 'timer-user', clockOffsetMs: 1234 }))
     expect(wrapper.find('.timer-floating').exists()).toBe(false)
     expect(window.open).not.toHaveBeenCalled()
   })

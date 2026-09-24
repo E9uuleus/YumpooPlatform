@@ -1,0 +1,85 @@
+import { app, BrowserWindow, ipcMain, screen, type IpcMainInvokeEvent } from 'electron'
+import type { TimerMenuAction, TimerMenuState } from '@yumpoo/preload-contract'
+import { isTrustedAuthIpcSender } from './auth-ipc'
+import { createWindowOptions } from './window-policy'
+import { installSecurityGuards } from './security-guards'
+import { MENU, placeMenu } from './timer-geometry'
+
+const ACTIONS = new Set<TimerMenuAction>(['open-main', 'find', 'settings', 'toggle', 'show-orb', 'show-dock', 'hide', 'toggle-pin', 'exit', 'close'])
+const KEEP_OPEN = new Set<TimerMenuAction>(['toggle', 'show-orb', 'show-dock', 'hide', 'toggle-pin'])
+export const validMenuAction = (value: unknown): value is TimerMenuAction => typeof value === 'string' && ACTIONS.has(value as TimerMenuAction)
+
+/** A prewarmed popup that renders the shared quick panel for the tray and the compact timer surfaces. */
+export class TimerQuickMenu {
+  private window: BrowserWindow | null = null
+  private ready = false
+  private focused = false
+  private hiddenAt = 0
+  private installed = false
+
+  constructor(private readonly origin: string, private readonly preload: string, private readonly onAction: (action: TimerMenuAction) => void) {}
+
+  install(): void {
+    if (this.installed) return
+    this.installed = true
+    ipcMain.handle('yumpoo:timer:menu-action', (event, action: unknown) => {
+      if (!this.isSender(event)) throw new Error('UNTRUSTED_IPC_SENDER')
+      if (!validMenuAction(action)) throw new Error('INVALID_TIMER_MENU_ACTION')
+      if (!KEEP_OPEN.has(action)) this.hide()
+      this.onAction(action)
+    })
+  }
+
+  isSender(event: IpcMainInvokeEvent): boolean { return isTrustedAuthIpcSender(event, this.window, this.origin) }
+
+  isVisible(): boolean { return !!this.window && !this.window.isDestroyed() && this.window.isVisible() }
+
+  prewarm(): void {
+    if (this.window && !this.window.isDestroyed()) return
+    const window = new BrowserWindow({ ...createWindowOptions(this.preload, app.isPackaged),
+      width: MENU.width, height: MENU.height, minWidth: MENU.width, minHeight: MENU.height,
+      frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, thickFrame: false,
+      resizable: false, movable: false, minimizable: false, maximizable: false, fullscreenable: false,
+      skipTaskbar: true, type: 'toolbar', alwaysOnTop: true, title: 'YumpooPlatform · 快捷面板',
+    })
+    this.window = window
+    this.ready = false
+    window.setAlwaysOnTop(true, 'pop-up-menu')
+    installSecurityGuards(window.webContents, this.origin)
+    window.on('page-title-updated', event => event.preventDefault())
+    window.on('focus', () => { this.focused = true })
+    window.on('blur', () => { if (this.focused) this.hide() })
+    window.on('closed', () => { if (this.window === window) { this.window = null; this.ready = false } })
+    window.webContents.on('did-finish-load', () => { if (this.window === window) this.ready = true })
+    window.webContents.on('render-process-gone', () => { if (this.window === window) { this.ready = false; window.destroy() } })
+    window.loadURL(new URL('/timer/menu', this.origin).href).catch(() => {
+      console.error('[YUMPOO_TIMER_MENU_LOAD_FAILED]')
+      if (!window.isDestroyed()) window.destroy()
+    })
+  }
+
+  /** Returns false while the panel is not loaded so the caller can fall back to the native menu. */
+  open(kind: 'tray' | 'pointer', state: TimerMenuState): boolean {
+    const window = this.window
+    if (!window || window.isDestroyed() || !this.ready) { this.prewarm(); return false }
+    if (kind === 'tray' && (window.isVisible() || Date.now() - this.hiddenAt < 250)) { this.hide(); return true }
+    const cursor = screen.getCursorScreenPoint()
+    window.setBounds(placeMenu(kind, cursor, screen.getDisplayNearestPoint(cursor)))
+    window.webContents.send('yumpoo:timer:menu-state', state)
+    this.focused = false
+    window.show()
+    window.focus()
+    return true
+  }
+
+  update(state: TimerMenuState): void {
+    if (this.isVisible()) this.window!.webContents.send('yumpoo:timer:menu-state', state)
+  }
+
+  hide(): void {
+    if (!this.isVisible()) return
+    this.focused = false
+    this.hiddenAt = Date.now()
+    this.window!.hide()
+  }
+}
