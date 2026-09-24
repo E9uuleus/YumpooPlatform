@@ -25,7 +25,9 @@ const preferences = ref<TimerPreferences>()
 const layoutElement = ref<HTMLElement>()
 const detailsOpen = ref(false)
 const pointerInside = ref(false)
+const dragging = ref(false)
 let opening = false
+let suppressToggle = false
 let detailRevision = 0
 let layoutRevision = 0
 let hoverTimer: ReturnType<typeof setTimeout> | undefined
@@ -71,6 +73,7 @@ function focusSearch() { void nextTick(() => search.value?.focus()) }
 function hover(value: boolean) {
   pointerInside.value = value
   clearTimeout(hoverTimer); clearTimeout(leaveTimer)
+  if (value && dragging.value) return
   if (value) hoverTimer = setTimeout(() => { void openDetails() }, 350)
   else leaveTimer = setTimeout(() => { if (!layoutElement.value?.querySelector(':focus-visible')) closeDetails() }, 250)
 }
@@ -145,6 +148,12 @@ async function syncWindow() {
 const offMode = desktop?.onMode(mode => { applyMode(mode); void syncWindow().catch(() => undefined) })
 const offHover = desktop?.onOrbHover(hover)
 const offFailed = desktop?.onCommandFailed(() => { notice.value = '托盘操作尚未确认，请核对当前计时后重试。'; void load() })
+const offDragging = desktop?.onDragging?.(value => {
+  dragging.value = value
+  if (!value) return
+  clearTimeout(hoverTimer); clearTimeout(leaveTimer)
+  if (!orb.value.dock) closeDetails()
+})
 onMounted(async () => {
   mounted = true
   if (desktop) {
@@ -160,7 +169,7 @@ onMounted(async () => {
     } catch { notice.value = '窗口状态暂不可用。' }
   } else if (expanded.value) focusSearch()
 })
-onBeforeUnmount(() => { disposed = true; clearTimeout(savedTimer); clearTimeout(hoverTimer); clearTimeout(leaveTimer); offMode?.(); offHover?.(); offFailed?.() })
+onBeforeUnmount(() => { disposed = true; clearTimeout(savedTimer); clearTimeout(hoverTimer); clearTimeout(leaveTimer); offMode?.(); offHover?.(); offFailed?.(); offDragging?.() })
 watch(() => props.orbLayout, layout => { if (layout && !desktop) orb.value = layout })
 watch(candidates, () => { selected.value = 0 })
 watch(currentItem, item => { if (item) focusedItem.value = item })
@@ -180,9 +189,42 @@ async function begin(id: string) {
 }
 async function pause() { notice.value = ''; await tracker.stop() }
 function toggle() {
+  if (suppressToggle) { suppressToggle = false; return }
   if (running.value) void pause()
   else if (resume.value) void begin(resume.value.workItemId)
   else void changeMode(true)
+}
+/**
+ * The orb's play/pause control cannot be a native drag region, so a press that travels a few pixels
+ * hands the window to the shell to follow the cursor and the click that ends it is ignored.
+ */
+function pressControl(event: PointerEvent) {
+  suppressToggle = false
+  const drag = desktop?.dragWindow
+  if (!drag || event.button !== 0) return
+  const control = event.currentTarget as HTMLElement
+  const x = event.screenX, y = event.screenY
+  let moving = false
+  const move = (next: PointerEvent) => {
+    if (moving || next.pointerId !== event.pointerId || Math.hypot(next.screenX - x, next.screenY - y) < 4) return
+    moving = true; suppressToggle = true
+    void drag(true).catch(() => undefined)
+  }
+  const end = (next: PointerEvent) => {
+    if (next.pointerId !== event.pointerId) return
+    control.removeEventListener('pointermove', move); control.removeEventListener('pointerup', end)
+    control.removeEventListener('pointercancel', end); control.removeEventListener('lostpointercapture', end)
+    if (control.hasPointerCapture?.(event.pointerId)) control.releasePointerCapture(event.pointerId)
+    if (moving) void drag(false).catch(() => undefined)
+  }
+  control.setPointerCapture?.(event.pointerId)
+  control.addEventListener('pointermove', move); control.addEventListener('pointerup', end)
+  control.addEventListener('pointercancel', end); control.addEventListener('lostpointercapture', end)
+}
+/** The orb is always dragged on its own, so grabbing it in the page collapses the capsule as the shell does on the desktop. */
+function dragOrb(event: PointerEvent) {
+  if (!desktop && event.button === 0) { clearTimeout(hoverTimer); closeDetails() }
+  emit('drag', event)
 }
 function retry() {
   notice.value = ''; tracker.problem.value = ''
@@ -260,6 +302,8 @@ function keydown(event: KeyboardEvent) {
         :left="orb.canvas?.left ?? 0"
         :top="orb.canvas?.top ?? 0"
         :expanded="detailsOpen"
+        :active="pointerInside && !dragging"
+        :dragging="dragging"
         :running="!!running"
         :saved="saved && !running"
         :busy="tracker.busy.value"
@@ -285,6 +329,8 @@ function keydown(event: KeyboardEvent) {
         :left="orbLeft"
         :top="orb.canvas?.top ?? 0"
         :open="detailsOpen"
+        :active="pointerInside && !dragging"
+        :dragging="dragging"
         :running="!!running"
         :saved="saved && !running"
         :busy="tracker.busy.value"
@@ -298,9 +344,10 @@ function keydown(event: KeyboardEvent) {
         @toggle="toggle"
         @switch="changeMode(true)"
         @open="openCurrent"
-        @drag="emit('drag', $event)"
+        @drag="dragOrb"
+        @press="pressControl"
         @closed="releaseDetails"
-        @expand="toggleDetails"
+        @reveal="openDetails"
       />
     </div>
     <template v-else>

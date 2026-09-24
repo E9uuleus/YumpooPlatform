@@ -15,6 +15,9 @@ export class TimerQuickMenu {
   private ready = false
   private focused = false
   private hiddenAt = 0
+  private openedAt = 0
+  private opener: BrowserWindow | null = null
+  private watch: ReturnType<typeof setInterval> | undefined
   private installed = false
 
   constructor(private readonly origin: string, private readonly preload: string, private readonly onAction: (action: TimerMenuAction) => void) {}
@@ -49,7 +52,7 @@ export class TimerQuickMenu {
     window.on('page-title-updated', event => event.preventDefault())
     window.on('focus', () => { this.focused = true })
     window.on('blur', () => { if (this.focused) this.hide() })
-    window.on('closed', () => { if (this.window === window) { this.window = null; this.ready = false } })
+    window.on('closed', () => { if (this.window === window) { this.window = null; this.ready = false; clearInterval(this.watch) } })
     window.webContents.on('did-finish-load', () => { if (this.window === window) this.ready = true })
     window.webContents.on('render-process-gone', () => { if (this.window === window) { this.ready = false; window.destroy() } })
     window.loadURL(new URL('/timer/menu', this.origin).href).catch(() => {
@@ -66,10 +69,29 @@ export class TimerQuickMenu {
     const cursor = screen.getCursorScreenPoint()
     window.setBounds(placeMenu(kind, cursor, screen.getDisplayNearestPoint(cursor)))
     window.webContents.send('yumpoo:timer:menu-state', state)
+    const focused = BrowserWindow.getFocusedWindow()
+    this.opener = focused && focused !== window ? focused : null
     this.focused = false
+    this.openedAt = Date.now()
     window.show()
     window.focus()
+    // A right-click on a native drag region is still being handled by the opener, which can take activation back.
+    setTimeout(() => { if (this.isVisible() && !window.isFocused()) window.focus() }, 0)
+    clearInterval(this.watch)
+    this.watch = setInterval(() => this.dismissWhenOutside(), 120)
     return true
+  }
+
+  /**
+   * Blur alone is not enough: when the panel never became the focused window, a click elsewhere only moves focus
+   * away from the window that opened it, so the panel also closes once focus leaves both.
+   */
+  private dismissWhenOutside(): void {
+    const window = this.window
+    if (!window || window.isDestroyed() || !window.isVisible()) { clearInterval(this.watch); return }
+    const focused = BrowserWindow.getFocusedWindow()
+    if (focused === window) { this.focused = true; return }
+    if (this.focused || (Date.now() - this.openedAt > 300 && focused !== this.opener)) this.hide()
   }
 
   update(state: TimerMenuState): void {
@@ -78,7 +100,9 @@ export class TimerQuickMenu {
 
   hide(): void {
     if (!this.isVisible()) return
+    clearInterval(this.watch)
     this.focused = false
+    this.opener = null
     this.hiddenAt = Date.now()
     this.window!.hide()
   }

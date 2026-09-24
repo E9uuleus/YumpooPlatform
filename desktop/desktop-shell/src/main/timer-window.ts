@@ -58,6 +58,10 @@ export class TimerWindowController {
   private reframeTimer: ReturnType<typeof setTimeout> | undefined
   private blurTimer: ReturnType<typeof setTimeout> | undefined
   private hovered = false
+  private dragging = false
+  private suppressHover = false
+  private dragTimer: ReturnType<typeof setInterval> | undefined
+  private dragGuard: ReturnType<typeof setTimeout> | undefined
   private orb: TimerOrbLayout
   private shape: Rect[] = []
   private state: DesktopTimerState | undefined
@@ -110,6 +114,12 @@ export class TimerWindowController {
         || (c.details !== undefined && typeof c.details !== 'boolean')) throw new Error('INVALID_TIMER_ORB')
       if (this.mode === 'compact' && typeof c.details === 'boolean') this.setDetails(c.details)
       return { ...this.orb }
+    })
+    ipcMain.handle('yumpoo:timer:drag', (event, active: unknown) => {
+      if (!isTrustedAuthIpcSender(event, this.window, this.origin)) throw new Error('UNTRUSTED_IPC_SENDER')
+      if (typeof active !== 'boolean') throw new Error('INVALID_TIMER_DRAG')
+      if (active) this.followCursor()
+      else this.endDrag()
     })
     ipcMain.handle('yumpoo:timer:mode', (event, mode: unknown) => {
       this.trusted(event)
@@ -184,6 +194,7 @@ export class TimerWindowController {
       clearTimeout(this.reframeTimer)
       clearTimeout(this.blurTimer)
       clearTimeout(this.exitTimeout); clearTimeout(this.commandTimeout)
+      clearInterval(this.dragTimer); clearTimeout(this.dragGuard)
       this.tray?.destroy()
     })
   }
@@ -373,6 +384,7 @@ export class TimerWindowController {
   }
 
   private resize(mode: TimerWindowMode): void {
+    if (expanded(mode)) this.endDrag()
     const previous = this.mode
     this.mode = mode
     if (!this.window || this.window.isDestroyed() || previous === mode) return
@@ -398,9 +410,9 @@ export class TimerWindowController {
   }
 
   /** Re-fits the transparent canvas after a drag; a dock also snaps to the nearest edge and remembers where it was left. */
-  private reframe(): void {
+  private reframe(force = false): void {
     const window = this.window
-    if (!window || window.isDestroyed() || this.mode !== 'compact' || !this.orb.canvas) return
+    if (!window || window.isDestroyed() || this.mode !== 'compact' || !this.orb.canvas || (this.dragging && !force)) return
     const bounds = window.getBounds(), area = screen.getDisplayMatching(bounds).workArea
     let next: { bounds: Rect; layout: TimerOrbLayout }
     if (this.orb.dock) {
@@ -419,6 +431,45 @@ export class TimerWindowController {
     window.webContents.send('yumpoo:timer:mode-changed', 'compact')
   }
 
+  /** Dragging hides the quick panel and keeps the capsule, or a closed card, from opening until the pointer has left once. */
+  private beginDrag(): void {
+    const window = this.window
+    if (this.dragging || !window || window.isDestroyed() || this.mode !== 'compact') return
+    this.dragging = true
+    this.menu.hide()
+    // The orb travels alone: an open capsule is clipped away at once, while an open dock card is carried along.
+    if (!this.orb.dock) this.setDetails(false)
+    if (!this.orb.dock?.expanded) {
+      this.suppressHover = true
+      if (this.hovered) { this.hovered = false; window.webContents.send('yumpoo:timer:orb-hover', false) }
+    }
+    window.webContents.send('yumpoo:timer:dragging', true)
+  }
+
+  private endDrag(): void {
+    clearInterval(this.dragTimer); clearTimeout(this.dragGuard)
+    this.dragTimer = undefined
+    if (!this.dragging) return
+    this.reframe(true)
+    this.dragging = false
+    if (this.window && !this.window.isDestroyed()) this.window.webContents.send('yumpoo:timer:dragging', false)
+  }
+
+  /** Buttons cannot be native drag regions, so a drag that starts on one moves the window with the cursor instead. */
+  private followCursor(): void {
+    const window = this.window
+    if (!window || window.isDestroyed() || this.mode !== 'compact' || this.dragging) return
+    const bounds = window.getBounds(), cursor = screen.getCursorScreenPoint()
+    const grab = { x: cursor.x - bounds.x, y: cursor.y - bounds.y }
+    this.beginDrag()
+    this.dragTimer = setInterval(() => {
+      if (window.isDestroyed()) { this.endDrag(); return }
+      const point = screen.getCursorScreenPoint()
+      window.setPosition(point.x - grab.x, point.y - grab.y)
+    }, 16)
+    this.dragGuard = setTimeout(() => this.endDrag(), 60_000)
+  }
+
   private applyShape(): void {
     this.shape = this.mode !== 'compact' || !this.orb.canvas ? [] : this.orb.dock ? dockShape(this.orb) : orbShape(this.orb)
     if (process.platform === 'win32' || process.platform === 'linux') this.window?.setShape(this.shape)
@@ -426,11 +477,13 @@ export class TimerWindowController {
 
   private updateHover(): void {
     const window = this.window
+    if (this.dragging) return
     let hovered = false
     if (window && !window.isDestroyed() && window.isVisible() && this.mode === 'compact') {
       const bounds = window.getBounds(), cursor = screen.getCursorScreenPoint()
       hovered = hitTest(this.shape, cursor.x - bounds.x, cursor.y - bounds.y)
     }
+    if (this.suppressHover) { if (!hovered) this.suppressHover = false; hovered = false }
     if (hovered === this.hovered) return
     this.hovered = hovered
     window?.webContents.send('yumpoo:timer:orb-hover', hovered)
@@ -471,15 +524,22 @@ export class TimerWindowController {
         if (!window.isDestroyed() && window.isVisible() && !this.pinned && this.mode === 'compact') window.moveTop()
       }, 0)
     })
-    // Windows reports the end of a native drag once; elsewhere `move` streams during the drag, so it is debounced.
-    if (process.platform === 'win32') window.on('moved', () => this.reframe())
-    else window.on('move', () => { clearTimeout(this.reframeTimer); this.reframeTimer = setTimeout(() => this.reframe(), 120) })
+    // Windows announces manual moves and reports their end once; elsewhere `move` streams during the drag, so it is debounced.
+    window.on('will-move', () => this.beginDrag())
+    if (process.platform === 'win32') window.on('moved', () => { if (this.dragging) this.endDrag(); else this.reframe() })
+    else window.on('move', () => {
+      clearTimeout(this.reframeTimer)
+      this.reframeTimer = setTimeout(() => { if (this.dragging && !this.dragTimer) this.endDrag(); else this.reframe() }, 120)
+    })
     // Right-clicking a drag region raises the system window menu; the shared quick panel replaces it.
     window.on('system-context-menu', event => { event.preventDefault(); this.openSurfaceMenu() })
     window.webContents.on('context-menu', () => { if (this.mode === 'compact') this.openSurfaceMenu() })
     installSecurityGuards(window.webContents, this.origin)
     window.on('close', event => { if (!this.approvedExit) { event.preventDefault(); window.hide(); this.updateTray() } })
-    window.on('closed', () => { clearInterval(this.hoverTimer); clearTimeout(this.reframeTimer); clearTimeout(this.blurTimer); this.window = null; this.updateTray() })
+    window.on('closed', () => {
+      clearInterval(this.hoverTimer); clearTimeout(this.reframeTimer); clearTimeout(this.blurTimer); clearInterval(this.dragTimer); clearTimeout(this.dragGuard)
+      this.window = null; this.dragging = false; this.updateTray()
+    })
     window.once('ready-to-show', () => reveal(window))
     try { await window.loadURL(new URL(`/timer?mode=${mode}`, this.origin).href) }
     catch {

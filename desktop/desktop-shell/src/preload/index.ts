@@ -102,6 +102,13 @@ const desktopTimer: DesktopTimerBridge = Object.freeze({
     return () => ipcRenderer.removeListener('yumpoo:timer:menu-state', wrapped)
   },
   runMenuAction: async (action: TimerMenuAction) => { await ipcRenderer.invoke('yumpoo:timer:menu-action', action) },
+  dragWindow: async (active: boolean) => { await ipcRenderer.invoke('yumpoo:timer:drag', active) },
+  onDragging: (listener: (dragging: boolean) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Timer listener must be a function')
+    const wrapped = (_event: unknown, dragging: unknown) => { if (typeof dragging === 'boolean') listener(dragging) }
+    ipcRenderer.on('yumpoo:timer:dragging', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:timer:dragging', wrapped)
+  },
   setAlwaysOnTop: async (value: boolean) => { await ipcRenderer.invoke('yumpoo:timer:pin', value) },
   publishState: async (state: DesktopTimerState) => { await ipcRenderer.invoke('yumpoo:timer:state', state) },
   onCommand: (listener: (command: DesktopTimerCommand) => void) => {

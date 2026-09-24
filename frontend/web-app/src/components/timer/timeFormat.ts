@@ -24,8 +24,8 @@ export function orbDuration(ms: number): string {
   return hours ? `${hours}h${pad(minutes)}` : `${pad(minutes)}:${pad(seconds % 60)}`
 }
 
-/** Two stacked lines for the narrow edge tab. */
-export function dockDuration(ms: number): [string, string] {
+/** Two stacked readings with units for the narrow edge tab: minutes and seconds within the first hour, then hours and minutes. */
+export function dockDuration(ms: number): { major: string; majorUnit: string; minor: string; minorUnit: string } {
   const seconds = Math.max(0, Math.floor(ms / 1000)), hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds / 60) % 60
-  return hours ? [`${hours}h`, `${pad(minutes)}m`] : [`${minutes}m`, `${pad(seconds % 60)}s`]
+  return hours ? { major: String(hours), majorUnit: '时', minor: pad(minutes), minorUnit: '分' } : { major: String(minutes), majorUnit: '分', minor: pad(seconds % 60), minorUnit: '秒' }
 }

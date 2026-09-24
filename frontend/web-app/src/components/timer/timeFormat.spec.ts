@@ -21,9 +21,9 @@ describe('compact timer durations', () => {
     expect(orbDuration(5_100_000)).toBe('1h25')
     expect(orbDuration(36_300_000)).toBe('10h05')
   })
-  it('stacks two short lines for the edge tab', () => {
-    expect(dockDuration(0)).toEqual(['0m', '00s'])
-    expect(dockDuration(1_508_000)).toEqual(['25m', '08s'])
-    expect(dockDuration(5_100_000)).toEqual(['1h', '25m'])
+  it('stacks two readings with units for the edge tab', () => {
+    expect(dockDuration(0)).toEqual({ major: '0', majorUnit: '分', minor: '00', minorUnit: '秒' })
+    expect(dockDuration(1_508_000)).toEqual({ major: '25', majorUnit: '分', minor: '08', minorUnit: '秒' })
+    expect(dockDuration(5_100_000)).toEqual({ major: '1', majorUnit: '时', minor: '25', minorUnit: '分' })
   })
 })
