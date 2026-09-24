@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { formatDuration } from '../../composables/useTimeTracker'
-const props = defineProps<{ duration: number }>()
-const value = computed(() => formatDuration(props.duration))
+const props = defineProps<{ duration?: number; text?: string }>()
+const value = computed(() => props.text ?? formatDuration(props.duration ?? 0))
 </script>
 
 <template>

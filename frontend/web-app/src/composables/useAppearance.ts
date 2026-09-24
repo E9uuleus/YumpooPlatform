@@ -56,6 +56,14 @@ function handleSystemThemeChange(event: MediaQueryListEvent | MediaQueryList): v
   if (themeMode.value === 'system') applyRootAppearance()
 }
 
+/** Other windows of the same origin (the desktop timer surfaces) follow theme changes made in the main window. */
+function handleStorage(event: StorageEvent): void {
+  if (event.key === THEME_STORAGE_KEY && isThemeMode(event.newValue)) themeMode.value = event.newValue
+  else if (event.key === DENSITY_STORAGE_KEY && isDensityMode(event.newValue)) densityMode.value = event.newValue
+  else return
+  applyRootAppearance()
+}
+
 function connectSystemTheme(): void {
   mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)')
   systemPrefersDark.value = mediaQuery?.matches ?? false
@@ -70,6 +78,7 @@ export function initializeAppearance(): void {
   themeMode.value = isThemeMode(storedTheme) ? storedTheme : 'system'
   densityMode.value = isDensityMode(storedDensity) ? storedDensity : 'comfortable'
   connectSystemTheme()
+  window.addEventListener('storage', handleStorage)
   applyRootAppearance()
   initialized = true
 }
@@ -102,6 +111,7 @@ export function resetAppearanceForTests(): void {
     mediaQuery.removeEventListener('change', handleSystemThemeChange)
   }
   mediaQuery = undefined
+  window.removeEventListener('storage', handleStorage)
   initialized = false
   themeMode.value = 'system'
   densityMode.value = 'comfortable'

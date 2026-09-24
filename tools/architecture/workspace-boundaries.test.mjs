@@ -201,6 +201,20 @@ test('计时托盘只开放固定桥接通道和确定的参数个数', async ()
     + "const channel = 'yumpoo:timer:state'; void ipcRenderer.invoke(channel, {})\n")).length, 3)
 })
 
+test('计时快捷面板与偏好只开放固定通道和参数个数', async () => {
+  const file = 'desktop/desktop-shell/src/preload/index.ts'
+  const prefix = "import { contextBridge, ipcRenderer } from 'electron'\nvoid contextBridge\n"
+  assert.equal((await boundaryMessages(file, prefix
+    + "void ipcRenderer.invoke('yumpoo:timer:preferences', {})\n"
+    + "void ipcRenderer.invoke('yumpoo:timer:menu-action', 'toggle')\n"
+    + "void ipcRenderer.on('yumpoo:timer:menu-state', () => {})\n"
+    + "void ipcRenderer.removeListener('yumpoo:timer:menu-state', () => {})\n")).length, 0)
+  assert.equal((await boundaryMessages(file, prefix
+    + "void ipcRenderer.invoke('yumpoo:timer:preferences')\n"
+    + "void ipcRenderer.invoke('yumpoo:timer:menu-action', 'toggle', 'extra')\n"
+    + "void ipcRenderer.invoke('yumpoo:timer:menu-state')\n")).length, 3)
+})
+
 test('preload contract 拦截 Electron 与路径逃逸', async () => {
   const file = 'packages/preload-contract/src/illegal.ts'
   assert.equal((await boundaryMessages(file, "import 'electron'\n")).length, 1)

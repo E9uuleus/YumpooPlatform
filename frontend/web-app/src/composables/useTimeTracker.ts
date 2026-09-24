@@ -31,6 +31,9 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
+/** Server clock minus local clock from the latest poll, published so other desktop surfaces tick the same duration. */
+export function timerClockOffset(): number { return offset }
+
 export function useTimeTracker() {
   return { current, now, busy, problem, connected, savedAt, refresh, toggle, start, stop, notify, summaries,
     runningDuration: computed(() => current.value?.session ? Math.max(0, now.value - current.value.session.startedAt.getTime()) : 0) }

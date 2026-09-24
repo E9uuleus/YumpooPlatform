@@ -39,8 +39,12 @@ export interface DesktopTimerBridge {
   show(mode?: TimerWindowMode, activate?: boolean): Promise<void>
   hide(): Promise<void>
   setMode(mode: TimerWindowMode): Promise<void>
-  getWindowState(): Promise<{ mode: TimerWindowMode; pinned: boolean; surface: 'main' | 'timer'; savedAt: number; orb: TimerOrbLayout; hovered?: boolean }>
+  getWindowState(): Promise<TimerWindowState>
   setOrbLayout(change: TimerOrbChange): Promise<TimerOrbLayout>
+  /** Optional because the remotely deployed web app can be newer than the installed shell. */
+  setPreferences?(change: TimerPreferencesChange): Promise<TimerPreferences>
+  onMenuState?(listener: (state: TimerMenuState) => void): () => void
+  runMenuAction?(action: TimerMenuAction): Promise<void>
   setAlwaysOnTop(value: boolean): Promise<void>
   refresh(): Promise<void>
   publishState(state: DesktopTimerState): Promise<void>
@@ -56,20 +60,65 @@ export interface DesktopTimerBridge {
   openWorkItem(projectId: string, workItemId: string): Promise<void>
 }
 
-export type TimerWindowMode = 'compact' | 'picker'
+export type TimerWindowMode = 'compact' | 'picker' | 'settings'
+export type TimerDisplayStyle = 'orb' | 'dock'
+export type TimerOrbSize = 'small' | 'medium' | 'large'
+export type TimerDockSide = 'left' | 'right'
+
+export interface TimerPreferences {
+  display: TimerDisplayStyle
+  orbSize: TimerOrbSize
+  dockSide: TimerDockSide
+}
+
+export type TimerPreferencesChange = Partial<TimerPreferences>
+
+export interface TimerWindowState {
+  mode: TimerWindowMode
+  pinned: boolean
+  surface: 'main' | 'timer'
+  savedAt: number
+  orb: TimerOrbLayout
+  hovered?: boolean
+  preferences?: TimerPreferences
+}
 
 export interface TimerOrbLayout {
   canvas?: { width: number; height: number; left: number; top: number }
-  titleVisible?: boolean
   size: number
   side: 'left' | 'right' | null
   detailWidth: number
+  /** Present only while the compact surface is docked to a screen edge. */
+  dock?: { side: TimerDockSide; expanded: boolean }
 }
 
 export interface TimerOrbChange {
-  titleVisible?: boolean
-  size?: number
   details?: boolean
+}
+
+export type TimerMenuAction =
+  | 'open-main'
+  | 'find'
+  | 'settings'
+  | 'toggle'
+  | 'show-orb'
+  | 'show-dock'
+  | 'hide'
+  | 'toggle-pin'
+  | 'exit'
+  | 'close'
+
+export interface TimerMenuState {
+  signedIn: boolean
+  ready: boolean
+  enabled: boolean
+  running: { title: string; startedAt: string } | null
+  recent: { title: string } | null
+  clockOffsetMs: number
+  savedAt: number
+  visible: boolean
+  display: TimerDisplayStyle
+  pinned: boolean
 }
 
 export interface DesktopTimerState {
@@ -80,6 +129,8 @@ export interface DesktopTimerState {
   savedAt: number
   running: { sessionId: string; workItemId: string | null; title: string; startedAt: string } | null
   recent: { workItemId: string; title: string } | null
+  /** Server clock minus local clock, so other surfaces can tick the same duration. */
+  clockOffsetMs?: number
 }
 
 export type DesktopTimerCommand =
