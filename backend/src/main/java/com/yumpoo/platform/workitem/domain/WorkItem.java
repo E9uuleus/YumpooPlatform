@@ -22,7 +22,8 @@ public record WorkItem(
 ) {
     private static final Pattern ITEM_NO = Pattern.compile("^[A-Z][A-Z0-9_]{1,31}-[1-9][0-9]*$");
     private static final Pattern STATUS = Pattern.compile("^[A-Z][A-Z0-9_]{1,31}$");
-    private static final int MAX_BODY_LENGTH = 16_384;
+    private static final int MAX_NOTES_LENGTH = 16_384;
+    private static final int MAX_DESCRIPTION_HTML_LENGTH = 65_536;
 
     public WorkItem {
         Objects.requireNonNull(id, "id must not be null");
@@ -43,8 +44,8 @@ public record WorkItem(
         if (statusCode == null || !STATUS.matcher(statusCode).matches())
             throw new IllegalArgumentException("statusCode must be a stable uppercase identifier");
         priority = normalizeCode(priority, "priority");
-        description = normalizeOptional(description, MAX_BODY_LENGTH, "description");
-        notes = normalizeOptional(notes, MAX_BODY_LENGTH, "notes");
+        description = normalizeOptional(description, MAX_DESCRIPTION_HTML_LENGTH, "description");
+        notes = normalizeOptional(notes, MAX_NOTES_LENGTH, "notes");
         if (dueTime != null && (dueDate == null || dueTime.getSecond() != 0 || dueTime.getNano() != 0))
             throw new IllegalArgumentException("due time requires a date and minute precision");
         if (completedAt != null && (statusCategory != WorkItemStatusCategory.DONE

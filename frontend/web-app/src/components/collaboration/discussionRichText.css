@@ -13,12 +13,14 @@
 .discussion-rich-text th { background: var(--yp-bg-sunken); font-weight: 650; }
 .discussion-rich-text .selectedCell::after { content: ''; position: absolute; inset: 0; background: var(--yp-bg-selected); opacity: .5; pointer-events: none; }
 .discussion-rich-text ul[data-type='taskList'] { list-style: none; padding-left: 0; }
-.discussion-rich-text li[data-type='taskItem'] { display: flex; gap: 8px; align-items: flex-start; }
-.discussion-rich-text li[data-type='taskItem'] > div { flex: 1; min-width: 0; }
-.discussion-rich-text li[data-type='taskItem'] > label { flex: none; margin-top: 3px; }
-.discussion-update__body li[data-type='taskItem'] { display: block; position: relative; padding-left: 25px; }
-.discussion-update__body li[data-type='taskItem']::before { content: '☐'; position: absolute; left: 0; }
-.discussion-update__body li[data-type='taskItem'][data-checked='true']::before { content: '☑'; color: var(--yp-action-primary); }
+.discussion-rich-text li[data-type='taskItem'], .discussion-rich-text .ProseMirror ul[data-type='taskList'] > li { display: flex; gap: 8px; align-items: flex-start; }
+.discussion-rich-text li[data-type='taskItem'] > div, .discussion-rich-text .ProseMirror ul[data-type='taskList'] > li > div { flex: 1; min-width: 0; }
+.discussion-rich-text li[data-type='taskItem'] > label, .discussion-rich-text .ProseMirror ul[data-type='taskList'] > li > label { flex: none; margin-top: 3px; }
+.discussion-update__body li[data-type='taskItem'], .work-item-description__body li[data-type='taskItem'] { display: block; position: relative; padding-left: 25px; }
+.discussion-update__body li[data-type='taskItem']::before, .work-item-description__body li[data-type='taskItem']::before { content: '☐'; position: absolute; left: 0; }
+.discussion-update__body li[data-type='taskItem'][data-checked='true']::before, .work-item-description__body li[data-type='taskItem'][data-checked='true']::before { content: '☑'; color: var(--yp-action-primary); }
+.discussion-rich-text img { display: block; max-width: 100%; height: auto; margin: 12px 0; border: 1px solid var(--yp-border-subtle); border-radius: 8px; background: var(--yp-bg-sunken); }
+.discussion-rich-text img.ProseMirror-selectednode { outline: 2px solid var(--yp-action-primary); outline-offset: 2px; }
 .discussion-editor-popup, .discussion-member-popup { position: fixed; z-index: 5000; box-sizing: border-box; width: min(304px, calc(100vw - 16px)); max-height: min(420px, calc(100vh - 16px)); overflow: auto; padding: 8px; border: 1px solid var(--yp-border-strong); border-radius: 8px; color: var(--yp-text-primary); background: var(--yp-bg-surface); box-shadow: var(--yp-shadow-card); font: inherit; font-size: 14px; }
 .discussion-editor-popup button, .discussion-member-popup button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 4px; color: inherit; background: transparent; text-align: left; cursor: pointer; font: inherit; }
 .discussion-editor-popup button:hover, .discussion-editor-popup button[aria-pressed='true'], .discussion-member-popup button:hover, .discussion-member-popup button[aria-selected='true'] { background: var(--yp-bg-selected); color: var(--yp-action-primary); }

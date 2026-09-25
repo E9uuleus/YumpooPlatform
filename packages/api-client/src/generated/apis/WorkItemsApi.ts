@@ -23,6 +23,7 @@ import type {
   WorkItemContentPatchRequest,
   WorkItemCreateRequest,
   WorkItemDeleteRequest,
+  WorkItemDescriptionPatchRequest,
   WorkItemDetail,
   WorkItemDueDatePatchRequest,
   WorkItemLabelCatalog,
@@ -63,6 +64,8 @@ import {
     WorkItemCreateRequestToJSON,
     WorkItemDeleteRequestFromJSON,
     WorkItemDeleteRequestToJSON,
+    WorkItemDescriptionPatchRequestFromJSON,
+    WorkItemDescriptionPatchRequestToJSON,
     WorkItemDetailFromJSON,
     WorkItemDetailToJSON,
     WorkItemDueDatePatchRequestFromJSON,
@@ -289,6 +292,14 @@ export interface PatchWorkItemContentRequest {
     ifMatch: string;
     idempotencyKey: string;
     workItemContentPatchRequest: WorkItemContentPatchRequest;
+}
+
+export interface PatchWorkItemDescriptionRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    workItemDescriptionPatchRequest: WorkItemDescriptionPatchRequest;
 }
 
 export interface PatchWorkItemDueDateRequest {
@@ -1970,6 +1981,86 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async patchWorkItemContent(requestParameters: PatchWorkItemContentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.patchWorkItemContentRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 单独更新富文本描述
+     */
+    async patchWorkItemDescriptionRaw(requestParameters: PatchWorkItemDescriptionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling patchWorkItemDescription().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling patchWorkItemDescription().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling patchWorkItemDescription().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling patchWorkItemDescription().'
+            );
+        }
+
+        if (requestParameters['workItemDescriptionPatchRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemDescriptionPatchRequest',
+                'Required parameter "workItemDescriptionPatchRequest" was null or undefined when calling patchWorkItemDescription().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/description`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemDescriptionPatchRequestToJSON(requestParameters['workItemDescriptionPatchRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 单独更新富文本描述
+     */
+    async patchWorkItemDescription(requestParameters: PatchWorkItemDescriptionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.patchWorkItemDescriptionRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

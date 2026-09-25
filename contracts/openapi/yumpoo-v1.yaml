@@ -2961,6 +2961,41 @@ paths:
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /work-items/{workItemId}/description:
+    patch:
+      tags: [WorkItems]
+      operationId: patchWorkItemDescription
+      summary: 单独更新富文本描述
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkItemDescriptionPatchRequest' }
+            examples:
+              withImage: { $ref: '#/components/examples/WorkItemDescriptionWithImage' }
+      responses:
+        '200':
+          description: 描述已更新、内容未变化，或返回幂等重放结果。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /work-items/{workItemId}/due-date:
     patch:
       tags: [WorkItems]
@@ -5544,7 +5579,15 @@ components:
         assigneeDisplayName: { type: string, minLength: 1, nullable: true }
         reporterUserId: { $ref: '#/components/schemas/Uuid' }
         reporterDisplayName: { type: string, minLength: 1 }
-        description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        description:
+          type: string
+          minLength: 1
+          maxLength: 65536
+          nullable: true
+          description: >-
+            工作项描述，受限协作富文本 HTML（与讨论正文相同的格式白名单，另允许 img[src,alt]）。
+            img.src 必须精确匹配同源附件内容地址 /api/v1/attachments/{uuid}/content，否则移除；
+            Mention 降级为纯文本。净化后 HTML 最多 65536 字符、纯文本最多 16384 字符；无文本且无图片时保存为 null。
         notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
@@ -5579,7 +5622,15 @@ components:
         assigneeDisplayName: { type: string, minLength: 1, nullable: true }
         reporterUserId: { $ref: '#/components/schemas/Uuid' }
         reporterDisplayName: { type: string, minLength: 1 }
-        description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        description:
+          type: string
+          minLength: 1
+          maxLength: 65536
+          nullable: true
+          description: >-
+            工作项描述，受限协作富文本 HTML（与讨论正文相同的格式白名单，另允许 img[src,alt]）。
+            img.src 必须精确匹配同源附件内容地址 /api/v1/attachments/{uuid}/content，否则移除；
+            Mention 降级为纯文本。净化后 HTML 最多 65536 字符、纯文本最多 16384 字符；无文本且无图片时保存为 null。
         notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
@@ -5864,6 +5915,17 @@ components:
       properties:
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
 
+    WorkItemDescriptionPatchRequest:
+      type: object
+      additionalProperties: false
+      required: [description]
+      properties:
+        description:
+          type: string
+          maxLength: 65536
+          nullable: true
+          description: 未受信任的描述富文本；null 或净化后为空表示清空。净化规则见 WorkItemDetail.description。
+
     WorkItemDueDatePatchRequest:
       type: object
       additionalProperties: false
@@ -5987,7 +6049,15 @@ components:
         title: { type: string, minLength: 1, maxLength: 300 }
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
-        description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        description:
+          type: string
+          minLength: 1
+          maxLength: 65536
+          nullable: true
+          description: >-
+            工作项描述，受限协作富文本 HTML（与讨论正文相同的格式白名单，另允许 img[src,alt]）。
+            img.src 必须精确匹配同源附件内容地址 /api/v1/attachments/{uuid}/content，否则移除；
+            Mention 降级为纯文本。净化后 HTML 最多 65536 字符、纯文本最多 16384 字符；无文本且无图片时保存为 null。
         notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
@@ -6003,7 +6073,15 @@ components:
         title: { type: string, minLength: 1, maxLength: 300 }
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
-        description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        description:
+          type: string
+          minLength: 1
+          maxLength: 65536
+          nullable: true
+          description: >-
+            工作项描述，受限协作富文本 HTML（与讨论正文相同的格式白名单，另允许 img[src,alt]）。
+            img.src 必须精确匹配同源附件内容地址 /api/v1/attachments/{uuid}/content，否则移除；
+            Mention 降级为纯文本。净化后 HTML 最多 65536 字符、纯文本最多 16384 字符；无文本且无图片时保存为 null。
         notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
@@ -6026,7 +6104,15 @@ components:
         title: { type: string, minLength: 1, maxLength: 300 }
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }
-        description: { type: string, minLength: 1, maxLength: 16384, nullable: true }
+        description:
+          type: string
+          minLength: 1
+          maxLength: 65536
+          nullable: true
+          description: >-
+            工作项描述，受限协作富文本 HTML（与讨论正文相同的格式白名单，另允许 img[src,alt]）。
+            img.src 必须精确匹配同源附件内容地址 /api/v1/attachments/{uuid}/content，否则移除；
+            Mention 降级为纯文本。净化后 HTML 最多 65536 字符、纯文本最多 16384 字符；无文本且无图片时保存为 null。
         notes: { type: string, minLength: 1, maxLength: 16384, nullable: true }
         timelineStartDate: { type: string, format: date, nullable: true }
         timelineEndDate: { type: string, format: date, nullable: true }
@@ -7234,6 +7320,9 @@ components:
     WorkItemUpdateRichText:
       summary: 受限富文本、表格、清单及个人提及的发布输入
       externalValue: ../examples/work-items/update-rich-text.json
+    WorkItemDescriptionWithImage:
+      summary: 含格式、清单与同源附件图片的描述输入
+      externalValue: ../examples/work-items/description-with-image.json
     WorkItemDeadlineWithTime:
       summary: 设置企业时区的日期及分钟精度时分
       externalValue: ../examples/work-items/deadline-with-time.json

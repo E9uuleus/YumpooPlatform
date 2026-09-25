@@ -125,7 +125,7 @@ export interface WorkItemSummary {
      */
     reporterDisplayName: string;
     /**
-     *
+     * 工作项描述，受限协作富文本 HTML（与讨论正文相同的格式白名单，另允许 img[src,alt]）。 img.src 必须精确匹配同源附件内容地址 /api/v1/attachments/{uuid}/content，否则移除； Mention 降级为纯文本。净化后 HTML 最多 65536 字符、纯文本最多 16384 字符；无文本且无图片时保存为 null。
      * @type {string}
      * @memberof WorkItemSummary
      */

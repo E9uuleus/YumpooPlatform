@@ -8,6 +8,7 @@ import com.yumpoo.platform.catalog.api.ProjectFactWriteSnapshot;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageResponse;
 import com.yumpoo.platform.foundation.api.pagination.CursorPageRequest;
+import com.yumpoo.platform.foundation.application.collaboration.CollaborationHtmlSanitizer;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
@@ -91,6 +92,7 @@ public class WorkItemService {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final TimeTrackingRepository timeTracking;
+    private final CollaborationHtmlSanitizer sanitizer;
     private final ProjectWorkItemCursorCodec projectCursors = new ProjectWorkItemCursorCodec();
     private final ProjectWorkItemFilterCursorCodec projectFilterCursors =
             new ProjectWorkItemFilterCursorCodec();
@@ -101,7 +103,8 @@ public class WorkItemService {
             ProjectActiveMembershipQuery activeMemberships,
             WorkItemLabelRepository labels, MinimalUserSnapshotQuery users,
             IdempotentCommandExecutor idempotency, TransactionalEventPort events,
-            ObjectMapper objectMapper, Clock clock, TimeTrackingRepository timeTracking) {
+            ObjectMapper objectMapper, Clock clock, TimeTrackingRepository timeTracking,
+            CollaborationHtmlSanitizer sanitizer) {
         this.workItems = workItems;
         this.relations = relations;
         this.updates = updates;
@@ -116,6 +119,7 @@ public class WorkItemService {
         this.objectMapper = objectMapper;
         this.clock = clock;
         this.timeTracking = timeTracking;
+        this.sanitizer = sanitizer;
     }
 
     @Transactional(readOnly = true)
@@ -350,6 +354,7 @@ public class WorkItemService {
         }
         requireWritableAccess(visible.project().actorAccess());
         String priority = priority(command.priority());
+        String description = description(command.description());
         requireDateRange(command.timelineStartDate(), command.timelineEndDate());
         return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
                 command.actor().userId(), "POST", "createWorkItem", command.idempotencyKey()),
@@ -362,7 +367,7 @@ public class WorkItemService {
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             requireActiveContent(content);
             CreatedWorkItem created = createItem(project, content, new WorkItemDraft(
-                    command.title(), priority, command.assigneeUserId(), command.description(),
+                    command.title(), priority, command.assigneeUserId(), description,
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
                     command.dueDate(), command.dueTime()), command.actor());
             return stored(201, detail(created.item(),
@@ -379,6 +384,7 @@ public class WorkItemService {
         ProjectAccessSnapshot visible = visible(command.actor(), parentLocator.projectId());
         requireWritableAccess(visible.actorAccess());
         String priority = priority(command.priority());
+        String description = description(command.description());
         requireDateRange(command.timelineStartDate(), command.timelineEndDate());
         return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(
                 command.actor().userId(), "POST", "createWorkItemSubitem",
@@ -403,7 +409,7 @@ public class WorkItemService {
                                     StandardErrorCode.RESOURCE_NOT_FOUND));
             requireActiveContent(targetContent);
             CreatedWorkItem created = createItem(project, targetContent, new WorkItemDraft(
-                    command.title(), priority, command.assigneeUserId(), command.description(),
+                    command.title(), priority, command.assigneeUserId(), description,
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
                     command.dueDate(), command.dueTime()), command.actor());
             ParentChildRelation relation = new ParentChildRelation(UUID.randomUUID(),
@@ -501,12 +507,13 @@ public class WorkItemService {
         requireVersion(before, command.expectedVersion());
         requireDateRange(command.timelineStartDate(), command.timelineEndDate());
         requireActiveAssignee(project, command.assigneeUserId());
+        String description = description(command.description());
         WorkItem candidate;
         try {
             String nextPriority = priority(command.priority());
             requireSelectablePriority(nextPriority, priorityLabels, before.priority());
             candidate = before.updateFields(command.title(), nextPriority,
-                    command.assigneeUserId(), command.description(), command.notes(),
+                    command.assigneeUserId(), description, command.notes(),
                     command.timelineStartDate(), command.timelineEndDate(), command.dueDate(),
                     command.dueTime().resolve(command.dueDate(), before.dueTime()),
                     command.actor().userId(), clock.instant());
@@ -1017,7 +1024,8 @@ public class WorkItemService {
             candidate = before.updateFields(before.title(),
                     nextPriority,
                     "ASSIGNEE".equals(command.field()) ? command.assigneeUserId() : before.assigneeUserId(),
-                    before.description(), before.notes(), before.timelineStartDate(),
+                    "DESCRIPTION".equals(command.field()) ? description(command.description()) : before.description(),
+                    before.notes(), before.timelineStartDate(),
                     before.timelineEndDate(),
                     "DUE_DATE".equals(command.field()) ? command.dueDate() : before.dueDate(),
                     "DUE_DATE".equals(command.field())
@@ -1597,6 +1605,14 @@ public class WorkItemService {
     private static void requireActor(CurrentActor actor) {
         if (actor == null)
             throw new ApplicationException(StandardErrorCode.AUTHENTICATION_REQUIRED);
+    }
+
+    private String description(String untrustedHtml) {
+        try {
+            return sanitizer.sanitizeDescription(untrustedHtml);
+        } catch (IllegalArgumentException exception) {
+            throw validation("description", "INVALID_DESCRIPTION", exception.getMessage());
+        }
     }
 
     private static ApplicationException validation(String field, String code, String message) {

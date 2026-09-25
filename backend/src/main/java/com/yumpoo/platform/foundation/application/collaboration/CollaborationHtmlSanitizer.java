@@ -11,6 +11,12 @@ public interface CollaborationHtmlSanitizer {
 
     SanitizedHtml canonicalize(ParsedHtml parsed, Map<UUID, String> authoritativeDisplayNames);
 
+    /**
+     * Work item description profile: collaboration formatting plus same-origin attachment images,
+     * mentions reduced to plain text. Returns {@code null} when neither text nor image remains.
+     */
+    String sanitizeDescription(String untrustedHtml);
+
     record ParsedHtml(String safeHtml, List<UUID> mentionedUserIds) {
         public ParsedHtml {
             mentionedUserIds = List.copyOf(mentionedUserIds);

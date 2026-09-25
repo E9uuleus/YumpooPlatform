@@ -116,4 +116,44 @@ class JsoupCollaborationHtmlSanitizerTest {
                 sanitizer.parse("<p>x" + "<br>".repeat(16_383) + "</p>"), Map.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void descriptionKeepsOnlySameOriginAttachmentImages() {
+        String attachment = "/api/v1/attachments/35000000-0000-4000-8000-000000000009/content";
+        String html = sanitizer.sanitizeDescription("<p>说明</p>"
+                + "<img src=\"" + attachment + "\" alt=\"  截图.png  \" width=\"9\" onerror=\"evil()\">"
+                + "<img src=\"javascript:alert(1)\"><img src=\"data:image/png;base64,AAAA\">"
+                + "<img src=\"https://evil.example" + attachment + "\"><img src=\"//evil.example" + attachment + "\">"
+                + "<img src=\"" + attachment + "?x=1\"><img src=\"/api/v1/attachments/not-a-uuid/content\">");
+
+        assertThat(html).isEqualTo("<p>说明</p><img src=\"" + attachment + "\" alt=\"截图.png\">");
+        assertThat(sanitizer.sanitizeDescription(html)).isEqualTo(html);
+    }
+
+    @Test
+    void descriptionDowngradesMentionsAndClearsEmptyContent() {
+        String html = sanitizer.sanitizeDescription("<p>请 <span data-type=\"mention\" data-mention-user-id=\""
+                + USER_ID + "\">@同事</span> 查看<script>x</script></p>");
+        assertThat(html).isEqualTo("<p>请 @同事 查看</p>");
+        assertThat(sanitizer.sanitizeDescription(null)).isNull();
+        assertThat(sanitizer.sanitizeDescription("  <p> </p><script>x</script>")).isNull();
+        assertThat(sanitizer.sanitizeDescription(
+                "<img src=\"/api/v1/attachments/35000000-0000-4000-8000-000000000009/content\">"))
+                .isEqualTo("<img src=\"/api/v1/attachments/35000000-0000-4000-8000-000000000009/content\">");
+    }
+
+    @Test
+    void descriptionPreservesDiscussionFormattingIdempotentlyAndEnforcesLimits() {
+        String html = sanitizer.sanitizeDescription("""
+                <h2 style="text-align: center">标题</h2><p><span style="color: #ff0000">红字</span></p>
+                <ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>完成</p></li></ul>
+                <p>&lt;b&gt;转义&amp;保留&lt;/b&gt;</p>
+                """);
+        assertThat(sanitizer.sanitizeDescription(html)).isEqualTo(html);
+        assertThat(html).contains("text-align: center", "color: #ff0000", "data-checked=\"true\"", "&lt;b&gt;转义&amp;保留");
+        assertThatThrownBy(() -> sanitizer.sanitizeDescription("<p>" + "字".repeat(16_385) + "</p>"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> sanitizer.sanitizeDescription("<p>x" + "<br>".repeat(16_383) + "</p>"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

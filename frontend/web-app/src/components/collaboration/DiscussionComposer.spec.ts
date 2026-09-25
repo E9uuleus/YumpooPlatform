@@ -40,6 +40,15 @@ function roundtrip() {
 afterEach(() => { wrapper?.unmount(); editor?.destroy(); document.querySelectorAll('[data-discussion-popup]').forEach(item => item.remove()) })
 
 describe('DiscussionComposer', () => {
+  it('描述场景可隐藏提及并提供插入图片入口', async () => {
+    await setup()
+    expect(wrapper.find('[aria-label="提及项目成员"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="插入图片"]').exists()).toBe(false)
+    await wrapper.setProps({ allowMention: false, allowImage: true })
+    expect(wrapper.find('[aria-label="提及项目成员"]').exists()).toBe(false)
+    await wrapper.get('[aria-label="插入图片"]').trigger('click')
+    expect(wrapper.emitted('pickImage')).toHaveLength(1)
+  })
   it('可写状态恢复后工具栏同步恢复可用', async () => {
     await setup()
     editor.setEditable(false)

@@ -43,10 +43,18 @@ class WorkItemTest {
         assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1",
                 "缺陷", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
-                null, "x".repeat(16_385), null, null, null, null, RANK,
+                null, "x".repeat(65_537), null, null, null, null, RANK,
                 UUID.randomUUID(), Instant.EPOCH))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("description");
+
+        assertThatThrownBy(() -> WorkItem.create(UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), 1, "PROJECT-1",
+                "缺陷", "OPEN", WorkItemStatusCategory.TODO, WorkItemPriority.HIGH,
+                null, "x".repeat(65_536), "x".repeat(16_385), null, null, null, RANK,
+                UUID.randomUUID(), Instant.EPOCH))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("notes");
     }
 
     @Test

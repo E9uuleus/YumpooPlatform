@@ -15,7 +15,7 @@ public record WorkItemSubitemCreateRequest(
         @NotBlank @Size(max = 300) String title,
         String priority,
         UUID assigneeUserId,
-        @Size(max = 16384) String description,
+        @Size(max = 65536) String description,
         @Size(max = 16384) String notes,
         LocalDate timelineStartDate,
         LocalDate timelineEndDate,

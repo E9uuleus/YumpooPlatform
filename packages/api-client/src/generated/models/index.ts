@@ -174,6 +174,7 @@ export * from './WorkItemCellActivityValueType';
 export * from './WorkItemContentPatchRequest';
 export * from './WorkItemCreateRequest';
 export * from './WorkItemDeleteRequest';
+export * from './WorkItemDescriptionPatchRequest';
 export * from './WorkItemDetail';
 export * from './WorkItemDueDatePatchRequest';
 export * from './WorkItemLabelCatalog';
