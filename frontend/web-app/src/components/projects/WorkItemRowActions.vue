@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, shallowRef } from 'vue'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElMessage, ElMessageBox, ElPopover } from 'element-plus'
-import { readCsrfToken, WorkItemViewType, type ProjectWorkItemListItem, type WorkItemDetail } from '@yumpoo/api-client'
+import { readCsrfToken, type ProjectWorkItemListItem } from '@yumpoo/api-client'
 import { workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
+import WorkItemActionIcon from './WorkItemActionIcon.vue'
+import { workItemOrderSiblings, moveWorkItemOrder } from './workItemOrder'
 import WorkItemParentPicker from './WorkItemParentPicker.vue'
 
 const props = defineProps<{
@@ -16,6 +18,7 @@ const props = defineProps<{
   orderItems?: ((item: ProjectWorkItemListItem, edge: 'top' | 'bottom') => Promise<ProjectWorkItemListItem[]>) | undefined
 }>()
 const emit = defineEmits<{
+  duplicate: [item: ProjectWorkItemListItem]
   open: [item: ProjectWorkItemListItem]
   addSubitem: [item: ProjectWorkItemListItem]
   createBelow: [item: ProjectWorkItemListItem]
@@ -97,39 +100,21 @@ async function copyLink(): Promise<void> {
   })
 }
 
-async function move(item: Pick<WorkItemDetail, 'id' | 'etag'>, previousId: string | null, nextId: string | null): Promise<void> {
-  const common = { xXSRFTOKEN: csrf(), ifMatch: item.etag, idempotencyKey: crypto.randomUUID(),
-    projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: previousId, nextVisibleWorkItemId: nextId } }
-  if (props.parentId) {
-    await workItemsApi.moveWorkItemSubitemOrder({ ...common, parentWorkItemId: props.parentId, subitemId: item.id })
-  } else {
-    await workItemsApi.moveProjectWorkItemOrder({ ...common, projectId: props.item.projectId, workItemId: item.id })
-  }
-}
-
 async function moveTo(edge: 'top' | 'bottom'): Promise<void> {
   if (props.sorted || !props.item.capabilities.canMoveInProjectOrder) return
   await run(async () => {
-    let siblings: ProjectWorkItemListItem[] = []
-    if (props.orderItems) {
-      siblings = await props.orderItems(props.item, edge)
-    } else if (props.parentId) {
-      siblings = (await workItemsApi.listWorkItemSubitems({ parentWorkItemId: props.parentId })).items
-    } else {
-      let cursor: string | null = null
-      do {
-        const page = await workItemsApi.listProjectWorkItems({ projectId: props.item.projectId,
-          view: WorkItemViewType.Table, limit: edge === 'top' ? 2 : 100, ...(cursor ? { cursor } : {}) })
-        siblings.push(...page.items)
-        cursor = page.nextCursor
-        if (edge === 'top') break
-      } while (cursor)
-    }
+    const siblings = await workItemOrderSiblings(props.item, edge, props.parentId, props.orderItems)
     const others = siblings.filter(item => item.id !== props.item.id)
     const anchor = edge === 'top' ? others[0] : others.at(-1)
-    if (anchor) await move(props.item, edge === 'bottom' ? anchor.id : null, edge === 'top' ? anchor.id : null)
+    if (anchor) await moveWorkItemOrder(props.item, props.parentId, edge === 'bottom' ? anchor.id : null, edge === 'top' ? anchor.id : null)
     emit('moved', props.item)
   })
+}
+
+function duplicate(): void {
+  if (!props.canCreate || locked.value) return
+  closeMenu()
+  emit('duplicate', props.item)
 }
 
 function createBelow(): void {
@@ -183,64 +168,42 @@ async function remove(archive: boolean): Promise<void> {
         :aria-expanded="open"
         aria-haspopup="menu"
       >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        ><circle
-          cx="4"
-          cy="10"
-          r="1.5"
-        /><circle
-          cx="10"
-          cy="10"
-          r="1.5"
-        /><circle
-          cx="16"
-          cy="10"
-          r="1.5"
-        /></svg>
+        <work-item-action-icon name="more" />
       </button>
       <template #dropdown>
         <el-dropdown-menu>
           <el-dropdown-item @click="openItem">
-            <span class="row-action-icon">↗</span>打开工作项
+            <work-item-action-icon name="open" />打开工作项
           </el-dropdown-item>
           <el-dropdown-item
             divided
             @click="copyLink"
           >
-            <svg
-              class="row-action-icon"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              aria-hidden="true"
-            ><path d="m8 7 2-2a4 4 0 0 1 6 6l-2 2M12 13l-2 2a4 4 0 0 1-6-6l2-2M7 13l6-6" /></svg>复制工作项链接
+            <work-item-action-icon name="link" />复制工作项链接
+          </el-dropdown-item>
+          <el-dropdown-item :disabled="!canCreate || locked" @click="duplicate">
+            <work-item-action-icon name="duplicate" />复制工作项
           </el-dropdown-item>
           <el-dropdown-item
             :disabled="!item.capabilities.canMoveInProjectOrder || sorted"
             :title="moveReason"
             @click="moveTo('top')"
           >
-            <span class="row-action-icon">↑</span>移动至顶部
+            <work-item-action-icon name="top" />移动至顶部
           </el-dropdown-item>
           <el-dropdown-item
             :disabled="!item.capabilities.canMoveInProjectOrder || sorted"
             :title="moveReason"
             @click="moveTo('bottom')"
           >
-            <span class="row-action-icon">↓</span>移动至底部
+            <work-item-action-icon name="bottom" />移动至底部
           </el-dropdown-item>
           <el-dropdown-item
             :disabled="!canCreate || sorted"
             :title="moveReason"
             @click="createBelow"
           >
-            <span class="row-action-icon">＋</span>在下方创建新工作项
+            <work-item-action-icon name="add" />在下方创建新工作项
           </el-dropdown-item>
           <el-dropdown-item
             v-if="!parentId"
@@ -248,14 +211,7 @@ async function remove(archive: boolean): Promise<void> {
             :disabled="!canCreate || !item.capabilities.canEditFields"
             @click="addSubitem"
           >
-            <svg
-              class="row-action-icon"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              aria-hidden="true"
-            ><path d="M3 3h7v5H3zM10 12h7v5h-7zM6 8v6h4" /></svg>添加子工作项
+            <work-item-action-icon name="subitem" />添加子工作项
           </el-dropdown-item>
           <el-dropdown-item
             v-if="!parentId"
@@ -269,15 +225,8 @@ async function remove(archive: boolean): Promise<void> {
             @click="showParentPicker($event, true)"
             @keydown.right.stop.prevent="showParentPicker($event, true)"
           >
-            <span class="row-action-icon">↳</span>转为子工作项
-            <svg
-              class="row-action-submenu-arrow"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              aria-hidden="true"
-            ><path d="m6 3 5 5-5 5" /></svg>
+            <work-item-action-icon name="convert" />转为子工作项
+            <work-item-action-icon name="chevron" class="row-action-submenu-arrow" />
           </el-dropdown-item>
           <el-popover
             v-if="!parentId && parentMenuElement"
@@ -307,28 +256,14 @@ async function remove(archive: boolean): Promise<void> {
             :disabled="!item.capabilities.canDelete"
             @click="remove(true)"
           >
-            <svg
-              class="row-action-icon"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              aria-hidden="true"
-            ><path d="M3 3h14v4H3zM4 7v10h12V7M8 10h4" /></svg>归档
+            <work-item-action-icon name="archive" />归档
           </el-dropdown-item>
           <el-dropdown-item
             class="row-action-delete"
             :disabled="!item.capabilities.canDelete"
             @click="remove(false)"
           >
-            <svg
-              class="row-action-icon"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.4"
-              aria-hidden="true"
-            ><path d="M3 5h14M7 5V3h6v2M5 5l1 12h8l1-12M8 8v6m4-6v6" /></svg>删除
+            <work-item-action-icon name="delete" />删除
           </el-dropdown-item>
         </el-dropdown-menu>
       </template>

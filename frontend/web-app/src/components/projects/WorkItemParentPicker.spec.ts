@@ -50,6 +50,30 @@ describe('选择父工作项', () => {
     wrapper.unmount()
   })
 
+  it('批量模式排除全部勾选项，选中父项后交给批量队列执行', async () => {
+    api.listWorkItemRelationCandidates.mockResolvedValue(page([candidate('selected'), candidate('parent'), candidate('nested', false)]))
+    const wrapper = render()
+    await wrapper.setProps({ items: [{ id: 'child' }, { id: 'selected' }] as ProjectWorkItemListItem[] })
+    await flushPromises()
+    expect(wrapper.findAll('.parent-picker-option').map(option => option.text())).toEqual(['parent', 'nested'])
+    await wrapper.findAll('.parent-picker-option')[0]!.trigger('click')
+    expect(wrapper.emitted('choose')).toEqual([[candidate('parent').item]])
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    expect(api.createWorkItemRelation).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('批量排除导致整页为空时自动读取下一页，避免没有滚动入口', async () => {
+    api.listWorkItemRelationCandidates.mockResolvedValueOnce(page([candidate('selected')], 0, 2))
+      .mockResolvedValueOnce(page([candidate('parent')], 1, 2))
+    const wrapper = render()
+    await wrapper.setProps({ items: [{ id: 'selected' }] as ProjectWorkItemListItem[] })
+    await flushPromises()
+    expect(api.listWorkItemRelationCandidates).toHaveBeenCalledTimes(2)
+    expect(wrapper.findAll('.parent-picker-option').map(option => option.text())).toEqual(['parent'])
+    wrapper.unmount()
+  })
+
   it('搜索防抖后丢弃旧请求的迟到结果', async () => {
     vi.useFakeTimers()
     let resolveOld!: (value: ReturnType<typeof page>) => void

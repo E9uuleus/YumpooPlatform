@@ -98,6 +98,7 @@ const emit = defineEmits<{
   rowChanged: [affectedIds: string[]]
   rowMoved: [item: ProjectWorkItemListItem, parentId: string]
   selectCell: [rowId: string, cellKey: string]
+  duplicate: [item: ProjectWorkItemListItem, parentId: string]
   rowRemoved: [item: ProjectWorkItemListItem]
   sortChange: [rules: ProjectWorkItemSubitemSortRule[]]
   created: [parent: ProjectWorkItemListItem]
@@ -128,7 +129,7 @@ const columnDraggingKey = ref<string>()
 const columnDraggingIndex = ref(-1)
 const columnDropIndex = ref<number>()
 const columnDropAllowed = ref(false)
-const subitemTableRef = ref<{ $el: HTMLElement }>()
+const subitemTableRef = ref<{ $el: HTMLElement; clearSelection: () => void; toggleRowSelection: (item: ProjectWorkItemListItem, selected: boolean) => void }>()
 const subitemScrollLeft = ref(0)
 const savingSortOrder = ref(false)
 const nameEditingId = ref('')
@@ -289,7 +290,8 @@ function openQuick(): void {
   void nextTick(() => quickTitleInput.value?.focus())
 }
 
-defineExpose({ openQuick, canClose: () => !quickCreating.value && !quickTitle.value.trim() && !inlineDraft.value && !nameEditingId.value && !props.editingCell && !savingSortOrder.value })
+defineExpose({ clearSelection: () => subitemTableRef.value?.clearSelection(),
+  deselect: (item: ProjectWorkItemListItem) => subitemTableRef.value?.toggleRowSelection(item, false), openQuick, canClose: () => !quickCreating.value && !quickTitle.value.trim() && !inlineDraft.value && !nameEditingId.value && !props.editingCell && !savingSortOrder.value })
 
 function closeQuick(): void {
   quickOpen.value = false
@@ -721,6 +723,7 @@ onBeforeUnmount(() => {
               @moved="$emit('rowMoved', $event, parent.id)"
               @changed="$emit('rowChanged', $event)"
               @removed="$emit('rowRemoved', $event)"
+              @duplicate="emit('duplicate', $event, parent.id)"
             />
           </template>
         </el-table-column>
