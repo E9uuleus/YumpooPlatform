@@ -76,6 +76,23 @@ function mountTable(items = [item('child-1'), item('child-2')]) {
 }
 
 describe('项目工作项子表格', () => {
+  it('转发子项复制事件及父项 ID，并暴露清空真实表格勾选', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    wrapper.getComponent({ name: 'WorkItemRowActions' }).vm.$emit('duplicate', item('child-1'))
+    expect(wrapper.emitted('duplicate')).toEqual([[item('child-1'), 'parent-1']])
+    const table = wrapper.getComponent({ name: 'ElTable' }).vm.$.exposed as unknown as {
+      toggleRowSelection: (item: ProjectWorkItemListItem, selected: boolean) => void
+      getSelectionRows: () => ProjectWorkItemListItem[]
+    }
+    table.toggleRowSelection(item('child-1'), true)
+    await nextTick()
+    expect(table.getSelectionRows()).toHaveLength(1)
+    wrapper.vm.$.exposed!.clearSelection()
+    await nextTick()
+    expect(table.getSelectionRows()).toHaveLength(0)
+    expect(wrapper.emitted('selectionChange')?.at(-1)).toEqual(['parent-1', []])
+  })
   beforeEach(() => {
     api.createWorkItemSubitem.mockReset()
     api.moveWorkItemSubitemOrder.mockReset()

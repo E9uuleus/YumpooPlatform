@@ -7,7 +7,7 @@ import {
   type WorkItemStatusLabel,
 } from '@yumpoo/api-client'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElInput, ElMessage, ElPopover } from 'element-plus'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
 import {
@@ -57,6 +57,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  busyChange: [busy: boolean]
   selectStatus: [statusCode: string]
   selectPriority: [priorityCode: string | null]
   updated: [catalog: WorkItemLabelCatalog]
@@ -65,6 +66,7 @@ const emit = defineEmits<{
 const mode = ref<'select' | 'edit'>('select')
 const isJellyWobble = ref(false)
 const saving = ref('')
+watch(saving, value => emit('busyChange', Boolean(value)), { flush: 'sync' })
 const draggedIndex = ref<number | null>(null)
 const inputRefs = ref<InstanceType<typeof ElInput>[]>([])
 const draftLabels = ref<DraftLabel[]>([])
@@ -117,7 +119,8 @@ function switchToEdit(): void {
   }, 340)
 }
 
-function resetEditor(): void {
+function resetEditor(force = false): void {
+  if (saving.value && !force) return
   mode.value = 'select'
   isJellyWobble.value = false
   draggedIndex.value = null
@@ -274,10 +277,10 @@ async function applyChanges(): Promise<void> {
     }
 
     emit('updated', currentCatalog)
-    resetEditor()
+    resetEditor(true)
   } catch (reason) {
     if (currentCatalog !== props.catalog) emit('updated', currentCatalog)
-    resetEditor()
+    resetEditor(true)
     ElMessage.error(problemMessage(await toApiProblem(reason)))
   } finally {
     saving.value = ''

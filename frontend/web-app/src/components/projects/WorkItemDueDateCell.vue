@@ -45,7 +45,7 @@ function clearDate(): void {
 <template>
   <span class="work-item-due-date" @pointerdown.stop @click.stop @keydown.stop>
     <el-popover
-      v-model:visible="visible" placement="bottom" :width="300" trigger="click"
+      :persistent="false" v-model:visible="visible" placement="bottom" :width="300" trigger="click"
       :disabled="disabled" popper-class="work-items-popover work-item-deadline-popover"
       @show="resetEditor" @hide="resetEditor"
     >

@@ -52,6 +52,17 @@ describe('工作项行菜单', () => {
     wrapper.unmount()
   })
 
+  it('复制工作项位于复制链接之后，向父级发事件并遵守创建权限', async () => {
+    const wrapper = render()
+    const labels = wrapper.findAll('button').map(button => button.text())
+    expect(labels.indexOf('复制工作项')).toBe(labels.indexOf('复制工作项链接') + 1)
+    await click(wrapper, '复制工作项')
+    expect(wrapper.emitted('duplicate')).toEqual([[item()]])
+    await wrapper.setProps({ canCreate: false })
+    expect(wrapper.findAll('button').find(button => button.text() === '复制工作项')!.attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
   it('移动到底部读取所有分页，不携带当前筛选；请求保留版本和 CSRF', async () => {
     api.listProjectWorkItems.mockResolvedValueOnce({ items: [item(), item('middle')], nextCursor: 'page-2' })
       .mockResolvedValueOnce({ items: [item('last')], nextCursor: null })
@@ -153,7 +164,7 @@ describe('工作项行菜单', () => {
     expect(ElMessageBox.confirm).not.toHaveBeenCalled()
     await wrapper.setProps({ canCreate: false, item: { ...item(), capabilities: { canEditFields: false, canMoveInProjectOrder: false, canDelete: false } } as ProjectWorkItemListItem })
     const enabled = wrapper.findAll('button').filter(button => button.text() && button.attributes('disabled') === undefined).map(button => button.text())
-    expect(enabled).toEqual(['↗打开工作项', '复制工作项链接'])
+    expect(enabled).toEqual(['打开工作项', '复制工作项链接'])
     wrapper.unmount()
   })
 })

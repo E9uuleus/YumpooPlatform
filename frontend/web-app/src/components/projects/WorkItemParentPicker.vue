@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { ElInput, ElMessage } from 'element-plus'
 import { readCsrfToken, WorkItemRelationType, WorkItemRelationRole, WorkItemRelationCandidateEligibilityEnum,
   type ProjectWorkItemListItem, type WorkItemRelationCandidate } from '@yumpoo/api-client'
@@ -7,8 +7,11 @@ import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 
-const props = defineProps<{ item: ProjectWorkItemListItem }>()
-const emit = defineEmits<{ close: []; changed: [affectedIds: string[]]; busyChange: [busy: boolean] }>()
+const props = defineProps<{ item?: ProjectWorkItemListItem | undefined; items?: ProjectWorkItemListItem[] }>()
+const sourceItem = computed(() => props.item ?? props.items?.[0])
+const excludedIds = computed(() => new Set(props.items?.map(item => item.id) ?? []))
+const visibleCandidates = computed(() => candidates.value.filter(candidate => !excludedIds.value.has(candidate.item.id)))
+const emit = defineEmits<{ choose: [parent: WorkItemRelationCandidate['item']]; close: []; changed: [affectedIds: string[]]; busyChange: [busy: boolean] }>()
 const query = ref('')
 const searchInput = ref<InstanceType<typeof ElInput>>()
 const candidates = ref<WorkItemRelationCandidate[]>([])
@@ -25,6 +28,8 @@ const reasons: Record<string, string> = { PARENT_IS_CHILD: '该工作项已是�
   CHILD_ALREADY_HAS_PARENT: '当前工作项已有父项', ALREADY_RELATED: '关系已存在' }
 
 async function search(nextPage = 0): Promise<void> {
+  const item = sourceItem.value
+  if (!item) return
   if (nextPage > 0 && (loading.value || loadingMore.value || saving.value)) return
   const current = ++revision
   loading.value = nextPage === 0
@@ -32,10 +37,10 @@ async function search(nextPage = 0): Promise<void> {
   retryPage.value = nextPage
   problem.value = undefined
   try {
-    const result = await workItemsApi.listWorkItemRelationCandidates({ workItemId: props.item.id,
-      targetProjectId: props.item.projectId, relationType: WorkItemRelationType.ParentChild,
+    const result = await workItemsApi.listWorkItemRelationCandidates({ workItemId: item.id,
+      targetProjectId: item.projectId, relationType: WorkItemRelationType.ParentChild,
       currentRole: WorkItemRelationRole.Child,
-      q: query.value.trim() || props.item.itemNo.slice(0, props.item.itemNo.lastIndexOf('-')),
+      q: query.value.trim() || item.itemNo.slice(0, item.itemNo.lastIndexOf('-')),
       page: nextPage, size: 12 })
     if (current !== revision) return
     candidates.value = nextPage === 0 ? result.items
@@ -43,7 +48,12 @@ async function search(nextPage = 0): Promise<void> {
     page.value = result.page
     pages.value = result.totalPages
   } catch (reason) { if (current === revision) problem.value = await toApiProblem(reason) }
-  finally { if (current === revision) { loading.value = false; loadingMore.value = false } }
+  finally {
+    if (current === revision) {
+      loading.value = false; loadingMore.value = false
+      if (props.items && !problem.value && !visibleCandidates.value.length && page.value + 1 < pages.value) void search(page.value + 1)
+    }
+  }
 }
 
 function loadMore(event: Event): void {
@@ -54,17 +64,19 @@ function loadMore(event: Event): void {
 
 async function choose(candidate: WorkItemRelationCandidate): Promise<void> {
   if (saving.value || loading.value || candidate.eligibility !== WorkItemRelationCandidateEligibilityEnum.Eligible) return
+  if (excludedIds.value.has(candidate.item.id)) return
+  if (props.items) { emit('choose', candidate.item); emit('close'); return }
   const token = readCsrfToken()
   if (!token) { problem.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
   saving.value = true
   problem.value = undefined
   try {
-    await workItemsApi.createWorkItemRelation({ workItemId: props.item.id, xXSRFTOKEN: token,
+    await workItemsApi.createWorkItemRelation({ workItemId: sourceItem.value!.id, xXSRFTOKEN: token,
       idempotencyKey: crypto.randomUUID(), workItemRelationCreateRequest: {
         relationType: WorkItemRelationType.ParentChild, currentRole: WorkItemRelationRole.Child,
-        targetProjectId: props.item.projectId, targetWorkItemId: candidate.item.id,
+        targetProjectId: sourceItem.value!.projectId, targetWorkItemId: candidate.item.id,
       } })
-    emit('changed', [props.item.id, candidate.item.id])
+    emit('changed', [sourceItem.value!.id, candidate.item.id])
     ElMessage.success(`已转为“${candidate.item.title}”的子工作项`)
     emit('close')
   } catch (reason) { problem.value = await toApiProblem(reason) }
@@ -80,6 +92,7 @@ watch(query, () => {
   searchTimer = setTimeout(() => void search(), 250)
 })
 watch(saving, value => emit('busyChange', value), { flush: 'sync' })
+watch(() => sourceItem.value?.id, () => void search())
 onMounted(() => void search())
 onBeforeUnmount(() => { revision += 1; clearTimeout(searchTimer) })
 defineExpose({ focusSearch: () => searchInput.value?.focus() })
@@ -118,11 +131,11 @@ defineExpose({ focusSearch: () => searchInput.value?.focus() })
       <p v-if="loading">
         正在加载工作项…
       </p>
-      <p v-else-if="!candidates.length">
+      <p v-else-if="!visibleCandidates.length">
         没有匹配的工作项
       </p>
       <button
-        v-for="candidate in candidates"
+        v-for="candidate in visibleCandidates"
         :key="candidate.item.id"
         type="button"
         class="parent-picker-option"

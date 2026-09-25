@@ -6,7 +6,13 @@ import { vBrandLoading as vLoading } from '../../brand/loading'
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
+import WorkItemColumnVisibilityMenu from './WorkItemColumnVisibilityMenu.vue'
+import { createWorkItemColumnFlip, measureWorkItemColumns, visibleWorkItemColumnCells } from './workItemColumnFlip'
 import WorkItemRowActions from './WorkItemRowActions.vue'
+import WorkItemBatchBar from './WorkItemBatchBar.vue'
+import WorkItemParentPicker from './WorkItemParentPicker.vue'
+import { useWorkItemBatchActions } from './useWorkItemBatchActions'
+import { workItemOrderSiblings } from './workItemOrder'
 import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
 import { useWorkItemInlineCreate } from './useWorkItemInlineCreate'
@@ -145,7 +151,8 @@ const lanes = reactive<Record<string, KanbanLane>>({})
 const subitems = reactive<Record<string, SubitemState>>({})
 const expandedSubitemIds = ref<string[]>([])
 const subitemSelections = reactive<Record<string, Set<string>>>({})
-const subitemTableHandles = new Map<string, { openQuick: () => void; canClose: () => boolean }>()
+type SubitemTableHandle = Pick<InstanceType<typeof ProjectWorkItemSubitemsTable>, 'openQuick' | 'canClose' | 'clearSelection' | 'deselect'>
+const subitemTableHandles = new Map<string, SubitemTableHandle>()
 const restoringArchive = ref(false)
 const quickOpen = ref(false)
 const quickTitle = ref('')
@@ -174,9 +181,9 @@ async function beforeDetailClose(done: () => void): Promise<void> {
   if (await beforeDraftLeave()) done()
 }
 
-onBeforeRouteLeave(() => embedded.value ? canClose() : beforeDraftLeave())
+onBeforeRouteLeave(() => canClose())
 onBeforeRouteUpdate((to, from) => to.params.projectId !== from.params.projectId
-  || to.query.workItemId !== from.query.workItemId ? beforeDraftLeave() : true)
+  ? canClose() : to.query.workItemId !== from.query.workItemId ? beforeDraftLeave() : true)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
 const detailTab = ref<'details' | 'discussion' | 'relations' | 'activity'>('details')
@@ -192,6 +199,7 @@ const selectedWorkItemIds = ref(new Set<string>())
 const tableRef = ref<{
   $el: HTMLElement
   doLayout: () => void
+  clearSelection: () => void
   toggleRowSelection: (row: ProjectWorkItemListItem, selected?: boolean) => void
 }>()
 const tableSentinel = ref<HTMLElement>()
@@ -243,6 +251,7 @@ const assigneeSearch = ref('')
 const assigneeMatches = ref<ProjectMember[]>()
 const filterOptionCounts = ref(new Map<string, number>())
 const filterOptionsLoading = ref(false)
+const cellPopoverBusy = reactive<Record<string, boolean>>({})
 const labelPopoverContentRefs = new Map<string, LabelPopoverContentHandle>()
 const searchExpanded = ref(Boolean(route.query.q))
 const searchInput = ref(String(route.query.q ?? ''))
@@ -688,6 +697,7 @@ function selectGroupRows(group: WorkItemGroup, checked: boolean): void {
   grouping.page(group.key).items.forEach(item => tableRef.value?.toggleRowSelection(item, checked))
 }
 async function changeGrouping(field: GroupField | ''): Promise<void> {
+  clearSelection()
   loadRevision++
   activeController?.abort()
   activeController = new AbortController()
@@ -711,6 +721,61 @@ const discussionReadOnlyReason = computed(() => {
   if (!canPublishDiscussion.value) return '当前角色没有发布讨论的权限。'
   return undefined
 })
+
+function currentBatchItem(id: string): ProjectWorkItemListItem | undefined {
+  return tableItems.value.find(item => item.id === id)
+    ?? Object.values(subitems).flatMap(state => state.items).find(item => item.id === id)
+}
+function clearSelection(): void {
+  tableRef.value?.clearSelection()
+  subitemTableHandles.forEach(handle => handle.clearSelection())
+  selectedWorkItemIds.value = new Set()
+  Object.keys(subitemSelections).forEach(id => delete subitemSelections[id])
+}
+const batch = useWorkItemBatchActions({
+  contextId: () => projectId.value,
+  selection: () => [
+    ...tableItems.value.filter(item => selectedWorkItemIds.value.has(item.id)).map(item => ({ id: item.id })),
+    ...Object.entries(subitemSelections).flatMap(([parentId, ids]) => (subitems[parentId]?.items ?? [])
+      .filter(item => ids.has(item.id)).map(item => ({ id: item.id, parentId }))),
+  ],
+  resolve: currentBatchItem,
+  canCreate: () => canCreate.value,
+  sorted: parentId => parentId ? Boolean(subitems[parentId]?.sortRules.length) : hasExplicitSort.value,
+  duplicateOptions: () => {
+    if (!catalog.value || !labelCatalog.value) throw new Error('工作项目录尚未加载，请稍后重试。')
+    return { catalog: catalog.value, labels: labelCatalog.value, members: members.value }
+  },
+  scopeKey: (selection, item) => selection.parentId ? 'parent:' + selection.parentId
+    : grouped.value ? 'group:' + groupKeyForRow(item) : 'project:' + item.projectId,
+  orderItems: (item, edge) => {
+    const parentId = Object.keys(subitems).find(id => subitems[id]!.items.some(child => child.id === item.id))
+    return workItemOrderSiblings(item, edge, parentId,
+      parentId ? async () => (await tableSource.listWorkItemSubitems({ parentWorkItemId: parentId })).items
+        : grouped.value ? grouping.edgeItems : embedded.value ? tableEdgeItems : undefined)
+  },
+  beforeRemove: async items => !detailOpen.value || !items.some(item => item.id === detail.value?.id
+    || subitems[item.id]?.items.some(child => child.id === detail.value?.id)) || await beforeDraftLeave(),
+  deselect: async (selection, action) => {
+    const item = currentBatchItem(selection.id)
+    if (!item) return
+    if (selection.parentId) {
+      subitemTableHandles.get(selection.parentId)?.deselect(item)
+      subitemSelections[selection.parentId]?.delete(item.id)
+    } else {
+      tableRef.value?.toggleRowSelection(item, false)
+      selectedWorkItemIds.value.delete(item.id)
+    }
+    if (action === 'archive' || action === 'delete') await onRowRemoved(item, true)
+  },
+  refresh: onRelationsChanged,
+})
+const { busy: batchBusy, stopping: batchStopping, progressLabel: batchProgressLabel, count: selectedCount,
+  subitemCount: selectedSubitemCount, selected: selectedBatchRows, convertibleItems: batchConvertibleItems,
+  canDelete: batchCanDelete, moveDisabled: batchMoveDisabled, choosingParent: batchChoosingParent } = batch
+function duplicateRow(item: ProjectWorkItemListItem, parentId?: string): void {
+  void batch.run('duplicate', [{ id: item.id, parentId }])
+}
 
 function lane(statusCode: string): KanbanLane {
   if (!lanes[statusCode]) lanes[statusCode] = {
@@ -774,7 +839,7 @@ function toggleSubitems(row: ProjectWorkItemListItem): void {
 }
 
 function setSubitemTableHandle(id: string, handle: unknown): void {
-  if (handle) subitemTableHandles.set(id, handle as { openQuick: () => void; canClose: () => boolean })
+  if (handle) subitemTableHandles.set(id, handle as SubitemTableHandle)
   else subitemTableHandles.delete(id)
 }
 
@@ -789,10 +854,10 @@ async function beforeRowRemove(row: ProjectWorkItemListItem): Promise<boolean> {
   return detailOpen.value && detail.value?.id === row.id ? beforeDraftLeave() : true
 }
 
-async function onRowRemoved(row: ProjectWorkItemListItem): Promise<void> {
+async function onRowRemoved(row: ProjectWorkItemListItem, preserveChildSelection = false): Promise<void> {
   selectedWorkItemIds.value.delete(row.id)
   Object.values(subitemSelections).forEach(selection => selection.delete(row.id))
-  delete subitemSelections[row.id]
+  if (!preserveChildSelection) delete subitemSelections[row.id]
   expandedSubitemIds.value = expandedSubitemIds.value.filter(id => id !== row.id)
   if (detail.value?.id === row.id) {
     detailOpen.value = false
@@ -1235,7 +1300,7 @@ async function loadWorkspace(): Promise<void> {
   project.value = undefined
   catalog.value = undefined
   labelCatalog.value = undefined
-  selectedWorkItemIds.value = new Set()
+  clearSelection()
   tableItems.value = []
   tableNextCursor.value = null
   members.value = []
@@ -1709,12 +1774,22 @@ function onHeaderDragEnd(newWidth: number, _oldWidth: number, column: { label: s
   persistTablePrefs()
 }
 
-function toggleColumn(key: ColumnKey, checked: boolean): void {
+const columnFlip = createWorkItemColumnFlip({
+  measure: () => measureWorkItemColumns(tableRef.value?.$el),
+  targets: () => visibleWorkItemColumnCells(tableRef.value?.$el),
+  disabled: () => Boolean(columnDraggingKey.value || columnResizingKey.value
+    || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
+})
+async function toggleColumn(key: ColumnKey, checked: boolean): Promise<void> {
   if (key === 'title') return
+  const snapshot = columnFlip.capture()
   const next = new Set(hiddenColumns.value)
   if (checked) next.delete(key); else next.add(key)
   hiddenColumns.value = next
   persistTablePrefs()
+  await nextTick()
+  flushResponsiveTableLayout()
+  columnFlip.play(snapshot)
 }
 
 const TABLE_ROW_HEIGHT = 36
@@ -2399,6 +2474,7 @@ function clearFilters(): void {
 }
 
 function resetCurrentData(): void {
+  clearSelection()
   grouping.stop()
   if (grouped.value && selectedView.value === 'table') {
     loadRevision++; activeController?.abort(); tableLoading.value = false; tableSorting.value = false
@@ -2407,7 +2483,6 @@ function resetCurrentData(): void {
   }
   const revision = ++loadRevision
   activeController?.abort(); activeController = new AbortController()
-  selectedWorkItemIds.value = new Set()
   error.value = undefined; tableItems.value = []; tableNextCursor.value = null
   Object.keys(lanes).forEach(key => delete lanes[key])
   Object.keys(subitems).forEach(key => delete subitems[key])
@@ -2440,6 +2515,7 @@ watch(() => props.refreshKey, async () => {
   await Promise.all(expandedSubitemIds.value.map(id => loadSubitems(id, true)))
 })
 async function canClose(): Promise<boolean> {
+  if (batchBusy.value) { ElMessage.info('批量操作正在执行，请停止或等待完成。'); return false }
   if (editingCell.value || editingNames.value.size || quickCreating.value || quickTitle.value.trim() || inlineDraft.value
       || workItemGroups.value.some(group => { const draft = groupCreate.draft(group); return draft.saving || draft.title.trim() })
       || [...subitemTableHandles.values()].some(handle => handle.canClose?.() === false)) {
@@ -2536,6 +2612,7 @@ onMounted(() => {
   watch(tableSentinel, (next, previous) => { if (previous) tableObserver?.unobserve(previous); if (next) tableObserver?.observe(next) }, { immediate: true })
 })
 onBeforeUnmount(() => {
+  columnFlip.cancel()
   groupObserver?.disconnect()
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
   if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
@@ -2746,13 +2823,8 @@ onBeforeUnmount(() => {
                 <el-icon><hide /></el-icon><span>隐藏</span>
               </button>
             </template>
-            <div class="popover-stack">
-              <strong>显示列</strong>
-              <label v-for="column in columns" :key="column.key" class="column-option">
-                <el-checkbox :model-value="!hiddenColumns.has(column.key)" :disabled="column.key === 'title'" @change="checked => toggleColumn(column.key, Boolean(checked))" />
-                <span>{{ column.label }}</span>
-              </label>
-            </div>
+            <work-item-column-visibility-menu :columns="columns" :hidden="hiddenColumns"
+              :disabled="Object.values(cellPopoverBusy).some(Boolean)" @toggle="toggleColumn" />
           </el-popover>
           <work-item-grouping-popover :field="groupingField" :order="groupingOrder" :show-empty="showEmptyGroups"
             :disabled="selectedView === 'kanban' || savingSortOrder"
@@ -2845,8 +2917,9 @@ onBeforeUnmount(() => {
                     :priority-options="priorityOptions"
                     :label-catalog="labelCatalog"
                     :can-create="canCreate"
-                    :editing-cell="Boolean(editingCell)"
+                    :editing-cell="Boolean(editingCell) || batchBusy"
                     :before-remove="beforeRowRemove"
+                    @duplicate="duplicateRow"
                     @row-changed="onRelationsChanged"
                     @row-moved="onRowMoved"
                     @select-cell="selectCell"
@@ -2873,10 +2946,11 @@ onBeforeUnmount(() => {
                     :can-create="canCreate"
                     :sorted="hasExplicitSort"
                     :order-items="grouped ? grouping.edgeItems : embedded ? tableEdgeItems : undefined"
-                    :disabled="Boolean(editingCell) || tableSorting || savingSortOrder || (grouped && groupsLoading)"
+                    :disabled="batchBusy || Boolean(editingCell) || tableSorting || savingSortOrder || (grouped && groupsLoading)"
                     :before-remove="() => beforeRowRemove(scope.row as ProjectWorkItemListItem)"
                     @open="openDetail($event, 'details')"
                     @add-subitem="addSubitem"
+                    @duplicate="duplicateRow($event)"
                     @create-below="createBelow"
                     @moved="onRowMoved"
                     @changed="onRelationsChanged"
@@ -2928,7 +3002,7 @@ onBeforeUnmount(() => {
               <el-table-column
                 label="工作项名称"
                 column-key="title"
-                :min-width="columnWidths.title"
+                :width="columnWidths.title"
                 header-align="center"
                 class-name="monday-title-column"
                 label-class-name="monday-title-column monday-sortable-column-header"
@@ -3077,7 +3151,7 @@ onBeforeUnmount(() => {
                     :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
                   />
                   <template v-else-if="column.key === 'assignee'">
-                    <el-popover placement="bottom" :width="360" trigger="click" popper-class="work-items-popover" @show="assigneeSearch = ''">
+                    <el-popover :persistent="false" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover" @show="assigneeSearch = ''">
                       <template #reference>
                         <button
                           class="cell-editor-trigger monday-cell-centered"
@@ -3102,6 +3176,7 @@ onBeforeUnmount(() => {
                       placement="bottom"
                       width="auto"
                       trigger="click"
+                      :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])"
                       popper-class="work-items-label-popover status-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'status')"
                     >
@@ -3118,6 +3193,7 @@ onBeforeUnmount(() => {
                       </template>
                       <work-item-label-popover-content
                         :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'status'), element)"
+                        @busy-change="cellPopoverBusy[scope.row.id + ':status'] = $event"
                         kind="status"
                         :project-id="projectId"
                         :catalog="labelCatalog"
@@ -3136,6 +3212,7 @@ onBeforeUnmount(() => {
                       placement="bottom"
                       width="auto"
                       trigger="click"
+                      :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])"
                       popper-class="work-items-label-popover priority-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'priority')"
                     >
@@ -3152,6 +3229,7 @@ onBeforeUnmount(() => {
                       </template>
                       <work-item-label-popover-content
                         :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'priority'), element)"
+                        @busy-change="cellPopoverBusy[scope.row.id + ':priority'] = $event"
                         kind="priority"
                         :project-id="projectId"
                         :catalog="labelCatalog"
@@ -3169,6 +3247,7 @@ onBeforeUnmount(() => {
                       placement="bottom"
                       width="auto"
                       trigger="click"
+                      :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])"
                       popper-class="work-items-label-popover content-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'content')"
                     >
@@ -3184,6 +3263,7 @@ onBeforeUnmount(() => {
                       </template>
                       <work-item-content-popover-content
                         :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'content'), element)"
+                        @busy-change="cellPopoverBusy[scope.row.id + ':content'] = $event"
                         :project-id="projectId"
                         :catalog="catalog"
                         :current-value="(scope.row as ProjectWorkItemListItem).contentId"
@@ -3296,6 +3376,7 @@ onBeforeUnmount(() => {
                   <span class="monday-quick-checkbox" aria-hidden="true" />
                   <span class="monday-quick-add__field">添加工作项</span>
                 </button>
+                <div v-if="selectedCount || batchBusy" class="work-item-batch-spacer" aria-hidden="true" />
                 <div ref="tableSentinel" class="cursor-sentinel" aria-hidden="true" />
                 <div v-if="!grouped && tableLoading && tableItems.length" class="incremental-state">正在加载更多工作项…</div>
                 <div v-else-if="!grouped && loadingMoreError" class="incremental-state incremental-state--error">
@@ -3304,6 +3385,18 @@ onBeforeUnmount(() => {
               </template>
             </el-table>
           </div>
+          <teleport to="body" :disabled="embedded">
+            <work-item-batch-bar v-if="selectedCount || batchBusy" :count="selectedCount" :subitem-count="selectedSubitemCount"
+              :busy="batchBusy" :stopping="batchStopping" :progress-label="batchProgressLabel"
+              :can-create="canCreate" :can-delete="batchCanDelete" :can-convert="Boolean(batchConvertibleItems.length)"
+              :move-disabled="batchMoveDisabled" :choosing-parent="batchChoosingParent" :embedded="embedded" :left="pageScrollbarLeft"
+              @action="batch.run($event)" @choose-parent="batchChoosingParent = $event" @clear="clearSelection" @stop="batch.stop">
+              <template #parent-picker>
+                <work-item-parent-picker v-if="batchConvertibleItems.length" :item="batchConvertibleItems[0]"
+                  :items="selectedBatchRows.map(row => row.item)" @choose="batch.run('convert', undefined, $event)" @close="batchChoosingParent = false" />
+              </template>
+            </work-item-batch-bar>
+          </teleport>
         </div>
 
         <div
@@ -3684,6 +3777,7 @@ onBeforeUnmount(() => {
 
 .monday-table-surface {
   display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 240px;
   flex: 1 1 0;
@@ -3697,6 +3791,8 @@ onBeforeUnmount(() => {
   width: calc(100% + 32px);
   max-width: none;
 }
+
+.work-item-batch-spacer { height: 160px; }
 
 .monday-table-wrapper {
   display: flex;

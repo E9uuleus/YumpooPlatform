@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { reactive } from 'vue'
 import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
@@ -97,6 +98,7 @@ const emit = defineEmits<{
   rowChanged: [affectedIds: string[]]
   rowMoved: [item: ProjectWorkItemListItem, parentId: string]
   selectCell: [rowId: string, cellKey: string]
+  duplicate: [item: ProjectWorkItemListItem, parentId: string]
   rowRemoved: [item: ProjectWorkItemListItem]
   sortChange: [rules: ProjectWorkItemSubitemSortRule[]]
   created: [parent: ProjectWorkItemListItem]
@@ -112,6 +114,7 @@ const emit = defineEmits<{
   moveColumn: [source: string, target: string, placement?: 'before' | 'after']
 }>()
 
+const cellPopoverBusy = reactive<Record<string, boolean>>({})
 const quickOpen = ref(false)
 const quickTitle = ref('')
 const defaultContentId = computed(() => props.activeContents.find(content => content.id === props.parent.contentId)?.id
@@ -126,7 +129,7 @@ const columnDraggingKey = ref<string>()
 const columnDraggingIndex = ref(-1)
 const columnDropIndex = ref<number>()
 const columnDropAllowed = ref(false)
-const subitemTableRef = ref<{ $el: HTMLElement }>()
+const subitemTableRef = ref<{ $el: HTMLElement; clearSelection: () => void; toggleRowSelection: (item: ProjectWorkItemListItem, selected: boolean) => void }>()
 const subitemScrollLeft = ref(0)
 const savingSortOrder = ref(false)
 const nameEditingId = ref('')
@@ -287,7 +290,8 @@ function openQuick(): void {
   void nextTick(() => quickTitleInput.value?.focus())
 }
 
-defineExpose({ openQuick, canClose: () => !quickCreating.value && !quickTitle.value.trim() && !inlineDraft.value && !nameEditingId.value && !props.editingCell && !savingSortOrder.value })
+defineExpose({ clearSelection: () => subitemTableRef.value?.clearSelection(),
+  deselect: (item: ProjectWorkItemListItem) => subitemTableRef.value?.toggleRowSelection(item, false), openQuick, canClose: () => !quickCreating.value && !quickTitle.value.trim() && !inlineDraft.value && !nameEditingId.value && !props.editingCell && !savingSortOrder.value })
 
 function closeQuick(): void {
   quickOpen.value = false
@@ -719,6 +723,7 @@ onBeforeUnmount(() => {
               @moved="$emit('rowMoved', $event, parent.id)"
               @changed="$emit('rowChanged', $event)"
               @removed="$emit('rowRemoved', $event)"
+              @duplicate="emit('duplicate', $event, parent.id)"
             />
           </template>
         </el-table-column>
@@ -804,7 +809,7 @@ onBeforeUnmount(() => {
               :status-label="statusLabel(scope.row.statusCode) || '—'"
               :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
             />
-            <el-popover v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click" @show="assigneeSearch = ''">
+            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click" @show="assigneeSearch = ''">
               <template #reference>
                 <button class="subitem-cell-button" :disabled="editingCell">
                   <yp-assignee :user-id="scope.row.assigneeUserId" :display-name="scope.row.assigneeDisplayName" :show-name="false" size="table" />
@@ -819,11 +824,12 @@ onBeforeUnmount(() => {
               </div>
             </el-popover>
 
-            <el-popover v-else-if="column.key === 'status'" placement="bottom" width="auto" trigger="click">
+            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])" v-else-if="column.key === 'status'" placement="bottom" width="auto" trigger="click">
               <template #reference>
                 <button class="subitem-block-cell" :style="statusStyle(scope.row.statusCode)" :disabled="editingCell">{{ statusLabel(scope.row.statusCode) }}</button>
               </template>
               <work-item-label-popover-content
+                @busy-change="cellPopoverBusy[scope.row.id + ':' + column.key] = $event"
                 kind="status"
                 :project-id="projectId"
                 :catalog="labelCatalog"
@@ -836,13 +842,14 @@ onBeforeUnmount(() => {
               />
             </el-popover>
 
-            <el-popover v-else-if="column.key === 'priority'" placement="bottom" width="auto" trigger="click">
+            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])" v-else-if="column.key === 'priority'" placement="bottom" width="auto" trigger="click">
               <template #reference>
                 <button class="subitem-block-cell" :class="`subitem-priority--${priorityPresentation(scope.row.priority).tone}`" :style="priorityStyle(scope.row.priority)" :disabled="editingCell">
                   {{ priorityPresentation(scope.row.priority).label }}
                 </button>
               </template>
               <work-item-label-popover-content
+                @busy-change="cellPopoverBusy[scope.row.id + ':' + column.key] = $event"
                 kind="priority"
                 :project-id="projectId"
                 :catalog="labelCatalog"
@@ -854,13 +861,14 @@ onBeforeUnmount(() => {
               />
             </el-popover>
 
-            <el-popover v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click">
+            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])" v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click">
               <template #reference>
                 <button class="subitem-content-pill" :style="labelCellStyle(contentLabel(scope.row as ProjectWorkItemListItem).colorToken)" :disabled="editingCell">
                   {{ contentLabel(scope.row as ProjectWorkItemListItem).name || '—' }}
                 </button>
               </template>
               <work-item-content-popover-content
+                @busy-change="cellPopoverBusy[scope.row.id + ':content'] = $event"
                 :project-id="projectId"
                 :catalog="contentCatalog"
                 :current-value="scope.row.contentId"

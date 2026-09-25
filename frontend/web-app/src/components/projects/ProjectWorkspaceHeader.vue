@@ -1,14 +1,7 @@
 <script setup lang="ts">
-import { Box, Clock, FolderOpened, MoreFilled, User } from '@element-plus/icons-vue'
+import { Box, Clock, FolderOpened, Grid, Setting, User } from '@element-plus/icons-vue'
 import type { ProjectDetail } from '@yumpoo/api-client'
-import {
-  ElButton,
-  ElDropdown,
-  ElDropdownItem,
-  ElDropdownMenu,
-  ElIcon,
-  ElTooltip,
-} from 'element-plus'
+import { ElIcon, ElTooltip } from 'element-plus'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import YpAssignee from '../yp/YpAssignee.vue'
@@ -32,12 +25,15 @@ const projectId = computed(() => props.project?.id)
 const heading = computed(() => props.project?.name ?? props.title)
 const supportingText = computed(() => props.project?.description
   || (props.project ? `${props.project.workspaceName} 中的项目空间` : props.description))
-const moreRoutes = computed(() => [
-  ...(props.section !== 'overview' ? [{ command: 'project-overview', label: '工作项' }] : []),
-  ...(props.section !== 'products' ? [{ command: 'project-products', label: '关联产品' }] : []),
-  ...(props.section !== 'activity' ? [{ command: 'project-activity', label: '动态' }] : []),
-  ...(props.section !== 'settings' ? [{ command: 'project-settings', label: '设置' }] : []),
-])
+const sectionGroups = [
+  [
+    { section: 'overview', route: 'project-overview', label: '工作项', icon: Grid },
+    { section: 'members', route: 'project-members', label: '成员', icon: User },
+    { section: 'products', route: 'project-products', label: '产品', icon: Box },
+    { section: 'activity', route: 'project-activity', label: '动态', icon: Clock },
+  ],
+  [{ section: 'settings', route: 'project-settings', label: '设置', icon: Setting }],
+]
 
 function navigate(routeName: string): void {
   if (!projectId.value) return
@@ -125,62 +121,39 @@ function navigate(routeName: string): void {
       v-if="project || $slots['primary-action']"
       class="project-workspace-header__actions"
     >
-      <el-button
-        v-if="project && section !== 'members'"
-        @click="navigate('project-members')"
-      >
-        <el-icon aria-hidden="true">
-          <user />
-        </el-icon>
-        成员
-      </el-button>
-      <el-button
-        v-if="project && section !== 'products'"
-        @click="navigate('project-products')"
-      >
-        <el-icon aria-hidden="true">
-          <box />
-        </el-icon>
-        产品
-      </el-button>
-      <el-button
-        v-if="project && section !== 'activity'"
-        @click="navigate('project-activity')"
-      >
-        <el-icon aria-hidden="true"><clock /></el-icon>
-        动态
-      </el-button>
       <slot name="primary-action" />
-      <el-tooltip
-        v-if="project && moreRoutes.length"
-        content="更多"
-        placement="top"
+      <nav
+        v-if="project && section !== 'catalog'"
+        class="project-workspace-header__sections"
+        aria-label="项目分区"
       >
-        <el-dropdown
-          trigger="click"
-          @command="navigate"
+        <div
+          v-for="(group, index) in sectionGroups"
+          :key="index"
+          class="project-workspace-header__section-group"
         >
-          <el-button
-            class="project-workspace-header__more"
-            aria-label="更多项目操作"
+          <el-tooltip
+            v-for="item in group"
+            :key="item.section"
+            :content="item.label"
+            placement="bottom"
+            :show-after="300"
           >
-            <el-icon aria-hidden="true">
-              <more-filled />
-            </el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item
-                v-for="item in moreRoutes"
-                :key="item.command"
-                :command="item.command"
-              >
-                {{ item.label }}
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </el-tooltip>
+            <button
+              type="button"
+              class="project-workspace-header__section"
+              :class="{ 'is-current': section === item.section }"
+              :aria-label="item.label"
+              :aria-current="section === item.section ? 'page' : undefined"
+              @click="navigate(item.route)"
+            >
+              <el-icon aria-hidden="true">
+                <component :is="item.icon" />
+              </el-icon>
+            </button>
+          </el-tooltip>
+        </div>
+      </nav>
     </div>
   </header>
 </template>
@@ -272,9 +245,55 @@ p {
   gap: var(--yp-space-2);
 }
 
-.project-workspace-header__more {
-  width: var(--yp-control-height);
+.project-workspace-header__sections {
+  display: flex;
+  gap: 8px;
+}
+
+.project-workspace-header__section-group {
+  display: flex;
+  height: var(--yp-control-height);
+  box-sizing: border-box;
+  border: 1px solid var(--yp-border-default);
+  border-radius: var(--yp-radius-md);
+  overflow: hidden;
+}
+
+.project-workspace-header__section {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 100%;
   padding: 0;
+  border: 0;
+  color: var(--yp-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--yp-motion-fast), background-color var(--yp-motion-fast);
+}
+
+.project-workspace-header__section + .project-workspace-header__section {
+  border-left: 1px solid var(--yp-border-subtle);
+}
+
+.project-workspace-header__section .el-icon {
+  font-size: 16px;
+}
+
+.project-workspace-header__section:hover {
+  background: var(--yp-bg-hover);
+  color: var(--yp-text-primary);
+}
+
+.project-workspace-header__section.is-current {
+  background: var(--yp-bg-selected);
+  color: var(--yp-action-primary);
+}
+
+.project-workspace-header__section:focus-visible {
+  outline: 2px solid var(--yp-focus-ring);
+  outline-offset: -2px;
 }
 
 .project-workspace-header--overview {
@@ -418,6 +437,11 @@ p {
 @media (max-width: 720px) {
   .project-workspace-header {
     flex-direction: column;
+  }
+
+  .project-workspace-header__actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .project-workspace-header:not(.project-workspace-header--catalog) {

@@ -181,6 +181,37 @@ describe('项目级工作项首页', () => {
 
   afterEach(() => vi.restoreAllMocks())
 
+  it.each(['filter', 'view', 'project', 'group'] as const)('%s 切换清除 reserve-selection 和子表内部勾选，数量不会回弹', async change => {
+    const parent = { ...item('parent'), subitemCount: 1 }
+    state.listProjectWorkItems.mockResolvedValue(page([parent]))
+    state.listWorkItemSubitems.mockResolvedValue({ items: [item('child')] })
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as {
+      onTableExpandChange: (item: ProjectWorkItemListItem, expanded: boolean) => void
+      changeGrouping: (field: string) => Promise<void>
+      selectedCount: number
+    }
+    view.onTableExpandChange(parent, true); await flushPromises()
+    const main = wrapper.getComponent({ name: 'ElTable' }).vm.$.exposed as unknown as { toggleRowSelection: (item: ProjectWorkItemListItem, value: boolean) => void; getSelectionRows: () => unknown[] }
+    const child = wrapper.getComponent({ name: 'ProjectWorkItemSubitemsTable' })
+    const childTable = child.getComponent({ name: 'ElTable' }).vm.$.exposed as unknown as typeof main
+    const clearChild = vi.spyOn(child.vm.$.exposed as unknown as { clearSelection: () => void }, 'clearSelection')
+    main.toggleRowSelection(parent, true)
+    childTable.toggleRowSelection(item('child'), true)
+    await nextTick()
+    expect(view.selectedCount).toBe(2)
+    expect(wrapper.getComponent({ name: 'WorkItemBatchBar' }).props('subitemCount')).toBe(1)
+    if (change === 'filter') state.route.query = { q: 'new' }
+    else if (change === 'view') state.route.query = { view: 'kanban' }
+    else if (change === 'project') state.route.params.projectId = 'other'
+    else await view.changeGrouping('STATUS')
+    await flushPromises()
+    expect(clearChild).toHaveBeenCalled()
+    expect(main.getSelectionRows()).toEqual([])
+    expect(view.selectedCount).toBe(0)
+  })
+
   it('仪表板嵌入复用原表格，并隔离路由和列偏好', async () => {
     const source: WorkItemTableSource = {
       listProjectWorkItems: vi.fn().mockResolvedValue(page([{ ...item(), subitemCount: 2 }])),
@@ -279,7 +310,7 @@ describe('项目级工作项首页', () => {
     expect(state.createWorkItem).toHaveBeenCalledWith(expect.objectContaining({ workItemCreateRequest: expect.objectContaining({ contentId: 'content-2', title: '按类别新增' }) }))
   })
 
-  it('分组与折叠保留同一个主表、勾选和子表草稿，展示行不进入选择或排序请求', async () => {
+  it('分组切换清空勾选但保留主表和子表草稿，折叠不销毁表格，展示行不进入选择或排序请求', async () => {
     const parent = { ...item('parent-1'), subitemCount: 1 }
     const done = { ...item('done'), statusCode: 'DONE' }
     state.listProjectWorkItems.mockResolvedValue(page([parent, done]))
@@ -309,7 +340,7 @@ describe('项目级工作项首页', () => {
     expect(wrapper.findAll('.work-item-group-heading')).toHaveLength(2)
     expect(wrapper.getComponent({ name: 'ElTable' }).vm.$).toBe(table)
     expect(wrapper.getComponent({ name: 'ProjectWorkItemSubitemsTable' }).vm.$).toBe(subtableInstance)
-    expect([...view.selectedWorkItemIds]).toEqual([parent.id])
+    expect([...view.selectedWorkItemIds]).toEqual([])
     expect(wrapper.findAll('.work-item-group-heading .el-checkbox')).toHaveLength(0)
     await wrapper.get('button[aria-label="收起分组：待开始"]').trigger('click')
     expect(wrapper.get('.work-item-group-heading').classes()).toContain('work-item-group-collapsed')
@@ -319,7 +350,7 @@ describe('项目级工作项首页', () => {
     await view.changeGrouping(''); await flushPromises()
     expect(wrapper.find('.work-item-group-heading').exists()).toBe(false)
     expect(wrapper.getComponent({ name: 'ElTable' }).vm.$).toBe(table)
-    expect([...view.selectedWorkItemIds]).toEqual([parent.id])
+    expect([...view.selectedWorkItemIds]).toEqual([])
     expect(state.moveProjectWorkItemOrder).not.toHaveBeenCalled()
   })
 
@@ -661,6 +692,11 @@ describe('项目级工作项首页', () => {
     }
 
     view.onHeaderDragEnd(188, 120, { label: '优先级' })
+    const widths = () => wrapper.findAllComponents({ name: 'ElTableColumn' })
+      .filter(column => column.props('label') && column.props('label') !== '优先级')
+      .map(column => [column.props('label'), column.props('width')])
+    await nextTick()
+    const before = widths()
     view.toggleColumn('priority', false)
     view.toggleColumn('title', false)
     await nextTick()
@@ -668,6 +704,7 @@ describe('项目级工作项首页', () => {
     const labels = wrapper.findAll('.el-table__header th').map(node => node.text()).filter(Boolean)
     expect(labels).not.toContain('优先级')
     expect(labels).toContain('工作项名称')
+    expect(widths()).toEqual(before)
     expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}'))
       .toMatchObject({ version: 1, widths: { priority: 188 }, hidden: ['priority'] })
   })
@@ -1236,6 +1273,9 @@ describe('项目级工作项首页', () => {
     const wrapper = mountView()
     await flushPromises()
     const listCalls = state.listProjectWorkItems.mock.calls.length
+    expect(wrapper.findComponent({ name: 'WorkItemContentPopoverContent' }).exists()).toBe(false)
+    await wrapper.get('.monday-content-label').trigger('click')
+    await flushPromises()
     const next = catalog()
     next.items[0] = { ...next.items[0]!, name: '更新后的类别', colorToken: WorkItemLabelColorToken.BrightGreen }
     wrapper.findComponent({ name: 'WorkItemContentPopoverContent' }).vm.$emit('updated', next)
@@ -1827,8 +1867,8 @@ describe('项目级工作项首页', () => {
     expect(selectionColumn?.props('fixed')).toBe(true)
     expect(selectionColumn?.props('reserveSelection')).toBe(true)
     expect(titleColumn?.props('fixed')).toBe(true)
-    expect(titleColumn?.props('width')).toBe('')
-    expect(titleColumn?.props('minWidth')).toBe(320)
+    expect(titleColumn?.props('minWidth')).toBe('')
+    expect(titleColumn?.props('width')).toBe(320)
     expect(wrapper.find('.el-table__append-wrapper .monday-quick-add').exists()).toBe(true)
 
     const tableScroll = wrapper.get('.monday-table .el-scrollbar__wrap').element as HTMLElement
