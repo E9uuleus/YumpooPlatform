@@ -6,6 +6,8 @@ import { vBrandLoading as vLoading } from '../../brand/loading'
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
+import WorkItemColumnVisibilityMenu from './WorkItemColumnVisibilityMenu.vue'
+import { createWorkItemColumnFlip, measureWorkItemColumns, visibleWorkItemColumnCells } from './workItemColumnFlip'
 import WorkItemRowActions from './WorkItemRowActions.vue'
 import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
@@ -243,6 +245,7 @@ const assigneeSearch = ref('')
 const assigneeMatches = ref<ProjectMember[]>()
 const filterOptionCounts = ref(new Map<string, number>())
 const filterOptionsLoading = ref(false)
+const cellPopoverBusy = reactive<Record<string, boolean>>({})
 const labelPopoverContentRefs = new Map<string, LabelPopoverContentHandle>()
 const searchExpanded = ref(Boolean(route.query.q))
 const searchInput = ref(String(route.query.q ?? ''))
@@ -1709,12 +1712,22 @@ function onHeaderDragEnd(newWidth: number, _oldWidth: number, column: { label: s
   persistTablePrefs()
 }
 
-function toggleColumn(key: ColumnKey, checked: boolean): void {
+const columnFlip = createWorkItemColumnFlip({
+  measure: () => measureWorkItemColumns(tableRef.value?.$el),
+  targets: () => visibleWorkItemColumnCells(tableRef.value?.$el),
+  disabled: () => Boolean(columnDraggingKey.value || columnResizingKey.value
+    || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches),
+})
+async function toggleColumn(key: ColumnKey, checked: boolean): Promise<void> {
   if (key === 'title') return
+  const snapshot = columnFlip.capture()
   const next = new Set(hiddenColumns.value)
   if (checked) next.delete(key); else next.add(key)
   hiddenColumns.value = next
   persistTablePrefs()
+  await nextTick()
+  flushResponsiveTableLayout()
+  columnFlip.play(snapshot)
 }
 
 const TABLE_ROW_HEIGHT = 36
@@ -2536,6 +2549,7 @@ onMounted(() => {
   watch(tableSentinel, (next, previous) => { if (previous) tableObserver?.unobserve(previous); if (next) tableObserver?.observe(next) }, { immediate: true })
 })
 onBeforeUnmount(() => {
+  columnFlip.cancel()
   groupObserver?.disconnect()
   activeController?.abort(); if (searchTimer) window.clearTimeout(searchTimer)
   if (memberSearchTimer) window.clearTimeout(memberSearchTimer)
@@ -2746,13 +2760,8 @@ onBeforeUnmount(() => {
                 <el-icon><hide /></el-icon><span>隐藏</span>
               </button>
             </template>
-            <div class="popover-stack">
-              <strong>显示列</strong>
-              <label v-for="column in columns" :key="column.key" class="column-option">
-                <el-checkbox :model-value="!hiddenColumns.has(column.key)" :disabled="column.key === 'title'" @change="checked => toggleColumn(column.key, Boolean(checked))" />
-                <span>{{ column.label }}</span>
-              </label>
-            </div>
+<work-item-column-visibility-menu :columns="columns" :hidden="hiddenColumns"
+              :disabled="Object.values(cellPopoverBusy).some(Boolean)" @toggle="toggleColumn" />
           </el-popover>
           <work-item-grouping-popover :field="groupingField" :order="groupingOrder" :show-empty="showEmptyGroups"
             :disabled="selectedView === 'kanban' || savingSortOrder"
@@ -2928,7 +2937,7 @@ onBeforeUnmount(() => {
               <el-table-column
                 label="工作项名称"
                 column-key="title"
-                :min-width="columnWidths.title"
+                :width="columnWidths.title"
                 header-align="center"
                 class-name="monday-title-column"
                 label-class-name="monday-title-column monday-sortable-column-header"
@@ -3077,7 +3086,7 @@ onBeforeUnmount(() => {
                     :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
                   />
                   <template v-else-if="column.key === 'assignee'">
-                    <el-popover placement="bottom" :width="360" trigger="click" popper-class="work-items-popover" @show="assigneeSearch = ''">
+                    <el-popover :persistent="false" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover" @show="assigneeSearch = ''">
                       <template #reference>
                         <button
                           class="cell-editor-trigger monday-cell-centered"
@@ -3102,6 +3111,7 @@ onBeforeUnmount(() => {
                       placement="bottom"
                       width="auto"
                       trigger="click"
+                      :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])"
                       popper-class="work-items-label-popover status-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'status')"
                     >
@@ -3118,6 +3128,7 @@ onBeforeUnmount(() => {
                       </template>
                       <work-item-label-popover-content
                         :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'status'), element)"
+                        @busy-change="cellPopoverBusy[scope.row.id + ':status'] = $event"
                         kind="status"
                         :project-id="projectId"
                         :catalog="labelCatalog"
@@ -3136,6 +3147,7 @@ onBeforeUnmount(() => {
                       placement="bottom"
                       width="auto"
                       trigger="click"
+                      :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])"
                       popper-class="work-items-label-popover priority-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'priority')"
                     >
@@ -3152,6 +3164,7 @@ onBeforeUnmount(() => {
                       </template>
                       <work-item-label-popover-content
                         :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'priority'), element)"
+                        @busy-change="cellPopoverBusy[scope.row.id + ':priority'] = $event"
                         kind="priority"
                         :project-id="projectId"
                         :catalog="labelCatalog"
@@ -3169,6 +3182,7 @@ onBeforeUnmount(() => {
                       placement="bottom"
                       width="auto"
                       trigger="click"
+                      :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])"
                       popper-class="work-items-label-popover content-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'content')"
                     >
@@ -3184,6 +3198,7 @@ onBeforeUnmount(() => {
                       </template>
                       <work-item-content-popover-content
                         :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'content'), element)"
+                        @busy-change="cellPopoverBusy[scope.row.id + ':content'] = $event"
                         :project-id="projectId"
                         :catalog="catalog"
                         :current-value="(scope.row as ProjectWorkItemListItem).contentId"

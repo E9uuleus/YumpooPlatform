@@ -661,6 +661,11 @@ describe('项目级工作项首页', () => {
     }
 
     view.onHeaderDragEnd(188, 120, { label: '优先级' })
+    const widths = () => wrapper.findAllComponents({ name: 'ElTableColumn' })
+      .filter(column => column.props('label') && column.props('label') !== '优先级')
+      .map(column => [column.props('label'), column.props('width')])
+    await nextTick()
+    const before = widths()
     view.toggleColumn('priority', false)
     view.toggleColumn('title', false)
     await nextTick()
@@ -668,6 +673,7 @@ describe('项目级工作项首页', () => {
     const labels = wrapper.findAll('.el-table__header th').map(node => node.text()).filter(Boolean)
     expect(labels).not.toContain('优先级')
     expect(labels).toContain('工作项名称')
+    expect(widths()).toEqual(before)
     expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}'))
       .toMatchObject({ version: 1, widths: { priority: 188 }, hidden: ['priority'] })
   })
@@ -1236,6 +1242,9 @@ describe('项目级工作项首页', () => {
     const wrapper = mountView()
     await flushPromises()
     const listCalls = state.listProjectWorkItems.mock.calls.length
+    expect(wrapper.findComponent({ name: 'WorkItemContentPopoverContent' }).exists()).toBe(false)
+    await wrapper.get('.monday-content-label').trigger('click')
+    await flushPromises()
     const next = catalog()
     next.items[0] = { ...next.items[0]!, name: '更新后的类别', colorToken: WorkItemLabelColorToken.BrightGreen }
     wrapper.findComponent({ name: 'WorkItemContentPopoverContent' }).vm.$emit('updated', next)
@@ -1827,8 +1836,8 @@ describe('项目级工作项首页', () => {
     expect(selectionColumn?.props('fixed')).toBe(true)
     expect(selectionColumn?.props('reserveSelection')).toBe(true)
     expect(titleColumn?.props('fixed')).toBe(true)
-    expect(titleColumn?.props('width')).toBe('')
-    expect(titleColumn?.props('minWidth')).toBe(320)
+    expect(titleColumn?.props('minWidth')).toBe('')
+    expect(titleColumn?.props('width')).toBe(320)
     expect(wrapper.find('.el-table__append-wrapper .monday-quick-add').exists()).toBe(true)
 
     const tableScroll = wrapper.get('.monday-table .el-scrollbar__wrap').element as HTMLElement

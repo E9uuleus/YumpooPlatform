@@ -5,7 +5,7 @@ import {
   type ProjectContentCatalog,
 } from '@yumpoo/api-client'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElInput, ElMessage, ElPopover } from 'element-plus'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { contentsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
 import { mondayWorkItemLabelColors, workItemLabelColorStyle as colorStyle } from './workItemLabelColors'
@@ -28,6 +28,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  busyChange: [busy: boolean]
   select: [contentId: string]
   updated: [catalog: ProjectContentCatalog]
 }>()
@@ -38,6 +39,7 @@ const isJellyWobble = ref(false)
 const drafts = ref<DraftContent[]>([])
 const deletedIds = ref<string[]>([])
 const saving = ref(false)
+watch(saving, value => emit('busyChange', Boolean(value)), { flush: 'sync' })
 const draggedIndex = ref<number | null>(null)
 const inputRefs = ref<InstanceType<typeof ElInput>[]>([])
 let draftSequence = 0
@@ -62,7 +64,8 @@ const isNewButtonOnSeparateColumn = computed(() => {
 
 const canApply = computed(() => !saving.value && drafts.value.every(item => Boolean(item.name.trim())))
 
-function resetEditor(): void {
+function resetEditor(force = false): void {
+  if (saving.value && !force) return
   mode.value = 'select'
   isJellyWobble.value = false
   drafts.value = []
@@ -218,7 +221,7 @@ async function applyChanges(): Promise<void> {
       catalog = await reload()
     }
     emit('updated', catalog)
-    resetEditor()
+    resetEditor(true)
   } catch (reason) {
     ElMessage.error(problemMessage(await toApiProblem(reason)))
   } finally {
