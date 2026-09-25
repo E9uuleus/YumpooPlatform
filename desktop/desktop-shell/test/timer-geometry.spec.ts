@@ -49,7 +49,7 @@ describe('timer surface geometry', () => {
   it('docks flush to either edge, clamps vertically and snaps by the tab after a drag', () => {
     const right = placeDock('right', .5, area)
     expect(right.bounds).toEqual({ x: 982, y: 314, width: 298, height: 172 })
-    expect(dockShape(right.layout)).toEqual([{ x: 256, y: 28, width: 42, height: 116 }])
+    expect(dockShape(right.layout)).toEqual([{ x: 256, y: 20, width: 42, height: 132 }])
     expect(dockShape({ ...right.layout, dock: { side: 'right', expanded: true } })).toEqual([{ x: 0, y: 0, width: 298, height: 172 }])
     const left = placeDock('left', 0, area)
     expect(left.bounds).toMatchObject({ x: 0, y: 0 })
@@ -59,7 +59,7 @@ describe('timer surface geometry', () => {
     expect(snapDock({ x: 300, y: 100, width: 298, height: 172 }, 'right', area).side).toBe('left')
     expect(snapDock({ x: 700, y: 100, width: 298, height: 172 }, 'left', area).side).toBe('right')
     expect(snapDock({ x: 0, y: 900, width: 298, height: 172 }, 'left', area).dockY).toBe(714 / 800)
-    expect(compactVisual(right.bounds, right.layout)).toEqual({ x: 1248, y: 352, width: 32, height: 96 })
+    expect(compactVisual(right.bounds, right.layout)).toEqual({ x: 1248, y: 344, width: 32, height: 112 })
   })
 
   it('opens the work panel beside the compact surface', () => {

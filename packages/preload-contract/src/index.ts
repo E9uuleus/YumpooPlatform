@@ -45,6 +45,9 @@ export interface DesktopTimerBridge {
   setPreferences?(change: TimerPreferencesChange): Promise<TimerPreferences>
   onMenuState?(listener: (state: TimerMenuState) => void): () => void
   runMenuAction?(action: TimerMenuAction): Promise<void>
+  /** Moves the compact window with the cursor for drags that start on a button, which cannot be a native drag region. */
+  dragWindow?(active: boolean): Promise<void>
+  onDragging?(listener: (dragging: boolean) => void): () => void
   setAlwaysOnTop(value: boolean): Promise<void>
   refresh(): Promise<void>
   publishState(state: DesktopTimerState): Promise<void>

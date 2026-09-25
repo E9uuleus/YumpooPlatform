@@ -208,11 +208,14 @@ test('计时快捷面板与偏好只开放固定通道和参数个数', async ()
     + "void ipcRenderer.invoke('yumpoo:timer:preferences', {})\n"
     + "void ipcRenderer.invoke('yumpoo:timer:menu-action', 'toggle')\n"
     + "void ipcRenderer.on('yumpoo:timer:menu-state', () => {})\n"
-    + "void ipcRenderer.removeListener('yumpoo:timer:menu-state', () => {})\n")).length, 0)
+    + "void ipcRenderer.removeListener('yumpoo:timer:menu-state', () => {})\n"
+    + "void ipcRenderer.invoke('yumpoo:timer:drag', true)\n"
+    + "void ipcRenderer.on('yumpoo:timer:dragging', () => {})\n")).length, 0)
   assert.equal((await boundaryMessages(file, prefix
     + "void ipcRenderer.invoke('yumpoo:timer:preferences')\n"
     + "void ipcRenderer.invoke('yumpoo:timer:menu-action', 'toggle', 'extra')\n"
-    + "void ipcRenderer.invoke('yumpoo:timer:menu-state')\n")).length, 3)
+    + "void ipcRenderer.invoke('yumpoo:timer:menu-state')\n"
+    + "void ipcRenderer.invoke('yumpoo:timer:drag')\n")).length, 4)
 })
 
 test('preload contract 拦截 Electron 与路径逃逸', async () => {

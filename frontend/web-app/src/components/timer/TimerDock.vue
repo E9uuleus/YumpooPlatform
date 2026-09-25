@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { TimerCandidate } from '@yumpoo/api-client'
 import TimerIcon from './TimerIcon.vue'
 import TimerDigits from './TimerDigits.vue'
@@ -11,6 +11,8 @@ const props = defineProps<{
   left: number
   top: number
   expanded: boolean
+  active: boolean
+  dragging: boolean
   running: boolean
   saved: boolean
   busy: boolean
@@ -25,7 +27,11 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ toggle: []; switch: []; open: []; closed: []; expand: [] }>()
 
-const lines = computed(() => dockDuration(props.duration))
+const reading = computed(() => dockDuration(props.duration))
+const progress = computed(() => props.running ? (props.duration % 60000) / 600 : 0)
+const wrapped = ref(false)
+watch(progress, (value, previous) => { wrapped.value = value < previous })
+const idle = computed(() => !props.running && !props.canResume)
 const toggleLabel = computed(() => props.running ? '暂停计时' : props.canResume ? '继续计时' : '查找工作项')
 const status = computed(() => props.offline ? '等待连接' : props.saved ? '已保存' : props.running ? '计时中' : props.canResume ? '已暂停' : '未开始')
 </script>
@@ -33,7 +39,7 @@ const status = computed(() => props.offline ? '等待连接' : props.saved ? '�
 <template>
   <div
     class="timer-dock"
-    :class="[`dock-${side}`, { 'is-running': running, 'is-saved': saved, 'is-offline': offline, 'is-busy': busy }]"
+    :class="[`dock-${side}`, { 'is-running': running, 'is-saved': saved, 'is-offline': offline, 'is-busy': busy, 'is-active': active, 'is-dragging': dragging }]"
   >
     <Transition
       name="dock-card"
@@ -106,49 +112,101 @@ const status = computed(() => props.offline ? '等待连接' : props.saved ? '�
       @keydown.enter.prevent="emit('expand')"
       @keydown.space.prevent="emit('expand')"
     >
-      <span class="status-dot" />
       <span
-        v-if="saved"
-        class="tab-glyph saved"
-      ><TimerIcon name="check" /></span>
+        class="tab-ring"
+        aria-hidden="true"
+      >
+        <svg
+          class="tab-dial"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            class="tab-track"
+            cx="12"
+            cy="12"
+            r="10"
+          />
+          <circle
+            class="tab-arc"
+            :class="{ 'no-sweep': wrapped }"
+            cx="12"
+            cy="12"
+            r="10"
+            pathLength="100"
+            :style="{ strokeDashoffset: 100 - progress }"
+          />
+        </svg>
+        <span
+          v-if="running && !busy"
+          class="tab-pulse"
+        />
+        <TimerIcon
+          v-else
+          class="tab-glyph"
+          :name="busy ? 'loader' : saved ? 'check' : idle ? 'play' : 'pause'"
+          :class="{ spinning: busy }"
+        />
+      </span>
       <span
-        v-else-if="!running && !canResume"
-        class="tab-glyph"
-      ><TimerIcon name="clock" /></span>
+        v-if="idle"
+        class="tab-hint"
+      >开始计时</span>
       <span
         v-else
-        class="tab-time"
-      ><span>{{ lines[0] }}</span><span>{{ lines[1] }}</span></span>
-      <span
-        class="tab-grip"
-        aria-hidden="true"
-      />
+        class="tab-reading"
+      >
+        <span class="tab-value is-major">{{ reading.major }}</span><span class="tab-unit">{{ reading.majorUnit }}</span>
+        <span class="tab-value">{{ reading.minor }}</span><span class="tab-unit">{{ reading.minorUnit }}</span>
+      </span>
     </div>
   </div>
 </template>
 
 <style scoped>
-.timer-dock{position:absolute;inset:0;--dot:var(--yp-text-disabled)}
-.is-running{--dot:var(--yp-timer-accent)}.is-saved{--dot:var(--yp-timer-saved)}.is-offline{--dot:var(--yp-timer-offline)}
+.timer-dock{position:absolute;inset:0;--dot:var(--yp-text-disabled);--tone:var(--yp-text-muted);--lift:6px}
+.is-running{--dot:var(--yp-timer-accent);--tone:var(--yp-timer-accent)}.is-saved{--dot:var(--yp-timer-saved);--tone:var(--yp-timer-saved)}.is-offline{--dot:var(--yp-timer-offline);--tone:var(--yp-timer-offline)}
 button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0;-webkit-app-region:no-drag;app-region:no-drag}
 button:disabled{cursor:default;opacity:.55}
 button:focus-visible,.dock-tab:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px}
 .status-dot{width:6px;height:6px;border-radius:50%;background:var(--dot);flex-shrink:0}
 .is-running .status-dot{box-shadow:0 0 0 3px color-mix(in srgb,var(--dot) 18%,transparent);animation:pulse 2.4s ease-in-out infinite}
-.dock-tab{position:absolute;top:50%;width:32px;height:96px;margin-top:-48px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
-  background:var(--yp-timer-surface);border:1px solid var(--yp-timer-hairline);box-shadow:var(--yp-timer-shadow),var(--yp-timer-highlight);color:var(--yp-text-primary);
-  cursor:grab;user-select:none;-webkit-app-region:drag;app-region:drag}
-.dock-right .dock-tab{right:0;border-right:0;border-radius:12px 0 0 12px}
-.dock-left .dock-tab{left:0;border-left:0;border-radius:0 12px 12px 0}
-.tab-time{display:flex;flex-direction:column;align-items:center;gap:1px;font-size:11px;line-height:13px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.tab-time span:last-child{color:var(--yp-text-muted);font-weight:550}
-.tab-glyph{display:grid;place-items:center;color:var(--yp-timer-accent)}.tab-glyph svg{width:16px;height:16px}.tab-glyph.saved{color:var(--yp-timer-saved)}
-.tab-grip{width:3px;height:10px;border-radius:2px;background:radial-gradient(circle,var(--yp-text-disabled) 1px,transparent 1.2px) 0 0/3px 4px repeat-y;opacity:.8}
+.dock-tab{position:absolute;top:50%;width:32px;height:112px;margin-top:-56px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:8px;padding:9px 0 8px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--yp-text-primary) 3%,var(--yp-timer-surface)),var(--yp-timer-surface) 45%);
+  border:1px solid var(--yp-timer-hairline);box-shadow:var(--yp-timer-shadow),var(--yp-timer-highlight);color:var(--yp-text-primary);
+  cursor:grab;user-select:none;-webkit-app-region:drag;app-region:drag;
+  transition:transform .24s var(--yp-timer-ease),border-radius .24s var(--yp-timer-ease),box-shadow .24s ease,border-color .24s ease}
+.dock-right .dock-tab{right:0;border-right-color:transparent;border-radius:16px 0 0 16px}
+.dock-left .dock-tab{left:0;border-left-color:transparent;border-radius:0 16px 16px 0}
+.dock-tab::after{content:'';position:absolute;top:38%;bottom:38%;width:2px;border-radius:2px;background:var(--tone);opacity:0;box-shadow:0 0 6px color-mix(in srgb,var(--tone) 45%,transparent);transition:opacity .3s ease}
+.dock-right .dock-tab::after{right:0}
+.dock-left .dock-tab::after{left:0}
+.is-running .dock-tab::after{opacity:.7}
+.is-active .dock-tab{border-color:color-mix(in srgb,var(--yp-timer-accent) 30%,var(--yp-timer-hairline));box-shadow:0 2px 4px color-mix(in srgb,#0b1220 10%,transparent),0 10px 24px -8px color-mix(in srgb,#0b1220 30%,transparent),var(--yp-timer-highlight)}
+.is-active.dock-right .dock-tab{border-right-color:transparent}.is-active.dock-left .dock-tab{border-left-color:transparent}
+.tab-ring{position:relative;display:grid;place-items:center;width:22px;height:22px;flex-shrink:0;color:var(--tone)}
+.tab-dial{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.tab-track{fill:none;stroke:var(--yp-timer-hairline);stroke-width:2}
+.is-saved .tab-track{stroke:var(--yp-timer-saved)}
+.tab-arc{fill:none;stroke:var(--yp-timer-accent);stroke-width:2.4;stroke-linecap:round;stroke-dasharray:100;opacity:0;transition:stroke-dashoffset 1s linear,opacity .3s ease}
+.tab-arc.no-sweep{transition:opacity .3s ease}
+.is-running .tab-arc{opacity:1}
+.tab-glyph{position:relative;width:10px;height:10px}
+.tab-pulse{width:6px;height:6px;border-radius:50%;background:var(--yp-timer-accent);animation:beat 2.4s ease-in-out infinite}
+.tab-reading{display:flex;flex-direction:column;align-items:center;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.tab-value{font-size:12px;font-weight:600;line-height:14px;color:var(--yp-text-secondary)}
+.tab-value.is-major{font-size:16px;font-weight:700;line-height:18px;color:var(--yp-text-primary)}
+.tab-unit{margin:1px 0 3px;font-size:9px;line-height:10px;color:var(--yp-text-muted)}
+.tab-unit:last-child{margin-bottom:0}
+.tab-hint{writing-mode:vertical-rl;font-size:11px;letter-spacing:.2em;color:var(--yp-text-secondary)}
 .dock-card{position:absolute;width:288px;height:152px;box-sizing:border-box;display:flex;flex-direction:column;padding:14px 14px 10px 16px;
   background:var(--yp-timer-surface);border:1px solid var(--yp-timer-hairline);box-shadow:var(--yp-timer-shadow),var(--yp-timer-highlight);color:var(--yp-text-primary);
-  -webkit-app-region:drag;app-region:drag;user-select:none}
-.dock-right .dock-card{border-right:0;border-radius:16px 0 0 16px}
-.dock-left .dock-card{border-left:0;border-radius:0 16px 16px 0;padding:14px 16px 10px 14px}
+  -webkit-app-region:drag;app-region:drag;user-select:none;transition:transform .24s var(--yp-timer-ease),border-radius .24s var(--yp-timer-ease),border-color .24s ease}
+.dock-right .dock-card{border-right-color:transparent;border-radius:16px 0 0 16px}
+.dock-left .dock-card{border-left-color:transparent;border-radius:0 16px 16px 0;padding:14px 16px 10px 14px}
+.is-dragging .dock-tab,.is-dragging .dock-card{border-color:var(--yp-timer-hairline);border-radius:16px;cursor:grabbing}
+.is-dragging.dock-right .dock-tab,.is-dragging.dock-right .dock-card{transform:translateX(calc(var(--lift) * -1))}
+.is-dragging.dock-left .dock-tab,.is-dragging.dock-left .dock-card{transform:translateX(var(--lift))}
+.is-dragging .dock-tab::after{opacity:0}
 .dock-head{display:flex;align-items:center;gap:10px;min-width:0}
 .dock-head :deep(.work-glyph),.dock-glyph{width:30px;height:30px;flex-shrink:0}
 .dock-glyph{display:grid;place-items:center;border-radius:9px;background:color-mix(in srgb,var(--yp-timer-accent) 10%,transparent);color:var(--yp-timer-accent)}.dock-glyph svg{width:16px;height:16px}
@@ -175,5 +233,6 @@ button:focus-visible,.dock-tab:focus-visible{outline:2px solid var(--yp-timer-ac
 .spinning{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{50%{box-shadow:0 0 0 5px color-mix(in srgb,var(--dot) 6%,transparent)}}
+@keyframes beat{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.7);opacity:.55}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>

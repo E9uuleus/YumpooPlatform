@@ -1,10 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TimerMenuState } from '@yumpoo/preload-contract'
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
   windows: [] as Array<{ options: Record<string, unknown>; instance: unknown }>,
   cursor: { x: 1200, y: 780 },
+  focused: null as unknown,
+  grant: true,
   load: vi.fn(async (): Promise<void> => undefined),
 }))
 vi.mock('electron', () => ({
@@ -15,6 +17,7 @@ vi.mock('electron', () => ({
     getDisplayNearestPoint: () => ({ bounds: { x: 0, y: 0, width: 1280, height: 800 }, workArea: { x: 0, y: 0, width: 1280, height: 752 } }),
   },
   BrowserWindow: class {
+    static getFocusedWindow = () => mocks.focused
     events = new Map<string, (...args: unknown[]) => void>()
     contentEvents = new Map<string, (...args: unknown[]) => void>()
     webContents = { mainFrame: { url: 'https://yumpoo.example/timer/menu' }, send: vi.fn(), on: (name: string, fn: (...args: unknown[]) => void) => this.contentEvents.set(name, fn) }
@@ -27,7 +30,8 @@ vi.mock('electron', () => ({
     setBounds = vi.fn()
     show = vi.fn(() => { this.visible = true })
     hide = vi.fn(() => { this.visible = false })
-    focus = vi.fn(() => { this.events.get('focus')?.() })
+    focus = vi.fn(() => { if (mocks.grant) { mocks.focused = this; this.events.get('focus')?.() } })
+    isFocused = () => mocks.focused === this
     loadURL = mocks.load
     constructor(options: Record<string, unknown>) { mocks.windows.push({ options, instance: this }) }
     on(name: string, fn: (...args: unknown[]) => void) { this.events.set(name, fn) }
@@ -48,7 +52,8 @@ function setup() {
 const act = (event: unknown, action: unknown) => mocks.handlers.get('yumpoo:timer:menu-action')?.(event, action)
 const sender = () => ({ sender: popup().webContents, senderFrame: popup().webContents.mainFrame })
 
-beforeEach(() => { mocks.handlers.clear(); mocks.windows.length = 0; mocks.cursor = { x: 1200, y: 780 }; vi.clearAllMocks(); vi.useRealTimers() })
+beforeEach(() => { mocks.handlers.clear(); mocks.windows.length = 0; mocks.cursor = { x: 1200, y: 780 }; mocks.focused = null; mocks.grant = true; vi.clearAllMocks(); vi.useFakeTimers() })
+afterEach(() => { vi.useRealTimers() })
 
 describe('timer quick panel window', () => {
   it('prewarms one hidden isolated popup and only opens after the page has loaded', () => {
@@ -85,6 +90,35 @@ describe('timer quick panel window', () => {
     expect(popup().hide).toHaveBeenCalledTimes(2)
     menu.update(state)
     expect(popup().webContents.send).toHaveBeenCalledOnce()
+  })
+
+  it('closes when focus leaves the window that opened it even though the panel never took focus', async () => {
+    const { menu } = setup()
+    menu.prewarm(); popup().contentEvents.get('did-finish-load')?.()
+    const orb = { title: 'orb' }
+    mocks.focused = orb; mocks.grant = false
+    menu.open('pointer', state)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(popup().hide).not.toHaveBeenCalled()
+    mocks.focused = null
+    await vi.advanceTimersByTimeAsync(150)
+    expect(popup().hide).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(300)
+    menu.open('tray', state)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(popup().hide).toHaveBeenCalledOnce()
+    expect(popup().show).toHaveBeenCalledTimes(2)
+  })
+
+  it('closes a focused panel once focus moves anywhere else, even without a blur event', async () => {
+    const { menu } = setup()
+    menu.prewarm(); popup().contentEvents.get('did-finish-load')?.()
+    menu.open('pointer', state)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(popup().hide).not.toHaveBeenCalled()
+    mocks.focused = { title: 'main' }
+    await vi.advanceTimersByTimeAsync(150)
+    expect(popup().hide).toHaveBeenCalledOnce()
   })
 
   it('runs only closed actions from its own main frame and keeps toggles open', () => {
