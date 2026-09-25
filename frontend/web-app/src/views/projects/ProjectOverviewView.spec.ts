@@ -135,7 +135,7 @@ function mountView(discussion?: { hasDraft: boolean, busy: boolean, discardDraft
         InlineProblem: true,
         WorkItemDetailPanel: discussion ? defineComponent({
           name: 'WorkItemDetailPanel',
-          props: { beforeLeave: Function },
+          props: { detail: Object },
           setup(_props, { expose }) { expose(discussion); return {} },
           template: '<div />',
         }) : true,
@@ -2017,8 +2017,9 @@ describe('项目级工作项首页', () => {
     confirm.mockRejectedValueOnce('cancel')
     expect(await routeGuard({ params: { projectId: 'project-1' }, query: { workItemId: 'item-2' } }, state.route)).toBe(false)
     confirm.mockResolvedValueOnce('confirm' as never)
-    const panel = wrapper.findComponent({ name: 'WorkItemDetailPanel' })
-    expect(await panel.props('beforeLeave')('details', 'discussion')).toBe(true)
+    expect(await routeGuard({ params: { projectId: 'project-1' }, query: { workItemId: 'item-2' } }, state.route)).toBe(true)
+    expect(draft.discardDraft).toHaveBeenCalledTimes(2)
+    expect(wrapper.findComponent({ name: 'WorkItemDetailPanel' }).props('detail')).toMatchObject({ id: 'item-1' })
   })
 
 })

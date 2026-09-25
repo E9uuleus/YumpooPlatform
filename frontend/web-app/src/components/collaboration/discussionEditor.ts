@@ -148,8 +148,9 @@ function memberSuggestion(getMembers: () => ProjectMember[], onOpen: () => void)
   }
 }
 
-export function discussionExtensions(getMembers: () => ProjectMember[], onMentionOpen: () => void = () => {}) {
-  return [
+export function discussionExtensions(getMembers: () => ProjectMember[], onMentionOpen: () => void = () => {},
+  options: { mention?: boolean } = {}) {
+  const extensions = [
     StarterKit.configure({ heading: { levels: [2] }, link: false }),
     Link.configure({
       openOnClick: false,
@@ -167,6 +168,10 @@ export function discussionExtensions(getMembers: () => ProjectMember[], onMentio
         return ['li', mergeAttributes(HTMLAttributes, { 'data-type': 'taskItem' }), 0]
       },
     }).configure({ nested: true, a11y: { checkboxLabel: node => `完成：${node.textContent || '清单项'}` } }),
+  ]
+  if (options.mention === false) return extensions
+  return [
+    ...extensions,
     Mention.extend({
       addAttributes() {
         return {
@@ -185,5 +190,5 @@ export function discussionExtensions(getMembers: () => ProjectMember[], onMentio
 
 export function discussionHasDraft(editor: Editor | undefined): boolean {
   if (!editor) return false
-  return Boolean(editor.getText().trim()) || /<(?:table|hr|pre|ul|ol|h2|blockquote)\b/.test(editor.getHTML())
+  return Boolean(editor.getText().trim()) || /<(?:table|hr|pre|ul|ol|h2|blockquote|img)\b|data-image-upload/.test(editor.getHTML())
 }

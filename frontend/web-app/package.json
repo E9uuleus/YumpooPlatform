@@ -17,6 +17,7 @@
   "dependencies": {
     "@element-plus/icons-vue": "2.3.2",
     "@tiptap/core": "3.30.3",
+    "@tiptap/extension-image": "3.30.3",
     "@tiptap/extension-link": "3.30.3",
     "@tiptap/extension-list": "3.30.3",
     "@tiptap/extension-mention": "3.30.3",

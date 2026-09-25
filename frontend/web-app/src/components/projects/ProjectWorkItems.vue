@@ -14,7 +14,6 @@ import WorkItemUpdatedCell from './WorkItemUpdatedCell.vue'
 import { Filter as FilterIcon, Hide, Search, Sort, User } from '@element-plus/icons-vue'
 import {
   TimeTrackingState,
-  AttachmentOwnerType,
   WorkItemViewType,
   ProjectActorAccess,
   ProjectLifecycle,
@@ -52,7 +51,6 @@ import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
-import LazyAttachmentPanel from '../../components/collaboration/LazyAttachmentPanel.vue'
 import MondayColumnQuickSort from './MondayColumnQuickSort.vue'
 import ProjectWorkItemSubitemsTable, {
   type ProjectWorkItemSubitemSortRule,
@@ -156,29 +154,29 @@ const quickRow = ref<HTMLElement>()
 const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const detailOpen = ref(false)
 const detailPanel = ref<InstanceType<typeof WorkItemDetailPanel>>()
-let leavingDiscussion: Promise<boolean> | undefined
+let leavingDraft: Promise<boolean> | undefined
 let detailGeneration = 0
 
-async function beforeDiscussionLeave(): Promise<boolean> {
+async function beforeDraftLeave(): Promise<boolean> {
   if (detailPanel.value?.busy) {
-    ElMessage.info('讨论正在保存，请稍候再离开。')
+    ElMessage.info('内容正在保存，请稍候再离开。')
     return false
   }
   if (!detailPanel.value?.hasDraft) return true
-  if (leavingDiscussion) return leavingDiscussion
-  leavingDiscussion = ElMessageBox.confirm('离开将丢弃尚未发布或保存的讨论草稿。', '放弃讨论草稿', {
+  if (leavingDraft) return leavingDraft
+  leavingDraft = ElMessageBox.confirm('离开将丢弃尚未保存的描述或讨论草稿。', '放弃草稿', {
     confirmButtonText: '放弃草稿', cancelButtonText: '继续编写', type: 'warning',
   }).then(() => { detailPanel.value?.discardDraft(); return true }, () => false)
-  try { return await leavingDiscussion } finally { leavingDiscussion = undefined }
+  try { return await leavingDraft } finally { leavingDraft = undefined }
 }
 
 async function beforeDetailClose(done: () => void): Promise<void> {
-  if (await beforeDiscussionLeave()) done()
+  if (await beforeDraftLeave()) done()
 }
 
-onBeforeRouteLeave(() => embedded.value ? canClose() : beforeDiscussionLeave())
+onBeforeRouteLeave(() => embedded.value ? canClose() : beforeDraftLeave())
 onBeforeRouteUpdate((to, from) => to.params.projectId !== from.params.projectId
-  || to.query.workItemId !== from.query.workItemId ? beforeDiscussionLeave() : true)
+  || to.query.workItemId !== from.query.workItemId ? beforeDraftLeave() : true)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
 const detailTab = ref<'details' | 'discussion' | 'relations' | 'activity'>('details')
@@ -788,7 +786,7 @@ async function addSubitem(row: ProjectWorkItemListItem): Promise<void> {
 }
 
 async function beforeRowRemove(row: ProjectWorkItemListItem): Promise<boolean> {
-  return detailOpen.value && detail.value?.id === row.id ? beforeDiscussionLeave() : true
+  return detailOpen.value && detail.value?.id === row.id ? beforeDraftLeave() : true
 }
 
 async function onRowRemoved(row: ProjectWorkItemListItem): Promise<void> {
@@ -936,10 +934,6 @@ function getPriorityPresentation(priority: string | null): { label: string; tone
 
 function formatDate(value: Date | string | null): string {
   return value ? new Date(value).toISOString().slice(0, 10) : '—'
-}
-
-function formatTime(value: Date | string): string {
-  return new Date(value).toLocaleString('zh-CN')
 }
 
 function queryValues(name: string): string[] {
@@ -1370,7 +1364,7 @@ async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'r
 
 async function openRelatedWorkItem(target: { workItemId: string, projectId: string }): Promise<void> {
   if (target.projectId === projectId.value) {
-    if (!await beforeDiscussionLeave()) return
+    if (!await beforeDraftLeave()) return
     await loadDetail(target.workItemId)
     return
   }
@@ -1427,7 +1421,7 @@ async function onRowMoved(item: ProjectWorkItemListItem, parentId?: string): Pro
 
 async function openDetail(item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity'): Promise<void> {
   if (detailOpen.value && detail.value?.id === item.id && detailTab.value === tab) return
-  if (!await beforeDiscussionLeave()) return
+  if (!await beforeDraftLeave()) return
   selectCell(item.id, tab === 'details' ? 'title' : tab === 'activity' ? 'updatedAt' : 'discussion')
   detailTab.value = tab
   if (String(route.query.workItemId ?? '') === item.id) {
@@ -2452,7 +2446,7 @@ async function canClose(): Promise<boolean> {
     ElMessage.info('请先完成或取消当前工作项编辑。')
     return false
   }
-  return beforeDiscussionLeave()
+  return beforeDraftLeave()
 }
 defineExpose({ canClose })
 watch([() => routeQuerySignature(true), () => routeQuerySignature(false)], ([, context], [, previousContext]) => {
@@ -3410,62 +3404,15 @@ onBeforeUnmount(() => {
           <work-item-detail-panel
             ref="detailPanel"
             v-model="detailTab"
-            :before-leave="beforeDiscussionLeave"
-            :work-item-id="detail.id"
-            :current-project-id="detail.projectId"
+            :detail="detail"
             :members="activeMembers"
             :can-publish="canPublishDiscussion"
             :read-only-reason="discussionReadOnlyReason"
             @relations-changed="onRelationsChanged"
             @discussion-changed="onDiscussionChanged"
+            @description-updated="replaceLightItem($event.id, $event)"
             @open-work-item="openRelatedWorkItem"
-          >
-            <template #details>
-              <dl class="detail-list">
-                <div>
-                  <dt>工作项类别</dt>
-                  <dd>
-                    <el-popover placement="bottom" width="auto" trigger="click" popper-class="work-items-label-popover content-popover">
-                      <template #reference>
-                        <button class="detail-content-pill" :style="labelCellStyle(contentLabel(detail).colorToken)">{{ contentLabel(detail).name || '—' }}</button>
-                      </template>
-                      <work-item-content-popover-content
-                        :project-id="projectId"
-                        :catalog="catalog"
-                        :current-value="detail.contentId"
-                        :can-manage="Boolean(catalog?.canManage)"
-                        @select="patchCell(detail as unknown as ProjectWorkItemListItem, 'content', $event)"
-                        @updated="onContentsUpdated"
-                      />
-                    </el-popover>
-                  </dd>
-                </div>
-                <div><dt>状态</dt><dd>{{ statusLabel(detail.statusCode) }}</dd></div>
-                <div><dt>优先级</dt><dd><yp-priority-badge :priority="detail.priority" /></dd></div>
-                <div>
-                  <dt>处理人</dt><dd>
-                    <yp-assignee
-                      :user-id="detail.assigneeUserId"
-                      :display-name="detail.assigneeDisplayName"
-                    />
-                  </dd>
-                </div>
-                <div><dt>截止日期</dt><dd>{{ formatDate(detail.dueDate) }}{{ detail.dueTime ? ` ${detail.dueTime}` : '' }}</dd></div>
-                <div><dt>最后更新时间</dt><dd>{{ formatTime(detail.updatedAt) }}</dd></div>
-              </dl>
-              <p
-                v-if="detail.description"
-                class="detail-copy"
-              >
-                {{ detail.description }}
-              </p>
-              <lazy-attachment-panel
-                :owner-type="AttachmentOwnerType.WorkItem"
-                :owner-id="detail.id"
-                :can-upload="detail.capabilities.canEditFields"
-              />
-            </template>
-          </work-item-detail-panel>
+          />
         </template>
       </div>
     </el-drawer>
@@ -4466,24 +4413,6 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.detail-content-pill {
-  display: flex;
-  min-width: 0;
-  height: 34px;
-  padding: 0 16px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 999px;
-  box-sizing: border-box;
-  color: var(--yp-text-inverse);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.detail-content-pill { width: min(240px, 100%); cursor: pointer; }
-
 /* 快速新增 */
 .monday-quick-add {
   position: relative;
@@ -4887,31 +4816,6 @@ onBeforeUnmount(() => {
 
 .detail-heading small {
   color: var(--yp-text-muted);
-}
-
-.detail-list {
-  display: grid;
-  gap: var(--yp-space-3);
-  margin: 0;
-}
-
-.detail-list div {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: var(--yp-space-3);
-}
-
-.detail-list dt {
-  color: var(--yp-text-muted);
-}
-
-.detail-list dd {
-  margin: 0;
-}
-
-.detail-copy {
-  margin-top: var(--yp-space-5);
-  white-space: pre-wrap;
 }
 
 </style>
