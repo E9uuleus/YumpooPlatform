@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Component
 public final class JsoupCollaborationHtmlSanitizer implements CollaborationHtmlSanitizer {
@@ -39,6 +40,38 @@ public final class JsoupCollaborationHtmlSanitizer implements CollaborationHtmlS
             .addAttributes("th", "colspan", "rowspan")
             .addAttributes("td", "colspan", "rowspan")
             .preserveRelativeLinks(true);
+    private static final Safelist DESCRIPTION_SAFELIST = new Safelist(SAFELIST)
+            .addAttributes("img", "src", "alt");
+    private static final Pattern ATTACHMENT_IMAGE_SRC = Pattern.compile(
+            "^/api/v1/attachments/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/content$");
+    private static final int MAX_IMAGE_ALT_LENGTH = 255;
+
+    @Override
+    public String sanitizeDescription(String untrustedHtml) {
+        if (untrustedHtml == null) return null;
+        Document dirty = Jsoup.parseBodyFragment(untrustedHtml);
+        for (Element span : dirty.body().select("span[data-type], span[data-mention-user-id]")) {
+            span.removeAttr("data-type").removeAttr("data-mention-user-id");
+        }
+        Document clean = new Cleaner(DESCRIPTION_SAFELIST).clean(dirty);
+        normalizeStructure(clean.body());
+        for (Element image : clean.body().select("img")) {
+            if (!ATTACHMENT_IMAGE_SRC.matcher(image.attr("src")).matches()) {
+                image.remove();
+                continue;
+            }
+            String alt = image.attr("alt").strip();
+            if (alt.isEmpty()) image.removeAttr("alt");
+            else image.attr("alt", alt.length() > MAX_IMAGE_ALT_LENGTH ? alt.substring(0, MAX_IMAGE_ALT_LENGTH) : alt);
+        }
+        clean.outputSettings(outputSettings());
+        String html = clean.body().html();
+        String text = clean.body().text().strip();
+        if (text.isEmpty() && clean.body().select("img").isEmpty()) return null;
+        if (html.length() > MAX_HTML_LENGTH) throw new IllegalArgumentException("description html is too long");
+        if (text.length() > MAX_TEXT_LENGTH) throw new IllegalArgumentException("description text is too long");
+        return html;
+    }
 
     @Override
     public ParsedHtml parse(String untrustedHtml) {

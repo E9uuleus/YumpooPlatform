@@ -320,6 +320,16 @@ public final class WorkItemController {
                 null, null, body.dueDate(), body);
     }
 
+    @PatchMapping("/work-items/{workItemId}/description")
+    ResponseEntity<String> patchDescription(@PathVariable UUID workItemId,
+            @Valid @RequestBody WorkItemDescriptionPatchRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false)
+            String idempotencyHeader) {
+        return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "DESCRIPTION",
+                null, null, null, body);
+    }
+
     @PatchMapping("/work-items/{workItemId}/content")
     ResponseEntity<String> patchContent(@PathVariable UUID workItemId,
             @Valid @RequestBody WorkItemContentPatchRequest body,
@@ -351,7 +361,8 @@ public final class WorkItemController {
                                 "workItemId", workItemId.toString(),
                                 "ifMatch", Long.toString(expectedVersion)),
                         objectMapper.valueToTree(body)), body instanceof WorkItemDueDatePatchRequest deadline
-                        ? dueTimeChange(deadline.dueTime()) : DueTimeChange.unchanged())).result();
+                        ? dueTimeChange(deadline.dueTime()) : DueTimeChange.unchanged(),
+                body instanceof WorkItemDescriptionPatchRequest description ? description.description() : null)).result();
         return storedResponse(stored);
     }
 

@@ -41,7 +41,7 @@ public final class WorkItemCommands {
 
     public record InlineUpdate(CurrentActor actor, UUID workItemId, long expectedVersion,
             String field, String priority, UUID assigneeUserId, LocalDate dueDate,
-            UUID idempotencyKey, RequestHash requestHash, DueTimeChange dueTime) {}
+            UUID idempotencyKey, RequestHash requestHash, DueTimeChange dueTime, String description) {}
 
     public record ChangeContent(CurrentActor actor, UUID workItemId, long expectedVersion,
             UUID contentId, UUID idempotencyKey, RequestHash requestHash) {}

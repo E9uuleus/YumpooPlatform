@@ -35,6 +35,13 @@
       "newSha256": "de25200de29679ab4cd724622e4a26cb0beacee4a0c5d9ee246abdf05b3d4e07",
       "reason": "继承已记录的类别重构与两级评论历史兼容例外，并叠加计时排序白名单扩展；精确连接同一历史基线与当前规范，不增加其他破坏变更。",
       "agentNote": ".agents/notes/implemented/architecture/2026-09-07-work-item-time-tracking.md"
+    },
+    {
+      "id": "2026-09-25-work-item-rich-description",
+      "oldSha256": "0a671730777276e2fb1651ffcf32d7186bb4ec8e702ce606533acd9ec0ca70cc",
+      "newSha256": "58c5530b16bfd5c875de2aa4641537d171d7e1256cd2961c7bba996e42cf704f",
+      "reason": "工作项描述升级为受限富文本 HTML，WorkItemSummary/WorkItemDetail 响应的 description 上限由 16384 放宽为 65536；将两处响应上限临时还原后完整 openapi-diff 通过，精确哈希仅限此放宽。",
+      "agentNote": ".agents/notes/implemented/product/2026-09-25-work-item-rich-description.md"
     }
   ]
 }

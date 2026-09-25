@@ -335,6 +335,58 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void richDescriptionIsSanitizedIdempotentAndSurvivesFullSnapshotEcho() throws Exception {
+        String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+        var body = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "富文本描述"));
+        body.put("description", "<p>初始<script>x</script></p>");
+        JsonNode item = created(mutate("POST", collection, member, json.writeValueAsString(body), null, UUID.randomUUID()));
+        assertThat(item.path("description").asText()).isEqualTo("<p>初始</p>");
+        UUID id = UUID.fromString(item.path("id").asText());
+        String path = "/api/v1/work-items/" + id;
+
+        String image = "/api/v1/attachments/" + UUID.randomUUID() + "/content";
+        String description = json.writeValueAsString(json.createObjectNode().put("description",
+                "<h2>背景</h2><img src=\"" + image + "\" alt=\"截图\" onerror=\"x()\"><img src=\"https://evil.example/a.png\">"));
+        long eventCount = fieldsEventCount(id);
+        String etag = item.path("etag").asText();
+        UUID key = UUID.randomUUID();
+        HttpResponse<String> patched = mutate("PATCH", path + "/description", member, description, etag, key);
+        item = ok(patched);
+        String expected = "<h2>背景</h2><img src=\"" + image + "\" alt=\"截图\">";
+        assertThat(item.path("description").asText()).isEqualTo(expected);
+        assertThat(fieldsEventCount(id)).isEqualTo(eventCount + 1);
+        JsonNode event = lastFieldsEvent(id);
+        assertThat(event.path("changedFields").toString()).isEqualTo("[\"description\"]");
+        assertThat(event.toString()).doesNotContain("背景", image);
+        assertThat(mutate("PATCH", path + "/description", member, description, etag, key).body()).isEqualTo(patched.body());
+        assertThat(mutate("PATCH", path + "/description", member, "{\"description\":\"<p>别的</p>\"}", etag, key)
+                .statusCode()).isEqualTo(409);
+        assertThat(mutate("PATCH", path + "/description", member, "{\"description\":\"<p>过期</p>\"}", etag, UUID.randomUUID())
+                .statusCode()).isEqualTo(412);
+        assertThat(mutate("PATCH", path + "/description", member, "{\"description\":null}", null, UUID.randomUUID())
+                .statusCode()).isEqualTo(428);
+        ok(mutate("PATCH", path + "/description", member, json.writeValueAsString(
+                json.createObjectNode().put("description", expected)), item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(fieldsEventCount(id)).isEqualTo(eventCount + 1);
+        assertThat(mutate("PATCH", path + "/description", member, json.writeValueAsString(json.createObjectNode()
+                .put("description", "<p>" + "字".repeat(16_385) + "</p>")), item.path("etag").asText(), UUID.randomUUID())
+                .statusCode()).isEqualTo(422);
+
+        body.remove("contentId");
+        body.put("title", "改名保留描述").put("description", item.path("description").asText());
+        item = ok(mutate("PATCH", path, member, json.writeValueAsString(body), item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(item.path("description").asText()).isEqualTo(expected);
+        assertThat(lastFieldsEvent(id).path("changedFields").toString()).isEqualTo("[\"title\"]");
+
+        item = ok(mutate("PATCH", path + "/description", member, "{\"description\":\"<p> </p>\"}",
+                item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(item.path("description").isNull()).isTrue();
+        JsonNode archived = ok(mutate("POST", path + "/archive", member, "", item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(mutate("PATCH", path + "/description", member, "{\"description\":\"<p>归档</p>\"}",
+                archived.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(404);
+    }
+
+    @Test
     void deadlineTimePreservesOmissionDistinguishesNullAndEmitsOneLogicalChange() throws Exception {
         String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
         var body = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "截止时间"));

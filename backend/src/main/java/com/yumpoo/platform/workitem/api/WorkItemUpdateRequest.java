@@ -15,7 +15,7 @@ public record WorkItemUpdateRequest(
         @JsonProperty(required = true)
         @Pattern(regexp = "LOW|MEDIUM|HIGH|URGENT") String priority,
         @JsonProperty(required = true) UUID assigneeUserId,
-        @JsonProperty(required = true) @Size(max = 16384) String description,
+        @JsonProperty(required = true) @Size(max = 65536) String description,
         @JsonProperty(required = true) @Size(max = 16384) String notes,
         @JsonProperty(required = true) LocalDate timelineStartDate,
         @JsonProperty(required = true) LocalDate timelineEndDate,
