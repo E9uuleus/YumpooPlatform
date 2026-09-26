@@ -12,6 +12,8 @@ servers:
   - url: /api/v1
     description: Yumpoo v1 business API
 tags:
+  - name: Notifications
+    description: 本人站内收件箱与未读计数。
   - name: Dashboards
     description: 用户私有仪表板、跨项目统计与布局配置。
   - name: TimeTracking
@@ -43,6 +45,152 @@ tags:
   - name: Activity
     description: Project 与 Work Item 的追加式安全动态时间线。
 paths:
+  /me/notifications:
+    get:
+      tags: [Notifications]
+      operationId: listNotifications
+      summary: 查询本人收件箱
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/NotificationListState' }
+        - name: group
+          in: query
+          schema: { $ref: '#/components/schemas/NotificationGroup' }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 2048 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPage' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /me/notifications/unread-count:
+    get:
+      tags: [Notifications]
+      operationId: getNotificationUnreadCounts
+      summary: 查询本人收件箱
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationUnreadCounts' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /me/notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      operationId: markNotificationRead
+      summary: 更新本人通知状态
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationUnreadCounts' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /me/notifications/{id}/unread:
+    post:
+      tags: [Notifications]
+      operationId: markNotificationUnread
+      summary: 更新本人通知状态
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationUnreadCounts' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /me/notifications/{id}/archive:
+    post:
+      tags: [Notifications]
+      operationId: archiveNotification
+      summary: 更新本人通知状态
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationUnreadCounts' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /me/notifications/read-all:
+    post:
+      tags: [Notifications]
+      operationId: markAllNotificationsRead
+      summary: 更新本人通知状态
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationReadAllRequest' }
+      responses:
+        '200':
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationUnreadCounts' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /admin/members/{userId}/platform-role:
     put:
       tags: [IdentityGovernance]
@@ -3859,6 +4007,81 @@ components:
         userRowVersion: { type: integer, format: int64 }
         authorizationVersion: { type: integer, format: int64 }
         changedAt: { type: string, format: date-time }
+    NotificationReason:
+      type: string
+      enum: [MENTION, REPLY, COMMENT, ASSIGNED, PROJECT_MEMBER_ADDED, PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED]
+    NotificationState:
+      type: string
+      enum: [UNREAD, READ, ARCHIVED]
+    NotificationListState:
+      type: string
+      enum: [UNREAD, ALL, ARCHIVED]
+      default: ALL
+    NotificationGroup:
+      type: string
+      enum: [MENTION, COMMENT, ASSIGNED, PROJECT]
+    NotificationTargetKind:
+      type: string
+      enum: [PROJECT, WORK_ITEM, WORK_ITEM_UPDATE]
+    NotificationPerson:
+      type: object
+      nullable: true
+      required: [id, displayName]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+    NotificationTarget:
+      type: object
+      required: [kind, accessible]
+      properties:
+        kind: { $ref: '#/components/schemas/NotificationTargetKind' }
+        accessible: { type: boolean }
+        projectId: { type: string, format: uuid, nullable: true }
+        projectName: { type: string, nullable: true }
+        workItemId: { type: string, format: uuid, nullable: true }
+        itemNo: { type: string, nullable: true }
+        title: { type: string, nullable: true }
+        updateId: { type: string, format: uuid, nullable: true }
+        excerpt: { type: string, nullable: true }
+    NotificationItem:
+      type: object
+      required: [id, reason, state, createdAt, readAt, actor, subject, target]
+      properties:
+        id: { type: string, format: uuid }
+        reason: { $ref: '#/components/schemas/NotificationReason' }
+        state: { $ref: '#/components/schemas/NotificationState' }
+        createdAt: { type: string, format: date-time }
+        readAt: { type: string, format: date-time, nullable: true }
+        actor: { $ref: '#/components/schemas/NotificationPerson' }
+        subject: { $ref: '#/components/schemas/NotificationPerson' }
+        target: { $ref: '#/components/schemas/NotificationTarget' }
+    NotificationPage:
+      type: object
+      required: [items, nextCursor, serverNow]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/NotificationItem' }
+        nextCursor: { type: string, nullable: true }
+        serverNow: { type: string, format: date-time }
+    NotificationUnreadCounts:
+      type: object
+      required: [total, mention, comment, assigned, project, newestUnreadAt, serverNow]
+      properties:
+        total: { type: integer, format: int64, minimum: 0 }
+        mention: { type: integer, format: int64, minimum: 0 }
+        comment: { type: integer, format: int64, minimum: 0 }
+        assigned: { type: integer, format: int64, minimum: 0 }
+        project: { type: integer, format: int64, minimum: 0 }
+        newestUnreadAt: { type: string, format: date-time, nullable: true }
+        serverNow: { type: string, format: date-time }
+    NotificationReadAllRequest:
+      type: object
+      additionalProperties: false
+      required: [upTo]
+      properties:
+        upTo: { type: string, format: date-time }
+        group: { $ref: '#/components/schemas/NotificationGroup' }
     DashboardChartMeasure:
       type: object
       required:
