@@ -3,6 +3,7 @@ package com.yumpoo.platform.foundation.infrastructure.outbox;
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventActorType;
+import com.yumpoo.platform.foundation.application.event.EventSubscription;
 import com.yumpoo.platform.foundation.application.outbox.OutboxClaim;
 import com.yumpoo.platform.foundation.application.outbox.OutboxFailure;
 import com.yumpoo.platform.foundation.application.outbox.OutboxLease;
@@ -248,6 +249,27 @@ public class JdbcOutboxRepository implements OutboxStorePort {
                 .param("leaseOwner", lease.leaseOwner())
                 .param("leaseToken", lease.leaseToken())
                 .update() == 1;
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int requeueMissingConsumerEvents(EventSubscription subscription, Instant nextAttemptAt) {
+        return jdbcClient.sql("""
+                        UPDATE yumpoo.outbox_event
+                        SET status = 'RETRY',
+                            next_attempt_at = GREATEST(occurred_at, :nextAttemptAt),
+                            dead_at = NULL
+                        WHERE event_type = :eventType
+                          AND event_version = :eventVersion
+                          AND status = 'DEAD'
+                          AND last_error_consumer = 'outbox.dispatcher'
+                          AND last_error_code = 'NO_MATCHING_CONSUMER'
+                          AND last_error_type = 'ConsumerRegistryFailure'
+                        """)
+                .param("nextAttemptAt", utc(nextAttemptAt))
+                .param("eventType", subscription.eventType())
+                .param("eventVersion", subscription.eventVersion())
+                .update();
     }
 
     private OutboxClaim mapClaim(ResultSet resultSet, int rowNumber) throws SQLException {
