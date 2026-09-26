@@ -21,7 +21,7 @@ Status: implemented
 
 [IdentityOutboxRecoveryRunner](../../../../backend/src/main/java/com/yumpoo/platform/identityaccess/infrastructure/event/IdentityOutboxRecoveryRunner.java) 每次启动针对上述确切订阅调用 foundation 的恢复端口；SQL 由 [JdbcOutboxRepository](../../../../backend/src/main/java/com/yumpoo/platform/foundation/infrastructure/outbox/JdbcOutboxRepository.java) 持有。恢复同时要求原状态为 `DEAD`，错误三元组为 `outbox.dispatcher / NO_MATCHING_CONSUMER / ConsumerRegistryFailure`，将其置为可再次领取的 `RETRY`。不直接标记完成，不改动事件事实、尝试次数、原错误字段或已有回执；完成后仍由正常 Dispatcher 清除错误并释放同聚合后续版本。
 
-恢复按每个类型和版本使用独立事务，SQL 状态条件保证重复启动及同版本多实例重复执行幂等。中途数据库失败会使启动失败，已提交的恢复在下次启动可继续；不在每次轮询中扫描历史事件。禁用 Outbox 调度时仍可以重排，但不会主动派发。该修复不新增数据库结构或 Flyway 版本。
+恢复按每个类型和版本使用独立事务，SQL 状态条件保证重复启动及同版本多实例重复执行幂等。中途数据库失败会使启动失败，已提交的恢复在下次启动可继续；不在每次轮询中扫描历史事件。禁用 Outbox 调度时仍可以重排，但不会主动派发。恢复 runner 以最高优先级在首次身份引导和角色维护 runner 之前执行，因为这些维护命令会调用 `SpringApplication.exit` 关闭应用；不能在它们返回后访问已关闭的数据源。该修复不新增数据库结构或 Flyway 版本。
 
 ## Alternatives considered
 
@@ -37,4 +37,4 @@ Status: implemented
 
 升级遵循现有 [Windows RUNBOOK](../../../../deployment/windows/RUNBOOK.md) 的停旧进程再启动新版本流程。恢复不保证新旧 worker 同时运行的滚动升级：旧 worker 可以在启动扫描之后再次制造缺失消费者 DEAD。若发生这种混合部署，应停止旧 worker 后重启新版本以重新执行限定恢复；不能清空所有 DEAD。回退旧程序不需要回退 schema，但旧程序仍会让新产生的这些事件失败。
 
-[IdentityOutboxIT](../../../../backend/src/test/java/com/yumpoo/platform/identityaccess/infrastructure/event/IdentityOutboxIT.java) 用合同样例核对身份订阅覆盖，并验证历史版本回执、重排幂等、错误边界、现有租约与完成状态不变，以及撤销事件恢复后真实负责人治理投影继续执行。
+[IdentityOutboxIT](../../../../backend/src/test/java/com/yumpoo/platform/identityaccess/infrastructure/event/IdentityOutboxIT.java) 用合同样例核对身份订阅覆盖，并验证历史版本回执、重排幂等、错误边界、现有租约与完成状态不变，以及撤销事件恢复后真实负责人治理投影继续执行。[IdentityOutboxRecoveryRunnerTest](../../../../backend/src/test/java/com/yumpoo/platform/identityaccess/infrastructure/event/IdentityOutboxRecoveryRunnerTest.java) 用真实 SpringApplication 和角色维护 runner 验证恢复先于维护与关停完成。
