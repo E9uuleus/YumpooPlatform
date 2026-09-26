@@ -198,6 +198,7 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
             String reasonReference, Instant now
     ) {
         OffsetDateTime databaseNow = databaseTime(now);
+        try {
         return jdbcClient.sql("""
                         INSERT INTO yumpoo.platform_role_assignment (
                             id, company_id, user_id, role_code, scope_type, scope_id, status,
@@ -222,6 +223,10 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
                 .param("now", databaseNow)
                 .query(JdbcRoleGovernanceRepository::mapAssignment)
                 .single();
+        } catch (org.springframework.dao.DuplicateKeyException exception) {
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "目标已拥有平台角色，请使用更改角色");
+        }
     }
 
     @Override
@@ -233,6 +238,7 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
         List<RoleAssignmentSnapshot> changed = jdbcClient.sql("""
                         UPDATE yumpoo.platform_role_assignment
                         SET status = 'REVOKED',
+                            revoked_by_actor_type = 'USER',
                             revoked_by_user_id = :actorUserId,
                             revoked_at = :now,
                             revoke_reason = :reason,
@@ -256,6 +262,25 @@ public class JdbcRoleGovernanceRepository implements RoleGovernanceRepository {
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
         }
         return changed.getFirst();
+    }
+
+    @Override
+    public RoleAssignmentSnapshot revokeBySystem(RoleAssignmentSnapshot assignment,
+            String systemCode, String reasonReference, Instant now) {
+        return jdbcClient.sql("""
+                UPDATE yumpoo.platform_role_assignment
+                SET status = 'REVOKED', revoked_by_actor_type = 'SYSTEM',
+                    revoked_by_system_code = :systemCode, revoked_at = :now,
+                    revoke_reason = :reason, row_version = row_version + 1, updated_at = :now
+                WHERE id = :id AND company_id = :companyId AND status = 'ACTIVE'
+                  AND row_version = :version
+                RETURNING id, company_id, user_id, role_code, status, row_version, granted_at
+                """)
+                .param("systemCode", systemCode).param("now", databaseTime(now))
+                .param("reason", reasonReference).param("id", assignment.assignmentId())
+                .param("companyId", assignment.companyId()).param("version", assignment.rowVersion())
+                .query(JdbcRoleGovernanceRepository::mapAssignment).optional()
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
     }
 
     @Override

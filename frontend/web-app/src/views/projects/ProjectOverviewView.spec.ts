@@ -1306,6 +1306,43 @@ describe('项目级工作项首页', () => {
     expect((wrapper.vm as unknown as { detailTab: string }).detailTab).toBe('activity')
   })
 
+  it('通知深链消费 discussion 参数，关闭后普通标题恢复详情且不重载列表', async () => {
+    state.route.query = { workItemId: 'item-1', tab: 'discussion' }
+    const wrapper = mountView()
+    await flushPromises()
+    expect((wrapper.vm as unknown as { detailTab: string }).detailTab).toBe('discussion')
+    expect(state.replace).toHaveBeenCalledWith({ query: { workItemId: 'item-1' } })
+    expect(state.route.query).not.toHaveProperty('tab')
+    expect(state.getWorkItem).toHaveBeenCalledTimes(1)
+    const listCalls = state.listProjectWorkItems.mock.calls.length
+    const view = wrapper.vm as unknown as { detailTab: string; onDetailModelValue: (value: boolean) => void }
+    view.onDetailModelValue(false)
+    await nextTick(); await flushPromises()
+    expect(state.route.query).toEqual({})
+    await wrapper.get('.work-item-detail-button').trigger('click')
+    await flushPromises()
+    expect(view.detailTab).toBe('details')
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(listCalls)
+    state.route.query.tab = 'discussion'
+    await nextTick(); await flushPromises()
+    expect(view.detailTab).toBe('discussion')
+    expect(state.route.query).not.toHaveProperty('tab')
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(listCalls)
+  })
+
+  it('嵌入表格清理旧偏好的 tab，后续保存不包含深链参数', async () => {
+    localStorage.setItem('dashboard:inbox:query', JSON.stringify({ tab: 'discussion', view: 'table' }))
+    const wrapper = mountView(undefined, { embeddedProjectId: 'project-1', preferenceScope: 'dashboard:inbox' })
+    await flushPromises()
+    const view = wrapper.vm as unknown as { detailTab: string; setViewQuery: (query: Record<string, string>) => Promise<void> }
+    expect(JSON.parse(localStorage.getItem('dashboard:inbox:query')!)).toEqual({ view: 'table' })
+    await view.setViewQuery({ view: 'table', workItemId: 'item-1', tab: 'discussion' })
+    await flushPromises()
+    expect(view.detailTab).toBe('discussion')
+    expect(JSON.parse(localStorage.getItem('dashboard:inbox:query')!)).toEqual({ view: 'table' })
+    expect(state.route.query).toEqual({})
+  })
+
   it('直达 workItemId 路由恢复抽屉且不重复加载项目列表', async () => {
     state.route.query = { view: 'table', workItemId: 'item-1' }
     const wrapper = mountView()

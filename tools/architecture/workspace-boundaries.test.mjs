@@ -188,6 +188,23 @@ test('Electron main 不得直接依赖 API client', async () => {
   assert.equal(messages.length, 1)
 })
 
+test('收件箱桥接只开放固定通道与参数个数', async () => {
+  const file = 'desktop/desktop-shell/src/preload/index.ts'
+  const prefix = "import { contextBridge, ipcRenderer } from 'electron'\nvoid contextBridge\n"
+  assert.equal((await boundaryMessages(file, prefix
+    + "void ipcRenderer.invoke('yumpoo:inbox:state', {})\n"
+    + "void ipcRenderer.invoke('yumpoo:inbox:preferences', { toasts: true })\n"
+    + "void ipcRenderer.invoke('yumpoo:inbox:get-preferences')\n"
+    + "void ipcRenderer.on('yumpoo:inbox:open', () => {})\n"
+    + "void ipcRenderer.removeListener('yumpoo:inbox:open', () => {})\n")).length, 0)
+  assert.equal((await boundaryMessages(file, prefix
+    + "void ipcRenderer.invoke('yumpoo:inbox:state')\n"
+    + "void ipcRenderer.invoke('yumpoo:inbox:preferences', {}, 'extra')\n"
+    + "void ipcRenderer.invoke('yumpoo:inbox:get-preferences', {})\n"
+    + "void ipcRenderer.invoke('yumpoo:inbox:open', null)\n"
+    + "void ipcRenderer.on('yumpoo:inbox:unknown', () => {})\n")).length, 5)
+})
+
 test('计时托盘只开放固定桥接通道和确定的参数个数', async () => {
   const file = 'desktop/desktop-shell/src/preload/index.ts'
   const prefix = "import { contextBridge, ipcRenderer } from 'electron'\nvoid contextBridge\n"

@@ -149,6 +149,11 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         return membershipService.findProject(companyId, projectId).map(ProjectCatalogAdapter::snapshot);
     }
 
+    @Override public java.util.Map<java.util.UUID,ProjectSnapshot> findAll(java.util.UUID companyId,java.util.Collection<java.util.UUID> ids) {
+        return membershipService.findProjects(companyId,ids).stream().map(ProjectCatalogAdapter::snapshot)
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(ProjectSnapshot::projectId,x->x));
+    }
+
     @Override
     public ProjectSnapshot create(ProjectCreationMutation mutation) {
         return snapshot(service.create(new ProjectCreateCommand(

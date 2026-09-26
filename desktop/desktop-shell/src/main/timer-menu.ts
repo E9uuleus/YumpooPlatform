@@ -5,7 +5,7 @@ import { createWindowOptions } from './window-policy'
 import { installSecurityGuards } from './security-guards'
 import { MENU, placeMenu } from './timer-geometry'
 
-const ACTIONS = new Set<TimerMenuAction>(['open-main', 'find', 'settings', 'toggle', 'show-orb', 'show-dock', 'hide', 'toggle-pin', 'exit', 'close'])
+const ACTIONS = new Set<TimerMenuAction>(['open-main', 'open-inbox', 'find', 'settings', 'toggle', 'show-orb', 'show-dock', 'hide', 'toggle-pin', 'exit', 'close'])
 const KEEP_OPEN = new Set<TimerMenuAction>(['toggle', 'show-orb', 'show-dock', 'hide', 'toggle-pin'])
 export const validMenuAction = (value: unknown): value is TimerMenuAction => typeof value === 'string' && ACTIONS.has(value as TimerMenuAction)
 

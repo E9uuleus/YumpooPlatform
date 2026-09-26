@@ -186,8 +186,8 @@ class ProjectMembershipGovernanceIT {
         CurrentActor crossCompany=new CurrentActor(ADMIN,UUID.randomUUID(),0,Set.of(PlatformRoleCode.COMPANY_ADMIN));
         assertCode(StandardErrorCode.RESOURCE_NOT_FOUND,()->query.findMembers(ordinary,projectId,
                 ProjectMembershipStatus.ALL,new OffsetPageRequest(0,20)));
-        assertCode(StandardErrorCode.RESOURCE_NOT_FOUND,()->query.findMembers(appManager,projectId,
-                ProjectMembershipStatus.ALL,new OffsetPageRequest(0,20)));
+        assertThat(query.findMembers(appManager,projectId,
+                ProjectMembershipStatus.ALL,new OffsetPageRequest(0,20)).items()).hasSize(1);
         assertCode(StandardErrorCode.RESOURCE_NOT_FOUND,()->query.findMembers(crossCompany,projectId,
                 ProjectMembershipStatus.ALL,new OffsetPageRequest(0,20)));
 

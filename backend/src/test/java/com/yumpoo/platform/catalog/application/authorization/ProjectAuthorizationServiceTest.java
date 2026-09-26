@@ -44,10 +44,10 @@ class ProjectAuthorizationServiceTest {
     }
 
     @Test
-    void appManagerOnlyAndOrdinaryNonMemberAreHidden() {
+    void appManagerInheritsCompanyAdminWhileOrdinaryNonMemberIsHidden() {
         ProjectAccessFacts facts = new ProjectAccessFacts(COMPANY, false, false);
         assertThat(decide(actor(Set.of(PlatformRoleCode.APP_MANAGER)), facts, READ))
-                .isEqualTo(AuthorizationDecision.DENY_HIDDEN);
+                .isEqualTo(AuthorizationDecision.ALLOW);
         assertThat(decide(actor(Set.of()), facts, ORDINARY_WRITE))
                 .isEqualTo(AuthorizationDecision.DENY_HIDDEN);
     }

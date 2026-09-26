@@ -33,6 +33,24 @@ export interface DesktopBridge {
   readonly client: 'electron'
   readonly auth: DesktopAuthBridge
   readonly timer: DesktopTimerBridge
+  readonly inbox?: DesktopInboxBridge
+}
+
+export type DesktopInboxReason = 'MENTION' | 'REPLY' | 'COMMENT' | 'ASSIGNED' | 'PROJECT_MEMBER_ADDED' | 'PROJECT_MEMBER_REMOVED' | 'PROJECT_OWNER_ASSIGNED' | 'PROJECT_OWNER_TRANSFERRED'
+
+export interface DesktopInboxState {
+  accountId: string | null
+  unreadCount: number
+  latest: Array<{ id: string; reason: DesktopInboxReason; actorName: string | null; createdAt: string }>
+}
+
+export interface DesktopInboxPreferences { toasts: boolean }
+
+export interface DesktopInboxBridge {
+  publishState(state: DesktopInboxState): Promise<void>
+  onOpen(listener: (notificationId: string | null) => void): () => void
+  getPreferences(): Promise<DesktopInboxPreferences>
+  setPreferences(change: DesktopInboxPreferences): Promise<DesktopInboxPreferences>
 }
 
 export interface DesktopTimerBridge {
@@ -101,6 +119,7 @@ export interface TimerOrbChange {
 
 export type TimerMenuAction =
   | 'open-main'
+  | 'open-inbox'
   | 'find'
   | 'settings'
   | 'toggle'
@@ -112,6 +131,7 @@ export type TimerMenuAction =
   | 'close'
 
 export interface TimerMenuState {
+  inbox?: { unreadCount: number }
   signedIn: boolean
   ready: boolean
   enabled: boolean

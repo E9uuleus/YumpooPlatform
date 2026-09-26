@@ -15,7 +15,8 @@ import static org.mockito.Mockito.when;
 
 class WorkItemReferenceAdapterTest {
     private final WorkItemReferenceService service = mock(WorkItemReferenceService.class);
-    private final WorkItemReferenceAdapter adapter = new WorkItemReferenceAdapter(service);
+    private final WorkItemReferenceAdapter adapter = new WorkItemReferenceAdapter(service,
+            mock(com.yumpoo.platform.workitem.application.WorkItemNotificationSourceService.class));
 
     @Test
     void exposesOnlyMinimalActorScopedReferenceAndSeparatesDeletedLookup() {

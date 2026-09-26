@@ -125,6 +125,7 @@ async function setViewQuery(query: LocationQuery, replace = false) {
     embeddedQuery.value = query
     const preferences = { ...query }
     delete preferences.workItemId
+    delete preferences.tab
     try { localStorage.setItem(`${props.preferenceScope}:query`, JSON.stringify(preferences)) } catch { /* Keep the current view usable. */ }
   } else if (replace) await router.replace({ query })
   else await router.push({ query })
@@ -1031,7 +1032,7 @@ function applyRouteState(): void {
 
 function routeQuerySignature(includeSort: boolean): string {
   return JSON.stringify(Object.fromEntries(Object.entries(route.query)
-    .filter(([key]) => key !== 'workItemId' && (includeSort || key !== 'sort'))
+    .filter(([key]) => key !== 'workItemId' && key !== 'tab' && (includeSort || key !== 'sort'))
     .sort(([left], [right]) => left.localeCompare(right))))
 }
 
@@ -1500,6 +1501,7 @@ async function closeDetailRoute(): Promise<void> {
   if (!route.query.workItemId) return
   const next = { ...route.query }
   delete next.workItemId
+  delete next.tab
   await setViewQuery(next)
 }
 
@@ -2506,6 +2508,10 @@ function onDeadlineChange(item: ProjectWorkItemListItem, value: DueDateValue): v
 watch(projectId, () => {
   if (embedded.value) {
     try { embeddedQuery.value = JSON.parse(localStorage.getItem(`${props.preferenceScope}:query`) ?? '{}') as LocationQuery } catch { embeddedQuery.value = {} }
+    if ('tab' in embeddedQuery.value) {
+      delete embeddedQuery.value.tab
+      void setViewQuery(embeddedQuery.value, true)
+    }
   }
   applyRouteState(); void loadWorkspace()
 }, { immediate: true })
@@ -2532,14 +2538,20 @@ watch([() => routeQuerySignature(true), () => routeQuerySignature(false)], ([, c
   if (sortOnly) void reloadSortedTableInPlace()
   else resetCurrentData()
 })
-watch(() => route.query.workItemId, value => {
+watch([() => route.query.workItemId, () => route.query.tab], ([value, tab], [previousValue, previousTab]) => {
+  if (value === previousValue && tab === undefined && previousTab !== undefined) return
   const workItemId = Array.isArray(value) ? value[0] : value
+  if (tab !== undefined) {
+    const next = { ...route.query }
+    delete next.tab
+    void setViewQuery(next, true)
+  }
   if (workItemId) {
     selectedRowId.value = String(workItemId)
     if (!selectedCellKey.value || !selectedCellKey.value.startsWith(`${workItemId}:`)) {
       selectedCellKey.value = `${workItemId}:title`
     }
-    void loadDetail(String(workItemId), detailTab.value)
+    void loadDetail(String(workItemId), tab === 'discussion' ? 'discussion' : detailTab.value)
   } else {
     detailGeneration++
     detailOpen.value = false

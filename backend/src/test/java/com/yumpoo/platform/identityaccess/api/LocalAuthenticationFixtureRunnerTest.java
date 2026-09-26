@@ -78,7 +78,7 @@ class LocalAuthenticationFixtureRunnerTest {
     }
 
     @Test
-    void provisionsTheLocalAccountAndGrantsBothAdministrativeRoles() {
+    void provisionsTheLocalAccountWithOneAppManagerTier() {
         UUID companyId = UUID.randomUUID();
         UUID adminId = UUID.randomUUID();
         UUID backupId = UUID.randomUUID();
@@ -137,7 +137,7 @@ class LocalAuthenticationFixtureRunnerTest {
                 "Local Development"
         );
         verify(maintenance).ensureAvailableAppManager(companyId, backupId, REASON);
-        verify(roleCommands, org.mockito.Mockito.times(2)).grant(any());
+        verify(roleCommands, org.mockito.Mockito.times(1)).grant(any());
     }
 
     private static final String REASON = "Local development identity fixture";

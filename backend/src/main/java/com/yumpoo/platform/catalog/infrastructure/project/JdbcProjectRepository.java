@@ -105,6 +105,12 @@ public class JdbcProjectRepository implements ProjectRepository {
         return find(companyId, projectId, false);
     }
 
+    @Override public List<Project> findAll(UUID companyId,Collection<UUID> ids) {
+        if(ids.isEmpty()) return List.of();
+        return jdbcClient.sql("SELECT "+COLUMNS+" FROM yumpoo.project WHERE company_id=:companyId AND id IN (:ids)")
+                .param("companyId",companyId).param("ids",ids).query(JdbcProjectRepository::map).list();
+    }
+
     @Override
     public Optional<Project> lockById(UUID companyId, UUID projectId) {
         return find(companyId, projectId, true);

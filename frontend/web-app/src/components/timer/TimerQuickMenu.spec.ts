@@ -23,6 +23,24 @@ beforeEach(() => {
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe('desktop quick panel', () => {
+  it('opens inbox and changes its independent preference only when the shell supports it', async () => {
+    const setPreferences = vi.fn(async () => ({ toasts: false }))
+    vi.stubGlobal('yumpooDesktop', { inbox: { getPreferences: async () => ({ toasts: true }), setPreferences }, timer: { runMenuAction, onMenuState: (listener: typeof push) => { push = listener; return vi.fn() } } })
+    const wrapper = await menu({ ...base, inbox: { unreadCount: 120 } })
+    expect(wrapper.get('.inbox-count').text()).toBe('99+')
+    await wrapper.get('.menu-inbox [role="menuitem"]').trigger('click')
+    expect(runMenuAction).toHaveBeenCalledWith('open-inbox')
+    await wrapper.get('[aria-label="桌面通知"]').trigger('click')
+    await flushPromises()
+    expect(setPreferences).toHaveBeenCalledWith({ toasts: false })
+    expect(wrapper.get('[aria-label="桌面通知"]').attributes('aria-checked')).toBe('false')
+  })
+
+  it('hides inbox controls for old shells', async () => {
+    const wrapper = await menu(base)
+    expect(wrapper.find('.menu-inbox').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="桌面通知"]').exists()).toBe(false)
+  })
   it('ticks the running duration with the server clock offset and pauses through the shell', async () => {
     const wrapper = await menu({ ...base, running: { title: '需求评审', startedAt: new Date(now - 65_000).toISOString() }, clockOffsetMs: 5000 })
     expect(wrapper.get('.status-copy strong').text()).toBe('需求评审')

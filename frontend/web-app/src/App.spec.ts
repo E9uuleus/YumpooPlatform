@@ -50,7 +50,7 @@ describe('M1-12 Web 全局壳', () => {
     vi.restoreAllMocks()
   })
 
-  it('默认展示个人工作台项目目录，普通成员不显示身份管理入口', async () => {
+  it('默认展示个人工作台项目目录，普通成员不显示公司管理入口', async () => {
     const wrapper = await mountApplication('/workspace/member')
     await flushPromises()
     expect(wrapper.text()).toContain('项目管理')
@@ -65,10 +65,10 @@ describe('M1-12 Web 全局壳', () => {
       new Set([AuthenticationRole.CompanyAdmin]),
     )
     const wrapper = await mountApplication('/admin/identity/overview')
-    expect(wrapper.text()).toContain('身份管理')
+    expect(wrapper.text()).toContain('公司管理')
     expect(wrapper.text()).toContain('概览')
     expect(wrapper.text()).toContain('同步运行')
-    expect(wrapper.text()).toContain('成员管理')
+    expect(wrapper.text()).toContain('成员与角色')
   })
 
   it('项目层级导航默认展开，管理项目与详情入口正确高亮', async () => {

@@ -30,7 +30,7 @@ public class IdentityAdminAccessPolicy {
 
     public RoleUserSnapshot requireCompanyAdmin(UUID companyId, UUID actorUserId) {
         RoleUserSnapshot actor = requireAvailable(companyId, actorUserId);
-        if (!actor.activeRoles().contains(ManagedPlatformRole.COMPANY_ADMIN)) {
+        if (!actor.hasEffectiveRole(ManagedPlatformRole.COMPANY_ADMIN)) {
             throw denied();
         }
         return actor;

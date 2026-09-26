@@ -40,6 +40,7 @@ const EXPECTED_ASAR_ENTRIES = new Set([
   'dist/main/timer-menu.js',
   'dist/main/timer-preferences.js',
   'dist/main/timer-window.js',
+  'dist/main/inbox-notifier.js',
   'dist/main/url-policy.js',
   'dist/main/window-policy.js',
   'dist/preload',
