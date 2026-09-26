@@ -12,6 +12,16 @@ public record RoleUserSnapshot(
         long rowVersion,
         Set<ManagedPlatformRole> activeRoles
 ) {
+    public Set<ManagedPlatformRole> effectiveRoles() {
+        if (!activeRoles.contains(ManagedPlatformRole.APP_MANAGER)) return Set.copyOf(activeRoles);
+        return Set.of(ManagedPlatformRole.APP_MANAGER, ManagedPlatformRole.COMPANY_ADMIN);
+    }
+
+    public boolean hasEffectiveRole(ManagedPlatformRole role) {
+        return activeRoles.contains(role) || role == ManagedPlatformRole.COMPANY_ADMIN
+                && activeRoles.contains(ManagedPlatformRole.APP_MANAGER);
+    }
+
     public boolean available() {
         return "ACTIVE".equals(employmentStatus) && "ENABLED".equals(accountStatus);
     }

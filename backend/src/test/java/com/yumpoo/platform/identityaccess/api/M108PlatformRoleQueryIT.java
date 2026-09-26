@@ -57,16 +57,12 @@ class M108PlatformRoleQueryIT {
     }
 
     @Test
-    void activeRolesAreCombinedAndReturnedAsAnImmutableSet() {
-        insertActive(UUID.fromString("81000000-0000-4000-8000-000000000109"), "COMPANY_ADMIN", "COMPANY");
+    void assignedTierIsReturnedWithoutEffectiveRoleExpansion() {
         insertActive(UUID.fromString("81000000-0000-4000-8000-000000000110"), "APP_MANAGER", "PLATFORM");
 
         Set<PlatformRoleCode> roles = roleQuery.findActiveRoleCodes(COMPANY_ID, USER_ID);
 
-        assertThat(roles).containsExactlyInAnyOrder(
-                PlatformRoleCode.COMPANY_ADMIN,
-                PlatformRoleCode.APP_MANAGER
-        );
+        assertThat(roles).containsExactly(PlatformRoleCode.APP_MANAGER);
         assertThatThrownBy(() -> roles.add(PlatformRoleCode.APP_MANAGER))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
@@ -77,7 +73,7 @@ class M108PlatformRoleQueryIT {
         insertActive(revokedId, "COMPANY_ADMIN", "COMPANY");
         jdbcClient.sql("""
                         UPDATE yumpoo.platform_role_assignment
-                        SET status = 'REVOKED', revoked_by_user_id = :userId,
+                        SET status = 'REVOKED', revoked_by_actor_type = 'USER', revoked_by_user_id = :userId,
                             revoked_at = transaction_timestamp(), revoke_reason = 'M1-08 test revoke',
                             row_version = row_version + 1, updated_at = transaction_timestamp()
                         WHERE id = :id

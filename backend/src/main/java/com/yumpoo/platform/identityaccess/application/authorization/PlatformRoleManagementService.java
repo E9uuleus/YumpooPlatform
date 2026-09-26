@@ -165,6 +165,11 @@ public class PlatformRoleManagementService
 
         Instant now = clock.instant();
         EventActor actor = EventActor.system(command.mode().systemCode());
+        for (RoleAssignmentSnapshot assignment : repository.findActiveAssignments(command.companyId(), target.userId())) {
+            RoleAssignmentSnapshot revoked = repository.revokeBySystem(
+                    assignment, command.mode().systemCode(), command.reasonReference(), now);
+            publishRoleEvent(ROLE_REVOKED_EVENT, result(revoked, target, now), command.reasonReference(), actor);
+        }
         PlatformRoleMutationResult result = grantLocked(
                 command.companyId(), target, ManagedPlatformRole.APP_MANAGER,
                 "SYSTEM", null, command.mode().systemCode(), command.reasonReference(), actor, now);
@@ -297,10 +302,9 @@ public class PlatformRoleManagementService
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
                     "只能向在职且启用的用户授予角色");
         }
-        if (repository.findActiveAssignment(command.companyId(), command.targetUserId(),
-                command.role()).isPresent()) {
+        if (!repository.findActiveAssignments(command.companyId(), command.targetUserId()).isEmpty()) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "目标已经拥有该角色");
+                    "目标已拥有平台角色，请使用更改角色");
         }
         EventActor actor = EventActor.adminOverride(actorUser.userId(), command.reasonReference());
         PlatformRoleMutationResult result = grantLocked(
@@ -466,6 +470,6 @@ public class PlatformRoleManagementService
     }
 
     private static Set<String> roleNames(RoleUserSnapshot user) {
-        return user.activeRoles().stream().map(Enum::name).collect(Collectors.toUnmodifiableSet());
+        return user.effectiveRoles().stream().map(Enum::name).collect(Collectors.toUnmodifiableSet());
     }
 }
