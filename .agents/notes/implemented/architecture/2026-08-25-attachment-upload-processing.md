@@ -44,3 +44,5 @@ V38 的 `attachment_blob` 是物理内容登记真源，但不维护易漂移的
 Web 必须先创建意图再 PUT Blob，并按 1/2/5 秒退避轮询最长 5 分钟。PUT 结果未知时先读取 metadata；仍可上传便复用 attachmentId 重试，否则继续轮询，不能盲目创建第二意图。Work Item 附件随详情加载，Update 附件仅在用户展开对应讨论后加载并缓存；只读或已删除 owner 不显示上传入口。`AVAILABLE` 文件名直接链接同源下载端点；删除弹窗强制理由。409/412 只刷新真源，传输结果未知则刷新确认附件仍存在后才复用原键和理由重试。
 
 备份恢复必须同时核对真实 attachment metadata、`attachment_blob`、配额、扫描任务与内容寻址文件，并在恢复后先完整对账、保持物理清理 dry-run。Feedback owner 的业务鉴权和 UI 仍由 M3B 负责；冻结枚举不表示已经支持创建。Range、在线预览、附件恢复，以及墓碑正式 blob 的保留期/legal hold/备份门禁清理由 M5-17 负责。工作项描述以同源内容地址内嵌 `AVAILABLE` 图片、详情页不再展示附件面板，见[富文本描述决定](../product/2026-09-25-work-item-rich-description.md)；下载响应头与鉴权不变。
+
+本文仅 APP_MANAGER 不获得业务读取权的历史边界由[平台角色层级决策](../security/2026-09-25-platform-role-tiers.md)部分替代：平台管理员现在包含公司管理员的业务可见性；其余投影、附件安全与审计约束保持有效。
