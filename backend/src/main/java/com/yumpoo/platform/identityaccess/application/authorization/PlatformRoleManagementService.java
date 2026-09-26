@@ -70,6 +70,67 @@ public class PlatformRoleManagementService
     }
 
     @Override
+    public IdempotencyExecutionResult changeTier(ChangePlatformRoleTierCommand command) {
+        return idempotentCommandExecutor.execute(new IdempotencyCommand(
+                new IdempotencyScope(command.actor().userId(), "PUT", "changeMemberPlatformRole", command.idempotencyKey()),
+                command.requestHash()), () -> {
+            PlatformRoleChangeResult result = executeChangeTier(command);
+            try {
+                return new StoredCommandResult(200, objectMapper.writeValueAsString(result),
+                        result.userId(), StrongEtag.format(result.userRowVersion()));
+            } catch (JacksonException exception) {
+                throw new IllegalStateException("platform role result serialization failed", exception);
+            }
+        });
+    }
+
+    private PlatformRoleChangeResult executeChangeTier(ChangePlatformRoleTierCommand command) {
+        AvailabilitySnapshot before = availabilityCoordinator.lock(command.companyId());
+        RoleUserSnapshot actorUser = requireAuthorizedActor(command.companyId(), command.actor());
+        if (actorUser.userId().equals(command.targetUserId())) {
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "不能更改自己的平台角色");
+        }
+        RoleUserSnapshot target = requireTarget(command.companyId(), command.targetUserId());
+        if (target.rowVersion() != command.expectedTargetRowVersion()) {
+            throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
+        }
+        MemberRoleTier previous = MemberRoleTier.of(target);
+        Instant now = clock.instant();
+        if (previous == command.role()) {
+            return new PlatformRoleChangeResult(target.userId(), previous, previous,
+                    target.rowVersion(), target.authorizationVersion(), now);
+        }
+        if (command.role().ordinal() > previous.ordinal() && !target.available()) {
+            throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION, "只能提升在职且启用的用户角色");
+        }
+        availabilityCoordinator.protectLastAvailable(before,
+                previous == MemberRoleTier.APP_MANAGER && target.available());
+        EventActor actor = EventActor.adminOverride(actorUser.userId(), command.reasonReference());
+        var revoked = repository.findActiveAssignments(command.companyId(), target.userId()).stream()
+                .map(assignment -> repository.revoke(assignment, actorUser.userId(), command.reasonReference(), now)).toList();
+        RoleAssignmentSnapshot granted = command.role() == MemberRoleTier.COMPANY_MEMBER ? null
+                : repository.grant(UUID.randomUUID(), command.companyId(), target.userId(),
+                        ManagedPlatformRole.valueOf(command.role().name()), "USER", actorUser.userId(),
+                        null, command.reasonReference(), now);
+        RoleUserSnapshot changed = repository.incrementAuthorizationVersion(
+                command.companyId(), target.userId(), target.rowVersion());
+        revoked.forEach(assignment -> publishRoleEvent(ROLE_REVOKED_EVENT,
+                result(assignment, changed, now), command.reasonReference(), actor));
+        if (granted != null) {
+            publishRoleEvent(ROLE_GRANTED_EVENT, result(granted, changed, now), command.reasonReference(), actor);
+        }
+        revokeSessions(changed, actor);
+        auditRecorder.succeeded(command.companyId(), "role-tier:" + target.userId() + ":" + changed.rowVersion(),
+                "PLATFORM_ROLE_TIER_CHANGED", actor, roleNames(actorUser), "USER", target.userId(),
+                command.reasonReference(), Map.of("role", previous.name()),
+                Map.of("role", command.role().name(), "authorizationVersion", changed.authorizationVersion()),
+                command.idempotencyKey(), null, null);
+        availabilityCoordinator.reconcile(before, "ROLE_TIER_CHANGED", target.userId(), actor);
+        return new PlatformRoleChangeResult(target.userId(), command.role(), previous,
+                changed.rowVersion(), changed.authorizationVersion(), now);
+    }
+
+    @Override
     public IdempotencyExecutionResult grant(GrantPlatformRoleCommand command) {
         IdempotencyCommand idempotency = new IdempotencyCommand(
                 new IdempotencyScope(
