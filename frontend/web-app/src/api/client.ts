@@ -1,4 +1,5 @@
 import {
+  NotificationsApi,
   DashboardsApi,
   TimeTrackingApi,
   AuthenticationApi,
@@ -37,3 +38,4 @@ export const activityApi = new ActivityApi(yumpooApiClient)
 
 export const timeTrackingApi = new TimeTrackingApi(yumpooApiClient)
 export const dashboardsApi = new DashboardsApi(yumpooApiClient)
+export const notificationsApi = new NotificationsApi(yumpooApiClient)

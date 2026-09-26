@@ -146,6 +146,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { shellSection: 'work' },
       },
       {
+        path: 'inbox',
+        name: 'inbox',
+        component: () => import('../views/inbox/InboxView.vue'),
+        meta: { shellSection: 'inbox' },
+      },
+      {
         path: ':pathMatch(.*)*',
         name: 'not-found',
         component: NotFoundView,

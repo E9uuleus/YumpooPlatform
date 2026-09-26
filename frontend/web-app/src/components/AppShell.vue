@@ -17,6 +17,9 @@ import { beginAuthentication } from '../auth/navigation'
 import { useAppearance } from '../composables/useAppearance'
 import { useProjectRecents } from '../composables/useProjectRecents'
 import { useSession } from '../composables/useSession'
+import { useInbox } from '../composables/useInbox'
+import { parseInboxFilter } from './inbox/inboxPresentation'
+import InboxBell from './inbox/InboxBell.vue'
 import type { ShellSection } from '../router/shell-navigation'
 import InlineProblem from './InlineProblem.vue'
 import YpAssignee from './yp/YpAssignee.vue'
@@ -34,6 +37,8 @@ interface ContextItem {
   label: string
   routeName: string
   params?: Record<string, string>
+  query?: Record<string, string>
+  badge?: number
   icon?: Component
   groupLabel?: string
 }
@@ -41,6 +46,7 @@ interface ContextItem {
 const route = useRoute()
 const router = useRouter()
 const session = useSession()
+const inbox = useInbox()
 const appearance = useAppearance()
 const mobileNavigationOpen = ref(false)
 const projectNavigationOpen = ref(true)
@@ -74,8 +80,21 @@ const moduleItems = computed<ModuleItem[]>(() => [
 const contextTitle = computed(() => ({
   work: '工作台',
   company: '公司管理',
+  inbox: '收件箱',
 })[activeSection.value])
 const contextItems = computed<ContextItem[]>(() => {
+  if (activeSection.value === 'inbox') {
+    const counts = inbox.counts.value
+    return [
+      { label: '未读', routeName: 'inbox', query: { filter: 'unread' }, badge: counts?.total ?? 0 },
+      { label: '全部', routeName: 'inbox', query: { filter: 'all' } },
+      { label: '@我', routeName: 'inbox', query: { filter: 'mention' }, badge: counts?.mention ?? 0 },
+      { label: '评论与回复', routeName: 'inbox', query: { filter: 'comment' }, badge: counts?.comment ?? 0 },
+      { label: '指派给我', routeName: 'inbox', query: { filter: 'assigned' }, badge: counts?.assigned ?? 0 },
+      { label: '项目动态', routeName: 'inbox', query: { filter: 'project' }, badge: counts?.project ?? 0 },
+      { label: '已归档', routeName: 'inbox', query: { filter: 'archived' } },
+    ]
+  }
   if (activeSection.value === 'company') {
     return [
       { label: '概览', routeName: 'company-overview' },
@@ -99,14 +118,14 @@ const contextItems = computed<ContextItem[]>(() => {
   return []
 })
 
-function navigate(name: string, params?: Record<string, string>): void {
+function navigate(name: string, params?: Record<string, string>, query?: Record<string, string>): void {
   mobileNavigationOpen.value = false
   if (name === 'workspace' || name === 'dashboards') {
     const workspaceSlug = session.authentication.value?.user.workspaceSlug
     if (workspaceSlug) void router.push({ name, params: { workspaceSlug } })
     return
   }
-  void router.push(params ? { name, params } : { name })
+  void router.push({ name, ...(params ? { params } : {}), ...(query ? { query } : {}) })
 }
 
 function navigateProject(project: ProjectSummary): void {
@@ -116,7 +135,7 @@ function navigateProject(project: ProjectSummary): void {
 }
 
 function isContextItemActive(item: ContextItem): boolean {
-  return route.name === item.routeName
+  return route.name === item.routeName && (!item.query?.filter || parseInboxFilter(route.query.filter) === item.query.filter)
 }
 
 async function signOut(): Promise<void> {
@@ -296,6 +315,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="app-topbar__actions">
         <span class="client-badge">{{ clientLabel }}</span>
+        <inbox-bell />
         <yp-theme-switcher
           :theme="appearance.themeMode.value"
           :density="appearance.densityMode.value"
@@ -502,7 +522,7 @@ onBeforeUnmount(() => {
         </template>
         <template
           v-for="item in contextItems"
-          :key="item.routeName"
+          :key="item.routeName + (item.query?.filter || '')"
         >
           <div
             v-if="item.groupLabel"
@@ -516,7 +536,7 @@ onBeforeUnmount(() => {
             type="button"
             :aria-current="isContextItemActive(item) ? 'page' : undefined"
             :class="{ active: isContextItemActive(item) }"
-            @click="navigate(item.routeName, item.params)"
+            @click="navigate(item.routeName, item.params, item.query)"
           >
             <el-icon
               v-if="item.icon"
@@ -524,7 +544,10 @@ onBeforeUnmount(() => {
             >
               <component :is="item.icon" />
             </el-icon>
-            <span>{{ item.label }}</span>
+            <span>{{ item.label }}</span><small
+              v-if="item.badge"
+              class="context-item-badge"
+            >{{ item.badge }}</small>
           </button>
         </template>
       </nav>
@@ -711,7 +734,7 @@ onBeforeUnmount(() => {
         </template>
         <template
           v-for="item in contextItems"
-          :key="item.routeName"
+          :key="item.routeName + (item.query?.filter || '')"
         >
           <div
             v-if="item.groupLabel"
@@ -724,7 +747,7 @@ onBeforeUnmount(() => {
             v-show="!isWorkspaceSection || projectNavigationOpen"
             type="button"
             :class="{ active: isContextItemActive(item) }"
-            @click="navigate(item.routeName, item.params)"
+            @click="navigate(item.routeName, item.params, item.query)"
           >
             <el-icon
               v-if="item.icon"
@@ -732,7 +755,10 @@ onBeforeUnmount(() => {
             >
               <component :is="item.icon" />
             </el-icon>
-            <span>{{ item.label }}</span>
+            <span>{{ item.label }}</span><small
+              v-if="item.badge"
+              class="context-item-badge"
+            >{{ item.badge }}</small>
           </button>
         </template>
       </nav>
@@ -750,3 +776,13 @@ onBeforeUnmount(() => {
     </button>
   </div>
 </template>
+
+<style scoped>
+.context-item-badge {
+  float: right;
+  min-width: 20px;
+  text-align: right;
+  color: var(--yp-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+</style>
