@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { app, BrowserWindow, dialog, ipcMain, Menu, screen, Tray, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, screen, Tray, type IpcMainInvokeEvent, type NativeImage } from 'electron'
 import type { DesktopTimerCommand, DesktopTimerState, TimerMenuAction, TimerMenuState, TimerWindowMode, TimerOrbLayout, TimerPreferencesChange } from '@yumpoo/preload-contract'
 import { isTrustedAuthIpcSender } from './auth-ipc'
 import { createWindowOptions } from './window-policy'
@@ -47,6 +47,7 @@ const sameRect = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.width ===
 export class TimerWindowController {
   private window: BrowserWindow | null = null
   private tray: Tray | undefined
+  private inboxCount: number | undefined
   private installed = false
   private contextMenu: Menu | undefined
   private readonly menu: TimerQuickMenu
@@ -212,6 +213,16 @@ export class TimerWindowController {
     main.show(); main.focus()
   }
 
+  inboxTray(): Tray | undefined { return this.tray }
+
+  isInboxPreferencesSender(event: IpcMainInvokeEvent): boolean { return this.menu.isSender(event) }
+
+  setInboxBadge(count: number | undefined, image: NativeImage): void {
+    this.inboxCount = count
+    this.tray?.setImage(image)
+    this.updateTray()
+  }
+
   private ready(): boolean {
     const state = this.state
     return !!state?.accountId && state.connected && Date.now() - this.stateAt < 15000
@@ -230,6 +241,7 @@ export class TimerWindowController {
       clockOffsetMs: state?.clockOffsetMs ?? 0, savedAt: state?.savedAt ?? 0,
       visible: !!this.window && !this.window.isDestroyed() && this.window.isVisible(),
       display: this.prefs.get().display, pinned: this.pinned,
+      ...(this.inboxCount === undefined ? {} : { inbox: { unreadCount: this.inboxCount } }),
     }
   }
 
@@ -239,7 +251,7 @@ export class TimerWindowController {
     const ready = this.ready()
     const enabled = this.commandsEnabled()
     const title = state?.running ? `计时中 · ${state.running.title}` : '计时已暂停'
-    this.tray?.setToolTip(`YumpooPlatform${state?.running ? `\n${title}` : ''}`.slice(0, 120))
+    this.tray?.setToolTip(`YumpooPlatform${this.inboxCount === undefined ? '' : `\n${this.inboxCount} 条未读`}${state?.running ? `\n${title}` : ''}`.slice(0, 120))
     const running = state?.running
     const recent = state?.recent
     const visible = !!this.window?.isVisible()
@@ -252,6 +264,7 @@ export class TimerWindowController {
         : recent ? [{ label: `继续 · ${recent.title.slice(0, 50)}`, enabled, click: () => this.toggleTimer() }] : []),
       { label: '查找工作项…', click: () => this.menuAction('find') },
       { label: '打开主界面', click: () => this.showMain() },
+      ...(this.inboxCount === undefined ? [] : [{ label: `收件箱 · ${this.inboxCount} 条未读`, click: () => this.menuAction('open-inbox') }]),
       { type: 'separator' },
       { label: '悬浮球', type: 'radio', checked: visible && display === 'orb', enabled: signedIn, click: () => this.menuAction('show-orb') },
       { label: '侧边栏', type: 'radio', checked: visible && display === 'dock', enabled: signedIn, click: () => this.menuAction('show-dock') },
@@ -268,6 +281,10 @@ export class TimerWindowController {
     const signedIn = !!this.state?.accountId
     switch (action) {
       case 'open-main': this.showMain(); break
+      case 'open-inbox':
+        this.showMain()
+        this.main()?.webContents.send('yumpoo:inbox:open', null)
+        break
       case 'find':
       case 'settings':
         if (signedIn) void this.show(action === 'find' ? 'picker' : 'settings')

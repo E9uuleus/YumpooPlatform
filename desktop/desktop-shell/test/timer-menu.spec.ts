@@ -61,14 +61,14 @@ describe('timer quick panel window', () => {
     expect(menu.open('tray', state)).toBe(false)
     menu.prewarm()
     expect(mocks.windows).toHaveLength(1)
-    expect(mocks.windows[0]!.options).toMatchObject({ frame: false, transparent: true, resizable: false, movable: false, skipTaskbar: true, type: 'toolbar', show: false, width: 312, height: 356,
+    expect(mocks.windows[0]!.options).toMatchObject({ frame: false, transparent: true, resizable: false, movable: false, skipTaskbar: true, type: 'toolbar', show: false, width: 312, height: 396,
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'yumpoo-authenticated' } })
     expect(popup().setAlwaysOnTop).toHaveBeenCalledWith(true, 'pop-up-menu')
     expect(mocks.load).toHaveBeenCalledWith('https://yumpoo.example/timer/menu')
     expect(menu.open('tray', state)).toBe(false)
     popup().contentEvents.get('did-finish-load')?.()
     expect(menu.open('tray', state)).toBe(true)
-    expect(popup().setBounds).toHaveBeenCalledWith({ x: 968, y: 396, width: 312, height: 356 })
+    expect(popup().setBounds).toHaveBeenCalledWith({ x: 968, y: 356, width: 312, height: 396 })
     expect(popup().webContents.send).toHaveBeenCalledWith('yumpoo:timer:menu-state', state)
     expect(popup().show).toHaveBeenCalledOnce()
     menu.update({ ...state, pinned: false })

@@ -1,5 +1,6 @@
 import { TimerWindowController } from './timer-window'
 import { TimerPreferenceStore } from './timer-preferences'
+import { InboxNotifier, InboxPreferenceStore } from './inbox-notifier'
 import { applicationIcon } from './application-icon'
 import path from 'node:path'
 import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron'
@@ -31,6 +32,7 @@ const SMOKE_TEST_TIMEOUT_MS = 20_000
 const protocolDispatcher = new ProtocolLaunchDispatcher()
 
 let timerController: TimerWindowController | undefined
+let inboxNotifier: InboxNotifier | undefined
 let mainWindow: BrowserWindow | null = null
 let webAppUrl: URL | undefined
 let credentialStore: DesktopCredentialStore | undefined
@@ -47,6 +49,7 @@ function electronAuthEnabled(): boolean {
 }
 
 async function clearDesktopSession(): Promise<void> {
+  inboxNotifier?.reset()
   await credentialStore?.clear()
   if (mainWindow && !mainWindow.isDestroyed() && webAppUrl) {
     await clearSessionCookies(mainWindow.webContents.session.cookies, webAppUrl.origin)
@@ -102,6 +105,8 @@ async function createMainWindow(): Promise<void> {
     timerController ??= new TimerWindowController(() => mainWindow, webAppUrl.origin, preloadPath, new TimerPreferenceStore(app.getPath('userData')))
     timerController.install()
     timerController.attachMain(mainWindow)
+    inboxNotifier ??= new InboxNotifier(() => mainWindow, webAppUrl.origin, timerController, new InboxPreferenceStore(app.getPath('userData')))
+    inboxNotifier.install()
   }
   const restored = await credentialStore?.load(webAppUrl.origin)
   if (restored) {
@@ -135,8 +140,10 @@ async function createMainWindow(): Promise<void> {
   }
 
   mainWindow.on('closed', () => {
+    inboxNotifier?.reset()
     mainWindow = null
   })
+  mainWindow.webContents.on('render-process-gone', () => inboxNotifier?.reset())
 
   await mainWindow.loadURL(webAppUrl.href)
 }
