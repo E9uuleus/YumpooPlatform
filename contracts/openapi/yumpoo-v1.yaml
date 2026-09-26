@@ -43,6 +43,39 @@ tags:
   - name: Activity
     description: Project 与 Work Item 的追加式安全动态时间线。
 paths:
+  /admin/members/{userId}/platform-role:
+    put:
+      tags: [IdentityGovernance]
+      operationId: changeMemberPlatformRole
+      summary: 原子变更成员全局角色层级
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlatformRoleChangeRequest' }
+      responses:
+        '200':
+          description: 查询或更新成功。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformRoleChangeResult' }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
   /me/dashboards:
     get:
       tags:
@@ -719,6 +752,10 @@ paths:
       summary: 分页查询成员目录
       security: [{ sessionCookie: [] }]
       parameters:
+        - name: platformRole
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/PlatformRoleTier' }
         - name: name
           in: query
           required: false
@@ -3802,6 +3839,26 @@ components:
       description: 服务端签发的 HttpOnly、Secure、SameSite=Lax Web Session Cookie。
 
   schemas:
+    PlatformRoleTier:
+      type: string
+      enum: [COMPANY_MEMBER, COMPANY_ADMIN, APP_MANAGER]
+    PlatformRoleChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [role, reason]
+      properties:
+        role: { $ref: '#/components/schemas/PlatformRoleTier' }
+        reason: { type: string, minLength: 1, maxLength: 160 }
+    PlatformRoleChangeResult:
+      type: object
+      required: [userId, role, previousRole, userRowVersion, authorizationVersion, changedAt]
+      properties:
+        userId: { type: string, format: uuid }
+        role: { $ref: '#/components/schemas/PlatformRoleTier' }
+        previousRole: { $ref: '#/components/schemas/PlatformRoleTier' }
+        userRowVersion: { type: integer, format: int64 }
+        authorizationVersion: { type: integer, format: int64 }
+        changedAt: { type: string, format: date-time }
     DashboardChartMeasure:
       type: object
       required:

@@ -21,6 +21,14 @@ public interface RoleGovernanceRepository {
             UUID companyId, UUID userId, ManagedPlatformRole role
     );
 
+    default java.util.List<RoleAssignmentSnapshot> findActiveAssignments(UUID companyId, UUID userId) {
+        return java.util.Arrays.stream(ManagedPlatformRole.values())
+                .flatMap(role -> findActiveAssignment(companyId, userId, role).stream()).toList();
+    }
+
+    RoleAssignmentSnapshot revokeBySystem(RoleAssignmentSnapshot assignment,
+            String systemCode, String reasonReference, Instant now);
+
     boolean hasAppManagerHistory(UUID companyId);
 
     boolean hasAnyRoleHistory(UUID companyId);

@@ -728,3 +728,7 @@ M1-10 新增 append-only 的 `security_audit_event`，以 Company + fact key 去
 ```powershell
 pnpm verify:m1-10
 ```
+
+### 公司管理与平台角色
+
+公司管理入口为 `/admin/company/overview`（旧 `/admin/identity/*` 链接保留重定向）。平台管理员包含公司管理员能力，每名成员仅有一个平台层级：普通员工、公司管理员或平台管理员。仅平台管理员可通过成员列表更改其他成员角色；变更会撤销目标会话。

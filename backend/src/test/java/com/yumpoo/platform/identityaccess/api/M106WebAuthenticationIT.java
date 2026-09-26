@@ -87,11 +87,6 @@ class M106WebAuthenticationIT {
                 .param("profileHash", "a".repeat(64))
                 .update();
         insertRole(
-                UUID.fromString("60000000-0000-4000-8000-000000000108"),
-                "COMPANY_ADMIN",
-                "COMPANY"
-        );
-        insertRole(
                 UUID.fromString("60000000-0000-4000-8000-000000000109"),
                 "APP_MANAGER",
                 "PLATFORM"

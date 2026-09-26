@@ -122,7 +122,7 @@ class ProjectCreationIT {
 
         assertThat(ownerPage.items()).extracting("code")
                 .containsExactly("QUERY_ALPHA", "QUERY_BETA");
-        assertThat(appManagerPage.totalElements()).isZero();
+        assertThat(appManagerPage.totalElements()).isEqualTo(ownerPage.totalElements());
         assertThat(workspace.visibleProjectCount()).isEqualTo(ownerPage.totalElements());
 
         try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(

@@ -2,6 +2,8 @@
 import {
   AccountStatus,
   EmploymentStatus,
+  PlatformRoleTier,
+  ManagedPlatformRole,
   readCsrfToken,
   type Member,
   type MemberPage,
@@ -11,6 +13,10 @@ import {
   ElDescriptions,
   ElDescriptionsItem,
   ElDrawer,
+  ElDialog,
+  ElRadio,
+  ElRadioGroup,
+  ElAlert,
   ElInput,
   ElMessage,
   ElMessageBox,
@@ -22,6 +28,9 @@ import {
   ElTag,
 } from 'element-plus'
 import { computed, onMounted, ref, type DefineComponent } from 'vue'
+import { useRoute } from 'vue-router'
+import { beginAuthentication } from '../../auth/navigation'
+import { useSession } from '../../composables/useSession'
 import { identityAdministrationApi, identityGovernanceApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
@@ -38,6 +47,74 @@ const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 
 const { canWrite } = useIdentityAdmin()
+const session = useSession()
+const route = useRoute()
+const platformRole = ref<PlatformRoleTier>()
+const roleMember = ref<Member>()
+const roleDialogOpen = ref(false)
+const chosenTier = ref<PlatformRoleTier>(PlatformRoleTier.CompanyMember)
+const roleReason = ref('')
+const roleProblem = ref<ApiProblem>()
+const roleLoading = ref(false)
+const roleChanged = computed(() => !!roleMember.value && chosenTier.value !== tierOf(roleMember.value))
+let roleAttempt: { fingerprint: string, key: string } | undefined
+const tiers = [
+  { value: PlatformRoleTier.CompanyMember, description: '参与所属项目，处理工作项与协作。' },
+  { value: PlatformRoleTier.CompanyAdmin, description: '管理公司业务、成员账号与组织同步。' },
+  { value: PlatformRoleTier.AppManager, description: '拥有公司管理能力，并可更改成员角色。' },
+]
+function tierOf(member: Member): PlatformRoleTier {
+  return member.platformRoles.has(ManagedPlatformRole.AppManager) ? PlatformRoleTier.AppManager
+    : member.platformRoles.has(ManagedPlatformRole.CompanyAdmin) ? PlatformRoleTier.CompanyAdmin : PlatformRoleTier.CompanyMember
+}
+function tierTagType(member: Member): 'primary' | 'info' {
+  const tier = tierOf(member)
+  return tier === PlatformRoleTier.CompanyMember ? 'info' : 'primary'
+}
+function openRole(member: Member): void {
+  roleMember.value = member
+  chosenTier.value = tierOf(member)
+  roleReason.value = ''
+  roleProblem.value = undefined
+  roleAttempt = undefined
+  roleDialogOpen.value = true
+}
+async function submitRole(): Promise<void> {
+  const member = roleMember.value
+  const reason = roleReason.value.trim()
+  if (!member || !roleChanged.value || !reason || reason.length > 160 || roleLoading.value) return
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    roleProblem.value = localProblem('缺少 CSRF 凭据，请刷新页面后重试。')
+    return
+  }
+  const fingerprint = JSON.stringify([member.userId, member.etag, chosenTier.value, reason])
+  if (roleAttempt?.fingerprint !== fingerprint) roleAttempt = { fingerprint, key: crypto.randomUUID() }
+  roleLoading.value = true
+  roleProblem.value = undefined
+  try {
+    await identityGovernanceApi.changeMemberPlatformRole({
+      userId: member.userId, ifMatch: member.etag, xXSRFTOKEN: csrf,
+      idempotencyKey: roleAttempt.key,
+      platformRoleChangeRequest: { role: chosenTier.value, reason },
+    })
+    roleDialogOpen.value = false
+    ElMessage.success('成员角色已更新')
+    await load()
+    if (drawerOpen.value) await openMember(member.userId)
+  } catch (failure) {
+    const problem = await toApiProblem(failure)
+    roleProblem.value = problem
+    if (isProblemStatus(problem, 412)) {
+      await load()
+      try {
+        roleMember.value = await identityAdministrationApi.getMember({ userId: member.userId })
+        if (drawerOpen.value) selected.value = roleMember.value
+        roleProblem.value = localProblem('成员信息已变化，请复核最新信息后重新提交。')
+      } catch (refreshFailure) { roleProblem.value = await toApiProblem(refreshFailure) }
+    }
+  } finally { roleLoading.value = false }
+}
 const result = ref<MemberPage>()
 const loading = ref(false)
 const error = ref<ApiProblem>()
@@ -51,6 +128,7 @@ const selected = ref<Member>()
 const drawerOpen = ref(false)
 const changingUserId = ref<string>()
 const activeFilters = computed<ActiveFilter[]>(() => [
+  ...(platformRole.value ? [{ key: 'platformRole', label: '角色', valueLabel: businessLabel(platformRole.value) }] : []),
   ...(name.value.trim() ? [{ key: 'name', label: '姓名', valueLabel: name.value.trim() }] : []),
   ...(externalUserId.value.trim()
     ? [{ key: 'externalUserId', label: '企微外部 ID', valueLabel: externalUserId.value.trim() }]
@@ -84,6 +162,7 @@ async function load(): Promise<void> {
       ...(externalUserId.value.trim() ? { externalUserId: externalUserId.value.trim() } : {}),
       ...(employmentStatus.value ? { employmentStatus: employmentStatus.value } : {}),
       ...(accountStatus.value ? { accountStatus: accountStatus.value } : {}),
+      ...(platformRole.value ? { platformRole: platformRole.value } : {}),
       page: page.value,
       size: size.value,
     })
@@ -110,6 +189,7 @@ function applyFilters(): void {
 }
 
 function removeFilter(key: string): void {
+  if (key === 'platformRole') platformRole.value = undefined
   if (key === 'name') name.value = ''
   if (key === 'externalUserId') externalUserId.value = ''
   if (key === 'employmentStatus') employmentStatus.value = undefined
@@ -118,6 +198,7 @@ function removeFilter(key: string): void {
 }
 
 function clearFilters(): void {
+  platformRole.value = undefined
   name.value = ''
   externalUserId.value = ''
   employmentStatus.value = undefined
@@ -237,6 +318,19 @@ onMounted(load)
       </template>
       <template #filters>
         <el-select
+          v-model="platformRole"
+          clearable
+          placeholder="全部角色"
+          aria-label="角色"
+        >
+          <el-option
+            v-for="tier in tiers"
+            :key="tier.value"
+            :label="businessLabel(tier.value)"
+            :value="tier.value"
+          />
+        </el-select>
+        <el-select
           v-model="employmentStatus"
           clearable
           placeholder="全部就业状态"
@@ -341,21 +435,17 @@ onMounted(load)
           min-width="180"
         >
           <template #default="scope">
-            <div class="role-list">
-              <el-tag
-                v-for="role in scope.row.platformRoles"
-                :key="role"
-                effect="plain"
-              >
-                {{ businessLabel(role) }}
-              </el-tag>
-              <span v-if="scope.row.platformRoles.size === 0">—</span>
-            </div>
+            <el-tag
+              :type="tierTagType(scope.row as Member)"
+              :effect="tierOf(scope.row as Member) === PlatformRoleTier.AppManager ? 'dark' : 'light'"
+            >
+              {{ businessLabel(tierOf(scope.row as Member)) }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column
           label="操作"
-          width="170"
+          width="240"
           fixed="right"
         >
           <template #default="scope">
@@ -365,6 +455,16 @@ onMounted(load)
               @click="openMember(scope.row.userId)"
             >
               详情
+            </el-button>
+            <el-button
+              v-if="session.canChangeMemberTier.value"
+              link
+              type="primary"
+              :disabled="scope.row.userId === session.authentication.value?.user.id"
+              :title="scope.row.userId === session.authentication.value?.user.id ? '不能更改自己的角色' : undefined"
+              @click="openRole(scope.row as Member)"
+            >
+              更改角色
             </el-button>
             <el-button
               v-if="canWrite"
@@ -396,6 +496,73 @@ onMounted(load)
       @update:current-page="value => { page = value - 1; load() }"
       @update:page-size="value => { size = value; page = 0; load() }"
     />
+
+    <el-dialog
+      v-model="roleDialogOpen"
+      :title="`更改 ${roleMember?.displayName ?? ''} 的角色`"
+      width="min(560px, 95vw)"
+    >
+      <el-radio-group
+        v-model="chosenTier"
+        class="tier-options"
+        aria-label="成员角色"
+      >
+        <el-radio
+          v-for="tier in tiers"
+          :key="tier.value"
+          :value="tier.value"
+          border
+          class="tier-card"
+        >
+          <strong>{{ businessLabel(tier.value) }}</strong>
+          <el-tag
+            v-if="roleMember && tierOf(roleMember) === tier.value"
+            size="small"
+            type="info"
+          >
+            当前
+          </el-tag>
+          <span class="tier-description">{{ tier.description }}</span>
+        </el-radio>
+      </el-radio-group>
+      <el-alert
+        v-if="roleChanged"
+        title="该成员的登录会话将失效"
+        type="warning"
+        :closable="false"
+      />
+      <el-input
+        v-model="roleReason"
+        type="textarea"
+        :maxlength="160"
+        show-word-limit
+        placeholder="请输入变更理由（1～160 字）"
+        aria-label="变更理由"
+      />
+      <inline-problem
+        v-if="roleProblem"
+        :problem="roleProblem"
+      />
+      <el-button
+        v-if="roleProblem && isProblemStatus(roleProblem, 403)"
+        @click="beginAuthentication(route.fullPath)"
+      >
+        重新登录
+      </el-button>
+      <template #footer>
+        <el-button @click="roleDialogOpen = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="roleLoading"
+          :disabled="!roleChanged || !roleReason.trim() || roleReason.trim().length > 160"
+          @click="submitRole"
+        >
+          {{ roleChanged ? `设为${businessLabel(chosenTier)}` : '当前角色' }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-drawer
       v-model="drawerOpen"
@@ -447,7 +614,7 @@ onMounted(load)
             {{ formatTime(selected.directorySyncedAt) }}
           </el-descriptions-item>
           <el-descriptions-item label="角色">
-            {{ Array.from(selected.platformRoles).map(businessLabel).join('、') || '无平台管理角色' }}
+            {{ businessLabel(tierOf(selected)) }}
           </el-descriptions-item>
         </el-descriptions>
         <el-button
@@ -462,3 +629,10 @@ onMounted(load)
     </el-drawer>
   </section>
 </template>
+
+<style scoped>
+.tier-options { display: grid; gap: var(--yp-space-3); width: 100%; margin-bottom: var(--yp-space-4); }
+.tier-card { margin: 0; min-height: 76px; height: auto; padding: var(--yp-space-3); }
+.tier-description { display: block; color: var(--yp-text-secondary); white-space: normal; margin-top: var(--yp-space-2); }
+.tier-card :deep(.el-tag) { margin-left: var(--yp-space-2); }
+</style>

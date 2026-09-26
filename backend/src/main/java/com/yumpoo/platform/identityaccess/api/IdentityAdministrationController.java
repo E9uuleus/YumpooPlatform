@@ -70,13 +70,14 @@ public final class IdentityAdministrationController {
             @RequestParam(required = false) String externalUserId,
             @RequestParam(required = false) String employmentStatus,
             @RequestParam(required = false) String accountStatus,
+            @RequestParam(required = false) String platformRole,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         CurrentActor actor = currentActorProvider.requiredActive();
         OffsetPageRequest pageRequest = OffsetPageRequest.of(page, size);
         var result = queryService.members(actor.companyId(), actor.userId(), new IdentityMemberQuery(
-                name, externalUserId, employmentStatus, accountStatus, pageRequest));
+                name, externalUserId, employmentStatus, accountStatus, platformRole, pageRequest));
         return OffsetPageResponse.of(result.items(), pageRequest, result.total());
     }
 

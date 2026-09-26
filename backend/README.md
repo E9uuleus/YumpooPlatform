@@ -343,3 +343,7 @@ ArchUnit 在 `verify` 阶段检查模块允许依赖图、循环依赖、层级�
 - 本切片没有角色管理 Controller 或 OpenAPI path。统一 Security Audit、失败审计及审计失败关闭由 M1-10 实现后，才能接通正式写 HTTP。
 
 维护 Runner 仅在 `yumpoo.maintenance.app-manager.enabled=true` 时注册。必须以 `spring.main.web-application-type=none` 运行，同时关闭 Outbox 调度，并提供 `BOOTSTRAP` 或 `BREAK_GLASS`、内部 `userId` 和 1～160 字符理由引用；成功或失败后进程结束。
+
+### 公司管理与平台角色
+
+公司管理入口为 `/admin/company/overview`（旧 `/admin/identity/*` 链接保留重定向）。平台管理员包含公司管理员能力，每名成员仅有一个平台层级：普通员工、公司管理员或平台管理员。仅平台管理员可通过成员列表更改其他成员角色；变更会撤销目标会话。

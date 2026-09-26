@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "yumpoo.outbox.enabled=false"
 )
-class M113PermissionMatrixIT {
+class PlatformRoleTierChangeHttpIT {
 
     private static final UUID COMPANY_ID = UUID.fromString(
             "00000000-0000-4000-8000-000000000001"
@@ -75,7 +75,7 @@ class M113PermissionMatrixIT {
     void setUp() {
         cleanUp();
         try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root("m113-matrix-" + UUID.randomUUID())
+                RequestCorrelation.root("tiers-matrix-" + UUID.randomUUID())
         )) {
             DirectoryMemberProvisioningResult memberUser = provision("member", "Member");
             DirectoryMemberProvisioningResult managerUser = provision("manager", "App Manager");
@@ -128,109 +128,103 @@ class M113PermissionMatrixIT {
     }
 
     @Test
-    void anonymousAndCompanyMemberStayOutsideIdentityAdministration() throws Exception {
-        assertThat(get("/api/v1/company", null).statusCode()).isEqualTo(401);
-        assertThat(get("/api/v1/company", member).statusCode()).isEqualTo(200);
-        assertDenied(get("/api/v1/admin/members", member));
-        assertDenied(get("/api/v1/admin/role-assignments", member));
-    }
-
-    @Test
-    void appManagerCanReadGovernRolesAndWriteIdentity() throws Exception {
-        assertThat(get("/api/v1/admin/members", appManager).statusCode()).isEqualTo(200);
-        HttpResponse<String> granted = post(
-                "/api/v1/admin/company-admin-assignments",
-                appManager,
-                "{\"userId\":\"" + target.userId()
-                        + "\",\"reason\":\"M1-13 role grant\"}",
-                etag(target.userId())
-        );
-        assertThat(granted.statusCode())
-                .as("body=%s", granted.body())
-                .isEqualTo(201);
-        assertThat(post("/api/v1/admin/members/" + target.userId() + "/account-disable", appManager,
-                "{\"reason\":\"platform manager account governance\"}", etag(target.userId())).statusCode()).isEqualTo(200);
-
-    }
-
-    @Test
-    void companyAdminCanWriteIdentityButCannotGovernPlatformRoles() throws Exception {
-        assertThat(get("/api/v1/admin/members", companyAdmin).statusCode()).isEqualTo(200);
-        assertDenied(post(
-                "/api/v1/admin/app-manager-assignments",
-                companyAdmin,
-                "{\"userId\":\"" + member.userId()
-                        + "\",\"reason\":\"M1-13 denied role grant\"}",
-                etag(member.userId())
-        ));
-
-        HttpResponse<String> disabled = post(
-                "/api/v1/admin/members/" + target.userId() + "/account-disable",
-                companyAdmin,
-                "{\"reason\":\"M1-13 account review\"}",
-                etag(target.userId())
-        );
-        assertThat(disabled.statusCode())
-                .as("body=%s", disabled.body())
-                .isEqualTo(200);
-        HttpResponse<String> oldSession = get("/api/v1/company", target);
-        assertThat(oldSession.statusCode()).isEqualTo(403);
-        assertThat(oldSession.body()).contains("ACCOUNT_DISABLED");
-    }
-
-    @Test
-    void dualRoleReceivesTheUnionOfBothCapabilities() throws Exception {
-        assertThat(get("/api/v1/admin/members", dualRole).statusCode()).isEqualTo(200);
-        assertThat(post(
-                "/api/v1/admin/company-admin-assignments",
-                dualRole,
-                "{\"userId\":\"" + member.userId()
-                        + "\",\"reason\":\"M1-13 dual role grant\"}",
-                etag(member.userId())
-        ).statusCode()).isEqualTo(201);
-        assertThat(post(
-                "/api/v1/admin/members/" + target.userId() + "/account-disable",
-                dualRole,
-                "{\"reason\":\"M1-13 dual role write\"}",
-                etag(target.userId())
-        ).statusCode()).isEqualTo(200);
-    }
-
-    @Test
-    void unavailableUnknownAndLoggedOutSessionsKeepStableSemantics() throws Exception {
-        jdbcClient.sql("""
-                        UPDATE yumpoo.identity_user
-                        SET employment_status = 'LEFT',
-                            left_at = transaction_timestamp(),
-                            left_reason = 'M1-13 MATRIX',
-                            authorization_version = authorization_version + 1,
-                            row_version = row_version + 1,
-                            updated_at = transaction_timestamp()
-                        WHERE id = :userId
-                        """)
-                .param("userId", member.userId())
-                .update();
-        HttpResponse<String> left = get("/api/v1/company", member);
-        assertThat(left.statusCode()).isEqualTo(403);
-        assertThat(left.body()).contains("ACCOUNT_DISABLED");
-
-        assertThat(get(
-                "/api/v1/admin/members/" + UUID.randomUUID(),
-                companyAdmin
-        ).statusCode()).isEqualTo(404);
-        assertThat(getWithCookies(
-                "/api/v1/company",
-                SessionHttpCookies.SESSION_COOKIE + "=" + "z".repeat(43)
-                        + "; " + SessionHttpCookies.CSRF_COOKIE + "=" + "y".repeat(43)
-        ).statusCode()).isEqualTo(401);
-
-        HttpResponse<String> logout = post("/api/v1/auth/logout", target, "", null);
-        assertThat(logout.statusCode()).isEqualTo(204);
+    void changesTierAtomicallyRevokesSessionsAndReplaysWithoutWriting() throws Exception {
+        String before = etag(target.userId());
+        UUID key = UUID.randomUUID();
+        var promoted = change(target.userId(), appManager, "COMPANY_ADMIN", before, key, true);
+        assertThat(promoted.statusCode()).as(promoted.body()).isEqualTo(200);
+        assertThat(promoted.body()).contains("\"previousRole\":\"COMPANY_MEMBER\"", "\"authorizationVersion\":1");
         assertThat(get("/api/v1/company", target).statusCode()).isEqualTo(401);
+        assertThat(change(target.userId(), appManager, "COMPANY_ADMIN", before, key, true).body()).isEqualTo(promoted.body());
+        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.platform_role_assignment WHERE user_id=:id AND status='ACTIVE'")
+                .param("id", target.userId()).query(Integer.class).single()).isOne();
+        long auditBefore = auditCount();
+        String currentEtag = etag(target.userId());
+        var unchanged = change(target.userId(), appManager, "COMPANY_ADMIN", currentEtag, UUID.randomUUID(), true);
+        assertThat(unchanged.statusCode()).isEqualTo(200);
+        assertThat(unchanged.headers().firstValue("ETag")).contains(currentEtag);
+        assertThat(auditCount()).isEqualTo(auditBefore);
+        var manager = change(target.userId(), appManager, "APP_MANAGER", currentEtag, UUID.randomUUID(), true);
+        assertThat(manager.statusCode()).as(manager.body()).isEqualTo(200);
+        assertThat(manager.body()).contains("\"authorizationVersion\":2");
+        var demoted = change(target.userId(), appManager, "COMPANY_MEMBER", etag(target.userId()), UUID.randomUUID(), true);
+        assertThat(demoted.statusCode()).as(demoted.body()).isEqualTo(200);
+        assertThat(demoted.body()).contains("\"authorizationVersion\":3");
+        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.platform_role_assignment WHERE user_id=:id AND status='ACTIVE'")
+                .param("id", target.userId()).query(Integer.class).single()).isZero();
+        assertThat(auditCount()).isEqualTo(auditBefore + 2);
+        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE event_type='identity.platform_role_revoked' AND payload_json->>'userId'=:id")
+                .param("id", target.userId().toString()).query(Integer.class).single()).isEqualTo(2);
+    }
+
+    @Test
+    void enforcesActorCsrfVersionSelfAndAvailabilityGuards() throws Exception {
+        String current = etag(target.userId());
+        assertThat(change(target.userId(), companyAdmin, "APP_MANAGER", current, UUID.randomUUID(), true).statusCode()).isEqualTo(403);
+        assertThat(change(target.userId(), appManager, "APP_MANAGER", current, UUID.randomUUID(), false).statusCode()).isEqualTo(403);
+        assertThat(change(target.userId(), appManager, "APP_MANAGER", null, UUID.randomUUID(), true).statusCode()).isEqualTo(428);
+        assertThat(change(target.userId(), appManager, "APP_MANAGER", "\"999\"", UUID.randomUUID(), true).statusCode()).isEqualTo(412);
+        assertThat(change(appManager.userId(), appManager, "COMPANY_MEMBER", etag(appManager.userId()), UUID.randomUUID(), true).statusCode()).isEqualTo(409);
+        assertThat(post("/api/v1/admin/company-admin-assignments", appManager,
+                "{\"userId\":\"" + companyAdmin.userId() + "\",\"reason\":\"duplicate\"}", etag(companyAdmin.userId())).statusCode()).isEqualTo(409);
+        assertThat(post("/api/v1/admin/members/" + target.userId() + "/account-disable", appManager,
+                "{\"reason\":\"availability test\"}", current).statusCode()).isEqualTo(200);
+        assertThat(change(target.userId(), appManager, "APP_MANAGER", etag(target.userId()), UUID.randomUUID(), true).statusCode()).isEqualTo(409);
+        jdbcClient.sql("UPDATE yumpoo.login_session SET issued_at = issued_at - interval '16 minutes' WHERE user_id=:id")
+                .param("id", appManager.userId()).update();
+        assertThat(change(target.userId(), appManager, "APP_MANAGER", current, UUID.randomUUID(), true).statusCode()).isEqualTo(403);
+    }
+
+    @Test
+    void auditFailureRollsBackTierAssignmentAuthorizationAndSessions() throws Exception {
+        jdbcClient.sql("""
+                CREATE FUNCTION yumpoo.tier_test_reject_audit() RETURNS trigger AS $$
+                BEGIN IF NEW.action = 'PLATFORM_ROLE_TIER_CHANGED' THEN
+                    RAISE EXCEPTION 'injected tier audit failure'; END IF; RETURN NEW; END;
+                $$ LANGUAGE plpgsql
+                """).update();
+        jdbcClient.sql("CREATE TRIGGER tier_test_reject_audit BEFORE INSERT ON yumpoo.security_audit_event FOR EACH ROW EXECUTE FUNCTION yumpoo.tier_test_reject_audit()")
+                .update();
+        try {
+            String version = etag(target.userId());
+            assertThat(change(target.userId(), appManager, "COMPANY_ADMIN", version, UUID.randomUUID(), true).statusCode()).isEqualTo(500);
+            assertThat(etag(target.userId())).isEqualTo(version);
+            assertThat(get("/api/v1/company", target).statusCode()).isEqualTo(200);
+            assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.platform_role_assignment WHERE user_id=:id")
+                    .param("id", target.userId()).query(Integer.class).single()).isZero();
+        } finally {
+            jdbcClient.sql("DROP TRIGGER tier_test_reject_audit ON yumpoo.security_audit_event").update();
+            jdbcClient.sql("DROP FUNCTION yumpoo.tier_test_reject_audit()").update();
+        }
+    }
+
+    @Test
+    void memberFiltersRepresentAssignedTiers() throws Exception {
+        var members = get("/api/v1/admin/members?platformRole=COMPANY_MEMBER", appManager);
+        assertThat(members.statusCode()).isEqualTo(200);
+        assertThat(members.body()).contains(target.userId().toString()).doesNotContain(companyAdmin.userId().toString());
+        var managers = get("/api/v1/admin/members?platformRole=APP_MANAGER", appManager);
+        assertThat(managers.body()).contains(appManager.userId().toString()).doesNotContain(target.userId().toString());
+    }
+
+    private long auditCount() {
+        return jdbcClient.sql("SELECT count(*) FROM yumpoo.security_audit_event WHERE action='PLATFORM_ROLE_TIER_CHANGED'")
+                .query(Long.class).single();
+    }
+
+    private HttpResponse<String> change(UUID userId, ActorFixture actor, String tier,
+            String version, UUID key, boolean csrf) throws Exception {
+        var request = HttpRequest.newBuilder(uri("/api/v1/admin/members/" + userId + "/platform-role"))
+                .header("Cookie", cookies(actor)).header("Idempotency-Key", key.toString())
+                .header("Content-Type", "application/json");
+        if (version != null) request.header("If-Match", version);
+        if (csrf) request.header(SessionBoundCsrfTokenRepository.HEADER_NAME, actor.session().csrfCredential().value());
+        return client.send(request.PUT(HttpRequest.BodyPublishers.ofString(
+                "{\"role\":\"" + tier + "\",\"reason\":\"tier change test\"}")).build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private DirectoryMemberProvisioningResult provision(String memberId, String name) {
-        return provisioner.provision("m113-" + memberId, "M1-13 " + name);
+        return provisioner.provision("tiers-" + memberId, "M1-13 " + name);
     }
 
     private PlatformRoleCommandReceipt grant(
@@ -253,7 +247,7 @@ class M113PermissionMatrixIT {
     }
 
     private ActorFixture actor(UUID userId) {
-        return new ActorFixture(userId, sessionService.issueWebSession(userId, "m113-matrix"));
+        return new ActorFixture(userId, sessionService.issueWebSession(userId, "tiers-matrix"));
     }
 
     private HttpResponse<String> get(String path, ActorFixture actor) throws Exception {

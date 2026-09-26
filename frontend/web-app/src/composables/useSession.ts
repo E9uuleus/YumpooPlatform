@@ -40,12 +40,12 @@ export function useSession() {
     ? authentication.value.roles.has(AuthenticationRole.AppManager)
       || authentication.value.roles.has(AuthenticationRole.CompanyAdmin)
     : false)
-  const canManageIdentity = computed(() => authentication.value?.roles.has(
-    AuthenticationRole.CompanyAdmin,
-  ) ?? false)
-  const isCompanyAdmin = computed(() => authentication.value?.roles.has(
-    AuthenticationRole.CompanyAdmin,
-  ) ?? false)
+  const memberTier = computed(() => authentication.value?.roles.has(AuthenticationRole.AppManager)
+    ? 'APP_MANAGER' : authentication.value?.roles.has(AuthenticationRole.CompanyAdmin)
+      ? 'COMPANY_ADMIN' : 'COMPANY_MEMBER')
+  const canChangeMemberTier = computed(() => memberTier.value === 'APP_MANAGER')
+  const canManageIdentity = computed(() => isIdentityReader.value)
+  const isCompanyAdmin = computed(() => isIdentityReader.value)
 
   return {
     phase,
@@ -54,6 +54,8 @@ export function useSession() {
     actionProblem,
     logoutLoading,
     isIdentityReader,
+    memberTier,
+    canChangeMemberTier,
     canManageIdentity,
     isCompanyAdmin,
     ensureAuthentication,

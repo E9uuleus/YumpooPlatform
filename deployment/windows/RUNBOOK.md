@@ -178,8 +178,8 @@ Invoke-RestMethod http://127.0.0.1:8100/actuator/health/readiness
 
 1. APP_MANAGER 使用 Chrome 扫码登录，`GET /api/v1/auth/me` 具有 APP_MANAGER，不具有 COMPANY_ADMIN。
 2. COMPANY_ADMIN 使用 Chrome 扫码登录，`GET /api/v1/auth/me` 具有 COMPANY_ADMIN，不具有 APP_MANAGER。
-3. COMPANY_ADMIN 打开 `/admin/identity/overview`，确认 OAuth 和通讯录状态完整。
-4. 在 `/admin/identity/sync-runs` 再执行一次正式手工同步，确认 `SUCCEEDED` 和幂等行为。
+3. COMPANY_ADMIN 打开 `/admin/company/overview`，确认 OAuth 和通讯录状态完整。
+4. 在 `/admin/company/sync-runs` 再执行一次正式手工同步，确认 `SUCCEEDED` 和幂等行为。
 5. APP_MANAGER 使用正式角色治理 API 授予更多 COMPANY_ADMIN；不得重新运行 M1-15。
 6. 检查 Security Audit 存在双角色和总体 bootstrap 成功事实，正文不含企微 UserID。
 

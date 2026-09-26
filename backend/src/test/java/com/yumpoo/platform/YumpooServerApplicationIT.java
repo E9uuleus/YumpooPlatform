@@ -546,6 +546,8 @@ class YumpooServerApplicationIT {
                 "uq_platform_role_assignment_active",
                 "idx_platform_role_assignment_user_status"
         );
+        assertThat(jdbcTemplate.queryForObject("SELECT indexdef FROM pg_indexes WHERE schemaname='yumpoo' AND indexname='uq_platform_role_assignment_active'",String.class))
+                .contains("(company_id, user_id)").doesNotContain("role_code");
         assertThat(workItemIndexNames).contains(
                 "idx_work_item_content_page",
                 "idx_work_item_content_status_page",
