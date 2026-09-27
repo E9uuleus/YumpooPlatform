@@ -26,14 +26,14 @@ class IdentityAdminAccessPolicyTest {
             "00000000-0000-4000-8000-000000000111");
 
     @Test
-    void bothAdministratorRolesCanReadButOnlyCompanyAdminCanWrite() {
+    void bothAdministratorTiersCanReadAndWriteCompanyAdministration() {
         RoleGovernanceRepository repository = mock(RoleGovernanceRepository.class);
         IdentityAdminAccessPolicy policy = new IdentityAdminAccessPolicy(repository);
 
         when(repository.findUser(COMPANY_ID, USER_ID))
                 .thenReturn(Optional.of(user(Set.of(ManagedPlatformRole.APP_MANAGER))));
         assertThat(policy.requireReader(COMPANY_ID, USER_ID).userId()).isEqualTo(USER_ID);
-        assertDenied(() -> policy.requireCompanyAdmin(COMPANY_ID, USER_ID));
+        assertThat(policy.requireCompanyAdmin(COMPANY_ID, USER_ID).userId()).isEqualTo(USER_ID);
 
         when(repository.findUser(COMPANY_ID, USER_ID))
                 .thenReturn(Optional.of(user(Set.of(ManagedPlatformRole.COMPANY_ADMIN))));

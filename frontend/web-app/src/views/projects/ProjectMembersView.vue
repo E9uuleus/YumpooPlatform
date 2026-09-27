@@ -246,7 +246,7 @@ onMounted(load)
       section="members"
       :project="project"
       title="项目成员"
-      description="负责人执行日常管理，企业管理员执行治理与负责人重指派。"
+      description="负责人执行日常管理，公司管理员执行治理与负责人重指派。"
     />
     <inline-problem
       v-if="error"

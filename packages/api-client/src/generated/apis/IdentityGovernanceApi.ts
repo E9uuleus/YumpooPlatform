@@ -19,6 +19,8 @@ import type {
   GovernanceReasonRequest,
   GovernanceState,
   ManagedPlatformRole,
+  PlatformRoleChangeRequest,
+  PlatformRoleChangeResult,
   RoleAssignmentPage,
   RoleAssignmentStatus,
   RoleGrantRequest,
@@ -35,6 +37,10 @@ import {
     GovernanceStateToJSON,
     ManagedPlatformRoleFromJSON,
     ManagedPlatformRoleToJSON,
+    PlatformRoleChangeRequestFromJSON,
+    PlatformRoleChangeRequestToJSON,
+    PlatformRoleChangeResultFromJSON,
+    PlatformRoleChangeResultToJSON,
     RoleAssignmentPageFromJSON,
     RoleAssignmentPageToJSON,
     RoleAssignmentStatusFromJSON,
@@ -44,6 +50,14 @@ import {
     RoleMutationResultFromJSON,
     RoleMutationResultToJSON,
 } from '../models/index';
+
+export interface ChangeMemberPlatformRoleRequest {
+    userId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+    platformRoleChangeRequest: PlatformRoleChangeRequest;
+}
 
 export interface DisableMemberAccountRequest {
     userId: string;
@@ -107,6 +121,86 @@ export interface RevokeCompanyAdminRequest {
  *
  */
 export class IdentityGovernanceApi extends runtime.BaseAPI {
+
+    /**
+     * 原子变更成员全局角色层级
+     */
+    async changeMemberPlatformRoleRaw(requestParameters: ChangeMemberPlatformRoleRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<PlatformRoleChangeResult>> {
+        if (requestParameters['userId'] == null) {
+            throw new runtime.RequiredError(
+                'userId',
+                'Required parameter "userId" was null or undefined when calling changeMemberPlatformRole().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling changeMemberPlatformRole().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling changeMemberPlatformRole().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling changeMemberPlatformRole().'
+            );
+        }
+
+        if (requestParameters['platformRoleChangeRequest'] == null) {
+            throw new runtime.RequiredError(
+                'platformRoleChangeRequest',
+                'Required parameter "platformRoleChangeRequest" was null or undefined when calling changeMemberPlatformRole().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/admin/members/{userId}/platform-role`;
+        urlPath = urlPath.replace(`{${"userId"}}`, encodeURIComponent(String(requestParameters['userId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PUT',
+            headers: headerParameters,
+            query: queryParameters,
+            body: PlatformRoleChangeRequestToJSON(requestParameters['platformRoleChangeRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => PlatformRoleChangeResultFromJSON(jsonValue));
+    }
+
+    /**
+     * 原子变更成员全局角色层级
+     */
+    async changeMemberPlatformRole(requestParameters: ChangeMemberPlatformRoleRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<PlatformRoleChangeResult> {
+        const response = await this.changeMemberPlatformRoleRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * 禁用成员账号

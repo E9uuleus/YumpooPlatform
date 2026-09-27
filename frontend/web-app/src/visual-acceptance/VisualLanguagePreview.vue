@@ -63,7 +63,7 @@ function togglePreviewGroup(id: string): void {
       </button>
       <button
         type="button"
-        aria-label="身份管理"
+        aria-label="公司管理"
       >
         <el-icon aria-hidden="true">
           <user />
@@ -457,7 +457,7 @@ function togglePreviewGroup(id: string): void {
             项目
           </button>
           <button type="button">
-            身份管理
+            公司管理
           </button>
         </nav>
         <p class="mobile-context-title">

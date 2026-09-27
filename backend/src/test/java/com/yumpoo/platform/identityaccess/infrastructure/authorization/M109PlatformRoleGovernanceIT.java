@@ -114,6 +114,7 @@ class M109PlatformRoleGovernanceIT {
                         COMPANY_ID, MANAGER_B, MaintenanceRoleMode.BREAK_GLASS, "not-missing")),
                 StandardErrorCode.INVALID_STATE_TRANSITION);
 
+        insertDirectRole(MANAGER_B, "COMPANY_ADMIN", "COMPANY");
         markManagerLeftAndReconcile(MANAGER_A);
         assertThat(state()).isEqualTo("MISSING|2");
         PlatformRoleMutationResult recovered = execute("m109-break-glass", () ->
@@ -121,6 +122,9 @@ class M109PlatformRoleGovernanceIT {
                         COMPANY_ID, MANAGER_B, MaintenanceRoleMode.BREAK_GLASS, "incident-42")));
 
         assertThat(systemActor(recovered.assignmentId())).isEqualTo("APP_MANAGER_BREAK_GLASS");
+        assertThat(activeRoleCount(MANAGER_B)).isOne();
+        assertThat(jdbcClient.sql("SELECT revoked_by_actor_type FROM yumpoo.platform_role_assignment WHERE user_id=:id AND role_code='COMPANY_ADMIN'")
+                .param("id", MANAGER_B).query(String.class).single()).isEqualTo("SYSTEM");
         assertThat(state()).isEqualTo("AVAILABLE|3");
         assertThat(eventCount("identity.app_manager_missing_detected")).isOne();
         assertThat(eventCount("identity.app_manager_availability_restored")).isOne();
@@ -226,14 +230,23 @@ class M109PlatformRoleGovernanceIT {
         assertThat(first.replayed()).isFalse();
         assertThat(replay.replayed()).isTrue();
 
-        PlatformRoleMutationResult appManager = grantResult(grantCommand(
+        assertError(() -> managementUseCase.grant(grantCommand(
                 MEMBER, ManagedPlatformRole.APP_MANAGER, 1, MANAGER_A,
-                manager.authorizationVersion(), UUID.randomUUID(), "b".repeat(64)));
-        assertThat(appManager.authorizationVersion()).isEqualTo(2);
-        assertThat(activeRoleCount(MEMBER)).isEqualTo(2);
+                manager.authorizationVersion(), UUID.randomUUID(), "b".repeat(64))),
+                StandardErrorCode.INVALID_STATE_TRANSITION);
+        var tierChange = execute("m109-tier-change", () -> managementUseCase.changeTier(
+                new com.yumpoo.platform.identityaccess.application.authorization.ChangePlatformRoleTierCommand(
+                        COMPANY_ID, MEMBER,
+                        com.yumpoo.platform.identityaccess.application.authorization.MemberRoleTier.APP_MANAGER,
+                        1, recentActor(MANAGER_A, manager.authorizationVersion()), UUID.randomUUID(),
+                        new RequestHash("e".repeat(64)), "tier promotion")));
+        assertThat(tierChange.result().responseJson()).contains("\"authorizationVersion\":2");
+        UUID appManagerAssignment = jdbcClient.sql("SELECT id FROM yumpoo.platform_role_assignment WHERE user_id=:id AND status='ACTIVE'")
+                .param("id", MEMBER).query(UUID.class).single();
+        assertThat(activeRoleCount(MEMBER)).isOne();
 
         PlatformRoleMutationResult revoked = revokeResult(new RevokePlatformRoleCommand(
-                COMPANY_ID, appManager.assignmentId(), ManagedPlatformRole.APP_MANAGER, 0,
+                COMPANY_ID, appManagerAssignment, ManagedPlatformRole.APP_MANAGER, 0,
                 recentActor(MANAGER_A, manager.authorizationVersion()),
                 UUID.randomUUID(), new RequestHash("c".repeat(64)), "rotation-complete"));
         assertThat(revoked.status()).isEqualTo(RoleAssignmentStatus.REVOKED);
@@ -243,10 +256,10 @@ class M109PlatformRoleGovernanceIT {
         PlatformRoleMutationResult regrant = grantResult(grantCommand(
                 MEMBER, ManagedPlatformRole.APP_MANAGER, 3, MANAGER_A,
                 manager.authorizationVersion(), UUID.randomUUID(), "d".repeat(64)));
-        assertThat(regrant.assignmentId()).isNotEqualTo(appManager.assignmentId());
+        assertThat(regrant.assignmentId()).isNotEqualTo(appManagerAssignment);
         assertThat(historyCount(MEMBER, "APP_MANAGER")).isEqualTo(2);
         assertThat(eventCount("identity.platform_role_granted")).isEqualTo(4);
-        assertThat(eventCount("identity.platform_role_revoked")).isOne();
+        assertThat(eventCount("identity.platform_role_revoked")).isEqualTo(2);
     }
 
     @Test

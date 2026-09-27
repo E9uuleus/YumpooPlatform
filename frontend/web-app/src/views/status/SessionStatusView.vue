@@ -11,7 +11,7 @@ const content = computed(() => {
     return {
       icon: 'warning' as const,
       title: '账号当前不可用',
-      description: '账号已停用或成员已离职，请联系企业管理员处理。',
+      description: '账号已停用或成员已离职，请联系公司管理员处理。',
       retry: false,
     }
   }

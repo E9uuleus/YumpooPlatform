@@ -21,9 +21,9 @@ const session = useSession()
         <el-button
           v-if="session.isIdentityReader.value"
           type="primary"
-          @click="router.push({ name: 'identity-overview' })"
+          @click="router.push({ name: 'company-overview' })"
         >
-          进入身份管理
+          进入公司管理
         </el-button>
       </template>
     </yp-page-header>
@@ -46,12 +46,8 @@ const session = useSession()
           <div>
             <span class="muted-text">当前角色</span>
             <div class="role-list">
-              <el-tag
-                v-for="role in session.authentication.value?.roles"
-                :key="role"
-                effect="plain"
-              >
-                {{ businessLabel(role) }}
+              <el-tag effect="plain">
+                {{ businessLabel(session.memberTier.value) }}
               </el-tag>
             </div>
           </div>
@@ -62,7 +58,7 @@ const session = useSession()
           <strong>可用功能</strong>
         </template>
         <p v-if="session.isIdentityReader.value">
-          项目、身份与组织管理。
+          项目、公司与组织管理。
         </p>
         <p v-else>
           查看当前账号可见的项目。

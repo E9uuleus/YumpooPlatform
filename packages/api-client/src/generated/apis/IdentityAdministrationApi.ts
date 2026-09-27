@@ -25,6 +25,7 @@ import type {
   ErrorResponse,
   Member,
   MemberPage,
+  PlatformRoleTier,
   WeComIntegrationStatus,
 } from '../models/index';
 import {
@@ -50,6 +51,8 @@ import {
     MemberToJSON,
     MemberPageFromJSON,
     MemberPageToJSON,
+    PlatformRoleTierFromJSON,
+    PlatformRoleTierToJSON,
     WeComIntegrationStatusFromJSON,
     WeComIntegrationStatusToJSON,
 } from '../models/index';
@@ -76,6 +79,7 @@ export interface ListDirectorySyncRunsRequest {
 }
 
 export interface ListMembersRequest {
+    platformRole?: PlatformRoleTier;
     name?: string;
     externalUserId?: string;
     employmentStatus?: EmploymentStatus;
@@ -323,6 +327,10 @@ export class IdentityAdministrationApi extends runtime.BaseAPI {
      */
     async listMembersRaw(requestParameters: ListMembersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MemberPage>> {
         const queryParameters: any = {};
+
+        if (requestParameters['platformRole'] != null) {
+            queryParameters['platformRole'] = requestParameters['platformRole'];
+        }
 
         if (requestParameters['name'] != null) {
             queryParameters['name'] = requestParameters['name'];
