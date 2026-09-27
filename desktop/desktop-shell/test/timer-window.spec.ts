@@ -19,6 +19,7 @@ vi.mock('electron', () => ({
   nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => false })) },
   Menu: { buildFromTemplate: (items: MenuItem[]) => { mocks.menu = items; return Object.assign(items, { popup: mocks.nativePopup }) } },
   Tray: class {
+    setImage = vi.fn()
     setToolTip = mocks.tooltip
     setContextMenu = vi.fn()
     popUpContextMenu = mocks.popup
@@ -78,7 +79,7 @@ function setup(store = new TimerPreferenceStore()) {
   const controller = new TimerWindowController(() => main as unknown as BrowserWindow, 'https://yumpoo.example', '/preload.js', store)
   controller.install(); controller.attachMain(main as unknown as BrowserWindow)
   const event = { sender: main.webContents, senderFrame: main.webContents.mainFrame }
-  return { main, event, events, store }
+  return { main, event, events, store, controller }
 }
 function state(running = false): DesktopTimerState {
   return { accountId: crypto.randomUUID(), rowVersion: 1, connected: true, busy: false, savedAt: 0,
@@ -98,6 +99,22 @@ beforeEach(() => {
 afterEach(() => { mocks.appEvents.get('will-quit')?.(); vi.useRealTimers() })
 
 describe('desktop timer and tray', () => {
+  it('keeps inbox badges in timer tooltips and exposes an inbox action in both menus', () => {
+    const { controller, main } = setup()
+    controller.setInboxBadge(7, {} as Parameters<typeof controller.setInboxBadge>[1])
+    expect(mocks.tooltip).toHaveBeenLastCalledWith('YumpooPlatform\n7 条未读')
+    expect(mocks.menuUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ inbox: { unreadCount: 7 } }))
+    menu('收件箱 · 7 条未读').click!()
+    expect(main.webContents.send).toHaveBeenLastCalledWith('yumpoo:inbox:open', null)
+    mocks.menuAction!('open-inbox')
+    expect(main.show).toHaveBeenCalledTimes(2)
+    controller.setInboxBadge(0, {} as Parameters<typeof controller.setInboxBadge>[1])
+    expect(mocks.tooltip).toHaveBeenLastCalledWith('YumpooPlatform\n0 条未读')
+    controller.setInboxBadge(undefined, {} as Parameters<typeof controller.setInboxBadge>[1])
+    expect(mocks.tooltip).toHaveBeenLastCalledWith('YumpooPlatform')
+    expect(mocks.menuUpdate.mock.calls.at(-1)![0]).not.toHaveProperty('inbox')
+    expect(mocks.menu.some(item => item.label?.startsWith('收件箱'))).toBe(false)
+  })
   it('rejects forged windows, subframes and malformed IPC payloads', async () => {
     const { event } = setup()
     await expect(invoke('show', { ...event, sender: {} })).rejects.toThrow('UNTRUSTED')

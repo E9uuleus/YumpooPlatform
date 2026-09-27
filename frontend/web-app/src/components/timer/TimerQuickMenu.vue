@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { TimerMenuAction, TimerMenuState } from '@yumpoo/preload-contract'
+import { Bell } from '@element-plus/icons-vue'
 import { formatDuration } from '../../composables/useTimeTracker'
 import brandLogo from '../../assets/brand/logo.svg'
 import TimerIcon from './TimerIcon.vue'
 
 const desktop = window.yumpooDesktop?.timer
+const inbox = window.yumpooDesktop?.inbox
+const toasts = ref(true)
+const preferencesReady = ref(false)
+const savingPreferences = ref(false)
 const state = ref<TimerMenuState>()
 const now = ref(Date.now())
 const root = ref<HTMLElement>()
@@ -34,9 +39,19 @@ const displays: Array<{ value: 'orb' | 'dock' | 'hidden'; label: string; icon: '
 ]
 
 function run(action: TimerMenuAction) { void desktop?.runMenuAction?.(action) }
+async function refreshInboxPreferences() {
+  if (!inbox) return
+  try { toasts.value = (await inbox.getPreferences()).toasts; preferencesReady.value = true } catch { preferencesReady.value = false }
+}
+async function toggleToasts() {
+  if (!inbox || !preferencesReady.value || savingPreferences.value) return
+  savingPreferences.value = true
+  try { toasts.value = (await inbox.setPreferences({ toasts: !toasts.value })).toasts } catch { await refreshInboxPreferences() }
+  finally { savingPreferences.value = false }
+}
 function items() { return [...(root.value?.querySelectorAll<HTMLButtonElement>('[data-menu-item]:not(:disabled)') ?? [])] }
 /** Opening focuses the panel itself so keyboard users can arrow into it without a focus ring greeting mouse users. */
-function focusPanel() { void nextTick(() => root.value?.focus()) }
+function focusPanel() { void nextTick(() => root.value?.focus()); void refreshInboxPreferences() }
 function keydown(event: KeyboardEvent) {
   if (event.key === 'Escape') { event.preventDefault(); run('close'); return }
   const list = items()
@@ -136,6 +151,35 @@ onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener
           <TimerIcon name="window" /><span>打开主界面</span>
         </button>
         <div
+          v-if="state?.inbox"
+          class="menu-inbox"
+        >
+          <button
+            class="menu-item"
+            role="menuitem"
+            data-menu-item
+            @click="run('open-inbox')"
+          >
+            <Bell /><span>收件箱</span><span class="inbox-count">{{ state.inbox.unreadCount > 99 ? '99+' : state.inbox.unreadCount }}</span>
+          </button>
+          <button
+            v-if="inbox"
+            class="inbox-preference"
+            role="menuitemcheckbox"
+            data-menu-item
+            aria-label="桌面通知"
+            :aria-checked="toasts"
+            :disabled="!preferencesReady || savingPreferences"
+            @click="toggleToasts"
+          >
+            <span>桌面通知</span><span
+              class="menu-switch"
+              :class="{ 'is-on': toasts }"
+              aria-hidden="true"
+            ><span /></span>
+          </button>
+        </div>
+        <div
           class="menu-display"
           role="group"
           aria-label="计时器显示方式"
@@ -224,6 +268,11 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .menu-item svg{width:16px;height:16px;color:var(--yp-text-secondary)}
 .menu-item:not(:disabled):hover,.menu-item:focus-visible{background:var(--yp-timer-hover)}
 .menu-item:focus-visible{outline:0}
+.menu-inbox{display:flex;align-items:center;gap:4px;height:39px;flex-shrink:0}
+.menu-inbox .menu-item{flex:1;min-width:0;gap:6px}
+.inbox-count{font-size:11px;color:var(--yp-text-muted);font-variant-numeric:tabular-nums}
+.inbox-preference{display:flex;align-items:center;gap:6px;padding:8px 8px 8px 4px;font-size:11px;color:var(--yp-text-secondary);border-radius:8px}
+.inbox-preference:not(:disabled):hover{background:var(--yp-timer-hover)}
 .menu-display{display:flex;align-items:center;gap:10px;height:40px;padding:0 6px 0 10px}
 .display-label{padding-left:26px;font-size:13px;color:var(--yp-text-primary);flex-shrink:0;white-space:nowrap}
 .display-segment{display:flex;flex:1;padding:2px;border-radius:9px;background:var(--yp-timer-sunken);box-shadow:inset 0 0 0 1px var(--yp-timer-hairline)}

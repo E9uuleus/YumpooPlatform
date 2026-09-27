@@ -10,6 +10,9 @@ import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.catalog.domain.project.ProjectType;
 
 public interface ProjectRepository {
+    default java.util.List<Project> findAll(UUID companyId, java.util.Collection<UUID> ids) {
+        return ids.stream().map(id->findById(companyId,id)).flatMap(java.util.Optional::stream).toList();
+    }
     boolean insert(Project project);
     Optional<Project> findById(UUID companyId, UUID projectId);
     Optional<Project> lockById(UUID companyId, UUID projectId);

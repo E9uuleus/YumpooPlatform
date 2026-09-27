@@ -7,6 +7,7 @@ export * from './ContentsApi';
 export * from './DashboardsApi';
 export * from './IdentityAdministrationApi';
 export * from './IdentityGovernanceApi';
+export * from './NotificationsApi';
 export * from './ProductsApi';
 export * from './ProjectTemplateAdministrationApi';
 export * from './ProjectTemplatesApi';
