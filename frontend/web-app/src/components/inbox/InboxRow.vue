@@ -122,10 +122,12 @@ const exactTime = computed(() => formatChineseTimestamp(props.item.createdAt, pr
             <svg
               viewBox="0 0 20 20"
               fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
               aria-hidden="true"
             >
-              <rect x="2.75" y="3.75" width="14.5" height="4" rx="1" stroke="currentColor" stroke-width="1.5" />
-              <path d="M4.25 7.75v7.5a1 1 0 0 0 1 1h9.5a1 1 0 0 0 1-1v-7.5M8 11h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              <path d="M3.75 3.75h12.5a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H3.75a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1ZM4.25 7.75v7.5a1 1 0 0 0 1 1h9.5a1 1 0 0 0 1-1v-7.5M8 11h4" />
             </svg>
           </el-icon>
         </el-button>
