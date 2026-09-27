@@ -29,6 +29,20 @@ public class PlatformRoleCommandAdapter implements PlatformRoleCommandPort {
     }
 
     @Override
+    public PlatformRoleTierChangeResult changeTier(PlatformRoleTierChangeCommand command) {
+        var result = useCase.changeTier(new com.yumpoo.platform.identityaccess.application.authorization.ChangePlatformRoleTierCommand(
+                command.companyId(), command.targetUserId(),
+                com.yumpoo.platform.identityaccess.application.authorization.MemberRoleTier.valueOf(command.role().name()),
+                command.expectedTargetRowVersion(), actor(command.actor()), command.idempotencyKey(),
+                new RequestHash(command.requestHash()), command.reasonReference()));
+        try {
+            return objectMapper.readValue(result.result().responseJson(), PlatformRoleTierChangeResult.class);
+        } catch (JacksonException exception) {
+            throw new IllegalStateException("platform role change result deserialization failed", exception);
+        }
+    }
+
+    @Override
     public PlatformRoleCommandReceipt grant(PlatformRoleGrantCommand command) {
         Objects.requireNonNull(command, "command must not be null");
         return receipt(useCase.grant(new GrantPlatformRoleCommand(

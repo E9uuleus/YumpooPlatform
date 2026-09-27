@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -107,6 +108,33 @@ public final class IdentityGovernanceController {
         RoleAssignmentPage result = roleQuery.find(new RoleAssignmentQuery(
                 actor.companyId(), actor.userId(), userId, role, status, page, size));
         return RoleAssignmentPageResponse.from(result);
+    }
+
+    @PutMapping("/admin/members/{userId}/platform-role")
+    ResponseEntity<PlatformRoleTierChangeResult> changeMemberPlatformRole(
+            @PathVariable UUID userId,
+            @Valid @RequestBody PlatformRoleChangeRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatch,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader,
+            HttpServletRequest request
+    ) {
+        CurrentActor actor = currentActorProvider.requiredActive();
+        UUID idempotencyKey = idempotencyKeyParser.parseRequired(idempotencyHeader);
+        try {
+            stateQuery.findMember(actor.companyId(), actor.userId(), userId);
+            long expectedVersion = ifMatchParser.parseForVisibleResource(true, ifMatch);
+            var result = roleCommands.changeTier(new PlatformRoleTierChangeCommand(
+                    actor.companyId(), userId, body.role(), expectedVersion, roleActor(actor, request),
+                    idempotencyKey, requestHasher.hash("changeMemberPlatformRole",
+                            Map.of("userId", userId.toString(), "ifMatch", Long.toString(expectedVersion)),
+                            objectMapper.valueToTree(body)).value(), body.reason()));
+            return ResponseEntity.ok().eTag(Long.toString(result.userRowVersion()))
+                    .cacheControl(org.springframework.http.CacheControl.noStore()).body(result);
+        } catch (RuntimeException exception) {
+            failClosed(actor, idempotencyKey, "changeMemberPlatformRole", "USER", userId,
+                    body.reason(), request, exception);
+            throw exception;
+        }
     }
 
     @PostMapping("/admin/company-admin-assignments")
@@ -311,6 +339,7 @@ public final class IdentityGovernanceController {
 
     private static String actionToAudit(String operation) {
         return switch (operation) {
+            case "changeMemberPlatformRole" -> "PLATFORM_ROLE_CHANGE_FAILED";
             case "grantAppManager", "grantCompanyAdmin" -> "PLATFORM_ROLE_GRANT_FAILED";
             case "revokeAppManager", "revokeCompanyAdmin" -> "PLATFORM_ROLE_REVOKE_FAILED";
             case "disableMemberAccount" -> "ACCOUNT_DISABLE_FAILED";

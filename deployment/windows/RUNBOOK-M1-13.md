@@ -359,10 +359,10 @@ curl.exe -I https://wecom-dev.yumpoo.com/api/v1/auth/wecom/authorize
 
 ### 10.2 通讯录合并
 
-1. 使用 COMPANY_ADMIN 打开 `/admin/identity/overview`，确认 OAuth 和通讯录配置完整。
-2. 在 `/admin/identity/sync-runs` 触发同步。新请求返回 201，同一 Idempotency-Key 重放返回 200，活动运行冲突返回 409 和 Location。
+1. 使用 COMPANY_ADMIN 打开 `/admin/company/overview`，确认 OAuth 和通讯录配置完整。
+2. 在 `/admin/company/sync-runs` 触发同步。新请求返回 201，同一 Idempotency-Key 重放返回 200，活动运行冲突返回 409 和 Location。
 3. 等待 `SUCCEEDED` 或明确失败终态，核对新增、更新、离职/禁用、未变化和失败计数。
-4. 在 `/admin/identity/members` 抽查企微稳定 ID、姓名、联系方式和部门摘要；响应不得包含 Secret 或 token。
+4. 在 `/admin/company/members` 抽查企微稳定 ID、姓名、联系方式和部门摘要；响应不得包含 Secret 或 token。
 5. 修改一个测试成员资料并再次同步，必须更新同一 identity user，不能新增重复成员。
 6. 将测试成员设为离职后同步，确认账号状态和会话撤销。
 7. 重复同步确认结果幂等，数据库中不存在同一企微身份映射到多个用户。

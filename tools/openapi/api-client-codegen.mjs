@@ -242,11 +242,11 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   )
   fs.writeFileSync(attachmentMetadataPath, attachmentMetadata, 'utf8')
 
-  for (const model of ['DashboardChart', 'DashboardChartSelection', 'DashboardItem', 'DashboardItemsQuery', 'DashboardQuery', 'DashboardSnapshot', 'DashboardWidget', 'DashboardTableCriteria', 'DashboardTableQuery']) {
+  for (const model of ['DashboardChart', 'DashboardChartSelection', 'DashboardItem', 'DashboardItemsQuery', 'DashboardQuery', 'DashboardSnapshot', 'DashboardWidget', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'NotificationTarget']) {
     const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
     let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
     source = source.replace(/^        '([^']+)': json\['\1'\] == null \? undefined : (.+),$/gm, (_line, field, conversion) => {
-      const nullable = !['DashboardQuery', 'DashboardSnapshot', 'DashboardTableCriteria', 'DashboardTableQuery'].includes(model) && !(model === 'DashboardItem' && field === 'workItem')
+      const nullable = !['DashboardQuery', 'DashboardSnapshot', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest'].includes(model) && !(model === 'DashboardItem' && field === 'workItem')
       return nullable
         ? `        ...(json['${field}'] === undefined ? {} : { '${field}': json['${field}'] === null ? null : ${conversion} }),`
         : `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`

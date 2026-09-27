@@ -55,6 +55,13 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
               AND (CAST(:externalUserId AS varchar) IS NULL OR e.external_user_id = CAST(:externalUserId AS varchar))
               AND (CAST(:employmentStatus AS varchar) IS NULL OR u.employment_status = CAST(:employmentStatus AS varchar))
               AND (CAST(:accountStatus AS varchar) IS NULL OR u.account_status = CAST(:accountStatus AS varchar))
+              AND (CAST(:platformRole AS varchar) IS NULL
+                OR (CAST(:platformRole AS varchar) = 'COMPANY_MEMBER' AND NOT EXISTS (
+                    SELECT 1 FROM yumpoo.platform_role_assignment a
+                    WHERE a.company_id = u.company_id AND a.user_id = u.id AND a.status = 'ACTIVE'))
+                OR EXISTS (SELECT 1 FROM yumpoo.platform_role_assignment a
+                    WHERE a.company_id = u.company_id AND a.user_id = u.id AND a.status = 'ACTIVE'
+                      AND a.role_code = CAST(:platformRole AS varchar)))
             """;
 
     private static final String RUN_COLUMNS = """
@@ -249,7 +256,8 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
                 .param("name", query.name())
                 .param("externalUserId", query.externalUserId())
                 .param("employmentStatus", query.employmentStatus())
-                .param("accountStatus", query.accountStatus());
+                .param("accountStatus", query.accountStatus())
+                .param("platformRole", query.platformRole());
     }
 
     private static JdbcClient.StatementSpec bindRunFilters(

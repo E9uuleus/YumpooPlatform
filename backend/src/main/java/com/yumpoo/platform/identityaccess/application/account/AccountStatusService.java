@@ -145,7 +145,7 @@ public class AccountStatusService implements AccountStatusUseCase {
                 changed.accountStatus() == AccountStatus.DISABLED
                         ? "ACCOUNT_DISABLED" : "ACCOUNT_ENABLED",
                 actor,
-                actorUser.activeRoles().stream().map(Enum::name)
+                actorUser.effectiveRoles().stream().map(Enum::name)
                         .collect(Collectors.toUnmodifiableSet()),
                 "USER", changed.userId(), command.reason(),
                 Map.of("accountStatus", changed.accountStatus() == AccountStatus.DISABLED
@@ -213,7 +213,7 @@ public class AccountStatusService implements AccountStatusUseCase {
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.ACCESS_DENIED));
         if (!user.available()
                 || user.authorizationVersion() != actor.sessionAuthorizationVersion()
-                || !user.activeRoles().contains(ManagedPlatformRole.COMPANY_ADMIN)) {
+                || !user.hasEffectiveRole(ManagedPlatformRole.COMPANY_ADMIN)) {
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         }
         return user;

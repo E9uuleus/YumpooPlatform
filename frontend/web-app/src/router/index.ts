@@ -107,11 +107,11 @@ export const routes: RouteRecordRaw[] = [
         ],
       },
       {
-        path: 'admin/identity',
+        path: 'admin/company',
         component: IdentityAdminLayout,
-        redirect: '/admin/identity/overview',
+        redirect: '/admin/company/overview',
         meta: {
-          shellSection: 'identity',
+          shellSection: 'company',
           requiredRoles: [
             AuthenticationRole.AppManager,
             AuthenticationRole.CompanyAdmin,
@@ -120,26 +120,36 @@ export const routes: RouteRecordRaw[] = [
         children: [
           {
             path: 'overview',
-            name: 'identity-overview',
+            name: 'company-overview',
             component: IdentityOverviewView,
           },
           {
             path: 'sync-runs',
-            name: 'identity-sync-runs',
+            name: 'company-sync-runs',
             component: IdentitySyncRunsView,
           },
           {
             path: 'members',
-            name: 'identity-members',
+            name: 'company-members',
             component: IdentityMembersView,
           },
         ],
+      },
+      {
+        path: 'admin/identity/:section(overview|members|sync-runs)?',
+        redirect: route => ({ path: `/admin/company/${route.params.section || 'overview'}`, query: route.query, hash: route.hash }),
       },
       {
         path: 'forbidden',
         name: 'forbidden',
         component: ForbiddenView,
         meta: { shellSection: 'work' },
+      },
+      {
+        path: 'inbox',
+        name: 'inbox',
+        component: () => import('../views/inbox/InboxView.vue'),
+        meta: { shellSection: 'inbox' },
       },
       {
         path: ':pathMatch(.*)*',

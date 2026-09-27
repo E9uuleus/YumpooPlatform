@@ -10,7 +10,7 @@ export const CAPSULE_WIDTH = 216
 export const DOCK_TAB = { width: 32, height: 112 } as const
 export const DOCK_CARD = { width: 288, height: 152 } as const
 export const PANEL = { width: 360 + PANEL_MARGIN * 2, height: 480 + PANEL_MARGIN * 2 } as const
-export const MENU = { width: 288 + PANEL_MARGIN * 2, height: 332 + PANEL_MARGIN * 2 } as const
+export const MENU = { width: 288 + PANEL_MARGIN * 2, height: 372 + PANEL_MARGIN * 2 } as const
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max))
 

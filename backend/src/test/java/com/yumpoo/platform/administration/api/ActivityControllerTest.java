@@ -59,16 +59,17 @@ class ActivityControllerTest {
     }
 
     @Test
-    void appManagerWithoutProjectMembershipIsHiddenAsNotFound() {
+    void appManagerWithoutProjectMembershipCanReadActivity() {
         CurrentActor actor = new CurrentActor(UUID.randomUUID(), COMPANY, 1,
                 Set.of(PlatformRoleCode.APP_MANAGER));
         Fixture fixture = fixture(actor);
-        when(fixture.access.findVisible(actor, PROJECT)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> fixture.controller.project(PROJECT, null, null,
-                null, null, null, null)).isInstanceOf(ApplicationException.class)
-                .extracting(failure -> ((ApplicationException) failure).errorCode())
-                .isEqualTo(StandardErrorCode.RESOURCE_NOT_FOUND);
+        when(fixture.access.findVisible(actor, PROJECT)).thenReturn(Optional.of(
+                project(ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
+                        ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY, OptionalLong.empty())));
+        when(fixture.activity.findProject(eq(COMPANY), eq(PROJECT), any()))
+                .thenReturn(new ActivityPage(List.of(), null, CUTOVER));
+        assertThat(actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)).isTrue();
+        assertThat(fixture.controller.project(PROJECT, null, null, null, null, null, null).getBody()).isNotNull();
     }
 
     @Test

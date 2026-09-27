@@ -340,6 +340,8 @@ class YumpooServerApplicationIT {
                 "idempotency_record",
                 "identity_user",
                 "login_session",
+                "notification_event",
+                "notification_projection_state",
                 "outbox_consumer_receipt",
                 "outbox_event",
                 "personal_dashboard",
@@ -354,6 +356,7 @@ class YumpooServerApplicationIT {
                 "project_work_item_priority_label",
                 "project_work_item_status_label",
                 "security_audit_event",
+                "user_notification",
                 "wecom_oauth_attempt",
                 "work_item",
                 "work_item_cell_activity",
@@ -546,6 +549,8 @@ class YumpooServerApplicationIT {
                 "uq_platform_role_assignment_active",
                 "idx_platform_role_assignment_user_status"
         );
+        assertThat(jdbcTemplate.queryForObject("SELECT indexdef FROM pg_indexes WHERE schemaname='yumpoo' AND indexname='uq_platform_role_assignment_active'",String.class))
+                .contains("(company_id, user_id)").doesNotContain("role_code");
         assertThat(workItemIndexNames).contains(
                 "idx_work_item_content_page",
                 "idx_work_item_content_status_page",

@@ -110,13 +110,7 @@ class M113PermissionMatrixIT {
                     managerActor,
                     "2"
             );
-            PlatformRoleCommandReceipt dualAdminRole = grant(
-                    dualUser.userId(),
-                    dualManagerRole.mutation().userRowVersion(),
-                    PlatformRoleCode.COMPANY_ADMIN,
-                    managerActor,
-                    "3"
-            );
+
 
             member = actor(memberUser.userId());
             appManager = actor(managerUser.userId());
@@ -124,7 +118,7 @@ class M113PermissionMatrixIT {
             dualRole = actor(dualUser.userId());
             target = actor(targetUser.userId());
             assertThat(adminRole.mutation().authorizationVersion()).isOne();
-            assertThat(dualAdminRole.mutation().authorizationVersion()).isEqualTo(2);
+            assertThat(dualManagerRole.mutation().authorizationVersion()).isOne();
         }
     }
 
@@ -142,21 +136,8 @@ class M113PermissionMatrixIT {
     }
 
     @Test
-    void appManagerCanReadAndGovernRolesButCannotWriteIdentity() throws Exception {
+    void appManagerCanReadGovernRolesAndWriteIdentity() throws Exception {
         assertThat(get("/api/v1/admin/members", appManager).statusCode()).isEqualTo(200);
-        assertDenied(post(
-                "/api/v1/admin/members/" + target.userId() + "/account-disable",
-                appManager,
-                "{\"reason\":\"M1-13 denied write\"}",
-                etag(target.userId())
-        ));
-        assertDenied(post(
-                "/api/v1/admin/directory-sync-runs",
-                appManager,
-                "",
-                null
-        ));
-
         HttpResponse<String> granted = post(
                 "/api/v1/admin/company-admin-assignments",
                 appManager,
@@ -167,6 +148,9 @@ class M113PermissionMatrixIT {
         assertThat(granted.statusCode())
                 .as("body=%s", granted.body())
                 .isEqualTo(201);
+        assertThat(post("/api/v1/admin/members/" + target.userId() + "/account-disable", appManager,
+                "{\"reason\":\"platform manager account governance\"}", etag(target.userId())).statusCode()).isEqualTo(200);
+
     }
 
     @Test

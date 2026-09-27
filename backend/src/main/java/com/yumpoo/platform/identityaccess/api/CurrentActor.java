@@ -21,6 +21,17 @@ public record CurrentActor(
                 platformRoles,
                 "platformRoles must not be null"
         ));
+        if (platformRoles.contains(PlatformRoleCode.APP_MANAGER)) {
+            var effective = new java.util.HashSet<>(platformRoles);
+            effective.add(PlatformRoleCode.COMPANY_ADMIN);
+            platformRoles = Set.copyOf(effective);
+        }
+    }
+
+    public PlatformRoleTier memberTier() {
+        return hasRole(PlatformRoleCode.APP_MANAGER) ? PlatformRoleTier.APP_MANAGER
+                : hasRole(PlatformRoleCode.COMPANY_ADMIN) ? PlatformRoleTier.COMPANY_ADMIN
+                : PlatformRoleTier.COMPANY_MEMBER;
     }
 
     public boolean hasRole(PlatformRoleCode role) {

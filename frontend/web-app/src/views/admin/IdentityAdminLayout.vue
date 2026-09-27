@@ -9,9 +9,9 @@ const { authentication } = useIdentityAdmin()
 <template>
   <section class="identity-admin">
     <yp-page-header
-      eyebrow="身份与组织"
-      title="身份管理"
-      description="查看公司与企微状态、诊断通讯录同步，并管理成员账号。"
+      eyebrow="公司与组织"
+      title="公司管理"
+      description="查看公司与企微状态、诊断通讯录同步，并管理成员账号与角色。"
     >
       <template #meta>
         <yp-assignee

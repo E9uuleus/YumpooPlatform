@@ -51,6 +51,21 @@ describe('全局会话状态', () => {
     session.actionProblem.value = undefined
   })
 
+  it('平台管理员继承公司管理能力，且仅平台管理员可更改层级', () => {
+    const session = useSession()
+    session.authentication.value = { ...currentAuthentication(), roles: new Set([AuthenticationRole.AppManager]) }
+    expect(session.memberTier.value).toBe('APP_MANAGER')
+    expect(session.canManageIdentity.value).toBe(true)
+    expect(session.isCompanyAdmin.value).toBe(true)
+    expect(session.canChangeMemberTier.value).toBe(true)
+    session.authentication.value.roles = new Set([AuthenticationRole.CompanyAdmin])
+    expect(session.memberTier.value).toBe('COMPANY_ADMIN')
+    expect(session.canChangeMemberTier.value).toBe(false)
+    session.authentication.value.roles = new Set()
+    expect(session.memberTier.value).toBe('COMPANY_MEMBER')
+    expect(session.canManageIdentity.value).toBe(false)
+  })
+
   it('GET /auth/me 并发单飞并建立认证主体', async () => {
     let resolve!: (value: CurrentAuthentication) => void
     api.getCurrentAuthentication.mockReturnValue(new Promise<CurrentAuthentication>((done) => { resolve = done }))

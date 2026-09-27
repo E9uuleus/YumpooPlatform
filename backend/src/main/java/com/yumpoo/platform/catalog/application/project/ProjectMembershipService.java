@@ -68,6 +68,11 @@ public class ProjectMembershipService {
     }
 
     @Transactional(readOnly = true)
+    public List<ProjectApplicationSnapshot> findProjects(UUID companyId,Collection<UUID> ids) {
+        return projectRepository.findAll(companyId,ids).stream().map(ProjectMembershipService::project).toList();
+    }
+
+    @Transactional(readOnly = true)
     public boolean isActiveMember(UUID companyId, UUID projectId, UUID userId) {
         return membershipRepository.existsActive(companyId, projectId, userId);
     }

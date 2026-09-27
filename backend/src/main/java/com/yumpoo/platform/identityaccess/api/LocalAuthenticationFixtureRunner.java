@@ -97,10 +97,7 @@ public final class LocalAuthenticationFixtureRunner implements ApplicationRunner
                 companyId,
                 backupManager.userId()
         );
-        if (adminRoles.containsAll(Set.of(
-                PlatformRoleCode.COMPANY_ADMIN,
-                PlatformRoleCode.APP_MANAGER
-        ))) {
+        if (adminRoles.contains(PlatformRoleCode.APP_MANAGER)) {
             LOGGER.info("Local authentication fixture is ready for member {}",
                     properties.getMemberId());
             return;
@@ -123,27 +120,15 @@ public final class LocalAuthenticationFixtureRunner implements ApplicationRunner
             actor = new ActorState(manager.userId(), manager.authorizationVersion());
         }
 
-        long targetRowVersion = localAdmin.rowVersion();
-        if (!adminRoles.contains(PlatformRoleCode.COMPANY_ADMIN)) {
-            PlatformRoleAssignmentMutation mutation = grant(
-                    companyId,
-                    localAdmin.userId(),
-                    PlatformRoleCode.COMPANY_ADMIN,
-                    targetRowVersion,
-                    actor
-            );
-            targetRowVersion = mutation.userRowVersion();
-            actor = actor.afterMutation(mutation);
-        }
-        if (!adminRoles.contains(PlatformRoleCode.APP_MANAGER)) {
-            PlatformRoleAssignmentMutation mutation = grant(
-                    companyId,
-                    localAdmin.userId(),
-                    PlatformRoleCode.APP_MANAGER,
-                    targetRowVersion,
-                    actor
-            );
-            actor = actor.afterMutation(mutation);
+        if (adminRoles.contains(PlatformRoleCode.COMPANY_ADMIN)) {
+            String commandIdentity = companyId + ":" + localAdmin.userId() + ":APP_MANAGER:" + localAdmin.rowVersion();
+            roleCommands.changeTier(new PlatformRoleTierChangeCommand(
+                    companyId, localAdmin.userId(), PlatformRoleTier.APP_MANAGER, localAdmin.rowVersion(),
+                    new PlatformRoleCommandActor(actor.userId(), actor.authorizationVersion(), clock.instant()),
+                    UUID.nameUUIDFromBytes(("local-auth:" + commandIdentity).getBytes(StandardCharsets.UTF_8)),
+                    sha256(commandIdentity), REASON));
+        } else {
+            grant(companyId, localAdmin.userId(), PlatformRoleCode.APP_MANAGER, localAdmin.rowVersion(), actor);
         }
         LOGGER.info("Local authentication fixture initialized for member {}",
                 properties.getMemberId());

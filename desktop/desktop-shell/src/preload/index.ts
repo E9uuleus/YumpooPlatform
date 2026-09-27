@@ -3,6 +3,9 @@ import type {
   DesktopAuthPhase,
   DesktopAuthStatus,
   DesktopBridge,
+  DesktopInboxBridge,
+  DesktopInboxState,
+  DesktopInboxPreferences,
   DesktopTimerBridge,
   DesktopTimerState,
   DesktopTimerCommand,
@@ -156,10 +159,25 @@ const desktopTimer: DesktopTimerBridge = Object.freeze({
   openWorkItem: async (project: string, item: string) => { await ipcRenderer.invoke('yumpoo:timer:open-item', project, item) },
 })
 
+const desktopInbox: DesktopInboxBridge = Object.freeze({
+  publishState: async (state: DesktopInboxState) => { await ipcRenderer.invoke('yumpoo:inbox:state', state) },
+  getPreferences: async () => ipcRenderer.invoke('yumpoo:inbox:get-preferences'),
+  setPreferences: async (change: DesktopInboxPreferences) => ipcRenderer.invoke('yumpoo:inbox:preferences', change),
+  onOpen: (listener: (notificationId: string | null) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Inbox listener must be a function')
+    const wrapped = (_event: unknown, value: unknown) => {
+      if (value === null || (typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))) listener(value)
+    }
+    ipcRenderer.on('yumpoo:inbox:open', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:inbox:open', wrapped)
+  },
+})
+
 const desktopBridge: DesktopBridge = Object.freeze({
   client: 'electron',
   auth: desktopAuth,
   timer: desktopTimer,
+  inbox: desktopInbox,
 })
 
 contextBridge.exposeInMainWorld('yumpooDesktop', desktopBridge)
