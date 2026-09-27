@@ -7,6 +7,7 @@ export type StatusDomain =
   | 'employment'
   | 'directory-sync'
   | 'integration'
+  | 'operations'
 
 export type StatusTone = 'blue' | 'green' | 'yellow' | 'red' | 'purple' | 'teal' | 'pink' | 'gray'
 
@@ -16,6 +17,13 @@ export interface StatusPresentation {
 }
 
 const statusMappings: Record<StatusDomain, Record<string, StatusPresentation>> = {
+  operations: {
+    UP: { label: '正常', tone: 'green' }, DOWN: { label: '不可用', tone: 'red' }, DEGRADED: { label: '需要关注', tone: 'yellow' }, UNKNOWN: { label: '等待采样', tone: 'gray' },
+    ONLINE: { label: '在线', tone: 'green' }, IDLE: { label: '空闲', tone: 'yellow' }, AWAY: { label: '离开', tone: 'gray' },
+    WARNING: { label: '警告', tone: 'yellow' }, CRITICAL: { label: '严重', tone: 'red' }, FIRING: { label: '活跃', tone: 'red' }, RESOLVED: { label: '已恢复', tone: 'green' },
+    PASS: { label: '通过', tone: 'green' }, FAIL: { label: '需检查', tone: 'yellow' },
+    ERROR: { label: 'ERROR', tone: 'red' }, WARN: { label: 'WARN', tone: 'yellow' }, INFO: { label: 'INFO', tone: 'blue' }, DEBUG: { label: 'DEBUG', tone: 'gray' }, TRACE: { label: 'TRACE', tone: 'gray' },
+  },
   'project-lifecycle': {
     DRAFT: { label: '草稿', tone: 'gray' },
     ACTIVE: { label: '活跃', tone: 'blue' },

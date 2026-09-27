@@ -44,6 +44,7 @@ export function useSession() {
     ? 'APP_MANAGER' : authentication.value?.roles.has(AuthenticationRole.CompanyAdmin)
       ? 'COMPANY_ADMIN' : 'COMPANY_MEMBER')
   const canChangeMemberTier = computed(() => memberTier.value === 'APP_MANAGER')
+  const isPlatformAdmin = computed(() => memberTier.value === 'APP_MANAGER')
   const canManageIdentity = computed(() => isIdentityReader.value)
   const isCompanyAdmin = computed(() => isIdentityReader.value)
 
@@ -56,6 +57,7 @@ export function useSession() {
     isIdentityReader,
     memberTier,
     canChangeMemberTier,
+    isPlatformAdmin,
     canManageIdentity,
     isCompanyAdmin,
     ensureAuthentication,

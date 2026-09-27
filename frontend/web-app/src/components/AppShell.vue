@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Clock, Close, FolderOpened, Grid, Menu as MenuIcon, Search, Setting, User, OfficeBuilding } from '@element-plus/icons-vue'
+import { Clock, Close, FolderOpened, Grid, Menu as MenuIcon, Search, Setting, User, OfficeBuilding, Monitor } from '@element-plus/icons-vue'
 import { AuthenticationClientType, ProjectLifecycleFilter, type ProjectSummary } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -20,6 +20,7 @@ import { useSession } from '../composables/useSession'
 import { useInbox } from '../composables/useInbox'
 import { parseInboxFilter } from './inbox/inboxPresentation'
 import InboxBell from './inbox/InboxBell.vue'
+import OperationsBadge from './operations/OperationsBadge.vue'
 import type { ShellSection } from '../router/shell-navigation'
 import InlineProblem from './InlineProblem.vue'
 import YpAssignee from './yp/YpAssignee.vue'
@@ -29,7 +30,7 @@ import brandLogo from '../assets/brand/logo.svg'
 interface ModuleItem {
   section: ShellSection
   label: string
-  routeName: 'workspace' | 'company-overview'
+  routeName: 'workspace' | 'company-overview' | 'operations-overview'
   icon: Component
 }
 
@@ -71,18 +72,28 @@ const projectRecentScope = computed(() => {
   return authentication ? `${authentication.company.id}:${authentication.user.id}` : undefined
 })
 const projectRecents = useProjectRecents(() => projectRecentScope.value)
+const operationsAlertCount = ref(0)
 const moduleItems = computed<ModuleItem[]>(() => [
   { section: 'work', label: '工作台', routeName: 'workspace', icon: Grid },
   ...(session.isIdentityReader.value
     ? [{ section: 'company', label: '公司管理', routeName: 'company-overview', icon: OfficeBuilding } as const]
     : []),
+  ...(session.isPlatformAdmin.value ? [{ section: 'operations', label: '运维', routeName: 'operations-overview', icon: Monitor } as const] : []),
 ])
 const contextTitle = computed(() => ({
   work: '工作台',
   company: '公司管理',
   inbox: '收件箱',
+  operations: '运维中心',
 })[activeSection.value])
 const contextItems = computed<ContextItem[]>(() => {
+  if (activeSection.value === 'operations') return [
+    { label: '概览', routeName: 'operations-overview' },
+    { label: '主机与运行时', routeName: 'operations-host' },
+    { label: '在线会话', routeName: 'operations-sessions' },
+    { label: '运行日志', routeName: 'operations-logs' },
+    { label: '告警', routeName: 'operations-alerts', badge: operationsAlertCount.value },
+  ]
   if (activeSection.value === 'inbox') {
     const counts = inbox.counts.value
     return [
@@ -301,6 +312,7 @@ onBeforeUnmount(() => {
               <component :is="item.icon" />
             </el-icon>
             <span class="module-rail__item-label">{{ item.label }}</span>
+            <operations-badge v-if="item.section === 'operations'" @count="operationsAlertCount = $event" />
           </button>
         </el-tooltip>
       </nav>
@@ -580,6 +592,7 @@ onBeforeUnmount(() => {
           @click="navigate(item.routeName)"
         >
           {{ item.label }}
+          <operations-badge v-if="item.section === 'operations' && mobileNavigationOpen" @count="operationsAlertCount = $event" />
         </button>
       </nav>
       <div
