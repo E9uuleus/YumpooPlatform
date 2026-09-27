@@ -37,7 +37,9 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
         } catch (DataAccessException failure) {
             throw failure;
         } catch (RuntimeException failure) {
-            LOG.warn("Ignoring inbox source event {}: {}", event.eventId(), failure.getClass().getSimpleName());
+            LOG.atWarn().setMessage("inbox source event ignored").addKeyValue("event", "notification.source.ignored")
+                    .addKeyValue("eventId", event.eventId())
+                    .addKeyValue("exceptionType", failure.getClass().getSimpleName()).log();
         }
     }
     private void project(DomainEventEnvelope event) {

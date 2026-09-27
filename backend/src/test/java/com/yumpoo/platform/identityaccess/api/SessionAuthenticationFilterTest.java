@@ -47,6 +47,7 @@ class SessionAuthenticationFilterTest {
         SessionCredential sessionCredential = new SessionCredential("s".repeat(43));
         SessionCredential csrfCredential = new SessionCredential("c".repeat(43));
         LoginSession loginSession = mock(LoginSession.class);
+        when(loginSession.clientType()).thenReturn(com.yumpoo.platform.identityaccess.domain.session.SessionClientType.WEB);
         Instant expiresAt = Instant.parse("2026-08-22T00:00:00Z");
         when(loginSession.absoluteExpiresAt()).thenReturn(expiresAt);
         IssuedSession issued = new IssuedSession(

@@ -23,7 +23,8 @@ public class SessionCleanupScheduler {
     public void purgeDueSessions() {
         int deleted = sessionService.purgeDueSessions();
         if (deleted > 0) {
-            LOGGER.info("due sessions purged; deletedCount={}", deleted);
+            LOGGER.atInfo().setMessage("due sessions purged").addKeyValue("event", "session.cleanup.completed")
+                    .addKeyValue("deletedCount", deleted).log();
         }
     }
 }

@@ -17,6 +17,9 @@ public final class StructuredLoggingContext {
     public static final String ATTEMPT = "attempt";
     public static final String OUTCOME = "outcome";
     public static final String ERROR_CODE = "errorCode";
+    public static final String USER_ID = "userId";
+    public static final String CLIENT_TYPE = "clientType";
+    public static final String JOB = "job";
 
     private StructuredLoggingContext() {
     }

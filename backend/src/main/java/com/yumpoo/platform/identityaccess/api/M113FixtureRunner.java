@@ -135,7 +135,7 @@ public class M113FixtureRunner implements ApplicationRunner {
                 sha256("grant-company-admin:" + companyId + ":" + controlled.userId()),
                 REASON
         ));
-        LOGGER.info("M1-13 controlled acceptance fixture initialized");
+        LOGGER.atInfo().setMessage("controlled acceptance fixture initialized").addKeyValue("event", "identity.fixture.initialized").log();
     }
 
     private void validateRuntimeBoundary() {

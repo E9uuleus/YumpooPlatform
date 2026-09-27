@@ -212,6 +212,16 @@ final class DeploymentPreflight {
         } catch (IOException exception) {
             fail(PATH_INVALID, "yumpoo.deployment.upload-temp-root");
         }
+        String logFile = requiredEnvironment("logging.file.name", PATH_INVALID);
+        try {
+            Path file = Path.of(logFile).toAbsolutePath().normalize();
+            if (!Path.of(logFile).isAbsolute() || !file.getParent().toRealPath().startsWith(paths.logRoot())
+                    || Files.isSymbolicLink(file) || Files.exists(file) && !file.toRealPath().startsWith(paths.logRoot())) {
+                fail(PATH_INVALID, "logging.file.name");
+            }
+        } catch (IOException | java.nio.file.InvalidPathException exception) {
+            fail(PATH_INVALID, "logging.file.name");
+        }
         return paths;
     }
 

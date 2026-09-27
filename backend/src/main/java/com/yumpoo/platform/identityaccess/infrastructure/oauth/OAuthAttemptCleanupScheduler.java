@@ -35,7 +35,8 @@ public class OAuthAttemptCleanupScheduler {
                 properties.getPurgeMaxBatches()
         );
         if (deleted > 0) {
-            LOGGER.info("expired OAuth attempts purged; deletedCount={}", deleted);
+            LOGGER.atInfo().setMessage("expired OAuth attempts purged").addKeyValue("event", "oauth.cleanup.completed")
+                    .addKeyValue("deletedCount", deleted).log();
         }
     }
 }

@@ -329,10 +329,10 @@ public final class IdentityGovernanceController {
                     SessionRequestContext.required(request).clientTypeCode(),
                     SessionRequestContext.required(request).clientVersion());
         } catch (RuntimeException auditFailure) {
-            LOGGER.error(
-                    "security audit append failed requestId={} action={} errorType={}",
-                    request.getAttribute(com.yumpoo.platform.foundation.application.request.RequestIdContext.ATTRIBUTE_NAME),
-                    action, auditFailure.getClass().getSimpleName());
+            LOGGER.atError().setMessage("security audit append failed").addKeyValue("event", "identity.audit.failed")
+                    .addKeyValue("requestId", request.getAttribute(com.yumpoo.platform.foundation.application.request.RequestIdContext.ATTRIBUTE_NAME))
+                    .addKeyValue("action", action)
+                    .addKeyValue("exceptionType", auditFailure.getClass().getSimpleName()).log();
             throw new ApplicationException(StandardErrorCode.INTERNAL_ERROR);
         }
     }

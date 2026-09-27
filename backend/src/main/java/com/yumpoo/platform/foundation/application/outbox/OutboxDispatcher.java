@@ -73,6 +73,7 @@ public class OutboxDispatcher {
     }
 
     private void process(OutboxClaim claim) {
+        long started = System.nanoTime();
         DomainEventEnvelope event = claim.event();
         RequestCorrelation consumerCorrelation = new RequestCorrelation(
                 event.requestId(),
@@ -111,7 +112,7 @@ public class OutboxDispatcher {
                     try (StructuredLoggingContext.Scope ignoredOutcome = StructuredLoggingContext.open(Map.of(
                             StructuredLoggingContext.OUTCOME, outcome.name()
                     ))) {
-                        LOGGER.info("outbox consumer completed");
+                        LOGGER.atDebug().setMessage("outbox consumer completed").addKeyValue("event", "outbox.consumer.completed").log();
                     }
                 } catch (OutboxConsumerException exception) {
                     fail(claim, new OutboxFailure(
@@ -136,7 +137,10 @@ public class OutboxDispatcher {
             try (StructuredLoggingContext.Scope ignoredOutcome = StructuredLoggingContext.open(Map.of(
                     StructuredLoggingContext.OUTCOME, completed ? "COMPLETED" : "STALE_LEASE"
             ))) {
-                LOGGER.info("outbox event finalized");
+                LOGGER.atLevel(completed ? org.slf4j.event.Level.DEBUG : org.slf4j.event.Level.WARN)
+                        .setMessage("outbox event finalized").addKeyValue("event", completed ? "outbox.event.completed" : "outbox.event.stale_lease")
+                        .addKeyValue("eventType", event.eventType()).addKeyValue("attempt", claim.attemptCount())
+                        .addKeyValue("consumers", consumers.size()).addKeyValue("durationMs", (System.nanoTime() - started) / 1_000_000).log();
             }
         }
     }
@@ -162,7 +166,10 @@ public class OutboxDispatcher {
                 StructuredLoggingContext.ERROR_CODE, failure.errorCode(),
                 StructuredLoggingContext.OUTCOME, outcome
         ))) {
-            LOGGER.warn("outbox event processing failed; exceptionType={}", failure.exceptionType());
+            LOGGER.atLevel("DEAD".equals(outcome) ? org.slf4j.event.Level.ERROR : org.slf4j.event.Level.WARN)
+                    .setMessage("outbox event processing failed")
+                    .addKeyValue("event", "DEAD".equals(outcome) ? "outbox.event.dead" : "RETRY".equals(outcome) ? "outbox.event.retry_scheduled" : "outbox.event.stale_lease")
+                    .addKeyValue("exceptionType", failure.exceptionType()).addKeyValue("attempt", claim.attemptCount()).log();
         }
     }
 

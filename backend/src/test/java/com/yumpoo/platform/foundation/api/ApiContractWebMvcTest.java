@@ -19,6 +19,7 @@ import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
 import jakarta.servlet.Filter;
+import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -403,7 +405,7 @@ class ApiContractWebMvcTest {
     }
 
     @Test
-    void structuredLogIsJsonWithControlledMdcAndWithoutExceptionMessage(
+    void consoleIsReadableAndFileHasControlledJsonWithoutSensitiveExceptionContent(
             CapturedOutput output
     ) throws Exception {
         IllegalStateException failure = new IllegalStateException(
@@ -418,25 +420,30 @@ class ApiContractWebMvcTest {
                 StructuredLoggingContext.OUTCOME, "RETRY",
                 StructuredLoggingContext.ERROR_CODE, "M011_RETRYABLE_FAILURE"
         ))) {
-            LOGGER.warn(
-                    "m011 structured logging probe; exceptionType={}",
-                    failure.getClass().getName()
-            );
+            LOGGER.atWarn().setMessage("m011 structured logging probe").setCause(failure)
+                    .addKeyValue("event", "logging.contract.probe").addKeyValue("attempt", 2).log();
         }
 
         String logLine = output.getOut().lines()
                 .filter(line -> line.contains("m011 structured logging probe"))
                 .reduce((first, second) -> second)
                 .orElseThrow();
-        JsonNode log = objectMapper.readTree(logLine);
+        assertThat(logLine).contains("WARN", "req=m011-log").doesNotStartWith("{");
+        String jsonLine;
+        try (var lines = java.nio.file.Files.lines(java.nio.file.Path.of("out/logs/yumpoo-server.log"))) {
+            jsonLine = lines.filter(line -> line.contains("logging.contract.probe")).reduce((a, b) -> b).orElseThrow();
+        }
+        JsonNode log = objectMapper.readTree(jsonLine);
+        assertThat(log.path("schema").asString()).isEqualTo("yumpoo-log/1");
         assertThat(log.get("requestId").asString()).isEqualTo("m011-log-request");
-        assertThat(log.get("correlationId").asString()).isEqualTo("m011-log-request");
+        assertThat(log.has("correlationId")).isFalse();
         assertThat(log.get("consumerName").asString())
                 .isEqualTo("audit.m011_probe_projection");
-        assertThat(log.get("attempt").asString()).isEqualTo("2");
+        assertThat(log.get("attempt").isNumber()).isTrue();
+        assertThat(log.get("attempt").asInt()).isEqualTo(2);
         assertThat(log.get("outcome").asString()).isEqualTo("RETRY");
         assertThat(log.get("errorCode").asString()).isEqualTo("M011_RETRYABLE_FAILURE");
-        assertThat(logLine)
+        assertThat(jsonLine)
                 .doesNotContain("secret-do-not-log")
                 .doesNotContain("database-password=hidden");
         assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
@@ -513,6 +520,33 @@ class ApiContractWebMvcTest {
         assertThat(response.isCommitted()).isTrue();
         assertThat(RequestCorrelationContext.current()).isEmpty();
         assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void operationsFailuresRestoreNoStoreBeforeWritingTheErrorBody(boolean applicationFailure) throws Exception {
+        MockHttpServletRequest request = loopbackRequest("proxy.operations-failure");
+        request.setRequestURI("/api/v1/admin/operations/overview");
+        MockHttpServletResponse response = new MockHttpServletResponse() {
+            @Override
+            public ServletOutputStream getOutputStream() {
+                assertThat(getHeader(HttpHeaders.CACHE_CONTROL)).isEqualTo("no-store");
+                return super.getOutputStream();
+            }
+        };
+        Filter failingFilter = (filterRequest, filterResponse, chain) -> {
+            if (applicationFailure) {
+                throw new ApplicationException(StandardErrorCode.DEPENDENCY_UNAVAILABLE);
+            }
+            throw new IllegalStateException("unavailable dependency");
+        };
+
+        requestIdFilter.doFilter(request, response, new MockFilterChain(new HttpServlet() { }, failingFilter));
+
+        assertThat(response.getStatus()).isEqualTo(applicationFailure ? 503 : 500);
+        assertThat(response.getHeader(HttpHeaders.CACHE_CONTROL)).isEqualTo("no-store");
+        assertThat(objectMapper.readTree(response.getContentAsString()).get("code").asString())
+                .isEqualTo(applicationFailure ? "DEPENDENCY_UNAVAILABLE" : "INTERNAL_ERROR");
     }
 
     @Test

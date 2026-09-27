@@ -42,7 +42,8 @@ public class IdentityOutboxRecoveryRunner implements ApplicationRunner {
             recovered += outboxStore.requeueMissingConsumerEvents(subscription, nextAttemptAt);
         }
         if (recovered > 0) {
-            LOGGER.info("identity outbox events requeued after consumer registration; count={}", recovered);
+            LOGGER.atInfo().setMessage("identity outbox events requeued").addKeyValue("event", "identity.outbox.requeued")
+                    .addKeyValue("count", recovered).log();
         }
     }
 }

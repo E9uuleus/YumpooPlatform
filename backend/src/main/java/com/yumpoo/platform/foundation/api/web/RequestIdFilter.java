@@ -13,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -35,9 +36,21 @@ public final class RequestIdFilter extends OncePerRequestFilter {
     private static final Logger LOGGER = LoggerFactory.getLogger(RequestIdFilter.class);
 
     private final ApiErrorWriter apiErrorWriter;
+    private final io.micrometer.core.instrument.Timer businessRequests;
 
     public RequestIdFilter(ApiErrorWriter apiErrorWriter) {
         this.apiErrorWriter = apiErrorWriter;
+        this.businessRequests = null;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RequestIdFilter(ApiErrorWriter apiErrorWriter, org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> registries) {
+        this.apiErrorWriter = apiErrorWriter;
+        var registry = registries.getIfAvailable();
+        this.businessRequests = registry == null ? null : io.micrometer.core.instrument.Timer.builder("yumpoo.http.business")
+                .description("Business HTTP latency without route tags")
+                .publishPercentiles(.95).distributionStatisticExpiry(java.time.Duration.ofMinutes(5))
+                .distributionStatisticBufferLength(1).register(registry);
     }
 
     @Override
@@ -46,6 +59,7 @@ public final class RequestIdFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
+        long started = System.nanoTime();
         String requestId = trustedRequestId(request);
         if (requestId == null) {
             requestId = UUID.randomUUID().toString();
@@ -53,6 +67,7 @@ public final class RequestIdFilter extends OncePerRequestFilter {
 
         request.setAttribute(RequestIdContext.ATTRIBUTE_NAME, requestId);
         response.setHeader(RequestIdContext.HEADER_NAME, requestId);
+        preventOperationsCaching(request, response);
         RequestCorrelation correlation = RequestCorrelation.root(requestId);
         try (
                 RequestCorrelationContext.Scope ignoredCorrelation =
@@ -68,33 +83,50 @@ public final class RequestIdFilter extends OncePerRequestFilter {
                 if (response.isCommitted()) {
                     throw exception;
                 }
-                resetAndWrite(response, exception, requestId);
+                resetAndWrite(request, response, exception, requestId);
             } catch (Exception exception) {
+                if (!Boolean.TRUE.equals(request.getAttribute(HttpAccessLog.ERROR_LOGGED))) {
+                    LOGGER.atError().setMessage("unexpected request failure").setCause(exception)
+                            .addKeyValue("event", "http.request.unhandled").addKeyValue("method", request.getMethod())
+                            .addKeyValue("route", HttpAccessLog.route(request)).log();
+                    request.setAttribute(HttpAccessLog.ERROR_LOGGED, true);
+                }
                 if (response.isCommitted()) {
                     rethrow(exception);
                 }
-                LOGGER.error(
-                        "unexpected request failure; method={}, path={}, exceptionType={}",
-                        request.getMethod(),
-                        request.getRequestURI(),
-                        exception.getClass().getName()
-                );
                 resetAndWrite(
+                        request,
                         response,
                         new ApplicationException(StandardErrorCode.INTERNAL_ERROR),
                         requestId
                 );
+            } finally {
+                preventOperationsCaching(request, response);
+                HttpAccessLog.completed(request, response, started);
+                String path = request.getRequestURI();
+                if (businessRequests != null && !path.startsWith("/api/v1/admin/operations") && !path.startsWith("/actuator")) {
+                    businessRequests.record(System.nanoTime() - started, java.util.concurrent.TimeUnit.NANOSECONDS);
+                }
             }
         }
     }
 
     private void resetAndWrite(
+            HttpServletRequest request,
             HttpServletResponse response,
             ApplicationException exception,
             String requestId
     ) throws IOException {
         response.reset();
+        preventOperationsCaching(request, response);
         apiErrorWriter.write(response, exception, requestId);
+    }
+
+    private static void preventOperationsCaching(HttpServletRequest request, HttpServletResponse response) {
+        String path = request.getRequestURI();
+        if (path.equals("/api/v1/admin/operations") || path.startsWith("/api/v1/admin/operations/")) {
+            response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
+        }
     }
 
     private static void rethrow(Exception exception) throws ServletException, IOException {

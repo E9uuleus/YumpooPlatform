@@ -98,8 +98,7 @@ public final class LocalAuthenticationFixtureRunner implements ApplicationRunner
                 backupManager.userId()
         );
         if (adminRoles.contains(PlatformRoleCode.APP_MANAGER)) {
-            LOGGER.info("Local authentication fixture is ready for member {}",
-                    properties.getMemberId());
+            LOGGER.atInfo().setMessage("local authentication fixture ready").addKeyValue("event", "identity.local.ready").log();
             return;
         }
 
@@ -130,8 +129,7 @@ public final class LocalAuthenticationFixtureRunner implements ApplicationRunner
         } else {
             grant(companyId, localAdmin.userId(), PlatformRoleCode.APP_MANAGER, localAdmin.rowVersion(), actor);
         }
-        LOGGER.info("Local authentication fixture initialized for member {}",
-                properties.getMemberId());
+        LOGGER.atInfo().setMessage("local authentication fixture ready").addKeyValue("event", "identity.local.initialized").log();
     }
 
     private PlatformRoleAssignmentMutation grant(

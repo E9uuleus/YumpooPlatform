@@ -12,6 +12,10 @@ spring:
     url: jdbc:postgresql://127.0.0.1:5432/yumpoo
     user: yumpoo_migrator
 
+logging:
+  file:
+    name: C:/ProgramData/Yumpoo/logs/yumpoo-server.log
+
 yumpoo:
   wecom:
     oauth:

@@ -26,8 +26,12 @@ public final class AttachmentMaintenanceScheduler {
             metrics.counter("yumpoo.attachments.maintenance.items","phase",result.phase()).increment(result.processed());
             metrics.counter("yumpoo.attachments.maintenance.issues","phase",result.phase()).increment(result.issues());
             metrics.counter("yumpoo.attachments.maintenance.deleted","phase",result.phase()).increment(result.deleted());
-            LOGGER.info("attachment maintenance runId={} phase={} processed={} issues={} deleted={}",
-                    result.runId(),result.phase(),result.processed(),result.issues(),result.deleted());
+            LOGGER.atInfo().setMessage("attachment maintenance completed").addKeyValue("event", "attachment.maintenance.completed")
+                    .addKeyValue("runId", result.runId())
+                    .addKeyValue("phase", result.phase())
+                    .addKeyValue("processed", result.processed())
+                    .addKeyValue("issues", result.issues())
+                    .addKeyValue("deleted", result.deleted()).log();
         });
     }
 }
