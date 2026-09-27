@@ -1,9 +1,5 @@
 <script setup lang="ts">
-import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPageHeader from '../../components/yp/YpPageHeader.vue'
-import { useIdentityAdmin } from '../../composables/useIdentityAdmin'
-
-const { authentication } = useIdentityAdmin()
 </script>
 
 <template>
@@ -11,17 +7,21 @@ const { authentication } = useIdentityAdmin()
     <yp-page-header
       eyebrow="公司与组织"
       title="公司管理"
-      description="查看公司与企微状态、诊断通讯录同步，并管理成员账号与角色。"
     >
       <template #meta>
-        <yp-assignee
-          v-if="authentication"
-          :user-id="authentication.user.id"
-          :display-name="authentication.user.displayName"
-          size="table"
-        />
+        <p class="identity-admin__lead">
+          查看公司与企微状态、诊断通讯录同步，并管理成员账号与角色。
+        </p>
       </template>
     </yp-page-header>
     <router-view />
   </section>
 </template>
+
+<style scoped>
+.identity-admin__lead {
+  max-width: 64ch;
+  margin: 0;
+  color: var(--yp-text-secondary);
+}
+</style>
