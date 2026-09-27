@@ -8,10 +8,12 @@ type OptionProps = {
   label?: string | number
   disabled?: boolean
 }
-export const ElOption: FunctionalComponent<OptionProps> = (props, { attrs, slots }) => createVNode(Option, { ...attrs, ...props }, slots)
+export const ElOption: FunctionalComponent<OptionProps> = (props, { attrs, slots }) =>
+  createVNode(Option, { ...attrs, ...props }, slots)
 
 type TabsProps = {
   modelValue: string | number
   'onUpdate:modelValue'?: (value: string | number) => void
 }
-export const ElTabs: FunctionalComponent<TabsProps> = (props, { attrs, slots }) => createVNode(Tabs, { ...attrs, ...props }, slots)
+export const ElTabs: FunctionalComponent<TabsProps> = (props, { attrs, slots }) =>
+  createVNode(Tabs, { ...attrs, ...props }, slots)

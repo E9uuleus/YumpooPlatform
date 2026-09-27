@@ -20,20 +20,36 @@ public enum AlertRuleType {
     public final Double warning;
     public final Double critical;
     public final int duration;
+
     AlertRuleType(String metric, String unit, boolean below, Double warning, Double critical, int duration) {
-        this.metric = metric; this.unit = unit; this.below = below; this.warning = warning; this.critical = critical; this.duration = duration;
+        this.metric = metric;
+        this.unit = unit;
+        this.below = below;
+        this.warning = warning;
+        this.critical = critical;
+        this.duration = duration;
     }
+
     public String severity(double value, Double warning, Double critical) {
         if (critical != null && (below ? value <= critical : value >= critical)) return "CRITICAL";
         if (warning != null && (below ? value <= warning : value >= warning)) return "WARNING";
         return null;
     }
+
     public boolean valid(Double warning, Double critical, int seconds) {
-        if (critical == null || !Double.isFinite(critical) || critical <= 0 || warning != null && (!Double.isFinite(warning) || warning <= 0)) return false;
+        if (
+            critical == null ||
+            !Double.isFinite(critical) ||
+            critical <= 0 ||
+            (warning != null && (!Double.isFinite(warning) || warning <= 0))
+        ) return false;
         if (seconds < 0 || seconds > 3600 || seconds % 15 != 0) return false;
-        if (unit.equals("RATIO") && (critical > 1 || warning != null && warning > 1)) return false;
-        if (unit.equals("COUNT") && (critical != Math.rint(critical) || warning != null && warning != Math.rint(warning))) return false;
-        if (critical > 1e9 || warning != null && warning > 1e9) return false;
+        if (unit.equals("RATIO") && (critical > 1 || (warning != null && warning > 1))) return false;
+        if (
+            unit.equals("COUNT") &&
+            (critical != Math.rint(critical) || (warning != null && warning != Math.rint(warning)))
+        ) return false;
+        if (critical > 1e9 || (warning != null && warning > 1e9)) return false;
         if ((this == DB_UNAVAILABLE || this == CONFIG_POSTURE) && (warning != null || seconds != 0)) return false;
         if (warning == null && this != DB_UNAVAILABLE && this != CONFIG_POSTURE) return false;
         return warning == null || (below ? warning > critical : warning < critical);

@@ -2,35 +2,74 @@
 import { ElOption } from '../../components/operations/elementPlus'
 import { ref, watch } from 'vue'
 import { ElInput, ElSelect, ElTable, ElTableColumn, ElPagination, ElButton } from 'element-plus'
-import { type ListOperationsSessionsPresenceEnum, type ListOperationsSessionsClientTypeEnum } from '@yumpoo/api-client'
+import {
+  type ListOperationsSessionsPresenceEnum,
+  type ListOperationsSessionsClientTypeEnum,
+} from '@yumpoo/api-client'
 import { operationsApi } from '../../api/client'
 import { useOperationsQuery } from '../../composables/useOperationsQuery'
 import { useOperations } from '../../components/operations/operationsContext'
 import { time } from '../../components/operations/operationsPresentation'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import InlineProblem from '../../components/InlineProblem.vue'
-const presence = ref(''), clientType = ref(''), q = ref(''), page = ref(1)
+const presence = ref(''),
+  clientType = ref(''),
+  q = ref(''),
+  page = ref(1)
 const operations = useOperations()
-const query = useOperationsQuery(signal => operationsApi.listOperationsSessions({ ...(presence.value ? { presence: presence.value as ListOperationsSessionsPresenceEnum } : {}), ...(clientType.value ? { clientType: clientType.value as ListOperationsSessionsClientTypeEnum } : {}), q:q.value, page:page.value-1, size:20 }, { signal }), { interval: () => operations.interval.value * 1000 })
-const summary = useOperationsQuery(signal => operationsApi.getOperationsSessionSummary({ signal }), { interval: () => operations.interval.value * 1000 })
-watch(operations.refreshVersion, () => { void query.refresh(); void summary.refresh() })
-function search() { page.value = 1; void query.refresh() }
-watch([presence,clientType], search); watch(page, () => void query.refresh())
+const query = useOperationsQuery(
+  (signal) =>
+    operationsApi.listOperationsSessions(
+      {
+        ...(presence.value
+          ? { presence: presence.value as ListOperationsSessionsPresenceEnum }
+          : {}),
+        ...(clientType.value
+          ? { clientType: clientType.value as ListOperationsSessionsClientTypeEnum }
+          : {}),
+        q: q.value,
+        page: page.value - 1,
+        size: 20,
+      },
+      { signal },
+    ),
+  { interval: () => operations.interval.value * 1000 },
+)
+const summary = useOperationsQuery(
+  (signal) => operationsApi.getOperationsSessionSummary({ signal }),
+  { interval: () => operations.interval.value * 1000 },
+)
+watch(operations.refreshVersion, () => {
+  void query.refresh()
+  void summary.refresh()
+})
+function search() {
+  page.value = 1
+  void query.refresh()
+}
+watch([presence, clientType], search)
+watch(page, () => void query.refresh())
 </script>
 <template>
   <div class="ops-grid three">
     <section
-      v-for="item in [{ title:'在线',value:summary.data.value?.online },{title:'空闲',value:summary.data.value?.idle},{title:'离开',value:summary.data.value?.away}]"
+      v-for="item in [
+        { title: '在线', value: summary.data.value?.online },
+        { title: '空闲', value: summary.data.value?.idle },
+        { title: '离开', value: summary.data.value?.away },
+      ]"
       :key="item.title"
       class="ops-card"
     >
-      <span class="ops-muted">{{ item.title }}</span><div class="ops-number">
+      <span class="ops-muted">{{ item.title }}</span>
+      <div class="ops-number">
         {{ item.value ?? '—' }}
       </div>
     </section>
   </div>
   <p class="ops-muted">
-    在线：最近 2 分钟活跃；空闲：最近 30 分钟活跃；离开：其余有效会话。仅在页面可见且未编辑输入时自动刷新。
+    在线：最近 2 分钟活跃；空闲：最近 30
+    分钟活跃；离开：其余有效会话。仅在页面可见且未编辑输入时自动刷新。
   </p>
   <div class="ops-toolbar">
     <el-input
@@ -94,7 +133,8 @@ watch([presence,clientType], search); watch(page, () => void query.refresh())
             :key="session.id"
             class="ops-row"
           >
-            <strong>{{ session.clientType }} {{ session.clientVersion ?? '未知版本' }}</strong><span>登录 {{ time(session.issuedAt) }} · 最近活跃 {{ time(session.lastSeenAt) }} · 到期 {{ time(session.expiresAt) }}</span>
+            <strong>{{ session.clientType }} {{ session.clientVersion ?? '未知版本' }}</strong><span>登录 {{ time(session.issuedAt) }} · 最近活跃 {{ time(session.lastSeenAt) }} · 到期
+              {{ time(session.expiresAt) }}</span>
           </div>
         </div>
       </template>
@@ -132,7 +172,8 @@ watch([presence,clientType], search); watch(page, () => void query.refresh())
     v-if="summary.data.value"
     class="ops-card versions"
   >
-    <h2>客户端版本分布 · {{ summary.data.value.activeSessions }} 个有效会话</h2><div
+    <h2>客户端版本分布 · {{ summary.data.value.activeSessions }} 个有效会话</h2>
+    <div
       v-for="version in summary.data.value.byClientVersion"
       :key="version.clientType + version.clientVersion"
       class="ops-row"
@@ -141,5 +182,8 @@ watch([presence,clientType], search); watch(page, () => void query.refresh())
     </div>
   </section>
 </template>
-<style scoped>.versions{margin-top:var(--yp-space-5)}</style>
-
+<style scoped>
+.versions {
+  margin-top: var(--yp-space-5);
+}
+</style>

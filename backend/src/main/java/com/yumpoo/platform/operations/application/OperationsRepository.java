@@ -1,8 +1,16 @@
 package com.yumpoo.platform.operations.application;
 
-import com.yumpoo.platform.operations.application.OperationsModels.*;
+import com.yumpoo.platform.operations.application.OperationsModels.Alert;
+import com.yumpoo.platform.operations.application.OperationsModels.AlertEvent;
+import com.yumpoo.platform.operations.application.OperationsModels.MetricPoint;
+import com.yumpoo.platform.operations.application.OperationsModels.Page;
+import com.yumpoo.platform.operations.application.OperationsModels.Rule;
+import com.yumpoo.platform.operations.application.OperationsModels.RuleUpdate;
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 public interface OperationsRepository {
     void saveMinute(UUID bootId, Instant startedAt, Instant minute, Map<String, Double> metrics, int count);

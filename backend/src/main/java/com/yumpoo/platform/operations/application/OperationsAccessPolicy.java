@@ -9,11 +9,18 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class OperationsAccessPolicy {
+
     private final CurrentActorProvider actors;
-    public OperationsAccessPolicy(CurrentActorProvider actors) { this.actors = actors; }
+
+    public OperationsAccessPolicy(CurrentActorProvider actors) {
+        this.actors = actors;
+    }
+
     public CurrentActor requireManager() {
         CurrentActor actor = actors.requiredActive();
-        if (!actor.hasRole(PlatformRoleCode.APP_MANAGER)) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+        if (!actor.hasRole(PlatformRoleCode.APP_MANAGER)) throw new ApplicationException(
+            StandardErrorCode.ACCESS_DENIED
+        );
         return actor;
     }
 }
