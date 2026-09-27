@@ -1,6 +1,7 @@
 package com.yumpoo.platform.foundation.application.outbox;
 
 import com.yumpoo.platform.foundation.application.event.DomainEventEnvelope;
+import com.yumpoo.platform.foundation.application.event.EventSubscription;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -32,4 +33,9 @@ public interface OutboxStorePort {
             OutboxFailure failure,
             Instant deadAt
     );
+
+    /**
+     * 显式恢复已补齐消费者的事件，仅重排因注册表无匹配消费者而 DEAD 的确切类型和版本。
+     */
+    int requeueMissingConsumerEvents(EventSubscription subscription, Instant nextAttemptAt);
 }
