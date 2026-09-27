@@ -68,7 +68,7 @@ describe('历史日志筛选', () => {
       'TRACE,DEBUG,INFO,WARN,ERROR',
     )
     expect(wrapper.get('.log-more-filters').attributes('open')).toBeUndefined()
-    expect(wrapper.get('.log-more-filters input[aria-label="事件代码"]').exists()).toBe(true)
+    expect(wrapper.find('.log-more-filters input[aria-label="事件代码"]').exists()).toBe(true)
     await wrapper
       .findAll('[aria-label="日志级别"] button')
       .find((button) => button.text().startsWith('DEBUG'))!
