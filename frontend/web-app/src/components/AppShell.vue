@@ -290,22 +290,8 @@ onBeforeUnmount(() => {
             fill="none"
             aria-hidden="true"
           >
-            <rect
-              x="2.75"
-              y="3.25"
-              width="14.5"
-              height="13.5"
-              rx="1.75"
-              stroke="currentColor"
-              stroke-width="1.5"
-            />
-            <path
-              d="M7 3.5v13M10 7l3 3-3 3"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
+            <rect x="2.75" y="3.25" width="14.5" height="13.5" rx="1.75" stroke="currentColor" stroke-width="1.5" />
+            <path d="M7 3.5v13M10 7l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </button>
         <el-tooltip
@@ -326,10 +312,7 @@ onBeforeUnmount(() => {
               <component :is="item.icon" />
             </el-icon>
             <span class="module-rail__item-label">{{ item.label }}</span>
-            <operations-badge
-              v-if="item.section === 'operations'"
-              @count="operationsAlertCount = $event"
-            />
+            <operations-badge v-if="item.section === 'operations'" @count="operationsAlertCount = $event" />
           </button>
         </el-tooltip>
       </nav>
@@ -406,9 +389,7 @@ onBeforeUnmount(() => {
               aria-label="搜索工作台项目"
               @click="openSidebarSearch"
             >
-              <el-icon aria-hidden="true">
-                <search />
-              </el-icon>
+              <el-icon aria-hidden="true"><search /></el-icon>
             </button>
             <button
               type="button"
@@ -422,22 +403,8 @@ onBeforeUnmount(() => {
                 fill="none"
                 aria-hidden="true"
               >
-                <rect
-                  x="2.75"
-                  y="3.25"
-                  width="14.5"
-                  height="13.5"
-                  rx="1.75"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                />
-                <path
-                  d="M7 3.5v13M13 7l-3 3 3 3"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
+                <rect x="2.75" y="3.25" width="14.5" height="13.5" rx="1.75" stroke="currentColor" stroke-width="1.5" />
+                <path d="M7 3.5v13M13 7l-3 3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </button>
           </div>
@@ -446,9 +413,7 @@ onBeforeUnmount(() => {
           v-else
           class="workspace-navigation-search"
         >
-          <el-icon aria-hidden="true">
-            <search />
-          </el-icon>
+          <el-icon aria-hidden="true"><search /></el-icon>
           <input
             ref="desktopSearchInput"
             v-model="sidebarSearchQuery"
@@ -464,9 +429,7 @@ onBeforeUnmount(() => {
             aria-label="关闭项目搜索"
             @click="closeSidebarSearch"
           >
-            <el-icon aria-hidden="true">
-              <close />
-            </el-icon>
+            <el-icon aria-hidden="true"><close /></el-icon>
           </button>
         </div>
       </div>
@@ -482,16 +445,7 @@ onBeforeUnmount(() => {
         aria-label="当前区域导航"
       >
         <template v-if="isWorkspaceSection">
-          <button
-            type="button"
-            :class="{ active: route.name === 'dashboards' }"
-            :aria-current="route.name === 'dashboards' ? 'page' : undefined"
-            @click="navigate('dashboards')"
-          >
-            <el-icon aria-hidden="true">
-              <grid />
-            </el-icon><span>仪表板</span>
-          </button>
+          <button type="button" :class="{ active: route.name === 'dashboards' }" :aria-current="route.name === 'dashboards' ? 'page' : undefined" @click="navigate('dashboards')"><el-icon aria-hidden="true"><grid /></el-icon><span>仪表板</span></button>
           <button
             class="project-navigation__toggle"
             type="button"
@@ -500,36 +454,18 @@ onBeforeUnmount(() => {
             @click="projectNavigationOpen = !projectNavigationOpen"
           >
             <span>项目</span>
-            <svg
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              width="12"
-              height="12"
-              aria-hidden="true"
-              class="project-navigation__chevron"
-            >
+            <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true" class="project-navigation__chevron">
               <path d="M9.442 12.76a.77.77 0 0 0 1.116 0l4.21-4.363a.84.84 0 0 0 0-1.157.77.77 0 0 0-1.116 0L10 11.025 6.348 7.24a.77.77 0 0 0-1.117 0 .84.84 0 0 0 0 1.157l4.21 4.363Z" />
             </svg>
           </button>
-          <div
-            v-show="projectNavigationOpen"
-            id="desktop-project-navigation"
-            class="project-navigation__children"
-          >
+          <div v-show="projectNavigationOpen" id="desktop-project-navigation" class="project-navigation__children">
             <button
               type="button"
               :aria-current="route.name === 'workspace' ? 'page' : undefined"
               :class="{ active: route.name === 'workspace' }"
               @click="navigate('workspace')"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-                aria-hidden="true"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                 <path d="M14.688 9.267a1.1 1.1 0 0 1 1.03.707l.235.606.702.41.639-.1a1.1 1.1 0 0 1 1.123.545l.27.471a1.12 1.12 0 0 1-.092 1.251l-.404.512v.817l.403.51a1.12 1.12 0 0 1 .092 1.253l-.27.47a1.107 1.107 0 0 1-1.122.544l-.639-.098-.702.41-.235.606a1.1 1.1 0 0 1-1.03.707h-.54a1.1 1.1 0 0 1-1.029-.707l-.236-.607-.702-.409-.639.098a1.096 1.096 0 0 1-1.122-.544l-.272-.471a1.12 1.12 0 0 1 .093-1.25l.404-.512v-.816l-.403-.51a1.12 1.12 0 0 1-.093-1.254l.27-.47a1.109 1.109 0 0 1 1.123-.545l.639.098.702-.409.235-.606a1.1 1.1 0 0 1 1.03-.707h.54Zm-6.303 1.598a.75.75 0 0 1 .158.018l-.238.427a1.684 1.684 0 0 0 .132 1.836l.573.747v1.196l-.574.748a1.683 1.683 0 0 0-.132 1.833l.045.08H3a.75.75 0 0 1-.75-.75v-5.385a.75.75 0 0 1 .75-.75h5.385ZM3.75 16.25h3.885v-3.885H3.75v3.885Zm10.668-3.959c-.47 0-.92.188-1.253.524a1.793 1.793 0 0 0 .575 2.912 1.759 1.759 0 0 0 1.93-.387 1.792 1.792 0 0 0-.268-2.748 1.763 1.763 0 0 0-.984-.301ZM8.385 2.25a.75.75 0 0 1 .75.75v5.385a.75.75 0 0 1-.75.75H3a.75.75 0 0 1-.75-.75V3A.75.75 0 0 1 3 2.25h5.385Zm8.615 0a.75.75 0 0 1 .75.75v5.385a.75.75 0 0 1-.75.75h-.53l-.248-.657a1.622 1.622 0 0 0-.725-.843h.753V3.75h-3.885v3.885h.886a1.7 1.7 0 0 0-.147.09 1.627 1.627 0 0 0-.578.753l-.248.657h-.663a.75.75 0 0 1-.75-.75V3a.75.75 0 0 1 .75-.75H17ZM3.75 7.635h3.885V3.75H3.75v3.885Z" />
               </svg>
               <span>管理项目</span>
@@ -540,9 +476,7 @@ onBeforeUnmount(() => {
               :class="{ active: route.name === 'products' || route.name === 'product-detail' }"
               @click="navigate('products')"
             >
-              <el-icon aria-hidden="true">
-                <grid />
-              </el-icon>
+              <el-icon aria-hidden="true"><grid /></el-icon>
               <span>产品</span>
             </button>
             <el-tooltip
@@ -558,19 +492,8 @@ onBeforeUnmount(() => {
                 :class="{ active: route.params.projectId === project.id }"
                 @click="navigateProject(project)"
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"
-                  />
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
                 </svg>
                 <span class="project-navigation__project-name">{{ project.name }}</span>
               </button>
@@ -586,28 +509,10 @@ onBeforeUnmount(() => {
                 aria-label="查看全部项目"
                 @click="navigate('workspace')"
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <circle
-                    cx="4"
-                    cy="10"
-                    r="1.5"
-                  />
-                  <circle
-                    cx="10"
-                    cy="10"
-                    r="1.5"
-                  />
-                  <circle
-                    cx="16"
-                    cy="10"
-                    r="1.5"
-                  />
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <circle cx="4" cy="10" r="1.5" />
+                  <circle cx="10" cy="10" r="1.5" />
+                  <circle cx="16" cy="10" r="1.5" />
                 </svg>
               </button>
             </el-tooltip>
@@ -660,10 +565,7 @@ onBeforeUnmount(() => {
       </nav>
     </aside>
 
-    <main
-      class="app-main"
-      :class="{ 'app-main--dashboard': route.name === 'dashboards' }"
-    >
+    <main class="app-main" :class="{ 'app-main--dashboard': route.name === 'dashboards' }">
       <inline-problem
         v-if="session.actionProblem.value"
         :problem="session.actionProblem.value"
@@ -690,10 +592,7 @@ onBeforeUnmount(() => {
           @click="navigate(item.routeName)"
         >
           {{ item.label }}
-          <operations-badge
-            v-if="item.section === 'operations' && mobileNavigationOpen"
-            @count="operationsAlertCount = $event"
-          />
+          <operations-badge v-if="item.section === 'operations' && mobileNavigationOpen" @count="operationsAlertCount = $event" />
         </button>
       </nav>
       <div
@@ -762,22 +661,8 @@ onBeforeUnmount(() => {
                 fill="none"
                 aria-hidden="true"
               >
-                <rect
-                  x="2.75"
-                  y="3.25"
-                  width="14.5"
-                  height="13.5"
-                  rx="1.75"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                />
-                <path
-                  d="M7 3.5v13M13 7l-3 3 3 3"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
+                <rect x="2.75" y="3.25" width="14.5" height="13.5" rx="1.75" stroke="currentColor" stroke-width="1.5" />
+                <path d="M7 3.5v13M13 7l-3 3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </button>
           </div>
@@ -794,59 +679,18 @@ onBeforeUnmount(() => {
         aria-label="移动端当前区域导航"
       >
         <template v-if="isWorkspaceSection">
-          <button
-            type="button"
-            :class="{ active: route.name === 'dashboards' }"
-            :aria-current="route.name === 'dashboards' ? 'page' : undefined"
-            @click="navigate('dashboards')"
-          >
-            <el-icon aria-hidden="true">
-              <grid />
-            </el-icon><span>仪表板</span>
-          </button>
-          <button
-            type="button"
-            class="project-navigation__toggle"
-            :aria-expanded="projectNavigationOpen"
-            @click="projectNavigationOpen = !projectNavigationOpen"
-          >
+          <button type="button" :class="{ active: route.name === 'dashboards' }" :aria-current="route.name === 'dashboards' ? 'page' : undefined" @click="navigate('dashboards')"><el-icon aria-hidden="true"><grid /></el-icon><span>仪表板</span></button>
+          <button type="button" class="project-navigation__toggle" :aria-expanded="projectNavigationOpen" @click="projectNavigationOpen = !projectNavigationOpen">
             <span>项目</span>
-            <svg
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              width="12"
-              height="12"
-              aria-hidden="true"
-              class="project-navigation__chevron"
-            ><path d="M9.442 12.76a.77.77 0 0 0 1.116 0l4.21-4.363a.84.84 0 0 0 0-1.157.77.77 0 0 0-1.116 0L10 11.025 6.348 7.24a.77.77 0 0 0-1.117 0 .84.84 0 0 0 0 1.157l4.21 4.363Z" /></svg>
+            <svg viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true" class="project-navigation__chevron"><path d="M9.442 12.76a.77.77 0 0 0 1.116 0l4.21-4.363a.84.84 0 0 0 0-1.157.77.77 0 0 0-1.116 0L10 11.025 6.348 7.24a.77.77 0 0 0-1.117 0 .84.84 0 0 0 0 1.157l4.21 4.363Z" /></svg>
           </button>
-          <div
-            v-show="projectNavigationOpen"
-            class="project-navigation__children"
-          >
-            <button
-              type="button"
-              :class="{ active: route.name === 'workspace' }"
-              @click="navigate('workspace')"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-                aria-hidden="true"
-              ><path d="M14.688 9.267a1.1 1.1 0 0 1 1.03.707l.235.606.702.41.639-.1a1.1 1.1 0 0 1 1.123.545l.27.471a1.12 1.12 0 0 1-.092 1.251l-.404.512v.817l.403.51a1.12 1.12 0 0 1 .092 1.253l-.27.47a1.107 1.107 0 0 1-1.122.544l-.639-.098-.702.41-.235.606a1.1 1.1 0 0 1-1.03.707h-.54a1.1 1.1 0 0 1-1.029-.707l-.236-.607-.702-.409-.639.098a1.096 1.096 0 0 1-1.122-.544l-.272-.471a1.12 1.12 0 0 1 .093-1.25l.404-.512v-.816l-.403-.51a1.12 1.12 0 0 1-.093-1.254l.27-.47a1.109 1.109 0 0 1 1.123-.545l.639.098.702-.409.235-.606a1.1 1.1 0 0 1 1.03-.707h.54Zm-6.303 1.598a.75.75 0 0 1 .158.018l-.238.427a1.684 1.684 0 0 0 .132 1.836l.573.747v1.196l-.574.748a1.683 1.683 0 0 0-.132 1.833l.045.08H3a.75.75 0 0 1-.75-.75v-5.385a.75.75 0 0 1 .75-.75h5.385ZM3.75 16.25h3.885v-3.885H3.75v3.885Zm10.668-3.959c-.47 0-.92.188-1.253.524a1.793 1.793 0 0 0 .575 2.912 1.759 1.759 0 0 0 1.93-.387 1.792 1.792 0 0 0-.268-2.748 1.763 1.763 0 0 0-.984-.301ZM8.385 2.25a.75.75 0 0 1 .75.75v5.385a.75.75 0 0 1-.75.75H3a.75.75 0 0 1-.75-.75V3A.75.75 0 0 1 3 2.25h5.385Zm8.615 0a.75.75 0 0 1 .75.75v5.385a.75.75 0 0 1-.75.75h-.53l-.248-.657a1.622 1.622 0 0 0-.725-.843h.753V3.75h-3.885v3.885h.886a1.7 1.7 0 0 0-.147.09 1.627 1.627 0 0 0-.578.753l-.248.657h-.663a.75.75 0 0 1-.75-.75V3a.75.75 0 0 1 .75-.75H17ZM3.75 7.635h3.885V3.75H3.75v3.885Z" /></svg>
+          <div v-show="projectNavigationOpen" class="project-navigation__children">
+            <button type="button" :class="{ active: route.name === 'workspace' }" @click="navigate('workspace')">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path d="M14.688 9.267a1.1 1.1 0 0 1 1.03.707l.235.606.702.41.639-.1a1.1 1.1 0 0 1 1.123.545l.27.471a1.12 1.12 0 0 1-.092 1.251l-.404.512v.817l.403.51a1.12 1.12 0 0 1 .092 1.253l-.27.47a1.107 1.107 0 0 1-1.122.544l-.639-.098-.702.41-.235.606a1.1 1.1 0 0 1-1.03.707h-.54a1.1 1.1 0 0 1-1.029-.707l-.236-.607-.702-.409-.639.098a1.096 1.096 0 0 1-1.122-.544l-.272-.471a1.12 1.12 0 0 1 .093-1.25l.404-.512v-.816l-.403-.51a1.12 1.12 0 0 1-.093-1.254l.27-.47a1.109 1.109 0 0 1 1.123-.545l.639.098.702-.409.235-.606a1.1 1.1 0 0 1 1.03-.707h.54Zm-6.303 1.598a.75.75 0 0 1 .158.018l-.238.427a1.684 1.684 0 0 0 .132 1.836l.573.747v1.196l-.574.748a1.683 1.683 0 0 0-.132 1.833l.045.08H3a.75.75 0 0 1-.75-.75v-5.385a.75.75 0 0 1 .75-.75h5.385ZM3.75 16.25h3.885v-3.885H3.75v3.885Zm10.668-3.959c-.47 0-.92.188-1.253.524a1.793 1.793 0 0 0 .575 2.912 1.759 1.759 0 0 0 1.93-.387 1.792 1.792 0 0 0-.268-2.748 1.763 1.763 0 0 0-.984-.301ZM8.385 2.25a.75.75 0 0 1 .75.75v5.385a.75.75 0 0 1-.75.75H3a.75.75 0 0 1-.75-.75V3A.75.75 0 0 1 3 2.25h5.385Zm8.615 0a.75.75 0 0 1 .75.75v5.385a.75.75 0 0 1-.75.75h-.53l-.248-.657a1.622 1.622 0 0 0-.725-.843h.753V3.75h-3.885v3.885h.886a1.7 1.7 0 0 0-.147.09 1.627 1.627 0 0 0-.578.753l-.248.657h-.663a.75.75 0 0 1-.75-.75V3a.75.75 0 0 1 .75-.75H17ZM3.75 7.635h3.885V3.75H3.75v3.885Z" /></svg>
               <span>管理项目</span>
             </button>
-            <button
-              type="button"
-              :class="{ active: route.name === 'products' || route.name === 'product-detail' }"
-              @click="navigate('products')"
-            >
-              <el-icon aria-hidden="true">
-                <grid />
-              </el-icon>
+            <button type="button" :class="{ active: route.name === 'products' || route.name === 'product-detail' }" @click="navigate('products')">
+              <el-icon aria-hidden="true"><grid /></el-icon>
               <span>产品</span>
             </button>
             <el-tooltip
@@ -861,19 +705,8 @@ onBeforeUnmount(() => {
                 :class="{ active: route.params.projectId === project.id }"
                 @click="navigateProject(project)"
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"
-                  />
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
                 </svg>
                 <span class="project-navigation__project-name">{{ project.name }}</span>
               </button>
@@ -889,28 +722,10 @@ onBeforeUnmount(() => {
                 aria-label="查看全部项目"
                 @click="navigate('workspace')"
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <circle
-                    cx="4"
-                    cy="10"
-                    r="1.5"
-                  />
-                  <circle
-                    cx="10"
-                    cy="10"
-                    r="1.5"
-                  />
-                  <circle
-                    cx="16"
-                    cy="10"
-                    r="1.5"
-                  />
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <circle cx="4" cy="10" r="1.5" />
+                  <circle cx="10" cy="10" r="1.5" />
+                  <circle cx="16" cy="10" r="1.5" />
                 </svg>
               </button>
             </el-tooltip>
