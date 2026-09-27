@@ -26,7 +26,6 @@ const content = computed(() => ({
   <el-empty
     class="yp-empty-state"
     :class="{ 'yp-empty-state--compact': compact }"
-    :description="description ?? content.description"
   >
     <template #image>
       <div
@@ -38,7 +37,10 @@ const content = computed(() => ({
         </el-icon>
       </div>
     </template>
-    <h3>{{ title ?? content.title }}</h3>
+    <template #description>
+      <h3>{{ title ?? content.title }}</h3>
+      <p>{{ description ?? content.description }}</p>
+    </template>
     <slot name="action" />
   </el-empty>
 </template>
@@ -87,8 +89,18 @@ const content = computed(() => ({
 }
 
 h3 {
-  margin: 0 0 var(--yp-space-2);
+  margin: 0 0 var(--yp-space-1);
   color: var(--yp-text-primary);
   font-size: var(--yp-type-card-title-size);
+  line-height: var(--yp-type-card-title-line);
+}
+
+p {
+  max-width: 30em;
+  margin: 0 auto;
+  color: var(--yp-text-secondary);
+  font-size: var(--yp-type-body-size);
+  line-height: var(--yp-type-body-line);
+  text-wrap: balance;
 }
 </style>

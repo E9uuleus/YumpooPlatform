@@ -17,8 +17,8 @@ import { beginAuthentication } from '../auth/navigation'
 import { useAppearance } from '../composables/useAppearance'
 import { useProjectRecents } from '../composables/useProjectRecents'
 import { useSession } from '../composables/useSession'
-import { useInbox } from '../composables/useInbox'
-import { parseInboxFilter } from './inbox/inboxPresentation'
+import { useInbox, type InboxFilter } from '../composables/useInbox'
+import { INBOX_FILTERS, parseInboxFilter } from './inbox/inboxPresentation'
 import InboxBell from './inbox/InboxBell.vue'
 import type { ShellSection } from '../router/shell-navigation'
 import InlineProblem from './InlineProblem.vue'
@@ -85,15 +85,10 @@ const contextTitle = computed(() => ({
 const contextItems = computed<ContextItem[]>(() => {
   if (activeSection.value === 'inbox') {
     const counts = inbox.counts.value
-    return [
-      { label: '未读', routeName: 'inbox', query: { filter: 'unread' }, badge: counts?.total ?? 0 },
-      { label: '全部', routeName: 'inbox', query: { filter: 'all' } },
-      { label: '@我', routeName: 'inbox', query: { filter: 'mention' }, badge: counts?.mention ?? 0 },
-      { label: '评论与回复', routeName: 'inbox', query: { filter: 'comment' }, badge: counts?.comment ?? 0 },
-      { label: '指派给我', routeName: 'inbox', query: { filter: 'assigned' }, badge: counts?.assigned ?? 0 },
-      { label: '项目动态', routeName: 'inbox', query: { filter: 'project' }, badge: counts?.project ?? 0 },
-      { label: '已归档', routeName: 'inbox', query: { filter: 'archived' } },
-    ]
+    const badges: Partial<Record<InboxFilter, number | undefined>> = {
+      unread: counts?.total, mention: counts?.mention, comment: counts?.comment, assigned: counts?.assigned, project: counts?.project,
+    }
+    return INBOX_FILTERS.map(({ value, label }) => ({ label, routeName: 'inbox', query: { filter: value }, badge: badges[value] ?? 0 }))
   }
   if (activeSection.value === 'company') {
     return [
@@ -535,6 +530,7 @@ onBeforeUnmount(() => {
             v-show="!isWorkspaceSection || projectNavigationOpen"
             type="button"
             :aria-current="isContextItemActive(item) ? 'page' : undefined"
+            class="context-item"
             :class="{ active: isContextItemActive(item) }"
             @click="navigate(item.routeName, item.params, item.query)"
           >
@@ -746,6 +742,7 @@ onBeforeUnmount(() => {
           <button
             v-show="!isWorkspaceSection || projectNavigationOpen"
             type="button"
+            class="context-item"
             :class="{ active: isContextItemActive(item) }"
             @click="navigate(item.routeName, item.params, item.query)"
           >
@@ -778,11 +775,30 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.context-item {
+  display: flex;
+  align-items: center;
+  gap: var(--yp-space-2);
+}
+
 .context-item-badge {
-  float: right;
   min-width: 20px;
-  text-align: right;
-  color: var(--yp-text-muted);
+  height: 18px;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: var(--yp-radius-pill);
+  color: var(--yp-text-secondary);
+  background: var(--yp-bg-sunken);
+  font-family: var(--yp-font-family);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+.context-item.active .context-item-badge {
+  color: var(--yp-status-blue-foreground);
+  background: var(--yp-action-primary);
 }
 </style>
