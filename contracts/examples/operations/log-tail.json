@@ -1,0 +1,27 @@
+{
+  "bootId": "683b5aec-3be6-42ed-a749-76a383485fc2",
+  "items": [{
+    "id": "683b5aec-3be6-42ed-a749-76a383485fc2:9007199254740993",
+    "seq": "9007199254740993",
+    "record": {
+      "time": "2026-09-26T12:00:00.123Z",
+      "level": "INFO",
+      "module": "foundation",
+      "event": "http.request.completed",
+      "msg": "http request completed",
+      "logger": "com.yumpoo.platform.foundation.api.web.HttpAccessLog",
+      "thread": "http-nio-exec-1",
+      "requestId": "ops-example-request",
+      "correlationId": null,
+      "userId": "55cbafdc-fbd7-405e-854f-15f03cdbd352",
+      "fields": { "status": 200, "durationMs": 42, "method": "POST" },
+      "error": null
+    }
+  }],
+  "nextAfterSeq": "9007199254740993",
+  "latestSeq": "9007199254740993",
+  "hasMore": false,
+  "gap": true,
+  "gapReason": "RESTART",
+  "droppedCount": 0
+}
