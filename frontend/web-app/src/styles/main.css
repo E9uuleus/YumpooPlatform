@@ -305,6 +305,16 @@ code {
   transition: padding-left var(--yp-motion-popover) var(--yp-ease-standard);
 }
 
+.app-main > * {
+  animation: yp-page-enter var(--yp-motion-popover) ease-out;
+}
+
+@keyframes yp-page-enter {
+  from {
+    opacity: 0;
+  }
+}
+
 .app-shell--context-open .app-main {
   padding-left: calc(232px + var(--yp-space-10));
 }
@@ -587,9 +597,17 @@ code {
 .status-page,
 .result-page {
   display: grid;
-  min-height: calc(100vh - 64px);
+  box-sizing: border-box;
   padding: var(--yp-space-8);
   place-items: center;
+}
+
+.status-page {
+  min-height: 100vh;
+}
+
+.result-page {
+  min-height: calc(100vh - 64px - 2 * var(--yp-space-8));
 }
 
 .status-page > .el-result,

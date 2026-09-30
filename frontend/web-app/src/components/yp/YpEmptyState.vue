@@ -32,9 +32,11 @@ const content = computed(() => ({
         class="yp-empty-state__icon"
         aria-hidden="true"
       >
-        <el-icon>
-          <component :is="content.icon" />
-        </el-icon>
+        <slot name="icon">
+          <el-icon>
+            <component :is="content.icon" />
+          </el-icon>
+        </slot>
       </div>
     </template>
     <template #description>
@@ -84,7 +86,8 @@ const content = computed(() => ({
   font-size: 28px;
 }
 
-.yp-empty-state__icon .el-icon {
+.yp-empty-state__icon .el-icon,
+.yp-empty-state__icon :deep(.el-icon) {
   font-size: inherit;
 }
 
