@@ -23,7 +23,7 @@ import {
   type OperationsAlert,
   type OperationsRule,
 } from '@yumpoo/api-client'
-import { operationsApi } from '../../api/client'
+import { identityAdministrationApi, operationsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import { useOperationsQuery } from '../../composables/useOperationsQuery'
 import {
@@ -111,6 +111,27 @@ onBeforeUnmount(() => {
   disposed = true
   mutationController.abort()
 })
+// 告警事件只携带操作人 ID；按需补齐姓名，查询失败记为空串并保留 ID 兜底，避免重复请求。
+const actorNames = ref(new Map<string, string>())
+const resolvingActors = new Set<string>()
+watch(
+  () => detail.data.value?.events,
+  (events) => {
+    const ids = new Set((events ?? []).map((event) => event.actorUserId).filter((id) => id != null))
+    for (const userId of ids) {
+      if (actorNames.value.has(userId) || resolvingActors.has(userId)) continue
+      resolvingActors.add(userId)
+      identityAdministrationApi
+        .getMember({ userId }, { signal: mutationController.signal })
+        .then((member) => member.displayName)
+        .catch(() => '')
+        .then((name) => {
+          resolvingActors.delete(userId)
+          if (!disposed) actorNames.value = new Map(actorNames.value).set(userId, name)
+        })
+    }
+  },
+)
 async function acknowledge() {
   if (!ack.value) return
   const csrf = readCsrfToken()
@@ -607,11 +628,22 @@ function logLink(alert: OperationsAlert) {
             <span><b>{{ eventNames[item.eventType] ?? item.eventType }}</b> ·
               {{ metric(item.value, String(detail.data.value.alert.params.unit)) }}</span>
             <small>{{ time(item.occurredAt) }}</small>
-            <yp-assignee
+            <div
               v-if="item.actorUserId"
-              :user-id="item.actorUserId"
-              size="table"
-            />
+              class="alert-actor"
+            >
+              <yp-assignee
+                v-if="actorNames.get(item.actorUserId)"
+                :user-id="item.actorUserId"
+                :display-name="actorNames.get(item.actorUserId)"
+                size="table"
+              />
+              <span
+                v-else
+                class="ops-muted"
+              >操作人</span>
+              <small :title="item.actorUserId">{{ item.actorUserId }}</small>
+            </div>
           </div>
         </li>
       </ul>
@@ -715,6 +747,13 @@ function logLink(alert: OperationsAlert) {
 
 .el-input-number {
   width: 130px;
+}
+
+.alert-actor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yp-space-2);
 }
 
 .alert-detail__head {
