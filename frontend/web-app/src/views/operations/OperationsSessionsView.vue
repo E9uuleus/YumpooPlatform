@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ElOption } from '../../components/operations/elementPlus'
 import { ref, watch } from 'vue'
-import { ElInput, ElSelect, ElTable, ElTableColumn, ElPagination, ElButton } from 'element-plus'
+import { ElInput, ElTable, ElTableColumn, ElPagination, ElButton } from 'element-plus'
 import {
   type ListOperationsSessionsPresenceEnum,
   type ListOperationsSessionsClientTypeEnum,
@@ -10,7 +9,10 @@ import { operationsApi } from '../../api/client'
 import { useOperationsQuery } from '../../composables/useOperationsQuery'
 import { useOperations } from '../../components/operations/operationsContext'
 import { time } from '../../components/operations/operationsPresentation'
+import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
+import OpsSegmented from '../../components/operations/OpsSegmented.vue'
+import { formatRelativeTime } from '../../design-system/dates'
 import InlineProblem from '../../components/InlineProblem.vue'
 const presence = ref(''),
   clientType = ref(''),
@@ -43,6 +45,20 @@ watch(operations.refreshVersion, () => {
   void query.refresh()
   void summary.refresh()
 })
+const presenceOptions = [
+  { value: '', label: '全部' },
+  { value: 'ONLINE', label: '在线' },
+  { value: 'IDLE', label: '空闲' },
+  { value: 'AWAY', label: '离开' },
+]
+const clientOptions = [
+  { value: '', label: '全部客户端' },
+  { value: 'WEB', label: 'Web' },
+  { value: 'ELECTRON', label: 'Electron' },
+]
+function clientLabel(type: string, version?: string | null): string {
+  return type === 'WEB' ? 'Web' : type === 'ELECTRON' ? `Electron ${version ?? ''}`.trim() : type
+}
 function search() {
   page.value = 1
   void query.refresh()
@@ -51,26 +67,37 @@ watch([presence, clientType], search)
 watch(page, () => void query.refresh())
 </script>
 <template>
-  <div class="ops-grid three">
-    <section
+  <section
+    class="ops-strip"
+    aria-label="会话摘要"
+  >
+    <div
       v-for="item in [
-        { title: '在线', value: summary.data.value?.online },
-        { title: '空闲', value: summary.data.value?.idle },
-        { title: '离开', value: summary.data.value?.away },
+        { title: '在线', hint: '2 分钟内有请求', value: summary.data.value?.online },
+        { title: '空闲', hint: '30 分钟内有请求', value: summary.data.value?.idle },
+        { title: '离开', hint: '其余有效会话', value: summary.data.value?.away },
+        { title: '有效会话', hint: '未过期、未撤销', value: summary.data.value?.activeSessions },
       ]"
       :key="item.title"
-      class="ops-card"
     >
-      <span class="ops-muted">{{ item.title }}</span>
-      <div class="ops-number">
-        {{ item.value ?? '—' }}
+      <span class="ops-number">{{ item.value ?? '—' }}</span>
+      <span class="ops-muted">{{ item.title }} · {{ item.hint }}</span>
+    </div>
+    <div class="wide">
+      <span class="ops-muted">客户端版本</span>
+      <div class="session-versions">
+        <span
+          v-for="version in summary.data.value?.byClientVersion ?? []"
+          :key="version.clientType + version.clientVersion"
+          class="ops-chip"
+        >{{ clientLabel(version.clientType, version.clientVersion ?? '未知版本') }} × {{ version.count }}</span>
+        <span
+          v-if="!summary.data.value?.byClientVersion.length"
+          class="ops-muted"
+        >—</span>
       </div>
-    </section>
-  </div>
-  <p class="ops-muted">
-    在线：最近 2 分钟活跃；空闲：最近 30
-    分钟活跃；离开：其余有效会话。仅在页面可见且未编辑输入时自动刷新。
-  </p>
+    </div>
+  </section>
   <div class="ops-toolbar">
     <el-input
       v-model="q"
@@ -80,110 +107,135 @@ watch(page, () => void query.refresh())
       aria-label="搜索成员名称"
       @keyup.enter="search"
     />
-    <el-select
-      v-model="presence"
-      aria-label="成员状态"
-    >
-      <el-option
-        label="全部状态"
-        value=""
-      /><el-option
-        label="在线"
-        value="ONLINE"
-      /><el-option
-        label="空闲"
-        value="IDLE"
-      /><el-option
-        label="离开"
-        value="AWAY"
-      />
-    </el-select>
-    <el-select
-      v-model="clientType"
-      aria-label="客户端"
-    >
-      <el-option
-        label="全部客户端"
-        value=""
-      /><el-option
-        label="Web"
-        value="WEB"
-      /><el-option
-        label="Electron"
-        value="ELECTRON"
-      />
-    </el-select><el-button @click="search">
+    <el-button @click="search">
       查询
     </el-button>
+    <ops-segmented
+      group-label="成员状态"
+      :options="presenceOptions"
+      :selected="presence"
+      @select="presence = String($event)"
+    />
+    <ops-segmented
+      group-label="客户端"
+      :options="clientOptions"
+      :selected="clientType"
+      @select="clientType = String($event)"
+    />
+    <span class="ops-muted ops-toolbar__end">{{ query.data.value?.totalElements ?? 0 }} 位成员 · 仅在页面可见且未编辑输入时自动刷新</span>
   </div>
   <inline-problem
     v-if="query.error.value"
     :problem="query.error.value"
   />
-  <el-table
-    :data="query.data.value?.items ?? []"
-    row-key="userId"
-    empty-text="暂无匹配的有效会话"
-  >
-    <el-table-column type="expand">
-      <template #default="{ row }">
-        <div class="ops-card">
-          <div
-            v-for="session in row.sessions"
-            :key="session.id"
-            class="ops-row"
-          >
-            <strong>{{ session.clientType }} {{ session.clientVersion ?? '未知版本' }}</strong><span>登录 {{ time(session.issuedAt) }} · 最近活跃 {{ time(session.lastSeenAt) }} · 到期
-              {{ time(session.expiresAt) }}</span>
-          </div>
-        </div>
-      </template>
-    </el-table-column>
-    <el-table-column
-      prop="displayName"
-      label="成员"
-    /><el-table-column label="状态">
-      <template #default="{ row }">
-        <yp-status-tag
-          domain="operations"
-          :status="row.presence"
-          effect="soft"
-        />
-      </template>
-    </el-table-column>
-    <el-table-column label="会话数">
-      <template #default="{ row }">
-        {{ row.sessions.length }}
-      </template>
-    </el-table-column><el-table-column label="最近活跃">
-      <template #default="{ row }">
-        {{ time(row.lastSeenAt) }}
-      </template>
-    </el-table-column>
-  </el-table>
-  <el-pagination
-    v-model:current-page="page"
-    class="ops-pagination"
-    :page-size="20"
-    :total="query.data.value?.totalElements ?? 0"
-    layout="total, prev, pager, next"
-  />
-  <section
-    v-if="summary.data.value"
-    class="ops-card versions"
-  >
-    <h2>客户端版本分布 · {{ summary.data.value.activeSessions }} 个有效会话</h2>
-    <div
-      v-for="version in summary.data.value.byClientVersion"
-      :key="version.clientType + version.clientVersion"
-      class="ops-row"
+  <section class="ops-card flush">
+    <el-table
+      :data="query.data.value?.items ?? []"
+      row-key="userId"
+      empty-text="暂无匹配的有效会话"
     >
-      <span>{{ version.clientType }} · {{ version.clientVersion ?? '未知版本' }}</span><strong>{{ version.count }}</strong>
-    </div>
+      <el-table-column type="expand">
+        <template #default="{ row }">
+          <ul class="ops-list session-detail">
+            <li
+              v-for="session in row.sessions"
+              :key="session.id"
+            >
+              <span class="ops-chip">{{ clientLabel(session.clientType, session.clientVersion ?? '未知版本') }}</span>
+              <span class="ops-muted">登录 {{ time(session.issuedAt) }} · 最近活跃 {{ time(session.lastSeenAt) }} · 到期
+                {{ time(session.expiresAt) }}</span>
+            </li>
+          </ul>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="成员"
+        min-width="180"
+      >
+        <template #default="{ row }">
+          <yp-assignee
+            :user-id="row.userId"
+            :display-name="row.displayName"
+            size="table"
+          />
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="状态"
+        width="110"
+      >
+        <template #default="{ row }">
+          <yp-status-tag
+            domain="operations"
+            :status="row.presence"
+            effect="soft"
+            size="small"
+          />
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="客户端"
+        min-width="200"
+      >
+        <template #default="{ row }">
+          <div class="session-clients">
+            <span
+              v-for="session in row.sessions"
+              :key="session.id"
+              class="ops-chip"
+            >{{ clientLabel(session.clientType, session.clientVersion) }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="最近活跃"
+        width="140"
+      >
+        <template #default="{ row }">
+          <span :title="time(row.lastSeenAt)">{{ formatRelativeTime(row.lastSeenAt) }}</span>
+        </template>
+      </el-table-column>
+    </el-table>
+    <footer
+      v-if="(query.data.value?.totalElements ?? 0) > 0"
+      class="ops-card__foot"
+    >
+      <el-pagination
+        v-model:current-page="page"
+        class="ops-pagination"
+        :page-size="20"
+        :total="query.data.value?.totalElements ?? 0"
+        layout="total, prev, pager, next"
+      />
+    </footer>
   </section>
 </template>
+
 <style scoped>
-.versions {
-  margin-top: var(--yp-space-5);
+.ops-strip .ops-number {
+  display: block;
+}
+
+.session-versions,
+.session-clients {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--yp-space-2);
+}
+
+.session-versions {
+  margin-top: var(--yp-space-1);
+}
+
+.session-detail {
+  margin: 0 var(--yp-space-5);
+}
+
+.session-detail li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yp-space-3);
+  padding: var(--yp-space-2) 0;
 }
 </style>
