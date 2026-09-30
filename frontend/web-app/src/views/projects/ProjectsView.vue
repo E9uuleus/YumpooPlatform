@@ -20,6 +20,7 @@ import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import YpFilterBar from '../../components/yp/YpFilterBar.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
+import YpTabs, { type TabItem } from '../../components/yp/YpTabs.vue'
 import { useProjectRecents, type ProjectRecentSource } from '../../composables/useProjectRecents'
 import { useSession } from '../../composables/useSession'
 import { formatDateOnly, formatTimestamp } from '../../design-system/dates'
@@ -38,6 +39,10 @@ const templates = ref<ProjectTemplateVersion[]>([])
 const owners = ref<Member[]>([])
 const ownerOptions = ref<ProjectOwnerOption[]>([])
 const activeView = ref<ProjectCatalogView>('content')
+const catalogTabs: TabItem[] = [
+  { value: 'recent', label: '最近', id: 'project-recent-tab', controls: 'project-recent-panel' },
+  { value: 'content', label: '内容', id: 'project-content-tab', controls: 'project-content-panel' },
+]
 const query = ref('')
 const appliedQuery = ref('')
 const modifiedPreset = ref<ModifiedPreset>()
@@ -245,44 +250,26 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
     <inline-problem v-if="error" :problem="error" />
 
     <div class="project-list-surface">
-      <nav class="project-catalog-tabs" role="tablist" aria-label="项目视图">
-        <button
-          id="project-recent-tab"
-          class="project-catalog-tab"
-          :class="{ selected: activeView === 'recent' }"
-          type="button"
-          role="tab"
-          :aria-selected="activeView === 'recent'"
-          aria-controls="project-recent-panel"
-          :tabindex="activeView === 'recent' ? 0 : -1"
-          @click="selectView('recent')"
-          @keydown.right.prevent="selectView('content')"
-        >
+      <yp-tabs
+        class="project-catalog-tabs"
+        label="项目视图"
+        :items="catalogTabs"
+        :model-value="activeView"
+        @update:model-value="selectView($event as ProjectCatalogView)"
+      >
+        <template #icon-recent>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M10 5.25v4.5l3 1.75M6.17 4.18H2.75v-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
             <path d="M3.4 4.45A7.25 7.25 0 1 1 2.75 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
-          <span>最近</span>
-        </button>
-        <button
-          id="project-content-tab"
-          class="project-catalog-tab"
-          :class="{ selected: activeView === 'content' }"
-          type="button"
-          role="tab"
-          :aria-selected="activeView === 'content'"
-          aria-controls="project-content-panel"
-          :tabindex="activeView === 'content' ? 0 : -1"
-          @click="selectView('content')"
-          @keydown.left.prevent="selectView('recent')"
-        >
+        </template>
+        <template #icon-content>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M5 2.75h6.75l3.25 3.5v8.25A2.5 2.5 0 0 1 12.5 17h-7A2.5 2.5 0 0 1 3 14.5V5.25A2.5 2.5 0 0 1 5.5 2.75Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
             <path d="M11.5 2.75v3.5H15M6.5 10h5M6.5 13h3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          <span>内容</span>
-        </button>
-      </nav>
+        </template>
+      </yp-tabs>
 
       <yp-filter-bar
         :filters="activeFilters" :result-count="visibleResultCount" :loading="loading"

@@ -50,6 +50,16 @@ describe('产品列表页', () => {
     expect(push).toHaveBeenCalledWith({ name: 'product-detail', params: { productId: 'product-1' } })
   })
 
+  it('状态分段切换后从第一页重新查询', async () => {
+    const wrapper = mount(ProductsView)
+    await flushPromises()
+    const archived = wrapper.findAll('[role="radio"]').find(radio => radio.text() === '已归档')!
+    await archived.trigger('click')
+    await flushPromises()
+    expect(archived.attributes('aria-checked')).toBe('true')
+    expect(api.listProducts).toHaveBeenLastCalledWith({ status: ProductStatusFilter.Archived, page: 0, size: 20 })
+  })
+
   it('CompanyAdmin 使用独立幂等键创建产品并重新加载', async () => {
     const wrapper = mount(ProductsView)
     await flushPromises()

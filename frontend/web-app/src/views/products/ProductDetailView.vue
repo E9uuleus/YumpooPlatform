@@ -3,14 +3,17 @@ import {
   GovernanceOverrideCreateAction, GovernanceOverrideRequestTargetTypeEnum,
   ProductStatus, readCsrfToken, type Product, type SafeBlocker,
 } from '@yumpoo/api-client'
-import { ElButton, ElInput, ElMessage } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
+import { ElAlert, ElButton, ElForm, ElFormItem, ElInput, ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { administrationApi, productsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
+import YpPageHeader from '../../components/yp/YpPageHeader.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
+import YpSurface from '../../components/yp/YpSurface.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -133,44 +136,217 @@ onMounted(() => load())
 </script>
 
 <template>
-  <section class="product-detail" v-loading="loading">
-    <button class="back-link" type="button" @click="router.push({ name: 'products' })">← 返回产品列表</button>
-    <inline-problem v-if="error" :problem="error" />
-    <div v-if="conflict" class="conflict" role="alert">服务器版本已更新。你的输入已保留；请核对最新详情后再次保存。</div>
+  <section
+    v-loading="loading"
+    class="product-detail"
+  >
+    <yp-page-header
+      v-if="product"
+      :eyebrow="product.code"
+      :title="product.name"
+    >
+      <template #breadcrumbs>
+        <el-button
+          class="back-link"
+          link
+          type="primary"
+          :icon="ArrowLeft"
+          @click="router.push({ name: 'products' })"
+        >
+          返回产品列表
+        </el-button>
+      </template>
+      <template #meta>
+        <yp-status-tag
+          domain="product-status"
+          :status="product.status"
+          effect="soft"
+        />
+      </template>
+    </yp-page-header>
+    <el-button
+      v-else
+      class="back-link"
+      link
+      type="primary"
+      :icon="ArrowLeft"
+      @click="router.push({ name: 'products' })"
+    >
+      返回产品列表
+    </el-button>
+    <inline-problem
+      v-if="error"
+      :problem="error"
+    />
+    <el-alert
+      v-if="conflict"
+      class="conflict"
+      type="warning"
+      title="服务器版本已更新。你的输入已保留；请核对最新详情后再次保存。"
+      :closable="false"
+      show-icon
+    />
     <template v-if="product">
-      <header><div><p>{{ product.code }}</p><h1>{{ product.name }}</h1></div><yp-status-tag domain="product-status" :status="product.status" effect="soft" /></header>
-      <section class="card">
-        <h2>基本信息</h2>
-        <label>名称<el-input v-model="draft.name" maxlength="80" :disabled="!product.capabilities?.canUpdate" /></label>
-        <label>描述<el-input v-model="draft.description" type="textarea" maxlength="500" show-word-limit :disabled="!product.capabilities?.canUpdate" /></label>
-        <div class="owner"><span>负责人</span><yp-assignee :user-id="product.ownerUserId" :display-name="product.ownerDisplayName ?? '-'" /></div>
-        <el-button v-if="product.capabilities?.canUpdate" type="primary" :loading="saving" @click="save">保存修改</el-button>
-      </section>
-      <section class="card danger">
-        <h2>生命周期</h2>
-        <el-button v-if="product.status === ProductStatus.Active && product.capabilities?.canArchive" :loading="saving" @click="archive">归档产品</el-button>
-        <el-button v-if="product.status === ProductStatus.Archived && product.capabilities?.canRestore" type="primary" :loading="saving" @click="restore">恢复产品</el-button>
-        <div v-if="blockers.length" class="blockers">
-          <strong>归档被以下事实阻断</strong>
-          <ul><li v-for="blocker in blockers" :key="blocker.code">{{ blocker.code }}：{{ blocker.count }}</li></ul>
-          <template v-if="product.capabilities?.canOverrideArchive">
-            <label>治理覆盖理由（10–500 字）<el-input v-model="overrideReason" type="textarea" minlength="10" maxlength="500" show-word-limit /></label>
-            <el-button type="danger" :disabled="overrideReason.trim().length < 10" :loading="saving" @click="overrideArchive">显式覆盖并归档</el-button>
-          </template>
+      <yp-surface title="基本信息">
+        <el-form
+          class="product-form"
+          label-position="top"
+          @submit.prevent
+        >
+          <el-form-item label="名称">
+            <el-input
+              v-model="draft.name"
+              maxlength="80"
+              :disabled="!product.capabilities?.canUpdate"
+            />
+          </el-form-item>
+          <el-form-item label="描述">
+            <el-input
+              v-model="draft.description"
+              type="textarea"
+              maxlength="500"
+              show-word-limit
+              :disabled="!product.capabilities?.canUpdate"
+            />
+          </el-form-item>
+          <el-form-item label="负责人">
+            <yp-assignee
+              :user-id="product.ownerUserId"
+              :display-name="product.ownerDisplayName ?? '-'"
+            />
+          </el-form-item>
+        </el-form>
+        <template
+          v-if="product.capabilities?.canUpdate"
+          #footer
+        >
+          <el-button
+            type="primary"
+            :loading="saving"
+            @click="save"
+          >
+            保存修改
+          </el-button>
+        </template>
+      </yp-surface>
+      <yp-surface
+        title="生命周期"
+        tone="danger"
+      >
+        <div class="lifecycle-actions">
+          <el-button
+            v-if="product.status === ProductStatus.Active && product.capabilities?.canArchive"
+            :loading="saving"
+            @click="archive"
+          >
+            归档产品
+          </el-button>
+          <el-button
+            v-if="product.status === ProductStatus.Archived && product.capabilities?.canRestore"
+            type="primary"
+            :loading="saving"
+            @click="restore"
+          >
+            恢复产品
+          </el-button>
         </div>
-      </section>
+        <div
+          v-if="blockers.length"
+          class="blockers"
+        >
+          <strong>归档被以下事实阻断</strong>
+          <ul>
+            <li
+              v-for="blocker in blockers"
+              :key="blocker.code"
+            >
+              {{ blocker.code }}：{{ blocker.count }}
+            </li>
+          </ul>
+          <el-form
+            v-if="product.capabilities?.canOverrideArchive"
+            class="product-form"
+            label-position="top"
+            @submit.prevent
+          >
+            <el-form-item label="治理覆盖理由（10–500 字）">
+              <el-input
+                v-model="overrideReason"
+                type="textarea"
+                minlength="10"
+                maxlength="500"
+                show-word-limit
+              />
+            </el-form-item>
+            <el-button
+              type="danger"
+              :disabled="overrideReason.trim().length < 10"
+              :loading="saving"
+              @click="overrideArchive"
+            >
+              显式覆盖并归档
+            </el-button>
+          </el-form>
+        </div>
+      </yp-surface>
     </template>
   </section>
 </template>
 
 <style scoped>
-.product-detail { max-width: 860px; margin: 0 auto; padding: 28px; display: grid; gap: 18px; }
-.back-link { justify-self: start; border: 0; background: none; color: var(--yp-link); cursor: pointer; }
-header { display: flex; align-items: center; justify-content: space-between; }
-header p { margin: 0; color: var(--yp-text-secondary); } header h1 { margin: 4px 0; }
-.card { display: grid; gap: 16px; padding: 22px; background: var(--yp-bg-surface); border: 1px solid var(--yp-border-subtle); border-radius: 12px; }
-.card h2 { margin: 0; } .card label { display: grid; gap: 8px; } .owner { display: flex; align-items: center; gap: 16px; }
-.danger { border-color: color-mix(in srgb, var(--el-color-danger) 30%, var(--yp-border-subtle)); }
-.blockers { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--yp-border-subtle); }
-.conflict { padding: 12px 16px; border-radius: 8px; background: var(--el-color-warning-light-9); color: var(--el-color-warning-dark-2); }
+.product-detail {
+  display: grid;
+  width: min(860px, 100%);
+  margin: 0 auto;
+  gap: var(--yp-space-4);
+}
+
+.product-detail > .yp-page-header {
+  margin-bottom: var(--yp-space-1);
+}
+
+.back-link {
+  justify-self: start;
+}
+
+.product-form :deep(.el-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+.lifecycle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--yp-space-2);
+}
+
+.lifecycle-actions:empty {
+  display: none;
+}
+
+.blockers {
+  display: grid;
+  gap: var(--yp-space-3);
+  margin-top: var(--yp-space-4);
+  padding-top: var(--yp-space-4);
+  border-top: 1px solid var(--yp-border-subtle);
+}
+
+.lifecycle-actions:empty + .blockers {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.blockers ul {
+  display: grid;
+  gap: var(--yp-space-1);
+  margin: 0;
+  padding: var(--yp-space-3) var(--yp-space-4);
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-secondary);
+  background: var(--yp-bg-sunken);
+  font-family: var(--yp-font-mono);
+  font-size: var(--yp-type-caption-size);
+  list-style: none;
+}
 </style>

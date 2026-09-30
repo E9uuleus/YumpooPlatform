@@ -100,6 +100,11 @@ const content = computed(() => ({
   width: auto;
 }
 
+.yp-empty-state--ambient h3 {
+  font-size: var(--yp-type-section-title-size);
+  line-height: var(--yp-type-section-title-line);
+}
+
 .yp-empty-state--ambient .yp-empty-state__icon {
   position: relative;
   border: 1px solid var(--yp-border-subtle);

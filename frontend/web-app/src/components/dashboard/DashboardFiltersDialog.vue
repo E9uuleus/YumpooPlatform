@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 import type { DashboardBucket, DashboardConnection, DashboardFilters } from '@yumpoo/api-client'
 import { clone, emptyFilters, categories } from './dashboardModel'
 import YpAssignee from '../yp/YpAssignee.vue'
+import YpEmptyState from '../yp/YpEmptyState.vue'
 const props = defineProps<{ modelValue: boolean; filters: DashboardFilters; options: DashboardBucket[]; projects: DashboardConnection[]; initialField?: string; userId?: string | undefined; title?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean]; apply: [value: DashboardFilters] }>()
 const draft = ref(emptyFilters()), active = ref('assignees'), query = ref('')
@@ -72,12 +73,12 @@ watch(active, () => { query.value = '' })
               /><span v-else>{{ choice.label }}<small v-if="choice.detail">{{ choice.detail }}</small></span><small v-if="choice.count !== undefined">{{ choice.count }}</small></span>
             </el-checkbox>
           </el-checkbox-group>
-          <div
+          <yp-empty-state
             v-if="!choices.length"
-            class="dialog-empty"
-          >
-            暂无选项
-          </div>
+            title="暂无选项"
+            description=""
+            compact
+          />
         </template>
         <template v-else-if="active === 'due'">
           <label class="dashboard-form-label">开始日期</label><el-date-picker

@@ -1,17 +1,14 @@
 <script setup lang="ts">
+import { OfficeBuilding } from '@element-plus/icons-vue'
 import type { Company, WeComIntegrationStatus } from '@yumpoo/api-client'
-import {
-  ElAlert,
-  ElCard,
-  ElDescriptions,
-  ElDescriptionsItem,
-  ElSkeleton,
-} from 'element-plus'
-import { onMounted, ref } from 'vue'
+import { ElAlert, ElIcon, ElSkeleton } from 'element-plus'
+import { computed, onMounted, ref } from 'vue'
 import { identityAdministrationApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
+import YpDefinitionList, { type DefinitionItem } from '../../components/yp/YpDefinitionList.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
+import YpSurface from '../../components/yp/YpSurface.vue'
 
 const company = ref<Company>()
 const status = ref<WeComIntegrationStatus>()
@@ -21,6 +18,30 @@ const error = ref<ApiProblem>()
 function formatTime(value?: Date | null): string {
   return value ? value.toLocaleString('zh-CN') : '暂无'
 }
+
+const companyItems = computed<DefinitionItem[]>(() => company.value
+  ? [
+      { key: 'timezone', label: '时区', value: company.value.timezone },
+      { key: 'weekStart', label: '周起始日', value: '星期一' },
+      { key: 'workday', label: '标准工时', value: `${company.value.defaultWorkdayMinutes} 分钟/日` },
+    ]
+  : [])
+
+const oauthItems = computed<DefinitionItem[]>(() => status.value
+  ? [
+      { key: 'corpId', label: 'Corp ID', value: status.value.oauth.corpIdMasked ?? '未配置', mono: Boolean(status.value.oauth.corpIdMasked) },
+      { key: 'secret', label: '应用凭据', value: status.value.oauth.appSecretConfigured ? '已安全注入' : '未配置' },
+    ]
+  : [])
+
+const directoryItems = computed<DefinitionItem[]>(() => status.value
+  ? [
+      { key: 'corpId', label: 'Corp ID', value: status.value.directory.corpIdMasked ?? '未配置', mono: Boolean(status.value.directory.corpIdMasked) },
+      { key: 'secret', label: '目录凭据', value: status.value.directory.directorySecretConfigured ? '已安全注入' : '未配置' },
+      { key: 'lastSuccess', label: '最近成功', value: formatTime(status.value.lastSuccessfulRunAt) },
+      { key: 'lastProblem', label: '最近异常', value: formatTime(status.value.lastProblemAt) },
+    ]
+  : [])
 
 async function load(): Promise<void> {
   loading.value = true
@@ -55,105 +76,65 @@ onMounted(load)
   />
   <div
     v-else
-    class="overview-grid"
+    class="identity-overview"
   >
-    <el-card shadow="never">
-      <template #header>
-        <strong>公司</strong>
-      </template>
-      <el-descriptions
-        v-if="company"
-        :column="1"
-        border
-      >
-        <el-descriptions-item label="名称">
-          {{ company.displayName }}
-        </el-descriptions-item>
-        <el-descriptions-item label="时区">
-          {{ company.timezone }}
-        </el-descriptions-item>
-        <el-descriptions-item label="周起始日">
-          星期一
-        </el-descriptions-item>
-        <el-descriptions-item label="标准工时">
-          {{ company.defaultWorkdayMinutes }} 分钟/日
-        </el-descriptions-item>
-      </el-descriptions>
-    </el-card>
-
-    <el-card
-      v-if="status"
-      shadow="never"
+    <yp-surface
+      v-if="company"
+      class="identity-overview__company"
     >
-      <template #header>
-        <strong>企微 Web OAuth</strong>
-      </template>
-      <el-descriptions
-        :column="1"
-        border
-      >
-        <el-descriptions-item label="运行开关">
+      <div class="company-identity">
+        <span
+          class="company-identity__icon"
+          aria-hidden="true"
+        >
+          <el-icon><office-building /></el-icon>
+        </span>
+        <div>
+          <p>公司</p>
+          <h2>{{ company.displayName }}</h2>
+        </div>
+      </div>
+      <yp-definition-list
+        :columns="3"
+        :items="companyItems"
+      />
+    </yp-surface>
+
+    <div
+      v-if="status"
+      class="identity-overview__integrations"
+    >
+      <yp-surface title="企微 Web OAuth">
+        <template #actions>
           <yp-status-tag
             domain="integration"
             :status="status.oauth.enabled ? 'ENABLED' : 'DISABLED'"
             effect="soft"
           />
-        </el-descriptions-item>
-        <el-descriptions-item label="配置状态">
           <yp-status-tag
             domain="integration"
             :status="status.oauth.configured ? 'CONFIGURED' : 'INCOMPLETE'"
             effect="soft"
           />
-        </el-descriptions-item>
-        <el-descriptions-item label="Corp ID">
-          {{ status.oauth.corpIdMasked ?? '未配置' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="应用凭据">
-          {{ status.oauth.appSecretConfigured ? '已安全注入' : '未配置' }}
-        </el-descriptions-item>
-      </el-descriptions>
-    </el-card>
-
-    <el-card
-      v-if="status"
-      shadow="never"
-    >
-      <template #header>
-        <strong>企微通讯录</strong>
-      </template>
-      <el-descriptions
-        :column="1"
-        border
-      >
-        <el-descriptions-item label="运行开关">
+        </template>
+        <yp-definition-list :items="oauthItems" />
+      </yp-surface>
+      <yp-surface title="企微通讯录">
+        <template #actions>
           <yp-status-tag
             domain="integration"
             :status="status.directory.enabled ? 'ENABLED' : 'DISABLED'"
             effect="soft"
           />
-        </el-descriptions-item>
-        <el-descriptions-item label="配置状态">
           <yp-status-tag
             domain="integration"
             :status="status.directory.configured ? 'CONFIGURED' : 'INCOMPLETE'"
             effect="soft"
           />
-        </el-descriptions-item>
-        <el-descriptions-item label="Corp ID">
-          {{ status.directory.corpIdMasked ?? '未配置' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="目录凭据">
-          {{ status.directory.directorySecretConfigured ? '已安全注入' : '未配置' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="最近成功">
-          {{ formatTime(status.lastSuccessfulRunAt) }}
-        </el-descriptions-item>
-        <el-descriptions-item label="最近异常">
-          {{ formatTime(status.lastProblemAt) }}
-        </el-descriptions-item>
-      </el-descriptions>
-    </el-card>
+        </template>
+        <yp-definition-list :items="directoryItems" />
+      </yp-surface>
+    </div>
 
     <el-alert
       class="security-note"
@@ -165,3 +146,55 @@ onMounted(load)
     />
   </div>
 </template>
+
+<style scoped>
+.identity-overview {
+  display: grid;
+  gap: var(--yp-space-4);
+}
+
+.company-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--yp-space-3);
+  margin-bottom: var(--yp-space-5);
+}
+
+.company-identity__icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  border-radius: var(--yp-radius-md);
+  color: var(--yp-link);
+  background: var(--yp-bg-selected);
+  font-size: 20px;
+}
+
+.company-identity p {
+  margin: 0;
+  color: var(--yp-text-secondary);
+  font-size: var(--yp-type-caption-size);
+  line-height: var(--yp-type-caption-line);
+}
+
+.company-identity h2 {
+  margin: 0;
+  color: var(--yp-text-primary);
+  font: 500 var(--yp-type-section-title-size) / var(--yp-type-section-title-line) var(--yp-font-heading);
+}
+
+.identity-overview__integrations {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--yp-space-4);
+}
+
+@media (max-width: 960px) {
+  .identity-overview__integrations {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>
