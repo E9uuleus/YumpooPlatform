@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ElOption } from '../../components/operations/elementPlus'
 import { computed, provide, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElButton, ElSelect } from 'element-plus'
+import { ElButton } from 'element-plus'
 import { operationsApi } from '../../api/client'
 import { useOperationsQuery } from '../../composables/useOperationsQuery'
 import { useSession } from '../../composables/useSession'
@@ -10,6 +9,7 @@ import { operationsContext } from '../../components/operations/operationsContext
 import { duration, time } from '../../components/operations/operationsPresentation'
 import YpPageHeader from '../../components/yp/YpPageHeader.vue'
 import InlineProblem from '../../components/InlineProblem.vue'
+import OpsSegmented from '../../components/operations/OpsSegmented.vue'
 import './operations.css'
 const route = useRoute(),
   session = useSession(),
@@ -33,6 +33,15 @@ const title = computed(
       'operations-alerts': '告警',
     })[String(route.name)] ?? '运维中心',
 )
+const intervalOptions = [
+  { value: 0, label: '关' },
+  { value: 15, label: '15 秒' },
+  { value: 30, label: '30 秒' },
+  { value: 60, label: '60 秒' },
+]
+function schemaLabel(version: string): string {
+  return /^\d/.test(version) ? 'V' + version : version
+}
 const hasActions = computed(() =>
   ['operations-overview', 'operations-host', 'operations-sessions'].includes(String(route.name)),
 )
@@ -58,12 +67,12 @@ watch(
   <section class="operations-page">
     <yp-page-header :title="title">
       <template #meta>
-        <span>运维中心</span>
+        <span class="ops-muted">运维中心</span>
         <template v-if="query.data.value">
-          <span>{{ query.data.value.runtime.host.hostName }} ·
-            {{ query.data.value.runtime.host.version }}</span>
-          <span>{{ query.data.value.runtime.host.commit.slice(0, 8) }} · 数据版本
-            {{ query.data.value.runtime.host.schemaVersion }}</span>
+          <span>{{ query.data.value.runtime.host.hostName }}</span>
+          <span class="ops-code">{{ query.data.value.runtime.host.version }} ·
+            {{ query.data.value.runtime.host.commit.slice(0, 8) }}</span>
+          <span>迁移 {{ schemaLabel(query.data.value.runtime.host.schemaVersion) }}</span>
           <span>已运行 {{ duration(query.data.value.runtime.host.uptimeMs) }}</span>
         </template>
       </template>
@@ -71,32 +80,19 @@ watch(
         v-if="hasActions"
         #actions
       >
-        <span class="ops-muted">更新于 {{ time(query.updatedAt.value) }}</span>
-        <el-select
-          v-model="interval"
-          aria-label="自动刷新间隔"
-          style="width: 110px"
-        >
-          <el-option
-            label="自动刷新关"
-            :value="0"
-          /><el-option
-            label="每 15 秒"
-            :value="15"
-          /><el-option
-            label="每 30 秒"
-            :value="30"
-          /><el-option
-            label="每 60 秒"
-            :value="60"
-          />
-        </el-select>
+        <ops-segmented
+          group-label="自动刷新间隔"
+          :options="intervalOptions"
+          :selected="interval"
+          @select="interval = Number($event)"
+        />
         <el-button
           :loading="query.loading.value"
           @click="refresh"
         >
           刷新
         </el-button>
+        <span class="ops-muted operations-updated">更新于 {{ time(query.updatedAt.value) }}</span>
       </template>
     </yp-page-header>
     <inline-problem
@@ -107,3 +103,9 @@ watch(
     <router-view v-if="session.isPlatformAdmin.value && session.phase.value === 'authenticated'" />
   </section>
 </template>
+
+<style scoped>
+.operations-updated {
+  font-variant-numeric: tabular-nums;
+}
+</style>
