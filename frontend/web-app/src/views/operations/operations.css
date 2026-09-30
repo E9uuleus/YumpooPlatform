@@ -86,12 +86,6 @@
   gap: var(--yp-space-3);
   margin-bottom: var(--yp-space-4);
 }
-.ops-toolbar .el-input {
-  width: 220px;
-}
-.ops-toolbar .el-select {
-  width: 150px;
-}
 .ops-toolbar__end {
   margin-left: auto;
 }
@@ -207,7 +201,8 @@ a.ops-chip:hover {
 }
 .ops-chip.ops-tone-yellow,
 .ops-chip.ops-tone-red,
-.ops-chip.ops-tone-green {
+.ops-chip.ops-tone-green,
+.ops-chip.ops-tone-blue {
   border-color: color-mix(in srgb, var(--ops-tone) var(--yp-status-border-mix), var(--yp-border-default));
   background: color-mix(in srgb, var(--ops-tone) var(--yp-status-surface-mix), var(--yp-bg-surface));
   color: var(--yp-text-primary);

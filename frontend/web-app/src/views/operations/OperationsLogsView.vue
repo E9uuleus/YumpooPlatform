@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ElOption } from '../../components/operations/elementPlus'
-import { computed, ref, watch, type DefineComponent } from 'vue'
+import { Close, Filter, Search } from '@element-plus/icons-vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElAlert,
   ElButton,
+  ElCheckbox,
   ElDatePicker,
   ElDrawer,
+  ElIcon,
   ElInput,
-  ElSelect as ElSelectRaw,
+  ElPopover,
   ElSwitch,
 } from 'element-plus'
 import type { OperationsLogEntry, OperationsLogPage } from '@yumpoo/api-client'
@@ -20,7 +22,6 @@ import InlineProblem from '../../components/InlineProblem.vue'
 import OpsSegmented from '../../components/operations/OpsSegmented.vue'
 import { mergeLogEntries as merge } from '../../components/operations/logEntries'
 import { MODULE_LABELS, moduleLabel } from '../../components/operations/operationsPresentation'
-const ElSelect = ElSelectRaw as unknown as DefineComponent
 const route = useRoute(),
   router = useRouter()
 const initial = (key: string) =>
@@ -178,6 +179,67 @@ const levelOptions = computed(() =>
     count: (histogram.data.value?.partial ? '≥' : '') + (levelCounts.value[level] ?? '—'),
   })),
 )
+const modulesOpen = ref(false),
+  moreOpen = ref(false)
+function toggleModule(module: string, checked: boolean) {
+  modules.value = checked
+    ? [...modules.value, module]
+    : modules.value.filter((value) => value !== module)
+  search()
+}
+function clearModules() {
+  modules.value = []
+  modulesOpen.value = false
+  search()
+}
+function applyMoreFilters() {
+  moreOpen.value = false
+  search()
+}
+function clearMoreFilters() {
+  requestId.value = ''
+  event.value = ''
+  userId.value = ''
+  moreOpen.value = false
+  search()
+}
+const moreFilterCount = computed(
+  () => [applied.value.requestId, applied.value.event, applied.value.userId].filter(Boolean).length,
+)
+const shortId = (value: string) => (value.length > 12 ? value.slice(0, 8) + '…' : value)
+const activeFilters = computed(() =>
+  [
+    applied.value.modules && {
+      key: 'modules',
+      label:
+        '模块：' +
+        applied.value.modules
+          .split(',')
+          .map((module) => moduleLabel(module))
+          .join('、'),
+    },
+    applied.value.q && { key: 'q', label: '关键字：' + applied.value.q },
+    applied.value.requestId && { key: 'requestId', label: '请求：' + shortId(applied.value.requestId) },
+    applied.value.event && { key: 'event', label: '事件：' + applied.value.event },
+    applied.value.userId && { key: 'userId', label: '用户：' + shortId(applied.value.userId) },
+  ].filter((filter): filter is { key: string; label: string } => Boolean(filter)),
+)
+function removeFilter(key: string) {
+  if (key === 'modules') modules.value = []
+  else if (key === 'q') q.value = ''
+  else if (key === 'requestId') requestId.value = ''
+  else if (key === 'event') event.value = ''
+  else if (key === 'userId') userId.value = ''
+  search()
+}
+function clearFilters() {
+  modules.value = []
+  q.value = ''
+  requestId.value = ''
+  event.value = ''
+  userId.value = ''
+  search()
+}
 function toggleLevel(level: string) {
   if (levels.value.includes(level)) {
     if (levels.value.length === 1) return
@@ -317,7 +379,7 @@ watch(
 </script>
 <template>
   <div class="ops-sticky log-toolbar">
-    <div class="ops-toolbar">
+    <div class="log-toolbar__row">
       <ops-segmented
         group-label="日志时间范围"
         :options="periodOptions"
@@ -330,42 +392,7 @@ watch(
         :selected="levels"
         @select="toggleLevel(String($event))"
       />
-      <span class="ops-muted">计数：{{ following ? '最近 15 分钟' : '当前区间' }} · 所选模块</span>
-    </div>
-    <div class="ops-toolbar">
-      <el-select
-        v-model="modules"
-        class="log-modules"
-        multiple
-        filterable
-        collapse-tags
-        :multiple-limit="16"
-        placeholder="全部模块"
-        aria-label="模块"
-      >
-        <el-option
-          v-for="module in moduleOptions"
-          :key="module"
-          :label="moduleLabel(module)"
-          :value="module"
-        />
-      </el-select>
-      <el-input
-        v-model="q"
-        class="log-search"
-        placeholder="关键字、事件码或异常类型"
-        :maxlength="200"
-        aria-label="搜索日志"
-        @keyup.enter="search"
-      />
-      <el-button
-        type="primary"
-        :loading="query.loading.value"
-        @click="search"
-      >
-        查询
-      </el-button>
-      <span class="ops-toolbar__end log-live">
+      <span class="log-toolbar__end log-live">
         <span
           v-if="following"
           class="log-live__pill"
@@ -373,13 +400,11 @@ watch(
         ><i aria-hidden="true" />{{ paused ? '已暂停' : '实时' }}</span>
         <el-button
           v-if="following && !paused"
-          size="small"
           @click="paused = true"
         >
           暂停显示
         </el-button><el-button
           v-if="following && paused"
-          size="small"
           type="primary"
           @click="resume"
         >
@@ -392,36 +417,170 @@ watch(
         />
       </span>
     </div>
-    <details class="log-more-filters">
-      <summary>更多筛选{{ requestId || event || userId ? ' · 已设置' : '' }}</summary>
-      <div class="ops-toolbar">
-        <el-date-picker
-          v-if="!following"
-          v-model="range"
-          type="datetimerange"
-          range-separator="至"
-          start-placeholder="开始时间"
-          end-placeholder="结束时间"
-          :clearable="false"
-        />
-        <el-input
-          v-model="requestId"
-          placeholder="Request ID"
-          aria-label="请求标识"
-        /><el-input
-          v-model="event"
-          placeholder="精确事件代码"
-          aria-label="事件代码"
-        /><el-input
-          v-model="userId"
-          placeholder="User ID"
-          aria-label="用户标识"
-        />
-      </div>
-    </details>
+    <div class="log-toolbar__row">
+      <el-popover
+        v-model:visible="modulesOpen"
+        placement="bottom-start"
+        trigger="click"
+        :width="300"
+        :teleported="false"
+      >
+        <template #reference>
+          <el-button
+            class="log-filter-button"
+            :class="{ active: modules.length }"
+            :icon="Filter"
+            :aria-expanded="modulesOpen"
+          >
+            模块{{ modules.length ? ` · ${modules.length}` : '' }}
+          </el-button>
+        </template>
+        <div class="log-panel">
+          <div class="log-panel__head">
+            <strong>按模块筛选</strong>
+            <el-button
+              v-if="modules.length"
+              link
+              type="primary"
+              @click="clearModules"
+            >
+              清除
+            </el-button>
+          </div>
+          <div
+            class="log-panel__modules"
+            role="group"
+            aria-label="模块"
+          >
+            <el-checkbox
+              v-for="module in moduleOptions"
+              :key="module"
+              :model-value="modules.includes(module)"
+              :aria-label="moduleLabel(module)"
+              @update:model-value="toggleModule(module, Boolean($event))"
+            >
+              {{ moduleLabel(module) }}<small>{{ module }}</small>
+            </el-checkbox>
+          </div>
+        </div>
+      </el-popover>
+      <el-input
+        v-model="q"
+        class="log-search"
+        :prefix-icon="Search"
+        placeholder="关键字、事件码或异常类型"
+        :maxlength="200"
+        aria-label="搜索日志"
+        @keyup.enter="search"
+      />
+      <el-button
+        type="primary"
+        :loading="query.loading.value"
+        @click="search"
+      >
+        查询
+      </el-button>
+      <span class="log-more-filters">
+        <el-popover
+          v-model:visible="moreOpen"
+          placement="bottom-start"
+          trigger="click"
+          :width="320"
+          :teleported="false"
+        >
+          <template #reference>
+            <el-button
+              class="log-filter-button"
+              :class="{ active: moreFilterCount }"
+              :aria-expanded="moreOpen"
+            >
+              更多筛选{{ moreFilterCount ? ` · ${moreFilterCount}` : '' }}
+            </el-button>
+          </template>
+          <div class="log-panel">
+            <div class="log-panel__head">
+              <strong>精确筛选</strong>
+            </div>
+            <label class="log-panel__field">
+              <span>Request / Correlation ID</span>
+              <el-input
+                v-model="requestId"
+                placeholder="完整 ID"
+                aria-label="请求标识"
+                @keyup.enter="applyMoreFilters"
+              />
+            </label>
+            <label class="log-panel__field">
+              <span>事件代码</span>
+              <el-input
+                v-model="event"
+                placeholder="如 http.request.failed"
+                aria-label="事件代码"
+                @keyup.enter="applyMoreFilters"
+              />
+            </label>
+            <label class="log-panel__field">
+              <span>用户 ID</span>
+              <el-input
+                v-model="userId"
+                placeholder="完整用户 UUID"
+                aria-label="用户标识"
+                @keyup.enter="applyMoreFilters"
+              />
+            </label>
+            <div class="log-panel__foot">
+              <el-button @click="clearMoreFilters">
+                清除
+              </el-button>
+              <el-button
+                type="primary"
+                @click="applyMoreFilters"
+              >
+                应用
+              </el-button>
+            </div>
+          </div>
+        </el-popover>
+      </span>
+      <el-date-picker
+        v-if="!following"
+        v-model="range"
+        class="log-range"
+        type="datetimerange"
+        range-separator="至"
+        start-placeholder="开始时间"
+        end-placeholder="结束时间"
+        :clearable="false"
+        @change="search"
+      />
+    </div>
+    <div
+      v-if="activeFilters.length"
+      class="log-toolbar__row log-chips"
+    >
+      <button
+        v-for="filter in activeFilters"
+        :key="filter.key"
+        type="button"
+        class="ops-chip log-chip"
+        :aria-label="'移除筛选 ' + filter.label"
+        @click="removeFilter(filter.key)"
+      >
+        {{ filter.label }}<el-icon aria-hidden="true">
+          <close />
+        </el-icon>
+      </button>
+      <el-button
+        link
+        type="primary"
+        @click="clearFilters"
+      >
+        清除全部
+      </el-button>
+    </div>
     <operations-chart
       class="log-histogram"
-      title="日志级别分布；拖动选择时间范围"
+      title="日志级别分布；在柱状图上拖拽选择时间范围"
       :times="histogram.data.value?.buckets.map((b) => b.time) ?? []"
       :series="histogramSeries"
       bars
@@ -429,7 +588,7 @@ watch(
       @range="brush"
     />
     <div class="log-source">
-      <span>来源：{{ source || '—' }}</span>
+      <span>来源：{{ source || '—' }} · 在柱状图上拖拽可缩放时间</span>
       <span>{{ entries.length }} 条（最多保留 500 条）</span>
     </div>
   </div>
@@ -507,16 +666,105 @@ watch(
   border-bottom: 1px solid var(--yp-border-subtle);
 }
 
-.log-toolbar .ops-toolbar {
-  margin-bottom: 0;
+.log-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yp-space-2);
 }
 
-.log-modules {
-  width: 220px;
+.log-toolbar__end {
+  margin-left: auto;
 }
 
-.log-toolbar .log-search {
-  width: 280px;
+.log-search {
+  flex: 1 1 240px;
+  max-width: 360px;
+}
+
+.log-range {
+  max-width: 380px;
+}
+
+.log-filter-button.active {
+  border-color: color-mix(in srgb, var(--yp-action-primary) 50%, var(--yp-border-default));
+  color: var(--yp-action-primary);
+  background: var(--yp-bg-selected);
+}
+
+.log-panel {
+  display: grid;
+  gap: var(--yp-space-3);
+}
+
+.log-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+}
+
+.log-panel__modules {
+  display: grid;
+  max-height: 320px;
+  margin-inline: calc(var(--yp-space-2) * -1);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.log-panel__modules :deep(.el-checkbox) {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  margin-right: 0;
+  padding-inline: var(--yp-space-2);
+  border-radius: var(--yp-radius-sm);
+}
+
+.log-panel__modules :deep(.el-checkbox:hover) {
+  background: var(--yp-bg-hover);
+}
+
+.log-panel__modules :deep(.el-checkbox__label) {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  gap: var(--yp-space-3);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.log-panel__modules small {
+  flex: none;
+  color: var(--yp-text-muted);
+  font: 11px var(--yp-font-mono);
+}
+
+.log-panel__field {
+  display: grid;
+  gap: var(--yp-space-1);
+  color: var(--yp-text-secondary);
+  font-size: var(--yp-type-caption-size);
+}
+
+.log-panel__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--yp-space-2);
+}
+
+.log-panel__foot .el-button + .el-button {
+  margin-left: 0;
+}
+
+.log-chip {
+  cursor: pointer;
+}
+
+.log-chip:hover {
+  border-color: var(--yp-border-strong);
+  color: var(--yp-text-primary);
 }
 
 .log-live {
@@ -524,6 +772,10 @@ watch(
   flex-wrap: wrap;
   align-items: center;
   gap: var(--yp-space-2);
+}
+
+.log-live .el-button + .el-button {
+  margin-left: 0;
 }
 
 .log-live__pill {
@@ -553,35 +805,9 @@ watch(
   }
 }
 
-.log-more-filters summary {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 var(--yp-space-3);
-  border: 1px solid var(--yp-border-default);
-  border-radius: var(--yp-radius-sm);
-  color: var(--yp-text-secondary);
-  background: var(--yp-bg-surface);
-  font-size: var(--yp-type-caption-size);
-  list-style: none;
-  cursor: pointer;
-}
-
-.log-more-filters summary::-webkit-details-marker {
-  display: none;
-}
-
-.log-more-filters[open] summary {
-  color: var(--yp-text-primary);
-  border-color: var(--yp-border-strong);
-}
-
-.log-more-filters > .ops-toolbar {
-  margin-top: var(--yp-space-2);
-}
-
 .log-histogram {
-  height: 120px;
+  height: 72px;
+  cursor: crosshair;
 }
 
 .log-source {
@@ -618,9 +844,14 @@ watch(
 }
 
 @media (max-width: 760px) {
-  .log-modules,
-  .log-toolbar .log-search {
-    width: 100%;
+  .log-search,
+  .log-range {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .log-toolbar__end {
+    margin-left: 0;
   }
 }
 </style>

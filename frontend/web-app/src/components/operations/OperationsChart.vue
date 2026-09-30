@@ -7,7 +7,7 @@ import {
   TooltipComponent,
   LegendComponent,
   MarkLineComponent,
-  DataZoomComponent,
+  BrushComponent,
   AriaComponent,
 } from 'echarts/components'
 import { SVGRenderer } from 'echarts/renderers'
@@ -19,7 +19,7 @@ use([
   TooltipComponent,
   LegendComponent,
   MarkLineComponent,
-  DataZoomComponent,
+  BrushComponent,
   AriaComponent,
   SVGRenderer,
 ])
@@ -44,6 +44,11 @@ function render() {
   const style = getComputedStyle(host.value),
     color = (name: string) => style.getPropertyValue(name).trim()
   const compact = props.compact
+  // 直方图与原型一致：只保留底部时间轴，数值读 tooltip 与级别计数，不画纵轴与辅助线。
+  const histogram = props.bars
+  const primary = color('--yp-action-primary')
+  const translucent = (value: string, alpha: string) =>
+    /^#[0-9a-f]{6}$/i.test(value) ? value + alpha : value
   chart.setOption(
     {
       animation: false,
@@ -55,24 +60,55 @@ function render() {
       ].map(color),
       aria: { enabled: true, label: { description: props.title } },
       tooltip: { trigger: 'axis', renderMode: 'richText', confine: true },
-      grid: {
-        left: compact ? 0 : 58,
-        right: compact ? 0 : 20,
-        top: compact ? 4 : 20,
-        bottom: compact ? 0 : props.zoom ? 72 : 48,
+      grid: histogram
+        ? { left: 2, right: 2, top: 6, bottom: 22 }
+        : {
+            left: compact ? 0 : 58,
+            right: compact ? 0 : 20,
+            top: compact ? 4 : 20,
+            bottom: compact ? 0 : 48,
+          },
+      legend: {
+        show: !compact && !histogram,
+        bottom: 0,
+        textStyle: { color: style.color },
+        type: 'scroll',
       },
-      legend: { show: !compact, bottom: 0, textStyle: { color: style.color }, type: 'scroll' },
-      xAxis: { type: 'time', show: !compact, axisLabel: { color: style.color } },
+      xAxis: {
+        type: 'time',
+        show: !compact,
+        axisLabel: { color: style.color, hideOverlap: true, fontSize: histogram ? 11 : 12 },
+        axisTick: { show: !histogram },
+        axisLine: { lineStyle: { color: color('--yp-border-default') } },
+        splitLine: { show: false },
+      },
       yAxis: {
         type: 'value',
-        show: !compact,
+        show: !compact && !histogram,
         axisLabel: {
           color: style.color,
           formatter: (value: number) => metric(value, props.series[0]?.unit),
         },
-        splitLine: { lineStyle: { color: color('--yp-border-subtle') } },
+        splitLine: {
+          show: !histogram,
+          lineStyle: { color: color('--yp-border-subtle') },
+        },
       },
-      dataZoom: props.zoom ? [{ type: 'slider', bottom: 26, height: 18, realtime: false }] : [],
+      ...(props.zoom
+        ? {
+            brush: {
+              xAxisIndex: 0,
+              brushType: 'lineX',
+              brushMode: 'single',
+              transformable: false,
+              brushStyle: {
+                color: translucent(primary, '29'),
+                borderColor: primary,
+                borderWidth: 1,
+              },
+            },
+          }
+        : {}),
       series: props.series.map((series, index) => ({
         name: metricNames[series.key] ?? series.key,
         type: props.bars ? 'bar' : 'line',
@@ -88,8 +124,8 @@ function render() {
                       ERROR: '--yp-status-red',
                       WARN: '--yp-status-yellow',
                       INFO: '--yp-action-primary',
-                      DEBUG: '--yp-status-teal',
-                      TRACE: '--yp-text-muted',
+                      DEBUG: '--yp-status-gray',
+                      TRACE: '--yp-text-disabled',
                     } as Record<string, string>
                   )[series.key] ?? '--yp-action-primary',
                 ),
@@ -122,17 +158,20 @@ function render() {
     },
     true,
   )
-  chart.off('datazoom')
-  chart.on('datazoom', (event: unknown) => {
-    const zoom = event as { start?: number; end?: number }
-    const first = props.times[0]?.getTime(),
-      last = props.times.at(-1)?.getTime()
-    if (first != null && last != null && zoom.start != null && zoom.end != null)
-      emit(
-        'range',
-        new Date(first + ((last - first) * zoom.start) / 100),
-        new Date(first + ((last - first) * zoom.end) / 100),
-      )
+  chart.off('brushEnd')
+  if (!props.zoom) return
+  // 在柱状图上直接拖拽框选时间范围（原型交互），选中后清掉框选区域。
+  chart.dispatchAction({
+    type: 'takeGlobalCursor',
+    key: 'brush',
+    brushOption: { brushType: 'lineX', brushMode: 'single' },
+  })
+  chart.on('brushEnd', (event: unknown) => {
+    const range = (event as { areas?: { coordRange?: number[] }[] }).areas?.[0]?.coordRange
+    if (range?.length === 2 && range[1]! > range[0]!) {
+      emit('range', new Date(range[0]!), new Date(range[1]!))
+    }
+    chart?.dispatchAction({ type: 'brush', areas: [] })
   })
 }
 watch(() => [props.times, props.series, props.restarts, props.threshold], render, {
