@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { ArrowRight, FolderOpened, Grid, Menu as MenuIcon, User } from '@element-plus/icons-vue'
 import { reactive, ref } from 'vue'
+import StatusScene from '../components/motion/StatusScene.vue'
 import YpAssignee from '../components/yp/YpAssignee.vue'
+import YpDefinitionList from '../components/yp/YpDefinitionList.vue'
 import YpEmptyState from '../components/yp/YpEmptyState.vue'
 import YpFilterBar from '../components/yp/YpFilterBar.vue'
+import YpSegmented from '../components/yp/YpSegmented.vue'
 import YpStatusTag from '../components/yp/YpStatusTag.vue'
+import YpSurface from '../components/yp/YpSurface.vue'
+import YpTabs from '../components/yp/YpTabs.vue'
 import YpThemeSwitcher from '../components/yp/YpThemeSwitcher.vue'
 import { useAppearance } from '../composables/useAppearance'
 
@@ -25,6 +30,28 @@ const previewGroups = [
   { id: 'delivery', code: 'DELIVERY', name: '交付与运营 Workspace', tone: 'purple', active: 0, draft: 0, archived: 1, rows: rows.slice(2) },
 ]
 const collapsedPreviewGroups = ref<ReadonlySet<string>>(new Set())
+const previewTab = ref('content')
+const previewStatus = ref('ACTIVE')
+const previewTabs = [
+  { value: 'recent', label: '最近' },
+  { value: 'content', label: '内容', count: 3 },
+]
+const previewStatusOptions = [
+  { value: 'ACTIVE', label: '进行中' },
+  { value: 'ARCHIVED', label: '已归档' },
+  { value: 'ALL', label: '全部' },
+]
+const previewDefinitions = [
+  { key: 'corpId', label: 'Corp ID', value: '****5678', mono: true },
+  { key: 'secret', label: '应用凭据', value: '已安全注入' },
+  { key: 'lastProblem', label: '最近异常', value: null },
+]
+const previewScenes = [
+  { variant: 'not-found', title: '页面不存在' },
+  { variant: 'forbidden', title: '无权访问' },
+  { variant: 'upgrade', title: '客户端需要升级' },
+  { variant: 'offline', title: '服务暂不可用' },
+] as const
 
 function togglePreviewGroup(id: string): void {
   const next = new Set(collapsedPreviewGroups.value)
@@ -399,6 +426,55 @@ function togglePreviewGroup(id: string): void {
         </section>
       </div>
 
+      <section class="page-stack">
+        <div class="section-heading">
+          <h2>复合组件与动效</h2>
+        </div>
+        <yp-tabs
+          v-model="previewTab"
+          label="视图切换验收"
+          :items="previewTabs"
+        />
+        <div class="acceptance-grid">
+          <yp-surface title="企微 Web OAuth">
+            <template #actions>
+              <yp-status-tag
+                domain="integration"
+                status="ENABLED"
+                effect="soft"
+              />
+            </template>
+            <yp-definition-list :items="previewDefinitions" />
+          </yp-surface>
+          <yp-surface
+            title="生命周期"
+            tone="danger"
+          >
+            <yp-segmented
+              v-model="previewStatus"
+              label="产品状态"
+              :options="previewStatusOptions"
+            />
+          </yp-surface>
+        </div>
+        <yp-surface title="空态轨道">
+          <yp-empty-state
+            ambient
+            title="连接项目"
+            description=""
+          />
+        </yp-surface>
+        <div class="acceptance-scenes">
+          <figure
+            v-for="scene in previewScenes"
+            :key="scene.variant"
+          >
+            <status-scene :variant="scene.variant" />
+            <figcaption>{{ scene.title }}</figcaption>
+          </figure>
+        </div>
+      </section>
+
       <el-drawer
         v-model="drawerOpen"
         title="浮层与表单验收"
@@ -527,6 +603,10 @@ function togglePreviewGroup(id: string): void {
 .acceptance-context button { padding: var(--yp-space-2) var(--yp-space-3); border: 0; border-radius: var(--yp-radius-md); color: var(--yp-text-secondary); background: transparent; text-align: left; }
 .acceptance-context button.active { color: var(--yp-link); background: var(--yp-bg-selected); font-weight: 600; }
 .acceptance-content { min-width: 0; padding: var(--yp-space-8); }
+.acceptance-scenes { display: grid; gap: var(--yp-space-4); grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.acceptance-scenes figure { display: grid; gap: var(--yp-space-2); margin: 0; justify-items: center; padding: var(--yp-space-4); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.acceptance-scenes figure > canvas { width: 220px; height: 188px; }
+.acceptance-scenes figcaption { color: var(--yp-text-secondary); font-size: var(--yp-type-caption-size); }
 .acceptance-content > * + * { margin-top: var(--yp-space-6); }
 .acceptance-project-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--yp-space-6); padding: var(--yp-space-2) 0 var(--yp-space-4); }
 .acceptance-project-header__identity { display: flex; min-width: 0; align-items: flex-start; gap: var(--yp-space-4); }
