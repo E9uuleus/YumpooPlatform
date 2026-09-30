@@ -27,5 +27,7 @@ export default defineConfig({
     include: ['src/**/*.spec.ts'],
     clearMocks: true,
     testTimeout: 20_000,
+    // Source-constraint specs read stylesheets as ?raw text; normal CSS imports stay stubbed.
+    css: { include: [/\.css\?raw$/u] },
   },
 })

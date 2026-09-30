@@ -500,8 +500,9 @@ function togglePreviewGroup(id: string): void {
   align-items: center;
   gap: var(--yp-space-3);
   padding: var(--yp-space-3) var(--yp-space-2);
-  color: var(--yp-text-on-brand);
-  background: var(--yp-bg-module-rail);
+  color: var(--yp-text-secondary);
+  border-right: 1px solid var(--yp-border-default);
+  background: var(--yp-bg-surface);
 }
 
 .acceptance-modules strong,
@@ -517,11 +518,11 @@ function togglePreviewGroup(id: string): void {
 }
 
 .acceptance-modules strong,
-.acceptance-modules .active { background: var(--yp-bg-module-active); }
+.acceptance-modules .active { color: var(--yp-link); background: var(--yp-bg-selected); }
 .acceptance-topbar { display: flex; grid-column: 2 / 4; align-items: center; justify-content: space-between; padding: 0 var(--yp-space-6); border-bottom: 1px solid var(--yp-border-default); background: var(--yp-bg-surface); }
 .acceptance-topbar__context { display: flex; align-items: center; gap: var(--yp-space-3); min-width: 0; }
 .acceptance-context-toggle { display: none; }
-.acceptance-context { display: flex; flex-direction: column; gap: var(--yp-space-2); padding: var(--yp-space-6) var(--yp-space-4); border-right: 1px solid var(--yp-border-default); background: var(--yp-bg-subtle); }
+.acceptance-context { display: flex; flex-direction: column; gap: var(--yp-space-2); padding: var(--yp-space-6) var(--yp-space-4); border-right: 1px solid var(--yp-border-default); background: var(--yp-bg-surface); }
 .acceptance-context h2 { margin: 0 0 var(--yp-space-4); }
 .acceptance-context button { padding: var(--yp-space-2) var(--yp-space-3); border: 0; border-radius: var(--yp-radius-md); color: var(--yp-text-secondary); background: transparent; text-align: left; }
 .acceptance-context button.active { color: var(--yp-link); background: var(--yp-bg-selected); font-weight: 600; }

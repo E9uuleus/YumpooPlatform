@@ -164,13 +164,13 @@ onBeforeUnmount(() => { if (timer) clearTimeout(timer) })
 <style scoped>
 .product-page { padding: 28px; display: grid; gap: 20px; }
 .product-page__header { display: flex; justify-content: space-between; align-items: end; gap: 20px; }
-.product-page__header p { margin: 0; color: var(--yp-color-primary); font-weight: 600; }
+.product-page__header p { margin: 0; color: var(--yp-link); font-weight: 600; }
 .product-page__header h1 { margin: 4px 0; }
-.product-page__header span { color: var(--yp-color-text-secondary); }
+.product-page__header span { color: var(--yp-text-secondary); }
 .product-toolbar { display: grid; grid-template-columns: minmax(220px, 480px) 150px; gap: 12px; }
-.product-table { background: var(--yp-color-surface); border: 1px solid var(--yp-color-border); border-radius: 12px; overflow: hidden; }
+.product-table { background: var(--yp-bg-surface); border: 1px solid var(--yp-border-subtle); border-radius: 12px; overflow: hidden; }
 .product-table :deep(.el-pagination) { padding: 16px; justify-content: flex-end; }
 .product-link { display: grid; gap: 2px; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; font: inherit; }
-.product-link small { color: var(--yp-color-text-secondary); }
+.product-link small { color: var(--yp-text-secondary); }
 @media (max-width: 640px) { .product-page { padding: 18px; } .product-toolbar { grid-template-columns: 1fr; } }
 </style>

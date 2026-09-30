@@ -200,7 +200,7 @@ onBeforeUnmount(() => { ++sequence; if (refreshTimer) clearTimeout(refreshTimer)
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  border-top: 1px solid var(--yp-border-color, var(--el-border-color));
+  border-top: 1px solid var(--yp-border-subtle);
   padding-top: 18px;
   margin-left: -32px;
 }

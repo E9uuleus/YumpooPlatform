@@ -165,12 +165,12 @@ onMounted(() => load())
 
 <style scoped>
 .product-detail { max-width: 860px; margin: 0 auto; padding: 28px; display: grid; gap: 18px; }
-.back-link { justify-self: start; border: 0; background: none; color: var(--yp-color-primary); cursor: pointer; }
+.back-link { justify-self: start; border: 0; background: none; color: var(--yp-link); cursor: pointer; }
 header { display: flex; align-items: center; justify-content: space-between; }
-header p { margin: 0; color: var(--yp-color-text-secondary); } header h1 { margin: 4px 0; }
-.card { display: grid; gap: 16px; padding: 22px; background: var(--yp-color-surface); border: 1px solid var(--yp-color-border); border-radius: 12px; }
+header p { margin: 0; color: var(--yp-text-secondary); } header h1 { margin: 4px 0; }
+.card { display: grid; gap: 16px; padding: 22px; background: var(--yp-bg-surface); border: 1px solid var(--yp-border-subtle); border-radius: 12px; }
 .card h2 { margin: 0; } .card label { display: grid; gap: 8px; } .owner { display: flex; align-items: center; gap: 16px; }
-.danger { border-color: color-mix(in srgb, var(--el-color-danger) 30%, var(--yp-color-border)); }
-.blockers { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--yp-color-border); }
+.danger { border-color: color-mix(in srgb, var(--el-color-danger) 30%, var(--yp-border-subtle)); }
+.blockers { display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--yp-border-subtle); }
 .conflict { padding: 12px 16px; border-radius: 8px; background: var(--el-color-warning-light-9); color: var(--el-color-warning-dark-2); }
 </style>
