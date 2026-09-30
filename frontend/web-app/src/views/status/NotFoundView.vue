@@ -1,18 +1,23 @@
 <script setup lang="ts">
-import { ElButton, ElResult } from 'element-plus'
+import { ElButton } from 'element-plus'
 import { useRouter } from 'vue-router'
+import StatusScene from '../../components/motion/StatusScene.vue'
+import YpResultPage from '../../components/yp/YpResultPage.vue'
 
 const router = useRouter()
 </script>
 
 <template>
-  <main class="result-page">
-    <el-result
-      icon="info"
+  <section class="result-page">
+    <yp-result-page
+      eyebrow="404"
       title="页面不存在"
-      sub-title="请检查地址，或返回 YumpooPlatform 工作台。"
+      description="请检查地址，或返回 YumpooPlatform 工作台。"
     >
-      <template #extra>
+      <template #scene>
+        <status-scene variant="not-found" />
+      </template>
+      <template #actions>
         <el-button
           type="primary"
           @click="router.push({ name: 'workspace-entry' })"
@@ -20,6 +25,6 @@ const router = useRouter()
           返回工作台
         </el-button>
       </template>
-    </el-result>
-  </main>
+    </yp-result-page>
+  </section>
 </template>

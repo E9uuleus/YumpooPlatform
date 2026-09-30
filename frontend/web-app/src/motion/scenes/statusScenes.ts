@@ -156,7 +156,7 @@ function upgrade(): Drawing {
   const random = createRandom(426)
   let particles: Array<{ column: number, progress: number, speed: number }> = []
   let untilSpawn = 0
-  return {
+  const drawing: Drawing = {
     step(dt) {
       untilSpawn -= dt
       if (untilSpawn <= 0) {
@@ -168,7 +168,7 @@ function upgrade(): Drawing {
     },
     draw(context, { accent, muted }) {
       context.setLineDash([2, 6])
-      context.strokeStyle = rgba(muted, 0.35)
+      context.strokeStyle = rgba(muted, 0.5)
       context.lineWidth = 1
       for (let column = 0; column < 7; column += 1) {
         const x = 40 + column * 30
@@ -198,6 +198,9 @@ function upgrade(): Drawing {
       context.lineJoin = 'miter'
     },
   }
+  // Start with the columns already in flight instead of an empty board.
+  for (let elapsed = 0; elapsed < 2400; elapsed += 50) drawing.step(50)
+  return drawing
 }
 
 /** Signal waves flatten and slowly recover: the service is temporarily unreachable. */

@@ -8,7 +8,9 @@ import {
   consumeReturnPath,
   resetAuthenticationNavigation,
 } from '../../auth/navigation'
+import BrandConstellation from '../../components/motion/BrandConstellation.vue'
 import YpThemeSwitcher from '../../components/yp/YpThemeSwitcher.vue'
+import brandLogo from '../../assets/brand/logo.svg'
 import { useAppearance } from '../../composables/useAppearance'
 import { ensureAuthentication } from '../../composables/useSession'
 
@@ -80,10 +82,15 @@ onBeforeUnmount(() => stopStatus?.())
       class="login-brand"
       aria-label="YumpooPlatform 产品介绍"
     >
+      <brand-constellation />
       <div class="login-brand__content">
-        <div class="login-brand__mark">
-          Y
-        </div>
+        <img
+          class="login-brand__logo"
+          :src="brandLogo"
+          width="88"
+          height="64"
+          alt="YumpooPlatform"
+        >
         <h1>让协作状态<br>一目了然</h1>
         <p>项目、成员与企业协作，都在一个工作空间。</p>
       </div>
@@ -101,6 +108,14 @@ onBeforeUnmount(() => stopStatus?.())
         class="login-card"
         shadow="never"
       >
+        <img
+          class="login-card__logo"
+          :src="brandLogo"
+          width="44"
+          height="32"
+          alt=""
+          aria-hidden="true"
+        >
         <p class="muted-text">
           YUMPOO PLATFORM
         </p>

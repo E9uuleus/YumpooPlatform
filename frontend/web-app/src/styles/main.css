@@ -499,46 +499,17 @@ code {
   background: linear-gradient(145deg, var(--yp-brand-gradient-start), var(--yp-brand-gradient-end));
 }
 
-.login-brand::before,
-.login-brand::after {
-  position: absolute;
-  border: 1px solid color-mix(in srgb, var(--yp-brand-glow) 55%, transparent);
-  border-radius: 50%;
-  content: "";
-}
-
-.login-brand::before {
-  top: -16vw;
-  right: -12vw;
-  width: 34vw;
-  height: 34vw;
-}
-
-.login-brand::after {
-  top: 22%;
-  right: 14%;
-  width: 12vw;
-  height: 12vw;
-  background: color-mix(in srgb, var(--yp-brand-glow) 12%, transparent);
-}
-
 .login-brand__content {
   position: relative;
   z-index: 1;
   max-width: 520px;
 }
 
-.login-brand__mark {
-  display: grid;
-  width: 48px;
-  height: 48px;
+.login-brand__logo {
+  display: block;
+  width: auto;
+  height: 64px;
   margin-bottom: var(--yp-space-8);
-  place-items: center;
-  border: 1px solid color-mix(in srgb, currentColor 34%, transparent);
-  border-radius: var(--yp-radius-lg);
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  font-size: 24px;
-  font-weight: 700;
 }
 
 .login-brand h1 {
@@ -571,6 +542,21 @@ code {
 .login-card {
   width: min(420px, 100%);
   border-radius: var(--yp-radius-xl);
+  animation: login-card-enter var(--yp-motion-overlay) var(--yp-ease-standard) both;
+}
+
+.login-card__logo {
+  display: block;
+  width: auto;
+  height: 32px;
+  margin-bottom: var(--yp-space-3);
+}
+
+@keyframes login-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 
 .login-card h2 {

@@ -1,18 +1,23 @@
 <script setup lang="ts">
-import { ElButton, ElResult } from 'element-plus'
+import { ElButton } from 'element-plus'
 import { useRouter } from 'vue-router'
+import StatusScene from '../../components/motion/StatusScene.vue'
+import YpResultPage from '../../components/yp/YpResultPage.vue'
 
 const router = useRouter()
 </script>
 
 <template>
-  <main class="result-page">
-    <el-result
-      icon="warning"
+  <section class="result-page">
+    <yp-result-page
+      eyebrow="403"
       title="无权访问此功能"
-      sub-title="当前账号没有进入该管理区域所需的角色。"
+      description="当前账号没有进入该管理区域所需的角色。"
     >
-      <template #extra>
+      <template #scene>
+        <status-scene variant="forbidden" />
+      </template>
+      <template #actions>
         <el-button
           type="primary"
           @click="router.push({ name: 'workspace-entry' })"
@@ -20,6 +25,6 @@ const router = useRouter()
           返回工作台
         </el-button>
       </template>
-    </el-result>
-  </main>
+    </yp-result-page>
+  </section>
 </template>
