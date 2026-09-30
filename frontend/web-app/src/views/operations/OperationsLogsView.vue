@@ -6,7 +6,6 @@ import {
   ElAlert,
   ElButton,
   ElCheckbox,
-  ElDatePicker,
   ElDrawer,
   ElIcon,
   ElInput,
@@ -21,7 +20,11 @@ import OperationsChart from '../../components/operations/OperationsChart.vue'
 import InlineProblem from '../../components/InlineProblem.vue'
 import OpsSegmented from '../../components/operations/OpsSegmented.vue'
 import { mergeLogEntries as merge } from '../../components/operations/logEntries'
-import { MODULE_LABELS, moduleLabel } from '../../components/operations/operationsPresentation'
+import {
+  MODULE_LABELS,
+  formatOperationsTimeRange,
+  moduleLabel,
+} from '../../components/operations/operationsPresentation'
 const route = useRoute(),
   router = useRouter()
 const initial = (key: string) =>
@@ -37,6 +40,8 @@ const following = ref(!initial('from')),
   paused = ref(false),
   entries = ref<OperationsLogEntry[]>([]),
   pending = ref<OperationsLogEntry[]>([])
+const customRange = ref(!following.value)
+let timeBeforeSelection: { following: boolean; range: [Date, Date] } | undefined
 const utc = ref(false)
 const warning = ref(''),
   cursor = ref<string | null>(null),
@@ -155,7 +160,11 @@ const moduleOptions = computed(() => [
   ]),
 ])
 const selectedPeriod = computed(() =>
-  following.value ? 0 : (range.value[1].getTime() - range.value[0].getTime()) / 60000,
+  following.value ? 0 : customRange.value ? null :
+    (range.value[1].getTime() - range.value[0].getTime()) / 60000,
+)
+const timeSelectionLabel = computed(() =>
+  formatOperationsTimeRange(appliedRange.value[0], appliedRange.value[1], utc.value),
 )
 const periodOptions = [
   { value: 0, label: '实时' },
@@ -225,7 +234,8 @@ const activeFilters = computed(() =>
   ].filter((filter): filter is { key: string; label: string } => Boolean(filter)),
 )
 function removeFilter(key: string) {
-  if (key === 'modules') modules.value = []
+  if (key === 'time') restoreTimeSelection()
+  else if (key === 'modules') modules.value = []
   else if (key === 'q') q.value = ''
   else if (key === 'requestId') requestId.value = ''
   else if (key === 'event') event.value = ''
@@ -233,12 +243,20 @@ function removeFilter(key: string) {
   search()
 }
 function clearFilters() {
+  restoreTimeSelection()
   modules.value = []
   q.value = ''
   requestId.value = ''
   event.value = ''
   userId.value = ''
   search()
+}
+function restoreTimeSelection() {
+  if (!customRange.value) return
+  following.value = timeBeforeSelection?.following ?? true
+  if (timeBeforeSelection) range.value = timeBeforeSelection.range
+  customRange.value = false
+  timeBeforeSelection = undefined
 }
 function toggleLevel(level: string) {
   if (levels.value.includes(level)) {
@@ -247,14 +265,12 @@ function toggleLevel(level: string) {
   } else levels.value = [...levels.value, level]
   search()
 }
+function validRange(from: Date, to: Date) {
+  const start = from.getTime(), end = to.getTime()
+  return Number.isFinite(start) && Number.isFinite(end) && end > start && end - start <= 86400000
+}
 function search() {
-  if (
-    !following.value &&
-    (!range.value ||
-      !Number.isFinite(range.value[0].getTime()) ||
-      range.value[1].getTime() <= range.value[0].getTime() ||
-      range.value[1].getTime() - range.value[0].getTime() > 86400000)
-  ) {
+  if (!following.value && !validRange(range.value[0], range.value[1])) {
     warning.value = '请选择不超过 24 小时的有效时间范围。'
     return
   }
@@ -283,21 +299,23 @@ function search() {
   void query.refresh()
 }
 function period(minutes: number) {
+  customRange.value = false
+  timeBeforeSelection = undefined
   if (minutes === 0) {
-    if (!following.value) following.value = true
-    return
+    if (following.value) return
+    following.value = true
+  } else {
+    const now = Date.now()
+    range.value = [new Date(now - minutes * 60000), new Date(now)]
+    following.value = false
   }
-  const now = Date.now()
-  range.value = [new Date(now - minutes * 60000), new Date(now)]
-  if (following.value) following.value = false
-  else search()
+  search()
 }
 function resume() {
   paused.value = false
   entries.value = merge(entries.value, pending.value)
   pending.value = []
 }
-watch(following, search)
 const pagination = useOperationsQuery(
   async (signal) => {
     if (!cursor.value || following.value) return
@@ -320,9 +338,16 @@ const pagination = useOperationsQuery(
   { immediate: false },
 )
 function brush(from: Date, to: Date) {
+  if (!validRange(from, to)) {
+    warning.value = '请选择不超过 24 小时的有效时间范围。'
+    return
+  }
+  if (!customRange.value)
+    timeBeforeSelection = { following: following.value, range: [...range.value] }
+  customRange.value = true
   range.value = [from, to]
-  if (following.value) following.value = false
-  else search()
+  following.value = false
+  search()
 }
 const selected = ref<OperationsLogEntry>(),
   traceOpen = ref(false)
@@ -372,8 +397,10 @@ watch(
     levels.value = (initial('levels') || 'INFO,WARN,ERROR').split(',')
     const live = !initial('from')
     if (!live) range.value = [new Date(initial('from')), new Date(initial('to'))]
-    if (following.value !== live) following.value = live
-    else search()
+    timeBeforeSelection = undefined
+    customRange.value = !live
+    following.value = live
+    search()
   },
 )
 </script>
@@ -542,22 +569,25 @@ watch(
           </div>
         </el-popover>
       </span>
-      <el-date-picker
-        v-if="!following"
-        v-model="range"
-        class="log-range"
-        type="datetimerange"
-        range-separator="至"
-        start-placeholder="开始时间"
-        end-placeholder="结束时间"
-        :clearable="false"
-        @change="search"
-      />
     </div>
     <div
-      v-if="activeFilters.length"
+      v-if="customRange || activeFilters.length"
       class="log-toolbar__row log-chips"
     >
+      <span
+        v-if="customRange"
+        class="ops-chip log-time-chip"
+      >
+        时间：{{ timeSelectionLabel }}
+        <button
+          type="button"
+          class="log-chip__remove"
+          aria-label="清除时间筛选"
+          @click="removeFilter('time')"
+        >
+          <el-icon aria-hidden="true"><close /></el-icon>
+        </button>
+      </span>
       <button
         v-for="filter in activeFilters"
         :key="filter.key"
@@ -583,6 +613,8 @@ watch(
       title="日志级别分布；在柱状图上拖拽选择时间范围"
       :times="histogram.data.value?.buckets.map((b) => b.time) ?? []"
       :series="histogramSeries"
+      :bucket-seconds="histogram.data.value?.bucketSeconds"
+      :utc="utc"
       bars
       zoom
       @range="brush"
@@ -636,6 +668,7 @@ watch(
   </div>
   <el-drawer
     v-model="traceOpen"
+    class="operations-overlay"
     title="请求链路 · 前后 1 小时"
     size="min(760px, 95vw)"
   >
@@ -680,10 +713,6 @@ watch(
 .log-search {
   flex: 1 1 240px;
   max-width: 360px;
-}
-
-.log-range {
-  max-width: 380px;
 }
 
 .log-filter-button.active {
@@ -760,6 +789,30 @@ watch(
 
 .log-chip {
   cursor: pointer;
+}
+
+.log-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.log-chip__remove:hover {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
+.log-chip__remove:focus-visible {
+  outline: 2px solid var(--yp-focus-ring);
+  outline-offset: 1px;
 }
 
 .log-chip:hover {

@@ -33,6 +33,9 @@
   --yp-radius-xl: 12px;
   --yp-radius-pill: 999px;
 
+  --yp-bg-tooltip: #25272c;
+  --yp-text-tooltip: #ffffff;
+
   --yp-action-primary: #0073ea;
   --yp-action-primary-hover: #0060b9;
   --yp-action-primary-active: #004b95;

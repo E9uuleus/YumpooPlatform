@@ -1,7 +1,23 @@
+.operations-page,
+.operations-overlay {
+  --ops-control-height: 32px;
+  --yp-control-height: var(--ops-control-height);
+  --yp-control-height-small: var(--ops-control-height);
+  --yp-control-height-large: var(--ops-control-height);
+  --el-component-size: var(--ops-control-height);
+  --el-component-size-small: var(--ops-control-height);
+  --el-component-size-large: var(--ops-control-height);
+}
+
 .operations-page {
   color: var(--yp-text-primary);
   max-width: 1800px;
   margin: 0 auto;
+}
+
+.operations-page .ops-segmented {
+  min-height: var(--ops-control-height);
+  align-items: center;
 }
 
 /* 语义色调：各组件通过 --ops-tone 取色，保证三主题一致 */

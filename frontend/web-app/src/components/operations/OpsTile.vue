@@ -7,6 +7,7 @@ defineProps<{
   unit?: string | undefined
   detail?: string | undefined
   tone: 'green' | 'yellow' | 'red'
+  colorToken: string
   times: Date[]
   series: { key: string; unit: string; values: (number | null)[] }[]
 }>()
@@ -35,6 +36,7 @@ defineProps<{
       :title="label + '近一小时'"
       :times="times"
       :series="series"
+      :color-token="colorToken"
       compact
     />
   </article>

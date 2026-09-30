@@ -1,22 +1,25 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElTooltip, type TooltipInstance } from 'element-plus'
 import { init, use, type ECharts } from 'echarts/core'
 import { LineChart, BarChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
+  ToolboxComponent,
   LegendComponent,
   MarkLineComponent,
   BrushComponent,
   AriaComponent,
 } from 'echarts/components'
 import { SVGRenderer } from 'echarts/renderers'
-import { metricNames, metric } from './operationsPresentation'
+import { formatOperationsTimeRange, metricNames, metric } from './operationsPresentation'
 use([
   LineChart,
   BarChart,
   GridComponent,
   TooltipComponent,
+  ToolboxComponent,
   LegendComponent,
   MarkLineComponent,
   BrushComponent,
@@ -29,18 +32,78 @@ const props = defineProps<{
   series: { key: string; unit: string; values: (number | null)[] }[]
   restarts?: Date[] | undefined
   compact?: boolean
+  colorToken?: string
   bars?: boolean
   threshold?: number | undefined
   zoom?: boolean
+  bucketSeconds?: number | undefined
+  utc?: boolean
 }>()
 const emit = defineEmits<{ range: [from: Date, to: Date] }>()
 const host = ref<HTMLElement>()
+const tooltip = ref<TooltipInstance>()
+const hovered = ref<{ key: string; count: number; time: string; color: string }>()
+let pointer = { x: 0, y: 0 }, dragging = false
+const hoverTarget = {
+  getBoundingClientRect: () => new DOMRect(pointer.x, pointer.y, 0, 0),
+}
 let chart: ECharts | undefined,
   resize: ResizeObserver | undefined,
   theme: MutationObserver | undefined
+function hideTooltip() {
+  hovered.value = undefined
+}
+function hover(event: unknown) {
+  const item = event as {
+    componentType?: string
+    seriesType?: string
+    seriesIndex?: number
+    dataIndex?: number
+    color?: unknown
+    event?: { offsetX: number; offsetY: number }
+  }
+  if (!props.bars || dragging || item.componentType !== 'series' || item.seriesType !== 'bar' ||
+      item.seriesIndex == null || item.dataIndex == null || !item.event || !host.value) {
+    hideTooltip()
+    return
+  }
+  const series = props.series[item.seriesIndex], at = props.times[item.dataIndex]
+  const count = series?.values[item.dataIndex]
+  if (!series || !at || count == null || count <= 0) {
+    hideTooltip()
+    return
+  }
+  const seconds = props.bucketSeconds ??
+    ((props.times[item.dataIndex + 1]?.getTime() ?? at.getTime() + 60000) - at.getTime()) / 1000
+  const bounds = host.value.getBoundingClientRect()
+  pointer = { x: bounds.left + item.event.offsetX, y: bounds.top + item.event.offsetY }
+  hovered.value = {
+    key: series.key,
+    count,
+    time: formatOperationsTimeRange(at, new Date(at.getTime() + seconds * 1000), props.utc),
+    color: typeof item.color === 'string' ? item.color : 'currentColor',
+  }
+  void nextTick(() => tooltip.value?.updatePopper())
+}
+function startDrag() {
+  if (props.zoom) dragging = true
+  hideTooltip()
+}
+function endDrag() {
+  dragging = false
+  hideTooltip()
+}
 function render() {
+  hideTooltip()
   if (!host.value?.clientWidth) return
-  chart ||= init(host.value, undefined, { renderer: 'svg' })
+  if (!chart) {
+    chart = init(host.value, undefined, { renderer: 'svg' })
+    chart.on('mousemove', hover)
+    chart.on('mouseout', hideTooltip)
+    chart.on('globalout', endDrag)
+    chart.getZr().on('mousedown', startDrag)
+    chart.getZr().on('mouseup', endDrag)
+  }
   const style = getComputedStyle(host.value),
     color = (name: string) => style.getPropertyValue(name).trim()
   const compact = props.compact
@@ -52,14 +115,15 @@ function render() {
   chart.setOption(
     {
       animation: false,
-      color: [
+      color: (props.colorToken ? [props.colorToken] : [
         '--yp-action-primary',
         '--yp-status-red',
         '--yp-status-teal',
         '--yp-status-purple',
-      ].map(color),
+      ]).map(color),
       aria: { enabled: true, label: { description: props.title } },
-      tooltip: { trigger: 'axis', renderMode: 'richText', confine: true },
+      tooltip: compact || histogram ? { show: false } :
+        { trigger: 'axis', renderMode: 'richText', confine: true },
       grid: histogram
         ? { left: 2, right: 2, top: 6, bottom: 22 }
         : {
@@ -96,6 +160,7 @@ function render() {
       },
       ...(props.zoom
         ? {
+            toolbox: { show: false },
             brush: {
               xAxisIndex: 0,
               brushType: 'lineX',
@@ -113,6 +178,7 @@ function render() {
         name: metricNames[series.key] ?? series.key,
         type: props.bars ? 'bar' : 'line',
         showSymbol: false,
+        silent: !!compact,
         connectNulls: false,
         ...(props.bars
           ? {
@@ -167,6 +233,7 @@ function render() {
     brushOption: { brushType: 'lineX', brushMode: 'single' },
   })
   chart.on('brushEnd', (event: unknown) => {
+    endDrag()
     const range = (event as { areas?: { coordRange?: number[] }[] }).areas?.[0]?.coordRange
     if (range?.length === 2 && range[1]! > range[0]!) {
       emit('range', new Date(range[0]!), new Date(range[1]!))
@@ -174,7 +241,8 @@ function render() {
     chart?.dispatchAction({ type: 'brush', areas: [] })
   })
 }
-watch(() => [props.times, props.series, props.restarts, props.threshold], render, {
+watch(() => [props.times, props.series, props.restarts, props.threshold, props.bars, props.colorToken,
+  props.zoom, props.compact, props.bucketSeconds, props.utc], render, {
   deep: true,
   flush: 'post',
 })
@@ -192,18 +260,56 @@ onMounted(() => {
   })
 })
 onBeforeUnmount(() => {
+  hideTooltip()
   resize?.disconnect()
   theme?.disconnect()
+  chart?.off('mousemove', hover)
+  chart?.off('mouseout', hideTooltip)
+  chart?.off('globalout', endDrag)
+  chart?.getZr().off('mousedown', startDrag)
+  chart?.getZr().off('mouseup', endDrag)
   chart?.dispose()
 })
 </script>
 <template>
   <div
-    ref="host"
     class="operations-chart"
     :class="{ compact }"
     :aria-label="title"
-  />
+  >
+    <div
+      ref="host"
+      class="operations-chart__canvas"
+    />
+    <el-tooltip
+      v-if="bars"
+      ref="tooltip"
+      :visible="!!hovered"
+      :virtual-ref="hoverTarget"
+      virtual-triggering
+      effect="dark"
+      placement="top"
+      :enterable="false"
+      :popper-style="{ pointerEvents: 'none' }"
+      popper-class="ops-chart-tooltip"
+    >
+      <template #content>
+        <template v-if="hovered">
+          <div class="ops-chart-tooltip__time">
+            {{ hovered.time }}
+          </div>
+          <div class="ops-chart-tooltip__value">
+            <i
+              :style="{ background: hovered.color }"
+              aria-hidden="true"
+            />
+            <b>{{ hovered.key }}</b>
+            <span>{{ hovered.count.toLocaleString('zh-CN') }} 条</span>
+          </div>
+        </template>
+      </template>
+    </el-tooltip>
+  </div>
 </template>
 <style scoped>
 .operations-chart {
@@ -214,5 +320,31 @@ onBeforeUnmount(() => {
 }
 .compact {
   height: 44px;
+}
+.operations-chart__canvas {
+  height: 100%;
+  width: 100%;
+}
+:global(.ops-chart-tooltip) {
+  --yp-text-primary: var(--yp-bg-tooltip);
+  --yp-text-inverse: var(--yp-text-tooltip);
+}
+.ops-chart-tooltip__time {
+  margin-bottom: var(--yp-space-1);
+  font-variant-numeric: tabular-nums;
+}
+.ops-chart-tooltip__value {
+  display: flex;
+  align-items: center;
+  gap: var(--yp-space-2);
+}
+.ops-chart-tooltip__value i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.ops-chart-tooltip__value span {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 </style>

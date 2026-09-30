@@ -150,6 +150,21 @@ export function volumePurpose(value: string): string {
 export function time(value?: Date | null): string {
   return value ? value.toLocaleString('zh-CN', { hour12: false }) : '—'
 }
+export function formatOperationsTimeRange(from: Date, to: Date, utc = false): string {
+  if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) return '—'
+  const timeZone = utc ? 'UTC' : undefined
+  const date = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit', timeZone,
+  })
+  const clock = new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit', minute: '2-digit',
+    ...(to.getTime() - from.getTime() < 60000 ? { second: '2-digit' } : {}),
+    hourCycle: 'h23', timeZone,
+  })
+  const sameDay = date.format(from) === date.format(to)
+  const label = (at: Date) => (sameDay ? '' : date.format(at) + ' ') + clock.format(at)
+  return label(from) + '–' + label(to)
+}
 export function bytes(value?: number | null): string {
   if (value == null || value < 0) return '—'
   const unit = value >= 1073741824 ? 'GB' : value >= 1048576 ? 'MB' : 'KB'

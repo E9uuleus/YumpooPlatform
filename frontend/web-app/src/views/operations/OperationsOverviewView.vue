@@ -49,6 +49,7 @@ const tiles = computed(() => {
     {
       name: '系统 CPU',
       key: 'cpu.system',
+      colorToken: '--yp-action-primary',
       value: metric(m['cpu.system'], 'RATIO'),
       unit: 'RATIO',
       tone: toneAbove(m['cpu.system'], 0.85, 0.95),
@@ -57,6 +58,7 @@ const tiles = computed(() => {
     {
       name: '物理内存',
       key: 'memory.used',
+      colorToken: '--yp-status-purple',
       value: bytes(m['memory.used']),
       unit: 'BYTES',
       tone: 'green' as Tone,
@@ -65,6 +67,7 @@ const tiles = computed(() => {
     {
       name: 'JVM 堆',
       key: 'heap.used',
+      colorToken: '--yp-status-yellow',
       value: bytes(m['heap.used']),
       unit: 'BYTES',
       tone: toneAbove(m['heap.ratio'], 0.85, 0.95),
@@ -73,6 +76,7 @@ const tiles = computed(() => {
     {
       name: '磁盘剩余',
       key: disk ? 'disk.' + disk.id + '.free' : '',
+      colorToken: '--yp-status-teal',
       value: diskRatio == null ? '—' : metric(diskRatio, 'RATIO'),
       unit: 'BYTES',
       tone: toneBelow(diskRatio, 0.2, 0.1),
@@ -81,6 +85,7 @@ const tiles = computed(() => {
     {
       name: '在线成员',
       key: 'sessions.online',
+      colorToken: '--yp-status-green',
       value: metric(m['sessions.online']),
       suffix: '人',
       unit: 'COUNT',
@@ -90,6 +95,7 @@ const tiles = computed(() => {
     {
       name: '请求',
       key: 'http.requests',
+      colorToken: '--yp-action-primary',
       value: metric(m['http.requests'] == null ? null : m['http.requests'] * 4),
       suffix: '次/分',
       unit: 'COUNT',
@@ -261,6 +267,7 @@ const postureTone = (severity: string) =>
         :unit="tile.suffix"
         :detail="tile.detail"
         :tone="tile.tone"
+        :color-token="tile.colorToken"
         :times="data.sparkline.map((p) => p.at)"
         :series="[
           {

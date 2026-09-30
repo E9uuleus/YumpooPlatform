@@ -5,11 +5,11 @@ import { RouterLink, useRoute } from 'vue-router'
 import {
   ElButton,
   ElDialog,
-  ElDrawer,
   ElInput,
   ElInputNumber,
   ElPagination,
   ElSelect,
+  ElSkeleton,
   ElSwitch,
   ElTable,
   ElTableColumn,
@@ -87,24 +87,34 @@ watch(tab, () => {
   if (tab.value !== 'rules') void query.refresh()
 })
 watch(page, () => void query.refresh())
-const selected = ref<OperationsAlert>(),
-  drawer = ref(false),
+const detailId = ref(typeof route.query.alert === 'string' ? route.query.alert : ''),
+  detailOpen = ref(Boolean(detailId.value)),
   ack = ref<OperationsAlert>(),
   note = ref('')
 const detail = useOperationsQuery(
   (signal) =>
     operationsApi.getOperationsAlert(
-      { alertId: selected.value?.id ?? String(route.query.alert) },
+      { alertId: detailId.value },
       { signal },
     ),
-  { enabled: () => drawer.value },
+  { enabled: () => detailOpen.value && !!detailId.value },
 )
 function open(alert: OperationsAlert) {
-  selected.value = alert
-  drawer.value = true
-  void detail.refresh()
+  openDetail(alert.id)
 }
-if (typeof route.query.alert === 'string') drawer.value = true
+function openDetail(alertId: string) {
+  const wasOpen = detailOpen.value
+  detail.cancel()
+  detail.data.value = undefined
+  detail.error.value = undefined
+  detailId.value = alertId
+  detailOpen.value = true
+  if (wasOpen) void detail.refresh()
+}
+watch(() => route.query.alert, (id) => {
+  if (typeof id === 'string') openDetail(id)
+  else detailOpen.value = false
+})
 let disposed = false
 const mutationController = new AbortController()
 onBeforeUnmount(() => {
@@ -150,7 +160,7 @@ async function acknowledge() {
     ack.value = undefined
     note.value = ''
     void query.refresh()
-    if (drawer.value) void detail.refresh()
+    if (detailOpen.value) void detail.refresh()
     window.dispatchEvent(new Event('yumpoo-operations-alerts-changed'))
   } catch (reason) {
     if (!disposed) actionError.value = await toApiProblem(reason)
@@ -561,6 +571,7 @@ function logLink(alert: OperationsAlert) {
   </template>
   <el-dialog
     :model-value="!!ack"
+    class="operations-overlay"
     title="确认告警"
     width="min(480px, 90vw)"
     @close="ack = undefined"
@@ -586,69 +597,167 @@ function logLink(alert: OperationsAlert) {
       </el-button>
     </template>
   </el-dialog>
-  <el-drawer
-    v-model="drawer"
+  <el-dialog
+    v-model="detailOpen"
+    class="operations-overlay alert-detail-dialog"
     title="告警详情"
-    size="min(640px, 95vw)"
+    width="min(960px, calc(100vw - 48px))"
+    align-center
+    append-to-body
   >
-    <inline-problem
-      v-if="detail.error.value"
-      :problem="detail.error.value"
-    />
-    <template v-if="detail.data.value">
-      <div class="alert-detail__head">
-        <yp-status-tag
-          domain="operations"
-          :status="detail.data.value.alert.severity"
-          effect="soft"
-          size="small"
-        />
-        <h2>{{ ruleNames[detail.data.value.alert.ruleCode] }}</h2>
-      </div>
-      <p class="ops-muted">
-        {{ subject(detail.data.value.alert) }} · 开始于 {{ time(detail.data.value.alert.startedAt) }}
-      </p>
-      <p
-        v-if="detail.data.value.alert.acknowledgeNote"
-        class="ops-callout"
-      >
-        {{ detail.data.value.alert.acknowledgeNote }}
-      </p>
-      <ul class="ops-timeline">
-        <li
-          v-for="item in detail.data.value.events"
-          :key="item.id"
+    <template #header="{ titleId }">
+      <div class="alert-detail__heading">
+        <span class="ops-muted">告警详情与时间线</span>
+        <h2 :id="titleId">
+          {{ detail.data.value
+            ? (ruleNames[detail.data.value.alert.ruleCode] ?? detail.data.value.alert.ruleCode)
+            : '告警详情' }}
+        </h2>
+        <div
+          v-if="detail.data.value"
+          class="alert-detail__head"
         >
-          <span class="ops-timeline__when">{{ item.occurredAt.toLocaleTimeString('zh-CN', { hour12: false }) }}</span>
-          <span
-            class="ops-timeline__rail"
-            :class="`ops-tone-${eventTones[item.eventType] ?? 'gray'}`"
-          ><span class="ops-timeline__node" /></span>
-          <div class="ops-timeline__what">
-            <span><b>{{ eventNames[item.eventType] ?? item.eventType }}</b> ·
-              {{ metric(item.value, String(detail.data.value.alert.params.unit)) }}</span>
-            <small>{{ time(item.occurredAt) }}</small>
-            <div
-              v-if="item.actorUserId"
-              class="alert-actor"
-            >
-              <yp-assignee
-                v-if="actorNames.get(item.actorUserId)"
-                :user-id="item.actorUserId"
-                :display-name="actorNames.get(item.actorUserId)"
-                size="table"
-              />
-              <span
-                v-else
-                class="ops-muted"
-              >操作人</span>
-              <small :title="item.actorUserId">{{ item.actorUserId }}</small>
-            </div>
-          </div>
-        </li>
-      </ul>
+          <yp-status-tag
+            domain="operations"
+            :status="detail.data.value.alert.severity"
+            effect="soft"
+            size="small"
+          />
+          <yp-status-tag
+            domain="operations"
+            :status="detail.data.value.alert.status"
+            effect="soft"
+            size="small"
+          />
+          <span class="ops-muted">{{ subject(detail.data.value.alert) }}</span>
+        </div>
+      </div>
     </template>
-  </el-drawer>
+    <div
+      v-if="detail.loading.value && !detail.data.value"
+      class="alert-detail__loading"
+      role="status"
+    >
+      <p class="ops-muted">
+        正在加载告警详情…
+      </p>
+      <el-skeleton
+        :rows="5"
+        animated
+      />
+    </div>
+    <div
+      v-if="detail.error.value"
+      class="alert-detail__error"
+    >
+      <inline-problem :problem="detail.error.value" />
+      <el-button @click="detail.refresh">
+        重新加载
+      </el-button>
+    </div>
+    <div
+      v-if="detail.data.value"
+      class="alert-detail__content"
+    >
+      <section class="alert-detail__summary">
+        <h3>指标与状态</h3>
+        <dl class="alert-detail__stats">
+          <div><dt>当前值</dt><dd>{{ metric(detail.data.value.alert.lastValue, String(detail.data.value.alert.params.unit)) }}</dd></div>
+          <div><dt>触发阈值</dt><dd>{{ metric(alertThreshold(detail.data.value.alert), String(detail.data.value.alert.params.unit)) }}</dd></div>
+          <div><dt>极值</dt><dd>{{ metric(detail.data.value.alert.peakValue, String(detail.data.value.alert.params.unit)) }}</dd></div>
+          <div><dt>持续时间</dt><dd>{{ duration((detail.data.value.alert.resolvedAt?.getTime() ?? Date.now()) - detail.data.value.alert.startedAt.getTime()) }}</dd></div>
+        </dl>
+        <dl class="ops-definition alert-detail__info">
+          <dt>首次触发</dt><dd>{{ time(detail.data.value.alert.startedAt) }}</dd>
+          <dt>最近评估</dt><dd>{{ time(detail.data.value.alert.evaluatedAt) }}</dd>
+          <dt>确认状态</dt><dd>{{ detail.data.value.alert.acknowledgedAt ? '已确认' : '未确认' }}</dd>
+          <template v-if="detail.data.value.alert.acknowledgedAt">
+            <dt>确认时间</dt><dd>{{ time(detail.data.value.alert.acknowledgedAt) }}</dd>
+          </template>
+          <template v-if="detail.data.value.alert.resolvedAt">
+            <dt>结束时间</dt><dd>{{ time(detail.data.value.alert.resolvedAt) }}</dd>
+            <dt>结束方式</dt><dd>{{ detail.data.value.alert.resolution === 'RULE_DISABLED' ? '规则停用' : '已恢复' }}</dd>
+          </template>
+        </dl>
+        <template v-if="detail.data.value.alert.acknowledgeNote">
+          <h3>处理备注</h3>
+          <p class="ops-callout alert-detail__note">
+            {{ detail.data.value.alert.acknowledgeNote }}
+          </p>
+        </template>
+      </section>
+      <section class="alert-detail__timeline">
+        <div class="alert-detail__timeline-head">
+          <h3>事件时间线</h3>
+          <span class="ops-muted">{{ detail.data.value.events.length }} 条事件</span>
+        </div>
+        <yp-empty-state
+          v-if="!detail.data.value.events.length"
+          title="暂无事件"
+        />
+        <ul
+          v-else
+          class="ops-timeline"
+        >
+          <li
+            v-for="item in detail.data.value.events"
+            :key="item.id"
+          >
+            <span class="ops-timeline__when">{{ item.occurredAt.toLocaleTimeString('zh-CN', { hour12: false }) }}</span>
+            <span
+              class="ops-timeline__rail"
+              :class="`ops-tone-${eventTones[item.eventType] ?? 'gray'}`"
+            ><span class="ops-timeline__node" /></span>
+            <div class="ops-timeline__what">
+              <span><b>{{ eventNames[item.eventType] ?? item.eventType }}</b> ·
+                {{ metric(item.value, String(detail.data.value.alert.params.unit)) }}</span>
+              <small>{{ time(item.occurredAt) }}</small>
+              <div
+                v-if="item.actorUserId"
+                class="alert-actor"
+              >
+                <yp-assignee
+                  v-if="actorNames.get(item.actorUserId)"
+                  :user-id="item.actorUserId"
+                  :display-name="actorNames.get(item.actorUserId)"
+                  size="table"
+                />
+                <span
+                  v-else
+                  class="ops-muted"
+                >操作人</span>
+                <small :title="item.actorUserId">{{ item.actorUserId }}</small>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </div>
+    <template #footer>
+      <div class="alert-detail__footer">
+        <div
+          v-if="detail.data.value"
+          class="alert-card__links"
+        >
+          <router-link
+            class="ops-link"
+            :to="{ name: 'operations-host' }"
+          >
+            查看指标
+          </router-link>
+          <router-link
+            class="ops-link"
+            :to="logLink(detail.data.value.alert)"
+          >
+            查看日志
+          </router-link>
+        </div>
+        <el-button @click="detailOpen = false">
+          关闭
+        </el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -758,13 +867,126 @@ function logLink(alert: OperationsAlert) {
 
 .alert-detail__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--yp-space-2);
 }
 
-.alert-detail__head h2 {
+.alert-detail__heading {
+  display: grid;
+  gap: var(--yp-space-2);
+  padding-right: var(--yp-space-5);
+}
+
+.alert-detail__heading h2 {
   margin: 0;
   font: 500 var(--yp-type-section-title-size) / 1.4 var(--yp-font-heading);
+}
+
+:global(.alert-detail-dialog.el-dialog) {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
+}
+
+:global(.alert-detail-dialog .el-dialog__header) {
+  flex: none;
+  padding-bottom: var(--yp-space-4);
+  border-bottom: 1px solid var(--yp-border-subtle);
+}
+
+:global(.alert-detail-dialog .el-dialog__body) {
+  min-height: 0;
+  padding-block: var(--yp-space-5);
+  overflow-y: auto;
+}
+
+:global(.alert-detail-dialog .el-dialog__footer) {
+  flex: none;
+  padding-top: var(--yp-space-4);
+  border-top: 1px solid var(--yp-border-subtle);
+}
+
+.alert-detail__content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: var(--yp-space-6);
+}
+
+.alert-detail__content h3 {
+  margin: 0 0 var(--yp-space-3);
+  color: var(--yp-text-primary);
+  font: 500 var(--yp-type-card-title-size) / 1.5 var(--yp-font-heading);
+}
+
+.alert-detail__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--yp-border-subtle);
+  border-radius: var(--yp-radius-md);
+  background: var(--yp-border-subtle);
+}
+
+.alert-detail__stats > div {
+  padding: var(--yp-space-3);
+  background: var(--yp-bg-sunken);
+}
+
+.alert-detail__stats dt {
+  color: var(--yp-text-muted);
+  font-size: var(--yp-type-caption-size);
+}
+
+.alert-detail__stats dd {
+  margin: var(--yp-space-1) 0 0;
+  color: var(--yp-text-primary);
+  font: 500 20px / 1.5 var(--yp-font-heading);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.alert-detail__info {
+  margin: var(--yp-space-5) 0;
+  font-size: var(--yp-type-caption-size);
+}
+
+.alert-detail__note {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.alert-detail__timeline-head,
+.alert-detail__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yp-space-3);
+}
+
+.alert-detail__footer .el-button {
+  margin-left: auto;
+}
+
+.alert-detail__error {
+  display: grid;
+  justify-items: start;
+  gap: var(--yp-space-3);
+}
+
+@media (max-width: 760px) {
+  .alert-detail__content {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--yp-space-4);
+  }
+
+  .alert-detail__stats dd {
+    font-size: clamp(16px, 4vw, 20px);
+  }
 }
 
 @media (max-width: 960px) {
