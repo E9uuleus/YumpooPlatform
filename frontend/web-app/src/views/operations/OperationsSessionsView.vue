@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { ElInput, ElTable, ElTableColumn, ElPagination, ElButton } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
+import { ElInput, ElTable, ElTableColumn, ElPagination } from 'element-plus'
 import {
   type ListOperationsSessionsPresenceEnum,
   type ListOperationsSessionsClientTypeEnum,
+  type OperationsSessionInfo,
 } from '@yumpoo/api-client'
 import { operationsApi } from '../../api/client'
 import { useOperationsQuery } from '../../composables/useOperationsQuery'
@@ -59,10 +61,31 @@ const clientOptions = [
 function clientLabel(type: string, version?: string | null): string {
   return type === 'WEB' ? 'Web' : type === 'ELECTRON' ? `Electron ${version ?? ''}`.trim() : type
 }
+// 同一成员常有多条同类会话（多个浏览器标签、多次登录），按客户端与版本合并计数，避免标签堆叠。
+function clientGroups(sessions: OperationsSessionInfo[]) {
+  const groups = new Map<string, { label: string; count: number; electron: boolean }>()
+  for (const session of sessions) {
+    const label = clientLabel(session.clientType, session.clientVersion)
+    const group = groups.get(label) ?? { label, count: 0, electron: session.clientType === 'ELECTRON' }
+    group.count++
+    groups.set(label, group)
+  }
+  return [...groups.values()].sort((a, b) => Number(b.electron) - Number(a.electron))
+}
 function search() {
   page.value = 1
   void query.refresh()
 }
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+function scheduleSearch() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(search, 300)
+}
+function searchNow() {
+  clearTimeout(searchTimer)
+  search()
+}
+onBeforeUnmount(() => clearTimeout(searchTimer))
 watch([presence, clientType], search)
 watch(page, () => void query.refresh())
 </script>
@@ -98,18 +121,19 @@ watch(page, () => void query.refresh())
       </div>
     </div>
   </section>
-  <div class="ops-toolbar">
+  <div class="ops-toolbar session-toolbar">
     <el-input
       v-model="q"
-      placeholder="搜索成员名称"
+      class="session-search"
+      :prefix-icon="Search"
+      placeholder="搜索成员"
       clearable
       :maxlength="200"
       aria-label="搜索成员名称"
-      @keyup.enter="search"
+      @input="scheduleSearch"
+      @keyup.enter="searchNow"
+      @clear="searchNow"
     />
-    <el-button @click="search">
-      查询
-    </el-button>
     <ops-segmented
       group-label="成员状态"
       :options="presenceOptions"
@@ -122,7 +146,10 @@ watch(page, () => void query.refresh())
       :selected="clientType"
       @select="clientType = String($event)"
     />
-    <span class="ops-muted ops-toolbar__end">{{ query.data.value?.totalElements ?? 0 }} 位成员 · 仅在页面可见且未编辑输入时自动刷新</span>
+    <span
+      class="ops-muted ops-toolbar__end"
+      title="仅在页面可见且未编辑输入时自动刷新"
+    >{{ query.data.value?.totalElements ?? 0 }} 位成员</span>
   </div>
   <inline-problem
     v-if="query.error.value"
@@ -180,10 +207,12 @@ watch(page, () => void query.refresh())
         <template #default="{ row }">
           <div class="session-clients">
             <span
-              v-for="session in row.sessions"
-              :key="session.id"
+              v-for="group in clientGroups(row.sessions)"
+              :key="group.label"
               class="ops-chip"
-            >{{ clientLabel(session.clientType, session.clientVersion) }}</span>
+              :class="{ 'ops-tone-blue': group.electron }"
+              :title="`${group.label}：${group.count} 个有效会话`"
+            >{{ group.label }}<b v-if="group.count > 1">× {{ group.count }}</b></span>
           </div>
         </template>
       </el-table-column>
@@ -225,6 +254,31 @@ watch(page, () => void query.refresh())
 
 .session-versions {
   margin-top: var(--yp-space-1);
+}
+
+.session-toolbar {
+  gap: var(--yp-space-2) var(--yp-space-3);
+}
+
+.session-search {
+  width: 240px;
+}
+
+.session-clients {
+  gap: var(--yp-space-1) var(--yp-space-2);
+  padding-block: 2px;
+}
+
+.session-clients b {
+  margin-left: 2px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+  .session-search {
+    width: 100%;
+  }
 }
 
 .session-detail {
