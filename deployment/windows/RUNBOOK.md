@@ -194,6 +194,20 @@ Invoke-RestMethod http://127.0.0.1:8100/actuator/health/readiness
 - `INITIAL_IDENTITY_BOOTSTRAP_PERMANENTLY_CLOSED`：首次引导已关闭或已有平台角色；改用正式治理 API/APP_MANAGER break-glass，不修改数据库。
 - `INITIAL_IDENTITY_BOOTSTRAP_ROLE_REJECTED`：同步后角色事务前置状态发生变化；核对审计与治理状态，不通过 SQL 重开入口。
 
-日志只允许保留 requestId、目录运行 ID、阶段和稳定错误码。Nginx 不得记录包含 OAuth query 的 `$request_uri`、`$args` 或完整 `$request`。
+首次身份引导诊断只保留 requestId、目录运行 ID、阶段和稳定错误码，不记录企业微信外部 UserID 或供应商响应。应用运行日志的字段和查询边界见下节。Nginx 不得记录包含 OAuth query 的 `$request_uri`、`$args` 或完整 `$request`。
 
 M1-15 不新增 Flyway。成功前回退时停止 Java、把 `current` 指回 M1-14 并恢复正常配置即可；成功后的用户、身份、角色、审计和 Outbox 与 M1-14 schema 兼容。若必须撤销已成功的首次引导事实，只能停服并恢复执行前数据库备份，不执行逆向 SQL 或手工删除角色。
+
+## 8. 运维中心与应用日志
+
+当前版本追加运维迁移 V58/V59。仅 `APP_MANAGER` 可见独立「运维」模块，入口 `/admin/operations/overview`，包含主机指标、有效会话、运行日志和告警。公司管理员没有该权限。规则修改需要 CSRF 和版本条件，产生安全审计；确认告警不会关闭告警，恢复或停用规则才结束事件。
+
+生产模板显式设置 `logging.file.name: C:/ProgramData/Yumpoo/logs/yumpoo-server.log`。启动预检要求它是 `yumpoo.deployment.log-root` 内的绝对路径；移动日志根时同步修改文件路径和目录 ACL。默认开发路径为 `out/logs/yumpoo-server.log`，可用 `YUMPOO_LOG_FILE` 配置。JSON 文件按 UTC 日期及 50 MB 滚动为 `.yyyy-MM-dd.N.gz`，保留至多 90 天且总量不超过 10 GB，达到任一限制都会清理旧归档。WinSW/stdout 或上述 `Tee-Object` 捕获的是便于阅读的控制台日志，不是历史检索数据源；应独立配置其保留策略，避免重复日志无限增长。
+
+日志由统一映射脱敏，包含稳定 event、requestId、内部用户 UUID、耗时和受控异常堆栈。禁止把日志目录配置为 Web 静态目录或扩大其 ACL。日志 API 不提供文件下载，不接受文件路径；查询最多 24 小时，文件扫描最多 3 秒/256 MiB，繁忙时返回 429。界面出现缺口、文件变化或 partial 时缩小区间重查；游标 5 分钟过期、进程重启后失效。无匹配日志不等于期间没有发生故障。
+
+指标每 15 秒采样，内存保留 1 小时、数据库分钟历史保留 14 天；告警历史保留 180 天。运维与 Actuator 请求不计入业务 HTTP 指标。P95 由不带路由标签的全局业务请求计时器计算，低请求量或缺失采样显示未知/空白；主机图表请求量统一显示次/分钟，阈值读取当前启用规则。采样使用独立执行器，数据库探针阻塞不占用 Outbox/附件的业务调度线程。连接池忙显示降级，本机告警观测继续采集，最多保留 240 份；连接恢复后按原采样时间顺序每轮评估至多 40 份，告警窗口不依赖 I/O 完成频率。运行中探针的等待时长作为数据库延迟下界。数据库长时间故障时，待写分钟桶最多 60 个；两类积压的丢弃数都在页面明示。
+
+数据库完全不可达会同时影响认证，应用内中心无法替代外部存活监测；连续数据库失败在连接恢复后补记，进程停止期间没有采样。当前出口为运维页面和徽标，未配置 P3 外部通知。构建信息中的 commit 可通过 Maven `-Dyumpoo.build.commit=<commit>` 注入，未注入显示 `unknown`；不要把它当成已验证的部署版本。
+
+运维表随正常数据库备份一起保护。回滚到旧应用保留 V58/V59 表，禁止为了回滚修改既有 Flyway checksum 或手工删除运维数据。首次身份引导的 M1-15 回退边界仍适用前节。

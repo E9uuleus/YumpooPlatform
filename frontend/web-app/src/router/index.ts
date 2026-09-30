@@ -58,6 +58,20 @@ export const routes: RouteRecordRaw[] = [
     component: AppShell,
     children: [
       {
+        path: 'admin/operations',
+        alias: '/operations',
+        component: () => import('../views/operations/OperationsLayout.vue'),
+        redirect: { name: 'operations-overview' },
+        meta: { shellSection: 'operations', requiredRoles: [AuthenticationRole.AppManager] },
+        children: [
+          { path: 'overview', name: 'operations-overview', component: () => import('../views/operations/OperationsOverviewView.vue') },
+          { path: 'host', name: 'operations-host', component: () => import('../views/operations/OperationsHostView.vue') },
+          { path: 'sessions', name: 'operations-sessions', component: () => import('../views/operations/OperationsSessionsView.vue') },
+          { path: 'logs', name: 'operations-logs', component: () => import('../views/operations/OperationsLogsView.vue') },
+          { path: 'alerts', name: 'operations-alerts', component: () => import('../views/operations/OperationsAlertsView.vue') },
+        ],
+      },
+      {
         path: '',
         name: 'workspace-root',
         component: ProjectsView,

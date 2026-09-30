@@ -12,6 +12,8 @@ servers:
   - url: /api/v1
     description: Yumpoo v1 business API
 tags:
+  - name: Operations
+    description: APP_MANAGER 专属运行诊断、脱敏日志与应用内告警。
   - name: Notifications
     description: 本人站内收件箱与未读计数。
   - name: Dashboards
@@ -3978,6 +3980,806 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
+  /admin/operations/overview:
+    get:
+      tags:
+        - Operations
+      operationId: getOperationsOverview
+      summary: 获取运维概览
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters: []
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsOverview"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/host:
+    get:
+      tags:
+        - Operations
+      operationId: getOperationsHost
+      summary: 获取主机与运行时信息
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters: []
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsHost"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/metrics:
+    get:
+      tags:
+        - Operations
+      operationId: getOperationsMetrics
+      summary: 获取指标时序
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: range
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - 1h
+              - 6h
+              - 24h
+              - 7d
+              - 14d
+            default: 1h
+        - name: keys
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 2048
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsMetricSeries"
+              examples:
+                sample:
+                  $ref: "#/components/examples/OperationsMetricsWithGap"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/sessions/summary:
+    get:
+      tags:
+        - Operations
+      operationId: getOperationsSessionSummary
+      summary: 获取有效会话统计
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters: []
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsSessionSummary"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/sessions:
+    get:
+      tags:
+        - Operations
+      operationId: listOperationsSessions
+      summary: 按成员查询有效会话
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: presence
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - ONLINE
+              - IDLE
+              - AWAY
+        - name: clientType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - WEB
+              - ELECTRON
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - &a8
+          name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100000
+            default: 0
+        - &a9
+          name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsSessionPage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/logs:
+    get:
+      tags:
+        - Operations
+      operationId: queryOperationsLogs
+      summary: 查询运行日志
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema: &a1
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema: *a1
+        - &a2
+          name: levels
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+        - &a3
+          name: modules
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+        - &a4
+          name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - &a5
+          name: requestId
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+        - &a6
+          name: event
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 512
+        - &a7
+          name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 36
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsLogPage"
+              examples:
+                sample:
+                  $ref: "#/components/examples/OperationsPartialLogPage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "429":
+          description: 另一项文件扫描正在进行，请稍后重试。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/logs/tail:
+    get:
+      tags:
+        - Operations
+      operationId: tailOperationsLogs
+      summary: 增量跟随运行日志
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: bootId
+          in: query
+          required: false
+          schema: &a11
+            type: string
+        - name: afterSeq
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^[0-9]+$
+        - *a2
+        - *a3
+        - *a4
+        - *a5
+        - *a6
+        - *a7
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsLogTail"
+              examples:
+                sample:
+                  $ref: "#/components/examples/OperationsLogTailSample"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/logs/histogram:
+    get:
+      tags:
+        - Operations
+      operationId: getOperationsLogHistogram
+      summary: 查询日志直方图
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: *a1
+        - name: to
+          in: query
+          required: true
+          schema: *a1
+        - *a2
+        - *a3
+        - *a4
+        - *a5
+        - *a6
+        - *a7
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsLogHistogram"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "429":
+          description: 另一项文件扫描正在进行，请稍后重试。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/alerts/summary:
+    get:
+      tags:
+        - Operations
+      operationId: getOperationsAlertSummary
+      summary: 获取未确认告警计数
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters: []
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsAlertSummary"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/alerts:
+    get:
+      tags:
+        - Operations
+      operationId: listOperationsAlerts
+      summary: 查询活跃或历史告警
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - FIRING
+              - RESOLVED
+        - name: severity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - WARNING
+              - CRITICAL
+        - *a8
+        - *a9
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsAlertPage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/alerts/{alertId}:
+    get:
+      tags:
+        - Operations
+      operationId: getOperationsAlert
+      summary: 获取告警事件时间线
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema: &a10
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsAlertDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/alerts/{alertId}/acknowledge:
+    post:
+      tags:
+        - Operations
+      operationId: acknowledgeOperationsAlert
+      summary: 确认活跃告警
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema: *a10
+        - $ref: "#/components/parameters/XsrfToken"
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsAlertDetail"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperationsAcknowledge"
+  /admin/operations/alert-rules:
+    get:
+      tags:
+        - Operations
+      operationId: listOperationsAlertRules
+      summary: 查询内置告警规则
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters: []
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OperationsRule"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/operations/alert-rules/{code}:
+    put:
+      tags:
+        - Operations
+      operationId: updateOperationsAlertRule
+      summary: 更新告警规则
+      description: "仅当前有效 APP_MANAGER 可访问；响应（含错误）使用 Cache-Control: no-store。"
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: *a11
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: 查询或更新成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum:
+                  - no-store
+              description: 禁止缓存。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsRule"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "503":
+          $ref: "#/components/responses/DependencyUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperationsRuleUpdate"
 components:
   securitySchemes:
     sessionCookie:
@@ -3987,6 +4789,646 @@ components:
       description: 服务端签发的 HttpOnly、Secure、SameSite=Lax Web Session Cookie。
 
   schemas:
+    OperationsVolume:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - label
+        - totalBytes
+        - freeBytes
+        - purposes
+      properties:
+        id: &a1
+          type: string
+        label: *a1
+        totalBytes: &a2
+          type: integer
+          format: int64
+        freeBytes: *a2
+        purposes:
+          type: array
+          items: *a1
+    OperationsHost:
+      type: object
+      additionalProperties: false
+      required:
+        - hostName
+        - os
+        - architecture
+        - cpuModel
+        - processors
+        - javaVersion
+        - pid
+        - startedAt
+        - uptimeMs
+        - heapMax
+        - version
+        - commit
+        - buildTime
+        - schemaVersion
+        - databaseVersion
+        - garbageCollectors
+        - defaultCharset
+        - timeZone
+        - profiles
+        - volumes
+      properties:
+        hostName: *a1
+        os: *a1
+        architecture: *a1
+        cpuModel:
+          type: string
+          nullable: true
+        processors: *a2
+        javaVersion: *a1
+        pid: *a2
+        startedAt: &a3
+          type: string
+          format: date-time
+        uptimeMs: *a2
+        heapMax: *a2
+        version: *a1
+        commit: *a1
+        buildTime:
+          type: string
+          format: date-time
+          nullable: true
+        schemaVersion: *a1
+        databaseVersion: *a1
+        garbageCollectors:
+          type: array
+          items: *a1
+        defaultCharset: *a1
+        timeZone: *a1
+        profiles:
+          type: array
+          items: *a1
+        volumes:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsVolume"
+    OperationsComponentHealth:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - status
+        - checkedAt
+        - detail
+      properties:
+        code: *a1
+        status: *a1
+        checkedAt:
+          type: string
+          format: date-time
+          nullable: true
+        detail: *a1
+    OperationsPostureCheck:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - severity
+        - status
+      properties:
+        code: *a1
+        severity: *a1
+        status: *a1
+    OperationsMetricPoint:
+      type: object
+      additionalProperties: false
+      required:
+        - at
+        - values
+      properties:
+        at: *a3
+        values:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            nullable: true
+    OperationsRuntime:
+      type: object
+      additionalProperties: false
+      required:
+        - sampledAt
+        - ioUpdatedAt
+        - health
+        - metrics
+        - components
+        - posture
+        - host
+        - lostSamples
+      properties:
+        sampledAt: *a3
+        ioUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        health: *a1
+        metrics:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            nullable: true
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsComponentHealth"
+        posture:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsPostureCheck"
+        host:
+          $ref: "#/components/schemas/OperationsHost"
+        lostSamples: *a2
+    OperationsSeries:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - unit
+        - values
+      properties:
+        key: *a1
+        unit: *a1
+        values:
+          type: array
+          items:
+            type: number
+            format: double
+            nullable: true
+    OperationsMetricSeries:
+      type: object
+      additionalProperties: false
+      required:
+        - range
+        - resolutionSeconds
+        - timestamps
+        - series
+        - restarts
+      properties:
+        range: *a1
+        resolutionSeconds: *a2
+        timestamps:
+          type: array
+          items: *a3
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsSeries"
+        restarts:
+          type: array
+          items: *a3
+      description: 1h 默认 15 秒（内存不足回退 60 秒）；6h/24h 为分钟，7d 为 15 分钟，14d 为 30 分钟。缺失采样保持 null；HTTP P95 来自无路由标签的全局业务请求计时器，排除运维与 Actuator 请求。
+    OperationsSessionInfo:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - clientType
+        - clientVersion
+        - issuedAt
+        - lastSeenAt
+        - expiresAt
+      properties:
+        id: &a4
+          type: string
+          format: uuid
+        clientType: *a1
+        clientVersion:
+          type: string
+          nullable: true
+        issuedAt: *a3
+        lastSeenAt: *a3
+        expiresAt: *a3
+    OperationsSessionUser:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - displayName
+        - presence
+        - lastSeenAt
+        - sessions
+      properties:
+        userId: *a4
+        displayName: *a1
+        presence: *a1
+        lastSeenAt: *a3
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsSessionInfo"
+    OperationsVersionCount:
+      type: object
+      additionalProperties: false
+      required:
+        - clientType
+        - clientVersion
+        - count
+      properties:
+        clientType: *a1
+        clientVersion:
+          type: string
+          nullable: true
+        count: *a2
+    OperationsSessionSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - online
+        - idle
+        - away
+        - activeSessions
+        - byClientVersion
+      properties:
+        online: *a2
+        idle: *a2
+        away: *a2
+        activeSessions: *a2
+        byClientVersion:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsVersionCount"
+    OperationsSessionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - totalElements
+        - page
+        - size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsSessionUser"
+        totalElements: *a2
+        page: *a2
+        size: *a2
+    OperationsLogError:
+      type: object
+      nullable: true
+      additionalProperties: false
+      required:
+        - type
+        - msg
+        - stack
+        - hash
+      properties:
+        type: *a1
+        msg: *a1
+        stack: *a1
+        hash: *a1
+    OperationsLogRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - time
+        - level
+        - module
+        - event
+        - msg
+        - logger
+        - thread
+        - requestId
+        - correlationId
+        - userId
+        - fields
+        - error
+      properties:
+        time: *a3
+        level: *a1
+        module: *a1
+        event:
+          type: string
+          nullable: true
+        msg: *a1
+        logger: *a1
+        thread: *a1
+        requestId:
+          type: string
+          nullable: true
+        correlationId:
+          type: string
+          nullable: true
+        userId:
+          type: string
+          nullable: true
+        fields:
+          type: object
+          additionalProperties: {}
+        error:
+          allOf:
+            - $ref: "#/components/schemas/OperationsLogError"
+          type: object
+          nullable: true
+    OperationsLogEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - seq
+        - record
+      properties:
+        id: *a1
+        seq:
+          type: string
+          pattern: ^[0-9]+$
+          nullable: true
+        record:
+          $ref: "#/components/schemas/OperationsLogRecord"
+    OperationsLogPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - source
+        - nextCursor
+        - partial
+        - partialReason
+        - scannedBytes
+        - skippedLines
+        - droppedCount
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsLogEntry"
+        source: *a1
+        nextCursor:
+          type: string
+          nullable: true
+        partial: &a5
+          type: boolean
+        partialReason:
+          type: string
+          nullable: true
+        scannedBytes: *a2
+        skippedLines: *a2
+        droppedCount: *a2
+      description: 每次查询范围至多 24h。文件查询预算 256MiB/3s、并发 1；partial 为 true 时结果并不完整。cursor 为进程内、5 分钟有效且绑定全部过滤条件的 opaque handle；文件变化时显式返回 partial。
+    OperationsLogTail:
+      type: object
+      additionalProperties: false
+      required:
+        - bootId
+        - items
+        - nextAfterSeq
+        - latestSeq
+        - hasMore
+        - gap
+        - gapReason
+        - droppedCount
+      properties:
+        bootId: *a1
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsLogEntry"
+        nextAfterSeq:
+          type: string
+          pattern: ^[0-9]+$
+        latestSeq:
+          type: string
+          pattern: ^[0-9]+$
+        hasMore: *a5
+        gap: *a5
+        gapReason:
+          type: string
+          nullable: true
+        droppedCount: *a2
+      description: seq 均使用十进制字符串；仅同一 bootId 内可比较。nextAfterSeq 推进所有已检查记录，过滤无结果也会推进；hasMore 时应继续补齐。gap 表示进程重启、缓冲淘汰或非法未来水位。
+    OperationsLogBucket:
+      type: object
+      additionalProperties: false
+      required:
+        - time
+        - counts
+      properties:
+        time: *a3
+        counts:
+          type: object
+          additionalProperties: *a2
+    OperationsLogHistogram:
+      type: object
+      additionalProperties: false
+      required:
+        - buckets
+        - bucketSeconds
+        - partial
+        - partialReason
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsLogBucket"
+        bucketSeconds: *a2
+        partial: *a5
+        partialReason:
+          type: string
+          nullable: true
+    OperationsRule:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - enabled
+        - warningThreshold
+        - criticalThreshold
+        - forSeconds
+        - rowVersion
+        - etag
+        - comparison
+        - unit
+      properties:
+        code: *a1
+        enabled: *a5
+        warningThreshold:
+          type: number
+          format: double
+          nullable: true
+        criticalThreshold: &a6
+          type: number
+          format: double
+        forSeconds: *a2
+        rowVersion: *a2
+        etag: *a1
+        comparison: *a1
+        unit: *a1
+    OperationsRuleUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - warningThreshold
+        - criticalThreshold
+        - forSeconds
+      properties:
+        enabled: *a5
+        warningThreshold:
+          type: number
+          format: double
+          nullable: true
+        criticalThreshold: *a6
+        forSeconds:
+          type: integer
+          minimum: 0
+          maximum: 3600
+          multipleOf: 15
+    OperationsAlert:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - ruleCode
+        - subjectKey
+        - severity
+        - status
+        - startedAt
+        - evaluatedAt
+        - peakValue
+        - lastValue
+        - params
+        - acknowledgedAt
+        - acknowledgedByUserId
+        - acknowledgeNote
+        - resolvedAt
+        - resolution
+      properties:
+        id: *a4
+        ruleCode: *a1
+        subjectKey: *a1
+        severity: *a1
+        status: *a1
+        startedAt: *a3
+        evaluatedAt: *a3
+        peakValue:
+          type: number
+          format: double
+          nullable: true
+        lastValue:
+          type: number
+          format: double
+          nullable: true
+        params:
+          type: object
+          additionalProperties: {}
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+        acknowledgedByUserId:
+          type: string
+          format: uuid
+          nullable: true
+        acknowledgeNote:
+          type: string
+          nullable: true
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        resolution:
+          type: string
+          nullable: true
+    OperationsAlertEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - eventType
+        - severity
+        - value
+        - actorUserId
+        - occurredAt
+      properties:
+        id: *a4
+        eventType: *a1
+        severity: *a1
+        value:
+          type: number
+          format: double
+          nullable: true
+        actorUserId:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt: *a3
+    OperationsAlertDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - alert
+        - events
+      properties:
+        alert:
+          $ref: "#/components/schemas/OperationsAlert"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsAlertEvent"
+    OperationsAlertSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - warning
+        - critical
+      properties:
+        warning: *a2
+        critical: *a2
+    OperationsAlertPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - totalElements
+        - page
+        - size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsAlert"
+        totalElements: *a2
+        page: *a2
+        size: *a2
+    OperationsAcknowledge:
+      type: object
+      additionalProperties: false
+      required: []
+      properties:
+        note:
+          type: string
+          maxLength: 200
+          nullable: true
+    OperationsOverview:
+      type: object
+      additionalProperties: false
+      required:
+        - runtime
+        - sparkline
+        - alerts
+        - recentErrors
+      properties:
+        runtime:
+          $ref: "#/components/schemas/OperationsRuntime"
+        sparkline:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsMetricPoint"
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsAlert"
+        recentErrors:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsLogEntry"
     PlatformRoleTier:
       type: string
       enum: [COMPANY_MEMBER, COMPANY_ADMIN, APP_MANAGER]
@@ -7597,6 +9039,15 @@ components:
         minimum: 1
 
   examples:
+    OperationsLogTailSample:
+      summary: 跨越 JavaScript 整数精度边界的日志水位与空异常
+      externalValue: ../examples/operations/log-tail.json
+    OperationsMetricsWithGap:
+      summary: 缺失采样保留空值并标记重启
+      externalValue: ../examples/operations/metrics-with-gap.json
+    OperationsPartialLogPage:
+      summary: 文件轮转或删除导致不完整查询
+      externalValue: ../examples/operations/partial-log-page.json
     WorkItemUpdateRichText:
       summary: 受限富文本、表格、清单及个人提及的发布输入
       externalValue: ../examples/work-items/update-rich-text.json

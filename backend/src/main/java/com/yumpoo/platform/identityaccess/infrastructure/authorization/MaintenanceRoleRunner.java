@@ -64,13 +64,11 @@ public class MaintenanceRoleRunner implements ApplicationRunner {
                 mode,
                 requireText(properties.reasonReference(), "reasonReference")
         ));
-        LOGGER.info(
-                "app-manager maintenance completed requestId={} mode={} assignmentId={} outcome={}",
-                requestId,
-                mode,
-                result.assignmentId(),
-                result.status()
-        );
+        LOGGER.atInfo().setMessage("app-manager maintenance completed").addKeyValue("event", "identity.maintenance.completed")
+                    .addKeyValue("requestId", requestId)
+                    .addKeyValue("mode", mode)
+                    .addKeyValue("assignmentId", result.assignmentId())
+                    .addKeyValue("outcome", result.status()).log();
         SpringApplication.exit(applicationContext, () -> 0);
     }
 

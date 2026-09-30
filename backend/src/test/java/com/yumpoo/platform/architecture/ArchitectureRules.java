@@ -37,7 +37,8 @@ final class ArchitectureRules {
             "notification",
             "audit",
             "reporting",
-            "administration"
+            "administration",
+            "operations"
     );
 
     static final Set<String> LAYERS = Set.of(
@@ -52,6 +53,7 @@ final class ArchitectureRules {
     );
 
     private static final Map<String, Set<String>> ALLOWED_MODULE_DEPENDENCIES = Map.ofEntries(
+            Map.entry("operations", Set.of("foundation", "identityaccess", "audit")),
             Map.entry("foundation", Set.of()),
             Map.entry("organization", Set.of("foundation")),
             Map.entry("identityaccess", Set.of("foundation", "organization", "audit")),

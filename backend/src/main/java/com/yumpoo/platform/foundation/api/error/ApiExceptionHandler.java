@@ -3,6 +3,7 @@ package com.yumpoo.platform.foundation.api.error;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
+import com.yumpoo.platform.foundation.api.web.HttpAccessLog;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.TypeMismatchException;
 import org.springframework.context.MessageSourceResolvable;
@@ -63,8 +64,13 @@ public final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<Object> handleUnexpectedException(Exception exception, WebRequest request) {
-        LOGGER.error("unexpected API failure requestId={} errorType={}",
-                requestId(request), exception.getClass().getSimpleName());
+        var log = LOGGER.atError().setMessage("unexpected api failure").setCause(exception)
+                .addKeyValue("event", "api.request.failed").addKeyValue("requestId", requestId(request));
+        if (request instanceof ServletWebRequest web) {
+            web.getRequest().setAttribute(HttpAccessLog.ERROR_LOGGED, true);
+            log.addKeyValue("method", web.getRequest().getMethod()).addKeyValue("route", HttpAccessLog.route(web.getRequest()));
+        }
+        log.log();
         return response(StandardErrorCode.INTERNAL_ERROR, HttpStatus.INTERNAL_SERVER_ERROR, request, List.of());
     }
 

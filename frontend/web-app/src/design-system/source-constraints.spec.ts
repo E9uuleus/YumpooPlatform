@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 const pageSources = import.meta.glob([
   '../views/**/*.vue',
   '../components/projects/**/*.vue',
+  '../components/operations/**/*.vue',
 ], {
   eager: true,
   import: 'default',

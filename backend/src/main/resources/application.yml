@@ -7,6 +7,8 @@ spring:
   datasource:
     hikari:
       connection-init-sql: SET TIME ZONE 'UTC'
+      data-source-properties:
+        logServerErrorDetail: false
   flyway:
     enabled: true
     locations:
@@ -131,7 +133,20 @@ yumpoo:
 logging:
   structured:
     format:
-      console: logstash
+      console: com.yumpoo.platform.foundation.infrastructure.logging.YumpooConsoleLogFormatter
+      file: com.yumpoo.platform.foundation.infrastructure.logging.YumpooJsonLogFormatter
+  file:
+    name: ${YUMPOO_LOG_FILE:out/logs/yumpoo-server.log}
+  charset:
+    console: UTF-8
+    file: UTF-8
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${LOG_FILE}.%d{yyyy-MM-dd, UTC}.%i.gz
+      max-file-size: 50MB
+      max-history: 90
+      total-size-cap: 10GB
+      clean-history-on-start: true
 
 server:
   address: 127.0.0.1
@@ -140,6 +155,10 @@ server:
   forward-headers-strategy: none
 
 management:
+  metrics:
+    distribution:
+      percentiles:
+        http.server.requests: 0.95
   endpoints:
     web:
       exposure:

@@ -198,8 +198,9 @@ public final class WebAuthenticationService {
         try {
             eventService.loginRejected(stage, exception.errorCode().name());
         } catch (RuntimeException auditFailure) {
-            LOGGER.error("login rejection audit failed stage={} errorType={}",
-                    stage, auditFailure.getClass().getSimpleName());
+            LOGGER.atError().setMessage("login rejection audit failed").addKeyValue("event", "identity.login.audit.failed")
+                    .addKeyValue("stage", stage)
+                    .addKeyValue("exceptionType", auditFailure.getClass().getSimpleName()).log();
             // 登录拒绝追踪是尽力记录；不得用记录失败覆盖原始 401/503。
         }
     }

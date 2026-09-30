@@ -35,10 +35,8 @@ public class OutboxPollScheduler {
                     StructuredLoggingContext.OUTCOME, "CYCLE_FAILED",
                     StructuredLoggingContext.ERROR_CODE, "DISPATCH_CYCLE_FAILURE"
             ))) {
-                LOGGER.error(
-                        "outbox dispatch cycle failed; exceptionType={}",
-                        safeExceptionType(exception)
-                );
+                LOGGER.atError().setMessage("outbox dispatch cycle failed").setCause(exception).addKeyValue("event", "outbox.dispatch.failed")
+                    .addKeyValue("exceptionType", safeExceptionType(exception)).log();
             }
         }
     }

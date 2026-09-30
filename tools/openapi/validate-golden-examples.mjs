@@ -114,6 +114,9 @@ function structuralSchemaConstraints(schema, additionalIgnoredKeys = new Set()) 
 }
 
 function schemaForExample(relativePath) {
+  if (relativePath === 'operations/log-tail.json') return 'OperationsLogTail'
+  if (relativePath === 'operations/metrics-with-gap.json') return 'OperationsMetricSeries'
+  if (relativePath === 'operations/partial-log-page.json') return 'OperationsLogPage'
   if (relativePath === 'work-items/update-rich-text.json') return 'WorkItemUpdateCreateRequest'
   if (relativePath === 'work-items/description-with-image.json') return 'WorkItemDescriptionPatchRequest'
   if (['work-items/deadline-with-time.json', 'work-items/deadline-remove-time.json', 'work-items/deadline-clear.json'].includes(relativePath)) {
@@ -324,5 +327,5 @@ assert(
 )
 
 console.log(
-  `已按 OpenAPI schema 校验 ${validatedErrors} 个错误 golden、${validatedPagination} 个分页 golden 和 ${validatedWorkItems} 个工作项 golden。`,
+  `已按 OpenAPI schema 校验 ${allJsonFiles.length} 个 golden（错误 ${validatedErrors}、分页 ${validatedPagination}、工作项 ${validatedWorkItems}，及运维样例）。`,
 )

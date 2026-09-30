@@ -86,11 +86,9 @@ public class InitialIdentityBootstrapRunner implements ApplicationRunner {
             InitialIdentityBootstrapInput input = inputReader.read(properties.inputFile());
             validateWeComConfiguration(input);
             InitialIdentityBootstrapResult result = bootstrapService.execute(input, reason, requestId);
-            LOGGER.info(
-                    "initial identity bootstrap completed requestId={} directoryRunId={} outcome=SUCCEEDED",
-                    requestId,
-                    result.directoryRunId()
-            );
+            LOGGER.atInfo().setMessage("initial identity bootstrap completed").addKeyValue("event", "identity.bootstrap.completed")
+                    .addKeyValue("requestId", requestId)
+                    .addKeyValue("directoryRunId", result.directoryRunId()).log();
             SpringApplication.exit(applicationContext, () -> 0);
         } catch (RuntimeException exception) {
             Failure failure = failure(exception);
@@ -104,19 +102,15 @@ public class InitialIdentityBootstrapRunner implements ApplicationRunner {
                         failure.directoryRunId()
                 );
             } catch (RuntimeException auditFailure) {
-                LOGGER.error(
-                        "initial identity bootstrap failure audit failed requestId={} errorCode={}",
-                        requestId,
-                        "INITIAL_IDENTITY_BOOTSTRAP_AUDIT_FAILED"
-                );
+                LOGGER.atError().setMessage("bootstrap failure audit failed").addKeyValue("event", "identity.bootstrap.audit.failed")
+                    .addKeyValue("requestId", requestId)
+                    .addKeyValue("errorCode", "INITIAL_IDENTITY_BOOTSTRAP_AUDIT_FAILED").log();
             }
-            LOGGER.error(
-                    "initial identity bootstrap failed requestId={} stage={} errorCode={} directoryRunId={}",
-                    requestId,
-                    failure.stage(),
-                    failure.errorCode(),
-                    failure.directoryRunId()
-            );
+            LOGGER.atError().setMessage("initial identity bootstrap failed").addKeyValue("event", "identity.bootstrap.failed")
+                    .addKeyValue("requestId", requestId)
+                    .addKeyValue("stage", failure.stage())
+                    .addKeyValue("errorCode", failure.errorCode())
+                    .addKeyValue("directoryRunId", failure.directoryRunId()).log();
             throw new IllegalStateException(
                     "Initial identity bootstrap failed requestId=" + requestId
                             + " errorCode=" + failure.errorCode()

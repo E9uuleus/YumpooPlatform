@@ -25,6 +25,7 @@
         <archunit.version>1.4.2</archunit.version>
         <tika.version>3.2.3</tika.version>
         <jsoup.version>1.20.1</jsoup.version>
+        <yumpoo.build.commit>unknown</yumpoo.build.commit>
     </properties>
 
     <dependencies>
@@ -116,6 +117,14 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals><goal>build-info</goal></goals>
+                        <configuration>
+                            <additionalProperties><commit>${yumpoo.build.commit}</commit></additionalProperties>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

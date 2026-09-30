@@ -33,6 +33,7 @@ class DeploymentPreflightTest {
         properties.setLogRoot(directory("logs").toString());
 
         environment = new MockEnvironment()
+                .withProperty("logging.file.name", Path.of(properties.getLogRoot()).resolve("yumpoo-server.log").toString())
                 .withProperty("server.address", "127.0.0.1")
                 .withProperty("server.port", "18080")
                 .withProperty("spring.datasource.url", "jdbc:postgresql://127.0.0.1:5432/yumpoo")
@@ -79,6 +80,14 @@ class DeploymentPreflightTest {
         properties.setPublicBaseUrl("http://yumpoo.example.test/path?leak=value");
 
         assertFailure("PUBLIC_ORIGIN_INVALID", "yumpoo.deployment.public-base-url");
+    }
+
+    @Test
+    void structuredLogMustBeAnAbsoluteFileInsideLogRoot() {
+        environment.setProperty("logging.file.name", "out/server.log");
+        assertFailure("PATH_INVALID", "logging.file.name");
+        environment.setProperty("logging.file.name", Path.of(properties.getLogRoot()).resolve("../outside.log").toString());
+        assertFailure("PATH_INVALID", "logging.file.name");
     }
 
     @Test

@@ -254,6 +254,20 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
     fs.writeFileSync(modelPath, source, 'utf8')
   }
 
+  const operationsSeriesPath = path.join(sourceRoot, 'models', 'OperationsMetricSeries.ts')
+  let operationsSeries = normalizeText(fs.readFileSync(operationsSeriesPath, 'utf8'))
+  for (const field of ['timestamps', 'restarts']) {
+    operationsSeries = replaceExactlyOnce(operationsSeries,
+      `        '${field}': json['${field}'],`,
+      `        '${field}': (json['${field}'] as string[]).map(value => new Date(value)),`,
+      `OperationsMetricSeries ${field} 日期数组反序列化`)
+    operationsSeries = replaceExactlyOnce(operationsSeries,
+      `        '${field}': value['${field}'],`,
+      `        '${field}': value['${field}'].map(value => value.toISOString()),`,
+      `OperationsMetricSeries ${field} 日期数组序列化`)
+  }
+  fs.writeFileSync(operationsSeriesPath, operationsSeries, 'utf8')
+
   for (const relative of listGeneratedSources(sourceRoot)) {
     const generatedPath = path.join(sourceRoot, ...relative.split('/'))
     const generated = normalizeText(fs.readFileSync(generatedPath, 'utf8'))

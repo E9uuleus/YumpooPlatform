@@ -1,6 +1,8 @@
 package com.yumpoo.platform.identityaccess.api;
 
 import com.yumpoo.platform.foundation.api.error.ApiErrorWriter;
+import com.yumpoo.platform.foundation.api.web.HttpAccessLog;
+import com.yumpoo.platform.foundation.application.logging.StructuredLoggingContext;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.request.RequestIdContext;
@@ -95,7 +97,13 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
                     )
             )));
             SecurityContextHolder.setContext(context);
-            filterChain.doFilter(request, response);
+            request.setAttribute(HttpAccessLog.USER_ID, authenticated.user().userId());
+            request.setAttribute(HttpAccessLog.CLIENT_TYPE, authenticated.clientTypeCode());
+            try (var ignored = StructuredLoggingContext.open(java.util.Map.of(
+                    StructuredLoggingContext.USER_ID, authenticated.user().userId(),
+                    StructuredLoggingContext.CLIENT_TYPE, authenticated.clientTypeCode()))) {
+                filterChain.doFilter(request, response);
+            }
             if (response.getStatus() >= 200 && response.getStatus() < 400) {
                 sessionService.touch(authenticated);
             }

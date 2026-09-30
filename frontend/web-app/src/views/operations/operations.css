@@ -1,0 +1,110 @@
+.operations-page {
+  color: var(--yp-text-primary);
+  max-width: 1800px;
+  margin: 0 auto;
+}
+.ops-grid {
+  display: grid;
+  gap: var(--yp-space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: var(--yp-space-5);
+}
+.ops-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ops-card {
+  border: 1px solid var(--yp-border-subtle);
+  border-radius: var(--yp-radius-md);
+  background: var(--yp-bg-surface);
+  padding: var(--yp-space-5);
+  min-width: 0;
+}
+.ops-card h2,
+.ops-card h3 {
+  font: 500 var(--yp-type-card-title-size)/1.5 var(--yp-font-heading);
+  margin: 0 0 var(--yp-space-4);
+}
+.ops-muted {
+  color: var(--yp-text-secondary);
+  font-size: var(--yp-type-caption-size);
+}
+.ops-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--yp-space-3);
+  margin-bottom: var(--yp-space-4);
+}
+.ops-toolbar .el-input {
+  width: 220px;
+}
+.ops-toolbar .el-select {
+  width: 150px;
+}
+.ops-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yp-space-4);
+  padding: var(--yp-space-3) 0;
+  border-bottom: 1px solid var(--yp-border-subtle);
+}
+.ops-row:last-child {
+  border-bottom: 0;
+}
+.ops-stack {
+  display: grid;
+  gap: var(--yp-space-3);
+}
+.ops-definition {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) 2fr;
+  gap: var(--yp-space-3);
+  font-size: var(--yp-type-body-size);
+}
+.ops-definition dt {
+  color: var(--yp-text-secondary);
+}
+.ops-definition dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.ops-empty {
+  padding: var(--yp-space-8);
+  text-align: center;
+  color: var(--yp-text-secondary);
+}
+.ops-number {
+  font-size: 28px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.ops-code {
+  font-family: var(--yp-font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.ops-error {
+  color: var(--yp-status-red);
+}
+.ops-warning {
+  color: var(--yp-status-yellow);
+}
+.ops-pagination {
+  margin-top: var(--yp-space-4);
+  justify-content: flex-end;
+}
+.ops-callout {
+  padding: var(--yp-space-4);
+  background: var(--yp-bg-sunken);
+  border-left: 3px solid var(--yp-action-primary);
+  margin-bottom: var(--yp-space-4);
+}
+@media (max-width: 960px) {
+  .ops-grid.three {
+    grid-template-columns: 1fr;
+  }
+  .ops-grid {
+    grid-template-columns: 1fr;
+  }
+}
