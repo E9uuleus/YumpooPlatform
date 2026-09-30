@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { ElOption } from '../../components/operations/elementPlus'
+import { Close, Filter, Search } from '@element-plus/icons-vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElAlert,
   ElButton,
-  ElDatePicker,
+  ElCheckbox,
   ElDrawer,
+  ElIcon,
   ElInput,
-  ElSelect,
+  ElPopover,
   ElSwitch,
 } from 'element-plus'
 import type { OperationsLogEntry, OperationsLogPage } from '@yumpoo/api-client'
@@ -17,8 +18,13 @@ import { useOperationsQuery } from '../../composables/useOperationsQuery'
 import OperationsLogStream from '../../components/operations/OperationsLogStream.vue'
 import OperationsChart from '../../components/operations/OperationsChart.vue'
 import InlineProblem from '../../components/InlineProblem.vue'
+import OpsSegmented from '../../components/operations/OpsSegmented.vue'
 import { mergeLogEntries as merge } from '../../components/operations/logEntries'
-import { MODULE_LABELS, moduleLabel } from '../../components/operations/operationsPresentation'
+import {
+  MODULE_LABELS,
+  formatOperationsTimeRange,
+  moduleLabel,
+} from '../../components/operations/operationsPresentation'
 const route = useRoute(),
   router = useRouter()
 const initial = (key: string) =>
@@ -34,6 +40,8 @@ const following = ref(!initial('from')),
   paused = ref(false),
   entries = ref<OperationsLogEntry[]>([]),
   pending = ref<OperationsLogEntry[]>([])
+const customRange = ref(!following.value)
+let timeBeforeSelection: { following: boolean; range: [Date, Date] } | undefined
 const utc = ref(false)
 const warning = ref(''),
   cursor = ref<string | null>(null),
@@ -152,8 +160,104 @@ const moduleOptions = computed(() => [
   ]),
 ])
 const selectedPeriod = computed(() =>
-  following.value ? 0 : (range.value[1].getTime() - range.value[0].getTime()) / 60000,
+  following.value ? 0 : customRange.value ? null :
+    (range.value[1].getTime() - range.value[0].getTime()) / 60000,
 )
+const timeSelectionLabel = computed(() =>
+  formatOperationsTimeRange(appliedRange.value[0], appliedRange.value[1], utc.value),
+)
+const periodOptions = [
+  { value: 0, label: '实时' },
+  { value: 15, label: '15 分钟' },
+  { value: 60, label: '1 小时' },
+  { value: 360, label: '6 小时' },
+  { value: 1440, label: '24 小时' },
+]
+const levelTones = {
+  ERROR: 'red',
+  WARN: 'yellow',
+  INFO: 'blue',
+  DEBUG: 'gray',
+  TRACE: 'gray',
+} as const
+const levelOptions = computed(() =>
+  (['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE'] as const).map((level) => ({
+    value: level,
+    label: level,
+    tone: levelTones[level],
+    count: (histogram.data.value?.partial ? '≥' : '') + (levelCounts.value[level] ?? '—'),
+  })),
+)
+const modulesOpen = ref(false),
+  moreOpen = ref(false)
+function toggleModule(module: string, checked: boolean) {
+  modules.value = checked
+    ? [...modules.value, module]
+    : modules.value.filter((value) => value !== module)
+  search()
+}
+function clearModules() {
+  modules.value = []
+  modulesOpen.value = false
+  search()
+}
+function applyMoreFilters() {
+  moreOpen.value = false
+  search()
+}
+function clearMoreFilters() {
+  requestId.value = ''
+  event.value = ''
+  userId.value = ''
+  moreOpen.value = false
+  search()
+}
+const moreFilterCount = computed(
+  () => [applied.value.requestId, applied.value.event, applied.value.userId].filter(Boolean).length,
+)
+const shortId = (value: string) => (value.length > 12 ? value.slice(0, 8) + '…' : value)
+const activeFilters = computed(() =>
+  [
+    applied.value.modules && {
+      key: 'modules',
+      label:
+        '模块：' +
+        applied.value.modules
+          .split(',')
+          .map((module) => moduleLabel(module))
+          .join('、'),
+    },
+    applied.value.q && { key: 'q', label: '关键字：' + applied.value.q },
+    applied.value.requestId && { key: 'requestId', label: '请求：' + shortId(applied.value.requestId) },
+    applied.value.event && { key: 'event', label: '事件：' + applied.value.event },
+    applied.value.userId && { key: 'userId', label: '用户：' + shortId(applied.value.userId) },
+  ].filter((filter): filter is { key: string; label: string } => Boolean(filter)),
+)
+function removeFilter(key: string) {
+  if (key === 'time') restoreTimeSelection()
+  else if (key === 'modules') modules.value = []
+  else if (key === 'q') q.value = ''
+  else if (key === 'requestId') requestId.value = ''
+  else if (key === 'event') event.value = ''
+  else if (key === 'userId') userId.value = ''
+  search()
+}
+function clearFilters() {
+  restoreTimeSelection()
+  modules.value = []
+  q.value = ''
+  requestId.value = ''
+  event.value = ''
+  userId.value = ''
+  search()
+}
+function restoreTimeSelection() {
+  if (!customRange.value) return
+  following.value = timeBeforeSelection?.following ?? true
+  if (timeBeforeSelection) range.value = timeBeforeSelection.range
+  customRange.value = false
+  timeBeforeSelection = undefined
+}
 function toggleLevel(level: string) {
   if (levels.value.includes(level)) {
     if (levels.value.length === 1) return
@@ -161,14 +265,12 @@ function toggleLevel(level: string) {
   } else levels.value = [...levels.value, level]
   search()
 }
+function validRange(from: Date, to: Date) {
+  const start = from.getTime(), end = to.getTime()
+  return Number.isFinite(start) && Number.isFinite(end) && end > start && end - start <= 86400000
+}
 function search() {
-  if (
-    !following.value &&
-    (!range.value ||
-      !Number.isFinite(range.value[0].getTime()) ||
-      range.value[1].getTime() <= range.value[0].getTime() ||
-      range.value[1].getTime() - range.value[0].getTime() > 86400000)
-  ) {
+  if (!following.value && !validRange(range.value[0], range.value[1])) {
     warning.value = '请选择不超过 24 小时的有效时间范围。'
     return
   }
@@ -197,21 +299,23 @@ function search() {
   void query.refresh()
 }
 function period(minutes: number) {
+  customRange.value = false
+  timeBeforeSelection = undefined
   if (minutes === 0) {
-    if (!following.value) following.value = true
-    return
+    if (following.value) return
+    following.value = true
+  } else {
+    const now = Date.now()
+    range.value = [new Date(now - minutes * 60000), new Date(now)]
+    following.value = false
   }
-  const now = Date.now()
-  range.value = [new Date(now - minutes * 60000), new Date(now)]
-  if (following.value) following.value = false
-  else search()
+  search()
 }
 function resume() {
   paused.value = false
   entries.value = merge(entries.value, pending.value)
   pending.value = []
 }
-watch(following, search)
 const pagination = useOperationsQuery(
   async (signal) => {
     if (!cursor.value || following.value) return
@@ -234,9 +338,16 @@ const pagination = useOperationsQuery(
   { immediate: false },
 )
 function brush(from: Date, to: Date) {
+  if (!validRange(from, to)) {
+    warning.value = '请选择不超过 24 小时的有效时间范围。'
+    return
+  }
+  if (!customRange.value)
+    timeBeforeSelection = { following: following.value, range: [...range.value] }
+  customRange.value = true
   range.value = [from, to]
-  if (following.value) following.value = false
-  else search()
+  following.value = false
+  search()
 }
 const selected = ref<OperationsLogEntry>(),
   traceOpen = ref(false)
@@ -286,120 +397,236 @@ watch(
     levels.value = (initial('levels') || 'INFO,WARN,ERROR').split(',')
     const live = !initial('from')
     if (!live) range.value = [new Date(initial('from')), new Date(initial('to'))]
-    if (following.value !== live) following.value = live
-    else search()
+    timeBeforeSelection = undefined
+    customRange.value = !live
+    following.value = live
+    search()
   },
 )
 </script>
 <template>
-  <div
-    class="ops-toolbar"
-    role="group"
-    aria-label="日志时间范围"
-  >
-    <el-button
-      v-for="item in [
-        { label: '实时', minutes: 0 },
-        { label: '15 分钟', minutes: 15 },
-        { label: '1 小时', minutes: 60 },
-        { label: '6 小时', minutes: 360 },
-        { label: '24 小时', minutes: 1440 },
-      ]"
-      :key="item.minutes"
-      size="small"
-      :aria-pressed="selectedPeriod === item.minutes"
-      :type="selectedPeriod === item.minutes ? 'primary' : 'default'"
-      @click="period(item.minutes)"
-    >
-      {{ item.label }}
-    </el-button>
-  </div>
-  <div
-    class="ops-toolbar log-levels"
-    role="group"
-    aria-label="日志级别"
-  >
-    <el-button
-      v-for="level in ['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE']"
-      :key="level"
-      size="small"
-      :aria-pressed="levels.includes(level)"
-      :type="levels.includes(level) ? 'primary' : 'default'"
-      @click="toggleLevel(level)"
-    >
-      {{ level }}
-      <span>{{ histogram.data.value?.partial ? '≥' : '' }}{{ levelCounts[level] ?? '—' }}</span>
-    </el-button>
-    <span class="ops-muted">{{ following ? '最近 15 分钟' : '当前区间' }} · 所选模块</span>
-  </div>
-  <div class="ops-toolbar">
-    <el-select
-      v-model="modules"
-      multiple
-      filterable
-      collapse-tags
-      :multiple-limit="16"
-      aria-label="模块"
-    >
-      <el-option
-        v-for="module in moduleOptions"
-        :key="module"
-        :label="moduleLabel(module)"
-        :value="module"
+  <div class="ops-sticky log-toolbar">
+    <div class="log-toolbar__row">
+      <ops-segmented
+        group-label="日志时间范围"
+        :options="periodOptions"
+        :selected="selectedPeriod"
+        @select="period(Number($event))"
       />
-    </el-select>
-    <el-input
-      v-model="q"
-      placeholder="搜索消息或事件"
-      :maxlength="200"
-      aria-label="搜索日志"
-      @keyup.enter="search"
-    />
-    <el-button
-      :loading="query.loading.value"
-      @click="search"
-    >
-      查询
-    </el-button>
-  </div>
-  <details class="log-more-filters">
-    <summary>更多筛选</summary>
-    <div class="ops-toolbar">
-      <el-date-picker
-        v-if="!following"
-        v-model="range"
-        type="datetimerange"
-        range-separator="至"
-        start-placeholder="开始时间"
-        end-placeholder="结束时间"
-        :clearable="false"
+      <ops-segmented
+        group-label="日志级别"
+        :options="levelOptions"
+        :selected="levels"
+        @select="toggleLevel(String($event))"
       />
-      <el-input
-        v-model="requestId"
-        placeholder="Request ID"
-        aria-label="请求标识"
-      /><el-input
-        v-model="event"
-        placeholder="精确事件代码"
-        aria-label="事件代码"
-      /><el-input
-        v-model="userId"
-        placeholder="User ID"
-        aria-label="用户标识"
-      />
+      <span class="log-toolbar__end log-live">
+        <span
+          v-if="following"
+          class="log-live__pill"
+          :class="{ paused }"
+        ><i aria-hidden="true" />{{ paused ? '已暂停' : '实时' }}</span>
+        <el-button
+          v-if="following && !paused"
+          @click="paused = true"
+        >
+          暂停显示
+        </el-button><el-button
+          v-if="following && paused"
+          type="primary"
+          @click="resume"
+        >
+          恢复 · {{ pending.length }} 条新日志
+        </el-button>
+        <el-switch
+          v-model="utc"
+          active-text="UTC"
+          inactive-text="本地时间"
+        />
+      </span>
     </div>
-  </details>
-  <operations-chart
-    class="log-histogram"
-    title="日志级别分布；拖动选择时间范围"
-    :times="histogram.data.value?.buckets.map((b) => b.time) ?? []"
-    :series="histogramSeries"
-    bars
-    zoom
-    @range="brush"
-  />
+    <div class="log-toolbar__row">
+      <el-popover
+        v-model:visible="modulesOpen"
+        placement="bottom-start"
+        trigger="click"
+        :width="300"
+        :teleported="false"
+      >
+        <template #reference>
+          <el-button
+            class="log-filter-button"
+            :class="{ active: modules.length }"
+            :icon="Filter"
+            :aria-expanded="modulesOpen"
+          >
+            模块{{ modules.length ? ` · ${modules.length}` : '' }}
+          </el-button>
+        </template>
+        <div class="log-panel">
+          <div class="log-panel__head">
+            <strong>按模块筛选</strong>
+            <el-button
+              v-if="modules.length"
+              link
+              type="primary"
+              @click="clearModules"
+            >
+              清除
+            </el-button>
+          </div>
+          <div
+            class="log-panel__modules"
+            role="group"
+            aria-label="模块"
+          >
+            <el-checkbox
+              v-for="module in moduleOptions"
+              :key="module"
+              :model-value="modules.includes(module)"
+              :aria-label="moduleLabel(module)"
+              @update:model-value="toggleModule(module, Boolean($event))"
+            >
+              {{ moduleLabel(module) }}<small>{{ module }}</small>
+            </el-checkbox>
+          </div>
+        </div>
+      </el-popover>
+      <el-input
+        v-model="q"
+        class="log-search"
+        :prefix-icon="Search"
+        placeholder="关键字、事件码或异常类型"
+        :maxlength="200"
+        aria-label="搜索日志"
+        @keyup.enter="search"
+      />
+      <el-button
+        type="primary"
+        :loading="query.loading.value"
+        @click="search"
+      >
+        查询
+      </el-button>
+      <span class="log-more-filters">
+        <el-popover
+          v-model:visible="moreOpen"
+          placement="bottom-start"
+          trigger="click"
+          :width="320"
+          :teleported="false"
+        >
+          <template #reference>
+            <el-button
+              class="log-filter-button"
+              :class="{ active: moreFilterCount }"
+              :aria-expanded="moreOpen"
+            >
+              更多筛选{{ moreFilterCount ? ` · ${moreFilterCount}` : '' }}
+            </el-button>
+          </template>
+          <div class="log-panel">
+            <div class="log-panel__head">
+              <strong>精确筛选</strong>
+            </div>
+            <label class="log-panel__field">
+              <span>Request / Correlation ID</span>
+              <el-input
+                v-model="requestId"
+                placeholder="完整 ID"
+                aria-label="请求标识"
+                @keyup.enter="applyMoreFilters"
+              />
+            </label>
+            <label class="log-panel__field">
+              <span>事件代码</span>
+              <el-input
+                v-model="event"
+                placeholder="如 http.request.failed"
+                aria-label="事件代码"
+                @keyup.enter="applyMoreFilters"
+              />
+            </label>
+            <label class="log-panel__field">
+              <span>用户 ID</span>
+              <el-input
+                v-model="userId"
+                placeholder="完整用户 UUID"
+                aria-label="用户标识"
+                @keyup.enter="applyMoreFilters"
+              />
+            </label>
+            <div class="log-panel__foot">
+              <el-button @click="clearMoreFilters">
+                清除
+              </el-button>
+              <el-button
+                type="primary"
+                @click="applyMoreFilters"
+              >
+                应用
+              </el-button>
+            </div>
+          </div>
+        </el-popover>
+      </span>
+    </div>
+    <div
+      v-if="customRange || activeFilters.length"
+      class="log-toolbar__row log-chips"
+    >
+      <span
+        v-if="customRange"
+        class="ops-chip log-time-chip"
+      >
+        时间：{{ timeSelectionLabel }}
+        <button
+          type="button"
+          class="log-chip__remove"
+          aria-label="清除时间筛选"
+          @click="removeFilter('time')"
+        >
+          <el-icon aria-hidden="true"><close /></el-icon>
+        </button>
+      </span>
+      <button
+        v-for="filter in activeFilters"
+        :key="filter.key"
+        type="button"
+        class="ops-chip log-chip"
+        :aria-label="'移除筛选 ' + filter.label"
+        @click="removeFilter(filter.key)"
+      >
+        {{ filter.label }}<el-icon aria-hidden="true">
+          <close />
+        </el-icon>
+      </button>
+      <el-button
+        link
+        type="primary"
+        @click="clearFilters"
+      >
+        清除全部
+      </el-button>
+    </div>
+    <operations-chart
+      class="log-histogram"
+      title="日志级别分布；在柱状图上拖拽选择时间范围"
+      :times="histogram.data.value?.buckets.map((b) => b.time) ?? []"
+      :series="histogramSeries"
+      :bucket-seconds="histogram.data.value?.bucketSeconds"
+      :utc="utc"
+      bars
+      zoom
+      @range="brush"
+    />
+    <div class="log-source">
+      <span>来源：{{ source || '—' }} · 在柱状图上拖拽可缩放时间</span>
+      <span>{{ entries.length }} 条（最多保留 500 条）</span>
+    </div>
+  </div>
   <el-alert
     v-if="warning || histogram.data.value?.partial"
+    class="log-notice"
     type="warning"
     :title="warning || '直方图为部分结果，请缩小范围重查。'"
     :closable="false"
@@ -415,35 +642,6 @@ watch(
     v-if="pagination.error.value"
     :problem="pagination.error.value"
   />
-  <div class="ops-toolbar">
-    <span class="ops-muted">{{ source }} · {{ entries.length }} 条（最多保留 500 条）</span>
-    <el-switch
-      v-model="utc"
-      active-text="UTC"
-      inactive-text="本地时间"
-    />
-    <el-button
-      v-if="following && !paused"
-      size="small"
-      @click="paused = true"
-    >
-      暂停显示
-    </el-button><el-button
-      v-if="following && paused"
-      size="small"
-      type="primary"
-      @click="resume"
-    >
-      恢复 · {{ pending.length }} 条新日志
-    </el-button>
-    <el-button
-      v-if="!following && cursor && entries.length < 500"
-      :loading="pagination.loading.value"
-      @click="pagination.refresh"
-    >
-      加载更早
-    </el-button>
-  </div>
   <div
     class="log-scroll"
     @scroll="following && ($event.target as HTMLElement).scrollTop > 8 && (paused = true)"
@@ -457,13 +655,26 @@ watch(
       @window="around"
     />
   </div>
+  <div
+    v-if="!following && cursor && entries.length < 500"
+    class="log-more"
+  >
+    <el-button
+      :loading="pagination.loading.value"
+      @click="pagination.refresh"
+    >
+      加载更早
+    </el-button>
+  </div>
   <el-drawer
     v-model="traceOpen"
-    title="请求追踪 · 前后 1 小时"
-    size="min(1000px, 95vw)"
+    class="operations-overlay"
+    title="请求链路 · 前后 1 小时"
+    size="min(760px, 95vw)"
   >
-    <p class="ops-code">
-      {{ selected?.record.requestId }}
+    <p class="log-trace-id">
+      <span class="ops-muted">Request / Correlation ID</span>
+      <span class="ops-code">{{ selected?.record.requestId }}</span>
     </p>
     <inline-problem
       v-if="trace.error.value"
@@ -479,16 +690,221 @@ watch(
     />
   </el-drawer>
 </template>
+
 <style scoped>
+.log-toolbar {
+  display: grid;
+  gap: var(--yp-space-2);
+  margin-bottom: var(--yp-space-3);
+  border-bottom: 1px solid var(--yp-border-subtle);
+}
+
+.log-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yp-space-2);
+}
+
+.log-toolbar__end {
+  margin-left: auto;
+}
+
+.log-search {
+  flex: 1 1 240px;
+  max-width: 360px;
+}
+
+.log-filter-button.active {
+  border-color: color-mix(in srgb, var(--yp-action-primary) 50%, var(--yp-border-default));
+  color: var(--yp-action-primary);
+  background: var(--yp-bg-selected);
+}
+
+.log-panel {
+  display: grid;
+  gap: var(--yp-space-3);
+}
+
+.log-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+}
+
+.log-panel__modules {
+  display: grid;
+  max-height: 320px;
+  margin-inline: calc(var(--yp-space-2) * -1);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.log-panel__modules :deep(.el-checkbox) {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  margin-right: 0;
+  padding-inline: var(--yp-space-2);
+  border-radius: var(--yp-radius-sm);
+}
+
+.log-panel__modules :deep(.el-checkbox:hover) {
+  background: var(--yp-bg-hover);
+}
+
+.log-panel__modules :deep(.el-checkbox__label) {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  gap: var(--yp-space-3);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.log-panel__modules small {
+  flex: none;
+  color: var(--yp-text-muted);
+  font: 11px var(--yp-font-mono);
+}
+
+.log-panel__field {
+  display: grid;
+  gap: var(--yp-space-1);
+  color: var(--yp-text-secondary);
+  font-size: var(--yp-type-caption-size);
+}
+
+.log-panel__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--yp-space-2);
+}
+
+.log-panel__foot .el-button + .el-button {
+  margin-left: 0;
+}
+
+.log-chip {
+  cursor: pointer;
+}
+
+.log-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.log-chip__remove:hover {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
+.log-chip__remove:focus-visible {
+  outline: 2px solid var(--yp-focus-ring);
+  outline-offset: 1px;
+}
+
+.log-chip:hover {
+  border-color: var(--yp-border-strong);
+  color: var(--yp-text-primary);
+}
+
+.log-live {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yp-space-2);
+}
+
+.log-live .el-button + .el-button {
+  margin-left: 0;
+}
+
+.log-live__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--yp-text-secondary);
+  font-size: var(--yp-type-caption-size);
+}
+
+.log-live__pill i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--yp-status-green);
+  animation: log-pulse 1.6s ease-in-out infinite;
+}
+
+.log-live__pill.paused i {
+  background: var(--yp-status-gray);
+  animation: none;
+}
+
+@keyframes log-pulse {
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--yp-status-green) 25%, transparent);
+  }
+}
+
+.log-histogram {
+  height: 72px;
+  cursor: crosshair;
+}
+
+.log-source {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--yp-space-3);
+  padding-bottom: var(--yp-space-2);
+  color: var(--yp-text-muted);
+  font-size: var(--yp-type-caption-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.log-notice {
+  margin-bottom: var(--yp-space-3);
+}
+
 .log-scroll {
   max-height: 65vh;
   overflow: auto;
   overflow-anchor: none;
 }
-.ops-toolbar {
+
+.log-more {
+  display: flex;
+  justify-content: center;
   margin-top: var(--yp-space-3);
 }
-.log-histogram {
-  height: 120px;
+
+.log-trace-id {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 var(--yp-space-3);
+}
+
+@media (max-width: 760px) {
+  .log-search,
+  .log-range {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .log-toolbar__end {
+    margin-left: 0;
+  }
 }
 </style>

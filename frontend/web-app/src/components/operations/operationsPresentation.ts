@@ -12,6 +12,20 @@ export const ruleNames: Record<string, string> = {
   ERROR_LOG_BURST: '错误日志突增',
   CONFIG_POSTURE: '生产配置异常',
 }
+export const RULE_DESCRIPTIONS: Record<string, string> = {
+  HOST_CPU_HIGH: '系统整体 CPU 使用率',
+  JVM_HEAP_HIGH: 'JVM 堆已用 / 堆上限',
+  DISK_LOW: '按存储卷评估剩余空间比例',
+  DB_UNAVAILABLE: '数据库探测连续失败次数，恢复后补记',
+  DB_SLOW: '数据库探测往返耗时',
+  DB_POOL_SATURATED: '等待数据库连接的线程数',
+  HTTP_ERROR_RATE: '5 分钟窗口的业务请求 5xx 比例',
+  HTTP_LATENCY_P95: '业务请求全局 P95 耗时',
+  OUTBOX_BACKLOG_AGE: '最老待处理事件的等待时间',
+  OUTBOX_DEAD: '最终投递失败的事件数',
+  ERROR_LOG_BURST: '5 分钟内 ERROR 日志条数',
+  CONFIG_POSTURE: '存在严重级别的生产配置问题',
+}
 export const metricNames: Record<string, string> = {
   'cpu.system': '系统 CPU',
   'cpu.process': '进程 CPU',
@@ -136,6 +150,21 @@ export function volumePurpose(value: string): string {
 export function time(value?: Date | null): string {
   return value ? value.toLocaleString('zh-CN', { hour12: false }) : '—'
 }
+export function formatOperationsTimeRange(from: Date, to: Date, utc = false): string {
+  if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) return '—'
+  const timeZone = utc ? 'UTC' : undefined
+  const date = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric', month: '2-digit', day: '2-digit', timeZone,
+  })
+  const clock = new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit', minute: '2-digit',
+    ...(to.getTime() - from.getTime() < 60000 ? { second: '2-digit' } : {}),
+    hourCycle: 'h23', timeZone,
+  })
+  const sameDay = date.format(from) === date.format(to)
+  const label = (at: Date) => (sameDay ? '' : date.format(at) + ' ') + clock.format(at)
+  return label(from) + '–' + label(to)
+}
 export function bytes(value?: number | null): string {
   if (value == null || value < 0) return '—'
   const unit = value >= 1073741824 ? 'GB' : value >= 1048576 ? 'MB' : 'KB'
@@ -147,6 +176,7 @@ export function metric(value?: number | null, unit = ''): string {
   if (value == null || !Number.isFinite(value)) return '—'
   if (unit === 'RATIO' || unit === 'ratio') return (value * 100).toFixed(1) + '%'
   if (unit === 'bytes' || unit === 'BYTES') return bytes(value)
+  if ((unit === 'SECONDS' || unit === 'seconds') && value >= 120) return duration(value * 1000)
   return (
     Number(value.toFixed(1)).toLocaleString('zh-CN') +
     ({ MS: ' ms', ms: ' ms', SECONDS: ' 秒', seconds: ' 秒', PER_MINUTE: ' 次/分钟' }[unit] ?? '')

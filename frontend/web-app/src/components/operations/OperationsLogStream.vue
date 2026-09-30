@@ -2,7 +2,7 @@
 import { ElButton, ElMessage } from 'element-plus'
 import { computed, ref } from 'vue'
 import type { OperationsLogEntry } from '@yumpoo/api-client'
-import YpStatusTag from '../yp/YpStatusTag.vue'
+import YpEmptyState from '../yp/YpEmptyState.vue'
 import { time, moduleLabel, EVENT_LABELS } from './operationsPresentation'
 const props = defineProps<{
   entries: OperationsLogEntry[]
@@ -73,38 +73,39 @@ async function copy(value: string) {
         <span
           class="ops-log-time"
           :title="time(entry.record.time)"
-        >{{
-          clock(entry.record.time)
-        }}</span><yp-status-tag
-          domain="operations"
-          :status="entry.record.level"
-          size="small"
-          effect="soft"
-        /><span
+        >{{ clock(entry.record.time) }}</span>
+        <span
+          class="ops-lvl"
+          :class="'ops-lvl-' + entry.record.level"
+        >{{ entry.record.level }}</span>
+        <span
           class="ops-log-module"
           :title="entry.record.module"
-        >{{
-          moduleLabel(entry.record.module)
-        }}</span><span
+        >{{ moduleLabel(entry.record.module) }}</span>
+        <span
           class="ops-log-message"
           :title="entry.record.event ?? undefined"
-        >{{ eventLabel(entry)
-        }}<span v-if="entry.record.fields.method && entry.record.fields.route">
-          · {{ entry.record.fields.method }} {{ entry.record.fields.route }}</span><span v-if="entry.record.error"> · {{ entry.record.error.msg }}</span></span>
+        ><b>{{ eventLabel(entry) }}</b><span
+          v-if="entry.record.fields.method && entry.record.fields.route"
+          class="ops-log-route"
+        > · {{ entry.record.fields.method }} {{ entry.record.fields.route }}</span><span
+          v-if="entry.record.error"
+          class="ops-log-cause"
+        > · {{ entry.record.error.msg }}</span></span>
         <span
           v-for="[key, value] in fields(entry)"
           :key="key"
-          class="ops-log-field"
+          class="ops-kv ops-log-field"
         >{{ key }}={{ value }}</span>
-        <el-button
+        <button
           v-if="entry.record.requestId"
-          size="small"
-          text
-          :title="entry.record.requestId"
+          type="button"
+          class="ops-log-request"
+          :title="'请求链路 ' + entry.record.requestId"
           @click.stop.prevent="emit('trace', entry)"
         >
           {{ entry.record.requestId.slice(0, 8) }}
-        </el-button>
+        </button>
       </summary>
       <div class="ops-log-detail">
         <div class="ops-toolbar">
@@ -160,12 +161,21 @@ async function copy(value: string) {
             <dd>{{ value }}</dd>
           </template>
         </dl>
-        <template v-if="entry.record.error">
-          <p>{{ entry.record.error.type }} · {{ entry.record.error.msg }}</p>
+        <div
+          v-if="entry.record.error"
+          class="ops-log-error"
+        >
+          <div class="ops-log-error__head">
+            <b>{{ entry.record.error.type }}</b>
+            <span>{{ entry.record.error.msg }}</span>
+            <small>错误指纹 {{ entry.record.error.hash }}</small>
+          </div>
           <pre>{{ stack(entry) }}</pre>
           <el-button
             v-if="entry.record.error.stack.split('\n').length > 12"
             size="small"
+            text
+            type="primary"
             @click="
               expandedStacks.has(entry.id)
                 ? expandedStacks.delete(entry.id)
@@ -174,94 +184,180 @@ async function copy(value: string) {
           >
             {{ expandedStacks.has(entry.id) ? '收起堆栈' : '展开全部帧' }}
           </el-button>
-          <small>错误指纹 {{ entry.record.error.hash }}</small>
-        </template>
+        </div>
       </div>
     </details>
-    <div
+    <yp-empty-state
       v-if="!entries.length"
-      class="ops-empty"
-    >
-      当前条件下没有日志
-    </div>
+      compact
+      reason="no-results"
+      title="当前条件下没有日志"
+      description="可以放宽级别、模块或时间范围。"
+    />
   </div>
 </template>
 <style scoped>
-.with-date .ops-log-time {
-  flex-basis: 160px;
-}
 .ops-log-stream {
-  font-family: var(--yp-font-mono);
-  font-size: 12px;
+  overflow: hidden;
   border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
+  font: 12.5px / 1.5 var(--yp-font-mono);
 }
+
 .ops-log-line {
-  border-bottom: 1px solid var(--yp-border-subtle);
-  border-left: 3px solid transparent;
+  border-top: 1px solid var(--yp-border-subtle);
 }
+
+.ops-log-line:first-child {
+  border-top: 0;
+}
+
 .ops-log-line.level-ERROR {
-  border-left-color: var(--yp-status-red);
+  background: color-mix(in srgb, var(--yp-status-red) 5%, var(--yp-bg-surface));
 }
-.ops-log-line.level-WARN {
-  border-left-color: var(--yp-status-yellow);
-}
+
 summary {
   display: flex;
   align-items: center;
   gap: var(--yp-space-3);
-  min-height: 28px;
-  padding: 0 var(--yp-space-3);
+  min-height: 30px;
+  padding: 3px var(--yp-space-3);
+  overflow: hidden;
+  list-style: none;
   cursor: pointer;
 }
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary:hover {
+  background: var(--yp-bg-hover);
+}
+
+summary:focus-visible {
+  outline: 2px solid var(--yp-focus-ring);
+  outline-offset: -2px;
+}
+
 .ops-log-time {
   flex: 0 0 90px;
-  color: var(--yp-text-secondary);
-}
-.ops-log-module {
-  flex: 0 0 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--yp-text-secondary);
-}
-.ops-log-field {
   color: var(--yp-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.with-date .ops-log-time {
+  flex-basis: 150px;
+}
+
+.ops-log-module {
+  flex: 0 0 88px;
+  overflow: hidden;
+  color: var(--yp-text-secondary);
+  font: var(--yp-type-caption-size) var(--yp-font-family);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .ops-log-message {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ops-log-detail {
-  padding: var(--yp-space-4);
-  border-top: 1px solid var(--yp-border-subtle);
+
+.ops-log-message b {
+  font: 600 var(--yp-type-body-size) var(--yp-font-family);
 }
-pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-height: 400px;
-  overflow: auto;
+
+.ops-log-route,
+.ops-log-cause {
+  color: var(--yp-text-secondary);
+}
+
+.ops-log-request {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 var(--yp-space-1);
+  border: 0;
+  color: var(--yp-link);
+  background: transparent;
   font: inherit;
+  font-size: var(--yp-type-caption-size);
+  cursor: pointer;
+}
+
+.ops-log-request:hover {
+  text-decoration: underline;
+}
+
+.ops-log-detail {
+  display: grid;
+  gap: var(--yp-space-3);
+  padding: var(--yp-space-3) var(--yp-space-4) var(--yp-space-4);
+  border-top: 1px dashed var(--yp-border-subtle);
+  background: var(--yp-bg-sunken);
+  font-family: var(--yp-font-family);
+}
+
+.ops-log-detail .ops-toolbar {
+  margin-bottom: 0;
+}
+
+.ops-log-detail .ops-definition {
+  gap: var(--yp-space-1) var(--yp-space-4);
+  font: 12.5px / 1.6 var(--yp-font-mono);
+}
+
+.ops-log-error {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--yp-status-red) 35%, var(--yp-border-subtle));
+  border-radius: var(--yp-radius-sm);
   background: var(--yp-bg-surface);
-  padding: var(--yp-space-4);
 }
-summary:focus-visible {
-  outline: 2px solid var(--yp-action-primary);
-  outline-offset: -2px;
+
+.ops-log-error__head {
+  display: grid;
+  gap: 2px;
+  padding: var(--yp-space-2) var(--yp-space-3);
+  border-bottom: 1px solid var(--yp-border-subtle);
+  font-size: var(--yp-type-caption-size);
 }
+
+.ops-log-error__head b {
+  color: var(--yp-status-red);
+  font-family: var(--yp-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.ops-log-error__head small {
+  color: var(--yp-text-muted);
+  font-family: var(--yp-font-mono);
+}
+
+pre {
+  max-height: 360px;
+  margin: 0;
+  padding: var(--yp-space-3);
+  overflow: auto;
+  color: var(--yp-text-secondary);
+  font: 12px / 19px var(--yp-font-mono);
+  white-space: pre;
+}
+
 @media (max-width: 760px) {
   .ops-log-time {
-    flex-basis: 115px;
-    font-size: 10px;
+    flex-basis: 96px;
+    font-size: 11px;
   }
+
   .ops-log-module,
   .ops-log-field {
     display: none;
   }
+
   summary {
     gap: var(--yp-space-2);
   }
