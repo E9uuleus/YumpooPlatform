@@ -85,8 +85,7 @@ describe('成员版本冲突', () => {
     const detailsButton = wrapper.findAll('button').find(button => button.text().includes('详情'))
     await detailsButton?.trigger('click')
     await flushPromises()
-    const disableButton = wrapper.findAll('button').find(button => button.text().includes('停用账号'))
-    await disableButton?.trigger('click')
+    Array.from(document.body.querySelectorAll('button')).find(button => button.textContent?.includes('停用账号'))?.click()
     await flushPromises()
 
     expect(api.disableMemberAccount).toHaveBeenCalledOnce()
@@ -156,6 +155,18 @@ describe('成员版本冲突', () => {
     submit?.vm.$emit('click')
     await flushPromises()
     expect(api.changeMemberPlatformRole).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('角色页签按层级筛选并回到第一页', async () => {
+    api.listMembers.mockResolvedValue(page(member()))
+    const wrapper = mount(IdentityMembersView)
+    await flushPromises()
+    await wrapper.findAll('.tier-tab').find(tab => tab.text() === '平台管理员')?.trigger('click')
+    await flushPromises()
+    expect(api.listMembers).toHaveBeenLastCalledWith(expect.objectContaining({ platformRole: PlatformRoleTier.AppManager, page: 0 }))
+    expect(wrapper.get('.tier-tab.active').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('.tier-tab.active').text()).toBe('平台管理员')
     wrapper.unmount()
   })
 

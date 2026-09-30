@@ -56,7 +56,41 @@ export function notificationDateGroup(at: Date, now: Date, timezone: string): st
   return day >= today - ((weekday + 6) % 7) ? '本周' : '更早'
 }
 
+export const INBOX_FILTERS: readonly { value: InboxFilter; label: string }[] = [
+  { value: 'unread', label: '未读' },
+  { value: 'all', label: '全部' },
+  { value: 'mention', label: '@我' },
+  { value: 'comment', label: '评论与回复' },
+  { value: 'assigned', label: '指派给我' },
+  { value: 'project', label: '项目动态' },
+  { value: 'archived', label: '已归档' },
+]
+
 export function parseInboxFilter(value: unknown): InboxFilter {
-  return typeof value === 'string' && ['unread', 'all', 'mention', 'comment', 'assigned', 'project', 'archived'].includes(value)
-    ? value as InboxFilter : 'unread'
+  return INBOX_FILTERS.find(filter => filter.value === value)?.value ?? 'unread'
+}
+
+export function inboxFilterLabel(filter: InboxFilter): string {
+  return INBOX_FILTERS.find(entry => entry.value === filter)?.label ?? '未读'
+}
+
+export type NotificationKind = 'mention' | 'comment' | 'assigned' | 'project'
+
+export function notificationKind(item: NotificationItem): NotificationKind {
+  switch (item.reason) {
+    case 'MENTION': return 'mention'
+    case 'REPLY':
+    case 'COMMENT': return 'comment'
+    case 'ASSIGNED': return 'assigned'
+    default: return 'project'
+  }
+}
+
+export function inboxEmptyCopy(filter: InboxFilter): { title: string; description: string } {
+  switch (filter) {
+    case 'unread': return { title: '全部处理完毕', description: '没有未读通知。新的评论、提及、指派与项目动态会出现在这里。' }
+    case 'all': return { title: '还没有通知', description: '新的评论、提及、指派与项目动态会出现在这里。' }
+    case 'archived': return { title: '没有已归档的通知', description: '归档后的通知会保存在这里，不再计入未读。' }
+    default: return { title: `暂无${inboxFilterLabel(filter)}通知`, description: '有新的相关动态时会出现在这里。' }
+  }
 }
