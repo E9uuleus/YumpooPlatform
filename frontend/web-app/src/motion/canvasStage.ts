@@ -13,6 +13,11 @@ export interface CanvasScene {
   pointer?(point: CanvasPoint | null): void
 }
 
+export interface ThemedCanvasScene extends CanvasScene {
+  /** Re-reads token colors after the theme changes. */
+  theme?(): void
+}
+
 export interface CanvasStageOptions {
   /** Frame cap; ambient decorations use 30. */
   fps?: number | undefined

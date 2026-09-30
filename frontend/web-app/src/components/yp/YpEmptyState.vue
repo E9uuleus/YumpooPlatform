@@ -2,17 +2,21 @@
 import { Box, Lock, Search } from '@element-plus/icons-vue'
 import { ElEmpty, ElIcon } from 'element-plus'
 import { computed } from 'vue'
+import OrbitHalo from '../motion/OrbitHalo.vue'
 
 const props = withDefaults(defineProps<{
   reason?: 'empty' | 'no-results' | 'forbidden'
   title?: string | null
   description?: string | null
   compact?: boolean
+  /** Decorative orbit behind the icon for page-level empty states; ignored when compact. */
+  ambient?: boolean
 }>(), {
   reason: 'empty',
   title: null,
   description: null,
   compact: false,
+  ambient: false,
 })
 
 const content = computed(() => ({
@@ -25,23 +29,28 @@ const content = computed(() => ({
 <template>
   <el-empty
     class="yp-empty-state"
-    :class="{ 'yp-empty-state--compact': compact }"
+    :class="{ 'yp-empty-state--compact': compact, 'yp-empty-state--ambient': ambient && !compact }"
   >
     <template #image>
       <div
-        class="yp-empty-state__icon"
+        class="yp-empty-state__visual"
         aria-hidden="true"
       >
-        <slot name="icon">
-          <el-icon>
-            <component :is="content.icon" />
-          </el-icon>
-        </slot>
+        <orbit-halo v-if="ambient && !compact" />
+        <div class="yp-empty-state__icon">
+          <slot name="icon">
+            <el-icon>
+              <component :is="content.icon" />
+            </el-icon>
+          </slot>
+        </div>
       </div>
     </template>
     <template #description>
       <h3>{{ title ?? content.title }}</h3>
-      <p>{{ description ?? content.description }}</p>
+      <p v-if="description ?? content.description">
+        {{ description ?? content.description }}
+      </p>
     </template>
     <slot name="action" />
   </el-empty>
@@ -73,6 +82,28 @@ const content = computed(() => ({
 
 .yp-empty-state--compact :deep(.el-empty__description) {
   margin-top: var(--yp-space-1);
+}
+
+.yp-empty-state__visual {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.yp-empty-state--ambient .yp-empty-state__visual {
+  width: 132px;
+  height: 132px;
+  margin: 0 auto;
+}
+
+.yp-empty-state--ambient :deep(.el-empty__image) {
+  width: auto;
+}
+
+.yp-empty-state--ambient .yp-empty-state__icon {
+  position: relative;
+  border: 1px solid var(--yp-border-subtle);
+  background: var(--yp-bg-surface);
 }
 
 .yp-empty-state__icon {

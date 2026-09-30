@@ -1,14 +1,10 @@
 import { onBeforeUnmount, onMounted, type Ref } from 'vue'
-import { createCanvasStage, type CanvasScene, type CanvasStage, type CanvasStageOptions } from '../../motion/canvasStage'
+import { createCanvasStage, type CanvasStage, type CanvasStageOptions, type ThemedCanvasScene } from '../../motion/canvasStage'
 import { watchTheme } from '../../motion/themeTokens'
 
-export interface ThemedCanvasScene extends CanvasScene {
-  /** Re-reads token colors after the theme changes. */
-  theme?(): void
-}
-
 interface SceneOptions extends Omit<CanvasStageOptions, 'pointerTarget'> {
-  pointerTarget?: Ref<HTMLElement | undefined>
+  /** Forward pointer movement over the canvas' parent to the scene. */
+  followParentPointer?: boolean
 }
 
 /** Mounts a decorative scene on a canvas for the component's lifetime; nothing runs where 2D canvas is unavailable. */
@@ -24,7 +20,11 @@ export function useCanvasScene(
     const element = canvas.value
     if (!element?.getContext('2d')) return
     const scene = createScene(element)
-    stage = createCanvasStage(element, scene, { ...options, pointerTarget: options.pointerTarget?.value })
+    const { followParentPointer, ...stageOptions } = options
+    stage = createCanvasStage(element, scene, {
+      ...stageOptions,
+      pointerTarget: followParentPointer ? element.parentElement ?? undefined : undefined,
+    })
     stopWatchingTheme = watchTheme(() => {
       scene.theme?.()
       stage?.redraw()
