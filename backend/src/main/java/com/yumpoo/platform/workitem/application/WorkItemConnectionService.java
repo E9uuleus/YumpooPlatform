@@ -283,9 +283,7 @@ public class WorkItemConnectionService {
         for (var entry : itemProjects.entrySet().stream().sorted(Comparator
                 .comparing((Map.Entry<UUID, UUID> item) -> item.getValue().toString())
                 .thenComparing(item -> item.getKey().toString())).toList()) {
-            var locator = items.findLocatorIncludingDeleted(companyId, entry.getKey())
-                    .filter(value -> value.projectId().equals(entry.getValue())).orElseThrow(ConnectionAccess::missing);
-            WorkItem item = items.lockIncludingDeleted(companyId, entry.getValue(), locator.contentId(), entry.getKey())
+            WorkItem item = items.lockProjectItemIncludingDeleted(companyId, entry.getValue(), entry.getKey())
                     .orElseThrow(ConnectionAccess::missing);
             result.put(entry.getKey(), item);
         }

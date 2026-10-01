@@ -4,6 +4,7 @@ import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import com.yumpoo.platform.workitem.domain.Content;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -207,6 +208,76 @@ class ConnectionConcurrencyIT {
     }
 
     @Test
+    void ordinaryAndConnectedFirstUseAcquireCatalogBeforeRankLane() throws Exception {
+        UUID contentId = unusedTargetContent();
+        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+            var pending = transaction(() -> {
+                jdbc.sql("SELECT project_id FROM yumpoo.work_item_rank_lane WHERE project_id=:id FOR UPDATE")
+                        .param("id", second.id()).query(UUID.class).list();
+                var ordinary = pool.submit(() -> transaction(() -> createOrdinary(contentId)));
+                awaitDatabaseLock("work_item_rank_lane");
+                var connected = pool.submit(() -> transaction(() -> createConnected(contentId)));
+                awaitDatabaseLock("yumpoo.content");
+                return List.of(ordinary, connected);
+            });
+            for (var result : pending) assertThat(result.get(15, TimeUnit.SECONDS).httpStatus()).isEqualTo(201);
+            assertThat(activeConnections()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void concurrentFirstUseWaitsForCatalogWithoutHoldingSharedCategoryLocks() throws Exception {
+        UUID contentId = unusedTargetContent();
+        long version = contents.catalogVersion(COMPANY, second.id());
+        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+            var pending = transaction(() -> {
+                contents.lockCatalogVersion(COMPANY, second.id());
+                var ordinary = pool.submit(() -> transaction(() -> createOrdinary(contentId)));
+                var connected = pool.submit(() -> transaction(() -> createConnected(contentId)));
+                awaitDatabaseLocks("content_catalog_version", 2);
+                return List.of(ordinary, connected);
+            });
+            for (var result : pending) assertThat(result.get(15, TimeUnit.SECONDS).httpStatus()).isEqualTo(201);
+            Content content = contents.find(COMPANY, second.id(), contentId).orElseThrow();
+            assertThat(content.everUsed()).isTrue();
+            assertThat(content.rowVersion()).isEqualTo(1);
+            assertThat(contents.catalogVersion(COMPANY, second.id())).isEqualTo(version + 1);
+        }
+    }
+
+    @Test
+    void usedCategoryCreationDoesNotWaitForTheCatalogManagementLock() throws Exception {
+        try (ExecutorService pool = Executors.newSingleThreadExecutor()) {
+            transaction(() -> {
+                contents.lockCatalogVersion(COMPANY, second.id());
+                var pending = pool.submit(() -> transaction(() -> createConnected(second.contentId())));
+                try { assertThat(pending.get(5, TimeUnit.SECONDS).httpStatus()).isEqualTo(201); }
+                catch (Exception error) { throw new AssertionError("used-category creation waited for catalog management", error); }
+                return true;
+            });
+        }
+    }
+
+    @Test
+    void categoryMoveWhileWaitingForEndpointLockDoesNotTurnTheConnectionInto404() throws Exception {
+        UUID contentId = unusedTargetContent();
+        try (ExecutorService pool = Executors.newSingleThreadExecutor()) {
+            var pending = transaction(() -> {
+                jdbc.sql("SELECT id FROM yumpoo.work_item WHERE id=:id FOR UPDATE")
+                        .param("id", right.id()).query(UUID.class).single();
+                var linking = pool.submit(() -> transaction(() -> link(left.id(), forward.id(), right.id())));
+                awaitDatabaseLock("yumpoo.work_item");
+                items.changeContent(new WorkItemCommands.ChangeContent(actor, right.id(), right.rowVersion(),
+                        contentId, UUID.randomUUID(), hash()));
+                return linking;
+            });
+            var linked = pending.get(15, TimeUnit.SECONDS);
+            assertThat(linked.httpStatus()).isEqualTo(201);
+            assertThat(connections.find(actor, linked.resourceId()).target().category().id()).isEqualTo(contentId);
+        }
+    }
+
+    @Test
     void failedCreateAndConnectRollsBackTheNewItemEventAndIdempotencyRecord() {
         transaction(() -> {
             for (int i = 0; i < 50; i++) link(left.id(), forward.id(), fixture.item(actor, second, "填满连接" + i).id());
@@ -214,12 +285,16 @@ class ConnectionConcurrencyIT {
         });
         long beforeItems = targetItemCount();
         long beforeEvents = fixture.eventCount("workitem.work_item_created");
+        UUID contentId = unusedTargetContent();
+        long beforeCatalog = contents.catalogVersion(COMPANY, second.id());
         UUID key = UUID.randomUUID();
         assertThatThrownBy(() -> transaction(() -> connections.createConnected(new CreateConnected(actor, left.id(),
-                forward.id(), second.id(), "必须整体回滚", null, key, hash()))))
+                forward.id(), second.id(), "必须整体回滚", contentId, key, hash()))))
                 .isInstanceOfSatisfying(ApplicationException.class, error -> assertThat(error.reason()).isEqualTo("CONNECTION_LIMIT"));
         assertThat(targetItemCount()).isEqualTo(beforeItems);
         assertThat(fixture.eventCount("workitem.work_item_created")).isEqualTo(beforeEvents);
+        assertThat(contents.find(COMPANY, second.id(), contentId).orElseThrow().everUsed()).isFalse();
+        assertThat(contents.catalogVersion(COMPANY, second.id())).isEqualTo(beforeCatalog);
         assertThat(activeConnections()).isEqualTo(50);
         assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.idempotency_record WHERE actor_user_id=:actor AND idempotency_key=:key")
                 .param("actor", actor.userId()).param("key", key).query(Long.class).single()).isZero();
@@ -227,6 +302,21 @@ class ConnectionConcurrencyIT {
 
     private StoredCommandResult link(UUID sourceId, UUID columnId, UUID targetId) {
         return connections.link(new Link(actor, sourceId, columnId, targetId, UUID.randomUUID(), hash())).result();
+    }
+
+    private UUID unusedTargetContent() {
+        return contents.findAll(COMPANY, second.id()).stream().filter(content -> !content.everUsed())
+                .findFirst().orElseThrow().id();
+    }
+
+    private StoredCommandResult createOrdinary(UUID contentId) {
+        return items.create(new WorkItemCommands.Create(actor, second.id(), contentId, "普通创建首次使用类别",
+                null, null, null, null, null, null, null, UUID.randomUUID(), hash(), DueTimeChange.unchanged())).result();
+    }
+
+    private StoredCommandResult createConnected(UUID contentId) {
+        return connections.createConnected(new CreateConnected(actor, left.id(), forward.id(), second.id(),
+                "连接创建首次使用类别", contentId, UUID.randomUUID(), hash())).result();
     }
 
     private <T> T transaction(Supplier<T> action) {
@@ -248,14 +338,18 @@ class ConnectionConcurrencyIT {
     }
 
     private void awaitDatabaseLock(String table) {
+        awaitDatabaseLocks(table, 1);
+    }
+
+    private void awaitDatabaseLocks(String table, int expected) {
         long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
         while (System.nanoTime() < deadline) {
             jdbc.sql("SELECT pg_stat_clear_snapshot()").query().singleRow();
-            boolean waiting = jdbc.sql("""
-                    SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid<>pg_backend_pid()
-                        AND wait_event_type='Lock' AND query ILIKE :query)
-                    """).param("query", "%" + table + "%").query(Boolean.class).single();
-            if (waiting) return;
+            long waiting = jdbc.sql("""
+                    SELECT count(*) FROM pg_stat_activity WHERE pid<>pg_backend_pid()
+                        AND wait_event_type='Lock' AND query ILIKE :query
+                    """).param("query", "%" + table + "%").query(Long.class).single();
+            if (waiting >= expected) return;
             try { Thread.sleep(10); }
             catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new AssertionError(error); }
         }

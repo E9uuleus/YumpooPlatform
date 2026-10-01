@@ -14,9 +14,9 @@ Status: implemented
 
 写入遵守项目 UUID 字符串升序 → 连接列目录 → 列 → 内容目录与类别 → 工作项（项目 UUID、工作项 UUID 升序）→ 连接的锁序，各命令只获取其需要的锁。项目成员端使用 `ProjectFactWriteGuard`，不要求成员的目标端使用 catalog 公开端口 `ProjectConnectionTargetQuery.lockAsConnectionTarget`；两者均与项目归档的排他锁互斥。获得项目锁后重新读取访问与生命周期。列共享锁保护目标集合，等待列更新后另查目标行，避免等待前的查询快照继续认可已移除目标。
 
-新建并关联通过 `WorkItemService.createRootItemForConnection` 的 MANDATORY 入口复用 `createItem`，内部只引入 `ItemWriteTarget(companyId, projectId, projectCode)`，沿用编号、标签、秩、项目顺序和工作项事件逻辑。首次使用类别需要更新内容目录与类别，因此在进入创建内核前取得内容目录锁并完成 `everUsed` 标记，避免工作项写入之后升级前序类别锁。普通创建参数重构单独提交并有根项、子项和处理人校验回归。
+新建并关联通过 `WorkItemService.createRootItemForConnection` 的 MANDATORY 入口复用 `createItem`，内部只引入 `ItemWriteTarget(companyId, projectId, projectCode)`，沿用编号、标签、秩、项目顺序和工作项事件逻辑。普通根项、子项和连接创建共用类别加锁入口：首次使用先取得内容目录锁，再锁类别，避免持有类别共享锁等待目录时发生锁升级死锁；已使用类别只取共享锁，不占用内容目录管理锁。`createItem` 在秩通道、项目顺序和工作项写入前统一完成 `everUsed` 标记，连接入口不复制该过程。失败时类别标记、目录版本、工作项与事件一起回滚。普通创建参数重构单独提交并有根项、子项和处理人校验回归。
 
-连接锁定工作项时复用包含删除项的仓储锁，再显式检查删除与归档：创建遇到删除返回 404，归档返回 `WORK_ITEM_ARCHIVED`；解除允许端点工作项已删除。既有 `lockProjectItem` 会直接过滤归档项，不适合连接所要求的 409 语义，因此保留其现状与普通关系调用方。
+连接通过 `lockProjectItemIncludingDeleted(companyId, projectId, workItemId)` 直接锁定端点，再显式检查删除与归档：创建遇到删除返回 404，归档返回 `WORK_ITEM_ARCHIVED`；解除允许端点工作项已删除。锁查询不以预读的类别 ID 限定工作项，等待期间移动类别不会误报 404。既有 `lockProjectItem` 会直接过滤归档项，不适合连接所要求的 409 语义，因此保留其现状与普通关系调用方。
 
 连接事件使用 `workitem.connect_column_created/updated/deleted` 与 `workitem.connection_created/deleted` v1，聚合类型分别为 `ConnectColumn` 和 `WorkItemConnection`。命名不使用 `workitem.work_item_` 前缀，不进入 M2 冻结清单或 `WORK_ITEM_EVENTS`。载荷只含约定标识、列名、变更字段或聚合计数，不含工作项标题、描述和正文。Activity 通过独立 `CONNECTION_EVENTS` 订阅：列事件写入所属项目；连接事件在两侧各投影一次，来源侧仅以事件列名渲染，目标侧只引用自身工作项且安全参数为空，audit 不为连接渲染回查工作项。连接不产生通知和单元格级动态。
 
@@ -33,4 +33,4 @@ Status: implemented
 
 连接的访问与卡片授权由[连接投递与卡片可见性](../security/2026-09-30-connection-intake-and-card-visibility.md)拥有；[普通关系可见性](../security/2026-08-31-cross-project-work-item-relation-visibility.md)继续拥有关系的隐藏占位规则，两者均保持活动，不发生完整取代或归档。
 
-`ConnectionConcurrencyIT` 验证双向关联、双向新建、列删除竞争、归档先后顺序、等待期间失权、列目标更新后的复核和失败整体回滚；`ConnectionMigrationIT` 从 V59 存量场景升级并确认 V62 保留既有事实。`ConnectionEventProjectionIT` 检查五类实际事件字段和两侧投影，`ConnectionActivityProjectionTest` 确认渲染不回查工作项。OpenAPI 只新增端点、schema 和黄金样例，不需要破坏性例外；后续扩字段或改变授权仍需独立决策与兼容审查。
+`ConnectionConcurrencyIT` 验证双向关联、双向新建、普通与连接创建首次使用类别的锁序、已使用类别不等待目录锁、等待期间类别移动、列删除竞争、归档先后顺序、等待期间失权、列目标更新后的复核和失败整体回滚；`ConnectionMigrationIT` 从 V59 存量场景升级并确认 V62 保留既有事实。`ConnectionEventProjectionIT` 检查五类实际事件字段和两侧投影，`ConnectionActivityProjectionTest` 确认渲染不回查工作项。OpenAPI 只新增端点、schema 和黄金样例，不需要破坏性例外；后续扩字段或改变授权仍需独立决策与兼容审查。
