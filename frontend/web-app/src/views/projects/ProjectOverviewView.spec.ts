@@ -89,7 +89,7 @@ function project(id: string): ProjectDetail {
     contactNote: null, actorAccess: ProjectActorAccess.Owner,
     capabilities: {
       canUpdateSettings: true, canActivate: false, canManageMembers: true,
-      canReassignOwner: true, canManageProductLinks: true, canArchive: true,
+      canReassignOwner: true, canArchive: true,
       canRestore: false, canMoveWorkspace: false, canOverrideArchive: false,
     },
     rowVersion: 1, etag: '"1"', createdAt: new Date('2026-08-25T00:00:00Z'),

@@ -47,12 +47,6 @@ export interface ProjectCapabilities {
      * @type {boolean}
      * @memberof ProjectCapabilities
      */
-    readonly canManageProductLinks: boolean;
-    /**
-     *
-     * @type {boolean}
-     * @memberof ProjectCapabilities
-     */
     readonly canArchive: boolean;
     /**
      *
@@ -83,7 +77,6 @@ export function instanceOfProjectCapabilities(value: object): value is ProjectCa
     if (!('canActivate' in value) || value['canActivate'] === undefined) return false;
     if (!('canManageMembers' in value) || value['canManageMembers'] === undefined) return false;
     if (!('canReassignOwner' in value) || value['canReassignOwner'] === undefined) return false;
-    if (!('canManageProductLinks' in value) || value['canManageProductLinks'] === undefined) return false;
     if (!('canArchive' in value) || value['canArchive'] === undefined) return false;
     if (!('canRestore' in value) || value['canRestore'] === undefined) return false;
     if (!('canMoveWorkspace' in value) || value['canMoveWorkspace'] === undefined) return false;
@@ -105,7 +98,6 @@ export function ProjectCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator:
         'canActivate': json['canActivate'],
         'canManageMembers': json['canManageMembers'],
         'canReassignOwner': json['canReassignOwner'],
-        'canManageProductLinks': json['canManageProductLinks'],
         'canArchive': json['canArchive'],
         'canRestore': json['canRestore'],
         'canMoveWorkspace': json['canMoveWorkspace'],
@@ -117,7 +109,7 @@ export function ProjectCapabilitiesToJSON(json: any): ProjectCapabilities {
     return ProjectCapabilitiesToJSONTyped(json, false);
 }
 
-export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canActivate'|'canManageMembers'|'canReassignOwner'|'canManageProductLinks'|'canArchive'|'canRestore'|'canMoveWorkspace'|'canOverrideArchive'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canActivate'|'canManageMembers'|'canReassignOwner'|'canArchive'|'canRestore'|'canMoveWorkspace'|'canOverrideArchive'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

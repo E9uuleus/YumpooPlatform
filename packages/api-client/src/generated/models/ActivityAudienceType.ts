@@ -18,8 +18,6 @@
  */
 export enum ActivityAudienceType {
     Project = 'PROJECT',
-    Product = 'PRODUCT',
-    Feedback = 'FEEDBACK',
     UnknownDefaultOpenApi = '11184809'
 }
 

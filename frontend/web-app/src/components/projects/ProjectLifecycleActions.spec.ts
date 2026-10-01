@@ -29,7 +29,7 @@ const activeProject: ProjectDetail = {
   contactNote: null, actorAccess: ProjectActorAccess.Owner,
   capabilities: {
     canUpdateSettings: true, canActivate: false, canManageMembers: true,
-    canReassignOwner: false, canManageProductLinks: true, canArchive: true,
+    canReassignOwner: false, canArchive: true,
     canRestore: false, canMoveWorkspace: false, canOverrideArchive: true,
   },
   rowVersion: 3, etag: '"3"', createdAt: new Date(), updatedAt: new Date(),
@@ -52,7 +52,7 @@ describe('ProjectLifecycleActions', () => {
       lifecycle: ProjectLifecycle.Archived,
       capabilities: {
         canUpdateSettings: false, canActivate: false, canManageMembers: false,
-        canReassignOwner: false, canManageProductLinks: false, canArchive: false,
+        canReassignOwner: false, canArchive: false,
         canRestore: true, canMoveWorkspace: false, canOverrideArchive: false,
       },
       archivedAt: new Date(),

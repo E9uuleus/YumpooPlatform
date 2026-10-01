@@ -36,7 +36,6 @@ const capabilities = {
   canActivate: false,
   canManageMembers: true,
   canReassignOwner: true,
-  canManageProductLinks: true,
   canArchive: true,
   canRestore: false,
   canMoveWorkspace: false,
