@@ -63,16 +63,7 @@ public class ProjectService {
             ProjectTypeFilter projectType, ProjectLifecycleFilter lifecycle, OffsetPageRequest page) {
         return findAll(actor, new ProjectSearchCriteria(null,
                 projectType == null ? List.of() : List.of(projectType.toDomain()),
-                List.of(), List.of(), null, lifecycle, null), page);
-    }
-
-    @Transactional(readOnly = true)
-    public OffsetPageResponse<ProjectSummary> findAll(CurrentActor actor, UUID ignoredWorkspaceId,
-            ProjectTypeFilter projectType, ProjectLifecycleFilter lifecycle, UUID productId,
-            OffsetPageRequest page) {
-        return findAll(actor, new ProjectSearchCriteria(null,
-                projectType == null ? List.of() : List.of(projectType.toDomain()),
-                List.of(), List.of(), null, lifecycle, productId), page);
+                List.of(), List.of(), null, lifecycle), page);
     }
 
     @Transactional(readOnly = true)
@@ -202,7 +193,7 @@ public class ProjectService {
         boolean mutable = project.lifecycle() != ProjectLifecycle.ARCHIVED;
         return new ProjectCapabilities(owner && mutable,
                 owner && project.lifecycle() == ProjectLifecycle.DRAFT,
-                (owner || admin) && mutable, admin && mutable, owner && mutable,
+                (owner || admin) && mutable, admin && mutable,
                 owner && project.lifecycle() == ProjectLifecycle.ACTIVE,
                 admin && project.lifecycle() == ProjectLifecycle.ARCHIVED,
                 false,

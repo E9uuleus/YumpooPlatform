@@ -22,16 +22,12 @@ import java.util.UUID;
 
 @Component
 public class ActivityProjectionService implements OutboxEventConsumer {
-    private static final Set<String> PRODUCT_EVENTS = Set.of(
-            "catalog.product_created", "catalog.product_updated", "catalog.product_archived",
-            "catalog.product_restored", "catalog.product_owner_reassigned");
     private static final Set<String> PROJECT_EVENTS = Set.of(
             "catalog.project_created", "catalog.project_updated", "catalog.project_activated",
             "catalog.project_archived", "catalog.project_reopened",
             "catalog.project_moved_to_workspace", "catalog.project_template_applied",
             "catalog.project_member_added", "catalog.project_member_removed",
-            "catalog.project_owner_reassigned", "catalog.product_linked_to_project",
-            "catalog.project_product_link_updated", "catalog.product_unlinked_from_project");
+            "catalog.project_owner_reassigned");
     private static final Set<String> CONTENT_EVENTS = Set.of(
             "workitem.content_created", "workitem.content_updated",
             "workitem.content_deleted", "workitem.content_archived", "workitem.content_restored");
@@ -84,8 +80,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     public void consume(DomainEventEnvelope event) {
         if (event.occurredAt().isBefore(repository.acceptedFrom())) return;
         try {
-            if (PRODUCT_EVENTS.contains(event.eventType())) appendProduct(event);
-            else if (PROJECT_EVENTS.contains(event.eventType())) appendProject(event);
+            if (PROJECT_EVENTS.contains(event.eventType())) appendProject(event);
             else if (CONTENT_EVENTS.contains(event.eventType())) appendContent(event);
             else if (WORK_ITEM_EVENTS.contains(event.eventType())) appendWorkItem(event);
             else if (TIME_EVENTS.contains(event.eventType())) appendTimeTracking(event);
@@ -105,18 +100,6 @@ public class ActivityProjectionService implements OutboxEventConsumer {
                 template(event.eventType()),safeRef(ref),itemId,null);
     }
 
-    private void appendProduct(DomainEventEnvelope event) {
-        JsonNode payload = event.payload();
-        UUID productId = uuid(payload, "productId");
-        String ref = join(text(payload, "code"), text(payload, "name"));
-        ObjectNode safe = safeRef(ref);
-        if (event.eventType().endsWith("owner_reassigned")) {
-            safe.put("memberDisplayName", user(event, uuid(payload, "newOwnerUserId")));
-        }
-        append(event, ActivityAudienceType.PRODUCT, productId, "PRODUCT", productId, ref,
-                template(event.eventType()), safe, null, null);
-    }
-
     private void appendProject(DomainEventEnvelope event) {
         JsonNode payload = event.payload();
         UUID projectId = uuid(payload, "projectId");
@@ -130,11 +113,6 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             safe.put("memberDisplayName", user(event, uuid(payload, "userId")));
         } else if (event.eventType().endsWith("owner_reassigned")) {
             safe.put("memberDisplayName", user(event, uuid(payload, "newOwnerUserId")));
-        } else if (event.eventType().contains("product_link")
-                || event.eventType().contains("product_unlinked")) {
-            entityType = "PRODUCT";
-            entityId = uuid(payload, "productId");
-            safe.put("relationType", text(payload, "relationType"));
         } else if (event.eventType().endsWith("template_applied")) {
             safe.put("templateKey", text(payload, "templateKey"));
             safe.put("initializedContentCount", integer(payload, "initializedContentCount"));
@@ -289,7 +267,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
 
     private static Set<String> allEvents() {
         LinkedHashSet<String> result = new LinkedHashSet<>();
-        result.addAll(PRODUCT_EVENTS); result.addAll(PROJECT_EVENTS); result.addAll(CONTENT_EVENTS);
+        result.addAll(PROJECT_EVENTS); result.addAll(CONTENT_EVENTS);
         result.addAll(TIME_EVENTS); result.addAll(WORK_ITEM_EVENTS); result.addAll(ATTACHMENT_EVENTS);
         return result;
     }

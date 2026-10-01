@@ -70,11 +70,6 @@ public class AttachmentApplicationService {
             UUID key, RequestHash hash) {
         return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(actor.userId(),
                 "POST", "createAttachmentIntent", key), hash), () -> {
-            if (request.ownerType() == AttachmentOwnerType.PRODUCT_FEEDBACK
-                    || request.ownerType() == AttachmentOwnerType.FEEDBACK_UPDATE) {
-                throw ApplicationException.validation(new FieldViolation("ownerType",
-                        "OWNER_TYPE_NOT_AVAILABLE", "该附件归属类型将在后续里程碑开放"));
-            }
             AttachmentParentAccessPort.AttachmentParentContext parent =
                     parents.requireWritable(actor, request.ownerType(), request.ownerId());
             AttachmentIntentResult result = attachments.createIntent(new CreateIntent(UUID.randomUUID(),

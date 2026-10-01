@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/** Shared rich-text boundary for collaboration facts such as WorkItemUpdate and FeedbackUpdate. */
+/** Shared rich-text boundary for work item updates. */
 public interface CollaborationHtmlSanitizer {
 
     ParsedHtml parse(String untrustedHtml);
