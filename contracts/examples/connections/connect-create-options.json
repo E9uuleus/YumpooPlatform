@@ -1,0 +1,12 @@
+{
+  "targetProjectId": "62000000-0000-4000-8000-000000000002",
+  "targetProjectName": "研发协作",
+  "categories": [
+    {
+      "id": "62000000-0000-4000-8000-000000000010",
+      "name": "需求",
+      "colorToken": "BRIGHT_BLUE"
+    }
+  ],
+  "defaultContentId": "62000000-0000-4000-8000-000000000010"
+}

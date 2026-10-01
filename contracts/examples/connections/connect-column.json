@@ -1,0 +1,17 @@
+{
+  "id": "62000000-0000-4000-8000-000000000005",
+  "projectId": "62000000-0000-4000-8000-000000000001",
+  "name": "研发跟进",
+  "targets": [
+    {
+      "projectId": "62000000-0000-4000-8000-000000000002",
+      "code": "P002",
+      "name": "研发协作",
+      "lifecycle": "ACTIVE",
+      "actorCanLinkExisting": false
+    }
+  ],
+  "rowVersion": 0,
+  "etag": "\"0\"",
+  "createdAt": "2026-10-01T12:00:00Z"
+}

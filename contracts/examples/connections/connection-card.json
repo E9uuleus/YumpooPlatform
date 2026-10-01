@@ -1,0 +1,24 @@
+{
+  "workItemId": "62000000-0000-4000-8000-000000000003",
+  "itemNo": "P001-1",
+  "title": "需求确认",
+  "archived": false,
+  "projectId": "62000000-0000-4000-8000-000000000001",
+  "projectCode": "P001",
+  "projectName": "需求协作",
+  "projectLifecycle": "ACTIVE",
+  "status": {
+    "code": "NOT_STARTED",
+    "name": "未开始",
+    "colorToken": "GRAY",
+    "category": "TODO"
+  },
+  "priority": null,
+  "category": {
+    "id": "62000000-0000-4000-8000-000000000010",
+    "name": "需求",
+    "colorToken": "BRIGHT_BLUE"
+  },
+  "assignee": null,
+  "canOpen": true
+}

@@ -1,0 +1,31 @@
+{
+  "card": {
+    "workItemId": "62000000-0000-4000-8000-000000000004",
+    "itemNo": "P002-1",
+    "title": "验证原型方案",
+    "archived": false,
+    "projectId": "62000000-0000-4000-8000-000000000002",
+    "projectCode": "P002",
+    "projectName": "研发协作",
+    "projectLifecycle": "ACTIVE",
+    "status": {
+      "code": "NOT_STARTED",
+      "name": "未开始",
+      "colorToken": "GRAY",
+      "category": "TODO"
+    },
+    "priority": null,
+    "category": {
+      "id": "62000000-0000-4000-8000-000000000010",
+      "name": "需求",
+      "colorToken": "BRIGHT_BLUE"
+    },
+    "assignee": null,
+    "canOpen": true
+  },
+  "parent": {
+    "workItemId": "62000000-0000-4000-8000-000000000012",
+    "title": "功能交付"
+  },
+  "alreadyConnected": true
+}

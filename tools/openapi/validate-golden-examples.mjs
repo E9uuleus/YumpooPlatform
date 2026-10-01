@@ -113,7 +113,39 @@ function structuralSchemaConstraints(schema, additionalIgnoredKeys = new Set()) 
   )
 }
 
+const connectionExampleSchemas = {
+  "connections/connect-column-incoming.json": "ConnectColumnIncoming",
+  "connections/connect-column-target.json": "ConnectColumnTarget",
+  "connections/connect-column.json": "ConnectColumn",
+  "connections/connect-column-catalog.json": "ConnectColumnCatalog",
+  "connections/connect-column-create-request.json": "ConnectColumnCreateRequest",
+  "connections/connect-column-update-request.json": "ConnectColumnUpdateRequest",
+  "connections/connect-column-delete-result.json": "ConnectColumnDeleteResult",
+  "connections/connect-target-project.json": "ConnectTargetProject",
+  "connections/connect-target-project-page.json": "ConnectTargetProjectPage",
+  "connections/connection-card-label.json": "ConnectionCardLabel",
+  "connections/connection-card-status.json": "ConnectionCardStatus",
+  "connections/connection-card-category.json": "ConnectionCardCategory",
+  "connections/connection-card-assignee.json": "ConnectionCardAssignee",
+  "connections/connection-card.json": "ConnectionCard",
+  "connections/work-item-connection-capabilities.json": "WorkItemConnectionCapabilities",
+  "connections/work-item-connection.json": "WorkItemConnection",
+  "connections/work-item-connection-outgoing.json": "WorkItemConnectionOutgoing",
+  "connections/work-item-connection-cell.json": "WorkItemConnectionCell",
+  "connections/work-item-connection-cell-list.json": "WorkItemConnectionCellList",
+  "connections/work-item-connection-page.json": "WorkItemConnectionPage",
+  "connections/connect-create-options.json": "ConnectCreateOptions",
+  "connections/connect-candidate-parent.json": "ConnectCandidateParent",
+  "connections/connect-candidate.json": "ConnectCandidate",
+  "connections/connect-candidate-page.json": "ConnectCandidatePage",
+  "connections/work-item-connection-link-request.json": "WorkItemConnectionLinkRequest",
+  "connections/connected-work-item-create-request.json": "ConnectedWorkItemCreateRequest",
+  "connections/connect-target-in-use-details.json": "ConnectTargetInUseDetails",
+  "connections/connect-target-in-use-error.json": "ConnectTargetInUseError"
+}
+
 function schemaForExample(relativePath) {
+  if (connectionExampleSchemas[relativePath]) return connectionExampleSchemas[relativePath]
   if (relativePath === 'operations/log-tail.json') return 'OperationsLogTail'
   if (relativePath === 'operations/metrics-with-gap.json') return 'OperationsMetricSeries'
   if (relativePath === 'operations/partial-log-page.json') return 'OperationsLogPage'
