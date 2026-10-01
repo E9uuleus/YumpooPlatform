@@ -12,6 +12,14 @@ public final class ApplicationException extends RuntimeException {
     private final List<FieldViolation> fieldViolations;
     private final String reason;
     private final List<SafeBlocker> blockers;
+    private final ConnectionTargetUse connectionTargetUse;
+
+    public record ConnectionTargetUse(java.util.UUID targetProjectId, long activeConnectionCount) {
+        public ConnectionTargetUse {
+            Objects.requireNonNull(targetProjectId);
+            if (activeConnectionCount < 1) throw new IllegalArgumentException("active connection count must be positive");
+        }
+    }
 
     public ApplicationException(StandardErrorCode errorCode) {
         this(errorCode, errorCode.defaultMessage(), List.of(), null, List.of());
@@ -40,12 +48,19 @@ public final class ApplicationException extends RuntimeException {
 
     public ApplicationException(StandardErrorCode errorCode, String safeMessage,
             List<FieldViolation> fieldViolations, String reason, List<SafeBlocker> blockers) {
+        this(errorCode, safeMessage, fieldViolations, reason, blockers, null);
+    }
+
+    private ApplicationException(StandardErrorCode errorCode, String safeMessage,
+            List<FieldViolation> fieldViolations, String reason, List<SafeBlocker> blockers,
+            ConnectionTargetUse connectionTargetUse) {
         super(requireSafeMessage(safeMessage));
         this.errorCode = Objects.requireNonNull(errorCode, "errorCode must not be null");
         this.fieldViolations = List.copyOf(fieldViolations);
         this.reason = normalizeReason(reason);
         this.blockers = List.copyOf(blockers).stream()
                 .sorted(java.util.Comparator.comparing(SafeBlocker::code)).toList();
+        this.connectionTargetUse = connectionTargetUse;
     }
 
     public StandardErrorCode errorCode() {
@@ -62,6 +77,14 @@ public final class ApplicationException extends RuntimeException {
 
     public List<SafeBlocker> blockers() {
         return blockers;
+    }
+
+    public ConnectionTargetUse connectionTargetUse() { return connectionTargetUse; }
+
+    public static ApplicationException connectionTargetInUse(java.util.UUID projectId, long count) {
+        return new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION,
+                StandardErrorCode.INVALID_STATE_TRANSITION.defaultMessage(), List.of(),
+                "CONNECT_TARGET_IN_USE", List.of(), new ConnectionTargetUse(projectId, count));
     }
 
     public static ApplicationException withReason(StandardErrorCode errorCode, String reason) {

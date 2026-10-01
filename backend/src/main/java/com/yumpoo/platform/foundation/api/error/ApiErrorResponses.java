@@ -13,7 +13,7 @@ final class ApiErrorResponses {
     }
 
     static ApiErrorResponse from(ApplicationException exception, String requestId) {
-        return create(
+        ApiErrorResponse response = create(
                 exception.errorCode(),
                 exception.getMessage(),
                 requestId,
@@ -23,6 +23,11 @@ final class ApiErrorResponses {
                         .map(blocker -> new ApiErrorDetails.ApiBlocker(blocker.code(), blocker.count()))
                         .toList()
         );
+        var targetUse = exception.connectionTargetUse();
+        if (targetUse == null) return response;
+        return new ApiErrorResponse(response.code(), response.message(), response.requestId(),
+                response.retryable(), response.fieldErrors(), new ApiErrorDetails(exception.reason(),
+                response.details().blockers(), targetUse.targetProjectId(), targetUse.activeConnectionCount()));
     }
 
     static ApiErrorResponse create(
