@@ -19,7 +19,6 @@ class ConnectColumnTest {
         var column = ConnectColumn.create(UUID.randomUUID(), UUID.randomUUID(), project, "  DEFECTS  ",
                 List.of(target, target), actor, now);
         assertThat(column.name()).isEqualTo("DEFECTS");
-        assertThat(column.normalizedName()).isEqualTo("defects");
         assertThat(column.targetProjectIds()).containsExactly(target);
         var updated = column.update("缺陷", List.of(target), actor, now.plusSeconds(1));
         assertThat(updated.id()).isEqualTo(column.id());

@@ -23,11 +23,10 @@ final class ApiErrorResponses {
                         .map(blocker -> new ApiErrorDetails.ApiBlocker(blocker.code(), blocker.count()))
                         .toList()
         );
-        var targetUse = exception.connectionTargetUse();
-        if (targetUse == null) return response;
+        if (exception.safeDetails().isEmpty()) return response;
         return new ApiErrorResponse(response.code(), response.message(), response.requestId(),
                 response.retryable(), response.fieldErrors(), new ApiErrorDetails(exception.reason(),
-                response.details().blockers(), targetUse.targetProjectId(), targetUse.activeConnectionCount()));
+                response.details().blockers(), exception.safeDetails()));
     }
 
     static ApiErrorResponse create(

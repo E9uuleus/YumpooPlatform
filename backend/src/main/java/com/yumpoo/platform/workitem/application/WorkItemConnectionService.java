@@ -140,7 +140,7 @@ public class WorkItemConnectionService {
         if (target == null) throw missing();
         if (target.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ACTIVE) throw conflict("PROJECT_ARCHIVED");
         var categories = connections.findActiveCategories(actor.companyId(), targetProjectId);
-        if (categories.isEmpty()) throw conflict("PROJECT_CONTENT_UNAVAILABLE");
+        if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "目标项目没有启用的工作项类别");
         return new CreateOptions(targetProjectId, target.name(), categories, categories.getFirst().id());
     }
 
@@ -207,7 +207,7 @@ public class WorkItemConnectionService {
             UUID contentId = command.contentId();
             if (contentId == null) {
                 var categories = connections.findActiveCategories(command.actor().companyId(), command.targetProjectId());
-                if (categories.isEmpty()) throw conflict("PROJECT_CONTENT_UNAVAILABLE");
+                if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "目标项目没有启用的工作项类别");
                 contentId = categories.getFirst().id();
             }
             WorkItem target = itemService.createRootItemForConnection(projects.get(command.targetProjectId()), contentId, title, command.actor());
@@ -233,12 +233,13 @@ public class WorkItemConnectionService {
                     .filter(id -> member(visibility.get(id))).findFirst()
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.ACCESS_DENIED));
             lockProjects(command.actor(), snapshot.sourceProjectId(), snapshot.targetProjectId(), Set.of(memberProject));
-            var column = column(command.actor().companyId(), snapshot.sourceProjectId(), snapshot.columnId(), true);
+            var column = columns.lock(command.actor().companyId(), snapshot.sourceProjectId(), snapshot.columnId(), true)
+                    .orElseThrow(ConnectionAccess::missing);
             lockItems(command.actor().companyId(), Map.of(snapshot.sourceWorkItemId(), snapshot.sourceProjectId(),
                     snapshot.targetWorkItemId(), snapshot.targetProjectId()));
             var connection = connections.lock(command.actor().companyId(), command.connectionId()).orElseThrow(ConnectionAccess::missing);
+            if (!connection.active() || !column.active()) throw conflict("CONNECTION_NOT_ACTIVE");
             requireVersion(connection.rowVersion(), command.expectedVersion());
-            if (!connection.active()) throw conflict("CONNECTION_NOT_ACTIVE");
             var deleted = connection.delete(command.actor().userId(), WorkItemConnection.DeleteReason.UNLINKED, clock.instant());
             if (!connections.softDelete(deleted, connection.rowVersion())) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
             append("workitem.connection_deleted", deleted, column.name(), command.actor());

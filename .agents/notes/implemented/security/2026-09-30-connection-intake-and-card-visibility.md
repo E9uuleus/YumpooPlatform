@@ -16,7 +16,7 @@ Status: implemented
 
 有效连接本身授予两端最小卡片读取：用户能看见任一端项目，就可读取两端卡片。`ConnectionCard` 的字段固定为 `workItemId, itemNo, title, archived, projectId, projectCode, projectName, projectLifecycle, status, priority, category, assignee, canOpen`。状态仅含 code/name/colorToken/category，优先级仅含 code/name/colorToken，类别仅含 id/name/colorToken，处理人仅含 userId/displayName。`canOpen` 只表示当前用户可见卡片所在项目；卡片不授予打开详情或修改目标的权限，也不包含描述、评论、附件、计时、截止日期、成员列表或其他正文。
 
-读取先用公司与项目限定 SQL。A6 静默忽略外项目工作项 ID，以免批量请求成为探针；出站只返回有有效连接的列，入站每项最多 50 条并返回完整计数。A7 在分页和计数前依据 catalog 返回的可见项目集合裁剪连接，不先取全量后在 Java 中过滤。A6 批量读取端点卡片、项目快照、访问快照及人员显示名，1 行与 100 行请求均为 8 次 SQL。任何端点已删除时读取省略连接，恢复后重新出现；项目归档保留读取。
+读取先用公司与项目限定 SQL。A6 静默忽略外项目工作项 ID，以免批量请求成为探针；出站只返回有有效连接的列，入站每项最多 50 条并返回完整计数。A7 在分页和计数前依据 catalog 返回的可见项目集合裁剪连接，不先取全量后在 Java 中过滤。A6 批量读取端点卡片、项目快照、访问快照及人员显示名，纯出站 1 行、混合入出站 1 行和 100 行请求均为 8 次 SQL；回归包含 3 个目标项目、3 个处理人、不同项目可见性和 53 条入站截取前 50 条的窗口。任何端点已删除时读取省略连接，恢复后重新出现；项目归档保留读取。
 
 连接 Activity 的目标侧只包含目标项目和目标工作项引用，安全参数为空，不包含来源项目、来源工作项或列标识。来源侧只用事件中列名生成文案，普通关系的隐藏占位继续按[关系可见性决策](2026-08-31-cross-project-work-item-relation-visibility.md)执行。聚合、锁序和事件归属见[连接架构决策](../architecture/2026-09-30-work-item-connections.md)。
 

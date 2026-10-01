@@ -97,12 +97,12 @@ public class JdbcConnectColumnRepository implements ConnectColumnRepository {
     }
 
     @Override
-    public boolean nameExists(UUID companyId, UUID projectId, String normalizedName, UUID excludingId) {
+    public boolean nameExists(UUID companyId, UUID projectId, String name, UUID excludingId) {
         return jdbc.sql("""
                 SELECT EXISTS(SELECT 1 FROM yumpoo.work_item_connect_column
-                WHERE company_id=:companyId AND project_id=:projectId AND normalized_name=:name
+                WHERE company_id=:companyId AND project_id=:projectId AND normalized_name=lower(:name)
                   AND (:id::uuid IS NULL OR id<>:id) AND deleted_at IS NULL)
-                """).param("companyId", companyId).param("projectId", projectId).param("name", normalizedName)
+                """).param("companyId", companyId).param("projectId", projectId).param("name", name)
                 .param("id", excludingId, Types.OTHER).query(Boolean.class).single();
     }
 
@@ -111,7 +111,7 @@ public class JdbcConnectColumnRepository implements ConnectColumnRepository {
         return parameters(jdbc.sql("""
                 INSERT INTO yumpoo.work_item_connect_column (id, company_id, project_id, name, normalized_name,
                     row_version, created_by_user_id, created_at, updated_by_user_id, updated_at)
-                VALUES (:id, :companyId, :projectId, :name, :normalizedName, :version,
+                VALUES (:id, :companyId, :projectId, :name, lower(:name), :version,
                     :createdBy, :createdAt, :updatedBy, :updatedAt) ON CONFLICT DO NOTHING
                 """), column).update() == 1;
     }
@@ -119,7 +119,7 @@ public class JdbcConnectColumnRepository implements ConnectColumnRepository {
     @Override
     public boolean update(ConnectColumn column, long expectedVersion) {
         return parameters(jdbc.sql("""
-                UPDATE yumpoo.work_item_connect_column SET name=:name, normalized_name=:normalizedName,
+                UPDATE yumpoo.work_item_connect_column SET name=:name, normalized_name=lower(:name),
                     row_version=:version, updated_by_user_id=:updatedBy, updated_at=:updatedAt,
                     deleted_by_user_id=:deletedBy, deleted_at=:deletedAt
                 WHERE company_id=:companyId AND project_id=:projectId AND id=:id AND row_version=:expected
@@ -142,7 +142,7 @@ public class JdbcConnectColumnRepository implements ConnectColumnRepository {
     private static JdbcClient.StatementSpec parameters(JdbcClient.StatementSpec statement, ConnectColumn column) {
         return statement.param("id", column.id()).param("companyId", column.companyId())
                 .param("projectId", column.projectId()).param("name", column.name())
-                .param("normalizedName", column.normalizedName()).param("version", column.rowVersion())
+                .param("version", column.rowVersion())
                 .param("createdBy", column.createdByUserId()).param("createdAt", timestamp(column.createdAt()))
                 .param("updatedBy", column.updatedByUserId()).param("updatedAt", timestamp(column.updatedAt()));
     }

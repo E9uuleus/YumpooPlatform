@@ -78,7 +78,7 @@ class ConnectColumnIT {
     @Test
     void rejectsDuplicateReservedNamesInvalidTargetsAndTwentyFirstColumn() {
         fixture.column(member, source, "DEFECTS", target.id());
-        assertReason(() -> fixture.column(member, source, "defects", target.id()), "CONNECT_COLUMN_NAME_EXISTS");
+        assertDuplicate(() -> fixture.column(member, source, "defects", target.id()));
         for (String name : List.of("被连接", "状态", "工作项名称", " ", "x".repeat(41)))
             assertThatThrownBy(() -> fixture.column(member, source, name, target.id())).isInstanceOf(ApplicationException.class);
         assertThatThrownBy(() -> fixture.column(member, source, "没有目标")).isInstanceOf(ApplicationException.class);
@@ -87,6 +87,29 @@ class ConnectColumnIT {
                 java.util.stream.Stream.generate(UUID::randomUUID).limit(21).toArray(UUID[]::new))).isInstanceOf(ApplicationException.class);
         for (int i = 1; i < 20; i++) fixture.column(member, source, "列" + i, target.id());
         assertReason(() -> fixture.column(member, source, "超限", target.id()), "CONNECT_COLUMN_LIMIT");
+    }
+
+    @Test
+    void unicodeNamesUseTheDatabaseNormalizationForCreationUpdatesAndDuplicates() {
+        for (String name : List.of("ΟΔΟΣ", "İD", "İ".repeat(40))) {
+            var column = fixture.column(member, source, name, target.id());
+            String normalized = jdbc.sql("SELECT lower(:name)").param("name", name).query(String.class).single();
+            assertThat(jdbc.sql("SELECT normalized_name FROM yumpoo.work_item_connect_column WHERE id=:id")
+                    .param("id", column.id()).query(String.class).single()).isEqualTo(normalized);
+            assertDuplicate(() -> fixture.column(member, source, normalized, target.id()));
+        }
+        var renamed = fixture.column(member, source, "待改名", target.id());
+        try (var ignored = correlation()) {
+            assertDuplicate(() -> columns.update(new ConnectColumnCommands.Update(member, source.id(), renamed.id(), 0,
+                    "ΟΔΟΣ", List.of(target.id()))));
+            var changed = columns.update(new ConnectColumnCommands.Update(member, source.id(), renamed.id(), 0,
+                    "ΝΕΟΣ", List.of(target.id())));
+            assertThat(changed.name()).isEqualTo("ΝΕΟΣ");
+            String normalized = jdbc.sql("SELECT lower('ΝΕΟΣ')").query(String.class).single();
+            assertThat(jdbc.sql("SELECT normalized_name FROM yumpoo.work_item_connect_column WHERE id=:id")
+                    .param("id", renamed.id()).query(String.class).single()).isEqualTo(normalized);
+            assertDuplicate(() -> fixture.column(member, source, normalized, target.id()));
+        }
     }
 
     @Test
@@ -128,5 +151,15 @@ class ConnectColumnIT {
     private static void assertReason(Runnable operation, String reason) {
         assertThatThrownBy(operation::run).isInstanceOfSatisfying(ApplicationException.class,
                 error -> assertThat(error.reason()).isEqualTo(reason));
+    }
+
+    private static void assertDuplicate(Runnable operation) {
+        assertThatThrownBy(operation::run).isInstanceOfSatisfying(ApplicationException.class, error -> {
+            assertThat(error.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED);
+            assertThat(error.fieldViolations()).singleElement().satisfies(field -> {
+                assertThat(field.field()).isEqualTo("name");
+                assertThat(field.code()).isEqualTo("DUPLICATE");
+            });
+        });
     }
 }

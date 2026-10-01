@@ -115,7 +115,13 @@ class ConnectionHttpIT {
         var removed = send("DELETE", connectionPath, targetOwner, null, "\"0\"", unlinkKey);
         assertThat(body(removed, 200).path("active").asBoolean()).isFalse();
         assertThat(send("DELETE", connectionPath, targetOwner, null, "\"0\"", unlinkKey).body()).isEqualTo(removed.body());
+        assertThat(send("GET", connectionPath, sourceMember, null, null, null).statusCode()).isEqualTo(404);
+        assertThat(body(send("DELETE", connectionPath, sourceMember, null, "\"0\"", UUID.randomUUID()), 409)
+                .path("details").path("reason").asText()).isEqualTo("CONNECTION_NOT_ACTIVE");
         assertThat(body(send("DELETE", path, owner, null, "\"1\"", UUID.randomUUID()), 200).path("removedConnectionCount").asInt()).isEqualTo(1);
+        String submittedPath = "/work-item-connections/" + body(submitted, 201).path("id").asText();
+        assertThat(body(send("DELETE", submittedPath, sourceMember, null, "\"0\"", UUID.randomUUID()), 409)
+                .path("details").path("reason").asText()).isEqualTo("CONNECTION_NOT_ACTIVE");
     }
 
     @Test
@@ -152,9 +158,27 @@ class ConnectionHttpIT {
         body(send("POST", "/work-items/" + sourceItem + "/connections", owner,
                 Map.of("columnId", id, "targetWorkItemId", targetItem), null, UUID.randomUUID()), 201);
         var conflict = body(send("PATCH", collection + "/" + id, owner, columnBody("仍有连接", spare.id()), "\"0\"", null), 409);
+        assertThat(conflict.path("details").propertyNames()).containsExactlyInAnyOrder("reason", "targetProjectId", "activeConnectionCount");
         assertThat(conflict.path("details").path("reason").asText()).isEqualTo("CONNECT_TARGET_IN_USE");
         assertThat(conflict.path("details").path("targetProjectId").asText()).isEqualTo(target.id().toString());
         assertThat(conflict.path("details").path("activeConnectionCount").asLong()).isEqualTo(1);
+    }
+
+    @Test
+    void unicodeDuplicatesAndMissingEnabledCategoriesReturn422FieldErrors() throws Exception {
+        String name = "ΟΔΟΣ";
+        var column = body(send("POST", collection, owner, columnBody(name, target.id()), null, UUID.randomUUID()), 201);
+        String normalized = jdbc.sql("SELECT lower(:name)").param("name", name).query(String.class).single();
+        var duplicate = body(send("POST", collection, owner, columnBody(normalized, target.id()), null, UUID.randomUUID()), 422);
+        assertThat(duplicate.path("fieldErrors").get(0).path("field").asText()).isEqualTo("name");
+        assertThat(duplicate.path("fieldErrors").get(0).path("code").asText()).isEqualTo("DUPLICATE");
+        jdbc.sql("UPDATE yumpoo.content SET active=false WHERE project_id=:id").param("id", target.id()).update();
+        String path = collection + "/" + column.path("id").asText();
+        var options = body(send("GET", path + "/create-options?targetProjectId=" + target.id(), sourceMember, null, null, null), 422);
+        assertThat(options.path("fieldErrors").get(0).path("code").asText()).isEqualTo("CONTENT_NOT_ACTIVE");
+        var creating = body(send("POST", "/work-items/" + sourceItem + "/connected-work-items", sourceMember,
+                Map.of("columnId", column.path("id").asText(), "targetProjectId", target.id(), "title", "无启用类别"), null, UUID.randomUUID()), 422);
+        assertThat(creating.path("fieldErrors").get(0).path("code").asText()).isEqualTo("CONTENT_NOT_ACTIVE");
     }
 
     private JsonNode column() throws Exception {

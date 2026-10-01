@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -102,7 +101,7 @@ public class ConnectColumnService {
             validateTargets(locked.companyId(), targetIds, List.of());
             var column = ConnectColumn.create(UUID.randomUUID(), locked.companyId(), locked.projectId(),
                     name, targetIds, command.actor().userId(), now);
-            if (!columns.insert(column)) throw conflict("CONNECT_COLUMN_NAME_EXISTS");
+            if (!columns.insert(column)) throw invalid("name", "DUPLICATE", "连接列名称已存在");
             columns.replaceTargets(column);
             columns.bumpCatalog(locked.companyId(), locked.projectId(), now);
             append("workitem.connect_column_created", column, command.actor(), Map.of("targetProjectIds", targetIds));
@@ -129,7 +128,8 @@ public class ConnectColumnService {
         List<UUID> removed = before.targetProjectIds().stream().filter(id -> !targetIds.contains(id)).toList();
         for (UUID id : removed) {
             long count = connections.countActiveTarget(project.companyId(), before.id(), id);
-            if (count > 0) throw ApplicationException.connectionTargetInUse(id, count);
+            if (count > 0) throw ApplicationException.withSafeDetails(StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "CONNECT_TARGET_IN_USE", Map.of("targetProjectId", id, "activeConnectionCount", count));
         }
         var after = before.update(name, targetIds, command.actor().userId(), now);
         if (!columns.update(after, before.rowVersion())) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
@@ -195,8 +195,8 @@ public class ConnectColumnService {
     }
 
     private void requireUniqueName(UUID companyId, UUID projectId, String name, UUID excludingId) {
-        if (columns.nameExists(companyId, projectId, name.toLowerCase(Locale.ROOT), excludingId))
-            throw conflict("CONNECT_COLUMN_NAME_EXISTS");
+        if (columns.nameExists(companyId, projectId, name, excludingId))
+            throw invalid("name", "DUPLICATE", "连接列名称已存在");
     }
 
     private static String name(String name) {

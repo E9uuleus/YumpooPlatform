@@ -17,7 +17,7 @@ public interface ConnectColumnRepository {
     Optional<ConnectColumn> find(UUID companyId, UUID projectId, UUID columnId);
     Optional<ConnectColumn> lock(UUID companyId, UUID projectId, UUID columnId, boolean forShare);
     long countActive(UUID companyId, UUID projectId);
-    boolean nameExists(UUID companyId, UUID projectId, String normalizedName, UUID excludingId);
+    boolean nameExists(UUID companyId, UUID projectId, String name, UUID excludingId);
     boolean insert(ConnectColumn column);
     boolean update(ConnectColumn column, long expectedVersion);
     void replaceTargets(ConnectColumn column);

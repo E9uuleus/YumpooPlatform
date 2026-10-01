@@ -104,6 +104,14 @@ class WorkItemConnectionIT {
     }
 
     @Test
+    void aTargetWithoutEnabledCategoriesReturnsValidationErrorsForOptionsAndCreation() {
+        jdbc.sql("UPDATE yumpoo.content SET active=false WHERE project_id=:id").param("id", target.id()).update();
+        assertField(() -> connections.createOptions(sourceOwner, source.id(), column.id(), target.id()), "CONTENT_NOT_ACTIVE");
+        assertField(() -> create(sourceOwner, target.id(), null), "CONTENT_NOT_ACTIVE");
+        assertThat(fixture.eventCount("workitem.connection_created")).isZero();
+    }
+
+    @Test
     void linkingRequiresBothMembershipsAndReturnsSameIdForExistingPair() {
         assertCode(() -> link(sourceOwner, targetItem.id()), StandardErrorCode.ACCESS_DENIED);
         var first = link(both, targetItem.id());
@@ -135,6 +143,7 @@ class WorkItemConnectionIT {
         assertCode(() -> unlink(sourceOwner, linked.resourceId(), 7), StandardErrorCode.VERSION_CONFLICT);
         var deleted = unlink(targetOwner, linked.resourceId(), 0);
         assertThat(json.readTree(deleted.responseJson()).path("active").asBoolean()).isFalse();
+        assertReason(() -> unlink(sourceOwner, linked.resourceId(), 0), "CONNECTION_NOT_ACTIVE");
         assertReason(() -> unlink(sourceOwner, linked.resourceId(), 1), "CONNECTION_NOT_ACTIVE");
         assertThat(unlink(sourceOwner, link(both, targetItem.id()).resourceId(), 0).httpStatus()).isEqualTo(200);
     }
@@ -235,8 +244,8 @@ class WorkItemConnectionIT {
             assertThatThrownBy(() -> columns.update(new ConnectColumnCommands.Update(sourceOwner, source.id(), column.id(), 1,
                     column.name(), List.of(other.id())))).isInstanceOfSatisfying(ApplicationException.class, error -> {
                         assertThat(error.reason()).isEqualTo("CONNECT_TARGET_IN_USE");
-                        assertThat(error.connectionTargetUse().targetProjectId()).isEqualTo(target.id());
-                        assertThat(error.connectionTargetUse().activeConnectionCount()).isEqualTo(1);
+                        assertThat(error.safeDetails()).containsEntry("targetProjectId", target.id())
+                                .containsEntry("activeConnectionCount", 1L);
                     });
             var deleted = columns.delete(new ConnectColumnCommands.Delete(sourceOwner, source.id(), column.id(), 1,
                     UUID.randomUUID(), hash()));
@@ -245,24 +254,75 @@ class WorkItemConnectionIT {
         assertThat(jdbc.sql("SELECT delete_reason FROM yumpoo.work_item_connection WHERE id=:id")
                 .param("id", linked.resourceId()).query(String.class).single()).isEqualTo("COLUMN_DELETED");
         assertThat(fixture.eventCount("workitem.connection_deleted")).isZero();
+        assertReason(() -> unlink(sourceOwner, linked.resourceId(), 0), "CONNECTION_NOT_ACTIVE");
         assertThat(columns.catalog(targetOwner, target.id()).incomingAvailable()).isFalse();
         assertThat(items.find(targetOwner, targetItem.id()).id()).isEqualTo(targetItem.id());
     }
 
     @Test
     void oneHundredRowsUseTheSameEightSqlStatementsAsOneRow() {
+        link(both, targetItem.id());
+        var secondTarget = fixture.project(targetOwner, "第二目标项目");
+        var thirdTarget = fixture.project(sourceOwner, "第三目标项目");
+        fixture.member(secondTarget.id(), both);
+        fixture.member(thirdTarget.id(), both);
+        var projects = List.of(target, secondTarget, thirdTarget);
+        var owners = List.of(targetOwner, targetOwner, sourceOwner);
+        var assignees = List.of(targetOwner.userId(), both.userId(), sourceOwner.userId());
+        var targets = new ArrayList<UUID>();
+        var incomingColumns = new ArrayList<UUID>();
+        for (int i = 0; i < projects.size(); i++) {
+            targets.add(fixture.item(owners.get(i), projects.get(i), "批量目标" + i, assignees.get(i)).id());
+            incomingColumns.add(fixture.column(owners.get(i), projects.get(i), "回连", source.id()).id());
+        }
+        try (var ignored = correlation()) {
+            columns.update(new ConnectColumnCommands.Update(sourceOwner, source.id(), column.id(), 0,
+                    column.name(), projects.stream().map(Project::id).toList()));
+        }
         List<UUID> ids = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
-            var item = fixture.item(sourceOwner, source, "批量事项" + i);
+            var item = fixture.item(sourceOwner, source, "批量事项" + i, i % 2 == 0 ? sourceOwner.userId() : both.userId());
             ids.add(item.id());
+            int project = i % projects.size();
+            var incoming = fixture.item(owners.get(project), projects.get(project), "批量入站" + i, assignees.get(project));
             try (var ignored = correlation()) {
-                connections.link(new Link(both, item.id(), column.id(), targetItem.id(), UUID.randomUUID(), hash()));
+                for (UUID targetId : targets)
+                    connections.link(new Link(both, item.id(), column.id(), targetId, UUID.randomUUID(), hash()));
+                connections.link(new Link(both, incoming.id(), incomingColumns.get(project), item.id(), UUID.randomUUID(), hash()));
             }
         }
-        int one = ConnectionSqlCounter.count(() -> assertThat(connections.cells(sourceOwner, source.id(), List.of(ids.getFirst())).items()).hasSize(1));
-        int hundred = ConnectionSqlCounter.count(() -> assertThat(connections.cells(sourceOwner, source.id(), ids).items())
-                .hasSize(100).allSatisfy(cell -> assertThat(cell.outgoing()).hasSize(1)));
+        for (int i = 0; i < 52; i++) {
+            int project = i % projects.size();
+            var incoming = fixture.item(owners.get(project), projects.get(project), "窗口上限入站" + i, assignees.get(project));
+            try (var ignored = correlation()) {
+                connections.link(new Link(both, incoming.id(), incomingColumns.get(project), ids.getFirst(), UUID.randomUUID(), hash()));
+            }
+        }
+        int one = ConnectionSqlCounter.count(() -> assertThat(connections.cells(sourceOwner, source.id(), List.of(sourceItem.id())).items()).hasSize(1));
+        int mixedOne = ConnectionSqlCounter.count(() -> assertThat(connections.cells(sourceOwner, source.id(), List.of(ids.getFirst())).items())
+                .singleElement().satisfies(cell -> {
+                    assertThat(cell.outgoing().getFirst().connections()).hasSize(3);
+                    assertThat(cell.incoming()).hasSize(50);
+                    assertThat(cell.incomingTotal()).isEqualTo(53);
+                }));
+        int hundred = ConnectionSqlCounter.count(() -> {
+            var cells = connections.cells(sourceOwner, source.id(), ids).items();
+            assertThat(cells).hasSize(100).allSatisfy(cell -> {
+                assertThat(cell.outgoing()).hasSize(1);
+                assertThat(cell.outgoing().getFirst().connections()).hasSize(3);
+                assertThat(cell.incoming()).isNotEmpty();
+            });
+            var outgoing = cells.getFirst().outgoing().getFirst().connections();
+            assertThat(outgoing).extracting(value -> value.target().projectId()).containsExactlyInAnyOrderElementsOf(projects.stream().map(Project::id).toList());
+            assertThat(outgoing).extracting(value -> value.target().assignee().userId()).containsExactlyInAnyOrderElementsOf(assignees);
+            assertThat(outgoing).extracting(value -> value.target().canOpen()).containsExactlyInAnyOrder(false, false, true);
+            assertThat(cells).filteredOn(cell -> cell.workItemId().equals(ids.getFirst())).singleElement().satisfies(cell -> {
+                assertThat(cell.incoming()).hasSize(50);
+                assertThat(cell.incomingTotal()).isEqualTo(53);
+            });
+        });
         assertThat(one).isEqualTo(8);
+        assertThat(mixedOne).isEqualTo(one);
         assertThat(hundred).isEqualTo(one);
     }
 
@@ -299,6 +359,9 @@ class WorkItemConnectionIT {
     }
     private static void assertField(Runnable operation, String code) {
         assertThatThrownBy(operation::run).isInstanceOfSatisfying(ApplicationException.class,
-                error -> assertThat(error.fieldViolations()).anySatisfy(field -> assertThat(field.code()).isEqualTo(code)));
+                error -> {
+                    assertThat(error.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED);
+                    assertThat(error.fieldViolations()).anySatisfy(field -> assertThat(field.code()).isEqualTo(code));
+                });
     }
 }

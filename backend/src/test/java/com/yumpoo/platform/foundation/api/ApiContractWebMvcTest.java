@@ -199,6 +199,38 @@ class ApiContractWebMvcTest {
     }
 
     @Test
+    void safeAdditionalDetailsAreImmutableAndFlattenedWithoutChangingTheErrorEnvelope() throws Exception {
+        UUID resourceId = UUID.randomUUID();
+        var values = new java.util.LinkedHashMap<String, Object>();
+        values.put("resourceId", resourceId);
+        values.put("count", 3L);
+        var error = ApplicationException.withSafeDetails(StandardErrorCode.INVALID_STATE_TRANSITION,
+                "RESOURCE_IN_USE", values);
+        values.put("internalObject", Map.of("secret", "must not appear"));
+        var response = new MockHttpServletResponse();
+        apiErrorWriter.write(response, error, "safe-details-test");
+        var actual = objectMapper.readTree(response.getContentAsString());
+        assertThat(response.getStatus()).isEqualTo(409);
+        assertThat(actual.propertyNames()).containsExactlyInAnyOrder("code", "message", "requestId", "retryable", "fieldErrors", "details");
+        assertThat(actual.path("details").propertyNames()).containsExactlyInAnyOrder("reason", "resourceId", "count");
+        assertThat(actual.path("details").path("resourceId").asText()).isEqualTo(resourceId.toString());
+        assertThat(actual.path("details").path("count").asLong()).isEqualTo(3);
+        assertThatThrownBy(() -> error.safeDetails().put("another", "value")).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    void safeAdditionalDetailsRejectReservedKeysAndStructuredValues() {
+        for (String key : List.of("reason", "blockers", "")) {
+            assertThatThrownBy(() -> ApplicationException.withSafeDetails(StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "RESOURCE_IN_USE", Map.of(key, "unsafe"))).isInstanceOf(IllegalArgumentException.class);
+        }
+        for (Object value : List.of(Map.of("secret", "hidden"), List.of("hidden"), new Object())) {
+            assertThatThrownBy(() -> ApplicationException.withSafeDetails(StandardErrorCode.INVALID_STATE_TRANSITION,
+                    "RESOURCE_IN_USE", Map.of("value", value))).isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    @Test
     void trustedLoopbackRequestIdIsPreservedOnSuccessfulResponses() throws Exception {
         String trustedRequestId = "proxy.request-123:abc";
 

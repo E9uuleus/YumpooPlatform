@@ -76,9 +76,13 @@ final class ConnectionFixture {
     }
 
     WorkItemModels.WorkItemDetail item(CurrentActor actor, Project project, String title) {
+        return item(actor, project, title, null);
+    }
+
+    WorkItemModels.WorkItemDetail item(CurrentActor actor, Project project, String title, UUID assigneeId) {
         try (var ignored = correlation()) {
             var result = items.create(new WorkItemCommands.Create(actor, project.id(), project.contentId(), title,
-                    null, null, null, null, null, null, null, UUID.randomUUID(), hash(), DueTimeChange.unchanged()));
+                    null, assigneeId, null, null, null, null, null, UUID.randomUUID(), hash(), DueTimeChange.unchanged()));
             return json.readValue(result.result().responseJson(), WorkItemModels.WorkItemDetail.class);
         }
     }

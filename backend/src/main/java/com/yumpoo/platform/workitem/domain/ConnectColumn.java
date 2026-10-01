@@ -3,7 +3,6 @@ package com.yumpoo.platform.workitem.domain;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -47,7 +46,6 @@ public record ConnectColumn(UUID id, UUID companyId, UUID projectId, String name
         return ids.stream().distinct().sorted(Comparator.comparing(UUID::toString)).toList();
     }
 
-    public String normalizedName() { return name.toLowerCase(Locale.ROOT); }
     public boolean active() { return deletedAt == null; }
 
     public static ConnectColumn create(UUID id, UUID companyId, UUID projectId, String name,
