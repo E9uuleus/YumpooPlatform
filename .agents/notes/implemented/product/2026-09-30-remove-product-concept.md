@@ -37,3 +37,7 @@ Product 与 Project 双容器使可见性、关系页面、负责人治理和规
 跨项目协作由后续连接列能力承担；该能力未在本次实现，届时由独立决策记录拥有其权限、数据和事件契约。原 M3B Feedback、解绑反馈阻断及反馈归档 provider 规划取消，不再是待补齐的本次交付项。项目归档继续使用真实工作项来源；待审批工时来源仍需后续真实 provider，已声明来源读取失败时拒绝归档。
 
 V60 集成测试验证 V59 混合业务数据升级、全部目标清理、五类约束收紧和非目标数据及 Security Audit 保留；两类反馈附件各自阻断迁移并保留 V59 数据与版本。产品专属旧验收转为历史结构校验，当前项目生命周期、迁移、权限、前端入口与事件契约仍由回归和 CI 验证。
+
+本记录完整取代并吸收了[旧产品生命周期](../../archived/product/2026-08-20-product-lifecycle-contract.md)和[旧项目产品关系](../../archived/product/2026-08-21-product-project-relation-contract.md)的独特理由；二者作为冻结历史归档。退役工具规则由[事件契约退役决定](../process/2026-09-30-event-contract-retirement.md)拥有。
+
+部分取代并保留的决定为：[M2 退出与公开端口](../architecture/2026-08-31-m2-exit-and-m3-public-ports.md)、[项目归档治理](2026-08-21-project-lifecycle-governance-contract.md)、[Activity 投影](../architecture/2026-08-30-activity-projection-contract.md)、[项目查询与激活](2026-08-20-project-query-and-activation-contract.md)、[工作项核心](../architecture/2026-08-22-work-item-core-contract.md)、[独立讨论](../architecture/2026-08-24-work-item-update-contract.md)、[附件处理](../architecture/2026-08-25-attachment-upload-processing.md)、[原始计时](../architecture/2026-09-07-work-item-time-tracking.md)与[身份事实确认](../architecture/2026-09-26-identity-outbox-completion.md)。它们继续拥有各自仍有效的授权、并发、事实与隐私约束。

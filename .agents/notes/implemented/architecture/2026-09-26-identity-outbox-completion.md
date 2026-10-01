@@ -17,7 +17,7 @@ Status: implemented
 
 这些事实不需要再执行异步业务动作；消费者依靠现有 `OutboxConsumerExecutor` 在消费事务中保存 `identity-committed-facts-v1` 回执，保留去重和多消费者投递语义。这里不重复执行登录、会话撤销、角色变更或 Security Audit，也不宣称执行了 JSON Schema 载荷校验。`directory_sync_completed@1` 虽不再由当前代码发布，仍按历史合同完成确认；两版 `user_sessions_revoked` 都仍在发布。
 
-账号启停、离职返岗及 AppManager 可用性六类事件继续由原治理消费者维护 Product、Project 和 Company 的治理问题。它们不加入事实确认消费者，防止未来真实治理消费者缺失被空确认掩盖。Dispatcher 对未知类型、未知版本和真实消费者异常的 DEAD、重试及顺序规则保持原义。
+账号启停、离职返岗及 AppManager 可用性六类事件继续由原治理消费者维护 Project 和 Company 的治理问题；产品负责人投影由[删除产品决定](../product/2026-09-30-remove-product-concept.md)移除。它们不加入事实确认消费者，防止未来真实治理消费者缺失被空确认掩盖。Dispatcher 对未知类型、未知版本和真实消费者异常的 DEAD、重试及顺序规则保持原义。
 
 [IdentityOutboxRecoveryRunner](../../../../backend/src/main/java/com/yumpoo/platform/identityaccess/infrastructure/event/IdentityOutboxRecoveryRunner.java) 每次启动针对上述确切订阅调用 foundation 的恢复端口；SQL 由 [JdbcOutboxRepository](../../../../backend/src/main/java/com/yumpoo/platform/foundation/infrastructure/outbox/JdbcOutboxRepository.java) 持有。恢复同时要求原状态为 `DEAD`，错误三元组为 `outbox.dispatcher / NO_MATCHING_CONSUMER / ConsumerRegistryFailure`，将其置为可再次领取的 `RETRY`。不直接标记完成，不改动事件事实、尝试次数、原错误字段或已有回执；完成后仍由正常 Dispatcher 清除错误并释放同聚合后续版本。
 

@@ -8,7 +8,7 @@ Project 列表、Workspace 计数、管理员治理可见性、Owner 日常命�
 
 ## Decision
 
-Project 范围查询在数据库同时约束 company 与调用人的 ACTIVE membership，COMPANY_ADMIN 才可绕过 membership。页面行和总数复用完全相同的权限与筛选谓词，支持名称/编码大小写不敏感包含搜索、项目类型/负责人/调用人角色多选、最后修改时间起点、生命周期与 Product；组内 OR、组间 AND。默认生命周期仍是 DRAFT+ACTIVE，项目管理页显式请求 ALL，并按 name、code、id 稳定排序。Workspace `visibleProjectCount` 使用同一可见性和当前生命周期口径，不保存派生计数。
+Project 范围查询在数据库同时约束 company 与调用人的 ACTIVE membership，COMPANY_ADMIN 才可绕过 membership。页面行和总数复用完全相同的权限与筛选谓词，支持名称/编码大小写不敏感包含搜索、项目类型/负责人/调用人角色多选、最后修改时间起点与生命周期；组内 OR、组间 AND。默认生命周期仍是 DRAFT+ACTIVE，项目管理页显式请求 ALL，并按 name、code、id 稳定排序。Workspace `visibleProjectCount` 使用同一可见性和当前生命周期口径，不保存派生计数。
 
 负责人筛选选项只从调用人可见的全部生命周期 Project 中提取 distinct owner，再通过 Identity & Access 最小用户快照补充显示名。仍挂在 Project 上的离职或停用负责人保持可筛选；接口不返回其他目录资料，也不泄露不可见 Project 的负责人。摘要响应包含必填 `createdAt/updatedAt`，Workspace ID/code/name 只作为内部 MAIN 归属兼容信息。
 
@@ -28,3 +28,5 @@ PATCH 事件只记录变更字段名；激活事件和 Security Audit 只记录�
 ## Consequences
 
 所有新 Project 查询消费者必须复用相同 SQL 可见性口径；能力字段不能被当作授权凭据。模板版本一旦被 Project 固化，就需要长期保持可解释。M2-08 的归档/恢复和后续 Activity 投影必须延续强 ETag、重新鉴权与安全摘要约束。
+
+产品筛选与激活时的关联产品检查由[删除产品决定](2026-09-30-remove-product-concept.md)取消；本记录继续拥有查询可见性、模板解释、DRAFT 激活及客户名称门槛。

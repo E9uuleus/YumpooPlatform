@@ -1,6 +1,7 @@
 # Agent Note: Product–Project 关系契约
 
 Status: implemented
+Archived: 2026-10-01
 
 ## Problem
 

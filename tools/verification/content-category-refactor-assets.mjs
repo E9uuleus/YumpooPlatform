@@ -43,12 +43,19 @@ export function verifyContentCategoryRefactorAssets(root = repositoryRoot) {
   }
 }
 
-export function verifyHistoricalMilestone(milestone) {
+export function verifyHistoricalMilestone(milestone, root = repositoryRoot) {
   const normalized = milestone.toLowerCase()
-  const read = name => JSON.parse(fs.readFileSync(path.join(repositoryRoot, `evidence/${normalized}/${name}.json`), 'utf8'))
+  const read = name => JSON.parse(fs.readFileSync(path.join(root, `evidence/${normalized}/${name}.json`), 'utf8'))
   const report = read('verification-report')
   const acceptance = read('acceptance-matrix')
-  assert(report.milestone === milestone && report.status === 'PASS', `${milestone} 历史报告无效`)
+  const expectedStatus = milestone === 'M2-24' ? 'VERIFIED' : 'PASS'
+  assert(report.milestone === milestone && report.status === expectedStatus, `${milestone} 历史报告无效`)
+  if (milestone === 'M2-24') {
+    assert(report.schemaVersion === 1 && report.flywayVersion === '45'
+      && report.checks?.fullMavenGate === true && report.checks?.linuxPrCi === true
+      && report.checks?.assetGate === true && Object.values(report.checks).every(value => value === true),
+    `${milestone} 历史检查未完整成功`)
+  }
   assert(Array.isArray(acceptance.verifiedSlices) && acceptance.verifiedSlices.length > 0,
     `${milestone} 历史验收矩阵缺少已验证切片`)
 }

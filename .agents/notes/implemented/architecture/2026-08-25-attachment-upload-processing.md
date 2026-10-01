@@ -8,7 +8,7 @@ Work Item 与已发布讨论需要上传附件，但一次 HTTP 请求内完成�
 
 ## Decision
 
-V37 将 `attachment`、`attachment_scan_task` 与 `attachment_quota_usage` 作为 filestorage 独占真源。附件业务状态固定为 `UPLOADING/AVAILABLE/REJECTED/DELETED`，接收、排队、扫描和最终化只记录在隐藏的处理阶段。四种 owner 枚举一次冻结；M2-18 只接受 `WORK_ITEM` 与 `WORK_ITEM_UPDATE`，Feedback 两种 owner 由 M3B 开放。`AVAILABLE` 由数据库约束强制具备正数大小、SHA-256、探测 MIME、storage key 和可用时刻。
+V37 将 `attachment`、`attachment_scan_task` 与 `attachment_quota_usage` 作为 filestorage 独占真源。附件业务状态固定为 `UPLOADING/AVAILABLE/REJECTED/DELETED`，接收、排队、扫描和最终化只记录在隐藏的处理阶段。当前 owner 仅为 `WORK_ITEM` 与 `WORK_ITEM_UPDATE`；[删除产品决定](../product/2026-09-30-remove-product-concept.md)取消反馈 owner 规划，V60 在确认不存在反馈附件后收紧数据库约束，发现引用则整笔迁移失败。`AVAILABLE` 由数据库约束强制具备正数大小、SHA-256、探测 MIME、storage key 和可用时刻。
 
 创建意图使用持久幂等键，缺省预约 100 MiB，显式 `sizeBytes` 作为本意图的接收上限。Company 与 Project 配额行按 COMPANY → PROJECT 固定顺序锁定，默认上限分别为 100 GiB 与 10 GiB。接收使用固定 64 KiB 缓冲并同步计算 SHA-256，不持有数据库事务；同一附件通过上传租约只允许一个活动 PUT。断流清理 `.part` 并解除租约以允许复用原意图，超出固定 100 MiB 或预约量分别稳定拒绝，封存后释放预约差额。
 
@@ -43,6 +43,6 @@ V38 的 `attachment_blob` 是物理内容登记真源，但不维护易漂移的
 
 Web 必须先创建意图再 PUT Blob，并按 1/2/5 秒退避轮询最长 5 分钟。PUT 结果未知时先读取 metadata；仍可上传便复用 attachmentId 重试，否则继续轮询，不能盲目创建第二意图。Work Item 附件随详情加载，Update 附件仅在用户展开对应讨论后加载并缓存；只读或已删除 owner 不显示上传入口。`AVAILABLE` 文件名直接链接同源下载端点；删除弹窗强制理由。409/412 只刷新真源，传输结果未知则刷新确认附件仍存在后才复用原键和理由重试。
 
-备份恢复必须同时核对真实 attachment metadata、`attachment_blob`、配额、扫描任务与内容寻址文件，并在恢复后先完整对账、保持物理清理 dry-run。Feedback owner 的业务鉴权和 UI 仍由 M3B 负责；冻结枚举不表示已经支持创建。Range、在线预览、附件恢复，以及墓碑正式 blob 的保留期/legal hold/备份门禁清理由 M5-17 负责。工作项描述以同源内容地址内嵌 `AVAILABLE` 图片、详情页不再展示附件面板，见[富文本描述决定](../product/2026-09-25-work-item-rich-description.md)；下载响应头与鉴权不变。
+备份恢复必须同时核对真实 attachment metadata、`attachment_blob`、配额、扫描任务与内容寻址文件，并在恢复后先完整对账、保持物理清理 dry-run。反馈 owner 不再是延期能力；已有事件合同保留历史可解释性，当前生产者仅发布受支持的 owner。Range、在线预览、附件恢复，以及墓碑正式 blob 的保留期/legal hold/备份门禁清理由 M5-17 负责。工作项描述以同源内容地址内嵌 `AVAILABLE` 图片、详情页不再展示附件面板，见[富文本描述决定](../product/2026-09-25-work-item-rich-description.md)；下载响应头与鉴权不变。
 
 本文仅 APP_MANAGER 不获得业务读取权的历史边界由[平台角色层级决策](../security/2026-09-25-platform-role-tiers.md)部分替代：平台管理员现在包含公司管理员的业务可见性；其余投影、附件安全与审计约束保持有效。

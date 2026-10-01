@@ -11,8 +11,9 @@ import { assertWorkflowSafety } from './workflow-policy.mjs'
 import { verificationEnvironment } from './environment.mjs'
 import { checkHistory } from './history-policy.mjs'
 import { plan } from './plan.mjs'
+import { historicalMilestones } from './historical-assets.mjs'
 import { assertStageReport } from './reports.mjs'
-import { verifyContentCategoryRefactorAssets } from '../verification/content-category-refactor-assets.mjs'
+import { verifyContentCategoryRefactorAssets, verifyHistoricalMilestone } from '../verification/content-category-refactor-assets.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const workflow = () => parse(fs.readFileSync(path.join(root, '.github/workflows/m0-18-ci.yml'), 'utf8'))
@@ -84,6 +85,47 @@ test('handoff prerequisites reject stale, partial and failed stage reports', () 
     { status: 'FAIL' }, { steps: report.steps.slice(1) }, { steps: [{ id: 'backend-regression', status: 'PASS' }] },
     { completedAt: 'invalid' }]) {
     assert.throws(() => assertStageReport({ ...report, ...changed }, expected), /旧报告或不完整/u)
+  }
+})
+
+test('retired product milestones retain historical checks without requiring deleted implementations', () => {
+  const steps = plan('static')
+  assert(steps.some(step => step.id === 'historical-milestones'))
+  for (const milestone of ['M2-03', 'M2-07', 'M2-24']) {
+    assert(!steps.some(step => step.id === `${milestone.toLowerCase()}-assets`))
+    assert.equal(historicalMilestones.filter(item => item === milestone).length, 1)
+    assert.doesNotThrow(() => verifyHistoricalMilestone(milestone))
+  }
+  for (const id of ['m2-04-assets', 'm2-06-assets', 'm2-08-assets', 'm2-23-assets']) {
+    assert(steps.some(step => step.id === id))
+  }
+})
+
+test('historical validation rejects changed statuses, incomplete checks and empty acceptance', context => {
+  const directory = temporary(context)
+  for (const milestone of ['M2-03', 'M2-07', 'M2-24']) {
+    const base = `evidence/${milestone.toLowerCase()}`
+    const report = JSON.parse(fs.readFileSync(path.join(root, base, 'verification-report.json'), 'utf8'))
+    const acceptance = fs.readFileSync(path.join(root, base, 'acceptance-matrix.json'), 'utf8')
+    const check = value => {
+      write(directory, `${base}/verification-report.json`, JSON.stringify(value))
+      verifyHistoricalMilestone(milestone, directory)
+    }
+    write(directory, `${base}/acceptance-matrix.json`, acceptance)
+    assert.doesNotThrow(() => check(report))
+    for (const status of ['FAIL', 'BLOCKED_ENVIRONMENT', 'SKIPPED', undefined,
+      milestone === 'M2-24' ? 'PASS' : 'VERIFIED']) {
+      assert.throws(() => check({ ...report, status }), /历史报告无效/u)
+    }
+    assert.throws(() => check({ ...report, milestone: 'M2-00' }), /历史报告无效/u)
+    if (milestone === 'M2-24') {
+      for (const changes of [{ checks: {} }, { checks: { ...report.checks, linuxPrCi: false } },
+        { checks: { ...report.checks, productHttpContract: false } }, { flywayVersion: '60' }]) {
+        assert.throws(() => check({ ...report, ...changes }), /历史检查未完整成功/u)
+      }
+    }
+    write(directory, `${base}/acceptance-matrix.json`, JSON.stringify({ verifiedSlices: [] }))
+    assert.throws(() => check(report), /缺少已验证切片/u)
   }
 })
 

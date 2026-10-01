@@ -1,6 +1,8 @@
 {
   "version": 1,
   "files": {
-    "product/2026-08-20-workspace-lifecycle-contract.md": "sha256:10914b6657f6d451d747a76bb32d3c936ee9706cd5a5fc5d79588b6510b6fc31"
+    "product/2026-08-20-product-lifecycle-contract.md": "sha256:3c51aec0230c99a0e226afc4cc61c8b3281c2cfd4d62ef761ab9408ad4e734d3",
+    "product/2026-08-20-workspace-lifecycle-contract.md": "sha256:10914b6657f6d451d747a76bb32d3c936ee9706cd5a5fc5d79588b6510b6fc31",
+    "product/2026-08-21-product-project-relation-contract.md": "sha256:4a376d496d8a24272211659d43112860bcbfb9d00dde21a74e0c27bf2e2fc7f9"
   }
 }
