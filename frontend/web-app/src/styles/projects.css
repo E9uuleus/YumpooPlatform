@@ -261,6 +261,15 @@
   color: var(--yp-text-primary);
 }
 
+/* el-table 会把列宽写成固定像素，auto 轨道会被其撑宽并锁定；限定为容器宽度，表格在自身卡片内横向滚动。 */
+.project-catalog {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.project-catalog > * {
+  min-width: 0;
+}
+
 .project-catalog::before {
   display: block;
   height: 180px;
