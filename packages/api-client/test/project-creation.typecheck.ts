@@ -1,23 +1,13 @@
 import type { CreateProjectRequest } from '../src/generated/apis/ProjectsApi.js'
-import { ProjectTemplateKey } from '../src/generated/models/ProjectTemplateKey.js'
-import { ProjectType } from '../src/generated/models/ProjectType.js'
 
 const createProject: CreateProjectRequest = {
   xXSRFTOKEN: 'csrf-token',
   idempotencyKey: '24000000-0000-4000-8000-000000000001',
-  projectCreateRequest: {
-    code: 'M2_04',
-    name: 'M2-04 Project',
-    description: null,
-    projectType: ProjectType.ProductDevelopment,
-    ownerUserId: '24000000-0000-4000-8000-000000000003',
-    templateKey: ProjectTemplateKey.Rnd,
-    templateVersion: 1,
-    customerName: 'Yumpoo',
-    customerReference: null,
-    deliverySite: null,
-    contactNote: null,
-  },
+  projectCreateRequest: { name: '统一项目', description: null },
 }
-
+// @ts-expect-error 编码由服务端生成，不允许客户端提交。
+createProject.projectCreateRequest.code = 'P001'
+// @ts-expect-error 创建命令必须携带幂等键。
+const missingKey: CreateProjectRequest = { xXSRFTOKEN: 'csrf', projectCreateRequest: { name: '项目' } }
 void createProject
+void missingKey

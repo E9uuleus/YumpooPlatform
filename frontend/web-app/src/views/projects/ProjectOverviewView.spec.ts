@@ -4,8 +4,8 @@ import {
   WorkItemLabelColorToken,
   ProjectActorAccess,
   ProjectLifecycle,
-  ProjectTemplateKey,
-  ProjectType,
+
+
   WorkItemStatusCategory,
   type ProjectContentCatalog,
   type ProjectDetail,
@@ -83,17 +83,17 @@ function project(id: string): ProjectDetail {
     id,
     workspaceId: 'workspace-1', workspaceCode: 'MAIN', workspaceName: '主工作空间',
     code: id.toUpperCase(), name: `项目 ${id}`, description: null,
-    projectType: ProjectType.ProductDevelopment, lifecycle: ProjectLifecycle.Active,
-    ownerUserId: 'owner-1', ownerDisplayName: '负责人', templateKey: ProjectTemplateKey.Rnd,
-    templateVersion: 1, customerName: null, customerReference: null, deliverySite: null,
-    contactNote: null, actorAccess: ProjectActorAccess.Owner,
+     lifecycle: ProjectLifecycle.Active,
+    ownerUserId: 'owner-1', ownerDisplayName: '负责人',
+
+     actorAccess: ProjectActorAccess.Owner,
     capabilities: {
-      canUpdateSettings: true, canActivate: false, canManageMembers: true,
+      canUpdateSettings: true,  canManageMembers: true,
       canReassignOwner: true, canArchive: true,
       canRestore: false, canMoveWorkspace: false, canOverrideArchive: false,
     },
     rowVersion: 1, etag: '"1"', createdAt: new Date('2026-08-25T00:00:00Z'),
-    updatedAt: new Date('2026-08-25T00:00:00Z'), activatedAt: null, archivedAt: null,
+    updatedAt: new Date('2026-08-25T00:00:00Z'),  archivedAt: null,
   }
 }
 

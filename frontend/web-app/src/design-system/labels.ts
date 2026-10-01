@@ -1,8 +1,4 @@
 const labels: Record<string, string> = {
-  PRODUCT_DEVELOPMENT: '产品研发',
-  PRE_SALES: '售前',
-  IMPLEMENTATION: '实施',
-  HYPERCARE: '运维保障',
   OWNER: '负责人',
   MEMBER: '成员',
   COMPANY_MEMBER: '普通员工',

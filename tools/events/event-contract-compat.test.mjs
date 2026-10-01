@@ -288,27 +288,11 @@ test('project_created v1 退役且 v2 保留时允许源码字面量，全部版
   const eventsRoot = path.join(directory, 'contracts/events')
   const catalogFile = path.join(eventsRoot, 'catalog.yaml')
   const catalog = parseYaml(fs.readFileSync(catalogFile, 'utf8'))
-  const previous = catalog.events.find(event => event.eventType === 'catalog.project_created')
-  const next = {
-    ...previous, eventVersion: 2,
-    schema: previous.schema.replace('-v1', '-v2'),
-    validExamples: previous.validExamples.map(file => file.replace('-v1', '-v2')),
-    invalidExamples: previous.invalidExamples.map(file => file.replace('-v1', '-v2')),
-  }
-  for (const relative of [previous.schema, ...previous.validExamples, ...previous.invalidExamples]) {
-    const source = fs.readFileSync(path.join(eventsRoot, relative), 'utf8')
-      .replaceAll('-v1', '-v2').replaceAll('"eventVersion": 1', '"eventVersion": 2')
-      .replaceAll('"const": 1', '"const": 2')
-    fs.writeFileSync(path.join(eventsRoot, relative.replace('-v1', '-v2')), source)
-    fs.unlinkSync(path.join(eventsRoot, relative))
-  }
-  catalog.events = catalog.events.filter(event => event !== previous)
-  catalog.events.push(next)
-  fs.writeFileSync(catalogFile, stringifyYaml(catalog))
+  const next = catalog.events.find(event => event.eventType === 'catalog.project_created' && event.eventVersion === 2)
+  assert(next, '测试基线必须包含 project_created v2')
   const manifestFile = path.join(directory, 'tools/events/retired-event-contracts.json')
   const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'))
-  manifest.retired.push({ ...retiredEntry, eventType: 'catalog.project_created' })
-  fs.writeFileSync(manifestFile, JSON.stringify(manifest))
+  assert(manifest.retired.some(event => event.eventType === 'catalog.project_created' && event.eventVersion === 1))
   fs.writeFileSync(path.join(directory, 'backend/src/main/java/Producer.java'),
     'new EventDraft("catalog.project_created", 2);')
   assert.doesNotThrow(() => loadCurrentBundle(directory))

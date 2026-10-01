@@ -6,7 +6,7 @@ import {
   ProjectActorAccess,
   ProjectLifecycle,
   ProjectLifecycleFilter,
-  ProjectType,
+
   type CurrentAuthentication,
   type ProjectPage,
   type ProjectSummary,
@@ -33,7 +33,7 @@ vi.mock('../api/client', () => ({ projectsApi: { listProjects: api.listProjects 
 
 const capabilities = {
   canUpdateSettings: true,
-  canActivate: false,
+
   canManageMembers: true,
   canReassignOwner: true,
   canArchive: true,
@@ -50,7 +50,7 @@ function project(index: number): ProjectSummary {
     workspaceName: '主工作空间',
     code: `YP_${String(index).padStart(2, '0')}`,
     name: `项目 ${index}`,
-    projectType: ProjectType.ProductDevelopment,
+
     lifecycle: ProjectLifecycle.Active,
     ownerUserId: 'owner-1',
     ownerDisplayName: '负责人甲',

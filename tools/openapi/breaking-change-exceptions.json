@@ -49,6 +49,13 @@
       "newSha256": "3c3d102f54caf4ec4252b7e4991bed716e8f9d8c15cdc33ec3273f6437320648",
       "reason": "统一项目模型取消产品聚合、项目产品关系与反馈占位，删除相关 API、能力字段和枚举；前后端与生成客户端配套升级。",
       "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
+    },
+    {
+      "id": "2026-09-30-unified-project-model",
+      "oldSha256": "3c3d102f54caf4ec4252b7e4991bed716e8f9d8c15cdc33ec3273f6437320648",
+      "newSha256": "dc6ac1ee9523e97e5a5e6e738ef13b7b99eb6078a9ca1e8d6ddba849176a00b9",
+      "reason": "统一项目模型删除类型、模板、客户信息与 DRAFT/激活接口；创建请求仅名称和描述，服务端生成编码并以创建人为负责人。前后端、事件和生成客户端配套升级。",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-unified-project-model.md"
     }
   ]
 }

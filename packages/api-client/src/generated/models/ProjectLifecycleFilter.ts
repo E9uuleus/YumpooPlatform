@@ -17,7 +17,6 @@
  * @enum {string}
  */
 export enum ProjectLifecycleFilter {
-    Draft = 'DRAFT',
     Active = 'ACTIVE',
     Archived = 'ARCHIVED',
     All = 'ALL',

@@ -1,4 +1,4 @@
-import type { ProjectActorAccess, ProjectLifecycle, ProjectType } from '@yumpoo/api-client'
+import { ProjectLifecycle, type ProjectActorAccess } from '@yumpoo/api-client'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const PROJECT_RECENTS_EVENT = 'yumpoo:project-recents-changed'
@@ -7,7 +7,6 @@ export interface ProjectRecentSource {
   id: string
   code: string
   name: string
-  projectType: ProjectType
   lifecycle: ProjectLifecycle
   ownerUserId: string
   ownerDisplayName: string
@@ -33,7 +32,6 @@ function isRecentProject(value: unknown): value is ProjectRecentEntry {
   return typeof candidate.id === 'string'
     && typeof candidate.code === 'string'
     && typeof candidate.name === 'string'
-    && typeof candidate.projectType === 'string'
     && typeof candidate.lifecycle === 'string'
     && typeof candidate.ownerUserId === 'string'
     && typeof candidate.ownerDisplayName === 'string'
@@ -55,7 +53,10 @@ function read(scope: string | undefined): ProjectRecentEntry[] {
   if (!scope || typeof window === 'undefined') return []
   try {
     const stored = JSON.parse(window.localStorage.getItem(storageKey(scope)) ?? '[]') as unknown
-    return Array.isArray(stored) ? ordered(stored.filter(isRecentProject)) : []
+    return Array.isArray(stored) ? ordered(stored.filter(isRecentProject).map(item => ({
+      ...item,
+      lifecycle: item.lifecycle === ProjectLifecycle.Archived ? ProjectLifecycle.Archived : ProjectLifecycle.Active,
+    }))) : []
   } catch {
     return []
   }
@@ -91,7 +92,6 @@ export function useProjectRecents(scope: () => string | undefined) {
         id: project.id,
         code: project.code,
         name: project.name,
-        projectType: project.projectType,
         lifecycle: project.lifecycle,
         ownerUserId: project.ownerUserId,
         ownerDisplayName: project.ownerDisplayName,

@@ -29,7 +29,6 @@ import type {
   ProjectOwnerOption,
   ProjectOwnerReassignmentRequest,
   ProjectPage,
-  ProjectType,
   ProjectUpdateRequest,
   ProjectWorkspaceMoveRequest,
 } from '../models/index';
@@ -64,20 +63,11 @@ import {
     ProjectOwnerReassignmentRequestToJSON,
     ProjectPageFromJSON,
     ProjectPageToJSON,
-    ProjectTypeFromJSON,
-    ProjectTypeToJSON,
     ProjectUpdateRequestFromJSON,
     ProjectUpdateRequestToJSON,
     ProjectWorkspaceMoveRequestFromJSON,
     ProjectWorkspaceMoveRequestToJSON,
 } from '../models/index';
-
-export interface ActivateProjectRequest {
-    projectId: string;
-    xXSRFTOKEN: string;
-    ifMatch: string;
-    idempotencyKey: string;
-}
 
 export interface AddProjectMemberRequest {
     projectId: string;
@@ -120,10 +110,7 @@ export interface ListProjectMembersRequest {
 }
 
 export interface ListProjectsRequest {
-    workspaceId?: string;
-    projectType?: ProjectType;
     query?: string;
-    projectTypes?: Array<ProjectType>;
     ownerUserIds?: Array<string>;
     actorAccesses?: Array<ProjectActorAccess>;
     updatedSince?: Date;
@@ -175,78 +162,6 @@ export interface UpdateProjectRequest {
  *
  */
 export class ProjectsApi extends runtime.BaseAPI {
-
-    /**
-     * 锁内重验 Owner、模板版本、Content provenance 及客户字段后执行 DRAFT 到 ACTIVE。
-     * Owner 原子激活 DRAFT Project
-     */
-    async activateProjectRaw(requestParameters: ActivateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
-        if (requestParameters['projectId'] == null) {
-            throw new runtime.RequiredError(
-                'projectId',
-                'Required parameter "projectId" was null or undefined when calling activateProject().'
-            );
-        }
-
-        if (requestParameters['xXSRFTOKEN'] == null) {
-            throw new runtime.RequiredError(
-                'xXSRFTOKEN',
-                'Required parameter "xXSRFTOKEN" was null or undefined when calling activateProject().'
-            );
-        }
-
-        if (requestParameters['ifMatch'] == null) {
-            throw new runtime.RequiredError(
-                'ifMatch',
-                'Required parameter "ifMatch" was null or undefined when calling activateProject().'
-            );
-        }
-
-        if (requestParameters['idempotencyKey'] == null) {
-            throw new runtime.RequiredError(
-                'idempotencyKey',
-                'Required parameter "idempotencyKey" was null or undefined when calling activateProject().'
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-        if (requestParameters['xXSRFTOKEN'] != null) {
-            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
-        }
-
-        if (requestParameters['ifMatch'] != null) {
-            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
-        }
-
-        if (requestParameters['idempotencyKey'] != null) {
-            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
-        }
-
-
-        let urlPath = `/projects/{projectId}/activate`;
-        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
-
-        const response = await this.request({
-            path: urlPath,
-            method: 'POST',
-            headers: headerParameters,
-            query: queryParameters,
-        }, initOverrides);
-
-        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectFromJSON(jsonValue));
-    }
-
-    /**
-     * 锁内重验 Owner、模板版本、Content provenance 及客户字段后执行 DRAFT 到 ACTIVE。
-     * Owner 原子激活 DRAFT Project
-     */
-    async activateProject(requestParameters: ActivateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
-        const response = await this.activateProjectRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
 
     /**
      * 加入或重激活 Project 成员
@@ -394,8 +309,8 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 同一事务创建 Project、ACTIVE owner membership 和模板定义的全部初始 Content。
-     * 原子创建 DRAFT Project
+     * 任意 ACTIVE + ENABLED 成员创建项目并成为负责人。同一事务生成编码、创建项目与成员关系，初始化内置默认类别和标签。
+     * 原子创建 ACTIVE Project
      */
     async createProjectRaw(requestParameters: CreateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
         if (requestParameters['xXSRFTOKEN'] == null) {
@@ -448,8 +363,8 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 同一事务创建 Project、ACTIVE owner membership 和模板定义的全部初始 Content。
-     * 原子创建 DRAFT Project
+     * 任意 ACTIVE + ENABLED 成员创建项目并成为负责人。同一事务生成编码、创建项目与成员关系，初始化内置默认类别和标签。
+     * 原子创建 ACTIVE Project
      */
     async createProject(requestParameters: CreateProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
         const response = await this.createProjectRaw(requestParameters, initOverrides);
@@ -634,26 +549,14 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * lifecycle 省略时返回 DRAFT 与 ACTIVE；分页和总数使用相同权限及筛选谓词。
+     * lifecycle 省略时返回全部可见项目（ALL）；分页和总数使用相同权限及筛选谓词。
      * 查询调用人可见的 Project
      */
     async listProjectsRaw(requestParameters: ListProjectsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectPage>> {
         const queryParameters: any = {};
 
-        if (requestParameters['workspaceId'] != null) {
-            queryParameters['workspaceId'] = requestParameters['workspaceId'];
-        }
-
-        if (requestParameters['projectType'] != null) {
-            queryParameters['projectType'] = requestParameters['projectType'];
-        }
-
         if (requestParameters['query'] != null) {
             queryParameters['query'] = requestParameters['query'];
-        }
-
-        if (requestParameters['projectTypes'] != null) {
-            queryParameters['projectTypes'] = requestParameters['projectTypes'];
         }
 
         if (requestParameters['ownerUserIds'] != null) {
@@ -696,7 +599,7 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * lifecycle 省略时返回 DRAFT 与 ACTIVE；分页和总数使用相同权限及筛选谓词。
+     * lifecycle 省略时返回全部可见项目（ALL）；分页和总数使用相同权限及筛选谓词。
      * 查询调用人可见的 Project
      */
     async listProjects(requestParameters: ListProjectsRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectPage> {
@@ -950,7 +853,7 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 锁内重验 Owner、ACTIVE membership、用户状态、模板可解释性和 ACTIVE Workspace。
+     * 锁内重验 Owner、ACTIVE membership、用户状态和 ACTIVE Workspace。
      * CompanyAdmin 恢复 ARCHIVED Project
      */
     async restoreProjectRaw(requestParameters: RestoreProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
@@ -1013,7 +916,7 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 锁内重验 Owner、ACTIVE membership、用户状态、模板可解释性和 ACTIVE Workspace。
+     * 锁内重验 Owner、ACTIVE membership、用户状态和 ACTIVE Workspace。
      * CompanyAdmin 恢复 ARCHIVED Project
      */
     async restoreProject(requestParameters: RestoreProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {

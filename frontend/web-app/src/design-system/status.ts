@@ -24,8 +24,7 @@ const statusMappings: Record<StatusDomain, Record<string, StatusPresentation>> =
     ERROR: { label: 'ERROR', tone: 'red' }, WARN: { label: 'WARN', tone: 'yellow' }, INFO: { label: 'INFO', tone: 'blue' }, DEBUG: { label: 'DEBUG', tone: 'gray' }, TRACE: { label: 'TRACE', tone: 'gray' },
   },
   'project-lifecycle': {
-    DRAFT: { label: '草稿', tone: 'gray' },
-    ACTIVE: { label: '活跃', tone: 'blue' },
+    ACTIVE: { label: '进行中', tone: 'blue' },
     ARCHIVED: { label: '已归档', tone: 'gray' },
   },
   'project-membership': {

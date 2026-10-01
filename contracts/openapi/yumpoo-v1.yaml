@@ -26,14 +26,10 @@ tags:
     description: 身份治理快照、平台角色与账号状态管理。
   - name: IdentityAdministration
     description: 公司、企微配置状态、通讯录同步运行与成员目录只读管理。
-  - name: ProjectTemplates
-    description: 固定 Project 模板、Content blueprint 与工作流版本目录。
-  - name: ProjectTemplateAdministration
-    description: COMPANY_ADMIN 对固定模板版本执行发布与停用治理。
   - name: Workspaces
     description: Company 下只承担导航归类、不形成授权边界的 Workspace 生命周期。
   - name: Projects
-    description: Company 下的 Project 原子创建、模板固化与初始协作结构。
+    description: Company 下的统一项目模型、原子创建与内置默认协作结构。
   - name: Contents
     description: Project 下固定工作项类型容器的目录、配置与归档生命周期。
   - name: WorkItems
@@ -1572,20 +1568,13 @@ paths:
 
   /projects:
     get:
-      tags: [Projects]
+      tags: [ Projects ]
       operationId: listProjects
       summary: 查询调用人可见的 Project
-      description: lifecycle 省略时返回 DRAFT 与 ACTIVE；分页和总数使用相同权限及筛选谓词。
-      security: [{ sessionCookie: [] }]
+      description: lifecycle 省略时返回全部可见项目（ALL）；分页和总数使用相同权限及筛选谓词。
+      security: [ { sessionCookie: [] } ]
       parameters:
-        - { name: workspaceId, in: query, deprecated: true, schema: { $ref: '#/components/schemas/Uuid' } }
-        - { name: projectType, in: query, deprecated: true, schema: { $ref: '#/components/schemas/ProjectType' } }
         - { name: query, in: query, schema: { type: string, maxLength: 80 } }
-        - name: projectTypes
-          in: query
-          style: form
-          explode: true
-          schema: { type: array, items: { $ref: '#/components/schemas/ProjectType' } }
         - name: ownerUserIds
           in: query
           style: form
@@ -1597,9 +1586,17 @@ paths:
           explode: true
           schema: { type: array, items: { $ref: '#/components/schemas/ProjectActorAccess' } }
         - { name: updatedSince, in: query, schema: { type: string, format: date-time } }
-        - { name: lifecycle, in: query, schema: { $ref: '#/components/schemas/ProjectLifecycleFilter' } }
+        - {
+            name: lifecycle,
+            in: query,
+            schema: { $ref: '#/components/schemas/ProjectLifecycleFilter' }
+          }
         - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
-        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - {
+            name: size,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+          }
       responses:
         '200':
           description: 按 name、code、id 稳定排序的权限过滤分页。
@@ -1607,11 +1604,11 @@ paths:
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
     post:
-      tags: [Projects]
+      tags: [ Projects ]
       operationId: createProject
-      summary: 原子创建 DRAFT Project
-      description: 同一事务创建 Project、ACTIVE owner membership 和模板定义的全部初始 Content。
-      security: [{ sessionCookie: [] }]
+      summary: 原子创建 ACTIVE Project
+      description: 任意 ACTIVE + ENABLED 成员创建项目并成为负责人。同一事务生成编码、创建项目与成员关系，初始化内置默认类别和标签。
+      security: [ { sessionCookie: [] } ]
       parameters:
         - $ref: '#/components/parameters/XsrfToken'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1694,29 +1691,6 @@ paths:
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
-  /projects/{projectId}/activate:
-    post:
-      tags: [Projects]
-      operationId: activateProject
-      summary: Owner 原子激活 DRAFT Project
-      description: 锁内重验 Owner、模板版本、Content provenance 及客户字段后执行 DRAFT 到 ACTIVE。
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - $ref: '#/components/parameters/ProjectId'
-        - $ref: '#/components/parameters/XsrfToken'
-        - $ref: '#/components/parameters/IfMatch'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '200': { $ref: '#/components/responses/ProjectChanged' }
-        '400': { $ref: '#/components/responses/MalformedRequest' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '412': { $ref: '#/components/responses/VersionConflict' }
-        '422': { $ref: '#/components/responses/ValidationFailed' }
-        '428': { $ref: '#/components/responses/PreconditionRequired' }
-        '500': { $ref: '#/components/responses/InternalError' }
 
   /projects/{projectId}/archive:
     post:
@@ -1746,7 +1720,7 @@ paths:
       tags: [Projects]
       operationId: restoreProject
       summary: CompanyAdmin 恢复 ARCHIVED Project
-      description: 锁内重验 Owner、ACTIVE membership、用户状态、模板可解释性和 ACTIVE Workspace。
+      description: 锁内重验 Owner、ACTIVE membership、用户状态和 ACTIVE Workspace。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -3320,92 +3294,9 @@ paths:
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
-  /project-templates:
-    get:
-      tags: [ProjectTemplates]
-      operationId: listProjectTemplates
-      summary: 查询已发布的固定 Project 模板版本
-      security: [{ sessionCookie: [] }]
-      responses:
-        '200':
-          description: 当前可用于新 Project 的全部 PUBLISHED 模板版本。
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ProjectTemplateList' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
 
-  /admin/project-templates/{templateKey}/versions/{version}:
-    get:
-      tags: [ProjectTemplateAdministration]
-      operationId: getProjectTemplateVersion
-      summary: 查询任意状态的模板版本治理详情
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - $ref: '#/components/parameters/TemplateKey'
-        - $ref: '#/components/parameters/TemplateVersion'
-      responses:
-        '200':
-          description: 模板版本完整详情。
-          headers:
-            ETag: { $ref: '#/components/headers/ETag' }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ProjectTemplateVersion' }
-        '400': { $ref: '#/components/responses/MalformedRequest' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
 
-  /admin/project-templates/{templateKey}/versions/{version}/publish:
-    post:
-      tags: [ProjectTemplateAdministration]
-      operationId: publishProjectTemplateVersion
-      summary: 发布 DRAFT 模板版本
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - $ref: '#/components/parameters/TemplateKey'
-        - $ref: '#/components/parameters/TemplateVersion'
-        - $ref: '#/components/parameters/XsrfToken'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/IfMatch'
-      requestBody: { $ref: '#/components/requestBodies/GovernanceReason' }
-      responses:
-        '200': { $ref: '#/components/responses/ProjectTemplateChanged' }
-        '400': { $ref: '#/components/responses/MalformedRequest' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '412': { $ref: '#/components/responses/VersionConflict' }
-        '422': { $ref: '#/components/responses/ValidationFailed' }
-        '428': { $ref: '#/components/responses/PreconditionRequired' }
-        '500': { $ref: '#/components/responses/InternalError' }
 
-  /admin/project-templates/{templateKey}/versions/{version}/retire:
-    post:
-      tags: [ProjectTemplateAdministration]
-      operationId: retireProjectTemplateVersion
-      summary: 停用 PUBLISHED 模板版本
-      security: [{ sessionCookie: [] }]
-      parameters:
-        - $ref: '#/components/parameters/TemplateKey'
-        - $ref: '#/components/parameters/TemplateVersion'
-        - $ref: '#/components/parameters/XsrfToken'
-        - $ref: '#/components/parameters/IdempotencyKey'
-        - $ref: '#/components/parameters/IfMatch'
-      requestBody: { $ref: '#/components/requestBodies/GovernanceReason' }
-      responses:
-        '200': { $ref: '#/components/responses/ProjectTemplateChanged' }
-        '400': { $ref: '#/components/responses/MalformedRequest' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/ResourceNotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '412': { $ref: '#/components/responses/VersionConflict' }
-        '422': { $ref: '#/components/responses/ValidationFailed' }
-        '428': { $ref: '#/components/responses/PreconditionRequired' }
-        '500': { $ref: '#/components/responses/InternalError' }
 
   /attachments:
     post:
@@ -6353,21 +6244,21 @@ components:
           deprecated: true
           description: v1 兼容字段；MAIN 的 sortOrder 永远保持 0。
 
-    ProjectTemplateKey:
-      type: string
-      enum: [RND, PRE_SALES, IMPLEMENTATION, HYPERCARE]
 
-    ProjectType:
-      type: string
-      enum: [PRODUCT_DEVELOPMENT, PRE_SALES, IMPLEMENTATION, HYPERCARE]
 
     ProjectLifecycle:
       type: string
-      enum: [DRAFT, ACTIVE, ARCHIVED]
+      enum:
+        - ACTIVE
+        - ARCHIVED
 
     ProjectLifecycleFilter:
       type: string
-      enum: [DRAFT, ACTIVE, ARCHIVED, ALL]
+      enum:
+        - ACTIVE
+        - ARCHIVED
+        - ALL
+      default: ALL
 
     ProjectActorAccess:
       type: string
@@ -6376,11 +6267,18 @@ components:
     ProjectCapabilities:
       type: object
       additionalProperties: false
-      required: [canUpdateSettings, canActivate, canManageMembers, canReassignOwner,
-        canArchive, canRestore, canMoveWorkspace, canOverrideArchive]
+      required:
+        [
+          canUpdateSettings,
+          canManageMembers,
+          canReassignOwner,
+          canArchive,
+          canRestore,
+          canMoveWorkspace,
+          canOverrideArchive
+        ]
       properties:
         canUpdateSettings: { type: boolean, readOnly: true }
-        canActivate: { type: boolean, readOnly: true }
         canManageMembers: { type: boolean, readOnly: true }
         canReassignOwner: { type: boolean, readOnly: true }
         canArchive: { type: boolean, readOnly: true }
@@ -6470,15 +6368,8 @@ components:
         - code
         - name
         - description
-        - projectType
         - lifecycle
         - ownerUserId
-        - templateKey
-        - templateVersion
-        - customerName
-        - customerReference
-        - deliverySite
-        - contactNote
         - rowVersion
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
@@ -6490,59 +6381,53 @@ components:
           pattern: '^[A-Z][A-Z0-9_]{1,31}$'
         name: { type: string, minLength: 1, maxLength: 80 }
         description: { type: string, maxLength: 500, nullable: true }
-        projectType: { $ref: '#/components/schemas/ProjectType' }
         lifecycle: { $ref: '#/components/schemas/ProjectLifecycle' }
         ownerUserId: { $ref: '#/components/schemas/Uuid' }
-        templateKey: { $ref: '#/components/schemas/ProjectTemplateKey' }
-        templateVersion: { type: integer, format: int32, minimum: 1 }
-        customerName: { type: string, maxLength: 160, nullable: true }
-        customerReference: { type: string, maxLength: 80, nullable: true }
-        deliverySite: { type: string, maxLength: 160, nullable: true }
-        contactNote: { type: string, maxLength: 500, nullable: true }
         rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
 
     ProjectCreateRequest:
       type: object
       additionalProperties: false
       required:
-        - code
         - name
-        - projectType
-        - ownerUserId
-        - templateKey
-        - templateVersion
       properties:
-        workspaceId: { $ref: '#/components/schemas/Uuid' }
-        code:
-          type: string
-          minLength: 2
-          maxLength: 32
-          pattern: '^[A-Z][A-Z0-9_]{1,31}$'
         name: { type: string, minLength: 1, maxLength: 80 }
         description: { type: string, maxLength: 500, nullable: true }
-        projectType: { $ref: '#/components/schemas/ProjectType' }
-        ownerUserId: { $ref: '#/components/schemas/Uuid' }
-        templateKey: { $ref: '#/components/schemas/ProjectTemplateKey' }
-        templateVersion: { type: integer, format: int32, minimum: 1 }
-        customerName: { type: string, maxLength: 160, nullable: true }
-        customerReference: { type: string, maxLength: 80, nullable: true }
-        deliverySite: { type: string, maxLength: 160, nullable: true }
-        contactNote: { type: string, maxLength: 500, nullable: true }
 
     ProjectSummary:
       type: object
       additionalProperties: false
-      required: [id, workspaceId, workspaceCode, workspaceName, code, name, projectType,
-        lifecycle, ownerUserId, ownerDisplayName, actorAccess, capabilities, rowVersion, etag,
-        createdAt, updatedAt]
+      required:
+        [
+          id,
+          workspaceId,
+          workspaceCode,
+          workspaceName,
+          code,
+          name,
+          lifecycle,
+          ownerUserId,
+          ownerDisplayName,
+          actorAccess,
+          capabilities,
+          rowVersion,
+          etag,
+          createdAt,
+          updatedAt
+        ]
       properties:
         id: { $ref: '#/components/schemas/Uuid' }
         workspaceId: { $ref: '#/components/schemas/Uuid' }
         workspaceCode: { type: string, minLength: 2, maxLength: 32 }
         workspaceName: { type: string, minLength: 1, maxLength: 80 }
-        code: { type: string, minLength: 2, maxLength: 32, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        code:
+          {
+            type: string,
+            minLength: 2,
+            maxLength: 32,
+            pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+          }
         name: { type: string, minLength: 1, maxLength: 80 }
-        projectType: { $ref: '#/components/schemas/ProjectType' }
         lifecycle: { $ref: '#/components/schemas/ProjectLifecycle' }
         ownerUserId: { $ref: '#/components/schemas/Uuid' }
         ownerDisplayName: { type: string, minLength: 1, maxLength: 200 }
@@ -6577,8 +6462,18 @@ components:
         - $ref: '#/components/schemas/Project'
         - type: object
           additionalProperties: false
-          required: [workspaceCode, workspaceName, ownerDisplayName, actorAccess, capabilities,
-            etag, createdAt, updatedAt, activatedAt, archivedAt]
+          required:
+            [
+              workspaceCode,
+              workspaceName,
+              ownerDisplayName,
+              actorAccess,
+              capabilities,
+              etag,
+              createdAt,
+              updatedAt,
+              archivedAt
+            ]
           properties:
             workspaceCode: { type: string, minLength: 2, maxLength: 32 }
             workspaceName: { type: string, minLength: 1, maxLength: 80 }
@@ -6588,20 +6483,15 @@ components:
             etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
             createdAt: { type: string, format: date-time, readOnly: true }
             updatedAt: { type: string, format: date-time, readOnly: true }
-            activatedAt: { type: string, format: date-time, nullable: true, readOnly: true }
             archivedAt: { type: string, format: date-time, nullable: true, readOnly: true }
 
     ProjectUpdateRequest:
       type: object
       additionalProperties: false
-      required: [name, description, customerName, customerReference, deliverySite, contactNote]
+      required: [ name, description ]
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
         description: { type: string, maxLength: 500, nullable: true }
-        customerName: { type: string, maxLength: 160, nullable: true }
-        customerReference: { type: string, maxLength: 80, nullable: true }
-        deliverySite: { type: string, maxLength: 160, nullable: true }
-        contactNote: { type: string, maxLength: 500, nullable: true }
 
     ProjectMembershipStatus:
       type: string
@@ -7452,99 +7342,16 @@ components:
         active: { type: boolean, nullable: true }
         sortOrder: { type: integer, format: int32, minimum: 1, nullable: true }
 
-    ProjectTemplateVersionStatus:
-      type: string
-      enum: [DRAFT, PUBLISHED, RETIRED]
 
-    WorkflowStatusCategory:
-      type: string
-      enum: [TODO, IN_PROGRESS, DONE, CANCELED]
 
     WorkflowRequiredPermission:
       type: string
       enum: [MEMBER]
 
-    ProjectTemplateContentBlueprint:
-      type: object
-      additionalProperties: false
-      required: [contentCode, displayName, colorToken, sortOrder]
-      properties:
-        contentCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
-        displayName: { type: string, minLength: 1, maxLength: 80 }
-        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
-        sortOrder: { type: integer, format: int32, minimum: 1 }
 
-    WorkflowStatusDefinition:
-      type: object
-      additionalProperties: false
-      required: [statusCode, displayName, statusCategory, sortOrder, initial, terminal]
-      properties:
-        statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
-        displayName: { type: string, minLength: 1, maxLength: 80 }
-        statusCategory: { $ref: '#/components/schemas/WorkflowStatusCategory' }
-        sortOrder: { type: integer, format: int32, minimum: 1 }
-        initial: { type: boolean }
-        terminal: { type: boolean }
 
-    WorkflowTransitionDefinition:
-      type: object
-      additionalProperties: false
-      required: [fromStatus, toStatus, requiredPermission, requiresResolution]
-      properties:
-        fromStatus: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
-        toStatus: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
-        requiredPermission: { $ref: '#/components/schemas/WorkflowRequiredPermission' }
-        requiresResolution: { type: boolean }
 
-    ProjectTemplateVersion:
-      type: object
-      additionalProperties: false
-      required:
-        - templateVersionId
-        - templateKey
-        - version
-        - versionCode
-        - projectType
-        - displayName
-        - lifecycleStatus
-        - rowVersion
-        - publishedAt
-        - retiredAt
-        - contentBlueprints
-        - statuses
-        - transitions
-      properties:
-        templateVersionId: { $ref: '#/components/schemas/Uuid' }
-        templateKey: { $ref: '#/components/schemas/ProjectTemplateKey' }
-        version: { type: integer, format: int32, minimum: 1 }
-        versionCode: { type: string, pattern: '^[A-Z][A-Z0-9_]*_V[1-9][0-9]*$' }
-        projectType: { $ref: '#/components/schemas/ProjectType' }
-        displayName: { type: string, minLength: 1, maxLength: 80 }
-        lifecycleStatus: { $ref: '#/components/schemas/ProjectTemplateVersionStatus' }
-        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
-        publishedAt: { type: string, format: date-time, nullable: true, readOnly: true }
-        retiredAt: { type: string, format: date-time, nullable: true, readOnly: true }
-        contentBlueprints:
-          type: array
-          minItems: 1
-          items: { $ref: '#/components/schemas/ProjectTemplateContentBlueprint' }
-        statuses:
-          type: array
-          minItems: 1
-          items: { $ref: '#/components/schemas/WorkflowStatusDefinition' }
-        transitions:
-          type: array
-          minItems: 1
-          items: { $ref: '#/components/schemas/WorkflowTransitionDefinition' }
 
-    ProjectTemplateList:
-      type: object
-      additionalProperties: false
-      required: [items]
-      properties:
-        items:
-          type: array
-          items: { $ref: '#/components/schemas/ProjectTemplateVersion' }
 
     Company:
       type: object
@@ -8391,20 +8198,7 @@ components:
       required: true
       schema: { $ref: '#/components/schemas/Uuid' }
 
-    TemplateKey:
-      name: templateKey
-      in: path
-      required: true
-      schema: { $ref: '#/components/schemas/ProjectTemplateKey' }
 
-    TemplateVersion:
-      name: version
-      in: path
-      required: true
-      schema:
-        type: integer
-        format: int32
-        minimum: 1
 
     WorkspaceId:
       name: workspaceId
@@ -8703,13 +8497,6 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Workspace' }
 
-    ProjectTemplateChanged:
-      description: 模板版本状态已改变，或返回同一幂等命令的既有成功结果。
-      headers:
-        ETag: { $ref: '#/components/headers/ETag' }
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/ProjectTemplateVersion' }
 
     RoleGranted:
       description: 角色授予成功。

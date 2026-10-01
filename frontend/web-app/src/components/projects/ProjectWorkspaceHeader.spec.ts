@@ -8,7 +8,7 @@ enableAutoUnmount(afterEach)
 const project = { id: 'project-1', name: '项目', code: 'PRJ', lifecycle: 'ACTIVE', ownerDisplayName: '负责人' } as ProjectDetail
 const sections = ['overview', 'members', 'activity', 'settings'] as const
 function render(section: typeof sections[number] | 'catalog' = 'overview') {
-  return mount(ProjectWorkspaceHeader, { props: { project, section }, slots: { 'primary-action': '<button class="activate">激活 Project</button>' } })
+  return mount(ProjectWorkspaceHeader, { props: { project, section }, slots: { 'primary-action': '<button class="primary">项目操作</button>' } })
 }
 beforeEach(() => push.mockReset())
 describe('项目头部分区切换器', () => {
@@ -39,14 +39,14 @@ describe('项目头部分区切换器', () => {
       expect(push).toHaveBeenLastCalledWith({ name: `project-${sections[index]}`, params: { projectId: 'project-1' } })
     }
     const actions = wrapper.get('.project-workspace-header__actions')
-    expect(actions.element.firstElementChild).toBe(wrapper.get('.activate').element)
-    expect(wrapper.get('.activate').text()).toBe('激活 Project')
+    expect(actions.element.firstElementChild).toBe(wrapper.get('.primary').element)
+    expect(wrapper.get('.primary').text()).toBe('项目操作')
   })
   it('目录页和缺少项目时不渲染分区，主操作插槽仍可用', async () => {
     const wrapper = render('catalog')
     expect(wrapper.find('nav').exists()).toBe(false)
     await wrapper.setProps({ section: 'overview', project: undefined })
     expect(wrapper.find('nav').exists()).toBe(false)
-    expect(wrapper.find('.activate').exists()).toBe(true)
+    expect(wrapper.find('.primary').exists()).toBe(true)
   })
 })

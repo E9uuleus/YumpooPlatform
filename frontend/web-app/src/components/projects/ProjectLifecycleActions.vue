@@ -66,7 +66,7 @@ async function run(operation: (token: string) => Promise<unknown>, success: stri
       blockers.value = problem.error.details.blockers ?? []
     }
     if (isProblemStatus(problem, 412)) {
-      ElMessage.warning('Project 已被其他操作更新，已刷新为最新状态。')
+      ElMessage.warning('项目已被其他操作更新，已刷新为最新状态。')
       emit('changed')
     }
     emit('problem', problem)
@@ -77,26 +77,26 @@ async function run(operation: (token: string) => Promise<unknown>, success: stri
 
 async function archive(): Promise<void> {
   try {
-    await ElMessageBox.confirm('归档后 Project 只读，可由 CompanyAdmin 恢复。', '归档 Project', {
+    await ElMessageBox.confirm('归档后项目只读，可由企业管理员恢复。', '归档项目', {
       type: 'warning', confirmButtonText: '确认归档', cancelButtonText: '取消',
     })
   } catch { return }
   await run((token) => projectsApi.archiveProject({
     projectId: props.project.id, xXSRFTOKEN: token, ifMatch: props.project.etag,
     idempotencyKey: crypto.randomUUID(),
-  }), 'Project 已归档')
+  }), '项目已归档')
 }
 
 async function restore(): Promise<void> {
   try {
-    await ElMessageBox.confirm('恢复前将重新验证 Owner、模板和主工作空间。', '恢复 Project', {
+    await ElMessageBox.confirm('恢复前将重新验证负责人和主工作空间。', '恢复项目', {
       type: 'warning', confirmButtonText: '确认恢复', cancelButtonText: '取消',
     })
   } catch { return }
   await run((token) => projectsApi.restoreProject({
     projectId: props.project.id, xXSRFTOKEN: token, ifMatch: props.project.etag,
     idempotencyKey: crypto.randomUUID(),
-  }), 'Project 已恢复')
+  }), '项目已恢复')
 }
 
 async function overrideArchive(): Promise<void> {
@@ -111,7 +111,7 @@ async function overrideArchive(): Promise<void> {
       targetId: props.project.id,
       reason: form.reason.trim(),
     },
-  }), 'Project 已通过治理覆盖归档')
+  }), '项目已通过治理覆盖归档')
 }
 </script>
 
@@ -122,8 +122,10 @@ async function overrideArchive(): Promise<void> {
     aria-labelledby="lifecycle-actions-title"
   >
     <div>
-      <h2 id="lifecycle-actions-title">生命周期治理</h2>
-      <p>操作会在服务端重新鉴权、校验版本并写入安全审计。</p>
+      <h2 id="lifecycle-actions-title">
+        危险操作
+      </h2>
+      <p>归档后项目将只读，企业管理员可以恢复。</p>
     </div>
     <div class="lifecycle-actions__buttons">
       <el-button
@@ -131,7 +133,7 @@ async function overrideArchive(): Promise<void> {
         :loading="busy"
         @click="archive"
       >
-        归档 Project
+        归档项目
       </el-button>
       <el-button
         v-if="project.capabilities.canOverrideArchive"
@@ -148,7 +150,7 @@ async function overrideArchive(): Promise<void> {
         :loading="busy"
         @click="restore"
       >
-        恢复 Project
+        恢复项目
       </el-button>
     </div>
     <el-alert
@@ -172,20 +174,36 @@ async function overrideArchive(): Promise<void> {
       title="治理覆盖归档"
       width="520px"
     >
-      <p class="dialog-note">此操作会保存理由、安全前后快照与 blocker 分类计数。</p>
+      <p class="dialog-note">
+        此操作会保存理由、安全前后快照与 blocker 分类计数。
+      </p>
       <el-form label-position="top">
-        <el-form-item label="覆盖理由（10–500 字）" required>
-          <el-input v-model="form.reason" type="textarea" maxlength="500" show-word-limit />
+        <el-form-item
+          label="覆盖理由（10–500 字）"
+          required
+        >
+          <el-input
+            v-model="form.reason"
+            type="textarea"
+            maxlength="500"
+            show-word-limit
+          />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="overrideOpen = false">取消</el-button>
-        <el-button type="danger" :disabled="!validReason" :loading="busy" @click="overrideArchive">
+        <el-button @click="overrideOpen = false">
+          取消
+        </el-button>
+        <el-button
+          type="danger"
+          :disabled="!validReason"
+          :loading="busy"
+          @click="overrideArchive"
+        >
           确认覆盖归档
         </el-button>
       </template>
     </el-dialog>
-
   </section>
 </template>
 

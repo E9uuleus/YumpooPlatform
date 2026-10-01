@@ -19,13 +19,6 @@ import {
     ProjectLifecycleToJSON,
     ProjectLifecycleToJSONTyped,
 } from './ProjectLifecycle';
-import type { ProjectType } from './ProjectType';
-import {
-    ProjectTypeFromJSON,
-    ProjectTypeFromJSONTyped,
-    ProjectTypeToJSON,
-    ProjectTypeToJSONTyped,
-} from './ProjectType';
 import type { ProjectCapabilities } from './ProjectCapabilities';
 import {
     ProjectCapabilitiesFromJSON,
@@ -83,12 +76,6 @@ export interface ProjectSummary {
      * @memberof ProjectSummary
      */
     name: string;
-    /**
-     *
-     * @type {ProjectType}
-     * @memberof ProjectSummary
-     */
-    projectType: ProjectType;
     /**
      *
      * @type {ProjectLifecycle}
@@ -157,7 +144,6 @@ export function instanceOfProjectSummary(value: object): value is ProjectSummary
     if (!('workspaceName' in value) || value['workspaceName'] === undefined) return false;
     if (!('code' in value) || value['code'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('projectType' in value) || value['projectType'] === undefined) return false;
     if (!('lifecycle' in value) || value['lifecycle'] === undefined) return false;
     if (!('ownerUserId' in value) || value['ownerUserId'] === undefined) return false;
     if (!('ownerDisplayName' in value) || value['ownerDisplayName'] === undefined) return false;
@@ -186,7 +172,6 @@ export function ProjectSummaryFromJSONTyped(json: any, ignoreDiscriminator: bool
         'workspaceName': json['workspaceName'],
         'code': json['code'],
         'name': json['name'],
-        'projectType': ProjectTypeFromJSON(json['projectType']),
         'lifecycle': ProjectLifecycleFromJSON(json['lifecycle']),
         'ownerUserId': json['ownerUserId'],
         'ownerDisplayName': json['ownerDisplayName'],
@@ -216,7 +201,6 @@ export function ProjectSummaryToJSONTyped(value?: Omit<ProjectSummary, 'rowVersi
         'workspaceName': value['workspaceName'],
         'code': value['code'],
         'name': value['name'],
-        'projectType': ProjectTypeToJSON(value['projectType']),
         'lifecycle': ProjectLifecycleToJSON(value['lifecycle']),
         'ownerUserId': value['ownerUserId'],
         'ownerDisplayName': value['ownerDisplayName'],

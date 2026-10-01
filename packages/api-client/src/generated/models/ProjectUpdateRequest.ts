@@ -30,30 +30,6 @@ export interface ProjectUpdateRequest {
      * @memberof ProjectUpdateRequest
      */
     description: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectUpdateRequest
-     */
-    customerName: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectUpdateRequest
-     */
-    customerReference: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectUpdateRequest
-     */
-    deliverySite: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectUpdateRequest
-     */
-    contactNote: string | null;
 }
 
 /**
@@ -62,10 +38,6 @@ export interface ProjectUpdateRequest {
 export function instanceOfProjectUpdateRequest(value: object): value is ProjectUpdateRequest {
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('customerName' in value) || value['customerName'] === undefined) return false;
-    if (!('customerReference' in value) || value['customerReference'] === undefined) return false;
-    if (!('deliverySite' in value) || value['deliverySite'] === undefined) return false;
-    if (!('contactNote' in value) || value['contactNote'] === undefined) return false;
     return true;
 }
 
@@ -81,10 +53,6 @@ export function ProjectUpdateRequestFromJSONTyped(json: any, ignoreDiscriminator
 
         'name': json['name'],
         'description': json['description'],
-        'customerName': json['customerName'],
-        'customerReference': json['customerReference'],
-        'deliverySite': json['deliverySite'],
-        'contactNote': json['contactNote'],
     };
 }
 
@@ -101,9 +69,5 @@ export function ProjectUpdateRequestToJSONTyped(value?: ProjectUpdateRequest | n
 
         'name': value['name'],
         'description': value['description'],
-        'customerName': value['customerName'],
-        'customerReference': value['customerReference'],
-        'deliverySite': value['deliverySite'],
-        'contactNote': value['contactNote'],
     };
 }
