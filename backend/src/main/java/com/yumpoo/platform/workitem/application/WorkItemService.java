@@ -34,6 +34,7 @@ import com.yumpoo.platform.workitem.domain.WorkItemStatusCategory;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
@@ -422,6 +423,24 @@ public class WorkItemService {
                     people(project.companyId(), List.of(created.item())), true,
                     created.statusLabels()));
         });
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public WorkItem createRootItemForConnection(ItemWriteTarget target, UUID contentId,
+            String title, CurrentActor actor) {
+        requireActor(actor);
+        if (!target.companyId().equals(actor.companyId()))
+            throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+        // First use upgrades the category and its catalog; acquire those locks before item creation.
+        contents.lockCatalogVersion(target.companyId(), target.projectId());
+        Content content = contents.lockForShare(target.companyId(), target.projectId(), contentId)
+                .orElseThrow(() -> validation("contentId", "CONTENT_NOT_AVAILABLE", "类别不属于目标项目或已删除"));
+        if (!content.active() || content.deletedAt() != null)
+            throw validation("contentId", "CONTENT_NOT_ACTIVE", "请选择目标项目的启用类别");
+        markContentUsed(target, content, actor);
+        Content used = content.everUsed() ? content : content.markUsed(actor.userId(), clock.instant());
+        return createItem(target, used, new WorkItemDraft(title, null, null, null, null,
+                null, null, null, DueTimeChange.unchanged()), actor).item();
     }
 
     private CreatedWorkItem createItem(ItemWriteTarget project, Content content,
