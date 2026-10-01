@@ -18,7 +18,7 @@ V42 将状态与优先级共用的受控色板扩展为 Monday 标签编辑器�
 
 项目总览表格以 `/projects/{projectId}/overview?view=table&workItemId={itemId}` 表示已打开的详情抽屉；刷新、前进/后退和直接访问恢复同一工作项，关闭只移除 `workItemId`，且该参数变化不触发项目列表重载。截止日期选择器绑定 `YYYY-MM-DD` 并在每次 `update:modelValue` 时调用已有强 ETag、幂等字段命令；路由和日期修复不新增数据库事实。
 
-本决策部分替代 [Work Item 核心契约](../architecture/2026-08-22-work-item-core-contract.md) 中“模板迁移图是唯一运行时状态源、优先级秩固定”的描述、[Content 管理契约](../product/2026-08-22-content-management-contract.md) 中“视图状态只来自固定模板”的描述，以及 [统一项目模型](../product/2026-09-30-unified-project-model.md) 中仅初始化 Content 的描述；相关记录的编号、锁、权限、软删除和视图同源决定继续有效。
+本决策部分替代 [Work Item 核心契约](../architecture/2026-08-22-work-item-core-contract.md) 中“模板迁移图是唯一运行时状态源、优先级秩固定”的描述、[Content 管理契约](../product/2026-08-22-content-management-contract.md) 中“视图状态只来自固定模板”的描述，以及 [历史 Project 创建契约](../../archived/product/2026-08-20-project-creation-contract.md) 中仅初始化 Content 的描述；相关记录的编号、锁、权限、软删除和视图同源决定继续有效。归档链接只说明当时的替代关系，当前初始化以统一项目模型为准。
 
 ## Alternatives considered
 
