@@ -123,7 +123,7 @@ async function overrideArchive(): Promise<void> {
   >
     <div>
       <h2 id="lifecycle-actions-title">
-        危险操作
+        危险区域
       </h2>
       <p>归档后项目将只读，企业管理员可以恢复。</p>
     </div>
@@ -178,32 +178,20 @@ async function overrideArchive(): Promise<void> {
         此操作会保存理由、安全前后快照与 blocker 分类计数。
       </p>
       <el-form label-position="top">
-        <el-form-item
-          label="覆盖理由（10–500 字）"
-          required
-        >
-          <el-input
-            v-model="form.reason"
-            type="textarea"
-            maxlength="500"
-            show-word-limit
-          />
+        <el-form-item label="覆盖理由（10–500 字）" required>
+          <el-input v-model="form.reason" type="textarea" maxlength="500" show-word-limit />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="overrideOpen = false">
           取消
         </el-button>
-        <el-button
-          type="danger"
-          :disabled="!validReason"
-          :loading="busy"
-          @click="overrideArchive"
-        >
+        <el-button type="danger" :disabled="!validReason" :loading="busy" @click="overrideArchive">
           确认覆盖归档
         </el-button>
       </template>
     </el-dialog>
+
   </section>
 </template>
 
@@ -212,13 +200,14 @@ async function overrideArchive(): Promise<void> {
   display: grid;
   gap: var(--yp-space-4);
   margin-bottom: var(--yp-space-5);
-  padding: var(--yp-space-5);
+  padding: var(--yp-space-6);
   border: 1px solid var(--yp-border-subtle);
   border-radius: var(--yp-radius-md);
   background: var(--yp-bg-surface);
 }
 .lifecycle-actions h2,
 .lifecycle-actions p { margin: 0; }
+.lifecycle-actions h2 { font-size: 16px; font-weight: 600; }
 .lifecycle-actions p { margin-top: var(--yp-space-1); color: var(--yp-text-secondary); }
 .lifecycle-actions__buttons { display: flex; flex-wrap: wrap; gap: var(--yp-space-2); }
 .blocker-list { margin: var(--yp-space-2) 0 0; padding-left: 20px; }

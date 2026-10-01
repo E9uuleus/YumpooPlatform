@@ -19,6 +19,10 @@ const formRef = ref<FormInstance>()
 const nameInput = ref<InstanceType<typeof ElInput>>()
 const submitting = ref(false)
 const problem = ref<ApiProblem>()
+const topProblem = computed(() => problem.value?.kind === 'response'
+  && problem.value.status === 422
+  && problem.value.error.fieldErrors.some(({ field }) => field === 'name' || field === 'description')
+  ? undefined : problem.value)
 const valid = computed(() => form.name.trim().length > 0 && form.name.trim().length <= 80 && form.description.length <= 500)
 const dirty = computed(() => Boolean(form.name || form.description))
 const user = computed(() => session.authentication.value?.user)
@@ -109,8 +113,8 @@ async function submit(): Promise<void> {
       </p>
     </template>
     <inline-problem
-      v-if="problem"
-      :problem="problem"
+      v-if="topProblem"
+      :problem="topProblem"
     />
     <div class="project-create-dialog__layout">
       <el-form
@@ -161,9 +165,10 @@ async function submit(): Promise<void> {
             <yp-assignee
               :user-id="user?.id"
               :display-name="user?.displayName ?? '我'"
+              :show-name="false"
               size="table"
             />
-            <span>你将成为负责人</span>
+            <span>你（{{ user?.displayName ?? '我' }}）将成为负责人</span>
           </div>
         </section>
         <section
@@ -180,7 +185,8 @@ async function submit(): Promise<void> {
               <span
                 v-for="category in DEFAULT_PROJECT_STRUCTURE.categories"
                 :key="category.code"
-              ><i :style="{ background: workItemLabelColorValue(category.color) }" />{{ category.name }}</span>
+                :style="{ background: workItemLabelColorValue(category.color) }"
+              >{{ category.name }}</span>
             </div>
           </div>
           <div class="project-create-dialog__structure-row">
@@ -189,7 +195,8 @@ async function submit(): Promise<void> {
               <span
                 v-for="status in DEFAULT_PROJECT_STRUCTURE.statuses"
                 :key="status.code"
-              ><i :style="{ background: workItemLabelColorValue(status.color) }" />{{ status.name }}</span>
+                :style="{ background: workItemLabelColorValue(status.color) }"
+              >{{ status.name }}</span>
             </div>
           </div>
           <div class="project-create-dialog__structure-row">
@@ -198,7 +205,8 @@ async function submit(): Promise<void> {
               <span
                 v-for="priority in DEFAULT_PROJECT_STRUCTURE.priorities"
                 :key="priority.code"
-              ><i :style="{ background: workItemLabelColorValue(priority.color) }" />{{ priority.name }}</span>
+                :style="{ background: workItemLabelColorValue(priority.color) }"
+              >{{ priority.name }}</span>
             </div>
           </div>
         </section>
@@ -298,8 +306,9 @@ async function submit(): Promise<void> {
 :global(.project-create-dialog__row + .project-create-dialog__row) { border-top: 1px solid var(--yp-border-subtle); }
 :global(.project-create-dialog__row--heading) { background: var(--yp-bg-sunken); color: var(--yp-text-secondary); }
 :global(.project-create-dialog__sample-status) { padding: var(--yp-space-1); border-radius: var(--yp-radius-sm); text-align: center; color: var(--yp-text-inverse); }
-:global(.project-create-dialog__category), :global(.project-create-dialog__labels span) { display: inline-flex; align-items: center; gap: var(--yp-space-1); white-space: nowrap; }
+:global(.project-create-dialog__category) { display: inline-flex; align-items: center; gap: var(--yp-space-1); white-space: nowrap; }
 :global(.project-create-dialog i) { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; }
-:global(.project-create-dialog__labels) { display: flex; flex-wrap: wrap; gap: var(--yp-space-2) var(--yp-space-3); font-size: 12px; }
+:global(.project-create-dialog__labels) { display: flex; flex-wrap: wrap; gap: var(--yp-space-2); font-size: 12px; }
+:global(.project-create-dialog__labels span) { display: inline-flex; align-items: center; height: 24px; padding: 0 var(--yp-space-3); border-radius: var(--yp-radius-pill); color: var(--yp-text-inverse); white-space: nowrap; }
 @media (max-width: 959.98px) { :global(.project-create-dialog__layout) { grid-template-columns: minmax(0, 1fr); } }
 </style>

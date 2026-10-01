@@ -138,8 +138,9 @@ async function load(): Promise<void> {
 }
 
 async function loadReferenceData(): Promise<void> {
-  try { ownerOptions.value = await projectsApi.listProjectOwnerOptions() }
-  catch (reason) { error.value = await toApiProblem(reason) }
+  try { ownerOptions.value = await projectsApi.listProjectOwnerOptions() } catch (reason) {
+    error.value = await toApiProblem(reason)
+  }
 }
 
 function refreshForFilters(): void { page.value = 0; void load() }
@@ -183,15 +184,11 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
 
 <template>
   <section class="project-catalog">
-    <project-workspace-header
-      section="catalog"
+    <project-workspace-header section="catalog"
       title="管理项目"
       description="统一查看项目状态、负责人和协作角色。"
     />
-    <inline-problem
-      v-if="error"
-      :problem="error"
-    />
+    <inline-problem v-if="error" :problem="error" />
 
     <div class="project-list-surface">
       <yp-tabs
@@ -202,75 +199,27 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
         @update:model-value="selectView($event as ProjectCatalogView)"
       >
         <template #icon-recent>
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 20 20"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M10 5.25v4.5l3 1.75M6.17 4.18H2.75v-3"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-            <path
-              d="M3.4 4.45A7.25 7.25 0 1 1 2.75 10"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-            />
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M10 5.25v4.5l3 1.75M6.17 4.18H2.75v-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M3.4 4.45A7.25 7.25 0 1 1 2.75 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
           </svg>
         </template>
         <template #icon-content>
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 20 20"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M5 2.75h6.75l3.25 3.5v8.25A2.5 2.5 0 0 1 12.5 17h-7A2.5 2.5 0 0 1 3 14.5V5.25A2.5 2.5 0 0 1 5.5 2.75Z"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linejoin="round"
-            />
-            <path
-              d="M11.5 2.75v3.5H15M6.5 10h5M6.5 13h3.5"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M5 2.75h6.75l3.25 3.5v8.25A2.5 2.5 0 0 1 12.5 17h-7A2.5 2.5 0 0 1 3 14.5V5.25A2.5 2.5 0 0 1 5.5 2.75Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+            <path d="M11.5 2.75v3.5H15M6.5 10h5M6.5 13h3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </template>
       </yp-tabs>
 
       <yp-filter-bar
-        :filters="activeFilters"
-        :result-count="visibleResultCount"
-        :loading="loading"
-        :popover-width="780"
-        :show-tags="false"
-        inline-search
-        labeled-tools
-        popover-class="project-filter-popover"
-        @remove="removeFilter"
-        @clear="clearFilters"
+        :filters="activeFilters" :result-count="visibleResultCount" :loading="loading"
+        :popover-width="780" :show-tags="false" inline-search labeled-tools popover-class="project-filter-popover"
+        @remove="removeFilter" @clear="clearFilters"
       >
         <template #search>
-          <el-input
-            v-model="query"
-            clearable
-            aria-label="搜索项目名称或编码"
-            placeholder="搜索项目名称或编码"
-            @input="scheduleSearch"
-            @clear="handleSearchClear"
-            @keyup.enter="runSearchImmediately"
-          />
+          <el-input v-model="query" clearable aria-label="搜索项目名称或编码" placeholder="搜索项目名称或编码"
+            @input="scheduleSearch" @clear="handleSearchClear" @keyup.enter="runSearchImmediately" />
         </template>
         <template #filters>
           <div class="project-filter-grid">
@@ -310,10 +259,7 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
             </section>
             <section class="project-filter-group">
               <h3>负责人</h3>
-              <el-checkbox-group
-                v-model="ownerUserIds"
-                @change="refreshForFilters"
-              >
+              <el-checkbox-group v-model="ownerUserIds" @change="refreshForFilters">
                 <el-tooltip
                   v-for="owner in ownerOptions"
                   :key="owner.userId"
@@ -322,25 +268,15 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
                   :show-after="350"
                 >
                   <el-checkbox :value="owner.userId">
-                    <yp-assignee
-                      :user-id="owner.userId"
-                      :display-name="owner.displayName"
-                      size="table"
-                    />
+                    <yp-assignee :user-id="owner.userId" :display-name="owner.displayName" size="table" />
                   </el-checkbox>
                 </el-tooltip>
               </el-checkbox-group>
-              <span
-                v-if="!ownerOptions.length"
-                class="project-filter-empty"
-              >暂无负责人选项</span>
+              <span v-if="!ownerOptions.length" class="project-filter-empty">暂无负责人选项</span>
             </section>
             <section class="project-filter-group">
               <h3>我的角色</h3>
-              <el-checkbox-group
-                v-model="actorAccesses"
-                @change="refreshForFilters"
-              >
+              <el-checkbox-group v-model="actorAccesses" @change="refreshForFilters">
                 <el-tooltip
                   v-for="value in accessOptions"
                   :key="value"
@@ -372,24 +308,10 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
         role="tabpanel"
         aria-labelledby="project-content-tab"
       >
-        <div
-          v-if="loading || result?.items.length"
-          v-loading="loading"
-          class="project-table-shell"
-          :aria-busy="loading"
-          aria-live="polite"
-        >
+        <div v-if="loading || result?.items.length" v-loading="loading" class="project-table-shell" :aria-busy="loading" aria-live="polite">
           <div class="table-scroll project-desktop-table">
-            <el-table
-              class="project-management-table"
-              :data="result?.items ?? []"
-              @row-click="openProjectFromTable"
-            >
-              <el-table-column
-                fixed="left"
-                label="项目名称"
-                min-width="260"
-              >
+            <el-table class="project-management-table" :data="result?.items ?? []" @row-click="openProjectFromTable">
+              <el-table-column fixed="left" label="项目名称" min-width="260">
                 <template #default="scope">
                   <div class="project-name-cell">
                     <svg
@@ -400,20 +322,8 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
                       fill="none"
                       aria-hidden="true"
                     >
-                      <rect
-                        x="2"
-                        y="2.5"
-                        width="12"
-                        height="11"
-                        rx="2"
-                        stroke="currentColor"
-                        stroke-width="1.3"
-                      />
-                      <path
-                        d="M2 6.5h12M6.5 6.5v7"
-                        stroke="currentColor"
-                        stroke-width="1.3"
-                      />
+                      <rect x="2" y="2.5" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.3" />
+                      <path d="M2 6.5h12M6.5 6.5v7" stroke="currentColor" stroke-width="1.3" />
                     </svg>
                     <button
                       class="project-name-cell__link"
@@ -425,106 +335,50 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
                   </div>
                 </template>
               </el-table-column>
-              <el-table-column
-                label="状态"
-                width="110"
-              >
+              <el-table-column label="状态" width="110">
                 <template #default="scope">
-                  <yp-status-tag
-                    domain="project-lifecycle"
-                    :status="scope.row.lifecycle"
-                    effect="soft"
-                  />
+                  <yp-status-tag domain="project-lifecycle" :status="scope.row.lifecycle" effect="soft" />
                 </template>
               </el-table-column>
-              <el-table-column
-                label="负责人"
-                width="80"
-              >
+              <el-table-column label="负责人" width="80">
                 <template #default="scope">
-                  <yp-assignee
-                    :user-id="scope.row.ownerUserId"
-                    :display-name="scope.row.ownerDisplayName"
-                    size="table"
-                    :show-name="false"
-                  />
+                  <yp-assignee :user-id="scope.row.ownerUserId" :display-name="scope.row.ownerDisplayName" size="table" :show-name="false" />
                 </template>
               </el-table-column>
-              <el-table-column
-                label="创建时间"
-                width="120"
-              >
+              <el-table-column label="创建时间" width="120">
                 <template #default="scope">
                   <span :title="formatTimestamp(scope.row.createdAt, companyTimezone)">{{ formatDateOnly(scope.row.createdAt, companyTimezone) }}</span>
                 </template>
               </el-table-column>
-              <el-table-column
-                label="最后修改时间"
-                width="120"
-              >
+              <el-table-column label="最后修改时间" width="120">
                 <template #default="scope">
                   <span :title="formatTimestamp(scope.row.updatedAt, companyTimezone)">{{ formatDateOnly(scope.row.updatedAt, companyTimezone) }}</span>
                 </template>
               </el-table-column>
-              <el-table-column
-                label="我的角色"
-                width="110"
-              >
+              <el-table-column label="我的角色" width="110">
                 <template #default="scope">
                   {{ businessLabel(scope.row.actorAccess) }}
                 </template>
               </el-table-column>
             </el-table>
           </div>
-          <ul
-            class="project-mobile-list"
-            aria-label="项目列表"
-          >
-            <li
-              v-for="item in result?.items ?? []"
-              :key="item.id"
-            >
-              <button
-                class="project-mobile-row"
-                type="button"
-                @click="openProject(item)"
-              >
-                <span class="project-mobile-row__header"><span class="project-mobile-row__identity"><strong>{{ item.name }}</strong></span><yp-status-tag
-                  domain="project-lifecycle"
-                  :status="item.lifecycle"
-                  size="small"
-                  effect="soft"
-                /></span>
-                <span class="project-mobile-row__meta"><yp-assignee
-                  :user-id="item.ownerUserId"
-                  :display-name="item.ownerDisplayName"
-                  size="table"
-                  :show-name="false"
-                /><span>{{ businessLabel(item.actorAccess) }}</span></span>
+          <ul class="project-mobile-list" aria-label="项目列表">
+            <li v-for="item in result?.items ?? []" :key="item.id">
+              <button class="project-mobile-row" type="button" @click="openProject(item)">
+                <span class="project-mobile-row__header"><span class="project-mobile-row__identity"><strong>{{ item.name }}</strong></span><yp-status-tag domain="project-lifecycle" :status="item.lifecycle" size="small" effect="soft" /></span>
+                <span class="project-mobile-row__meta"><yp-assignee :user-id="item.ownerUserId" :display-name="item.ownerDisplayName" size="table" :show-name="false" /><span>{{ businessLabel(item.actorAccess) }}</span></span>
                 <span class="project-mobile-row__dates">创建 {{ formatDateOnly(item.createdAt, companyTimezone) }} · 修改 {{ formatDateOnly(item.updatedAt, companyTimezone) }}</span>
               </button>
             </li>
           </ul>
-          <el-pagination
-            v-if="result && result.totalElements > 0"
-            class="page-control"
-            layout="prev, pager, next, total"
-            :current-page="page + 1"
-            :page-size="size"
-            :total="result.totalElements"
-            @current-change="next => { page = next - 1; load() }"
-          />
+          <el-pagination v-if="result && result.totalElements > 0" class="page-control" layout="prev, pager, next, total"
+            :current-page="page + 1" :page-size="size" :total="result.totalElements" @current-change="next => { page = next - 1; load() }" />
         </div>
-        <yp-empty-state
-          v-else
-          reason="no-results"
+        <yp-empty-state v-else reason="no-results"
           description="没有符合当前搜索和筛选条件的项目。"
           compact
         >
-          <template
-            v-if="activeFilters.length"
-            #action
-          >
+          <template v-if="activeFilters.length" #action>
             <el-button @click="clearFilters">
               清除筛选
             </el-button>
@@ -540,61 +394,28 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
         aria-labelledby="project-recent-tab"
       >
         <template v-if="recentProjectItems.length">
-          <div
-            class="project-recent-list__header"
-            aria-hidden="true"
-          >
+          <div class="project-recent-list__header" aria-hidden="true">
             <span>项目</span>
             <span>负责人</span>
             <span>状态</span>
             <span>最近打开</span>
             <span />
           </div>
-          <ul
-            class="project-recent-list"
-            aria-label="最近打开的项目"
-          >
-            <li
-              v-for="item in recentProjectItems"
-              :key="item.id"
-              :class="{ pinned: item.pinned }"
-            >
-              <button
-                class="project-recent-list__identity"
-                type="button"
-                @click="openProject(item)"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"
-                  />
+          <ul class="project-recent-list" aria-label="最近打开的项目">
+            <li v-for="item in recentProjectItems" :key="item.id" :class="{ pinned: item.pinned }">
+              <button class="project-recent-list__identity" type="button" @click="openProject(item)">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M2.75 5.5c0-.966.784-1.75 1.75-1.75h3.19c.464 0 .91.184 1.238.513L10.165 5.5H15.5c.966 0 1.75.784 1.75 1.75v7.25a1.75 1.75 0 0 1-1.75 1.75h-11a1.75 1.75 0 0 1-1.75-1.75v-9Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
                 </svg>
                 <span><strong>{{ item.name }}</strong></span>
               </button>
-              <yp-assignee
-                :user-id="item.ownerUserId"
-                :display-name="item.ownerDisplayName"
-                size="table"
-                :show-name="false"
-              />
+              <yp-assignee :user-id="item.ownerUserId" :display-name="item.ownerDisplayName" size="table" :show-name="false" />
               <yp-status-tag
                 domain="project-lifecycle"
                 :status="item.lifecycle"
                 effect="soft"
               />
-              <time
-                :datetime="new Date(item.openedAt).toISOString()"
-                :title="formatTimestamp(new Date(item.openedAt), companyTimezone)"
-              >{{ formatDateOnly(new Date(item.openedAt), companyTimezone) }}</time>
+              <time :datetime="new Date(item.openedAt).toISOString()" :title="formatTimestamp(new Date(item.openedAt), companyTimezone)">{{ formatDateOnly(new Date(item.openedAt), companyTimezone) }}</time>
               <button
                 class="project-recent-list__pin"
                 type="button"
@@ -603,19 +424,8 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
                 :aria-pressed="item.pinned"
                 @click="projectRecents.togglePinned(item.id)"
               >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 20 20"
-                  :fill="item.pinned ? 'currentColor' : 'none'"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M7 2.75h6l-.9 4.05 2.4 2.4v1.3h-3.75v5.75L10 17.5l-.75-1.25V10.5H5.5V9.2l2.4-2.4L7 2.75Z"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linejoin="round"
-                  />
+                <svg width="20" height="20" viewBox="0 0 20 20" :fill="item.pinned ? 'currentColor' : 'none'" aria-hidden="true">
+                  <path d="M7 2.75h6l-.9 4.05 2.4 2.4v1.3h-3.75v5.75L10 17.5l-.75-1.25V10.5H5.5V9.2l2.4-2.4L7 2.75Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
                 </svg>
               </button>
             </li>
@@ -627,10 +437,7 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
           :description="recentProjects.length ? '没有符合当前搜索和筛选条件的最近项目。' : '打开过的项目会按最近访问顺序显示在这里。'"
           compact
         >
-          <template
-            v-if="activeFilters.length"
-            #action
-          >
+          <template v-if="activeFilters.length" #action>
             <el-button @click="clearFilters">
               清除筛选
             </el-button>

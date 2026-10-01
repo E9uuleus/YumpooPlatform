@@ -3,6 +3,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { ElDialog, ElInput, ElMessageBox } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectCreateDialog from './ProjectCreateDialog.vue'
+import InlineProblem from '../InlineProblem.vue'
 
 const api = vi.hoisted(() => ({ createProject: vi.fn() }))
 vi.mock('../../api/client', () => ({ projectsApi: api }))
@@ -20,7 +21,7 @@ describe('创建项目弹窗', () => {
     expect(wrapper.findComponent(ElDialog).props()).toMatchObject({ width: 'min(800px, calc(100vw - 32px))', top: '10vh', closeOnClickModal: false })
     expect(document.body.querySelectorAll('.project-create-dialog__row')).toHaveLength(4)
     expect(document.body.querySelectorAll('.project-create-dialog__labels span')).toHaveLength(12)
-    expect(document.body.textContent).toContain('张三')
+    expect(document.body.textContent).toContain('你（张三）将成为负责人')
     expect(document.body.textContent).toContain('项目编码创建后由系统生成')
     expect(document.body.textContent).toContain('未命名项目')
     expect(document.body.textContent).toContain('暂无描述')
@@ -56,18 +57,30 @@ describe('创建项目弹窗', () => {
     const first = api.createProject.mock.calls[0]![0].idempotencyKey
     expect(api.createProject.mock.calls[1]![0].idempotencyKey).toBe(first)
     expect((document.body.querySelector('input') as HTMLInputElement).value).toBe('项目')
+    expect(wrapper.findComponent(InlineProblem).exists()).toBe(true)
     await wrapper.findComponent(ElInput).setValue('另一项目')
     await vm.submit()
     expect(api.createProject.mock.calls[2]![0].idempotencyKey).not.toBe(first)
   })
-  it('422 同时呈现字段错误和统一错误提示', async () => {
+  it('422 字段错误只显示在对应字段，不重复显示顶部提示', async () => {
     const wrapper = render(); await flushPromises()
-    api.createProject.mockRejectedValue(new ResponseError(new Response(JSON.stringify({ code: ErrorCode.ValidationFailed, message: '名称校验失败', requestId: 'up2-field', retryable: false, fieldErrors: [{ field: 'name', code: 'INVALID_VALUE', message: '名称不符合要求' }], details: {} }), { status: 422 })))
+    api.createProject.mockRejectedValue(new ResponseError(new Response(JSON.stringify({ code: ErrorCode.ValidationFailed, message: '字段校验失败', requestId: 'up2-field', retryable: false, fieldErrors: [{ field: 'name', code: 'INVALID_VALUE', message: '名称不符合要求' }, { field: 'description', code: 'INVALID_VALUE', message: '描述不符合要求' }], details: {} }), { status: 422 })))
     await wrapper.findComponent(ElInput).setValue('项目')
     await (wrapper.vm as unknown as DialogVm).submit()
     await flushPromises()
-    expect(document.body.textContent).toContain('名称校验失败')
-    await vi.waitFor(() => expect(document.body.querySelector('.el-form-item__error')?.textContent).toBe('名称不符合要求'))
+    expect(wrapper.findComponent(InlineProblem).exists()).toBe(false)
+    expect(document.body.textContent).not.toContain('字段校验失败')
+    await vi.waitFor(() => expect(Array.from(document.body.querySelectorAll('.el-form-item__error'), error => error.textContent)).toEqual(['名称不符合要求', '描述不符合要求']))
+  })
+  it('无可对应字段的 422 保留顶部提示和输入', async () => {
+    const wrapper = render(); await flushPromises()
+    api.createProject.mockRejectedValue(new ResponseError(new Response(JSON.stringify({ code: ErrorCode.ValidationFailed, message: '请求校验失败', requestId: 'up2-request', retryable: false, fieldErrors: [], details: {} }), { status: 422 })))
+    await wrapper.findComponent(ElInput).setValue('项目')
+    await (wrapper.vm as unknown as DialogVm).submit()
+    await flushPromises()
+    expect(wrapper.findComponent(InlineProblem).exists()).toBe(true)
+    expect(document.body.textContent).toContain('请求校验失败')
+    expect((document.body.querySelector('input') as HTMLInputElement).value).toBe('项目')
   })
   it('脏内容关闭需确认，提交期间禁用关闭与重复提交', async () => {
     const wrapper = render(); await flushPromises(); const vm = wrapper.vm as unknown as DialogVm
