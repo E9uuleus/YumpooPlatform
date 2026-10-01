@@ -366,7 +366,7 @@ public class WorkItemService {
                             command.contentId())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             requireActiveContent(content);
-            CreatedWorkItem created = createItem(project, content, new WorkItemDraft(
+            CreatedWorkItem created = createItem(ItemWriteTarget.from(project), content, new WorkItemDraft(
                     command.title(), priority, command.assigneeUserId(), description,
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
                     command.dueDate(), command.dueTime()), command.actor());
@@ -408,7 +408,7 @@ public class WorkItemService {
                             .orElseThrow(() -> new ApplicationException(
                                     StandardErrorCode.RESOURCE_NOT_FOUND));
             requireActiveContent(targetContent);
-            CreatedWorkItem created = createItem(project, targetContent, new WorkItemDraft(
+            CreatedWorkItem created = createItem(ItemWriteTarget.from(project), targetContent, new WorkItemDraft(
                     command.title(), priority, command.assigneeUserId(), description,
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
                     command.dueDate(), command.dueTime()), command.actor());
@@ -424,7 +424,7 @@ public class WorkItemService {
         });
     }
 
-    private CreatedWorkItem createItem(ProjectFactWriteSnapshot project, Content content,
+    private CreatedWorkItem createItem(ItemWriteTarget project, Content content,
             WorkItemDraft draft, CurrentActor actor) {
         requireActiveAssignee(project, draft.assigneeUserId());
         List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
@@ -474,7 +474,7 @@ public class WorkItemService {
     private record CreatedWorkItem(WorkItem item,
             List<WorkItemLabelModels.StatusLabel> statusLabels) {}
 
-    private void markContentUsed(ProjectFactWriteSnapshot project, Content content, CurrentActor actor) {
+    private void markContentUsed(ItemWriteTarget project, Content content, CurrentActor actor) {
         if (content.everUsed()) return;
         long catalogVersion = contents.lockCatalogVersion(project.companyId(), project.projectId());
         Content locked = contents.lock(project.companyId(), project.projectId(), content.id())
@@ -1477,6 +1477,10 @@ public class WorkItemService {
     }
 
     private void requireActiveAssignee(ProjectFactWriteSnapshot project, UUID assigneeUserId) {
+        requireActiveAssignee(ItemWriteTarget.from(project), assigneeUserId);
+    }
+
+    private void requireActiveAssignee(ItemWriteTarget project, UUID assigneeUserId) {
         if (assigneeUserId != null && !activeMemberships.isActiveMember(
                 project.companyId(), project.projectId(), assigneeUserId)) {
             throw validation("assigneeUserId", "NOT_ACTIVE_PROJECT_MEMBER",
