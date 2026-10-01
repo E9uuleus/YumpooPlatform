@@ -18,7 +18,7 @@ Status: implemented
 
 桌面小窗口复用认证 session partition，保持 sandbox、contextIsolation 和关闭 Node integration；只有登记的主窗口与计时窗口主 frame 可以调用固定白名单通道。当前入口、紧凑/展开交互、托盘常驻及主窗口隐藏语义由[个人跨项目工作选择器决策](../product/2026-09-08-timer-work-picker.md)接管；Web 使用画中画或页内非模态浮窗。该部分取代不改变本记录拥有的服务端计时事实、权限和显式退出语义。
 
-`TimeTrackingRecordQuery` 是面向后续 Worklog 的 actor-scoped 分页只读端口，不公开计时写入口。本决策补充 [M3 公开端口约定](2026-08-31-m2-exit-and-m3-public-ports.md)，不改变已有 Project/Product 锁序、审批 blocker 的归属或部署完成定义。
+`TimeTrackingRecordQuery` 是面向后续 Worklog 的 actor-scoped 分页只读端口，不公开计时写入口。本决策补充 [M3 公开端口约定](2026-08-31-m2-exit-and-m3-public-ports.md)，沿用 Project 生命周期锁、审批 blocker 的归属与部署完成定义；产品侧守卫和锁序已由[删除产品决定](../product/2026-09-30-remove-product-concept.md)退役。
 
 计时日志的添加和编辑采用分钟输入；已编辑记录通过持久化 rowVersion 与来源识别（手动记录大于 0、自动计时停止后大于 1），日期与起止时间标为 `#D83A52`。工作项详情动态订阅计时修改与删除 v2，保存 UTC 时间范围、会话引用、操作成员和发生时间，前端按公司时区显示。修改保存前后范围，无变化时不产生动态；删除使用 TIME_TRACKING / REMOVED，保留被删除范围且不回填历史删除。启停和补录不进入单元格动态。修改和删除 v1 保留冻结，v2 增加类别定位，修改另带原时间快照，避免从当前事实猜测历史。
 

@@ -252,9 +252,6 @@ public class JdbcProjectRepository implements ProjectRepository {
                 + "AND (:allOwners OR p.owner_user_id IN (:ownerUserIds)) "
                 + "AND (:allAccesses OR (" + actorAccess + ") IN (:actorAccesses)) "
                 + "AND (:allUpdatedSince OR p.updated_at >= :updatedSince) "
-                + "AND (:allProducts OR EXISTS (SELECT 1 FROM yumpoo.project_product_link ppl "
-                + "WHERE ppl.company_id=p.company_id AND ppl.project_id=p.id "
-                + "AND ppl.product_id=:productId AND ppl.removed_at IS NULL)) "
                 + "AND ((:draft AND p.lifecycle='DRAFT') OR (:active AND p.lifecycle='ACTIVE') "
                 + "OR (:archived AND p.lifecycle='ARCHIVED')) ";
         JdbcClient.StatementSpec items = visible(jdbcClient.sql("SELECT p.*, w.code AS workspace_code, "
@@ -354,7 +351,6 @@ public class JdbcProjectRepository implements ProjectRepository {
                     case COMPANY_ADMIN -> "COMPANY_ADMIN_READ_ONLY";
                 }).toList();
         Instant updatedSince = criteria.updatedSince() == null ? Instant.EPOCH : criteria.updatedSince();
-        UUID productId = criteria.productId();
         return statement.param("allQuery", criteria.query() == null)
                 .param("query", "%" + normalizedQuery + "%")
                 .param("allTypes", criteria.projectTypes().isEmpty())
@@ -365,8 +361,6 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .param("actorAccesses", actorAccesses)
                 .param("allUpdatedSince", criteria.updatedSince() == null)
                 .param("updatedSince", OffsetDateTime.ofInstant(updatedSince, ZoneOffset.UTC))
-                .param("allProducts", productId == null)
-                .param("productId", productId == null ? new UUID(0, 0) : productId)
                 .param("draft", current || lifecycle == ProjectLifecycleFilter.DRAFT
                         || lifecycle == ProjectLifecycleFilter.ALL)
                 .param("active", current || lifecycle == ProjectLifecycleFilter.ACTIVE

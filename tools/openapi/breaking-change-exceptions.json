@@ -42,6 +42,13 @@
       "newSha256": "58c5530b16bfd5c875de2aa4641537d171d7e1256cd2961c7bba996e42cf704f",
       "reason": "工作项描述升级为受限富文本 HTML，WorkItemSummary/WorkItemDetail 响应的 description 上限由 16384 放宽为 65536；将两处响应上限临时还原后完整 openapi-diff 通过，精确哈希仅限此放宽。",
       "agentNote": ".agents/notes/implemented/product/2026-09-25-work-item-rich-description.md"
+    },
+    {
+      "id": "2026-09-30-remove-product-concept",
+      "oldSha256": "d42872df7b25b6fb71a36d7e14003ad983174f71dc3fd097304237938aaebcb0",
+      "newSha256": "3c3d102f54caf4ec4252b7e4991bed716e8f9d8c15cdc33ec3273f6437320648",
+      "reason": "统一项目模型取消产品聚合、项目产品关系与反馈占位，删除相关 API、能力字段和枚举；前后端与生成客户端配套升级。",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
     }
   ]
 }

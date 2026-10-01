@@ -12,8 +12,6 @@ class ActivitySummaryRendererTest {
     @ParameterizedTest
     @CsvSource({
             "PROJECT_MOVED_TO_WORKSPACE,移动了项目所属工作区",
-            "PRODUCT_LINKED_TO_PROJECT,关联了产品",
-            "PRODUCT_UNLINKED_FROM_PROJECT,取消了产品关联",
             "WORK_ITEM_RELATION_DELETED,解除事项关系",
             "WORK_ITEM_PARENT_CHANGED,更换事项父项"
     })

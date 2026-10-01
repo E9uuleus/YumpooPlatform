@@ -11,6 +11,7 @@ import { assertWorkflowSafety } from './workflow-policy.mjs'
 import { verificationEnvironment } from './environment.mjs'
 import { checkHistory } from './history-policy.mjs'
 import { plan } from './plan.mjs'
+import { historicalMilestones, verifyHistoricalMilestone } from './historical-assets.mjs'
 import { assertStageReport } from './reports.mjs'
 import { verifyContentCategoryRefactorAssets } from '../verification/content-category-refactor-assets.mjs'
 
@@ -87,6 +88,60 @@ test('handoff prerequisites reject stale, partial and failed stage reports', () 
   }
 })
 
+test('retired product milestones retain historical checks without requiring deleted implementations', () => {
+  const steps = plan('static')
+  assert(steps.some(step => step.id === 'historical-milestones'))
+  for (const milestone of ['M2-03', 'M2-07', 'M2-24']) {
+    assert(!steps.some(step => step.id === `${milestone.toLowerCase()}-assets`))
+    assert.equal(historicalMilestones.filter(item => item === milestone).length, 1)
+    assert.doesNotThrow(() => verifyHistoricalMilestone(milestone))
+  }
+  for (const id of ['m2-04-assets', 'm2-06-assets', 'm2-08-assets', 'm2-23-assets']) {
+    assert(steps.some(step => step.id === id))
+  }
+})
+
+test('historical validation rejects changed statuses, incomplete checks and empty acceptance', context => {
+  const directory = temporary(context)
+  for (const milestone of ['M2-03', 'M2-07', 'M2-24']) {
+    const base = `evidence/${milestone.toLowerCase()}`
+    const report = JSON.parse(fs.readFileSync(path.join(root, base, 'verification-report.json'), 'utf8'))
+    const acceptance = fs.readFileSync(path.join(root, base, 'acceptance-matrix.json'), 'utf8')
+    const check = value => {
+      write(directory, `${base}/verification-report.json`, JSON.stringify(value))
+      verifyHistoricalMilestone(milestone, directory)
+    }
+    write(directory, `${base}/acceptance-matrix.json`, acceptance)
+    assert.doesNotThrow(() => check(report))
+    for (const status of ['FAIL', 'BLOCKED_ENVIRONMENT', 'SKIPPED', undefined,
+      milestone === 'M2-24' ? 'PASS' : 'VERIFIED']) {
+      assert.throws(() => check({ ...report, status }), /历史报告无效/u)
+    }
+    assert.throws(() => check({ ...report, milestone: 'M2-00' }), /历史报告无效/u)
+    if (milestone === 'M2-24') {
+      for (const changes of [{ checks: {} }, { checks: { ...report.checks, linuxPrCi: false } },
+        { checks: { ...report.checks, productHttpContract: false } }, { flywayVersion: '60' }]) {
+        assert.throws(() => check({ ...report, ...changes }), /历史检查未完整成功/u)
+      }
+    }
+    write(directory, `${base}/acceptance-matrix.json`, JSON.stringify({ verifiedSlices: [] }))
+    assert.throws(() => check(report), /缺少已验证切片/u)
+  }
+})
+
+test('retired product verification commands run only historical evidence checks', () => {
+  for (const milestone of ['m2-03', 'm2-07', 'm2-24']) {
+    for (const suffix of ['', '-assets']) {
+      const result = spawnSync(process.execPath, [`tools/verification/verify-${milestone}${suffix}.mjs`], {
+        cwd: root, encoding: 'utf8', timeout: 10000,
+      })
+      assert.equal(result.status, 0, result.error?.message || result.stderr)
+      assert.match(result.stdout, /仅校验历史验收记录/u)
+      assert.match(result.stdout, /ci:static.*ci:backend/u)
+    }
+  }
+})
+
 test('verification subprocesses cannot inherit application credentials or JVM test bypasses', () => {
   const source = { PATH: 'toolchain', JAVA_HOME: 'jdk', DOCKER_HOST: 'docker', npm_execpath: 'pnpm.cjs',
     SPRING_DATASOURCE_URL: 'external-db', spring_flyway_password: 'external-secret',
@@ -119,6 +174,9 @@ test('history guard permits forward additions and rejects rewritten or deleted d
   write(directory, migration, 'SELECT 1;\n')
   write(directory, manifest, JSON.stringify({ exceptions: [{ id: 'historical', oldSha256: 'a', newSha256: 'b' }] }))
   write(directory, freeze, '{"frozen":true}\n')
+  const retirement = 'tools/events/retired-event-contracts.json'
+  const retirementEntry = { eventType: 'catalog.retired', eventVersion: 1, reason: '历史决策',
+    agentNote: '.agents/notes/implemented/product/2026-09-30-remove-product-concept.md' }
   const git = args => {
     const result = spawnSync('git', ['-c', 'user.name=CI', '-c', 'user.email=ci@example.invalid',
       '-c', `core.hooksPath=${path.join(directory, 'no-hooks')}`, ...args], { cwd: directory, encoding: 'utf8' })
@@ -129,6 +187,16 @@ test('history guard permits forward additions and rejects rewritten or deleted d
   git(['add', '.'])
   git(['commit', '--quiet', '-m', 'fixture'])
   const baseline = git(['rev-parse', 'HEAD'])
+  write(directory, retirement, JSON.stringify({ schemaVersion: 1, retired: [retirementEntry] }))
+  assert.doesNotThrow(() => checkHistory(directory, baseline))
+  git(['add', retirement])
+  git(['commit', '--quiet', '-m', 'retirement'])
+  const retirementBaseline = git(['rev-parse', 'HEAD'])
+  write(directory, retirement, JSON.stringify({ schemaVersion: 1, retired: [] }))
+  assert.throws(() => checkHistory(directory, retirementBaseline), /只允许追加/u)
+  fs.unlinkSync(path.join(directory, retirement))
+  assert.throws(() => checkHistory(directory, retirementBaseline))
+  write(directory, retirement, JSON.stringify({ schemaVersion: 1, retired: [retirementEntry] }))
   write(directory, 'backend/src/main/resources/db/migration/foundation/V2__forward.sql', 'SELECT 2;\n')
   assert.equal(checkHistory(directory, baseline), baseline)
   write(directory, 'backend/src/main/resources/db/migration/foundation/V1__duplicate.sql', 'SELECT 2;\n')

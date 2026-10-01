@@ -38,6 +38,7 @@ const events = catalog.events.map((frozen) => {
     eventType: frozen.eventType,
     eventVersion: frozen.eventVersion,
     schemaPath: catalogEvent.schema,
+    invalidExamples: catalogEvent.invalidExamples,
     schema: parseJson(
       gitObject(repositoryRoot, baseCommit, `contracts/events/${catalogEvent.schema}`),
       catalogEvent.schema,

@@ -54,7 +54,7 @@ const eventOptions = [
   ['filestorage.attachment_available', '附件可用'],
 ] as const
 const entityOptions = [
-  ['PROJECT', '项目'], ['PROJECT_MEMBER', '成员'], ['PRODUCT', '产品'],
+  ['PROJECT', '项目'], ['PROJECT_MEMBER', '成员'],
   ['CONTENT', '事项集合'], ['WORK_ITEM', '事项'], ['WORK_ITEM_UPDATE', '事项动态'],
   ['WORK_ITEM_RELATION', '事项关系'], ['ATTACHMENT', '附件'],
 ] as const

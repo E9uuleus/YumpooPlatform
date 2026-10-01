@@ -8,9 +8,6 @@ import com.yumpoo.platform.catalog.api.ProjectActivationMutation;
 import com.yumpoo.platform.catalog.api.ProjectActivationSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectLifecycleCommandPort;
 import com.yumpoo.platform.catalog.api.ProjectSnapshot;
-import com.yumpoo.platform.catalog.api.ProductFactWriteGuard;
-import com.yumpoo.platform.catalog.api.ProductLifecycleStatus;
-import com.yumpoo.platform.catalog.api.ProductProjectRelationQuery;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
@@ -34,11 +31,9 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -48,8 +43,6 @@ public class ProjectActivationOrchestrator {
     private final ActiveUserSnapshotQuery users;
     private final ProjectTemplateVersionQuery templates;
     private final ProjectContentReadinessQuery contents;
-    private final ProductProjectRelationQuery productRelations;
-    private final ProductFactWriteGuard products;
     private final IdempotentCommandExecutor idempotency;
     private final TransactionalEventPort events;
     private final SecurityAuditAppendPort audits;
@@ -58,16 +51,13 @@ public class ProjectActivationOrchestrator {
 
     public ProjectActivationOrchestrator(ProjectLifecycleCommandPort projects,
             ActiveUserSnapshotQuery users, ProjectTemplateVersionQuery templates,
-            ProjectContentReadinessQuery contents, ProductProjectRelationQuery productRelations,
-            ProductFactWriteGuard products, IdempotentCommandExecutor idempotency,
+            ProjectContentReadinessQuery contents, IdempotentCommandExecutor idempotency,
             TransactionalEventPort events, SecurityAuditAppendPort audits,
             ObjectMapper objectMapper, Clock clock) {
         this.projects = projects;
         this.users = users;
         this.templates = templates;
         this.contents = contents;
-        this.productRelations = productRelations;
-        this.products = products;
         this.idempotency = idempotency;
         this.events = events;
         this.audits = audits;
@@ -100,7 +90,6 @@ public class ProjectActivationOrchestrator {
             throw ApplicationException.validation(new FieldViolation("customerName",
                     "REQUIRED_FOR_ACTIVATION", "非研发 Project 激活前必须填写客户名称"));
         }
-        requireRelatedProductsActive(command, before);
         ProjectSnapshot after = projects.activate(mutation);
         Map<String, Object> summary = safeSummary(before, after);
         audits.append(new SecurityAuditDraft(after.companyId(),
@@ -116,21 +105,6 @@ public class ProjectActivationOrchestrator {
                 after.rowVersion(), after.companyId(), EventActor.user(command.actor().userId()),
                 objectMapper.valueToTree(summary)));
         return stored(after);
-    }
-
-    private void requireRelatedProductsActive(ProjectActivationCommand command,
-                                               ProjectSnapshot project) {
-        Set<UUID> productIds = productRelations.findProductIds(project.companyId(),
-                project.projectId(), Set.of(ProductProjectRelationQuery.RelationType.DEVELOPMENT,
-                        ProductProjectRelationQuery.RelationType.SUPPORT));
-        for (UUID productId : productIds.stream()
-                .sorted(Comparator.comparing(UUID::toString)).toList()) {
-            if (products.lockForFactWrite(command.actor(), productId).status()
-                    != ProductLifecycleStatus.ACTIVE) {
-                throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
-                        "RELATED_PRODUCT_ARCHIVED");
-            }
-        }
     }
 
     private void requireOwnerReady(ProjectSnapshot project, boolean membershipActive) {

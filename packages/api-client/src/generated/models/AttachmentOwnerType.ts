@@ -19,8 +19,6 @@
 export enum AttachmentOwnerType {
     WorkItem = 'WORK_ITEM',
     WorkItemUpdate = 'WORK_ITEM_UPDATE',
-    ProductFeedback = 'PRODUCT_FEEDBACK',
-    FeedbackUpdate = 'FEEDBACK_UPDATE',
     UnknownDefaultOpenApi = '11184809'
 }
 

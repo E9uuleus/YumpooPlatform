@@ -6,20 +6,20 @@ const push = vi.hoisted(() => vi.fn())
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 enableAutoUnmount(afterEach)
 const project = { id: 'project-1', name: '项目', code: 'PRJ', lifecycle: 'ACTIVE', ownerDisplayName: '负责人' } as ProjectDetail
-const sections = ['overview', 'members', 'products', 'activity', 'settings'] as const
+const sections = ['overview', 'members', 'activity', 'settings'] as const
 function render(section: typeof sections[number] | 'catalog' = 'overview') {
   return mount(ProjectWorkspaceHeader, { props: { project, section }, slots: { 'primary-action': '<button class="activate">激活 Project</button>' } })
 }
 beforeEach(() => push.mockReset())
 describe('项目头部分区切换器', () => {
-  it('五个按钮按固定顺序提供可访问名称和延迟 tooltip', () => {
+  it('四个按钮按固定顺序提供可访问名称和延迟 tooltip', () => {
     const wrapper = render()
     expect(wrapper.get('nav[aria-label="项目分区"]').findAll('button').map(button => button.attributes('aria-label')))
-      .toEqual(['工作项', '成员', '产品', '动态', '设置'])
-    expect(wrapper.findAll('.project-workspace-header__section-group').map(group => group.findAll('button').length)).toEqual([4, 1])
+      .toEqual(['工作项', '成员', '动态', '设置'])
+    expect(wrapper.findAll('.project-workspace-header__section-group').map(group => group.findAll('button').length)).toEqual([3, 1])
     const tooltips = wrapper.findAllComponents({ name: 'ElTooltip' })
-      .filter(tooltip => ['工作项', '成员', '产品', '动态', '设置'].includes(tooltip.props('content')))
-    expect(tooltips).toHaveLength(5)
+      .filter(tooltip => ['工作项', '成员', '动态', '设置'].includes(tooltip.props('content')))
+    expect(tooltips).toHaveLength(4)
     for (const tooltip of tooltips) {
       expect(tooltip.props()).toMatchObject({ placement: 'bottom', showAfter: 300 })
     }
@@ -27,7 +27,7 @@ describe('项目头部分区切换器', () => {
   it.each(sections)('%s 分区仍显示全部入口，当前按钮标记 page 并高亮', section => {
     const wrapper = render(section)
     const buttons = wrapper.findAll('nav button')
-    expect(buttons).toHaveLength(5)
+    expect(buttons).toHaveLength(4)
     expect(buttons.filter(button => button.attributes('aria-current') === 'page')).toHaveLength(1)
     expect(buttons[sections.indexOf(section)]!.classes()).toContain('is-current')
     expect(wrapper.get('nav .is-current').attributes('aria-current')).toBe('page')

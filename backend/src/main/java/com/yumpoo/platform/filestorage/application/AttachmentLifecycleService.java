@@ -48,10 +48,6 @@ public class AttachmentLifecycleService {
     }
 
     public IntentResult createIntent(CreateIntent command) {
-        if (command.ownerType() == AttachmentOwnerType.PRODUCT_FEEDBACK
-                || command.ownerType() == AttachmentOwnerType.FEEDBACK_UPDATE) {
-            throw validation("ownerType", "OWNER_TYPE_NOT_AVAILABLE", "该附件归属类型将在后续里程碑开放");
-        }
         if (command.declaredMime() == null || command.declaredMime().isBlank()
                 || command.declaredMime().length() > 160) {
             throw validation("declaredMime", "INVALID_MIME", "声明 MIME 无效");

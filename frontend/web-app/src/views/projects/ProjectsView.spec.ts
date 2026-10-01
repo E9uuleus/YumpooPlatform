@@ -28,7 +28,7 @@ vi.mock('@yumpoo/api-client', async importOriginal => ({
 const now = new Date('2026-08-23T02:30:00Z')
 const capabilities = {
   canUpdateSettings: true, canActivate: false, canManageMembers: true, canReassignOwner: true,
-  canManageProductLinks: true, canArchive: true, canRestore: false,
+  canArchive: true, canRestore: false,
   canMoveWorkspace: false, canOverrideArchive: true,
 }
 const summary: ProjectSummary = {

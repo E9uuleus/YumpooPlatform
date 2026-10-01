@@ -76,7 +76,6 @@ class M017BackupRestoreIT {
             createCompanyCalendarFact(source);
             createIdentityBindingFact(source);
             createWorkspaceFact(source);
-            createProductGovernanceFact(source);
             createProjectContentFact(source);
             createAttachmentFact(source, first);
             createActivityFact(source);
@@ -125,8 +124,6 @@ class M017BackupRestoreIT {
             assertThat(readProjectTemplateCatalogFact(target))
                     .isEqualTo(readProjectTemplateCatalogFact(source));
             assertThat(readWorkspaceFact(target)).isEqualTo(readWorkspaceFact(source));
-            assertThat(readProductGovernanceFact(target))
-                    .isEqualTo(readProductGovernanceFact(source));
             assertThat(readProjectContentFact(target))
                     .isEqualTo(readProjectContentFact(source));
             assertThat(readWorkItemStatusEventFact(target))
@@ -770,84 +767,6 @@ class M017BackupRestoreIT {
         }
     }
 
-    private static void createProductGovernanceFact(PostgreSQLContainer container) throws SQLException {
-        OffsetDateTime createdAt = OffsetDateTime.ofInstant(
-                Instant.parse("2026-08-20T06:00:00Z"), ZoneOffset.UTC);
-        try (Connection connection = connection(container)) {
-            connection.setAutoCommit(false);
-            try (PreparedStatement product = connection.prepareStatement("""
-                    INSERT INTO yumpoo.product (
-                        id, company_id, product_code, name, description, status, owner_user_id,
-                        row_version, created_at, created_by_user_id, updated_at, updated_by_user_id,
-                        archived_at, archived_by_user_id
-                    ) VALUES (
-                        '00000000-0000-4000-8000-000000000602',
-                        '00000000-0000-4000-8000-000000000001',
-                        'M2_03_RESTORE', 'M2-03 Restore Product', 'Product lifecycle restore probe',
-                        'ARCHIVED', '00000000-0000-4000-8000-000000000102', 3, ?,
-                        '00000000-0000-4000-8000-000000000102', ?,
-                        '00000000-0000-4000-8000-000000000102', ?,
-                        '00000000-0000-4000-8000-000000000102'
-                    )
-                    """)) {
-                product.setObject(1, createdAt);
-                product.setObject(2, createdAt.plusHours(2));
-                product.setObject(3, createdAt.plusHours(2));
-                assertThat(product.executeUpdate()).isOne();
-            }
-            try (PreparedStatement issue = connection.prepareStatement("""
-                    INSERT INTO yumpoo.governance_issue (
-                        id, company_id, issue_type, target_type, target_id, status,
-                        safe_summary_code, detected_event_id, detected_at,
-                        resolved_event_id, resolved_at, resolution_code,
-                        row_version, created_at, updated_at
-                    ) VALUES (
-                        '00000000-0000-4000-8000-000000000702',
-                        '00000000-0000-4000-8000-000000000001',
-                        'OWNER_MISSING', 'PRODUCT',
-                        '00000000-0000-4000-8000-000000000602', 'RESOLVED',
-                        'PRODUCT_OWNER_MISSING',
-                        '00000000-0000-4000-8000-000000000703', ?,
-                        '00000000-0000-4000-8000-000000000704', ?,
-                        'PRODUCT_OWNER_GOVERNED', 1, ?, ?
-                    )
-                    """)) {
-                issue.setObject(1, createdAt.plusHours(1));
-                issue.setObject(2, createdAt.plusHours(2));
-                issue.setObject(3, createdAt.plusHours(1));
-                issue.setObject(4, createdAt.plusHours(2));
-                assertThat(issue.executeUpdate()).isOne();
-            }
-            connection.commit();
-        }
-    }
-
-    private static ProductGovernanceFact readProductGovernanceFact(
-            PostgreSQLContainer container
-    ) throws SQLException {
-        try (Connection connection = connection(container);
-             Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("""
-                     SELECT product.id, product.product_code, product.status,
-                            product.owner_user_id, product.row_version,
-                            issue.issue_type, issue.target_type, issue.target_id,
-                            issue.status AS issue_status, issue.resolution_code
-                     FROM yumpoo.product product
-                     JOIN yumpoo.governance_issue issue ON issue.target_id = product.id
-                     WHERE product.id = '00000000-0000-4000-8000-000000000602'
-                     """)) {
-            assertThat(result.next()).isTrue();
-            ProductGovernanceFact fact = new ProductGovernanceFact(
-                    result.getObject("id", UUID.class), result.getString("product_code"),
-                    result.getString("status"), result.getObject("owner_user_id", UUID.class),
-                    result.getLong("row_version"), result.getString("issue_type"),
-                    result.getString("target_type"), result.getObject("target_id", UUID.class),
-                    result.getString("issue_status"), result.getString("resolution_code"));
-            assertThat(result.next()).isFalse();
-            return fact;
-        }
-    }
-
     private static void createProjectContentFact(PostgreSQLContainer container) throws SQLException {
         OffsetDateTime createdAt = OffsetDateTime.ofInstant(
                 Instant.parse("2026-08-20T07:00:00Z"), ZoneOffset.UTC);
@@ -978,33 +897,6 @@ class M017BackupRestoreIT {
                     """)) {
                 issue.setObject(1,createdAt); issue.setObject(2,createdAt); issue.setObject(3,createdAt);
                 assertThat(issue.executeUpdate()).isOne();
-            }
-            try (PreparedStatement link = connection.prepareStatement("""
-                    INSERT INTO yumpoo.project_product_link (
-                        id,company_id,project_id,product_id,relation_type,is_primary,
-                        linked_at,linked_by_user_id,updated_at,updated_by_user_id,
-                        removed_at,removed_by_user_id,remove_reason,row_version
-                    ) VALUES (
-                        '00000000-0000-4000-8000-000000000810',
-                        '00000000-0000-4000-8000-000000000001',
-                        '00000000-0000-4000-8000-000000000802',
-                        '00000000-0000-4000-8000-000000000602','DEVELOPMENT',true,
-                        ?,'00000000-0000-4000-8000-000000000102',?,
-                        '00000000-0000-4000-8000-000000000102',NULL,NULL,NULL,0),(
-                        '00000000-0000-4000-8000-000000000811',
-                        '00000000-0000-4000-8000-000000000001',
-                        '00000000-0000-4000-8000-000000000802',
-                        '00000000-0000-4000-8000-000000000602','SUPPORT',false,
-                        ?,'00000000-0000-4000-8000-000000000102',?,
-                        '00000000-0000-4000-8000-000000000102',?,
-                        '00000000-0000-4000-8000-000000000102','历史支持关系结束',4)
-                    """)) {
-                link.setObject(1, createdAt);
-                link.setObject(2, createdAt.plusHours(1));
-                link.setObject(3, createdAt);
-                link.setObject(4, createdAt.plusHours(2));
-                link.setObject(5, createdAt.plusHours(2));
-                assertThat(link.executeUpdate()).isEqualTo(2);
             }
             try (PreparedStatement content = connection.prepareStatement("""
                     INSERT INTO yumpoo.content (
@@ -1197,14 +1089,14 @@ class M017BackupRestoreIT {
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000812',
                         '00000000-0000-4000-8000-000000000001',
-                        'PRODUCT_ARCHIVE_WITH_BLOCKERS', 'PRODUCT',
-                        '00000000-0000-4000-8000-000000000602',
-                        '备份恢复必须保留产品治理覆盖理由和安全快照', ?,
+                        'PROJECT_ARCHIVE_WITH_OPEN_ITEMS', 'PROJECT',
+                        '00000000-0000-4000-8000-000000000802',
+                        '备份恢复必须保留项目治理覆盖理由和安全快照', ?,
                         '00000000-0000-4000-8000-000000000813',
                         '00000000-0000-4000-8000-000000000102',
-                        '{"productId":"00000000-0000-4000-8000-000000000602","status":"ACTIVE","rowVersion":2}'::jsonb,
-                        '{"productId":"00000000-0000-4000-8000-000000000602","status":"ARCHIVED","rowVersion":3}'::jsonb,
-                        '[{"code":"ACTIVE_DEVELOPMENT_SUPPORT_PROJECTS","count":1}]'::jsonb,
+                        '{"projectId":"00000000-0000-4000-8000-000000000802","lifecycle":"ACTIVE","rowVersion":2}'::jsonb,
+                        '{"projectId":"00000000-0000-4000-8000-000000000802","lifecycle":"ARCHIVED","rowVersion":3}'::jsonb,
+                        '[{"code":"OPEN_WORK_ITEMS","count":1}]'::jsonb,
                         'SUCCEEDED', NULL, ?
                     )
                     """)) {
@@ -1229,11 +1121,6 @@ class M017BackupRestoreIT {
                             (SELECT string_agg(m.user_id || ':' || m.status || ':' || m.row_version,
                                 ',' ORDER BY m.user_id) FROM yumpoo.project_membership m
                                 WHERE m.project_id=project.id) AS membership_facts,
-                            (SELECT string_agg(l.product_id || ':' || l.relation_type || ':'
-                                || l.is_primary || ':' || COALESCE(l.remove_reason,'-') || ':'
-                                || l.row_version || ':' || (l.removed_at IS NULL), ',' ORDER BY l.id)
-                                FROM yumpoo.project_product_link l
-                                WHERE l.project_id=project.id) AS product_link_facts,
                             issue.issue_type, issue.target_type, issue.status AS issue_status,
                             issue.row_version AS issue_version,
                             (SELECT counter.last_sequence FROM yumpoo.work_item_project_counter counter
@@ -1302,7 +1189,6 @@ class M017BackupRestoreIT {
                     result.getObject("owner_user_id", UUID.class),
                     result.getString("template_key"), result.getInt("template_version"),
                     result.getString("membership_status"), result.getString("membership_facts"),
-                    result.getString("product_link_facts"),
                     result.getString("issue_type"), result.getString("target_type"),
                     result.getString("issue_status"), result.getLong("issue_version"),
                     result.getLong("work_item_sequence"), result.getLong("label_catalog_version"),
@@ -1488,20 +1374,6 @@ class M017BackupRestoreIT {
     ) {
     }
 
-    private record ProductGovernanceFact(
-            UUID productId,
-            String code,
-            String productStatus,
-            UUID ownerUserId,
-            long rowVersion,
-            String issueType,
-            String targetType,
-            UUID targetId,
-            String issueStatus,
-            String resolutionCode
-    ) {
-    }
-
     private record ProjectContentFact(
             UUID projectId,
             String projectCode,
@@ -1514,7 +1386,6 @@ class M017BackupRestoreIT {
             int templateVersion,
             String membershipStatus,
             String membershipFacts,
-            String productLinkFacts,
             String issueType,
             String issueTargetType,
             String issueStatus,

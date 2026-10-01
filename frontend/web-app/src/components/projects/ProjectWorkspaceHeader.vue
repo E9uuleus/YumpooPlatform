@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Box, Clock, FolderOpened, Grid, Setting, User } from '@element-plus/icons-vue'
+import { Clock, FolderOpened, Grid, Setting, User } from '@element-plus/icons-vue'
 import type { ProjectDetail } from '@yumpoo/api-client'
 import { ElIcon, ElTooltip } from 'element-plus'
 import { computed } from 'vue'
@@ -7,7 +7,7 @@ import { useRouter } from 'vue-router'
 import YpAssignee from '../yp/YpAssignee.vue'
 import YpStatusTag from '../yp/YpStatusTag.vue'
 
-type ProjectSection = 'catalog' | 'overview' | 'members' | 'products' | 'activity' | 'settings'
+type ProjectSection = 'catalog' | 'overview' | 'members' | 'activity' | 'settings'
 
 const props = withDefaults(defineProps<{
   section: ProjectSection
@@ -29,7 +29,6 @@ const sectionGroups = [
   [
     { section: 'overview', route: 'project-overview', label: '工作项', icon: Grid },
     { section: 'members', route: 'project-members', label: '成员', icon: User },
-    { section: 'products', route: 'project-products', label: '产品', icon: Box },
     { section: 'activity', route: 'project-activity', label: '动态', icon: Clock },
   ],
   [{ section: 'settings', route: 'project-settings', label: '设置', icon: Setting }],

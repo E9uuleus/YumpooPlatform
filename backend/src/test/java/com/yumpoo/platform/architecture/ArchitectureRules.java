@@ -32,7 +32,6 @@ final class ArchitectureRules {
             "templateworkflow",
             "filestorage",
             "workitem",
-            "productfeedback",
             "worklog",
             "notification",
             "audit",
@@ -63,9 +62,6 @@ final class ArchitectureRules {
             Map.entry("workitem", Set.of(
                     "foundation", "catalog", "templateworkflow", "identityaccess", "filestorage", "audit"
             )),
-            Map.entry("productfeedback", Set.of(
-                    "foundation", "catalog", "workitem", "identityaccess", "filestorage"
-            )),
             Map.entry("worklog", Set.of(
                     "foundation", "organization", "catalog", "workitem", "identityaccess"
             )),
@@ -73,11 +69,11 @@ final class ArchitectureRules {
             Map.entry("audit", Set.of("foundation")),
             Map.entry("reporting", Set.of(
                     "foundation", "organization", "identityaccess", "catalog", "templateworkflow",
-                    "filestorage", "workitem", "productfeedback", "worklog", "notification", "audit"
+                    "filestorage", "workitem", "worklog", "notification", "audit"
             )),
             Map.entry("administration", Set.of(
                     "foundation", "organization", "identityaccess", "catalog", "templateworkflow",
-                    "filestorage", "workitem", "productfeedback", "worklog", "notification", "audit",
+                    "filestorage", "workitem", "worklog", "notification", "audit",
                     "reporting"
             ))
     );

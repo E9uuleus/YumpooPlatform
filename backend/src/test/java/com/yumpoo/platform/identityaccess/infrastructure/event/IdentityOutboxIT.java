@@ -19,6 +19,8 @@ import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
@@ -43,7 +45,7 @@ class IdentityOutboxIT {
 
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final UUID USER_ID = UUID.fromString("94000000-0000-4000-8000-000000000109");
-    private static final UUID PRODUCT_ID = UUID.fromString("95000000-0000-4000-8000-000000000109");
+    private static final UUID PROJECT_ID = UUID.fromString("95000000-0000-4000-8000-000000000109");
     private static final Set<String> GOVERNANCE_EVENTS = Set.of(
             "identity.user_employment_left", "identity.user_employment_returned",
             "identity.user_account_disabled", "identity.user_account_enabled",
@@ -65,13 +67,18 @@ class IdentityOutboxIT {
     private IdentityCommittedFactConsumer consumer;
     @Autowired
     private IdentityOutboxRecoveryRunner recovery;
+    @Autowired
+    private PlatformTransactionManager transactions;
 
     @BeforeEach
     @AfterEach
     void cleanUp() {
         jdbc.sql("DELETE FROM yumpoo.governance_issue WHERE target_id = :id")
-                .param("id", PRODUCT_ID).update();
-        jdbc.sql("DELETE FROM yumpoo.product WHERE id = :id").param("id", PRODUCT_ID).update();
+                .param("id", PROJECT_ID).update();
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            jdbc.sql("DELETE FROM yumpoo.project_membership WHERE project_id = :id").param("id", PROJECT_ID).update();
+            jdbc.sql("DELETE FROM yumpoo.project WHERE id = :id").param("id", PROJECT_ID).update();
+        });
         jdbc.sql("DELETE FROM yumpoo.identity_user WHERE id = :id").param("id", USER_ID).update();
         jdbc.sql("TRUNCATE yumpoo.outbox_event, yumpoo.outbox_consumer_receipt").update();
     }
@@ -120,7 +127,7 @@ class IdentityOutboxIT {
 
     @Test
     void startupRecoveryUnblocksTheNextUserVersionAndRunsItsGovernanceProjection() {
-        insertProductWithDisabledOwner();
+        insertProjectWithDisabledOwner();
         DomainEventEnvelope revoked = append("identity.user_sessions_revoked", 2, USER_ID, 1);
         markDead(revoked, "outbox.dispatcher", "NO_MATCHING_CONSUMER", "ConsumerRegistryFailure");
         DomainEventEnvelope disabled = append("identity.user_account_disabled", 1, USER_ID, 2);
@@ -142,7 +149,6 @@ class IdentityOutboxIT {
         assertThat(row(disabled)).containsEntry("status", "COMPLETED");
         assertThat(openIssues()).isOne();
         assertThat(receipts(disabled)).containsExactly(
-                "administration-product-owner-governance-v1",
                 "administration-project-owner-governance-v1");
         Map<String, Object> completed = row(revoked);
         recover();
@@ -280,10 +286,10 @@ class IdentityOutboxIT {
     private int openIssues() {
         return jdbc.sql("SELECT count(*) FROM yumpoo.governance_issue "
                         + "WHERE target_id = :id AND status = 'OPEN' AND issue_type = 'OWNER_MISSING'")
-                .param("id", PRODUCT_ID).query(Integer.class).single();
+                .param("id", PROJECT_ID).query(Integer.class).single();
     }
 
-    private void insertProductWithDisabledOwner() {
+    private void insertProjectWithDisabledOwner() {
         jdbc.sql("""
                         INSERT INTO yumpoo.identity_user (
                             id, company_id, employment_status, account_status, display_name,
@@ -298,13 +304,24 @@ class IdentityOutboxIT {
                             updated_at = transaction_timestamp(), row_version = row_version + 1
                         WHERE id = :id
                         """).param("id", USER_ID).update();
-        jdbc.sql("""
-                        INSERT INTO yumpoo.product (
-                            id, company_id, product_code, name, status, owner_user_id,
-                            row_version, created_at, created_by_user_id, updated_at, updated_by_user_id
-                        ) VALUES (:id, :companyId, 'IDENTITY_OUTBOX', 'Identity Outbox', 'ACTIVE', :ownerId,
-                            0, transaction_timestamp(), :ownerId, transaction_timestamp(), :ownerId)
-                        """).param("id", PRODUCT_ID).param("companyId", COMPANY_ID)
-                .param("ownerId", USER_ID).update();
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            jdbc.sql("""
+                    INSERT INTO yumpoo.project (
+                        id, company_id, workspace_id, project_code, name, project_type,
+                        lifecycle, owner_user_id, template_key, template_version,
+                        row_version, created_at, created_by_user_id, updated_at, updated_by_user_id
+                    ) SELECT :id, :companyId, id, 'IDENTITY_OUTBOX', 'Identity Outbox',
+                        'PRODUCT_DEVELOPMENT', 'DRAFT', :ownerId, 'RND', 1,
+                        0, transaction_timestamp(), :ownerId, transaction_timestamp(), :ownerId
+                      FROM yumpoo.workspace WHERE company_id=:companyId AND code='MAIN'
+                    """).param("id", PROJECT_ID).param("companyId", COMPANY_ID)
+                    .param("ownerId", USER_ID).update();
+            jdbc.sql("""
+                    INSERT INTO yumpoo.project_membership (
+                        id, company_id, project_id, user_id, status, joined_at, joined_by_user_id, row_version
+                    ) VALUES (:id, :companyId, :projectId, :ownerId, 'ACTIVE', transaction_timestamp(), :ownerId, 0)
+                    """).param("id", UUID.randomUUID()).param("companyId", COMPANY_ID)
+                    .param("projectId", PROJECT_ID).param("ownerId", USER_ID).update();
+        });
     }
 }

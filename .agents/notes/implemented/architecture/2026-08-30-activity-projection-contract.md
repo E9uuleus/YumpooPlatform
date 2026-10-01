@@ -14,7 +14,7 @@ V44 建立 append-only `activity_event` 和单行 `activity_projection_state`。
 
 每条投影保存不可变行为人显示名快照、事实时间、实体引用、最多两个同范围 Work Item 关联、模板码和白名单 JSON。正文、删除或治理理由、客户字段、哈希、Update 内容长度以及跨 Project 的另一端标识均不保存。Project 与 Work Item HTTP 查询先按当前访问关系验证，移除成员和仅 APP_MANAGER 身份得到 404；归档 Project 和软删除 Work Item 的已投影历史保持可读。
 
-游标绑定 Company、Project、可选 Work Item 和完整筛选指纹，锚点为 `(occurred_at, id)`；响应不返回总数。Product 生命周期也写入 `PRODUCT` 范围，但 M2-20 不开放 Product Activity HTTP 或页面。
+游标绑定 Company、Project、可选 Work Item 和完整筛选指纹，锚点为 `(occurred_at, id)`；响应不返回总数。当前受众仅为 `PROJECT`；产品事件订阅、渲染和 PRODUCT/FEEDBACK 历史行由[删除产品决定](../product/2026-09-30-remove-product-concept.md)移除，V60 收紧数据库范围约束。
 
 工作项详情的字段审计使用独立 `WORK_ITEM_CELL_ACTIVITY_V1` 追加投影，不改变上述综合 Activity V1。V46 建立自己的迁移切点和一事件多字段拆行幂等键；V46 已执行后保持冻结，V47 仅以追加迁移移除 facet 索引中的 Content 键。投影只记录创建名称、名称、处理人、状态、优先级和截止日期，明确排除描述、备注、计划日期、排序、删除恢复、讨论、关系、附件和派生更新时间。Content 只保存事件发生时的类别 ID/显示名快照，不作为查询筛选或统计维度，不产生伪造的类别变更，也不引入跨 Content 移动能力。字段值是白名单结构快照：状态/优先级保存代码、显示名和颜色，成员保存 ID 与当时显示名，自然日保存日期文本。
 
@@ -29,7 +29,7 @@ V44 建立 append-only `activity_event` 和单行 `activity_projection_state`。
 - 查询时直接扫描 Outbox：拒绝，因为 Outbox 可清理，载荷不是展示契约，而且会扩大敏感字段和权限侧信道。
 - 上线时回填全部旧事件：拒绝，因为已完成、死亡和旧版本事件无法可靠重建行为人快照与去重语义；采用明确切点更可验证。
 - 让 `audit.application` 直接调用其他模块或其自身 API 端口：拒绝，因为违反模块依赖矩阵和同模块单向层级。
-- 为 Product 同步开放页面：拒绝，Product 投影先稳定存储，公开面留给后续里程碑。
+- 为已经退役的业务保留投影和页面占位：拒绝。事件、当前受众与公开入口应遵循同一退出决定。
 - 把单元格拆行塞进既有 `activity_event`：拒绝，既有一事件一范围唯一约束和综合摘要语义不能安全表达多字段前后值；独立投影可保持旧 API 与项目动态兼容。
 - 回放旧 Outbox 推断字段旧值：拒绝，旧 fields-changed v1 没有标题、优先级与截止日的可靠前值；采用新切点并由生产者兼容增加可选前值。
 

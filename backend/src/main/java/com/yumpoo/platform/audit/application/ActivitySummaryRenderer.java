@@ -9,11 +9,6 @@ public class ActivitySummaryRenderer {
         String ref = text(parameters, "entityRef", "该对象");
         String person = text(parameters, "memberDisplayName", "成员");
         return switch (templateCode) {
-            case "PRODUCT_CREATED" -> "创建了产品 " + ref;
-            case "PRODUCT_UPDATED" -> "更新了产品 " + ref;
-            case "PRODUCT_ARCHIVED" -> "归档了产品 " + ref;
-            case "PRODUCT_RESTORED" -> "恢复了产品 " + ref;
-            case "PRODUCT_OWNER_REASSIGNED" -> "调整了产品负责人：" + person;
             case "PROJECT_CREATED" -> "创建了项目 " + ref;
             case "PROJECT_UPDATED" -> "更新了项目信息";
             case "PROJECT_ACTIVATED" -> "激活了项目";
@@ -24,9 +19,6 @@ public class ActivitySummaryRenderer {
             case "PROJECT_MEMBER_ADDED" -> "添加了项目成员：" + person;
             case "PROJECT_MEMBER_REMOVED" -> "移除了项目成员：" + person;
             case "PROJECT_OWNER_REASSIGNED" -> "调整了项目负责人：" + person;
-            case "PRODUCT_LINKED_TO_PROJECT" -> "关联了产品";
-            case "PROJECT_PRODUCT_LINK_UPDATED" -> "更新了产品关联";
-            case "PRODUCT_UNLINKED_FROM_PROJECT" -> "取消了产品关联";
             case "CONTENT_CREATED" -> "创建了工作项类别 " + ref;
             case "CONTENT_UPDATED" -> "更新了工作项类别 " + ref;
             case "CONTENT_DELETED" -> "删除了工作项类别 " + ref;

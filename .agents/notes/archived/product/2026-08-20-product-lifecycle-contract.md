@@ -1,6 +1,7 @@
 # Agent Note: Product 生命周期与唯一负责人契约
 
 Status: implemented
+Archived: 2026-10-01
 
 ## Problem
 

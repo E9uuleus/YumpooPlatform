@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "retired": [
+    {
+      "eventType": "catalog.product_created",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消产品概念",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
+    },
+    {
+      "eventType": "catalog.product_updated",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消产品概念",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
+    },
+    {
+      "eventType": "catalog.product_archived",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消产品概念",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
+    },
+    {
+      "eventType": "catalog.product_restored",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消产品概念",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
+    },
+    {
+      "eventType": "catalog.product_owner_reassigned",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消产品概念",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
+    },
+    {
+      "eventType": "catalog.product_linked_to_project",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消产品概念",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
+    },
+    {
+      "eventType": "catalog.project_product_link_updated",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消产品概念",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
+    },
+    {
+      "eventType": "catalog.product_unlinked_from_project",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消产品概念",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
+    }
+  ]
+}

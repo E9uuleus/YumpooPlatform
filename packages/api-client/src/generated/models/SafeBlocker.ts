@@ -39,7 +39,6 @@ export interface SafeBlocker {
 export enum SafeBlockerCodeEnum {
     OpenWorkItems = 'OPEN_WORK_ITEMS',
     PendingWorklogApprovals = 'PENDING_WORKLOG_APPROVALS',
-    OpenProductFeedback = 'OPEN_PRODUCT_FEEDBACK',
     CurrentProjects = 'CURRENT_PROJECTS',
     UnknownDefaultOpenApi = '11184809'
 }
