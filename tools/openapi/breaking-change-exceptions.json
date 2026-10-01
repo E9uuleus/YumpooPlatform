@@ -53,15 +53,8 @@
     {
       "id": "2026-09-30-unified-project-model",
       "oldSha256": "3c3d102f54caf4ec4252b7e4991bed716e8f9d8c15cdc33ec3273f6437320648",
-      "newSha256": "dc6ac1ee9523e97e5a5e6e738ef13b7b99eb6078a9ca1e8d6ddba849176a00b9",
-      "reason": "统一项目模型删除类型、模板、客户信息与 DRAFT/激活接口；创建请求仅名称和描述，服务端生成编码并以创建人为负责人。前后端、事件和生成客户端配套升级。",
-      "agentNote": ".agents/notes/implemented/product/2026-09-30-unified-project-model.md"
-    },
-    {
-      "id": "2026-10-01-unified-project-model-review",
-      "oldSha256": "3c3d102f54caf4ec4252b7e4991bed716e8f9d8c15cdc33ec3273f6437320648",
       "newSha256": "ab7ad4702c6b04793a1786023fec197e8430356b992c493e4e27de52fff6f9c7",
-      "reason": "继承 PR-2 已批准的统一项目模型破坏变更；评审仅修正 visibleProjectCount 的 ACTIVE 说明并恢复无关格式，解析后的规范结构与 PR-2 原快照一致，不新增权限规则或契约字段。既有例外保持不变。",
+      "reason": "统一项目模型删除类型、模板、客户信息与 DRAFT/激活接口；创建请求仅名称和描述，服务端生成编码并以创建人为负责人。前后端、事件和生成客户端配套升级。",
       "agentNote": ".agents/notes/implemented/product/2026-09-30-unified-project-model.md"
     }
   ]
