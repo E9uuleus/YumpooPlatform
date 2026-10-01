@@ -63,7 +63,7 @@ export interface Workspace {
      */
     status: WorkspaceStatus;
     /**
-     * 调用人可见的 DRAFT 与 ACTIVE Project 数量；管理员统计全公司，普通用户统计 ACTIVE membership。
+     * 调用人可见的 ACTIVE Project 数量；管理员统计全公司，普通用户统计 ACTIVE membership。
      * @type {number}
      * @memberof Workspace
      */
