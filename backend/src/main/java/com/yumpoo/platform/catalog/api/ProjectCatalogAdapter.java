@@ -161,8 +161,6 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
                 mutation.actorUserId())));
     }
 
-
-
     @Override
     public ProjectSnapshot lockForArchive(ProjectArchiveMutation mutation) {
         return snapshot(lifecycleService.lockForArchive(new com.yumpoo.platform.catalog.application.project.ProjectArchiveCommand(
@@ -194,7 +192,6 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     public ProjectSnapshot lockForNewFact(java.util.UUID companyId, java.util.UUID projectId) {
         return snapshot(lifecycleService.lockForNewFact(companyId, projectId));
     }
-
 
     private static ProjectSnapshot snapshot(ProjectApplicationSnapshot project) {
         return new ProjectSnapshot(project.projectId(), project.companyId(), project.workspaceId(),

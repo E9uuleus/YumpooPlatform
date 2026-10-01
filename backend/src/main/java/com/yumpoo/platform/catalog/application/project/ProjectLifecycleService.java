@@ -29,8 +29,6 @@ public class ProjectLifecycleService {
         this.clock = clock;
     }
 
-
-
     @Transactional(propagation = Propagation.MANDATORY)
     public ProjectApplicationSnapshot lockForArchive(ProjectArchiveCommand command) {
         Project project = requiredLocked(command.companyId(), command.projectId());
@@ -118,7 +116,6 @@ public class ProjectLifecycleService {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
     }
-
 
     private static ProjectApplicationSnapshot snapshot(Project project) {
         return new ProjectApplicationSnapshot(project.id(), project.companyId(), project.workspaceId(),

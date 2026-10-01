@@ -128,7 +128,6 @@ public final class ProjectLifecycleGovernanceService {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
                     "OWNER_MISSING");
         }
-
     }
 
     private void appendArchive(ProjectSnapshot before, ProjectSnapshot after, CurrentActor actor,
