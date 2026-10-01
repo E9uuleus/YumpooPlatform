@@ -51,6 +51,8 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "workitem.work_item_status_changed", "workitem.work_item_deleted",
             "workitem.work_item_restored", "workitem.work_item_update_published",
             "workitem.work_item_update_edited", "workitem.work_item_update_deleted");
+    private static final Set<String> V2_ONLY_EVENTS = Set.of(
+            "catalog.project_created", "workitem.content_deleted");
 
     private final ActivityRepository repository;
     private final ActivityProjectionContextPort context;
@@ -71,7 +73,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     @Override
     public Set<EventSubscription> subscriptions() {
         LinkedHashSet<EventSubscription> subscriptions = new LinkedHashSet<>();
-        allEvents().stream().filter(type -> !type.equals("catalog.project_created"))
+        allEvents().stream().filter(type -> !V2_ONLY_EVENTS.contains(type))
                 .forEach(type -> subscriptions.add(new EventSubscription(type, 1)));
         V2_EVENTS.forEach(type -> subscriptions.add(new EventSubscription(type, 2)));
         return Set.copyOf(subscriptions);

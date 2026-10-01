@@ -83,6 +83,15 @@ class ActivityProjectionServiceTest {
     }
 
     @Test
+    void subscribesOnlyToCurrentProjectCreationAndContentDeletionVersions() {
+        assertThat(service.subscriptions())
+                .contains(new EventSubscription("catalog.project_created", 2),
+                        new EventSubscription("workitem.content_deleted", 2))
+                .doesNotContain(new EventSubscription("catalog.project_created", 1),
+                        new EventSubscription("workitem.content_deleted", 1));
+    }
+
+    @Test
     void storesOnlyWhitelistedWorkItemFactsAndActorSnapshot() {
         ObjectNode payload = workItem();
         payload.put("description", "不得落库的正文");
