@@ -73,7 +73,7 @@ export interface ConnectionCard {
      */
     title: string;
     /**
-     * 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+     *
      * @type {boolean}
      * @memberof ConnectionCard
      */
@@ -127,7 +127,7 @@ export interface ConnectionCard {
      */
     assignee: ConnectionCardAssignee | null;
     /**
-     * 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+     * 当前用户能看见该卡片所在项目。
      * @type {boolean}
      * @memberof ConnectionCard
      */

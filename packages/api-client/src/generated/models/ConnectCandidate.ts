@@ -46,7 +46,7 @@ export interface ConnectCandidate {
      */
     parent: ConnectCandidateParent | null;
     /**
-     * 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+     *
      * @type {boolean}
      * @memberof ConnectCandidate
      */

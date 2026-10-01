@@ -19,7 +19,7 @@ import { mapValues } from '../runtime';
  */
 export interface WorkItemConnectionCapabilities {
     /**
-     * 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+     *
      * @type {boolean}
      * @memberof WorkItemConnectionCapabilities
      */

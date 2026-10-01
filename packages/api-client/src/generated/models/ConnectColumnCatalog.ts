@@ -40,7 +40,7 @@ export interface ConnectColumnCatalog {
      */
     items: Array<ConnectColumn>;
     /**
-     * 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+     *
      * @type {boolean}
      * @memberof ConnectColumnCatalog
      */
@@ -52,13 +52,13 @@ export interface ConnectColumnCatalog {
      */
     incomingColumns: Array<ConnectColumnIncoming>;
     /**
-     * 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+     *
      * @type {boolean}
      * @memberof ConnectColumnCatalog
      */
     canManage: boolean;
     /**
-     * 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+     *
      * @type {boolean}
      * @memberof ConnectColumnCatalog
      */

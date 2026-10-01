@@ -5145,6 +5145,7 @@ components:
         actorCanLinkExisting:
           type: boolean
           description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+
     ConnectColumn:
       type: object
       additionalProperties: false
@@ -5198,17 +5199,17 @@ components:
           maxItems: 20
         incomingAvailable:
           type: boolean
-          description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+
         incomingColumns:
           type: array
           items:
             $ref: "#/components/schemas/ConnectColumnIncoming"
         canManage:
           type: boolean
-          description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+
         canDelete:
           type: boolean
-          description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+
       description: 来源项目可见；入站列只暴露项目与列的最小名称信息。
     ConnectColumnCreateRequest:
       type: object
@@ -5318,7 +5319,7 @@ components:
         name:
           type: string
           minLength: 1
-          maxLength: 40
+          maxLength: 80
         colorToken:
           $ref: "#/components/schemas/WorkItemLabelColorToken"
     ConnectionCardStatus:
@@ -5337,7 +5338,7 @@ components:
         name:
           type: string
           minLength: 1
-          maxLength: 40
+          maxLength: 80
         colorToken:
           $ref: "#/components/schemas/WorkItemLabelColorToken"
         category:
@@ -5398,7 +5399,6 @@ components:
           maxLength: 300
         archived:
           type: boolean
-          description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
         projectId:
           $ref: "#/components/schemas/Uuid"
         projectCode:
@@ -5426,7 +5426,7 @@ components:
             name:
               type: string
               minLength: 1
-              maxLength: 40
+              maxLength: 80
             colorToken:
               $ref: "#/components/schemas/WorkItemLabelColorToken"
           nullable: true
@@ -5447,7 +5447,7 @@ components:
           nullable: true
         canOpen:
           type: boolean
-          description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+          description: 当前用户能看见该卡片所在项目。
       description: 连接授权的固定 13 字段只读卡片。canOpen 仅表明当前用户能否打开该卡片所在项目。
     WorkItemConnectionCapabilities:
       type: object
@@ -5457,7 +5457,7 @@ components:
       properties:
         canUnlink:
           type: boolean
-          description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+
     WorkItemConnection:
       type: object
       additionalProperties: false
@@ -5497,7 +5497,7 @@ components:
             - CREATED
         active:
           type: boolean
-          description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+
         source:
           $ref: "#/components/schemas/ConnectionCard"
         target:
@@ -5648,7 +5648,7 @@ components:
           nullable: true
         alreadyConnected:
           type: boolean
-          description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+
     ConnectCandidatePage:
       type: object
       additionalProperties: false
