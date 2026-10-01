@@ -91,19 +91,19 @@ test('handoff prerequisites reject stale, partial and failed stage reports', () 
 test('retired product milestones retain historical checks without requiring deleted implementations', () => {
   const steps = plan('static')
   assert(steps.some(step => step.id === 'historical-milestones'))
-  for (const milestone of ['M2-03', 'M2-07', 'M2-24']) {
+  for (const milestone of ['M2-01', 'M2-03', 'M2-04', 'M2-06', 'M2-07', 'M2-24']) {
     assert(!steps.some(step => step.id === `${milestone.toLowerCase()}-assets`))
     assert.equal(historicalMilestones.filter(item => item === milestone).length, 1)
     assert.doesNotThrow(() => verifyHistoricalMilestone(milestone))
   }
-  for (const id of ['m2-04-assets', 'm2-06-assets', 'm2-08-assets', 'm2-23-assets']) {
+  for (const id of ['m2-02-assets', 'm2-08-assets', 'm2-23-assets']) {
     assert(steps.some(step => step.id === id))
   }
 })
 
 test('historical validation rejects changed statuses, incomplete checks and empty acceptance', context => {
   const directory = temporary(context)
-  for (const milestone of ['M2-03', 'M2-07', 'M2-24']) {
+  for (const milestone of ['M2-01', 'M2-03', 'M2-04', 'M2-06', 'M2-07', 'M2-24']) {
     const base = `evidence/${milestone.toLowerCase()}`
     const report = JSON.parse(fs.readFileSync(path.join(root, base, 'verification-report.json'), 'utf8'))
     const acceptance = fs.readFileSync(path.join(root, base, 'acceptance-matrix.json'), 'utf8')
@@ -124,13 +124,13 @@ test('historical validation rejects changed statuses, incomplete checks and empt
         assert.throws(() => check({ ...report, ...changes }), /历史检查未完整成功/u)
       }
     }
-    write(directory, `${base}/acceptance-matrix.json`, JSON.stringify({ verifiedSlices: [] }))
+    write(directory, `${base}/acceptance-matrix.json`, JSON.stringify({ verifiedSlices: [], verifiedRequirements: [] }))
     assert.throws(() => check(report), /缺少已验证切片/u)
   }
 })
 
 test('retired product verification commands run only historical evidence checks', () => {
-  for (const milestone of ['m2-03', 'm2-07', 'm2-24']) {
+  for (const milestone of ['m2-01', 'm2-03', 'm2-04', 'm2-06', 'm2-07', 'm2-24']) {
     for (const suffix of ['', '-assets']) {
       const result = spawnSync(process.execPath, [`tools/verification/verify-${milestone}${suffix}.mjs`], {
         cwd: root, encoding: 'utf8', timeout: 10000,

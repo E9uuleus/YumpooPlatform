@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-Content 保留后端名称，产品语义固定为 Project 级“工作项类别”。条目只保存稳定 code、名称、受控颜色、顺序、启用、保护、曾使用、版本和审计事实；不保存描述、工作项类型、视图配置或模板来源。模板蓝图只初始化 `{contentCode, displayName, colorToken, sortOrder}`，至少一个且 code 唯一。
+Content 保留后端名称，产品语义固定为 Project 级“工作项类别”。条目只保存稳定 code、名称、受控颜色、顺序、启用、保护、曾使用、版本和审计事实；不保存描述、工作项类型、视图配置或模板来源。新项目按[统一项目模型](2026-09-30-unified-project-model.md) 的 DefaultProjectStructure 初始化 `{contentCode, displayName, colorToken, sortOrder}`，至少一个且 code 唯一；存量类别不迁移、不改写。
 
 默认“需求 / 任务 / 缺陷”受保护，初始颜色为亮蓝、明亮绿、深红。Owner 可改名、调色、排序和停用；受保护类别不可删除。Owner 创建的新类别从未使用时可软删除，一经工作项引用即永久记为曾使用，只能停用。目录始终至少有一个启用类别。Member 与 CompanyAdmin 可按项目可见性读取，只有 Owner 可管理。
 

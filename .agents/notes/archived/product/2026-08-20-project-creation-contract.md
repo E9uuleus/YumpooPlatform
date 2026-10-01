@@ -1,6 +1,7 @@
 # Agent Note: Project 原子创建与模板固化契约
 
 Status: implemented
+Archived: 2026-10-01
 
 ## Problem
 
