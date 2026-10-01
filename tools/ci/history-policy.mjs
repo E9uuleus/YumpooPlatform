@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { resolveGitCommit } from '../verification/m0-18-utils.mjs'
+import { retirementManifestPath, validateRetirementManifest } from '../events/event-contract-compat.mjs'
 
 function git(root, args) {
   const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
@@ -48,5 +49,23 @@ export function checkHistory(root, reference) {
       throw new Error(`不得改写既有 OpenAPI 精确例外：${entry.id}`)
     }
   }
+  const trackedRetirement = git(root, ['ls-tree', '--name-only', baseCommit, '--', retirementManifestPath]).trim()
+  const currentRetirementPath = path.join(root, retirementManifestPath)
+  if (trackedRetirement || fs.existsSync(currentRetirementPath)) {
+    const previous = trackedRetirement ? JSON.parse(git(root, ['show', `${baseCommit}:${retirementManifestPath}`]))
+      : { schemaVersion: 1, retired: [] }
+    const next = JSON.parse(fs.readFileSync(currentRetirementPath, 'utf8'))
+    assertRetirementHistory(previous, next)
+  }
   return baseCommit
+}
+
+export function assertRetirementHistory(previous, next) {
+  validateRetirementManifest(previous)
+  validateRetirementManifest(next)
+  for (const [index, entry] of previous.retired.entries()) {
+    if (JSON.stringify(next.retired[index]) !== JSON.stringify(entry)) {
+      throw new Error(`事件退役清单只允许追加，不得修改、删除或重排：${entry.eventType}@${entry.eventVersion}`)
+    }
+  }
 }

@@ -6,6 +6,7 @@ import { parse as parseYaml } from 'yaml'
 
 export const freezeManifestPath = 'contracts/events/freeze/workitem-m2-v1.json'
 export const eventEnvelopePath = 'schemas/event-envelope.schema.json'
+export const retirementManifestPath = 'tools/events/retired-event-contracts.json'
 
 const frozenEventCount = 14
 const eventTypePattern = /^workitem\.work_item_[a-z0-9_]+$/u
@@ -73,6 +74,29 @@ export function validateFreezeManifest(manifest) {
 export function loadCurrentBundle(repositoryRoot, manifest = readFreezeManifest(repositoryRoot)) {
   const eventsRoot = path.join(repositoryRoot, 'contracts', 'events')
   const catalog = parseYaml(fs.readFileSync(path.join(eventsRoot, 'catalog.yaml'), 'utf8'))
+  const retirement = readJson(path.join(repositoryRoot, retirementManifestPath), '事件退役清单')
+  validateRetirementManifest(retirement)
+  const frozenEvents = fs.readdirSync(path.join(eventsRoot, 'freeze'), { recursive: true })
+    .filter(file => file.endsWith('.json'))
+    .flatMap(file => readJson(path.join(eventsRoot, 'freeze', file)).events ?? [])
+  const contractFiles = ['schemas', 'examples'].flatMap(directory =>
+    fs.readdirSync(path.join(eventsRoot, directory), { recursive: true })
+      .filter(file => file.endsWith('.json'))
+      .map(file => `${directory}/${file.replaceAll('\\', '/')}`))
+  const retiredKeys = new Set(retirement.retired.map(eventKey))
+  for (const file of contractFiles) {
+    const value = readJson(path.join(eventsRoot, file), file)
+    const definitions = [value, ...(value.allOf ?? []).map(layer => ({
+      eventType: layer.properties?.eventType?.const,
+      eventVersion: layer.properties?.eventVersion?.const,
+    }))]
+    assert(!definitions.some(entry => retiredKeys.has(eventKey(entry))), `退役事件仍有 Schema 或样例文件：${file}`)
+  }
+  for (const entry of retirement.retired) {
+    assert(fs.statSync(path.join(repositoryRoot, entry.agentNote), { throwIfNoEntry: false })?.isFile(),
+      `${eventKey(entry)} 退役决策记录不存在：${entry.agentNote}`)
+  }
+  assertRetiredEventsAbsent(retirement.retired, catalog.events, frozenEvents)
   const envelopeSchema = readJson(path.join(eventsRoot, eventEnvelopePath), eventEnvelopePath)
   const supportSchemas = fs.readdirSync(path.join(eventsRoot, 'schemas'))
     .filter(file => file.endsWith('-payload.schema.json'))
@@ -97,12 +121,42 @@ export function loadCurrentBundle(repositoryRoot, manifest = readFreezeManifest(
       validExamples,
     }
   })
-  return { schemaVersion: 1, envelopeSchema, events, supportSchemas }
+  return { schemaVersion: 1, envelopeSchema, events, supportSchemas, retired: retirement.retired, frozenEvents, contractFiles }
+}
+
+export function validateRetirementManifest(manifest) {
+  assert(manifest?.schemaVersion === 1 && Array.isArray(manifest.retired), '退役清单必须使用 schemaVersion=1 与 retired 数组')
+  const keys = new Set()
+  for (const entry of manifest.retired) {
+    assert(entry && /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/u.test(entry.eventType)
+      && Number.isSafeInteger(entry.eventVersion) && entry.eventVersion > 0, '退役事件名称或版本不合法')
+    const key = eventKey(entry)
+    assert(!keys.has(key), `${key} 在退役清单中重复`)
+    keys.add(key)
+    assert(typeof entry.reason === 'string' && entry.reason.trim().length > 0, `${key} 缺少退役理由`)
+    assert(typeof entry.agentNote === 'string'
+      && /^\.agents\/notes\/implemented\/[a-z]+\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$/u.test(entry.agentNote),
+    `${key} 缺少有效的退役决策记录路径`)
+  }
+}
+
+function assertRetiredEventsAbsent(retired, events, frozenEvents) {
+  const currentKeys = new Set(events.map(eventKey))
+  const frozenKeys = new Set(frozenEvents.map(eventKey))
+  for (const entry of retired) {
+    const key = eventKey(entry)
+    assert(!frozenKeys.has(key), `${key} 是冻结事件，不可退役`)
+    assert(!currentKeys.has(key), `${key} 已退役，不得出现在当前事件目录`)
+  }
 }
 
 export function assertEventContractsCompatible(baseline, current) {
   assert(baseline?.schemaVersion === 1, '历史基线 schemaVersion 必须为 1')
   assert(current?.schemaVersion === 1, '当前契约 bundle schemaVersion 必须为 1')
+  const retired = current.retired ?? []
+  validateRetirementManifest({ schemaVersion: 1, retired })
+  assertRetiredEventsAbsent(retired, current.events, current.frozenEvents ?? [])
+  const retiredKeys = new Set(retired.map(eventKey))
   compareObjectSchema('事件信封', baseline.envelopeSchema, current.envelopeSchema)
 
   const ajv = new Ajv({ allErrors: true, strict: true, schemas: [current.envelopeSchema] })
@@ -120,6 +174,13 @@ export function assertEventContractsCompatible(baseline, current) {
   const currentByKey = new Map(current.events.map((event) => [eventKey(event), event]))
   for (const previous of baseline.events) {
     const key = eventKey(previous)
+    if (retiredKeys.has(key)) {
+      for (const file of [previous.schemaPath, ...previous.validExamples.map(example => example.path),
+        ...(previous.invalidExamples ?? [])]) {
+        assert(!current.contractFiles?.includes(file), `${key} 退役后仍保留契约文件：${file}`)
+      }
+      continue
+    }
     const next = currentByKey.get(key)
     assert(next, `${key} 已从当前事件目录移除`)
     compareEvent(key, previous, next, ajv)

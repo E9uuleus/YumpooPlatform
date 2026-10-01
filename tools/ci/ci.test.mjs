@@ -119,6 +119,9 @@ test('history guard permits forward additions and rejects rewritten or deleted d
   write(directory, migration, 'SELECT 1;\n')
   write(directory, manifest, JSON.stringify({ exceptions: [{ id: 'historical', oldSha256: 'a', newSha256: 'b' }] }))
   write(directory, freeze, '{"frozen":true}\n')
+  const retirement = 'tools/events/retired-event-contracts.json'
+  const retirementEntry = { eventType: 'catalog.retired', eventVersion: 1, reason: '历史决策',
+    agentNote: '.agents/notes/implemented/product/2026-09-30-remove-product-concept.md' }
   const git = args => {
     const result = spawnSync('git', ['-c', 'user.name=CI', '-c', 'user.email=ci@example.invalid',
       '-c', `core.hooksPath=${path.join(directory, 'no-hooks')}`, ...args], { cwd: directory, encoding: 'utf8' })
@@ -129,6 +132,16 @@ test('history guard permits forward additions and rejects rewritten or deleted d
   git(['add', '.'])
   git(['commit', '--quiet', '-m', 'fixture'])
   const baseline = git(['rev-parse', 'HEAD'])
+  write(directory, retirement, JSON.stringify({ schemaVersion: 1, retired: [retirementEntry] }))
+  assert.doesNotThrow(() => checkHistory(directory, baseline))
+  git(['add', retirement])
+  git(['commit', '--quiet', '-m', 'retirement'])
+  const retirementBaseline = git(['rev-parse', 'HEAD'])
+  write(directory, retirement, JSON.stringify({ schemaVersion: 1, retired: [] }))
+  assert.throws(() => checkHistory(directory, retirementBaseline), /只允许追加/u)
+  fs.unlinkSync(path.join(directory, retirement))
+  assert.throws(() => checkHistory(directory, retirementBaseline))
+  write(directory, retirement, JSON.stringify({ schemaVersion: 1, retired: [retirementEntry] }))
   write(directory, 'backend/src/main/resources/db/migration/foundation/V2__forward.sql', 'SELECT 2;\n')
   assert.equal(checkHistory(directory, baseline), baseline)
   write(directory, 'backend/src/main/resources/db/migration/foundation/V1__duplicate.sql', 'SELECT 2;\n')

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import path from 'node:path'
+import fs from 'node:fs'
+import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { assertEventContractsCompatible, loadCurrentBundle } from './event-contract-compat.mjs'
 import { assertRegisteredInventory } from './event-inventory-policy.mjs'
+import { assertRetirementHistory } from '../ci/history-policy.mjs'
 
 const envelope = {
   $id: 'event-envelope.schema.json',
@@ -152,6 +155,77 @@ test('删除或改名既有事件会失败', () => {
   incompatible(bundle(eventEntry(eventSchema({ eventType: 'workitem.work_item_created_renamed' }), {
     eventType: 'workitem.work_item_created_renamed',
   })), /已从当前事件目录移除/u)
+})
+
+const retiredEntry = {
+  eventType: 'catalog.product_created', eventVersion: 1,
+  reason: '统一项目模型取消产品概念',
+  agentNote: '.agents/notes/implemented/product/2026-09-30-remove-product-concept.md',
+}
+
+test('只允许精确登记的退役版本缺失，其他版本仍受兼容检查保护', () => {
+  const baseline = bundle(eventEntry(eventSchema({ eventType: retiredEntry.eventType }), retiredEntry))
+  const current = { ...bundle(), events: [], retired: [retiredEntry] }
+  assert.doesNotThrow(() => assertEventContractsCompatible(baseline, current))
+  assert.throws(() => assertEventContractsCompatible(baseline, { ...current, retired: [] }), /已从当前事件目录移除/u)
+  assert.throws(() => assertEventContractsCompatible(baseline,
+    { ...current, retired: [{ ...retiredEntry, eventVersion: 2 }] }), /已从当前事件目录移除/u)
+})
+
+test('退役事件不可重新登记、保留文件或绕过冻结', () => {
+  const baseline = bundle(eventEntry(eventSchema({ eventType: retiredEntry.eventType }), retiredEntry))
+  const current = { ...bundle(), events: [], retired: [retiredEntry] }
+  assert.throws(() => assertEventContractsCompatible(baseline,
+    { ...current, events: baseline.events }), /不得出现在当前事件目录/u)
+  assert.throws(() => assertEventContractsCompatible(baseline,
+    { ...current, frozenEvents: [retiredEntry] }), /冻结事件，不可退役/u)
+  for (const file of [baseline.events[0].schemaPath, baseline.events[0].validExamples[0].path]) {
+    assert.throws(() => assertEventContractsCompatible(baseline,
+      { ...current, contractFiles: [file] }), /仍保留契约文件/u)
+  }
+})
+
+test('退役清单只能追加，修改、删除、重排、重复与缺少决策记录均失败', () => {
+  const previous = { schemaVersion: 1, retired: [retiredEntry] }
+  const additional = { ...retiredEntry, eventVersion: 2 }
+  assert.doesNotThrow(() => assertRetirementHistory(previous, { ...previous, retired: [retiredEntry, additional] }))
+  for (const retired of [[], [{ ...retiredEntry, reason: '改写' }], [additional, retiredEntry]]) {
+    assert.throws(() => assertRetirementHistory(previous, { ...previous, retired }), /只允许追加/u)
+  }
+  assert.throws(() => assertRetirementHistory(previous, { ...previous, retired: [retiredEntry, retiredEntry] }), /重复/u)
+  assert.throws(() => assertRetirementHistory(previous,
+    { ...previous, retired: [{ ...retiredEntry, agentNote: '../outside.md' }] }), /决策记录路径/u)
+})
+
+test('当前文件树拒绝退役事件遗留的 Schema 和合法、非法样例，即使文件改名', context => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-retirement-'))
+  context.after(() => {
+    assert(path.resolve(directory).startsWith(path.join(path.resolve(os.tmpdir()), 'yumpoo-retirement-')))
+    fs.rmSync(directory, { recursive: true, force: true })
+  })
+  fs.cpSync(path.join(root, 'contracts/events'), path.join(directory, 'contracts/events'), { recursive: true })
+  const fixture = { ...retiredEntry, eventType: 'catalog.retirement_fixture' }
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'tools/events/retired-event-contracts.json'), 'utf8'))
+  manifest.retired.push(fixture)
+  fs.mkdirSync(path.join(directory, 'tools/events'), { recursive: true })
+  fs.writeFileSync(path.join(directory, 'tools/events/retired-event-contracts.json'), JSON.stringify(manifest))
+  for (const entry of manifest.retired) {
+    const note = path.join(directory, entry.agentNote)
+    fs.mkdirSync(path.dirname(note), { recursive: true })
+    fs.writeFileSync(note, 'fixture')
+  }
+  assert.doesNotThrow(() => loadCurrentBundle(directory))
+  for (const [file, value] of [
+    ['schemas/renamed.schema.json', eventSchema({ eventType: fixture.eventType })],
+    ['examples/renamed.json', validExample(fixture.eventType)],
+    ['examples/renamed.invalid.json', { eventType: fixture.eventType, eventVersion: 1 }],
+  ]) {
+    const absolute = path.join(directory, 'contracts/events', file)
+    fs.writeFileSync(absolute, JSON.stringify(value))
+    assert.throws(() => loadCurrentBundle(directory), /仍有 Schema 或样例文件/u)
+    fs.unlinkSync(absolute)
+  }
 })
 
 test('改变聚合语义会失败', () => {
