@@ -4,6 +4,14 @@
 
 普通迭代使用 `pnpm ci`；快速反馈可先运行 `pnpm ci:static`。向 `dev` 开 PR 后，CI 自动执行契约、业务/安全/迁移回归与 Windows 交付，最终门禁要求所有必需任务完整成功。无需刷新历史验收哈希或串联里程碑脚本。入口、基线/例外边界、故障定位及远端规则见 [CI 与 PR](.github/CI.md)；下方里程碑章节保留切片背景。
 
+## 产品概念退役
+
+V60 起删除 Product、Project–Product 关系及 Product Feedback 空壳，相关 API、事件契约、治理、Activity 投影和前端入口一并移除。M3B 反馈模块、反馈归档/解绑 blocker、反馈附件 owner 和产品负责人 UI 的后续规划取消；项目归档保留真实工作项来源，Worklog 来源仍需后续真实 provider。项目模板、类型、客户字段与 DRAFT 保留，跨项目连接列另行交付。
+
+迁移清理产品数据与指定事件，保留全部 Security Audit；若存在反馈附件则整体失败，不能静默删除。删除范围和旧决策理由见[删除产品决定](.agents/notes/implemented/product/2026-09-30-remove-product-concept.md)，只追加的退役清单及冻结事件保护见[事件契约退役决定](.agents/notes/implemented/process/2026-09-30-event-contract-retirement.md)。
+
+下方 M2 章节中的产品能力、产品公开端口、产品锁序和 M3B 延期描述仅记录当时切片，已由本节取代。M2-03、M2-07、M2-24 的旧命令不再验证当前实现；历史记录由 `node tools/ci/historical-assets.mjs` 校验，当前行为使用 `pnpm ci:static` 与 `pnpm ci:backend`。
+
 ## Content 工作项类别重构
 
 V48 起，`Content` 仅表示项目级“工作项类别”目录，不再承载工作项类型、表格/看板视图配置或独立工作区。项目工作项总表是唯一表格/看板入口；根项、子项、创建表单和详情抽屉均可通过普通字段切换类别，类别变化不改变编号、父子关系、讨论、附件、项目顺序或 Project+Status Kanban rank。
