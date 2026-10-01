@@ -98,7 +98,7 @@ export function loadCurrentBundle(repositoryRoot, manifest = readFreezeManifest(
       `${eventKey(entry)} 退役决策记录不存在：${entry.agentNote}`)
   }
   assertRetiredEventsAbsent(retirement.retired, catalog.events, frozenEvents)
-  assertRetiredEventLiteralsAbsent(repositoryRoot, retirement.retired)
+  assertRetiredEventLiteralsAbsent(repositoryRoot, retirement.retired, catalog.events)
   const envelopeSchema = readJson(path.join(eventsRoot, eventEnvelopePath), eventEnvelopePath)
   const supportSchemas = fs.readdirSync(path.join(eventsRoot, 'schemas'))
     .filter(file => file.endsWith('-payload.schema.json'))
@@ -142,12 +142,14 @@ export function validateRetirementManifest(manifest) {
   }
 }
 
-function assertRetiredEventLiteralsAbsent(repositoryRoot, retired) {
+function assertRetiredEventLiteralsAbsent(repositoryRoot, retired, currentEvents) {
   if (retired.length === 0) return
   const relativeRoot = 'backend/src/main/java'
   const sourceRoot = path.join(repositoryRoot, relativeRoot)
   assert(fs.statSync(sourceRoot, { throwIfNoEntry: false })?.isDirectory(), `缺少后端事件扫描目录：${relativeRoot}`)
+  const activeTypes = new Set(currentEvents.map(entry => entry.eventType))
   const eventTypes = [...new Set(retired.map(entry => entry.eventType))]
+    .filter(eventType => !activeTypes.has(eventType))
   for (const file of fs.readdirSync(sourceRoot, { recursive: true }).filter(file => file.endsWith('.java')).sort()) {
     const source = fs.readFileSync(path.join(sourceRoot, file), 'utf8')
     for (const eventType of eventTypes) {

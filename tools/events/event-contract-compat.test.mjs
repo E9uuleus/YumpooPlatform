@@ -4,6 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { assertEventContractsCompatible, loadCurrentBundle } from './event-contract-compat.mjs'
 import { assertRegisteredInventory } from './event-inventory-policy.mjs'
 import { assertRetirementHistory } from '../ci/history-policy.mjs'
@@ -280,6 +281,46 @@ test('退役事件不能以生产者、订阅或共享常量重新进入任意�
     })
     fs.unlinkSync(file)
   }
+})
+
+test('project_created v1 退役且 v2 保留时允许源码字面量，全部版本退役时仍拒绝', context => {
+  const { directory } = retirementRepository(context)
+  const eventsRoot = path.join(directory, 'contracts/events')
+  const catalogFile = path.join(eventsRoot, 'catalog.yaml')
+  const catalog = parseYaml(fs.readFileSync(catalogFile, 'utf8'))
+  const previous = catalog.events.find(event => event.eventType === 'catalog.project_created')
+  const next = {
+    ...previous, eventVersion: 2,
+    schema: previous.schema.replace('-v1', '-v2'),
+    validExamples: previous.validExamples.map(file => file.replace('-v1', '-v2')),
+    invalidExamples: previous.invalidExamples.map(file => file.replace('-v1', '-v2')),
+  }
+  for (const relative of [previous.schema, ...previous.validExamples, ...previous.invalidExamples]) {
+    const source = fs.readFileSync(path.join(eventsRoot, relative), 'utf8')
+      .replaceAll('-v1', '-v2').replaceAll('"eventVersion": 1', '"eventVersion": 2')
+      .replaceAll('"const": 1', '"const": 2')
+    fs.writeFileSync(path.join(eventsRoot, relative.replace('-v1', '-v2')), source)
+    fs.unlinkSync(path.join(eventsRoot, relative))
+  }
+  catalog.events = catalog.events.filter(event => event !== previous)
+  catalog.events.push(next)
+  fs.writeFileSync(catalogFile, stringifyYaml(catalog))
+  const manifestFile = path.join(directory, 'tools/events/retired-event-contracts.json')
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'))
+  manifest.retired.push({ ...retiredEntry, eventType: 'catalog.project_created' })
+  fs.writeFileSync(manifestFile, JSON.stringify(manifest))
+  fs.writeFileSync(path.join(directory, 'backend/src/main/java/Producer.java'),
+    'new EventDraft("catalog.project_created", 2);')
+  assert.doesNotThrow(() => loadCurrentBundle(directory))
+
+  catalog.events = catalog.events.filter(event => event !== next)
+  fs.writeFileSync(catalogFile, stringifyYaml(catalog))
+  for (const relative of [next.schema, ...next.validExamples, ...next.invalidExamples]) {
+    fs.unlinkSync(path.join(eventsRoot, relative))
+  }
+  manifest.retired.push({ ...retiredEntry, eventType: 'catalog.project_created', eventVersion: 2 })
+  fs.writeFileSync(manifestFile, JSON.stringify(manifest))
+  assert.throws(() => loadCurrentBundle(directory), /退役事件类型仍出现在后端源码：catalog.project_created/u)
 })
 
 test('退役源码扫描不误伤不同事件名及测试、历史迁移，但扫描目录缺失时失败', context => {
