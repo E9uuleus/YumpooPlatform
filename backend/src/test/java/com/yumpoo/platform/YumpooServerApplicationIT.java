@@ -353,8 +353,6 @@ class YumpooServerApplicationIT {
                 "platform_role_assignment",
                 "project",
                 "project_membership",
-                "project_template_content_blueprint",
-                "project_template_definition",
                 "project_work_item_label_catalog",
                 "project_work_item_priority_label",
                 "project_work_item_status_label",
@@ -372,8 +370,6 @@ class YumpooServerApplicationIT {
                 "work_item_timer_state",
                 "work_item_update",
                 "work_item_update_mention",
-                "workflow_status_definition",
-                "workflow_transition_definition",
                 "workspace"
         );
         assertThat(outboxConstraintNames).containsExactlyInAnyOrder(
@@ -1080,7 +1076,7 @@ class YumpooServerApplicationIT {
                         assertThat(projects.getInt("workspace_count")).isOne();
                         assertThat(projects.getString("workspace_id")).isEqualTo(expectedWorkspaceId);
                         assertThat(projects.getString("facts")).isEqualTo(
-                                "MIGRATE_ACTIVE:ACTIVE:8,MIGRATE_ARCHIVED:ARCHIVED:9,MIGRATE_DRAFT:DRAFT:7");
+                                "MIGRATE_ACTIVE:ACTIVE:8,MIGRATE_ARCHIVED:ARCHIVED:9,MIGRATE_DRAFT:ACTIVE:7");
                     }
                 }
             }

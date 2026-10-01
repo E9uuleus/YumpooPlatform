@@ -250,13 +250,13 @@ class ProjectCreationIT {
     void disabledOrDepartedCreatorsCannotCreate() {
         for (String column : List.of("account_status", "employment_status")) {
             String unavailable=column.equals("account_status") ? "DISABLED" : "LEFT";
-            jdbcClient.sql("UPDATE yumpoo.identity_user SET "+column+"=:value, "
+            jdbcClient.sql("UPDATE yumpoo.identity_user SET "+column+"=:value, updated_at=transaction_timestamp(), "
                     +(column.equals("account_status") ? "account_disabled_at=now(), account_disabled_by_user_id=:admin, account_disabled_reason='UP2 test'" : "left_at=now(), left_reason='UP2 test'")+" WHERE id=:id")
                     .param("admin",ADMIN_ID).param("value",unavailable).param("id",OWNER_ID).update();
             assertThatThrownBy(() -> create("Unavailable", "a"))
                     .isInstanceOfSatisfying(ApplicationException.class,e ->
                             assertThat(e.errorCode()).isEqualTo(StandardErrorCode.ACCESS_DENIED));
-            jdbcClient.sql("UPDATE yumpoo.identity_user SET "+column+"=:value, "
+            jdbcClient.sql("UPDATE yumpoo.identity_user SET "+column+"=:value, updated_at=transaction_timestamp(), "
                     +(column.equals("account_status") ? "account_disabled_at=NULL, account_disabled_by_user_id=NULL, account_disabled_reason=NULL" : "left_at=NULL, left_reason=NULL")+" WHERE id=:id")
                     .param("value",column.equals("account_status") ? "ENABLED" : "ACTIVE")
                     .param("id",OWNER_ID).update();
@@ -303,7 +303,7 @@ class ProjectCreationIT {
     }
 
     private IdempotencyExecutionResult create(String name, String hashSeed) {
-        return execute("up2-create-" + name, command(name, UUID.randomUUID(), hashSeed.repeat(64)));
+        return execute("up2-create-" + UUID.randomUUID(), command(name, UUID.randomUUID(), hashSeed.repeat(64)));
     }
 
     private ProjectCreationCommand command(
