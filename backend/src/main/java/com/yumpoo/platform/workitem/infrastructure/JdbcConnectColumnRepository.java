@@ -74,7 +74,12 @@ public class JdbcConnectColumnRepository implements ConnectColumnRepository {
 
     @Override
     public Optional<ConnectColumn> lock(UUID companyId, UUID projectId, UUID columnId, boolean forShare) {
-        return select(companyId, projectId, columnId, forShare ? " FOR SHARE OF c" : " FOR UPDATE OF c");
+        var locked = jdbc.sql("SELECT id FROM yumpoo.work_item_connect_column c"
+                        + " WHERE company_id=:companyId AND project_id=:projectId AND id=:id"
+                        + (forShare ? " FOR SHARE OF c" : " FOR UPDATE OF c"))
+                .param("companyId", companyId).param("projectId", projectId).param("id", columnId).query(UUID.class).optional();
+        // Target rows may have changed while the row lock waited; use a fresh statement snapshot.
+        return locked.isEmpty() ? Optional.empty() : find(companyId, projectId, columnId);
     }
 
     private Optional<ConnectColumn> select(UUID companyId, UUID projectId, UUID columnId, String lock) {

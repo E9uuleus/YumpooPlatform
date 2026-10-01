@@ -225,7 +225,7 @@ public class JdbcWorkItemConnectionRepository implements WorkItemConnectionRepos
                     EXISTS(SELECT 1 FROM yumpoo.work_item_connection r WHERE r.company_id=w.company_id
                         AND r.column_id=:column AND r.source_work_item_id=:source AND r.target_work_item_id=w.id
                         AND r.deleted_at IS NULL) AS connected
-                """ + CANDIDATES.replace(" WHERE", """
+                """ + CANDIDATES.replace(" WHERE", " " + """
                  LEFT JOIN yumpoo.work_item_relation relation ON relation.company_id=w.company_id
                     AND relation.right_work_item_id=w.id AND relation.relation_type='PARENT_CHILD'
                     AND relation.deleted_at IS NULL

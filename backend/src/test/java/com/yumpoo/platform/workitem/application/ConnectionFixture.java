@@ -22,6 +22,7 @@ final class ConnectionFixture {
     final ContentRepository contents;
     final WorkItemLabelRepository labels;
     final ObjectMapper json;
+    private final Set<UUID> userIds = new java.util.LinkedHashSet<>();
 
     ConnectionFixture(JdbcClient jdbc, WorkItemService items, ConnectColumnService columns,
             ContentRepository contents, WorkItemLabelRepository labels, ObjectMapper json) {
@@ -35,6 +36,7 @@ final class ConnectionFixture {
 
     CurrentActor user(String name) {
         UUID id = UUID.randomUUID();
+        userIds.add(id);
         jdbc.sql("""
                 INSERT INTO yumpoo.identity_user (id, company_id, employment_status, account_status,
                     display_name, directory_synced_at, row_version, created_at, updated_at)
@@ -90,13 +92,13 @@ final class ConnectionFixture {
     }
 
     void archive(Project project) {
-        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED', archived_at=now() WHERE id=:id")
+        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED', archived_at=now(), updated_at=now() WHERE id=:id")
                 .param("id", project.id()).update();
     }
 
     long eventCount(String type) {
-        return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE company_id=:company AND event_type=:type")
-                .param("company", COMPANY).param("type", type).query(Long.class).single();
+        return jdbc.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE company_id=:company AND event_type=:type AND actor_user_id IN (:users)")
+                .param("company", COMPANY).param("type", type).param("users", userIds).query(Long.class).single();
     }
 
     static RequestHash hash() { return new RequestHash("0".repeat(64)); }
