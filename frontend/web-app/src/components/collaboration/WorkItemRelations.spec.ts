@@ -1,4 +1,6 @@
 import {
+  ProjectActorAccess,
+  ProjectLifecycleFilter,
   WorkItemRelationCandidateEligibilityEnum,
   WorkItemRelationRole,
   WorkItemRelationType,
@@ -200,6 +202,12 @@ describe('WorkItemRelations', () => {
     }
     vm.openCreate()
     await flushPromises()
+    expect(api.listProjects).toHaveBeenCalledWith({
+      actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member],
+      lifecycle: ProjectLifecycleFilter.Active,
+      page: 0,
+      size: 20,
+    })
     vm.targetProjectId = 'project-2'
     vm.query = '目标'
     await vm.search()

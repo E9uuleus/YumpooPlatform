@@ -9,10 +9,5 @@ public record ProjectUpdateCommand(
         UUID projectId,
         long expectedRowVersion,
         String name,
-        String description,
-        String customerName,
-        String customerReference,
-        String deliverySite,
-        String contactNote
-) {
+        String description) {
 }

@@ -12,39 +12,12 @@
  */
 
 import { mapValues } from '../runtime';
-import type { ProjectType } from './ProjectType';
-import {
-    ProjectTypeFromJSON,
-    ProjectTypeFromJSONTyped,
-    ProjectTypeToJSON,
-    ProjectTypeToJSONTyped,
-} from './ProjectType';
-import type { ProjectTemplateKey } from './ProjectTemplateKey';
-import {
-    ProjectTemplateKeyFromJSON,
-    ProjectTemplateKeyFromJSONTyped,
-    ProjectTemplateKeyToJSON,
-    ProjectTemplateKeyToJSONTyped,
-} from './ProjectTemplateKey';
-
 /**
  *
  * @export
  * @interface ProjectCreateRequest
  */
 export interface ProjectCreateRequest {
-    /**
-     * 不透明 UUID；客户端不得从值中推导业务语义。
-     * @type {string}
-     * @memberof ProjectCreateRequest
-     */
-    workspaceId?: string;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectCreateRequest
-     */
-    code: string;
     /**
      *
      * @type {string}
@@ -57,68 +30,13 @@ export interface ProjectCreateRequest {
      * @memberof ProjectCreateRequest
      */
     description?: string | null;
-    /**
-     *
-     * @type {ProjectType}
-     * @memberof ProjectCreateRequest
-     */
-    projectType: ProjectType;
-    /**
-     * 不透明 UUID；客户端不得从值中推导业务语义。
-     * @type {string}
-     * @memberof ProjectCreateRequest
-     */
-    ownerUserId: string;
-    /**
-     *
-     * @type {ProjectTemplateKey}
-     * @memberof ProjectCreateRequest
-     */
-    templateKey: ProjectTemplateKey;
-    /**
-     *
-     * @type {number}
-     * @memberof ProjectCreateRequest
-     */
-    templateVersion: number;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectCreateRequest
-     */
-    customerName?: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectCreateRequest
-     */
-    customerReference?: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectCreateRequest
-     */
-    deliverySite?: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectCreateRequest
-     */
-    contactNote?: string | null;
 }
-
-
 
 /**
  * Check if a given object implements the ProjectCreateRequest interface.
  */
 export function instanceOfProjectCreateRequest(value: object): value is ProjectCreateRequest {
-    if (!('code' in value) || value['code'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('projectType' in value) || value['projectType'] === undefined) return false;
-    if (!('ownerUserId' in value) || value['ownerUserId'] === undefined) return false;
-    if (!('templateKey' in value) || value['templateKey'] === undefined) return false;
-    if (!('templateVersion' in value) || value['templateVersion'] === undefined) return false;
     return true;
 }
 
@@ -132,18 +50,8 @@ export function ProjectCreateRequestFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
 
-        'workspaceId': json['workspaceId'] == null ? undefined : json['workspaceId'],
-        'code': json['code'],
         'name': json['name'],
         'description': json['description'] == null ? undefined : json['description'],
-        'projectType': ProjectTypeFromJSON(json['projectType']),
-        'ownerUserId': json['ownerUserId'],
-        'templateKey': ProjectTemplateKeyFromJSON(json['templateKey']),
-        'templateVersion': json['templateVersion'],
-        'customerName': json['customerName'] == null ? undefined : json['customerName'],
-        'customerReference': json['customerReference'] == null ? undefined : json['customerReference'],
-        'deliverySite': json['deliverySite'] == null ? undefined : json['deliverySite'],
-        'contactNote': json['contactNote'] == null ? undefined : json['contactNote'],
     };
 }
 
@@ -158,17 +66,7 @@ export function ProjectCreateRequestToJSONTyped(value?: ProjectCreateRequest | n
 
     return {
 
-        'workspaceId': value['workspaceId'],
-        'code': value['code'],
         'name': value['name'],
         'description': value['description'],
-        'projectType': ProjectTypeToJSON(value['projectType']),
-        'ownerUserId': value['ownerUserId'],
-        'templateKey': ProjectTemplateKeyToJSON(value['templateKey']),
-        'templateVersion': value['templateVersion'],
-        'customerName': value['customerName'],
-        'customerReference': value['customerReference'],
-        'deliverySite': value['deliverySite'],
-        'contactNote': value['contactNote'],
     };
 }

@@ -9,9 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -30,18 +28,11 @@ public class ContentInitializationService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public List<InitializedContentView> initialize(ContentInitializationCommand initialization) {
-        if (initialization.blueprints().isEmpty()) {
-            throw new ApplicationException(StandardErrorCode.VALIDATION_FAILED);
-        }
-        Set<String> codes = new HashSet<>();
         Instant now = clock.instant();
         labels.initialize(initialization.companyId(), initialization.projectId(),
-                initialization.templateKey(), initialization.templateVersion(), now);
+                now);
         repository.initializeCatalog(initialization.companyId(), initialization.projectId(), now);
-        List<Content> contents = initialization.blueprints().stream().map(blueprint -> {
-            if (!codes.add(blueprint.contentCode())) {
-                throw new ApplicationException(StandardErrorCode.VALIDATION_FAILED);
-            }
+        List<Content> contents = DefaultProjectStructure.CATEGORIES.stream().map(blueprint -> {
             return Content.initial(UUID.randomUUID(), initialization.companyId(),
                     initialization.projectId(), blueprint.contentCode(), blueprint.displayName(),
                     blueprint.colorToken(), blueprint.sortOrder(), initialization.actorUserId(), now);

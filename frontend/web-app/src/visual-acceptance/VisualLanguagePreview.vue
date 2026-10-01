@@ -19,15 +19,14 @@ const mobileNavigationOpen = ref(false)
 const contextNavigationOpen = ref(typeof window === 'undefined'
   ? true
   : (window.matchMedia?.('(min-width: 1280px)').matches ?? true))
-const project = reactive({ name: 'Yumpoo Web 视觉迁移', owner: 'user-visual', type: 'PRODUCT_DEVELOPMENT' })
+const project = reactive({ name: 'Yumpoo Web 视觉迁移', owner: 'user-visual' })
 const rows = [
-  { id: 1, code: 'YP-WEB', name: '统一项目工作台', owner: '林晓', status: 'ACTIVE', type: '产品研发', access: '负责人', priority: 'HIGH', progress: 72 },
-  { id: 2, code: 'YP-NIGHT', name: '夜间主题验收', owner: '周遥', status: 'DRAFT', type: '产品研发', access: '成员', priority: 'MEDIUM', progress: 38 },
-  { id: 3, code: 'YP-OPS', name: '未知总量任务', owner: '陈屿', status: 'ARCHIVED', type: '运维保障', access: '成员', priority: 'LOW', progress: null },
+  { id: 1, code: 'P001', name: '统一项目工作台', owner: '林晓', status: 'ACTIVE', access: '负责人', priority: 'HIGH', progress: 72 },
+  { id: 2, code: 'P002', name: '夜间主题验收', owner: '周遥', status: 'ACTIVE', access: '成员', priority: 'MEDIUM', progress: 38 },
+  { id: 3, code: 'P003', name: '未知总量任务', owner: '陈屿', status: 'ARCHIVED', access: '成员', priority: 'LOW', progress: null },
 ]
 const previewGroups = [
-  { id: 'product', code: 'PRODUCT', name: '产品研发 Workspace', tone: 'blue', active: 1, draft: 1, archived: 0, rows: rows.slice(0, 2) },
-  { id: 'delivery', code: 'DELIVERY', name: '交付与运营 Workspace', tone: 'purple', active: 0, draft: 0, archived: 1, rows: rows.slice(2) },
+  { id: 'main', code: 'MAIN', name: '默认工作空间', tone: 'blue', active: 2, archived: 1, rows },
 ]
 const collapsedPreviewGroups = ref<ReadonlySet<string>>(new Set())
 const previewTab = ref('content')
@@ -213,12 +212,12 @@ function togglePreviewGroup(id: string): void {
                 clearable
               >
                 <el-option
-                  label="活跃"
+                  label="进行中"
                   value="ACTIVE"
                 />
                 <el-option
-                  label="草稿"
-                  value="DRAFT"
+                  label="已归档"
+                  value="ARCHIVED"
                 />
               </el-select>
             </template>
@@ -252,8 +251,7 @@ function togglePreviewGroup(id: string): void {
                   </span>
                 </button>
                 <div class="project-board-group__summary">
-                  <span v-if="group.active">活跃 {{ group.active }}</span>
-                  <span v-if="group.draft">草稿 {{ group.draft }}</span>
+                  <span v-if="group.active">进行中 {{ group.active }}</span>
                   <span v-if="group.archived">已归档 {{ group.archived }}</span>
                 </div>
               </header>
@@ -305,11 +303,6 @@ function togglePreviewGroup(id: string): void {
                       </template>
                     </el-table-column>
                     <el-table-column
-                      prop="type"
-                      label="项目类型"
-                      min-width="150"
-                    />
-                    <el-table-column
                       prop="access"
                       label="我的角色"
                       min-width="120"
@@ -345,7 +338,7 @@ function togglePreviewGroup(id: string): void {
                           :display-name="row.owner"
                           size="table"
                         />
-                        <span>{{ row.type }} · {{ row.access }}</span>
+                        <span>{{ row.access }}</span>
                       </span>
                     </button>
                   </li>
@@ -367,18 +360,6 @@ function togglePreviewGroup(id: string): void {
               required
             >
               <el-input v-model="project.name" />
-            </el-form-item>
-            <el-form-item label="项目类型">
-              <el-select v-model="project.type">
-                <el-option
-                  label="产品研发"
-                  value="PRODUCT_DEVELOPMENT"
-                />
-                <el-option
-                  label="实施"
-                  value="IMPLEMENTATION"
-                />
-              </el-select>
             </el-form-item>
             <el-form-item label="说明">
               <el-input

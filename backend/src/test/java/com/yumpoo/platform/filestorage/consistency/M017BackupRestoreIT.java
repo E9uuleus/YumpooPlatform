@@ -121,8 +121,8 @@ class M017BackupRestoreIT {
             assertThat(readIdentityBindingFact(target)).isEqualTo(readIdentityBindingFact(source));
             assertThat(readSessionSecurityFact(target)).isEqualTo(readSessionSecurityFact(source));
             assertThat(readDirectorySyncFact(target)).isEqualTo(readDirectorySyncFact(source));
-            assertThat(readProjectTemplateCatalogFact(target))
-                    .isEqualTo(readProjectTemplateCatalogFact(source));
+            assertThat(readProjectCatalogFact(target))
+                    .isEqualTo(readProjectCatalogFact(source));
             assertThat(readWorkspaceFact(target)).isEqualTo(readWorkspaceFact(source));
             assertThat(readProjectContentFact(target))
                     .isEqualTo(readProjectContentFact(source));
@@ -456,33 +456,21 @@ class M017BackupRestoreIT {
         }
     }
 
-    private static String readProjectTemplateCatalogFact(PostgreSQLContainer container) throws SQLException {
+    private static String readProjectCatalogFact(PostgreSQLContainer container) throws SQLException {
         try (Connection connection = connection(container);
              Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery("""
                      SELECT string_agg(fact, E'\n' ORDER BY fact)
                      FROM (
-                         SELECT 'T|' || template_key || '|' || template_version || '|'
-                                || version_code || '|' || project_type || '|' || lifecycle_status AS fact
-                           FROM yumpoo.project_template_definition
+                         SELECT 'C|' || project_id || '|' || code || '|' || name || '|' || color_token || '|' || sort_order AS fact
+                           FROM yumpoo.content
                          UNION ALL
-                         SELECT 'B|' || template.version_code || '|' || blueprint.content_code || '|'
-                                || blueprint.display_name || '|' || blueprint.color_token || '|'
-                                || blueprint.sort_order
-                           FROM yumpoo.project_template_content_blueprint blueprint
-                           JOIN yumpoo.project_template_definition template ON template.id = blueprint.template_id
+                         SELECT 'S|' || project_id || '|' || status_code || '|' || display_name || '|' || color_token
+                                || '|' || status_category || '|' || sort_order || '|' || protected_label
+                           FROM yumpoo.project_work_item_status_label
                          UNION ALL
-                         SELECT 'S|' || template.version_code || '|' || status.status_code || '|'
-                                || status.status_category || '|' || status.sort_order || '|'
-                                || status.is_initial || '|' || status.is_terminal
-                           FROM yumpoo.workflow_status_definition status
-                           JOIN yumpoo.project_template_definition template ON template.id = status.template_id
-                         UNION ALL
-                         SELECT 'E|' || template.version_code || '|' || transition.from_status || '|'
-                                || transition.to_status || '|' || transition.required_permission || '|'
-                                || transition.requires_resolution
-                           FROM yumpoo.workflow_transition_definition transition
-                           JOIN yumpoo.project_template_definition template ON template.id = transition.template_id
+                         SELECT 'P|' || project_id || '|' || priority_code || '|' || display_name || '|' || color_token || '|' || sort_order
+                           FROM yumpoo.project_work_item_priority_label
                      ) catalog
                      """)) {
             assertThat(result.next()).isTrue();
@@ -774,27 +762,21 @@ class M017BackupRestoreIT {
             connection.setAutoCommit(false);
             try (PreparedStatement project = connection.prepareStatement("""
                     INSERT INTO yumpoo.project (
-                        id, company_id, workspace_id, project_code, name, description,
-                        project_type, lifecycle, owner_user_id, template_key, template_version,
-                        customer_name, customer_reference, delivery_site, contact_note,
-                        row_version, created_at, created_by_user_id, updated_at, updated_by_user_id,
-                        activated_at, archived_at
+                        id, company_id, workspace_id, project_code, name, description, lifecycle, owner_user_id,
+                        row_version, created_at, created_by_user_id, updated_at, updated_by_user_id, archived_at
                     ) VALUES (
                         '00000000-0000-4000-8000-000000000802',
                         '00000000-0000-4000-8000-000000000001',
                         '00000000-0000-4000-8000-000000000502',
-                        'M2_04_RESTORE', 'M2-04 Restore Project', 'Project restore probe',
-                        'PRODUCT_DEVELOPMENT', 'ARCHIVED',
-                        '00000000-0000-4000-8000-000000000102', 'RND', 1,
-                        'Restore Customer', 'RESTORE-01', 'Shanghai', 'Private restore note',
+                        'M2_04_RESTORE', 'M2-04 Restore Project', 'Project restore probe', 'ARCHIVED',
+                        '00000000-0000-4000-8000-000000000102',
                         4, ?, '00000000-0000-4000-8000-000000000102', ?,
-                        '00000000-0000-4000-8000-000000000102', ?, ?
+                        '00000000-0000-4000-8000-000000000102', ?
                     )
                     """)) {
                 project.setObject(1, createdAt);
                 project.setObject(2, createdAt.plusHours(3));
-                project.setObject(3, createdAt.plusHours(2));
-                project.setObject(4, createdAt.plusHours(3));
+                project.setObject(3, createdAt.plusHours(3));
                 assertThat(project.executeUpdate()).isOne();
             }
             try (PreparedStatement membership = connection.prepareStatement("""
@@ -834,16 +816,12 @@ class M017BackupRestoreIT {
                             status_category, sort_order, active, protected_label)
                         SELECT '00000000-0000-4000-8000-000000000802',
                                '00000000-0000-4000-8000-000000000001',
-                               status.status_code, status.display_name,
-                               CASE status.status_category WHEN 'DONE' THEN 'GREEN'
-                                   WHEN 'CANCELED' THEN 'GRAY'
-                                   WHEN 'IN_PROGRESS' THEN 'ORANGE' ELSE 'BLUE' END,
-                               status.status_category, status.sort_order + 100, true, false
-                          FROM yumpoo.project_template_definition template
-                          JOIN yumpoo.workflow_status_definition status
-                            ON status.template_id=template.id
-                         WHERE template.template_key='RND' AND template.template_version=1
-                           AND status.status_code <> 'NOT_STARTED'
+                               seed.code, seed.name, seed.color, seed.category, seed.sort_order, true, false
+                        FROM (VALUES ('IN_PROGRESS','进行中','ORANGE','IN_PROGRESS',10),
+                                     ('STUCK','卡住','RED','IN_PROGRESS',20),
+                                     ('DONE','已完成','GREEN','DONE',30),
+                                     ('CANCELED','已取消','AMERICAN_GRAY','CANCELED',40))
+                            AS seed(code,name,color,category,sort_order)
                         """)).isPositive();
                 assertThat(labels.executeUpdate("""
                         INSERT INTO yumpoo.project_work_item_priority_label (
@@ -959,7 +937,7 @@ class M017BackupRestoreIT {
                     INSERT INTO yumpoo.work_item_rank_lane (project_id, company_id, status_code)
                     VALUES
                         ('00000000-0000-4000-8000-000000000802',
-                         '00000000-0000-4000-8000-000000000001', 'BACKLOG'),
+                         '00000000-0000-4000-8000-000000000001', 'NOT_STARTED'),
                         ('00000000-0000-4000-8000-000000000802',
                          '00000000-0000-4000-8000-000000000001', 'DONE')
                     """)) {
@@ -982,7 +960,7 @@ class M017BackupRestoreIT {
                     """)) {
                 Object[][] facts = {
                         {UUID.fromString("00000000-0000-4000-8000-000000000815"), 1L,
-                                "M2_04_RESTORE-1", "恢复工作项一", "BACKLOG", "TODO",
+                                "M2_04_RESTORE-1", "恢复工作项一", "NOT_STARTED", "TODO",
                                 "500000000000000000000000000000000000000", "MEDIUM",
                                 "333333333333333333333333333333333333333",
                                 UUID.fromString("00000000-0000-4000-8000-000000000102"),
@@ -1115,8 +1093,8 @@ class M017BackupRestoreIT {
              Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery("""
                      SELECT project.id, project.project_code, project.lifecycle,
-                            project.row_version, project.activated_at, project.archived_at,
-                            project.owner_user_id, project.template_key, project.template_version,
+                            project.row_version, project.archived_at,
+                            project.owner_user_id,
                             membership.status AS membership_status,
                             (SELECT string_agg(m.user_id || ':' || m.status || ':' || m.row_version,
                                 ',' ORDER BY m.user_id) FROM yumpoo.project_membership m
@@ -1175,8 +1153,8 @@ class M017BackupRestoreIT {
                          AND issue.target_type='PROJECT'
                       WHERE project.id = '00000000-0000-4000-8000-000000000802'
                       GROUP BY project.id, project.project_code, project.lifecycle,
-                               project.row_version, project.activated_at, project.archived_at,
-                               project.owner_user_id, project.template_key, project.template_version,
+                               project.row_version, project.archived_at,
+                               project.owner_user_id,
                                membership.status, issue.issue_type, issue.target_type,
                                issue.status, issue.row_version
                      """)) {
@@ -1184,10 +1162,8 @@ class M017BackupRestoreIT {
             ProjectContentFact fact = new ProjectContentFact(
                     result.getObject("id", UUID.class), result.getString("project_code"),
                     result.getString("lifecycle"), result.getLong("row_version"),
-                    result.getObject("activated_at", OffsetDateTime.class),
                     result.getObject("archived_at", OffsetDateTime.class),
                     result.getObject("owner_user_id", UUID.class),
-                    result.getString("template_key"), result.getInt("template_version"),
                     result.getString("membership_status"), result.getString("membership_facts"),
                     result.getString("issue_type"), result.getString("target_type"),
                     result.getString("issue_status"), result.getLong("issue_version"),
@@ -1379,11 +1355,8 @@ class M017BackupRestoreIT {
             String projectCode,
             String lifecycle,
             long rowVersion,
-            OffsetDateTime activatedAt,
             OffsetDateTime archivedAt,
             UUID ownerUserId,
-            String templateKey,
-            int templateVersion,
             String membershipStatus,
             String membershipFacts,
             String issueType,

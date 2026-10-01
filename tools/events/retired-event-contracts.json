@@ -48,6 +48,36 @@
       "eventVersion": 1,
       "reason": "统一项目模型取消产品概念",
       "agentNote": ".agents/notes/implemented/product/2026-09-30-remove-product-concept.md"
+    },
+    {
+      "eventType": "templateworkflow.project_template_published",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消模板、类型、客户信息与激活，项目创建使用 v2",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-unified-project-model.md"
+    },
+    {
+      "eventType": "templateworkflow.project_template_retired",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消模板、类型、客户信息与激活，项目创建使用 v2",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-unified-project-model.md"
+    },
+    {
+      "eventType": "catalog.project_created",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消模板、类型、客户信息与激活，项目创建使用 v2",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-unified-project-model.md"
+    },
+    {
+      "eventType": "catalog.project_activated",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消模板、类型、客户信息与激活，项目创建使用 v2",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-unified-project-model.md"
+    },
+    {
+      "eventType": "catalog.project_template_applied",
+      "eventVersion": 1,
+      "reason": "统一项目模型取消模板、类型、客户信息与激活，项目创建使用 v2",
+      "agentNote": ".agents/notes/implemented/product/2026-09-30-unified-project-model.md"
     }
   ]
 }

@@ -10,7 +10,6 @@ public record ProjectSummary(
         String workspaceName,
         String code,
         String name,
-        String projectType,
         String lifecycle,
         UUID ownerUserId,
         String ownerDisplayName,

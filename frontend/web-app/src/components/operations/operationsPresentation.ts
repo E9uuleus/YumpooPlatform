@@ -87,7 +87,6 @@ export const MODULE_LABELS: Record<string, string> = {
   reporting: '报表',
   catalog: '项目与目录',
   organization: '组织架构',
-  templateworkflow: '模板与流程',
   worklog: '工时',
   spring: 'Spring 框架',
   hikari: '数据库连接池',

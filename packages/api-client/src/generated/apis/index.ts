@@ -9,8 +9,6 @@ export * from './IdentityAdministrationApi';
 export * from './IdentityGovernanceApi';
 export * from './NotificationsApi';
 export * from './OperationsApi';
-export * from './ProjectTemplateAdministrationApi';
-export * from './ProjectTemplatesApi';
 export * from './ProjectsApi';
 export * from './TimeTrackingApi';
 export * from './WorkItemUpdatesApi';

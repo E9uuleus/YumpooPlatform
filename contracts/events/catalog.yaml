@@ -119,20 +119,6 @@ events:
       - examples/identity.app-manager-availability-restored-v1.json
     invalidExamples:
       - examples/identity.app-manager-availability-restored-v1.invalid.json
-  - eventType: templateworkflow.project_template_published
-    eventVersion: 1
-    schema: schemas/templateworkflow.project-template-published-v1.schema.json
-    validExamples:
-      - examples/templateworkflow.project-template-published-v1.json
-    invalidExamples:
-      - examples/templateworkflow.project-template-published-v1.invalid.json
-  - eventType: templateworkflow.project_template_retired
-    eventVersion: 1
-    schema: schemas/templateworkflow.project-template-retired-v1.schema.json
-    validExamples:
-      - examples/templateworkflow.project-template-retired-v1.json
-    invalidExamples:
-      - examples/templateworkflow.project-template-retired-v1.invalid.json
   - eventType: catalog.workspace_created
     eventVersion: 1
     schema: schemas/catalog.workspace-created-v1.schema.json
@@ -162,20 +148,17 @@ events:
     invalidExamples:
       - examples/catalog.workspace-restored-v1.invalid.json
   - eventType: catalog.project_created
-    eventVersion: 1
-    schema: schemas/catalog.project-created-v1.schema.json
-    validExamples: [examples/catalog.project-created-v1.json]
-    invalidExamples: [examples/catalog.project-created-v1.invalid.json]
+    eventVersion: 2
+    schema: schemas/catalog.project-created-v2.schema.json
+    validExamples:
+      - examples/catalog.project-created-v2.json
+    invalidExamples:
+      - examples/catalog.project-created-v2.invalid.json
   - eventType: catalog.project_updated
     eventVersion: 1
     schema: schemas/catalog.project-updated-v1.schema.json
     validExamples: [examples/catalog.project-updated-v1.json]
     invalidExamples: [examples/catalog.project-updated-v1.invalid.json]
-  - eventType: catalog.project_activated
-    eventVersion: 1
-    schema: schemas/catalog.project-activated-v1.schema.json
-    validExamples: [examples/catalog.project-activated-v1.json]
-    invalidExamples: [examples/catalog.project-activated-v1.invalid.json]
   - eventType: catalog.project_archived
     eventVersion: 1
     schema: schemas/catalog.project-archived-v1.schema.json
@@ -191,11 +174,6 @@ events:
     schema: schemas/catalog.project-moved-to-workspace-v1.schema.json
     validExamples: [examples/catalog.project-moved-to-workspace-v1.json]
     invalidExamples: [examples/catalog.project-moved-to-workspace-v1.invalid.json]
-  - eventType: catalog.project_template_applied
-    eventVersion: 1
-    schema: schemas/catalog.project-template-applied-v1.schema.json
-    validExamples: [examples/catalog.project-template-applied-v1.json]
-    invalidExamples: [examples/catalog.project-template-applied-v1.invalid.json]
   - eventType: catalog.project_member_added
     eventVersion: 1
     schema: schemas/catalog.project-member-added-v1.schema.json

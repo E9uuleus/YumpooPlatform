@@ -284,12 +284,12 @@ class NotificationHttpIT {
     private void createProject(UUID ownerId, UUID memberId) {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             jdbc.sql("""
-                INSERT INTO yumpoo.project (id,company_id,workspace_id,project_code,name,project_type,
-                    lifecycle,owner_user_id,template_key,template_version,row_version,created_at,
-                    created_by_user_id,updated_at,updated_by_user_id,activated_at)
-                VALUES (:id,:companyId,:workspaceId,'CATEGORY_WORK','Category Work','PRODUCT_DEVELOPMENT',
-                    'ACTIVE',:ownerId,'RND',1,0,transaction_timestamp(),:ownerId,
-                    transaction_timestamp(),:ownerId,transaction_timestamp())
+                INSERT INTO yumpoo.project (id,company_id,workspace_id,project_code,name,
+                    lifecycle,owner_user_id,row_version,created_at,
+                    created_by_user_id,updated_at,updated_by_user_id)
+                VALUES (:id,:companyId,:workspaceId,'CATEGORY_WORK','Category Work',
+                    'ACTIVE',:ownerId,0,transaction_timestamp(),:ownerId,
+                    transaction_timestamp(),:ownerId)
                 """).param("id", PROJECT_ID).param("companyId", COMPANY_ID)
                     .param("workspaceId", WORKSPACE_ID).param("ownerId", ownerId).update();
             jdbc.sql("""
@@ -301,7 +301,7 @@ class NotificationHttpIT {
                     .param("ownerId", ownerId).param("memberId", memberId).update();
             jdbc.sql("INSERT INTO yumpoo.content_catalog_version (project_id,company_id) VALUES (:projectId,:companyId)")
                     .param("projectId", PROJECT_ID).param("companyId", COMPANY_ID).update();
-            labels.initialize(COMPANY_ID, PROJECT_ID, "RND", 1, clock.instant());
+            labels.initialize(COMPANY_ID, PROJECT_ID, clock.instant());
         });
     }
 

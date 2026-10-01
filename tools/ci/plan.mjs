@@ -40,7 +40,7 @@ export const assetSteps = [
   node('m1-13-evidence', 'tools/verification/verify-m1-13-evidence.mjs'),
   node('m1-15-assets', 'tools/verification/verify-m1-15-assets.mjs'),
   node('m1-15-deployment', 'tools/verification/verify-m1-15-deployment-assets.mjs'),
-  ...['01', '02', '04', '06', '08', '21a', '21', '22', '23'].map(step =>
+  ...['02', '08', '21a', '21', '22', '23'].map(step =>
     node(`m2-${step}-assets`, `tools/verification/verify-m2-${step}-assets.mjs`)),
   node('content-contract', 'tools/verification/verify-content-category-refactor-assets.mjs'),
   node('historical-milestones', 'tools/ci/historical-assets.mjs'),

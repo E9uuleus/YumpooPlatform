@@ -29,12 +29,6 @@ export interface ProjectCapabilities {
      * @type {boolean}
      * @memberof ProjectCapabilities
      */
-    readonly canActivate: boolean;
-    /**
-     *
-     * @type {boolean}
-     * @memberof ProjectCapabilities
-     */
     readonly canManageMembers: boolean;
     /**
      *
@@ -74,7 +68,6 @@ export interface ProjectCapabilities {
  */
 export function instanceOfProjectCapabilities(value: object): value is ProjectCapabilities {
     if (!('canUpdateSettings' in value) || value['canUpdateSettings'] === undefined) return false;
-    if (!('canActivate' in value) || value['canActivate'] === undefined) return false;
     if (!('canManageMembers' in value) || value['canManageMembers'] === undefined) return false;
     if (!('canReassignOwner' in value) || value['canReassignOwner'] === undefined) return false;
     if (!('canArchive' in value) || value['canArchive'] === undefined) return false;
@@ -95,7 +88,6 @@ export function ProjectCapabilitiesFromJSONTyped(json: any, ignoreDiscriminator:
     return {
 
         'canUpdateSettings': json['canUpdateSettings'],
-        'canActivate': json['canActivate'],
         'canManageMembers': json['canManageMembers'],
         'canReassignOwner': json['canReassignOwner'],
         'canArchive': json['canArchive'],
@@ -109,7 +101,7 @@ export function ProjectCapabilitiesToJSON(json: any): ProjectCapabilities {
     return ProjectCapabilitiesToJSONTyped(json, false);
 }
 
-export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canActivate'|'canManageMembers'|'canReassignOwner'|'canArchive'|'canRestore'|'canMoveWorkspace'|'canOverrideArchive'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectCapabilitiesToJSONTyped(value?: Omit<ProjectCapabilities, 'canUpdateSettings'|'canManageMembers'|'canReassignOwner'|'canArchive'|'canRestore'|'canMoveWorkspace'|'canOverrideArchive'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

@@ -56,8 +56,7 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         ProjectAccessSnapshot access = access(membershipService.requireVisible(actor, projectId));
         return new ProjectFactWriteSnapshot(project.projectId(), project.companyId(), project.code(),
                 ProjectFactWriteSnapshot.ProjectLifecycle.valueOf(project.lifecycle()),
-                ProjectFactWriteSnapshot.ActorProjectAccess.valueOf(access.actorAccess().name()),
-                project.templateKey(), project.templateVersion());
+                ProjectFactWriteSnapshot.ActorProjectAccess.valueOf(access.actorAccess().name()));
     }
 
     @Override
@@ -157,22 +156,9 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
     @Override
     public ProjectSnapshot create(ProjectCreationMutation mutation) {
         return snapshot(service.create(new ProjectCreateCommand(
-                mutation.companyId(), mutation.code(), mutation.name(),
-                mutation.description(), mutation.projectType(), mutation.ownerUserId(),
-                mutation.templateKey(), mutation.templateVersion(), mutation.customerName(),
-                mutation.customerReference(), mutation.deliverySite(), mutation.contactNote(),
+                mutation.companyId(), mutation.name(),
+                mutation.description(),
                 mutation.actorUserId())));
-    }
-
-    @Override
-    public ProjectActivationSnapshot lockForActivation(ProjectActivationMutation mutation) {
-        var state = lifecycleService.lockForActivation(activationCommand(mutation));
-        return new ProjectActivationSnapshot(snapshot(state.project()), state.ownerMembershipActive());
-    }
-
-    @Override
-    public ProjectSnapshot activate(ProjectActivationMutation mutation) {
-        return snapshot(lifecycleService.activate(activationCommand(mutation)));
     }
 
     @Override
@@ -207,19 +193,10 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         return snapshot(lifecycleService.lockForNewFact(companyId, projectId));
     }
 
-    private static com.yumpoo.platform.catalog.application.project.ProjectActivationCommand activationCommand(
-            ProjectActivationMutation mutation) {
-        return new com.yumpoo.platform.catalog.application.project.ProjectActivationCommand(
-                mutation.companyId(), mutation.projectId(), mutation.expectedRowVersion(),
-                mutation.actorUserId());
-    }
-
     private static ProjectSnapshot snapshot(ProjectApplicationSnapshot project) {
         return new ProjectSnapshot(project.projectId(), project.companyId(), project.workspaceId(),
-                project.code(), project.name(), project.description(), project.projectType(),
-                project.lifecycle(), project.ownerUserId(), project.templateKey(),
-                project.templateVersion(), project.customerName(), project.customerReference(),
-                project.deliverySite(), project.contactNote(), project.rowVersion());
+                project.code(), project.name(), project.description(),
+                project.lifecycle(), project.ownerUserId(), project.rowVersion());
     }
 
     private static ProjectMembershipModels.MemberCommand command(ProjectMemberMutation mutation) {
@@ -238,7 +215,6 @@ public class ProjectCatalogAdapter implements ProjectLifecycleCommandPort, Proje
         return new ProjectAccessSnapshot(access.projectId(),access.companyId(),
                 ProjectAccessSnapshot.ProjectLifecycle.valueOf(access.lifecycle()),
                 ProjectAccessSnapshot.ActorProjectAccess.valueOf(access.actorAccess().name()),
-                access.templateKey(),access.templateVersion(),
                 access.projectVersion(),access.membershipVersion());
     }
 }

@@ -19,13 +19,6 @@ import {
     ProjectLifecycleToJSON,
     ProjectLifecycleToJSONTyped,
 } from './ProjectLifecycle';
-import type { ProjectType } from './ProjectType';
-import {
-    ProjectTypeFromJSON,
-    ProjectTypeFromJSONTyped,
-    ProjectTypeToJSON,
-    ProjectTypeToJSONTyped,
-} from './ProjectType';
 import type { ProjectCapabilities } from './ProjectCapabilities';
 import {
     ProjectCapabilitiesFromJSON,
@@ -40,13 +33,6 @@ import {
     ProjectActorAccessToJSON,
     ProjectActorAccessToJSONTyped,
 } from './ProjectActorAccess';
-import type { ProjectTemplateKey } from './ProjectTemplateKey';
-import {
-    ProjectTemplateKeyFromJSON,
-    ProjectTemplateKeyFromJSONTyped,
-    ProjectTemplateKeyToJSON,
-    ProjectTemplateKeyToJSONTyped,
-} from './ProjectTemplateKey';
 
 /**
  *
@@ -86,12 +72,6 @@ export interface ProjectDetail {
     description: string | null;
     /**
      *
-     * @type {ProjectType}
-     * @memberof ProjectDetail
-     */
-    projectType: ProjectType;
-    /**
-     *
      * @type {ProjectLifecycle}
      * @memberof ProjectDetail
      */
@@ -102,42 +82,6 @@ export interface ProjectDetail {
      * @memberof ProjectDetail
      */
     ownerUserId: string;
-    /**
-     *
-     * @type {ProjectTemplateKey}
-     * @memberof ProjectDetail
-     */
-    templateKey: ProjectTemplateKey;
-    /**
-     *
-     * @type {number}
-     * @memberof ProjectDetail
-     */
-    templateVersion: number;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectDetail
-     */
-    customerName: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectDetail
-     */
-    customerReference: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectDetail
-     */
-    deliverySite: string | null;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectDetail
-     */
-    contactNote: string | null;
     /**
      *
      * @type {number}
@@ -197,12 +141,6 @@ export interface ProjectDetail {
      * @type {Date}
      * @memberof ProjectDetail
      */
-    readonly activatedAt: Date | null;
-    /**
-     *
-     * @type {Date}
-     * @memberof ProjectDetail
-     */
     readonly archivedAt: Date | null;
 }
 
@@ -217,15 +155,8 @@ export function instanceOfProjectDetail(value: object): value is ProjectDetail {
     if (!('code' in value) || value['code'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('projectType' in value) || value['projectType'] === undefined) return false;
     if (!('lifecycle' in value) || value['lifecycle'] === undefined) return false;
     if (!('ownerUserId' in value) || value['ownerUserId'] === undefined) return false;
-    if (!('templateKey' in value) || value['templateKey'] === undefined) return false;
-    if (!('templateVersion' in value) || value['templateVersion'] === undefined) return false;
-    if (!('customerName' in value) || value['customerName'] === undefined) return false;
-    if (!('customerReference' in value) || value['customerReference'] === undefined) return false;
-    if (!('deliverySite' in value) || value['deliverySite'] === undefined) return false;
-    if (!('contactNote' in value) || value['contactNote'] === undefined) return false;
     if (!('rowVersion' in value) || value['rowVersion'] === undefined) return false;
     if (!('workspaceCode' in value) || value['workspaceCode'] === undefined) return false;
     if (!('workspaceName' in value) || value['workspaceName'] === undefined) return false;
@@ -235,7 +166,6 @@ export function instanceOfProjectDetail(value: object): value is ProjectDetail {
     if (!('etag' in value) || value['etag'] === undefined) return false;
     if (!('createdAt' in value) || value['createdAt'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
-    if (!('activatedAt' in value) || value['activatedAt'] === undefined) return false;
     if (!('archivedAt' in value) || value['archivedAt'] === undefined) return false;
     return true;
 }
@@ -255,15 +185,8 @@ export function ProjectDetailFromJSONTyped(json: any, ignoreDiscriminator: boole
         'code': json['code'],
         'name': json['name'],
         'description': json['description'],
-        'projectType': ProjectTypeFromJSON(json['projectType']),
         'lifecycle': ProjectLifecycleFromJSON(json['lifecycle']),
         'ownerUserId': json['ownerUserId'],
-        'templateKey': ProjectTemplateKeyFromJSON(json['templateKey']),
-        'templateVersion': json['templateVersion'],
-        'customerName': json['customerName'],
-        'customerReference': json['customerReference'],
-        'deliverySite': json['deliverySite'],
-        'contactNote': json['contactNote'],
         'rowVersion': json['rowVersion'],
         'workspaceCode': json['workspaceCode'],
         'workspaceName': json['workspaceName'],
@@ -273,7 +196,6 @@ export function ProjectDetailFromJSONTyped(json: any, ignoreDiscriminator: boole
         'etag': json['etag'],
         'createdAt': (new Date(json['createdAt'])),
         'updatedAt': (new Date(json['updatedAt'])),
-        'activatedAt': (json['activatedAt'] == null ? null : new Date(json['activatedAt'])),
         'archivedAt': (json['archivedAt'] == null ? null : new Date(json['archivedAt'])),
     };
 }
@@ -282,7 +204,7 @@ export function ProjectDetailToJSON(json: any): ProjectDetail {
     return ProjectDetailToJSONTyped(json, false);
 }
 
-export function ProjectDetailToJSONTyped(value?: Omit<ProjectDetail, 'rowVersion'|'etag'|'createdAt'|'updatedAt'|'activatedAt'|'archivedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectDetailToJSONTyped(value?: Omit<ProjectDetail, 'rowVersion'|'etag'|'createdAt'|'updatedAt'|'archivedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -294,15 +216,8 @@ export function ProjectDetailToJSONTyped(value?: Omit<ProjectDetail, 'rowVersion
         'code': value['code'],
         'name': value['name'],
         'description': value['description'],
-        'projectType': ProjectTypeToJSON(value['projectType']),
         'lifecycle': ProjectLifecycleToJSON(value['lifecycle']),
         'ownerUserId': value['ownerUserId'],
-        'templateKey': ProjectTemplateKeyToJSON(value['templateKey']),
-        'templateVersion': value['templateVersion'],
-        'customerName': value['customerName'],
-        'customerReference': value['customerReference'],
-        'deliverySite': value['deliverySite'],
-        'contactNote': value['contactNote'],
         'workspaceCode': value['workspaceCode'],
         'workspaceName': value['workspaceName'],
         'ownerDisplayName': value['ownerDisplayName'],

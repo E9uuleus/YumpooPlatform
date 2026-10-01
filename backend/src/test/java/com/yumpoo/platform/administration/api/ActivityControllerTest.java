@@ -126,8 +126,7 @@ class ActivityControllerTest {
 
     private static ProjectAccessSnapshot project(ProjectAccessSnapshot.ProjectLifecycle lifecycle,
             ProjectAccessSnapshot.ActorProjectAccess access, OptionalLong membershipVersion) {
-        return new ProjectAccessSnapshot(PROJECT, COMPANY, lifecycle, access,
-                "DEFAULT", 1, 2, membershipVersion);
+        return new ProjectAccessSnapshot(PROJECT, COMPANY, lifecycle, access, 2, membershipVersion);
     }
 
     private record Fixture(ActivityController controller, ProjectAccessSnapshotQuery access,

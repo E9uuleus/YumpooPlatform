@@ -18,13 +18,7 @@ public class ProjectContentInitializationAdapter implements InitializeProjectCon
     @Override
     public List<InitializedProjectContent> initialize(ProjectContentInitialization initialization) {
         ContentInitializationCommand command = new ContentInitializationCommand(
-                initialization.companyId(), initialization.projectId(),
-                initialization.templateKey(), initialization.templateVersion(),
-                initialization.actorUserId(), initialization.blueprints().stream()
-                .map(blueprint -> new ContentInitializationCommand.Blueprint(
-                        blueprint.contentCode(), blueprint.displayName(), blueprint.colorToken(),
-                        blueprint.sortOrder()))
-                .toList());
+                initialization.companyId(), initialization.projectId(), initialization.actorUserId());
         return service.initialize(command).stream()
                 .map(content -> new InitializedProjectContent(
                         content.contentId(), content.code()))

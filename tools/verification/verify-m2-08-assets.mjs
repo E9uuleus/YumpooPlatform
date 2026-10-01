@@ -32,7 +32,7 @@ for (const fragment of ['/projects/{projectId}/workspace-moves:', 'deprecated: t
 for (const fragment of ['/projects/{projectId}/archive:', '/projects/{projectId}/restore:', '/admin/governance-overrides:']) {
   assert(openapi.includes(fragment), `OpenAPI 缺少 ${fragment}`)
 }
-for (const fragment of ['治理覆盖归档', 'problem.error.details.blockers', 'Project 已被其他操作更新']) {
+for (const fragment of ['治理覆盖归档', 'problem.error.details.blockers', '项目已被其他操作更新']) {
   assert(page.includes(fragment), `项目端生命周期闭环缺少 ${fragment}`)
 }
 assert(!page.includes('迁移 Workspace'), '项目端仍显示 Workspace 迁移')

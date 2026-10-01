@@ -54,15 +54,17 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
 
     private static final String FIND_ACTIVE_BY_ID = FIND_BY_ID + " AND status = 'ACTIVE'";
 
-    private static final String FIND_MAIN_FOR_SHARE = """
+    private static final String FIND_MAIN = """
             SELECT
             """ + COLUMNS + """
             FROM yumpoo.workspace
             WHERE company_id = :companyId
               AND code = 'MAIN'
               AND status = 'ACTIVE'
-            FOR SHARE
             """;
+
+    private static final String FIND_MAIN_FOR_SHARE = FIND_MAIN + "FOR SHARE";
+    private static final String FIND_MAIN_FOR_UPDATE = FIND_MAIN + "FOR UPDATE";
 
     private static final String UPDATE_DETAILS = """
             UPDATE yumpoo.workspace
@@ -109,6 +111,12 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
                 .param("companyId", companyId)
                 .query(JdbcWorkspaceRepository::map)
                 .optional();
+    }
+
+    @Override
+    public Optional<Workspace> findMainForUpdate(UUID companyId) {
+        return jdbcClient.sql(FIND_MAIN_FOR_UPDATE)
+                .param("companyId", companyId).query(JdbcWorkspaceRepository::map).optional();
     }
 
     @Override

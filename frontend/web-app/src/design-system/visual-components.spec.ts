@@ -20,7 +20,7 @@ describe('视觉语义组件', () => {
   it('集中显示已知和未知业务状态', () => {
     expect(mount(YpStatusTag, {
       props: { domain: 'project-lifecycle', status: 'ACTIVE' },
-    }).text()).toBe('活跃')
+    }).text()).toBe('进行中')
     expect(mount(YpStatusTag, {
       props: { domain: 'account', status: 'FUTURE_STATE' },
     }).text()).toBe('未知（FUTURE_STATE）')

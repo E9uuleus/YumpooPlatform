@@ -114,7 +114,6 @@ class WorkItemLabelServiceTest {
     private static ProjectFactWriteSnapshot writable(
             ProjectFactWriteSnapshot.ActorProjectAccess actorAccess) {
         return new ProjectFactWriteSnapshot(PROJECT_ID, COMPANY_ID, "PRJ",
-                ProjectFactWriteSnapshot.ProjectLifecycle.ACTIVE, actorAccess,
-                "DEFAULT", 1);
+                ProjectFactWriteSnapshot.ProjectLifecycle.ACTIVE, actorAccess);
     }
 }

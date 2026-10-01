@@ -4,17 +4,8 @@ import java.util.UUID;
 
 public record ProjectCreationMutation(
         UUID companyId,
-        String code,
         String name,
         String description,
-        String projectType,
-        UUID ownerUserId,
-        String templateKey,
-        int templateVersion,
-        String customerName,
-        String customerReference,
-        String deliverySite,
-        String contactNote,
         UUID actorUserId
 ) {
 }

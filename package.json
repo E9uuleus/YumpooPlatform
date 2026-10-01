@@ -36,7 +36,7 @@
     "test:agent-notes": "vitest run scripts/verify-agent-notes.spec.ts scripts/archived-agent-notes.spec.ts",
     "doc-sync": "pnpm run verify-md-links && pnpm run verify-agent-notes && pnpm run verify-archived-agent-notes",
     "lint": "eslint \"frontend/**/*.{ts,vue}\" \"desktop/**/*.ts\" \"packages/**/*.ts\"",
-    "test:architecture": "node --test tools/architecture/workspace-boundaries.test.mjs",
+    "test:architecture": "node --test tools/architecture/workspace-boundaries.test.mjs tools/verification/unified-project-model.test.mjs",
     "typecheck": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/api-client typecheck && pnpm --filter @yumpoo/api-client build && pnpm --filter @yumpoo/web-app typecheck && pnpm --filter @yumpoo/desktop-shell typecheck",
     "test": "pnpm --filter @yumpoo/api-client test && pnpm --filter @yumpoo/web-app test && pnpm --filter @yumpoo/desktop-shell test",
     "build": "pnpm --filter @yumpoo/preload-contract build && pnpm --filter @yumpoo/api-client build && pnpm --filter @yumpoo/web-app build && pnpm --filter @yumpoo/desktop-shell build",

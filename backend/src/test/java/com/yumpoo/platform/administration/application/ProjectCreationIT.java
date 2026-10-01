@@ -45,7 +45,6 @@ class ProjectCreationIT {
     private static final UUID WORKSPACE_ID = UUID.fromString("a460aa25-7180-490b-ab14-f9ec09049024");
 
     @Autowired private ProjectCreationOrchestrator orchestrator;
-    @Autowired private ProjectActivationOrchestrator activationOrchestrator;
     @Autowired private ProjectLifecycleGovernanceService lifecycle;
     @Autowired private com.yumpoo.platform.catalog.application.project.ProjectService projectService;
     @Autowired private com.yumpoo.platform.catalog.application.workspace.WorkspaceService workspaceService;
@@ -67,12 +66,12 @@ class ProjectCreationIT {
     }
 
     @Test
-    void createsFourTypesWithOwnerMembershipAndTemplateProvenance() {
+    void createsActiveProjectsWithCreatorMembershipAndDefaultStructure() {
         List<IdempotencyExecutionResult> results = List.of(
-                create("RND_PROJECT", "PRODUCT_DEVELOPMENT", "RND", "  Customer  ", "a"),
-                create("PRESALES_PROJECT", "PRE_SALES", "PRE_SALES", null, "b"),
-                create("IMPLEMENT_PROJECT", "IMPLEMENTATION", "IMPLEMENTATION", null, "c"),
-                create("HYPERCARE_PROJECT", "HYPERCARE", "HYPERCARE", null, "d"));
+                create("研发协作", "a"),
+                create("门户升级", "b"),
+                create("服务改善", "c"),
+                create("团队计划", "d"));
 
         assertThat(results).allSatisfy(result -> {
             assertThat(result.result().httpStatus()).isEqualTo(201);
@@ -92,46 +91,58 @@ class ProjectCreationIT {
                         "DEFECTS:缺陷:DARK_RED:30:true:true",
                         "REQUIREMENTS:需求:BRIGHT_BLUE:10:true:true",
                         "TASKS:任务:BRIGHT_GREEN:20:true:true");
-        assertThat(jdbcClient.sql("SELECT customer_name FROM yumpoo.project WHERE project_code = 'RND_PROJECT'")
-                .query(String.class).single()).isEqualTo("Customer");
+        UUID firstProjectId = results.getFirst().result().resourceId();
+        assertThat(jdbcClient.sql("SELECT lifecycle || ':' || owner_user_id FROM yumpoo.project WHERE id=:id")
+                .param("id", firstProjectId).query(String.class).single()).isEqualTo("ACTIVE:" + OWNER_ID);
+        assertThat(jdbcClient.sql("""
+                SELECT status_code || ':' || display_name || ':' || color_token || ':' || status_category || ':'
+                       || sort_order || ':' || active || ':' || protected_label
+                  FROM yumpoo.project_work_item_status_label WHERE project_id=:id ORDER BY sort_order
+                """).param("id", firstProjectId).query(String.class).list()).containsExactly(
+                "NOT_STARTED:未开始:GRAY:TODO:0:true:true", "IN_PROGRESS:进行中:ORANGE:IN_PROGRESS:10:true:false",
+                "STUCK:卡住:RED:IN_PROGRESS:20:true:false", "DONE:已完成:GREEN:DONE:30:true:false",
+                "CANCELED:已取消:AMERICAN_GRAY:CANCELED:40:true:false");
+        assertThat(jdbcClient.sql("""
+                SELECT priority_code || ':' || display_name || ':' || color_token || ':' || sort_order || ':' || active
+                  FROM yumpoo.project_work_item_priority_label WHERE project_id=:id ORDER BY sort_order
+                """).param("id", firstProjectId).query(String.class).list()).containsExactly(
+                "LOW:低:BLUE:10:true", "MEDIUM:中:TEAL:20:true", "HIGH:高:ORANGE:30:true", "URGENT:紧急:RED:40:true");
         assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.platform_role_assignment WHERE role_code = 'PROJECT_OWNER'")
                 .query(Integer.class).single()).isZero();
 
         String payloads = jdbcClient.sql("""
                         SELECT string_agg(payload_json::text, ' ')
                           FROM yumpoo.outbox_event
-                         WHERE event_type IN ('catalog.project_created', 'catalog.project_template_applied')
+                         WHERE event_type='catalog.project_created' AND event_version=2
                         """).query(String.class).single();
         assertThat(payloads).doesNotContain("description", "customerName", "contactNote");
     }
 
     @Test
     void queryAndWorkspaceCountsUseTheSameDatabaseVisibilityPredicateAndPatchIsNoOpAware() {
-        UUID first = create("QUERY_ALPHA", "PRODUCT_DEVELOPMENT", "RND", null, "7")
+        UUID first = create("QUERY_ALPHA", "7")
                 .result().resourceId();
-        create("QUERY_BETA", "PRE_SALES", "PRE_SALES", "客户", "8");
+        create("QUERY_BETA", "8");
 
-        var ownerPage = projectService.findAll(owner(), null, null, null,
+        var ownerPage = projectService.findAll(owner(), new com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria(null, null, null, null, null),
                 com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest.of(0, 20));
         var appManagerPage = projectService.findAll(new CurrentActor(UUID.randomUUID(), COMPANY_ID, 0,
-                        Set.of(PlatformRoleCode.APP_MANAGER)), null, null, null,
+                        Set.of(PlatformRoleCode.APP_MANAGER)), new com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria(null, null, null, null, null),
                 com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest.of(0, 20));
         var workspace = workspaceService.findAll(owner(),
                 com.yumpoo.platform.catalog.application.workspace.WorkspaceListStatus.ACTIVE).getFirst();
 
         assertThat(ownerPage.items()).extracting("code")
-                .containsExactly("QUERY_ALPHA", "QUERY_BETA");
+                .containsExactly("P001", "P002");
         assertThat(appManagerPage.totalElements()).isEqualTo(ownerPage.totalElements());
         assertThat(workspace.visibleProjectCount()).isEqualTo(ownerPage.totalElements());
 
         try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
                 RequestCorrelation.root("m206-project-update"))) {
             var updated = projectService.update(new com.yumpoo.platform.catalog.application.project.ProjectUpdateCommand(
-                    owner(), first, 0, "Query Alpha Updated", "private description", null,
-                    null, null, "private contact"));
+                    owner(), first, 0, "Query Alpha Updated", "private description"));
             var noOp = projectService.update(new com.yumpoo.platform.catalog.application.project.ProjectUpdateCommand(
-                    owner(), first, 1, updated.name(), updated.description(), updated.customerName(),
-                    updated.customerReference(), updated.deliverySite(), updated.contactNote()));
+                    owner(), first, 1, updated.name(), updated.description()));
             assertThat(updated.rowVersion()).isOne();
             assertThat(noOp.rowVersion()).isOne();
         }
@@ -144,9 +155,9 @@ class ProjectCreationIT {
 
     @Test
     void projectManagementQueryCombinesSearchFiltersDatesOwnersAndAccessWithoutCountDrift() {
-        UUID alpha = create("FILTER_ALPHA", "PRODUCT_DEVELOPMENT", "RND", null, "a")
+        UUID alpha = create("FILTER_ALPHA", "a")
                 .result().resourceId();
-        UUID beta = create("FILTER_BETA", "PRE_SALES", "PRE_SALES", "客户", "b")
+        UUID beta = create("FILTER_BETA", "b")
                 .result().resourceId();
         java.time.Instant threshold = java.time.Instant.now().minus(java.time.Duration.ofDays(1));
         jdbcClient.sql("UPDATE yumpoo.project SET created_at=:old, updated_at=:old WHERE id=:id")
@@ -155,7 +166,7 @@ class ProjectCreationIT {
                 .param("id", alpha).update();
 
         var criteria = new com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria(
-                "filter", List.of(com.yumpoo.platform.catalog.domain.project.ProjectType.PRE_SALES),
+                "filter",
                 List.of(OWNER_ID),
                 List.of(com.yumpoo.platform.catalog.application.project.ProjectActorAccess.OWNER),
                 threshold,
@@ -177,140 +188,93 @@ class ProjectCreationIT {
     }
 
     @Test
-    void activatesAllFourTypesAndRequiresCustomerOnlyOutsideProductDevelopment() {
-        List<IdempotencyExecutionResult> created = List.of(
-                create("ACT_RND", "PRODUCT_DEVELOPMENT", "RND", null, "1"),
-                create("ACT_PRE", "PRE_SALES", "PRE_SALES", "客户", "2"),
-                create("ACT_IMPL", "IMPLEMENTATION", "IMPLEMENTATION", "客户", "3"),
-                create("ACT_HYPER", "HYPERCARE", "HYPERCARE", "客户", "4"));
-
-        for (IdempotencyExecutionResult item : created) {
-            IdempotencyExecutionResult activated = activate(item.result().resourceId(), 0);
-            assertThat(activated.result().httpStatus()).isEqualTo(200);
-            assertThat(activated.result().etag()).isEqualTo("\"1\"");
-        }
-        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.project WHERE lifecycle='ACTIVE' AND activated_at IS NOT NULL")
-                .query(Integer.class).single()).isEqualTo(4);
-
-        UUID missingCustomer = create("ACT_BLOCKED", "PRE_SALES", "PRE_SALES", null, "5")
+    void ownerCanArchiveAndAdministratorCanRestoreWithoutTemplateDependencies() {
+        UUID projectId = create("UP2_LIFECYCLE", "b")
                 .result().resourceId();
-        assertThatThrownBy(() -> activate(missingCustomer, 0))
-                .isInstanceOfSatisfying(ApplicationException.class, exception -> {
-                    assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED);
-                    assertThat(exception.fieldViolations()).extracting("field")
-                            .containsExactly("customerName");
-                });
-        assertThat(jdbcClient.sql("SELECT lifecycle FROM yumpoo.project WHERE id=:id")
-                .param("id", missingCustomer).query(String.class).single()).isEqualTo("DRAFT");
-    }
-
-    @Test
-    void ownerCanArchiveAndAdministratorCanRestoreWithoutProductDependencies() {
-        UUID projectId = create("UP1_LIFECYCLE", "PRODUCT_DEVELOPMENT", "RND", null, "b")
-                .result().resourceId();
-        activate(projectId, 0);
         try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
                 RequestCorrelation.root("up1-project-lifecycle"))) {
             assertThatThrownBy(() -> lifecycle.archive(new ProjectArchiveOperationCommand(admin(), projectId,
-                    1, UUID.randomUUID(), new RequestHash("c".repeat(64)))))
+                    0, UUID.randomUUID(), new RequestHash("c".repeat(64)))))
                     .isInstanceOfSatisfying(ApplicationException.class, error ->
                             assertThat(error.errorCode()).isEqualTo(StandardErrorCode.ACCESS_DENIED));
             var archived = lifecycle.archive(new ProjectArchiveOperationCommand(owner(), projectId,
-                    1, UUID.randomUUID(), new RequestHash("d".repeat(64))));
+                    0, UUID.randomUUID(), new RequestHash("d".repeat(64))));
             assertThat(archived.result().responseJson()).contains("ARCHIVED");
             var restored = lifecycle.restore(new ProjectRestoreOperationCommand(admin(), projectId,
-                    2, UUID.randomUUID(), new RequestHash("e".repeat(64))));
+                    1, UUID.randomUUID(), new RequestHash("e".repeat(64))));
             assertThat(restored.result().responseJson()).contains("ACTIVE");
         }
         assertThat(jdbcClient.sql("SELECT row_version FROM yumpoo.project WHERE id=:id")
-                .param("id", projectId).query(Long.class).single()).isEqualTo(3);
+                .param("id", projectId).query(Long.class).single()).isEqualTo(2);
     }
 
     @Test
-    void concurrentActivationCommitsExactlyOneLifecycleTransition() throws Exception {
-        UUID projectId = create("M224_ACTIVATION", "PRODUCT_DEVELOPMENT", "RND", null, "a")
-                .result().resourceId();
-        CountDownLatch start = new CountDownLatch(1);
-        try (var executor = Executors.newFixedThreadPool(2)) {
-            Future<Boolean> first = executor.submit(() -> concurrentActivation(start, projectId));
-            Future<Boolean> second = executor.submit(() -> concurrentActivation(start, projectId));
-            start.countDown();
-            assertThat(first.get(10, TimeUnit.SECONDS) ^ second.get(10, TimeUnit.SECONDS)).isTrue();
-        }
-        assertThat(jdbcClient.sql("SELECT lifecycle FROM yumpoo.project WHERE id=:id")
-                .param("id", projectId).query(String.class).single()).isEqualTo("ACTIVE");
-        assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.outbox_event WHERE event_type='catalog.project_activated' AND aggregate_id=:id")
-                .param("id", projectId).query(Integer.class).single()).isOne();
-    }
-
-    @Test
-    @org.springframework.transaction.annotation.Transactional
-    void retiredFrozenTemplateRemainsActivatableAndSensitiveFieldsStayOutOfEvent() {
-        UUID projectId = create("ACT_RETIRED", "PRODUCT_DEVELOPMENT", "RND", null, "6")
-                .result().resourceId();
-        jdbcClient.sql("""
-                UPDATE yumpoo.project_template_definition
-                   SET lifecycle_status='RETIRED', retired_at=transaction_timestamp(),
-                       retired_by_user_id=:adminId, retire_reason='M2-06 activation verification'
-                       , row_version=row_version+1, updated_at=transaction_timestamp()
-                 WHERE template_key='RND' AND template_version=1
-                """).param("adminId", ADMIN_ID).update();
-        activate(projectId, 0);
-        String payload = jdbcClient.sql("SELECT payload_json::text FROM yumpoo.outbox_event WHERE event_type='catalog.project_activated' AND aggregate_id=:id")
-                .param("id", projectId).query(String.class).single();
-        assertThat(payload).contains("fromLifecycle", "toLifecycle")
-                .doesNotContain("customerName", "description", "contactNote");
-    }
-
-    @Test
-    void replayIsIdenticalAndConcurrentDuplicateCodeHasOneWinner() throws Exception {
-        UUID replayKey = UUID.randomUUID();
-        ProjectCreationCommand replayCommand = command(
-                "REPLAY", "PRE_SALES", "PRE_SALES", replayKey, "e".repeat(64));
-        IdempotencyExecutionResult first = execute("m204-replay-first", replayCommand);
-        IdempotencyExecutionResult replay = execute("m204-replay-second", replayCommand);
+    void replayIsIdenticalAndFiveConcurrentCreationsAllGetUniqueCodes() throws Exception {
+        var replayCommand = command("REPLAY", UUID.randomUUID(), "e".repeat(64));
+        var first = execute("up2-first", replayCommand);
+        var replay = execute("up2-replay", replayCommand);
         assertThat(replay.result()).isEqualTo(first.result());
         assertThat(replay.replayed()).isTrue();
-        assertThat(countByCode("REPLAY")).isOne();
-
+        assertThat(countByCode("P001")).isOne();
         CountDownLatch start = new CountDownLatch(1);
-        try (var executor = Executors.newFixedThreadPool(2)) {
-            List<Future<Boolean>> futures = new ArrayList<>();
-            for (int index = 0; index < 2; index++) {
-                int caller = index;
+        try (var executor = Executors.newFixedThreadPool(5)) {
+            List<Future<UUID>> futures = new ArrayList<>();
+            for (int index=0; index<5; index++) {
+                int caller=index;
                 futures.add(executor.submit(() -> {
-                    start.await(5, TimeUnit.SECONDS);
-                    try {
-                        execute("m204-duplicate-" + caller,
-                                command("RACE_CODE", "IMPLEMENTATION", "IMPLEMENTATION",
-                                        UUID.randomUUID(), String.valueOf(caller + 1).repeat(64)));
-                        return true;
-                    } catch (ApplicationException exception) {
-                        assertThat(exception.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED);
-                        return false;
-                    }
+                    start.await(10, TimeUnit.SECONDS);
+                    return execute("up2-race-"+caller, command("Concurrent "+caller, UUID.randomUUID(), String.valueOf(caller+1).repeat(64))).result().resourceId();
                 }));
             }
             start.countDown();
-            assertThat(futures.get(0).get(10, TimeUnit.SECONDS)
-                    ^ futures.get(1).get(10, TimeUnit.SECONDS)).isTrue();
+            Set<UUID> ids = new java.util.HashSet<>();
+            for (var future : futures) ids.add(future.get(20, TimeUnit.SECONDS));
+            assertThat(ids).hasSize(5);
         }
-        assertThat(countByCode("RACE_CODE")).isOne();
-        assertThat(contentCountByCode("RACE_CODE")).isEqualTo(3);
+        assertThat(jdbcClient.sql("SELECT project_code FROM yumpoo.project ORDER BY project_code")
+                .query(String.class).list()).containsExactly("P001","P002","P003","P004","P005","P006");
     }
 
     @Test
-    void secondContentAuditAndBothOutboxFailuresRollBackEveryFact() {
+    void generatedCodeIgnoresManualCodesAndContinuesTheLargestNumericCode() {
+        UUID numeric=create("Numeric", "1").result().resourceId();
+        UUID manual=create("Manual", "2").result().resourceId();
+        jdbcClient.sql("UPDATE yumpoo.project SET project_code='P007' WHERE id=:id").param("id",numeric).update();
+        jdbcClient.sql("UPDATE yumpoo.project SET project_code='RND_PORTAL' WHERE id=:id").param("id",manual).update();
+        UUID next=create("Next", "3").result().resourceId();
+        assertThat(jdbcClient.sql("SELECT project_code FROM yumpoo.project WHERE id=:id")
+                .param("id",next).query(String.class).single()).isEqualTo("P008");
+    }
+
+    @Test
+    void disabledOrDepartedCreatorsCannotCreate() {
+        for (String column : List.of("account_status", "employment_status")) {
+            String unavailable=column.equals("account_status") ? "DISABLED" : "LEFT";
+            jdbcClient.sql("UPDATE yumpoo.identity_user SET "+column+"=:value, updated_at=transaction_timestamp(), "
+                    +(column.equals("account_status") ? "account_disabled_at=now(), account_disabled_by_user_id=:admin, account_disabled_reason='UP2 test'" : "left_at=now(), left_reason='UP2 test'")+" WHERE id=:id")
+                    .param("admin",ADMIN_ID).param("value",unavailable).param("id",OWNER_ID).update();
+            assertThatThrownBy(() -> create("Unavailable", "a"))
+                    .isInstanceOfSatisfying(ApplicationException.class,e ->
+                            assertThat(e.errorCode()).isEqualTo(StandardErrorCode.ACCESS_DENIED));
+            jdbcClient.sql("UPDATE yumpoo.identity_user SET "+column+"=:value, updated_at=transaction_timestamp(), "
+                    +(column.equals("account_status") ? "account_disabled_at=NULL, account_disabled_by_user_id=NULL, account_disabled_reason=NULL" : "left_at=NULL, left_reason=NULL")+" WHERE id=:id")
+                    .param("value",column.equals("account_status") ? "ENABLED" : "ACTIVE")
+                    .param("id",OWNER_ID).update();
+        }
+        assertThat(count("project")).isZero();
+    }
+
+    @Test
+    void secondContentAuditAndOutboxFailuresRollBackEveryFact() {
         for (FailurePoint point : FailurePoint.values()) {
             installFailureTrigger(point);
-            String code = "FAIL_" + point.name();
-            assertThatThrownBy(() -> create(code, "HYPERCARE", "HYPERCARE", null,
-                    Integer.toString(point.ordinal() + 1)))
+            String name = "FAIL_" + point.name();
+            assertThatThrownBy(() -> create(name, Integer.toString(point.ordinal() + 1)))
                     .isInstanceOf(RuntimeException.class);
-            assertThat(countByCode(code)).isZero();
-            assertThat(contentCountByCode(code)).isZero();
-            assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.project_membership membership JOIN yumpoo.project project ON project.id = membership.project_id WHERE project.project_code = :code")
-                    .param("code", code).query(Integer.class).single()).isZero();
+            assertThat(count("project")).isZero();
+            assertThat(count("content")).isZero();
+            assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.project_membership membership JOIN yumpoo.project project ON project.id = membership.project_id WHERE project.name = :name")
+                    .param("name", name).query(Integer.class).single()).isZero();
             assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.idempotency_record WHERE route_key = 'createProject' AND request_hash = :hash")
                     .param("hash", Integer.toString(point.ordinal() + 1).repeat(64))
                     .query(Integer.class).single()).isZero();
@@ -324,11 +288,11 @@ class ProjectCreationIT {
         UUID projectId = UUID.randomUUID();
         assertThatThrownBy(() -> transaction.executeWithoutResult(status -> jdbcClient.sql("""
                         INSERT INTO yumpoo.project (
-                            id, company_id, workspace_id, project_code, name, project_type, lifecycle,
-                            owner_user_id, template_key, template_version, row_version,
+                            id, company_id, workspace_id, project_code, name, lifecycle,
+                            owner_user_id, row_version,
                             created_at, created_by_user_id, updated_at, updated_by_user_id
                         ) VALUES (:id, :companyId, :workspaceId, 'NO_MEMBERSHIP', 'No membership',
-                            'PRODUCT_DEVELOPMENT', 'DRAFT', :ownerId, 'RND', 1, 0,
+                            'ACTIVE', :ownerId, 0,
                             transaction_timestamp(), :adminId, transaction_timestamp(), :adminId)
                         """).param("id", projectId).param("companyId", COMPANY_ID)
                 .param("workspaceId", WORKSPACE_ID).param("ownerId", OWNER_ID)
@@ -338,78 +302,15 @@ class ProjectCreationIT {
         assertThat(countByCode("NO_MEMBERSHIP")).isZero();
     }
 
-    @Test
-    void publishedTemplateShareLockSerializesRetirement() throws Exception {
-        CountDownLatch locked = new CountDownLatch(1);
-        CountDownLatch release = new CountDownLatch(1);
-        try (var executor = Executors.newFixedThreadPool(2)) {
-            Future<Void> reader = executor.submit(() -> {
-                try (Connection connection = dataSource.getConnection()) {
-                    connection.setAutoCommit(false);
-                    try (PreparedStatement statement = connection.prepareStatement("""
-                            SELECT id FROM yumpoo.project_template_definition
-                             WHERE template_key = 'RND' AND template_version = 1
-                               AND lifecycle_status = 'PUBLISHED'
-                             FOR SHARE
-                            """)) {
-                        assertThat(statement.executeQuery().next()).isTrue();
-                    }
-                    locked.countDown();
-                    release.await(5, TimeUnit.SECONDS);
-                    connection.rollback();
-                }
-                return null;
-            });
-            Future<Integer> retirement = executor.submit(() -> {
-                assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
-                try (Connection connection = dataSource.getConnection()) {
-                    connection.setAutoCommit(false);
-                    try (PreparedStatement statement = connection.prepareStatement("""
-                            UPDATE yumpoo.project_template_definition
-                               SET lifecycle_status = 'RETIRED', retired_at = transaction_timestamp(),
-                                   retired_by_user_id = ?, retire_reason = 'M2-04 lock verification',
-                                   row_version = row_version + 1, updated_at = transaction_timestamp()
-                             WHERE template_key = 'RND' AND template_version = 1
-                            """)) {
-                        statement.setObject(1, ADMIN_ID);
-                        int updated = statement.executeUpdate();
-                        connection.rollback();
-                        return updated;
-                    }
-                }
-            });
-            assertThat(locked.await(5, TimeUnit.SECONDS)).isTrue();
-            assertThatThrownBy(() -> retirement.get(Duration.ofMillis(200).toMillis(), TimeUnit.MILLISECONDS))
-                    .isInstanceOf(java.util.concurrent.TimeoutException.class);
-            release.countDown();
-            assertThat(retirement.get(5, TimeUnit.SECONDS)).isOne();
-            reader.get(5, TimeUnit.SECONDS);
-        }
-        assertThat(jdbcClient.sql("SELECT lifecycle_status FROM yumpoo.project_template_definition WHERE template_key = 'RND' AND template_version = 1")
-                .query(String.class).single()).isEqualTo("PUBLISHED");
-    }
-
-    private IdempotencyExecutionResult create(
-            String code, String projectType, String templateKey, String customerName, String hashSeed
-    ) {
-        ProjectCreationCommand command = command(code, projectType, templateKey,
-                UUID.randomUUID(), hashSeed.repeat(64));
-        if (customerName != null) {
-            command = new ProjectCreationCommand(command.actor(), command.code(),
-                    command.name(), command.description(), command.projectType(), command.ownerUserId(),
-                    command.templateKey(), command.templateVersion(), customerName,
-                    command.customerReference(), command.deliverySite(), command.contactNote(),
-                    command.idempotencyKey(), command.requestHash(), command.clientType(), command.clientVersion());
-        }
-        return execute("m204-create-" + code, command);
+    private IdempotencyExecutionResult create(String name, String hashSeed) {
+        return execute("up2-create-" + UUID.randomUUID(), command(name, UUID.randomUUID(), hashSeed.repeat(64)));
     }
 
     private ProjectCreationCommand command(
-            String code, String projectType, String templateKey, UUID key, String hash
+            String name, UUID key, String hash
     ) {
-        return new ProjectCreationCommand(admin(), code, "  " + code + "  ",
-                "  private description  ", projectType, OWNER_ID, templateKey, 1,
-                null, " ", " ", " private contact ", key, new RequestHash(hash),
+        return new ProjectCreationCommand(owner(), "  " + name + "  ",
+                "  private description  ", key, new RequestHash(hash),
                 "WEB", "m2-04-test");
     }
 
@@ -417,28 +318,6 @@ class ProjectCreationIT {
         try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
                 RequestCorrelation.root(requestId))) {
             return orchestrator.create(command);
-        }
-    }
-
-    private IdempotencyExecutionResult activate(UUID projectId, long version) {
-        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
-                RequestCorrelation.root("m206-activate-" + projectId))) {
-            return activationOrchestrator.activate(new ProjectActivationCommand(
-                    owner(), projectId, version, UUID.randomUUID(),
-                    new RequestHash(UUID.randomUUID().toString().replace("-", "").repeat(2)),
-                    "WEB", "m2-06-test"));
-        }
-    }
-
-    private boolean concurrentActivation(CountDownLatch start, UUID projectId) {
-        try {
-            start.await(5, TimeUnit.SECONDS);
-            activate(projectId, 0);
-            return true;
-        } catch (ApplicationException expected) {
-            return false;
-        } catch (Exception exception) {
-            throw new RuntimeException(exception);
         }
     }
 
@@ -496,10 +375,8 @@ class ProjectCreationIT {
                 .param("companyId", COMPANY_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.outbox_event WHERE company_id = :companyId AND aggregate_type = 'Project'")
                 .param("companyId", COMPANY_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :adminId AND route_key = 'createProject'")
-                .param("adminId", ADMIN_ID).update();
-        jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id = :ownerId AND route_key = 'activateProject'")
-                .param("ownerId", OWNER_ID).update();
+        jdbcClient.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id IN (:adminId, :ownerId)")
+                .param("adminId", ADMIN_ID).param("ownerId", OWNER_ID).update();
         jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id IN (:adminId, :ownerId)")
                 .param("adminId", ADMIN_ID).param("ownerId", OWNER_ID).update();
     }
@@ -515,8 +392,7 @@ class ProjectCreationIT {
     private enum FailurePoint {
         SECOND_CONTENT("CREATE TRIGGER m204_fail_write BEFORE INSERT ON yumpoo.content FOR EACH ROW WHEN (NEW.code = 'TASKS') EXECUTE FUNCTION yumpoo.m204_fail_write()"),
         SECURITY_AUDIT("CREATE TRIGGER m204_fail_write BEFORE INSERT ON yumpoo.security_audit_event FOR EACH ROW EXECUTE FUNCTION yumpoo.m204_fail_write()"),
-        PROJECT_CREATED_OUTBOX("CREATE TRIGGER m204_fail_write BEFORE INSERT ON yumpoo.outbox_event FOR EACH ROW WHEN (NEW.event_type = 'catalog.project_created') EXECUTE FUNCTION yumpoo.m204_fail_write()"),
-        TEMPLATE_APPLIED_OUTBOX("CREATE TRIGGER m204_fail_write BEFORE INSERT ON yumpoo.outbox_event FOR EACH ROW WHEN (NEW.event_type = 'catalog.project_template_applied') EXECUTE FUNCTION yumpoo.m204_fail_write()");
+        PROJECT_CREATED_OUTBOX("CREATE TRIGGER m204_fail_write BEFORE INSERT ON yumpoo.outbox_event FOR EACH ROW WHEN (NEW.event_type = 'catalog.project_created') EXECUTE FUNCTION yumpoo.m204_fail_write()");
 
         private final String triggerSql;
 

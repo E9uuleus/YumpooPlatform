@@ -1,6 +1,8 @@
 package com.yumpoo.platform;
 
 import com.yumpoo.platform.filestorage.testing.M014AttachmentProbeController;
+import com.yumpoo.platform.foundation.application.event.EventSubscription;
+import com.yumpoo.platform.foundation.application.event.OutboxEventConsumer;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.configuration.Configuration;
@@ -16,6 +18,10 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.Container;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.net.URI;
@@ -30,7 +36,10 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,6 +69,39 @@ class YumpooServerApplicationIT {
 
     @Autowired
     private PostgreSQLContainer postgresContainer;
+
+    @Test
+    void registeredOutboxSubscriptionsMatchCurrentContractsAndExcludeRetiredVersions() throws IOException {
+        Map<?, ?> catalog = new Yaml(new SafeConstructor(new LoaderOptions()))
+                .load(Files.readString(Path.of("../contracts/events/catalog.yaml")));
+        Set<EventSubscription> current = new HashSet<>();
+        for (Object entry : (List<?>) catalog.get("events")) {
+            Map<?, ?> event = (Map<?, ?>) entry;
+            current.add(new EventSubscription((String) event.get("eventType"),
+                    ((Number) event.get("eventVersion")).intValue()));
+        }
+        Set<EventSubscription> retired = new HashSet<>();
+        var manifest = new ObjectMapper().readTree(Files.readString(
+                Path.of("../tools/events/retired-event-contracts.json")));
+        for (var event : manifest.get("retired")) {
+            retired.add(new EventSubscription(event.get("eventType").asString(),
+                    event.get("eventVersion").asInt()));
+        }
+        assertThat(current).isNotEmpty();
+        assertThat(retired).isNotEmpty();
+        var consumers = applicationContext.getBeansOfType(OutboxEventConsumer.class).values();
+        assertThat(consumers).isNotEmpty();
+        for (OutboxEventConsumer consumer : consumers) {
+            assertThat(consumer.subscriptions()).as("subscriptions of %s", consumer.consumerName())
+                    .isNotEmpty();
+            for (EventSubscription subscription : consumer.subscriptions()) {
+                assertThat(current).as("current contract for %s: %s", consumer.consumerName(), subscription)
+                        .contains(subscription);
+                assertThat(retired).as("retired contract for %s: %s", consumer.consumerName(), subscription)
+                        .doesNotContain(subscription);
+            }
+        }
+    }
 
     @Test
     void livenessAndDatabaseBackedReadinessProbesAreAvailableWithoutDetails() throws Exception {
@@ -353,8 +395,6 @@ class YumpooServerApplicationIT {
                 "platform_role_assignment",
                 "project",
                 "project_membership",
-                "project_template_content_blueprint",
-                "project_template_definition",
                 "project_work_item_label_catalog",
                 "project_work_item_priority_label",
                 "project_work_item_status_label",
@@ -372,8 +412,6 @@ class YumpooServerApplicationIT {
                 "work_item_timer_state",
                 "work_item_update",
                 "work_item_update_mention",
-                "workflow_status_definition",
-                "workflow_transition_definition",
                 "workspace"
         );
         assertThat(outboxConstraintNames).containsExactlyInAnyOrder(
@@ -1080,7 +1118,7 @@ class YumpooServerApplicationIT {
                         assertThat(projects.getInt("workspace_count")).isOne();
                         assertThat(projects.getString("workspace_id")).isEqualTo(expectedWorkspaceId);
                         assertThat(projects.getString("facts")).isEqualTo(
-                                "MIGRATE_ACTIVE:ACTIVE:8,MIGRATE_ARCHIVED:ARCHIVED:9,MIGRATE_DRAFT:DRAFT:7");
+                                "MIGRATE_ACTIVE:ACTIVE:8,MIGRATE_ARCHIVED:ARCHIVED:9,MIGRATE_DRAFT:ACTIVE:7");
                     }
                 }
             }

@@ -8,7 +8,9 @@ Project 与 Work Item 需要统一动态时间线，但业务模块不能在写�
 
 ## Decision
 
-V44 建立 append-only `activity_event` 和单行 `activity_projection_state`。Activity V1 只接收迁移切点后的显式 v1 事件；切点前后来被领取的 `PENDING/RETRY` 只完成 receipt，不生成投影，既有 `COMPLETED/DEAD` 不重排、不回填。查询返回 `historyStartedAt` 公开这条边界。
+V44 建立 append-only `activity_event` 和单行 `activity_projection_state`。首次上线时 Activity V1 只接收迁移切点后的显式 v1 事件；切点前后来被领取的 `PENDING/RETRY` 只完成 receipt，不生成投影，既有 `COMPLETED/DEAD` 不重排、不回填。查询返回 `historyStartedAt` 公开这条边界。
+
+当前消费订阅按契约目录的类型和版本声明。`catalog.project_created` 与 `workitem.content_deleted` 仅订阅当前 @2，其他仍有当前契约的 v1/v2 及冻结订阅继续保留；不因历史摘要仍可读而订阅缺少当前契约的版本。已存 Activity 的历史渲染不受影响，不回填、改写或清理旧动态。全部运行时消费者由[事件退役机制](../process/2026-09-30-event-contract-retirement.md)中的当前目录与退役版本回归约束。
 
 `audit` 拥有事件白名单、模板码、安全参数映射、追加仓储、游标和摘要渲染。受现有层级规则约束，Outbox 消费映射放在 `audit.api`，通过同层上下文端口取得投影时刻的成员显示名和事项安全引用；`administration` 仅组合 identityaccess 与 workitem 的公开查询端口。`audit.application` 不反向依赖 API DTO，`audit.infrastructure` 不依赖公共枚举。
 

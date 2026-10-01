@@ -3,10 +3,11 @@ import { fileURLToPath } from 'node:url'
 import { verifyHistoricalMilestone as verifyHistoricalReport } from '../verification/content-category-refactor-assets.mjs'
 
 export const historicalMilestones = [
-  'M2-03', 'M2-07', 'M2-09', 'M2-10', 'M2-11', 'M2-12', 'M2-13', 'M2-14', 'M2-15', 'M2-16', 'M2-19A', 'M2-24',
+  'M2-01', 'M2-03', 'M2-04', 'M2-06', 'M2-07', 'M2-09', 'M2-10', 'M2-11', 'M2-12', 'M2-13', 'M2-14', 'M2-15', 'M2-16', 'M2-19A', 'M2-24',
 ]
 
 const reportPolicies = {
+  'M2-01': { acceptanceField: 'verifiedRequirements' },
   'M2-24': {
     status: 'VERIFIED',
     validateReport(report) {

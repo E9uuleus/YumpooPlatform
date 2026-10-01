@@ -37,7 +37,7 @@ public class JdbcProjectOwnerGovernanceProjection implements OutboxEventConsumer
                 new EventSubscription("identity.user_account_disabled",1),
                 new EventSubscription("identity.user_account_enabled",1),
                 new EventSubscription("catalog.project_owner_reassigned",1),
-                new EventSubscription("catalog.project_created",1));
+                new EventSubscription("catalog.project_created",2));
     }
 
     @Override public void consume(DomainEventEnvelope event) {

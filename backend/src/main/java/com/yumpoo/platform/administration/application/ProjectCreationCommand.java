@@ -7,17 +7,8 @@ import java.util.UUID;
 
 public record ProjectCreationCommand(
         CurrentActor actor,
-        String code,
         String name,
         String description,
-        String projectType,
-        UUID ownerUserId,
-        String templateKey,
-        int templateVersion,
-        String customerName,
-        String customerReference,
-        String deliverySite,
-        String contactNote,
         UUID idempotencyKey,
         RequestHash requestHash,
         String clientType,

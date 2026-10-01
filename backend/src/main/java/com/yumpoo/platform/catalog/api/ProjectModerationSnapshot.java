@@ -16,6 +16,6 @@ public record ProjectModerationSnapshot(
         Objects.requireNonNull(actorAccess, "actorAccess must not be null");
     }
 
-    public enum ProjectLifecycle { DRAFT, ACTIVE, ARCHIVED }
+    public enum ProjectLifecycle { ACTIVE, ARCHIVED }
     public enum ActorProjectAccess { MEMBER, OWNER, COMPANY_ADMIN_READ_ONLY }
 }

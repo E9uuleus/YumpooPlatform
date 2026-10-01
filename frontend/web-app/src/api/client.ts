@@ -9,7 +9,6 @@ import {
   IdentityGovernanceApi,
   ProjectsApi,
   WorkspacesApi,
-  ProjectTemplatesApi,
   ContentsApi,
   WorkItemsApi,
   WorkItemUpdatesApi,
@@ -28,7 +27,6 @@ export const identityAdministrationApi = new IdentityAdministrationApi(yumpooApi
 export const identityGovernanceApi = new IdentityGovernanceApi(yumpooApiClient)
 export const projectsApi = new ProjectsApi(yumpooApiClient)
 export const workspacesApi = new WorkspacesApi(yumpooApiClient)
-export const projectTemplatesApi = new ProjectTemplatesApi(yumpooApiClient)
 export const contentsApi = new ContentsApi(yumpooApiClient)
 export const workItemsApi = new WorkItemsApi(yumpooApiClient)
 export const workItemUpdatesApi = new WorkItemUpdatesApi(yumpooApiClient)

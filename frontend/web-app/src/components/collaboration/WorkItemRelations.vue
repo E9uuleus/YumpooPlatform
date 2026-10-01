@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   ProjectActorAccess,
+  ProjectLifecycleFilter,
   WorkItemRelationCandidateEligibilityEnum,
   WorkItemRelationRole,
   WorkItemRelationType,
@@ -161,6 +162,7 @@ async function searchProjects(text: string): Promise<void> {
     const result = await projectsApi.listProjects({
       ...(text.trim() ? { query: text.trim() } : {}),
       actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member],
+      lifecycle: ProjectLifecycleFilter.Active,
       page: 0,
       size: 20,
     })

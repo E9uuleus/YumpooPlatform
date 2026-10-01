@@ -17,7 +17,6 @@
  * @enum {string}
  */
 export enum ProjectLifecycle {
-    Draft = 'DRAFT',
     Active = 'ACTIVE',
     Archived = 'ARCHIVED',
     UnknownDefaultOpenApi = '11184809'
