@@ -58,13 +58,6 @@ public class ProjectService {
         return OffsetPageResponse.of(items, page, result.totalElements());
     }
 
-    @Transactional(readOnly = true)
-    public OffsetPageResponse<ProjectSummary> findAll(CurrentActor actor, UUID ignoredWorkspaceId,
-            ProjectTypeFilter projectType, ProjectLifecycleFilter lifecycle, OffsetPageRequest page) {
-        return findAll(actor, new ProjectSearchCriteria(null,
-                projectType == null ? List.of() : List.of(projectType.toDomain()),
-                List.of(), List.of(), null, lifecycle), page);
-    }
 
     @Transactional(readOnly = true)
     public List<ProjectOwnerOption> findOwnerOptions(CurrentActor actor) {
@@ -97,13 +90,11 @@ public class ProjectService {
         if (before.lifecycle() == ProjectLifecycle.ARCHIVED) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
         }
-        if (before.hasSameDetails(command.name(), command.description(), command.customerName(),
-                command.customerReference(), command.deliverySite(), command.contactNote())) {
+        if (before.hasSameDetails(command.name(), command.description())) {
             return detail(command.actor(), row, ownerName(command.actor(), before.ownerUserId()));
         }
         Project candidate = before.updateDetails(command.name(), command.description(),
-                command.customerName(), command.customerReference(), command.deliverySite(),
-                command.contactNote(), command.actor().userId(), clock.instant());
+                command.actor().userId(), clock.instant());
         Project after = repository.updateDetails(candidate, command.expectedRowVersion())
                 .orElseThrow(() -> conditionalFailure(command.actor(), command.projectId(),
                         command.expectedRowVersion()));
@@ -127,10 +118,6 @@ public class ProjectService {
         List<String> fields = new ArrayList<>();
         if (!before.name().equals(after.name())) fields.add("name");
         if (!Objects.equals(before.description(), after.description())) fields.add("description");
-        if (!Objects.equals(before.customerName(), after.customerName())) fields.add("customerName");
-        if (!Objects.equals(before.customerReference(), after.customerReference())) fields.add("customerReference");
-        if (!Objects.equals(before.deliverySite(), after.deliverySite())) fields.add("deliverySite");
-        if (!Objects.equals(before.contactNote(), after.contactNote())) fields.add("contactNote");
         return List.copyOf(fields);
     }
 
@@ -162,7 +149,7 @@ public class ProjectService {
     private static ProjectSummary summary(CurrentActor actor, ProjectQueryRow row, String ownerName) {
         Project project = row.project();
         return new ProjectSummary(project.id(), project.workspaceId(), row.workspaceCode(),
-                row.workspaceName(), project.code(), project.name(), project.projectType().name(),
+                row.workspaceName(), project.code(), project.name(),
                 project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
                 capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()),
                 project.createdAt(), project.updatedAt());
@@ -171,12 +158,9 @@ public class ProjectService {
     private static ProjectDetail detail(CurrentActor actor, ProjectQueryRow row, String ownerName) {
         Project project = row.project();
         return new ProjectDetail(project.id(), project.workspaceId(), row.workspaceCode(),
-                row.workspaceName(), project.code(), project.name(), project.description(),
-                project.projectType().name(), project.lifecycle().name(), project.ownerUserId(), ownerName,
-                project.templateKey(), project.templateVersion(), project.customerName(),
-                project.customerReference(), project.deliverySite(), project.contactNote(), access(row),
+                row.workspaceName(), project.code(), project.name(), project.description(), project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
                 capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()),
-                project.createdAt(), project.updatedAt(), project.activatedAt(), project.archivedAt());
+                project.createdAt(), project.updatedAt(), project.archivedAt());
     }
 
     private static ProjectActorAccess access(ProjectQueryRow row) {
@@ -192,7 +176,6 @@ public class ProjectService {
         boolean admin = actor.hasRole(PlatformRoleCode.COMPANY_ADMIN);
         boolean mutable = project.lifecycle() != ProjectLifecycle.ARCHIVED;
         return new ProjectCapabilities(owner && mutable,
-                owner && project.lifecycle() == ProjectLifecycle.DRAFT,
                 (owner || admin) && mutable, admin && mutable,
                 owner && project.lifecycle() == ProjectLifecycle.ACTIVE,
                 admin && project.lifecycle() == ProjectLifecycle.ARCHIVED,

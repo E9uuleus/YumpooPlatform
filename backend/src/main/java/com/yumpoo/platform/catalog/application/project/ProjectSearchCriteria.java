@@ -1,6 +1,5 @@
 package com.yumpoo.platform.catalog.application.project;
 
-import com.yumpoo.platform.catalog.domain.project.ProjectType;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 
@@ -10,7 +9,6 @@ import java.util.UUID;
 
 public record ProjectSearchCriteria(
         String query,
-        List<ProjectType> projectTypes,
         List<UUID> ownerUserIds,
         List<ProjectActorAccess> actorAccesses,
         Instant updatedSince,
@@ -22,8 +20,8 @@ public record ProjectSearchCriteria(
             throw ApplicationException.validation(new FieldViolation(
                     "query", "SIZE", "搜索内容不能超过 80 个字符"));
         }
-        projectTypes = projectTypes == null ? List.of() : List.copyOf(projectTypes);
         ownerUserIds = ownerUserIds == null ? List.of() : List.copyOf(ownerUserIds);
+        lifecycle = lifecycle == null ? ProjectLifecycleFilter.ALL : lifecycle;
         actorAccesses = actorAccesses == null ? List.of() : List.copyOf(actorAccesses);
     }
 }

@@ -112,6 +112,12 @@ public class JdbcWorkspaceRepository implements WorkspaceRepository {
     }
 
     @Override
+    public Optional<Workspace> findMainForUpdate(UUID companyId) {
+        return jdbcClient.sql(FIND_MAIN_FOR_SHARE.replace("FOR SHARE", "FOR UPDATE"))
+                .param("companyId", companyId).query(JdbcWorkspaceRepository::map).optional();
+    }
+
+    @Override
     public Optional<Workspace> updateDetails(Workspace workspace, long expectedRowVersion) {
         return jdbcClient.sql(UPDATE_DETAILS)
                 .param("name", workspace.name())

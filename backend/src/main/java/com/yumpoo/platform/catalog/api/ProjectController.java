@@ -8,7 +8,6 @@ import com.yumpoo.platform.catalog.application.project.ProjectActorAccess;
 import com.yumpoo.platform.catalog.application.project.ProjectOwnerOption;
 import com.yumpoo.platform.catalog.application.project.ProjectSearchCriteria;
 import com.yumpoo.platform.catalog.application.project.ProjectUpdateCommand;
-import com.yumpoo.platform.catalog.application.project.ProjectTypeFilter;
 import com.yumpoo.platform.foundation.api.http.IfMatchParser;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.pagination.OffsetPageResponse;
@@ -45,10 +44,7 @@ public final class ProjectController {
 
     @GetMapping("/projects")
     ResponseEntity<OffsetPageResponse<ProjectSummary>> list(
-            @RequestParam(required = false) UUID workspaceId,
-            @RequestParam(required = false) ProjectTypeFilter projectType,
             @RequestParam(required = false) String query,
-            @RequestParam(required = false) List<ProjectTypeFilter> projectTypes,
             @RequestParam(required = false) List<UUID> ownerUserIds,
             @RequestParam(required = false) List<ProjectActorAccess> actorAccesses,
             @RequestParam(required = false) Instant updatedSince,
@@ -58,7 +54,6 @@ public final class ProjectController {
         CurrentActor actor = actorProvider.requiredActive();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(service.findAll(actor, new ProjectSearchCriteria(query,
-                                ProjectTypeFilter.merge(projectType, projectTypes),
                                 ownerUserIds, actorAccesses, updatedSince, lifecycle),
                         OffsetPageRequest.of(page, size)));
     }
@@ -84,8 +79,7 @@ public final class ProjectController {
         service.findVisible(actor, projectId);
         long version = ifMatchParser.parseForVisibleResource(true, ifMatch);
         ProjectDetail project = service.update(new ProjectUpdateCommand(actor, projectId, version,
-                body.name(), body.description(), body.customerName(), body.customerReference(),
-                body.deliverySite(), body.contactNote()));
+                body.name(), body.description()));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .eTag(Long.toString(project.rowVersion())).body(project);
     }

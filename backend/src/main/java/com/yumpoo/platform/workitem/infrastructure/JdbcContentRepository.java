@@ -159,16 +159,6 @@ public class JdbcContentRepository implements ContentRepository {
                 .param("contentId", contentId).query(JdbcContentRepository::map).optional();
     }
 
-    @Override
-    public boolean hasActiveForTemplate(UUID companyId, UUID projectId, String templateKey,
-            int templateVersion) {
-        return jdbc.sql("""
-                SELECT EXISTS (SELECT 1 FROM yumpoo.content
-                 WHERE company_id=:companyId AND project_id=:projectId
-                   AND active=true AND deleted_at IS NULL)
-                """).param("companyId", companyId).param("projectId", projectId)
-                .query(Boolean.class).single();
-    }
 
     @Override
     public Optional<Content> update(Content content, long expectedVersion) {

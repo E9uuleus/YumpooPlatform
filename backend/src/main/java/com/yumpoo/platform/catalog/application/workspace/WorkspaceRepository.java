@@ -16,5 +16,7 @@ public interface WorkspaceRepository {
 
     Optional<Workspace> findMainForShare(UUID companyId);
 
+    Optional<Workspace> findMainForUpdate(UUID companyId);
+
     Optional<Workspace> updateDetails(Workspace workspace, long expectedRowVersion);
 }

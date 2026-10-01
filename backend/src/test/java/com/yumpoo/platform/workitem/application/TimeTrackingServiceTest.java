@@ -41,7 +41,7 @@ class TimeTrackingServiceTest {
         when(items.lockProjectItem(company, project, item)).thenReturn(Optional.of(mock(WorkItem.class)));
         when(access.findVisible(actor, project)).thenReturn(Optional.of(mock(ProjectAccessSnapshot.class)));
         when(guard.lockForFactWrite(actor, project)).thenReturn(new ProjectFactWriteSnapshot(project, company, "TEST",
-                ProjectFactWriteSnapshot.ProjectLifecycle.ACTIVE, ProjectFactWriteSnapshot.ActorProjectAccess.MEMBER, "TEST", 1));
+                ProjectFactWriteSnapshot.ProjectLifecycle.ACTIVE, ProjectFactWriteSnapshot.ActorProjectAccess.MEMBER));
         when(timers.find(company, sessionId)).thenReturn(Optional.of(before));
         when(executor.execute(any(), any())).thenAnswer(call -> {
             Supplier<StoredCommandResult> action = call.getArgument(1);

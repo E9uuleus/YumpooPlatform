@@ -3,6 +3,7 @@ package com.yumpoo.platform.workitem.infrastructure;
 import com.yumpoo.platform.workitem.application.WorkItemLabelModels.PriorityLabel;
 import com.yumpoo.platform.workitem.application.WorkItemLabelModels.StatusLabel;
 import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
+import com.yumpoo.platform.workitem.application.DefaultProjectStructure;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -23,8 +24,7 @@ public class JdbcWorkItemLabelRepository implements WorkItemLabelRepository {
     }
 
     @Override
-    public void initialize(UUID companyId, UUID projectId, String templateKey,
-            int templateVersion, Instant now) {
+    public void initialize(UUID companyId, UUID projectId, Instant now) {
         OffsetDateTime timestamp = OffsetDateTime.ofInstant(now, ZoneOffset.UTC);
         jdbc.sql("""
                 INSERT INTO yumpoo.project_work_item_label_catalog
@@ -33,54 +33,32 @@ public class JdbcWorkItemLabelRepository implements WorkItemLabelRepository {
                 ON CONFLICT (project_id) DO NOTHING
                 """).param("projectId", projectId).param("companyId", companyId)
                 .param("now", timestamp).update();
-        jdbc.sql("""
-                INSERT INTO yumpoo.project_work_item_status_label (
-                    project_id, company_id, status_code, display_name, color_token,
-                    status_category, sort_order, active, protected_label, created_at, updated_at
-                ) VALUES (
-                    :projectId, :companyId, 'NOT_STARTED', '未开始', 'GRAY',
-                    'TODO', 0, true, true, :now, :now
-                ) ON CONFLICT (project_id, status_code) DO NOTHING
-                """).param("projectId", projectId).param("companyId", companyId)
-                .param("now", timestamp).update();
-        jdbc.sql("""
-                INSERT INTO yumpoo.project_work_item_status_label (
-                    project_id, company_id, status_code, display_name, color_token,
-                    status_category, sort_order, active, protected_label, created_at, updated_at
-                )
-                SELECT :projectId, :companyId, status.status_code, status.display_name,
-                       CASE status.status_category
-                           WHEN 'DONE' THEN 'GREEN'
-                           WHEN 'CANCELED' THEN 'GRAY'
-                           WHEN 'IN_PROGRESS' THEN 'ORANGE'
-                           ELSE 'BLUE'
-                       END,
-                       status.status_category, status.sort_order + 100, true, false, :now, :now
-                  FROM yumpoo.project_template_definition template
-                  JOIN yumpoo.workflow_status_definition status ON status.template_id = template.id
-                 WHERE template.template_key = :templateKey
-                   AND template.template_version = :templateVersion
-                   AND status.status_code <> 'NOT_STARTED'
-                ON CONFLICT (project_id, status_code) DO NOTHING
-                """).param("projectId", projectId).param("companyId", companyId)
-                .param("templateKey", templateKey).param("templateVersion", templateVersion)
-                .param("now", timestamp).update();
-        jdbc.sql("""
-                INSERT INTO yumpoo.project_work_item_priority_label (
-                    project_id, company_id, priority_code, display_name, color_token,
-                    sort_order, active, created_at, updated_at
-                )
-                SELECT :projectId, :companyId, seed.code, seed.name, seed.color,
-                       seed.sort_order, true, :now, :now
-                  FROM (VALUES
-                    ('LOW', '低', 'BLUE', 10),
-                    ('MEDIUM', '中', 'TEAL', 20),
-                    ('HIGH', '高', 'ORANGE', 30),
-                    ('URGENT', '紧急', 'RED', 40)
-                  ) AS seed(code, name, color, sort_order)
-                ON CONFLICT (project_id, priority_code) DO NOTHING
-                """).param("projectId", projectId).param("companyId", companyId)
-                .param("now", timestamp).update();
+        for (var label : DefaultProjectStructure.STATUSES) {
+            jdbc.sql("""
+                    INSERT INTO yumpoo.project_work_item_status_label (
+                        project_id, company_id, status_code, display_name, color_token, status_category,
+                        sort_order, active, protected_label, created_at, updated_at)
+                    VALUES (:projectId, :companyId, :code, :name, :color, :category,
+                        :sortOrder, true, :protected, :now, :now)
+                    ON CONFLICT (project_id, status_code) DO NOTHING
+                    """).param("projectId", projectId).param("companyId", companyId)
+                    .param("code", label.code()).param("name", label.displayName())
+                    .param("color", label.colorToken()).param("category", label.category())
+                    .param("sortOrder", label.sortOrder()).param("protected", label.protectedLabel())
+                    .param("now", timestamp).update();
+        }
+        for (var label : DefaultProjectStructure.PRIORITIES) {
+            jdbc.sql("""
+                    INSERT INTO yumpoo.project_work_item_priority_label (
+                        project_id, company_id, priority_code, display_name, color_token,
+                        sort_order, active, created_at, updated_at)
+                    VALUES (:projectId, :companyId, :code, :name, :color, :sortOrder, true, :now, :now)
+                    ON CONFLICT (project_id, priority_code) DO NOTHING
+                    """).param("projectId", projectId).param("companyId", companyId)
+                    .param("code", label.code()).param("name", label.displayName())
+                    .param("color", label.colorToken()).param("sortOrder", label.sortOrder())
+                    .param("now", timestamp).update();
+        }
     }
 
     @Override

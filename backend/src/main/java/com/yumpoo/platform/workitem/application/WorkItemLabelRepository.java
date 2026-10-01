@@ -10,7 +10,7 @@ import static com.yumpoo.platform.workitem.application.WorkItemLabelModels.Prior
 import static com.yumpoo.platform.workitem.application.WorkItemLabelModels.StatusLabel;
 
 public interface WorkItemLabelRepository {
-    void initialize(UUID companyId, UUID projectId, String templateKey, int templateVersion,
+    void initialize(UUID companyId, UUID projectId,
             Instant now);
 
     OptionalLong version(UUID companyId, UUID projectId, boolean lock);

@@ -54,8 +54,8 @@ class ProjectMembershipGovernanceIT {
         insertUser(LEFT,"M2-05 Left","LEFT","ENABLED");
         try(RequestCorrelationContext.Scope ignored=RequestCorrelationContext.open(
                 RequestCorrelation.root("m205-create"))) {
-            projectId=creation.create(new ProjectCreationCommand(admin(),"M2_05_PROJECT",
-                    "M2-05 Project",null,"PRODUCT_DEVELOPMENT",OWNER,"RND",1,null,null,null,null,
+            projectId=creation.create(new ProjectCreationCommand(owner(),
+                    "M2-05 Project",null,
                     UUID.randomUUID(),new RequestHash("a".repeat(64)),"WEB","test"))
                     .result().resourceId();
         }
@@ -133,7 +133,7 @@ class ProjectMembershipGovernanceIT {
                 memberCommand(owner(),MEMBER,9L,null,"6"))))
                 .isInstanceOfSatisfying(ApplicationException.class,e->assertThat(e.errorCode())
                         .isEqualTo(StandardErrorCode.VERSION_CONFLICT));
-        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED',activated_at=created_at,archived_at=updated_at WHERE id=:id")
+        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED',archived_at=updated_at WHERE id=:id")
                 .param("id",projectId).update();
         assertThatThrownBy(()->execute("archived",()->governance.add(
                 memberCommand(owner(),NEXT_OWNER,null,null,"7"))))

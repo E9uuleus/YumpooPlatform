@@ -45,6 +45,19 @@ class ActivityProjectionServiceTest {
     }
 
     @Test
+    void projectsSubscribeToV2OnlyAndKeepHistoricalTemplatesReadable() {
+        assertThat(service.subscriptions()).contains(new EventSubscription("catalog.project_created", 2))
+                .doesNotContain(new EventSubscription("catalog.project_created", 1),
+                        new EventSubscription("catalog.project_activated", 1),
+                        new EventSubscription("catalog.project_template_applied", 1));
+        var renderer = new com.yumpoo.platform.audit.application.ActivitySummaryRenderer();
+        var parameters = objectMapper.createObjectNode().put("entityRef", "LEGACY 历史项目");
+        assertThat(renderer.render("PROJECT_CREATED", parameters)).isEqualTo("创建了项目 LEGACY 历史项目");
+        assertThat(renderer.render("PROJECT_ACTIVATED", parameters)).isEqualTo("激活了项目");
+        assertThat(renderer.render("PROJECT_TEMPLATE_APPLIED", parameters)).isEqualTo("应用了项目模板");
+    }
+
+    @Test
     void acknowledgesPreCutoverEventsWithoutProjection() {
         service.consume(event("workitem.work_item_created", CUTOVER.minusSeconds(1), workItem()));
         verify(repository, never()).append(any());

@@ -307,11 +307,10 @@ class IdentityOutboxIT {
         new TransactionTemplate(transactions).executeWithoutResult(status -> {
             jdbc.sql("""
                     INSERT INTO yumpoo.project (
-                        id, company_id, workspace_id, project_code, name, project_type,
-                        lifecycle, owner_user_id, template_key, template_version,
+                        id, company_id, workspace_id, project_code, name,
+                        lifecycle, owner_user_id,
                         row_version, created_at, created_by_user_id, updated_at, updated_by_user_id
-                    ) SELECT :id, :companyId, id, 'IDENTITY_OUTBOX', 'Identity Outbox',
-                        'PRODUCT_DEVELOPMENT', 'DRAFT', :ownerId, 'RND', 1,
+                    ) SELECT :id, :companyId, id, 'IDENTITY_OUTBOX', 'Identity Outbox', 'ACTIVE', :ownerId,
                         0, transaction_timestamp(), :ownerId, transaction_timestamp(), :ownerId
                       FROM yumpoo.workspace WHERE company_id=:companyId AND code='MAIN'
                     """).param("id", PROJECT_ID).param("companyId", COMPANY_ID)

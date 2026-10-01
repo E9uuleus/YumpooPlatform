@@ -26,8 +26,6 @@ import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
-import com.yumpoo.platform.templateworkflow.api.ProjectTemplateSnapshot;
-import com.yumpoo.platform.templateworkflow.api.ProjectTemplateVersionQuery;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -45,7 +43,6 @@ public final class ProjectLifecycleGovernanceService {
     private final ProjectLifecycleCommandPort projects;
     private final ProjectArchiveBlockerCollector blockers;
     private final ActiveUserSnapshotQuery users;
-    private final ProjectTemplateVersionQuery templates;
     private final IdempotentCommandExecutor idempotency;
     private final TransactionalEventPort events;
     private final SecurityAuditAppendPort audits;
@@ -54,11 +51,11 @@ public final class ProjectLifecycleGovernanceService {
 
     public ProjectLifecycleGovernanceService(ProjectLifecycleCommandPort projects,
             ProjectArchiveBlockerCollector blockers, ActiveUserSnapshotQuery users,
-            ProjectTemplateVersionQuery templates, IdempotentCommandExecutor idempotency,
+            IdempotentCommandExecutor idempotency,
             TransactionalEventPort events, SecurityAuditAppendPort audits,
             ObjectMapper objectMapper, Clock clock) {
         this.projects = projects; this.blockers = blockers; this.users = users;
-        this.templates = templates; this.idempotency = idempotency; this.events = events;
+        this.idempotency = idempotency; this.events = events;
         this.audits = audits; this.objectMapper = objectMapper; this.clock = clock;
     }
 
@@ -131,14 +128,7 @@ public final class ProjectLifecycleGovernanceService {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
                     "OWNER_MISSING");
         }
-        ProjectTemplateSnapshot template = templates.findAny(project.templateKey(),
-                project.templateVersion()).orElse(null);
-        if (template == null || !template.projectType().equals(project.projectType())
-                || !("PUBLISHED".equals(template.lifecycleStatus())
-                || "RETIRED".equals(template.lifecycleStatus()))) {
-            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
-                    "TEMPLATE_UNAVAILABLE");
-        }
+
     }
 
     private void appendArchive(ProjectSnapshot before, ProjectSnapshot after, CurrentActor actor,
@@ -186,11 +176,8 @@ public final class ProjectLifecycleGovernanceService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", p.projectId()); result.put("workspaceId", p.workspaceId());
         result.put("code", p.code()); result.put("name", p.name()); result.put("description", p.description());
-        result.put("projectType", p.projectType()); result.put("lifecycle", p.lifecycle());
-        result.put("ownerUserId", p.ownerUserId()); result.put("templateKey", p.templateKey());
-        result.put("templateVersion", p.templateVersion()); result.put("customerName", p.customerName());
-        result.put("customerReference", p.customerReference()); result.put("deliverySite", p.deliverySite());
-        result.put("contactNote", p.contactNote()); result.put("rowVersion", p.rowVersion()); return result;
+        result.put("lifecycle", p.lifecycle());
+        result.put("ownerUserId", p.ownerUserId()); result.put("rowVersion", p.rowVersion()); return result;
     }
 
     private static IdempotencyCommand key(CurrentActor actor, String route, UUID id,

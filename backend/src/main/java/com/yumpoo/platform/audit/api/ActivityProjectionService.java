@@ -23,9 +23,9 @@ import java.util.UUID;
 @Component
 public class ActivityProjectionService implements OutboxEventConsumer {
     private static final Set<String> PROJECT_EVENTS = Set.of(
-            "catalog.project_created", "catalog.project_updated", "catalog.project_activated",
+            "catalog.project_created", "catalog.project_updated",
             "catalog.project_archived", "catalog.project_reopened",
-            "catalog.project_moved_to_workspace", "catalog.project_template_applied",
+            "catalog.project_moved_to_workspace",
             "catalog.project_member_added", "catalog.project_member_removed",
             "catalog.project_owner_reassigned");
     private static final Set<String> CONTENT_EVENTS = Set.of(
@@ -45,7 +45,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "workitem.time_tracking_added", "workitem.time_tracking_edited", "workitem.time_tracking_deleted");
     private static final Set<String> ATTACHMENT_EVENTS = Set.of(
             "filestorage.attachment_available", "filestorage.attachment_deleted");
-    private static final Set<String> V2_EVENTS = Set.of("workitem.time_tracking_edited", "workitem.time_tracking_deleted",
+    private static final Set<String> V2_EVENTS = Set.of("catalog.project_created", "workitem.time_tracking_edited", "workitem.time_tracking_deleted",
             "workitem.content_created", "workitem.content_updated", "workitem.content_deleted",
             "workitem.work_item_created", "workitem.work_item_fields_changed",
             "workitem.work_item_status_changed", "workitem.work_item_deleted",
@@ -71,7 +71,8 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     @Override
     public Set<EventSubscription> subscriptions() {
         LinkedHashSet<EventSubscription> subscriptions = new LinkedHashSet<>();
-        allEvents().forEach(type -> subscriptions.add(new EventSubscription(type, 1)));
+        allEvents().stream().filter(type -> !type.equals("catalog.project_created"))
+                .forEach(type -> subscriptions.add(new EventSubscription(type, 1)));
         V2_EVENTS.forEach(type -> subscriptions.add(new EventSubscription(type, 2)));
         return Set.copyOf(subscriptions);
     }
@@ -113,9 +114,6 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             safe.put("memberDisplayName", user(event, uuid(payload, "userId")));
         } else if (event.eventType().endsWith("owner_reassigned")) {
             safe.put("memberDisplayName", user(event, uuid(payload, "newOwnerUserId")));
-        } else if (event.eventType().endsWith("template_applied")) {
-            safe.put("templateKey", text(payload, "templateKey"));
-            safe.put("initializedContentCount", integer(payload, "initializedContentCount"));
         }
         append(event, ActivityAudienceType.PROJECT, projectId, entityType, entityId, ref,
                 template(event.eventType()), safe, null, null);

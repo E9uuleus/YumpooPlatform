@@ -16,35 +16,20 @@ class ProjectTest {
     private static final Instant NOW = Instant.parse("2026-08-20T09:00:00Z");
 
     @Test
-    void createNormalizesOptionalTextAndStartsAsDraft() {
-        Project project = create(ProjectType.PRODUCT_DEVELOPMENT, "RND",
-                "  Project description  ", "  Customer  ", "   ");
+    void createNormalizesOptionalTextAndStartsActive() {
+        Project project = create("  Project description  ");
 
         assertThat(project.description()).isEqualTo("Project description");
-        assertThat(project.customerName()).isEqualTo("Customer");
-        assertThat(project.customerReference()).isNull();
-        assertThat(project.lifecycle()).isEqualTo(ProjectLifecycle.DRAFT);
+        assertThat(project.lifecycle()).isEqualTo(ProjectLifecycle.ACTIVE);
         assertThat(project.rowVersion()).isZero();
-        assertThat(project.activatedAt()).isNull();
+        assertThat(project.archivedAt()).isNull();
     }
 
     @Test
-    void allFrozenProjectTypesMapToExactlyOneTemplateKey() {
-        assertThat(ProjectType.PRODUCT_DEVELOPMENT.templateKey()).isEqualTo("RND");
-        assertThat(ProjectType.PRE_SALES.templateKey()).isEqualTo("PRE_SALES");
-        assertThat(ProjectType.IMPLEMENTATION.templateKey()).isEqualTo("IMPLEMENTATION");
-        assertThat(ProjectType.HYPERCARE.templateKey()).isEqualTo("HYPERCARE");
-    }
-
-    @Test
-    void typeMismatchAndFieldLimitsAreRejected() {
-        assertThatThrownBy(() -> create(ProjectType.PRODUCT_DEVELOPMENT, "PRE_SALES",
-                null, null, null)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> create(ProjectType.PRE_SALES, "PRE_SALES",
-                "x".repeat(501), null, null)).isInstanceOf(IllegalArgumentException.class);
+    void fieldLimitsAreRejected() {
+        assertThatThrownBy(() -> create("x".repeat(501))).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> Project.create(UUID.randomUUID(), COMPANY_ID, WORKSPACE_ID,
-                "lower", "Project", null, ProjectType.PRE_SALES, OWNER_ID,
-                "PRE_SALES", 1, null, null, null, null, OWNER_ID, NOW))
+                "lower", "Project", null, OWNER_ID, OWNER_ID, NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -65,45 +50,28 @@ class ProjectTest {
 
     @Test
     void archivedProjectCannotReassignOwner() {
-        Project draft = create(ProjectType.PRODUCT_DEVELOPMENT, "RND", null, null, null);
+        Project draft = create(null);
         Project archived = new Project(draft.id(), draft.companyId(), draft.workspaceId(), draft.code(),
-                draft.name(), draft.description(), draft.projectType(), ProjectLifecycle.ARCHIVED,
-                draft.ownerUserId(), draft.templateKey(), draft.templateVersion(), draft.customerName(),
-                draft.customerReference(), draft.deliverySite(), draft.contactNote(), 2, draft.createdAt(),
-                draft.createdByUserId(), NOW.plusSeconds(20), OWNER_ID, NOW.plusSeconds(10), NOW.plusSeconds(20));
+                draft.name(), draft.description(), ProjectLifecycle.ARCHIVED,
+                draft.ownerUserId(), 2, draft.createdAt(),
+                draft.createdByUserId(), NOW.plusSeconds(20), OWNER_ID, NOW.plusSeconds(20));
         assertThatThrownBy(() -> archived.reassignOwner(UUID.randomUUID(), OWNER_ID, NOW.plusSeconds(30)))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void updateNormalizesFullSnapshotAndNoChangeCanBeDetected() {
-        Project draft = create(ProjectType.PRE_SALES, "PRE_SALES", null, null, null);
-        Project updated = draft.updateDetails("  新名称  ", "  描述  ", "  客户  ",
-                " ", " 上海 ", " 联系备注 ", OWNER_ID, NOW.plusSeconds(10));
+        Project draft = create(null);
+        Project updated = draft.updateDetails("  新名称  ", "  描述  ", OWNER_ID, NOW.plusSeconds(10));
 
         assertThat(updated.name()).isEqualTo("新名称");
-        assertThat(updated.customerReference()).isNull();
         assertThat(updated.rowVersion()).isOne();
-        assertThat(updated.hasSameDetails("新名称", "描述", "客户", null,
-                "上海", "联系备注")).isTrue();
+        assertThat(updated.hasSameDetails("新名称", "描述")).isTrue();
     }
 
     @Test
-    void activationOnlyAllowsDraftAndCapturesLifecycleTimestamp() {
-        Project draft = create(ProjectType.PRODUCT_DEVELOPMENT, "RND", null, null, null);
-        Project active = draft.activate(OWNER_ID, NOW.plusSeconds(10));
-
-        assertThat(active.lifecycle()).isEqualTo(ProjectLifecycle.ACTIVE);
-        assertThat(active.activatedAt()).isEqualTo(NOW.plusSeconds(10));
-        assertThat(active.rowVersion()).isOne();
-        assertThatThrownBy(() -> active.activate(OWNER_ID, NOW.plusSeconds(20)))
-                .isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    void archiveAndReopenPreserveActivationTimeAndAdvanceVersion() {
-        Project active = create(ProjectType.PRODUCT_DEVELOPMENT, "RND", null, null, null)
-                .activate(OWNER_ID, NOW.plusSeconds(10));
+    void archiveAndReopenAdvanceVersion() {
+        Project active = create(null);
 
         Project archived = active.archive(OWNER_ID, NOW.plusSeconds(20));
         Project reopened = archived.reopen(OWNER_ID, NOW.plusSeconds(30));
@@ -111,32 +79,24 @@ class ProjectTest {
         assertThat(archived.lifecycle()).isEqualTo(ProjectLifecycle.ARCHIVED);
         assertThat(archived.archivedAt()).isEqualTo(NOW.plusSeconds(20));
         assertThat(reopened.lifecycle()).isEqualTo(ProjectLifecycle.ACTIVE);
-        assertThat(reopened.activatedAt()).isEqualTo(active.activatedAt());
         assertThat(reopened.archivedAt()).isNull();
-        assertThat(reopened.rowVersion()).isEqualTo(3);
+        assertThat(reopened.rowVersion()).isEqualTo(2);
     }
 
     @Test
     void archiveAndRestoreRejectInvalidLifecycle() {
-        Project draft = create(ProjectType.PRODUCT_DEVELOPMENT, "RND", null, null, null);
-        Project active = draft.activate(OWNER_ID, NOW.plusSeconds(10));
+        Project draft = create(null);
+        Project active = draft;
         Project archived = active.archive(OWNER_ID, NOW.plusSeconds(20));
 
-        assertThatThrownBy(() -> draft.archive(OWNER_ID, NOW.plusSeconds(5)))
+        assertThatThrownBy(() -> archived.archive(OWNER_ID, NOW.plusSeconds(30)))
                 .isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> active.reopen(OWNER_ID, NOW.plusSeconds(20)))
                 .isInstanceOf(IllegalStateException.class);
     }
 
-    private static Project create(
-            ProjectType type,
-            String templateKey,
-            String description,
-            String customerName,
-            String customerReference
-    ) {
+    private static Project create(String description) {
         return Project.create(UUID.randomUUID(), COMPANY_ID, WORKSPACE_ID, "M2_04",
-                " M2-04 Project ", description, type, OWNER_ID, templateKey, 1,
-                customerName, customerReference, " ", " ", OWNER_ID, NOW);
+                " M2-04 Project ", description, OWNER_ID, OWNER_ID, NOW);
     }
 }

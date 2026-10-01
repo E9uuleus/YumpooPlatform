@@ -262,9 +262,8 @@ public class ProjectMembershipService {
 
     private static ProjectApplicationSnapshot project(Project project) {
         return new ProjectApplicationSnapshot(project.id(), project.companyId(), project.workspaceId(), project.code(),
-                project.name(), project.description(), project.projectType().name(), project.lifecycle().name(),
-                project.ownerUserId(), project.templateKey(), project.templateVersion(), project.customerName(),
-                project.customerReference(), project.deliverySite(), project.contactNote(), project.rowVersion());
+                project.name(), project.description(), project.lifecycle().name(),
+                project.ownerUserId(), project.rowVersion());
     }
 
     private static int pages(long total, int size) { return (int) ((total + size - 1) / size); }

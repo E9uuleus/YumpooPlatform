@@ -9,8 +9,6 @@ public record ProjectAccessSnapshot(
         UUID companyId,
         ProjectLifecycle lifecycle,
         ActorProjectAccess actorAccess,
-        String templateKey,
-        int templateVersion,
         long projectVersion,
         OptionalLong membershipVersion
 ) {
@@ -20,9 +18,8 @@ public record ProjectAccessSnapshot(
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(lifecycle, "lifecycle must not be null");
         Objects.requireNonNull(actorAccess, "actorAccess must not be null");
-        Objects.requireNonNull(templateKey, "templateKey must not be null");
         Objects.requireNonNull(membershipVersion, "membershipVersion must not be null");
-        if (templateVersion < 1 || projectVersion < 0) {
+        if (projectVersion < 0) {
             throw new IllegalArgumentException("projectVersion must not be negative");
         }
         if (membershipVersion.isPresent() && membershipVersion.getAsLong() < 0) {
@@ -34,7 +31,6 @@ public record ProjectAccessSnapshot(
     }
 
     public enum ProjectLifecycle {
-        DRAFT,
         ACTIVE,
         ARCHIVED
     }

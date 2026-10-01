@@ -196,11 +196,7 @@ public class ProjectMembershipGovernanceService {
         Map<String,Object> result=new LinkedHashMap<>();
         result.put("id",project.projectId()); result.put("workspaceId",project.workspaceId());
         result.put("code",project.code()); result.put("name",project.name());
-        result.put("description",project.description()); result.put("projectType",project.projectType());
-        result.put("lifecycle",project.lifecycle()); result.put("ownerUserId",project.ownerUserId());
-        result.put("templateKey",project.templateKey()); result.put("templateVersion",project.templateVersion());
-        result.put("customerName",project.customerName()); result.put("customerReference",project.customerReference());
-        result.put("deliverySite",project.deliverySite()); result.put("contactNote",project.contactNote());
+        result.put("description",project.description()); result.put("lifecycle",project.lifecycle()); result.put("ownerUserId",project.ownerUserId());
         result.put("rowVersion",project.rowVersion());
         return result;
     }

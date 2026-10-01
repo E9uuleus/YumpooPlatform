@@ -161,13 +161,10 @@ class ActivityProjectionIT {
         payload.put("workspaceId", UUID.randomUUID().toString());
         payload.put("code", code);
         payload.put("name", "Activity 集成测试");
-        payload.put("projectType", "PRODUCT_DEVELOPMENT");
-        payload.put("lifecycle", "DRAFT");
+        payload.put("lifecycle", "ACTIVE");
         payload.put("ownerUserId", UUID.randomUUID().toString());
-        payload.put("templateKey", "RND");
-        payload.put("templateVersion", 1);
         payload.put("initializedContentCount", 1);
-        return new DomainEventEnvelope(eventId, "catalog.project_created", 1, occurredAt,
+        return new DomainEventEnvelope(eventId, "catalog.project_created", 2, occurredAt,
                 "Project", PROJECT, 0, COMPANY, EventActor.system("M2_20_TEST"),
                 "m2-20-cutover", "m2-20-cutover", null, payload);
     }

@@ -22,8 +22,6 @@ public interface ContentRepository {
     Optional<Content> find(UUID companyId, UUID projectId, UUID contentId);
     Optional<Content> lock(UUID companyId, UUID projectId, UUID contentId);
     Optional<Content> lockForShare(UUID companyId, UUID projectId, UUID contentId);
-    boolean hasActiveForTemplate(UUID companyId, UUID projectId, String templateKey,
-                                 int templateVersion);
     Optional<Content> update(Content content, long expectedVersion);
     void replaceOrder(List<Content> contents);
 }

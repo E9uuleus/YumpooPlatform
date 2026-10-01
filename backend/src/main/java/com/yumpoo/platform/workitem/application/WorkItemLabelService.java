@@ -161,9 +161,8 @@ public class WorkItemLabelService {
         return finish(project, expectedVersion);
     }
 
-    public void initialize(UUID companyId, UUID projectId, String templateKey,
-            int templateVersion) {
-        labels.initialize(companyId, projectId, templateKey, templateVersion, clock.instant());
+    public void initialize(UUID companyId, UUID projectId) {
+        labels.initialize(companyId, projectId, clock.instant());
     }
 
     private LabelCatalog finish(ProjectFactWriteSnapshot project, long expectedVersion) {

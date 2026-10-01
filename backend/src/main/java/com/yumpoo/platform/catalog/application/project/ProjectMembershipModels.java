@@ -12,7 +12,7 @@ public final class ProjectMembershipModels {
     public record WritableProject(UUID projectId, String name, String code) {}
     public enum ActorAccess { MEMBER, OWNER, COMPANY_ADMIN_READ_ONLY }
     public record Access(UUID projectId, UUID companyId, String lifecycle,
-                         ActorAccess actorAccess, String templateKey, int templateVersion,
+                         ActorAccess actorAccess,
                          long projectVersion,
                          OptionalLong membershipVersion) {}
     public record Member(UUID membershipId, UUID projectId, UUID userId, String displayName,

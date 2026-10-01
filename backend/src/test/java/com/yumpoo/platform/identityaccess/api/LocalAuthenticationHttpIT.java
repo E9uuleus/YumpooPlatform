@@ -92,7 +92,7 @@ class LocalAuthenticationHttpIT {
         List<String> paths = List.of(
                 "/api/v1/projects?page=0&size=20",
                 "/api/v1/workspaces",
-                "/api/v1/project-templates",
+                "/api/v1/projects/owner-options",
                 "/api/v1/admin/members?employmentStatus=ACTIVE&accountStatus=ENABLED&page=0&size=100"
         );
         CountDownLatch ready = new CountDownLatch(paths.size());
