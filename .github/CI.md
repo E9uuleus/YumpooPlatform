@@ -10,7 +10,7 @@ pnpm run ci
 
 日常快速反馈可先运行 `pnpm ci:static`；涉及后端时运行 `pnpm ci:backend`。`pnpm run ci` 按相同顺序执行全部本机可运行阶段，显式 `run` 避免与 pnpm 内置的清理安装命令 `ci` 冲突。需要 Node/pnpm 的仓库固定版本、Java 21 和 Linux-container Docker；Windows 交付阶段还需要 Windows x64、PowerShell 和 Electron。Linux 本地不会运行 Windows 阶段，PR 的 Windows Delivery 始终必需。
 
-旧 `verify:m*` 命令保留切片复现用途。普通 PR 使用统一入口，不需要串联里程碑命令、手工修改验收报告或刷新历史哈希。
+旧 `verify:m*` 命令保留切片复现用途；已退役的 `verify:m2-03/07/24` 及其 `:assets` 入口仅校验历史验收记录，不再读取产品实现。普通 PR 使用统一入口，不需要串联里程碑命令、手工修改验收报告或刷新历史哈希。
 
 ## 当前执行链
 
@@ -22,7 +22,7 @@ pnpm run ci
 | `pnpm ci:portable` | 校验当前源码的 static/backend 成功记录与新鲜备份恢复报告；运行 packaged JAR + SPA HTTP；生成和验证 JAR/Web handoff |
 | `pnpm ci:windows` | 复核 handoff，真实 Electron smoke、Windows 桌面/ASAR、ZIP、PowerShell 行为及服务器包验证；服务器包逐文件对照同一 handoff |
 
-[plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。M2-23/M2-24 的 `:assets` 只检查切片资产，完整契约检查归 `ci:contracts`；类别资产只执行一次，旧切片记录另行校验结构。类型检查由各包实际构建或专用类型测试承担，不再重复运行同一整套 Node 入口。Windows smoke 使用 handoff 的 Web 字节；服务器不重复编译。
+[plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。M2-23 的 `:assets` 检查当前切片资产，完整契约检查归 `ci:contracts`；类别资产只执行一次，M2-03、M2-07、M2-24 等旧切片由 [historical-assets.mjs](../tools/ci/historical-assets.mjs) 校验历史报告与验收矩阵。类型检查由各包实际构建或专用类型测试承担，不再重复运行同一整套 Node 入口。Windows smoke 使用 handoff 的 Web 字节；服务器不重复编译。
 
 `out/ci/<stage>.json` 记录步骤、起止时间、状态、解析后的基线提交及源码指纹。中途失败立即非零退出；重跑会覆盖本阶段结果，不缓存跳过步骤。后续阶段拒绝旧源码、旧基线、不完整或失败报告。输出、构建目录和测试夹具不写入 Git。子进程清除继承的 `SPRING_*`、`YUMPOO_*` 和 JVM/Maven/Node 注入选项，再显式设置本次验证需要的值；不连接开发或生产数据库，也不继承受控身份 fixture。
 
@@ -33,7 +33,7 @@ pnpm run ci
 - **兼容性基线**：PR 取 `pull_request.base.sha`，`dev` push 取 `before`，本地默认取 `origin/dev`，手动 Actions 使用 `base_ref`。开始时解析为完整 commit，缺失、全零或无效引用失败；不复制永久规范基线。用 `YUMPOO_CI_BASE_REF` 可以显式指定本地比较基线。
 - **例外**：已有条目只授权其原始 `oldSha256/newSha256` 对；原因、唯一 ID、活动决策链接必须完整。后续兼容演进不需要把当前规范连到旧例外。额外不兼容变更仍失败；真正破坏变更须先作明确产品/迁移决定，不能为过 CI 自动批准或刷新哈希。请求枚举缩减和响应枚举扩展恢复严格检测。
 
-迁移测试从实际资源和 Flyway pending 清单推导数量、版本与执行集合，继续逐项核验表、索引、约束、已有数据、checksum 和重跑幂等性。事件只允许同版本增加可选字段（含嵌套对象）或修改 Schema 注释；既有约束、必需字段、引用、事件名与聚合语义保持兼容，旧合法样例必须可读。新版本不能使旧版本漏检。
+迁移测试从实际资源和 Flyway pending 清单推导数量、版本与执行集合，继续逐项核验表、索引、约束、已有数据、checksum 和重跑幂等性。事件只允许同版本增加可选字段（含嵌套对象）或修改 Schema 注释；既有约束、必需字段、引用、事件名与聚合语义保持兼容，旧合法样例必须可读。新版本不能使旧版本漏检。显式退役仅豁免只追加清单登记的精确版本；决策 Note 按原路径或同分类同名归档路径解析，当前目录、Schema、样例和后端 Java 源码均不得保留退役事件，冻结事件不可退役。
 
 ## Actions 与最终门禁
 

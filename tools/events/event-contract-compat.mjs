@@ -93,10 +93,12 @@ export function loadCurrentBundle(repositoryRoot, manifest = readFreezeManifest(
     assert(!definitions.some(entry => retiredKeys.has(eventKey(entry))), `退役事件仍有 Schema 或样例文件：${file}`)
   }
   for (const entry of retirement.retired) {
-    assert(fs.statSync(path.join(repositoryRoot, entry.agentNote), { throwIfNoEntry: false })?.isFile(),
+    const notePaths = [entry.agentNote, entry.agentNote.replace('/implemented/', '/archived/')]
+    assert(notePaths.some(file => fs.statSync(path.join(repositoryRoot, file), { throwIfNoEntry: false })?.isFile()),
       `${eventKey(entry)} 退役决策记录不存在：${entry.agentNote}`)
   }
   assertRetiredEventsAbsent(retirement.retired, catalog.events, frozenEvents)
+  assertRetiredEventLiteralsAbsent(repositoryRoot, retirement.retired)
   const envelopeSchema = readJson(path.join(eventsRoot, eventEnvelopePath), eventEnvelopePath)
   const supportSchemas = fs.readdirSync(path.join(eventsRoot, 'schemas'))
     .filter(file => file.endsWith('-payload.schema.json'))
@@ -135,8 +137,25 @@ export function validateRetirementManifest(manifest) {
     keys.add(key)
     assert(typeof entry.reason === 'string' && entry.reason.trim().length > 0, `${key} 缺少退役理由`)
     assert(typeof entry.agentNote === 'string'
-      && /^\.agents\/notes\/implemented\/[a-z]+\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$/u.test(entry.agentNote),
+      && /^\.agents\/notes\/(?:implemented|archived)\/[a-z]+\/\d{4}-\d{2}-\d{2}-[a-z0-9-]+\.md$/u.test(entry.agentNote),
     `${key} 缺少有效的退役决策记录路径`)
+  }
+}
+
+function assertRetiredEventLiteralsAbsent(repositoryRoot, retired) {
+  if (retired.length === 0) return
+  const relativeRoot = 'backend/src/main/java'
+  const sourceRoot = path.join(repositoryRoot, relativeRoot)
+  assert(fs.statSync(sourceRoot, { throwIfNoEntry: false })?.isDirectory(), `缺少后端事件扫描目录：${relativeRoot}`)
+  const eventTypes = [...new Set(retired.map(entry => entry.eventType))]
+  for (const file of fs.readdirSync(sourceRoot, { recursive: true }).filter(file => file.endsWith('.java')).sort()) {
+    const source = fs.readFileSync(path.join(sourceRoot, file), 'utf8')
+    for (const eventType of eventTypes) {
+      const offset = source.indexOf(`"${eventType}"`)
+      if (offset < 0) continue
+      const line = source.slice(0, offset).split('\n').length
+      fail(`退役事件类型仍出现在后端源码：${eventType}，${relativeRoot}/${file.replaceAll('\\', '/')}:${line}`)
+    }
   }
 }
 

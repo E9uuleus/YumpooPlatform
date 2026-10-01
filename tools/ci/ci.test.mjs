@@ -11,9 +11,9 @@ import { assertWorkflowSafety } from './workflow-policy.mjs'
 import { verificationEnvironment } from './environment.mjs'
 import { checkHistory } from './history-policy.mjs'
 import { plan } from './plan.mjs'
-import { historicalMilestones } from './historical-assets.mjs'
+import { historicalMilestones, verifyHistoricalMilestone } from './historical-assets.mjs'
 import { assertStageReport } from './reports.mjs'
-import { verifyContentCategoryRefactorAssets, verifyHistoricalMilestone } from '../verification/content-category-refactor-assets.mjs'
+import { verifyContentCategoryRefactorAssets } from '../verification/content-category-refactor-assets.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const workflow = () => parse(fs.readFileSync(path.join(root, '.github/workflows/m0-18-ci.yml'), 'utf8'))
@@ -126,6 +126,19 @@ test('historical validation rejects changed statuses, incomplete checks and empt
     }
     write(directory, `${base}/acceptance-matrix.json`, JSON.stringify({ verifiedSlices: [] }))
     assert.throws(() => check(report), /缺少已验证切片/u)
+  }
+})
+
+test('retired product verification commands run only historical evidence checks', () => {
+  for (const milestone of ['m2-03', 'm2-07', 'm2-24']) {
+    for (const suffix of ['', '-assets']) {
+      const result = spawnSync(process.execPath, [`tools/verification/verify-${milestone}${suffix}.mjs`], {
+        cwd: root, encoding: 'utf8', timeout: 10000,
+      })
+      assert.equal(result.status, 0, result.error?.message || result.stderr)
+      assert.match(result.stdout, /仅校验历史验收记录/u)
+      assert.match(result.stdout, /ci:static.*ci:backend/u)
+    }
   }
 })
 
