@@ -184,7 +184,8 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
 
 <template>
   <section class="project-catalog">
-    <project-workspace-header section="catalog"
+    <project-workspace-header
+      section="catalog"
       title="管理项目"
       description="统一查看项目状态、负责人和协作角色。"
     />
