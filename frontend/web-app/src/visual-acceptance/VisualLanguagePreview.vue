@@ -452,7 +452,7 @@ function togglePreviewGroup(id: string): void {
           >
             <yp-segmented
               v-model="previewStatus"
-              label="产品状态"
+              label="生命周期"
               :options="previewStatusOptions"
             />
           </yp-surface>

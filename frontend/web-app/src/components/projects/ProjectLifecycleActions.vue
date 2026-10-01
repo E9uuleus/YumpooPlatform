@@ -35,7 +35,6 @@ const form = reactive({ reason: '' })
 const blockerLabels: Record<string, string> = {
   OPEN_WORK_ITEMS: '未关闭工作项',
   PENDING_WORKLOG_APPROVALS: '待审批工时',
-  OPEN_PRODUCT_FEEDBACK: '未关闭产品反馈',
   CURRENT_PROJECTS: '当前项目',
 }
 

@@ -11,7 +11,7 @@ import {
   type ProjectPage,
   type ProjectSummary,
 } from '@yumpoo/api-client'
-import { flushPromises, mount } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSession } from '../composables/useSession'
 import AppShell from './AppShell.vue'
@@ -108,8 +108,27 @@ describe('项目侧栏导航', () => {
     expect(projects.every(item => item.find('svg').exists())).toBe(true)
     expect(projects.every(item => item.attributes('title') === undefined)).toBe(true)
     expect(wrapper.findAll('#desktop-project-navigation .project-navigation__more svg circle')).toHaveLength(3)
+    expect(wrapper.get('#desktop-project-navigation').text()).not.toContain('产品')
 
     await projects[0]?.trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'project-overview', params: { projectId: 'project-1' } })
+    wrapper.unmount()
+  })
+
+  it('移动导航保留管理项目与项目跳转，移除产品入口', async () => {
+    const wrapper = mount(AppShell, {
+      attachTo: document.body,
+      global: { stubs: { RouterView: true } },
+    })
+    await flushPromises()
+    await wrapper.get('.mobile-nav-toggle').trigger('click')
+    await flushPromises()
+    const navigationElement = document.querySelector<HTMLElement>('nav[aria-label="移动端当前区域导航"]')
+    expect(navigationElement).not.toBeNull()
+    const navigation = new DOMWrapper(navigationElement!)
+    expect(navigation.findAll('button').some(button => button.text() === '产品')).toBe(false)
+    expect(navigation.text()).toContain('管理项目')
+    await navigation.get('.project-navigation__project').trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'project-overview', params: { projectId: 'project-1' } })
     wrapper.unmount()
   })

@@ -22,11 +22,8 @@ import ProjectsView from '../views/projects/ProjectsView.vue'
 import ProjectLayout from '../views/projects/ProjectLayout.vue'
 import ProjectOverviewView from '../views/projects/ProjectOverviewView.vue'
 import ProjectMembersView from '../views/projects/ProjectMembersView.vue'
-import ProjectProductsView from '../views/projects/ProjectProductsView.vue'
 import ProjectSettingsView from '../views/projects/ProjectSettingsView.vue'
 import ProjectActivityView from '../views/projects/ProjectActivityView.vue'
-import ProductsView from '../views/products/ProductsView.vue'
-import ProductDetailView from '../views/products/ProductDetailView.vue'
 
 export const routes: RouteRecordRaw[] = [
   { path: '/timer', name: 'timer', component: TimerPanel, props: route => ({ initialExpanded: route.query.mode !== 'compact' }) },
@@ -96,18 +93,6 @@ export const routes: RouteRecordRaw[] = [
         meta: { shellSection: 'work' },
       },
       {
-        path: 'products',
-        name: 'products',
-        component: ProductsView,
-        meta: { shellSection: 'work' },
-      },
-      {
-        path: 'products/:productId',
-        name: 'product-detail',
-        component: ProductDetailView,
-        meta: { shellSection: 'work' },
-      },
-      {
         path: 'projects/:projectId',
         component: ProjectLayout,
         redirect: route => ({ name: 'project-overview', params: route.params }),
@@ -115,7 +100,6 @@ export const routes: RouteRecordRaw[] = [
         children: [
           { path: 'overview', name: 'project-overview', component: ProjectOverviewView },
           { path: 'members', name: 'project-members', component: ProjectMembersView },
-          { path: 'products', name: 'project-products', component: ProjectProductsView },
           { path: 'activity', name: 'project-activity', component: ProjectActivityView },
           { path: 'settings', name: 'project-settings', component: ProjectSettingsView },
         ],
