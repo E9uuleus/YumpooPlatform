@@ -15,6 +15,7 @@ import DashboardProjectsDialog from '../components/dashboard/DashboardProjectsDi
 import DashboardFiltersDialog from '../components/dashboard/DashboardFiltersDialog.vue'
 import ChartTypeIcon from '../components/dashboard/ChartTypeIcon.vue'
 import DashboardExploreDialog from '../components/dashboard/DashboardExploreDialog.vue'
+import YpEmptyState from '../components/yp/YpEmptyState.vue'
 
 const session = useSession()
 const { dashboards, dashboard, snapshot, loading, refreshing, error, saveError, name, configuration, saving, changed, save, refresh, create, remove, switchTo, load, reload, reloading, recovery, resolveRecovery } = useDashboard()
@@ -156,12 +157,12 @@ async function discardReload() {
               <el-icon><DataAnalysis /></el-icon><span>{{ d.name }}</span><el-icon v-if="d.id === dashboard?.id">
                 <Check />
               </el-icon>
-            </button><div
+            </button><yp-empty-state
               v-if="!choices.length"
-              class="dialog-empty"
-            >
-              暂无仪表板
-            </div>
+              title="暂无仪表板"
+              description=""
+              compact
+            />
           </div>
           <el-button
             text
@@ -350,21 +351,32 @@ async function discardReload() {
         v-else-if="!dashboard || !configuration.projectIds.length"
         class="dashboard-welcome"
       >
-        <el-icon :size="44">
-          <DataAnalysis />
-        </el-icon><h2>连接项目</h2><el-button
-          type="primary"
-          :icon="Connection"
-          @click="projectDialog = true"
+        <yp-empty-state
+          ambient
+          title="连接项目"
+          description=""
         >
-          连接第一个项目
-        </el-button><el-button
-          v-if="!dashboard"
-          text
-          @click="startCreate"
-        >
-          从空白仪表板开始
-        </el-button>
+          <template #icon>
+            <el-icon><DataAnalysis /></el-icon>
+          </template>
+          <template #action>
+            <div class="dashboard-empty-actions">
+              <el-button
+                type="primary"
+                :icon="Connection"
+                @click="projectDialog = true"
+              >
+                连接第一个项目
+              </el-button><el-button
+                v-if="!dashboard"
+                text
+                @click="startCreate"
+              >
+                从空白仪表板开始
+              </el-button>
+            </div>
+          </template>
+        </yp-empty-state>
       </div>
       <DashboardGrid
         v-else-if="configuration.widgets.length"
@@ -451,15 +463,24 @@ async function discardReload() {
         v-else
         class="dashboard-empty-widgets"
       >
-        <el-icon :size="40">
-          <DataAnalysis />
-        </el-icon><h2>添加第一个组件</h2><el-button
-          type="primary"
-          :icon="Plus"
-          @click="gallery = true"
+        <yp-empty-state
+          ambient
+          title="添加第一个组件"
+          description=""
         >
-          添加组件
-        </el-button>
+          <template #icon>
+            <el-icon><DataAnalysis /></el-icon>
+          </template>
+          <template #action>
+            <el-button
+              type="primary"
+              :icon="Plus"
+              @click="gallery = true"
+            >
+              添加组件
+            </el-button>
+          </template>
+        </yp-empty-state>
       </div>
     </main>
     <DashboardProjectsDialog

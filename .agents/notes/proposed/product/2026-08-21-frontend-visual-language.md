@@ -17,7 +17,7 @@ Status: proposed
 - 支持 `comfortable | compact` 两档密度，默认 Comfortable。
 - Light、Dark、Night 保持相同状态色相；状态必须同时显示文字，不能以颜色作为唯一信息通道。
 - Vue 3 和 Element Plus 继续作为实现基线，通过 `--yp-*` 到 `--el-*` 的变量映射统一基础控件。
-- Button、Input、Dropdown 等基础控件直接复用 Element Plus；状态、负责人、日期、进度、筛选栏和页头等重复业务模式由 `Yp*` 复合组件拥有。
+- Button、Input、Dropdown 等基础控件直接复用 Element Plus；状态、负责人、日期、进度、筛选栏和页头等重复业务模式由 `Yp*` 复合组件拥有；卡片表面、定义列表、页签、分段控件和结果页骨架分别由 `YpSurface`、`YpDefinitionList`、`YpTabs`、`YpSegmented`、`YpResultPage` 统一。
 - monday.com Vibe Design System 只作为操作层级、组件组合和反馈方式的参考，不引入 React 的 `@vibe/core`，也不复制其品牌资产和业务模型。
 - 工作台与项目详情共享约 260px 二级侧栏、项目专用页头和开放式工作画布；Monday Workspace 仅提供布局层级、留白和视觉节奏参考，不迁移其品牌色、图标、文案或功能入口。
 - 项目模块主体画布使用白色表面，常驻区域只以灰阶 1px 分割线建立层级；项目管理页在独立浅灰顶部留白之后开始，避免整页灰底或依赖阴影分层。
@@ -46,7 +46,7 @@ Status: proposed
 - `docs/03-frontend` 明确页面模式、三主题 Token、两档密度、组件规则、Element Plus 映射和当前实现边界。
 - 运行时代码在 Vue 挂载前解析主题，使用 `data-theme`、`data-density` 和 Dark/Night 共用的 `dark` 类，首屏无错误主题闪烁。
 - 核心页面不再使用冲突硬编码色、裸业务枚举或重复的通用 Element Plus 深层覆盖。
-- `YpStatusTag`、`YpAssignee`、`YpPriorityBadge`、`YpDateBadge`、`YpProgress`、`YpFilterBar` 和统一页头模式已覆盖代表页面。
+- `YpStatusTag`、`YpAssignee`、`YpPriorityBadge`、`YpDateBadge`、`YpProgress`、`YpFilterBar`、`YpSurface`、`YpDefinitionList`、`YpTabs`、`YpSegmented`、`YpResultPage` 和统一页头模式已覆盖代表页面。
 - 项目管理、概览、成员和设置共享同一项目层级；项目管理页使用服务端搜索、筛选、负责人候选和摘要时间字段，不以视觉需要虚构数据。
 - 项目模块常驻画布背景为白色并以灰阶分割线组织区域；项目管理页保留顶部浅灰留白，桌面表格使用 40px 白色表头、48px 舒适行高且不出现竖向列线或结构阴影。
 - 工作台二级侧栏显示固定标题与语义文件夹图标，在“管理项目”之后最多展示 10 个项目，并在更多项目存在时显示省略号入口；搜索整行切换、250ms 防抖、Escape/关闭、收起与独立展开按钮通过键盘和减少动态效果验收。

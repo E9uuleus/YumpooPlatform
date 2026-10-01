@@ -2,6 +2,7 @@
 import { ElDialog, ElInput, ElCheckbox, ElTag, ElAlert, ElCheckboxGroup, ElButton } from 'element-plus'
 import { computed, ref, watch } from 'vue'
 import type { DashboardConnection, DashboardProject } from '@yumpoo/api-client'
+import YpEmptyState from '../yp/YpEmptyState.vue'
 import { dashboardsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
 const props = defineProps<{ modelValue: boolean; selected: string[]; connections: DashboardConnection[] }>()
@@ -74,12 +75,13 @@ watch([query, archived], () => { clearTimeout(timer); timer = setTimeout(() => v
           <span class="project-symbol">▦</span><span class="project-row-copy"><strong>{{ p.name }}</strong><small>{{ p.code }}<span v-if="p.lifecycle === 'ARCHIVED'"> · 已归档</span></small></span>
         </el-checkbox>
       </div>
-      <div
+      <yp-empty-state
         v-if="!items.length && !loading"
-        class="dialog-empty"
-      >
-        {{ query ? '没有找到匹配项目' : '暂无可连接的项目，请先加入一个项目' }}
-      </div>
+        :reason="query ? 'no-results' : 'empty'"
+        :title="query ? '没有找到匹配项目' : '暂无可连接的项目，请先加入一个项目'"
+        description=""
+        compact
+      />
     </el-checkbox-group>
     <el-button
       v-if="items.length < total"

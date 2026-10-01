@@ -134,6 +134,7 @@ onBeforeUnmount(() => observer?.disconnect())
       </section>
       <yp-empty-state
         v-if="!list.items.value.length && !list.loading.value && !list.error.value"
+        ambient
         :title="emptyCopy.title"
         :description="emptyCopy.description"
       >

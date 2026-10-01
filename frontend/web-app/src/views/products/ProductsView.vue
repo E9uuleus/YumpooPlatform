@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus } from '@element-plus/icons-vue'
+import { Box, Plus, Search } from '@element-plus/icons-vue'
 import {
   AccountStatus, EmploymentStatus, ProductStatusFilter, readCsrfToken,
   type Member, type ProductPage,
@@ -15,14 +15,22 @@ import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
+import YpPageHeader from '../../components/yp/YpPageHeader.vue'
+import YpSegmented from '../../components/yp/YpSegmented.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
+import YpSurface from '../../components/yp/YpSurface.vue'
 import { useSession } from '../../composables/useSession'
 
 const router = useRouter()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const session = useSession()
 const result = ref<ProductPage>()
-const status = ref(ProductStatusFilter.Active)
+const status = ref<ProductStatusFilter>(ProductStatusFilter.Active)
+const statusOptions = [
+  { value: ProductStatusFilter.Active, label: '进行中' },
+  { value: ProductStatusFilter.Archived, label: '已归档' },
+  { value: ProductStatusFilter.All, label: '全部' },
+]
 const query = ref('')
 const appliedQuery = ref('')
 const page = ref(0)
@@ -126,51 +134,275 @@ onBeforeUnmount(() => { if (timer) clearTimeout(timer) })
 
 <template>
   <section class="product-page">
-    <header class="product-page__header">
-      <div><p>产品治理</p><h1>产品</h1><span>查看产品状态、负责人并完成生命周期治理。</span></div>
-      <el-button v-if="session.isCompanyAdmin.value" type="primary" @click="createOpen = true"><el-icon><plus /></el-icon>创建产品</el-button>
-    </header>
-    <inline-problem v-if="error" :problem="error" />
+    <yp-page-header
+      eyebrow="产品治理"
+      title="产品"
+      description="查看产品状态、负责人并完成生命周期治理。"
+    >
+      <template
+        v-if="session.isCompanyAdmin.value"
+        #actions
+      >
+        <el-button
+          type="primary"
+          :icon="Plus"
+          @click="createOpen = true"
+        >
+          创建产品
+        </el-button>
+      </template>
+    </yp-page-header>
+    <inline-problem
+      v-if="error"
+      :problem="error"
+    />
     <div class="product-toolbar">
-      <el-input v-model="query" clearable aria-label="搜索产品名称或编码" placeholder="按名称或编码前缀搜索" @input="scheduleSearch" @clear="search" @keyup.enter="search" />
-      <el-select v-model="status" aria-label="产品状态" @change="changeStatus">
-        <el-option label="进行中" :value="ProductStatusFilter.Active" />
-        <el-option label="已归档" :value="ProductStatusFilter.Archived" />
-        <el-option label="全部" :value="ProductStatusFilter.All" />
-      </el-select>
+      <el-input
+        v-model="query"
+        class="product-toolbar__search"
+        clearable
+        :prefix-icon="Search"
+        aria-label="搜索产品名称或编码"
+        placeholder="按名称或编码前缀搜索"
+        @input="scheduleSearch"
+        @clear="search"
+        @keyup.enter="search"
+      />
+      <yp-segmented
+        v-model="status"
+        label="产品状态"
+        :options="statusOptions"
+        @change="changeStatus"
+      />
     </div>
-    <div v-if="loading || result?.items.length" v-loading="loading" class="product-table">
-      <el-table :data="result?.items ?? []" @row-click="row => openProduct(row.id)">
-        <el-table-column label="产品" min-width="260"><template #default="scope"><button class="product-link" type="button" @click.stop="openProduct(scope.row.id)">{{ scope.row.name }}<small>{{ scope.row.code }}</small></button></template></el-table-column>
-        <el-table-column label="负责人" min-width="180"><template #default="scope"><yp-assignee :user-id="scope.row.ownerUserId" :display-name="scope.row.ownerDisplayName ?? '-'" size="table" /></template></el-table-column>
-        <el-table-column label="状态" width="120"><template #default="scope"><yp-status-tag domain="product-status" :status="scope.row.status" effect="soft" /></template></el-table-column>
+    <yp-surface
+      v-if="loading || result?.items.length"
+      v-loading="loading"
+      class="product-table"
+      flush
+    >
+      <el-table
+        :data="result?.items ?? []"
+        @row-click="row => openProduct(row.id)"
+      >
+        <el-table-column
+          label="产品"
+          min-width="280"
+        >
+          <template #default="scope">
+            <button
+              class="product-link"
+              type="button"
+              @click.stop="openProduct(scope.row.id)"
+            >
+              <span
+                class="product-link__icon"
+                aria-hidden="true"
+              >
+                <el-icon><box /></el-icon>
+              </span>
+              <span class="product-link__text">
+                <span class="product-link__name">{{ scope.row.name }}</span>
+                <small>{{ scope.row.code }}</small>
+              </span>
+            </button>
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="负责人"
+          width="200"
+        >
+          <template #default="scope">
+            <yp-assignee
+              :user-id="scope.row.ownerUserId"
+              :display-name="scope.row.ownerDisplayName ?? '-'"
+              size="table"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="状态"
+          width="120"
+        >
+          <template #default="scope">
+            <yp-status-tag
+              domain="product-status"
+              :status="scope.row.status"
+              effect="soft"
+            />
+          </template>
+        </el-table-column>
       </el-table>
-      <el-pagination v-if="result && result.totalElements" layout="prev, pager, next, total" :current-page="page + 1" :page-size="size" :total="result.totalElements" @current-change="next => { page = next - 1; load() }" />
-    </div>
-    <yp-empty-state v-else reason="no-results" description="没有符合条件的产品。" compact />
+      <template
+        v-if="result && result.totalElements"
+        #footer
+      >
+        <el-pagination
+          layout="prev, pager, next, total"
+          :current-page="page + 1"
+          :page-size="size"
+          :total="result.totalElements"
+          @current-change="next => { page = next - 1; load() }"
+        />
+      </template>
+    </yp-surface>
+    <yp-surface v-else>
+      <yp-empty-state
+        reason="no-results"
+        description="没有符合条件的产品。"
+        compact
+      />
+    </yp-surface>
 
-    <el-dialog v-model="createOpen" title="创建产品" width="min(520px, 92vw)" @closed="resetForm">
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-        <el-form-item label="编码" prop="code"><el-input v-model="form.code" maxlength="32" /></el-form-item>
-        <el-form-item label="名称" prop="name"><el-input v-model="form.name" maxlength="80" /></el-form-item>
-        <el-form-item label="描述"><el-input v-model="form.description" type="textarea" maxlength="500" show-word-limit /></el-form-item>
-        <el-form-item label="负责人" prop="ownerUserId"><el-select v-model="form.ownerUserId" filterable><el-option v-for="owner in owners" :key="owner.userId" :label="owner.displayName" :value="owner.userId" /></el-select></el-form-item>
+    <el-dialog
+      v-model="createOpen"
+      title="创建产品"
+      width="min(520px, 92vw)"
+      @closed="resetForm"
+    >
+      <el-form
+        ref="formRef"
+        :model="form"
+        :rules="rules"
+        label-position="top"
+      >
+        <el-form-item
+          label="编码"
+          prop="code"
+        >
+          <el-input
+            v-model="form.code"
+            maxlength="32"
+          />
+        </el-form-item>
+        <el-form-item
+          label="名称"
+          prop="name"
+        >
+          <el-input
+            v-model="form.name"
+            maxlength="80"
+          />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input
+            v-model="form.description"
+            type="textarea"
+            maxlength="500"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item
+          label="负责人"
+          prop="ownerUserId"
+        >
+          <el-select
+            v-model="form.ownerUserId"
+            filterable
+          >
+            <el-option
+              v-for="owner in owners"
+              :key="owner.userId"
+              :label="owner.displayName"
+              :value="owner.userId"
+            />
+          </el-select>
+        </el-form-item>
       </el-form>
-      <template #footer><el-button @click="createOpen = false">取消</el-button><el-button type="primary" :loading="creating" @click="createProduct">创建</el-button></template>
+      <template #footer>
+        <el-button @click="createOpen = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="creating"
+          @click="createProduct"
+        >
+          创建
+        </el-button>
+      </template>
     </el-dialog>
   </section>
 </template>
 
 <style scoped>
-.product-page { padding: 28px; display: grid; gap: 20px; }
-.product-page__header { display: flex; justify-content: space-between; align-items: end; gap: 20px; }
-.product-page__header p { margin: 0; color: var(--yp-color-primary); font-weight: 600; }
-.product-page__header h1 { margin: 4px 0; }
-.product-page__header span { color: var(--yp-color-text-secondary); }
-.product-toolbar { display: grid; grid-template-columns: minmax(220px, 480px) 150px; gap: 12px; }
-.product-table { background: var(--yp-color-surface); border: 1px solid var(--yp-color-border); border-radius: 12px; overflow: hidden; }
-.product-table :deep(.el-pagination) { padding: 16px; justify-content: flex-end; }
-.product-link { display: grid; gap: 2px; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; font: inherit; }
-.product-link small { color: var(--yp-color-text-secondary); }
-@media (max-width: 640px) { .product-page { padding: 18px; } .product-toolbar { grid-template-columns: 1fr; } }
+.product-page {
+  display: grid;
+  gap: var(--yp-space-4);
+}
+
+.product-page > .yp-page-header {
+  margin-bottom: var(--yp-space-1);
+}
+
+.product-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yp-space-3);
+}
+
+.product-toolbar__search {
+  width: min(360px, 100%);
+}
+
+.product-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+
+.product-link {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--yp-space-3);
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.product-link__icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-link);
+  background: var(--yp-bg-selected);
+  font-size: 16px;
+}
+
+.product-link__text {
+  display: grid;
+  min-width: 0;
+}
+
+.product-link__name {
+  overflow: hidden;
+  color: var(--yp-text-primary);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-link:hover .product-link__name,
+.product-link:focus-visible .product-link__name {
+  color: var(--yp-link);
+}
+
+.product-link small {
+  color: var(--yp-text-muted);
+  font-size: var(--yp-type-caption-size);
+  line-height: var(--yp-type-caption-line);
+}
+
+@media (max-width: 640px) {
+  .product-toolbar__search {
+    width: 100%;
+  }
+}
 </style>
