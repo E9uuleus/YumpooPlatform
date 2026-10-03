@@ -148,7 +148,14 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
     await write((xXSRFTOKEN, signal) => workItemsApi.unlinkWorkItemConnection({ connectionId: connection.id, xXSRFTOKEN,
       ifMatch: connection.etag, idempotencyKey: crypto.randomUUID() }, { signal }), connectionChanged, affectedItems(connection))
   }
-  const getConnection = (connectionId: string, signal?: AbortSignal) => workItemsApi.getWorkItemConnection({ connectionId }, signal ? { signal } : undefined)
+  function query<T>(request: (signal: AbortSignal) => Promise<T>, caller?: AbortSignal) {
+    return read(signal => request(caller ? AbortSignal.any([signal, caller]) : signal))
+  }
+  const getConnection = (connectionId: string, caller?: AbortSignal) => query(signal => workItemsApi.getWorkItemConnection({ connectionId }, { signal }), caller)
+  const searchTargets = (text: string, page: number, caller?: AbortSignal) => query(signal => workItemsApi.searchConnectTargetProjects({ query: text, page, size: 20 }, { signal }), caller)
+  const createOptions = (columnId: string, targetProjectId: string, caller?: AbortSignal) => query(signal => workItemsApi.getConnectCreateOptions({ projectId: toValue(projectId), columnId, targetProjectId }, { signal }), caller)
+  const searchCandidates = (columnId: string, targetProjectId: string, sourceWorkItemId: string, q: string, page: number, caller?: AbortSignal) => query(signal => workItemsApi.searchConnectCandidates({ projectId: toValue(projectId), columnId, targetProjectId, sourceWorkItemId, q, page, size: 20 }, { signal }), caller)
+  const incoming = (workItemId: string, page: number, caller?: AbortSignal) => query(signal => workItemsApi.listIncomingWorkItemConnections({ workItemId, page, size: 50 }, { signal }), caller)
   return { catalog, cells, catalogLoading, catalogError, cellError, loadCatalog, ensureCells, refreshCells,
-    createColumn, updateColumn, deleteColumn, link, createAndLink, unlink, getConnection }
+    createColumn, updateColumn, deleteColumn, link, createAndLink, unlink, getConnection, searchTargets, createOptions, searchCandidates, incoming }
 }
