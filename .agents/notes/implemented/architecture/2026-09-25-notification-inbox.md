@@ -22,7 +22,7 @@ UP5c 为 `workitem.connection_created` v1 建立独立消费分支，先检查 `
 
 V63 追加扩展原因约束和投影代码约束，以数据库 `clock_timestamp()` 新建 `CONNECTION_CREATED_V1` 水位，保留 V57 的 `INBOX_V1` 水位与已有通知不变。连接事件只接受新水位之后发生的事件，部署前积压不补发；其他通知仍使用原水位。幂等重放沿用既有事件与接收人唯一键，既有事件载荷、冻结事件与通知 HTTP 属性均未扩展。
 
-OpenAPI 的 `NotificationReason` 响应枚举新增值由用户明确批准；精确例外 `2026-10-03-connection-created-notification` 登记于 `tools/openapi/breaking-change-exceptions.json`。相对 PR-4 dev 基线，仅移除该新增响应枚举值的临时规范通过完整 openapi-diff，确认 UP5a 的可选查询参数兼容。例外仅绑定这两个完整规范的 SHA-256，不修改历史例外。新旧桌面壳通过[桌面提醒](../product/2026-09-25-desktop-inbox-alerts.md)的原因能力声明隔离，连接事务与事件仍由[连接架构](2026-09-30-work-item-connections.md)拥有。
+OpenAPI 的 `NotificationReason` 响应枚举新增值由用户明确批准；精确例外 `2026-10-03-connection-created-notification` 保留于 `tools/openapi/breaking-change-exceptions.json`，含已批准连接筛选 20 项上限的当前规范另追加 `2026-10-03-connection-notification-filter-limits`。相对 PR-4 dev 基线，仅移除该新增响应枚举值的临时规范通过完整 openapi-diff，确认 UP5a 的可选查询参数及上限兼容。每条例外仅绑定对应两个完整规范的 SHA-256，不修改历史例外。新旧桌面壳通过[桌面提醒](../product/2026-09-25-desktop-inbox-alerts.md)的原因能力声明隔离，连接事务与事件仍由[连接架构](2026-09-30-work-item-connections.md)拥有。
 
 ## Alternatives considered
 

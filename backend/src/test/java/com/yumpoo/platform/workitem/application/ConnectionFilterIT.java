@@ -76,6 +76,27 @@ class ConnectionFilterIT {
         assertThat(list(targetOwner, target, request(Set.of(), Set.of(), Set.of(UUID.randomUUID())))).isEmpty();
     }
 
+    @Test void incomingProjectsFormAUnionAndOptionPagingKeepsItsUuidOrder() {
+        var otherSource = fixture.project(sourceOwner, "Alpha 来源");
+        fixture.member(otherSource.id(), both);
+        var otherItem = fixture.item(sourceOwner, otherSource, "另一个来源");
+        var otherTarget = fixture.item(targetOwner, target, "仅来自 B");
+        var otherColumn = fixture.column(sourceOwner, otherSource, "投递目标", target.id());
+        link(otherColumn.id(), otherItem.id(), otherTarget.id());
+        assertThat(list(targetOwner, target, request(Set.of(), Set.of(), Set.of(source.id()))))
+                .containsExactly(targetFirst.id(), targetSecond.id());
+        assertThat(list(targetOwner, target, request(Set.of(), Set.of(), Set.of(source.id(), otherSource.id()))))
+                .containsExactly(targetFirst.id(), targetSecond.id(), otherTarget.id());
+        var context = request(Set.of(), Set.of(), Set.of());
+        var firstPage = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", context, CursorPageRequest.of(null, 1));
+        var secondPage = items.listProjectFilterOptions(targetOwner, target.id(), "INCOMING_PROJECT", context,
+                CursorPageRequest.of(firstPage.nextCursor(), 1));
+        var expected = List.of(source.id().toString(), otherSource.id().toString()).stream().sorted().toList();
+        assertThat(List.of(firstPage.items().getFirst().value(), secondPage.items().getFirst().value())).isEqualTo(expected);
+        assertThat(firstPage.nextCursor()).isNotNull();
+        assertThat(secondPage.nextCursor()).isNull();
+    }
+
     @Test void cursorBindsConnectionFiltersAndNormalizesTheirOrder() {
         var connected = request(Set.of(column.id()), Set.of(), Set.of());
         var page = items.listProject(sourceOwner, source.id(), connected, "TABLE", CursorPageRequest.of(null, 1));

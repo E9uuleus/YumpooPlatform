@@ -96,6 +96,26 @@ class ConnectionHttpIT {
     }
 
     @Test
+    void connectionFilterArraysAcceptTwentyAndRejectTwentyOneBeforeDeduplication() throws Exception {
+        String list = "/projects/" + source.id() + "/work-items";
+        var ids = java.util.stream.IntStream.range(0, 21).mapToObj(index -> UUID.randomUUID().toString()).toList();
+        for (String field : List.of("connectedColumnIds", "unconnectedColumnIds", "incomingProjectIds")) {
+            for (String path : List.of(list + "?", list + "/filter-options?field=INCOMING_PROJECT&")) {
+                String twenty = ids.subList(0, 20).stream().map(id -> field + "=" + id)
+                        .collect(java.util.stream.Collectors.joining("&"));
+                body(send("GET", path + twenty, owner, null, null, null), 200);
+                for (String values : List.of(twenty + "&" + field + "=" + ids.get(20),
+                        java.util.Collections.nCopies(21, field + "=" + ids.getFirst()).stream()
+                                .collect(java.util.stream.Collectors.joining("&")))) {
+                    var problem = body(send("GET", path + values, owner, null, null, null), 422);
+                    assertThat(problem.path("fieldErrors").get(0).path("field").asText()).isEqualTo(field);
+                    assertThat(problem.path("fieldErrors").get(0).path("code").asText()).isEqualTo("TOO_MANY");
+                }
+            }
+        }
+    }
+
+    @Test
     void allThirteenRoutesPreserveStatusHeadersPaginationAndIdempotency() throws Exception {
         var created = column();
         String id = created.path("id").asText();

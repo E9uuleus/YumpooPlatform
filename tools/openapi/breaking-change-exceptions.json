@@ -63,6 +63,13 @@
       "newSha256": "3751273ae48cae5c3a80857bc0581bf0530c8ac3818efaa067e68beea4fcccd5",
       "reason": "用户批准新增 NotificationReason.CONNECTION_CREATED 响应枚举，归入 PROJECT 并沿用 WORK_ITEM 目标引用；仅移除该新增枚举的临时规范已通过完整 openapi-diff。Web 按桌面壳显式原因能力过滤，旧壳不接收新原因且保留同包旧通知。精确哈希只覆盖该枚举扩展，既有字段与事件不变。",
       "agentNote": ".agents/notes/implemented/architecture/2026-09-25-notification-inbox.md"
+    },
+    {
+      "id": "2026-10-03-connection-notification-filter-limits",
+      "oldSha256": "d5b7b8d335cd619eca2f5770ddf8b9217a3016da839dafeb004b026edfa710ba",
+      "newSha256": "03c395a184e8d06b6a9e1bc09c98544ae56e767011f6df041ced554ab5870029",
+      "reason": "保留既有通知原因例外，追加本轮已批准的三个连接筛选数组 maxItems:20 后的精确规范指纹。仅移除已批准 CONNECTION_CREATED 响应枚举的临时规范通过完整 openapi-diff，确认上限及其余变更相对 dev 兼容；无新增破坏性变更，既有例外条目不变。",
+      "agentNote": ".agents/notes/implemented/architecture/2026-09-25-notification-inbox.md"
     }
   ]
 }

@@ -2,6 +2,7 @@ package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
+import com.yumpoo.platform.workitem.domain.ConnectColumn;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -33,9 +34,9 @@ public record WorkItemQuery(
     public record ConnectionFilter(Set<UUID> connectedColumnIds, Set<UUID> unconnectedColumnIds,
                                    Set<UUID> incomingProjectIds) {
         public ConnectionFilter {
-            connectedColumnIds = Set.copyOf(connectedColumnIds);
-            unconnectedColumnIds = Set.copyOf(unconnectedColumnIds);
-            incomingProjectIds = Set.copyOf(incomingProjectIds);
+            connectedColumnIds = connectionIds(connectedColumnIds, "connectedColumnIds");
+            unconnectedColumnIds = connectionIds(unconnectedColumnIds, "unconnectedColumnIds");
+            incomingProjectIds = connectionIds(incomingProjectIds, "incomingProjectIds");
         }
         public static ConnectionFilter empty() { return new ConnectionFilter(Set.of(), Set.of(), Set.of()); }
         public String fingerprint() {
@@ -111,9 +112,9 @@ public record WorkItemQuery(
         }
         public Request withConnections(Collection<UUID> connected, Collection<UUID> unconnected, Collection<UUID> incoming) {
             return new Request(query,statuses,priorities,assigneeUserIds,contentIds,dueFrom,dueTo,updatedAfter,sorts,timeTracking,emptyField,scope,
-                    new ConnectionFilter(connected == null ? Set.of() : new LinkedHashSet<>(connected),
-                            unconnected == null ? Set.of() : new LinkedHashSet<>(unconnected),
-                            incoming == null ? Set.of() : new LinkedHashSet<>(incoming)));
+                    new ConnectionFilter(connectionIds(connected, "connectedColumnIds"),
+                            connectionIds(unconnected, "unconnectedColumnIds"),
+                            connectionIds(incoming, "incomingProjectIds")));
         }
         public Request(String query, Collection<String> statuses, Collection<String> priorities, Collection<UUID> assigneeUserIds,
                 Collection<UUID> contentIds, LocalDate dueFrom, LocalDate dueTo, Instant updatedAfter, Collection<String> sorts, TimeFilter timeTracking, String emptyField) {
@@ -205,6 +206,13 @@ public record WorkItemQuery(
             result.add(new Sort(field, direction));
         }
         return result;
+    }
+
+    private static Set<UUID> connectionIds(Collection<UUID> ids, String field) {
+        if (ids == null) return Set.of();
+        if (ids.size() > ConnectColumn.MAX_COLUMNS)
+            throw invalid(field, "TOO_MANY", "每个连接筛选最多选择 " + ConnectColumn.MAX_COLUMNS + " 项");
+        return Set.copyOf(ids);
     }
 
     private static ApplicationException invalid(String field, String code, String message) {

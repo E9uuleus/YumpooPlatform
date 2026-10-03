@@ -2758,19 +2758,19 @@ paths:
           description: 所选每个本项目有效连接列均至少有一条可读连接。 参与计数与游标，不提供连接排序或分组。
           style: form
           explode: true
-          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+          schema: { type: array, uniqueItems: true, maxItems: 20, items: { $ref: '#/components/schemas/Uuid' } }
         - name: unconnectedColumnIds
           in: query
           description: 所选每个本项目有效连接列均没有可读连接；不存在或其他项目的列不匹配。 参与计数与游标，不提供连接排序或分组。
           style: form
           explode: true
-          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+          schema: { type: array, uniqueItems: true, maxItems: 20, items: { $ref: '#/components/schemas/Uuid' } }
         - name: incomingProjectIds
           in: query
           description: 至少有一条来自所选任一项目的有效入站连接。 参与计数与游标，不提供连接排序或分组。
           style: form
           explode: true
-          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+          schema: { type: array, uniqueItems: true, maxItems: 20, items: { $ref: '#/components/schemas/Uuid' } }
         - name: projectId
           in: path
           required: true
@@ -3058,19 +3058,19 @@ paths:
           description: 所选每个本项目有效连接列均至少有一条可读连接。 参与计数与游标，不提供连接排序或分组。
           style: form
           explode: true
-          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+          schema: { type: array, uniqueItems: true, maxItems: 20, items: { $ref: '#/components/schemas/Uuid' } }
         - name: unconnectedColumnIds
           in: query
           description: 所选每个本项目有效连接列均没有可读连接；不存在或其他项目的列不匹配。 参与计数与游标，不提供连接排序或分组。
           style: form
           explode: true
-          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+          schema: { type: array, uniqueItems: true, maxItems: 20, items: { $ref: '#/components/schemas/Uuid' } }
         - name: incomingProjectIds
           in: query
           description: 至少有一条来自所选任一项目的有效入站连接。 参与计数与游标，不提供连接排序或分组。
           style: form
           explode: true
-          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+          schema: { type: array, uniqueItems: true, maxItems: 20, items: { $ref: '#/components/schemas/Uuid' } }
         - name: timeTrackingState
           in: query
           schema: { $ref: '#/components/schemas/TimeTrackingState' }
