@@ -110,7 +110,7 @@ const emit = defineEmits<{
   labelsUpdated: [catalog: WorkItemLabelCatalog]
   transition: [item: ProjectWorkItemListItem, statusCode: string]
   selectionChange: [parentId: string, rows: ProjectWorkItemListItem[]]
-  headerResize: [newWidth: number, oldWidth: number, column: { label: string }]
+  headerResize: [newWidth: number, oldWidth: number, column: { property?: string; columnKey?: string }]
   moveColumn: [source: string, target: string, placement?: 'before' | 'after']
 }>()
 
@@ -700,7 +700,7 @@ onBeforeUnmount(() => {
         :header-cell-style="subitemHeaderCellStyle"
         @scroll="subitemScrollLeft = $event.scrollLeft"
         @selection-change="$emit('selectionChange', parent.id, $event)"
-        @header-dragend="(newWidth: number, oldWidth: number, column: { label: string }) => $emit('headerResize', newWidth, oldWidth, column)"
+        @header-dragend="(newWidth: number, oldWidth: number, column: { property?: string; columnKey?: string }) => $emit('headerResize', newWidth, oldWidth, column)"
       >
         <el-table-column
           :width="SUBITEM_MENU_COLUMN_WIDTH"

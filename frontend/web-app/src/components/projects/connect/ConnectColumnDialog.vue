@@ -71,6 +71,7 @@ async function submit() {
     const column = props.mode === 'edit' && props.column
       ? await context.updateColumn(context.catalog.value?.items.find(column => column.id === props.column?.id) ?? props.column, input)
       : await context.createColumn(input)
+    if (current !== revision || !props.open) return
     emit('saved', column); emit('update:open', false)
     ElMessage.success(props.mode === 'edit' ? '连接列已更新' : '已添加连接列')
   } catch (reason) {

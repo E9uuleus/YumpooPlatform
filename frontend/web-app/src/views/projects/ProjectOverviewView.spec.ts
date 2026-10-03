@@ -19,6 +19,10 @@ import { defineComponent, nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkItemTableSource } from '../../components/projects/workItemTableSource'
 import ProjectOverviewView from '../../components/projects/ProjectWorkItems.vue'
+import ConnectCell from '../../components/projects/connect/ConnectCell.vue'
+import ConnectColumnAddButton from '../../components/projects/connect/ConnectColumnAddButton.vue'
+import ConnectColumnDialog from '../../components/projects/connect/ConnectColumnDialog.vue'
+import { connection, connectionCatalog } from '../../components/projects/connect/connectTestFixtures'
 
 enableAutoUnmount(afterEach)
 
@@ -43,6 +47,9 @@ const state = vi.hoisted(() => ({
   getWorkItem: vi.fn(),
   updateWorkItem: vi.fn(),
   transitionWorkItem: vi.fn(),
+  listConnectColumns: vi.fn(),
+  listWorkItemConnectionCells: vi.fn(),
+  searchConnectTargetProjects: vi.fn(),
   routeLeave: vi.fn(),
   routeUpdate: vi.fn(),
 }))
@@ -61,6 +68,9 @@ vi.mock('../../api/client', () => ({
   projectsApi: { getProject: state.getProject, listProjectMembers: state.listProjectMembers },
   contentsApi: { listProjectContents: state.listProjectContents },
   workItemsApi: {
+    listConnectColumns: state.listConnectColumns,
+    listWorkItemConnectionCells: state.listWorkItemConnectionCells,
+    searchConnectTargetProjects: state.searchConnectTargetProjects,
     listProjectWorkItems: state.listProjectWorkItems,
     listWorkItemSubitems: state.listWorkItemSubitems,
     listProjectWorkItemFilterOptions: state.listProjectWorkItemFilterOptions,
@@ -161,6 +171,9 @@ describe('项目级工作项首页', () => {
     })
     state.getProject.mockImplementation(({ projectId }: { projectId: string }) => Promise.resolve(project(projectId)))
     state.listProjectContents.mockResolvedValue(catalog())
+    state.listConnectColumns.mockResolvedValue({ items: [], incomingAvailable: false, incomingColumns: [], canManage: true, canDelete: true })
+    state.listWorkItemConnectionCells.mockResolvedValue({ items: [] })
+    state.searchConnectTargetProjects.mockResolvedValue({ items: [], page: 0, size: 20, totalPages: 0, totalElements: 0 })
     state.getProjectWorkItemLabels.mockResolvedValue({
       statuses: [
         { code: 'BACKLOG', displayName: '待开始', colorToken: 'BLUE', statusCategory: 'TODO',
@@ -180,6 +193,33 @@ describe('项目级工作项首页', () => {
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it('连接列固定在内置列之后，列宽按 key 更新，加号打开真实列中心', async () => {
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    state.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item-1', outgoing: [{ columnId: connection.columnId, connections: [connection] }], incoming: [], incomingTotal: 0 }] })
+    const wrapper = mountView(); await flushPromises()
+    expect(wrapper.findComponent(ConnectCell).props('connections')).toEqual([connection])
+    const keys = wrapper.findAllComponents({ name: 'ElTableColumn' }).map(column => column.props('prop') || column.props('columnKey'))
+    expect(keys.indexOf('connect:column-1')).toBeGreaterThan(keys.indexOf('updatedAt'))
+    expect(keys.indexOf('connect:column-1')).toBeLessThan(keys.indexOf('add-column'))
+    expect(wrapper.get('th.monday-connect-column-header').classes()).not.toContain('monday-movable-column-header')
+    const vm = wrapper.vm as unknown as { onHeaderDragEnd: (next: number, old: number, column: { property: string }) => void }
+    vm.onHeaderDragEnd(275, 200, { property: 'connect:column-1' }); await nextTick()
+    expect(wrapper.findAllComponents({ name: 'ElTableColumn' }).find(column => column.props('prop') === 'connect:column-1')?.props('width')).toBe(275)
+    expect(wrapper.findAllComponents({ name: 'ElTableColumn' }).find(column => column.props('prop') === 'priority')?.props('width')).toBe(90)
+    wrapper.findComponent(ConnectColumnAddButton).vm.$emit('addConnectColumn'); await flushPromises()
+    expect(wrapper.findComponent(ConnectColumnDialog).props('open')).toBe(true)
+    expect(state.listWorkItemConnectionCells).toHaveBeenCalledTimes(1)
+  })
+
+  it('嵌入表格不加载、不渲染连接列和连接弹窗', async () => {
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    const wrapper = mountView(undefined, { embeddedProjectId: 'project-1', preferenceScope: 'dashboard:test' })
+    await flushPromises()
+    expect(state.listConnectColumns).not.toHaveBeenCalled(); expect(state.listWorkItemConnectionCells).not.toHaveBeenCalled()
+    expect(wrapper.find('.monday-connect-column').exists()).toBe(false)
+    expect(wrapper.findComponent(ConnectColumnDialog).exists()).toBe(false)
+  })
 
   it.each(['filter', 'view', 'project', 'group'] as const)('%s 切换清除 reserve-selection 和子表内部勾选，数量不会回弹', async change => {
     const parent = { ...item('parent'), subitemCount: 1 }
@@ -594,12 +634,10 @@ describe('项目级工作项首页', () => {
     const addColumnHeader = wrapper.get('th.monday-add-column-header')
     const addColumn = wrapper.findAllComponents({ name: 'ElTableColumn' })
       .find(column => column.props('columnKey') === 'add-column')
-    const addColumnButton = addColumnHeader.get('button.monday-add-column-icon')
-    expect(addColumnButton.attributes('aria-label')).toBe('添加列（功能预留）')
-    expect(addColumnButton.get('svg').attributes()).toMatchObject({
-      viewBox: '0 0 20 20', width: '18', height: '18', fill: 'currentColor',
-    })
-    expect(addColumnButton.get('path').attributes('d')).toContain('M10 2.25')
+    const addColumnButton = addColumnHeader.get('button.connect-column-add-button')
+    expect(addColumnButton.attributes('aria-label')).toBe('添加列')
+    expect(addColumnButton.find('svg').exists()).toBe(true)
+    expect(wrapper.findComponent(ConnectColumnAddButton).props('canManage')).toBe(true)
     expect(addColumnHeader.classes()).not.toContain('monday-movable-column-header')
     expect(addColumn?.props('width')).toBe('')
     expect(addColumn?.props('minWidth')).toBe(96)
@@ -687,11 +725,11 @@ describe('项目级工作项首页', () => {
     const wrapper = mountView()
     await flushPromises()
     const view = wrapper.vm as unknown as {
-      onHeaderDragEnd: (width: number, oldWidth: number, column: { label: string }) => void
+      onHeaderDragEnd: (width: number, oldWidth: number, column: { property: string }) => void
       toggleColumn: (key: string, checked: boolean) => void
     }
 
-    view.onHeaderDragEnd(188, 120, { label: '优先级' })
+    view.onHeaderDragEnd(188, 120, { property: 'priority' })
     const widths = () => wrapper.findAllComponents({ name: 'ElTableColumn' })
       .filter(column => column.props('label') && column.props('label') !== '优先级')
       .map(column => [column.props('label'), column.props('width')])

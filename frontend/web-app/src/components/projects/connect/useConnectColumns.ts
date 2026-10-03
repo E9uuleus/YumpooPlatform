@@ -13,7 +13,7 @@ export function useConnectContext(): ConnectColumns {
   return context
 }
 
-export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: MaybeRefOrGetter<boolean> = true) {
+export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: MaybeRefOrGetter<boolean> = true, identity: MaybeRefOrGetter<string> = '') {
   const catalog = shallowRef<ConnectColumnCatalog>()
   const cells = shallowRef(new Map<string, WorkItemConnectionCell>())
   const catalogLoading = ref(false)
@@ -32,7 +32,7 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
     catalog.value = undefined; cells.value = new Map()
     catalogError.value = undefined; cellError.value = undefined; catalogLoading.value = false
   }
-  watch(() => [toValue(projectId), toValue(enabled)], reset, { flush: 'sync' })
+  watch(() => [toValue(projectId), toValue(enabled), toValue(identity)], reset, { flush: 'sync' })
   onScopeDispose(reset)
 
   async function read<T>(request: (signal: AbortSignal) => Promise<T>): Promise<T> {
@@ -114,9 +114,10 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
     }
   }
   async function columnsChanged(): Promise<void> {
+    const current = revision
     const ids = [...new Set([...cells.value.keys(), ...pending.keys()])]
     await loadCatalog()
-    await refreshCells(ids)
+    if (current === revision) await refreshCells(ids)
   }
   function affectedItems(connection: WorkItemConnection): string[] {
     return [connection.source, connection.target].filter(card => card.projectId === toValue(projectId)).map(card => card.workItemId)
