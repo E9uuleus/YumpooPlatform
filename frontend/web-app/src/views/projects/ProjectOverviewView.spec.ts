@@ -226,12 +226,14 @@ describe('项目级工作项首页', () => {
     expect(wrapper.findComponent(ConnectColumnDialog).exists()).toBe(false)
   })
 
-  it('从卡片解除连接只刷新一次当前行', async () => {
+  it.each([200, 404])('从卡片解除连接返回 %i 时只刷新一次当前行', async status => {
     const current = { ...connection, source: { ...connection.source, projectId: 'project-1', workItemId: 'item-1' } }
     state.listConnectColumns.mockResolvedValue(connectionCatalog)
     state.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item-1', outgoing: [{ columnId: current.columnId, connections: [current] }], incoming: [], incomingTotal: 0 }] })
     state.getWorkItemConnection.mockResolvedValue(current)
-    state.unlinkWorkItemConnection.mockResolvedValue({ ...current, active: false })
+    if (status === 404) {
+      state.unlinkWorkItemConnection.mockRejectedValue(new ResponseError(new Response(JSON.stringify({ code: 'RESOURCE_NOT_FOUND', message: '不存在', requestId: 'test', retryable: false, fieldErrors: [], details: {} }), { status })))
+    } else state.unlinkWorkItemConnection.mockResolvedValue({ ...current, active: false })
     const wrapper = mountView(); await flushPromises()
     wrapper.getComponent(ConnectCell).vm.$emit('openCard', current); await flushPromises()
     state.listWorkItemConnectionCells.mockClear()

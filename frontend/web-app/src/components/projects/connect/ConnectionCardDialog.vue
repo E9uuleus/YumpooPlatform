@@ -36,7 +36,11 @@ async function refresh() {
     if (isProblemStatus(failure, 404)) missing(); else problem.value = failure
   } finally { if (requestRevision === revision) loading.value = false }
 }
-function missing() { ElMessage.info('该连接已不存在'); emit('invalidated', props.connection); emit('update:open', false) }
+function missing(refreshRows = true) {
+  ElMessage.info('该连接已不存在')
+  if (refreshRows) emit('invalidated', props.connection)
+  emit('update:open', false)
+}
 watch(() => [props.open, props.connection.id], () => {
   revision++; controller?.abort()
   if (props.open) { current.value = props.connection; void refresh() }
@@ -47,7 +51,7 @@ async function unlink() {
   if (busy.value || loading.value || !current.value.capabilities.canUnlink) return
   busy.value = true; problem.value = undefined
   try { await context.unlink(current.value); emit('unlinked', current.value); emit('update:open', false); ElMessage.success('已解除连接') }
-  catch (reason) { problem.value = await toConnectProblem(reason); if (isProblemStatus(problem.value, 404)) missing() }
+  catch (reason) { problem.value = await toConnectProblem(reason); if (isProblemStatus(problem.value, 404)) missing(false) }
   finally { busy.value = false }
 }
 async function openWorkItem() { if (card.value.canOpen) { await router.push({ ...overview.value, query: { ...overview.value.query, workItemId: card.value.workItemId } }); close() } }
