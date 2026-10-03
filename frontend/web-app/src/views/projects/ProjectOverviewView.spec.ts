@@ -269,6 +269,23 @@ describe('项目级工作项首页', () => {
     expect(wrapper.find('.kanban-card button button').exists()).toBe(false)
   })
 
+  it.each(['catalog', 'cells'])('看板连接 %s 请求失败时显示重试并恢复 chip', async failure => {
+    state.route.query = { view: 'kanban' }
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    state.listProjectWorkItems.mockImplementation(async request => request.status.has('BACKLOG') ? page([item()]) : page([]))
+    state.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item-1',
+      outgoing: [{ columnId: connection.columnId, connections: [connection] }], incoming: [], incomingTotal: 0 }] })
+    const request = failure === 'catalog' ? state.listConnectColumns : state.listWorkItemConnectionCells
+    request.mockRejectedValueOnce(new Error('连接加载失败'))
+    const wrapper = mountView(); await flushPromises()
+    const retry = wrapper.findAll('button').find(button => button.text() === '重新加载连接')
+    expect(retry).toBeDefined()
+    expect(wrapper.getComponent(ConnectKanbanConnections).props('connections')).toEqual([])
+    await retry!.trigger('click'); await flushPromises()
+    expect(wrapper.findAll('button').some(button => button.text() === '重新加载连接')).toBe(false)
+    expect(wrapper.getComponent(ConnectKanbanConnections).props('connections')).toEqual([connection])
+  })
+
   it('连接筛选从路由传入列表与动态计数，互斥选择及清除同步路由', async () => {
     state.route.query = { connectedColumnIds: 'column-1', incomingProjectIds: 'source-project' }
     state.listConnectColumns.mockResolvedValue(connectionCatalog)

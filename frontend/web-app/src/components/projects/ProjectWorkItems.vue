@@ -2948,7 +2948,7 @@ onBeforeUnmount(() => {
           <button class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
         </div>
 
-        <template v-if="!embedded && selectedView === 'table' && (connect.catalogError || connect.cellError)">
+        <template v-if="!embedded && (connect.catalogError || connect.cellError)">
           <inline-problem :problem="connect.catalogError ?? connect.cellError!" />
           <el-button
             text
