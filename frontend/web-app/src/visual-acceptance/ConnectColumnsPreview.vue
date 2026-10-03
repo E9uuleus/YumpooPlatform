@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, provide, ref, shallowRef } from 'vue'
+import { computed, provide, reactive, ref, shallowRef } from 'vue'
 import { ProjectLifecycle, type ConnectColumn, type ConnectColumnCatalog, type WorkItemConnection } from '@yumpoo/api-client'
 import ConnectCell from '../components/projects/connect/ConnectCell.vue'
 import IncomingConnectCell from '../components/projects/connect/IncomingConnectCell.vue'
@@ -9,6 +9,8 @@ import ConnectColumnDialog from '../components/projects/connect/ConnectColumnDia
 import ConnectColumnDeleteDialog from '../components/projects/connect/ConnectColumnDeleteDialog.vue'
 import ConnectionCardDialog from '../components/projects/connect/ConnectionCardDialog.vue'
 import ProjectConnectionsOverview from '../components/projects/connect/ProjectConnectionsOverview.vue'
+import ConnectFilterSection from '../components/projects/connect/ConnectFilterSection.vue'
+import ConnectKanbanConnections from '../components/projects/connect/ConnectKanbanConnections.vue'
 import YpAssignee from '../components/yp/YpAssignee.vue'
 import { connectColumnsContext, type ConnectColumns } from '../components/projects/connect/useConnectColumns'
 import { workItemLabelColorValue } from '../components/projects/workItemLabelColors'
@@ -19,6 +21,14 @@ const readOnly = computed(() => role.value === 'admin')
 const baseColumns = ref<ConnectColumn[]>([previewColumn, { ...previewColumn, id: 'preview-multi', name: '跨项目协作', targets: [...previewColumn.targets, previewSecondProject] }])
 const columns = computed(() => baseColumns.value.map(column => ({ ...column, targets: column.targets.map(target => ({ ...target, actorCanLinkExisting: role.value === 'member' })) })))
 const hidden = ref<string[]>([]), connections = ref(previewConnections)
+const filters = reactive({ connectedColumnIds: new Set<string>(), unconnectedColumnIds: new Set<string>(), incomingProjectIds: new Set<string>() })
+const incomingOptions = [{ value: previewSecondProject.projectId, label: previewSecondProject.name, count: 2 }]
+function changeFilter(field: keyof typeof filters, id: string, checked: boolean) {
+  if (checked) filters[field].add(id); else filters[field].delete(id)
+  if (checked && field !== 'incomingProjectIds') filters[field === 'connectedColumnIds' ? 'unconnectedColumnIds' : 'connectedColumnIds'].delete(id)
+}
+const kanbanConnections = computed(() => [...previewConnections, ...previewConnections.slice(0, 2).map((connection, index) => ({ ...connection,
+  id: `preview-more-${index}`, columnName: '跨项目协作', target: { ...connection.target, projectId: previewSecondProject.projectId, projectCode: previewSecondProject.code, projectName: previewSecondProject.name } }))].map(projectConnection))
 const card = shallowRef<WorkItemConnection>(), perspective = ref<'source' | 'target'>('source')
 const dialogOpen = ref(false), editing = shallowRef<ConnectColumn>(), deleting = shallowRef<ConnectColumn>()
 const catalog = computed<ConnectColumnCatalog>(() => ({ items: columns.value, incomingAvailable: true,
@@ -83,6 +93,10 @@ provide(connectColumnsContext, service)
           目标项目表格
         </el-radio-button><el-radio-button value="settings">
           设置页连接概览
+        </el-radio-button><el-radio-button value="filters">
+          连接筛选
+        </el-radio-button><el-radio-button value="kanban">
+          看板连接
         </el-radio-button>
       </el-radio-group>
       <el-radio-group
@@ -107,6 +121,26 @@ provide(connectColumnsContext, service)
         :project-id="previewSource.projectId"
         :catalog="catalog"
       />
+      <connect-filter-section
+        v-else-if="view === 'filters'"
+        class="connect-preview__filters"
+        :columns="columns"
+        :incoming="incomingOptions"
+        :connected-column-ids="filters.connectedColumnIds"
+        :unconnected-column-ids="filters.unconnectedColumnIds"
+        :incoming-project-ids="filters.incomingProjectIds"
+        @change="changeFilter"
+      />
+      <div v-else-if="view === 'kanban'" class="connect-preview__kanban">
+        <section v-for="(status, index) in ['进行中', '待处理']" :key="status" class="connect-preview__lane">
+          <h4>{{ status }}</h4>
+          <article class="connect-preview__kanban-card">
+            <small>{{ index === 0 ? previewSource.itemNo : 'P012-9' }}</small>
+            <strong>{{ index === 0 ? previewSource.title : '批量导出缺少列' }}</strong>
+            <connect-kanban-connections :connections="index === 0 ? kanbanConnections : []" @open-card="openCard($event)" />
+          </article>
+        </section>
+      </div>
       <template v-else>
         <div class="connect-preview__table-scroll">
           <table class="connect-preview__table">
@@ -246,6 +280,7 @@ provide(connectColumnsContext, service)
       :open="Boolean(card)"
       :connection="card"
       :perspective="perspective"
+      :read-only="view === 'kanban'"
       @update:open="card = undefined"
     />
   </section>
@@ -273,4 +308,10 @@ provide(connectColumnsContext, service)
 .connect-preview__hint { margin: 16px 0 0; color: var(--yp-text-muted); font-size: 12px; }
 .connect-preview__examples { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--yp-text-secondary); font-size: 12px; }
 .connect-preview__examples .el-button { margin-left: 0; }
+.connect-preview__filters { max-width: 480px; }
+.connect-preview__kanban { display: grid; grid-template-columns: repeat(2, minmax(0, 320px)); gap: var(--yp-space-4); }
+.connect-preview__lane { padding: var(--yp-space-3); border-radius: var(--yp-radius-md); background: var(--yp-bg-sunken); }
+.connect-preview__lane h4 { margin: 0 0 var(--yp-space-3); }
+.connect-preview__kanban-card { display: grid; gap: var(--yp-space-2); padding: var(--yp-space-3); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-raised); }
+.connect-preview__kanban-card small { color: var(--yp-text-muted); }
 </style>

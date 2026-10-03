@@ -12,6 +12,16 @@ vi.mock('../../../composables/useSession', () => ({ useSession: () => ({ authent
 enableAutoUnmount(afterEach)
 beforeEach(() => { document.body.innerHTML = ''; push.mockReset() })
 describe('连接卡片', () => {
+  it('看板只读模式保留最新卡片鉴权并禁止解除', async () => {
+    const { context, global } = connectionTestContext()
+    const wrapper = mount(ConnectionCardDialog, { props: { open: true, connection, perspective: 'source', readOnly: true },
+      global: { ...global, stubs: { RouterLink: true } }, attachTo: document.body })
+    await flushPromises()
+    expect(context.getConnection).toHaveBeenCalledWith(connection.id, expect.any(AbortSignal))
+    expect(wrapper.findComponent(ElPopconfirm).exists()).toBe(false)
+    await (wrapper.vm as unknown as { unlink: () => Promise<void> }).unlink()
+    expect(context.unlink).not.toHaveBeenCalled()
+  })
   it('立即展示对端并刷新，只读字段通过 dl 展示，打开完整工作项带目标 id', async () => {
     const { context, global } = connectionTestContext()
     const wrapper = mount(ConnectionCardDialog, { props: { open: true, connection, perspective: 'source' }, global: { ...global, stubs: { RouterLink: true } }, attachTo: document.body })

@@ -85,6 +85,7 @@ import IncomingConnectCell from './connect/IncomingConnectCell.vue'
 import ConnectionCardDialog from './connect/ConnectionCardDialog.vue'
 import { isConnectColumnKey, type ConnectColumnKey } from './connect/connectColumnKeys'
 import ConnectFilterSection from './connect/ConnectFilterSection.vue'
+import ConnectKanbanConnections from './connect/ConnectKanbanConnections.vue'
 import type { ProjectWorkItemFilterOption } from '@yumpoo/api-client'
 import { useConnectTable } from './connect/useConnectTable'
 
@@ -542,7 +543,8 @@ const orderedSubitemColumns = computed(() => [
 ])
 const connect = reactive(useConnectTable({
   projectId, project, enabled: () => !embedded.value,
-  rows: () => [...tableItems.value, ...Object.values(subitems).flatMap(state => state.items)],
+  rows: () => selectedView.value === 'kanban' ? Object.values(lanes).flatMap(state => state.items)
+    : [...tableItems.value, ...Object.values(subitems).flatMap(state => state.items)],
   table: () => tableRef.value?.$el,
 }))
 const builtInVisibleColumns = computed(() => orderedColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
@@ -2748,6 +2750,7 @@ onBeforeUnmount(() => {
           v-model:open="connect.cardOpen"
           :connection="connect.selectedConnection"
           :perspective="connect.perspective"
+          :read-only="selectedView === 'kanban'"
           @invalidated="connect.refreshConnection"
         />
       </template>
@@ -3591,7 +3594,7 @@ onBeforeUnmount(() => {
               v-if="lane(status.statusCode).error"
               :problem="lane(status.statusCode).error!"
             />
-            <button
+            <article
               v-for="item in lane(status.statusCode).items"
               :key="item.id"
               class="kanban-card"
@@ -3600,10 +3603,22 @@ onBeforeUnmount(() => {
               @dragend="dragging = undefined"
               @click="openDetail(item, 'details')"
             >
-              <small>{{ contentName(item.contentId) }} · {{ item.itemNo }}</small>
-              <strong>{{ item.title }}</strong>
+              <button
+                type="button"
+                class="kanban-card__open"
+                :aria-label="`打开工作项：${item.title}`"
+                @click.stop="openDetail(item, 'details')"
+              >
+                <small>{{ contentName(item.contentId) }} · {{ item.itemNo }}</small>
+                <strong>{{ item.title }}</strong>
+              </button>
+              <connect-kanban-connections
+                v-if="!embedded"
+                :connections="connect.cells.get(item.id)?.outgoing.flatMap(column => column.connections) ?? []"
+                @open-card="connect.openCard($event)"
+              />
               <span><yp-priority-badge :priority="item.priority" /></span>
-            </button>
+            </article>
             <div
               v-if="lane(status.statusCode).nextCursor"
               class="lane-cursor-sentinel incremental-state"
@@ -5040,6 +5055,21 @@ onBeforeUnmount(() => {
 .kanban-card:hover {
   border-color: var(--yp-border-strong);
 }
+
+.kanban-card__open {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yp-space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.kanban-card__open:focus-visible { outline: 2px solid var(--yp-action-primary); outline-offset: 2px; }
 
 .detail-heading h2 {
   margin: var(--yp-space-1) 0 var(--yp-space-4);

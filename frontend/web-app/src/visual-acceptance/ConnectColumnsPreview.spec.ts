@@ -7,6 +7,7 @@ import ConnectCell from '../components/projects/connect/ConnectCell.vue'
 import IncomingConnectCell from '../components/projects/connect/IncomingConnectCell.vue'
 import ProjectConnectionsOverview from '../components/projects/connect/ProjectConnectionsOverview.vue'
 import ConnectionCardDialog from '../components/projects/connect/ConnectionCardDialog.vue'
+import ConnectKanbanConnections from '../components/projects/connect/ConnectKanbanConnections.vue'
 
 enableAutoUnmount(afterEach)
 it('连接验收覆盖单/多目标、空单元格、只读、被连接、设置概览与缺省卡片字段', async () => {
@@ -24,4 +25,14 @@ it('连接验收覆盖单/多目标、空单元格、只读、被连接、设置
   expect(wrapper.getComponent(ProjectConnectionsOverview).text()).toContain('移动端重构')
   await wrapper.findAll('.connect-preview__examples button')[1]!.trigger('click'); await flushPromises()
   expect(wrapper.getComponent(ConnectionCardDialog).props('connection').target).toMatchObject({ assignee: null, priority: null })
+  wrapper.getComponent(ConnectionCardDialog).vm.$emit('update:open', false)
+  wrapper.findAllComponents(ElRadioGroup)[0]!.vm.$emit('update:modelValue', 'filters'); await flushPromises()
+  await wrapper.get('input[aria-label="产品缺陷 已连接"]').setValue(true)
+  await wrapper.get('input[aria-label="产品缺陷 未连接"]').setValue(true)
+  expect((wrapper.get('input[aria-label="产品缺陷 已连接"]').element as HTMLInputElement).checked).toBe(false)
+  wrapper.findAllComponents(ElRadioGroup)[0]!.vm.$emit('update:modelValue', 'kanban'); await flushPromises()
+  const chips = wrapper.findAllComponents(ConnectKanbanConnections)
+  expect(chips.map(component => component.props('connections').length)).toEqual([5, 0])
+  chips[0]!.vm.$emit('openCard', chips[0]!.props('connections')[0]); await flushPromises()
+  expect(wrapper.getComponent(ConnectionCardDialog).props('readOnly')).toBe(true)
 })

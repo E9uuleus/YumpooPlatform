@@ -1,0 +1,14 @@
+{
+  "fixture": "ConnectColumnsPreview.vue using production components and static API responses",
+  "checks": [
+    "light: filters toggle exclusion and incoming selection",
+    "light: three chips plus +2, five readonly expanded rows, readonly card",
+    "light: nonmember read-only card current visibility",
+    "light: admin read-only card current visibility",
+    "dark: filters toggle exclusion and incoming selection",
+    "dark: three chips plus +2, five readonly expanded rows, readonly card",
+    "night: filters toggle exclusion and incoming selection",
+    "night: three chips plus +2, five readonly expanded rows, readonly card"
+  ],
+  "pageErrors": []
+}

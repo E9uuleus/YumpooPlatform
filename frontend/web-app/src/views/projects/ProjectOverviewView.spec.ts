@@ -24,6 +24,7 @@ import ConnectColumnAddButton from '../../components/projects/connect/ConnectCol
 import ConnectColumnDialog from '../../components/projects/connect/ConnectColumnDialog.vue'
 import ConnectionCardDialog from '../../components/projects/connect/ConnectionCardDialog.vue'
 import ConnectFilterSection from '../../components/projects/connect/ConnectFilterSection.vue'
+import ConnectKanbanConnections from '../../components/projects/connect/ConnectKanbanConnections.vue'
 import { connection, connectionCatalog } from '../../components/projects/connect/connectTestFixtures'
 
 enableAutoUnmount(afterEach)
@@ -246,6 +247,26 @@ describe('项目级工作项首页', () => {
     expect(state.listWorkItemConnectionCells.mock.calls[0]![0].workItemIds).toEqual(['item-1'])
     expect(card.props('open')).toBe(false)
     expect(wrapper.getComponent(ConnectCell).props('connections')).toEqual([])
+  })
+
+  it('看板批量加载出站连接，chip 打开只读连接卡片且不打开工作项抽屉', async () => {
+    state.route.query = { view: 'kanban', connectedColumnIds: connection.columnId }
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    state.listProjectWorkItems.mockImplementation(async request => request.status.has('BACKLOG') ? page([item()]) : page([]))
+    state.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item-1',
+      outgoing: [{ columnId: connection.columnId, connections: [connection] }], incoming: [], incomingTotal: 0 }] })
+    const wrapper = mountView(); await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenCalledWith(expect.objectContaining({
+      view: WorkItemViewType.Kanban, connectedColumnIds: new Set([connection.columnId]),
+    }), expect.anything())
+    expect(state.listWorkItemConnectionCells).toHaveBeenCalledWith(expect.objectContaining({ workItemIds: ['item-1'] }), expect.anything())
+    const chips = wrapper.getComponent(ConnectKanbanConnections)
+    expect(chips.props('connections')).toEqual([connection])
+    await chips.get('.connection-chip').trigger('click'); await flushPromises()
+    const dialog = wrapper.getComponent(ConnectionCardDialog)
+    expect(dialog.props()).toMatchObject({ open: true, readOnly: true, perspective: 'source' })
+    expect(state.getWorkItem).not.toHaveBeenCalled()
+    expect(wrapper.find('.kanban-card button button').exists()).toBe(false)
   })
 
   it('连接筛选从路由传入列表与动态计数，互斥选择及清除同步路由', async () => {
