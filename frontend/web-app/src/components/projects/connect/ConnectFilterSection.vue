@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ElCheckbox } from 'element-plus'
 import type { ConnectColumn, ProjectWorkItemFilterOption } from '@yumpoo/api-client'
 
 defineProps<{
@@ -28,36 +29,31 @@ const emit = defineEmits<{
       class="connect-filters__column"
     >
       <span>{{ column.name }}</span>
-      <label><input
-        type="checkbox"
+      <el-checkbox
         :aria-label="`${column.name} 已连接`"
-        :checked="connectedColumnIds.has(column.id)"
-        @change="emit('change', 'connectedColumnIds', column.id, ($event.target as HTMLInputElement).checked)"
-      >已连接</label>
-      <label><input
-        type="checkbox"
+        :model-value="connectedColumnIds.has(column.id)"
+        @change="emit('change', 'connectedColumnIds', column.id, $event === true)"
+      >已连接</el-checkbox>
+      <el-checkbox
         :aria-label="`${column.name} 未连接`"
-        :checked="unconnectedColumnIds.has(column.id)"
-        @change="emit('change', 'unconnectedColumnIds', column.id, ($event.target as HTMLInputElement).checked)"
-      >未连接</label>
+        :model-value="unconnectedColumnIds.has(column.id)"
+        @change="emit('change', 'unconnectedColumnIds', column.id, $event === true)"
+      >未连接</el-checkbox>
     </div>
     <div
       v-if="incoming.length"
       class="connect-filters__incoming"
     >
       <span>被连接来源</span>
-      <label
+      <el-checkbox
         v-for="project in incoming"
         :key="project.value"
+        :aria-label="`来自 ${project.label}`"
+        :model-value="incomingProjectIds.has(project.value)"
+        @change="emit('change', 'incomingProjectIds', project.value, $event === true)"
       >
-        <input
-          type="checkbox"
-          :aria-label="`来自 ${project.label}`"
-          :checked="incomingProjectIds.has(project.value)"
-          @change="emit('change', 'incomingProjectIds', project.value, ($event.target as HTMLInputElement).checked)"
-        >
         <span>{{ project.label }}</span><small>{{ project.count }}</small>
-      </label>
+      </el-checkbox>
     </div>
   </section>
 </template>
@@ -67,8 +63,8 @@ const emit = defineEmits<{
 .connect-filters h4, .connect-filters p { margin: 0; }
 .connect-filters p, .connect-filters small { color: var(--yp-text-muted); }
 .connect-filters__column { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--yp-space-3); align-items: center; }
-.connect-filters label { display: flex; gap: var(--yp-space-2); align-items: center; cursor: pointer; }
-.connect-filters input { accent-color: var(--yp-action-primary); }
+.connect-filters .el-checkbox { margin-right: 0; }
 .connect-filters__incoming { display: grid; gap: var(--yp-space-2); }
+.connect-filters__incoming :deep(.el-checkbox__label) { display: flex; flex: 1; gap: var(--yp-space-2); }
 .connect-filters__incoming small { margin-left: auto; }
 </style>

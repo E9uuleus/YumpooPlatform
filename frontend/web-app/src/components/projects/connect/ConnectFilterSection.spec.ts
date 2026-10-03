@@ -10,9 +10,9 @@ describe('连接筛选', () => {
       columns: [column], incoming: [{ value: 'source', label: '来源项目', count: 23 }],
       connectedColumnIds: new Set([column.id]), unconnectedColumnIds: new Set<string>(), incomingProjectIds: new Set<string>(),
     } })
-    expect((wrapper.get(`[aria-label="${column.name} 已连接"]`).element as HTMLInputElement).checked).toBe(true)
-    await wrapper.get(`[aria-label="${column.name} 未连接"]`).setValue(true)
-    await wrapper.get('[aria-label="来自 来源项目"]').setValue(true)
+    expect((wrapper.get(`[aria-label="${column.name} 已连接"] input`).element as HTMLInputElement).checked).toBe(true)
+    await wrapper.get(`[aria-label="${column.name} 未连接"] input`).setValue(true)
+    await wrapper.get('[aria-label="来自 来源项目"] input').setValue(true)
     expect(wrapper.emitted('change')).toEqual([['unconnectedColumnIds', column.id, true], ['incomingProjectIds', 'source', true]])
     expect(wrapper.text()).toContain('23')
     wrapper.unmount()
