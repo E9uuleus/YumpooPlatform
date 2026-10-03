@@ -74,6 +74,9 @@ public final class WorkItemController {
 
     @GetMapping("/projects/{projectId}/work-items")
     ResponseEntity<ProjectWorkItemCursorPage> listProject(@PathVariable UUID projectId,
+            @RequestParam(required = false) List<UUID> connectedColumnIds,
+            @RequestParam(required = false) List<UUID> unconnectedColumnIds,
+            @RequestParam(required = false) List<UUID> incomingProjectIds,
             @RequestParam(required = false) String q,
             @RequestParam(name = "status", required = false) List<String> statuses,
             @RequestParam(name = "priority", required = false) List<String> priorities,
@@ -91,13 +94,17 @@ public final class WorkItemController {
                 .body(service.listProject(actors.requiredActive(), projectId,
                         withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds, contentIds,
                                 dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts))
-                                .withEmptyField(httpRequest.getParameter("emptyField")), httpRequest),
+                                .withEmptyField(httpRequest.getParameter("emptyField"))
+                                .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds), httpRequest),
                         view, CursorPageRequest.of(cursor, limit)));
     }
 
     @GetMapping("/projects/{projectId}/work-items/filter-options")
     ResponseEntity<ProjectWorkItemFilterOptionCursorPage> listProjectFilterOptions(
             @PathVariable UUID projectId, @RequestParam String field,
+            @RequestParam(required = false) List<UUID> connectedColumnIds,
+            @RequestParam(required = false) List<UUID> unconnectedColumnIds,
+            @RequestParam(required = false) List<UUID> incomingProjectIds,
             @RequestParam(required = false) String q,
             @RequestParam(name = "status", required = false) List<String> statuses,
             @RequestParam(name = "priority", required = false) List<String> priorities,
@@ -114,7 +121,8 @@ public final class WorkItemController {
                 .body(service.listProjectFilterOptions(actors.requiredActive(), projectId, field,
                         withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds,
                                 contentIds, dueFrom, dueTo, updatedAfter,
-                                sorts == null ? null : List.of(sorts)), httpRequest),
+                                sorts == null ? null : List.of(sorts))
+                                .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds), httpRequest),
                         CursorPageRequest.of(cursor, limit)));
     }
 

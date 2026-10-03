@@ -15,6 +15,7 @@ import java.util.*;
 @Component
 public class NotificationInboxProjection implements OutboxEventConsumer {
     private static final Logger LOG = LoggerFactory.getLogger(NotificationInboxProjection.class);
+    private static final String CONNECTION_CREATED = "workitem.connection_created";
     private final NotificationRepository repository;
     private final NotificationContextPort context;
     public NotificationInboxProjection(NotificationRepository repository, NotificationContextPort context) {
@@ -28,11 +29,14 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
                 new EventSubscription("workitem.work_item_assigned",1),
                 new EventSubscription("catalog.project_member_added",1),
                 new EventSubscription("catalog.project_member_removed",1),
-                new EventSubscription("catalog.project_owner_reassigned",1));
+                new EventSubscription("catalog.project_owner_reassigned",1),
+                new EventSubscription(CONNECTION_CREATED,1));
     }
     @Override public void consume(DomainEventEnvelope event) {
         try {
-            if (event.occurredAt().isBefore(repository.acceptedFrom())) return;
+            var acceptedFrom = CONNECTION_CREATED.equals(event.eventType())
+                    ? repository.connectionAcceptedFrom() : repository.acceptedFrom();
+            if (event.occurredAt().isBefore(acceptedFrom)) return;
             project(event);
         } catch (DataAccessException failure) {
             throw failure;
@@ -43,6 +47,10 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
         }
     }
     private void project(DomainEventEnvelope event) {
+        if (CONNECTION_CREATED.equals(event.eventType())) {
+            projectConnection(event);
+            return;
+        }
         JsonNode p = event.payload();
         UUID project = uuid(p,"projectId"), item = null, update = null, subject = null;
         TargetKind kind = TargetKind.PROJECT;
@@ -90,6 +98,19 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
         if (!recipients.isEmpty()) repository.append(new NotificationRepository.Event(UUID.randomUUID(),
                 event.companyId(),event.eventId(),type,event.eventVersion(),kind,project,item,update,subject,
                 event.actor().userId(),event.occurredAt()),recipients);
+    }
+    private void projectConnection(DomainEventEnvelope event) {
+        JsonNode payload = event.payload();
+        if (event.eventVersion()!=1 || !"CREATED".equals(payload.path("origin").asText())) return;
+        UUID targetProject=uuid(payload,"targetProjectId"), targetItem=uuid(payload,"targetWorkItemId");
+        var participants=context.workItemParticipants(event.companyId(),targetItem).orElseThrow();
+        if (!targetProject.equals(participants.projectId())) throw new IllegalArgumentException();
+        UUID owner=context.projectOwner(event.companyId(),targetProject).orElseThrow();
+        if (owner.equals(event.actor().userId())
+                || !context.eligibleProjectRecipients(event.companyId(),targetProject,Set.of(owner)).contains(owner)) return;
+        repository.append(new NotificationRepository.Event(UUID.randomUUID(),event.companyId(),event.eventId(),
+                event.eventType(),event.eventVersion(),TargetKind.WORK_ITEM,targetProject,targetItem,null,null,
+                event.actor().userId(),event.occurredAt()),Map.of(owner,Reason.CONNECTION_CREATED));
     }
     private static void add(Map<UUID,Reason> recipients, UUID user, Reason reason) {
         if (user!=null) recipients.put(user,reason);

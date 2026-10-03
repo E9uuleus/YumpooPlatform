@@ -15,6 +15,14 @@ describe('notification presentation', () => {
   it('names another membership subject for the project owner', () => {
     expect(notificationText({ ...item, reason: NotificationReason.ProjectMemberAdded }, 'owner')).toBe('将李四加入项目 平台')
   })
+  it('renders connection notifications from target data and hides their link after access is lost', () => {
+    const connection = { ...item, reason: NotificationReason.ConnectionCreated }
+    expect(notificationText(connection)).toBe('向你负责的项目新建了 YP-12 整理验收')
+    expect(notificationLink(connection)).toEqual({ path: '/projects/project/overview', query: { workItemId: 'item' } })
+    const hidden = { ...connection, target: { ...connection.target, accessible: false } }
+    expect(notificationText(hidden)).toBe('相关内容已不可访问')
+    expect(notificationLink(hidden)).toBeUndefined()
+  })
   it('explains removal to the removed reader even after project access is lost', () => {
     const removed = { ...item, reason: NotificationReason.ProjectMemberRemoved, target: { ...item.target, accessible: false } }
     expect(notificationText(removed, 'reader')).toBe('将你移出了一个项目')

@@ -78,6 +78,44 @@ class ConnectionHttpIT {
     }
 
     @Test
+    void connectionFiltersApplyToListsOptionsAndRemainActorScoped() throws Exception {
+        String columnId = column().path("id").asText();
+        body(send("POST", "/work-items/" + sourceItem + "/connections", owner,
+                Map.of("columnId", columnId, "targetWorkItemId", targetItem), null, UUID.randomUUID()), 201);
+        String sourceList = "/projects/" + source.id() + "/work-items";
+        assertThat(body(send("GET", sourceList + "?connectedColumnIds=" + columnId, sourceMember, null, null, null), 200)
+                .path("items").get(0).path("id").asText()).isEqualTo(sourceItem.toString());
+        assertThat(body(send("GET", sourceList + "?unconnectedColumnIds=" + columnId, sourceMember, null, null, null), 200)
+                .path("items").size()).isZero();
+        String targetList = "/projects/" + target.id() + "/work-items";
+        assertThat(body(send("GET", targetList + "?incomingProjectIds=" + source.id(), targetOwner, null, null, null), 200)
+                .path("items").get(0).path("id").asText()).isEqualTo(targetItem.toString());
+        assertThat(body(send("GET", targetList + "/filter-options?field=INCOMING_PROJECT&incomingProjectIds=" + source.id(),
+                targetOwner, null, null, null), 200).path("items").get(0).path("count").asInt()).isEqualTo(1);
+        assertThat(send("GET", targetList + "?incomingProjectIds=" + source.id(), outsider, null, null, null).statusCode()).isEqualTo(404);
+    }
+
+    @Test
+    void connectionFilterArraysAcceptTwentyAndRejectTwentyOneBeforeDeduplication() throws Exception {
+        String list = "/projects/" + source.id() + "/work-items";
+        var ids = java.util.stream.IntStream.range(0, 21).mapToObj(index -> UUID.randomUUID().toString()).toList();
+        for (String field : List.of("connectedColumnIds", "unconnectedColumnIds", "incomingProjectIds")) {
+            for (String path : List.of(list + "?", list + "/filter-options?field=INCOMING_PROJECT&")) {
+                String twenty = ids.subList(0, 20).stream().map(id -> field + "=" + id)
+                        .collect(java.util.stream.Collectors.joining("&"));
+                body(send("GET", path + twenty, owner, null, null, null), 200);
+                for (String values : List.of(twenty + "&" + field + "=" + ids.get(20),
+                        java.util.Collections.nCopies(21, field + "=" + ids.getFirst()).stream()
+                                .collect(java.util.stream.Collectors.joining("&")))) {
+                    var problem = body(send("GET", path + values, owner, null, null, null), 422);
+                    assertThat(problem.path("fieldErrors").get(0).path("field").asText()).isEqualTo(field);
+                    assertThat(problem.path("fieldErrors").get(0).path("code").asText()).isEqualTo("TOO_MANY");
+                }
+            }
+        }
+    }
+
+    @Test
     void allThirteenRoutesPreserveStatusHeadersPaginationAndIdempotency() throws Exception {
         var created = column();
         String id = created.path("id").asText();

@@ -13,6 +13,7 @@ public interface NotificationRepository {
     record Row(UUID id, Reason reason, State state, Instant createdAt, Instant readAt, Event event) {}
     record Anchor(Instant createdAt, UUID id) {}
     Instant acceptedFrom();
+    Instant connectionAcceptedFrom();
     void append(Event event, Map<UUID, Reason> recipients);
     List<Row> find(UUID companyId, UUID userId, ListState state, Group group, Anchor before, int limit);
     UnreadCounts counts(UUID companyId, UUID userId);

@@ -1,0 +1,17 @@
+{
+  "fixture": "Production ProjectWorkItems/ConnectFilterSection with real Vue Router web history and static API method responses. Browser native back/forward tested; server semantics covered by integration tests.",
+  "checks": [
+    "light: A remains selected, B stays available through full pagination, names sorted, A+B reaches list query",
+    "light: native browser back/forward restores A+B and A selections and URL",
+    "light: invalid column and zero-count source preserved until separately removed; unrelated URL search remains",
+    "light: failed options keep the selected filter and show unknown status instead of deletion",
+    "dark: A remains selected, B stays available through full pagination, names sorted, A+B reaches list query",
+    "dark: native browser back/forward restores A+B and A selections and URL",
+    "dark: invalid column and zero-count source preserved until separately removed; unrelated URL search remains",
+    "night: A remains selected, B stays available through full pagination, names sorted, A+B reaches list query",
+    "night: native browser back/forward restores A+B and A selections and URL",
+    "night: invalid column and zero-count source preserved until separately removed; unrelated URL search remains"
+  ],
+  "pageErrors": [],
+  "unmockedApiRequests": []
+}

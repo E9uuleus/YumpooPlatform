@@ -2,6 +2,8 @@ package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
+import com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery;
+import com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery.ConnectTargetProjectSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
 import com.yumpoo.platform.catalog.api.ProjectFactWriteGuard;
 import com.yumpoo.platform.catalog.api.ProjectFactWriteSnapshot;
@@ -94,6 +96,7 @@ public class WorkItemService {
     private final Clock clock;
     private final TimeTrackingRepository timeTracking;
     private final CollaborationHtmlSanitizer sanitizer;
+    private final ProjectConnectionTargetQuery connectionTargets;
     private final ProjectWorkItemCursorCodec projectCursors = new ProjectWorkItemCursorCodec();
     private final ProjectWorkItemFilterCursorCodec projectFilterCursors =
             new ProjectWorkItemFilterCursorCodec();
@@ -105,7 +108,7 @@ public class WorkItemService {
             WorkItemLabelRepository labels, MinimalUserSnapshotQuery users,
             IdempotentCommandExecutor idempotency, TransactionalEventPort events,
             ObjectMapper objectMapper, Clock clock, TimeTrackingRepository timeTracking,
-            CollaborationHtmlSanitizer sanitizer) {
+            CollaborationHtmlSanitizer sanitizer, ProjectConnectionTargetQuery connectionTargets) {
         this.workItems = workItems;
         this.relations = relations;
         this.updates = updates;
@@ -121,6 +124,7 @@ public class WorkItemService {
         this.clock = clock;
         this.timeTracking = timeTracking;
         this.sanitizer = sanitizer;
+        this.connectionTargets = connectionTargets;
     }
 
     @Transactional(readOnly = true)
@@ -270,7 +274,7 @@ public class WorkItemService {
         try {
             normalizedField = Objects.requireNonNull(field).strip().toUpperCase(java.util.Locale.ROOT);
             if (!Set.of("TITLE", "ASSIGNEE", "STATUS", "PRIORITY", "CONTENT",
-                    "DUE_DATE", "UPDATED_AT").contains(normalizedField)) throw new IllegalArgumentException();
+                    "DUE_DATE", "UPDATED_AT", "INCOMING_PROJECT").contains(normalizedField)) throw new IllegalArgumentException();
         } catch (RuntimeException exception) {
             throw validation("field", "INVALID_VALUE", "筛选选项字段不受支持");
         }
@@ -298,6 +302,9 @@ public class WorkItemService {
         Map<String, String> priorityNames = priorityLabels.stream().collect(
                 java.util.stream.Collectors.toMap(WorkItemLabelModels.PriorityLabel::code,
                         WorkItemLabelModels.PriorityLabel::displayName));
+        Map<UUID, ConnectTargetProjectSnapshot> incomingProjects = "INCOMING_PROJECT".equals(normalizedField)
+                ? connectionTargets.findByIds(project.companyId(), rows.stream().map(row -> UUID.fromString(row.value())).toList())
+                : Map.of();
         List<ProjectWorkItemFilterOption> items = rows.stream().map(row -> {
             String label = switch (normalizedField) {
                 case "CONTENT" -> contentNames.getOrDefault(UUID.fromString(row.value()), row.value());
@@ -308,6 +315,8 @@ public class WorkItemService {
                 case "PRIORITY" -> "__NULL__".equals(row.value()) ? "未设置"
                         : priorityNames.getOrDefault(row.value(), row.value());
                 case "DUE_DATE" -> "__NULL__".equals(row.value()) ? "未设置" : row.value();
+                case "INCOMING_PROJECT" -> Optional.ofNullable(incomingProjects.get(UUID.fromString(row.value())))
+                        .map(ConnectTargetProjectSnapshot::name).orElse("项目");
                 default -> row.value();
             };
             return new ProjectWorkItemFilterOption(row.value(), label, row.count());
@@ -1250,6 +1259,7 @@ public class WorkItemService {
                 query.timeTracking()==null ? "" : Objects.toString(query.timeTracking().state(),"")+":"+query.timeTracking().minMs()+":"+query.timeTracking().maxMs());
         if (query.emptyField() != null) canonical += "\nemptyField=" + query.emptyField();
         if (query.scope() != null) canonical += "\nchart=" + query.scope().fingerprint();
+        canonical += "\nconnections=" + query.connections().fingerprint();
         try {
             byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
                     .digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));

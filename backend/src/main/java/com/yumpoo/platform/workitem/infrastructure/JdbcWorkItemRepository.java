@@ -628,6 +628,20 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
     @Override
     public List<FilterOptionCount> findProjectFilterOptions(UUID companyId, UUID projectId,
             WorkItemQuery query, String field, String afterValue, int limit) {
+        if ("INCOMING_PROJECT".equals(field)) {
+            Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
+            String predicate = where(query, parameters, false);
+            String after = afterValue == null ? "" : " WHERE incoming.option_value > :afterValue";
+            if (afterValue != null) parameters.put("afterValue", afterValue);
+            parameters.put("limit", limit);
+            return bind(jdbc.sql("SELECT incoming.option_value, count(*) AS option_count FROM ("
+                    + "SELECT ARRAY(SELECT DISTINCT connection.source_project_id::text"
+                    + JdbcConnectionFilterSql.activeConnections(true) + ") AS project_ids"
+                    + " FROM yumpoo.work_item" + predicate + ") filtered"
+                    + " CROSS JOIN LATERAL unnest(filtered.project_ids) incoming(option_value)"
+                    + after + " GROUP BY incoming.option_value ORDER BY incoming.option_value LIMIT :limit"), parameters)
+                    .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count"))).list();
+        }
         String expression = switch (field) {
             case "TITLE" -> "title";
             case "ASSIGNEE" -> "coalesce(assignee_user_id::text, '__NULL__')";
@@ -787,6 +801,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             if (time.minMs()!=null) { sql.append(" AND ").append(duration).append(">=:timeMin"); parameters.put("timeMin",time.minMs()); }
             if (time.maxMs()!=null) { sql.append(" AND ").append(duration).append("<=:timeMax"); parameters.put("timeMax",time.maxMs()); }
         }
+        JdbcConnectionFilterSql.append(sql, parameters, query.connections());
         return sql.toString();
     }
 

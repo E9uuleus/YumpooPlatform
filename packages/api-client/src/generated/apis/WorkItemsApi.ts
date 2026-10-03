@@ -290,6 +290,9 @@ export interface ListIncomingWorkItemConnectionsRequest {
 export interface ListProjectWorkItemFilterOptionsRequest {
     projectId: string;
     field: ListProjectWorkItemFilterOptionsFieldEnum;
+    connectedColumnIds?: Set<string>;
+    unconnectedColumnIds?: Set<string>;
+    incomingProjectIds?: Set<string>;
     timeTrackingState?: TimeTrackingState;
     timeTrackingMinMs?: number;
     timeTrackingMaxMs?: number;
@@ -308,6 +311,9 @@ export interface ListProjectWorkItemFilterOptionsRequest {
 
 export interface ListProjectWorkItemsRequest {
     projectId: string;
+    connectedColumnIds?: Set<string>;
+    unconnectedColumnIds?: Set<string>;
+    incomingProjectIds?: Set<string>;
     timeTrackingState?: TimeTrackingState;
     timeTrackingMinMs?: number;
     timeTrackingMaxMs?: number;
@@ -1860,6 +1866,18 @@ export class WorkItemsApi extends runtime.BaseAPI {
 
         const queryParameters: any = {};
 
+        if (requestParameters['connectedColumnIds'] != null) {
+            queryParameters['connectedColumnIds'] = requestParameters['connectedColumnIds'];
+        }
+
+        if (requestParameters['unconnectedColumnIds'] != null) {
+            queryParameters['unconnectedColumnIds'] = requestParameters['unconnectedColumnIds'];
+        }
+
+        if (requestParameters['incomingProjectIds'] != null) {
+            queryParameters['incomingProjectIds'] = requestParameters['incomingProjectIds'];
+        }
+
         if (requestParameters['timeTrackingState'] != null) {
             queryParameters['timeTrackingState'] = requestParameters['timeTrackingState'];
         }
@@ -1957,6 +1975,18 @@ export class WorkItemsApi extends runtime.BaseAPI {
         }
 
         const queryParameters: any = {};
+
+        if (requestParameters['connectedColumnIds'] != null) {
+            queryParameters['connectedColumnIds'] = requestParameters['connectedColumnIds'];
+        }
+
+        if (requestParameters['unconnectedColumnIds'] != null) {
+            queryParameters['unconnectedColumnIds'] = requestParameters['unconnectedColumnIds'];
+        }
+
+        if (requestParameters['incomingProjectIds'] != null) {
+            queryParameters['incomingProjectIds'] = requestParameters['incomingProjectIds'];
+        }
 
         if (requestParameters['timeTrackingState'] != null) {
             queryParameters['timeTrackingState'] = requestParameters['timeTrackingState'];
@@ -3692,6 +3722,7 @@ export enum ListProjectWorkItemFilterOptionsFieldEnum {
     Content = 'CONTENT',
     DueDate = 'DUE_DATE',
     UpdatedAt = 'UPDATED_AT',
+    IncomingProject = 'INCOMING_PROJECT',
     UnknownDefaultOpenApi = '11184809'
 }
 /**

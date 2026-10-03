@@ -18,6 +18,8 @@ describe('inbox preload bridge', () => {
   it('exposes a frozen narrow bridge with a separate preference channel', async () => {
     const bridge = mocks.bridge!.inbox!
     expect(Object.isFrozen(bridge)).toBe(true)
+    expect(bridge.supportedReasons).toContain('CONNECTION_CREATED')
+    expect(Object.isFrozen(bridge.supportedReasons)).toBe(true)
     const state = { accountId: null, unreadCount: 0, latest: [] }
     await bridge.publishState(state)
     await bridge.getPreferences()

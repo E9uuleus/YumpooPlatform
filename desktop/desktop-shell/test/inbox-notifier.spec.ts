@@ -48,6 +48,18 @@ beforeEach(() => { mocks.handlers.clear(); mocks.alerts.length = 0; vi.clearAllM
 afterEach(async () => { vi.useRealTimers(); for (const directory of directories.splice(0)) await rm(directory, { recursive: true, force: true }) })
 
 describe('inbox IPC and native alerts', () => {
+  it('accepts connection reasons and emits only minimal text while still rejecting source data', () => {
+    const connection = { ...item(2), reason: 'CONNECTION_CREATED' as const }
+    const value = { accountId: account, unreadCount: 1, latest: [connection] }
+    expect(validInboxState(value)).toBe(true)
+    expect(validInboxState({ ...value, latest: [{ ...connection, sourceProjectId: account }] })).toBe(false)
+    expect(validInboxState({ ...value, latest: [{ ...connection, columnName: '私有列名' }] })).toBe(false)
+    expect(inboxAlertText(connection)).toBe('张三 向你负责的项目新建了工作项')
+    const { publish, tray } = setup()
+    publish(state())
+    publish(value)
+    expect(tray.displayBalloon).toHaveBeenCalledWith(expect.objectContaining({ content: '张三 向你负责的项目新建了工作项' }))
+  })
   it('hides inbox surfaces until an authenticated state arrives and hides them again on logout', () => {
     const { publish, surfaces, main } = setup()
     expect(surfaces.setInboxBadge).toHaveBeenLastCalledWith(undefined, expect.anything())

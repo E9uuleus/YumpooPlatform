@@ -23,6 +23,8 @@ import ConnectCell from '../../components/projects/connect/ConnectCell.vue'
 import ConnectColumnAddButton from '../../components/projects/connect/ConnectColumnAddButton.vue'
 import ConnectColumnDialog from '../../components/projects/connect/ConnectColumnDialog.vue'
 import ConnectionCardDialog from '../../components/projects/connect/ConnectionCardDialog.vue'
+import ConnectFilterSection from '../../components/projects/connect/ConnectFilterSection.vue'
+import ConnectKanbanConnections from '../../components/projects/connect/ConnectKanbanConnections.vue'
 import { connection, connectionCatalog } from '../../components/projects/connect/connectTestFixtures'
 
 enableAutoUnmount(afterEach)
@@ -245,6 +247,148 @@ describe('项目级工作项首页', () => {
     expect(state.listWorkItemConnectionCells.mock.calls[0]![0].workItemIds).toEqual(['item-1'])
     expect(card.props('open')).toBe(false)
     expect(wrapper.getComponent(ConnectCell).props('connections')).toEqual([])
+  })
+
+  it('看板批量加载出站连接，chip 打开只读连接卡片且不打开工作项抽屉', async () => {
+    state.route.query = { view: 'kanban', connectedColumnIds: connection.columnId }
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    state.listProjectWorkItems.mockImplementation(async request => request.status.has('BACKLOG') ? page([item()]) : page([]))
+    state.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item-1',
+      outgoing: [{ columnId: connection.columnId, connections: [connection] }], incoming: [], incomingTotal: 0 }] })
+    const wrapper = mountView(); await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenCalledWith(expect.objectContaining({
+      view: WorkItemViewType.Kanban, connectedColumnIds: new Set([connection.columnId]),
+    }), expect.anything())
+    expect(state.listWorkItemConnectionCells).toHaveBeenCalledWith(expect.objectContaining({ workItemIds: ['item-1'] }), expect.anything())
+    const chips = wrapper.getComponent(ConnectKanbanConnections)
+    expect(chips.props('connections')).toEqual([connection])
+    await chips.get('.connection-chip').trigger('click'); await flushPromises()
+    const dialog = wrapper.getComponent(ConnectionCardDialog)
+    expect(dialog.props()).toMatchObject({ open: true, readOnly: true, perspective: 'source' })
+    expect(state.getWorkItem).not.toHaveBeenCalled()
+    expect(wrapper.find('.kanban-card button button').exists()).toBe(false)
+  })
+
+  it.each(['catalog', 'cells'])('看板连接 %s 请求失败时显示重试并恢复 chip', async failure => {
+    state.route.query = { view: 'kanban' }
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    state.listProjectWorkItems.mockImplementation(async request => request.status.has('BACKLOG') ? page([item()]) : page([]))
+    state.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item-1',
+      outgoing: [{ columnId: connection.columnId, connections: [connection] }], incoming: [], incomingTotal: 0 }] })
+    const request = failure === 'catalog' ? state.listConnectColumns : state.listWorkItemConnectionCells
+    request.mockRejectedValueOnce(new Error('连接加载失败'))
+    const wrapper = mountView(); await flushPromises()
+    const retry = wrapper.findAll('button').find(button => button.text() === '重新加载连接')
+    expect(retry).toBeDefined()
+    expect(wrapper.getComponent(ConnectKanbanConnections).props('connections')).toEqual([])
+    await retry!.trigger('click'); await flushPromises()
+    expect(wrapper.findAll('button').some(button => button.text() === '重新加载连接')).toBe(false)
+    expect(wrapper.getComponent(ConnectKanbanConnections).props('connections')).toEqual([connection])
+  })
+
+  it('连接筛选从路由传入列表与动态计数，互斥选择及清除同步路由', async () => {
+    state.route.query = { connectedColumnIds: 'column-1', incomingProjectIds: 'source-project' }
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    state.listProjectWorkItemFilterOptions.mockImplementation(async request => request.field === 'INCOMING_PROJECT'
+      ? { items: [{ value: 'source-project', label: '来源项目', count: 12 }], nextCursor: null }
+      : { items: [], nextCursor: null })
+    const wrapper = mountView(); await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenCalledWith(expect.objectContaining({
+      connectedColumnIds: new Set(['column-1']), incomingProjectIds: new Set(['source-project']),
+    }), expect.anything())
+    const view = wrapper.vm as unknown as { loadFilterOptions: () => Promise<void>; clearFilters: () => void }
+    await view.loadFilterOptions(); await flushPromises()
+    expect(state.listProjectWorkItemFilterOptions).toHaveBeenCalledWith(expect.objectContaining({
+      field: 'INCOMING_PROJECT', connectedColumnIds: new Set(['column-1']),
+    }), expect.anything())
+    expect(state.listProjectWorkItemFilterOptions.mock.calls.find(([request]) => request.field === 'INCOMING_PROJECT')![0])
+      .not.toHaveProperty('incomingProjectIds')
+    const section = wrapper.getComponent(ConnectFilterSection)
+    expect(section.props('incoming')).toEqual([{ value: 'source-project', label: '来源项目', count: 12 }])
+    section.vm.$emit('change', 'unconnectedColumnIds', 'column-1', true); await flushPromises()
+    expect(state.replace).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ unconnectedColumnIds: 'column-1' }) }))
+    expect(state.replace.mock.lastCall?.[0].query.connectedColumnIds).toBeUndefined()
+    view.clearFilters(); await flushPromises()
+    expect(state.replace.mock.lastCall?.[0].query.incomingProjectIds).toBeUndefined()
+    expect(state.replace.mock.lastCall?.[0].query.unconnectedColumnIds).toBeUndefined()
+  })
+
+  it('选择来源 A 后仍能完整分页获取 B 并加选，保留其他筛选与服务端游标', async () => {
+    state.route.query = { status: 'BACKLOG', connectedColumnIds: 'column-1', incomingProjectIds: 'source-a' }
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    state.listProjectWorkItemFilterOptions.mockImplementation(async request => request.field !== 'INCOMING_PROJECT'
+      ? { items: [], nextCursor: null }
+      : request.cursor ? { items: [{ value: 'source-a', label: 'Alpha 项目', count: 2 }], nextCursor: null }
+        : { items: [{ value: 'source-b', label: 'Beta 项目', count: 3 }], nextCursor: 'incoming-page-2' })
+    const wrapper = mountView(); await flushPromises()
+    const view = wrapper.vm as unknown as { loadFilterOptions: () => Promise<void> }
+    await view.loadFilterOptions(); await flushPromises()
+    const calls = state.listProjectWorkItemFilterOptions.mock.calls.filter(([request]) => request.field === 'INCOMING_PROJECT')
+    expect(calls).toHaveLength(2)
+    for (const [request] of calls) {
+      expect(request).not.toHaveProperty('incomingProjectIds')
+      expect(request).toMatchObject({ status: new Set(['BACKLOG']), connectedColumnIds: new Set(['column-1']) })
+    }
+    expect(calls[1]![0].cursor).toBe('incoming-page-2')
+    const section = wrapper.getComponent(ConnectFilterSection)
+    expect(section.findAll('.connect-filters__incoming .el-checkbox').map(row => row.attributes('aria-label')))
+      .toEqual(['来自 Alpha 项目', '来自 Beta 项目'])
+    await section.get('[aria-label="来自 Beta 项目"] input').setValue(true); await flushPromises()
+    expect(state.route.query.incomingProjectIds).toBe('source-a,source-b')
+    expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({
+      incomingProjectIds: new Set(['source-a', 'source-b']), status: new Set(['BACKLOG']), connectedColumnIds: new Set(['column-1']),
+    }), expect.anything())
+    await view.loadFilterOptions(); await flushPromises()
+    expect(section.findAll('.connect-filters__incoming .el-checkbox').map(row => row.attributes('aria-label')))
+      .toEqual(['来自 Alpha 项目', '来自 Beta 项目'])
+  })
+
+  it('失效列和零计数来源可分别取消，路由恢复时重新应用而不静默清理', async () => {
+    const original = { q: '保留搜索', connectedColumnIds: 'gone-column', incomingProjectIds: 'gone-project' }
+    state.route.query = { ...original }
+    const wrapper = mountView(); await flushPromises()
+    const view = wrapper.vm as unknown as { loadFilterOptions: () => Promise<void> }
+    await view.loadFilterOptions(); await flushPromises()
+    expect(state.route.query).toEqual(original)
+    const section = wrapper.getComponent(ConnectFilterSection)
+    await section.get('[aria-label="不可用连接列（gone-column） 已连接"] input').setValue(false); await flushPromises()
+    expect(state.route.query).toEqual({ q: '保留搜索', incomingProjectIds: 'gone-project' })
+    await view.loadFilterOptions(); await flushPromises()
+    expect(section.get('.connect-filters__incoming .el-checkbox small').text()).toBe('0')
+    await section.get('[aria-label="来自 未匹配来源项目（gone-project）"] input').setValue(false); await flushPromises()
+    expect(state.route.query).toEqual({ q: '保留搜索' })
+    state.route.query = { ...original }; await flushPromises()
+    expect(section.props('connectedColumnIds')).toEqual(new Set(['gone-column']))
+    expect(section.props('incomingProjectIds')).toEqual(new Set(['gone-project']))
+    expect(state.listProjectWorkItems).toHaveBeenLastCalledWith(expect.objectContaining({
+      connectedColumnIds: new Set(['gone-column']), incomingProjectIds: new Set(['gone-project']),
+    }), expect.anything())
+    expect(state.route.query).toEqual(original)
+  })
+
+  it('选项失败保持 URL 和待确认项，重试成功后丢弃旧路由的迟到响应', async () => {
+    state.route.query = { incomingProjectIds: 'selected' }
+    state.listConnectColumns.mockRejectedValueOnce(new Error('目录暂不可用'))
+    state.listProjectWorkItemFilterOptions.mockRejectedValueOnce(new Error('来源暂不可用'))
+    const wrapper = mountView(); await flushPromises()
+    const view = wrapper.vm as unknown as { loadFilterOptions: () => Promise<void> }
+    await view.loadFilterOptions(); await flushPromises()
+    const section = wrapper.getComponent(ConnectFilterSection)
+    expect(section.props()).toMatchObject({ columnsState: 'error', incomingState: 'error' })
+    expect(state.route.query.incomingProjectIds).toBe('selected')
+    expect(section.text()).toContain('待确认来源项目')
+    let finishOld!: (page: { items: { value: string; label: string; count: number }[]; nextCursor: null }) => void
+    state.listProjectWorkItemFilterOptions.mockImplementation(async request => request.field === 'INCOMING_PROJECT'
+      ? new Promise(resolve => { finishOld = resolve }) : { items: [], nextCursor: null })
+    const oldLoad = view.loadFilterOptions(); await flushPromises()
+    state.route.query = { incomingProjectIds: 'new-source' }; await flushPromises()
+    state.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [{ value: 'new-source', label: '新来源', count: 7 }], nextCursor: null })
+    await view.loadFilterOptions(); await flushPromises()
+    finishOld({ items: [{ value: 'selected', label: '旧来源', count: 1 }], nextCursor: null })
+    await oldLoad; await flushPromises()
+    expect(section.props('incomingState')).toBe('ready')
+    expect(section.props('incoming')).toEqual([{ value: 'new-source', label: '新来源', count: 7 }])
+    expect(state.route.query.incomingProjectIds).toBe('new-source')
   })
 
   it('重新加载连接包含展开的子项行，恢复子项请求失败的单元格', async () => {

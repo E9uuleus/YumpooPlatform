@@ -13,7 +13,7 @@ import { workItemLabelColorValue } from '../workItemLabelColors'
 import { toConnectProblem } from './connectProblems'
 import { useConnectContext } from './useConnectColumns'
 
-const props = defineProps<{ open: boolean; connection: WorkItemConnection; perspective: 'source' | 'target' }>()
+const props = defineProps<{ open: boolean; connection: WorkItemConnection; perspective: 'source' | 'target'; readOnly?: boolean }>()
 const emit = defineEmits<{ 'update:open': [open: boolean]; unlinked: [connection: WorkItemConnection]; invalidated: [connection: WorkItemConnection] }>()
 const context = useConnectContext(), router = useRouter(), session = useSession()
 const current = shallowRef(props.connection), loading = ref(false), busy = ref(false), problem = ref<ApiProblem>()
@@ -48,7 +48,7 @@ watch(() => [props.open, props.connection.id], () => {
 onBeforeUnmount(() => { revision++; controller?.abort() })
 function close() { if (!busy.value) emit('update:open', false) }
 async function unlink() {
-  if (busy.value || loading.value || !current.value.capabilities.canUnlink) return
+  if (busy.value || loading.value || props.readOnly || !current.value.capabilities.canUnlink) return
   busy.value = true; problem.value = undefined
   try { await context.unlink(current.value); emit('unlinked', current.value); emit('update:open', false); ElMessage.success('已解除连接') }
   catch (reason) { problem.value = await toConnectProblem(reason); if (isProblemStatus(problem.value, 404)) missing(false) }
@@ -156,7 +156,7 @@ async function openWorkItem() { if (card.value.canOpen) { await router.push({ ..
     </p>
     <template #footer>
       <el-popconfirm
-        v-if="current.capabilities.canUnlink"
+        v-if="!readOnly && current.capabilities.canUnlink"
         title="解除连接？对应工作项不会被删除。"
         confirm-button-text="解除连接"
         cancel-button-text="取消"

@@ -1,0 +1,10 @@
+{
+  "fixture": "Production InboxRow and inboxPresentation with static NotificationItem data; no real backend or native desktop display claimed",
+  "checks": [
+    "light: target-owner wording, PROJECT icon, target-only work item link, inaccessible row hides actor/references and has no link",
+    "dark: target-owner wording, PROJECT icon, target-only work item link, inaccessible row hides actor/references and has no link",
+    "night: target-owner wording, PROJECT icon, target-only work item link, inaccessible row hides actor/references and has no link",
+    "390px: no horizontal overflow"
+  ],
+  "pageErrors": []
+}

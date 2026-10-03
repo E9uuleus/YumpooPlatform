@@ -7,7 +7,7 @@ import java.util.UUID;
 public final class NotificationModels {
     private NotificationModels() {}
     public enum Reason { MENTION, REPLY, COMMENT, ASSIGNED, PROJECT_MEMBER_ADDED,
-        PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED }
+        PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED, CONNECTION_CREATED }
     public enum State { UNREAD, READ, ARCHIVED }
     public enum ListState { UNREAD, ALL, ARCHIVED }
     public enum Group { MENTION, COMMENT, ASSIGNED, PROJECT }
