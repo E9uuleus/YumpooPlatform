@@ -117,6 +117,35 @@ describe('连接目录与批量单元格', () => {
     expect(api.listConnectColumns).toHaveBeenCalledTimes(1)
     expect(api.listWorkItemConnectionCells.mock.calls[0]![0].workItemIds).toEqual(['source-item'])
   })
+  it.each(['link', 'createAndLink', 'unlink-source', 'unlink-target'] as const)('%s 遇到 404 只刷新当前项目受影响的行并清除失效连接', async operation => {
+    const { data, projectId } = harness()
+    const targetSide = operation === 'unlink-target'
+    const affected = targetSide ? connection.target : connection.source
+    projectId.value = affected.projectId
+    api.listConnectColumns.mockResolvedValue({ ...connectionCatalog, incomingAvailable: targetSide })
+    await data.loadCatalog()
+    api.listWorkItemConnectionCells.mockImplementationOnce(async ({ workItemIds }: { workItemIds: string[] }) => ({
+      items: response(workItemIds).items.map(cell => ({ ...cell,
+        outgoing: targetSide ? [] : [{ columnId: connectColumn.id, connections: [connection] }],
+        incoming: targetSide ? [connection] : [], incomingTotal: targetSide ? 1 : 0,
+      })),
+    }))
+    await data.ensureCells([affected.workItemId, 'unaffected-item'])
+    const unchanged = data.cells.value.get('unaffected-item')
+    api.listConnectColumns.mockClear(); api.listWorkItemConnectionCells.mockClear()
+    const failure = new ResponseError(new Response(JSON.stringify({ code: 'RESOURCE_NOT_FOUND', message: '不存在', requestId: 'test', retryable: false, fieldErrors: [], details: {} }), { status: 404 }))
+    api.linkWorkItemConnection.mockRejectedValue(failure)
+    api.createConnectedWorkItem.mockRejectedValue(failure)
+    api.unlinkWorkItemConnection.mockRejectedValue(failure)
+    const command = operation === 'link' ? data.link(affected.workItemId, connectColumn.id, connection.target.workItemId)
+      : operation === 'createAndLink' ? data.createAndLink(affected.workItemId, { columnId: connectColumn.id, targetProjectId: connection.target.projectId, title: '新建工作项', contentId: 'bug' })
+        : data.unlink(connection)
+    await expect(command).rejects.toBe(failure)
+    expect(api.listConnectColumns).toHaveBeenCalledTimes(1)
+    expect(api.listWorkItemConnectionCells).toHaveBeenCalledExactlyOnceWith({ projectId: affected.projectId, workItemIds: [affected.workItemId] }, { signal: expect.any(AbortSignal) })
+    expect(data.cells.value.get(affected.workItemId)).toEqual(response([affected.workItemId]).items[0])
+    expect(data.cells.value.get('unaffected-item')).toEqual(unchanged)
+  })
   it('缺少 CSRF 不发送写请求', async () => {
     csrf.token = undefined
     const { data } = harness()

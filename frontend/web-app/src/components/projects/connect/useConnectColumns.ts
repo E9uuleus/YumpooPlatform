@@ -108,7 +108,9 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
       const problem = await toApiProblem(reason)
       if (current === revision && problem.kind === 'response' && [404, 409, 412].includes(problem.status)) {
         await loadCatalog()
-        if (current === revision && problem.status !== 404) await refreshCells(affected.length ? affected : [...cells.value.keys()])
+        if (current === revision && (affected.length || problem.status !== 404)) {
+          await refreshCells(affected.length ? affected : [...cells.value.keys()])
+        }
       }
       throw reason
     }
