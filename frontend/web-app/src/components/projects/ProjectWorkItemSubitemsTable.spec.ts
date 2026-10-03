@@ -77,7 +77,7 @@ function mountTable(items = [item('child-1'), item('child-2')]) {
         WorkItemLabelPopoverContent: true,
       },
     },
-    slots: { 'add-column': '<button type="button" class="test-add-column" aria-label="添加列">+</button>' },
+    slots: { 'column-add': '<button type="button" class="test-add-column" aria-label="添加列">+</button>' },
   })
 }
 
