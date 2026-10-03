@@ -5,6 +5,11 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.regex.Pattern;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ModuleArchitectureTest {
@@ -55,5 +60,15 @@ class ModuleArchitectureTest {
     @Test
     void apiControllersDeferRequiredIfMatchChecksUntilAfterVisibleLookup() {
         assertThat(ArchitectureRules.requiredIfMatchHeaderViolations(PRODUCTION_CLASSES)).isEmpty();
+    }
+
+    @Test
+    void workitemDoesNotReadCatalogProjectOrMembershipTables() throws IOException {
+        var forbidden = Pattern.compile("(?i)yumpoo\\.project\\b|project_membership");
+        try (var files = Files.walk(Path.of("src/main/java/com/yumpoo/platform/workitem"))) {
+            for (var file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
+                assertThat(forbidden.matcher(Files.readString(file)).find()).as("catalog SQL in %s", file).isFalse();
+            }
+        }
     }
 }

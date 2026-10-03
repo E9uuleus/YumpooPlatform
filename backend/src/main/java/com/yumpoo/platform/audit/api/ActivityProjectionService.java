@@ -31,6 +31,9 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     private static final Set<String> CONTENT_EVENTS = Set.of(
             "workitem.content_created", "workitem.content_updated",
             "workitem.content_deleted", "workitem.content_archived", "workitem.content_restored");
+    private static final Set<String> CONNECTION_EVENTS = Set.of(
+            "workitem.connect_column_created", "workitem.connect_column_updated", "workitem.connect_column_deleted",
+            "workitem.connection_created", "workitem.connection_deleted");
     private static final Set<String> WORK_ITEM_EVENTS = Set.of(
             "workitem.work_item_created", "workitem.work_item_fields_changed",
             "workitem.work_item_assigned", "workitem.work_item_unassigned",
@@ -85,6 +88,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
         try {
             if (PROJECT_EVENTS.contains(event.eventType())) appendProject(event);
             else if (CONTENT_EVENTS.contains(event.eventType())) appendContent(event);
+            else if (CONNECTION_EVENTS.contains(event.eventType())) appendConnection(event);
             else if (WORK_ITEM_EVENTS.contains(event.eventType())) appendWorkItem(event);
             else if (TIME_EVENTS.contains(event.eventType())) appendTimeTracking(event);
             else if (ATTACHMENT_EVENTS.contains(event.eventType())) appendAttachment(event);
@@ -192,6 +196,30 @@ public class ActivityProjectionService implements OutboxEventConsumer {
                 template(type), safe, workItemId, null);
     }
 
+    private void appendConnection(DomainEventEnvelope event) {
+        JsonNode payload = event.payload();
+        if (event.eventType().startsWith("workitem.connect_column_")) {
+            String name = text(payload, "name");
+            ObjectNode safe = objectMapper.createObjectNode().put("name", name);
+            if (event.eventType().equals("workitem.connect_column_deleted"))
+                safe.put("removedConnectionCount", number(payload, "removedConnectionCount"));
+            append(event, ActivityAudienceType.PROJECT, uuid(payload, "projectId"), "CONNECT_COLUMN",
+                    uuid(payload, "columnId"), name, template(event.eventType()), safe, null, null);
+            return;
+        }
+        UUID sourceItem = uuid(payload, "sourceWorkItemId");
+        UUID targetItem = uuid(payload, "targetWorkItemId");
+        String base = template(event.eventType());
+        ObjectNode sourceParameters = objectMapper.createObjectNode().put("columnName", text(payload, "columnName"));
+        append(event, ActivityAudienceType.PROJECT, uuid(payload, "sourceProjectId"), "WORK_ITEM", sourceItem,
+                null, base + "_SOURCE", sourceParameters, sourceItem, null);
+        String targetTemplate = base + "_TARGET";
+        if (event.eventType().equals("workitem.connection_created") && "CREATED".equals(text(payload, "origin")))
+            targetTemplate += "_NEW";
+        append(event, ActivityAudienceType.PROJECT, uuid(payload, "targetProjectId"), "WORK_ITEM", targetItem,
+                null, targetTemplate, objectMapper.createObjectNode(), targetItem, null);
+    }
+
     private void appendRelation(DomainEventEnvelope event) {
         JsonNode payload = event.payload();
         UUID relationId = uuid(payload, "relationId");
@@ -268,6 +296,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     private static Set<String> allEvents() {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         result.addAll(PROJECT_EVENTS); result.addAll(CONTENT_EVENTS);
+        result.addAll(CONNECTION_EVENTS);
         result.addAll(TIME_EVENTS); result.addAll(WORK_ITEM_EVENTS); result.addAll(ATTACHMENT_EVENTS);
         return result;
     }

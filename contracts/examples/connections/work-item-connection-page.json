@@ -1,0 +1,73 @@
+{
+  "items": [
+    {
+      "id": "62000000-0000-4000-8000-000000000007",
+      "etag": "\"0\"",
+      "rowVersion": 0,
+      "columnId": "62000000-0000-4000-8000-000000000005",
+      "columnName": "研发跟进",
+      "origin": "CREATED",
+      "active": true,
+      "source": {
+        "workItemId": "62000000-0000-4000-8000-000000000003",
+        "itemNo": "P001-1",
+        "title": "需求确认",
+        "archived": false,
+        "projectId": "62000000-0000-4000-8000-000000000001",
+        "projectCode": "P001",
+        "projectName": "需求协作",
+        "projectLifecycle": "ACTIVE",
+        "status": {
+          "code": "NOT_STARTED",
+          "name": "未开始",
+          "colorToken": "GRAY",
+          "category": "TODO"
+        },
+        "priority": null,
+        "category": {
+          "id": "62000000-0000-4000-8000-000000000010",
+          "name": "需求",
+          "colorToken": "BRIGHT_BLUE"
+        },
+        "assignee": null,
+        "canOpen": true
+      },
+      "target": {
+        "workItemId": "62000000-0000-4000-8000-000000000004",
+        "itemNo": "P002-1",
+        "title": "验证原型方案",
+        "archived": false,
+        "projectId": "62000000-0000-4000-8000-000000000002",
+        "projectCode": "P002",
+        "projectName": "研发协作",
+        "projectLifecycle": "ACTIVE",
+        "status": {
+          "code": "NOT_STARTED",
+          "name": "未开始",
+          "colorToken": "GRAY",
+          "category": "TODO"
+        },
+        "priority": null,
+        "category": {
+          "id": "62000000-0000-4000-8000-000000000010",
+          "name": "需求",
+          "colorToken": "BRIGHT_BLUE"
+        },
+        "assignee": null,
+        "canOpen": false
+      },
+      "createdAt": "2026-10-01T12:00:00Z",
+      "createdBy": {
+        "userId": "62000000-0000-4000-8000-000000000011",
+        "displayName": "李明"
+      },
+      "capabilities": {
+        "canUnlink": true
+      }
+    }
+  ],
+  "page": 0,
+  "size": 20,
+  "totalElements": 1,
+  "totalPages": 1
+}

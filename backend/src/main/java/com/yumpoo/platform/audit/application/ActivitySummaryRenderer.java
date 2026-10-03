@@ -24,6 +24,15 @@ public class ActivitySummaryRenderer {
             case "CONTENT_DELETED" -> "删除了工作项类别 " + ref;
             case "CONTENT_ARCHIVED" -> "归档了事项集合 " + ref;
             case "CONTENT_RESTORED" -> "恢复了事项集合 " + ref;
+            case "CONNECT_COLUMN_CREATED" -> "添加了连接列「" + text(parameters, "name", "连接列") + "」";
+            case "CONNECT_COLUMN_UPDATED" -> "修改了连接列「" + text(parameters, "name", "连接列") + "」";
+            case "CONNECT_COLUMN_DELETED" -> "删除了连接列「" + text(parameters, "name", "连接列") + "」，解除了 "
+                    + parameters.path("removedConnectionCount").asLong() + " 个连接";
+            case "CONNECTION_CREATED_SOURCE" -> "在「" + text(parameters, "columnName", "连接列") + "」中连接了其他项目的工作项";
+            case "CONNECTION_CREATED_TARGET" -> "从其他项目连接了此工作项";
+            case "CONNECTION_CREATED_TARGET_NEW" -> "从其他项目新建并连接了此工作项";
+            case "CONNECTION_DELETED_SOURCE" -> "在「" + text(parameters, "columnName", "连接列") + "」中解除了一个连接";
+            case "CONNECTION_DELETED_TARGET" -> "解除了来自其他项目的连接";
             case "WORK_ITEM_CREATED" -> "创建了事项 " + ref;
             case "WORK_ITEM_FIELDS_CHANGED" -> "更新了事项 " + ref;
             case "WORK_ITEM_ASSIGNED" -> "将事项 " + ref + " 指派给 " + person;

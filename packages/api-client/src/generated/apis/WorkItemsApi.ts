@@ -14,12 +14,26 @@
 
 import * as runtime from '../runtime';
 import type {
+  ConnectCandidatePage,
+  ConnectColumn,
+  ConnectColumnCatalog,
+  ConnectColumnCreateRequest,
+  ConnectColumnDeleteResult,
+  ConnectColumnUpdateRequest,
+  ConnectCreateOptions,
+  ConnectTargetProjectPage,
+  ConnectedWorkItemCreateRequest,
   ErrorResponse,
   ProjectWorkItemCursorPage,
   ProjectWorkItemFilterOptionCursorPage,
   ProjectWorkItemOrderMoveRequest,
   TimeTrackingState,
+  UpdateConnectColumn409Response,
   WorkItemAssigneePatchRequest,
+  WorkItemConnection,
+  WorkItemConnectionCellList,
+  WorkItemConnectionLinkRequest,
+  WorkItemConnectionPage,
   WorkItemContentPatchRequest,
   WorkItemCreateRequest,
   WorkItemDeleteRequest,
@@ -46,6 +60,24 @@ import type {
   WorkItemViewType,
 } from '../models/index';
 import {
+    ConnectCandidatePageFromJSON,
+    ConnectCandidatePageToJSON,
+    ConnectColumnFromJSON,
+    ConnectColumnToJSON,
+    ConnectColumnCatalogFromJSON,
+    ConnectColumnCatalogToJSON,
+    ConnectColumnCreateRequestFromJSON,
+    ConnectColumnCreateRequestToJSON,
+    ConnectColumnDeleteResultFromJSON,
+    ConnectColumnDeleteResultToJSON,
+    ConnectColumnUpdateRequestFromJSON,
+    ConnectColumnUpdateRequestToJSON,
+    ConnectCreateOptionsFromJSON,
+    ConnectCreateOptionsToJSON,
+    ConnectTargetProjectPageFromJSON,
+    ConnectTargetProjectPageToJSON,
+    ConnectedWorkItemCreateRequestFromJSON,
+    ConnectedWorkItemCreateRequestToJSON,
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
     ProjectWorkItemCursorPageFromJSON,
@@ -56,8 +88,18 @@ import {
     ProjectWorkItemOrderMoveRequestToJSON,
     TimeTrackingStateFromJSON,
     TimeTrackingStateToJSON,
+    UpdateConnectColumn409ResponseFromJSON,
+    UpdateConnectColumn409ResponseToJSON,
     WorkItemAssigneePatchRequestFromJSON,
     WorkItemAssigneePatchRequestToJSON,
+    WorkItemConnectionFromJSON,
+    WorkItemConnectionToJSON,
+    WorkItemConnectionCellListFromJSON,
+    WorkItemConnectionCellListToJSON,
+    WorkItemConnectionLinkRequestFromJSON,
+    WorkItemConnectionLinkRequestToJSON,
+    WorkItemConnectionPageFromJSON,
+    WorkItemConnectionPageToJSON,
     WorkItemContentPatchRequestFromJSON,
     WorkItemContentPatchRequestToJSON,
     WorkItemCreateRequestFromJSON,
@@ -123,6 +165,20 @@ export interface ChangeWorkItemParentRequest {
     workItemParentChangeRequest: WorkItemParentChangeRequest;
 }
 
+export interface CreateConnectColumnRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    connectColumnCreateRequest: ConnectColumnCreateRequest;
+}
+
+export interface CreateConnectedWorkItemRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    connectedWorkItemCreateRequest: ConnectedWorkItemCreateRequest;
+}
+
 export interface CreateProjectWorkItemPriorityLabelRequest {
     projectId: string;
     xXSRFTOKEN: string;
@@ -158,6 +214,14 @@ export interface CreateWorkItemSubitemRequest {
     workItemSubitemCreateRequest: WorkItemSubitemCreateRequest;
 }
 
+export interface DeleteConnectColumnRequest {
+    projectId: string;
+    columnId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+}
+
 export interface DeleteProjectWorkItemPriorityLabelRequest {
     projectId: string;
     code: string;
@@ -188,12 +252,39 @@ export interface DeleteWorkItemRelationRequest {
     workItemRelationDeleteRequest: WorkItemRelationDeleteRequest;
 }
 
+export interface GetConnectCreateOptionsRequest {
+    projectId: string;
+    columnId: string;
+    targetProjectId: string;
+}
+
 export interface GetProjectWorkItemLabelsRequest {
     projectId: string;
 }
 
 export interface GetWorkItemRequest {
     workItemId: string;
+}
+
+export interface GetWorkItemConnectionRequest {
+    connectionId: string;
+}
+
+export interface LinkWorkItemConnectionRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    workItemConnectionLinkRequest: WorkItemConnectionLinkRequest;
+}
+
+export interface ListConnectColumnsRequest {
+    projectId: string;
+}
+
+export interface ListIncomingWorkItemConnectionsRequest {
+    workItemId: string;
+    page?: number;
+    size?: number;
 }
 
 export interface ListProjectWorkItemFilterOptionsRequest {
@@ -233,6 +324,11 @@ export interface ListProjectWorkItemsRequest {
     dueTo?: Date;
     updatedAfter?: Date;
     sort?: Array<string>;
+}
+
+export interface ListWorkItemConnectionCellsRequest {
+    projectId: string;
+    workItemIds: Array<string>;
 }
 
 export interface ListWorkItemRelationCandidatesRequest {
@@ -333,6 +429,22 @@ export interface RestoreWorkItemRequest {
     idempotencyKey: string;
 }
 
+export interface SearchConnectCandidatesRequest {
+    projectId: string;
+    columnId: string;
+    targetProjectId: string;
+    sourceWorkItemId: string;
+    q: string;
+    page?: number;
+    size?: number;
+}
+
+export interface SearchConnectTargetProjectsRequest {
+    query?: string;
+    page?: number;
+    size?: number;
+}
+
 export interface TransitionWorkItemRequest {
     workItemId: string;
     xXSRFTOKEN: string;
@@ -346,6 +458,21 @@ export interface UnarchiveWorkItemRequest {
     xXSRFTOKEN: string;
     ifMatch: string;
     idempotencyKey: string;
+}
+
+export interface UnlinkWorkItemConnectionRequest {
+    connectionId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+}
+
+export interface UpdateConnectColumnRequest {
+    projectId: string;
+    columnId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    connectColumnUpdateRequest: ConnectColumnUpdateRequest;
 }
 
 export interface UpdateProjectWorkItemPriorityLabelRequest {
@@ -525,6 +652,146 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async changeWorkItemParent(requestParameters: ChangeWorkItemParentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemRelation> {
         const response = await this.changeWorkItemParentRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 创建项目连接列
+     */
+    async createConnectColumnRaw(requestParameters: CreateConnectColumnRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConnectColumn>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling createConnectColumn().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling createConnectColumn().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling createConnectColumn().'
+            );
+        }
+
+        if (requestParameters['connectColumnCreateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'connectColumnCreateRequest',
+                'Required parameter "connectColumnCreateRequest" was null or undefined when calling createConnectColumn().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/connect-columns`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ConnectColumnCreateRequestToJSON(requestParameters['connectColumnCreateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ConnectColumnFromJSON(jsonValue));
+    }
+
+    /**
+     * 创建项目连接列
+     */
+    async createConnectColumn(requestParameters: CreateConnectColumnRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectColumn> {
+        const response = await this.createConnectColumnRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅要求来源项目 OWNER/MEMBER，两端项目 ACTIVE。目标根项与连接在同一事务创建，默认状态 NOT_STARTED，其余可选字段为空。
+     * 在目标项目新建根工作项并关联
+     */
+    async createConnectedWorkItemRaw(requestParameters: CreateConnectedWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemConnection>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling createConnectedWorkItem().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling createConnectedWorkItem().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling createConnectedWorkItem().'
+            );
+        }
+
+        if (requestParameters['connectedWorkItemCreateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'connectedWorkItemCreateRequest',
+                'Required parameter "connectedWorkItemCreateRequest" was null or undefined when calling createConnectedWorkItem().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/connected-work-items`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ConnectedWorkItemCreateRequestToJSON(requestParameters['connectedWorkItemCreateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemConnectionFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅要求来源项目 OWNER/MEMBER，两端项目 ACTIVE。目标根项与连接在同一事务创建，默认状态 NOT_STARTED，其余可选字段为空。
+     * 在目标项目新建根工作项并关联
+     */
+    async createConnectedWorkItem(requestParameters: CreateConnectedWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnection> {
+        const response = await this.createConnectedWorkItemRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -878,6 +1145,84 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
+     * 负责人删除连接列并解除列内连接
+     */
+    async deleteConnectColumnRaw(requestParameters: DeleteConnectColumnRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConnectColumnDeleteResult>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling deleteConnectColumn().'
+            );
+        }
+
+        if (requestParameters['columnId'] == null) {
+            throw new runtime.RequiredError(
+                'columnId',
+                'Required parameter "columnId" was null or undefined when calling deleteConnectColumn().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling deleteConnectColumn().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling deleteConnectColumn().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling deleteConnectColumn().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/connect-columns/{columnId}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"columnId"}}`, encodeURIComponent(String(requestParameters['columnId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ConnectColumnDeleteResultFromJSON(jsonValue));
+    }
+
+    /**
+     * 负责人删除连接列并解除列内连接
+     */
+    async deleteConnectColumn(requestParameters: DeleteConnectColumnRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectColumnDeleteResult> {
+        const response = await this.deleteConnectColumnRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * 删除从未被工作项引用的优先级标签
      */
     async deleteProjectWorkItemPriorityLabelRaw(requestParameters: DeleteProjectWorkItemPriorityLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemLabelCatalog>> {
@@ -1174,6 +1519,62 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
+     * 读取新建并关联的目标类别选项
+     */
+    async getConnectCreateOptionsRaw(requestParameters: GetConnectCreateOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConnectCreateOptions>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling getConnectCreateOptions().'
+            );
+        }
+
+        if (requestParameters['columnId'] == null) {
+            throw new runtime.RequiredError(
+                'columnId',
+                'Required parameter "columnId" was null or undefined when calling getConnectCreateOptions().'
+            );
+        }
+
+        if (requestParameters['targetProjectId'] == null) {
+            throw new runtime.RequiredError(
+                'targetProjectId',
+                'Required parameter "targetProjectId" was null or undefined when calling getConnectCreateOptions().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['targetProjectId'] != null) {
+            queryParameters['targetProjectId'] = requestParameters['targetProjectId'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/connect-columns/{columnId}/create-options`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"columnId"}}`, encodeURIComponent(String(requestParameters['columnId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ConnectCreateOptionsFromJSON(jsonValue));
+    }
+
+    /**
+     * 读取新建并关联的目标类别选项
+     */
+    async getConnectCreateOptions(requestParameters: GetConnectCreateOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectCreateOptions> {
+        const response = await this.getConnectCreateOptionsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * 查询 Project 级工作项状态与优先级标签目录
      */
     async getProjectWorkItemLabelsRaw(requestParameters: GetProjectWorkItemLabelsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemLabelCatalog>> {
@@ -1244,6 +1645,198 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async getWorkItem(requestParameters: GetWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.getWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 能看见任一端项目即可读取两端 ConnectionCard；任一工作项已删除时省略该连接。
+     * 读取连接与两端最小卡片
+     */
+    async getWorkItemConnectionRaw(requestParameters: GetWorkItemConnectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemConnection>> {
+        if (requestParameters['connectionId'] == null) {
+            throw new runtime.RequiredError(
+                'connectionId',
+                'Required parameter "connectionId" was null or undefined when calling getWorkItemConnection().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/work-item-connections/{connectionId}`;
+        urlPath = urlPath.replace(`{${"connectionId"}}`, encodeURIComponent(String(requestParameters['connectionId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemConnectionFromJSON(jsonValue));
+    }
+
+    /**
+     * 能看见任一端项目即可读取两端 ConnectionCard；任一工作项已删除时省略该连接。
+     * 读取连接与两端最小卡片
+     */
+    async getWorkItemConnection(requestParameters: GetWorkItemConnectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnection> {
+        const response = await this.getWorkItemConnectionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 双侧项目成员关联已有工作项
+     */
+    async linkWorkItemConnectionRaw(requestParameters: LinkWorkItemConnectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemConnection>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling linkWorkItemConnection().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling linkWorkItemConnection().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling linkWorkItemConnection().'
+            );
+        }
+
+        if (requestParameters['workItemConnectionLinkRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemConnectionLinkRequest',
+                'Required parameter "workItemConnectionLinkRequest" was null or undefined when calling linkWorkItemConnection().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/connections`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemConnectionLinkRequestToJSON(requestParameters['workItemConnectionLinkRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemConnectionFromJSON(jsonValue));
+    }
+
+    /**
+     * 双侧项目成员关联已有工作项
+     */
+    async linkWorkItemConnection(requestParameters: LinkWorkItemConnectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnection> {
+        const response = await this.linkWorkItemConnectionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 读取连接列目录与入站列概览
+     */
+    async listConnectColumnsRaw(requestParameters: ListConnectColumnsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConnectColumnCatalog>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listConnectColumns().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/connect-columns`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ConnectColumnCatalogFromJSON(jsonValue));
+    }
+
+    /**
+     * 读取连接列目录与入站列概览
+     */
+    async listConnectColumns(requestParameters: ListConnectColumnsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectColumnCatalog> {
+        const response = await this.listConnectColumnsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 每条连接须有任一端项目可见；在 SQL 中裁剪可见连接后计数与分页。
+     * 分页读取可见的入站连接
+     */
+    async listIncomingWorkItemConnectionsRaw(requestParameters: ListIncomingWorkItemConnectionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemConnectionPage>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling listIncomingWorkItemConnections().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/work-items/{workItemId}/incoming-connections`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemConnectionPageFromJSON(jsonValue));
+    }
+
+    /**
+     * 每条连接须有任一端项目可见；在 SQL 中裁剪可见连接后计数与分页。
+     * 分页读取可见的入站连接
+     */
+    async listIncomingWorkItemConnections(requestParameters: ListIncomingWorkItemConnectionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnectionPage> {
+        const response = await this.listIncomingWorkItemConnectionsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -1451,6 +2044,56 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async listProjectWorkItems(requestParameters: ListProjectWorkItemsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectWorkItemCursorPage> {
         const response = await this.listProjectWorkItemsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 只返回本项目未删除工作项，外项目 ID 静默忽略；incoming 最多 50 条，incomingTotal 为完整计数。请求 1–100 行采用固定次数批量 SQL。
+     * 批量读取工作项出站与入站连接
+     */
+    async listWorkItemConnectionCellsRaw(requestParameters: ListWorkItemConnectionCellsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemConnectionCellList>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling listWorkItemConnectionCells().'
+            );
+        }
+
+        if (requestParameters['workItemIds'] == null) {
+            throw new runtime.RequiredError(
+                'workItemIds',
+                'Required parameter "workItemIds" was null or undefined when calling listWorkItemConnectionCells().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['workItemIds'] != null) {
+            queryParameters['workItemIds'] = requestParameters['workItemIds'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/work-item-connections`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemConnectionCellListFromJSON(jsonValue));
+    }
+
+    /**
+     * 只返回本项目未删除工作项，外项目 ID 静默忽略；incoming 最多 50 条，incomingTotal 为完整计数。请求 1–100 行采用固定次数批量 SQL。
+     * 批量读取工作项出站与入站连接
+     */
+    async listWorkItemConnectionCells(requestParameters: ListWorkItemConnectionCellsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnectionCellList> {
+        const response = await this.listWorkItemConnectionCellsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -2379,6 +3022,135 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
+     * 根项与子项均可返回，排除已删除；匹配标题与工作项编号前缀，完全编号匹配优先，其次 updated_at DESC、id。
+     * 双侧成员搜索可关联的目标工作项
+     */
+    async searchConnectCandidatesRaw(requestParameters: SearchConnectCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConnectCandidatePage>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling searchConnectCandidates().'
+            );
+        }
+
+        if (requestParameters['columnId'] == null) {
+            throw new runtime.RequiredError(
+                'columnId',
+                'Required parameter "columnId" was null or undefined when calling searchConnectCandidates().'
+            );
+        }
+
+        if (requestParameters['targetProjectId'] == null) {
+            throw new runtime.RequiredError(
+                'targetProjectId',
+                'Required parameter "targetProjectId" was null or undefined when calling searchConnectCandidates().'
+            );
+        }
+
+        if (requestParameters['sourceWorkItemId'] == null) {
+            throw new runtime.RequiredError(
+                'sourceWorkItemId',
+                'Required parameter "sourceWorkItemId" was null or undefined when calling searchConnectCandidates().'
+            );
+        }
+
+        if (requestParameters['q'] == null) {
+            throw new runtime.RequiredError(
+                'q',
+                'Required parameter "q" was null or undefined when calling searchConnectCandidates().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['targetProjectId'] != null) {
+            queryParameters['targetProjectId'] = requestParameters['targetProjectId'];
+        }
+
+        if (requestParameters['sourceWorkItemId'] != null) {
+            queryParameters['sourceWorkItemId'] = requestParameters['sourceWorkItemId'];
+        }
+
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/{projectId}/connect-columns/{columnId}/candidates`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"columnId"}}`, encodeURIComponent(String(requestParameters['columnId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ConnectCandidatePageFromJSON(jsonValue));
+    }
+
+    /**
+     * 根项与子项均可返回，排除已删除；匹配标题与工作项编号前缀，完全编号匹配优先，其次 updated_at DESC、id。
+     * 双侧成员搜索可关联的目标工作项
+     */
+    async searchConnectCandidates(requestParameters: SearchConnectCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectCandidatePage> {
+        const response = await this.searchConnectCandidatesRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 搜索本公司启用项目的最小信息
+     */
+    async searchConnectTargetProjectsRaw(requestParameters: SearchConnectTargetProjectsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConnectTargetProjectPage>> {
+        const queryParameters: any = {};
+
+        if (requestParameters['query'] != null) {
+            queryParameters['query'] = requestParameters['query'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/projects/connect-targets`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ConnectTargetProjectPageFromJSON(jsonValue));
+    }
+
+    /**
+     * 搜索本公司启用项目的最小信息
+     */
+    async searchConnectTargetProjects(requestParameters: SearchConnectTargetProjectsRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectTargetProjectPage> {
+        const response = await this.searchConnectTargetProjectsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * 服务端验证当前状态到目标状态的精确模板边；状态类别只能由目标状态派生。
      * 按 Project 固化模板迁移 Work Item 状态
      */
@@ -2529,6 +3301,155 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async unarchiveWorkItem(requestParameters: UnarchiveWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.unarchiveWorkItemRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 任一端项目成员解除连接
+     */
+    async unlinkWorkItemConnectionRaw(requestParameters: UnlinkWorkItemConnectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemConnection>> {
+        if (requestParameters['connectionId'] == null) {
+            throw new runtime.RequiredError(
+                'connectionId',
+                'Required parameter "connectionId" was null or undefined when calling unlinkWorkItemConnection().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling unlinkWorkItemConnection().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling unlinkWorkItemConnection().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling unlinkWorkItemConnection().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/work-item-connections/{connectionId}`;
+        urlPath = urlPath.replace(`{${"connectionId"}}`, encodeURIComponent(String(requestParameters['connectionId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemConnectionFromJSON(jsonValue));
+    }
+
+    /**
+     * 任一端项目成员解除连接
+     */
+    async unlinkWorkItemConnection(requestParameters: UnlinkWorkItemConnectionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnection> {
+        const response = await this.unlinkWorkItemConnectionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 无变化时不升版本、不发事件；移除仍有有效连接的目标返回 CONNECT_TARGET_IN_USE 及目标 ID、有效连接数。
+     * 按完整快照修改连接列
+     */
+    async updateConnectColumnRaw(requestParameters: UpdateConnectColumnRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConnectColumn>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateConnectColumn().'
+            );
+        }
+
+        if (requestParameters['columnId'] == null) {
+            throw new runtime.RequiredError(
+                'columnId',
+                'Required parameter "columnId" was null or undefined when calling updateConnectColumn().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateConnectColumn().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateConnectColumn().'
+            );
+        }
+
+        if (requestParameters['connectColumnUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'connectColumnUpdateRequest',
+                'Required parameter "connectColumnUpdateRequest" was null or undefined when calling updateConnectColumn().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/connect-columns/{columnId}`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+        urlPath = urlPath.replace(`{${"columnId"}}`, encodeURIComponent(String(requestParameters['columnId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ConnectColumnUpdateRequestToJSON(requestParameters['connectColumnUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ConnectColumnFromJSON(jsonValue));
+    }
+
+    /**
+     * 无变化时不升版本、不发事件；移除仍有有效连接的目标返回 CONNECT_TARGET_IN_USE 及目标 ID、有效连接数。
+     * 按完整快照修改连接列
+     */
+    async updateConnectColumn(requestParameters: UpdateConnectColumnRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectColumn> {
+        const response = await this.updateConnectColumnRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

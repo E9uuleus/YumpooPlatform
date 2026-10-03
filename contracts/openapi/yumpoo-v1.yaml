@@ -41,6 +41,729 @@ tags:
   - name: Activity
     description: Project 与 Work Item 的追加式安全动态时间线。
 paths:
+  /projects/{projectId}/connect-columns:
+    get:
+      tags:
+        - WorkItems
+      operationId: listConnectColumns
+      summary: 读取连接列目录与入站列概览
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectColumnCatalog"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectColumnCatalog"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags:
+        - WorkItems
+      operationId: createConnectColumn
+      summary: 创建项目连接列
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectColumnCreateRequest"
+      responses:
+        "201":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectColumn"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectColumn"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/connect-columns/{columnId}:
+    patch:
+      tags:
+        - WorkItems
+      operationId: updateConnectColumn
+      summary: 按完整快照修改连接列
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectColumnUpdateRequest"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectColumn"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectColumn"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          description: 项目归档或待移除目标仍有有效连接。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ErrorResponse"
+                  - $ref: "#/components/schemas/ConnectTargetInUseError"
+              examples:
+                targetInUse:
+                  $ref: "#/components/examples/ConnectTargetInUseError"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+      description: 无变化时不升版本、不发事件；移除仍有有效连接的目标返回 CONNECT_TARGET_IN_USE 及目标 ID、有效连接数。
+    delete:
+      tags:
+        - WorkItems
+      operationId: deleteConnectColumn
+      summary: 负责人删除连接列并解除列内连接
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectColumnDeleteResult"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectColumnDeleteResult"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/connect-targets:
+    get:
+      tags:
+        - WorkItems
+      operationId: searchConnectTargetProjects
+      summary: 搜索本公司启用项目的最小信息
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 0
+            maxLength: 80
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectTargetProjectPage"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectTargetProjectPage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/work-item-connections:
+    get:
+      tags:
+        - WorkItems
+      operationId: listWorkItemConnectionCells
+      summary: 批量读取工作项出站与入站连接
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: workItemIds
+          in: query
+          required: true
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/Uuid"
+            minItems: 1
+            maxItems: 100
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnectionCellList"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnectionCellList"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 只返回本项目未删除工作项，外项目 ID 静默忽略；incoming 最多 50 条，incomingTotal 为完整计数。请求 1–100 行采用固定次数批量 SQL。
+  /work-items/{workItemId}/incoming-connections:
+    get:
+      tags:
+        - WorkItems
+      operationId: listIncomingWorkItemConnections
+      summary: 分页读取可见的入站连接
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnectionPage"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnectionPage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 每条连接须有任一端项目可见；在 SQL 中裁剪可见连接后计数与分页。
+  /work-item-connections/{connectionId}:
+    get:
+      tags:
+        - WorkItems
+      operationId: getWorkItemConnection
+      summary: 读取连接与两端最小卡片
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 能看见任一端项目即可读取两端 ConnectionCard；任一工作项已删除时省略该连接。
+    delete:
+      tags:
+        - WorkItems
+      operationId: unlinkWorkItemConnection
+      summary: 任一端项目成员解除连接
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /projects/{projectId}/connect-columns/{columnId}/create-options:
+    get:
+      tags:
+        - WorkItems
+      operationId: getConnectCreateOptions
+      summary: 读取新建并关联的目标类别选项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: targetProjectId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectCreateOptions"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectCreateOptions"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /projects/{projectId}/connect-columns/{columnId}/candidates:
+    get:
+      tags:
+        - WorkItems
+      operationId: searchConnectCandidates
+      summary: 双侧成员搜索可关联的目标工作项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: targetProjectId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: sourceWorkItemId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 20
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectCandidatePage"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectCandidatePage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 根项与子项均可返回，排除已删除；匹配标题与工作项编号前缀，完全编号匹配优先，其次 updated_at DESC、id。
+  /work-items/{workItemId}/connections:
+    post:
+      tags:
+        - WorkItems
+      operationId: linkWorkItemConnection
+      summary: 双侧项目成员关联已有工作项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemConnectionLinkRequest"
+      responses:
+        "200":
+          description: 同列同端点已有有效连接，返回同一连接 ID。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "201":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-items/{workItemId}/connected-work-items:
+    post:
+      tags:
+        - WorkItems
+      operationId: createConnectedWorkItem
+      summary: 在目标项目新建根工作项并关联
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectedWorkItemCreateRequest"
+      responses:
+        "201":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 仅要求来源项目 OWNER/MEMBER，两端项目 ACTIVE。目标根项与连接在同一事务创建，默认状态 NOT_STARTED，其余可选字段为空。
   /me/notifications:
     get:
       tags: [Notifications]
@@ -4375,6 +5098,663 @@ components:
       description: 服务端签发的 HttpOnly、Secure、SameSite=Lax Web Session Cookie。
 
   schemas:
+    ConnectColumnIncoming:
+      type: object
+      additionalProperties: false
+      required:
+        - columnId
+        - columnName
+        - projectId
+        - projectCode
+        - projectName
+      properties:
+        columnId:
+          $ref: "#/components/schemas/Uuid"
+        columnName:
+          type: string
+          minLength: 1
+          maxLength: 40
+        projectId:
+          $ref: "#/components/schemas/Uuid"
+        projectCode:
+          type: string
+          minLength: 1
+        projectName:
+          type: string
+          minLength: 1
+    ConnectColumnTarget:
+      type: object
+      additionalProperties: false
+      required:
+        - projectId
+        - code
+        - name
+        - lifecycle
+        - actorCanLinkExisting
+      properties:
+        projectId:
+          $ref: "#/components/schemas/Uuid"
+        code:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        lifecycle:
+          $ref: "#/components/schemas/ProjectLifecycle"
+        actorCanLinkExisting:
+          type: boolean
+          description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+
+    ConnectColumn:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - name
+        - targets
+        - rowVersion
+        - etag
+        - createdAt
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        projectId:
+          $ref: "#/components/schemas/Uuid"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectColumnTarget"
+          minItems: 1
+          maxItems: 20
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        etag:
+          type: string
+          pattern: ^"[0-9]+"$
+        createdAt:
+          type: string
+          format: date-time
+    ConnectColumnCatalog:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - incomingAvailable
+        - incomingColumns
+        - canManage
+        - canDelete
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectColumn"
+          maxItems: 20
+        incomingAvailable:
+          type: boolean
+
+        incomingColumns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectColumnIncoming"
+        canManage:
+          type: boolean
+
+        canDelete:
+          type: boolean
+
+      description: 来源项目可见；入站列只暴露项目与列的最小名称信息。
+    ConnectColumnCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - targetProjectIds
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        targetProjectIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/Uuid"
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+    ConnectColumnUpdateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - targetProjectIds
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        targetProjectIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/Uuid"
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+    ConnectColumnDeleteResult:
+      type: object
+      additionalProperties: false
+      required:
+        - columnId
+        - removedConnectionCount
+      properties:
+        columnId:
+          $ref: "#/components/schemas/Uuid"
+        removedConnectionCount:
+          type: integer
+          format: int64
+          minimum: 0
+    ConnectTargetProject:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - code
+        - name
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        code:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+    ConnectTargetProjectPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectTargetProject"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+          maximum: 50
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+    ConnectionCardLabel:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - name
+        - colorToken
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 32
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        colorToken:
+          $ref: "#/components/schemas/WorkItemLabelColorToken"
+    ConnectionCardStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - name
+        - colorToken
+        - category
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 32
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        colorToken:
+          $ref: "#/components/schemas/WorkItemLabelColorToken"
+        category:
+          $ref: "#/components/schemas/WorkItemStatusCategory"
+    ConnectionCardCategory:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - colorToken
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        name:
+          type: string
+          minLength: 1
+        colorToken:
+          $ref: "#/components/schemas/WorkItemLabelColorToken"
+    ConnectionCardAssignee:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - displayName
+      properties:
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        displayName:
+          type: string
+          minLength: 1
+    ConnectionCard:
+      type: object
+      additionalProperties: false
+      required:
+        - workItemId
+        - itemNo
+        - title
+        - archived
+        - projectId
+        - projectCode
+        - projectName
+        - projectLifecycle
+        - status
+        - priority
+        - category
+        - assignee
+        - canOpen
+      properties:
+        workItemId:
+          $ref: "#/components/schemas/Uuid"
+        itemNo:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        archived:
+          type: boolean
+        projectId:
+          $ref: "#/components/schemas/Uuid"
+        projectCode:
+          type: string
+          minLength: 1
+        projectName:
+          type: string
+          minLength: 1
+        projectLifecycle:
+          $ref: "#/components/schemas/ProjectLifecycle"
+        status:
+          $ref: "#/components/schemas/ConnectionCardStatus"
+        priority:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - name
+            - colorToken
+          properties:
+            code:
+              type: string
+              minLength: 1
+              maxLength: 32
+            name:
+              type: string
+              minLength: 1
+              maxLength: 80
+            colorToken:
+              $ref: "#/components/schemas/WorkItemLabelColorToken"
+          nullable: true
+        category:
+          $ref: "#/components/schemas/ConnectionCardCategory"
+        assignee:
+          type: object
+          additionalProperties: false
+          required:
+            - userId
+            - displayName
+          properties:
+            userId:
+              $ref: "#/components/schemas/Uuid"
+            displayName:
+              type: string
+              minLength: 1
+          nullable: true
+        canOpen:
+          type: boolean
+          description: 当前用户能看见该卡片所在项目。
+      description: 连接授权的固定 13 字段只读卡片。canOpen 仅表明当前用户能否打开该卡片所在项目。
+    WorkItemConnectionCapabilities:
+      type: object
+      additionalProperties: false
+      required:
+        - canUnlink
+      properties:
+        canUnlink:
+          type: boolean
+
+    WorkItemConnection:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - etag
+        - rowVersion
+        - columnId
+        - columnName
+        - origin
+        - active
+        - source
+        - target
+        - createdAt
+        - createdBy
+        - capabilities
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        etag:
+          type: string
+          pattern: ^"[0-9]+"$
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        columnId:
+          $ref: "#/components/schemas/Uuid"
+        columnName:
+          type: string
+          minLength: 1
+          maxLength: 40
+        origin:
+          type: string
+          enum:
+            - LINKED
+            - CREATED
+        active:
+          type: boolean
+
+        source:
+          $ref: "#/components/schemas/ConnectionCard"
+        target:
+          $ref: "#/components/schemas/ConnectionCard"
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          $ref: "#/components/schemas/ConnectionCardAssignee"
+        capabilities:
+          $ref: "#/components/schemas/WorkItemConnectionCapabilities"
+    WorkItemConnectionOutgoing:
+      type: object
+      additionalProperties: false
+      required:
+        - columnId
+        - connections
+      properties:
+        columnId:
+          $ref: "#/components/schemas/Uuid"
+        connections:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemConnection"
+          minItems: 1
+          maxItems: 50
+    WorkItemConnectionCell:
+      type: object
+      additionalProperties: false
+      required:
+        - workItemId
+        - outgoing
+        - incoming
+        - incomingTotal
+      properties:
+        workItemId:
+          $ref: "#/components/schemas/Uuid"
+        outgoing:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemConnectionOutgoing"
+          maxItems: 20
+        incoming:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemConnection"
+          maxItems: 50
+        incomingTotal:
+          type: integer
+          format: int64
+          minimum: 0
+    WorkItemConnectionCellList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemConnectionCell"
+          maxItems: 100
+    WorkItemConnectionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemConnection"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+          maximum: 50
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+    ConnectCreateOptions:
+      type: object
+      additionalProperties: false
+      required:
+        - targetProjectId
+        - targetProjectName
+        - categories
+        - defaultContentId
+      properties:
+        targetProjectId:
+          $ref: "#/components/schemas/Uuid"
+        targetProjectName:
+          type: string
+          minLength: 1
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectionCardCategory"
+          minItems: 1
+        defaultContentId:
+          $ref: "#/components/schemas/Uuid"
+    ConnectCandidateParent:
+      type: object
+      additionalProperties: false
+      required:
+        - workItemId
+        - title
+      properties:
+        workItemId:
+          $ref: "#/components/schemas/Uuid"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+    ConnectCandidate:
+      type: object
+      additionalProperties: false
+      required:
+        - card
+        - parent
+        - alreadyConnected
+      properties:
+        card:
+          $ref: "#/components/schemas/ConnectionCard"
+        parent:
+          type: object
+          additionalProperties: false
+          required:
+            - workItemId
+            - title
+          properties:
+            workItemId:
+              $ref: "#/components/schemas/Uuid"
+            title:
+              type: string
+              minLength: 1
+              maxLength: 300
+          nullable: true
+        alreadyConnected:
+          type: boolean
+
+    ConnectCandidatePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConnectCandidate"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+          maximum: 20
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+    WorkItemConnectionLinkRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - columnId
+        - targetWorkItemId
+      properties:
+        columnId:
+          $ref: "#/components/schemas/Uuid"
+        targetWorkItemId:
+          $ref: "#/components/schemas/Uuid"
+    ConnectedWorkItemCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - columnId
+        - targetProjectId
+        - title
+      properties:
+        columnId:
+          $ref: "#/components/schemas/Uuid"
+        targetProjectId:
+          $ref: "#/components/schemas/Uuid"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        contentId:
+          type: string
+          format: uuid
+          nullable: true
+    ConnectTargetInUseDetails:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+        - targetProjectId
+        - activeConnectionCount
+      properties:
+        reason:
+          type: string
+          enum:
+            - CONNECT_TARGET_IN_USE
+        targetProjectId:
+          $ref: "#/components/schemas/Uuid"
+        activeConnectionCount:
+          type: integer
+          format: int64
+          minimum: 1
+    ConnectTargetInUseError:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - requestId
+        - retryable
+        - fieldErrors
+        - details
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+          minLength: 1
+          description: 面向当前用户的安全错误说明。
+        requestId:
+          $ref: "#/components/schemas/RequestId"
+        retryable:
+          type: boolean
+          description: 当前请求是否可在不改变业务意图的前提下自动重试。
+        fieldErrors:
+          type: array
+          description: 字段级错误；非字段校验错误固定为空数组。
+          items:
+            $ref: "#/components/schemas/FieldError"
+        details:
+          $ref: "#/components/schemas/ConnectTargetInUseDetails"
     OperationsVolume:
       type: object
       additionalProperties: false
@@ -8345,6 +9725,90 @@ components:
         minimum: 1
 
   examples:
+    ConnectColumnIncoming:
+      summary: ConnectColumnIncoming 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-incoming.json
+    ConnectColumnTarget:
+      summary: ConnectColumnTarget 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-target.json
+    ConnectColumn:
+      summary: ConnectColumn 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column.json
+    ConnectColumnCatalog:
+      summary: ConnectColumnCatalog 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-catalog.json
+    ConnectColumnCreateRequest:
+      summary: ConnectColumnCreateRequest 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-create-request.json
+    ConnectColumnUpdateRequest:
+      summary: ConnectColumnUpdateRequest 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-update-request.json
+    ConnectColumnDeleteResult:
+      summary: ConnectColumnDeleteResult 连接契约黄金样例
+      externalValue: ../examples/connections/connect-column-delete-result.json
+    ConnectTargetProject:
+      summary: ConnectTargetProject 连接契约黄金样例
+      externalValue: ../examples/connections/connect-target-project.json
+    ConnectTargetProjectPage:
+      summary: ConnectTargetProjectPage 连接契约黄金样例
+      externalValue: ../examples/connections/connect-target-project-page.json
+    ConnectionCardLabel:
+      summary: ConnectionCardLabel 连接契约黄金样例
+      externalValue: ../examples/connections/connection-card-label.json
+    ConnectionCardStatus:
+      summary: ConnectionCardStatus 连接契约黄金样例
+      externalValue: ../examples/connections/connection-card-status.json
+    ConnectionCardCategory:
+      summary: ConnectionCardCategory 连接契约黄金样例
+      externalValue: ../examples/connections/connection-card-category.json
+    ConnectionCardAssignee:
+      summary: ConnectionCardAssignee 连接契约黄金样例
+      externalValue: ../examples/connections/connection-card-assignee.json
+    ConnectionCard:
+      summary: ConnectionCard 连接契约黄金样例
+      externalValue: ../examples/connections/connection-card.json
+    WorkItemConnectionCapabilities:
+      summary: WorkItemConnectionCapabilities 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-capabilities.json
+    WorkItemConnection:
+      summary: WorkItemConnection 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection.json
+    WorkItemConnectionOutgoing:
+      summary: WorkItemConnectionOutgoing 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-outgoing.json
+    WorkItemConnectionCell:
+      summary: WorkItemConnectionCell 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-cell.json
+    WorkItemConnectionCellList:
+      summary: WorkItemConnectionCellList 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-cell-list.json
+    WorkItemConnectionPage:
+      summary: WorkItemConnectionPage 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-page.json
+    ConnectCreateOptions:
+      summary: ConnectCreateOptions 连接契约黄金样例
+      externalValue: ../examples/connections/connect-create-options.json
+    ConnectCandidateParent:
+      summary: ConnectCandidateParent 连接契约黄金样例
+      externalValue: ../examples/connections/connect-candidate-parent.json
+    ConnectCandidate:
+      summary: ConnectCandidate 连接契约黄金样例
+      externalValue: ../examples/connections/connect-candidate.json
+    ConnectCandidatePage:
+      summary: ConnectCandidatePage 连接契约黄金样例
+      externalValue: ../examples/connections/connect-candidate-page.json
+    WorkItemConnectionLinkRequest:
+      summary: WorkItemConnectionLinkRequest 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-link-request.json
+    ConnectedWorkItemCreateRequest:
+      summary: ConnectedWorkItemCreateRequest 连接契约黄金样例
+      externalValue: ../examples/connections/connected-work-item-create-request.json
+    ConnectTargetInUseDetails:
+      summary: ConnectTargetInUseDetails 连接契约黄金样例
+      externalValue: ../examples/connections/connect-target-in-use-details.json
+    ConnectTargetInUseError:
+      summary: ConnectTargetInUseError 连接契约黄金样例
+      externalValue: ../examples/connections/connect-target-in-use-error.json
     OperationsLogTailSample:
       summary: 跨越 JavaScript 整数精度边界的日志水位与空异常
       externalValue: ../examples/operations/log-tail.json

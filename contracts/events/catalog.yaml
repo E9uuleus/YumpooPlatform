@@ -416,3 +416,38 @@ events:
     schema: schemas/workitem.work-item-unarchived-v1.schema.json
     validExamples: [examples/workitem.work-item-unarchived-v1.json]
     invalidExamples: [examples/workitem.work-item-unarchived-v1.invalid.json]
+  - eventType: workitem.connect_column_created
+    eventVersion: 1
+    schema: schemas/workitem.connect-column-created-v1.schema.json
+    validExamples:
+      - examples/workitem.connect-column-created-v1.json
+    invalidExamples:
+      - examples/workitem.connect-column-created-v1.invalid.json
+  - eventType: workitem.connect_column_updated
+    eventVersion: 1
+    schema: schemas/workitem.connect-column-updated-v1.schema.json
+    validExamples:
+      - examples/workitem.connect-column-updated-v1.json
+    invalidExamples:
+      - examples/workitem.connect-column-updated-v1.invalid.json
+  - eventType: workitem.connect_column_deleted
+    eventVersion: 1
+    schema: schemas/workitem.connect-column-deleted-v1.schema.json
+    validExamples:
+      - examples/workitem.connect-column-deleted-v1.json
+    invalidExamples:
+      - examples/workitem.connect-column-deleted-v1.invalid.json
+  - eventType: workitem.connection_created
+    eventVersion: 1
+    schema: schemas/workitem.connection-created-v1.schema.json
+    validExamples:
+      - examples/workitem.connection-created-v1.json
+    invalidExamples:
+      - examples/workitem.connection-created-v1.invalid.json
+  - eventType: workitem.connection_deleted
+    eventVersion: 1
+    schema: schemas/workitem.connection-deleted-v1.schema.json
+    validExamples:
+      - examples/workitem.connection-deleted-v1.json
+    invalidExamples:
+      - examples/workitem.connection-deleted-v1.invalid.json

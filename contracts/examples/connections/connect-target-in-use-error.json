@@ -1,0 +1,12 @@
+{
+  "code": "INVALID_STATE_TRANSITION",
+  "message": "目标项目仍有有效连接",
+  "requestId": "up3-target-in-use",
+  "retryable": false,
+  "fieldErrors": [],
+  "details": {
+    "reason": "CONNECT_TARGET_IN_USE",
+    "targetProjectId": "62000000-0000-4000-8000-000000000002",
+    "activeConnectionCount": 1
+  }
+}

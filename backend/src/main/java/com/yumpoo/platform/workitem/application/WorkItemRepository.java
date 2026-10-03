@@ -56,6 +56,7 @@ public interface WorkItemRepository {
             Map<UUID, String> ranks);
     void lockProjectOrder(UUID companyId, UUID projectId);
     Optional<WorkItem> lockProjectItem(UUID companyId, UUID projectId, UUID workItemId);
+    Optional<WorkItem> lockProjectItemIncludingDeleted(UUID companyId, UUID projectId, UUID workItemId);
     Optional<RankedProjectWorkItem> findProjectNeighborBefore(UUID companyId, UUID projectId,
             String projectSortKey, UUID excludedId);
     Optional<RankedProjectWorkItem> findProjectNeighborAfter(UUID companyId, UUID projectId,

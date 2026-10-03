@@ -1,0 +1,26 @@
+{
+  "eventId": "62000000-0000-4000-8000-000000000020",
+  "eventType": "workitem.connect_column_created",
+  "eventVersion": 1,
+  "occurredAt": "2026-10-01T12:00:00Z",
+  "aggregateType": "ConnectColumn",
+  "aggregateId": "62000000-0000-4000-8000-000000000005",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": {
+    "type": "USER",
+    "userId": "62000000-0000-4000-8000-000000000011"
+  },
+  "requestId": "up3-contract",
+  "correlationId": "up3-contract",
+  "causationId": null,
+  "payload": {
+    "projectId": "62000000-0000-4000-8000-000000000001",
+    "columnId": "62000000-0000-4000-8000-000000000005",
+    "name": "研发跟进",
+    "targetProjectIds": [
+      "62000000-0000-4000-8000-000000000002"
+    ],
+    "title": "禁止写入正文或未约定字段"
+  }
+}

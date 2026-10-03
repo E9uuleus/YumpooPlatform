@@ -1,0 +1,28 @@
+{
+  "eventId": "62000000-0000-4000-8000-000000000023",
+  "eventType": "workitem.connection_created",
+  "eventVersion": 1,
+  "occurredAt": "2026-10-01T12:00:00Z",
+  "aggregateType": "WorkItemConnection",
+  "aggregateId": "62000000-0000-4000-8000-000000000007",
+  "aggregateVersion": 0,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": {
+    "type": "USER",
+    "userId": "62000000-0000-4000-8000-000000000011"
+  },
+  "requestId": "up3-contract",
+  "correlationId": "up3-contract",
+  "causationId": null,
+  "payload": {
+    "connectionId": "62000000-0000-4000-8000-000000000007",
+    "columnId": "62000000-0000-4000-8000-000000000005",
+    "columnName": "研发跟进",
+    "origin": "CREATED",
+    "sourceProjectId": "62000000-0000-4000-8000-000000000001",
+    "sourceWorkItemId": "62000000-0000-4000-8000-000000000003",
+    "targetProjectId": "62000000-0000-4000-8000-000000000002",
+    "targetWorkItemId": "62000000-0000-4000-8000-000000000004",
+    "title": "禁止写入正文或未约定字段"
+  }
+}

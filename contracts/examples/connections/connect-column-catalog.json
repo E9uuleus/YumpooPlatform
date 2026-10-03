@@ -1,0 +1,33 @@
+{
+  "items": [
+    {
+      "id": "62000000-0000-4000-8000-000000000005",
+      "projectId": "62000000-0000-4000-8000-000000000001",
+      "name": "研发跟进",
+      "targets": [
+        {
+          "projectId": "62000000-0000-4000-8000-000000000002",
+          "code": "P002",
+          "name": "研发协作",
+          "lifecycle": "ACTIVE",
+          "actorCanLinkExisting": false
+        }
+      ],
+      "rowVersion": 0,
+      "etag": "\"0\"",
+      "createdAt": "2026-10-01T12:00:00Z"
+    }
+  ],
+  "incomingAvailable": true,
+  "incomingColumns": [
+    {
+      "columnId": "62000000-0000-4000-8000-000000000006",
+      "columnName": "反馈协作",
+      "projectId": "62000000-0000-4000-8000-000000000002",
+      "projectCode": "P002",
+      "projectName": "研发协作"
+    }
+  ],
+  "canManage": true,
+  "canDelete": true
+}

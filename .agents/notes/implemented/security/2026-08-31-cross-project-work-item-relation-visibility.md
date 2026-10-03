@@ -28,6 +28,8 @@ Status: implemented
 
 ## Consequences
 
+连接是[独立聚合](../architecture/2026-09-30-work-item-connections.md)，其[最小卡片授权](2026-09-30-connection-intake-and-card-visibility.md)不改变本记录的普通关系隐藏占位规则。
+
 所有新的关系读取入口都必须在分页和计数前应用双侧 Project 可见性，不能通过缓存、统计、导出或错误信息重新暴露隐藏关系。所有新的跨项目关系写命令必须复用同一锁序和双侧事务内复检。Web 只能把匿名占位渲染为单一不可操作提示；跨项目对端必须切换到目标 Project 上下文后再加载成员、Content 和编辑能力。
 
 备份、恢复和事件重放继续把关系与双侧 Work Item 视为一致性集合。Linux CI 的 PostgreSQL HTTP 集成测试是数据库与并发结论的最终门禁；当前 Windows 宿主的 Java HttpClient 回环限制不得被解释为集成测试通过。

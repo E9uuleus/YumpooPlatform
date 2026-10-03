@@ -34,6 +34,7 @@ import com.yumpoo.platform.workitem.domain.WorkItemStatusCategory;
 import org.springframework.stereotype.Service;
 import java.time.Instant;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
@@ -362,11 +363,11 @@ public class WorkItemService {
             ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
                     command.actor(), visible.project().projectId());
             requireWritableAccess(project.actorAccess());
-            Content content = contents.lockForShare(project.companyId(), project.projectId(),
+            Content content = lockCreationContent(project.companyId(), project.projectId(),
                             command.contentId())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             requireActiveContent(content);
-            CreatedWorkItem created = createItem(project, content, new WorkItemDraft(
+            CreatedWorkItem created = createItem(ItemWriteTarget.from(project), content, new WorkItemDraft(
                     command.title(), priority, command.assigneeUserId(), description,
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
                     command.dueDate(), command.dueTime()), command.actor());
@@ -392,7 +393,11 @@ public class WorkItemService {
             ProjectFactWriteSnapshot project = writeGuard.lockForFactWrite(
                     command.actor(), parentLocator.projectId());
             requireWritableAccess(project.actorAccess());
-            Content parentContent = contents.lockForShare(project.companyId(), project.projectId(),
+            Content targetContent = lockCreationContent(project.companyId(), project.projectId(), command.contentId())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            requireActiveContent(targetContent);
+            Content parentContent = parentLocator.contentId().equals(targetContent.id())
+                    ? targetContent : contents.lockForShare(project.companyId(), project.projectId(),
                             parentLocator.contentId())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             WorkItem parent = workItems.lock(project.companyId(), project.projectId(),
@@ -402,13 +407,7 @@ public class WorkItemService {
                 throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
                         "NESTED_SUBITEM_NOT_SUPPORTED");
             }
-            Content targetContent = parentContent.id().equals(command.contentId())
-                    ? parentContent
-                    : contents.lockForShare(project.companyId(), project.projectId(), command.contentId())
-                            .orElseThrow(() -> new ApplicationException(
-                                    StandardErrorCode.RESOURCE_NOT_FOUND));
-            requireActiveContent(targetContent);
-            CreatedWorkItem created = createItem(project, targetContent, new WorkItemDraft(
+            CreatedWorkItem created = createItem(ItemWriteTarget.from(project), targetContent, new WorkItemDraft(
                     command.title(), priority, command.assigneeUserId(), description,
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
                     command.dueDate(), command.dueTime()), command.actor());
@@ -424,8 +423,31 @@ public class WorkItemService {
         });
     }
 
-    private CreatedWorkItem createItem(ProjectFactWriteSnapshot project, Content content,
+    @Transactional(propagation = Propagation.MANDATORY)
+    public WorkItem createRootItemForConnection(ItemWriteTarget target, UUID contentId,
+            String title, CurrentActor actor) {
+        requireActor(actor);
+        if (!target.companyId().equals(actor.companyId()))
+            throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+        Content content = lockCreationContent(target.companyId(), target.projectId(), contentId)
+                .orElseThrow(() -> validation("contentId", "CONTENT_NOT_AVAILABLE", "类别不属于目标项目或已删除"));
+        if (!content.active() || content.deletedAt() != null)
+            throw validation("contentId", "CONTENT_NOT_ACTIVE", "请选择目标项目的启用类别");
+        return createItem(target, content, new WorkItemDraft(title, null, null, null, null,
+                null, null, null, DueTimeChange.unchanged()), actor).item();
+    }
+
+    private Optional<Content> lockCreationContent(UUID companyId, UUID projectId, UUID contentId) {
+        var snapshot = contents.find(companyId, projectId, contentId);
+        if (snapshot.isEmpty()) return Optional.empty();
+        // First-use writers must wait for the catalog without holding a category share lock.
+        if (!snapshot.get().everUsed()) contents.lockCatalogVersion(companyId, projectId);
+        return contents.lockForShare(companyId, projectId, contentId);
+    }
+
+    private CreatedWorkItem createItem(ItemWriteTarget project, Content content,
             WorkItemDraft draft, CurrentActor actor) {
+        markContentUsed(project, content, actor);
         requireActiveAssignee(project, draft.assigneeUserId());
         List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
                 project.companyId(), project.projectId());
@@ -462,7 +484,6 @@ public class WorkItemService {
             throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
         }
         if (!workItems.insert(item)) throw new IllegalStateException("work item insert failed");
-        markContentUsed(project, content, actor);
         appendCreated(item, actor);
         return new CreatedWorkItem(item, statusLabels);
     }
@@ -474,7 +495,7 @@ public class WorkItemService {
     private record CreatedWorkItem(WorkItem item,
             List<WorkItemLabelModels.StatusLabel> statusLabels) {}
 
-    private void markContentUsed(ProjectFactWriteSnapshot project, Content content, CurrentActor actor) {
+    private void markContentUsed(ItemWriteTarget project, Content content, CurrentActor actor) {
         if (content.everUsed()) return;
         long catalogVersion = contents.lockCatalogVersion(project.companyId(), project.projectId());
         Content locked = contents.lock(project.companyId(), project.projectId(), content.id())
@@ -1477,6 +1498,10 @@ public class WorkItemService {
     }
 
     private void requireActiveAssignee(ProjectFactWriteSnapshot project, UUID assigneeUserId) {
+        requireActiveAssignee(ItemWriteTarget.from(project), assigneeUserId);
+    }
+
+    private void requireActiveAssignee(ItemWriteTarget project, UUID assigneeUserId) {
         if (assigneeUserId != null && !activeMemberships.isActiveMember(
                 project.companyId(), project.projectId(), assigneeUserId)) {
             throw validation("assigneeUserId", "NOT_ACTIVE_PROJECT_MEMBER",

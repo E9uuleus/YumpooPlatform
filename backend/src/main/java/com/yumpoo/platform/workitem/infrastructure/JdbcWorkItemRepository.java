@@ -477,6 +477,14 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 .query(JdbcWorkItemRepository::map).optional();
     }
 
+    @Override
+    public Optional<WorkItem> lockProjectItemIncludingDeleted(UUID companyId, UUID projectId, UUID workItemId) {
+        return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item "
+                        + "WHERE company_id=:companyId AND project_id=:projectId AND id=:workItemId FOR UPDATE")
+                .param("companyId", companyId).param("projectId", projectId)
+                .param("workItemId", workItemId).query(JdbcWorkItemRepository::map).optional();
+    }
+
     private Optional<WorkItem> find(UUID companyId, UUID projectId, UUID contentId,
             UUID workItemId, boolean lock, boolean includeDeleted) {
         return jdbc.sql("SELECT " + COLUMNS + " FROM yumpoo.work_item WHERE company_id=:companyId "
