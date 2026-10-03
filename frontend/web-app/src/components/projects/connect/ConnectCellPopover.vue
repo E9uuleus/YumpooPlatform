@@ -48,7 +48,7 @@ async function link(candidate: ConnectCandidate) {
   if (busy.value || !canSearch.value || connected(candidate) || candidate.card.archived) return
   busy.value = true
   try { await context.link(props.item.id, props.column.id, candidate.card.workItemId); candidate.alreadyConnected = true; emit('changed'); ElMessage.success('已关联工作项') }
-  catch (reason) { ElMessage.error(problemMessage(await toConnectProblem(reason))) } finally { busy.value = false }
+  catch (reason) { ElMessage.error(problemMessage(await toConnectProblem(reason, { operation: 'link' }))) } finally { busy.value = false }
 }
 function create() { if (writable.value && target.value) emit('requestCreate', target.value.projectId, query.value.trim() || props.item.title) }
 </script>

@@ -45,7 +45,7 @@ async function submit() {
     const connection = await context.createAndLink(props.sourceItem.id, { columnId: props.column.id, targetProjectId: props.targetProjectId, title: title.value.trim(), contentId: contentId.value })
     if (current !== revision) return
     ElMessage.success(`已在「${projectName.value}」中新建并关联`); emit('created', connection); emit('update:open', false)
-  } catch (reason) { if (current === revision) problem.value = await toConnectProblem(reason) }
+  } catch (reason) { if (current === revision) problem.value = await toConnectProblem(reason, { operation: 'createAndLink' }) }
   finally { if (current === revision) busy.value = false }
 }
 </script>

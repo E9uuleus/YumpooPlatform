@@ -1,6 +1,6 @@
 import { computed, nextTick, provide, ref, watch, type MaybeRefOrGetter, toValue } from 'vue'
 import { ProjectActorAccess, ProjectLifecycle, type ConnectColumn, type ProjectDetail, type ProjectWorkItemListItem, type WorkItemConnection } from '@yumpoo/api-client'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSession } from '../../../composables/useSession'
 import { connectColumnDefaultWidth, connectColumnKey, connectColumnKeys, connectColumnMinWidth, type ConnectColumnKey, type ConnectTableColumn } from './connectColumnKeys'
 import { connectColumnPrefsKey, readConnectColumnPrefs, saveConnectColumnPrefs, type ConnectColumnPrefs } from './connectColumnPrefs'
@@ -8,7 +8,7 @@ import { connectColumnsContext, useConnectColumns } from './useConnectColumns'
 
 export function useConnectTable(options: { projectId: MaybeRefOrGetter<string>; enabled: MaybeRefOrGetter<boolean>;
   project: MaybeRefOrGetter<ProjectDetail | undefined>; rows: () => ProjectWorkItemListItem[]; table: () => HTMLElement | undefined }) {
-  const session = useSession(), route = useRoute()
+  const session = useSession(), route = useRoute(), router = useRouter()
   const prefs = ref<ConnectColumnPrefs>({ hidden: [], widths: {} })
   const prefKey = computed(() => {
     const authentication = session.authentication.value
@@ -42,7 +42,7 @@ export function useConnectTable(options: { projectId: MaybeRefOrGetter<string>; 
   watch(() => [toValue(options.project)?.actorAccess, toValue(options.project)?.lifecycle], (next, previous) => {
     if (previous[0] && next[0] && next.join() !== previous.join()) { void context.loadCatalog(); void context.refreshCells(options.rows().map(item => item.id)) }
   })
-  watch(() => [toValue(options.enabled), options.rows().map(item => `${item.id}:${item.rowVersion}`).join('|'), catalog.value], () => {
+  watch([() => toValue(options.enabled), () => options.rows().map(item => `${item.id}:${item.rowVersion}`).join('|'), () => Boolean(catalog.value)], () => {
     if (!toValue(options.enabled) || !catalog.value) return
     const items = options.rows()
     const changed = items.filter(item => versions.has(item.id) && versions.get(item.id) !== item.rowVersion).map(item => item.id)
@@ -56,24 +56,39 @@ export function useConnectTable(options: { projectId: MaybeRefOrGetter<string>; 
     if (visible) next.delete(key); else next.add(key)
     prefs.value = { ...prefs.value, hidden: [...next] }; persist()
   }
-  function resizeColumn(key: ConnectColumnKey, value: number) {
+  function resizeColumn(key: ConnectColumnKey, value: number, save = true) {
     if (!keys.value.includes(key) || !Number.isFinite(value)) return
-    prefs.value = { ...prefs.value, widths: { ...prefs.value.widths, [key]: Math.max(connectColumnMinWidth(key), Math.round(value)) } }; persist()
+    prefs.value = { ...prefs.value, widths: { ...prefs.value.widths, [key]: Math.max(connectColumnMinWidth(key), Math.round(value)) } }
+    if (save) persist()
   }
   async function reveal(column: ConnectColumn | string) {
     const key = connectColumnKey(typeof column === 'string' ? column : column.id)
-    if (!keys.value.includes(key)) return
+    if (!toValue(options.enabled) || !keys.value.includes(key)) return false
     toggleColumn(key, true)
     await nextTick()
     options.table()?.querySelector<HTMLElement>(`[data-connect-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    return true
   }
-  watch([() => route.query.connectColumn, () => keys.value.join('|')], ([id]) => { if (typeof id === 'string') void reveal(id) }, { immediate: true })
+  watch([() => route.query.connectColumn, () => keys.value.join('|')], async ([id], _, onCleanup) => {
+    if (typeof id !== 'string') return
+    let stale = false
+    onCleanup(() => { stale = true })
+    if (!await reveal(id) || stale || route.query.connectColumn !== id) return
+    const query = { ...route.query }
+    delete query.connectColumn
+    await router.replace({ path: route.path, query, hash: route.hash })
+  }, { immediate: true })
   function edit(column?: ConnectColumn) { if (canManage.value) { editingColumn.value = column; columnDialogOpen.value = true } }
   function requestDelete(column: ConnectColumn) { if (canDelete.value) deletingColumn.value = column }
   function openCard(connection: WorkItemConnection, side: 'source' | 'target' = 'source') { selectedConnection.value = connection; perspective.value = side; cardOpen.value = true }
   function refreshConnection(connection: WorkItemConnection) {
     return context.refreshCells([connection.source, connection.target].filter(card => card.projectId === toValue(options.projectId)).map(card => card.workItemId))
   }
+  async function reloadConnections() {
+    const identity = prefKey.value
+    await context.loadCatalog()
+    if (identity === prefKey.value) await context.refreshCells(options.rows().map(item => item.id))
+  }
   return { ...context, columns, visibleColumns, hidden, readOnly, canManage, canDelete, columnDialogOpen, editingColumn, deletingColumn,
-    selectedConnection, perspective, cardOpen, edit, requestDelete, openCard, width, toggleColumn, resizeColumn, reveal, refreshConnection }
+    selectedConnection, perspective, cardOpen, edit, requestDelete, openCard, width, toggleColumn, resizeColumn, reveal, refreshConnection, reloadConnections }
 }

@@ -106,18 +106,12 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
       return result
     } catch (reason) {
       const problem = await toApiProblem(reason)
-      if (current === revision && problem.kind === 'response' && [409, 412].includes(problem.status)) {
+      if (current === revision && problem.kind === 'response' && [404, 409, 412].includes(problem.status)) {
         await loadCatalog()
-        if (current === revision) await refreshCells(affected.length ? affected : [...cells.value.keys()])
+        if (current === revision && problem.status !== 404) await refreshCells(affected.length ? affected : [...cells.value.keys()])
       }
       throw reason
     }
-  }
-  async function columnsChanged(): Promise<void> {
-    const current = revision
-    const ids = [...new Set([...cells.value.keys(), ...pending.keys()])]
-    await loadCatalog()
-    if (current === revision) await refreshCells(ids)
   }
   function affectedItems(connection: WorkItemConnection): string[] {
     return [connection.source, connection.target].filter(card => card.projectId === toValue(projectId)).map(card => card.workItemId)
@@ -126,15 +120,15 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
   function createColumn(input: ConnectColumnCreateRequest) {
     const id = toValue(projectId)
     return write((xXSRFTOKEN, signal) => workItemsApi.createConnectColumn({ projectId: id, xXSRFTOKEN,
-      idempotencyKey: crypto.randomUUID(), connectColumnCreateRequest: input }, { signal }), columnsChanged)
+      idempotencyKey: crypto.randomUUID(), connectColumnCreateRequest: input }, { signal }), loadCatalog)
   }
   function updateColumn(column: ConnectColumn, input: ConnectColumnCreateRequest) {
     return write((xXSRFTOKEN, signal) => workItemsApi.updateConnectColumn({ projectId: column.projectId, columnId: column.id,
-      xXSRFTOKEN, ifMatch: column.etag, connectColumnUpdateRequest: input }, { signal }), columnsChanged)
+      xXSRFTOKEN, ifMatch: column.etag, connectColumnUpdateRequest: input }, { signal }), loadCatalog)
   }
   async function deleteColumn(column: ConnectColumn): Promise<number> {
     const result = await write((xXSRFTOKEN, signal) => workItemsApi.deleteConnectColumn({ projectId: column.projectId, columnId: column.id,
-      xXSRFTOKEN, ifMatch: column.etag, idempotencyKey: crypto.randomUUID() }, { signal }), columnsChanged)
+      xXSRFTOKEN, ifMatch: column.etag, idempotencyKey: crypto.randomUUID() }, { signal }), loadCatalog)
     return result.removedConnectionCount
   }
   function link(sourceItemId: string, columnId: string, targetItemId: string) {

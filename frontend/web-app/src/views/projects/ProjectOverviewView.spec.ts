@@ -14,7 +14,7 @@ import {
   type ProjectWorkItemListItem,
 } from '@yumpoo/api-client'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElPopconfirm } from 'element-plus'
 import { defineComponent, nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkItemTableSource } from '../../components/projects/workItemTableSource'
@@ -22,6 +22,7 @@ import ProjectOverviewView from '../../components/projects/ProjectWorkItems.vue'
 import ConnectCell from '../../components/projects/connect/ConnectCell.vue'
 import ConnectColumnAddButton from '../../components/projects/connect/ConnectColumnAddButton.vue'
 import ConnectColumnDialog from '../../components/projects/connect/ConnectColumnDialog.vue'
+import ConnectionCardDialog from '../../components/projects/connect/ConnectionCardDialog.vue'
 import { connection, connectionCatalog } from '../../components/projects/connect/connectTestFixtures'
 
 enableAutoUnmount(afterEach)
@@ -50,6 +51,8 @@ const state = vi.hoisted(() => ({
   listConnectColumns: vi.fn(),
   listWorkItemConnectionCells: vi.fn(),
   searchConnectTargetProjects: vi.fn(),
+  getWorkItemConnection: vi.fn(),
+  unlinkWorkItemConnection: vi.fn(),
   routeLeave: vi.fn(),
   routeUpdate: vi.fn(),
 }))
@@ -71,6 +74,8 @@ vi.mock('../../api/client', () => ({
     listConnectColumns: state.listConnectColumns,
     listWorkItemConnectionCells: state.listWorkItemConnectionCells,
     searchConnectTargetProjects: state.searchConnectTargetProjects,
+    getWorkItemConnection: state.getWorkItemConnection,
+    unlinkWorkItemConnection: state.unlinkWorkItemConnection,
     listProjectWorkItems: state.listProjectWorkItems,
     listWorkItemSubitems: state.listWorkItemSubitems,
     listProjectWorkItemFilterOptions: state.listProjectWorkItemFilterOptions,
@@ -219,6 +224,42 @@ describe('项目级工作项首页', () => {
     expect(state.listConnectColumns).not.toHaveBeenCalled(); expect(state.listWorkItemConnectionCells).not.toHaveBeenCalled()
     expect(wrapper.find('.monday-connect-column').exists()).toBe(false)
     expect(wrapper.findComponent(ConnectColumnDialog).exists()).toBe(false)
+  })
+
+  it('从卡片解除连接只刷新一次当前行', async () => {
+    const current = { ...connection, source: { ...connection.source, projectId: 'project-1', workItemId: 'item-1' } }
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    state.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item-1', outgoing: [{ columnId: current.columnId, connections: [current] }], incoming: [], incomingTotal: 0 }] })
+    state.getWorkItemConnection.mockResolvedValue(current)
+    state.unlinkWorkItemConnection.mockResolvedValue({ ...current, active: false })
+    const wrapper = mountView(); await flushPromises()
+    wrapper.getComponent(ConnectCell).vm.$emit('openCard', current); await flushPromises()
+    state.listWorkItemConnectionCells.mockClear()
+    state.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item-1', outgoing: [], incoming: [], incomingTotal: 0 }] })
+    const card = wrapper.getComponent(ConnectionCardDialog)
+    card.getComponent(ElPopconfirm).vm.$emit('confirm'); await flushPromises()
+    expect(state.unlinkWorkItemConnection).toHaveBeenCalledTimes(1)
+    expect(state.listWorkItemConnectionCells).toHaveBeenCalledTimes(1)
+    expect(state.listWorkItemConnectionCells.mock.calls[0]![0].workItemIds).toEqual(['item-1'])
+    expect(card.props('open')).toBe(false)
+    expect(wrapper.getComponent(ConnectCell).props('connections')).toEqual([])
+  })
+
+  it('重新加载连接包含展开的子项行，恢复子项请求失败的单元格', async () => {
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    state.listProjectWorkItems.mockResolvedValue(page([{ ...item('parent'), subitemCount: 1 }]))
+    state.listWorkItemSubitems.mockResolvedValue({ items: [item('child')] })
+    const wrapper = mountView(); await flushPromises()
+    state.listWorkItemConnectionCells.mockRejectedValueOnce(new Error('子项连接请求失败'))
+    await wrapper.get('button[aria-label="展开子项"]').trigger('click'); await flushPromises()
+    const retry = wrapper.findAll('button').find(button => button.text() === '重新加载连接')!
+    expect(retry.exists()).toBe(true)
+    state.listWorkItemConnectionCells.mockClear()
+    state.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'child', outgoing: [{ columnId: connection.columnId, connections: [connection] }], incoming: [], incomingTotal: 0 }] })
+    await retry.trigger('click'); await flushPromises()
+    expect(state.listWorkItemConnectionCells).toHaveBeenCalledTimes(1)
+    expect(state.listWorkItemConnectionCells.mock.calls[0]![0].workItemIds).toEqual(['parent', 'child'])
+    expect(wrapper.findAllComponents(ConnectCell).find(cell => cell.props('item').id === 'child')?.props('connections')).toEqual([connection])
   })
 
   it.each(['filter', 'view', 'project', 'group'] as const)('%s 切换清除 reserve-selection 和子表内部勾选，数量不会回弹', async change => {

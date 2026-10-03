@@ -77,7 +77,7 @@ import { useSession } from '../../composables/useSession'
 import { useWorkItemDueClock } from './useWorkItemDueClock'
 import { companyDate } from './workItemDueDate'
 import ConnectColumnAddButton from './connect/ConnectColumnAddButton.vue'
-import ConnectColumnHeader from './connect/ConnectColumnHeader.vue'
+import ConnectTableColumnHeader from './connect/ConnectTableColumnHeader.vue'
 import ConnectColumnDialog from './connect/ConnectColumnDialog.vue'
 import ConnectColumnDeleteDialog from './connect/ConnectColumnDeleteDialog.vue'
 import ConnectCell from './connect/ConnectCell.vue'
@@ -536,8 +536,11 @@ const orderedSubitemColumns = computed(() => [
   columnByKey.get('title')!,
   ...subitemMovableColumnOrder.value.map(key => columnByKey.get(key)!),
 ])
-const connect = reactive(useConnectTable({ projectId, project, enabled: () => !embedded.value && selectedView.value === 'table',
-  rows: () => [...tableItems.value, ...Object.values(subitems).flatMap(state => state.items)], table: () => tableRef.value?.$el }))
+const connect = reactive(useConnectTable({
+  projectId, project, enabled: () => !embedded.value && selectedView.value === 'table',
+  rows: () => [...tableItems.value, ...Object.values(subitems).flatMap(state => state.items)],
+  table: () => tableRef.value?.$el,
+}))
 const builtInVisibleColumns = computed(() => orderedColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
 const visibleColumns = computed(() => [...builtInVisibleColumns.value, ...connect.visibleColumns])
 const visibleSubitemColumns = computed(() => orderedSubitemColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
@@ -2683,11 +2686,25 @@ onBeforeUnmount(() => {
     />
     <template v-if="project">
       <template v-if="!embedded">
-        <connect-column-dialog v-model:open="connect.columnDialogOpen" :project-id="projectId" :mode="connect.editingColumn ? 'edit' : 'create'"
-          :column="connect.editingColumn" :existing-names="connect.catalog?.items.map(column => column.name) ?? []" @saved="connect.reveal" />
-        <connect-column-delete-dialog :column="connect.deletingColumn" @close="connect.deletingColumn = undefined" />
-        <connection-card-dialog v-if="connect.selectedConnection" v-model:open="connect.cardOpen" :connection="connect.selectedConnection"
-          :perspective="connect.perspective" @unlinked="connect.refreshConnection" @invalidated="connect.refreshConnection" />
+        <connect-column-dialog
+          v-model:open="connect.columnDialogOpen"
+          :project-id="projectId"
+          :mode="connect.editingColumn ? 'edit' : 'create'"
+          :column="connect.editingColumn"
+          :existing-names="connect.catalog?.items.map(column => column.name) ?? []"
+          @saved="connect.reveal"
+        />
+        <connect-column-delete-dialog
+          :column="connect.deletingColumn"
+          @close="connect.deletingColumn = undefined"
+        />
+        <connection-card-dialog
+          v-if="connect.selectedConnection"
+          v-model:open="connect.cardOpen"
+          :connection="connect.selectedConnection"
+          :perspective="connect.perspective"
+          @invalidated="connect.refreshConnection"
+        />
       </template>
       <project-workspace-header
         v-if="!embedded"
@@ -2876,7 +2893,12 @@ onBeforeUnmount(() => {
 
         <template v-if="!embedded && selectedView === 'table' && (connect.catalogError || connect.cellError)">
           <inline-problem :problem="connect.catalogError ?? connect.cellError!" />
-          <el-button text @click="connect.loadCatalog().then(() => connect.refreshCells(tableItems.map(item => item.id)))">重新加载连接</el-button>
+          <el-button
+            text
+            @click="connect.reloadConnections"
+          >
+            重新加载连接
+          </el-button>
         </template>
         <div
           v-if="selectedView === 'table'"
@@ -2955,7 +2977,9 @@ onBeforeUnmount(() => {
                     :error="subitemState((scope.row.parent as ProjectWorkItemListItem).id).error"
                     :sort-rules="subitemState((scope.row.parent as ProjectWorkItemListItem).id).sortRules"
                     :columns="visibleSubitemColumns"
-                    :connect-columns="connect.visibleColumns" :connect-cells="connect.cells" :connect-read-only="connect.readOnly"
+                    :connect-columns="connect.visibleColumns"
+                    :connect-cells="connect.cells"
+                    :connect-read-only="connect.readOnly"
                     :column-widths="columnWidths"
                     :active-contents="activeContents"
                     :content-catalog="catalog"
@@ -2989,12 +3013,20 @@ onBeforeUnmount(() => {
                     @open-connection="connect.openCard"
                   >
                     <template #connect-header="{ column }">
-                      <connect-column-header :label="column.label" :kind="column.kind" :can-manage="connect.canManage" :can-delete="connect.canDelete"
-                        :column-key="column.key" :width="column.width" :min-width="column.minWidth" @edit="connect.edit(column.column)"
-                        @hide="toggleColumn(column.key, false)" @delete="column.column && connect.requestDelete(column.column)" @resize="connect.resizeColumn(column.key, $event)" />
+                      <connect-table-column-header
+                        :column="column"
+                        :table="connect"
+                        @hide="toggleColumn($event, false)"
+                      />
                     </template>
-                    <template #column-add><connect-column-add-button :can-manage="connect.canManage" :hidden-columns="restorableColumns"
-                      @add-connect-column="connect.edit()" @show-column="showHiddenColumn" /></template>
+                    <template #column-add>
+                      <connect-column-add-button
+                        :can-manage="connect.canManage"
+                        :hidden-columns="restorableColumns"
+                        @add-connect-column="connect.edit()"
+                        @show-column="showHiddenColumn"
+                      />
+                    </template>
                   </project-work-item-subitems-table>
                   <work-item-row-actions
                     v-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem)"
@@ -3349,24 +3381,48 @@ onBeforeUnmount(() => {
                 </template>
               </el-table-column>
 
-              <el-table-column v-for="column in connect.visibleColumns" :key="column.key" :column-key="column.key" :prop="column.key"
-                :label="column.label" :width="column.width" :min-width="column.minWidth" class-name="monday-connect-column" label-class-name="monday-connect-column-header" resizable>
+              <el-table-column
+                v-for="column in connect.visibleColumns"
+                :key="column.key"
+                :column-key="column.key"
+                :prop="column.key"
+                :label="column.label"
+                :width="column.width"
+                :min-width="column.minWidth"
+                class-name="monday-connect-column"
+                label-class-name="monday-connect-column-header"
+                resizable
+              >
                 <template #header>
-                  <connect-column-header :label="column.label" :kind="column.kind" :can-manage="connect.canManage" :can-delete="connect.canDelete"
-                    :column-key="column.key" :width="column.width" :min-width="column.minWidth" @edit="connect.edit(column.column)"
-                    @hide="toggleColumn(column.key, false)" @delete="column.column && connect.requestDelete(column.column)" @resize="connect.resizeColumn(column.key, $event)" />
+                  <connect-table-column-header
+                    :column="column"
+                    :table="connect"
+                    @hide="toggleColumn($event, false)"
+                  />
                 </template>
                 <template #default="scope">
-                  <connect-column-header v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
-                    :label="column.label" :kind="column.kind" :can-manage="connect.canManage" :can-delete="connect.canDelete" :column-key="column.key"
-                    :width="column.width" :min-width="column.minWidth" @edit="connect.edit(column.column)" @hide="toggleColumn(column.key, false)"
-                    @delete="column.column && connect.requestDelete(column.column)" @resize="connect.resizeColumn(column.key, $event)" />
-                  <connect-cell v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem) && column.column" :item="scope.row as ProjectWorkItemListItem" :column="column.column"
+                  <connect-table-column-header
+                    v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
+                    :column="column"
+                    :table="connect"
+                    @hide="toggleColumn($event, false)"
+                  />
+                  <connect-cell
+                    v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem) && column.column"
+                    :item="scope.row as ProjectWorkItemListItem"
+                    :column="column.column"
                     :connections="connect.cells.get(scope.row.id)?.outgoing.find(value => value.columnId === column.column?.id)?.connections ?? []"
-                    :read-only="connect.readOnly" @open-card="connect.openCard($event)" />
-                  <incoming-connect-cell v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem) && column.kind === 'incoming'"
-                    :item="scope.row as ProjectWorkItemListItem" :incoming="connect.cells.get(scope.row.id)?.incoming ?? []" :incoming-total="connect.cells.get(scope.row.id)?.incomingTotal ?? 0"
-                    :read-only="connect.readOnly" @open-card="connect.openCard($event, 'target')" />
+                    :read-only="connect.readOnly"
+                    @open-card="connect.openCard($event)"
+                  />
+                  <incoming-connect-cell
+                    v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem) && column.kind === 'incoming'"
+                    :item="scope.row as ProjectWorkItemListItem"
+                    :incoming="connect.cells.get(scope.row.id)?.incoming ?? []"
+                    :incoming-total="connect.cells.get(scope.row.id)?.incomingTotal ?? 0"
+                    :read-only="connect.readOnly"
+                    @open-card="connect.openCard($event, 'target')"
+                  />
                 </template>
               </el-table-column>
               <el-table-column
@@ -3379,12 +3435,21 @@ onBeforeUnmount(() => {
                 label-class-name="monday-add-column-header"
               >
                 <template #header>
-                  <connect-column-add-button :can-manage="connect.canManage" :hidden-columns="restorableColumns"
-                    @add-connect-column="connect.edit()" @show-column="showHiddenColumn" />
+                  <connect-column-add-button
+                    :can-manage="connect.canManage"
+                    :hidden-columns="restorableColumns"
+                    @add-connect-column="connect.edit()"
+                    @show-column="showHiddenColumn"
+                  />
                 </template>
                 <template #default="scope">
-                  <connect-column-add-button v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
-                    :can-manage="connect.canManage" :hidden-columns="restorableColumns" @add-connect-column="connect.edit()" @show-column="showHiddenColumn" />
+                  <connect-column-add-button
+                    v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
+                    :can-manage="connect.canManage"
+                    :hidden-columns="restorableColumns"
+                    @add-connect-column="connect.edit()"
+                    @show-column="showHiddenColumn"
+                  />
                 </template>
               </el-table-column>
 
@@ -4137,34 +4202,6 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: flex-start;
   padding: 0 0 0 10px;
-}
-
-.monday-add-column-icon {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--yp-radius-sm, 4px);
-  background: transparent;
-  color: var(--yp-text-secondary);
-  cursor: pointer;
-  user-select: none;
-  transition: color var(--yp-motion-fast) var(--yp-ease-standard),
-              background-color var(--yp-motion-fast) var(--yp-ease-standard);
-}
-
-.monday-add-column-icon:hover {
-  background: var(--yp-bg-hover);
-  color: var(--yp-text-primary);
-}
-
-.monday-add-column-icon:focus-visible {
-  outline: 2px solid var(--yp-action-primary);
-  outline-offset: -2px;
 }
 
 :deep(.monday-table .monday-selection-column > .cell) {

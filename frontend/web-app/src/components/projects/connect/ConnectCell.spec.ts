@@ -13,6 +13,20 @@ beforeEach(() => {
 })
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 describe('连接单元格', () => {
+  it.each([true, false])('只读空单元格没有可聚焦入口且不能打开弹窗（出站：%s）', async outgoing => {
+    const { global } = connectionTestContext()
+    const wrapper = mount(ConnectCell, { props: { item: sourceItem, column: outgoing ? connectColumn : undefined, connections: [], readOnly: true }, global })
+    expect(wrapper.find('.connect-cell__open').exists()).toBe(false)
+    expect(wrapper.getComponent(ElPopover).props('disabled')).toBe(true)
+    await wrapper.get('.connect-cell').trigger('click')
+    await wrapper.get('.connect-cell').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.getComponent(ElPopover).props('visible')).toBe(false)
+    await wrapper.setProps({ connections: [connection] })
+    await wrapper.get('.connect-cell__open').trigger('click')
+    expect(wrapper.getComponent(ElPopover).props('visible')).toBe(true)
+    await wrapper.setProps({ connections: [] })
+    expect(wrapper.getComponent(ElPopover).props('visible')).toBe(false)
+  })
   it('被连接弹窗进入第一个连接，Esc 关闭后焦点回到单元格', async () => {
     const wrapper = mount(ConnectCell, { props: { item: sourceItem, connections: [connection], incomingTotal: 1, readOnly: true },
       slots: { popover: '<button class="incoming-card">来源工作项</button>' }, attachTo: document.body })

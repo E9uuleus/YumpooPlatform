@@ -76,7 +76,9 @@ async function submit() {
     emit('saved', column); emit('update:open', false)
     ElMessage.success(props.mode === 'edit' ? '连接列已更新' : '已添加连接列')
   } catch (reason) {
-    if (props.open && current === revision) problem.value = await toConnectProblem(reason, id => selected.value.find(project => project.id === id)?.name ?? props.column?.targets.find(target => target.projectId === id)?.name ?? '目标项目')
+    if (props.open && current === revision) problem.value = await toConnectProblem(reason, {
+      projectName: id => selected.value.find(project => project.id === id)?.name ?? props.column?.targets.find(target => target.projectId === id)?.name ?? '目标项目',
+    })
   } finally { submitting.value = false }
 }
 </script>

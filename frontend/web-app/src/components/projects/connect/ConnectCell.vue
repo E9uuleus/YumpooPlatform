@@ -14,6 +14,7 @@ const open = ref(false), root = ref<HTMLElement>(), measure = ref<HTMLElement>()
 const visibleCount = ref(0), createTarget = ref(''), createTitle = ref(''), createOpen = ref(false)
 const showProject = computed(() => !props.column || props.column.targets.length > 1)
 const total = computed(() => props.incomingTotal ?? props.connections.length)
+const canOpenPopover = computed(() => total.value > 0 || (!props.readOnly && Boolean(props.column)))
 const hiddenCount = computed(() => Math.max(0, total.value - visibleCount.value))
 const card = (connection: WorkItemConnection) => props.column ? connection.target : connection.source
 const tooltip = (connection: WorkItemConnection) => props.column ? undefined : `来自 ${connection.source.projectName} 的「${connection.columnName}」`
@@ -40,6 +41,7 @@ onMounted(() => {
 })
 watch(() => [props.connections.map(connection => `${connection.id}:${card(connection).title}:${card(connection).projectName}`).join('|'), showProject.value, total.value], () => { void nextTick(() => measureChips(true)) })
 watch(() => props.item.id, () => { open.value = false; createOpen.value = false })
+watch(canOpenPopover, allowed => { if (!allowed) open.value = false })
 onBeforeUnmount(() => observer?.disconnect())
 function close() { open.value = false; void nextTick(() => opener.value?.focus({ preventScroll: true })) }
 function openCard(connection: WorkItemConnection) { open.value = false; emit('openCard', connection) }
@@ -54,6 +56,7 @@ function focusPopover() { void nextTick(() => { if (!props.column) document.getE
     trigger="click"
     placement="bottom-start"
     :width="380"
+    :disabled="!canOpenPopover"
     popper-class="connect-cell-popper"
     @after-enter="focusPopover"
   >
@@ -66,6 +69,7 @@ function focusPopover() { void nextTick(() => { if (!props.column) document.getE
         @keydown.esc.stop.prevent="close"
       >
         <button
+          v-if="canOpenPopover"
           ref="opener"
           type="button"
           class="connect-cell__open"

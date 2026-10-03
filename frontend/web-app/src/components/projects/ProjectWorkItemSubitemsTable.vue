@@ -902,16 +902,43 @@ onBeforeUnmount(() => {
           </template>
         </el-table-column>
 
-        <el-table-column v-for="column in connectColumns ?? []" :key="column.key" :column-key="column.key" :prop="column.key"
-          :label="column.label" :width="column.width" :min-width="column.minWidth" class-name="monday-connect-column" label-class-name="monday-connect-column-header" resizable>
-          <template #header><slot name="connect-header" :column="column">{{ column.label }}</slot></template>
+        <el-table-column
+          v-for="column in connectColumns ?? []"
+          :key="column.key"
+          :column-key="column.key"
+          :prop="column.key"
+          :label="column.label"
+          :width="column.width"
+          :min-width="column.minWidth"
+          class-name="monday-connect-column"
+          label-class-name="monday-connect-column-header"
+          resizable
+        >
+          <template #header>
+            <slot
+              name="connect-header"
+              :column="column"
+            >
+              {{ column.label }}
+            </slot>
+          </template>
           <template #default="{ row }">
-            <connect-cell v-if="!isDraft(row as ProjectWorkItemListItem) && column.column" :item="row as ProjectWorkItemListItem" :column="column.column"
+            <connect-cell
+              v-if="!isDraft(row as ProjectWorkItemListItem) && column.column"
+              :item="row as ProjectWorkItemListItem"
+              :column="column.column"
               :connections="connectCells?.get(row.id)?.outgoing.find(value => value.columnId === column.column?.id)?.connections ?? []"
-              :read-only="connectReadOnly ?? true" @open-card="emit('openConnection', $event, 'source')" />
-            <incoming-connect-cell v-else-if="!isDraft(row as ProjectWorkItemListItem) && column.kind === 'incoming'" :item="row as ProjectWorkItemListItem"
-              :incoming="connectCells?.get(row.id)?.incoming ?? []" :incoming-total="connectCells?.get(row.id)?.incomingTotal ?? 0"
-              :read-only="connectReadOnly ?? true" @open-card="emit('openConnection', $event, 'target')" />
+              :read-only="connectReadOnly ?? true"
+              @open-card="emit('openConnection', $event, 'source')"
+            />
+            <incoming-connect-cell
+              v-else-if="!isDraft(row as ProjectWorkItemListItem) && column.kind === 'incoming'"
+              :item="row as ProjectWorkItemListItem"
+              :incoming="connectCells?.get(row.id)?.incoming ?? []"
+              :incoming-total="connectCells?.get(row.id)?.incomingTotal ?? 0"
+              :read-only="connectReadOnly ?? true"
+              @open-card="emit('openConnection', $event, 'target')"
+            />
           </template>
         </el-table-column>
         <el-table-column
@@ -1257,30 +1284,6 @@ onBeforeUnmount(() => {
 }
 .subitem-column-header { position: relative; width: 100%; height: 100%; min-width: 0; user-select: none; }
 .subitem-column-header--dragging { cursor: grabbing; }
-.subitem-add-column-button {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--yp-radius-sm, 4px);
-  background: transparent;
-  color: var(--yp-text-secondary);
-  cursor: pointer;
-  transition: color var(--yp-motion-fast) var(--yp-ease-standard),
-              background-color var(--yp-motion-fast) var(--yp-ease-standard);
-}
-.subitem-add-column-button:hover {
-  background: var(--yp-bg-hover);
-  color: var(--yp-text-primary);
-}
-.subitem-add-column-button:focus-visible {
-  outline: 2px solid var(--yp-action-primary);
-  outline-offset: -2px;
-}
 .monday-column-resize-handle {
   position: absolute;
   z-index: 20;

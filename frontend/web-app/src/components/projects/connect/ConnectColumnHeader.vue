@@ -5,19 +5,33 @@ import { InfoFilled, MoreFilled } from '@element-plus/icons-vue'
 
 const props = defineProps<{ label: string; kind: 'connect' | 'incoming'; canManage: boolean; canDelete: boolean;
   columnKey?: string | undefined; width?: number | undefined; minWidth?: number | undefined }>()
-const emit = defineEmits<{ edit: []; hide: []; delete: []; resize: [width: number] }>()
+const emit = defineEmits<{ edit: []; hide: []; delete: []; resize: [width: number, save?: boolean] }>()
 function command(action: string) { if (action === 'hide') emit('hide'); else if (action === 'edit') emit('edit'); else if (action === 'delete') emit('delete') }
-let resize: { x: number; width: number; pointerId: number } | undefined
+let resize: { x: number; width: number; nextWidth: number; pointerId: number } | undefined
 function start(event: PointerEvent) {
+  if (resize) return
   event.preventDefault(); event.stopPropagation()
-  resize = { x: event.clientX, width: props.width ?? 200, pointerId: event.pointerId }
-  window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop); window.addEventListener('pointercancel', stop)
+  const width = props.width ?? 200
+  resize = { x: event.clientX, width, nextWidth: width, pointerId: event.pointerId }
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop); window.addEventListener('pointercancel', cancel)
 }
 function move(event: PointerEvent) {
-  if (resize?.pointerId === event.pointerId) emit('resize', Math.max(props.minWidth ?? 140, Math.round(resize.width + event.clientX - resize.x)))
+  if (resize?.pointerId !== event.pointerId) return
+  resize.nextWidth = Math.max(props.minWidth ?? 140, Math.round(resize.width + event.clientX - resize.x))
+  emit('resize', resize.nextWidth, false)
 }
-function stop() { resize = undefined; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', stop) }
-onBeforeUnmount(stop)
+function stop(event: PointerEvent) {
+  if (resize?.pointerId !== event.pointerId) return
+  if (resize.nextWidth !== resize.width) emit('resize', resize.nextWidth, true)
+  cleanup()
+}
+function cancel(event: PointerEvent) {
+  if (resize?.pointerId !== event.pointerId) return
+  emit('resize', resize.width, false)
+  cleanup()
+}
+function cleanup() { resize = undefined; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', cancel) }
+onBeforeUnmount(cleanup)
 </script>
 
 <template>
