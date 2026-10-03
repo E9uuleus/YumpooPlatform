@@ -924,7 +924,7 @@ onBeforeUnmount(() => {
           label-class-name="subitem-add-column-header"
         >
           <template #header>
-            <slot name="add-column" />
+              <slot name="column-add" />
           </template>
         </el-table-column>
 

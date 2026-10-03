@@ -2993,7 +2993,7 @@ onBeforeUnmount(() => {
                         :column-key="column.key" :width="column.width" :min-width="column.minWidth" @edit="connect.edit(column.column)"
                         @hide="toggleColumn(column.key, false)" @delete="column.column && connect.requestDelete(column.column)" @resize="connect.resizeColumn(column.key, $event)" />
                     </template>
-                    <template #add-column><connect-column-add-button :can-manage="connect.canManage" :hidden-columns="restorableColumns"
+                    <template #column-add><connect-column-add-button :can-manage="connect.canManage" :hidden-columns="restorableColumns"
                       @add-connect-column="connect.edit()" @show-column="showHiddenColumn" /></template>
                   </project-work-item-subitems-table>
                   <work-item-row-actions
