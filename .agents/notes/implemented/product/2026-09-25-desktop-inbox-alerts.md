@@ -20,7 +20,7 @@ Windows 使用 `tray.displayBalloon` 且设置 `respectQuietTime`，不设置 Ap
 
 本记录补充[桌面计时界面与快捷面板](2026-09-24-desktop-timer-surfaces.md)，其计时显示、置顶、窗口几何与命令握手约定继续有效。
 
-UP5c 为可选 `DesktopBridge.inbox` 增加只读可选 `supportedReasons` 能力列表。新 preload 暴露冻结的共享原因列表，主进程从同一列表严格校验，其中包括 `CONNECTION_CREATED`；Web 仅向明确声明支持该原因的壳转发它。旧壳未声明能力时，Web 回退到原八个原因并先过滤再截取五条，保留同包中既有原因，避免旧壳因未知原因拒绝整包。未读总数仍保留服务端全量值以更新徽标，不把原因过滤误作已读。
+UP5c 为可选 `DesktopBridge.inbox` 增加只读可选 `supportedReasons` 能力列表。新 preload 暴露冻结的原因列表，主进程严格校验包含 `CONNECTION_CREATED` 的九个原因；两侧和 Web 仅以 type-only 方式依赖契约，各自保留运行时白名单以遵守工作区边界。Web 仅向明确声明支持该原因的壳转发它。旧壳未声明能力时，Web 回退到原八个原因并先过滤再截取五条，保留同包中既有原因，避免旧壳因未知原因拒绝整包。未读总数仍保留服务端全量值以更新徽标，不把原因过滤误作已读。
 
 新增原因的原生提醒只显示操作者与“向你负责的项目新建了工作项”，IPC 不增加项目、工作项、来源或列信息，主进程继续拒绝任何未知键。首次基线、焦点抑制、账号切换和不补弹规则保持不变。原因语义、仅新建并关联及部署水位由[站内收件箱](../architecture/2026-09-25-notification-inbox.md)拥有。
 
