@@ -17,6 +17,7 @@ export function notificationText(item: NotificationItem, readerId?: string): str
     case 'REPLY': return `回复了你在 ${target} 的评论`
     case 'COMMENT': return `评论了 ${target}`
     case 'ASSIGNED': return `将 ${target} 指派给你`
+    case 'CONNECTION_CREATED': return `向你负责的项目新建了 ${target}`
     case 'PROJECT_MEMBER_ADDED': return `将${subject}加入项目 ${project}`
     case 'PROJECT_MEMBER_REMOVED': return `将${subject}移出项目 ${project}`
     case 'PROJECT_OWNER_ASSIGNED': return `将项目 ${project} 的负责人转交给你`

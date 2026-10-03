@@ -1,4 +1,4 @@
-# PR-5 筛选与看板视觉验收
+# PR-5 筛选、看板与通知验收
 
 本目录是新增证据，不改写 PR-4 证据。使用用户电脑上的可见 Chromium 打开只读设计包的 `prototype.html`，逐一核对来源项目表格、目标项目表格、设置页，以及双方成员、非目标项目成员、企业管理员只读三种身份。原型文件未修改、未复制入库。
 
@@ -21,6 +21,14 @@
 
 [机器记录](browser-checks.json)：14 张截图、8 组交互/主题/身份检查、0 个页面异常。检查包含已连接/未连接互斥、5 条连接仅 3 个 chip + `+2`、只读展开列表、只读卡片、非成员导航限制。打开卡片的实时 GET、已失效连接关闭、取消请求和旧响应丢弃由既有卡片组件测试继续覆盖。
 
-## 范围边界
+## 目标负责人通知（UP5c）
 
-本证据仅覆盖 UP5a/UP5b，不声称 UP5c 已完成。通知原因枚举的设计缺口在 PR 描述中单独列出；尚未增加通知字段、迁移或事件。
+用户批准 `CONNECTION_CREATED` 原因、既有 PROJECT 分组与 WORK_ITEM 目标、V63 追加迁移后，补充正式 `InboxRow` 和 `inboxPresentation` 的浏览器验收。截图使用静态 `NotificationItem` 数据，不代表真实后端或原生系统通知已部署。验收夹具在本任务本机临时目录运行，不修改设计包或产品页面。
+
+| 场景 | Light | Dark | Night |
+| --- | --- | --- | --- |
+| 目标负责人文案、PROJECT 图标；失权后隐藏操作者和全部目标信息 | [截图](notification-light.jpg) | [截图](notification-dark.jpg) | [截图](notification-night.jpg) |
+
+[390px 窄屏](notification-mobile-night.jpg)无水平溢出。[通知浏览器记录](notification-browser-checks.json)包含 4 组检查、0 个页面异常：三主题的目标工作项链接、失权行无链接且不暴露操作者/目标信息，以及窄屏检查。全目录合计 18 张截图、12 组浏览器检查。
+
+真实行为由 `NotificationInboxProjectionTest`、`ConnectionNotificationIT`、`ConnectionNotificationMigrationIT` 和 `NotificationHttpIT` 验证：仅新建并关联投递目标负责人；持久化不含来源或列信息；部署前事件不补发；升级保留原水位和通知；重放去重；PROJECT 分组计数/读取/全部已读；撤销成员资格或删除目标后重新鉴权。`InboxHost.spec.ts`、桌面 preload/notifier 测试另覆盖新壳能力声明、旧壳混合包过滤、最小原生文案及拒绝扩展业务字段。

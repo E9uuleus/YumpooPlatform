@@ -56,6 +56,13 @@
       "newSha256": "ab7ad4702c6b04793a1786023fec197e8430356b992c493e4e27de52fff6f9c7",
       "reason": "统一项目模型删除类型、模板、客户信息与 DRAFT/激活接口；创建请求仅名称和描述，服务端生成编码并以创建人为负责人。前后端、事件和生成客户端配套升级。",
       "agentNote": ".agents/notes/implemented/product/2026-09-30-unified-project-model.md"
+    },
+    {
+      "id": "2026-10-03-connection-created-notification",
+      "oldSha256": "d5b7b8d335cd619eca2f5770ddf8b9217a3016da839dafeb004b026edfa710ba",
+      "newSha256": "3751273ae48cae5c3a80857bc0581bf0530c8ac3818efaa067e68beea4fcccd5",
+      "reason": "用户批准新增 NotificationReason.CONNECTION_CREATED 响应枚举，归入 PROJECT 并沿用 WORK_ITEM 目标引用；仅移除该新增枚举的临时规范已通过完整 openapi-diff。Web 按桌面壳显式原因能力过滤，旧壳不接收新原因且保留同包旧通知。精确哈希只覆盖该枚举扩展，既有字段与事件不变。",
+      "agentNote": ".agents/notes/implemented/architecture/2026-09-25-notification-inbox.md"
     }
   ]
 }

@@ -18,12 +18,14 @@ class NotificationInboxProjectionTest {
     final UUID company=UUID.randomUUID(),project=UUID.randomUUID(),item=UUID.randomUUID(),update=UUID.randomUUID();
     final UUID actor=UUID.randomUUID(),assignee=UUID.randomUUID(),creator=UUID.randomUUID(),parent=UUID.randomUUID();
     final Instant cutover=Instant.parse("2026-09-25T00:00:00Z");
+    final Instant connectionCutover=cutover.plusSeconds(60);
     final ObjectMapper mapper=new ObjectMapper();
     NotificationRepository repository; NotificationContextPort context; NotificationInboxProjection projection;
     @BeforeEach void setup() {
         repository=mock(NotificationRepository.class);context=mock(NotificationContextPort.class);
         projection=new NotificationInboxProjection(repository,context);
         when(repository.acceptedFrom()).thenReturn(cutover);
+        when(repository.connectionAcceptedFrom()).thenReturn(connectionCutover);
         when(context.workItemParticipants(company,item)).thenReturn(Optional.of(new NotificationContextPort.Participants(project,assignee,creator)));
         when(context.update(company,update)).thenReturn(Optional.of(new NotificationContextPort.Update(project,item,actor,parent)));
         when(context.projectOwner(company,project)).thenReturn(Optional.of(creator));
@@ -82,8 +84,57 @@ class NotificationInboxProjectionTest {
         ObjectNode p=payload();p.put("assigneeUserId",assignee.toString());
         projection.consume(event("workitem.work_item_assigned",1,p,cutover));
         verify(repository,never()).append(any(),any());
-        assertThat(projection.subscriptions()).hasSize(7).contains(new EventSubscription("workitem.work_item_created",2))
+        assertThat(projection.subscriptions()).hasSize(8).contains(new EventSubscription("workitem.work_item_created",2),
+                new EventSubscription("workitem.connection_created",1))
                 .doesNotContain(new EventSubscription("workitem.work_item_created",1));
+    }
+    @Test void createdConnectionUsesOnlyTargetReferencesAndNotifiesTargetOwnerOnly() {
+        ObjectNode payload=connectionPayload("CREATED");
+        var event=event("workitem.connection_created",1,payload,connectionCutover);
+        projection.consume(event);
+        var captured=org.mockito.ArgumentCaptor.forClass(NotificationRepository.Event.class);
+        verify(repository).append(captured.capture(),eq(Map.of(creator,Reason.CONNECTION_CREATED)));
+        var row=captured.getValue();
+        assertThat(row.kind()).isEqualTo(TargetKind.WORK_ITEM);
+        assertThat(row.projectId()).isEqualTo(project);
+        assertThat(row.workItemId()).isEqualTo(item);
+        assertThat(row.updateId()).isNull();
+        assertThat(row.subjectUserId()).isNull();
+        assertThat(row.sourceEventId()).isEqualTo(event.eventId());
+        assertThat(mapper.writeValueAsString(row)).doesNotContain(payload.path("sourceProjectId").asText(),
+                payload.path("sourceWorkItemId").asText(),payload.path("columnId").asText(),payload.path("connectionId").asText(),
+                "私有列名","sourceProjectId","sourceWorkItemId","columnId","columnName","connectionId");
+        verify(context).eligibleProjectRecipients(company,project,Set.of(creator));
+        verify(context,never()).activeAccounts(any(),any());
+    }
+    @Test void linkedConnectionsAndPreDeploymentBacklogDoNotNotifyOrReadSourceContext() {
+        for (String origin:List.of("LINKED","","created"))
+            projection.consume(event("workitem.connection_created",1,connectionPayload(origin),connectionCutover));
+        projection.consume(event("workitem.connection_created",1,connectionPayload("CREATED"),connectionCutover.minusNanos(1)));
+        verifyNoInteractions(context);
+        verify(repository,never()).append(any(),any());
+        ObjectNode prior=payload().put("assigneeUserId",assignee.toString());
+        projection.consume(event("workitem.work_item_assigned",1,prior,cutover.plusSeconds(1)));
+        verify(repository).append(any(),eq(Map.of(assignee,Reason.ASSIGNED)));
+    }
+    @Test void connectionOwnerMustBeEligibleAndTargetMustMatchWithoutSelfNotifications() {
+        var event=event("workitem.connection_created",1,connectionPayload("CREATED"),connectionCutover);
+        when(context.eligibleProjectRecipients(eq(company),eq(project),any())).thenReturn(Set.of());
+        projection.consume(event);
+        when(context.projectOwner(company,project)).thenReturn(Optional.of(actor));
+        projection.consume(event);
+        when(context.projectOwner(company,project)).thenReturn(Optional.empty());
+        projection.consume(event);
+        when(context.workItemParticipants(company,item)).thenReturn(Optional.of(
+                new NotificationContextPort.Participants(UUID.randomUUID(),assignee,creator)));
+        projection.consume(event);
+        verify(repository,never()).append(any(),any());
+    }
+    private ObjectNode connectionPayload(String origin) {
+        return mapper.createObjectNode().put("targetProjectId",project.toString()).put("targetWorkItemId",item.toString())
+                .put("sourceProjectId",UUID.randomUUID().toString()).put("sourceWorkItemId",UUID.randomUUID().toString())
+                .put("columnId",UUID.randomUUID().toString()).put("connectionId",UUID.randomUUID().toString())
+                .put("columnName","私有列名").put("origin",origin);
     }
     ObjectNode payload() { return mapper.createObjectNode().put("projectId",project.toString()).put("workItemId",item.toString()).put("updateId",update.toString()); }
     DomainEventEnvelope event(String type,int version,ObjectNode p,Instant time) {

@@ -19,7 +19,14 @@ public class JdbcNotificationRepository implements NotificationRepository {
     private final JdbcClient jdbc;
     public JdbcNotificationRepository(JdbcClient jdbc) { this.jdbc=jdbc; }
     @Override public Instant acceptedFrom() {
-        return jdbc.sql("SELECT accepted_from FROM yumpoo.notification_projection_state WHERE projection_code='INBOX_V1'")
+        return acceptedFrom("INBOX_V1");
+    }
+    @Override public Instant connectionAcceptedFrom() {
+        return acceptedFrom("CONNECTION_CREATED_V1");
+    }
+    private Instant acceptedFrom(String projection) {
+        return jdbc.sql("SELECT accepted_from FROM yumpoo.notification_projection_state WHERE projection_code=:projection")
+                .param("projection",projection)
                 .query(OffsetDateTime.class).single().toInstant();
     }
     @Override public Instant serverNow() {
@@ -67,7 +74,7 @@ public class JdbcNotificationRepository implements NotificationRepository {
             SELECT count(*) AS total,count(*) FILTER(WHERE reason='MENTION') AS mention,
               count(*) FILTER(WHERE reason IN ('COMMENT','REPLY')) AS comment,
               count(*) FILTER(WHERE reason='ASSIGNED') AS assigned,
-              count(*) FILTER(WHERE reason LIKE 'PROJECT_%') AS project,
+              count(*) FILTER(WHERE reason LIKE 'PROJECT_%' OR reason='CONNECTION_CREATED') AS project,
               max(created_at) AS newest,clock_timestamp() AS now
             FROM yumpoo.user_notification WHERE company_id=:company AND recipient_user_id=:user AND state='UNREAD'
             """).param("company",company).param("user",user).query((rs,n)->new UnreadCounts(rs.getLong("total"),rs.getLong("mention"),
@@ -91,6 +98,7 @@ public class JdbcNotificationRepository implements NotificationRepository {
     }
     private static String groupSql(Group group,String prefix) {
         if(group==null) return "";
+        if(group==Group.PROJECT) return " AND ("+prefix+"reason LIKE 'PROJECT_%' OR "+prefix+"reason='CONNECTION_CREATED')";
         return " AND "+prefix+switch(group) {
             case MENTION->"reason='MENTION'"; case COMMENT->"reason IN ('COMMENT','REPLY')";
             case ASSIGNED->"reason='ASSIGNED'"; case PROJECT->"reason LIKE 'PROJECT_%'";

@@ -25,6 +25,7 @@ export enum NotificationReason {
     ProjectMemberRemoved = 'PROJECT_MEMBER_REMOVED',
     ProjectOwnerAssigned = 'PROJECT_OWNER_ASSIGNED',
     ProjectOwnerTransferred = 'PROJECT_OWNER_TRANSFERRED',
+    ConnectionCreated = 'CONNECTION_CREATED',
     UnknownDefaultOpenApi = '11184809'
 }
 

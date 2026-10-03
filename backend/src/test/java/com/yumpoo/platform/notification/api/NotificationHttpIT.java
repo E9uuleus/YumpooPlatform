@@ -181,6 +181,36 @@ class NotificationHttpIT {
         assertThat(updated.path("total").asInt()).isOne();
         assertThat(updated.path("project").asInt()).isOne();
     }
+    @Test void connectionReasonSerializesInProjectGroupAndDeletedTargetsAreReauthorized() throws Exception {
+        var item=created(mutate("POST","/api/v1/projects/"+PROJECT_ID+"/work-items",owner,
+                workItemBody(tasksId,"连接通知目标"),null,UUID.randomUUID()));
+        UUID itemId=UUID.fromString(item.path("id").asText());
+        var event=new com.yumpoo.platform.notification.application.NotificationRepository.Event(UUID.randomUUID(),COMPANY_ID,
+                UUID.randomUUID(),"workitem.connection_created",1,
+                com.yumpoo.platform.notification.application.NotificationModels.TargetKind.WORK_ITEM,PROJECT_ID,
+                itemId,null,null,member.userId(),java.time.Instant.now());
+        notifications.append(event,java.util.Map.of(owner.userId(),
+                com.yumpoo.platform.notification.application.NotificationModels.Reason.CONNECTION_CREATED));
+        var page=ok(get("/api/v1/me/notifications?group=PROJECT",owner));
+        assertThat(page.path("items").size()).isOne();
+        var notification=page.path("items").get(0);
+        assertThat(notification.path("reason").asText()).isEqualTo("CONNECTION_CREATED");
+        assertThat(notification.path("target").path("kind").asText()).isEqualTo("WORK_ITEM");
+        assertThat(notification.path("target").path("workItemId").asText()).isEqualTo(itemId.toString());
+        var counts=ok(get("/api/v1/me/notifications/unread-count",owner));
+        assertThat(counts.path("project").asInt()).isOne();
+        assertThat(ok(get("/api/v1/me/notifications?group=PROJECT",member)).path("items").size()).isZero();
+        var updated=ok(mutate("POST","/api/v1/me/notifications/read-all",owner,
+                json.writeValueAsString(java.util.Map.of("group","PROJECT","upTo",counts.path("serverNow").asText())),null,null));
+        assertThat(updated.path("total").asInt()).isZero();
+        jdbc.sql("DELETE FROM yumpoo.work_item WHERE id=:id").param("id",itemId).update();
+        var target=ok(get("/api/v1/me/notifications?state=ALL&group=PROJECT",owner)).path("items").get(0).path("target");
+        assertThat(target.path("accessible").asBoolean()).isFalse();
+        for (String field:java.util.List.of("projectId","projectName","workItemId","itemNo","title","updateId","excerpt"))
+            assertThat(target.path(field).isNull()).as(field).isTrue();
+        assertThat(get("/api/v1/work-items/"+itemId,owner).statusCode()).isEqualTo(404);
+    }
+
     @Test void personalStateMutationsRequireCsrfAndHideOtherUsersRows() throws Exception {
         UUID id=seed(com.yumpoo.platform.notification.application.NotificationModels.Reason.MENTION,member.userId());
         String path="/api/v1/me/notifications/"+id;

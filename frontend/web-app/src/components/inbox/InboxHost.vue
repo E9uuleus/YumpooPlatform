@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { DesktopInboxReason } from '@yumpoo/preload-contract'
+import { DESKTOP_INBOX_REASONS, type DesktopInboxReason } from '@yumpoo/preload-contract'
 import { activateInbox, useInbox } from '../../composables/useInbox'
 import { useSession } from '../../composables/useSession'
 import { notificationLink } from './inboxPresentation'
 
 const route = useRoute(), router = useRouter(), session = useSession(), inbox = useInbox()
 const bridge = window.yumpooDesktop?.inbox
+const supportedReasons = new Set<DesktopInboxReason>(bridge?.supportedReasons ?? [
+  'MENTION', 'REPLY', 'COMMENT', 'ASSIGNED', 'PROJECT_MEMBER_ADDED', 'PROJECT_MEMBER_REMOVED',
+  'PROJECT_OWNER_ASSIGNED', 'PROJECT_OWNER_TRANSFERRED',
+])
 const surface = ref<'main' | 'timer' | undefined>(window.yumpooDesktop ? undefined : 'main')
 let disposed = false
 if (window.yumpooDesktop?.timer) void window.yumpooDesktop.timer.getWindowState()
@@ -18,11 +22,11 @@ watch([active, () => session.authentication.value?.user.id], ([value]) => activa
 const state = computed(() => ({
   accountId: active.value ? session.authentication.value?.user.id ?? null : null,
   unreadCount: active.value ? inbox.unread.value : 0,
-  latest: active.value ? inbox.latest.value.slice(0, 5).flatMap(item => isDesktopReason(item.reason) ? [{ id: item.id, reason: item.reason,
-    actorName: item.actor?.displayName ?? null, createdAt: item.createdAt.toISOString() }] : []) : [],
+  latest: active.value ? inbox.latest.value.flatMap(item => isDesktopReason(item.reason) ? [{ id: item.id, reason: item.reason,
+    actorName: item.actor?.displayName ?? null, createdAt: item.createdAt.toISOString() }] : []).slice(0, 5) : [],
 }))
 function isDesktopReason(value: string): value is DesktopInboxReason {
-  return ['MENTION', 'REPLY', 'COMMENT', 'ASSIGNED', 'PROJECT_MEMBER_ADDED', 'PROJECT_MEMBER_REMOVED', 'PROJECT_OWNER_ASSIGNED', 'PROJECT_OWNER_TRANSFERRED'].includes(value)
+  return DESKTOP_INBOX_REASONS.includes(value as DesktopInboxReason) && supportedReasons.has(value as DesktopInboxReason)
 }
 watch(state, value => {
   if (surface.value === 'main' && (inbox.ready.value || !active.value)) void bridge?.publishState(value).catch(() => undefined)

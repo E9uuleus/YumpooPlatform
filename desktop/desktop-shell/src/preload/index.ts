@@ -16,6 +16,7 @@ import type {
   TimerPreferencesChange,
 } from '@yumpoo/preload-contract'
 import { contextBridge, ipcRenderer } from 'electron'
+import { DESKTOP_INBOX_REASONS } from '@yumpoo/preload-contract'
 
 const AUTH_PHASES = new Set<DesktopAuthPhase>([
   'IDLE',
@@ -160,6 +161,7 @@ const desktopTimer: DesktopTimerBridge = Object.freeze({
 })
 
 const desktopInbox: DesktopInboxBridge = Object.freeze({
+  supportedReasons: DESKTOP_INBOX_REASONS,
   publishState: async (state: DesktopInboxState) => { await ipcRenderer.invoke('yumpoo:inbox:state', state) },
   getPreferences: async () => ipcRenderer.invoke('yumpoo:inbox:get-preferences'),
   setPreferences: async (change: DesktopInboxPreferences) => ipcRenderer.invoke('yumpoo:inbox:preferences', change),

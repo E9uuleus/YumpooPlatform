@@ -3,12 +3,13 @@ import { readFileSync } from 'node:fs'
 import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { app, ipcMain, nativeImage, Notification, type BrowserWindow, type IpcMainInvokeEvent, type NativeImage, type Tray } from 'electron'
 import type { DesktopInboxPreferences, DesktopInboxReason, DesktopInboxState } from '@yumpoo/preload-contract'
+import { DESKTOP_INBOX_REASONS } from '@yumpoo/preload-contract'
 import { isTrustedAuthIpcSender } from './auth-ipc'
 import { applicationIcon } from './application-icon'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const BALLOON_LIFETIME_MS = 10_000
-const REASONS = new Set<DesktopInboxReason>(['MENTION', 'REPLY', 'COMMENT', 'ASSIGNED', 'PROJECT_MEMBER_ADDED', 'PROJECT_MEMBER_REMOVED', 'PROJECT_OWNER_ASSIGNED', 'PROJECT_OWNER_TRANSFERRED'])
+const REASONS = new Set<DesktopInboxReason>(DESKTOP_INBOX_REASONS)
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
 const keys = (value: Record<string, unknown>, allowed: string[]) => Object.keys(value).every(key => allowed.includes(key))
 const validId = (value: unknown): value is string => typeof value === 'string' && UUID.test(value)
@@ -88,7 +89,8 @@ export function composeUnreadBadge(bitmap: Uint8Array, width: number, height: nu
 export function inboxAlertText(item: DesktopInboxState['latest'][number]): string {
   const actor = item.actorName?.trim() || '有人'
   const action = item.reason === 'MENTION' ? '提到了你' : item.reason === 'REPLY' ? '回复了你'
-    : item.reason === 'COMMENT' ? '评论了你关注的工作项' : item.reason === 'ASSIGNED' ? '给你指派了工作项' : '更新了你的项目成员身份'
+    : item.reason === 'COMMENT' ? '评论了你关注的工作项' : item.reason === 'ASSIGNED' ? '给你指派了工作项'
+    : item.reason === 'CONNECTION_CREATED' ? '向你负责的项目新建了工作项' : '更新了你的项目成员身份'
   return `${actor} ${action}`
 }
 

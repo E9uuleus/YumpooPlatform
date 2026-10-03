@@ -36,7 +36,9 @@ export interface DesktopBridge {
   readonly inbox?: DesktopInboxBridge
 }
 
-export type DesktopInboxReason = 'MENTION' | 'REPLY' | 'COMMENT' | 'ASSIGNED' | 'PROJECT_MEMBER_ADDED' | 'PROJECT_MEMBER_REMOVED' | 'PROJECT_OWNER_ASSIGNED' | 'PROJECT_OWNER_TRANSFERRED'
+export const DESKTOP_INBOX_REASONS = Object.freeze(['MENTION', 'REPLY', 'COMMENT', 'ASSIGNED', 'PROJECT_MEMBER_ADDED',
+  'PROJECT_MEMBER_REMOVED', 'PROJECT_OWNER_ASSIGNED', 'PROJECT_OWNER_TRANSFERRED', 'CONNECTION_CREATED'] as const)
+export type DesktopInboxReason = typeof DESKTOP_INBOX_REASONS[number]
 
 export interface DesktopInboxState {
   accountId: string | null
@@ -47,6 +49,7 @@ export interface DesktopInboxState {
 export interface DesktopInboxPreferences { toasts: boolean }
 
 export interface DesktopInboxBridge {
+  readonly supportedReasons?: readonly DesktopInboxReason[]
   publishState(state: DesktopInboxState): Promise<void>
   onOpen(listener: (notificationId: string | null) => void): () => void
   getPreferences(): Promise<DesktopInboxPreferences>
