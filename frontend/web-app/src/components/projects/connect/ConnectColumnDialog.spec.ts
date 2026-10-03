@@ -16,6 +16,17 @@ function render(mode: 'create' | 'edit' = 'create') {
   return { wrapper, ...provided }
 }
 describe('添加与设置连接列', () => {
+  it('点击项目行与复选框只切换一次，选中项目后可以提交', async () => {
+    const { wrapper, context } = render(); await flushPromises()
+    const row = document.querySelector<HTMLElement>('.connect-column-form__project')!
+    row.click(); await flushPromises()
+    expect(wrapper.findAllComponents(ElCheckbox)[0]!.props('modelValue')).toBe(true)
+    row.querySelector<HTMLInputElement>('input')!.click(); await flushPromises()
+    expect(wrapper.findAllComponents(ElCheckbox)[0]!.props('modelValue')).toBe(false)
+    row.querySelector<HTMLInputElement>('input')!.click(); await flushPromises()
+    await (wrapper.vm as unknown as { submit: () => Promise<void> }).submit()
+    expect(context.createColumn).toHaveBeenCalledWith({ name: '连接项目 3', targetProjectIds: new Set(['target-0']) })
+  })
   it('默认名递增，640 档位且排除当前项目，最多选择 20 个', async () => {
     const { wrapper } = render(); await flushPromises()
     expect(wrapper.findComponent(ElInput).props('modelValue')).toBe('连接项目 3')

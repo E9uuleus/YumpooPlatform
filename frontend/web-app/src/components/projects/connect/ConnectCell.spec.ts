@@ -13,6 +13,17 @@ beforeEach(() => {
 })
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 describe('连接单元格', () => {
+  it('被连接弹窗进入第一个连接，Esc 关闭后焦点回到单元格', async () => {
+    const wrapper = mount(ConnectCell, { props: { item: sourceItem, connections: [connection], incomingTotal: 1, readOnly: true },
+      slots: { popover: '<button class="incoming-card">来源工作项</button>' }, attachTo: document.body })
+    await wrapper.get('.connect-cell__open').trigger('click'); await flushPromises()
+    wrapper.getComponent(ElPopover).vm.$emit('after-enter'); await flushPromises()
+    expect(document.activeElement?.className).toBe('incoming-card')
+    document.querySelector('.incoming-card')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+    expect(wrapper.getComponent(ElPopover).props('visible')).toBe(false)
+    expect(document.activeElement).toBe(wrapper.get('.connect-cell__open').element)
+  })
   it('随宽度显示可容纳的 chip 和 +N，并且只在点击空白或计数时打开列表', async () => {
     const { global } = connectionTestContext()
     const connections = [connection, { ...connection, id: 'connection-2' }, { ...connection, id: 'connection-3' }]

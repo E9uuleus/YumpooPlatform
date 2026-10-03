@@ -62,7 +62,7 @@ async function submit() {
     :show-close="!busy"
     :close-on-press-escape="!busy"
     :before-close="close"
-    @open-auto-focus="focusTitle"
+    @opened="focusTitle"
   >
     <inline-problem
       v-if="problem"

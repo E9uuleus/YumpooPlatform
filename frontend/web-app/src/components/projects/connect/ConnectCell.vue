@@ -55,7 +55,7 @@ function focusPopover() { void nextTick(() => { if (!props.column) document.getE
     placement="bottom-start"
     :width="380"
     popper-class="connect-cell-popper"
-    @show="focusPopover"
+    @after-enter="focusPopover"
   >
     <template #reference>
       <div

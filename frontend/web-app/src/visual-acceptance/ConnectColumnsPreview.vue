@@ -1,0 +1,276 @@
+<script setup lang="ts">
+import { computed, provide, ref, shallowRef } from 'vue'
+import { ProjectLifecycle, type ConnectColumn, type ConnectColumnCatalog, type WorkItemConnection } from '@yumpoo/api-client'
+import ConnectCell from '../components/projects/connect/ConnectCell.vue'
+import IncomingConnectCell from '../components/projects/connect/IncomingConnectCell.vue'
+import ConnectColumnAddButton from '../components/projects/connect/ConnectColumnAddButton.vue'
+import ConnectColumnHeader from '../components/projects/connect/ConnectColumnHeader.vue'
+import ConnectColumnDialog from '../components/projects/connect/ConnectColumnDialog.vue'
+import ConnectColumnDeleteDialog from '../components/projects/connect/ConnectColumnDeleteDialog.vue'
+import ConnectionCardDialog from '../components/projects/connect/ConnectionCardDialog.vue'
+import ProjectConnectionsOverview from '../components/projects/connect/ProjectConnectionsOverview.vue'
+import YpAssignee from '../components/yp/YpAssignee.vue'
+import { connectColumnsContext, type ConnectColumns } from '../components/projects/connect/useConnectColumns'
+import { workItemLabelColorValue } from '../components/projects/workItemLabelColors'
+import { previewColumn, previewConnection, previewConnections, previewSecondProject, previewSource, previewTarget } from './connectColumnFixtures'
+
+const role = ref<'member' | 'nonmember' | 'admin'>('member'), view = ref('source')
+const readOnly = computed(() => role.value === 'admin')
+const baseColumns = ref<ConnectColumn[]>([previewColumn, { ...previewColumn, id: 'preview-multi', name: '跨项目协作', targets: [...previewColumn.targets, previewSecondProject] }])
+const columns = computed(() => baseColumns.value.map(column => ({ ...column, targets: column.targets.map(target => ({ ...target, actorCanLinkExisting: role.value === 'member' })) })))
+const hidden = ref<string[]>([]), connections = ref(previewConnections)
+const card = shallowRef<WorkItemConnection>(), perspective = ref<'source' | 'target'>('source')
+const dialogOpen = ref(false), editing = shallowRef<ConnectColumn>(), deleting = shallowRef<ConnectColumn>()
+const catalog = computed<ConnectColumnCatalog>(() => ({ items: columns.value, incomingAvailable: true,
+  incomingColumns: [{ columnId: 'preview-incoming', columnName: '实施问题', projectId: previewSecondProject.projectId, projectName: previewSecondProject.name, projectCode: previewSecondProject.code }],
+  canManage: !readOnly.value, canDelete: !readOnly.value }))
+const rows = [previewSource, { ...previewSource, workItemId: 'preview-source-2', itemNo: 'P012-9', title: '批量导出缺少列', assignee: null },
+  { ...previewSource, workItemId: 'preview-source-3', itemNo: 'P012-10', title: '新站点初始化失败' }]
+function projectConnection(connection: WorkItemConnection): WorkItemConnection {
+  return { ...connection, target: { ...connection.target, canOpen: role.value !== 'nonmember' }, capabilities: { canUnlink: !readOnly.value && connection.capabilities.canUnlink } }
+}
+function rowConnections(id: string, column: ConnectColumn) {
+  if (id !== previewSource.workItemId) return []
+  return connections.value.map(connection => projectConnection({ ...connection, columnId: column.id, columnName: column.name,
+    target: column.id === 'preview-multi' && connection.id === 'preview-connection-2' ? { ...connection.target, projectId: previewSecondProject.projectId, projectCode: previewSecondProject.code, projectName: previewSecondProject.name } : connection.target }))
+}
+function openCard(connection: WorkItemConnection, side: 'source' | 'target' = 'source') { perspective.value = side; card.value = projectConnection(connection) }
+function edit(column?: ConnectColumn) { editing.value = column; dialogOpen.value = true }
+const service: ConnectColumns = {
+  catalog, cells: shallowRef(new Map()), catalogLoading: ref(false), catalogError: ref(), cellError: ref(),
+  loadCatalog: async () => {}, ensureCells: async () => {}, refreshCells: async () => {},
+  createColumn: async input => {
+    const column = { ...previewColumn, id: crypto.randomUUID(), name: input.name, targets: [previewColumn.targets[0]!, previewSecondProject].filter(target => input.targetProjectIds.has(target.projectId)) }
+    baseColumns.value = [...baseColumns.value, column]; return column
+  },
+  updateColumn: async (column, input) => {
+    const updated = { ...column, name: input.name, targets: [previewColumn.targets[0]!, previewSecondProject].filter(target => input.targetProjectIds.has(target.projectId)) }
+    baseColumns.value = baseColumns.value.map(current => current.id === column.id ? updated : current); return updated
+  },
+  deleteColumn: async column => { baseColumns.value = baseColumns.value.filter(current => current.id !== column.id); return connections.value.length },
+  link: async () => previewConnection,
+  createAndLink: async (_id, input) => {
+    const created = { ...previewConnection, id: crypto.randomUUID(), target: { ...previewTarget, title: input.title, assignee: null, priority: null } }
+    connections.value = [...connections.value, created]; return created
+  },
+  unlink: async connection => { connections.value = connections.value.filter(current => current.id !== connection.id) },
+  getConnection: async id => projectConnection(card.value?.id === id ? card.value : connections.value.find(connection => connection.id === id) ?? previewConnection),
+  searchTargets: async query => ({ items: [previewColumn.targets[0]!, previewSecondProject].map(target => ({ id: target.projectId, code: target.code, name: target.name })).filter(target => `${target.name}${target.code}`.includes(query)), page: 0, size: 20, totalElements: 2, totalPages: 1 }),
+  createOptions: async () => ({ targetProjectId: previewTarget.projectId, targetProjectName: previewTarget.projectName, categories: [previewTarget.category], defaultContentId: previewTarget.category.id }),
+  searchCandidates: async () => ({ items: [{ card: previewTarget, parent: null, alreadyConnected: true }, { card: { ...previewTarget, title: '打印队列重试机制', workItemId: 'preview-candidate', itemNo: 'P003-55' }, parent: null, alreadyConnected: false }], page: 0, size: 20, totalElements: 2, totalPages: 1 }),
+  incoming: async () => ({ items: [projectConnection(previewConnection)], page: 0, size: 50, totalElements: 1, totalPages: 1 }),
+}
+provide(connectColumnsContext, service)
+</script>
+
+<template>
+  <section
+    id="connect-columns"
+    class="connect-preview page-stack"
+    aria-label="连接列视觉验收"
+  >
+    <div class="section-heading">
+      <div><h2>连接列</h2><p>静态验收数据 · 与正式表格共用连接组件</p></div>
+    </div>
+    <div class="connect-preview__controls">
+      <el-radio-group
+        v-model="view"
+        aria-label="连接验收页面"
+      >
+        <el-radio-button value="source">
+          来源项目表格
+        </el-radio-button><el-radio-button value="target">
+          目标项目表格
+        </el-radio-button><el-radio-button value="settings">
+          设置页连接概览
+        </el-radio-button>
+      </el-radio-group>
+      <el-radio-group
+        v-model="role"
+        aria-label="连接验收身份"
+      >
+        <el-radio-button value="member">
+          双方成员
+        </el-radio-button><el-radio-button value="nonmember">
+          非目标项目成员
+        </el-radio-button><el-radio-button value="admin">
+          企业管理员只读
+        </el-radio-button>
+      </el-radio-group>
+    </div>
+    <div class="connect-preview__surface">
+      <header class="connect-preview__project">
+        <div><h3>{{ view === 'target' ? previewTarget.projectName : previewSource.projectName }}</h3><span>{{ view === 'target' ? 'P003' : 'P012' }} · 进行中</span></div><span v-if="readOnly">公司管理员只读</span>
+      </header>
+      <project-connections-overview
+        v-if="view === 'settings'"
+        :project-id="previewSource.projectId"
+        :catalog="catalog"
+      />
+      <template v-else>
+        <div class="connect-preview__table-scroll">
+          <table class="connect-preview__table">
+            <thead>
+              <tr>
+                <th class="connect-preview__title">
+                  工作项名称
+                </th><th class="connect-preview__assignee">
+                  处理人
+                </th><th class="connect-preview__status">
+                  状态
+                </th>
+                <template v-if="view === 'source'">
+                  <th
+                    v-for="column in columns.filter(column => !hidden.includes(column.id))"
+                    :key="column.id"
+                    class="connect-preview__connection"
+                  >
+                    <connect-column-header
+                      :label="column.name"
+                      kind="connect"
+                      :can-manage="!readOnly"
+                      :can-delete="!readOnly"
+                      @edit="edit(column)"
+                      @hide="hidden.push(column.id)"
+                      @delete="deleting = column"
+                    />
+                  </th>
+                </template>
+                <th
+                  v-else
+                  class="connect-preview__connection"
+                >
+                  <connect-column-header
+                    label="被连接"
+                    kind="incoming"
+                    :can-manage="false"
+                    :can-delete="false"
+                  />
+                </th>
+                <th class="connect-preview__add">
+                  <connect-column-add-button
+                    :can-manage="!readOnly"
+                    :hidden-columns="columns.filter(column => hidden.includes(column.id)).map(column => ({ key: column.id, label: column.name }))"
+                    @add-connect-column="edit()"
+                    @show-column="hidden = hidden.filter(id => id !== $event)"
+                  />
+                </th>
+              </tr>
+            </thead><tbody>
+              <tr
+                v-for="(row, index) in (view === 'source' ? rows : [previewTarget, { ...previewTarget, workItemId: 'preview-target-empty', title: '会话续期异常', itemNo: 'P003-44' }])"
+                :key="row.workItemId"
+              >
+                <td class="connect-preview__title">
+                  <code>{{ row.itemNo }}</code><span>{{ row.title }}</span>
+                </td><td>
+                  <yp-assignee
+                    v-if="row.assignee"
+                    :user-id="row.assignee.userId"
+                    :display-name="row.assignee.displayName"
+                    size="table"
+                  /><span v-else>未分配</span>
+                </td><td
+                  class="connect-preview__status-value"
+                  :style="{ background: workItemLabelColorValue(row.status.colorToken) }"
+                >
+                  {{ row.status.name }}
+                </td>
+                <template v-if="view === 'source'">
+                  <td
+                    v-for="column in columns.filter(column => !hidden.includes(column.id))"
+                    :key="column.id"
+                  >
+                    <connect-cell
+                      :key="`${column.id}:${role}`"
+                      :item="{ id: row.workItemId, title: row.title }"
+                      :column="column"
+                      :connections="rowConnections(row.workItemId, column)"
+                      :read-only="readOnly"
+                      @open-card="openCard($event)"
+                    />
+                  </td>
+                </template>
+                <td v-else>
+                  <incoming-connect-cell
+                    :key="role"
+                    :item="{ id: row.workItemId, title: row.title }"
+                    :incoming="index === 0 ? [projectConnection(previewConnection)] : []"
+                    :incoming-total="index === 0 ? 1 : 0"
+                    :read-only="readOnly"
+                    @open-card="openCard($event, 'target')"
+                  />
+                </td><td />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="connect-preview__hint">
+          点击连接标签打开卡片；点击单元格空白或 +N 管理连接。
+        </p>
+      </template>
+    </div>
+    <div class="connect-preview__examples">
+      <span>卡片状态</span><el-button
+        size="small"
+        @click="openCard(previewConnection)"
+      >
+        有处理人
+      </el-button><el-button
+        size="small"
+        @click="openCard(previewConnections[1]!)"
+      >
+        无处理人 / 无优先级
+      </el-button><el-button
+        size="small"
+        @click="openCard({ ...previewConnections[2]!, target: { ...previewConnections[2]!.target, projectLifecycle: ProjectLifecycle.Archived } })"
+      >
+        已归档
+      </el-button>
+    </div>
+    <connect-column-dialog
+      v-if="dialogOpen"
+      v-model:open="dialogOpen"
+      :project-id="previewSource.projectId"
+      :mode="editing ? 'edit' : 'create'"
+      :column="editing"
+      :existing-names="columns.map(column => column.name)"
+    />
+    <connect-column-delete-dialog
+      v-if="deleting"
+      :column="deleting"
+      @close="deleting = undefined"
+    />
+    <connection-card-dialog
+      v-if="card"
+      :open="Boolean(card)"
+      :connection="card"
+      :perspective="perspective"
+      @update:open="card = undefined"
+    />
+  </section>
+</template>
+
+<style scoped>
+.connect-preview { min-width: 0; scroll-margin-top: 20px; }
+.connect-preview .section-heading p { margin: 6px 0 0; color: var(--yp-text-muted); font-size: 12px; }
+.connect-preview__controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
+.connect-preview__surface { min-width: 0; padding: 24px; border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-raised); }
+.connect-preview__project { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; color: var(--yp-text-muted); font-size: 12px; }
+.connect-preview__project h3 { margin: 0 0 8px; color: var(--yp-text-primary); font-size: 22px; }
+.connect-preview__table-scroll { overflow-x: auto; }
+.connect-preview__table { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 940px; font-size: 13px; }
+.connect-preview__table th, .connect-preview__table td { height: 40px; border: 1px solid var(--yp-border-subtle); padding: 0 10px; font-weight: 400; }
+.connect-preview__table th { color: var(--yp-text-secondary); background: var(--yp-bg-sunken); }
+.connect-preview__table tbody tr:hover { background: var(--yp-bg-hover); }
+.connect-preview__title { width: 270px; text-align: left; }
+.connect-preview__title code { font-size: 11px; margin-right: 12px; color: var(--yp-text-muted); }
+.connect-preview__assignee { width: 90px; }
+.connect-preview__status { width: 90px; }
+.connect-preview__connection { width: 200px; }
+.connect-preview__add { width: 44px; }
+.connect-preview__status-value { text-align: center; color: var(--yp-text-inverse); }
+.connect-preview__hint { margin: 16px 0 0; color: var(--yp-text-muted); font-size: 12px; }
+.connect-preview__examples { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--yp-text-secondary); font-size: 12px; }
+.connect-preview__examples .el-button { margin-left: 0; }
+</style>

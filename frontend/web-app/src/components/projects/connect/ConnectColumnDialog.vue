@@ -92,7 +92,7 @@ async function submit() {
     :close-on-press-escape="!submitting"
     :show-close="!submitting"
     :before-close="close"
-    @open-auto-focus="focusName"
+    @opened="focusName"
   >
     <inline-problem
       v-if="problem"
@@ -151,19 +151,21 @@ async function submit() {
           :aria-busy="loading"
           @scroll.passive="scroll"
         >
-          <label
+          <div
             v-for="project in projects"
             :key="project.id"
             class="connect-column-form__project"
+            @click="choose(project, !selected.some(value => value.id === project.id))"
           >
             <el-checkbox
               :model-value="selected.some(value => value.id === project.id)"
               :disabled="submitting || (selected.length >= 20 && !selected.some(value => value.id === project.id))"
               :aria-label="project.name"
+              @click.stop
               @change="choose(project, Boolean($event))"
             />
             <span class="connect-column-form__name">{{ project.name }}</span><code>{{ project.code }}</code>
-          </label>
+          </div>
           <p
             v-if="loading"
             role="status"
