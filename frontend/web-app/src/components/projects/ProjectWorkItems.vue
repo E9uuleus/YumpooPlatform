@@ -264,7 +264,9 @@ const assigneeSearch = ref('')
 const assigneeMatches = ref<ProjectMember[]>()
 const filterOptionCounts = ref(new Map<string, number>())
 const incomingFilterOptions = ref<ProjectWorkItemFilterOption[]>([])
+const incomingFilterOptionsState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 const filterOptionsLoading = ref(false)
+let filterOptionsRequestId = 0
 const cellPopoverBusy = reactive<Record<string, boolean>>({})
 const labelPopoverContentRefs = new Map<string, LabelPopoverContentHandle>()
 const searchExpanded = ref(Boolean(route.query.q))
@@ -1144,7 +1146,10 @@ function countBy(field: 'statusCode' | 'priority' | 'contentId' | 'assigneeUserI
 async function loadFilterOptions(): Promise<void> {
   if (filterOptionsLoading.value) return
   filterOptionsLoading.value = true
+  incomingFilterOptionsState.value = 'loading'
+  const requestId = ++filterOptionsRequestId
   const revision = loadRevision
+  const current = () => requestId === filterOptionsRequestId && revision === loadRevision
   const fields = [ListProjectWorkItemFilterOptionsFieldEnum.Assignee,
     ListProjectWorkItemFilterOptionsFieldEnum.Status,
     ListProjectWorkItemFilterOptionsFieldEnum.Priority,
@@ -1157,26 +1162,39 @@ async function loadFilterOptions(): Promise<void> {
       ...context, projectId: projectId.value, field, limit: 100,
     }, { signal: activeController?.signal ?? null })))
     const next = new Map<string, number>()
-    if (revision !== loadRevision) return
+    if (!current()) return
     pages.forEach((page, index) => page.items.forEach(option => next.set(`${fields[index]}:${option.value}`, option.count)))
     filterOptionCounts.value = next
     if (!embedded.value) {
+      const { incomingProjectIds: _selectedIncoming, ...incomingContext } = context
+      void _selectedIncoming
       const incoming: ProjectWorkItemFilterOption[] = []
       let cursor: string | null = null
       do {
-        const page = await tableSource.listProjectWorkItemFilterOptions({ ...context, projectId: projectId.value,
+        const page = await tableSource.listProjectWorkItemFilterOptions({ ...incomingContext, projectId: projectId.value,
           field: ListProjectWorkItemFilterOptionsFieldEnum.IncomingProject, limit: 100, ...(cursor ? { cursor } : {}) },
         { signal: activeController?.signal ?? null })
-        if (revision !== loadRevision) return
+        if (!current()) return
         incoming.push(...page.items)
         cursor = page.nextCursor
       } while (cursor)
       incomingFilterOptions.value = incoming
+      incomingFilterOptionsState.value = 'ready'
     }
   } catch (reason) {
-    if (!(reason instanceof DOMException && reason.name === 'AbortError'))
-      error.value = await toApiProblem(reason)
-  } finally { filterOptionsLoading.value = false }
+    if (!current()) return
+    if (reason instanceof DOMException && reason.name === 'AbortError') incomingFilterOptionsState.value = 'idle'
+    else {
+      const problem = await toApiProblem(reason)
+      if (current()) { incomingFilterOptionsState.value = 'error'; error.value = problem }
+    }
+  } finally { if (requestId === filterOptionsRequestId) filterOptionsLoading.value = false }
+}
+
+function invalidateFilterOptions() {
+  filterOptionsRequestId++
+  filterOptionsLoading.value = false
+  incomingFilterOptionsState.value = 'idle'
 }
 
 async function loadMembers(requestedProjectId: string, revision: number): Promise<void> {
@@ -2548,6 +2566,7 @@ function clearFilters(): void {
 }
 
 function resetCurrentData(): void {
+  invalidateFilterOptions()
   clearSelection()
   grouping.stop()
   if (grouped.value && selectedView.value === 'table') {
@@ -2578,6 +2597,7 @@ function onDeadlineChange(item: ProjectWorkItemListItem, value: DueDateValue): v
 }
 
 watch(projectId, () => {
+  invalidateFilterOptions()
   incomingFilterOptions.value = []
   if (embedded.value) {
     try { embeddedQuery.value = JSON.parse(localStorage.getItem(`${props.preferenceScope}:query`) ?? '{}') as LocationQuery } catch { embeddedQuery.value = {} }
@@ -2881,6 +2901,8 @@ onBeforeUnmount(() => {
                 v-if="!embedded"
                 :columns="connect.catalog?.items ?? []"
                 :incoming="incomingFilterOptions"
+                :columns-state="connect.catalogLoading ? 'loading' : connect.catalogError ? 'error' : connect.catalog ? 'ready' : 'idle'"
+                :incoming-state="incomingFilterOptionsState"
                 :connected-column-ids="filters.connectedColumnIds"
                 :unconnected-column-ids="filters.unconnectedColumnIds"
                 :incoming-project-ids="filters.incomingProjectIds"
