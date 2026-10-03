@@ -16,6 +16,21 @@ function render(mode: 'create' | 'edit' = 'create') {
   return { wrapper, ...provided }
 }
 describe('添加与设置连接列', () => {
+  it('保存时取消待执行搜索，防止搜索修订号吞掉保存成功事件', async () => {
+    vi.useFakeTimers()
+    try {
+      const { wrapper, context } = render('edit'); await flushPromises()
+      let complete!: (column: typeof connectColumn) => void
+      vi.mocked(context.updateColumn).mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
+      wrapper.findAllComponents(ElInput)[1]!.vm.$emit('update:modelValue', '门户'); await flushPromises()
+      const pending = (wrapper.vm as unknown as { submit: () => Promise<void> }).submit()
+      await vi.advanceTimersByTimeAsync(300)
+      expect(context.searchTargets).toHaveBeenCalledTimes(1)
+      complete(connectColumn); await pending; await flushPromises()
+      expect(wrapper.emitted('saved')).toEqual([[connectColumn]])
+      expect(wrapper.emitted('update:open')).toEqual([[false]])
+    } finally { vi.useRealTimers() }
+  })
   it('点击项目行与复选框只切换一次，选中项目后可以提交', async () => {
     const { wrapper, context } = render(); await flushPromises()
     const row = document.querySelector<HTMLElement>('.connect-column-form__project')!

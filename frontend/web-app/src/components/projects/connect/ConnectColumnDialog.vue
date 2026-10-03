@@ -28,7 +28,7 @@ const nameError = computed(() => {
 const valid = computed(() => !nameError.value && selected.value.length > 0 && selected.value.length <= 20)
 function cancelSearch() { revision++; controller?.abort(); clearTimeout(timer); loading.value = false }
 async function search(append = false) {
-  if (!props.open || (append && (loading.value || page.value + 1 >= totalPages.value))) return
+  if (!props.open || submitting.value || (append && (loading.value || page.value + 1 >= totalPages.value))) return
   const current = ++revision; controller?.abort(); controller = new AbortController()
   const requestedPage = append ? page.value + 1 : 0
   loading.value = true
@@ -64,6 +64,7 @@ function close() { if (!submitting.value) emit('update:open', false) }
 function focusName() { void nextTick(() => nameInput.value?.focus()) }
 async function submit() {
   if (!valid.value || submitting.value) return
+  cancelSearch()
   const current = revision
   submitting.value = true; problem.value = undefined
   try {
