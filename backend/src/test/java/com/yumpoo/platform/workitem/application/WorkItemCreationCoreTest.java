@@ -68,7 +68,8 @@ class WorkItemCreationCoreTest {
         service = new WorkItemService(items, relations, contents, mock(WorkItemUpdateRepository.class),
                 access, guard, members, labels, mock(MinimalUserSnapshotQuery.class), idempotency,
                 events, JsonMapper.builder().build(), Clock.fixed(now, ZoneOffset.UTC),
-                mock(TimeTrackingRepository.class), sanitizer);
+                mock(TimeTrackingRepository.class), sanitizer,
+                mock(com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery.class));
         when(access.findVisible(actor, project)).thenReturn(Optional.of(new ProjectAccessSnapshot(
                 project, company, ProjectAccessSnapshot.ProjectLifecycle.ACTIVE,
                 ProjectAccessSnapshot.ActorProjectAccess.MEMBER, 0, OptionalLong.of(0))));

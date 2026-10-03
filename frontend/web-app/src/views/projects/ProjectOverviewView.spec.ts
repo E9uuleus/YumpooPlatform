@@ -23,6 +23,7 @@ import ConnectCell from '../../components/projects/connect/ConnectCell.vue'
 import ConnectColumnAddButton from '../../components/projects/connect/ConnectColumnAddButton.vue'
 import ConnectColumnDialog from '../../components/projects/connect/ConnectColumnDialog.vue'
 import ConnectionCardDialog from '../../components/projects/connect/ConnectionCardDialog.vue'
+import ConnectFilterSection from '../../components/projects/connect/ConnectFilterSection.vue'
 import { connection, connectionCatalog } from '../../components/projects/connect/connectTestFixtures'
 
 enableAutoUnmount(afterEach)
@@ -245,6 +246,31 @@ describe('项目级工作项首页', () => {
     expect(state.listWorkItemConnectionCells.mock.calls[0]![0].workItemIds).toEqual(['item-1'])
     expect(card.props('open')).toBe(false)
     expect(wrapper.getComponent(ConnectCell).props('connections')).toEqual([])
+  })
+
+  it('连接筛选从路由传入列表与动态计数，互斥选择及清除同步路由', async () => {
+    state.route.query = { connectedColumnIds: 'column-1', incomingProjectIds: 'source-project' }
+    state.listConnectColumns.mockResolvedValue(connectionCatalog)
+    state.listProjectWorkItemFilterOptions.mockImplementation(async request => request.field === 'INCOMING_PROJECT'
+      ? { items: [{ value: 'source-project', label: '来源项目', count: 12 }], nextCursor: null }
+      : { items: [], nextCursor: null })
+    const wrapper = mountView(); await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenCalledWith(expect.objectContaining({
+      connectedColumnIds: new Set(['column-1']), incomingProjectIds: new Set(['source-project']),
+    }), expect.anything())
+    const view = wrapper.vm as unknown as { loadFilterOptions: () => Promise<void>; clearFilters: () => void }
+    await view.loadFilterOptions(); await flushPromises()
+    expect(state.listProjectWorkItemFilterOptions).toHaveBeenCalledWith(expect.objectContaining({
+      field: 'INCOMING_PROJECT', connectedColumnIds: new Set(['column-1']), incomingProjectIds: new Set(['source-project']),
+    }), expect.anything())
+    const section = wrapper.getComponent(ConnectFilterSection)
+    expect(section.props('incoming')).toEqual([{ value: 'source-project', label: '来源项目', count: 12 }])
+    section.vm.$emit('change', 'unconnectedColumnIds', 'column-1', true); await flushPromises()
+    expect(state.replace).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ unconnectedColumnIds: 'column-1' }) }))
+    expect(state.replace.mock.lastCall?.[0].query.connectedColumnIds).toBeUndefined()
+    view.clearFilters(); await flushPromises()
+    expect(state.replace.mock.lastCall?.[0].query.incomingProjectIds).toBeUndefined()
+    expect(state.replace.mock.lastCall?.[0].query.unconnectedColumnIds).toBeUndefined()
   })
 
   it('重新加载连接包含展开的子项行，恢复子项请求失败的单元格', async () => {

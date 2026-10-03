@@ -78,6 +78,24 @@ class ConnectionHttpIT {
     }
 
     @Test
+    void connectionFiltersApplyToListsOptionsAndRemainActorScoped() throws Exception {
+        String columnId = column().path("id").asText();
+        body(send("POST", "/work-items/" + sourceItem + "/connections", owner,
+                Map.of("columnId", columnId, "targetWorkItemId", targetItem), null, UUID.randomUUID()), 201);
+        String sourceList = "/projects/" + source.id() + "/work-items";
+        assertThat(body(send("GET", sourceList + "?connectedColumnIds=" + columnId, sourceMember, null, null, null), 200)
+                .path("items").get(0).path("id").asText()).isEqualTo(sourceItem.toString());
+        assertThat(body(send("GET", sourceList + "?unconnectedColumnIds=" + columnId, sourceMember, null, null, null), 200)
+                .path("items").size()).isZero();
+        String targetList = "/projects/" + target.id() + "/work-items";
+        assertThat(body(send("GET", targetList + "?incomingProjectIds=" + source.id(), targetOwner, null, null, null), 200)
+                .path("items").get(0).path("id").asText()).isEqualTo(targetItem.toString());
+        assertThat(body(send("GET", targetList + "/filter-options?field=INCOMING_PROJECT&incomingProjectIds=" + source.id(),
+                targetOwner, null, null, null), 200).path("items").get(0).path("count").asInt()).isEqualTo(1);
+        assertThat(send("GET", targetList + "?incomingProjectIds=" + source.id(), outsider, null, null, null).statusCode()).isEqualTo(404);
+    }
+
+    @Test
     void allThirteenRoutesPreserveStatusHeadersPaginationAndIdempotency() throws Exception {
         var created = column();
         String id = created.path("id").asText();

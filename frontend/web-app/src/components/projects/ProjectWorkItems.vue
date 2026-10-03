@@ -84,6 +84,8 @@ import ConnectCell from './connect/ConnectCell.vue'
 import IncomingConnectCell from './connect/IncomingConnectCell.vue'
 import ConnectionCardDialog from './connect/ConnectionCardDialog.vue'
 import { isConnectColumnKey, type ConnectColumnKey } from './connect/connectColumnKeys'
+import ConnectFilterSection from './connect/ConnectFilterSection.vue'
+import type { ProjectWorkItemFilterOption } from '@yumpoo/api-client'
 import { useConnectTable } from './connect/useConnectTable'
 
 type ProjectView = 'table' | 'kanban'
@@ -260,6 +262,7 @@ const editingNames = ref(new Set<string>())
 const assigneeSearch = ref('')
 const assigneeMatches = ref<ProjectMember[]>()
 const filterOptionCounts = ref(new Map<string, number>())
+const incomingFilterOptions = ref<ProjectWorkItemFilterOption[]>([])
 const filterOptionsLoading = ref(false)
 const cellPopoverBusy = reactive<Record<string, boolean>>({})
 const labelPopoverContentRefs = new Map<string, LabelPopoverContentHandle>()
@@ -478,6 +481,7 @@ function onVerticalPageScroll(): void {
   }
 }
 const filters = reactive({
+  connectedColumnIds: new Set<string>(), unconnectedColumnIds: new Set<string>(), incomingProjectIds: new Set<string>(),
   assignees: new Set<string>(), statuses: new Set<string>(), priorities: new Set<string>(),
   timeState: '' as '' | TimeTrackingState, timeMin: '', timeMax: '',
   contents: new Set<string>(), dueRange: [] as Date[], updatedAfter: null as Date | null,
@@ -537,7 +541,7 @@ const orderedSubitemColumns = computed(() => [
   ...subitemMovableColumnOrder.value.map(key => columnByKey.get(key)!),
 ])
 const connect = reactive(useConnectTable({
-  projectId, project, enabled: () => !embedded.value && selectedView.value === 'table',
+  projectId, project, enabled: () => !embedded.value,
   rows: () => [...tableItems.value, ...Object.values(subitems).flatMap(state => state.items)],
   table: () => tableRef.value?.$el,
 }))
@@ -1037,6 +1041,8 @@ function applyRouteState(): void {
   filters.statuses = new Set(queryValues('status'))
   filters.priorities = new Set(queryValues('priority'))
   filters.contents = new Set(queryValues('content'))
+  for (const field of ['connectedColumnIds', 'unconnectedColumnIds', 'incomingProjectIds'] as const)
+    filters[field] = new Set(embedded.value ? [] : queryValues(field))
   const dueFrom = route.query.dueFrom ? new Date(String(route.query.dueFrom)) : undefined
   const dueTo = route.query.dueTo ? new Date(String(route.query.dueTo)) : undefined
   filters.dueRange = dueFrom && dueTo ? [dueFrom, dueTo] : []
@@ -1070,6 +1076,7 @@ async function syncUrl(extra: Record<string, string | undefined> = {}): Promise<
   else delete next.q
   put('assignee', filters.assignees); put('status', filters.statuses)
   put('priority', filters.priorities); put('content', filters.contents)
+  for (const field of ['connectedColumnIds', 'unconnectedColumnIds', 'incomingProjectIds'] as const) put(field, filters[field])
   if (filters.dueRange.length === 2) {
     next.dueFrom = formatDate(filters.dueRange[0]!)
     next.dueTo = formatDate(filters.dueRange[1]!)
@@ -1135,6 +1142,7 @@ function countBy(field: 'statusCode' | 'priority' | 'contentId' | 'assigneeUserI
 async function loadFilterOptions(): Promise<void> {
   if (filterOptionsLoading.value) return
   filterOptionsLoading.value = true
+  const revision = loadRevision
   const fields = [ListProjectWorkItemFilterOptionsFieldEnum.Assignee,
     ListProjectWorkItemFilterOptionsFieldEnum.Status,
     ListProjectWorkItemFilterOptionsFieldEnum.Priority,
@@ -1147,8 +1155,22 @@ async function loadFilterOptions(): Promise<void> {
       ...context, projectId: projectId.value, field, limit: 100,
     }, { signal: activeController?.signal ?? null })))
     const next = new Map<string, number>()
+    if (revision !== loadRevision) return
     pages.forEach((page, index) => page.items.forEach(option => next.set(`${fields[index]}:${option.value}`, option.count)))
     filterOptionCounts.value = next
+    if (!embedded.value) {
+      const incoming: ProjectWorkItemFilterOption[] = []
+      let cursor: string | null = null
+      do {
+        const page = await tableSource.listProjectWorkItemFilterOptions({ ...context, projectId: projectId.value,
+          field: ListProjectWorkItemFilterOptionsFieldEnum.IncomingProject, limit: 100, ...(cursor ? { cursor } : {}) },
+        { signal: activeController?.signal ?? null })
+        if (revision !== loadRevision) return
+        incoming.push(...page.items)
+        cursor = page.nextCursor
+      } while (cursor)
+      incomingFilterOptions.value = incoming
+    }
   } catch (reason) {
     if (!(reason instanceof DOMException && reason.name === 'AbortError'))
       error.value = await toApiProblem(reason)
@@ -1174,6 +1196,25 @@ async function loadMembers(requestedProjectId: string, revision: number): Promis
   members.value = loaded
 }
 
+function connectionFilterRequest() {
+  if (embedded.value) return {}
+  return {
+    ...(filters.connectedColumnIds.size ? { connectedColumnIds: filters.connectedColumnIds } : {}),
+    ...(filters.unconnectedColumnIds.size ? { unconnectedColumnIds: filters.unconnectedColumnIds } : {}),
+    ...(filters.incomingProjectIds.size ? { incomingProjectIds: filters.incomingProjectIds } : {}),
+  }
+}
+function changeConnectionFilter(field: 'connectedColumnIds' | 'unconnectedColumnIds' | 'incomingProjectIds', id: string, checked: boolean) {
+  const next = new Set(filters[field])
+  if (checked) next.add(id); else next.delete(id)
+  filters[field] = next
+  if (checked && field !== 'incomingProjectIds') {
+    const opposite = field === 'connectedColumnIds' ? 'unconnectedColumnIds' : 'connectedColumnIds'
+    filters[opposite] = new Set([...filters[opposite]].filter(value => value !== id))
+  }
+  void syncUrl()
+}
+
 function listRequest(cursor?: string | null) {
   return {
     projectId: projectId.value, limit: 25,
@@ -1184,6 +1225,7 @@ function listRequest(cursor?: string | null) {
     ...(filters.priorities.size ? { priority: filters.priorities } : {}),
     ...(filters.assignees.size ? { assigneeUserId: filters.assignees } : {}),
     ...(filters.contents.size ? { contentId: filters.contents } : {}),
+    ...connectionFilterRequest(),
     ...(filters.dueRange[0] ? { dueFrom: filters.dueRange[0] } : {}),
     ...(filters.dueRange[1] ? { dueTo: filters.dueRange[1] } : {}),
     ...(filters.timeState ? { timeTrackingState: filters.timeState } : {}),
@@ -1278,6 +1320,7 @@ async function loadLane(statusCode: string, cursor: string | null = null, revisi
       ...(filters.assignees.size ? { assigneeUserId: filters.assignees } : {}),
       ...(filters.priorities.size ? { priority: filters.priorities } : {}),
       ...(filters.contents.size ? { contentId: filters.contents } : {}),
+    ...connectionFilterRequest(),
       ...(filters.dueRange[0] ? { dueFrom: filters.dueRange[0] } : {}),
       ...(filters.dueRange[1] ? { dueTo: filters.dueRange[1] } : {}),
       ...(filters.timeState ? { timeTrackingState: filters.timeState } : {}),
@@ -2495,6 +2538,7 @@ async function commitTableDrop(): Promise<void> {
 }
 
 function clearFilters(): void {
+  filters.connectedColumnIds = new Set(); filters.unconnectedColumnIds = new Set(); filters.incomingProjectIds = new Set()
   filters.assignees = new Set(); filters.statuses = new Set(); filters.priorities = new Set(); filters.contents = new Set()
   filters.timeState = ''; filters.timeMin = ''; filters.timeMax = ''
   filters.dueRange = []; filters.updatedAfter = null
@@ -2532,6 +2576,7 @@ function onDeadlineChange(item: ProjectWorkItemListItem, value: DueDateValue): v
 }
 
 watch(projectId, () => {
+  incomingFilterOptions.value = []
   if (embedded.value) {
     try { embeddedQuery.value = JSON.parse(localStorage.getItem(`${props.preferenceScope}:query`) ?? '{}') as LocationQuery } catch { embeddedQuery.value = {} }
     if ('tab' in embeddedQuery.value) {
@@ -2796,7 +2841,7 @@ onBeforeUnmount(() => {
 
           <el-popover placement="bottom-start" :width="560" trigger="click" popper-class="work-items-popover work-items-filter-popover" @show="loadFilterOptions">
             <template #reference>
-              <button class="toolbar-button" :class="{ active: filters.statuses.size || filters.priorities.size || filters.contents.size || filters.dueRange.length || filters.timeState || filters.timeMin || filters.timeMax || filters.updatedAfter }">
+              <button class="toolbar-button" :class="{ active: filters.connectedColumnIds.size || filters.unconnectedColumnIds.size || filters.incomingProjectIds.size || filters.statuses.size || filters.priorities.size || filters.contents.size || filters.dueRange.length || filters.timeState || filters.timeMin || filters.timeMax || filters.updatedAfter }">
                 <el-icon><filter-icon /></el-icon><span>筛选</span>
               </button>
             </template>
@@ -2829,6 +2874,15 @@ onBeforeUnmount(() => {
                   </button>
                 </section>
               </div>
+              <connect-filter-section
+                v-if="!embedded"
+                :columns="connect.catalog?.items ?? []"
+                :incoming="incomingFilterOptions"
+                :connected-column-ids="filters.connectedColumnIds"
+                :unconnected-column-ids="filters.unconnectedColumnIds"
+                :incoming-project-ids="filters.incomingProjectIds"
+                @change="changeConnectionFilter"
+              />
               <div class="filter-dates">
                 <div class="filter-field">
                   <span class="filter-field-label">截止日期</span>
