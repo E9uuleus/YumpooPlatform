@@ -98,10 +98,10 @@ public class JdbcNotificationRepository implements NotificationRepository {
     }
     private static String groupSql(Group group,String prefix) {
         if(group==null) return "";
-        if(group==Group.PROJECT) return " AND ("+prefix+"reason LIKE 'PROJECT_%' OR "+prefix+"reason='CONNECTION_CREATED')";
-        return " AND "+prefix+switch(group) {
-            case MENTION->"reason='MENTION'"; case COMMENT->"reason IN ('COMMENT','REPLY')";
-            case ASSIGNED->"reason='ASSIGNED'"; case PROJECT->"reason LIKE 'PROJECT_%'";
+        return " AND "+switch(group) {
+            case MENTION->prefix+"reason='MENTION'"; case COMMENT->prefix+"reason IN ('COMMENT','REPLY')";
+            case ASSIGNED->prefix+"reason='ASSIGNED'";
+            case PROJECT->"("+prefix+"reason LIKE 'PROJECT_%' OR "+prefix+"reason='CONNECTION_CREATED')";
         };
     }
     private static OffsetDateTime time(Instant time) { return time.atOffset(ZoneOffset.UTC); }
