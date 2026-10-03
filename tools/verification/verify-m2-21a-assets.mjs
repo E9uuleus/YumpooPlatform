@@ -15,6 +15,7 @@ const sdk = read('packages/api-client/src/generated/apis/WorkItemsApi.ts')
 const eventSchema = read('contracts/events/schemas/workitem.work-item-relation-created-v1.schema.json')
 const overview = read('frontend/web-app/src/components/projects/ProjectWorkItems.vue')
 const subtable = read('frontend/web-app/src/components/projects/ProjectWorkItemSubitemsTable.vue')
+const addColumnButton = read('frontend/web-app/src/components/projects/connect/ConnectColumnAddButton.vue')
 const subtableTest = read('frontend/web-app/src/components/projects/ProjectWorkItemSubitemsTable.spec.ts')
 const note = read('.agents/notes/implemented/data/2026-08-28-work-item-parent-child-relations.md')
 const readme = read('README.md')
@@ -50,7 +51,7 @@ for (const fragment of ['expandedSubitemIds', 'loadSubitems', 'onTableExpandChan
   'project-work-item-subitems-table', '--work-item-hierarchy-gap: 14px',
   '--work-item-table-scroll-left', 'syncSubitemFixedColumnScrollPosition',
   'subitemMovableColumnOrder', 'visibleSubitemColumns', 'moveSubitemColumn',
-  'monday-add-column-icon', 'M10 2.25C10.4142 2.25',
+  '<connect-column-add-button', '#column-add',
   'monday-quick-add__field', 'placeholder="添加工作项"', 'contentId: defaultContentId.value',
   'monday-quick-checkbox', 'translateX(var(--work-item-table-scroll-left, 0px))',
   '--work-item-quick-control-height: 26px', '.monday-quick-row:focus-within',
@@ -79,8 +80,7 @@ for (const fragment of ['aria-label', '--work-item-hierarchy-indent, 40px',
   'th.monday-sortable-column-header:has(.sort-by-column--active)',
   'createColumnDragPreview', 'columnDragStyle', 'subitem-column-drag-source', 'columnDropAllowed',
   '.el-table__body-wrapper tbody tr.el-table__row',
-  'SUBITEM_ADD_COLUMN_MIN_WIDTH', 'subitem-add-column-header', 'subitem-add-column-button',
-  'M10 2.25C10.4142 2.25',
+  'SUBITEM_ADD_COLUMN_MIN_WIDTH', 'subitem-add-column-header', '<slot name="column-add"',
   '--subitem-table-quick-height: var(--subitem-table-row-height)', 'subitem-add__field',
   'placeholder="添加子项"', 'contentId: defaultContentId.value',
   'subitem-quick-checkbox', 'color-mix(in srgb, var(--yp-border-strong) 50%, transparent)',
@@ -89,6 +89,10 @@ for (const fragment of ['aria-label', '--work-item-hierarchy-indent, 40px',
   'translateX(var(--work-item-table-scroll-left, 0px))',
   'createWorkItemSubitem', 'moveWorkItemSubitemOrder']) assert(subtable.includes(fragment), `子表格缺少 ${fragment}`)
 assert(!subtable.includes('subitem-hierarchy-branch--header'), '子表头不应渲染层级连接锚点')
+for (const fragment of ['connect-column-add-button', 'aria-label="添加列"', 'viewBox="0 0 20 20"',
+  'width="18"', 'height="18"', 'fill="currentColor"', 'M10 2.25C10.4142 2.25']) {
+  assert(addColumnButton.includes(fragment), `共用添加列入口缺少 ${fragment}`)
+}
 for (const fragment of ['自动继承父项类别而非首个启用类别', '直接兄弟锚点', '不渲染下一级展开入口',
   '表头不渲染连接锚点', '空子项时让添加行紧接表头', '状态和优先级标签占满对应子项单元格',
   '固定勾选和名称列，并让单行表头整列可拖出表格但仅在当前子表内落下']) {
