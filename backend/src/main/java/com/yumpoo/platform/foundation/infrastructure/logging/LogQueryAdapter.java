@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.SmartLifecycle;
@@ -44,6 +45,9 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
 
     private static final long BYTE_LIMIT = 256L * 1024 * 1024;
     private static final long TIME_LIMIT = 3_000_000_000L;
+    // A queued query waits for one in-flight scan to finish its budget instead of failing immediately.
+    private static final long ACQUIRE_LIMIT = TIME_LIMIT + 1_000_000_000L;
+    private static final Set<String> LEVELS = Set.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR");
     private static final Set<String> RESERVED = Set.of(
         "schema",
         "time",
@@ -60,7 +64,7 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
     );
     private final LogBufferAppender buffer;
     private final Environment environment;
-    private final Semaphore scanner = new Semaphore(1);
+    final Semaphore scanner = new Semaphore(1, true);
     private final JsonMapper json = JsonMapper.builder().build();
     private final Map<String, Cursor> cursors = new LinkedHashMap<>();
     private volatile boolean running;
@@ -73,6 +77,10 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
         byte[] prefix,
         String id
     ) {}
+
+    private record Line(JsonNode root, Instant time, String level) {}
+
+    private record Match(long number, Line line) {}
 
     private record Cursor(
         Instant from,
@@ -184,7 +192,7 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
         LogQueryPort.validateLimit(limit);
         Cursor state = cursor == null ? initial(from, to, filter) : lookup(cursor, from, to, filter);
         if (state.memory) return memory(state, limit);
-        if (!scanner.tryAcquire()) throw new ApplicationException(StandardErrorCode.RATE_LIMITED);
+        acquire();
         try {
             return files(state, limit);
         } finally {
@@ -248,25 +256,25 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
         Budget budget = new Budget();
         for (int index = state.index; index < state.files.size(); index++) {
             FileRef ref = state.files.get(index);
-            Deque<Entry> matches = new ArrayDeque<>();
+            Deque<Match> matches = new ArrayDeque<>();
             String failure = scan(
                 ref,
                 index == state.index ? state.beforeLine : Long.MAX_VALUE,
                 budget,
-                (line, record) -> {
-                    if (within(record, state) && state.filter.matches(record)) {
-                        matches.addLast(new Entry(ref.id + ":" + line, null, record));
+                (number, line) -> {
+                    if (matches(line, state)) {
+                        matches.addLast(new Match(number, line));
                         if (matches.size() > limit - found.size() + 1) matches.removeFirst();
                     }
                 }
             );
             if (failure != null) {
                 if (failure.equals("SOURCE_REMOVED")) matches.clear();
-                while (!matches.isEmpty() && found.size() < limit) found.add(matches.removeLast());
+                while (!matches.isEmpty() && found.size() < limit) found.add(entry(ref, matches.removeLast()));
                 return new Page(found, "FILE", null, true, failure, budget.bytes, budget.skipped, buffer.dropped());
             }
             while (!matches.isEmpty()) {
-                Entry item = matches.removeLast();
+                Match item = matches.removeLast();
                 if (found.size() == limit) {
                     String last = found.getLast().id();
                     long boundary = Long.parseLong(last.substring(last.lastIndexOf(':') + 1));
@@ -293,7 +301,7 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
                         buffer.dropped()
                     );
                 }
-                found.add(item);
+                found.add(entry(ref, item));
             }
             if (found.size() == limit && index + 1 < state.files.size()) return new Page(
                 found,
@@ -334,7 +342,7 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
         FileRef ref,
         long beforeLine,
         Budget budget,
-        java.util.function.BiConsumer<Long, LogRecord> visitor
+        java.util.function.BiConsumer<Long, Line> visitor
     ) {
         if (budget.exhausted()) return "SCAN_BUDGET";
         try {
@@ -353,19 +361,19 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
                 while ((count = input.read(chunk)) != -1) {
                     budget.bytes += count;
                     if (budget.exhausted()) return "SCAN_BUDGET";
-                    for (int i = 0; i < count; i++) {
-                        if (chunk[i] != '\n') {
-                            if (line.size() < 65536) line.write(chunk[i]);
-                            else overflow = true;
-                            continue;
-                        }
+                    for (int start = 0, i = 0; i <= count; i++) {
+                        if (i < count && chunk[i] != '\n') continue;
+                        if (line.size() + i - start <= 65536) line.write(chunk, start, i - start);
+                        else overflow = true;
+                        start = i + 1;
+                        if (i == count) break;
                         number++;
                         if (number >= beforeLine) return locate(ref) == null ? "SOURCE_REMOVED" : null;
                         if (overflow) budget.skipped++;
                         else try {
-                            LogRecord record = parse(line.toString(StandardCharsets.UTF_8));
-                            if (record == null) budget.skipped++;
-                            else visitor.accept(number, record);
+                            Line parsed = read(line.toString(StandardCharsets.UTF_8));
+                            if (parsed == null) budget.skipped++;
+                            else visitor.accept(number, parsed);
                         } catch (RuntimeException exception) {
                             budget.skipped++;
                         }
@@ -472,9 +480,50 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
         }
     }
 
-    private LogRecord parse(String value) {
+    private Line read(String value) {
         JsonNode root = json.readTree(value);
         if (!"yumpoo-log/1".equals(root.path("schema").asText())) return null;
+        String level = root.path("level").asText();
+        if (!LEVELS.contains(level)) return null;
+        return new Line(root, Instant.parse(root.path("time").asText()), level);
+    }
+
+    // Redaction dominates scan cost, so filtering redacts only the text a keyword search reads.
+    private static boolean matches(Line line, Cursor state) {
+        if (
+            line.time.isBefore(state.from) ||
+            !line.time.isBefore(state.to) ||
+            !state.filter.levels().contains(line.level)
+        ) return false;
+        JsonNode root = line.root,
+            e = root.path("error");
+        boolean text = state.filter.q() != null && !state.filter.q().isBlank();
+        return state.filter.matches(
+            new LogRecord(
+                line.time,
+                line.level,
+                state.filter.modules().isEmpty() ? "" : LogSanitizer.text(root.path("module").asText(), 64),
+                nullable(root, "event"),
+                text ? LogSanitizer.text(root.path("msg").asText(), 2048) : "",
+                "",
+                "",
+                nullable(root, "requestId"),
+                nullable(root, "correlationId"),
+                nullable(root, "userId"),
+                Map.of(),
+                text && e.isObject()
+                    ? new LogRecord.LogError(LogSanitizer.text(e.path("type").asText(), 256), "", "", "")
+                    : null
+            )
+        );
+    }
+
+    private Entry entry(FileRef ref, Match match) {
+        return new Entry(ref.id + ":" + match.number, null, record(match.line));
+    }
+
+    private LogRecord record(Line line) {
+        JsonNode root = line.root;
         Map<String, Object> fields = new LinkedHashMap<>();
         root.properties().forEach(pair -> {
             if (!RESERVED.contains(pair.getKey()) && fields.size() < 32) {
@@ -495,11 +544,9 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
                   LogSanitizer.text(e.path("hash").asText(), 64)
               )
             : null;
-        String level = root.path("level").asText();
-        if (!Set.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(level)) return null;
         return new LogRecord(
-            Instant.parse(root.path("time").asText()),
-            level,
+            line.time,
+            line.level,
             LogSanitizer.text(root.path("module").asText(), 64),
             nullable(root, "event"),
             LogSanitizer.text(root.path("msg").asText(), 2048),
@@ -571,24 +618,27 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
         Map<Instant, Map<String, Long>> counts = new TreeMap<>();
         Cursor state = initial(from, to, filter);
         String reason = null;
-        java.util.function.Consumer<LogRecord> count = record -> {
-            if (!within(record, state) || !filter.matches(record)) return;
-            Instant at = Instant.ofEpochSecond(Math.floorDiv(record.time().getEpochSecond(), seconds) * seconds);
-            counts.computeIfAbsent(at, ignored -> new TreeMap<>()).merge(record.level(), 1L, Long::sum);
+        java.util.function.BiConsumer<Instant, String> count = (time, level) -> {
+            Instant at = Instant.ofEpochSecond(Math.floorDiv(time.getEpochSecond(), seconds) * seconds);
+            counts.computeIfAbsent(at, ignored -> new TreeMap<>()).merge(level, 1L, Long::sum);
         };
         if (state.memory) {
             var snapshot = buffer.snapshot(filter.problemsOnly());
-            snapshot.items().forEach(item -> count.accept(item.record()));
+            for (var item : snapshot.items()) if (
+                within(item.record(), state) && filter.matches(item.record())
+            ) count.accept(item.record().time(), item.record().level());
             if (
                 snapshot.evicted() > 0 &&
                 (snapshot.items().isEmpty() || !from.isAfter(snapshot.items().getFirst().record().time()))
             ) reason = "BUFFER_EVICTED";
         } else {
-            if (!scanner.tryAcquire()) throw new ApplicationException(StandardErrorCode.RATE_LIMITED);
+            acquire();
             try {
                 Budget budget = new Budget();
                 for (FileRef ref : state.files) {
-                    reason = scan(ref, Long.MAX_VALUE, budget, (line, record) -> count.accept(record));
+                    reason = scan(ref, Long.MAX_VALUE, budget, (number, line) -> {
+                        if (matches(line, state)) count.accept(line.time, line.level);
+                    });
                     if (reason != null) break;
                 }
                 if (reason == null && budget.skipped > 0) reason = "SKIPPED_LINES";
@@ -611,6 +661,15 @@ public class LogQueryAdapter implements LogQueryPort, SmartLifecycle {
             reason != null,
             reason
         );
+    }
+
+    private void acquire() {
+        try {
+            if (scanner.tryAcquire(ACQUIRE_LIMIT, TimeUnit.NANOSECONDS)) return;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+        }
+        throw new ApplicationException(StandardErrorCode.RATE_LIMITED);
     }
 
     private static final class BoundedInputStream extends FilterInputStream {

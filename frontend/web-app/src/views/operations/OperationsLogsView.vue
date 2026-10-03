@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Close, Filter, Search } from '@element-plus/icons-vue'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ElAlert,
@@ -68,54 +68,60 @@ const routeKey = (value: object) =>
 let lastRouteKey = routeKey(route.query)
 const query = useOperationsQuery(
   async (signal) => {
-    if (following.value) {
-      const result = await operationsApi.tailOperationsLogs(
-        {
-          ...applied.value,
-          ...(bootId.value ? { bootId: bootId.value } : {}),
-          ...(afterSeq.value ? { afterSeq: afterSeq.value } : {}),
-          limit: 500,
-        },
-        { signal },
-      )
-      if (signal.aborted) return
-      if (result.gap) {
-        warning.value =
-          result.gapReason === 'RESTART'
-            ? '服务已重启，已开始新的日志流。此前记录可用历史查询查看。'
-            : '缓冲已淘汰部分日志，请缩小时间范围查询文件补齐。'
-        entries.value = []
-        pending.value = []
+    try {
+      await loadEntries(signal)
+    } finally {
+      if (!signal.aborted && Date.now() - lastHistogramAt >= 60000) {
+        lastHistogramAt = Date.now()
+        if (following.value) histogramRange.value = [new Date(Date.now() - 900000), new Date()]
+        void histogram.refresh()
       }
-      bootId.value = result.bootId
-      afterSeq.value = result.nextAfterSeq
-      more = result.hasMore
-      source.value = '实时缓冲'
-      if (paused.value) {
-        if (pending.value.length + result.items.length > 500)
-          warning.value = '暂停期间新日志超过 500 条，较早记录请用历史查询查看。'
-        pending.value = merge(pending.value, result.items)
-      } else entries.value = merge(entries.value, result.items)
-      if (result.droppedCount) warning.value = '部分超长日志未进入缓冲，请查询历史文件。'
-    } else {
-      const result = await operationsApi.queryOperationsLogs(
-        { ...applied.value, from: appliedRange.value[0], to: appliedRange.value[1], limit: 100 },
-        { signal },
-      )
-      if (signal.aborted) return
-      entries.value = result.items
-      cursor.value = result.nextCursor
-      source.value = result.source === 'FILE' ? '历史文件' : '内存缓冲'
-      warnPartial(result)
-    }
-    if (Date.now() - lastHistogramAt >= 60000) {
-      lastHistogramAt = Date.now()
-      if (following.value) histogramRange.value = [new Date(Date.now() - 900000), new Date()]
-      void histogram.refresh()
     }
   },
   { interval: () => (following.value ? (more ? 500 : 3000) : 0) },
 )
+async function loadEntries(signal: AbortSignal) {
+  if (following.value) {
+    const result = await operationsApi.tailOperationsLogs(
+      {
+        ...applied.value,
+        ...(bootId.value ? { bootId: bootId.value } : {}),
+        ...(afterSeq.value ? { afterSeq: afterSeq.value } : {}),
+        limit: 500,
+      },
+      { signal },
+    )
+    if (signal.aborted) return
+    if (result.gap) {
+      warning.value =
+        result.gapReason === 'RESTART'
+          ? '服务已重启，已开始新的日志流。此前记录可用历史查询查看。'
+          : '缓冲已淘汰部分日志，请缩小时间范围查询文件补齐。'
+      entries.value = []
+      pending.value = []
+    }
+    bootId.value = result.bootId
+    afterSeq.value = result.nextAfterSeq
+    more = result.hasMore
+    source.value = '实时缓冲'
+    if (paused.value) {
+      if (pending.value.length + result.items.length > 500)
+        warning.value = '暂停期间新日志超过 500 条，较早记录请用历史查询查看。'
+      pending.value = merge(pending.value, result.items)
+    } else entries.value = merge(entries.value, result.items)
+    if (result.droppedCount) warning.value = '部分超长日志未进入缓冲，请查询历史文件。'
+  } else {
+    const result = await operationsApi.queryOperationsLogs(
+      { ...applied.value, from: appliedRange.value[0], to: appliedRange.value[1], limit: 100 },
+      { signal },
+    )
+    if (signal.aborted) return
+    entries.value = result.items
+    cursor.value = result.nextCursor
+    source.value = result.source === 'FILE' ? '历史文件' : '内存缓冲'
+    warnPartial(result)
+  }
+}
 function warnPartial(result: OperationsLogPage) {
   warning.value = result.partial
     ? '查询结果不完整（文件变化或扫描预算耗尽），请缩小范围重查。'
@@ -137,6 +143,21 @@ const histogram = useOperationsQuery(
     ),
   { immediate: false },
 )
+// History queries do not poll, so a scan rejected while another one runs gets a few delayed retries.
+let rateLimitRetries = 0,
+  rateLimitTimer: ReturnType<typeof setTimeout> | undefined
+for (const target of [query, histogram])
+  watch(target.error, (problem) => {
+    if (problem?.kind !== 'response' || problem.status !== 429 || rateLimitRetries >= 3) return
+    if (target === query && following.value) return
+    rateLimitRetries++
+    clearTimeout(rateLimitTimer)
+    rateLimitTimer = setTimeout(
+      () => void target.refresh(),
+      (Number(problem.retryAfter) || 2) * 1000,
+    )
+  })
+onBeforeUnmount(() => clearTimeout(rateLimitTimer))
 const histogramSeries = computed(() =>
   ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR'].map((key) => ({
     key,
@@ -286,6 +307,10 @@ function search() {
   afterSeq.value = undefined
   cursor.value = null
   warning.value = ''
+  source.value = ''
+  histogram.data.value = undefined
+  rateLimitRetries = 0
+  clearTimeout(rateLimitTimer)
   histogramRange.value = following.value ? [new Date(Date.now() - 900000), new Date()] : range.value
   const queryState = {
     ...filters(),

@@ -2,7 +2,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 import { ElSwitch } from 'element-plus'
-import type { OperationsLogPage } from '@yumpoo/api-client'
+import { ResponseError, type OperationsLogPage } from '@yumpoo/api-client'
 import OperationsLogsView from './OperationsLogsView.vue'
 import OperationsChart from '../../components/operations/OperationsChart.vue'
 
@@ -71,10 +71,50 @@ beforeEach(() => {
   vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
 })
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
   Object.values(api).forEach((mock) => mock.mockReset())
 })
 describe('历史日志筛选', () => {
+  it('切换区间清空旧来源和统计，列表被限流时仍刷新直方图并自动重试', async () => {
+    api.getOperationsLogHistogram.mockResolvedValue({
+      buckets: [{ time: new Date(), counts: { INFO: 4 } }],
+      bucketSeconds: 60, partial: false, partialReason: null,
+    })
+    const wrapper = mount(OperationsLogsView)
+    await flushPromises()
+    expect(wrapper.get('.log-source').text()).toContain('来源：历史文件')
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let histogramDone!: (value: unknown) => void
+    api.getOperationsLogHistogram.mockImplementationOnce(
+      () => new Promise((resolve) => { histogramDone = resolve }),
+    )
+    api.queryOperationsLogs.mockRejectedValueOnce(new ResponseError(new Response(JSON.stringify({
+      code: 'RATE_LIMITED', message: '请求过于频繁', requestId: 'test', retryable: true,
+      fieldErrors: [], details: {},
+    }), { status: 429 })))
+    await wrapper.findAll('[aria-label="日志时间范围"] button')
+      .find((button) => button.text() === '6 小时')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.log-source').text()).toContain('来源：—')
+    expect(wrapper.get('[aria-label="日志级别"]').text()).not.toContain('INFO 4')
+    expect(wrapper.text()).toContain('请求过于频繁')
+    expect(api.getOperationsLogHistogram).toHaveBeenCalledTimes(2)
+    histogramDone({
+      buckets: [{ time: new Date(), counts: { INFO: 7 } }],
+      bucketSeconds: 300, partial: false, partialReason: null,
+    })
+    await flushPromises()
+    expect(wrapper.get('[aria-label="日志级别"]').text()).toContain('INFO 7')
+    expect(api.queryOperationsLogs).toHaveBeenCalledTimes(2)
+    vi.advanceTimersByTime(2000)
+    await flushPromises()
+    expect(api.queryOperationsLogs).toHaveBeenCalledTimes(3)
+    expect(wrapper.text()).toContain('history')
+    expect(wrapper.text()).not.toContain('请求过于频繁')
+    expect(wrapper.get('.log-source').text()).toContain('来源：历史文件')
+    wrapper.unmount()
+  })
   it('级别计数覆盖当前区间的所有级别，精确筛选收在折叠区', async () => {
     api.queryOperationsLogs.mockResolvedValue(page('history', null))
     api.getOperationsLogHistogram.mockResolvedValue({

@@ -283,6 +283,52 @@ class OperationsLoggingTest {
     }
 
     @Test
+    void fileKeywordSearchMatchesOnlyRedactedTextWithinRange() throws Exception {
+        Instant from = Instant.now().minusSeconds(600),
+            to = Instant.now();
+        Path file = directory.resolve("server.log");
+        Files.writeString(
+            file,
+            line(from.minusSeconds(60), "plain secret-value") +
+                line(from.plusSeconds(1), "token=secret-value") +
+                line(from.plusSeconds(2), "plain secret-value")
+        );
+        var adapter = new LogQueryAdapter(new MockEnvironment().withProperty("logging.file.name", file.toString()));
+        var keyword = new LogQueryPort.Filter(null, Set.of(), "SECRET-VALUE", null, null, null);
+        assertThat(adapter.search(from, to, keyword, null, 10).items())
+            .extracting(e -> e.record().msg())
+            .containsExactly("plain secret-value");
+        assertThat(
+            adapter
+                .histogram(from, to, keyword)
+                .buckets()
+                .stream()
+                .mapToLong(b -> b.counts().getOrDefault("INFO", 0L))
+                .sum()
+        ).isEqualTo(1);
+    }
+
+    @Test
+    @org.junit.jupiter.api.Timeout(10)
+    void queuedFileQueryWaitsForTheInFlightScanInsteadOfBeingRateLimited() throws Exception {
+        Instant from = Instant.now().minusSeconds(600),
+            to = Instant.now();
+        Path file = directory.resolve("server.log");
+        Files.writeString(file, line(from.plusSeconds(1), "queued"));
+        var adapter = new LogQueryAdapter(new MockEnvironment().withProperty("logging.file.name", file.toString()));
+        adapter.scanner.acquire();
+        var release = java.util.concurrent.CompletableFuture.runAsync(
+            adapter.scanner::release,
+            java.util.concurrent.CompletableFuture.delayedExecutor(300, java.util.concurrent.TimeUnit.MILLISECONDS)
+        );
+        assertThat(adapter.search(from, to, filter, null, 10).items())
+            .extracting(e -> e.record().msg())
+            .containsExactly("queued");
+        release.join();
+        assertThat(adapter.scanner.availablePermits()).isEqualTo(1);
+    }
+
+    @Test
     void replacementBetweenPagesDoesNotReturnRowsFromTheNewFile() throws Exception {
         Path file = directory.resolve("server.log");
         Instant from = Instant.now().minusSeconds(600),
