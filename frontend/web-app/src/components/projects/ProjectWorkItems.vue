@@ -76,6 +76,15 @@ import { useWorkItemGroupCreate } from './useWorkItemGroupCreate'
 import { useSession } from '../../composables/useSession'
 import { useWorkItemDueClock } from './useWorkItemDueClock'
 import { companyDate } from './workItemDueDate'
+import ConnectColumnAddButton from './connect/ConnectColumnAddButton.vue'
+import ConnectTableColumnHeader from './connect/ConnectTableColumnHeader.vue'
+import ConnectColumnDialog from './connect/ConnectColumnDialog.vue'
+import ConnectColumnDeleteDialog from './connect/ConnectColumnDeleteDialog.vue'
+import ConnectCell from './connect/ConnectCell.vue'
+import IncomingConnectCell from './connect/IncomingConnectCell.vue'
+import ConnectionCardDialog from './connect/ConnectionCardDialog.vue'
+import { isConnectColumnKey, type ConnectColumnKey } from './connect/connectColumnKeys'
+import { useConnectTable } from './connect/useConnectTable'
 
 type ProjectView = 'table' | 'kanban'
 
@@ -238,7 +247,7 @@ let tableColumnPointerCandidate: {
 } | undefined
 let tableColumnResizeCandidate: {
   pointerId: number
-  key: ColumnKey
+  key: BuiltInColumnKey
   minWidth: number
   startWidth: number
   startX: number
@@ -481,9 +490,10 @@ const stopTimerUpdates = onTimeTrackingChanged(() => {
   if (sortRules.value.some(rule => rule.field === 'TIME_TRACKING') || filters.timeState || filters.timeMin !== '' || filters.timeMax !== '') void loadTable()
 })
 onBeforeUnmount(stopTimerUpdates)
-type ColumnKey = 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate' | 'timeTracking' | 'updatedAt'
-type MovableColumnKey = Exclude<ColumnKey, 'title'>
-const columns: Array<{ key: ColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
+type BuiltInColumnKey = 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate' | 'timeTracking' | 'updatedAt'
+type ColumnKey = BuiltInColumnKey | ConnectColumnKey
+type MovableColumnKey = Exclude<BuiltInColumnKey, 'title'>
+const columns: Array<{ key: BuiltInColumnKey; label: string; defaultWidth: number; minWidth: number }> = [
   { key: 'title', label: '工作项名称', defaultWidth: 320, minWidth: 220 },
   { key: 'assignee', label: '处理人', defaultWidth: 90, minWidth: 72 },
   { key: 'status', label: '状态', defaultWidth: 96, minWidth: 96 },
@@ -493,7 +503,7 @@ const columns: Array<{ key: ColumnKey; label: string; defaultWidth: number; minW
   { key: 'timeTracking', label: '时长追踪', defaultWidth: 140, minWidth: 120 },
   { key: 'updatedAt', label: '最后更新时间', defaultWidth: 170, minWidth: 135 },
 ]
-const sortFieldByColumn: Record<ColumnKey, string> = {
+const sortFieldByColumn: Record<BuiltInColumnKey, string> = {
   title: 'TITLE',
   assignee: 'ASSIGNEE',
   status: 'STATUS',
@@ -506,8 +516,8 @@ const columnByKey = new Map(columns.map(column => [column.key, column]))
 const defaultMovableColumnOrder = columns.filter(column => column.key !== 'title').map(column => column.key as MovableColumnKey)
 const movableColumnOrder = ref<MovableColumnKey[]>([...defaultMovableColumnOrder])
 const subitemMovableColumnOrder = ref<MovableColumnKey[]>([...defaultMovableColumnOrder])
-const columnWidths = reactive<Record<ColumnKey, number>>(Object.fromEntries(columns.map(item => [item.key, item.defaultWidth])) as Record<ColumnKey, number>)
-const hiddenColumns = ref(new Set<ColumnKey>())
+const columnWidths = reactive<Record<BuiltInColumnKey, number>>(Object.fromEntries(columns.map(item => [item.key, item.defaultWidth])) as Record<BuiltInColumnKey, number>)
+const hiddenColumns = ref(new Set<BuiltInColumnKey>())
 let loadRevision = 0
 let searchTimer: number | undefined
 let memberSearchTimer: number | undefined
@@ -526,13 +536,23 @@ const orderedSubitemColumns = computed(() => [
   columnByKey.get('title')!,
   ...subitemMovableColumnOrder.value.map(key => columnByKey.get(key)!),
 ])
-const visibleColumns = computed(() => orderedColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
+const connect = reactive(useConnectTable({
+  projectId, project, enabled: () => !embedded.value && selectedView.value === 'table',
+  rows: () => [...tableItems.value, ...Object.values(subitems).flatMap(state => state.items)],
+  table: () => tableRef.value?.$el,
+}))
+const builtInVisibleColumns = computed(() => orderedColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
+const visibleColumns = computed(() => [...builtInVisibleColumns.value, ...connect.visibleColumns])
 const visibleSubitemColumns = computed(() => orderedSubitemColumns.value.filter(item => item.key === 'title' || !hiddenColumns.value.has(item.key)))
-const movableVisibleColumns = computed(() => visibleColumns.value.filter(item => item.key !== 'title'))
+const movableVisibleColumns = computed(() => builtInVisibleColumns.value.filter(item => item.key !== 'title'))
+const allHiddenColumns = computed(() => new Set<ColumnKey>([...hiddenColumns.value, ...connect.hidden]))
+const restorableColumns = computed(() => [...columns, ...connect.columns].filter(column => allHiddenColumns.value.has(column.key)))
+function columnWidth(key: ColumnKey): number { return isConnectColumnKey(key) ? connect.width(key) : columnWidths[key] }
+function showHiddenColumn(key: string) { if (isConnectColumnKey(key) || columnByKey.has(key as BuiltInColumnKey)) void toggleColumn(key as ColumnKey, true) }
 const quickGridStyle = computed(() => ({
   '--work-item-menu-column-width': `${TABLE_MENU_COLUMN_WIDTH}px`,
   gridTemplateColumns: [`${TABLE_MENU_COLUMN_WIDTH}px`, `${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
-    ...visibleColumns.value.map(item => `${columnWidths[item.key]}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
+    ...visibleColumns.value.map(item => `${columnWidth(item.key)}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
 }))
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
@@ -685,6 +705,7 @@ function groupRowStyles(context: { row: TableDisplayRow; rowIndex: number }): CS
 }
 function groupCellClasses(context: { row: TableDisplayRow; column: { property?: string } }): string {
   if (isGroupDisplayRow(context.row) && context.row.groupRowKind === 'subitems') return 'el-table__expanded-cell'
+  if (isGroupDisplayRow(context.row) && context.row.groupRowKind === 'columns' && isConnectColumnKey(context.column.property ?? '')) return 'work-item-group-column-header monday-connect-column-header'
   if (isGroupDisplayRow(context.row)) return context.row.groupRowKind === 'columns'
     ? `work-item-group-column-header monday-sortable-column-header${context.column.property && context.column.property !== 'title' ? ' monday-movable-column-header' : ''}` : ''
   return tableCellClassName({ ...context, row: context.row })
@@ -856,6 +877,7 @@ async function beforeRowRemove(row: ProjectWorkItemListItem): Promise<boolean> {
 }
 
 async function onRowRemoved(row: ProjectWorkItemListItem, preserveChildSelection = false): Promise<void> {
+  void connect.refreshCells([row.id])
   selectedWorkItemIds.value.delete(row.id)
   Object.values(subitemSelections).forEach(selection => selection.delete(row.id))
   if (!preserveChildSelection) delete subitemSelections[row.id]
@@ -876,6 +898,7 @@ async function restoreArchivedItem(): Promise<void> {
     const restored = await workItemsApi.unarchiveWorkItem({ workItemId: restoringItem.id, xXSRFTOKEN: csrf,
       ifMatch: restoringItem.etag, idempotencyKey: crypto.randomUUID() })
     if (detail.value?.id === restoringItem.id) detail.value = restored
+    void connect.refreshCells([restoringItem.id])
     await onRelationsChanged([restoringItem.id, ...expandedSubitemIds.value])
     ElMessage.success('工作项已恢复')
   } catch (reason) {
@@ -1639,11 +1662,11 @@ function setSortCount(count: number): void {
   void syncUrl()
 }
 
-function sortDirectionForColumn(key: ColumnKey): 'ASC' | 'DESC' | undefined {
+function sortDirectionForColumn(key: BuiltInColumnKey): 'ASC' | 'DESC' | undefined {
   return sortRules.value.find(rule => rule.field === sortFieldByColumn[key])?.direction
 }
 
-function applyColumnQuickSort(key: ColumnKey): void {
+function applyColumnQuickSort(key: BuiltInColumnKey): void {
   if (savingSortOrder.value) return
   const field = sortFieldByColumn[key]
   const index = sortRules.value.findIndex(rule => rule.field === field)
@@ -1660,7 +1683,7 @@ function applyColumnQuickSort(key: ColumnKey): void {
   void syncUrl()
 }
 
-function clearColumnSort(key: ColumnKey): void {
+function clearColumnSort(key: BuiltInColumnKey): void {
   if (savingSortOrder.value) return
   const field = sortFieldByColumn[key]
   sortRules.value = sortRules.value.filter(rule => rule.field !== field)
@@ -1745,10 +1768,10 @@ function loadTablePrefs(): void {
   try {
     const parsed = JSON.parse(localStorage.getItem(tablePrefsKey.value) ?? (embedded.value ? localStorage.getItem(projectTablePrefsKey) : null) ?? '{}') as {
       version?: number
-      widths?: Partial<Record<ColumnKey, number>>
-      hidden?: ColumnKey[]
-      order?: ColumnKey[]
-      subitemOrder?: ColumnKey[]
+      widths?: Partial<Record<BuiltInColumnKey, number>>
+      hidden?: BuiltInColumnKey[]
+      order?: BuiltInColumnKey[]
+      subitemOrder?: BuiltInColumnKey[]
     }
     if (parsed.version !== TABLE_PREFS_VERSION) return
     columns.forEach(column => {
@@ -1769,8 +1792,10 @@ function loadTablePrefs(): void {
   } catch { /* 忽略损坏的本地视图偏好 */ }
 }
 
-function onHeaderDragEnd(newWidth: number, _oldWidth: number, column: { label: string }): void {
-  const config = columns.find(item => item.label === column.label)
+function onHeaderDragEnd(newWidth: number, _oldWidth: number, column: { property?: string; columnKey?: string }): void {
+  const key = column.property ?? column.columnKey ?? ''
+  if (isConnectColumnKey(key)) { connect.resizeColumn(key, newWidth); return }
+  const config = columnByKey.get(key as BuiltInColumnKey)
   if (!config) return
   columnWidths[config.key] = Math.max(config.minWidth, Math.round(newWidth))
   persistTablePrefs()
@@ -1784,6 +1809,7 @@ const columnFlip = createWorkItemColumnFlip({
 })
 async function toggleColumn(key: ColumnKey, checked: boolean): Promise<void> {
   if (key === 'title') return
+  if (isConnectColumnKey(key)) { connect.toggleColumn(key, checked); await nextTick(flushResponsiveTableLayout); return }
   const snapshot = columnFlip.capture()
   const next = new Set(hiddenColumns.value)
   if (checked) next.delete(key); else next.add(key)
@@ -2032,7 +2058,7 @@ function applyTableColumnResize(clientX: number): void {
 }
 
 function onTableColumnResizePointerDown(event: PointerEvent, handle: HTMLElement): void {
-  const columnKey = handle.dataset.columnKey as ColumnKey | undefined
+  const columnKey = handle.dataset.columnKey as BuiltInColumnKey | undefined
   const config = columnKey ? columnByKey.get(columnKey) : undefined
   const header = handle.closest<HTMLTableCellElement>(grouped.value ? '.work-item-group-column-header' : '.monday-movable-column-header')
   if (!columnKey || !config || (columnKey === 'title' && !grouped.value) || !header) return
@@ -2595,7 +2621,7 @@ watch([
   () => quickOpen.value,
   () => tableLoading.value,
   () => loadingMoreError.value,
-  () => visibleColumns.value.map(item => `${item.key}:${columnWidths[item.key]}`).join('|'),
+  () => visibleColumns.value.map(item => `${item.key}:${columnWidth(item.key)}`).join('|'),
 ], schedulePageScrollbarSync, { flush: 'post' })
 
 onMounted(() => {
@@ -2659,6 +2685,27 @@ onBeforeUnmount(() => {
       :problem="error"
     />
     <template v-if="project">
+      <template v-if="!embedded">
+        <connect-column-dialog
+          v-model:open="connect.columnDialogOpen"
+          :project-id="projectId"
+          :mode="connect.editingColumn ? 'edit' : 'create'"
+          :column="connect.editingColumn"
+          :existing-names="connect.catalog?.items.map(column => column.name) ?? []"
+          @saved="connect.reveal"
+        />
+        <connect-column-delete-dialog
+          :column="connect.deletingColumn"
+          @close="connect.deletingColumn = undefined"
+        />
+        <connection-card-dialog
+          v-if="connect.selectedConnection"
+          v-model:open="connect.cardOpen"
+          :connection="connect.selectedConnection"
+          :perspective="connect.perspective"
+          @invalidated="connect.refreshConnection"
+        />
+      </template>
       <project-workspace-header
         v-if="!embedded"
         section="overview"
@@ -2835,7 +2882,7 @@ onBeforeUnmount(() => {
                 <el-icon><hide /></el-icon><span>隐藏</span>
               </button>
             </template>
-            <work-item-column-visibility-menu :columns="columns" :hidden="hiddenColumns"
+            <work-item-column-visibility-menu :columns="[...columns, ...connect.columns]" :hidden="allHiddenColumns"
               :disabled="Object.values(cellPopoverBusy).some(Boolean)" @toggle="toggleColumn" />
           </el-popover>
           <work-item-grouping-popover :field="groupingField" :order="groupingOrder" :show-empty="showEmptyGroups"
@@ -2844,6 +2891,15 @@ onBeforeUnmount(() => {
           <button class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
         </div>
 
+        <template v-if="!embedded && selectedView === 'table' && (connect.catalogError || connect.cellError)">
+          <inline-problem :problem="connect.catalogError ?? connect.cellError!" />
+          <el-button
+            text
+            @click="connect.reloadConnections"
+          >
+            重新加载连接
+          </el-button>
+        </template>
         <div
           v-if="selectedView === 'table'"
           v-loading="tableLoading && !tableItems.length && !grouped"
@@ -2921,6 +2977,9 @@ onBeforeUnmount(() => {
                     :error="subitemState((scope.row.parent as ProjectWorkItemListItem).id).error"
                     :sort-rules="subitemState((scope.row.parent as ProjectWorkItemListItem).id).sortRules"
                     :columns="visibleSubitemColumns"
+                    :connect-columns="connect.visibleColumns"
+                    :connect-cells="connect.cells"
+                    :connect-read-only="connect.readOnly"
                     :column-widths="columnWidths"
                     :active-contents="activeContents"
                     :content-catalog="catalog"
@@ -2951,7 +3010,24 @@ onBeforeUnmount(() => {
                     @selection-change="onSubitemSelectionChange"
                     @header-resize="onHeaderDragEnd"
                     @move-column="moveSubitemColumn"
-                  />
+                    @open-connection="connect.openCard"
+                  >
+                    <template #connect-header="{ column }">
+                      <connect-table-column-header
+                        :column="column"
+                        :table="connect"
+                        @hide="toggleColumn($event, false)"
+                      />
+                    </template>
+                    <template #column-add>
+                      <connect-column-add-button
+                        :can-manage="connect.canManage"
+                        :hidden-columns="restorableColumns"
+                        @add-connect-column="connect.edit()"
+                        @show-column="showHiddenColumn"
+                      />
+                    </template>
+                  </project-work-item-subitems-table>
                   <work-item-row-actions
                     v-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem)"
                     :item="scope.row as ProjectWorkItemListItem"
@@ -3306,6 +3382,50 @@ onBeforeUnmount(() => {
               </el-table-column>
 
               <el-table-column
+                v-for="column in connect.visibleColumns"
+                :key="column.key"
+                :column-key="column.key"
+                :prop="column.key"
+                :label="column.label"
+                :width="column.width"
+                :min-width="column.minWidth"
+                class-name="monday-connect-column"
+                label-class-name="monday-connect-column-header"
+                resizable
+              >
+                <template #header>
+                  <connect-table-column-header
+                    :column="column"
+                    :table="connect"
+                    @hide="toggleColumn($event, false)"
+                  />
+                </template>
+                <template #default="scope">
+                  <connect-table-column-header
+                    v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
+                    :column="column"
+                    :table="connect"
+                    @hide="toggleColumn($event, false)"
+                  />
+                  <connect-cell
+                    v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem) && column.column"
+                    :item="scope.row as ProjectWorkItemListItem"
+                    :column="column.column"
+                    :connections="connect.cells.get(scope.row.id)?.outgoing.find(value => value.columnId === column.column?.id)?.connections ?? []"
+                    :read-only="connect.readOnly"
+                    @open-card="connect.openCard($event)"
+                  />
+                  <incoming-connect-cell
+                    v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem) && column.kind === 'incoming'"
+                    :item="scope.row as ProjectWorkItemListItem"
+                    :incoming="connect.cells.get(scope.row.id)?.incoming ?? []"
+                    :incoming-total="connect.cells.get(scope.row.id)?.incomingTotal ?? 0"
+                    :read-only="connect.readOnly"
+                    @open-card="connect.openCard($event, 'target')"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column
                 label="添加列"
                 column-key="add-column"
                 :min-width="TABLE_ADD_COLUMN_MIN_WIDTH"
@@ -3315,32 +3435,21 @@ onBeforeUnmount(() => {
                 label-class-name="monday-add-column-header"
               >
                 <template #header>
-                  <button
-                    type="button"
-                    class="monday-add-column-icon"
-                    aria-label="添加列（功能预留）"
-                    title="添加列（功能预留）"
-                  >
-                    <svg
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                      width="18"
-                      height="18"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="M10 2.25C10.4142 2.25 10.75 2.58579 10.75 3V9.25H17C17.4142 9.25 17.75 9.58579 17.75 10C17.75 10.4142 17.4142 10.75 17 10.75H10.75V17C10.75 17.4142 10.4142 17.75 10 17.75C9.58579 17.75 9.25 17.4142 9.25 17V10.75H3C2.58579 10.75 2.25 10.4142 2.25 10C2.25 9.58579 2.58579 9.25 3 9.25H9.25V3C9.25 2.58579 9.58579 2.25 10 2.25Z"
-                        fill-rule="evenodd"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
-                  </button>
+                  <connect-column-add-button
+                    :can-manage="connect.canManage"
+                    :hidden-columns="restorableColumns"
+                    @add-connect-column="connect.edit()"
+                    @show-column="showHiddenColumn"
+                  />
                 </template>
                 <template #default="scope">
-                  <button v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'" type="button"
-                    class="monday-add-column-icon" aria-label="添加列（功能预留）" title="添加列（功能预留）">
-                    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
-                  </button>
+                  <connect-column-add-button
+                    v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
+                    :can-manage="connect.canManage"
+                    :hidden-columns="restorableColumns"
+                    @add-connect-column="connect.edit()"
+                    @show-column="showHiddenColumn"
+                  />
                 </template>
               </el-table-column>
 
@@ -4093,34 +4202,6 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: flex-start;
   padding: 0 0 0 10px;
-}
-
-.monday-add-column-icon {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--yp-radius-sm, 4px);
-  background: transparent;
-  color: var(--yp-text-secondary);
-  cursor: pointer;
-  user-select: none;
-  transition: color var(--yp-motion-fast) var(--yp-ease-standard),
-              background-color var(--yp-motion-fast) var(--yp-ease-standard);
-}
-
-.monday-add-column-icon:hover {
-  background: var(--yp-bg-hover);
-  color: var(--yp-text-primary);
-}
-
-.monday-add-column-icon:focus-visible {
-  outline: 2px solid var(--yp-action-primary);
-  outline-offset: -2px;
 }
 
 :deep(.monday-table .monday-selection-column > .cell) {

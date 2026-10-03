@@ -12,6 +12,7 @@ import YpSurface from '../components/yp/YpSurface.vue'
 import YpTabs from '../components/yp/YpTabs.vue'
 import YpThemeSwitcher from '../components/yp/YpThemeSwitcher.vue'
 import { useAppearance } from '../composables/useAppearance'
+import ConnectColumnsPreview from './ConnectColumnsPreview.vue'
 
 const appearance = useAppearance()
 const drawerOpen = ref(false)
@@ -181,6 +182,8 @@ function togglePreviewGroup(id: string): void {
         show-icon
         :closable="false"
       />
+
+      <connect-columns-preview />
 
       <section class="project-catalog acceptance-board-preview">
         <div class="project-list-surface">

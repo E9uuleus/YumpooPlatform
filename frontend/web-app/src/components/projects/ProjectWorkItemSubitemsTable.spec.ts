@@ -10,6 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { localProblem } from '../../api/problems'
 import ProjectWorkItemSubitemsTable from './ProjectWorkItemSubitemsTable.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
+import ConnectCell from './connect/ConnectCell.vue'
+import IncomingConnectCell from './connect/IncomingConnectCell.vue'
+import { connectionTestContext } from './connect/connectTestSupport'
+import { connectColumn, connection } from './connect/connectTestFixtures'
 
 enableAutoUnmount(afterEach)
 
@@ -67,15 +71,38 @@ function mountTable(items = [item('child-1'), item('child-2')]) {
       members: [], workflowStatuses: [], priorityOptions: [], canCreate: true, editingCell: false,
     },
     global: {
+      provide: connectionTestContext().global.provide,
       stubs: {
         InlineProblem: true,
         WorkItemLabelPopoverContent: true,
       },
     },
+    slots: { 'column-add': '<button type="button" class="test-add-column" aria-label="添加列">+</button>' },
   })
 }
 
 describe('项目工作项子表格', () => {
+  it('复用父表连接列宽度和只读态，固定在内置列后并转发卡片事件', async () => {
+    const wrapper = mountTable([item('child-1')])
+    await wrapper.setProps({
+      connectColumns: [
+        { key: 'connect:column-1', label: '产品缺陷', kind: 'connect', column: connectColumn, width: 236, minWidth: 140 },
+        { key: 'connect-incoming', label: '被连接', kind: 'incoming', width: 220, minWidth: 160 },
+      ],
+      connectCells: new Map([['child-1', { workItemId: 'child-1', outgoing: [{ columnId: 'column-1', connections: [connection] }], incoming: [connection], incomingTotal: 1 }]]),
+      connectReadOnly: true,
+    })
+    await flushPromises()
+    const columns = wrapper.findAllComponents({ name: 'ElTableColumn' })
+    const connectIndex = columns.findIndex(column => column.props('prop') === 'connect:column-1')
+    expect(connectIndex).toBeGreaterThan(columns.findIndex(column => column.props('prop') === 'content'))
+    expect(columns[connectIndex]?.props('width')).toBe(236)
+    expect(wrapper.find('th.subitem-movable-column-header.monday-connect-column').exists()).toBe(false)
+    expect(wrapper.getComponent(IncomingConnectCell).props('readOnly')).toBe(true)
+    expect(wrapper.findComponent(ConnectCell).props('connections')).toEqual([connection])
+    wrapper.findComponent(ConnectCell).vm.$emit('openCard', connection)
+    expect(wrapper.emitted('openConnection')?.[0]).toEqual([connection, 'source'])
+  })
   it('转发子项复制事件及父项 ID，并暴露清空真实表格勾选', async () => {
     const wrapper = mountTable()
     await flushPromises()
@@ -395,12 +422,7 @@ describe('项目工作项子表格', () => {
     expect(addColumn?.props('minWidth')).toBe(96)
     expect(addColumn?.props('resizable')).toBe(false)
 
-    const addColumnButton = wrapper.get('.subitem-add-column-button')
-    expect(addColumnButton.attributes('aria-label')).toBe('添加列（功能预留）')
-    expect(addColumnButton.get('svg').attributes()).toMatchObject({
-      viewBox: '0 0 20 20', width: '18', height: '18', fill: 'currentColor',
-    })
-    expect(addColumnButton.get('path').attributes('d')).toContain('M10 2.25')
+    expect(wrapper.get('.test-add-column').attributes('aria-label')).toBe('添加列')
 
     const headers = wrapper.findAll('.subitem-column-header')
     expect(headers.every(header => header.attributes('draggable') === undefined)).toBe(true)

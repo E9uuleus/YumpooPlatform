@@ -37,6 +37,10 @@ import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 import type { DueDateValue } from './workItemDueDate'
 import { workItemLabelColorValue } from './workItemLabelColors'
+import type { WorkItemConnection, WorkItemConnectionCell } from '@yumpoo/api-client'
+import type { ConnectTableColumn } from './connect/connectColumnKeys'
+import ConnectCell from './connect/ConnectCell.vue'
+import IncomingConnectCell from './connect/IncomingConnectCell.vue'
 
 export interface ProjectWorkItemSubitemSortRule {
   field: string
@@ -74,6 +78,9 @@ const props = defineProps<{
   error?: ApiProblem | undefined
   sortRules: ProjectWorkItemSubitemSortRule[]
   columns: ProjectWorkItemSubitemColumn[]
+  connectColumns?: ConnectTableColumn[] | undefined
+  connectCells?: Map<string, WorkItemConnectionCell> | undefined
+  connectReadOnly?: boolean | undefined
   columnWidths: Record<ProjectWorkItemSubitemColumn['key'], number>
   activeContents: ContentOption[]
   contentCatalog?: ProjectContentCatalog | undefined
@@ -93,6 +100,7 @@ function contentLabel(item: ProjectWorkItemListItem) {
 }
 
 const emit = defineEmits<{
+  openConnection: [connection: WorkItemConnection, perspective: 'source' | 'target']
   timerChanged: []
   retry: []
   rowChanged: [affectedIds: string[]]
@@ -110,7 +118,7 @@ const emit = defineEmits<{
   labelsUpdated: [catalog: WorkItemLabelCatalog]
   transition: [item: ProjectWorkItemListItem, statusCode: string]
   selectionChange: [parentId: string, rows: ProjectWorkItemListItem[]]
-  headerResize: [newWidth: number, oldWidth: number, column: { label: string }]
+  headerResize: [newWidth: number, oldWidth: number, column: { property?: string; columnKey?: string }]
   moveColumn: [source: string, target: string, placement?: 'before' | 'after']
 }>()
 
@@ -700,7 +708,7 @@ onBeforeUnmount(() => {
         :header-cell-style="subitemHeaderCellStyle"
         @scroll="subitemScrollLeft = $event.scrollLeft"
         @selection-change="$emit('selectionChange', parent.id, $event)"
-        @header-dragend="(newWidth: number, oldWidth: number, column: { label: string }) => $emit('headerResize', newWidth, oldWidth, column)"
+        @header-dragend="(newWidth: number, oldWidth: number, column: { property?: string; columnKey?: string }) => $emit('headerResize', newWidth, oldWidth, column)"
       >
         <el-table-column
           :width="SUBITEM_MENU_COLUMN_WIDTH"
@@ -895,6 +903,45 @@ onBeforeUnmount(() => {
         </el-table-column>
 
         <el-table-column
+          v-for="column in connectColumns ?? []"
+          :key="column.key"
+          :column-key="column.key"
+          :prop="column.key"
+          :label="column.label"
+          :width="column.width"
+          :min-width="column.minWidth"
+          class-name="monday-connect-column"
+          label-class-name="monday-connect-column-header"
+          resizable
+        >
+          <template #header>
+            <slot
+              name="connect-header"
+              :column="column"
+            >
+              {{ column.label }}
+            </slot>
+          </template>
+          <template #default="{ row }">
+            <connect-cell
+              v-if="!isDraft(row as ProjectWorkItemListItem) && column.column"
+              :item="row as ProjectWorkItemListItem"
+              :column="column.column"
+              :connections="connectCells?.get(row.id)?.outgoing.find(value => value.columnId === column.column?.id)?.connections ?? []"
+              :read-only="connectReadOnly ?? true"
+              @open-card="emit('openConnection', $event, 'source')"
+            />
+            <incoming-connect-cell
+              v-else-if="!isDraft(row as ProjectWorkItemListItem) && column.kind === 'incoming'"
+              :item="row as ProjectWorkItemListItem"
+              :incoming="connectCells?.get(row.id)?.incoming ?? []"
+              :incoming-total="connectCells?.get(row.id)?.incomingTotal ?? 0"
+              :read-only="connectReadOnly ?? true"
+              @open-card="emit('openConnection', $event, 'target')"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column
           label="添加列"
           column-key="add-column"
           :min-width="SUBITEM_ADD_COLUMN_MIN_WIDTH"
@@ -904,26 +951,7 @@ onBeforeUnmount(() => {
           label-class-name="subitem-add-column-header"
         >
           <template #header>
-            <button
-              type="button"
-              class="subitem-add-column-button"
-              aria-label="添加列（功能预留）"
-              title="添加列（功能预留）"
-            >
-              <svg
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                width="18"
-                height="18"
-                aria-hidden="true"
-              >
-                <path
-                  d="M10 2.25C10.4142 2.25 10.75 2.58579 10.75 3V9.25H17C17.4142 9.25 17.75 9.58579 17.75 10C17.75 10.4142 17.4142 10.75 17 10.75H10.75V17C10.75 17.4142 10.4142 17.75 10 17.75C9.58579 17.75 9.25 17.4142 9.25 17V10.75H3C2.58579 10.75 2.25 10.4142 2.25 10C2.25 9.58579 2.58579 9.25 3 9.25H9.25V3C9.25 2.58579 9.58579 2.25 10 2.25Z"
-                  fill-rule="evenodd"
-                  clip-rule="evenodd"
-                />
-              </svg>
-            </button>
+              <slot name="column-add" />
           </template>
         </el-table-column>
 
@@ -1256,30 +1284,6 @@ onBeforeUnmount(() => {
 }
 .subitem-column-header { position: relative; width: 100%; height: 100%; min-width: 0; user-select: none; }
 .subitem-column-header--dragging { cursor: grabbing; }
-.subitem-add-column-button {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--yp-radius-sm, 4px);
-  background: transparent;
-  color: var(--yp-text-secondary);
-  cursor: pointer;
-  transition: color var(--yp-motion-fast) var(--yp-ease-standard),
-              background-color var(--yp-motion-fast) var(--yp-ease-standard);
-}
-.subitem-add-column-button:hover {
-  background: var(--yp-bg-hover);
-  color: var(--yp-text-primary);
-}
-.subitem-add-column-button:focus-visible {
-  outline: 2px solid var(--yp-action-primary);
-  outline-offset: -2px;
-}
 .monday-column-resize-handle {
   position: absolute;
   z-index: 20;

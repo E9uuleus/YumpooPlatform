@@ -4,10 +4,10 @@ import { ElInput, ElMessageBox } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectSettingsView from './ProjectSettingsView.vue'
 
-const api = vi.hoisted(() => ({ getProject: vi.fn(), updateProject: vi.fn() }))
+const api = vi.hoisted(() => ({ getProject: vi.fn(), updateProject: vi.fn(), listConnectColumns: vi.fn() }))
 const guard = vi.hoisted(() => vi.fn())
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { projectId: 'project-1' } }), useRouter: () => ({ push: vi.fn() }), onBeforeRouteLeave: guard }))
-vi.mock('../../api/client', () => ({ projectsApi: api }))
+vi.mock('../../api/client', () => ({ projectsApi: api, workItemsApi: api }))
 vi.mock('../../composables/useSession', () => ({ useSession: () => ({ authentication: { value: { company: { timezone: 'Asia/Shanghai' } } } }) }))
 vi.mock('@yumpoo/api-client', async original => ({ ...await original<typeof import('@yumpoo/api-client')>(), readCsrfToken: () => 'csrf' }))
 enableAutoUnmount(afterEach)
@@ -18,10 +18,13 @@ const project: ProjectDetail = {
   capabilities: { canUpdateSettings: true, canManageMembers: true, canReassignOwner: false, canArchive: true, canRestore: false, canMoveWorkspace: false, canOverrideArchive: false },
   rowVersion: 0, etag: '"0"', createdAt: new Date('2026-10-01T00:00:00Z'), updatedAt: new Date('2026-10-01T00:00:00Z'), archivedAt: null,
 }
-beforeEach(() => { Object.values(api).forEach(mock => mock.mockReset()); guard.mockReset(); vi.restoreAllMocks(); api.getProject.mockResolvedValue(project) })
+beforeEach(() => {
+  Object.values(api).forEach(mock => mock.mockReset()); guard.mockReset(); vi.restoreAllMocks(); api.getProject.mockResolvedValue(project)
+  api.listConnectColumns.mockResolvedValue({ items: [], incomingColumns: [], incomingAvailable: false, canManage: true, canDelete: true })
+})
 
 describe('项目设置', () => {
-  it('展示只读编码与项目信息，连接仅空态，归档时间按实际状态出现', async () => {
+  it('展示只读编码与项目信息，连接目录为空时显示空态，归档时间按实际状态出现', async () => {
     const wrapper = mount(ProjectSettingsView)
     await flushPromises()
     expect(wrapper.get('.unified-project-settings__code').text()).toContain('P001')
@@ -30,6 +33,18 @@ describe('项目设置', () => {
     expect(wrapper.text()).not.toContain('归档时间')
     expect(wrapper.findAllComponents(ElInput)).toHaveLength(2)
     expect(api.getProject).toHaveBeenCalledOnce()
+    expect(api.listConnectColumns).toHaveBeenCalledWith({ projectId: 'project-1' }, expect.objectContaining({ signal: expect.any(AbortSignal) }))
+  })
+  it('连接概览同时展示本项目的列与连接到本项目的来源列', async () => {
+    api.listConnectColumns.mockResolvedValue({ items: [{ id: 'column-1', name: '产品缺陷', targets: [{ projectId: 'target', name: 'Yumpoo 门户' }] }],
+      incomingColumns: [{ columnId: 'incoming-1', projectName: '现场实施', projectCode: 'P012', columnName: '实施问题' }], incomingAvailable: true })
+    const wrapper = mount(ProjectSettingsView, { global: { stubs: { RouterLink: { props: ['to'], template: '<a><slot /></a>' } } } })
+    await flushPromises()
+    expect(wrapper.find('.unified-project-settings__empty').exists()).toBe(false)
+    expect(wrapper.get('.project-connections-overview').text()).toContain('产品缺陷')
+    expect(wrapper.get('.project-connections-overview').text()).toContain('Yumpoo 门户')
+    expect(wrapper.get('.project-connections-overview').text()).toContain('现场实施')
+    expect(wrapper.get('.project-connections-overview').text()).toContain('实施问题')
   })
   it('发送名称和描述完整快照，并使用当前 ETag', async () => {
     const wrapper = mount(ProjectSettingsView)

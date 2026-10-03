@@ -21,6 +21,7 @@ import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '..
 import InlineProblem from '../../components/InlineProblem.vue'
 import ProjectLifecycleActions from '../../components/projects/ProjectLifecycleActions.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
+import ProjectConnectionsOverview from '../../components/projects/connect/ProjectConnectionsOverview.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import { useSession } from '../../composables/useSession'
 import { formatTimestamp } from '../../design-system/dates'
@@ -209,9 +210,7 @@ onMounted(load)
         <h2 id="project-connections-title">
           连接
         </h2>
-        <div class="unified-project-settings__empty">
-          还没有连接。在工作项表格右上角「+」中添加连接列。
-        </div>
+        <project-connections-overview :project-id="projectId" />
       </section>
       <project-lifecycle-actions
         :project="project"
