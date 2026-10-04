@@ -14,7 +14,7 @@ import {
   type ProjectWorkItemListItem,
 } from '@yumpoo/api-client'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { ElDropdown, ElMessage, ElMessageBox, ElPopconfirm } from 'element-plus'
+import { ElDropdown, ElMessage, ElMessageBox } from 'element-plus'
 import { defineComponent, nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkItemTableSource } from '../../components/projects/workItemTableSource'
