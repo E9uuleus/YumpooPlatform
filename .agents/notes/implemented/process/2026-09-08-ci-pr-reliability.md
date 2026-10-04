@@ -10,13 +10,15 @@ Status: implemented
 
 ## Decision
 
-`tools/ci/plan.mjs` 与 `run.mjs` 提供平铺的 `ci:contracts/static/backend/portable/windows` 和统一 `pnpm ci` 入口。昂贵能力各执行一次，后端 `clean verify` 保留全部业务、安全、架构、数据库迁移和备份恢复集成测试，96 MiB 堆的附件探针另行执行。当前资产、历史证据结构、事件兼容与校验器测试分工明确；M2-23/M2-24 的 assets 不再隐式运行整套工具链。旧切片入口仍作历史复现，普通 PR 不依赖嵌套命令。
+`tools/ci/plan.mjs` 与 `run.mjs` 提供平铺的 `ci:contracts/static/backend/portable/windows` 和统一 `pnpm run ci` 入口，显式 `run` 避免与 pnpm 内置命令冲突。昂贵能力各执行一次，后端 `clean verify` 保留全部业务、安全、架构、数据库迁移和备份恢复集成测试，96 MiB 堆的附件探针另行执行。当前资产、历史证据结构、事件兼容与校验器测试分工明确；M2-23/M2-24 的 assets 不再隐式运行整套工具链。旧切片入口仍作历史复现，普通 PR 不依赖嵌套命令。
 
 历史 SQL、M2-23 冻结清单及既有 OpenAPI 精确例外对照 PR 基线不可改写，归档 Note 继续由原 manifest 门禁保护。当前 OpenAPI 和完整事件目录是现行规范，兼容基线从目标提交临时提取。已有例外仅匹配原始精确哈希对，不授权后续规范；类别专项不再要求每次正常迭代追加“旧历史 → 当前”的哈希链。恢复请求枚举缩减和响应枚举扩展检测，没有增加或批准例外。本决策部分替代[类别重构闸门](2026-09-02-content-category-openapi-breaking-change.md)的当前哈希维护要求，保留其精确授权与审计理由。
 
 事件比较覆盖全部当前登记版本及共享载荷。既有版本只允许增加可选字段、嵌套可选对象字段或变更 Schema 注释；聚合语义、必需字段、原有约束、引用和历史合法样例继续保护。JSON Schema 的业务属性即使名为 `description` 也不是可忽略的注释。M2-23 的 14 项清单仍是冻结历史，新增版本在当前目录登记；本决策补充[事件冻结决定](../data/2026-08-31-work-item-event-contract-freeze.md)。
 
 迁移测试从真实资源和 Flyway pending 清单推导期望版本、执行数量和执行集合，保留具体数据、索引、约束、V46 checksum 及重复 migrate 的断言；增加未来迁移夹具，修改已应用 SQL 仍由 checksum 和 Git 历史检查拒绝。类别专项读取结构化 OpenAPI 与事件契约，移除旧 CSS 尺寸、源码符号和文档措辞匹配，原有前端/后端行为回归继续运行。
+
+根 README 提供当前项目介绍、技术栈、运行、构建、验证与部署入口，历史切片由 Git、`evidence/` 与相关决策记录保留。M2-17 至 M2-23（含 M2-21A）的资产脚本移除对 README 里程碑标题和旧延期措辞的匹配，保留各自契约、实现、测试和验收资产检查；README 链接继续由 `doc-sync` 校验。
 
 验证子进程清除继承的应用配置、认证 fixture 和 JVM/Maven/Node 注入选项，再显式注入当前验证参数。阶段报告记录源码指纹、基线提交及逐步完成状态；后续交付拒绝旧源码、旧基线和缺失步骤。Windows 在校验 handoff 后对同一 JAR/Web 字节执行 smoke 和组包，服务器包再次逐文件对照 handoff。
 

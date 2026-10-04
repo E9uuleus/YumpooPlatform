@@ -23,7 +23,6 @@ const httpTest = read('backend/src/test/java/com/yumpoo/platform/workitem/api/Wo
 const migrationTest = read('backend/src/test/java/com/yumpoo/platform/YumpooServerApplicationIT.java')
 const backup = read('backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java')
 const note = read('.agents/notes/implemented/architecture/2026-08-24-work-item-update-contract.md')
-const readme = read('README.md')
 const report = JSON.parse(read('evidence/m2-17/verification-report.json'))
 const acceptance = JSON.parse(read('evidence/m2-17/acceptance-matrix.json'))
 
@@ -98,7 +97,6 @@ for (const fragment of ['M2-16/M2-17', '截止时刻本身已经超窗', '失败
   'M2-20 从事件投影和查询 Activity']) {
   assert(note.includes(fragment), `Agent Note 缺少 ${fragment}`)
 }
-assert(readme.includes('## M2-17 Update 编辑、删除与治理删除'), 'README 未同步 M2-17')
 assert(report.milestone === 'M2-17' && report.status === 'PASS' && report.flywayVersion === '36',
   '验证报告无效')
 assert(report.testCounts.backendUnit >= 391 && report.testCounts.backendIntegration >= 205

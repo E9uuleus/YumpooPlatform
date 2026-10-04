@@ -16,7 +16,6 @@ const timeline = read('frontend/web-app/src/components/collaboration/ActivityTim
 const backup = read('backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java')
 const postgresProjection = read('backend/src/test/java/com/yumpoo/platform/audit/infrastructure/ActivityProjectionIT.java')
 const note = read('.agents/notes/implemented/architecture/2026-08-30-activity-projection-contract.md')
-const readme = read('README.md')
 const acceptance = JSON.parse(read('evidence/m2-20/acceptance-matrix.json'))
 const report = JSON.parse(read('evidence/m2-20/verification-report.json'))
 
@@ -54,7 +53,6 @@ for (const fragment of ['ACTIVITY_V1:PROJECT', 'newFixedThreadPool(2)',
 }
 for (const fragment of ['## Problem', '## Decision', '## Alternatives considered', '## Consequences',
   '不回填', '跨 Project']) assert(note.includes(fragment), `Agent Note 缺少 ${fragment}`)
-assert(readme.includes('## M2-20 Activity 追加投影与游标查询'), 'README 未同步 M2-20')
 assert(report.milestone === 'M2-20' && report.flywayVersion === '44', '验证报告无效')
 for (const requirement of ['ACTIVITY-CUTOVER-PERSISTENCE', 'ACTIVITY-SAFE-PROJECTION',
   'ACTIVITY-CURSOR-ACL', 'ACTIVITY-CONTRACT-SDK', 'ACTIVITY-WEB']) {

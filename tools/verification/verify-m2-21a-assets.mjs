@@ -18,7 +18,6 @@ const subtable = read('frontend/web-app/src/components/projects/ProjectWorkItemS
 const addColumnButton = read('frontend/web-app/src/components/projects/connect/ConnectColumnAddButton.vue')
 const subtableTest = read('frontend/web-app/src/components/projects/ProjectWorkItemSubitemsTable.spec.ts')
 const note = read('.agents/notes/implemented/data/2026-08-28-work-item-parent-child-relations.md')
-const readme = read('README.md')
 const acceptance = JSON.parse(read('evidence/m2-21a/acceptance-matrix.json'))
 const report = JSON.parse(read('evidence/m2-21a/verification-report.json'))
 
@@ -101,7 +100,6 @@ for (const fragment of ['自动继承父项类别而非首个启用类别', '直
 for (const fragment of ['根查询语义', 'M2-21', '不级联', '递归环检测']) {
   assert(note.includes(fragment), `Agent Note 缺少 ${fragment}`)
 }
-assert(readme.includes('## M2-21A 项目工作项直接子项'), 'README 未同步 M2-21A')
 assert(report.milestone === 'M2-21A' && report.flywayVersion === '43', '验证报告无效')
 for (const requirement of ['WORK-ITEM-PARENT-CHILD-DATA', 'WORK-ITEM-SUBITEM-API',
   'WORK-ITEM-ROOT-QUERY', 'WORK-ITEM-SUBITEM-TABLE', 'WORK-ITEM-RELATION-EVENT']) {
