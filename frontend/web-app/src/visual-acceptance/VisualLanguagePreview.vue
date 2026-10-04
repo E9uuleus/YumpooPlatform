@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRight, FolderOpened, Grid, Menu as MenuIcon, User } from '@element-plus/icons-vue'
+import { ArrowRight, FolderOpened, Grid, Menu as MenuIcon, Search, User } from '@element-plus/icons-vue'
 import { reactive, ref } from 'vue'
 import StatusScene from '../components/motion/StatusScene.vue'
 import YpAssignee from '../components/yp/YpAssignee.vue'
@@ -21,6 +21,7 @@ const contextNavigationOpen = ref(typeof window === 'undefined'
   ? true
   : (window.matchMedia?.('(min-width: 1280px)').matches ?? true))
 const project = reactive({ name: 'Yumpoo Web 视觉迁移', owner: 'user-visual' })
+const inputStates = reactive({ query: '', status: 'ACTIVE', due: null as Date | null, invalid: '超过四十个字符的列名示例' })
 const rows = [
   { id: 1, code: 'P001', name: '统一项目工作台', owner: '林晓', status: 'ACTIVE', access: '负责人', priority: 'HIGH', progress: 72 },
   { id: 2, code: 'P002', name: '夜间主题验收', owner: '周遥', status: 'ACTIVE', access: '成员', priority: 'MEDIUM', progress: 38 },
@@ -407,6 +408,51 @@ function togglePreviewGroup(id: string): void {
               <el-button>清除筛选</el-button>
             </template>
           </yp-empty-state>
+        </section>
+        <section class="surface-card page-stack">
+          <div class="section-heading">
+            <h2>输入框状态</h2>
+            <p>静止、悬停和聚焦共用同一条 1px 描边，只改变颜色。</p>
+          </div>
+          <el-form label-position="top">
+            <el-form-item label="搜索">
+              <el-input
+                v-model="inputStates.query"
+                :prefix-icon="Search"
+                placeholder="搜索工作项，或输入标题新建"
+                clearable
+              />
+            </el-form-item>
+            <el-form-item label="选择">
+              <el-select v-model="inputStates.status">
+                <el-option
+                  v-for="option in previewStatusOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="日期">
+              <el-date-picker
+                v-model="inputStates.due"
+                type="date"
+                placeholder="选择截止日期"
+              />
+            </el-form-item>
+            <el-form-item
+              label="校验失败"
+              error="列名最多 40 个字符"
+            >
+              <el-input v-model="inputStates.invalid" />
+            </el-form-item>
+            <el-form-item label="禁用">
+              <el-input
+                model-value="只读内容"
+                disabled
+              />
+            </el-form-item>
+          </el-form>
         </section>
       </div>
 

@@ -208,7 +208,6 @@ onBeforeUnmount(() => {
 .work-item-title-text:focus-visible { outline: 1px solid var(--yp-action-primary); outline-offset: 2px; }
 .work-item-name-input { flex: 1 1 auto; width: 0; min-width: 0; height: 100%; --el-input-bg-color: var(--yp-bg-surface); --el-input-text-color: var(--yp-text-primary); --el-input-placeholder-color: color-mix(in srgb, var(--yp-text-muted) 60%, var(--yp-bg-surface)); }
 .work-item-name-cell .work-item-name-input :deep(.el-input__wrapper) { height: 100%; min-height: 0; padding: 0; border-radius: 0; box-shadow: none; }
-.work-item-name-cell .work-item-name-input :deep(.el-input__wrapper:has(input:focus-visible)) { outline: none; }
 .work-item-name-input :deep(.el-input__inner) { height: 100%; min-height: 0; padding: 0; font: inherit; font-size: 13.5px; font-weight: 500; line-height: normal; cursor: text; }
 .work-item-detail-button { display: inline-flex; flex: 0 0 24px; width: 24px; height: 24px; align-items: center; justify-content: center; margin-left: auto; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--yp-text-secondary); cursor: pointer; opacity: 0; }
 .work-item-name-cell:hover .work-item-detail-button, .work-item-name-cell:focus-within .work-item-detail-button { opacity: 1; }

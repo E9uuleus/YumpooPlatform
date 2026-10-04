@@ -4750,8 +4750,7 @@ onBeforeUnmount(() => {
 .monday-quick-add:focus-visible { outline: none; }
 
 .monday-quick-add:focus-visible .monday-quick-add__field {
-  border-color: var(--yp-action-primary);
-  box-shadow: 0 0 0 1px var(--yp-action-primary);
+  border-color: var(--yp-input-border-focus);
 }
 
 .monday-quick-add:disabled {
@@ -4851,7 +4850,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   margin: 0;
   outline: none;
-  border-color: var(--yp-action-primary);
+  border-color: var(--yp-input-border-focus);
   background: var(--yp-bg-surface);
   color: var(--yp-text-primary);
 }

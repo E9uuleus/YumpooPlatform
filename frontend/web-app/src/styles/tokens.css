@@ -121,6 +121,11 @@
   --yp-shadow-popover: 0 8px 24px color-mix(in srgb, var(--yp-text-primary) 16%, transparent);
   --yp-shadow-overlay: 0 16px 48px color-mix(in srgb, var(--yp-text-primary) 22%, transparent);
   --yp-text-placeholder: var(--yp-text-muted);
+  --yp-input-bg: var(--yp-bg-surface);
+  --yp-input-border: var(--yp-border-strong);
+  --yp-input-border-hover: color-mix(in srgb, var(--yp-text-primary) 45%, var(--yp-border-strong));
+  --yp-input-border-focus: var(--yp-focus-ring);
+  --yp-input-radius: var(--yp-radius-sm);
 }
 
 :root[data-density='comfortable'] {

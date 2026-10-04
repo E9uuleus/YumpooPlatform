@@ -633,7 +633,7 @@ defineExpose({ closePanel, reset })
 .discussion-composer:not(.discussion-composer--expanded):not(:focus-within):hover { background: var(--yp-bg-sunken); }
 .discussion-composer--compact:not(.discussion-composer--expanded) .discussion-composer__footer { display: none; }
 .discussion-composer--compact:not(.discussion-composer--expanded) .discussion-editor :deep(.ProseMirror) { min-height: 64px; }
-.discussion-composer:focus-within { border-color: var(--yp-action-primary); }
+.discussion-composer:focus-within { border-color: var(--yp-input-border-focus); }
 .discussion-toolbar { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px; border-bottom: 1px solid var(--yp-border-subtle); }
 .discussion-toolbar button, .discussion-composer__insert button { display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 4px; color: var(--yp-text-secondary); background: transparent; font-size: 15px; cursor: pointer; }
 .discussion-toolbar .bold { font-weight: 750; }.discussion-toolbar .italic { font-style: italic; }.discussion-toolbar .underline { text-decoration: underline; }.discussion-toolbar .strike { text-decoration: line-through; }
