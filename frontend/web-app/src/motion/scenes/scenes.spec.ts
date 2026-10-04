@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CONNECT_BOARDS_DURATION, createConnectBoardsScene } from './connectBoards'
 import { createConstellationScene } from './constellation'
 import { createOrbitHaloScene } from './orbitHalo'
 import { createStatusScene, type StatusSceneVariant } from './statusScenes'
@@ -69,6 +70,23 @@ describe('Canvas 场景', () => {
     const second = run(createConstellationScene(canvas), 480, 640)
     expect(first.styles).toEqual(second.styles)
     expect(first.calls).toEqual(second.calls)
+  })
+
+  it('连接引导插画只播放一次：开场为空、结束时绘出连线与徽标并报告完成', () => {
+    const canvas = document.createElement('canvas')
+    const opening = createConnectBoardsScene(canvas)
+    const empty = run(opening, 300, 116, 0)
+    expect(empty.calls.filter(call => call === 'arc')).toHaveLength(0)
+    expect(opening.finished()).toBe(false)
+    const scene = createConnectBoardsScene(canvas)
+    const ended = run(scene, 300, 116, Math.ceil(CONNECT_BOARDS_DURATION / 33))
+    expect(scene.finished()).toBe(true)
+    expect(ended.calls).toEqual(expect.arrayContaining(['arc', 'setLineDash', 'lineTo']))
+    expect(ended.styles.every(style => colorPattern.test(style))).toBe(true)
+    scene.step(5000)
+    const settled = recordingContext()
+    scene.draw(settled.context, 300, 116)
+    expect(settled.calls).toEqual(ended.calls)
   })
 
   it('轨道光晕输出合法颜色', () => {

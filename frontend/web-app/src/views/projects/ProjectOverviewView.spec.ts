@@ -21,7 +21,7 @@ import type { WorkItemTableSource } from '../../components/projects/workItemTabl
 import ProjectOverviewView from '../../components/projects/ProjectWorkItems.vue'
 import ConnectCell from '../../components/projects/connect/ConnectCell.vue'
 import ConnectColumnAddButton from '../../components/projects/connect/ConnectColumnAddButton.vue'
-import ConnectColumnDialog from '../../components/projects/connect/ConnectColumnDialog.vue'
+import ConnectColumnSetupPopover from '../../components/projects/connect/ConnectColumnSetupPopover.vue'
 import ConnectionCardDialog from '../../components/projects/connect/ConnectionCardDialog.vue'
 import ConnectFilterSection from '../../components/projects/connect/ConnectFilterSection.vue'
 import ConnectKanbanConnections from '../../components/projects/connect/ConnectKanbanConnections.vue'
@@ -215,7 +215,11 @@ describe('项目级工作项首页', () => {
     expect(wrapper.findAllComponents({ name: 'ElTableColumn' }).find(column => column.props('prop') === 'connect:column-1')?.props('width')).toBe(275)
     expect(wrapper.findAllComponents({ name: 'ElTableColumn' }).find(column => column.props('prop') === 'priority')?.props('width')).toBe(90)
     wrapper.findComponent(ConnectColumnAddButton).vm.$emit('addConnectColumn'); await flushPromises()
-    expect(wrapper.findComponent(ConnectColumnDialog).props('open')).toBe(true)
+    const withDraft = wrapper.findAllComponents({ name: 'ElTableColumn' }).map(column => column.props('prop') || column.props('columnKey'))
+    expect(withDraft.indexOf('connect-draft')).toBe(withDraft.indexOf('connect:column-1') + 1)
+    expect(wrapper.getComponent(ConnectColumnSetupPopover).props()).toMatchObject({ visible: true, mode: 'create' })
+    wrapper.getComponent(ConnectColumnSetupPopover).vm.$emit('update:visible', false); await flushPromises()
+    expect(wrapper.findAllComponents({ name: 'ElTableColumn' }).some(column => column.props('prop') === 'connect-draft')).toBe(false)
     expect(state.listWorkItemConnectionCells).toHaveBeenCalledTimes(1)
   })
 
@@ -225,7 +229,7 @@ describe('项目级工作项首页', () => {
     await flushPromises()
     expect(state.listConnectColumns).not.toHaveBeenCalled(); expect(state.listWorkItemConnectionCells).not.toHaveBeenCalled()
     expect(wrapper.find('.monday-connect-column').exists()).toBe(false)
-    expect(wrapper.findComponent(ConnectColumnDialog).exists()).toBe(false)
+    expect(wrapper.findComponent(ConnectColumnSetupPopover).exists()).toBe(false)
   })
 
   it.each([200, 404])('从卡片解除连接返回 %i 时只刷新一次当前行', async status => {

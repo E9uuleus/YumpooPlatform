@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, provide, reactive, ref, shallowRef } from 'vue'
+import { computed, nextTick, provide, reactive, ref, shallowRef } from 'vue'
 import { ProjectLifecycle, type ConnectColumn, type ConnectColumnCatalog, type WorkItemConnection, type WorkItemConnectionCell } from '@yumpoo/api-client'
 import ConnectCell from '../components/projects/connect/ConnectCell.vue'
 import ReverseConnectCell from '../components/projects/connect/ReverseConnectCell.vue'
 import ConnectColumnAddButton from '../components/projects/connect/ConnectColumnAddButton.vue'
 import ConnectColumnHeader from '../components/projects/connect/ConnectColumnHeader.vue'
-import ConnectColumnDialog from '../components/projects/connect/ConnectColumnDialog.vue'
+import ConnectColumnSetupPopover from '../components/projects/connect/ConnectColumnSetupPopover.vue'
+import ConnectTableCell from '../components/projects/connect/ConnectTableCell.vue'
+import { connectColumnAutoName } from '../components/projects/connect/connectColumnKeys'
+import type { ConnectSetupMode, ConnectTargetChoice } from '../components/projects/connect/useConnectTable'
 import ConnectColumnDeleteDialog from '../components/projects/connect/ConnectColumnDeleteDialog.vue'
 import ConnectionCardDialog from '../components/projects/connect/ConnectionCardDialog.vue'
 import ProjectConnectionsOverview from '../components/projects/connect/ProjectConnectionsOverview.vue'
@@ -32,7 +35,7 @@ const kanbanConnections = computed(() => [...previewConnections, ...previewConne
 const kanbanCell = computed<WorkItemConnectionCell>(() => ({ workItemId: previewSource.workItemId, incoming: [], incomingTotal: 0, incomingByColumn: [],
   outgoing: [{ columnId: previewColumn.id, connections: kanbanConnections.value }] }))
 const card = shallowRef<WorkItemConnection>(), perspective = ref<'source' | 'target'>('source')
-const dialogOpen = ref(false), editing = shallowRef<ConnectColumn>(), deleting = shallowRef<ConnectColumn>()
+const setup = ref<{ id: string; mode: ConnectSetupMode }>(), deleting = shallowRef<ConnectColumn>()
 const catalog = computed<ConnectColumnCatalog>(() => ({ items: columns.value, incomingAvailable: true,
   incomingColumns: [{ columnId: 'preview-incoming', columnName: '实施问题', projectId: previewSecondProject.projectId, projectName: previewSecondProject.name, projectCode: previewSecondProject.code, projectLifecycle: ProjectLifecycle.Active, actorCanLinkExisting: true }],
   canManage: !readOnly.value, canDelete: !readOnly.value }))
@@ -47,7 +50,18 @@ function rowConnections(id: string, column: ConnectColumn) {
     target: column.id === 'preview-multi' && connection.id === 'preview-connection-2' ? { ...connection.target, projectId: previewSecondProject.projectId, projectCode: previewSecondProject.code, projectName: previewSecondProject.name } : connection.target }))
 }
 function openCard(connection: WorkItemConnection, side: 'source' | 'target' = 'source') { perspective.value = side; card.value = projectConnection(connection) }
-function edit(column?: ConnectColumn) { editing.value = column; dialogOpen.value = true }
+const tableScroll = ref<HTMLElement>()
+function edit(column?: ConnectColumn) {
+  if (readOnly.value) return
+  setup.value = column ? { id: column.id, mode: 'edit' } : { id: 'draft', mode: 'create' }
+  if (!column) void nextTick(() => tableScroll.value?.scrollTo({ left: tableScroll.value.scrollWidth }))
+}
+async function submitSetup(projects: ConnectTargetChoice[], column?: ConnectColumn) {
+  const others = columns.value.filter(item => item.id !== column?.id).map(item => item.name)
+  const input = { name: column?.name ?? connectColumnAutoName(projects.map(project => project.name), others), targetProjectIds: new Set(projects.map(project => project.id)) }
+  if (column) await service.updateColumn(column, input); else await service.createColumn(input)
+  setup.value = undefined
+}
 const service: ConnectColumns = {
   catalog, cells: shallowRef(new Map()), catalogLoading: ref(false), catalogError: ref(), cellError: ref(),
   loadCatalog: async () => {}, ensureCells: async () => {}, refreshCells: async () => {},
@@ -148,7 +162,10 @@ provide(connectColumnsContext, service)
         </section>
       </div>
       <template v-else>
-        <div class="connect-preview__table-scroll">
+        <div
+          ref="tableScroll"
+          class="connect-preview__table-scroll"
+        >
           <table class="connect-preview__table">
             <thead>
               <tr>
@@ -165,15 +182,50 @@ provide(connectColumnsContext, service)
                     :key="column.id"
                     class="connect-preview__connection"
                   >
-                    <connect-column-header
-                      :label="column.name"
-                      kind="connect"
-                      :can-manage="!readOnly"
-                      :can-delete="!readOnly"
-                      @edit="edit(column)"
-                      @hide="hidden.push(column.id)"
-                      @delete="deleting = column"
-                    />
+                    <div class="connect-preview__header-host">
+                      <connect-column-header
+                        :label="column.name"
+                        kind="connect"
+                        :can-manage="!readOnly"
+                        :can-delete="!readOnly"
+                        :taken-names="columns.map(item => item.name)"
+                        :rename="name => service.updateColumn(column, { name, targetProjectIds: new Set(column.targets.map(target => target.projectId)) })"
+                        @edit="edit(column)"
+                        @hide="hidden.push(column.id)"
+                        @delete="deleting = column"
+                      />
+                      <connect-column-setup-popover
+                        v-if="setup?.id === column.id"
+                        :visible="true"
+                        mode="edit"
+                        :column="column"
+                        :project-id="previewSource.projectId"
+                        :project-name="previewSource.projectName"
+                        :submit="projects => submitSetup(projects, column)"
+                        @update:visible="setup = undefined"
+                      />
+                    </div>
+                  </th>
+                  <th
+                    v-if="setup?.id === 'draft'"
+                    class="connect-preview__connection"
+                  >
+                    <div class="connect-preview__header-host">
+                      <connect-column-header
+                        label="新连接"
+                        kind="draft"
+                        :can-manage="false"
+                        :can-delete="false"
+                      />
+                      <connect-column-setup-popover
+                        :visible="true"
+                        mode="create"
+                        :project-id="previewSource.projectId"
+                        :project-name="previewSource.projectName"
+                        :submit="projects => submitSetup(projects)"
+                        @update:visible="setup = undefined"
+                      />
+                    </div>
                   </th>
                 </template>
                 <th
@@ -231,6 +283,14 @@ provide(connectColumnsContext, service)
                       @open-card="openCard($event)"
                     />
                   </td>
+                  <td v-if="setup?.id === 'draft'">
+                    <connect-table-cell
+                      :column="{ key: 'connect-draft', kind: 'draft', label: '新连接', width: 200, minWidth: 140 }"
+                      :item="{ id: row.workItemId, title: row.title }"
+                      :read-only="true"
+                      :row-index="index"
+                    />
+                  </td>
                 </template>
                 <td v-else>
                   <reverse-connect-cell
@@ -270,14 +330,6 @@ provide(connectColumnsContext, service)
         已归档
       </el-button>
     </div>
-    <connect-column-dialog
-      v-if="dialogOpen"
-      v-model:open="dialogOpen"
-      :project-id="previewSource.projectId"
-      :mode="editing ? 'edit' : 'create'"
-      :column="editing"
-      :existing-names="columns.map(column => column.name)"
-    />
     <connect-column-delete-dialog
       v-if="deleting"
       :column="deleting"
@@ -296,6 +348,7 @@ provide(connectColumnsContext, service)
 
 <style scoped>
 .connect-preview { min-width: 0; scroll-margin-top: 20px; }
+.connect-preview__header-host { position: relative; }
 .connect-preview .section-heading p { margin: 6px 0 0; color: var(--yp-text-muted); font-size: 12px; }
 .connect-preview__controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
 .connect-preview__surface { min-width: 0; padding: 24px; border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-raised); }

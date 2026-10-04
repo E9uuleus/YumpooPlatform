@@ -78,7 +78,6 @@ import { useWorkItemDueClock } from './useWorkItemDueClock'
 import { companyDate } from './workItemDueDate'
 import ConnectColumnAddButton from './connect/ConnectColumnAddButton.vue'
 import ConnectTableColumnHeader from './connect/ConnectTableColumnHeader.vue'
-import ConnectColumnDialog from './connect/ConnectColumnDialog.vue'
 import ConnectColumnDeleteDialog from './connect/ConnectColumnDeleteDialog.vue'
 import ConnectTableCell from './connect/ConnectTableCell.vue'
 import ConnectionCardDialog from './connect/ConnectionCardDialog.vue'
@@ -2752,14 +2751,6 @@ onBeforeUnmount(() => {
     />
     <template v-if="project">
       <template v-if="!embedded">
-        <connect-column-dialog
-          v-model:open="connect.columnDialogOpen"
-          :project-id="projectId"
-          :mode="connect.editingColumn ? 'edit' : 'create'"
-          :column="connect.editingColumn"
-          :existing-names="connect.catalog?.items.map(column => column.name) ?? []"
-          @saved="connect.reveal"
-        />
         <connect-column-delete-dialog
           :column="connect.deletingColumn"
           @close="connect.deletingColumn = undefined"
@@ -3094,6 +3085,8 @@ onBeforeUnmount(() => {
                       <connect-table-column-header
                         :column="column"
                         :table="connect"
+                        :project-id="projectId"
+                        :primary="false"
                         @hide="toggleColumn($event, false)"
                       />
                     </template>
@@ -3101,7 +3094,7 @@ onBeforeUnmount(() => {
                       <connect-column-add-button
                         :can-manage="connect.canManage"
                         :hidden-columns="restorableColumns"
-                        @add-connect-column="connect.edit()"
+                        @add-connect-column="connect.startDraft()"
                         @show-column="showHiddenColumn"
                       />
                     </template>
@@ -3475,6 +3468,7 @@ onBeforeUnmount(() => {
                   <connect-table-column-header
                     :column="column"
                     :table="connect"
+                    :project-id="projectId"
                     @hide="toggleColumn($event, false)"
                   />
                 </template>
@@ -3483,6 +3477,8 @@ onBeforeUnmount(() => {
                     v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
                     :column="column"
                     :table="connect"
+                    :project-id="projectId"
+                    :primary="false"
                     @hide="toggleColumn($event, false)"
                   />
                   <connect-table-cell
@@ -3491,6 +3487,8 @@ onBeforeUnmount(() => {
                     :item="scope.row as ProjectWorkItemListItem"
                     :cell="connect.cells.get(scope.row.id)"
                     :read-only="connect.readOnly"
+                    :row-index="scope.$index"
+                    :celebrate="connect.celebrated === column.key"
                     @open-card="connect.openCard"
                   />
                 </template>
@@ -3508,7 +3506,7 @@ onBeforeUnmount(() => {
                   <connect-column-add-button
                     :can-manage="connect.canManage"
                     :hidden-columns="restorableColumns"
-                    @add-connect-column="connect.edit()"
+                    @add-connect-column="connect.startDraft()"
                     @show-column="showHiddenColumn"
                   />
                 </template>
@@ -3517,7 +3515,7 @@ onBeforeUnmount(() => {
                     v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
                     :can-manage="connect.canManage"
                     :hidden-columns="restorableColumns"
-                    @add-connect-column="connect.edit()"
+                    @add-connect-column="connect.startDraft()"
                     @show-column="showHiddenColumn"
                   />
                 </template>

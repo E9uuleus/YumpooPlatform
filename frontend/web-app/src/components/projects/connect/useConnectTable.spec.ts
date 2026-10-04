@@ -9,10 +9,11 @@ import { connectionCatalog } from './connectTestFixtures'
 const reverseColumn = { columnId: 'reverse-1', columnName: '实施问题', projectId: 'other-project', projectCode: 'P9', projectName: '华南现场',
   projectLifecycle: ProjectLifecycle.Active, actorCanLinkExisting: true }
 
-const api = vi.hoisted(() => ({ listConnectColumns: vi.fn(), listWorkItemConnectionCells: vi.fn() }))
+const api = vi.hoisted(() => ({ listConnectColumns: vi.fn(), listWorkItemConnectionCells: vi.fn(), createConnectColumn: vi.fn(), updateConnectColumn: vi.fn() }))
 const replace = vi.hoisted(() => vi.fn())
 const route = reactive({ path: '/projects/project-1/overview', query: {} as Record<string, string>, hash: '#table' })
 vi.mock('../../../api/client', () => ({ workItemsApi: api }))
+vi.mock('@yumpoo/api-client', async original => ({ ...await original<typeof import('@yumpoo/api-client')>(), readCsrfToken: () => 'csrf' }))
 vi.mock('../../../composables/useSession', () => ({ useSession: () => ({ authentication: { value: { user: { id: 'user' }, company: { id: 'company' } } } }) }))
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ replace }) }))
 enableAutoUnmount(afterEach)
@@ -82,6 +83,32 @@ describe('表格连接列集成状态', () => {
     expect(table.visibleColumns.value.map(column => column.key)).toEqual(['connect-reverse:reverse-1'])
     enabled.value = false; await flushPromises()
     expect(table.visibleColumns.value).toEqual([])
+  })
+  it('草稿列占据新列位置，连接后以项目名创建并定位；改目标时自动名随项目更新，手动名保留', async () => {
+    const { table } = harness(); await flushPromises()
+    table.startDraft()
+    expect(table.visibleColumns.value.map(column => column.key)).toEqual(['connect:column-1', 'connect-draft', 'connect-reverse:reverse-1'])
+    expect(table.setup.value).toEqual({ key: 'connect-draft', mode: 'create' })
+    table.toggleColumn('connect-draft', false)
+    expect(table.visibleColumns.value.map(column => column.key)).not.toContain('connect-draft')
+    table.startDraft()
+    const created = { ...connectionCatalog.items[0]!, id: 'column-2', name: 'Yumpoo 门户 2' }
+    api.createConnectColumn.mockResolvedValue(created)
+    api.listConnectColumns.mockResolvedValue({ ...connectionCatalog, items: [...connectionCatalog.items, created], incomingColumns: [reverseColumn] })
+    await table.connectProjects([{ id: 'target-project', name: '产品缺陷', code: 'P003' }])
+    expect(api.createConnectColumn).toHaveBeenCalledWith(expect.objectContaining({ connectColumnCreateRequest: { name: '产品缺陷 2', targetProjectIds: new Set(['target-project']) } }), expect.anything())
+    expect(table.draft.value).toBe(false); expect(table.setup.value).toBeUndefined()
+    expect(table.celebrated.value).toBe('connect:column-2')
+    const automatic = { ...connectionCatalog.items[0]!, name: 'Yumpoo 门户' }
+    api.listConnectColumns.mockResolvedValue({ ...connectionCatalog, items: [automatic, created], incomingColumns: [reverseColumn] })
+    await table.loadCatalog()
+    api.updateConnectColumn.mockResolvedValue(automatic)
+    await table.connectProjects([{ id: 'target-project', name: 'Yumpoo 门户', code: 'P003' }, { id: 'p4', name: '华南现场', code: 'P4' }], automatic)
+    expect(api.updateConnectColumn).toHaveBeenLastCalledWith(expect.objectContaining({ connectColumnUpdateRequest: { name: 'Yumpoo 门户、华南现场', targetProjectIds: new Set(['target-project', 'p4']) } }), expect.anything())
+    api.listConnectColumns.mockResolvedValue({ ...connectionCatalog, items: [connectionCatalog.items[0]!, created], incomingColumns: [reverseColumn] })
+    await table.loadCatalog()
+    await table.connectProjects([{ id: 'p4', name: '华南现场', code: 'P4' }], connectionCatalog.items[0]!)
+    expect(api.updateConnectColumn).toHaveBeenLastCalledWith(expect.objectContaining({ connectColumnUpdateRequest: { name: '产品缺陷', targetProjectIds: new Set(['p4']) } }), expect.anything())
   })
   it('归档和企业管理员只读使列管理不可用，项目行更新强制刷新对应单元格', async () => {
     const { table, project, rows } = harness(); await flushPromises()
