@@ -16,7 +16,7 @@ function harness() {
   const data = scope.run(() => useConnectColumns(projectId, enabled))!
   return { data, projectId, enabled }
 }
-function response(ids: string[]): WorkItemConnectionCellList { return { items: ids.map(workItemId => ({ workItemId, outgoing: [], incoming: [], incomingTotal: 0 })) } }
+function response(ids: string[]): WorkItemConnectionCellList { return { items: ids.map(workItemId => ({ workItemId, outgoing: [], incoming: [], incomingTotal: 0, incomingByColumn: [] })) } }
 beforeEach(() => {
   vi.resetAllMocks(); csrf.token = 'csrf'
   api.listConnectColumns.mockResolvedValue(connectionCatalog)

@@ -32,7 +32,7 @@ const kanbanConnections = computed(() => [...previewConnections, ...previewConne
 const card = shallowRef<WorkItemConnection>(), perspective = ref<'source' | 'target'>('source')
 const dialogOpen = ref(false), editing = shallowRef<ConnectColumn>(), deleting = shallowRef<ConnectColumn>()
 const catalog = computed<ConnectColumnCatalog>(() => ({ items: columns.value, incomingAvailable: true,
-  incomingColumns: [{ columnId: 'preview-incoming', columnName: '实施问题', projectId: previewSecondProject.projectId, projectName: previewSecondProject.name, projectCode: previewSecondProject.code }],
+  incomingColumns: [{ columnId: 'preview-incoming', columnName: '实施问题', projectId: previewSecondProject.projectId, projectName: previewSecondProject.name, projectCode: previewSecondProject.code, projectLifecycle: ProjectLifecycle.Active, actorCanLinkExisting: true }],
   canManage: !readOnly.value, canDelete: !readOnly.value }))
 const rows = [previewSource, { ...previewSource, workItemId: 'preview-source-2', itemNo: 'P012-9', title: '批量导出缺少列', assignee: null },
   { ...previewSource, workItemId: 'preview-source-3', itemNo: 'P012-10', title: '新站点初始化失败' }]

@@ -11,6 +11,8 @@ public final class WorkItemConnectionCommands {
             UUID idempotencyKey, RequestHash requestHash) {}
     public record CreateConnected(CurrentActor actor, UUID workItemId, UUID columnId, UUID targetProjectId,
             String title, UUID contentId, UUID idempotencyKey, RequestHash requestHash) {}
+    public record CreateReverseConnected(CurrentActor actor, UUID workItemId, UUID columnId, String title,
+            UUID contentId, UUID idempotencyKey, RequestHash requestHash) {}
     public record Unlink(CurrentActor actor, UUID connectionId, long expectedVersion,
             UUID idempotencyKey, RequestHash requestHash) {}
 }

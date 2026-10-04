@@ -78,7 +78,7 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
           const valid = catalog.value ? new Set(catalog.value.items.map(column => column.id)) : undefined
           for (const itemId of batch) {
             if (versions.get(itemId) !== stamps.get(itemId)) continue
-            const cell = received.get(itemId) ?? { workItemId: itemId, outgoing: [], incoming: [], incomingTotal: 0 }
+            const cell = received.get(itemId) ?? { workItemId: itemId, outgoing: [], incoming: [], incomingTotal: 0, incomingByColumn: [] }
             next.set(itemId, { ...cell, outgoing: cell.outgoing.filter(column => !valid || valid.has(column.columnId)) })
           }
           cells.value = next

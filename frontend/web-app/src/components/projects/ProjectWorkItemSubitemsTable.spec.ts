@@ -89,7 +89,7 @@ describe('项目工作项子表格', () => {
         { key: 'connect:column-1', label: '产品缺陷', kind: 'connect', column: connectColumn, width: 236, minWidth: 140 },
         { key: 'connect-incoming', label: '被连接', kind: 'incoming', width: 220, minWidth: 160 },
       ],
-      connectCells: new Map([['child-1', { workItemId: 'child-1', outgoing: [{ columnId: 'column-1', connections: [connection] }], incoming: [connection], incomingTotal: 1 }]]),
+      connectCells: new Map([['child-1', { workItemId: 'child-1', outgoing: [{ columnId: 'column-1', connections: [connection] }], incoming: [connection], incomingTotal: 1, incomingByColumn: [] }]]),
       connectReadOnly: true,
     })
     await flushPromises()

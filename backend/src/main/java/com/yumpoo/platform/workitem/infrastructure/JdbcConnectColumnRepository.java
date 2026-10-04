@@ -73,6 +73,12 @@ public class JdbcConnectColumnRepository implements ConnectColumnRepository {
     }
 
     @Override
+    public Optional<ConnectColumn> findActiveById(UUID companyId, UUID columnId) {
+        return jdbc.sql(SELECT + " WHERE c.company_id=:companyId AND c.id=:id AND c.deleted_at IS NULL")
+                .param("companyId", companyId).param("id", columnId).query(JdbcConnectColumnRepository::map).optional();
+    }
+
+    @Override
     public Optional<ConnectColumn> lock(UUID companyId, UUID projectId, UUID columnId, boolean forShare) {
         var locked = jdbc.sql("SELECT id FROM yumpoo.work_item_connect_column c"
                         + " WHERE company_id=:companyId AND project_id=:projectId AND id=:id"

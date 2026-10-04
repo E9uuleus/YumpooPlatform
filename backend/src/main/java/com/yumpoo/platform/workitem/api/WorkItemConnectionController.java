@@ -7,6 +7,7 @@ import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.api.web.ApiV1Controller;
 import com.yumpoo.platform.foundation.application.idempotency.StoredCommandResult;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
+import com.yumpoo.platform.workitem.application.ConnectCandidateSearch;
 import com.yumpoo.platform.workitem.application.WorkItemConnectionCommands;
 import com.yumpoo.platform.workitem.application.WorkItemConnectionService;
 import jakarta.validation.Valid;
@@ -46,9 +47,9 @@ public final class WorkItemConnectionController {
     }
 
     @GetMapping("/work-items/{workItemId}/incoming-connections")
-    ResponseEntity<ConnectionPage> incoming(@PathVariable UUID workItemId,
+    ResponseEntity<ConnectionPage> incoming(@PathVariable UUID workItemId, @RequestParam(required = false) UUID columnId,
             @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
-        return read(service.incoming(actors.requiredActive(), workItemId, OffsetPageRequest.of(page, size)));
+        return read(service.incoming(actors.requiredActive(), workItemId, columnId, OffsetPageRequest.of(page, size)));
     }
 
     @GetMapping("/work-item-connections/{connectionId}")
@@ -65,10 +66,26 @@ public final class WorkItemConnectionController {
 
     @GetMapping("/projects/{projectId}/connect-columns/{columnId}/candidates")
     ResponseEntity<CandidatePage> candidates(@PathVariable UUID projectId, @PathVariable UUID columnId,
-            @RequestParam UUID targetProjectId, @RequestParam UUID sourceWorkItemId, @RequestParam String q,
+            @RequestParam UUID targetProjectId, @RequestParam UUID sourceWorkItemId,
+            @RequestParam(required = false) String q, @RequestParam(required = false) List<String> fields,
+            @RequestParam(required = false) String sort,
             @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
         return read(service.candidates(actors.requiredActive(), projectId, columnId, targetProjectId,
-                sourceWorkItemId, q, OffsetPageRequest.of(page, size)));
+                sourceWorkItemId, ConnectCandidateSearch.of(q, fields, sort), OffsetPageRequest.of(page, size)));
+    }
+
+    @GetMapping("/work-items/{workItemId}/reverse-connect-candidates")
+    ResponseEntity<CandidatePage> reverseCandidates(@PathVariable UUID workItemId, @RequestParam UUID columnId,
+            @RequestParam(required = false) String q, @RequestParam(required = false) List<String> fields,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size) {
+        return read(service.reverseCandidates(actors.requiredActive(), workItemId, columnId,
+                ConnectCandidateSearch.of(q, fields, sort), OffsetPageRequest.of(page, size)));
+    }
+
+    @GetMapping("/work-items/{workItemId}/reverse-connect-create-options")
+    ResponseEntity<CreateOptions> reverseCreateOptions(@PathVariable UUID workItemId, @RequestParam UUID columnId) {
+        return read(service.reverseCreateOptions(actors.requiredActive(), workItemId, columnId));
     }
 
     @PostMapping("/work-items/{workItemId}/connections")
@@ -87,6 +104,17 @@ public final class WorkItemConnectionController {
         var result = service.createConnected(new WorkItemConnectionCommands.CreateConnected(actors.requiredActive(), workItemId,
                 body.columnId(), body.targetProjectId(), body.title(), body.contentId(), keys.parseRequired(key),
                 hasher.hash("createConnectedWorkItem", Map.of("workItemId", workItemId.toString()), json.valueToTree(body)))).result();
+        return stored(result, true);
+    }
+
+    @PostMapping("/work-items/{workItemId}/reverse-connected-work-items")
+    ResponseEntity<String> reverseCreateConnected(@PathVariable UUID workItemId,
+            @Valid @RequestBody WorkItemConnectionRequests.CreateReverseConnected body,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String key) {
+        var result = service.reverseCreateConnected(new WorkItemConnectionCommands.CreateReverseConnected(actors.requiredActive(),
+                workItemId, body.columnId(), body.title(), body.contentId(), keys.parseRequired(key),
+                hasher.hash("createReverseConnectedWorkItem", Map.of("workItemId", workItemId.toString()),
+                        json.valueToTree(body)))).result();
         return stored(result, true);
     }
 

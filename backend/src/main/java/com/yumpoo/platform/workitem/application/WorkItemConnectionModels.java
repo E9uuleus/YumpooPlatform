@@ -20,7 +20,9 @@ public final class WorkItemConnectionModels {
             String origin, boolean active, ConnectionCard source, ConnectionCard target, Instant createdAt,
             ConnectionCardAssignee createdBy, Capabilities capabilities) {}
     public record Outgoing(UUID columnId, List<ConnectionView> connections) {}
-    public record Cell(UUID workItemId, List<Outgoing> outgoing, List<ConnectionView> incoming, long incomingTotal) {}
+    public record IncomingByColumn(UUID columnId, List<ConnectionView> connections, long total) {}
+    public record Cell(UUID workItemId, List<Outgoing> outgoing, List<ConnectionView> incoming, long incomingTotal,
+            List<IncomingByColumn> incomingByColumn) {}
     public record CellList(List<Cell> items) {}
     public record ConnectionPage(List<ConnectionView> items, int page, int size, long totalElements, int totalPages) {}
     public record CreateOptions(UUID targetProjectId, String targetProjectName,
@@ -28,4 +30,6 @@ public final class WorkItemConnectionModels {
     public record Parent(UUID workItemId, String title) {}
     public record Candidate(ConnectionCard card, Parent parent, boolean alreadyConnected) {}
     public record CandidatePage(List<Candidate> items, int page, int size, long totalElements, int totalPages) {}
+    public enum CandidateField { NAME, ASSIGNEE, STATUS, PRIORITY, CONTENT }
+    public enum CandidateSort { RECENT, TITLE }
 }

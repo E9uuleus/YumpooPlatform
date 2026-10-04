@@ -10,7 +10,8 @@ public final class ConnectColumnModels {
     public record Target(UUID projectId, String code, String name, String lifecycle, boolean actorCanLinkExisting) {}
     public record Column(UUID id, UUID projectId, String name, List<Target> targets,
             long rowVersion, String etag, Instant createdAt) {}
-    public record IncomingColumn(UUID columnId, String columnName, UUID projectId, String projectCode, String projectName) {}
+    public record IncomingColumn(UUID columnId, String columnName, UUID projectId, String projectCode, String projectName,
+            String projectLifecycle, boolean actorCanLinkExisting) {}
     public record Catalog(List<Column> items, boolean incomingAvailable, List<IncomingColumn> incomingColumns,
             boolean canManage, boolean canDelete) {}
     public record DeleteResult(UUID columnId, long removedConnectionCount) {}
