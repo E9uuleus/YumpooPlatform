@@ -12,6 +12,7 @@ import java.sql.Types;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,10 +37,6 @@ public class JdbcWorkItemConnectionRepository implements WorkItemConnectionRepos
             """;
     private static final String ACTIVE = " r.deleted_at IS NULL AND c.deleted_at IS NULL ";
     private static final String VISIBLE = " (r.source_project_id IN (:visible) OR r.target_project_id IN (:visible)) ";
-    private static final String CANDIDATES = """
-            FROM yumpoo.work_item w WHERE w.company_id=:companyId AND w.project_id=:projectId
-              AND w.deleted_at IS NULL AND (w.title ILIKE :query ESCAPE '!' OR w.item_no ILIKE :prefix ESCAPE '!')
-            """;
     private final JdbcClient jdbc;
 
     public JdbcWorkItemConnectionRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
@@ -148,16 +145,19 @@ public class JdbcWorkItemConnectionRepository implements WorkItemConnectionRepos
     }
 
     @Override
-    public List<ConnectionRow> findIncomingCells(UUID companyId, UUID projectId, Collection<UUID> itemIds) {
+    public List<IncomingCellRow> findIncomingCells(UUID companyId, UUID projectId, Collection<UUID> itemIds) {
         if (itemIds.isEmpty()) return List.of();
         return jdbc.sql("SELECT * FROM (" + SELECT + """
                 , count(*) OVER (PARTITION BY r.target_work_item_id) AS incoming_total,
-                row_number() OVER (PARTITION BY r.target_work_item_id ORDER BY r.created_at, r.id) AS position
+                count(*) OVER (PARTITION BY r.target_work_item_id, r.column_id) AS column_total,
+                row_number() OVER (PARTITION BY r.target_work_item_id ORDER BY r.created_at, r.id) AS cell_position,
+                row_number() OVER (PARTITION BY r.target_work_item_id, r.column_id ORDER BY r.created_at, r.id) AS position
                 """ + FROM + ENDPOINTS + " WHERE r.company_id=:companyId AND r.target_project_id=:projectId"
                         + " AND r.target_work_item_id IN (:ids) AND " + ACTIVE
-                        + ") ranked WHERE position<=50 ORDER BY target_work_item_id, position")
+                        + ") ranked WHERE position<=50 ORDER BY target_work_item_id, cell_position")
                 .param("companyId", companyId).param("projectId", projectId).param("ids", itemIds)
-                .query(JdbcWorkItemConnectionRepository::row).list();
+                .query((row, n) -> new IncomingCellRow(row(row, n), row.getLong("column_total"), row.getLong("cell_position")))
+                .list();
     }
 
     @Override
@@ -168,23 +168,31 @@ public class JdbcWorkItemConnectionRepository implements WorkItemConnectionRepos
     }
 
     @Override
-    public List<ConnectionRow> findIncomingPage(UUID companyId, UUID workItemId, Set<UUID> visibleProjectIds,
-            OffsetPageRequest page) {
+    public List<ConnectionRow> findIncomingPage(UUID companyId, UUID workItemId, UUID columnId,
+            Set<UUID> visibleProjectIds, OffsetPageRequest page) {
         if (visibleProjectIds.isEmpty()) return List.of();
-        return jdbc.sql(SELECT + ", 0 AS incoming_total " + FROM + ENDPOINTS
+        return withColumn(jdbc.sql(SELECT + ", 0 AS incoming_total " + FROM + ENDPOINTS
                         + " WHERE r.company_id=:companyId AND r.target_work_item_id=:id AND " + ACTIVE
-                        + " AND " + VISIBLE + " ORDER BY r.created_at, r.id LIMIT :size OFFSET :offset")
+                        + " AND " + VISIBLE + columnFilter(columnId) + " ORDER BY r.created_at, r.id LIMIT :size OFFSET :offset"),
+                columnId)
                 .param("companyId", companyId).param("id", workItemId).param("visible", visibleProjectIds)
                 .param("size", page.size()).param("offset", (long) page.page() * page.size())
                 .query(JdbcWorkItemConnectionRepository::row).list();
     }
 
     @Override
-    public long countIncoming(UUID companyId, UUID workItemId, Set<UUID> visibleProjectIds) {
+    public long countIncoming(UUID companyId, UUID workItemId, UUID columnId, Set<UUID> visibleProjectIds) {
         if (visibleProjectIds.isEmpty()) return 0;
-        return jdbc.sql("SELECT count(*) " + FROM + ENDPOINTS
-                        + " WHERE r.company_id=:companyId AND r.target_work_item_id=:id AND " + ACTIVE + " AND " + VISIBLE)
+        return withColumn(jdbc.sql("SELECT count(*) " + FROM + ENDPOINTS
+                        + " WHERE r.company_id=:companyId AND r.target_work_item_id=:id AND " + ACTIVE + " AND " + VISIBLE
+                        + columnFilter(columnId)), columnId)
                 .param("companyId", companyId).param("id", workItemId).param("visible", visibleProjectIds).query(Long.class).single();
+    }
+
+    private static String columnFilter(UUID columnId) { return columnId == null ? "" : " AND r.column_id=:column"; }
+
+    private static JdbcClient.StatementSpec withColumn(JdbcClient.StatementSpec statement, UUID columnId) {
+        return columnId == null ? statement : statement.param("column", columnId);
     }
 
     @Override
@@ -218,36 +226,66 @@ public class JdbcWorkItemConnectionRepository implements WorkItemConnectionRepos
     }
 
     @Override
-    public List<CandidateRow> findCandidates(UUID companyId, UUID projectId, UUID columnId, UUID sourceId,
-            String query, OffsetPageRequest page) {
+    public List<CandidateRow> findCandidates(UUID companyId, CandidateQuery query, OffsetPageRequest page) {
+        String connected = query.anchorIsSource()
+                ? "r.source_work_item_id=:anchor AND r.target_work_item_id=w.id"
+                : "r.source_work_item_id=w.id AND r.target_work_item_id=:anchor";
+        String order = query.sort() == CandidateSort.TITLE ? "lower(w.title), w.id" : "w.updated_at DESC, w.id";
         return candidateQuery("""
                 SELECT w.id, parent.id AS parent_id, parent.title AS parent_title,
                     EXISTS(SELECT 1 FROM yumpoo.work_item_connection r WHERE r.company_id=w.company_id
-                        AND r.column_id=:column AND r.source_work_item_id=:source AND r.target_work_item_id=w.id
-                        AND r.deleted_at IS NULL) AS connected
-                """ + CANDIDATES.replace(" WHERE", " " + """
-                 LEFT JOIN yumpoo.work_item_relation relation ON relation.company_id=w.company_id
+                        AND r.column_id=:column AND %s AND r.deleted_at IS NULL) AS connected
+                FROM yumpoo.work_item w
+                LEFT JOIN yumpoo.work_item_relation relation ON relation.company_id=w.company_id
                     AND relation.right_work_item_id=w.id AND relation.relation_type='PARENT_CHILD'
                     AND relation.deleted_at IS NULL
-                 LEFT JOIN yumpoo.work_item parent ON parent.company_id=w.company_id
+                LEFT JOIN yumpoo.work_item parent ON parent.company_id=w.company_id
                     AND parent.id=relation.left_work_item_id AND parent.deleted_at IS NULL
-                 WHERE""") + " ORDER BY (lower(w.item_no)=lower(:exact)) DESC, w.updated_at DESC, w.id LIMIT :size OFFSET :offset",
-                companyId, projectId, query).param("column", columnId).param("source", sourceId)
-                .param("exact", query).param("size", page.size()).param("offset", (long) page.page() * page.size())
+                """.formatted(connected) + candidateWhere(query)
+                        + " ORDER BY (lower(w.item_no)=lower(:exact)) DESC, " + order + " LIMIT :size OFFSET :offset",
+                companyId, query).param("column", query.columnId()).param("anchor", query.anchorWorkItemId())
+                .param("exact", query.text()).param("size", page.size()).param("offset", (long) page.page() * page.size())
                 .query((row, n) -> new CandidateRow(row.getObject("id", UUID.class),
                         row.getObject("parent_id") == null ? null : new Parent(row.getObject("parent_id", UUID.class),
                                 row.getString("parent_title")), row.getBoolean("connected"))).list();
     }
 
     @Override
-    public long countCandidates(UUID companyId, UUID projectId, String query) {
-        return candidateQuery("SELECT count(*) " + CANDIDATES, companyId, projectId, query).query(Long.class).single();
+    public long countCandidates(UUID companyId, CandidateQuery query) {
+        return candidateQuery("SELECT count(*) FROM yumpoo.work_item w" + candidateWhere(query), companyId, query)
+                .query(Long.class).single();
     }
 
-    private JdbcClient.StatementSpec candidateQuery(String sql, UUID companyId, UUID projectId, String query) {
-        String escaped = query.replace("!", "!!").replace("%", "!%").replace("_", "!_");
-        return jdbc.sql(sql).param("companyId", companyId).param("projectId", projectId)
-                .param("query", "%" + escaped + "%").param("prefix", escaped + "%");
+    private static String candidateWhere(CandidateQuery query) {
+        String where = " WHERE w.company_id=:companyId AND w.project_id=:projectId AND w.deleted_at IS NULL";
+        if (query.text().isEmpty()) return where;
+        List<String> matches = new ArrayList<>();
+        if (query.fields().contains(CandidateField.NAME))
+            matches.add("w.title ILIKE :query ESCAPE '!' OR w.item_no ILIKE :prefix ESCAPE '!'");
+        if (query.fields().contains(CandidateField.STATUS)) matches.add("""
+                EXISTS(SELECT 1 FROM yumpoo.project_work_item_status_label s WHERE s.company_id=w.company_id
+                    AND s.project_id=w.project_id AND s.status_code=w.status_code AND s.display_name ILIKE :query ESCAPE '!')""");
+        if (query.fields().contains(CandidateField.PRIORITY)) matches.add("""
+                EXISTS(SELECT 1 FROM yumpoo.project_work_item_priority_label p WHERE p.company_id=w.company_id
+                    AND p.project_id=w.project_id AND p.priority_code=w.priority AND p.display_name ILIKE :query ESCAPE '!')""");
+        if (query.fields().contains(CandidateField.CONTENT)) matches.add("""
+                EXISTS(SELECT 1 FROM yumpoo.content c WHERE c.company_id=w.company_id
+                    AND c.project_id=w.project_id AND c.id=w.content_id AND c.name ILIKE :query ESCAPE '!')""");
+        if (assigneeSearch(query)) matches.add("w.assignee_user_id IN (:assignees)");
+        return where + " AND (" + (matches.isEmpty() ? "FALSE"
+                : String.join(" OR ", matches.stream().map(match -> "(" + match + ")").toList())) + ")";
+    }
+
+    private static boolean assigneeSearch(CandidateQuery query) {
+        return query.fields().contains(CandidateField.ASSIGNEE) && !query.assigneeIds().isEmpty();
+    }
+
+    private JdbcClient.StatementSpec candidateQuery(String sql, UUID companyId, CandidateQuery query) {
+        var statement = jdbc.sql(sql).param("companyId", companyId).param("projectId", query.projectId());
+        if (query.text().isEmpty()) return statement;
+        String escaped = query.text().replace("!", "!!").replace("%", "!%").replace("_", "!_");
+        statement = statement.param("query", "%" + escaped + "%").param("prefix", escaped + "%");
+        return assigneeSearch(query) ? statement.param("assignees", query.assigneeIds()) : statement;
     }
 
     private static ConnectionRow row(ResultSet row, int n) throws SQLException {

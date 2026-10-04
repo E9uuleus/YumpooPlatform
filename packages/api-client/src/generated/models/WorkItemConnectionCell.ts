@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemConnectionIncomingColumn } from './WorkItemConnectionIncomingColumn';
+import {
+    WorkItemConnectionIncomingColumnFromJSON,
+    WorkItemConnectionIncomingColumnFromJSONTyped,
+    WorkItemConnectionIncomingColumnToJSON,
+    WorkItemConnectionIncomingColumnToJSONTyped,
+} from './WorkItemConnectionIncomingColumn';
 import type { WorkItemConnectionOutgoing } from './WorkItemConnectionOutgoing';
 import {
     WorkItemConnectionOutgoingFromJSON,
@@ -57,6 +64,12 @@ export interface WorkItemConnectionCell {
      * @memberof WorkItemConnectionCell
      */
     incomingTotal: number;
+    /**
+     *
+     * @type {Array<WorkItemConnectionIncomingColumn>}
+     * @memberof WorkItemConnectionCell
+     */
+    incomingByColumn: Array<WorkItemConnectionIncomingColumn>;
 }
 
 /**
@@ -67,6 +80,7 @@ export function instanceOfWorkItemConnectionCell(value: object): value is WorkIt
     if (!('outgoing' in value) || value['outgoing'] === undefined) return false;
     if (!('incoming' in value) || value['incoming'] === undefined) return false;
     if (!('incomingTotal' in value) || value['incomingTotal'] === undefined) return false;
+    if (!('incomingByColumn' in value) || value['incomingByColumn'] === undefined) return false;
     return true;
 }
 
@@ -84,6 +98,7 @@ export function WorkItemConnectionCellFromJSONTyped(json: any, ignoreDiscriminat
         'outgoing': ((json['outgoing'] as Array<any>).map(WorkItemConnectionOutgoingFromJSON)),
         'incoming': ((json['incoming'] as Array<any>).map(WorkItemConnectionFromJSON)),
         'incomingTotal': json['incomingTotal'],
+        'incomingByColumn': ((json['incomingByColumn'] as Array<any>).map(WorkItemConnectionIncomingColumnFromJSON)),
     };
 }
 
@@ -102,5 +117,6 @@ export function WorkItemConnectionCellToJSONTyped(value?: WorkItemConnectionCell
         'outgoing': ((value['outgoing'] as Array<any>).map(WorkItemConnectionOutgoingToJSON)),
         'incoming': ((value['incoming'] as Array<any>).map(WorkItemConnectionToJSON)),
         'incomingTotal': value['incomingTotal'],
+        'incomingByColumn': ((value['incomingByColumn'] as Array<any>).map(WorkItemConnectionIncomingColumnToJSON)),
     };
 }

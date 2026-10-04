@@ -39,8 +39,7 @@ import type { DueDateValue } from './workItemDueDate'
 import { workItemLabelColorValue } from './workItemLabelColors'
 import type { WorkItemConnection, WorkItemConnectionCell } from '@yumpoo/api-client'
 import type { ConnectTableColumn } from './connect/connectColumnKeys'
-import ConnectCell from './connect/ConnectCell.vue'
-import IncomingConnectCell from './connect/IncomingConnectCell.vue'
+import ConnectTableCell from './connect/ConnectTableCell.vue'
 
 export interface ProjectWorkItemSubitemSortRule {
   field: string
@@ -923,21 +922,13 @@ onBeforeUnmount(() => {
             </slot>
           </template>
           <template #default="{ row }">
-            <connect-cell
-              v-if="!isDraft(row as ProjectWorkItemListItem) && column.column"
+            <connect-table-cell
+              v-if="!isDraft(row as ProjectWorkItemListItem)"
+              :column="column"
               :item="row as ProjectWorkItemListItem"
-              :column="column.column"
-              :connections="connectCells?.get(row.id)?.outgoing.find(value => value.columnId === column.column?.id)?.connections ?? []"
+              :cell="connectCells?.get(row.id)"
               :read-only="connectReadOnly ?? true"
-              @open-card="emit('openConnection', $event, 'source')"
-            />
-            <incoming-connect-cell
-              v-else-if="!isDraft(row as ProjectWorkItemListItem) && column.kind === 'incoming'"
-              :item="row as ProjectWorkItemListItem"
-              :incoming="connectCells?.get(row.id)?.incoming ?? []"
-              :incoming-total="connectCells?.get(row.id)?.incomingTotal ?? 0"
-              :read-only="connectReadOnly ?? true"
-              @open-card="emit('openConnection', $event, 'target')"
+              @open-card="(connection, side) => emit('openConnection', connection, side)"
             />
           </template>
         </el-table-column>
@@ -1340,7 +1331,7 @@ onBeforeUnmount(() => {
   transform: translateX(var(--subitem-quick-scroll-left));
 }
 .subitem-quick-controls { grid-column: 4; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
-.subitem-quick-title.subitem-add__field { width: 100%; min-width: 0; margin: 0; outline: none; border-color: var(--yp-action-primary); background: var(--yp-bg-surface); color: var(--yp-text-primary); }
+.subitem-quick-title.subitem-add__field { width: 100%; min-width: 0; margin: 0; outline: none; border-color: var(--yp-input-border-focus); background: var(--yp-bg-surface); color: var(--yp-text-primary); }
 .subitem-quick-title :deep(.el-input__wrapper) {
   height: 100%;
   min-height: 0;
@@ -1410,8 +1401,7 @@ onBeforeUnmount(() => {
 }
 .subitem-add:focus-visible { outline: none; }
 .subitem-add:focus-visible .subitem-add__field {
-  border-color: var(--yp-action-primary);
-  box-shadow: 0 0 0 1px var(--yp-action-primary);
+  border-color: var(--yp-input-border-focus);
 }
 .subitem-add:disabled { cursor: not-allowed; opacity: .55; }
 </style>

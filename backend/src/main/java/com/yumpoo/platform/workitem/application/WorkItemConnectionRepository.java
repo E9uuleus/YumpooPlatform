@@ -18,6 +18,14 @@ public interface WorkItemConnectionRepository {
             ConnectionCardStatus status, ConnectionCardLabel priority, ConnectionCardCategory category,
             UUID assigneeUserId) {}
     record CandidateRow(UUID workItemId, Parent parent, boolean alreadyConnected) {}
+    /** One incoming row within its column window; {@code cellPosition} ranks it across every column of the target item. */
+    record IncomingCellRow(ConnectionRow row, long columnTotal, long cellPosition) {}
+    /**
+     * Searches one project's items for a connect column. The anchor is the row the picker was opened from: the source
+     * item when searching targets, or the target item when searching the column's own project from the reverse column.
+     */
+    record CandidateQuery(UUID projectId, UUID columnId, UUID anchorWorkItemId, boolean anchorIsSource, String text,
+            Set<CandidateField> fields, Collection<UUID> assigneeIds, CandidateSort sort) {}
 
     Optional<ConnectionRow> find(UUID companyId, UUID connectionId);
     Optional<ConnectionRow> findReadable(UUID companyId, UUID connectionId, Set<UUID> visibleProjectIds);
@@ -30,13 +38,13 @@ public interface WorkItemConnectionRepository {
     long countActiveTarget(UUID companyId, UUID columnId, UUID targetProjectId);
     List<UUID> findActiveProjectItems(UUID companyId, UUID projectId, Collection<UUID> itemIds);
     List<ConnectionRow> findOutgoing(UUID companyId, UUID projectId, Collection<UUID> itemIds);
-    List<ConnectionRow> findIncomingCells(UUID companyId, UUID projectId, Collection<UUID> itemIds);
+    List<IncomingCellRow> findIncomingCells(UUID companyId, UUID projectId, Collection<UUID> itemIds);
     Set<UUID> findIncomingProjectIds(UUID companyId, UUID workItemId);
-    List<ConnectionRow> findIncomingPage(UUID companyId, UUID workItemId, Set<UUID> visibleProjectIds, OffsetPageRequest page);
-    long countIncoming(UUID companyId, UUID workItemId, Set<UUID> visibleProjectIds);
+    List<ConnectionRow> findIncomingPage(UUID companyId, UUID workItemId, UUID columnId, Set<UUID> visibleProjectIds,
+            OffsetPageRequest page);
+    long countIncoming(UUID companyId, UUID workItemId, UUID columnId, Set<UUID> visibleProjectIds);
     List<CardRow> findCards(UUID companyId, Collection<UUID> itemIds, boolean includingDeleted);
     List<ConnectionCardCategory> findActiveCategories(UUID companyId, UUID projectId);
-    List<CandidateRow> findCandidates(UUID companyId, UUID projectId, UUID columnId, UUID sourceId,
-            String query, OffsetPageRequest page);
-    long countCandidates(UUID companyId, UUID projectId, String query);
+    List<CandidateRow> findCandidates(UUID companyId, CandidateQuery query, OffsetPageRequest page);
+    long countCandidates(UUID companyId, CandidateQuery query);
 }

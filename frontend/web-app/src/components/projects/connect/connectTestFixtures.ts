@@ -1,5 +1,5 @@
 import { ProjectLifecycle, WorkItemStatusCategory, WorkItemConnectionOriginEnum, WorkItemLabelColorToken,
-  type ConnectColumn, type ConnectionCard, type WorkItemConnection } from '@yumpoo/api-client'
+  type ConnectColumn, type ConnectColumnCatalog, type ConnectionCard, type WorkItemConnection } from '@yumpoo/api-client'
 
 export const sourceCard: ConnectionCard = {
   workItemId: 'source-item', itemNo: 'P012-8', title: '现场打印超时', archived: false,
@@ -17,5 +17,5 @@ export const connectColumn: ConnectColumn = { id: 'column-1', projectId: sourceC
 export const connection: WorkItemConnection = { id: 'connection-1', etag: '"1"', rowVersion: 1, columnId: connectColumn.id,
   columnName: connectColumn.name, source: sourceCard, target: targetCard, origin: WorkItemConnectionOriginEnum.Created, active: true,
   createdAt: new Date('2026-09-30T14:20:00Z'), createdBy: { userId: 'user-1', displayName: '张三' }, capabilities: { canUnlink: true } }
-export const connectionCatalog = { items: [connectColumn], incomingAvailable: false, incomingColumns: [], canManage: true, canDelete: true }
+export const connectionCatalog: ConnectColumnCatalog = { items: [connectColumn], incomingAvailable: false, incomingColumns: [], canManage: true, canDelete: true }
 export const sourceItem = { id: sourceCard.workItemId, title: sourceCard.title }

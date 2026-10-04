@@ -67,7 +67,7 @@ watch(() => [props.projectId, Boolean(props.catalog)], () => { if (!props.catalo
         <p v-if="!catalog.items.length">
           本项目还没有连接列。
         </p>
-        <h3>连接到本项目的项目</h3>
+        <h3>双向连接到本项目的项目</h3>
         <div
           v-for="column in catalog.incomingColumns"
           :key="column.columnId"

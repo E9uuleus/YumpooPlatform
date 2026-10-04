@@ -73,5 +73,6 @@
     }
   ],
   "incoming": [],
-  "incomingTotal": 0
+  "incomingTotal": 0,
+  "incomingByColumn": []
 }

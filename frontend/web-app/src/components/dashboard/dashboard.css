@@ -67,8 +67,8 @@
 .chart-editor-heading-icon{display:grid;place-items:center;width:36px;height:36px;flex-shrink:0;border-radius:6px;background:var(--yp-bg-selected);color:var(--yp-link)}
 .chart-editor-heading-icon svg{width:26px;height:26px}
 .chart-editor-heading>input{font:500 22px/30px var(--yp-font-family);min-width:0;flex:1;border:1px solid transparent;border-radius:4px;padding:3px 6px;background:none;color:var(--yp-text-primary)}
-.chart-editor-heading>input:hover{border-color:var(--yp-border-default)}
-.chart-editor-heading>input:focus{outline:none;border-color:var(--yp-action-primary)}
+.chart-editor-heading>input:hover{border-color:var(--yp-input-border-hover)}
+.chart-editor-heading>input:focus{outline:none;border-color:var(--yp-input-border-focus)}
 .chart-editor-heading>input.invalid{border-color:var(--yp-status-red)}
 .chart-editor .el-button{height:36px;border-radius:4px;font:14px var(--yp-font-family);padding:8px 12px}
 .chart-editor .el-button+.el-button{margin-left:0}
@@ -100,15 +100,13 @@
 .chart-field{display:flex;flex-direction:column;gap:8px;font-size:14px;min-width:0}
 .chart-field>span{color:var(--yp-text-secondary);line-height:20px}
 .chart-editor-settings .el-select{width:100%}
-.chart-editor-settings .el-select__wrapper,.chart-editor-settings .el-input__wrapper{min-height:36px;border-radius:4px;padding:6px 12px;box-shadow:0 0 0 1px var(--yp-border-default) inset;background:var(--yp-bg-surface);font-size:14px;transition:box-shadow .15s}
-.chart-editor-settings .el-select__wrapper:hover,.chart-editor-settings .el-input__wrapper:hover{box-shadow:0 0 0 1px var(--yp-border-strong) inset}
-.chart-editor-settings .el-select__wrapper.is-focused,.chart-editor-settings .el-input__wrapper.is-focus{box-shadow:0 0 0 1px var(--yp-action-primary) inset,0 0 0 2px color-mix(in srgb,var(--yp-action-primary) 12%,transparent)}
+.chart-editor-settings .el-select__wrapper,.chart-editor-settings .el-input__wrapper{min-height:36px;padding:6px 12px;font-size:14px}
 .chart-editor-settings .el-input__inner{height:24px;font:14px var(--yp-font-family)}
 .chart-editor-settings .el-select__caret{font-size:14px;color:var(--yp-text-secondary)}
 .chart-editor-settings .el-select__tags-text{max-width:180px}
-.chart-field>input{height:36px;width:100%;box-sizing:border-box;padding:6px 12px;border:1px solid var(--yp-border-default);border-radius:4px;background:var(--yp-bg-surface);color:var(--yp-text-primary);font:14px var(--yp-font-family)}
-.chart-field>input:hover{border-color:var(--yp-border-strong)}
-.chart-field>input:focus{outline:2px solid color-mix(in srgb,var(--yp-action-primary) 12%,transparent);border-color:var(--yp-action-primary)}
+.chart-field>input{height:36px;width:100%;box-sizing:border-box;padding:6px 12px;border:1px solid var(--yp-input-border);border-radius:var(--yp-input-radius);background:var(--yp-input-bg);color:var(--yp-text-primary);font:14px var(--yp-font-family)}
+.chart-field>input:hover{border-color:var(--yp-input-border-hover)}
+.chart-field>input:focus{outline:none;border-color:var(--yp-input-border-focus)}
 .chart-field>input[aria-invalid=true]{border-color:var(--yp-status-red)}
 .chart-check{display:flex;align-items:center;gap:10px;font-size:14px;line-height:22px;cursor:pointer}
 .chart-check input{appearance:none;display:grid;place-content:center;width:16px;height:16px;border:1px solid var(--yp-border-strong);border-radius:3px;margin:0;flex-shrink:0;background:var(--yp-bg-surface);cursor:inherit}

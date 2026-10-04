@@ -13,6 +13,8 @@ import com.yumpoo.platform.foundation.application.event.EventDraft;
 import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
 import com.yumpoo.platform.foundation.application.idempotency.*;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
+import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshot;
+import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.workitem.domain.ConnectColumn;
 import com.yumpoo.platform.workitem.domain.WorkItem;
 import com.yumpoo.platform.workitem.domain.WorkItemConnection;
@@ -35,10 +37,13 @@ import java.util.UUID;
 import static com.yumpoo.platform.workitem.application.ConnectionAccess.*;
 import static com.yumpoo.platform.workitem.application.WorkItemConnectionCommands.*;
 import static com.yumpoo.platform.workitem.application.WorkItemConnectionModels.*;
+import static com.yumpoo.platform.workitem.application.WorkItemConnectionRepository.CandidateQuery;
 import static com.yumpoo.platform.workitem.application.WorkItemConnectionRepository.ConnectionRow;
 
 @Service
 public class WorkItemConnectionService {
+    /** Assignee search resolves at most this many matching people before filtering candidates. */
+    static final int ASSIGNEE_MATCH_LIMIT = 100;
     private final WorkItemConnectionRepository connections;
     private final ConnectColumnRepository columns;
     private final WorkItemRepository items;
@@ -47,6 +52,7 @@ public class WorkItemConnectionService {
     private final ProjectConnectionTargetQuery targets;
     private final ProjectFactWriteGuard guard;
     private final ConnectionCardReader cards;
+    private final MinimalUserSnapshotQuery users;
     private final IdempotentCommandExecutor idempotency;
     private final TransactionalEventPort events;
     private final ObjectMapper json;
@@ -55,7 +61,8 @@ public class WorkItemConnectionService {
     public WorkItemConnectionService(WorkItemConnectionRepository connections, ConnectColumnRepository columns,
             WorkItemRepository items, WorkItemService itemService, ProjectAccessSnapshotQuery access,
             ProjectConnectionTargetQuery targets, ProjectFactWriteGuard guard, ConnectionCardReader cards,
-            IdempotentCommandExecutor idempotency, TransactionalEventPort events, ObjectMapper json, Clock clock) {
+            MinimalUserSnapshotQuery users, IdempotentCommandExecutor idempotency, TransactionalEventPort events,
+            ObjectMapper json, Clock clock) {
         this.connections = connections;
         this.columns = columns;
         this.items = items;
@@ -64,6 +71,7 @@ public class WorkItemConnectionService {
         this.targets = targets;
         this.guard = guard;
         this.cards = cards;
+        this.users = users;
         this.idempotency = idempotency;
         this.events = events;
         this.json = json;
@@ -80,25 +88,35 @@ public class WorkItemConnectionService {
         var outgoing = connections.findOutgoing(actor.companyId(), projectId, ids);
         var incoming = connections.findIncomingCells(actor.companyId(), projectId, ids);
         List<ConnectionRow> rows = new ArrayList<>(outgoing);
-        rows.addAll(incoming);
+        incoming.forEach(value -> rows.add(value.row()));
         var views = cards.connections(actor, rows, false);
         Map<UUID, Map<UUID, List<ConnectionView>>> out = new LinkedHashMap<>();
         Map<UUID, List<ConnectionView>> in = new LinkedHashMap<>();
         Map<UUID, Long> totals = new LinkedHashMap<>();
+        Map<UUID, Map<UUID, List<ConnectionView>>> inByColumn = new LinkedHashMap<>();
+        Map<UUID, Map<UUID, Long>> columnTotals = new LinkedHashMap<>();
         for (var row : outgoing) out.computeIfAbsent(row.connection().sourceWorkItemId(), ignored -> new LinkedHashMap<>())
                 .computeIfAbsent(row.connection().columnId(), ignored -> new ArrayList<>()).add(views.get(row.connection().id()));
-        for (var row : incoming) {
-            UUID id = row.connection().targetWorkItemId();
-            in.computeIfAbsent(id, ignored -> new ArrayList<>()).add(views.get(row.connection().id()));
-            totals.put(id, row.incomingTotal());
+        for (var value : incoming) {
+            var connection = value.row().connection();
+            UUID id = connection.targetWorkItemId();
+            var view = views.get(connection.id());
+            // Every column keeps its first 50 rows, so the first 50 across columns are always among them.
+            if (value.cellPosition() <= WorkItemConnection.MAX_PER_CELL) in.computeIfAbsent(id, ignored -> new ArrayList<>()).add(view);
+            totals.put(id, value.row().incomingTotal());
+            inByColumn.computeIfAbsent(id, ignored -> new LinkedHashMap<>())
+                    .computeIfAbsent(connection.columnId(), ignored -> new ArrayList<>()).add(view);
+            columnTotals.computeIfAbsent(id, ignored -> new LinkedHashMap<>()).put(connection.columnId(), value.columnTotal());
         }
         return new CellList(ids.stream().map(id -> new Cell(id,
                 out.getOrDefault(id, Map.of()).entrySet().stream().map(entry -> new Outgoing(entry.getKey(), entry.getValue())).toList(),
-                in.getOrDefault(id, List.of()), totals.getOrDefault(id, 0L))).toList());
+                in.getOrDefault(id, List.of()), totals.getOrDefault(id, 0L),
+                inByColumn.getOrDefault(id, Map.of()).entrySet().stream().map(entry -> new IncomingByColumn(entry.getKey(),
+                        entry.getValue(), columnTotals.get(id).get(entry.getKey()))).toList())).toList());
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
-    public ConnectionPage incoming(CurrentActor actor, UUID workItemId, OffsetPageRequest page) {
+    public ConnectionPage incoming(CurrentActor actor, UUID workItemId, UUID columnId, OffsetPageRequest page) {
         requireActor(actor);
         requirePage(page, 50);
         var item = items.findLocator(actor.companyId(), workItemId).orElseThrow(ConnectionAccess::missing);
@@ -106,8 +124,8 @@ public class WorkItemConnectionService {
         projectIds.add(item.projectId());
         var visible = access.findVisible(actor, projectIds);
         if (visible.isEmpty()) throw missing();
-        var rows = connections.findIncomingPage(actor.companyId(), workItemId, visible.keySet(), page);
-        long total = connections.countIncoming(actor.companyId(), workItemId, visible.keySet());
+        var rows = connections.findIncomingPage(actor.companyId(), workItemId, columnId, visible.keySet(), page);
+        long total = connections.countIncoming(actor.companyId(), workItemId, columnId, visible.keySet());
         var views = cards.connections(actor, rows, false);
         return new ConnectionPage(rows.stream().map(row -> views.get(row.connection().id())).toList(),
                 page.page(), page.size(), total, totalPages(total, page.size()));
@@ -146,20 +164,50 @@ public class WorkItemConnectionService {
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public CandidatePage candidates(CurrentActor actor, UUID projectId, UUID columnId, UUID targetProjectId,
-            UUID sourceWorkItemId, String query, OffsetPageRequest page) {
+            UUID sourceWorkItemId, ConnectCandidateSearch search, OffsetPageRequest page) {
         requireWritable(visible(actor, projectId));
         requirePage(page, 20);
         var column = column(actor.companyId(), projectId, columnId, false);
         requireTarget(column, targetProjectId);
         requireWritable(access.findVisible(actor, targetProjectId).orElse(null));
         items.findLocator(actor.companyId(), projectId, sourceWorkItemId).orElseThrow(ConnectionAccess::missing);
-        String normalized = query == null ? "" : query.strip();
-        if (normalized.isEmpty() || normalized.length() > 80) throw invalid("q", "INVALID_LENGTH", "搜索词须为 1–80 个字符");
-        var rows = connections.findCandidates(actor.companyId(), targetProjectId, columnId, sourceWorkItemId, normalized, page);
-        long total = connections.countCandidates(actor.companyId(), targetProjectId, normalized);
+        return candidatePage(actor, new CandidateQuery(targetProjectId, columnId, sourceWorkItemId, true, search.text(),
+                search.fields(), assignees(actor, search), search.sort()), page);
+    }
+
+    /** Searches the column's own project from a reverse column; {@code workItemId} is the target-side row. */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public CandidatePage reverseCandidates(CurrentActor actor, UUID workItemId, UUID columnId,
+            ConnectCandidateSearch search, OffsetPageRequest page) {
+        requirePage(page, 20);
+        var reverse = reverse(actor, workItemId, columnId);
+        return candidatePage(actor, new CandidateQuery(reverse.column().projectId(), columnId, reverse.target().workItemId(),
+                false, search.text(), search.fields(), assignees(actor, search), search.sort()), page);
+    }
+
+    @Transactional(readOnly = true)
+    public CreateOptions reverseCreateOptions(CurrentActor actor, UUID workItemId, UUID columnId) {
+        var reverse = reverse(actor, workItemId, columnId);
+        UUID projectId = reverse.column().projectId();
+        var project = targets.findByIds(actor.companyId(), List.of(projectId)).get(projectId);
+        if (project == null) throw missing();
+        var categories = connections.findActiveCategories(actor.companyId(), projectId);
+        if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "来源项目没有启用的工作项类别");
+        return new CreateOptions(projectId, project.name(), categories, categories.getFirst().id());
+    }
+
+    private CandidatePage candidatePage(CurrentActor actor, CandidateQuery query, OffsetPageRequest page) {
+        var rows = connections.findCandidates(actor.companyId(), query, page);
+        long total = connections.countCandidates(actor.companyId(), query);
         var cardViews = cards.cards(actor, rows.stream().map(WorkItemConnectionRepository.CandidateRow::workItemId).toList());
         return new CandidatePage(rows.stream().map(row -> new Candidate(cardViews.get(row.workItemId()), row.parent(), row.alreadyConnected()))
                 .toList(), page.page(), page.size(), total, totalPages(total, page.size()));
+    }
+
+    private List<UUID> assignees(CurrentActor actor, ConnectCandidateSearch search) {
+        if (search.text().isEmpty() || !search.fields().contains(CandidateField.ASSIGNEE)) return List.of();
+        return users.findActiveEnabledByName(actor.companyId(), search.text(), new OffsetPageRequest(0, ASSIGNEE_MATCH_LIMIT))
+                .items().stream().map(MinimalUserSnapshot::userId).toList();
     }
 
     public IdempotencyExecutionResult link(Link command) {
@@ -224,6 +272,39 @@ public class WorkItemConnectionService {
         });
     }
 
+    /** Creates a root item in the column's own project from a reverse column and connects it to the target-side row. */
+    public IdempotencyExecutionResult reverseCreateConnected(CreateReverseConnected command) {
+        var reverse = reverse(command.actor(), command.workItemId(), command.columnId());
+        var target = reverse.target();
+        UUID sourceProjectId = reverse.column().projectId();
+        UUID companyId = command.actor().companyId();
+        String title = command.title() == null ? "" : command.title().strip();
+        if (title.isEmpty() || title.length() > 300) throw invalid("title", "INVALID_LENGTH", "标题须为 1–300 个字符");
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(command.actor().userId(), "POST",
+                "createReverseConnectedWorkItem", command.idempotencyKey()), command.requestHash()), () -> {
+            var projects = lockProjects(command.actor(), sourceProjectId, target.projectId(),
+                    Set.of(sourceProjectId, target.projectId()));
+            var lockedColumn = column(companyId, sourceProjectId, command.columnId(), true);
+            requireTarget(lockedColumn, target.projectId());
+            UUID contentId = command.contentId();
+            if (contentId == null) {
+                var categories = connections.findActiveCategories(companyId, sourceProjectId);
+                if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "来源项目没有启用的工作项类别");
+                contentId = categories.getFirst().id();
+            }
+            WorkItem source = itemService.createRootItemForConnection(projects.get(sourceProjectId), contentId, title, command.actor());
+            WorkItem lockedTarget = lockItems(companyId, Map.of(target.workItemId(), target.projectId())).get(target.workItemId());
+            requireUnarchived(lockedTarget);
+            // The actor is a member of both projects, so this is an ordinary link rather than a cross-project intake.
+            var connection = WorkItemConnection.create(UUID.randomUUID(), companyId, lockedColumn.id(), sourceProjectId,
+                    source.id(), target.projectId(), target.workItemId(), WorkItemConnection.Origin.LINKED,
+                    command.actor().userId(), clock.instant());
+            if (!connections.insert(connection)) throw new IllegalStateException("new reverse connected item already connected");
+            append("workitem.connection_created", connection, lockedColumn.name(), command.actor());
+            return stored(201, response(command.actor(), connection, lockedColumn));
+        });
+    }
+
     public IdempotencyExecutionResult unlink(Unlink command) {
         var snapshot = requireVisibleConnection(command.actor(), command.connectionId()).connection();
         return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(command.actor().userId(), "DELETE",
@@ -252,6 +333,19 @@ public class WorkItemConnectionService {
         var source = items.findLocator(actor.companyId(), id).orElseThrow(ConnectionAccess::missing);
         requireWritable(visible(actor, source.projectId()));
         return source;
+    }
+
+    private record Reverse(WorkItemModels.WorkItemLocator target, ConnectColumn column) {}
+
+    private Reverse reverse(CurrentActor actor, UUID workItemId, UUID columnId) {
+        requireActor(actor);
+        var target = items.findLocator(actor.companyId(), workItemId).orElseThrow(ConnectionAccess::missing);
+        requireWritable(visible(actor, target.projectId()));
+        var column = columns.findActiveById(actor.companyId(), columnId)
+                .filter(value -> value.targetProjectIds().contains(target.projectId()))
+                .orElseThrow(ConnectionAccess::missing);
+        requireWritable(access.findVisible(actor, column.projectId()).orElse(null));
+        return new Reverse(target, column);
     }
 
     private ProjectAccessSnapshot visible(CurrentActor actor, UUID projectId) {

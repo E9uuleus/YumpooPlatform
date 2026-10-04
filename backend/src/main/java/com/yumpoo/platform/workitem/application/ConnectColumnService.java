@@ -71,7 +71,8 @@ public class ConnectColumnService {
         var visibility = access.findVisible(actor, ids);
         var incomingViews = incoming.stream().map(column -> {
             var source = snapshots.get(column.projectId());
-            return new IncomingColumn(column.columnId(), column.columnName(), column.projectId(), source.code(), source.name());
+            return new IncomingColumn(column.columnId(), column.columnName(), column.projectId(), source.code(), source.name(),
+                    source.lifecycle().name(), writable(project) && writable(visibility.get(column.projectId())));
         }).toList();
         return new Catalog(items.stream().map(column -> view(column, project, snapshots, visibility)).toList(),
                 !incomingViews.isEmpty(), incomingViews, writable(project), writable(project)

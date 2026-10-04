@@ -78,6 +78,21 @@ describe('Canvas 动效舞台', () => {
     expect(current.draw).toHaveBeenCalledTimes(1)
   })
 
+  it('一次性场景播放完毕后保留末帧并停止循环，不因可见性变化重启', () => {
+    let done = false
+    const current = { ...scene(), finished: vi.fn(() => done) }
+    const stage = createCanvasStage(sizedCanvas(), current)
+    frames.shift()!(performance.now() + 20)
+    expect(frames).toHaveLength(1)
+    done = true
+    frames.shift()!(performance.now() + 40)
+    expect(frames).toHaveLength(0)
+    expect(stage.running).toBe(false)
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(frames).toHaveLength(0)
+    stage.destroy()
+  })
+
   it('页面隐藏时暂停，销毁后不再恢复', () => {
     const current = scene()
     const stage = createCanvasStage(sizedCanvas(), current)

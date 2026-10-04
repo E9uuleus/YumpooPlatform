@@ -163,6 +163,40 @@ class ConnectionHttpIT {
     }
 
     @Test
+    void reverseRoutesSearchAndCreateFromTheTargetSideWithFieldAndSortParameters() throws Exception {
+        String id = column().path("id").asText();
+        String reverse = "/work-items/" + targetItem;
+        var browse = body(send("GET", reverse + "/reverse-connect-candidates?columnId=" + id + "&sort=TITLE", owner, null, null, null), 200);
+        assertThat(browse.path("items").get(0).path("card").path("workItemId").asText()).isEqualTo(sourceItem.toString());
+        assertThat(send("GET", reverse + "/reverse-connect-candidates?columnId=" + id, targetOwner, null, null, null).statusCode())
+                .isEqualTo(403);
+        assertThat(send("GET", reverse + "/reverse-connect-candidates?columnId=" + id + "&q=x&fields=DUE_DATE", owner, null, null, null)
+                .statusCode()).isEqualTo(422);
+        String status = java.net.URLEncoder.encode("未开始", java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(body(send("GET", collection + "/" + id + "/candidates?targetProjectId=" + target.id() + "&sourceWorkItemId="
+                + sourceItem + "&q=" + status + "&fields=STATUS&fields=NAME", owner, null, null, null), 200).path("items").size()).isEqualTo(1);
+        assertThat(body(send("GET", reverse + "/reverse-connect-create-options?columnId=" + id, owner, null, null, null), 200)
+                .path("targetProjectId").asText()).isEqualTo(source.id().toString());
+        UUID key = UUID.randomUUID();
+        var createBody = Map.of("columnId", id, "title", "HTTP 反向新建");
+        var created = send("POST", reverse + "/reverse-connected-work-items", owner, createBody, null, key);
+        var view = body(created, 201);
+        assertThat(view.path("origin").asText()).isEqualTo("LINKED");
+        assertThat(view.path("source").path("projectId").asText()).isEqualTo(source.id().toString());
+        assertThat(created.headers().firstValue("location")).contains("/api/v1/work-item-connections/" + view.path("id").asText());
+        assertThat(send("POST", reverse + "/reverse-connected-work-items", owner, createBody, null, key).body()).isEqualTo(created.body());
+        assertThat(send("POST", reverse + "/reverse-connected-work-items", owner,
+                Map.of("columnId", id, "title", "未知字段", "targetProjectId", source.id()), null, UUID.randomUUID()).statusCode()).isIn(400, 422);
+        assertThat(send("POST", reverse + "/reverse-connected-work-items", targetOwner, createBody, null, UUID.randomUUID()).statusCode())
+                .isEqualTo(403);
+        assertThat(body(send("GET", reverse + "/incoming-connections?columnId=" + id, targetOwner, null, null, null), 200)
+                .path("totalElements").asInt()).isEqualTo(1);
+        var cells = body(send("GET", "/projects/" + target.id() + "/work-item-connections?workItemIds=" + targetItem,
+                targetOwner, null, null, null), 200);
+        assertThat(cells.path("items").get(0).path("incomingByColumn").get(0).path("total").asInt()).isEqualTo(1);
+    }
+
+    @Test
     void authenticationCsrfVisibilityPreconditionsAndClosedRequestSchemasAreEnforced() throws Exception {
         assertThat(send("GET", collection, null, null, null, null).statusCode()).isEqualTo(401);
         assertThat(send("GET", collection, outsider, null, null, null).statusCode()).isEqualTo(404);

@@ -107,13 +107,13 @@ function clearDate(): void {
 .deadline-clock { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 4px; color: var(--yp-text-secondary); background: transparent; cursor: pointer; }
 .deadline-clock.is-active { color: var(--yp-action-primary); background: var(--yp-bg-hover); }
 .deadline-clock:disabled { opacity: .45; cursor: default; }
-.deadline-editor__fields { display: flex; align-items: center; min-width: 0; border-radius: var(--el-border-radius-base); background: var(--el-fill-color-blank); box-shadow: 0 0 0 1px var(--el-border-color) inset; }
-.deadline-editor__fields:hover { box-shadow: 0 0 0 1px var(--el-border-color-hover) inset; }
-.deadline-editor__fields:focus-within { box-shadow: 0 0 0 1px var(--el-color-primary) inset; }
+.deadline-editor__fields { display: flex; align-items: center; min-width: 0; border-radius: var(--yp-input-radius); background: var(--yp-input-bg); box-shadow: 0 0 0 1px var(--yp-input-border) inset; transition: box-shadow var(--yp-motion-fast) var(--yp-ease-standard); }
+.deadline-editor__fields:hover { box-shadow: 0 0 0 1px var(--yp-input-border-hover) inset; }
+.deadline-editor__fields:focus-within { box-shadow: 0 0 0 1px var(--yp-input-border-focus) inset; }
 .deadline-editor__fields :deep(.el-date-editor) { width: 0; min-width: 0; }
 .deadline-editor__fields :deep(.deadline-editor__date) { flex: 1; }
 .deadline-editor__fields :deep(.deadline-editor__time) { flex: 0 0 104px; }
 .deadline-editor__divider { flex: 0 0 1px; height: 18px; background: var(--el-border-color); }
-.deadline-editor__fields :deep(.el-input__wrapper) { min-width: 0; padding: 1px 10px; background: transparent; box-shadow: none; outline: none; }
+.deadline-editor__fields :deep(.el-input__wrapper) { min-width: 0; padding: 1px 10px; background: transparent; box-shadow: none; }
 .deadline-editor__fields :deep(.el-input__prefix) { display: none; }
 </style>

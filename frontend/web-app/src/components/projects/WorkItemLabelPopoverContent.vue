@@ -738,8 +738,7 @@ function onDrop(targetIndex: number): void {
 }
 
 .label-card-box:focus-within {
-  border-color: var(--yp-action-primary);
-  box-shadow: 0 0 0 1px var(--yp-action-primary);
+  border-color: var(--yp-input-border-focus);
 }
 
 .label-card-box--inactive {
@@ -775,9 +774,7 @@ function onDrop(targetIndex: number): void {
 
 .label-name-input :deep(.el-input__wrapper) {
   padding: 0 3px;
-  outline: none !important;
-  outline-offset: 0;
-  box-shadow: none !important;
+  box-shadow: none;
   background: transparent;
   height: 26px;
 }

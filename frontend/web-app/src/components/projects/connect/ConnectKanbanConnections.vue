@@ -1,33 +1,38 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElPopover } from 'element-plus'
-import type { WorkItemConnection } from '@yumpoo/api-client'
+import type { WorkItemConnection, WorkItemConnectionCell } from '@yumpoo/api-client'
 import ConnectionChip from './ConnectionChip.vue'
 import ConnectionList from './ConnectionList.vue'
 
-defineProps<{ connections: WorkItemConnection[] }>()
-const emit = defineEmits<{ openCard: [connection: WorkItemConnection] }>()
+type Side = 'source' | 'target'
+const props = defineProps<{ cell?: WorkItemConnectionCell | undefined }>()
+const emit = defineEmits<{ openCard: [connection: WorkItemConnection, side: Side] }>()
 const expanded = ref(false)
-function openCard(connection: WorkItemConnection) { expanded.value = false; emit('openCard', connection) }
+const outgoing = computed(() => props.cell?.outgoing.flatMap(column => column.connections) ?? [])
+const reverse = computed(() => props.cell?.incomingByColumn.flatMap(column => column.connections) ?? [])
+const entries = computed(() => [...outgoing.value.map(connection => ({ connection, side: 'source' as Side, card: connection.target })),
+  ...reverse.value.map(connection => ({ connection, side: 'target' as Side, card: connection.source }))])
+function openCard(connection: WorkItemConnection, side: Side) { expanded.value = false; emit('openCard', connection, side) }
 </script>
 
 <template>
   <div
-    v-if="connections.length"
+    v-if="entries.length"
     class="kanban-connections"
-    aria-label="出站连接"
+    aria-label="连接"
     @dragstart.stop.prevent
   >
     <connection-chip
-      v-for="connection in connections.slice(0, 3)"
-      :key="connection.id"
-      :card="connection.target"
+      v-for="entry in entries.slice(0, 3)"
+      :key="entry.connection.id"
+      :card="entry.card"
       :show-project="true"
-      :tooltip="`${connection.columnName} · ${connection.target.projectName} · ${connection.target.title}`"
-      @click="openCard(connection)"
+      :tooltip="`${entry.side === 'source' ? entry.connection.columnName : `双向连接 · ${entry.connection.columnName}`} · ${entry.card.projectName} · ${entry.card.title}`"
+      @click="openCard(entry.connection, entry.side)"
     />
     <el-popover
-      v-if="connections.length > 3"
+      v-if="entries.length > 3"
       v-model:visible="expanded"
       trigger="click"
       :width="380"
@@ -37,17 +42,25 @@ function openCard(connection: WorkItemConnection) { expanded.value = false; emit
         <button
           type="button"
           class="kanban-connections__more"
-          :aria-label="`查看全部 ${connections.length} 个连接`"
+          :aria-label="`查看全部 ${entries.length} 个连接`"
           @click.stop
         >
-          +{{ connections.length - 3 }}
+          +{{ entries.length - 3 }}
         </button>
       </template>
       <connection-list
-        :connections="connections"
+        v-if="outgoing.length"
+        :connections="outgoing"
         perspective="source"
         read-only
-        @open-card="openCard"
+        @open-card="openCard($event, 'source')"
+      />
+      <connection-list
+        v-if="reverse.length"
+        :connections="reverse"
+        perspective="target"
+        read-only
+        @open-card="openCard($event, 'target')"
       />
     </el-popover>
   </div>

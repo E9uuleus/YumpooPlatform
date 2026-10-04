@@ -1,20 +1,24 @@
 <script setup lang="ts">
-import { computed, provide, reactive, ref, shallowRef } from 'vue'
-import { ProjectLifecycle, type ConnectColumn, type ConnectColumnCatalog, type WorkItemConnection } from '@yumpoo/api-client'
+import { computed, nextTick, provide, reactive, ref, shallowRef } from 'vue'
+import { ProjectLifecycle, type ConnectColumn, type ConnectColumnCatalog, type WorkItemConnection, type WorkItemConnectionCell, type WorkItemDetail } from '@yumpoo/api-client'
 import ConnectCell from '../components/projects/connect/ConnectCell.vue'
-import IncomingConnectCell from '../components/projects/connect/IncomingConnectCell.vue'
 import ConnectColumnAddButton from '../components/projects/connect/ConnectColumnAddButton.vue'
 import ConnectColumnHeader from '../components/projects/connect/ConnectColumnHeader.vue'
-import ConnectColumnDialog from '../components/projects/connect/ConnectColumnDialog.vue'
+import ConnectColumnSetupPopover from '../components/projects/connect/ConnectColumnSetupPopover.vue'
+import ConnectTableCell from '../components/projects/connect/ConnectTableCell.vue'
+import { connectColumnAutoName } from '../components/projects/connect/connectColumnKeys'
+import type { ConnectSetupMode, ConnectTargetChoice } from '../components/projects/connect/useConnectTable'
 import ConnectColumnDeleteDialog from '../components/projects/connect/ConnectColumnDeleteDialog.vue'
-import ConnectionCardDialog from '../components/projects/connect/ConnectionCardDialog.vue'
+import ConnectedItemCard from '../components/projects/connect/ConnectedItemCard.vue'
 import ProjectConnectionsOverview from '../components/projects/connect/ProjectConnectionsOverview.vue'
 import ConnectFilterSection from '../components/projects/connect/ConnectFilterSection.vue'
 import ConnectKanbanConnections from '../components/projects/connect/ConnectKanbanConnections.vue'
 import YpAssignee from '../components/yp/YpAssignee.vue'
 import { connectColumnsContext, type ConnectColumns } from '../components/projects/connect/useConnectColumns'
 import { workItemLabelColorValue } from '../components/projects/workItemLabelColors'
-import { previewColumn, previewConnection, previewConnections, previewSecondProject, previewSource, previewTarget } from './connectColumnFixtures'
+import { connectedItemSource, type ConnectedItemSource } from '../components/projects/connect/useConnectedItem'
+import { previewColumn, previewConnection, previewConnections, previewContents, previewDetail, previewLabels, previewProject, previewSecondProject,
+  previewSource, previewTarget } from './connectColumnFixtures'
 
 const role = ref<'member' | 'nonmember' | 'admin'>('member'), view = ref('source')
 const readOnly = computed(() => role.value === 'admin')
@@ -29,10 +33,12 @@ function changeFilter(field: keyof typeof filters, id: string, checked: boolean)
 }
 const kanbanConnections = computed(() => [...previewConnections, ...previewConnections.slice(0, 2).map((connection, index) => ({ ...connection,
   id: `preview-more-${index}`, columnName: '跨项目协作', target: { ...connection.target, projectId: previewSecondProject.projectId, projectCode: previewSecondProject.code, projectName: previewSecondProject.name } }))].map(projectConnection))
+const kanbanCell = computed<WorkItemConnectionCell>(() => ({ workItemId: previewSource.workItemId, incoming: [], incomingTotal: 0, incomingByColumn: [],
+  outgoing: [{ columnId: previewColumn.id, connections: kanbanConnections.value }] }))
 const card = shallowRef<WorkItemConnection>(), perspective = ref<'source' | 'target'>('source')
-const dialogOpen = ref(false), editing = shallowRef<ConnectColumn>(), deleting = shallowRef<ConnectColumn>()
+const setup = ref<{ id: string; mode: ConnectSetupMode }>(), deleting = shallowRef<ConnectColumn>()
 const catalog = computed<ConnectColumnCatalog>(() => ({ items: columns.value, incomingAvailable: true,
-  incomingColumns: [{ columnId: 'preview-incoming', columnName: '实施问题', projectId: previewSecondProject.projectId, projectName: previewSecondProject.name, projectCode: previewSecondProject.code }],
+  incomingColumns: [{ columnId: 'preview-incoming', columnName: '实施问题', projectId: previewSecondProject.projectId, projectName: previewSecondProject.name, projectCode: previewSecondProject.code, projectLifecycle: ProjectLifecycle.Active, actorCanLinkExisting: true }],
   canManage: !readOnly.value, canDelete: !readOnly.value }))
 const rows = [previewSource, { ...previewSource, workItemId: 'preview-source-2', itemNo: 'P012-9', title: '批量导出缺少列', assignee: null },
   { ...previewSource, workItemId: 'preview-source-3', itemNo: 'P012-10', title: '新站点初始化失败' }]
@@ -45,7 +51,18 @@ function rowConnections(id: string, column: ConnectColumn) {
     target: column.id === 'preview-multi' && connection.id === 'preview-connection-2' ? { ...connection.target, projectId: previewSecondProject.projectId, projectCode: previewSecondProject.code, projectName: previewSecondProject.name } : connection.target }))
 }
 function openCard(connection: WorkItemConnection, side: 'source' | 'target' = 'source') { perspective.value = side; card.value = projectConnection(connection) }
-function edit(column?: ConnectColumn) { editing.value = column; dialogOpen.value = true }
+const tableScroll = ref<HTMLElement>()
+function edit(column?: ConnectColumn) {
+  if (readOnly.value) return
+  setup.value = column ? { id: column.id, mode: 'edit' } : { id: 'draft', mode: 'create' }
+  if (!column) void nextTick(() => tableScroll.value?.scrollTo({ left: tableScroll.value.scrollWidth }))
+}
+async function submitSetup(projects: ConnectTargetChoice[], column?: ConnectColumn) {
+  const others = columns.value.filter(item => item.id !== column?.id).map(item => item.name)
+  const input = { name: column?.name ?? connectColumnAutoName(projects.map(project => project.name), others), targetProjectIds: new Set(projects.map(project => project.id)) }
+  if (column) await service.updateColumn(column, input); else await service.createColumn(input)
+  setup.value = undefined
+}
 const service: ConnectColumns = {
   catalog, cells: shallowRef(new Map()), catalogLoading: ref(false), catalogError: ref(), cellError: ref(),
   loadCatalog: async () => {}, ensureCells: async () => {}, refreshCells: async () => {},
@@ -59,6 +76,8 @@ const service: ConnectColumns = {
   },
   deleteColumn: async column => { baseColumns.value = baseColumns.value.filter(current => current.id !== column.id); return connections.value.length },
   link: async () => previewConnection,
+  reverseLink: async () => previewConnection,
+  reverseCreateAndLink: async () => previewConnection,
   createAndLink: async (_id, input) => {
     const created = { ...previewConnection, id: crypto.randomUUID(), target: { ...previewTarget, title: input.title, assignee: null, priority: null } }
     connections.value = [...connections.value, created]; return created
@@ -68,9 +87,38 @@ const service: ConnectColumns = {
   searchTargets: async query => ({ items: [previewColumn.targets[0]!, previewSecondProject].map(target => ({ id: target.projectId, code: target.code, name: target.name })).filter(target => `${target.name}${target.code}`.includes(query)), page: 0, size: 20, totalElements: 2, totalPages: 1 }),
   createOptions: async () => ({ targetProjectId: previewTarget.projectId, targetProjectName: previewTarget.projectName, categories: [previewTarget.category], defaultContentId: previewTarget.category.id }),
   searchCandidates: async () => ({ items: [{ card: previewTarget, parent: null, alreadyConnected: true }, { card: { ...previewTarget, title: '打印队列重试机制', workItemId: 'preview-candidate', itemNo: 'P003-55' }, parent: null, alreadyConnected: false }], page: 0, size: 20, totalElements: 2, totalPages: 1 }),
+  reverseCandidates: async () => ({ items: [
+    { card: { ...previewSource, workItemId: 'preview-source-2', itemNo: 'P012-9', title: '批量导出缺少列', assignee: null }, parent: null, alreadyConnected: false },
+    { card: { ...previewSource, workItemId: 'preview-source-4', itemNo: 'P012-12', title: '门店打印机离线告警', status: { ...previewSource.status, code: 'TODO', name: '未开始', colorToken: previewSource.category.colorToken } }, parent: null, alreadyConnected: false },
+  ], page: 0, size: 20, totalElements: 2, totalPages: 1 }),
+  reverseCreateOptions: async () => ({ targetProjectId: previewSecondProject.projectId, targetProjectName: previewSecondProject.name, categories: [previewTarget.category], defaultContentId: previewTarget.category.id }),
   incoming: async () => ({ items: [projectConnection(previewConnection)], page: 0, size: 50, totalElements: 1, totalPages: 1 }),
 }
 provide(connectColumnsContext, service)
+// The card edits an in-memory copy so the editable field layout can be reviewed without a backend.
+const details = new Map<string, WorkItemDetail>()
+const itemSource: ConnectedItemSource = {
+  load: async workItemId => {
+    const card = [...previewConnections.flatMap(connection => [connection.source, connection.target]), previewTarget]
+      .find(value => value.workItemId === workItemId) ?? previewTarget
+    const detail = details.get(workItemId) ?? previewDetail(card)
+    return { detail, project: previewProject(card), contents: previewContents(card.projectId), labels: previewLabels }
+  },
+  edit: async (detail, change) => {
+    const content = previewContents(detail.projectId).items.find(item => item.id === change.value)
+    const status = previewLabels.statuses.find(item => item.code === change.value)
+    const updated: WorkItemDetail = { ...detail, rowVersion: detail.rowVersion + 1, etag: `"${detail.rowVersion + 1}"`, updatedAt: new Date(),
+      ...(change.field === 'title' ? { title: change.value } : {}),
+      ...(change.field === 'priority' ? { priority: change.value as string | null } : {}),
+      ...(change.field === 'assignee' ? { assigneeUserId: change.value as string | null, assigneeDisplayName: change.value ? '王五' : null } : {}),
+      ...(change.field === 'dueDate' ? { dueDate: change.value as Date | null, dueTime: change.dueTime ?? null } : {}),
+      ...(change.field === 'content' && content ? { contentId: content.id, contentName: content.name, contentColorToken: content.colorToken } : {}),
+      ...(change.field === 'status' && status ? { statusCode: status.code, statusCategory: status.statusCategory } : {}) }
+    details.set(detail.id, updated)
+    return updated
+  },
+}
+provide(connectedItemSource, itemSource)
 </script>
 
 <template>
@@ -137,12 +185,15 @@ provide(connectColumnsContext, service)
           <article class="connect-preview__kanban-card">
             <small>{{ index === 0 ? previewSource.itemNo : 'P012-9' }}</small>
             <strong>{{ index === 0 ? previewSource.title : '批量导出缺少列' }}</strong>
-            <connect-kanban-connections :connections="index === 0 ? kanbanConnections : []" @open-card="openCard($event)" />
+            <connect-kanban-connections :cell="index === 0 ? kanbanCell : undefined" @open-card="openCard" />
           </article>
         </section>
       </div>
       <template v-else>
-        <div class="connect-preview__table-scroll">
+        <div
+          ref="tableScroll"
+          class="connect-preview__table-scroll"
+        >
           <table class="connect-preview__table">
             <thead>
               <tr>
@@ -159,15 +210,50 @@ provide(connectColumnsContext, service)
                     :key="column.id"
                     class="connect-preview__connection"
                   >
-                    <connect-column-header
-                      :label="column.name"
-                      kind="connect"
-                      :can-manage="!readOnly"
-                      :can-delete="!readOnly"
-                      @edit="edit(column)"
-                      @hide="hidden.push(column.id)"
-                      @delete="deleting = column"
-                    />
+                    <div class="connect-preview__header-host">
+                      <connect-column-header
+                        :label="column.name"
+                        kind="connect"
+                        :can-manage="!readOnly"
+                        :can-delete="!readOnly"
+                        :taken-names="columns.map(item => item.name)"
+                        :rename="name => service.updateColumn(column, { name, targetProjectIds: new Set(column.targets.map(target => target.projectId)) })"
+                        @edit="edit(column)"
+                        @hide="hidden.push(column.id)"
+                        @delete="deleting = column"
+                      />
+                      <connect-column-setup-popover
+                        v-if="setup?.id === column.id"
+                        :visible="true"
+                        mode="edit"
+                        :column="column"
+                        :project-id="previewSource.projectId"
+                        :project-name="previewSource.projectName"
+                        :submit="projects => submitSetup(projects, column)"
+                        @update:visible="setup = undefined"
+                      />
+                    </div>
+                  </th>
+                  <th
+                    v-if="setup?.id === 'draft'"
+                    class="connect-preview__connection"
+                  >
+                    <div class="connect-preview__header-host">
+                      <connect-column-header
+                        label="新连接"
+                        kind="draft"
+                        :can-manage="false"
+                        :can-delete="false"
+                      />
+                      <connect-column-setup-popover
+                        :visible="true"
+                        mode="create"
+                        :project-id="previewSource.projectId"
+                        :project-name="previewSource.projectName"
+                        :submit="projects => submitSetup(projects)"
+                        @update:visible="setup = undefined"
+                      />
+                    </div>
                   </th>
                 </template>
                 <th
@@ -175,8 +261,9 @@ provide(connectColumnsContext, service)
                   class="connect-preview__connection"
                 >
                   <connect-column-header
-                    label="被连接"
-                    kind="incoming"
+                    :label="catalog.incomingColumns[0]!.projectName"
+                    kind="reverse"
+                    :reverse-hint="`双向连接：来自「${catalog.incomingColumns[0]!.projectName}」的「${catalog.incomingColumns[0]!.columnName}」`"
                     :can-manage="false"
                     :can-delete="false"
                   />
@@ -224,13 +311,22 @@ provide(connectColumnsContext, service)
                       @open-card="openCard($event)"
                     />
                   </td>
+                  <td v-if="setup?.id === 'draft'">
+                    <connect-table-cell
+                      :column="{ key: 'connect-draft', kind: 'draft', label: '新连接', width: 200, minWidth: 140 }"
+                      :item="{ id: row.workItemId, title: row.title }"
+                      :read-only="true"
+                      :row-index="index"
+                    />
+                  </td>
                 </template>
                 <td v-else>
-                  <incoming-connect-cell
+                  <connect-cell
                     :key="role"
                     :item="{ id: row.workItemId, title: row.title }"
-                    :incoming="index === 0 ? [projectConnection(previewConnection)] : []"
-                    :incoming-total="index === 0 ? 1 : 0"
+                    :reverse="catalog.incomingColumns[0]!"
+                    :connections="index === 0 ? [projectConnection(previewConnection)] : []"
+                    :total="index === 0 ? 1 : 0"
                     :read-only="readOnly"
                     @open-card="openCard($event, 'target')"
                   />
@@ -262,20 +358,12 @@ provide(connectColumnsContext, service)
         已归档
       </el-button>
     </div>
-    <connect-column-dialog
-      v-if="dialogOpen"
-      v-model:open="dialogOpen"
-      :project-id="previewSource.projectId"
-      :mode="editing ? 'edit' : 'create'"
-      :column="editing"
-      :existing-names="columns.map(column => column.name)"
-    />
     <connect-column-delete-dialog
       v-if="deleting"
       :column="deleting"
       @close="deleting = undefined"
     />
-    <connection-card-dialog
+    <connected-item-card
       v-if="card"
       :open="Boolean(card)"
       :connection="card"
@@ -288,6 +376,7 @@ provide(connectColumnsContext, service)
 
 <style scoped>
 .connect-preview { min-width: 0; scroll-margin-top: 20px; }
+.connect-preview__header-host { position: relative; }
 .connect-preview .section-heading p { margin: 6px 0 0; color: var(--yp-text-muted); font-size: 12px; }
 .connect-preview__controls { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; }
 .connect-preview__surface { min-width: 0; padding: 24px; border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-raised); }

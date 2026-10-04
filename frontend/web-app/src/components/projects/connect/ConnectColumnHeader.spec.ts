@@ -1,6 +1,7 @@
-import { enableAutoUnmount, mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it } from 'vitest'
-import { ElDropdown, ElDropdownItem } from 'element-plus'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ElDropdown, ElDropdownItem, ElInput } from 'element-plus'
 import ConnectColumnHeader from './ConnectColumnHeader.vue'
 
 enableAutoUnmount(afterEach)
@@ -21,15 +22,38 @@ describe('连接列表头', () => {
     window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1 }))
     expect(wrapper.emitted('resize')?.slice(-2)).toEqual([[180, false], [200, false]])
   })
-  it('成员只有设置和隐藏，负责人可删除，被连接列始终只有隐藏', async () => {
+  it('成员只有设置和隐藏，负责人可删除，反向列始终只有隐藏', async () => {
     const wrapper = mount(ConnectColumnHeader, { props: { label: '产品缺陷', kind: 'connect', canManage: true, canDelete: false } })
     expect(wrapper.findAllComponents(ElDropdownItem).map(item => item.props('command'))).toEqual(['edit', 'hide'])
     await wrapper.setProps({ canDelete: true })
     expect(wrapper.findAllComponents(ElDropdownItem).map(item => item.props('command'))).toEqual(['edit', 'hide', 'delete'])
-    await wrapper.setProps({ kind: 'incoming' })
+    await wrapper.setProps({ kind: 'reverse', reverseHint: '双向连接：来自「华东现场」的「实施问题」' })
     expect(wrapper.findAllComponents(ElDropdownItem).map(item => item.props('command'))).toEqual(['hide'])
+    expect(wrapper.get('.connect-column-header__two-way').attributes('aria-label')).toBe('双向连接')
     wrapper.findComponent(ElDropdown).vm.$emit('command', 'hide')
     expect(wrapper.emitted('hide')).toHaveLength(1)
+  })
+  it('双击或菜单重命名，校验重名并提交，失败保留编辑态，Esc 取消', async () => {
+    const rename = vi.fn(async () => undefined)
+    const wrapper = mount(ConnectColumnHeader, { attachTo: document.body, props: { label: '产品缺陷', kind: 'connect', canManage: true, canDelete: false, takenNames: ['产品缺陷', '现场问题'], rename } })
+    expect(wrapper.findAllComponents(ElDropdownItem).map(item => item.props('command'))).toEqual(['edit', 'rename', 'hide'])
+    await wrapper.get('.connect-column-header__label').trigger('dblclick')
+    const input = wrapper.getComponent(ElInput)
+    input.vm.$emit('update:modelValue', '现场问题'); await nextTick()
+    expect(wrapper.find('.connect-column-header__input.is-invalid').exists()).toBe(true)
+    await input.find('input').trigger('keydown', { key: 'Enter' })
+    expect(rename).not.toHaveBeenCalled()
+    input.vm.$emit('update:modelValue', '打印问题'); await nextTick()
+    await input.find('input').trigger('keydown', { key: 'Enter' }); await flushPromises()
+    expect(rename).toHaveBeenCalledWith('打印问题')
+    expect(wrapper.findComponent(ElInput).exists()).toBe(false)
+    wrapper.findComponent(ElDropdown).vm.$emit('command', 'rename'); await nextTick()
+    await wrapper.getComponent(ElInput).find('input').trigger('keydown', { key: 'Escape' })
+    expect(wrapper.findComponent(ElInput).exists()).toBe(false)
+    await wrapper.setProps({ kind: 'draft' })
+    expect(wrapper.find('.connect-column-header__menu').exists()).toBe(false)
+    await wrapper.get('.connect-column-header__label').trigger('dblclick')
+    expect(wrapper.findComponent(ElInput).exists()).toBe(false)
   })
   it('列宽按键盘调整并限制最小值，表头不提供拖拽排序', async () => {
     const wrapper = mount(ConnectColumnHeader, { props: { label: '产品缺陷', kind: 'connect', canManage: false, canDelete: false, width: 140, minWidth: 140, columnKey: 'connect:1' } })

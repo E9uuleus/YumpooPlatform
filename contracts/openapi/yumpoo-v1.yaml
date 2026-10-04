@@ -362,7 +362,7 @@ paths:
           $ref: "#/components/responses/ResourceNotFound"
         "422":
           $ref: "#/components/responses/ValidationFailed"
-      description: 只返回本项目未删除工作项，外项目 ID 静默忽略；incoming 最多 50 条，incomingTotal 为完整计数。请求 1–100 行采用固定次数批量 SQL。
+      description: 只返回本项目未删除工作项，外项目 ID 静默忽略；incomingByColumn 按来源连接列分组，每列最多 50 条并给出该列完整计数，供目标项目渲染双向连接的反向列。incoming 与 incomingTotal 是跨列汇总的兼容视图（最多 50 条与完整计数）。请求 1–100 行采用固定次数批量 SQL。
   /work-items/{workItemId}/incoming-connections:
     get:
       tags:
@@ -375,6 +375,12 @@ paths:
         - name: workItemId
           in: path
           required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: query
+          required: false
+          description: 只返回该来源连接列的入站连接，用于反向列展开分页。
           schema:
             $ref: "#/components/schemas/Uuid"
         - name: page
@@ -591,11 +597,29 @@ paths:
             $ref: "#/components/schemas/Uuid"
         - name: q
           in: query
-          required: true
+          required: false
+          description: 为空时按排序浏览全部工作项。
           schema:
             type: string
-            minLength: 1
+            minLength: 0
             maxLength: 80
+        - name: fields
+          in: query
+          required: false
+          description: 搜索词匹配的字段，默认只匹配名称（标题与编号前缀）；处理人按姓名匹配最多 100 位有效成员。
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/ConnectCandidateField"
+            minItems: 1
+            maxItems: 5
+          style: form
+          explode: true
+        - name: sort
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ConnectCandidateSort"
         - name: page
           in: query
           required: false
@@ -638,7 +662,7 @@ paths:
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationFailed"
-      description: 根项与子项均可返回，排除已删除；匹配标题与工作项编号前缀，完全编号匹配优先，其次 updated_at DESC、id。
+      description: 根项与子项均可返回，排除已删除；搜索词按所选字段匹配，任一字段命中即返回。完全编号匹配优先，其次按 sort（RECENT 为 updated_at DESC，TITLE 为标题升序）与 id 排序。
   /work-items/{workItemId}/connections:
     post:
       tags:
@@ -764,6 +788,197 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationFailed"
       description: 仅要求来源项目 OWNER/MEMBER，两端项目 ACTIVE。目标根项与连接在同一事务创建，默认状态 NOT_STARTED，其余可选字段为空。
+  /work-items/{workItemId}/reverse-connect-candidates:
+    get:
+      tags:
+        - WorkItems
+      operationId: searchReverseConnectCandidates
+      summary: 从反向列搜索连接列所在项目的工作项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          description: 目标项目中打开反向列的工作项。
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: q
+          in: query
+          required: false
+          description: 为空时按排序浏览全部工作项。
+          schema:
+            type: string
+            minLength: 0
+            maxLength: 80
+        - name: fields
+          in: query
+          required: false
+          description: 搜索词匹配的字段，默认只匹配名称（标题与编号前缀）；处理人按姓名匹配最多 100 位有效成员。
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/ConnectCandidateField"
+            minItems: 1
+            maxItems: 5
+          style: form
+          explode: true
+        - name: sort
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ConnectCandidateSort"
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 20
+      responses:
+        "200":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectCandidatePage"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectCandidatePage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 要求当前用户同时是两端项目的 OWNER/MEMBER 且两端 ACTIVE；连接列须以该工作项所在项目为目标，否则返回 404。alreadyConnected 表示候选项已作为来源连接到该工作项。
+  /work-items/{workItemId}/reverse-connect-create-options:
+    get:
+      tags:
+        - WorkItems
+      operationId: getReverseConnectCreateOptions
+      summary: 读取反向新建并关联的来源项目类别选项
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: columnId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: 操作成功；targetProjectId 是新工作项将要创建到的连接列所在项目。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectCreateOptions"
+              examples:
+                example:
+                  $ref: "#/components/examples/ConnectCreateOptions"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-items/{workItemId}/reverse-connected-work-items:
+    post:
+      tags:
+        - WorkItems
+      operationId: createReverseConnectedWorkItem
+      summary: 从反向列在连接列所在项目新建根工作项并关联
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReverseConnectedWorkItemCreateRequest"
+            examples:
+              example:
+                $ref: "#/components/examples/ReverseConnectedWorkItemCreateRequest"
+      responses:
+        "201":
+          description: 操作成功。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Location:
+              $ref: "#/components/headers/Location"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemConnection"
+              examples:
+                example:
+                  $ref: "#/components/examples/WorkItemConnection"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+      description: 要求两端项目 OWNER/MEMBER 且 ACTIVE，不构成跨项目投递；新根项建在连接列所在项目，与连接在同一事务创建，连接 origin 为 LINKED，不产生投递通知。
   /me/notifications:
     get:
       tags: [Notifications]
@@ -5137,12 +5352,15 @@ components:
     ConnectColumnIncoming:
       type: object
       additionalProperties: false
+      description: 以当前项目为目标的其他项目连接列，目标项目据此渲染双向连接的反向列。
       required:
         - columnId
         - columnName
         - projectId
         - projectCode
         - projectName
+        - projectLifecycle
+        - actorCanLinkExisting
       properties:
         columnId:
           $ref: "#/components/schemas/Uuid"
@@ -5158,6 +5376,11 @@ components:
         projectName:
           type: string
           minLength: 1
+        projectLifecycle:
+          $ref: "#/components/schemas/ProjectLifecycle"
+        actorCanLinkExisting:
+          type: boolean
+          description: 当前用户是两端项目 OWNER/MEMBER 且两端 ACTIVE，可从反向列关联、新建或搜索。
     ConnectColumnTarget:
       type: object
       additionalProperties: false
@@ -5560,6 +5783,26 @@ components:
             $ref: "#/components/schemas/WorkItemConnection"
           minItems: 1
           maxItems: 50
+    WorkItemConnectionIncomingColumn:
+      type: object
+      additionalProperties: false
+      required:
+        - columnId
+        - connections
+        - total
+      properties:
+        columnId:
+          $ref: "#/components/schemas/Uuid"
+        connections:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemConnection"
+          minItems: 1
+          maxItems: 50
+        total:
+          type: integer
+          format: int64
+          minimum: 1
     WorkItemConnectionCell:
       type: object
       additionalProperties: false
@@ -5568,6 +5811,7 @@ components:
         - outgoing
         - incoming
         - incomingTotal
+        - incomingByColumn
       properties:
         workItemId:
           $ref: "#/components/schemas/Uuid"
@@ -5585,6 +5829,10 @@ components:
           type: integer
           format: int64
           minimum: 0
+        incomingByColumn:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemConnectionIncomingColumn"
     WorkItemConnectionCellList:
       type: object
       additionalProperties: false
@@ -5744,6 +5992,36 @@ components:
           type: string
           format: uuid
           nullable: true
+    ReverseConnectedWorkItemCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - columnId
+        - title
+      properties:
+        columnId:
+          $ref: "#/components/schemas/Uuid"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        contentId:
+          type: string
+          format: uuid
+          nullable: true
+    ConnectCandidateField:
+      type: string
+      enum:
+        - NAME
+        - ASSIGNEE
+        - STATUS
+        - PRIORITY
+        - CONTENT
+    ConnectCandidateSort:
+      type: string
+      enum:
+        - RECENT
+        - TITLE
     ConnectTargetInUseDetails:
       type: object
       additionalProperties: false
@@ -9839,6 +10117,12 @@ components:
     ConnectedWorkItemCreateRequest:
       summary: ConnectedWorkItemCreateRequest 连接契约黄金样例
       externalValue: ../examples/connections/connected-work-item-create-request.json
+    ReverseConnectedWorkItemCreateRequest:
+      summary: ReverseConnectedWorkItemCreateRequest 连接契约黄金样例
+      externalValue: ../examples/connections/reverse-connected-work-item-create-request.json
+    WorkItemConnectionIncomingColumn:
+      summary: WorkItemConnectionIncomingColumn 连接契约黄金样例
+      externalValue: ../examples/connections/work-item-connection-incoming-column.json
     ConnectTargetInUseDetails:
       summary: ConnectTargetInUseDetails 连接契约黄金样例
       externalValue: ../examples/connections/connect-target-in-use-details.json

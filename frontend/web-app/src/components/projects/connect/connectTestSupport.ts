@@ -9,10 +9,13 @@ export function connectionTestContext() {
     catalog: shallowRef(structuredClone(connectionCatalog)), cells: shallowRef(new Map()), catalogLoading: ref(false),
     catalogError: ref(), cellError: ref(), loadCatalog: vi.fn(async () => {}), ensureCells: vi.fn(async () => {}), refreshCells: vi.fn(async () => {}),
     createColumn: vi.fn(async () => connectColumn), updateColumn: vi.fn(async () => connectColumn), deleteColumn: vi.fn(async () => 3),
-    link: vi.fn(async () => connection), createAndLink: vi.fn(async () => connection), unlink: vi.fn(async () => {}), getConnection: vi.fn(async () => connection),
+    link: vi.fn(async () => connection), createAndLink: vi.fn(async () => connection), reverseLink: vi.fn(async () => connection),
+    reverseCreateAndLink: vi.fn(async () => connection), unlink: vi.fn(async () => {}), getConnection: vi.fn(async () => connection),
     searchTargets: vi.fn((query, page, signal) => workItemsApi.searchConnectTargetProjects({ query, page, size: 20 }, { signal: signal ?? null })),
     createOptions: vi.fn(async () => ({ targetProjectId: connection.target.projectId, targetProjectName: connection.target.projectName, categories: [connection.target.category], defaultContentId: connection.target.category.id })),
     searchCandidates: vi.fn(async () => ({ items: [], page: 0, size: 20, totalElements: 0, totalPages: 0 })),
+    reverseCandidates: vi.fn(async () => ({ items: [], page: 0, size: 20, totalElements: 0, totalPages: 0 })),
+    reverseCreateOptions: vi.fn(async () => ({ targetProjectId: connection.source.projectId, targetProjectName: connection.source.projectName, categories: [connection.source.category], defaultContentId: connection.source.category.id })),
     incoming: vi.fn(async () => ({ items: [], page: 0, size: 50, totalElements: 0, totalPages: 0 })),
   }
   return { context, global: { provide: { [connectColumnsContext as symbol]: context } } }

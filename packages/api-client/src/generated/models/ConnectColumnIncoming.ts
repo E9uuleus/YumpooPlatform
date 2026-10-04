@@ -12,8 +12,16 @@
  */
 
 import { mapValues } from '../runtime';
+import type { ProjectLifecycle } from './ProjectLifecycle';
+import {
+    ProjectLifecycleFromJSON,
+    ProjectLifecycleFromJSONTyped,
+    ProjectLifecycleToJSON,
+    ProjectLifecycleToJSONTyped,
+} from './ProjectLifecycle';
+
 /**
- *
+ * 以当前项目为目标的其他项目连接列，目标项目据此渲染双向连接的反向列。
  * @export
  * @interface ConnectColumnIncoming
  */
@@ -48,7 +56,21 @@ export interface ConnectColumnIncoming {
      * @memberof ConnectColumnIncoming
      */
     projectName: string;
+    /**
+     *
+     * @type {ProjectLifecycle}
+     * @memberof ConnectColumnIncoming
+     */
+    projectLifecycle: ProjectLifecycle;
+    /**
+     * 当前用户是两端项目 OWNER/MEMBER 且两端 ACTIVE，可从反向列关联、新建或搜索。
+     * @type {boolean}
+     * @memberof ConnectColumnIncoming
+     */
+    actorCanLinkExisting: boolean;
 }
+
+
 
 /**
  * Check if a given object implements the ConnectColumnIncoming interface.
@@ -59,6 +81,8 @@ export function instanceOfConnectColumnIncoming(value: object): value is Connect
     if (!('projectId' in value) || value['projectId'] === undefined) return false;
     if (!('projectCode' in value) || value['projectCode'] === undefined) return false;
     if (!('projectName' in value) || value['projectName'] === undefined) return false;
+    if (!('projectLifecycle' in value) || value['projectLifecycle'] === undefined) return false;
+    if (!('actorCanLinkExisting' in value) || value['actorCanLinkExisting'] === undefined) return false;
     return true;
 }
 
@@ -77,6 +101,8 @@ export function ConnectColumnIncomingFromJSONTyped(json: any, ignoreDiscriminato
         'projectId': json['projectId'],
         'projectCode': json['projectCode'],
         'projectName': json['projectName'],
+        'projectLifecycle': ProjectLifecycleFromJSON(json['projectLifecycle']),
+        'actorCanLinkExisting': json['actorCanLinkExisting'],
     };
 }
 
@@ -96,5 +122,7 @@ export function ConnectColumnIncomingToJSONTyped(value?: ConnectColumnIncoming |
         'projectId': value['projectId'],
         'projectCode': value['projectCode'],
         'projectName': value['projectName'],
+        'projectLifecycle': ProjectLifecycleToJSON(value['projectLifecycle']),
+        'actorCanLinkExisting': value['actorCanLinkExisting'],
     };
 }

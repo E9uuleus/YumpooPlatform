@@ -140,6 +140,8 @@ const connectionExampleSchemas = {
   "connections/connect-candidate-page.json": "ConnectCandidatePage",
   "connections/work-item-connection-link-request.json": "WorkItemConnectionLinkRequest",
   "connections/connected-work-item-create-request.json": "ConnectedWorkItemCreateRequest",
+  "connections/reverse-connected-work-item-create-request.json": "ReverseConnectedWorkItemCreateRequest",
+  "connections/work-item-connection-incoming-column.json": "WorkItemConnectionIncomingColumn",
   "connections/connect-target-in-use-details.json": "ConnectTargetInUseDetails",
   "connections/connect-target-in-use-error.json": "ConnectTargetInUseError"
 }

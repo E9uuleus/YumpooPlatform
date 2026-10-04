@@ -1,11 +1,15 @@
-import { readCsrfToken, type ConnectColumn, type ConnectColumnCatalog, type ConnectColumnCreateRequest,
-  type ConnectedWorkItemCreateRequest, type WorkItemConnection, type WorkItemConnectionCell } from '@yumpoo/api-client'
+import { readCsrfToken, type ConnectCandidateField, type ConnectCandidateSort, type ConnectColumn, type ConnectColumnCatalog,
+  type ConnectColumnCreateRequest, type ConnectedWorkItemCreateRequest, type ReverseConnectedWorkItemCreateRequest,
+  type WorkItemConnection, type WorkItemConnectionCell } from '@yumpoo/api-client'
 import { inject, onScopeDispose, ref, shallowRef, toValue, watch, type InjectionKey, type MaybeRefOrGetter } from 'vue'
 import { workItemsApi } from '../../../api/client'
 import { toApiProblem, type ApiProblem } from '../../../api/problems'
 import { missingConnectCsrf } from './connectProblems'
 
 export type ConnectColumns = ReturnType<typeof useConnectColumns>
+export interface CandidateSearchOptions { fields?: ConnectCandidateField[] | undefined; sort?: ConnectCandidateSort | undefined }
+const searchOptions = (options: CandidateSearchOptions) => ({ ...(options.fields?.length ? { fields: options.fields } : {}),
+  ...(options.sort ? { sort: options.sort } : {}) })
 export const connectColumnsContext: InjectionKey<ConnectColumns> = Symbol('connectColumns')
 export function useConnectContext(): ConnectColumns {
   const context = inject(connectColumnsContext)
@@ -47,15 +51,20 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
     try {
       const result = await read(signal => workItemsApi.listConnectColumns({ projectId: id }, { signal }))
       if (current !== revision || requestRevision !== catalogRevision) return
-      const valid = new Set(result.items.map(column => column.id))
-      cells.value = new Map([...cells.value].map(([id, cell]) => [id, { ...cell,
-        outgoing: cell.outgoing.filter(column => valid.has(column.columnId)),
-        incoming: result.incomingAvailable ? cell.incoming : [], incomingTotal: result.incomingAvailable ? cell.incomingTotal : 0 }]))
+      cells.value = new Map([...cells.value].map(([id, cell]) => [id, validCell(cell, result)]))
       catalog.value = result
     } catch (reason) {
       const problem = await toApiProblem(reason)
       if (current === revision && requestRevision === catalogRevision) catalogError.value = problem
     } finally { if (current === revision && requestRevision === catalogRevision) catalogLoading.value = false }
+  }
+
+  /** Drops connections of columns that were deleted, or stopped targeting this project, since the cell was read. */
+  function validCell(cell: WorkItemConnectionCell, current: ConnectColumnCatalog): WorkItemConnectionCell {
+    const outgoing = new Set(current.items.map(column => column.id))
+    const reverse = new Set(current.incomingColumns.map(column => column.columnId))
+    return { ...cell, outgoing: cell.outgoing.filter(column => outgoing.has(column.columnId)),
+      incomingByColumn: cell.incomingByColumn.filter(column => reverse.has(column.columnId)) }
   }
 
   async function requestCells(ids: string[], force: boolean): Promise<void> {
@@ -75,11 +84,10 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
           if (current !== revision) return
           const received = new Map(result.items.map(cell => [cell.workItemId, cell]))
           const next = new Map(cells.value)
-          const valid = catalog.value ? new Set(catalog.value.items.map(column => column.id)) : undefined
           for (const itemId of batch) {
             if (versions.get(itemId) !== stamps.get(itemId)) continue
-            const cell = received.get(itemId) ?? { workItemId: itemId, outgoing: [], incoming: [], incomingTotal: 0 }
-            next.set(itemId, { ...cell, outgoing: cell.outgoing.filter(column => !valid || valid.has(column.columnId)) })
+            const cell = received.get(itemId) ?? { workItemId: itemId, outgoing: [], incoming: [], incomingTotal: 0, incomingByColumn: [] }
+            next.set(itemId, catalog.value ? validCell(cell, catalog.value) : cell)
           }
           cells.value = next
         } catch (reason) {
@@ -141,6 +149,15 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
     return write((xXSRFTOKEN, signal) => workItemsApi.createConnectedWorkItem({ workItemId: sourceItemId, xXSRFTOKEN,
       idempotencyKey: crypto.randomUUID(), connectedWorkItemCreateRequest: input }, { signal }), connectionChanged, [sourceItemId])
   }
+  /** Links from a reverse column: the picked item is the source, the row in this project is the target. */
+  function reverseLink(targetItemId: string, columnId: string, sourceItemId: string) {
+    return write((xXSRFTOKEN, signal) => workItemsApi.linkWorkItemConnection({ workItemId: sourceItemId, xXSRFTOKEN,
+      idempotencyKey: crypto.randomUUID(), workItemConnectionLinkRequest: { columnId, targetWorkItemId: targetItemId } }, { signal }), connectionChanged, [targetItemId])
+  }
+  function reverseCreateAndLink(targetItemId: string, input: ReverseConnectedWorkItemCreateRequest) {
+    return write((xXSRFTOKEN, signal) => workItemsApi.createReverseConnectedWorkItem({ workItemId: targetItemId, xXSRFTOKEN,
+      idempotencyKey: crypto.randomUUID(), reverseConnectedWorkItemCreateRequest: input }, { signal }), connectionChanged, [targetItemId])
+  }
   async function unlink(connection: WorkItemConnection): Promise<void> {
     await write((xXSRFTOKEN, signal) => workItemsApi.unlinkWorkItemConnection({ connectionId: connection.id, xXSRFTOKEN,
       ifMatch: connection.etag, idempotencyKey: crypto.randomUUID() }, { signal }), connectionChanged, affectedItems(connection))
@@ -151,8 +168,17 @@ export function useConnectColumns(projectId: MaybeRefOrGetter<string>, enabled: 
   const getConnection = (connectionId: string, caller?: AbortSignal) => query(signal => workItemsApi.getWorkItemConnection({ connectionId }, { signal }), caller)
   const searchTargets = (text: string, page: number, caller?: AbortSignal) => query(signal => workItemsApi.searchConnectTargetProjects({ query: text, page, size: 20 }, { signal }), caller)
   const createOptions = (columnId: string, targetProjectId: string, caller?: AbortSignal) => query(signal => workItemsApi.getConnectCreateOptions({ projectId: toValue(projectId), columnId, targetProjectId }, { signal }), caller)
-  const searchCandidates = (columnId: string, targetProjectId: string, sourceWorkItemId: string, q: string, page: number, caller?: AbortSignal) => query(signal => workItemsApi.searchConnectCandidates({ projectId: toValue(projectId), columnId, targetProjectId, sourceWorkItemId, q, page, size: 20 }, { signal }), caller)
-  const incoming = (workItemId: string, page: number, caller?: AbortSignal) => query(signal => workItemsApi.listIncomingWorkItemConnections({ workItemId, page, size: 50 }, { signal }), caller)
+  const searchCandidates = (columnId: string, targetProjectId: string, sourceWorkItemId: string, q: string, page: number, caller?: AbortSignal,
+    options: CandidateSearchOptions = {}) => query(signal => workItemsApi.searchConnectCandidates({ projectId: toValue(projectId), columnId,
+    targetProjectId, sourceWorkItemId, q, page, size: 20, ...searchOptions(options) }, { signal }), caller)
+  const reverseCandidates = (columnId: string, targetWorkItemId: string, q: string, page: number, caller?: AbortSignal,
+    options: CandidateSearchOptions = {}) => query(signal => workItemsApi.searchReverseConnectCandidates({ workItemId: targetWorkItemId,
+    columnId, q, page, size: 20, ...searchOptions(options) }, { signal }), caller)
+  const reverseCreateOptions = (columnId: string, targetWorkItemId: string, caller?: AbortSignal) => query(signal =>
+    workItemsApi.getReverseConnectCreateOptions({ workItemId: targetWorkItemId, columnId }, { signal }), caller)
+  const incoming = (workItemId: string, page: number, caller?: AbortSignal, columnId?: string) => query(signal =>
+    workItemsApi.listIncomingWorkItemConnections({ workItemId, page, size: 50, ...(columnId ? { columnId } : {}) }, { signal }), caller)
   return { catalog, cells, catalogLoading, catalogError, cellError, loadCatalog, ensureCells, refreshCells,
-    createColumn, updateColumn, deleteColumn, link, createAndLink, unlink, getConnection, searchTargets, createOptions, searchCandidates, incoming }
+    createColumn, updateColumn, deleteColumn, link, createAndLink, reverseLink, reverseCreateAndLink, unlink, getConnection, searchTargets,
+    createOptions, searchCandidates, reverseCandidates, reverseCreateOptions, incoming }
 }

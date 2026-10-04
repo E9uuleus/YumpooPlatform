@@ -25,8 +25,10 @@
 .discussion-editor-popup button, .discussion-member-popup button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 4px; color: inherit; background: transparent; text-align: left; cursor: pointer; font: inherit; }
 .discussion-editor-popup button:hover, .discussion-editor-popup button[aria-pressed='true'], .discussion-member-popup button:hover, .discussion-member-popup button[aria-selected='true'] { background: var(--yp-bg-selected); color: var(--yp-action-primary); }
 .discussion-editor-popup button:disabled { opacity: .45; cursor: not-allowed; }
-.discussion-editor-popup input, .discussion-member-popup input { box-sizing: border-box; width: 100%; padding: 8px; margin: 4px 0 8px; border: 1px solid var(--yp-border-strong); border-radius: 4px; color: var(--yp-text-primary); background: var(--yp-bg-surface); font: inherit; }
-.discussion-editor-popup button:focus-visible, .discussion-member-popup button:focus-visible, .discussion-editor-popup input:focus, .discussion-member-popup input:focus { outline: 2px solid var(--yp-action-primary); outline-offset: -2px; }
+.discussion-editor-popup input, .discussion-member-popup input { box-sizing: border-box; width: 100%; padding: 8px; margin: 4px 0 8px; border: 1px solid var(--yp-input-border); border-radius: var(--yp-input-radius); color: var(--yp-text-primary); background: var(--yp-input-bg); font: inherit; }
+.discussion-editor-popup input:hover, .discussion-member-popup input:hover { border-color: var(--yp-input-border-hover); }
+.discussion-editor-popup input:focus, .discussion-member-popup input:focus { border-color: var(--yp-input-border-focus); outline: none; }
+.discussion-editor-popup button:focus-visible, .discussion-member-popup button:focus-visible { outline: 2px solid var(--yp-action-primary); outline-offset: -2px; }
 .discussion-member-popup [role='listbox'] { max-height: 220px; overflow: auto; }
 .discussion-color-tabs { display: flex; }.discussion-color-tabs button { text-align: center; }
 .discussion-color-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; margin: 12px 0; }

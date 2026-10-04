@@ -108,15 +108,19 @@
 .workspace-navigation-search {
   gap: var(--yp-space-2);
   padding: 0 var(--yp-space-1) 0 var(--yp-space-2);
-  border: 1px solid var(--yp-border-default);
-  border-radius: var(--yp-radius-md);
+  border: 1px solid var(--yp-input-border);
+  border-radius: var(--yp-input-radius);
   color: var(--yp-text-secondary);
-  background: var(--yp-bg-surface);
+  background: var(--yp-input-bg);
+  transition: border-color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.workspace-navigation-search:hover {
+  border-color: var(--yp-input-border-hover);
 }
 
 .workspace-navigation-search:focus-within {
-  border-color: var(--yp-action-primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--yp-focus-ring) 22%, transparent);
+  border-color: var(--yp-input-border-focus);
 }
 
 .workspace-navigation-search input {
@@ -1060,7 +1064,6 @@
 .project-filter-popover .el-select__wrapper {
   height: var(--yp-control-height-medium);
   min-height: var(--yp-control-height-medium);
-  border-radius: 6px;
 }
 
 @media (min-width: 1440px) {

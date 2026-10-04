@@ -78,11 +78,9 @@ import { useWorkItemDueClock } from './useWorkItemDueClock'
 import { companyDate } from './workItemDueDate'
 import ConnectColumnAddButton from './connect/ConnectColumnAddButton.vue'
 import ConnectTableColumnHeader from './connect/ConnectTableColumnHeader.vue'
-import ConnectColumnDialog from './connect/ConnectColumnDialog.vue'
 import ConnectColumnDeleteDialog from './connect/ConnectColumnDeleteDialog.vue'
-import ConnectCell from './connect/ConnectCell.vue'
-import IncomingConnectCell from './connect/IncomingConnectCell.vue'
-import ConnectionCardDialog from './connect/ConnectionCardDialog.vue'
+import ConnectTableCell from './connect/ConnectTableCell.vue'
+import ConnectedItemCard from './connect/ConnectedItemCard.vue'
 import { isConnectColumnKey, type ConnectColumnKey } from './connect/connectColumnKeys'
 import ConnectFilterSection from './connect/ConnectFilterSection.vue'
 import ConnectKanbanConnections from './connect/ConnectKanbanConnections.vue'
@@ -2753,25 +2751,18 @@ onBeforeUnmount(() => {
     />
     <template v-if="project">
       <template v-if="!embedded">
-        <connect-column-dialog
-          v-model:open="connect.columnDialogOpen"
-          :project-id="projectId"
-          :mode="connect.editingColumn ? 'edit' : 'create'"
-          :column="connect.editingColumn"
-          :existing-names="connect.catalog?.items.map(column => column.name) ?? []"
-          @saved="connect.reveal"
-        />
         <connect-column-delete-dialog
           :column="connect.deletingColumn"
           @close="connect.deletingColumn = undefined"
         />
-        <connection-card-dialog
+        <connected-item-card
           v-if="connect.selectedConnection"
           v-model:open="connect.cardOpen"
           :connection="connect.selectedConnection"
           :perspective="connect.perspective"
           :read-only="selectedView === 'kanban'"
           @invalidated="connect.refreshConnection"
+          @changed="connect.refreshConnection"
         />
       </template>
       <project-workspace-header
@@ -3095,6 +3086,8 @@ onBeforeUnmount(() => {
                       <connect-table-column-header
                         :column="column"
                         :table="connect"
+                        :project-id="projectId"
+                        :primary="false"
                         @hide="toggleColumn($event, false)"
                       />
                     </template>
@@ -3102,7 +3095,7 @@ onBeforeUnmount(() => {
                       <connect-column-add-button
                         :can-manage="connect.canManage"
                         :hidden-columns="restorableColumns"
-                        @add-connect-column="connect.edit()"
+                        @add-connect-column="connect.startDraft()"
                         @show-column="showHiddenColumn"
                       />
                     </template>
@@ -3476,6 +3469,7 @@ onBeforeUnmount(() => {
                   <connect-table-column-header
                     :column="column"
                     :table="connect"
+                    :project-id="projectId"
                     @hide="toggleColumn($event, false)"
                   />
                 </template>
@@ -3484,23 +3478,19 @@ onBeforeUnmount(() => {
                     v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
                     :column="column"
                     :table="connect"
+                    :project-id="projectId"
+                    :primary="false"
                     @hide="toggleColumn($event, false)"
                   />
-                  <connect-cell
-                    v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem) && column.column"
+                  <connect-table-cell
+                    v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem)"
+                    :column="column"
                     :item="scope.row as ProjectWorkItemListItem"
-                    :column="column.column"
-                    :connections="connect.cells.get(scope.row.id)?.outgoing.find(value => value.columnId === column.column?.id)?.connections ?? []"
+                    :cell="connect.cells.get(scope.row.id)"
                     :read-only="connect.readOnly"
-                    @open-card="connect.openCard($event)"
-                  />
-                  <incoming-connect-cell
-                    v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem) && column.kind === 'incoming'"
-                    :item="scope.row as ProjectWorkItemListItem"
-                    :incoming="connect.cells.get(scope.row.id)?.incoming ?? []"
-                    :incoming-total="connect.cells.get(scope.row.id)?.incomingTotal ?? 0"
-                    :read-only="connect.readOnly"
-                    @open-card="connect.openCard($event, 'target')"
+                    :row-index="scope.$index"
+                    :celebrate="connect.celebrated === column.key"
+                    @open-card="connect.openCard"
                   />
                 </template>
               </el-table-column>
@@ -3517,7 +3507,7 @@ onBeforeUnmount(() => {
                   <connect-column-add-button
                     :can-manage="connect.canManage"
                     :hidden-columns="restorableColumns"
-                    @add-connect-column="connect.edit()"
+                    @add-connect-column="connect.startDraft()"
                     @show-column="showHiddenColumn"
                   />
                 </template>
@@ -3526,7 +3516,7 @@ onBeforeUnmount(() => {
                     v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
                     :can-manage="connect.canManage"
                     :hidden-columns="restorableColumns"
-                    @add-connect-column="connect.edit()"
+                    @add-connect-column="connect.startDraft()"
                     @show-column="showHiddenColumn"
                   />
                 </template>
@@ -3636,8 +3626,8 @@ onBeforeUnmount(() => {
               </button>
               <connect-kanban-connections
                 v-if="!embedded"
-                :connections="connect.cells.get(item.id)?.outgoing.flatMap(column => column.connections) ?? []"
-                @open-card="connect.openCard($event)"
+                :cell="connect.cells.get(item.id)"
+                @open-card="connect.openCard"
               />
               <span><yp-priority-badge :priority="item.priority" /></span>
             </article>
@@ -4750,8 +4740,7 @@ onBeforeUnmount(() => {
 .monday-quick-add:focus-visible { outline: none; }
 
 .monday-quick-add:focus-visible .monday-quick-add__field {
-  border-color: var(--yp-action-primary);
-  box-shadow: 0 0 0 1px var(--yp-action-primary);
+  border-color: var(--yp-input-border-focus);
 }
 
 .monday-quick-add:disabled {
@@ -4851,7 +4840,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   margin: 0;
   outline: none;
-  border-color: var(--yp-action-primary);
+  border-color: var(--yp-input-border-focus);
   background: var(--yp-bg-surface);
   color: var(--yp-text-primary);
 }

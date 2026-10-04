@@ -55,18 +55,49 @@
   min-height: var(--yp-control-height-large);
 }
 
-.el-button:focus-visible,
-.el-input__wrapper:has(input:focus-visible),
-.el-select__wrapper:has(input:focus-visible) {
+.el-button:focus-visible {
   outline: 2px solid var(--yp-focus-ring);
   outline-offset: 2px;
+}
+
+/* Text fields draw focus with their own 1px stroke only; Chromium treats every clicked text input as
+   :focus-visible, so an extra outline would always stack a second ring around it. */
+.el-input,
+.el-textarea,
+.el-date-editor {
+  --el-input-border-color: var(--yp-input-border);
+  --el-input-hover-border-color: var(--yp-input-border-hover);
+  --el-input-focus-border-color: var(--yp-input-border-focus);
+  --el-input-border-radius: var(--yp-input-radius);
+  --el-input-bg-color: var(--yp-input-bg);
+}
+
+.el-select {
+  --el-select-border-color-hover: var(--yp-input-border-hover);
+  --el-select-input-focus-border-color: var(--yp-input-border-focus);
+  --el-border-color-hover: var(--yp-input-border-hover);
 }
 
 .el-input__wrapper,
 .el-select__wrapper,
 .el-textarea__inner {
-  border-radius: var(--yp-radius-md);
-  box-shadow: 0 0 0 1px var(--yp-border-strong) inset;
+  border-radius: var(--yp-input-radius);
+  box-shadow: 0 0 0 1px var(--yp-input-border) inset;
+  transition: box-shadow var(--yp-motion-fast) var(--yp-ease-standard),
+              background-color var(--yp-motion-fast) var(--yp-ease-standard);
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-range-editor.is-active,
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px var(--yp-input-border-focus) inset;
+  outline: none;
+}
+
+.el-input__wrapper.is-focus .el-input__prefix,
+.el-select__wrapper.is-focused .el-select__prefix {
+  color: var(--yp-text-secondary);
 }
 
 .el-card,

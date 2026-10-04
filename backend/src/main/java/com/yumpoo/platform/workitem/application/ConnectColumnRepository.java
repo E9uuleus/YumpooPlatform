@@ -15,6 +15,7 @@ public interface ConnectColumnRepository {
     List<ConnectColumn> findActive(UUID companyId, UUID projectId);
     List<IncomingColumn> findIncoming(UUID companyId, UUID projectId);
     Optional<ConnectColumn> find(UUID companyId, UUID projectId, UUID columnId);
+    Optional<ConnectColumn> findActiveById(UUID companyId, UUID columnId);
     Optional<ConnectColumn> lock(UUID companyId, UUID projectId, UUID columnId, boolean forShare);
     long countActive(UUID companyId, UUID projectId);
     boolean nameExists(UUID companyId, UUID projectId, String name, UUID excludingId);

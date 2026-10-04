@@ -11,6 +11,8 @@ export interface CanvasScene {
   draw(context: CanvasRenderingContext2D, width: number, height: number): void
   /** Pointer position relative to the canvas, or null once the pointer leaves. */
   pointer?(point: CanvasPoint | null): void
+  /** One-shot scenes return true once played through; the stage then keeps the last frame and stops the loop. */
+  finished?(): boolean
 }
 
 export interface ThemedCanvasScene extends CanvasScene {
@@ -60,9 +62,10 @@ export function createCanvasStage(canvas: HTMLCanvasElement, scene: CanvasScene,
   let visible = true
   let settled = false
   let destroyed = false
+  let completed = false
 
   const still = () => Boolean(reducedMotion?.matches)
-  const active = () => visible && !document.hidden && !still() && width > 0 && height > 0
+  const active = () => visible && !document.hidden && !still() && !completed && width > 0 && height > 0
 
   function paint(): void {
     context!.clearRect(0, 0, width, height)
@@ -85,6 +88,10 @@ export function createCanvasStage(canvas: HTMLCanvasElement, scene: CanvasScene,
       scene.step(Math.min(elapsed, MAX_STEP))
       last = now
       paint()
+      if (scene.finished?.()) {
+        completed = true
+        return
+      }
     }
     frame = requestAnimationFrame(tick)
   }

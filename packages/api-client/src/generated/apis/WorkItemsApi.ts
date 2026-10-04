@@ -14,7 +14,9 @@
 
 import * as runtime from '../runtime';
 import type {
+  ConnectCandidateField,
   ConnectCandidatePage,
+  ConnectCandidateSort,
   ConnectColumn,
   ConnectColumnCatalog,
   ConnectColumnCreateRequest,
@@ -27,6 +29,7 @@ import type {
   ProjectWorkItemCursorPage,
   ProjectWorkItemFilterOptionCursorPage,
   ProjectWorkItemOrderMoveRequest,
+  ReverseConnectedWorkItemCreateRequest,
   TimeTrackingState,
   UpdateConnectColumn409Response,
   WorkItemAssigneePatchRequest,
@@ -60,8 +63,12 @@ import type {
   WorkItemViewType,
 } from '../models/index';
 import {
+    ConnectCandidateFieldFromJSON,
+    ConnectCandidateFieldToJSON,
     ConnectCandidatePageFromJSON,
     ConnectCandidatePageToJSON,
+    ConnectCandidateSortFromJSON,
+    ConnectCandidateSortToJSON,
     ConnectColumnFromJSON,
     ConnectColumnToJSON,
     ConnectColumnCatalogFromJSON,
@@ -86,6 +93,8 @@ import {
     ProjectWorkItemFilterOptionCursorPageToJSON,
     ProjectWorkItemOrderMoveRequestFromJSON,
     ProjectWorkItemOrderMoveRequestToJSON,
+    ReverseConnectedWorkItemCreateRequestFromJSON,
+    ReverseConnectedWorkItemCreateRequestToJSON,
     TimeTrackingStateFromJSON,
     TimeTrackingStateToJSON,
     UpdateConnectColumn409ResponseFromJSON,
@@ -193,6 +202,13 @@ export interface CreateProjectWorkItemStatusLabelRequest {
     workItemLabelCreateRequest: WorkItemLabelCreateRequest;
 }
 
+export interface CreateReverseConnectedWorkItemRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    reverseConnectedWorkItemCreateRequest: ReverseConnectedWorkItemCreateRequest;
+}
+
 export interface CreateWorkItemRequest {
     projectId: string;
     xXSRFTOKEN: string;
@@ -262,6 +278,11 @@ export interface GetProjectWorkItemLabelsRequest {
     projectId: string;
 }
 
+export interface GetReverseConnectCreateOptionsRequest {
+    workItemId: string;
+    columnId: string;
+}
+
 export interface GetWorkItemRequest {
     workItemId: string;
 }
@@ -283,6 +304,7 @@ export interface ListConnectColumnsRequest {
 
 export interface ListIncomingWorkItemConnectionsRequest {
     workItemId: string;
+    columnId?: string;
     page?: number;
     size?: number;
 }
@@ -440,13 +462,25 @@ export interface SearchConnectCandidatesRequest {
     columnId: string;
     targetProjectId: string;
     sourceWorkItemId: string;
-    q: string;
+    q?: string;
+    fields?: Array<ConnectCandidateField>;
+    sort?: ConnectCandidateSort;
     page?: number;
     size?: number;
 }
 
 export interface SearchConnectTargetProjectsRequest {
     query?: string;
+    page?: number;
+    size?: number;
+}
+
+export interface SearchReverseConnectCandidatesRequest {
+    workItemId: string;
+    columnId: string;
+    q?: string;
+    fields?: Array<ConnectCandidateField>;
+    sort?: ConnectCandidateSort;
     page?: number;
     size?: number;
 }
@@ -936,6 +970,77 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async createProjectWorkItemStatusLabel(requestParameters: CreateProjectWorkItemStatusLabelRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemLabelCatalog> {
         const response = await this.createProjectWorkItemStatusLabelRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 要求两端项目 OWNER/MEMBER 且 ACTIVE，不构成跨项目投递；新根项建在连接列所在项目，与连接在同一事务创建，连接 origin 为 LINKED，不产生投递通知。
+     * 从反向列在连接列所在项目新建根工作项并关联
+     */
+    async createReverseConnectedWorkItemRaw(requestParameters: CreateReverseConnectedWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemConnection>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling createReverseConnectedWorkItem().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling createReverseConnectedWorkItem().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling createReverseConnectedWorkItem().'
+            );
+        }
+
+        if (requestParameters['reverseConnectedWorkItemCreateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'reverseConnectedWorkItemCreateRequest',
+                'Required parameter "reverseConnectedWorkItemCreateRequest" was null or undefined when calling createReverseConnectedWorkItem().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/reverse-connected-work-items`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ReverseConnectedWorkItemCreateRequestToJSON(requestParameters['reverseConnectedWorkItemCreateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemConnectionFromJSON(jsonValue));
+    }
+
+    /**
+     * 要求两端项目 OWNER/MEMBER 且 ACTIVE，不构成跨项目投递；新根项建在连接列所在项目，与连接在同一事务创建，连接 origin 为 LINKED，不产生投递通知。
+     * 从反向列在连接列所在项目新建根工作项并关联
+     */
+    async createReverseConnectedWorkItem(requestParameters: CreateReverseConnectedWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnection> {
+        const response = await this.createReverseConnectedWorkItemRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -1618,6 +1723,54 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
+     * 读取反向新建并关联的来源项目类别选项
+     */
+    async getReverseConnectCreateOptionsRaw(requestParameters: GetReverseConnectCreateOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConnectCreateOptions>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling getReverseConnectCreateOptions().'
+            );
+        }
+
+        if (requestParameters['columnId'] == null) {
+            throw new runtime.RequiredError(
+                'columnId',
+                'Required parameter "columnId" was null or undefined when calling getReverseConnectCreateOptions().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['columnId'] != null) {
+            queryParameters['columnId'] = requestParameters['columnId'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/work-items/{workItemId}/reverse-connect-create-options`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ConnectCreateOptionsFromJSON(jsonValue));
+    }
+
+    /**
+     * 读取反向新建并关联的来源项目类别选项
+     */
+    async getReverseConnectCreateOptions(requestParameters: GetReverseConnectCreateOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectCreateOptions> {
+        const response = await this.getReverseConnectCreateOptionsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * 查询 Work Item 详情
      */
     async getWorkItemRaw(requestParameters: GetWorkItemRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
@@ -1812,6 +1965,10 @@ export class WorkItemsApi extends runtime.BaseAPI {
         }
 
         const queryParameters: any = {};
+
+        if (requestParameters['columnId'] != null) {
+            queryParameters['columnId'] = requestParameters['columnId'];
+        }
 
         if (requestParameters['page'] != null) {
             queryParameters['page'] = requestParameters['page'];
@@ -2078,7 +2235,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 只返回本项目未删除工作项，外项目 ID 静默忽略；incoming 最多 50 条，incomingTotal 为完整计数。请求 1–100 行采用固定次数批量 SQL。
+     * 只返回本项目未删除工作项，外项目 ID 静默忽略；incomingByColumn 按来源连接列分组，每列最多 50 条并给出该列完整计数，供目标项目渲染双向连接的反向列。incoming 与 incomingTotal 是跨列汇总的兼容视图（最多 50 条与完整计数）。请求 1–100 行采用固定次数批量 SQL。
      * 批量读取工作项出站与入站连接
      */
     async listWorkItemConnectionCellsRaw(requestParameters: ListWorkItemConnectionCellsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemConnectionCellList>> {
@@ -2119,7 +2276,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 只返回本项目未删除工作项，外项目 ID 静默忽略；incoming 最多 50 条，incomingTotal 为完整计数。请求 1–100 行采用固定次数批量 SQL。
+     * 只返回本项目未删除工作项，外项目 ID 静默忽略；incomingByColumn 按来源连接列分组，每列最多 50 条并给出该列完整计数，供目标项目渲染双向连接的反向列。incoming 与 incomingTotal 是跨列汇总的兼容视图（最多 50 条与完整计数）。请求 1–100 行采用固定次数批量 SQL。
      * 批量读取工作项出站与入站连接
      */
     async listWorkItemConnectionCells(requestParameters: ListWorkItemConnectionCellsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemConnectionCellList> {
@@ -3052,7 +3209,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 根项与子项均可返回，排除已删除；匹配标题与工作项编号前缀，完全编号匹配优先，其次 updated_at DESC、id。
+     * 根项与子项均可返回，排除已删除；搜索词按所选字段匹配，任一字段命中即返回。完全编号匹配优先，其次按 sort（RECENT 为 updated_at DESC，TITLE 为标题升序）与 id 排序。
      * 双侧成员搜索可关联的目标工作项
      */
     async searchConnectCandidatesRaw(requestParameters: SearchConnectCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConnectCandidatePage>> {
@@ -3084,13 +3241,6 @@ export class WorkItemsApi extends runtime.BaseAPI {
             );
         }
 
-        if (requestParameters['q'] == null) {
-            throw new runtime.RequiredError(
-                'q',
-                'Required parameter "q" was null or undefined when calling searchConnectCandidates().'
-            );
-        }
-
         const queryParameters: any = {};
 
         if (requestParameters['targetProjectId'] != null) {
@@ -3103,6 +3253,14 @@ export class WorkItemsApi extends runtime.BaseAPI {
 
         if (requestParameters['q'] != null) {
             queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['fields'] != null) {
+            queryParameters['fields'] = requestParameters['fields'];
+        }
+
+        if (requestParameters['sort'] != null) {
+            queryParameters['sort'] = requestParameters['sort'];
         }
 
         if (requestParameters['page'] != null) {
@@ -3131,7 +3289,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 根项与子项均可返回，排除已删除；匹配标题与工作项编号前缀，完全编号匹配优先，其次 updated_at DESC、id。
+     * 根项与子项均可返回，排除已删除；搜索词按所选字段匹配，任一字段命中即返回。完全编号匹配优先，其次按 sort（RECENT 为 updated_at DESC，TITLE 为标题升序）与 id 排序。
      * 双侧成员搜索可关联的目标工作项
      */
     async searchConnectCandidates(requestParameters: SearchConnectCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectCandidatePage> {
@@ -3177,6 +3335,76 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async searchConnectTargetProjects(requestParameters: SearchConnectTargetProjectsRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectTargetProjectPage> {
         const response = await this.searchConnectTargetProjectsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 要求当前用户同时是两端项目的 OWNER/MEMBER 且两端 ACTIVE；连接列须以该工作项所在项目为目标，否则返回 404。alreadyConnected 表示候选项已作为来源连接到该工作项。
+     * 从反向列搜索连接列所在项目的工作项
+     */
+    async searchReverseConnectCandidatesRaw(requestParameters: SearchReverseConnectCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConnectCandidatePage>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling searchReverseConnectCandidates().'
+            );
+        }
+
+        if (requestParameters['columnId'] == null) {
+            throw new runtime.RequiredError(
+                'columnId',
+                'Required parameter "columnId" was null or undefined when calling searchReverseConnectCandidates().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['columnId'] != null) {
+            queryParameters['columnId'] = requestParameters['columnId'];
+        }
+
+        if (requestParameters['q'] != null) {
+            queryParameters['q'] = requestParameters['q'];
+        }
+
+        if (requestParameters['fields'] != null) {
+            queryParameters['fields'] = requestParameters['fields'];
+        }
+
+        if (requestParameters['sort'] != null) {
+            queryParameters['sort'] = requestParameters['sort'];
+        }
+
+        if (requestParameters['page'] != null) {
+            queryParameters['page'] = requestParameters['page'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/work-items/{workItemId}/reverse-connect-candidates`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ConnectCandidatePageFromJSON(jsonValue));
+    }
+
+    /**
+     * 要求当前用户同时是两端项目的 OWNER/MEMBER 且两端 ACTIVE；连接列须以该工作项所在项目为目标，否则返回 404。alreadyConnected 表示候选项已作为来源连接到该工作项。
+     * 从反向列搜索连接列所在项目的工作项
+     */
+    async searchReverseConnectCandidates(requestParameters: SearchReverseConnectCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectCandidatePage> {
+        const response = await this.searchReverseConnectCandidatesRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

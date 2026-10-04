@@ -6,6 +6,7 @@ import { readCsrfToken, WorkItemRelationType, WorkItemRelationRole, WorkItemRela
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
+import './workItemAccentBar.css'
 
 const props = defineProps<{ item?: ProjectWorkItemListItem | undefined; items?: ProjectWorkItemListItem[] }>()
 const sourceItem = computed(() => props.item ?? props.items?.[0])
@@ -138,7 +139,7 @@ defineExpose({ focusSearch: () => searchInput.value?.focus() })
         v-for="candidate in visibleCandidates"
         :key="candidate.item.id"
         type="button"
-        class="parent-picker-option"
+        class="parent-picker-option work-item-accent-bar"
         :title="candidate.reasonCode ? reasons[candidate.reasonCode] ?? '该工作项不可选择' : candidate.item.title"
         :disabled="saving || loading || candidate.eligibility !== WorkItemRelationCandidateEligibilityEnum.Eligible"
         @click="choose(candidate)"
@@ -158,8 +159,8 @@ defineExpose({ focusSearch: () => searchInput.value?.focus() })
 <style scoped>
 .parent-picker h3 { margin: 0 0 10px; font-size: 16px; font-weight: 600; color: var(--yp-text-primary); }
 .parent-picker-results { display: grid; align-content: start; gap: 4px; margin-top: 12px; height: min(360px, calc(100dvh - 150px)); overflow-y: auto; overscroll-behavior: contain; }
-.parent-picker-option { position: relative; display: flex; align-items: center; width: 100%; height: var(--work-item-table-row-height, 36px); box-sizing: border-box; padding: 0 12px 0 18px; border: 1px solid var(--yp-monday-grid-border, var(--yp-border-subtle)); border-left: 0; border-radius: var(--work-item-hierarchy-corner-radius, 6px) 0 0 var(--work-item-hierarchy-corner-radius, 6px); background: var(--yp-bg-surface); text-align: left; font: inherit; font-size: 13px; color: var(--yp-text-primary); cursor: pointer; }
-.parent-picker-option::before { position: absolute; top: -1px; bottom: -1px; left: 0; width: var(--work-item-hierarchy-bar-width, 6px); border-radius: var(--work-item-hierarchy-corner-radius, 6px) 0 0 var(--work-item-hierarchy-corner-radius, 6px); background: var(--work-item-group-accent, rgb(87, 155, 252)); content: ''; }
+.parent-picker-option { display: flex; align-items: center; width: 100%; height: var(--work-item-table-row-height, 36px); box-sizing: border-box; padding: 0 12px 0 18px; border: 1px solid var(--yp-monday-grid-border, var(--yp-border-subtle)); border-left: 0; border-radius: var(--work-item-hierarchy-corner-radius, 6px) 0 0 var(--work-item-hierarchy-corner-radius, 6px); background: var(--yp-bg-surface); text-align: left; font: inherit; font-size: 13px; color: var(--yp-text-primary); cursor: pointer; }
+.parent-picker-option.work-item-accent-bar::before { top: -1px; bottom: -1px; }
 .parent-picker-option span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .parent-picker-option:hover:not(:disabled) { background: var(--yp-bg-sunken); }
 .parent-picker-option:focus-visible { background: var(--yp-bg-selected); outline: 2px solid var(--yp-action-primary); outline-offset: -2px; }
