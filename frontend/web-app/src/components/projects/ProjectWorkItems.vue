@@ -80,7 +80,7 @@ import ConnectColumnAddButton from './connect/ConnectColumnAddButton.vue'
 import ConnectTableColumnHeader from './connect/ConnectTableColumnHeader.vue'
 import ConnectColumnDeleteDialog from './connect/ConnectColumnDeleteDialog.vue'
 import ConnectTableCell from './connect/ConnectTableCell.vue'
-import ConnectionCardDialog from './connect/ConnectionCardDialog.vue'
+import ConnectedItemCard from './connect/ConnectedItemCard.vue'
 import { isConnectColumnKey, type ConnectColumnKey } from './connect/connectColumnKeys'
 import ConnectFilterSection from './connect/ConnectFilterSection.vue'
 import ConnectKanbanConnections from './connect/ConnectKanbanConnections.vue'
@@ -2755,13 +2755,14 @@ onBeforeUnmount(() => {
           :column="connect.deletingColumn"
           @close="connect.deletingColumn = undefined"
         />
-        <connection-card-dialog
+        <connected-item-card
           v-if="connect.selectedConnection"
           v-model:open="connect.cardOpen"
           :connection="connect.selectedConnection"
           :perspective="connect.perspective"
           :read-only="selectedView === 'kanban'"
           @invalidated="connect.refreshConnection"
+          @changed="connect.refreshConnection"
         />
       </template>
       <project-workspace-header

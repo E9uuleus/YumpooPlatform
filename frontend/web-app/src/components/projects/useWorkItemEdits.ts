@@ -5,13 +5,15 @@ import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 
 export type WorkItemPatchField = 'assignee' | 'priority' | 'dueDate' | 'content'
+/** Table rows and full details both carry what an edit needs, so the connected-item card reuses the same commands. */
+export type EditableWorkItem = Pick<ProjectWorkItemListItem, 'id' | 'etag' | 'statusCode' | 'capabilities'>
 export function useWorkItemEdits(options: {
   updated: (id: string, detail: WorkItemDetail) => void
   failed: (problem: ApiProblem) => void | Promise<void>
 }) {
   const busy = ref('')
   const attempts = new Map<string, string>()
-  async function execute(item: ProjectWorkItemListItem, identity: unknown[], command: (common: {
+  async function execute(item: EditableWorkItem, identity: unknown[], command: (common: {
     workItemId: string; xXSRFTOKEN: string; ifMatch: string; idempotencyKey: string
   }) => Promise<WorkItemDetail>): Promise<boolean> {
     if (busy.value || !item.capabilities.canEditFields) return false
@@ -31,7 +33,7 @@ export function useWorkItemEdits(options: {
       return false
     } finally { busy.value = '' }
   }
-  function patch(item: ProjectWorkItemListItem, field: WorkItemPatchField, value: string | Date | null, dueTime?: string | null) {
+  function patch(item: EditableWorkItem, field: WorkItemPatchField, value: string | Date | null, dueTime?: string | null) {
     return execute(item, [field, value, dueTime], common => field === 'content'
       ? workItemsApi.patchWorkItemContent({ ...common, workItemContentPatchRequest: { contentId: value as string } })
       : field === 'assignee'
@@ -40,7 +42,7 @@ export function useWorkItemEdits(options: {
           ? workItemsApi.patchWorkItemPriority({ ...common, workItemPriorityPatchRequest: { priority: value as string | null } })
           : workItemsApi.patchWorkItemDueDate({ ...common, workItemDueDatePatchRequest: { dueDate: value as Date | null, ...(dueTime !== undefined ? { dueTime } : {}) } }))
   }
-  async function transition(item: ProjectWorkItemListItem, statusCode: string) {
+  async function transition(item: EditableWorkItem, statusCode: string) {
     if (busy.value || item.statusCode === statusCode) return false
     const target = item.capabilities.availableTransitions.find(t => t.toStatus === statusCode)
     if (!target) return false

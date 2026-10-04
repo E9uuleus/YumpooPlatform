@@ -5,7 +5,7 @@ import { afterEach, expect, it } from 'vitest'
 import ConnectColumnsPreview from './ConnectColumnsPreview.vue'
 import ConnectCell from '../components/projects/connect/ConnectCell.vue'
 import ProjectConnectionsOverview from '../components/projects/connect/ProjectConnectionsOverview.vue'
-import ConnectionCardDialog from '../components/projects/connect/ConnectionCardDialog.vue'
+import ConnectedItemCard from '../components/projects/connect/ConnectedItemCard.vue'
 import ConnectKanbanConnections from '../components/projects/connect/ConnectKanbanConnections.vue'
 
 enableAutoUnmount(afterEach)
@@ -23,8 +23,8 @@ it('连接验收覆盖单/多目标、空单元格、只读、反向列、设置
   wrapper.findAllComponents(ElRadioGroup)[0]!.vm.$emit('update:modelValue', 'settings'); await flushPromises()
   expect(wrapper.getComponent(ProjectConnectionsOverview).text()).toContain('移动端重构')
   await wrapper.findAll('.connect-preview__examples button')[1]!.trigger('click'); await flushPromises()
-  expect(wrapper.getComponent(ConnectionCardDialog).props('connection').target).toMatchObject({ assignee: null, priority: null })
-  wrapper.getComponent(ConnectionCardDialog).vm.$emit('update:open', false)
+  expect(wrapper.getComponent(ConnectedItemCard).props('connection').target).toMatchObject({ assignee: null, priority: null })
+  wrapper.getComponent(ConnectedItemCard).vm.$emit('update:open', false)
   wrapper.findAllComponents(ElRadioGroup)[0]!.vm.$emit('update:modelValue', 'filters'); await flushPromises()
   await wrapper.get('[aria-label="产品缺陷 已连接"] input').setValue(true)
   await wrapper.get('[aria-label="产品缺陷 未连接"] input').setValue(true)
@@ -33,5 +33,5 @@ it('连接验收覆盖单/多目标、空单元格、只读、反向列、设置
   const chips = wrapper.findAllComponents(ConnectKanbanConnections)
   expect(chips.map(component => component.props('cell')?.outgoing.flatMap(column => column.connections).length ?? 0)).toEqual([5, 0])
   chips[0]!.vm.$emit('openCard', chips[0]!.props('cell')!.outgoing[0]!.connections[0], 'source'); await flushPromises()
-  expect(wrapper.getComponent(ConnectionCardDialog).props('readOnly')).toBe(true)
+  expect(wrapper.getComponent(ConnectedItemCard).props('readOnly')).toBe(true)
 })

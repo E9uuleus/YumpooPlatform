@@ -14,7 +14,7 @@ import {
   type ProjectWorkItemListItem,
 } from '@yumpoo/api-client'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { ElMessage, ElMessageBox, ElPopconfirm } from 'element-plus'
+import { ElDropdown, ElMessage, ElMessageBox, ElPopconfirm } from 'element-plus'
 import { defineComponent, nextTick, reactive } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkItemTableSource } from '../../components/projects/workItemTableSource'
@@ -22,7 +22,7 @@ import ProjectOverviewView from '../../components/projects/ProjectWorkItems.vue'
 import ConnectCell from '../../components/projects/connect/ConnectCell.vue'
 import ConnectColumnAddButton from '../../components/projects/connect/ConnectColumnAddButton.vue'
 import ConnectColumnSetupPopover from '../../components/projects/connect/ConnectColumnSetupPopover.vue'
-import ConnectionCardDialog from '../../components/projects/connect/ConnectionCardDialog.vue'
+import ConnectedItemCard from '../../components/projects/connect/ConnectedItemCard.vue'
 import ConnectFilterSection from '../../components/projects/connect/ConnectFilterSection.vue'
 import ConnectKanbanConnections from '../../components/projects/connect/ConnectKanbanConnections.vue'
 import { connection, connectionCatalog } from '../../components/projects/connect/connectTestFixtures'
@@ -244,8 +244,9 @@ describe('项目级工作项首页', () => {
     wrapper.getComponent(ConnectCell).vm.$emit('openCard', current); await flushPromises()
     state.listWorkItemConnectionCells.mockClear()
     state.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item-1', outgoing: [], incoming: [], incomingTotal: 0, incomingByColumn: [] }] })
-    const card = wrapper.getComponent(ConnectionCardDialog)
-    card.getComponent(ElPopconfirm).vm.$emit('confirm'); await flushPromises()
+    const card = wrapper.getComponent(ConnectedItemCard)
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
+    card.getComponent(ElDropdown).vm.$emit('command', 'unlink'); await flushPromises()
     expect(state.unlinkWorkItemConnection).toHaveBeenCalledTimes(1)
     expect(state.listWorkItemConnectionCells).toHaveBeenCalledTimes(1)
     expect(state.listWorkItemConnectionCells.mock.calls[0]![0].workItemIds).toEqual(['item-1'])
@@ -267,9 +268,9 @@ describe('项目级工作项首页', () => {
     const chips = wrapper.getComponent(ConnectKanbanConnections)
     expect(chips.props('cell')?.outgoing[0]?.connections).toEqual([connection])
     await chips.get('.connection-chip').trigger('click'); await flushPromises()
-    const dialog = wrapper.getComponent(ConnectionCardDialog)
+    const dialog = wrapper.getComponent(ConnectedItemCard)
     expect(dialog.props()).toMatchObject({ open: true, readOnly: true, perspective: 'source' })
-    expect(state.getWorkItem).not.toHaveBeenCalled()
+    expect(state.getWorkItem).not.toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'item-1' }))
     expect(wrapper.find('.kanban-card button button').exists()).toBe(false)
   })
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, provide, reactive, ref, shallowRef } from 'vue'
-import { ProjectLifecycle, type ConnectColumn, type ConnectColumnCatalog, type WorkItemConnection, type WorkItemConnectionCell } from '@yumpoo/api-client'
+import { ProjectLifecycle, type ConnectColumn, type ConnectColumnCatalog, type WorkItemConnection, type WorkItemConnectionCell, type WorkItemDetail } from '@yumpoo/api-client'
 import ConnectCell from '../components/projects/connect/ConnectCell.vue'
 import ConnectColumnAddButton from '../components/projects/connect/ConnectColumnAddButton.vue'
 import ConnectColumnHeader from '../components/projects/connect/ConnectColumnHeader.vue'
@@ -9,14 +9,16 @@ import ConnectTableCell from '../components/projects/connect/ConnectTableCell.vu
 import { connectColumnAutoName } from '../components/projects/connect/connectColumnKeys'
 import type { ConnectSetupMode, ConnectTargetChoice } from '../components/projects/connect/useConnectTable'
 import ConnectColumnDeleteDialog from '../components/projects/connect/ConnectColumnDeleteDialog.vue'
-import ConnectionCardDialog from '../components/projects/connect/ConnectionCardDialog.vue'
+import ConnectedItemCard from '../components/projects/connect/ConnectedItemCard.vue'
 import ProjectConnectionsOverview from '../components/projects/connect/ProjectConnectionsOverview.vue'
 import ConnectFilterSection from '../components/projects/connect/ConnectFilterSection.vue'
 import ConnectKanbanConnections from '../components/projects/connect/ConnectKanbanConnections.vue'
 import YpAssignee from '../components/yp/YpAssignee.vue'
 import { connectColumnsContext, type ConnectColumns } from '../components/projects/connect/useConnectColumns'
 import { workItemLabelColorValue } from '../components/projects/workItemLabelColors'
-import { previewColumn, previewConnection, previewConnections, previewSecondProject, previewSource, previewTarget } from './connectColumnFixtures'
+import { connectedItemSource, type ConnectedItemSource } from '../components/projects/connect/useConnectedItem'
+import { previewColumn, previewConnection, previewConnections, previewContents, previewDetail, previewLabels, previewProject, previewSecondProject,
+  previewSource, previewTarget } from './connectColumnFixtures'
 
 const role = ref<'member' | 'nonmember' | 'admin'>('member'), view = ref('source')
 const readOnly = computed(() => role.value === 'admin')
@@ -90,6 +92,30 @@ const service: ConnectColumns = {
   incoming: async () => ({ items: [projectConnection(previewConnection)], page: 0, size: 50, totalElements: 1, totalPages: 1 }),
 }
 provide(connectColumnsContext, service)
+// The card edits an in-memory copy so the editable field layout can be reviewed without a backend.
+const details = new Map<string, WorkItemDetail>()
+const itemSource: ConnectedItemSource = {
+  load: async workItemId => {
+    const card = [...previewConnections.flatMap(connection => [connection.source, connection.target]), previewTarget]
+      .find(value => value.workItemId === workItemId) ?? previewTarget
+    const detail = details.get(workItemId) ?? previewDetail(card)
+    return { detail, project: previewProject(card), contents: previewContents(card.projectId), labels: previewLabels }
+  },
+  edit: async (detail, change) => {
+    const content = previewContents(detail.projectId).items.find(item => item.id === change.value)
+    const status = previewLabels.statuses.find(item => item.code === change.value)
+    const updated: WorkItemDetail = { ...detail, rowVersion: detail.rowVersion + 1, etag: `"${detail.rowVersion + 1}"`, updatedAt: new Date(),
+      ...(change.field === 'title' ? { title: change.value } : {}),
+      ...(change.field === 'priority' ? { priority: change.value as string | null } : {}),
+      ...(change.field === 'assignee' ? { assigneeUserId: change.value as string | null, assigneeDisplayName: change.value ? '王五' : null } : {}),
+      ...(change.field === 'dueDate' ? { dueDate: change.value as Date | null, dueTime: change.dueTime ?? null } : {}),
+      ...(change.field === 'content' && content ? { contentId: content.id, contentName: content.name, contentColorToken: content.colorToken } : {}),
+      ...(change.field === 'status' && status ? { statusCode: status.code, statusCategory: status.statusCategory } : {}) }
+    details.set(detail.id, updated)
+    return updated
+  },
+}
+provide(connectedItemSource, itemSource)
 </script>
 
 <template>
@@ -334,7 +360,7 @@ provide(connectColumnsContext, service)
       :column="deleting"
       @close="deleting = undefined"
     />
-    <connection-card-dialog
+    <connected-item-card
       v-if="card"
       :open="Boolean(card)"
       :connection="card"
