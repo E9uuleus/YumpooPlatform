@@ -5,7 +5,7 @@ import { Search } from '@element-plus/icons-vue'
 import type { ConnectColumn, ConnectTargetProject } from '@yumpoo/api-client'
 import { type ApiProblem } from '../../../api/problems'
 import InlineProblem from '../../InlineProblem.vue'
-import { builtInColumnNames, suggestedConnectColumnName } from './connectColumnKeys'
+import { builtInColumnNames, connectColumnAutoName } from './connectColumnKeys'
 import { toConnectProblem } from './connectProblems'
 import { useConnectContext } from './useConnectColumns'
 
@@ -44,7 +44,7 @@ async function search(append = false) {
 watch(() => [props.open, props.projectId, props.column?.id], () => {
   cancelSearch()
   if (!props.open) return
-  name.value = props.mode === 'edit' ? props.column?.name ?? '' : suggestedConnectColumnName(props.existingNames)
+  name.value = props.mode === 'edit' ? props.column?.name ?? '' : connectColumnAutoName([], props.existingNames)
   query.value = ''; problem.value = undefined; projects.value = []; page.value = 0; totalPages.value = 0
   selected.value = props.mode === 'edit' ? props.column?.targets.map(target => ({ id: target.projectId, name: target.name, code: target.code })) ?? [] : []
   void search()
@@ -192,7 +192,7 @@ async function submit() {
         </div>
       </el-form-item>
       <p class="connect-column-form__notice">
-        所选项目的成员会在「被连接」列中看到本项目工作项的卡片（项目名、编号、标题、状态、优先级、类别、处理人）。
+        将创建双向连接：所选项目的表格会自动出现以本项目命名的列，两边成员都能查看和维护连接。
       </p>
     </el-form>
     <template #footer>

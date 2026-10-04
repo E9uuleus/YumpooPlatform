@@ -21,13 +21,14 @@ describe('连接列表头', () => {
     window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1 }))
     expect(wrapper.emitted('resize')?.slice(-2)).toEqual([[180, false], [200, false]])
   })
-  it('成员只有设置和隐藏，负责人可删除，被连接列始终只有隐藏', async () => {
+  it('成员只有设置和隐藏，负责人可删除，反向列始终只有隐藏', async () => {
     const wrapper = mount(ConnectColumnHeader, { props: { label: '产品缺陷', kind: 'connect', canManage: true, canDelete: false } })
     expect(wrapper.findAllComponents(ElDropdownItem).map(item => item.props('command'))).toEqual(['edit', 'hide'])
     await wrapper.setProps({ canDelete: true })
     expect(wrapper.findAllComponents(ElDropdownItem).map(item => item.props('command'))).toEqual(['edit', 'hide', 'delete'])
-    await wrapper.setProps({ kind: 'incoming' })
+    await wrapper.setProps({ kind: 'reverse', reverseHint: '双向连接：来自「华东现场」的「实施问题」' })
     expect(wrapper.findAllComponents(ElDropdownItem).map(item => item.props('command'))).toEqual(['hide'])
+    expect(wrapper.get('.connect-column-header__two-way').attributes('aria-label')).toBe('双向连接')
     wrapper.findComponent(ElDropdown).vm.$emit('command', 'hide')
     expect(wrapper.emitted('hide')).toHaveLength(1)
   })

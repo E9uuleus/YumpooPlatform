@@ -2,7 +2,8 @@ import { computed, nextTick, provide, ref, watch, type MaybeRefOrGetter, toValue
 import { ProjectActorAccess, ProjectLifecycle, type ConnectColumn, type ProjectDetail, type ProjectWorkItemListItem, type WorkItemConnection } from '@yumpoo/api-client'
 import { useRoute, useRouter } from 'vue-router'
 import { useSession } from '../../../composables/useSession'
-import { connectColumnDefaultWidth, connectColumnKey, connectColumnKeys, connectColumnMinWidth, type ConnectColumnKey, type ConnectTableColumn } from './connectColumnKeys'
+import { connectColumnDefaultWidth, connectColumnKey, connectColumnKeys, connectColumnMinWidth, reverseColumnKey, reverseColumnLabels,
+  type ConnectColumnKey, type ConnectTableColumn } from './connectColumnKeys'
 import { connectColumnPrefsKey, readConnectColumnPrefs, saveConnectColumnPrefs, type ConnectColumnPrefs } from './connectColumnPrefs'
 import { connectColumnsContext, useConnectColumns } from './useConnectColumns'
 
@@ -19,11 +20,21 @@ export function useConnectTable(options: { projectId: MaybeRefOrGetter<string>; 
   const catalog = context.catalog
   const keys = computed(() => connectColumnKeys(catalog.value))
   const width = (key: ConnectColumnKey) => prefs.value.widths[key] ?? connectColumnDefaultWidth(key)
-  const columns = computed<ConnectTableColumn[]>(() => !toValue(options.enabled) ? [] : [
-    ...(catalog.value?.items ?? []).map(column => ({ key: connectColumnKey(column.id), label: column.name, kind: 'connect' as const, column,
-      width: width(connectColumnKey(column.id)), minWidth: 140 })),
-    ...(catalog.value?.incomingAvailable ? [{ key: 'connect-incoming' as const, label: '被连接', kind: 'incoming' as const, width: width('connect-incoming'), minWidth: 160 }] : []),
-  ])
+  const columns = computed<ConnectTableColumn[]>(() => {
+    if (!toValue(options.enabled)) return []
+    const labels = reverseColumnLabels(catalog.value?.incomingColumns ?? [])
+    return [
+      ...(catalog.value?.items ?? []).map(column => {
+        const key = connectColumnKey(column.id)
+        return { key, label: column.name, kind: 'connect' as const, column, width: width(key), minWidth: connectColumnMinWidth(key) }
+      }),
+      ...(catalog.value?.incomingColumns ?? []).map(reverse => {
+        const key = reverseColumnKey(reverse.columnId)
+        return { key, label: labels.get(reverse.columnId) ?? reverse.projectName, kind: 'reverse' as const, reverse, width: width(key),
+          minWidth: connectColumnMinWidth(key) }
+      }),
+    ]
+  })
   const hidden = computed(() => new Set(prefs.value.hidden))
   const visibleColumns = computed(() => columns.value.filter(column => !hidden.value.has(column.key)))
   const readOnly = computed(() => !toValue(options.project) || toValue(options.project)?.lifecycle !== ProjectLifecycle.Active

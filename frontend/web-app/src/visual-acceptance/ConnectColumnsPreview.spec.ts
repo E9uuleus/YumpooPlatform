@@ -4,13 +4,13 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, expect, it } from 'vitest'
 import ConnectColumnsPreview from './ConnectColumnsPreview.vue'
 import ConnectCell from '../components/projects/connect/ConnectCell.vue'
-import IncomingConnectCell from '../components/projects/connect/IncomingConnectCell.vue'
+import ReverseConnectCell from '../components/projects/connect/ReverseConnectCell.vue'
 import ProjectConnectionsOverview from '../components/projects/connect/ProjectConnectionsOverview.vue'
 import ConnectionCardDialog from '../components/projects/connect/ConnectionCardDialog.vue'
 import ConnectKanbanConnections from '../components/projects/connect/ConnectKanbanConnections.vue'
 
 enableAutoUnmount(afterEach)
-it('连接验收覆盖单/多目标、空单元格、只读、被连接、设置概览与缺省卡片字段', async () => {
+it('连接验收覆盖单/多目标、空单元格、只读、反向列、设置概览与缺省卡片字段', async () => {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null } }] })
   const wrapper = mount(ConnectColumnsPreview, { global: { plugins: [ElementPlus, router] } })
   await flushPromises()
@@ -20,7 +20,7 @@ it('连接验收覆盖单/多目标、空单元格、只读、被连接、设置
   wrapper.findAllComponents(ElRadioGroup)[1]!.vm.$emit('update:modelValue', 'admin'); await flushPromises()
   expect(wrapper.findAllComponents(ConnectCell).every(cell => cell.props('readOnly'))).toBe(true)
   wrapper.findAllComponents(ElRadioGroup)[0]!.vm.$emit('update:modelValue', 'target'); await flushPromises()
-  expect(wrapper.findAllComponents(IncomingConnectCell)).toHaveLength(2)
+  expect(wrapper.findAllComponents(ReverseConnectCell)).toHaveLength(2)
   wrapper.findAllComponents(ElRadioGroup)[0]!.vm.$emit('update:modelValue', 'settings'); await flushPromises()
   expect(wrapper.getComponent(ProjectConnectionsOverview).text()).toContain('移动端重构')
   await wrapper.findAll('.connect-preview__examples button')[1]!.trigger('click'); await flushPromises()
@@ -32,7 +32,7 @@ it('连接验收覆盖单/多目标、空单元格、只读、被连接、设置
   expect((wrapper.get('[aria-label="产品缺陷 已连接"] input').element as HTMLInputElement).checked).toBe(false)
   wrapper.findAllComponents(ElRadioGroup)[0]!.vm.$emit('update:modelValue', 'kanban'); await flushPromises()
   const chips = wrapper.findAllComponents(ConnectKanbanConnections)
-  expect(chips.map(component => component.props('connections').length)).toEqual([5, 0])
-  chips[0]!.vm.$emit('openCard', chips[0]!.props('connections')[0]); await flushPromises()
+  expect(chips.map(component => component.props('cell')?.outgoing.flatMap(column => column.connections).length ?? 0)).toEqual([5, 0])
+  chips[0]!.vm.$emit('openCard', chips[0]!.props('cell')!.outgoing[0]!.connections[0], 'source'); await flushPromises()
   expect(wrapper.getComponent(ConnectionCardDialog).props('readOnly')).toBe(true)
 })

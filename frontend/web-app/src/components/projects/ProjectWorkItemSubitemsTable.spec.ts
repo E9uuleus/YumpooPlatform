@@ -1,4 +1,5 @@
 import {
+  ProjectLifecycle,
   WorkItemStatusCategory,
   WorkItemLabelColorToken,
   type ProjectWorkItemListItem,
@@ -11,9 +12,12 @@ import { localProblem } from '../../api/problems'
 import ProjectWorkItemSubitemsTable from './ProjectWorkItemSubitemsTable.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 import ConnectCell from './connect/ConnectCell.vue'
-import IncomingConnectCell from './connect/IncomingConnectCell.vue'
+import ReverseConnectCell from './connect/ReverseConnectCell.vue'
 import { connectionTestContext } from './connect/connectTestSupport'
 import { connectColumn, connection } from './connect/connectTestFixtures'
+
+const reverseColumn = { columnId: 'reverse-1', columnName: '实施问题', projectId: 'other-project', projectCode: 'P9', projectName: '华南现场',
+  projectLifecycle: ProjectLifecycle.Active, actorCanLinkExisting: true }
 
 enableAutoUnmount(afterEach)
 
@@ -87,9 +91,10 @@ describe('项目工作项子表格', () => {
     await wrapper.setProps({
       connectColumns: [
         { key: 'connect:column-1', label: '产品缺陷', kind: 'connect', column: connectColumn, width: 236, minWidth: 140 },
-        { key: 'connect-incoming', label: '被连接', kind: 'incoming', width: 220, minWidth: 160 },
+        { key: 'connect-reverse:reverse-1', label: '华南现场', kind: 'reverse', reverse: reverseColumn, width: 200, minWidth: 140 },
       ],
-      connectCells: new Map([['child-1', { workItemId: 'child-1', outgoing: [{ columnId: 'column-1', connections: [connection] }], incoming: [connection], incomingTotal: 1, incomingByColumn: [] }]]),
+      connectCells: new Map([['child-1', { workItemId: 'child-1', outgoing: [{ columnId: 'column-1', connections: [connection] }], incoming: [connection],
+        incomingTotal: 1, incomingByColumn: [{ columnId: 'reverse-1', connections: [connection], total: 1 }] }]]),
       connectReadOnly: true,
     })
     await flushPromises()
@@ -98,10 +103,12 @@ describe('项目工作项子表格', () => {
     expect(connectIndex).toBeGreaterThan(columns.findIndex(column => column.props('prop') === 'content'))
     expect(columns[connectIndex]?.props('width')).toBe(236)
     expect(wrapper.find('th.subitem-movable-column-header.monday-connect-column').exists()).toBe(false)
-    expect(wrapper.getComponent(IncomingConnectCell).props('readOnly')).toBe(true)
+    expect(wrapper.getComponent(ReverseConnectCell).props('readOnly')).toBe(true)
+    expect(wrapper.getComponent(ReverseConnectCell).props('connections')).toEqual([connection])
     expect(wrapper.findComponent(ConnectCell).props('connections')).toEqual([connection])
     wrapper.findComponent(ConnectCell).vm.$emit('openCard', connection)
-    expect(wrapper.emitted('openConnection')?.[0]).toEqual([connection, 'source'])
+    wrapper.getComponent(ReverseConnectCell).vm.$emit('openCard', connection)
+    expect(wrapper.emitted('openConnection')).toEqual([[connection, 'source'], [connection, 'target']])
   })
   it('转发子项复制事件及父项 ID，并暴露清空真实表格勾选', async () => {
     const wrapper = mountTable()

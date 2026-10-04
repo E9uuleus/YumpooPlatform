@@ -13,11 +13,11 @@ describe('每项目连接列偏好', () => {
     expect(localStorage.getItem('yumpoo:project-work-items:table:v1')).toBe('built-in')
   })
   it('丢弃失效列键并应用默认宽度和最小宽度', () => {
-    localStorage.setItem(key, JSON.stringify({ hidden: ['status', 'connect:deleted', 'connect:a'], widths: { 'connect:a': 42, 'connect-incoming': 100, 'connect:deleted': 999 } }))
-    expect(readConnectColumnPrefs(key, ['connect:a', 'connect:b', 'connect-incoming'])).toEqual({ hidden: ['connect:a'], widths: { 'connect:a': 140, 'connect:b': 200, 'connect-incoming': 160 } })
+    localStorage.setItem(key, JSON.stringify({ hidden: ['status', 'connect:deleted', 'connect:a', 'connect-incoming'], widths: { 'connect:a': 42, 'connect-reverse:r': 100, 'connect:deleted': 999 } }))
+    expect(readConnectColumnPrefs(key, ['connect:a', 'connect:b', 'connect-reverse:r'])).toEqual({ hidden: ['connect:a'], widths: { 'connect:a': 140, 'connect:b': 200, 'connect-reverse:r': 140 } })
   })
   it.each(['broken', 'null', '[]', '{"hidden":"bad","widths":{"connect:a":"bad"}}'])('忽略损坏数据 %s', value => {
     localStorage.setItem(key, value)
-    expect(readConnectColumnPrefs(key, ['connect:a', 'connect-incoming'])).toEqual({ hidden: [], widths: { 'connect:a': 200, 'connect-incoming': 220 } })
+    expect(readConnectColumnPrefs(key, ['connect:a', 'connect-reverse:r'])).toEqual({ hidden: [], widths: { 'connect:a': 200, 'connect-reverse:r': 200 } })
   })
 })

@@ -14,7 +14,8 @@ const emit = defineEmits<{ hide: [key: ConnectColumnKey] }>()
 <template>
   <connect-column-header
     :label="column.label"
-    :kind="column.kind"
+    :kind="column.kind === 'reverse' ? 'reverse' : 'connect'"
+    :reverse-hint="column.reverse && `双向连接：来自「${column.reverse.projectName}」的「${column.reverse.columnName}」`"
     :can-manage="table.canManage"
     :can-delete="table.canDelete"
     :column-key="column.key"

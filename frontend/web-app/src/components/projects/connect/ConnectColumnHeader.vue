@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onBeforeUnmount } from 'vue'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElIcon, ElTooltip } from 'element-plus'
-import { InfoFilled, MoreFilled } from '@element-plus/icons-vue'
+import { MoreFilled } from '@element-plus/icons-vue'
 
-const props = defineProps<{ label: string; kind: 'connect' | 'incoming'; canManage: boolean; canDelete: boolean;
-  columnKey?: string | undefined; width?: number | undefined; minWidth?: number | undefined }>()
+const props = defineProps<{ label: string; kind: 'connect' | 'reverse'; canManage: boolean; canDelete: boolean;
+  columnKey?: string | undefined; width?: number | undefined; minWidth?: number | undefined; reverseHint?: string | undefined }>()
 const emit = defineEmits<{ edit: []; hide: []; delete: []; resize: [width: number, save?: boolean] }>()
 function command(action: string) { if (action === 'hide') emit('hide'); else if (action === 'edit') emit('edit'); else if (action === 'delete') emit('delete') }
 let resize: { x: number; width: number; nextWidth: number; pointerId: number } | undefined
@@ -40,18 +40,25 @@ onBeforeUnmount(cleanup)
     :data-connect-key="columnKey"
     @pointerdown.stop
   >
+    <el-tooltip
+      v-if="kind === 'reverse'"
+      :content="reverseHint ?? '双向连接'"
+    >
+      <svg
+        class="connect-column-header__two-way"
+        viewBox="0 0 16 16"
+        width="14"
+        height="14"
+        aria-label="双向连接"
+        role="img"
+      >
+        <path d="M2.5 5.5h10m-2.5-2.5 2.5 2.5-2.5 2.5M13.5 10.5h-10m2.5-2.5-2.5 2.5 2.5 2.5" />
+      </svg>
+    </el-tooltip>
     <span
       class="connect-column-header__label"
       :title="label"
     >{{ label }}</span>
-    <el-tooltip
-      v-if="kind === 'incoming'"
-      content="其他项目通过连接列关联到这里的工作项"
-    >
-      <el-icon class="connect-column-header__info">
-        <info-filled />
-      </el-icon>
-    </el-tooltip>
     <el-dropdown
       trigger="click"
       @command="command"
@@ -101,7 +108,7 @@ onBeforeUnmount(cleanup)
 <style scoped>
 .connect-column-header { position: relative; display: flex; width: 100%; height: 36px; align-items: center; justify-content: center; gap: 5px; color: var(--yp-text-secondary); font-size: 13px; }
 .connect-column-header__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.connect-column-header__info { flex-shrink: 0; color: var(--yp-text-muted); font-size: 14px; }
+.connect-column-header__two-way { flex-shrink: 0; fill: none; stroke: var(--yp-text-muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .connect-column-header__menu { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: var(--yp-radius-sm); background: transparent; color: var(--yp-text-muted); cursor: pointer; }
 .connect-column-header__menu:hover { background: var(--yp-bg-hover); color: var(--yp-text-primary); }
 .connect-column-header__resize { position: absolute; right: -8px; top: 0; bottom: 0; width: 8px; padding: 0; border: 0; background: transparent; cursor: col-resize; touch-action: none; }

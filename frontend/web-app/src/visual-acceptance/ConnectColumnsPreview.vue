@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, provide, reactive, ref, shallowRef } from 'vue'
-import { ProjectLifecycle, type ConnectColumn, type ConnectColumnCatalog, type WorkItemConnection } from '@yumpoo/api-client'
+import { ProjectLifecycle, type ConnectColumn, type ConnectColumnCatalog, type WorkItemConnection, type WorkItemConnectionCell } from '@yumpoo/api-client'
 import ConnectCell from '../components/projects/connect/ConnectCell.vue'
-import IncomingConnectCell from '../components/projects/connect/IncomingConnectCell.vue'
+import ReverseConnectCell from '../components/projects/connect/ReverseConnectCell.vue'
 import ConnectColumnAddButton from '../components/projects/connect/ConnectColumnAddButton.vue'
 import ConnectColumnHeader from '../components/projects/connect/ConnectColumnHeader.vue'
 import ConnectColumnDialog from '../components/projects/connect/ConnectColumnDialog.vue'
@@ -29,6 +29,8 @@ function changeFilter(field: keyof typeof filters, id: string, checked: boolean)
 }
 const kanbanConnections = computed(() => [...previewConnections, ...previewConnections.slice(0, 2).map((connection, index) => ({ ...connection,
   id: `preview-more-${index}`, columnName: '跨项目协作', target: { ...connection.target, projectId: previewSecondProject.projectId, projectCode: previewSecondProject.code, projectName: previewSecondProject.name } }))].map(projectConnection))
+const kanbanCell = computed<WorkItemConnectionCell>(() => ({ workItemId: previewSource.workItemId, incoming: [], incomingTotal: 0, incomingByColumn: [],
+  outgoing: [{ columnId: previewColumn.id, connections: kanbanConnections.value }] }))
 const card = shallowRef<WorkItemConnection>(), perspective = ref<'source' | 'target'>('source')
 const dialogOpen = ref(false), editing = shallowRef<ConnectColumn>(), deleting = shallowRef<ConnectColumn>()
 const catalog = computed<ConnectColumnCatalog>(() => ({ items: columns.value, incomingAvailable: true,
@@ -59,6 +61,8 @@ const service: ConnectColumns = {
   },
   deleteColumn: async column => { baseColumns.value = baseColumns.value.filter(current => current.id !== column.id); return connections.value.length },
   link: async () => previewConnection,
+  reverseLink: async () => previewConnection,
+  reverseCreateAndLink: async () => previewConnection,
   createAndLink: async (_id, input) => {
     const created = { ...previewConnection, id: crypto.randomUUID(), target: { ...previewTarget, title: input.title, assignee: null, priority: null } }
     connections.value = [...connections.value, created]; return created
@@ -68,6 +72,8 @@ const service: ConnectColumns = {
   searchTargets: async query => ({ items: [previewColumn.targets[0]!, previewSecondProject].map(target => ({ id: target.projectId, code: target.code, name: target.name })).filter(target => `${target.name}${target.code}`.includes(query)), page: 0, size: 20, totalElements: 2, totalPages: 1 }),
   createOptions: async () => ({ targetProjectId: previewTarget.projectId, targetProjectName: previewTarget.projectName, categories: [previewTarget.category], defaultContentId: previewTarget.category.id }),
   searchCandidates: async () => ({ items: [{ card: previewTarget, parent: null, alreadyConnected: true }, { card: { ...previewTarget, title: '打印队列重试机制', workItemId: 'preview-candidate', itemNo: 'P003-55' }, parent: null, alreadyConnected: false }], page: 0, size: 20, totalElements: 2, totalPages: 1 }),
+  reverseCandidates: async () => ({ items: [], page: 0, size: 20, totalElements: 0, totalPages: 0 }),
+  reverseCreateOptions: async () => ({ targetProjectId: previewSecondProject.projectId, targetProjectName: previewSecondProject.name, categories: [previewTarget.category], defaultContentId: previewTarget.category.id }),
   incoming: async () => ({ items: [projectConnection(previewConnection)], page: 0, size: 50, totalElements: 1, totalPages: 1 }),
 }
 provide(connectColumnsContext, service)
@@ -137,7 +143,7 @@ provide(connectColumnsContext, service)
           <article class="connect-preview__kanban-card">
             <small>{{ index === 0 ? previewSource.itemNo : 'P012-9' }}</small>
             <strong>{{ index === 0 ? previewSource.title : '批量导出缺少列' }}</strong>
-            <connect-kanban-connections :connections="index === 0 ? kanbanConnections : []" @open-card="openCard($event)" />
+            <connect-kanban-connections :cell="index === 0 ? kanbanCell : undefined" @open-card="openCard" />
           </article>
         </section>
       </div>
@@ -175,8 +181,9 @@ provide(connectColumnsContext, service)
                   class="connect-preview__connection"
                 >
                   <connect-column-header
-                    label="被连接"
-                    kind="incoming"
+                    :label="catalog.incomingColumns[0]!.projectName"
+                    kind="reverse"
+                    :reverse-hint="`双向连接：来自「${catalog.incomingColumns[0]!.projectName}」的「${catalog.incomingColumns[0]!.columnName}」`"
                     :can-manage="false"
                     :can-delete="false"
                   />
@@ -226,11 +233,12 @@ provide(connectColumnsContext, service)
                   </td>
                 </template>
                 <td v-else>
-                  <incoming-connect-cell
+                  <reverse-connect-cell
                     :key="role"
                     :item="{ id: row.workItemId, title: row.title }"
-                    :incoming="index === 0 ? [projectConnection(previewConnection)] : []"
-                    :incoming-total="index === 0 ? 1 : 0"
+                    :reverse="catalog.incomingColumns[0]!"
+                    :connections="index === 0 ? [projectConnection(previewConnection)] : []"
+                    :total="index === 0 ? 1 : 0"
                     :read-only="readOnly"
                     @open-card="openCard($event, 'target')"
                   />

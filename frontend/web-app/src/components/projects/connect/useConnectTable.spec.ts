@@ -6,6 +6,9 @@ import { useConnectTable } from './useConnectTable'
 import { connectColumnPrefsKey } from './connectColumnPrefs'
 import { connectionCatalog } from './connectTestFixtures'
 
+const reverseColumn = { columnId: 'reverse-1', columnName: '实施问题', projectId: 'other-project', projectCode: 'P9', projectName: '华南现场',
+  projectLifecycle: ProjectLifecycle.Active, actorCanLinkExisting: true }
+
 const api = vi.hoisted(() => ({ listConnectColumns: vi.fn(), listWorkItemConnectionCells: vi.fn() }))
 const replace = vi.hoisted(() => vi.fn())
 const route = reactive({ path: '/projects/project-1/overview', query: {} as Record<string, string>, hash: '#table' })
@@ -17,7 +20,7 @@ beforeEach(() => {
   localStorage.clear(); vi.resetAllMocks()
   route.query = {}
   replace.mockImplementation(async ({ query }: { query: Record<string, string> }) => { route.query = query })
-  api.listConnectColumns.mockResolvedValue({ ...connectionCatalog, incomingAvailable: true })
+  api.listConnectColumns.mockResolvedValue({ ...connectionCatalog, incomingAvailable: true, incomingColumns: [reverseColumn] })
   api.listWorkItemConnectionCells.mockResolvedValue({ items: [] })
 })
 function harness() {
@@ -61,12 +64,13 @@ describe('表格连接列集成状态', () => {
     table.resizeColumn('connect:column-1', 250, true)
     expect(JSON.parse(localStorage.getItem(key)!)).toMatchObject({ widths: { 'connect:column-1': 250 } })
   })
-  it('服务端顺序后追加被连接列，个人隐藏与宽度不混入内置偏好', async () => {
+  it('服务端顺序后追加以来源项目命名的反向列，个人隐藏与宽度不混入内置偏好', async () => {
     const { table } = harness(); await flushPromises()
-    expect(table.visibleColumns.value.map(column => column.key)).toEqual(['connect:column-1', 'connect-incoming'])
-    table.resizeColumn('connect:column-1', 80); table.toggleColumn('connect-incoming', false)
+    expect(table.visibleColumns.value.map(column => [column.key, column.kind, column.label])).toEqual([
+      ['connect:column-1', 'connect', '产品缺陷'], ['connect-reverse:reverse-1', 'reverse', '华南现场']])
+    table.resizeColumn('connect:column-1', 80); table.toggleColumn('connect-reverse:reverse-1', false)
     expect(table.visibleColumns.value.map(column => column.width)).toEqual([140])
-    expect(JSON.parse(localStorage.getItem(connectColumnPrefsKey('company', 'user', 'project-1'))!)).toMatchObject({ hidden: ['connect-incoming'], widths: { 'connect:column-1': 140 } })
+    expect(JSON.parse(localStorage.getItem(connectColumnPrefsKey('company', 'user', 'project-1'))!)).toMatchObject({ hidden: ['connect-reverse:reverse-1'], widths: { 'connect:column-1': 140 } })
     expect(localStorage.getItem('yumpoo:project-work-items:table:v1')).toBeNull()
   })
   it('项目切换恢复各自偏好，嵌入开关清空连接显示', async () => {
@@ -75,7 +79,7 @@ describe('表格连接列集成状态', () => {
     projectId.value = 'project-2'; await flushPromises()
     expect(table.visibleColumns.value).toHaveLength(2)
     projectId.value = 'project-1'; await flushPromises()
-    expect(table.visibleColumns.value.map(column => column.key)).toEqual(['connect-incoming'])
+    expect(table.visibleColumns.value.map(column => column.key)).toEqual(['connect-reverse:reverse-1'])
     enabled.value = false; await flushPromises()
     expect(table.visibleColumns.value).toEqual([])
   })

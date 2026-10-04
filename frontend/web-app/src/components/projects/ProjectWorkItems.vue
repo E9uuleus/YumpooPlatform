@@ -80,8 +80,7 @@ import ConnectColumnAddButton from './connect/ConnectColumnAddButton.vue'
 import ConnectTableColumnHeader from './connect/ConnectTableColumnHeader.vue'
 import ConnectColumnDialog from './connect/ConnectColumnDialog.vue'
 import ConnectColumnDeleteDialog from './connect/ConnectColumnDeleteDialog.vue'
-import ConnectCell from './connect/ConnectCell.vue'
-import IncomingConnectCell from './connect/IncomingConnectCell.vue'
+import ConnectTableCell from './connect/ConnectTableCell.vue'
 import ConnectionCardDialog from './connect/ConnectionCardDialog.vue'
 import { isConnectColumnKey, type ConnectColumnKey } from './connect/connectColumnKeys'
 import ConnectFilterSection from './connect/ConnectFilterSection.vue'
@@ -3486,21 +3485,13 @@ onBeforeUnmount(() => {
                     :table="connect"
                     @hide="toggleColumn($event, false)"
                   />
-                  <connect-cell
-                    v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem) && column.column"
+                  <connect-table-cell
+                    v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem)"
+                    :column="column"
                     :item="scope.row as ProjectWorkItemListItem"
-                    :column="column.column"
-                    :connections="connect.cells.get(scope.row.id)?.outgoing.find(value => value.columnId === column.column?.id)?.connections ?? []"
+                    :cell="connect.cells.get(scope.row.id)"
                     :read-only="connect.readOnly"
-                    @open-card="connect.openCard($event)"
-                  />
-                  <incoming-connect-cell
-                    v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem) && column.kind === 'incoming'"
-                    :item="scope.row as ProjectWorkItemListItem"
-                    :incoming="connect.cells.get(scope.row.id)?.incoming ?? []"
-                    :incoming-total="connect.cells.get(scope.row.id)?.incomingTotal ?? 0"
-                    :read-only="connect.readOnly"
-                    @open-card="connect.openCard($event, 'target')"
+                    @open-card="connect.openCard"
                   />
                 </template>
               </el-table-column>
@@ -3636,8 +3627,8 @@ onBeforeUnmount(() => {
               </button>
               <connect-kanban-connections
                 v-if="!embedded"
-                :connections="connect.cells.get(item.id)?.outgoing.flatMap(column => column.connections) ?? []"
-                @open-card="connect.openCard($event)"
+                :cell="connect.cells.get(item.id)"
+                @open-card="connect.openCard"
               />
               <span><yp-priority-badge :priority="item.priority" /></span>
             </article>

@@ -39,8 +39,7 @@ import type { DueDateValue } from './workItemDueDate'
 import { workItemLabelColorValue } from './workItemLabelColors'
 import type { WorkItemConnection, WorkItemConnectionCell } from '@yumpoo/api-client'
 import type { ConnectTableColumn } from './connect/connectColumnKeys'
-import ConnectCell from './connect/ConnectCell.vue'
-import IncomingConnectCell from './connect/IncomingConnectCell.vue'
+import ConnectTableCell from './connect/ConnectTableCell.vue'
 
 export interface ProjectWorkItemSubitemSortRule {
   field: string
@@ -923,21 +922,13 @@ onBeforeUnmount(() => {
             </slot>
           </template>
           <template #default="{ row }">
-            <connect-cell
-              v-if="!isDraft(row as ProjectWorkItemListItem) && column.column"
+            <connect-table-cell
+              v-if="!isDraft(row as ProjectWorkItemListItem)"
+              :column="column"
               :item="row as ProjectWorkItemListItem"
-              :column="column.column"
-              :connections="connectCells?.get(row.id)?.outgoing.find(value => value.columnId === column.column?.id)?.connections ?? []"
+              :cell="connectCells?.get(row.id)"
               :read-only="connectReadOnly ?? true"
-              @open-card="emit('openConnection', $event, 'source')"
-            />
-            <incoming-connect-cell
-              v-else-if="!isDraft(row as ProjectWorkItemListItem) && column.kind === 'incoming'"
-              :item="row as ProjectWorkItemListItem"
-              :incoming="connectCells?.get(row.id)?.incoming ?? []"
-              :incoming-total="connectCells?.get(row.id)?.incomingTotal ?? 0"
-              :read-only="connectReadOnly ?? true"
-              @open-card="emit('openConnection', $event, 'target')"
+              @open-card="(connection, side) => emit('openConnection', connection, side)"
             />
           </template>
         </el-table-column>

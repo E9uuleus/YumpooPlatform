@@ -79,7 +79,7 @@ function cannotAdd(selected: Set<string>, id: string, available = true) {
       v-if="displayedIncoming.length"
       class="connect-filters__incoming"
     >
-      <span>被连接来源 <small>最多选择 20 项</small></span>
+      <span>双向连接来源 <small>最多选择 20 项</small></span>
       <el-checkbox
         v-for="project in displayedIncoming"
         :key="project.value"

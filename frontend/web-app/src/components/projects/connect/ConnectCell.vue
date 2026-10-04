@@ -73,7 +73,7 @@ function focusPopover() { void nextTick(() => { if (!props.column) document.getE
           ref="opener"
           type="button"
           class="connect-cell__open"
-          :aria-label="`${column?.name ?? '被连接'}：${item.title}，${total} 个连接`"
+          :aria-label="`${column?.name ?? '双向连接'}：${item.title}，${total} 个连接`"
           :aria-expanded="open"
           @click.stop="open = !open"
         >

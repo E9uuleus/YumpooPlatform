@@ -1,11 +1,12 @@
 import { effectScope, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ResponseError, type WorkItemConnectionCellList } from '@yumpoo/api-client'
+import { ConnectCandidateSort, ResponseError, type WorkItemConnectionCellList } from '@yumpoo/api-client'
 import { useConnectColumns } from './useConnectColumns'
 import { connectColumn, connection, connectionCatalog } from './connectTestFixtures'
 
 const api = vi.hoisted(() => ({ listConnectColumns: vi.fn(), listWorkItemConnectionCells: vi.fn(), createConnectColumn: vi.fn(),
-  updateConnectColumn: vi.fn(), deleteConnectColumn: vi.fn(), linkWorkItemConnection: vi.fn(), createConnectedWorkItem: vi.fn(), unlinkWorkItemConnection: vi.fn(), getWorkItemConnection: vi.fn() }))
+  updateConnectColumn: vi.fn(), deleteConnectColumn: vi.fn(), linkWorkItemConnection: vi.fn(), createConnectedWorkItem: vi.fn(), unlinkWorkItemConnection: vi.fn(), getWorkItemConnection: vi.fn(),
+  createReverseConnectedWorkItem: vi.fn(), searchReverseConnectCandidates: vi.fn(), searchConnectCandidates: vi.fn() }))
 vi.mock('../../../api/client', () => ({ workItemsApi: api }))
 const csrf = vi.hoisted(() => ({ token: 'csrf' as string | undefined }))
 vi.mock('@yumpoo/api-client', async original => ({ ...await original<typeof import('@yumpoo/api-client')>(), readCsrfToken: () => csrf.token }))
@@ -97,7 +98,7 @@ describe('连接目录与批量单元格', () => {
   it.each(['update', 'delete'] as const)('%s 遇到已被删除的列时刷新目录并移除残留缓存', async operation => {
     const { data } = harness()
     await data.loadCatalog()
-    api.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item', outgoing: [{ columnId: connectColumn.id, connections: [connection] }], incoming: [], incomingTotal: 0 }] })
+    api.listWorkItemConnectionCells.mockResolvedValue({ items: [{ workItemId: 'item', outgoing: [{ columnId: connectColumn.id, connections: [connection] }], incoming: [], incomingTotal: 0, incomingByColumn: [] }] })
     await data.ensureCells(['item'])
     api.listConnectColumns.mockResolvedValue({ ...connectionCatalog, items: [] }); api.listConnectColumns.mockClear()
     api.listWorkItemConnectionCells.mockClear()
@@ -145,6 +146,34 @@ describe('连接目录与批量单元格', () => {
     expect(api.listWorkItemConnectionCells).toHaveBeenCalledExactlyOnceWith({ projectId: affected.projectId, workItemIds: [affected.workItemId] }, { signal: expect.any(AbortSignal) })
     expect(data.cells.value.get(affected.workItemId)).toEqual(response([affected.workItemId]).items[0])
     expect(data.cells.value.get('unaffected-item')).toEqual(unchanged)
+  })
+  it('反向列以当前行为目标关联或新建，只刷新本项目行，并在目录变化时清除失效反向列', async () => {
+    const { data, projectId } = harness()
+    projectId.value = connection.target.projectId
+    const reverse = { columnId: connectColumn.id, columnName: connectColumn.name, projectId: connection.source.projectId, projectCode: 'P012',
+      projectName: connection.source.projectName, projectLifecycle: connectColumn.targets[0]!.lifecycle, actorCanLinkExisting: true }
+    api.listConnectColumns.mockResolvedValue({ ...connectionCatalog, items: [], incomingColumns: [reverse] })
+    await data.loadCatalog()
+    api.listWorkItemConnectionCells.mockImplementation(async ({ workItemIds }: { workItemIds: string[] }) => ({
+      items: response(workItemIds).items.map(cell => ({ ...cell, incomingByColumn: [{ columnId: connectColumn.id, connections: [connection], total: 1 }] })) }))
+    await data.ensureCells([connection.target.workItemId])
+    expect(data.cells.value.get(connection.target.workItemId)?.incomingByColumn).toHaveLength(1)
+    api.listWorkItemConnectionCells.mockClear()
+    await data.reverseLink(connection.target.workItemId, connectColumn.id, connection.source.workItemId)
+    expect(api.linkWorkItemConnection).toHaveBeenCalledWith(expect.objectContaining({ workItemId: connection.source.workItemId,
+      workItemConnectionLinkRequest: { columnId: connectColumn.id, targetWorkItemId: connection.target.workItemId } }), expect.anything())
+    api.createReverseConnectedWorkItem.mockResolvedValue(connection)
+    await data.reverseCreateAndLink(connection.target.workItemId, { columnId: connectColumn.id, title: '来源补充' })
+    expect(api.createReverseConnectedWorkItem).toHaveBeenCalledWith(expect.objectContaining({ workItemId: connection.target.workItemId,
+      reverseConnectedWorkItemCreateRequest: { columnId: connectColumn.id, title: '来源补充' } }), expect.anything())
+    expect(api.listWorkItemConnectionCells.mock.calls.map(call => call[0].workItemIds)).toEqual([[connection.target.workItemId], [connection.target.workItemId]])
+    api.searchReverseConnectCandidates.mockResolvedValue({ items: [], page: 0, size: 20, totalElements: 0, totalPages: 0 })
+    await data.reverseCandidates(connectColumn.id, connection.target.workItemId, '', 0, undefined, { fields: [], sort: ConnectCandidateSort.Title })
+    expect(api.searchReverseConnectCandidates).toHaveBeenCalledWith({ workItemId: connection.target.workItemId, columnId: connectColumn.id,
+      q: '', page: 0, size: 20, sort: 'TITLE' }, expect.anything())
+    api.listConnectColumns.mockResolvedValue({ ...connectionCatalog, items: [], incomingColumns: [] })
+    await data.loadCatalog()
+    expect(data.cells.value.get(connection.target.workItemId)?.incomingByColumn).toEqual([])
   })
   it('缺少 CSRF 不发送写请求', async () => {
     csrf.token = undefined
