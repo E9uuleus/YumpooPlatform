@@ -1,0 +1,18 @@
+/* Rounded colour strip on the left of anything that stands for a work item row outside the table body.
+   It follows the row's group colour unless --work-item-accent picks another one (for example a status colour). */
+.work-item-accent-bar {
+  position: relative;
+  border-radius: var(--work-item-hierarchy-corner-radius, 6px);
+}
+
+.work-item-accent-bar::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--work-item-hierarchy-bar-width, 6px);
+  border-radius: var(--work-item-hierarchy-corner-radius, 6px) 0 0 var(--work-item-hierarchy-corner-radius, 6px);
+  background: var(--work-item-accent, var(--work-item-group-accent, rgb(87, 155, 252)));
+  content: '';
+  pointer-events: none;
+}

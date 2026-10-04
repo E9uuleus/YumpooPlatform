@@ -4,7 +4,6 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, expect, it } from 'vitest'
 import ConnectColumnsPreview from './ConnectColumnsPreview.vue'
 import ConnectCell from '../components/projects/connect/ConnectCell.vue'
-import ReverseConnectCell from '../components/projects/connect/ReverseConnectCell.vue'
 import ProjectConnectionsOverview from '../components/projects/connect/ProjectConnectionsOverview.vue'
 import ConnectionCardDialog from '../components/projects/connect/ConnectionCardDialog.vue'
 import ConnectKanbanConnections from '../components/projects/connect/ConnectKanbanConnections.vue'
@@ -20,7 +19,7 @@ it('连接验收覆盖单/多目标、空单元格、只读、反向列、设置
   wrapper.findAllComponents(ElRadioGroup)[1]!.vm.$emit('update:modelValue', 'admin'); await flushPromises()
   expect(wrapper.findAllComponents(ConnectCell).every(cell => cell.props('readOnly'))).toBe(true)
   wrapper.findAllComponents(ElRadioGroup)[0]!.vm.$emit('update:modelValue', 'target'); await flushPromises()
-  expect(wrapper.findAllComponents(ReverseConnectCell)).toHaveLength(2)
+  expect(wrapper.findAllComponents(ConnectCell).filter(cell => cell.props('reverse'))).toHaveLength(2)
   wrapper.findAllComponents(ElRadioGroup)[0]!.vm.$emit('update:modelValue', 'settings'); await flushPromises()
   expect(wrapper.getComponent(ProjectConnectionsOverview).text()).toContain('移动端重构')
   await wrapper.findAll('.connect-preview__examples button')[1]!.trigger('click'); await flushPromises()

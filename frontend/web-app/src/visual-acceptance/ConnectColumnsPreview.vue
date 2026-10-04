@@ -2,7 +2,6 @@
 import { computed, nextTick, provide, reactive, ref, shallowRef } from 'vue'
 import { ProjectLifecycle, type ConnectColumn, type ConnectColumnCatalog, type WorkItemConnection, type WorkItemConnectionCell } from '@yumpoo/api-client'
 import ConnectCell from '../components/projects/connect/ConnectCell.vue'
-import ReverseConnectCell from '../components/projects/connect/ReverseConnectCell.vue'
 import ConnectColumnAddButton from '../components/projects/connect/ConnectColumnAddButton.vue'
 import ConnectColumnHeader from '../components/projects/connect/ConnectColumnHeader.vue'
 import ConnectColumnSetupPopover from '../components/projects/connect/ConnectColumnSetupPopover.vue'
@@ -293,7 +292,7 @@ provide(connectColumnsContext, service)
                   </td>
                 </template>
                 <td v-else>
-                  <reverse-connect-cell
+                  <connect-cell
                     :key="role"
                     :item="{ id: row.workItemId, title: row.title }"
                     :reverse="catalog.incomingColumns[0]!"

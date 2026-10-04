@@ -12,7 +12,6 @@ import { localProblem } from '../../api/problems'
 import ProjectWorkItemSubitemsTable from './ProjectWorkItemSubitemsTable.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 import ConnectCell from './connect/ConnectCell.vue'
-import ReverseConnectCell from './connect/ReverseConnectCell.vue'
 import { connectionTestContext } from './connect/connectTestSupport'
 import { connectColumn, connection } from './connect/connectTestFixtures'
 
@@ -103,11 +102,11 @@ describe('项目工作项子表格', () => {
     expect(connectIndex).toBeGreaterThan(columns.findIndex(column => column.props('prop') === 'content'))
     expect(columns[connectIndex]?.props('width')).toBe(236)
     expect(wrapper.find('th.subitem-movable-column-header.monday-connect-column').exists()).toBe(false)
-    expect(wrapper.getComponent(ReverseConnectCell).props('readOnly')).toBe(true)
-    expect(wrapper.getComponent(ReverseConnectCell).props('connections')).toEqual([connection])
-    expect(wrapper.findComponent(ConnectCell).props('connections')).toEqual([connection])
-    wrapper.findComponent(ConnectCell).vm.$emit('openCard', connection)
-    wrapper.getComponent(ReverseConnectCell).vm.$emit('openCard', connection)
+    const [forwardCell, reverseCell] = wrapper.findAllComponents(ConnectCell)
+    expect(reverseCell!.props()).toMatchObject({ readOnly: true, connections: [connection], total: 1, reverse: reverseColumn })
+    expect(forwardCell!.props('connections')).toEqual([connection])
+    forwardCell!.vm.$emit('openCard', connection)
+    reverseCell!.vm.$emit('openCard', connection)
     expect(wrapper.emitted('openConnection')).toEqual([[connection, 'source'], [connection, 'target']])
   })
   it('转发子项复制事件及父项 ID，并暴露清空真实表格勾选', async () => {

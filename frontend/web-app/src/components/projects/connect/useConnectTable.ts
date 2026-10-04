@@ -7,6 +7,7 @@ import { CONNECT_DRAFT_KEY, connectColumnAutoName, connectColumnDefaultWidth, co
   reverseColumnKey, reverseColumnLabels, type ConnectColumnKey, type ConnectTableColumn } from './connectColumnKeys'
 import { connectColumnPrefsKey, readConnectColumnPrefs, saveConnectColumnPrefs, type ConnectColumnPrefs } from './connectColumnPrefs'
 import { connectColumnsContext, useConnectColumns } from './useConnectColumns'
+import { connectTableActions } from './connectTableActions'
 
 export type ConnectSetupMode = 'create' | 'edit'
 export type ConnectTargetChoice = Pick<ConnectTargetProject, 'id' | 'name' | 'code'>
@@ -135,6 +136,7 @@ export function useConnectTable(options: { projectId: MaybeRefOrGetter<string>; 
     setup.value = { key: connectColumnKey(column.id), mode: 'edit' }
   }
   function closeSetup() { setup.value = undefined; draft.value = false }
+  provide(connectTableActions, { canManage, openSettings })
   function celebrate(key: ConnectColumnKey) {
     clearTimeout(celebration)
     celebrated.value = key
