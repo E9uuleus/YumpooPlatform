@@ -24,6 +24,8 @@ Status: implemented
 
 连接事件使用 `workitem.connect_column_created/updated/deleted` 与 `workitem.connection_created/deleted` v1，聚合类型分别为 `ConnectColumn` 和 `WorkItemConnection`。命名不使用 `workitem.work_item_` 前缀，不进入 M2 冻结清单或 `WORK_ITEM_EVENTS`。载荷只含约定标识、列名、变更字段或聚合计数，不含工作项标题、描述和正文。Activity 通过独立 `CONNECTION_EVENTS` 订阅：列事件写入所属项目；连接事件在两侧各投影一次，来源侧仅以事件列名渲染，目标侧只引用自身工作项且安全参数为空，audit 不为连接渲染回查工作项。连接不产生单元格级动态。
 
+[双向连接列](../product/2026-10-04-two-way-connect-columns.md)不新增表、列实体或事件类型：目标项目的反向列由同一条连接推导，批量单元格的入站窗口改为按 `(target_work_item_id, column_id)` 分区各取 50 条，并在同一查询中计算跨列序号以生成兼容视图。反向新建复用 `createRootItemForConnection`，两端都以 `ProjectFactWriteGuard` 锁定，按既有锁序先锁项目、列，再创建来源根项并锁目标工作项；连接仍发 `workitem.connection_created`，`origin=LINKED` 不进入投递通知分支。候选搜索的正反两个方向共用同一查询构造器，只在 `alreadyConnected` 的方向上不同。
+
 UP5c 在既有 `workitem.connection_created` v1 上追加目标负责人通知，不改变连接事件契约。仅 `origin=CREATED` 的新建并关联进入独立通知分支；关联已有不通知。通知投影仅保存目标项目与目标工作项 ID，不保存来源项目、来源工作项、连接列或连接 ID；V63 为该投影建立独立部署水位，部署前事件不补发。通知接收人、当前权限读取及 `CONNECTION_CREATED` 原因的规则由[站内收件箱](2026-09-25-notification-inbox.md)拥有。
 
 ## Alternatives considered
@@ -42,4 +44,4 @@ UP5c 在既有 `workitem.connection_created` v1 上追加目标负责人通知�
 
 连接的访问与卡片授权由[连接投递与卡片可见性](../security/2026-09-30-connection-intake-and-card-visibility.md)拥有；[普通关系可见性](../security/2026-08-31-cross-project-work-item-relation-visibility.md)继续拥有关系的隐藏占位规则，两者均保持活动，不发生完整取代或归档。
 
-`ConnectionConcurrencyIT` 验证双向关联、双向新建、普通与连接创建首次使用类别的锁序、已使用类别不等待目录锁、等待期间类别移动、列删除竞争、归档先后顺序、等待期间失权、列目标更新后的复核和失败整体回滚；`ConnectionMigrationIT` 从 V59 存量场景升级并确认 V62 保留既有事实。`ConnectionEventProjectionIT` 检查五类实际事件字段和两侧投影，`ConnectionActivityProjectionTest` 确认渲染不回查工作项。连接核心交付的 OpenAPI 只新增端点、schema 和黄金样例，不需要破坏性例外；后续扩字段或改变授权仍需独立决策与兼容审查。
+`ConnectionConcurrencyIT` 验证双向关联、双向新建、普通与连接创建首次使用类别的锁序、已使用类别不等待目录锁、等待期间类别移动、列删除竞争、归档先后顺序、等待期间失权、列目标更新后的复核和失败整体回滚；`ConnectionMigrationIT` 从 V59 存量场景升级并确认 V62 保留既有事实。`ConnectionEventProjectionIT` 检查五类实际事件字段和两侧投影，`ConnectionActivityProjectionTest` 确认渲染不回查工作项。连接核心交付与双向连接列的 OpenAPI 都只新增端点、可选参数、响应字段、schema 和黄金样例，openapi-diff 判定向后兼容，不需要破坏性例外；后续扩字段或改变授权仍需独立决策与兼容审查。

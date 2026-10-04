@@ -87,7 +87,10 @@ const service: ConnectColumns = {
   searchTargets: async query => ({ items: [previewColumn.targets[0]!, previewSecondProject].map(target => ({ id: target.projectId, code: target.code, name: target.name })).filter(target => `${target.name}${target.code}`.includes(query)), page: 0, size: 20, totalElements: 2, totalPages: 1 }),
   createOptions: async () => ({ targetProjectId: previewTarget.projectId, targetProjectName: previewTarget.projectName, categories: [previewTarget.category], defaultContentId: previewTarget.category.id }),
   searchCandidates: async () => ({ items: [{ card: previewTarget, parent: null, alreadyConnected: true }, { card: { ...previewTarget, title: '打印队列重试机制', workItemId: 'preview-candidate', itemNo: 'P003-55' }, parent: null, alreadyConnected: false }], page: 0, size: 20, totalElements: 2, totalPages: 1 }),
-  reverseCandidates: async () => ({ items: [], page: 0, size: 20, totalElements: 0, totalPages: 0 }),
+  reverseCandidates: async () => ({ items: [
+    { card: { ...previewSource, workItemId: 'preview-source-2', itemNo: 'P012-9', title: '批量导出缺少列', assignee: null }, parent: null, alreadyConnected: false },
+    { card: { ...previewSource, workItemId: 'preview-source-4', itemNo: 'P012-12', title: '门店打印机离线告警', status: { ...previewSource.status, code: 'TODO', name: '未开始', colorToken: previewSource.category.colorToken } }, parent: null, alreadyConnected: false },
+  ], page: 0, size: 20, totalElements: 2, totalPages: 1 }),
   reverseCreateOptions: async () => ({ targetProjectId: previewSecondProject.projectId, targetProjectName: previewSecondProject.name, categories: [previewTarget.category], defaultContentId: previewTarget.category.id }),
   incoming: async () => ({ items: [projectConnection(previewConnection)], page: 0, size: 50, totalElements: 1, totalPages: 1 }),
 }
