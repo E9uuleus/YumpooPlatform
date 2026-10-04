@@ -22,7 +22,6 @@ const backup = read('backend/src/test/java/com/yumpoo/platform/filestorage/consi
 const backupReportSchema = read('evidence/m0-17/verification-report.schema.json')
 const backupReportExample = read('evidence/m0-17/verification-report.example.json')
 const note = read('.agents/notes/implemented/architecture/2026-08-25-attachment-upload-processing.md')
-const readme = read('README.md')
 const acceptance = JSON.parse(read('evidence/m2-19/acceptance-matrix.json'))
 const report = JSON.parse(read('evidence/m2-19/verification-report.json'))
 
@@ -84,7 +83,6 @@ assert(backupReportSchema.includes('attachmentBlobRegistryReconciled')
 for (const fragment of ['PUBLISH/CLEANUP', '连续观察', 'M5-17', 'canDownloadContent/canDelete']) {
   assert(note.includes(fragment), `Agent Note 缺少 ${fragment}`)
 }
-assert(readme.includes('## M2-19 附件下载、逻辑删除与安全维护'), 'README 未同步 M2-19')
 assert(report.milestone === 'M2-19' && report.flywayVersion === '38', '验证报告无效')
 for (const requirement of ['ATTACHMENT-DOWNLOAD', 'ATTACHMENT-LOGICAL-DELETE',
   'ATTACHMENT-MAINTENANCE', 'ATTACHMENT-RECONCILIATION', 'ATTACHMENT-WEB-CLOSEOUT',

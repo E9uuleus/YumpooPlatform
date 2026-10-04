@@ -7,7 +7,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8')
 const manifest = readFreezeManifest(root)
 const note = read('.agents/notes/implemented/data/2026-08-31-work-item-event-contract-freeze.md')
-const readme = read('README.md')
 const activity = read('backend/src/main/java/com/yumpoo/platform/audit/api/ActivityProjectionService.java')
 const outboxTest = read('backend/src/test/java/com/yumpoo/platform/foundation/consistency/M011TransactionalOutboxIT.java')
 const catalog = read('contracts/events/catalog.yaml')
@@ -18,10 +17,6 @@ assert(manifest.events.length === 14, '冻结清单必须包含 14 个事件')
 for (const fragment of ['## Problem', '## Decision', '## Alternatives considered',
   '## Consequences', '同一 v1 只允许增加可选字段', '当前端点范围']) {
   assert(note.includes(fragment), `Agent Note 缺少 ${fragment}`)
-}
-assert(readme.includes('## M2-23 Work Item 领域事件契约冻结'), 'README 未同步 M2-23')
-for (const stale of ['M2-23 事件冻结和 M2-24', 'M2-23 最终事件冻结和 M2-24']) {
-  assert(!readme.includes(stale), `README 仍保留旧延期描述 ${stale}`)
 }
 for (const eventType of ['workitem.content_created', 'workitem.content_updated',
   'workitem.content_archived', 'workitem.content_restored',

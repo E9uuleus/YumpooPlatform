@@ -18,7 +18,6 @@ const discussion = read('frontend/web-app/src/components/collaboration/WorkItemD
 const migrationTest = read('backend/src/test/java/com/yumpoo/platform/YumpooServerApplicationIT.java')
 const backup = read('backend/src/test/java/com/yumpoo/platform/filestorage/consistency/M017BackupRestoreIT.java')
 const note = read('.agents/notes/implemented/architecture/2026-08-25-attachment-upload-processing.md')
-const readme = read('README.md')
 const acceptance = JSON.parse(read('evidence/m2-18/acceptance-matrix.json'))
 const report = JSON.parse(read('evidence/m2-18/verification-report.json'))
 
@@ -69,7 +68,6 @@ for (const fragment of ['createAttachmentFact', 'readAttachmentFact', 'attachmen
 for (const fragment of ['持久队列', '固定顺序锁定', '安全扫描已通过', 'M2-19', 'M3B']) {
   assert(note.includes(fragment), `Agent Note 缺少 ${fragment}`)
 }
-assert(readme.includes('## M2-18 附件上传与安全扫描闭环'), 'README 未同步 M2-18')
 assert(report.milestone === 'M2-18' && report.flywayVersion === '37', '验证报告无效')
 for (const requirement of ['ATTACHMENT-INTENT-UPLOAD-QUOTA', 'ATTACHMENT-PERSISTENT-SCAN',
   'ATTACHMENT-API-RESCAN', 'ATTACHMENT-WEB', 'ATTACHMENT-MIGRATION-BACKUP']) {

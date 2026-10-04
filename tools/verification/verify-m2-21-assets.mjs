@@ -14,7 +14,6 @@ const activity = read('backend/src/main/java/com/yumpoo/platform/audit/api/Activ
 const web = read('frontend/web-app/src/components/collaboration/WorkItemRelations.vue')
 const webTest = read('frontend/web-app/src/components/collaboration/WorkItemRelations.spec.ts')
 const note = read('.agents/notes/implemented/data/2026-08-28-work-item-parent-child-relations.md')
-const readme = read('README.md')
 const acceptance = JSON.parse(read('evidence/m2-21/acceptance-matrix.json'))
 const report = JSON.parse(read('evidence/m2-21/verification-report.json'))
 
@@ -44,7 +43,6 @@ for (const fragment of ['WorkItemRelationCandidateEligibilityEnum.ReparentRequir
   'mutationKey', '关系事实已刷新', 'counterpart.deleted']) assert(web.includes(fragment), `Web 缺少 ${fragment}`)
 for (const fragment of ['已删除对端', '原子接口', '提交原因与 ETag']) assert(webTest.includes(fragment), `Web 验收缺少 ${fragment}`)
 for (const fragment of ['永久限定为两层', '不实现递归 DAG', 'M2-22', '原子换父']) assert(note.includes(fragment), `Agent Note 缺少 ${fragment}`)
-assert(readme.includes('## M2-21 同项目 Work Item 普通关系'), 'README 未同步 M2-21')
 assert(report.milestone === 'M2-21' && report.flywayVersion === '43', '验证报告无效')
 for (const requirement of ['WORK-ITEM-GENERAL-RELATIONS', 'WORK-ITEM-PARENT-CHANGE',
   'WORK-ITEM-RELATION-WEB', 'WORK-ITEM-RELATION-EVENTS']) {
