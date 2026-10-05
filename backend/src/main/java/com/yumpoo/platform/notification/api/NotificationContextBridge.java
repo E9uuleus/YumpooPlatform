@@ -11,7 +11,7 @@ public class NotificationContextBridge implements NotificationContext {
     private final NotificationContextPort context;
     public NotificationContextBridge(NotificationContextPort context) { this.context=context; }
     public Optional<Participants> workItemParticipants(UUID company,UUID item) {
-        return context.workItemParticipants(company,item).map(p->new Participants(p.projectId(),p.assigneeUserId(),p.reporterUserId()));
+        return context.workItemParticipants(company,item).map(p->new Participants(p.projectId(),p.assigneeUserIds(),p.reporterUserId()));
     }
     public Optional<Update> update(UUID company,UUID update) {
         return context.update(company,update).map(p->new Update(p.projectId(),p.workItemId(),p.authorUserId(),p.parentAuthorUserId()));

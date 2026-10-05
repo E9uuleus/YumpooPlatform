@@ -6,9 +6,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.List;
 
 public interface NotificationContextPort {
-    record Participants(UUID projectId, UUID assigneeUserId, UUID reporterUserId) {}
+    record Participants(UUID projectId, List<UUID> assigneeUserIds, UUID reporterUserId) {}
     record Update(UUID projectId, UUID workItemId, UUID authorUserId, UUID parentAuthorUserId) {}
     record Reference(UUID id, NotificationModels.TargetKind kind, UUID projectId,
             UUID workItemId, UUID updateId) {}

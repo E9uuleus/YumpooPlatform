@@ -26,7 +26,7 @@ class NotificationInboxProjectionTest {
         projection=new NotificationInboxProjection(repository,context);
         when(repository.acceptedFrom()).thenReturn(cutover);
         when(repository.connectionAcceptedFrom()).thenReturn(connectionCutover);
-        when(context.workItemParticipants(company,item)).thenReturn(Optional.of(new NotificationContextPort.Participants(project,assignee,creator)));
+        when(context.workItemParticipants(company,item)).thenReturn(Optional.of(new NotificationContextPort.Participants(project,List.of(assignee),creator)));
         when(context.update(company,update)).thenReturn(Optional.of(new NotificationContextPort.Update(project,item,actor,parent)));
         when(context.projectOwner(company,project)).thenReturn(Optional.of(creator));
         when(context.eligibleProjectRecipients(eq(company),eq(project),any())).thenAnswer(i->new HashSet<>((Collection<UUID>)i.getArgument(2)));
@@ -52,6 +52,23 @@ class NotificationInboxProjectionTest {
         projection.consume(event("workitem.work_item_created",2,p,cutover));
         projection.consume(event("workitem.work_item_assigned",1,p,cutover));
         verify(repository,times(2)).append(any(),eq(Map.of(assignee,Reason.ASSIGNED)));
+    }
+    @Test void assigneeSetChangesNotifyOnlyAddedMembersAndSkipLegacyMarkers() {
+        ObjectNode p=payload();
+        p.putArray("addedUserIds").add(parent.toString()).add(actor.toString());
+        p.putArray("removedUserIds").add(assignee.toString());
+        p.putArray("assigneeUserIds").add(parent.toString()).add(creator.toString());
+        projection.consume(event("workitem.work_item_assignees_changed",1,p,cutover));
+        verify(repository).append(any(),eq(Map.of(parent,Reason.ASSIGNED)));
+        clearInvocations(repository);
+        p.put("assigneeUserId",creator.toString());
+        projection.consume(event("workitem.work_item_assigned",1,p,cutover));
+        verify(repository,never()).append(any(),any());
+    }
+    @Test void createdArrayNotifiesAllAssigneesAndExcludesActor() {
+        ObjectNode p=payload();p.putArray("assigneeUserIds").add(assignee.toString()).add(parent.toString()).add(actor.toString());
+        projection.consume(event("workitem.work_item_created",2,p,cutover));
+        verify(repository).append(any(),eq(Map.of(assignee,Reason.ASSIGNED,parent,Reason.ASSIGNED)));
     }
     @Test void projectMembershipAndTransferHaveDistinctRecipients() {
         ObjectNode p=payload();p.put("userId",assignee.toString());
@@ -84,7 +101,7 @@ class NotificationInboxProjectionTest {
         ObjectNode p=payload();p.put("assigneeUserId",assignee.toString());
         projection.consume(event("workitem.work_item_assigned",1,p,cutover));
         verify(repository,never()).append(any(),any());
-        assertThat(projection.subscriptions()).hasSize(8).contains(new EventSubscription("workitem.work_item_created",2),
+        assertThat(projection.subscriptions()).hasSize(9).contains(new EventSubscription("workitem.work_item_created",2),
                 new EventSubscription("workitem.connection_created",1))
                 .doesNotContain(new EventSubscription("workitem.work_item_created",1));
     }
@@ -126,7 +143,7 @@ class NotificationInboxProjectionTest {
         when(context.projectOwner(company,project)).thenReturn(Optional.empty());
         projection.consume(event);
         when(context.workItemParticipants(company,item)).thenReturn(Optional.of(
-                new NotificationContextPort.Participants(UUID.randomUUID(),assignee,creator)));
+                new NotificationContextPort.Participants(UUID.randomUUID(),List.of(assignee),creator)));
         projection.consume(event);
         verify(repository,never()).append(any(),any());
     }

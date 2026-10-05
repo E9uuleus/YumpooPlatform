@@ -27,7 +27,7 @@ public class NotificationContextAdapter implements NotificationContextPort {
         this.users=users;this.memberships=memberships;this.access=access;this.projects=projects;this.source=source;this.items=items;
     }
     public Optional<Participants> workItemParticipants(UUID company,UUID item) {
-        return source.findParticipants(company,item).map(p->new Participants(p.projectId(),p.assigneeUserId(),p.reporterUserId()));
+        return source.findParticipants(company,item).map(p->new Participants(p.projectId(),p.assigneeUserIds(),p.reporterUserId()));
     }
     public Optional<Update> update(UUID company,UUID id) {
         return source.findUpdate(company,id).map(u->new Update(u.projectId(),u.workItemId(),u.authorUserId(),u.parentAuthorUserId()));

@@ -168,6 +168,27 @@ class WorkItemCellActivityProjectionServiceTest {
         assertThat(row.occurredAt()).isEqualTo(occurredAt);
     }
 
+    @Test
+    void assigneeSetChangesProduceOneRowPerRemovedAndAddedMember() {
+        UUID added=UUID.randomUUID(), removed=UUID.randomUUID();
+        ObjectNode payload=base();payload.putArray("addedUserIds").add(added.toString());
+        payload.putArray("removedUserIds").add(removed.toString());
+        service.consume(event("workitem.work_item_assignees_changed",CUTOVER.plusSeconds(1),payload));
+        var captor=ArgumentCaptor.forClass(WorkItemCellActivityStoredEvent.class);
+        verify(repository,times(2)).append(captor.capture());
+        assertThat(captor.getAllValues()).extracting(WorkItemCellActivityStoredEvent::changeType).containsExactly("REMOVED","ADDED");
+        assertThat(captor.getAllValues()).extracting(WorkItemCellActivityStoredEvent::valueKey).containsExactly(removed.toString(),added.toString());
+        assertThat(captor.getAllValues().get(0).beforeValue().path("referenceId").asText()).isEqualTo(removed.toString());
+        assertThat(captor.getAllValues().get(1).afterValue().path("referenceId").asText()).isEqualTo(added.toString());
+    }
+
+    @Test
+    void markedLegacyAssignmentDoesNotProduceCellActivity() {
+        ObjectNode payload=base();payload.putArray("assigneeUserIds");
+        service.consume(event("workitem.work_item_assigned",CUTOVER.plusSeconds(1),payload));
+        verify(repository,never()).append(any());
+    }
+
     private ObjectNode base() {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("workItemId", ITEM.toString());

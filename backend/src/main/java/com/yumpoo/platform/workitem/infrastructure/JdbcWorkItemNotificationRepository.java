@@ -13,9 +13,17 @@ public class JdbcWorkItemNotificationRepository implements WorkItemNotificationR
     private final JdbcClient jdbc;
     public JdbcWorkItemNotificationRepository(JdbcClient jdbc) { this.jdbc=jdbc; }
     public Optional<Participants> participants(UUID company,UUID id) {
-        return jdbc.sql("SELECT project_id,assignee_user_id,reporter_user_id FROM yumpoo.work_item WHERE company_id=:company AND id=:id AND deleted_at IS NULL")
-                .param("company",company).param("id",id).query((rs,n)->new Participants(rs.getObject("project_id",UUID.class),
-                        rs.getObject("assignee_user_id",UUID.class),rs.getObject("reporter_user_id",UUID.class))).optional();
+        return jdbc.sql("""
+            SELECT project_id,reporter_user_id,
+                ARRAY(SELECT a.user_id FROM yumpoo.work_item_assignee a
+                      WHERE a.company_id=yumpoo.work_item.company_id AND a.work_item_id=yumpoo.work_item.id
+                      ORDER BY a.position) AS assignee_ids
+            FROM yumpoo.work_item WHERE company_id=:company AND id=:id AND deleted_at IS NULL
+            """).param("company",company).param("id",id)
+                .query((rs,n)->new Participants(rs.getObject("project_id",UUID.class),
+                        java.util.Arrays.stream((Object[]) rs.getArray("assignee_ids").getArray())
+                                .map(v->v instanceof UUID u ? u : UUID.fromString(v.toString())).toList(),
+                        rs.getObject("reporter_user_id",UUID.class))).optional();
     }
     public Optional<Update> update(UUID company,UUID id) {
         return jdbc.sql("""
