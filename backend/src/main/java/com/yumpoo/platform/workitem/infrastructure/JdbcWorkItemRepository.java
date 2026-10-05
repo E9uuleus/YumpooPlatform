@@ -646,9 +646,33 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                     + after + " GROUP BY incoming.option_value ORDER BY incoming.option_value LIMIT :limit"), parameters)
                     .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count"))).list();
         }
+        if ("ASSIGNEE".equals(field)) {
+            Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
+            String predicate = where(query, parameters, false);
+            String after = afterValue == null ? "" : " WHERE member.option_value > :afterValue";
+            if (afterValue != null) parameters.put("afterValue", afterValue);
+            parameters.put("limit", limit);
+            return bind(jdbc.sql("SELECT member.option_value, count(*) AS option_count FROM ("
+                    + "SELECT ARRAY(SELECT a.user_id::text FROM yumpoo.work_item_assignee a"
+                    + " WHERE a.company_id=yumpoo.work_item.company_id AND a.work_item_id=yumpoo.work_item.id) AS ids FROM yumpoo.work_item" + predicate + ") filtered"
+                    + " CROSS JOIN LATERAL unnest(CASE WHEN cardinality(ids)=0 THEN ARRAY['__NULL__'] ELSE ids END) member(option_value)"
+                    + after + " GROUP BY member.option_value ORDER BY member.option_value LIMIT :limit"), parameters)
+                    .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count"))).list();
+        }
+        if ("ASSIGNEE_SET".equals(field)) {
+            Map<String, Object> parameters = baseProjectParameters(companyId, projectId);
+            String predicate = where(query, parameters, false);
+            String after = afterValue == null ? "" : " WHERE o.option_value > :afterValue";
+            if (afterValue != null) parameters.put("afterValue", afterValue);
+            parameters.put("limit", limit);
+            return bind(jdbc.sql("SELECT o.option_value, count(*) AS option_count FROM ("
+                    + "SELECT coalesce((SELECT string_agg(a.user_id::text, ',' ORDER BY a.user_id) FROM yumpoo.work_item_assignee a"
+                    + " WHERE a.company_id=yumpoo.work_item.company_id AND a.work_item_id=yumpoo.work_item.id), '__NULL__') AS option_value"
+                    + " FROM yumpoo.work_item" + predicate + ") o" + after + " GROUP BY 1 ORDER BY 1 LIMIT :limit"), parameters)
+                    .query((rs, row) -> new FilterOptionCount(rs.getString("option_value"), rs.getLong("option_count"))).list();
+        }
         String expression = switch (field) {
             case "TITLE" -> "title";
-            case "ASSIGNEE" -> "coalesce(assignee_user_id::text, '__NULL__')";
             case "STATUS" -> "status_code";
             case "PRIORITY" -> "coalesce(priority, '__NULL__')";
             case "CONTENT" -> "content_id::text";
@@ -766,8 +790,12 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             parameters.put("priorities", query.priorities());
         }
         if (!query.assigneeUserIds().isEmpty()) {
-            sql.append(" AND assignee_user_id IN (:assigneeUserIds)");
+            sql.append(" AND EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=yumpoo.work_item.id AND a.user_id IN (:assigneeUserIds))");
             parameters.put("assigneeUserIds", query.assigneeUserIds());
+        }
+        if (!query.assigneeSetUserIds().isEmpty()) {
+            sql.append(" AND (SELECT string_agg(a.user_id::text, ',' ORDER BY a.user_id) FROM yumpoo.work_item_assignee a WHERE a.company_id=:companyId AND a.work_item_id=yumpoo.work_item.id) = :assigneeSetKey");
+            parameters.put("assigneeSetKey", query.assigneeSetKey());
         }
         if (query.emptyField() != null) {
             String column = switch (query.emptyField()) {

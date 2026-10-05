@@ -271,7 +271,7 @@ public class JdbcWorkItemConnectionRepository implements WorkItemConnectionRepos
         if (query.fields().contains(CandidateField.CONTENT)) matches.add("""
                 EXISTS(SELECT 1 FROM yumpoo.content c WHERE c.company_id=w.company_id
                     AND c.project_id=w.project_id AND c.id=w.content_id AND c.name ILIKE :query ESCAPE '!')""");
-        if (assigneeSearch(query)) matches.add("w.assignee_user_id IN (:assignees)");
+        if (assigneeSearch(query)) matches.add("EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id IN (:assignees))");
         return where + " AND (" + (matches.isEmpty() ? "FALSE"
                 : String.join(" OR ", matches.stream().map(match -> "(" + match + ")").toList())) + ")";
     }

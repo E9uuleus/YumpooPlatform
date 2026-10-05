@@ -90,7 +90,23 @@ class WorkItemHttpIT {
         assertThat(updated.path("assignees").get(1).path("userId").asText()).isEqualTo(owner.userId().toString());
         JsonNode detail = ok(get("/api/v1/work-items/" + item.path("id").asText(), member));
         assertThat(detail.path("assignees")).isEqualTo(updated.path("assignees"));
+        String collection = "/api/v1/projects/" + PROJECT_ID + "/work-items";
+        assertThat(ok(get(collection + "?assigneeUserId=" + owner.userId(), member)).path("items").size()).isEqualTo(1);
+        String exact = "?assigneeSetUserId=" + owner.userId() + "&assigneeSetUserId=" + member.userId();
+        assertThat(ok(get(collection + exact, member)).path("items").size()).isEqualTo(1);
+        assertThat(ok(get(collection + "?assigneeSetUserId=" + member.userId(), member)).path("items").size()).isZero();
+        JsonNode members = ok(get(collection + "/filter-options?field=ASSIGNEE", member)).path("items");
+        assertThat(members.size()).isEqualTo(2);
+        for (JsonNode option : members) assertThat(option.path("count").asInt()).isEqualTo(1);
+        JsonNode groups = ok(get(collection + "/filter-options?field=ASSIGNEE_SET", member)).path("items");
+        String setKey = java.util.stream.Stream.of(owner.userId(), member.userId()).map(UUID::toString).sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+        assertThat(groups.size()).isEqualTo(1);
+        assertThat(groups.get(0).path("value").asText()).isEqualTo(setKey);
+        assertThat(groups.get(0).path("count").asInt()).isEqualTo(1);
+        assertThat(groups.get(0).path("label").asText()).isEqualTo("Work Category Member、Work Category Owner");
         var legacyBody = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "多人事项"));
+        legacyBody.remove("contentId");
         legacyBody.put("assigneeUserId", member.userId().toString());
         JsonNode legacy = ok(mutate("PATCH", "/api/v1/work-items/" + item.path("id").asText(), member,
                 legacyBody.toString(), updated.path("etag").asText(), null));

@@ -58,7 +58,7 @@ public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
         var request = new com.yumpoo.platform.workitem.application.WorkItemQuery.Request(c.q(), c.status(), c.priority(),
                 c.assigneeUserId(), c.contentId(), c.dueFrom(), c.dueTo(), c.updatedAfter(), c.sort(),
                 new com.yumpoo.platform.workitem.application.WorkItemQuery.TimeFilter(c.timeTrackingState(),
-                        c.timeTrackingMinMs(), c.timeTrackingMaxMs(), scope.asOf(), 0, 0), c.emptyField()).withScope(scope);
+                        c.timeTrackingMinMs(), c.timeTrackingMaxMs(), scope.asOf(), 0, 0), c.emptyField()).withScope(scope).withAssigneeSet(c.assigneeSetUserId());
         var page = com.yumpoo.platform.foundation.api.pagination.CursorPageRequest.of(c.cursor(), c.limit());
         if (c.field() != null) {
             var result = workItems.listProjectFilterOptions(actor, projectId, c.field(), request, page);

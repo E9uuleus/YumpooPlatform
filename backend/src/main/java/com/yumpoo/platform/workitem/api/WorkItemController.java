@@ -81,6 +81,7 @@ public final class WorkItemController {
             @RequestParam(name = "status", required = false) List<String> statuses,
             @RequestParam(name = "priority", required = false) List<String> priorities,
             @RequestParam(name = "assigneeUserId", required = false) List<UUID> assigneeUserIds,
+            @RequestParam(name = "assigneeSetUserId", required = false) List<UUID> assigneeSetUserIds,
             @RequestParam(name = "contentId", required = false) List<UUID> contentIds,
             @RequestParam(required = false) LocalDate dueFrom,
             @RequestParam(required = false) LocalDate dueTo,
@@ -95,6 +96,7 @@ public final class WorkItemController {
                         withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds, contentIds,
                                 dueFrom, dueTo, updatedAfter, sorts == null ? null : List.of(sorts))
                                 .withEmptyField(httpRequest.getParameter("emptyField"))
+                                .withAssigneeSet(assigneeSetUserIds)
                                 .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds), httpRequest),
                         view, CursorPageRequest.of(cursor, limit)));
     }
@@ -109,6 +111,7 @@ public final class WorkItemController {
             @RequestParam(name = "status", required = false) List<String> statuses,
             @RequestParam(name = "priority", required = false) List<String> priorities,
             @RequestParam(name = "assigneeUserId", required = false) List<UUID> assigneeUserIds,
+            @RequestParam(name = "assigneeSetUserId", required = false) List<UUID> assigneeSetUserIds,
             @RequestParam(name = "contentId", required = false) List<UUID> contentIds,
             @RequestParam(required = false) LocalDate dueFrom,
             @RequestParam(required = false) LocalDate dueTo,
@@ -122,6 +125,8 @@ public final class WorkItemController {
                         withTime(new WorkItemQuery.Request(q, statuses, priorities, assigneeUserIds,
                                 contentIds, dueFrom, dueTo, updatedAfter,
                                 sorts == null ? null : List.of(sorts))
+                                .withAssigneeSet(assigneeSetUserIds)
+                                .withEmptyField(httpRequest.getParameter("emptyField"))
                                 .withConnections(connectedColumnIds, unconnectedColumnIds, incomingProjectIds), httpRequest),
                         CursorPageRequest.of(cursor, limit)));
     }

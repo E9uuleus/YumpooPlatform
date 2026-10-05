@@ -274,7 +274,7 @@ public class WorkItemService {
         String normalizedField;
         try {
             normalizedField = Objects.requireNonNull(field).strip().toUpperCase(java.util.Locale.ROOT);
-            if (!Set.of("TITLE", "ASSIGNEE", "STATUS", "PRIORITY", "CONTENT",
+            if (!Set.of("TITLE", "ASSIGNEE", "ASSIGNEE_SET", "STATUS", "PRIORITY", "CONTENT",
                     "DUE_DATE", "UPDATED_AT", "INCOMING_PROJECT").contains(normalizedField)) throw new IllegalArgumentException();
         } catch (RuntimeException exception) {
             throw validation("field", "INVALID_VALUE", "筛选选项字段不受支持");
@@ -292,9 +292,9 @@ public class WorkItemService {
         if (hasMore) rows = new ArrayList<>(rows.subList(0, page.limit()));
         Map<UUID, String> contentNames = contents.findAll(project.companyId(), project.projectId())
                 .stream().collect(java.util.stream.Collectors.toMap(Content::id, Content::name));
-        Set<UUID> userIds = rows.stream().filter(row -> "ASSIGNEE".equals(normalizedField))
+        Set<UUID> userIds = rows.stream().filter(row -> Set.of("ASSIGNEE", "ASSIGNEE_SET").contains(normalizedField))
                 .map(WorkItemRepository.FilterOptionCount::value)
-                .filter(value -> !"__NULL__".equals(value)).map(UUID::fromString)
+                .filter(value -> !"__NULL__".equals(value)).flatMap(value -> java.util.Arrays.stream(value.split(","))).map(UUID::fromString)
                 .collect(java.util.stream.Collectors.toSet());
         Map<UUID, MinimalUserSnapshot> people = users.findByUserIds(project.companyId(), userIds);
         Map<String, String> statusNames = statusLabels.stream().collect(
@@ -312,6 +312,12 @@ public class WorkItemService {
                 case "ASSIGNEE" -> "__NULL__".equals(row.value()) ? "未分配"
                         : Optional.ofNullable(people.get(UUID.fromString(row.value())))
                                 .map(MinimalUserSnapshot::displayName).orElse("未知成员");
+                case "ASSIGNEE_SET" -> "__NULL__".equals(row.value()) ? "未分配"
+                        : java.util.Arrays.stream(row.value().split(",")).map(UUID::fromString)
+                                .map(id -> Map.entry(id.toString(), Optional.ofNullable(people.get(id)).map(MinimalUserSnapshot::displayName).orElse("未知成员")))
+                                .sorted(java.util.Comparator.<Map.Entry<String, String>, String>comparing(Map.Entry::getValue, String.CASE_INSENSITIVE_ORDER)
+                                        .thenComparing(Map.Entry::getValue).thenComparing(Map.Entry::getKey))
+                                .map(Map.Entry::getValue).collect(java.util.stream.Collectors.joining("、"));
                 case "STATUS" -> statusNames.getOrDefault(row.value(), row.value());
                 case "PRIORITY" -> "__NULL__".equals(row.value()) ? "未设置"
                         : priorityNames.getOrDefault(row.value(), row.value());
@@ -1274,6 +1280,7 @@ public class WorkItemService {
                 Objects.toString(query.dueFrom(), ""), Objects.toString(query.dueTo(), ""),
                 Objects.toString(query.updatedAfter(), ""), sorts,
                 query.timeTracking()==null ? "" : Objects.toString(query.timeTracking().state(),"")+":"+query.timeTracking().minMs()+":"+query.timeTracking().maxMs());
+        if (!query.assigneeSetUserIds().isEmpty()) canonical += "\nassigneeSet=" + query.assigneeSetKey();
         if (query.emptyField() != null) canonical += "\nemptyField=" + query.emptyField();
         if (query.scope() != null) canonical += "\nchart=" + query.scope().fingerprint();
         canonical += "\nconnections=" + query.connections().fingerprint();
