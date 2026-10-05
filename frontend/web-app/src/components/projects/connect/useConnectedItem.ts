@@ -1,11 +1,12 @@
+import { workItemAssigneeIds } from '../workItemAssignees'
 import { computed, inject, ref, shallowRef, type InjectionKey } from 'vue'
 import { readCsrfToken, type ProjectContentCatalog, type ProjectDetail, type WorkItemDetail, type WorkItemLabelCatalog } from '@yumpoo/api-client'
 import { contentsApi, projectsApi, workItemsApi } from '../../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../../api/problems'
-import { useWorkItemEdits, type WorkItemPatchField } from '../useWorkItemEdits'
+import { useWorkItemEdits, type WorkItemPatchField, type WorkItemPatchValue } from '../useWorkItemEdits'
 
 export interface ConnectedItemData { detail: WorkItemDetail; project: ProjectDetail; contents: ProjectContentCatalog; labels: WorkItemLabelCatalog }
-export type ConnectedItemChange = { field: WorkItemPatchField; value: string | Date | null; dueTime?: string | null | undefined }
+export type ConnectedItemChange = { field: WorkItemPatchField; value: WorkItemPatchValue; dueTime?: string | null | undefined }
   | { field: 'status' | 'title'; value: string }
 /** Replaces the work item endpoints, for example in the visual acceptance page that runs without a backend. */
 export interface ConnectedItemSource {
@@ -68,7 +69,7 @@ export function useConnectedItem(options: { changed: (detail: WorkItemDetail) =>
   }
   function reset() { revision++; detail.value = undefined; project.value = undefined; loading.value = false; problem.value = undefined; forbidden.value = false }
 
-  async function patch(field: WorkItemPatchField, value: string | Date | null, dueTime?: string | null) {
+  async function patch(field: WorkItemPatchField, value: WorkItemPatchValue, dueTime?: string | null) {
     if (!detail.value || !editable.value) return false
     problem.value = undefined
     if (source) return viaSource({ field, value, dueTime })
@@ -92,7 +93,7 @@ export function useConnectedItem(options: { changed: (detail: WorkItemDetail) =>
     try {
       const current = await workItemsApi.getWorkItem({ workItemId: item.id })
       const updated = await workItemsApi.updateWorkItem({ workItemId: item.id, xXSRFTOKEN: csrf, ifMatch: current.etag, workItemUpdateRequest: {
-        title: value, priority: current.priority, assigneeUserId: current.assigneeUserId, description: current.description, notes: current.notes,
+        title: value, priority: current.priority, assigneeUserId: current.assigneeUserId, assigneeUserIds: workItemAssigneeIds(current), description: current.description, notes: current.notes,
         timelineStartDate: current.timelineStartDate, timelineEndDate: current.timelineEndDate, dueDate: current.dueDate, dueTime: current.dueTime ?? null } })
       detail.value = updated; options.changed(updated)
       return true

@@ -2,6 +2,7 @@ import { readCsrfToken, type ProjectContentCatalog, type ProjectMember, type Pro
   type WorkItemCreateRequest, type WorkItemDetail, type WorkItemLabelCatalog } from '@yumpoo/api-client'
 import { workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
+import { workItemAssigneeIds } from './workItemAssignees'
 import { moveWorkItemOrder } from './workItemOrder'
 
 export interface WorkItemDuplicateOptions {
@@ -22,13 +23,14 @@ export async function duplicateWorkItem(options: WorkItemDuplicateOptions): Prom
   }
   const token = readCsrfToken()
   if (!token) throw new Error('缺少 CSRF 凭据，请刷新后重试。')
+  const assigneeUserIds = workItemAssigneeIds(detail).filter(id => options.members.some(member => member.userId === id
+    && member.membershipStatus === 'ACTIVE' && member.employmentStatus === 'ACTIVE' && member.accountStatus === 'ENABLED'))
   const body: WorkItemCreateRequest = {
     contentId: detail.contentId,
     title: `${detail.title.slice(0, 296)}（副本）`,
     priority: options.labels.priorities.some(label => label.code === detail.priority && label.active) ? detail.priority : null,
-    assigneeUserId: options.members.some(member => member.userId === detail.assigneeUserId
-      && member.membershipStatus === 'ACTIVE' && member.employmentStatus === 'ACTIVE' && member.accountStatus === 'ENABLED')
-      ? detail.assigneeUserId : null,
+    assigneeUserId: assigneeUserIds[0] ?? null,
+    assigneeUserIds,
     description: detail.description, notes: detail.notes,
     timelineStartDate: detail.timelineStartDate, timelineEndDate: detail.timelineEndDate,
     dueDate: detail.dueDate, dueTime: detail.dueTime ?? null,

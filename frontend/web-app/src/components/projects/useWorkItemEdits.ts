@@ -4,7 +4,8 @@ import { readCsrfToken, type ProjectWorkItemListItem, type WorkItemDetail } from
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 
-export type WorkItemPatchField = 'assignee' | 'priority' | 'dueDate' | 'content'
+export type WorkItemPatchField = 'assignees' | 'priority' | 'dueDate' | 'content'
+export type WorkItemPatchValue = string | Date | null | readonly string[]
 /** Table rows and full details both carry what an edit needs, so the connected-item card reuses the same commands. */
 export type EditableWorkItem = Pick<ProjectWorkItemListItem, 'id' | 'etag' | 'statusCode' | 'capabilities'>
 export function useWorkItemEdits(options: {
@@ -33,11 +34,11 @@ export function useWorkItemEdits(options: {
       return false
     } finally { busy.value = '' }
   }
-  function patch(item: EditableWorkItem, field: WorkItemPatchField, value: string | Date | null, dueTime?: string | null) {
+  function patch(item: EditableWorkItem, field: WorkItemPatchField, value: WorkItemPatchValue, dueTime?: string | null) {
     return execute(item, [field, value, dueTime], common => field === 'content'
       ? workItemsApi.patchWorkItemContent({ ...common, workItemContentPatchRequest: { contentId: value as string } })
-      : field === 'assignee'
-        ? workItemsApi.patchWorkItemAssignee({ ...common, workItemAssigneePatchRequest: { assigneeUserId: value as string | null } })
+      : field === 'assignees'
+        ? workItemsApi.patchWorkItemAssignees({ ...common, workItemAssigneesPatchRequest: { assigneeUserIds: [...(value as readonly string[])] } })
         : field === 'priority'
           ? workItemsApi.patchWorkItemPriority({ ...common, workItemPriorityPatchRequest: { priority: value as string | null } })
           : workItemsApi.patchWorkItemDueDate({ ...common, workItemDueDatePatchRequest: { dueDate: value as Date | null, ...(dueTime !== undefined ? { dueTime } : {}) } }))

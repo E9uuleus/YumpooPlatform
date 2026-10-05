@@ -42,7 +42,7 @@ const state = vi.hoisted(() => ({
   getProjectWorkItemLabels: vi.fn(),
   moveProjectWorkItemOrder: vi.fn(),
   moveWorkItemSubitemOrder: vi.fn(),
-  patchWorkItemAssignee: vi.fn(),
+  patchWorkItemAssignees: vi.fn(),
   patchWorkItemPriority: vi.fn(),
   patchWorkItemDueDate: vi.fn(),
   createWorkItem: vi.fn(),
@@ -84,7 +84,7 @@ vi.mock('../../api/client', () => ({
     getProjectWorkItemLabels: state.getProjectWorkItemLabels,
     moveProjectWorkItemOrder: state.moveProjectWorkItemOrder,
     moveWorkItemSubitemOrder: state.moveWorkItemSubitemOrder,
-    patchWorkItemAssignee: state.patchWorkItemAssignee,
+    patchWorkItemAssignees: state.patchWorkItemAssignees,
     patchWorkItemPriority: state.patchWorkItemPriority,
     patchWorkItemDueDate: state.patchWorkItemDueDate,
     createWorkItem: state.createWorkItem,
@@ -643,10 +643,11 @@ describe('项目级工作项首页', () => {
   })
 
   it('分组保留发起位置的根项草稿，切换字段不重建输入框', async () => {
-    const anchor = { ...item('anchor'), statusCode: 'DONE', title: '草稿锚点' }
+    const anchor = { ...item('anchor'), statusCode: 'DONE', title: '草稿锚点', assigneeUserId: 'a', assigneeDisplayName: '张三',
+      assignees: [{ userId: 'a', displayName: '张三' }, { userId: 'b', displayName: '李四' }] }
     state.listProjectWorkItems.mockResolvedValue(page([anchor]))
     state.listProjectWorkItemFilterOptions.mockImplementation(async ({ field }: { field: string }) => ({
-      items: [{ value: field === 'STATUS' ? 'DONE' : '__NULL__', label: '分组', count: 1 }], nextCursor: null,
+      items: [{ value: field === 'STATUS' ? 'DONE' : 'a,b', label: field === 'STATUS' ? '分组' : '张三、李四', count: 1 }], nextCursor: null,
     }))
     const wrapper = mountView(); await flushPromises()
     const view = wrapper.vm as unknown as { changeGrouping: (field: string) => Promise<void> }
@@ -659,6 +660,8 @@ describe('项目级工作项首页', () => {
     expect(wrapper.get<HTMLInputElement>('.work-item-draft-row .work-item-name-input input').element === input.element).toBe(true)
     expect(input.element.value).toBe('未保存的根项')
     expect(state.createWorkItem).not.toHaveBeenCalled()
+    expect(state.listProjectWorkItemFilterOptions).toHaveBeenCalledWith(expect.objectContaining({ field: 'ASSIGNEE_SET' }), expect.anything())
+    expect(wrapper.text()).toContain('张三、李四')
   })
 
   it('文字编辑保存后同步主表名称，单元格空白不打开详情', async () => {

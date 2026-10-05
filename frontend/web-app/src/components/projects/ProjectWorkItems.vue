@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import './workItemCompactTable.css'
-import { useWorkItemEdits } from './useWorkItemEdits'
+import { useWorkItemEdits, type WorkItemPatchField, type WorkItemPatchValue } from './useWorkItemEdits'
 import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
@@ -70,6 +70,9 @@ import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 import type { DueDateValue } from './workItemDueDate'
 import { workItemLabelColorValue } from './workItemLabelColors'
+import WorkItemAssigneePicker from './WorkItemAssigneePicker.vue'
+import { workItemAssignees, workItemAssigneeIds } from './workItemAssignees'
+import YpAssigneeStack from '../yp/YpAssigneeStack.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import WorkItemGroupingPopover from './WorkItemGroupingPopover.vue'
@@ -707,7 +710,7 @@ function groupCreateDisabledReason(group: WorkItemGroup): string {
     case 'CONTENT': return activeContents.value.some(item => item.id === group.key) ? '' : '此类别已停用'
     case 'STATUS': return workflowStatuses.value.some(item => item.code === group.key && item.active) ? '' : '此状态已停用'
     case 'PRIORITY': return priorityOptions.value.some(item => item.code === group.key && item.active) ? '' : '此优先级已停用'
-    case 'ASSIGNEE': return activeMembers.value.some(item => item.userId === group.key) ? '' : '此处理人已不在项目中'
+    case 'ASSIGNEE': return group.key.split(',').every(id => activeMembers.value.some(item => item.userId === id)) ? '' : '此分组中有处理人已不在项目中'
     case 'DUE_DATE': return group.from && group.to && group.from > group.to ? '当前日期下此分组没有可用日期' : ''
     default: return ''
   }
@@ -1222,7 +1225,7 @@ function toggleSet<T>(set: Set<T>, value: T, checked: boolean): void {
 function countBy(field: 'statusCode' | 'priority' | 'contentId' | 'assigneeUserId', value: string | null): number {
   const apiField = ({ statusCode: 'STATUS', priority: 'PRIORITY', contentId: 'CONTENT', assigneeUserId: 'ASSIGNEE' } as const)[field]
   return filterOptionCounts.value.get(`${apiField}:${value ?? '__NULL__'}`)
-    ?? tableItems.value.filter(item => item[field] === value).length
+    ?? tableItems.value.filter(item => field === 'assigneeUserId' ? workItemAssigneeIds(item).includes(value ?? '') : item[field] === value).length
 }
 
 async function loadFilterOptions(): Promise<void> {
@@ -1768,6 +1771,7 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
       contentColorToken: updatedDetail.contentColorToken,
       statusCode: updatedDetail.statusCode, statusCategory: updatedDetail.statusCategory,
       priority: updatedDetail.priority,
+      assignees: workItemAssignees(updatedDetail),
       assigneeUserId: updatedDetail.assigneeUserId,
       assigneeDisplayName: updatedDetail.assigneeDisplayName,
       dueDate: updatedDetail.dueDate, dueTime: updatedDetail.dueTime ?? null,
@@ -1789,7 +1793,7 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
 }
 
 const cellEdits = useWorkItemEdits({ updated: replaceLightItem, failed: async problem => { error.value = problem; notifyChanged(); await loadTable(null, false) } })
-async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null, dueTime?: string | null): Promise<boolean> {
+async function patchCell(item: ProjectWorkItemListItem, field: WorkItemPatchField, value: WorkItemPatchValue, dueTime?: string | null): Promise<boolean> {
   if (editingCell.value) return false
   editingCell.value = item.id + ':' + field
   try {
@@ -3407,23 +3411,22 @@ onBeforeUnmount(() => {
                     :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
                   />
                   <template v-else-if="column.key === 'assignee'">
-                    <el-popover :persistent="false" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover" @show="assigneeSearch = ''">
+                    <el-popover :persistent="false" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover">
                       <template #reference>
                         <button
                           class="cell-editor-trigger monday-cell-centered"
                           :disabled="Boolean(editingCell)"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'assignee')"
                         >
-                          <yp-assignee :user-id="(scope.row as ProjectWorkItemListItem).assigneeUserId" :display-name="(scope.row as ProjectWorkItemListItem).assigneeDisplayName" :show-name="false" size="table" />
+                          <yp-assignee-stack :assignees="workItemAssignees(scope.row as ProjectWorkItemListItem)" />
                         </button>
                       </template>
-                      <div class="popover-stack">
-                        <el-input v-model="assigneeSearch" autofocus clearable placeholder="搜索项目成员" />
-                        <button class="popover-option" @click="patchCell(scope.row as ProjectWorkItemListItem, 'assignee', null)"><span class="empty-avatar">—</span><span>清空处理人</span></button>
-                        <button v-for="member in filteredMembers" :key="member.userId" class="popover-option" @click="patchCell(scope.row as ProjectWorkItemListItem, 'assignee', member.userId)">
-                          <yp-assignee :user-id="member.userId" :display-name="member.displayName" />
-                        </button>
-                      </div>
+                      <work-item-assignee-picker
+                        :project-id="projectId"
+                        :selected="workItemAssignees(scope.row as ProjectWorkItemListItem)"
+                        :busy="editingCell === `${scope.row.id}:assignees`"
+                        @change="patchCell(scope.row as ProjectWorkItemListItem, 'assignees', $event)"
+                      />
                     </el-popover>
                   </template>
 

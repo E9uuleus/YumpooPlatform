@@ -32,7 +32,7 @@ beforeEach(() => {
 
 describe('分组末尾新增', () => {
   it.each<[GroupField, string, Partial<WorkItemCreateRequest>]>([
-    ['ASSIGNEE', 'user-2', { assigneeUserId: 'user-2' }], ['ASSIGNEE', EMPTY_GROUP, { assigneeUserId: null }],
+    ['ASSIGNEE', 'user-2', { assigneeUserId: 'user-2', assigneeUserIds: ['user-2'] }], ['ASSIGNEE', EMPTY_GROUP, { assigneeUserId: null, assigneeUserIds: [] }],
     ['PRIORITY', 'HIGH', { priority: 'HIGH' }], ['PRIORITY', EMPTY_GROUP, { priority: null }],
     ['CONTENT', 'content-2', { contentId: 'content-2' }],
   ])('%s / %s 创建时写入所在分组字段', async (field, key, expected) => {

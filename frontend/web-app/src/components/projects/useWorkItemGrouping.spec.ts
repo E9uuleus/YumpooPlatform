@@ -41,7 +41,7 @@ describe('分组分页与本地偏好', () => {
     expect(api.listProjectWorkItemFilterOptions.mock.calls[1]![0]).toMatchObject({ cursor: 'next', q: '筛选', limit: 100 })
     expect(api.listProjectWorkItems).not.toHaveBeenCalled()
     await grouping.load('u100')
-    expect(api.listProjectWorkItems.mock.calls[0]![0]).toMatchObject({ q: '筛选', assigneeUserId: new Set(['u100']), limit: 2 })
+    expect(api.listProjectWorkItems.mock.calls[0]![0]).toMatchObject({ q: '筛选', assigneeSetUserId: new Set(['u100']), limit: 2 })
   })
   it('每组独立分页，失败保留已有行，重试复用该组游标', async () => {
     api.listProjectWorkItemFilterOptions.mockResolvedValue({ items: [facet('a'), facet(EMPTY_GROUP)], nextCursor: null })

@@ -18,7 +18,7 @@ interface GroupCreateDraft {
 export function groupCreateFields(field: GroupField, group: WorkItemGroup): Partial<WorkItemCreateRequest> {
   const value = group.key === EMPTY_GROUP ? null : group.key
   switch (field) {
-    case 'ASSIGNEE': return { assigneeUserId: value }
+    case 'ASSIGNEE': { const ids = value ? value.split(',') : []; return { assigneeUserId: ids[0] ?? null, assigneeUserIds: ids } }
     case 'PRIORITY': return { priority: value }
     case 'CONTENT': return { contentId: group.key }
     case 'DUE_DATE': return { dueDate: value ? new Date(`${group.from ?? group.to}T00:00:00Z`) : null }

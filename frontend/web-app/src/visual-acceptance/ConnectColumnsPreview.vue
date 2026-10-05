@@ -110,7 +110,8 @@ const itemSource: ConnectedItemSource = {
     const updated: WorkItemDetail = { ...detail, rowVersion: detail.rowVersion + 1, etag: `"${detail.rowVersion + 1}"`, updatedAt: new Date(),
       ...(change.field === 'title' ? { title: change.value } : {}),
       ...(change.field === 'priority' ? { priority: change.value as string | null } : {}),
-      ...(change.field === 'assignee' ? { assigneeUserId: change.value as string | null, assigneeDisplayName: change.value ? '王五' : null } : {}),
+      ...(change.field === 'assignees' ? { assignees: (change.value as string[]).map(userId => ({ userId, displayName: '王五' })),
+      assigneeUserId: (change.value as string[])[0] ?? null, assigneeDisplayName: (change.value as string[]).length ? '王五' : null } : {}),
       ...(change.field === 'dueDate' ? { dueDate: change.value as Date | null, dueTime: change.dueTime ?? null } : {}),
       ...(change.field === 'content' && content ? { contentId: content.id, contentName: content.name, contentColorToken: content.colorToken } : {}),
       ...(change.field === 'status' && status ? { statusCode: status.code, statusCategory: status.statusCategory } : {}) }

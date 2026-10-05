@@ -29,7 +29,7 @@ describe('复制工作项', () => {
     const result = await duplicateWorkItem(options())
     expect(api.getWorkItem).toHaveBeenCalledWith({ workItemId: 'original' })
     expect(api.createWorkItem.mock.calls[0]![0].workItemCreateRequest).toEqual({ contentId: 'c', title: '完整详情标题（副本）',
-      priority: 'HIGH', assigneeUserId: 'u', description: detail.description, notes: '备注',
+      priority: 'HIGH', assigneeUserId: 'u', assigneeUserIds: ['u'], description: detail.description, notes: '备注',
       timelineStartDate: detail.timelineStartDate, timelineEndDate: detail.timelineEndDate, dueDate: detail.dueDate, dueTime: '16:30' })
     expect(api.moveProjectWorkItemOrder).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'p', workItemId: 'copy', ifMatch: '"1"',
       projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: 'original', nextVisibleWorkItemId: null } }))

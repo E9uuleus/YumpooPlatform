@@ -30,7 +30,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, type CSSProperties
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
-import YpAssignee from '../yp/YpAssignee.vue'
+import YpAssigneeStack from '../yp/YpAssigneeStack.vue'
+import WorkItemAssigneePicker from './WorkItemAssigneePicker.vue'
+import { workItemAssignees } from './workItemAssignees'
+import type { WorkItemPatchField, WorkItemPatchValue } from './useWorkItemEdits'
 import MondayColumnQuickSort from './MondayColumnQuickSort.vue'
 import WorkItemLabelPopoverContent from './WorkItemLabelPopoverContent.vue'
 import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
@@ -111,7 +114,7 @@ const emit = defineEmits<{
   created: [parent: ProjectWorkItemListItem]
   updated: [id: string, detail: WorkItemDetail]
   openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity']
-  patch: [item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null]
+  patch: [item: ProjectWorkItemListItem, field: WorkItemPatchField, value: WorkItemPatchValue]
   dueDateChange: [item: ProjectWorkItemListItem, value: DueDateValue]
   contentsUpdated: [catalog: ProjectContentCatalog]
   labelsUpdated: [catalog: WorkItemLabelCatalog]
@@ -130,7 +133,6 @@ const quickCreating = ref(false)
 const quickError = ref<ApiProblem>()
 const quickRow = ref<HTMLElement>()
 const quickTitleInput = ref<InstanceType<typeof ElInput>>()
-const assigneeSearch = ref('')
 const draggingItem = ref<ProjectWorkItemListItem>()
 const columnDraggingKey = ref<string>()
 const columnDraggingIndex = ref(-1)
@@ -168,11 +170,7 @@ const COLUMN_RESIZE_HANDLE_WIDTH = 8
 const SUBITEM_ADD_COLUMN_MIN_WIDTH = 96
 const SUBITEM_MENU_COLUMN_WIDTH = 72
 
-const filteredMembers = computed(() => {
-  const query = assigneeSearch.value.trim().toLocaleLowerCase()
-  const active = props.members.filter(member => member.membershipStatus === 'ACTIVE')
-  return query ? active.filter(member => member.displayName.toLocaleLowerCase().includes(query)) : active
-})
+
 
 const sortFieldByColumn: Record<ProjectWorkItemSubitemColumn['key'], string> = {
   title: 'TITLE', assignee: 'ASSIGNEE', status: 'STATUS', priority: 'PRIORITY',
@@ -328,8 +326,8 @@ function openItem(raw: unknown, tab: 'details' | 'discussion'): void {
   emit('openDetail', row(raw), tab)
 }
 
-function patchItem(raw: unknown, field: 'assignee' | 'priority' | 'dueDate' | 'content',
-  value: string | Date | null): void {
+function patchItem(raw: unknown, field: WorkItemPatchField,
+  value: WorkItemPatchValue): void {
   emit('patch', row(raw), field, value)
 }
 
@@ -816,19 +814,14 @@ onBeforeUnmount(() => {
               :status-label="statusLabel(scope.row.statusCode) || '—'"
               :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
             />
-            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click" @show="assigneeSearch = ''">
+            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click">
               <template #reference>
                 <button class="subitem-cell-button" :disabled="editingCell">
-                  <yp-assignee :user-id="scope.row.assigneeUserId" :display-name="scope.row.assigneeDisplayName" :show-name="false" size="table" />
+                  <yp-assignee-stack :assignees="workItemAssignees(row(scope.row))" />
                 </button>
               </template>
-              <div class="subitem-popover-stack">
-                <el-input v-model="assigneeSearch" clearable placeholder="搜索项目成员" />
-                <button class="subitem-option" @click="patchItem(scope.row, 'assignee', null)">清空处理人</button>
-                <button v-for="member in filteredMembers" :key="member.userId" class="subitem-option" @click="patchItem(scope.row, 'assignee', member.userId)">
-                  <yp-assignee :user-id="member.userId" :display-name="member.displayName" />
-                </button>
-              </div>
+              <work-item-assignee-picker :project-id="projectId" :selected="workItemAssignees(row(scope.row))" :busy="editingCell"
+                @change="patchItem(scope.row, 'assignees', $event)" />
             </el-popover>
 
             <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])" v-else-if="column.key === 'status'" placement="bottom" width="auto" trigger="click">
