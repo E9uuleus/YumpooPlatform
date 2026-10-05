@@ -42,7 +42,7 @@ public interface WorkItemStatisticsQuery {
     record Bucket(String kind, String key, UUID projectId, UUID userId, String label,
             String code, String category, String colorToken, long count, long inProgress, long done, long durationMs) {}
     record Snapshot(List<Bucket> buckets, List<Bucket> options, Instant asOf) {}
-    record Item(UUID id, UUID projectId, String itemNo, String title, UUID assigneeUserId, String assigneeName,
+    record Item(UUID id, UUID projectId, String itemNo, String title, UUID assigneeUserId, String assigneeName, List<com.yumpoo.platform.workitem.application.WorkItemModels.WorkItemAssignee> assignees,
             String statusCode, String statusName, String statusCategory, String colorToken, long durationMs, Instant updatedAt,
             UUID contentId, String contentName, String priority, String priorityName, UUID reporterUserId, String reporterName,
             LocalDate dueDate, LocalDate timelineStartDate, LocalDate timelineEndDate, Instant createdAt, Instant completedAt,

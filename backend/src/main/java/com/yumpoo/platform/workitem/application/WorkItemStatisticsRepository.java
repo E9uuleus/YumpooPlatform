@@ -12,7 +12,7 @@ public interface WorkItemStatisticsRepository {
             return new Bucket(kind, key, projectId, userId, name, code, category, colorToken, count, inProgress, done, durationMs);
         }
     }
-    record Item(UUID id, UUID projectId, String itemNo, String title, UUID assigneeUserId,
+    record Item(UUID id, UUID projectId, String itemNo, String title, UUID assigneeUserId, List<UUID> assigneeUserIds,
             String statusCode, String statusName, String statusCategory, String colorToken,
             long durationMs, Instant updatedAt, UUID contentId, String contentName, String priority,
             String priorityName, UUID reporterUserId, java.time.LocalDate dueDate, java.time.LocalDate timelineStartDate,

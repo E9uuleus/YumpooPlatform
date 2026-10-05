@@ -32,7 +32,7 @@ public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
                 .forEach(item -> editable.put(item.id(), item)));
         return new Page(result.items().stream().map(row -> {
             var i = row.item();
-            return new Item(i.id(), i.projectId(), i.itemNo(), i.title(), i.assigneeUserId(), row.assigneeName(),
+            return new Item(i.id(), i.projectId(), i.itemNo(), i.title(), i.assigneeUserId(), row.assigneeName(), row.assignees(),
                     i.statusCode(), i.statusName(), i.statusCategory(), i.colorToken(), i.durationMs(), i.updatedAt(),
                     i.contentId(), i.contentName(), i.priority(), i.priorityName(), i.reporterUserId(), row.reporterName(),
                     i.dueDate(), i.timelineStartDate(), i.timelineEndDate(), i.createdAt(), i.completedAt(), editable.get(i.id()));

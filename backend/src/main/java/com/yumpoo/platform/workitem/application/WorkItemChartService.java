@@ -85,10 +85,11 @@ public class WorkItemChartService {
         var s = scope(projects.find(actor, connected), global, chart); var now = clock.instant();
         if (s.global().projectIds().isEmpty()) return new WorkItemStatisticsService.Page(List.of(), 0, now);
         var rows = repository.items(actor.companyId(), s.global(), s.local(), chart, selection, now, offset, limit);
-        var people = users.findByUserIds(actor.companyId(), rows.stream().flatMap(r -> java.util.stream.Stream.of(r.assigneeUserId(), r.reporterUserId()))
+        var people = users.findByUserIds(actor.companyId(), rows.stream().flatMap(r -> java.util.stream.Stream.concat(r.assigneeUserIds().stream(), java.util.stream.Stream.of(r.reporterUserId())))
                 .filter(Objects::nonNull).distinct().toList());
         return new WorkItemStatisticsService.Page(rows.stream().map(r -> new WorkItemStatisticsService.ItemRow(r,
-                person(r.assigneeUserId(), people), person(r.reporterUserId(), people))).toList(),
+                person(r.assigneeUserId(), people), person(r.reporterUserId(), people), r.assigneeUserIds().stream()
+                        .map(id -> new WorkItemModels.WorkItemAssignee(id, person(id, people))).toList())).toList(),
                 repository.count(actor.companyId(), s.global(), s.local(), chart, selection, now), now);
     }
     public ChartStatistics.TableScope tableScope(CurrentActor actor, List<UUID> connected, WorkItemStatisticsService.Request global,

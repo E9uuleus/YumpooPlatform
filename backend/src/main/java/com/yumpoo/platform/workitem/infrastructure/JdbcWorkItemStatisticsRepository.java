@@ -25,8 +25,9 @@ public class JdbcWorkItemStatisticsRepository implements WorkItemStatisticsRepos
             + MEASURES + " GROUP BY project_id";
     private static final String STATUS = "SELECT 'STATUS',project_id::text||':'||status_code,project_id,NULL::uuid,"
             + "MAX(status_name),status_code,MAX(status_category),MAX(status_color)," + MEASURES + " GROUP BY project_id,status_code";
-    private static final String MEMBER = "SELECT 'MEMBER',COALESCE(assignee_user_id::text,'UNASSIGNED'),NULL::uuid,assignee_user_id,"
-            + "'','','','BLUE'," + MEASURES + " GROUP BY assignee_user_id";
+    private static final String MEMBER = "SELECT 'MEMBER',COALESCE(member_id::text,'UNASSIGNED'),NULL::uuid,member_id,"
+            + "'','','','BLUE',COUNT(*),COUNT(*) FILTER(WHERE status_category='IN_PROGRESS'),"
+            + "COUNT(*) FILTER(WHERE status_category='DONE'),COALESCE(SUM(member_duration_ms),0)::bigint FROM member_rows GROUP BY member_id";
     private static final String PRIORITY = "SELECT 'PRIORITY',project_id::text||':'||COALESCE(priority,'UNASSIGNED'),project_id,NULL::uuid,"
             + "MAX(priority_name),COALESCE(priority,'UNASSIGNED'),'',MAX(priority_color)," + MEASURES + " GROUP BY project_id,priority";
     private static final String CONTENT = "SELECT 'CONTENT',content_id::text,project_id,NULL::uuid,MAX(content_name),'','',MAX(content_color),"
@@ -38,7 +39,7 @@ public class JdbcWorkItemStatisticsRepository implements WorkItemStatisticsRepos
         Query base = base(company, filter, asOf, !options);
         String sql = options ? TOTAL + " UNION ALL " + STATUS + " UNION ALL " + MEMBER + " UNION ALL " + PRIORITY + " UNION ALL " + CONTENT
                 : TOTAL + " UNION ALL " + PROJECT + " UNION ALL " + STATUS + " UNION ALL " + MEMBER;
-        return jdbc.sql(base.sql() + sql).params(base.parameters()).query((rs, n) -> new Bucket(
+        return jdbc.sql(base.sql() + memberRows("filtered", !options, filter.assignees().isEmpty() ? new String[0] : new String[]{"assignees"}) + sql).params(base.parameters()).query((rs, n) -> new Bucket(
                 rs.getString("kind"), rs.getString("key"), rs.getObject("project_id", UUID.class),
                 rs.getObject("user_id", UUID.class), rs.getString("label"), rs.getString("code"),
                 rs.getString("category"), rs.getString("color_token"), rs.getLong("count"),
@@ -58,13 +59,37 @@ public class JdbcWorkItemStatisticsRepository implements WorkItemStatisticsRepos
     static Item item(java.sql.ResultSet rs, int n) throws java.sql.SQLException {
         var completed = rs.getTimestamp("completed_at");
         return new Item(rs.getObject("id", UUID.class), rs.getObject("project_id", UUID.class), rs.getString("item_no"),
-                rs.getString("title"), rs.getObject("assignee_user_id", UUID.class), rs.getString("status_code"),
+                rs.getString("title"), rs.getObject("assignee_user_id", UUID.class),
+                java.util.Arrays.stream((Object[]) rs.getArray("assignee_ids").getArray())
+                        .map(v -> v instanceof UUID u ? u : UUID.fromString(v.toString())).toList(), rs.getString("status_code"),
                 rs.getString("status_name"), rs.getString("status_category"), rs.getString("status_color"), rs.getLong("duration_ms"),
                 rs.getTimestamp("updated_at").toInstant(), rs.getObject("content_id", UUID.class), rs.getString("content_name"),
                 rs.getString("priority"), rs.getString("priority_name"), rs.getObject("reporter_user_id", UUID.class),
                 rs.getObject("due_date", java.time.LocalDate.class), rs.getObject("timeline_start_date", java.time.LocalDate.class),
                 rs.getObject("timeline_end_date", java.time.LocalDate.class), rs.getTimestamp("created_at").toInstant(),
                 completed == null ? null : completed.toInstant());
+    }
+    static String assigneeMatch(String param) {
+        return "(EXISTS (SELECT 1 FROM unnest(assignee_ids) AS am(user_id) WHERE am.user_id::text IN (:" + param
+                + ")) OR (cardinality(assignee_ids)=0 AND 'UNASSIGNED' IN (:" + param + ")))";
+    }
+    static String memberRows(String source, boolean withTime, String... filterParams) {
+        String timing = withTime ? """
+            ,member_timings AS (
+              SELECT work_item_id,user_id,
+                SUM(GREATEST(0,EXTRACT(EPOCH FROM (COALESCE(stopped_at,:asOf)-started_at))*1000))::bigint AS duration_ms
+              FROM yumpoo.work_item_time_session
+              WHERE company_id=:company AND project_id IN (:projects) AND deleted_at IS NULL
+              GROUP BY work_item_id,user_id)
+            """ : "";
+        String duration = withTime ? "COALESCE(mt.duration_ms,0)::bigint" : "0::bigint";
+        String join = withTime ? " LEFT JOIN member_timings mt ON mt.work_item_id=f.id AND mt.user_id=m.user_id" : "";
+        String filter = filterParams.length == 0 ? "" : " WHERE " + java.util.Arrays.stream(filterParams)
+                .map(param -> "m.user_id::text IN (:" + param + ")").collect(java.util.stream.Collectors.joining(" AND "));
+        return timing + ",member_rows AS (SELECT f.*,m.user_id AS member_id," + duration + " AS member_duration_ms FROM "
+                + source + " f CROSS JOIN LATERAL unnest(f.assignee_ids) AS m(user_id)" + join + filter
+                + " UNION ALL SELECT f.*,NULL::uuid," + (withTime ? "f.duration_ms" : "0::bigint")
+                + " FROM " + source + " f WHERE cardinality(f.assignee_ids)=0) ";
     }
     record Query(String sql, Map<String, Object> parameters) {}
     static Query base(UUID company, StatisticsFilter f, Instant asOf, boolean withTime) {
@@ -84,7 +109,9 @@ public class JdbcWorkItemStatisticsRepository implements WorkItemStatisticsRepos
         String sql = "WITH " + timing + "base AS (SELECT w.*, " + timedColumns + """
             ,COALESCE(s.display_name,w.status_code) AS status_name,COALESCE(s.color_token,'GRAY') AS status_color,
             COALESCE(pr.display_name,w.priority,'未设置') AS priority_name,COALESCE(pr.color_token,'GRAY') AS priority_color,
-            c.name AS content_name,c.color_token AS content_color
+            c.name AS content_name,c.color_token AS content_color,
+            ARRAY(SELECT a.user_id FROM yumpoo.work_item_assignee a
+                  WHERE a.company_id=w.company_id AND a.work_item_id=w.id ORDER BY a.position) AS assignee_ids
             FROM yumpoo.work_item w
             LEFT JOIN yumpoo.content c ON c.id=w.content_id AND c.company_id=w.company_id AND c.project_id=w.project_id
             LEFT JOIN yumpoo.project_work_item_status_label s
@@ -97,7 +124,7 @@ public class JdbcWorkItemStatisticsRepository implements WorkItemStatisticsRepos
             """;
         List<String> clauses = new ArrayList<>();
         if (!f.assignees().isEmpty()) {
-            clauses.add("COALESCE(assignee_user_id::text,'UNASSIGNED') IN (:assignees)"); p.put("assignees", f.assignees());
+            clauses.add(assigneeMatch("assignees")); p.put("assignees", f.assignees());
         }
         if (!f.statuses().isEmpty()) {
             clauses.add("project_id::text||':'||status_code IN (:statuses)"); p.put("statuses", f.statuses());

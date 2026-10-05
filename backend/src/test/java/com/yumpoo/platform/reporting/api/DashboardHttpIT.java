@@ -104,6 +104,8 @@ class DashboardHttpIT {
         var child = created(mutate("POST", "/api/v1/work-items/" + parent.path("id").asText() + "/subitems", member, workItemBody(tasksId, "子项"), null, UUID.randomUUID()));
         created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(requirementsId, "无类型限制"), null, UUID.randomUUID()));
         jdbc.sql("UPDATE yumpoo.work_item SET assignee_user_id=:user WHERE id=:id").param("user", member.userId()).param("id", UUID.fromString(child.path("id").asText())).update();
+        jdbc.sql("INSERT INTO yumpoo.work_item_assignee SELECT company_id,project_id,id,:user,0 FROM yumpoo.work_item WHERE id=:id")
+                .param("user", member.userId()).param("id", UUID.fromString(child.path("id").asText())).update();
         String times = "/api/v1/work-items/" + parent.path("id").asText() + "/time-sessions";
         String timeBody = "{\"startedAt\":\"2026-01-01T00:00:00Z\",\"stoppedAt\":\"2026-01-01T01:00:00Z\"}";
         ok(mutate("POST", times, member, timeBody, null, UUID.randomUUID()));
@@ -133,6 +135,56 @@ class DashboardHttpIT {
                 .param("id", UUID.fromString(child.path("id").asText())).update();
         assertThat(total(ok(mutate("POST", path + "/query", member, "{}", null, null))).path("count").asLong()).isEqualTo(2);
         assertThat(total(ok(mutate("POST", path + "/query", member, "{\"filters\":{\"includeArchived\":true,\"hasTime\":false}}", null, null))).path("count").asLong()).isEqualTo(3);
+    }
+
+    @Test
+    void sharedAssigneesCountIndividuallyAndOnlyIncludeTheirOwnTrackedTime() throws Exception {
+        ActorFixture other;
+        try (var ignored = RequestCorrelationContext.open(RequestCorrelation.root("dashboard-assignees-" + UUID.randomUUID()))) {
+            other = actor(provisioner.provision("dashboard-other", "Other Member").userId());
+        }
+        jdbc.sql("INSERT INTO yumpoo.project_membership (id,company_id,project_id,user_id,status,joined_at,joined_by_user_id,row_version) "
+                + "VALUES (:id,:company,:project,:user,'ACTIVE',transaction_timestamp(),:owner,0)")
+                .param("id", UUID.randomUUID()).param("company", COMPANY_ID).param("project", PROJECT_ID)
+                .param("user", other.userId()).param("owner", owner.userId()).update();
+        var body = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "共同处理"));
+        body.set("assigneeUserIds", json.createArrayNode().add(member.userId().toString()).add(owner.userId().toString()));
+        var item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, body.toString(), null, UUID.randomUUID()));
+        var actors = java.util.List.of(member, owner, other);
+        for (int i = 0; i < actors.size(); i++) {
+            var time = json.createObjectNode().put("startedAt", "2026-01-01T00:00:00Z")
+                    .put("stoppedAt", "2026-01-01T0" + (i + 1) + ":00:00Z");
+            ok(mutate("POST", "/api/v1/work-items/" + item.path("id").asText() + "/time-sessions", actors.get(i), time.toString(), null, UUID.randomUUID()));
+        }
+        String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
+        var all = ok(mutate("POST", path + "/query", member, "{}", null, null));
+        assertThat(total(all).path("count").asLong()).isEqualTo(1);
+        assertThat(total(all).path("durationMs").asLong()).isEqualTo(21600000);
+        var expected = java.util.Map.of(member.userId().toString(), 3600000L, owner.userId().toString(), 7200000L);
+        int memberBuckets = 0;
+        for (var bucket : all.path("buckets")) if (bucket.path("kind").asText().equals("MEMBER")) {
+            memberBuckets++;
+            assertThat(bucket.path("count").asLong()).isEqualTo(1);
+            assertThat(bucket.path("durationMs").asLong()).isEqualTo(expected.get(bucket.path("key").asText()));
+        }
+        assertThat(memberBuckets).isEqualTo(2);
+        var widget = chartWidget();
+        var chart = (tools.jackson.databind.node.ObjectNode) widget.path("chart");
+        chart.put("dimension", "ASSIGNEE").put("series", "NONE");
+        var counts = preview(path, widget, null).path("charts").get(0).path("points");
+        assertThat(counts.size()).isEqualTo(2);
+        for (var point : counts) assertThat(point.path("value").asLong()).isEqualTo(1);
+        chart.set("measure", json.createObjectNode().put("metric", "DURATION").put("calculation", "SUM"));
+        for (var point : preview(path, widget, null).path("charts").get(0).path("points"))
+            assertThat(point.path("value").asLong()).isEqualTo(expected.get(point.path("key").asText()));
+        var filters = json.createObjectNode().put("includeArchived", false).put("hasTime", false)
+                .set("assignees", json.createArrayNode().add(member.userId().toString()));
+        var filtered = preview(path, widget, filters);
+        var filteredPoints = filtered.path("charts").get(0).path("points");
+        assertThat(filteredPoints.size()).isEqualTo(1);
+        assertThat(filteredPoints.get(0).path("key").asText()).isEqualTo(member.userId().toString());
+        for (var bucket : filtered.path("buckets")) if (bucket.path("kind").asText().equals("MEMBER"))
+            assertThat(bucket.path("key").asText()).isEqualTo(member.userId().toString());
     }
 
     @Test
