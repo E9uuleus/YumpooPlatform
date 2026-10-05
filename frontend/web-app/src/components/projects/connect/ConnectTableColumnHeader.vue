@@ -12,8 +12,9 @@ const props = withDefaults(defineProps<{
   projectId: string
   /** Only the header in the table head hosts the setup popover; group header rows repeat the label without it. */
   primary?: boolean
-}>(), { primary: true })
-const emit = defineEmits<{ hide: [key: ConnectColumnKey] }>()
+  collapsible?: boolean
+}>(), { primary: true, collapsible: false })
+const emit = defineEmits<{ hide: [key: ConnectColumnKey]; collapse: [key: ConnectColumnKey] }>()
 const setupMode = computed(() => props.primary && props.table.setup?.key === props.column.key ? props.table.setup.mode : undefined)
 function submit(projects: ConnectTargetChoice[]) { return props.table.connectProjects(projects, props.column.column) }
 </script>
@@ -27,6 +28,7 @@ function submit(projects: ConnectTargetChoice[]) { return props.table.connectPro
       :label="column.label"
       :kind="column.kind"
       :can-manage="table.canManage"
+      :collapsible="collapsible"
       :can-delete="table.canDelete"
       :column-key="column.key"
       :width="column.width"
@@ -36,6 +38,7 @@ function submit(projects: ConnectTargetChoice[]) { return props.table.connectPro
       :rename="column.column ? name => table.rename(column.column!, name) : undefined"
       @edit="column.column && table.openSettings(column.column)"
       @hide="emit('hide', column.key)"
+      @collapse="emit('collapse', column.key)"
       @delete="column.column && table.requestDelete(column.column)"
       @resize="(width, save) => table.resizeColumn(column.key, width, save)"
     />

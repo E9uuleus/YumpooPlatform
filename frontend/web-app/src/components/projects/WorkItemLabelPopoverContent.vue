@@ -53,6 +53,7 @@ const props = defineProps<{
   priorityOptions?: PriorityOption[] | undefined
   currentValue?: string | null | undefined
   canManage?: boolean | undefined
+  initialMode?: 'select' | 'edit' | undefined
   availableTransitions?: Array<{ toStatus: string }> | undefined
 }>()
 
@@ -61,6 +62,7 @@ const emit = defineEmits<{
   selectStatus: [statusCode: string]
   selectPriority: [priorityCode: string | null]
   updated: [catalog: WorkItemLabelCatalog]
+  done: []
 }>()
 
 const mode = ref<'select' | 'edit'>('select')
@@ -269,18 +271,21 @@ async function applyChanges(): Promise<void> {
       const persisted = catalogLabels(currentCatalog).find(item => item.code === label.persistedCode)
       if (!persisted) continue
       const displayName = label.displayName.trim()
+      const sortOrder = (index + 1) * 10
       const changed = displayName !== persisted.displayName
         || label.colorToken !== persisted.colorToken
         || label.active !== persisted.active
-        || index + 1 !== persisted.sortOrder
-      if (changed) currentCatalog = await persistUpdate(currentCatalog, label, persisted, index + 1, csrf)
+        || sortOrder !== persisted.sortOrder
+      if (changed) currentCatalog = await persistUpdate(currentCatalog, label, persisted, sortOrder, csrf)
     }
 
     emit('updated', currentCatalog)
-    resetEditor(true)
+    if (props.initialMode === 'edit') emit('done')
+    else resetEditor(true)
   } catch (reason) {
     if (currentCatalog !== props.catalog) emit('updated', currentCatalog)
-    resetEditor(true)
+    if (props.initialMode === 'edit') emit('done')
+    else resetEditor(true)
     ElMessage.error(problemMessage(await toApiProblem(reason)))
   } finally {
     saving.value = ''
@@ -315,6 +320,7 @@ function onDrop(targetIndex: number): void {
   next.splice(targetIndex, 0, sourceLabel)
   draftLabels.value = next.map((item, index) => ({ ...item, sortOrder: index + 1 }))
 }
+if (props.initialMode === 'edit') switchToEdit()
 </script>
 
 <template>

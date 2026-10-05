@@ -1,5 +1,6 @@
 <script setup lang="ts">
 export type WorkItemActionIconName = 'open' | 'link' | 'duplicate' | 'top' | 'bottom' | 'add' | 'subitem' | 'convert' | 'archive' | 'delete' | 'move' | 'more' | 'chevron'
+  | 'settings' | 'filter' | 'sort' | 'collapse' | 'group' | 'expand'
 defineProps<{ name: WorkItemActionIconName }>()
 const paths: Record<WorkItemActionIconName, string> = {
   open: 'M5 15 15 5M5 5h10v10',
@@ -15,6 +16,12 @@ const paths: Record<WorkItemActionIconName, string> = {
   move: 'M10 2v16M2 10h16M7 5l3-3 3 3M7 15l3 3 3-3M5 7l-3 3 3 3M15 7l3 3-3 3',
   more: 'M3 10h1M9.5 10h1M16 10h1',
   chevron: 'm7 4 6 6-6 6',
+  settings: 'M10 7.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5ZM10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4',
+  filter: 'M3 4h14l-5.5 6.5V16l-3 1.5v-7L3 4Z',
+  sort: 'M6 3v14M3 14l3 3 3-3M14 17V3M11 6l3-3 3 3',
+  collapse: 'M3 6l4 4-4 4M17 6l-4 4 4 4',
+  group: 'M3 4h14v12H3zM6 7h3v6H6z',
+  expand: 'M3 10h14M6 7l-3 3 3 3M14 7l3 3-3 3',
 }
 </script>
 

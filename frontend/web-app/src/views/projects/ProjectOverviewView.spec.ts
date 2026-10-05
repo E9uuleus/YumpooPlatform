@@ -1331,6 +1331,46 @@ describe('项目级工作项首页', () => {
     expect(state.replace).toHaveBeenLastCalledWith({ query: {} })
     expect(wrapper.find('.sort-by-column--active').exists()).toBe(false)
     expect(wrapper.find('.clear-button-wrapper').exists()).toBe(false)
+    await wrapper.get('button[aria-label="状态列菜单"]').trigger('click')
+    await flushPromises()
+    const menu = wrapper.findAllComponents({ name: 'WorkItemColumnHeaderMenu' })
+      .find(component => component.props('state').label === '状态')!
+    await vi.waitFor(() => {
+      expect(menu.findComponent({ name: 'ElDropdownMenu' }).exists()).toBe(true)
+    })
+    expect(menu.getComponent({ name: 'ElDropdownMenu' }).text()).toMatch(/设置.*筛选.*排序.*折叠.*分组依据/s)
+    await menu.getComponent({ name: 'ElDropdownMenu' }).findAll('li[role="menuitem"]')
+      .find(option => option.text().trim() === '设置')!.trigger('click')
+    await vi.waitFor(() => {
+      expect(menu.getComponent({ name: 'ElDropdownMenu' }).find('button[role="menuitem"]').exists()).toBe(true)
+    })
+    await menu.getComponent({ name: 'ElDropdownMenu' }).get('button[role="menuitem"]').trigger('click')
+    await flushPromises()
+    const settings = wrapper.getComponent({ name: 'WorkItemColumnSettingsPopover' })
+    expect(settings.props('anchor')).toBe(wrapper.get('button[aria-label="状态列菜单"]').element.closest('th'))
+    const editor = settings.getComponent({ name: 'WorkItemLabelPopoverContent' })
+    expect(editor.props('initialMode')).toBe('edit')
+    const popover = settings.getComponent({ name: 'ElPopover' })
+    editor.vm.$emit('busyChange', true)
+    await nextTick()
+    popover.vm.$emit('update:visible', false)
+    await nextTick()
+    expect(settings.props('kind')).toBe('status')
+    editor.vm.$emit('busyChange', false)
+    await nextTick()
+    popover.vm.$emit('update:visible', false)
+    await nextTick()
+    expect(settings.props('kind')).toBeUndefined()
+    await wrapper.get('button[aria-label="状态列菜单"]').trigger('click')
+    await vi.waitFor(() => {
+      expect(menu.findComponent({ name: 'ElDropdownMenu' }).exists()).toBe(true)
+    })
+    const collapse = menu.getComponent({ name: 'ElDropdownMenu' }).findAll('li[role="menuitem"]')
+      .find(option => option.text().trim() === '折叠')!
+    await collapse.trigger('click')
+    await flushPromises()
+    expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}').collapsed).toEqual(['status'])
+
   })
 
   it('保存排序时加载完整结果，并用相邻项避让接口固化新的工作项顺序', async () => {

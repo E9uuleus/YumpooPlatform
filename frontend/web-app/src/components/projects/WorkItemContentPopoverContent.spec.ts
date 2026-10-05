@@ -63,6 +63,18 @@ function catalog(): ProjectContentCatalog {
 describe('WorkItemContentPopoverContent', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('直接进入编辑模式并在应用成功后发出 done', async () => {
+    vi.mocked(contentsApi.listProjectContents).mockResolvedValue(catalog())
+    const wrapper = mount(WorkItemContentPopoverContent, {
+      props: { projectId: 'project-1', catalog: catalog(), canManage: true, initialMode: 'edit' },
+      global: { stubs: floatingStubs },
+    })
+    expect(wrapper.classes()).toContain('yp-label-popover-root--edit')
+    await wrapper.get('.apply-action-btn').trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('done')).toEqual([[]])
+  })
+
   it('选择态只显示启用类别和当前停用类别，并使用优先级弹窗的布局结构', async () => {
     const wrapper = mount(WorkItemContentPopoverContent, {
       props: { projectId: 'project-1', catalog: catalog(), currentValue: 'content-defect', canManage: true },

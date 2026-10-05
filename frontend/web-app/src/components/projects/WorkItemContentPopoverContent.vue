@@ -25,12 +25,14 @@ const props = defineProps<{
   catalog?: ProjectContentCatalog | undefined
   currentValue?: string | undefined
   canManage?: boolean | undefined
+  initialMode?: 'select' | 'edit' | undefined
 }>()
 
 const emit = defineEmits<{
   busyChange: [busy: boolean]
   select: [contentId: string]
   updated: [catalog: ProjectContentCatalog]
+  done: []
 }>()
 
 const ITEMS_PER_COLUMN = 6
@@ -221,13 +223,15 @@ async function applyChanges(): Promise<void> {
       catalog = await reload()
     }
     emit('updated', catalog)
-    resetEditor(true)
+    if (props.initialMode === 'edit') emit('done')
+    else resetEditor(true)
   } catch (reason) {
     ElMessage.error(problemMessage(await toApiProblem(reason)))
   } finally {
     saving.value = false
   }
 }
+if (props.initialMode === 'edit') switchToEdit()
 </script>
 
 <template>

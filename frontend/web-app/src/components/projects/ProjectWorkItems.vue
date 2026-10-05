@@ -57,7 +57,10 @@ import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
-import MondayColumnQuickSort from './MondayColumnQuickSort.vue'
+import WorkItemColumnHeader from './WorkItemColumnHeader.vue'
+import WorkItemColumnExpandButton from './WorkItemColumnExpandButton.vue'
+import WorkItemColumnSettingsPopover from './WorkItemColumnSettingsPopover.vue'
+import { COLLAPSED_COLUMN_WIDTH, type ColumnMenuAction, type ColumnMenuState } from './workItemColumnMenu'
 import ProjectWorkItemSubitemsTable, {
   type ProjectWorkItemSubitemSortRule,
 } from './ProjectWorkItemSubitemsTable.vue'
@@ -553,7 +556,81 @@ const visibleSubitemColumns = computed(() => orderedSubitemColumns.value.filter(
 const movableVisibleColumns = computed(() => builtInVisibleColumns.value.filter(item => item.key !== 'title'))
 const allHiddenColumns = computed(() => new Set<ColumnKey>([...hiddenColumns.value, ...connect.hidden]))
 const restorableColumns = computed(() => [...columns, ...connect.columns].filter(column => allHiddenColumns.value.has(column.key)))
-function columnWidth(key: ColumnKey): number { return isConnectColumnKey(key) ? connect.width(key) : columnWidths[key] }
+const collapsedColumns = ref(new Set<ColumnKey>())
+const columnSettingsKind = ref<'status' | 'priority' | 'content'>()
+const columnSettingsAnchor = ref<HTMLElement>()
+const assigneeFilterOpen = ref(false)
+const filterPopoverOpen = ref(false)
+const groupFieldByColumn: Partial<Record<BuiltInColumnKey, GroupField>> = {
+  assignee: 'ASSIGNEE', status: 'STATUS', priority: 'PRIORITY', content: 'CONTENT', dueDate: 'DUE_DATE',
+}
+function isColumnCollapsed(key: ColumnKey): boolean { return collapsedColumns.value.has(key) }
+// 替换原 columnWidth：折叠列在表格与添加行网格中统一使用折叠宽度
+function columnWidth(key: ColumnKey): number {
+  if (isColumnCollapsed(key)) return COLLAPSED_COLUMN_WIDTH
+  return isConnectColumnKey(key) ? connect.width(key) : columnWidths[key]
+}
+function columnMenuState(column: { key: BuiltInColumnKey; label: string }): ColumnMenuState {
+  const labels = column.key === 'status' || column.key === 'priority' ? labelCatalog.value
+    : column.key === 'content' ? catalog.value : undefined
+  const groupField = groupFieldByColumn[column.key]
+  return {
+    label: column.label,
+    settings: !labels ? 'unavailable' : labels.canManage ? 'editable' : 'readonly',
+    sortDirection: sortDirectionForColumn(column.key),
+    sortDisabled: savingSortOrder.value,
+    collapsible: column.key !== 'title',
+    groupField,
+    groupedByThis: Boolean(groupField) && groupingField.value === groupField,
+    groupDisabled: savingSortOrder.value,
+  }
+}
+function onColumnMenuAction(key: BuiltInColumnKey, action: ColumnMenuAction, anchor?: HTMLElement): void {
+  if (action.type === 'settings') {
+    if (anchor && (key === 'status' || key === 'priority' || key === 'content')) {
+      columnSettingsAnchor.value = anchor
+      columnSettingsKind.value = key
+    }
+  } else if (action.type === 'filter') openColumnFilter(key)
+  else if (action.type === 'sort') setColumnSort(key, action.direction)
+  else if (action.type === 'collapse') void toggleColumnCollapsed(key)
+  else {
+    const field = groupFieldByColumn[key]
+    if (field) void changeGrouping(groupingField.value === field ? '' : field)
+  }
+}
+function openColumnFilter(key: BuiltInColumnKey): void {
+  // 等列菜单关闭后再打开工具栏弹层，避免同一次点击被弹层判定为外部点击而立即关闭。
+  window.setTimeout(() => {
+    if (key === 'title') { searchExpanded.value = true; return }
+    void loadFilterOptions()
+    if (key === 'assignee') assigneeFilterOpen.value = true
+    else filterPopoverOpen.value = true
+  }, 0)
+}
+function setColumnSort(key: BuiltInColumnKey, direction: 'ASC' | 'DESC' | null): void {
+  if (savingSortOrder.value) return
+  if (!direction) { clearColumnSort(key); return }
+  const field = sortFieldByColumn[key]
+  const next = sortRules.value.map(rule => ({ ...rule }))
+  const index = next.findIndex(rule => rule.field === field)
+  if (index >= 0) next[index] = { field, direction }
+  else if (next.length < 3) next.push({ field, direction })
+  else next[next.length - 1] = { field, direction }
+  sortRules.value = next
+  void syncUrl()
+}
+async function toggleColumnCollapsed(key: ColumnKey): Promise<void> {
+  if (key === 'title') return
+  const snapshot = columnFlip.capture()
+  const next = new Set(collapsedColumns.value)
+  if (next.has(key)) next.delete(key); else next.add(key)
+  collapsedColumns.value = next
+  persistTablePrefs()
+  await nextTick()
+  flushResponsiveTableLayout()
+  columnFlip.play(snapshot)
+}
 function showHiddenColumn(key: string) { if (isConnectColumnKey(key) || columnByKey.has(key as BuiltInColumnKey)) void toggleColumn(key as ColumnKey, true) }
 const QUICK_CHECKBOX_SIZE = 16
 const quickGridStyle = computed(() => {
@@ -1827,6 +1904,7 @@ function persistTablePrefs(): void {
     version: TABLE_PREFS_VERSION,
     widths: columnWidths,
     hidden: [...hiddenColumns.value],
+    collapsed: [...collapsedColumns.value],
     order: movableColumnOrder.value,
     subitemOrder: subitemMovableColumnOrder.value,
   }))
@@ -1837,6 +1915,7 @@ function loadTablePrefs(): void {
     const parsed = JSON.parse(localStorage.getItem(tablePrefsKey.value) ?? (embedded.value ? localStorage.getItem(projectTablePrefsKey) : null) ?? '{}') as {
       version?: number
       widths?: Partial<Record<BuiltInColumnKey, number>>
+      collapsed?: string[]
       hidden?: BuiltInColumnKey[]
       order?: BuiltInColumnKey[]
       subitemOrder?: BuiltInColumnKey[]
@@ -1847,6 +1926,8 @@ function loadTablePrefs(): void {
       if (typeof value === 'number') columnWidths[column.key] = Math.max(column.minWidth, value)
     })
     hiddenColumns.value = new Set((parsed.hidden ?? []).filter(key => key !== 'title'))
+    collapsedColumns.value = new Set((parsed.collapsed ?? []).filter((key): key is ColumnKey =>
+      key !== 'title' && (isConnectColumnKey(key) || columnByKey.has(key as BuiltInColumnKey))))
     const savedOrder = (parsed.order ?? []).filter((key): key is MovableColumnKey => key !== 'title' && defaultMovableColumnOrder.includes(key as MovableColumnKey))
     movableColumnOrder.value = [
       ...new Set(savedOrder),
@@ -1862,6 +1943,7 @@ function loadTablePrefs(): void {
 
 function onHeaderDragEnd(newWidth: number, _oldWidth: number, column: { property?: string; columnKey?: string }): void {
   const key = column.property ?? column.columnKey ?? ''
+  if (isColumnCollapsed(key as ColumnKey)) { scheduleResponsiveTableLayout(); return }
   if (isConnectColumnKey(key)) { connect.resizeColumn(key, newWidth); return }
   const config = columnByKey.get(key as BuiltInColumnKey)
   if (!config) return
@@ -2186,7 +2268,7 @@ function onTableColumnPointerDown(event: PointerEvent): void {
     onTableColumnResizePointerDown(event, resizeHandle)
     return
   }
-  if (target?.closest('.sort-by-column')) return
+  if (target?.closest('.sort-by-column, .work-item-column-menu, .work-item-column-expand')) return
   const header = target?.closest<HTMLTableCellElement>('.monday-movable-column-header')
   if (!header) return
   const rect = header.getBoundingClientRect()
@@ -2838,7 +2920,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <el-popover placement="bottom-start" :width="360" trigger="click" popper-class="work-items-popover work-item-view-control" @show="loadFilterOptions">
+          <el-popover v-model:visible="assigneeFilterOpen" placement="bottom-start" :width="360" trigger="click" popper-class="work-items-popover work-item-view-control" @show="loadFilterOptions">
             <template #reference>
               <button class="toolbar-button" :class="{ active: filters.assignees.size }">
                 <el-icon><user /></el-icon><span>处理人</span>
@@ -2860,7 +2942,7 @@ onBeforeUnmount(() => {
             </div>
           </el-popover>
 
-          <el-popover placement="bottom-start" :width="560" trigger="click" popper-class="work-items-popover work-items-filter-popover" @show="loadFilterOptions">
+          <el-popover v-model:visible="filterPopoverOpen" placement="bottom-start" :width="560" trigger="click" popper-class="work-items-popover work-items-filter-popover" @show="loadFilterOptions">
             <template #reference>
               <button class="toolbar-button" :class="{ active: filters.connectedColumnIds.size || filters.unconnectedColumnIds.size || filters.incomingProjectIds.size || filters.statuses.size || filters.priorities.size || filters.contents.size || filters.dueRange.length || filters.timeState || filters.timeMin || filters.timeMax || filters.updatedAfter }">
                 <el-icon><filter-icon /></el-icon><span>筛选</span>
@@ -3179,11 +3261,11 @@ onBeforeUnmount(() => {
                 resizable
               >
                 <template #header>
-                  <monday-column-quick-sort
-                    label="工作项名称"
-                    :direction="sortDirectionForColumn('title')"
+                  <work-item-column-header
+                    :state="columnMenuState(columnByKey.get('title')!)"
                     :saving="savingSortOrder"
                     @sort="applyColumnQuickSort('title')"
+                    @action="(action, anchor) => onColumnMenuAction('title', action, anchor)"
                     @clear="clearColumnSort('title')"
                     @save="saveSortedWorkItemOrder"
                   />
@@ -3195,9 +3277,10 @@ onBeforeUnmount(() => {
                 </template>
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
-                    <monday-column-quick-sort v-if="scope.row.groupRowKind === 'columns'" label="工作项名称"
-                      :direction="sortDirectionForColumn('title')" :saving="tableSorting" :allow-save="false"
-                      @sort="applyColumnQuickSort('title')" @clear="clearColumnSort('title')" />
+                    <work-item-column-header v-if="scope.row.groupRowKind === 'columns'" :state="columnMenuState(columnByKey.get('title')!)"
+                      :saving="tableSorting" :allow-save="false"
+                      @sort="applyColumnQuickSort('title')" @action="(action, anchor) => onColumnMenuAction('title', action, anchor)"
+                    @clear="clearColumnSort('title')" />
                     <span class="monday-column-resize-handle monday-title-column-resize-handle" data-column-key="title" aria-hidden="true" />
                   </template>
                   <div v-else class="title-cell" :data-work-item-id="scope.row.id">
@@ -3284,22 +3367,24 @@ onBeforeUnmount(() => {
                 :key="columnIndex"
                 :label="column.label"
                 :prop="column.key"
-                :width="columnWidths[column.key]"
+                :width="columnWidth(column.key)"
                 align="center"
-                :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' || column.key === 'content' ? ' monday-block-column' : ''}`"
-                :label-class-name="`monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key}${columnResizingKey === column.key ? ' monday-column-resizing' : ''}`"
+                :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' || column.key === 'content' ? ' monday-block-column' : ''}${isColumnCollapsed(column.key) ? ' monday-column--collapsed' : ''}`"
+                :label-class-name="`monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key}${columnResizingKey === column.key ? ' monday-column-resizing' : ''}${isColumnCollapsed(column.key) ? ' monday-column-header--collapsed' : ''}`"
                 resizable
               >
                 <template #header>
-                  <monday-column-quick-sort
-                    :label="column.label"
-                    :direction="sortDirectionForColumn(column.key)"
+                  <work-item-column-header
+                    :state="columnMenuState(column)"
+                    :collapsed="isColumnCollapsed(column.key)"
                     :saving="savingSortOrder"
                     @sort="applyColumnQuickSort(column.key)"
+                    @action="(action, anchor) => onColumnMenuAction(column.key, action, anchor)"
                     @clear="clearColumnSort(column.key)"
                     @save="saveSortedWorkItemOrder"
                   />
                   <span
+                    v-if="!isColumnCollapsed(column.key)"
                     class="monday-column-resize-handle"
                     :data-column-key="column.key"
                     aria-hidden="true"
@@ -3307,11 +3392,13 @@ onBeforeUnmount(() => {
                 </template>
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
-                    <monday-column-quick-sort v-if="scope.row.groupRowKind === 'columns'" :label="column.label"
-                      :direction="sortDirectionForColumn(column.key)" :saving="tableSorting" :allow-save="false"
-                      @sort="applyColumnQuickSort(column.key)" @clear="clearColumnSort(column.key)" />
-                    <span class="monday-column-resize-handle" :data-column-key="column.key" aria-hidden="true" />
+                    <work-item-column-header v-if="scope.row.groupRowKind === 'columns'" :state="columnMenuState(column)"
+                      :collapsed="isColumnCollapsed(column.key)" :saving="tableSorting" :allow-save="false"
+                      @sort="applyColumnQuickSort(column.key)" @action="(action, anchor) => onColumnMenuAction(column.key, action, anchor)"
+                    @clear="clearColumnSort(column.key)" />
+                    <span v-if="!isColumnCollapsed(column.key)" class="monday-column-resize-handle" :data-column-key="column.key" aria-hidden="true" />
                   </template>
+                  <span v-else-if="isColumnCollapsed(column.key)" class="work-item-collapsed-cell" aria-hidden="true" />
                   <work-item-draft-cell
                     v-else-if="isDraft(scope.row as ProjectWorkItemListItem)"
                     :item="scope.row as ProjectWorkItemListItem"
@@ -3468,14 +3555,18 @@ onBeforeUnmount(() => {
                 :column-key="column.key"
                 :prop="column.key"
                 :label="column.label"
-                :width="column.width"
-                :min-width="column.minWidth"
+                :width="columnWidth(column.key)"
+                :min-width="isColumnCollapsed(column.key) ? COLLAPSED_COLUMN_WIDTH : column.minWidth"
                 class-name="monday-connect-column"
                 label-class-name="monday-connect-column-header"
                 resizable
               >
                 <template #header>
+                  <work-item-column-expand-button v-if="isColumnCollapsed(column.key)" :label="column.label" @expand="toggleColumnCollapsed(column.key)" />
                   <connect-table-column-header
+                    v-else
+                    collapsible
+                    @collapse="toggleColumnCollapsed"
                     :column="column"
                     :table="connect"
                     :project-id="projectId"
@@ -3483,14 +3574,18 @@ onBeforeUnmount(() => {
                   />
                 </template>
                 <template #default="scope">
+                  <work-item-column-expand-button v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns' && isColumnCollapsed(column.key)" :label="column.label" @expand="toggleColumnCollapsed(column.key)" />
                   <connect-table-column-header
-                    v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
+                    v-else-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
+                    collapsible
+                    @collapse="toggleColumnCollapsed"
                     :column="column"
                     :table="connect"
                     :project-id="projectId"
                     :primary="false"
                     @hide="toggleColumn($event, false)"
                   />
+                  <span v-else-if="!isGroupDisplayRow(scope.row) && isColumnCollapsed(column.key)" class="work-item-collapsed-cell" aria-hidden="true" />
                   <connect-table-cell
                     v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem)"
                     :column="column"
@@ -3598,6 +3693,16 @@ onBeforeUnmount(() => {
               </template>
             </work-item-batch-bar>
           </teleport>
+          <work-item-column-settings-popover
+            :kind="columnSettingsKind"
+            :anchor="columnSettingsAnchor"
+            :project-id="projectId"
+            :label-catalog="labelCatalog"
+            :content-catalog="catalog"
+            @close="columnSettingsKind = undefined"
+            @labels-updated="onLabelsUpdated"
+            @contents-updated="onContentsUpdated"
+          />
         </div>
 
         <div
@@ -5128,6 +5233,9 @@ onBeforeUnmount(() => {
   color: var(--yp-text-muted);
 }
 
+:deep(.monday-table td.monday-column--collapsed > .cell),
+:deep(.monday-table th.monday-column-header--collapsed > .cell) { padding: 0; }
+.work-item-collapsed-cell { display: block; width: 100%; height: 100%; }
 </style>
 
 <style>
@@ -5324,6 +5432,9 @@ onBeforeUnmount(() => {
 .drawer-resize-handle--resizing .drawer-resize-grip {
   transform: scale(1);
 }
+:deep(.monday-table td.monday-column--collapsed > .cell),
+:deep(.monday-table th.monday-column-header--collapsed > .cell) { padding: 0; }
+.work-item-collapsed-cell { display: block; width: 100%; height: 100%; }
 </style>
 
 <style scoped>
@@ -5334,4 +5445,7 @@ onBeforeUnmount(() => {
 .work-items-embedded :deep(.el-scrollbar__bar) { display: block !important; }
 .work-items-embedded :deep(.el-scrollbar__wrap) { overscroll-behavior: auto; }
 .work-item-context-label { font-size: 11px; white-space: nowrap; color: var(--yp-text-secondary); padding: 0 5px; }
+:deep(.monday-table td.monday-column--collapsed > .cell),
+:deep(.monday-table th.monday-column-header--collapsed > .cell) { padding: 0; }
+.work-item-collapsed-cell { display: block; width: 100%; height: 100%; }
 </style>
