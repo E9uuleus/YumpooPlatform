@@ -24,6 +24,8 @@ V44 建立 append-only `activity_event` 和单行 `activity_projection_state`。
 
 `GET /work-items/{id}/cell-activity` 继续先按当前 Project 可见性鉴权，允许可见 Project 下的软删除事项读取历史。它按企业时区与周起始日解释今天、昨天、本周、本月和今年；同维度 OR、跨维度 AND。游标除筛选指纹和 `(occurred_at,id)` 外还绑定首次请求时间锚点，避免跨午夜继续分页时范围漂移。筛选计数基于完整专用投影，每个维度忽略自身筛选、保留其他维度，不能由前端已加载页推算。
 
+处理人集合变化按增减成员分别拆行，V65 的 value_key（成员 ID）纳入投影幂等键；综合 Activity 仍每命令一条，标记去重规则见[多处理人事件决策](../data/2026-10-05-work-item-multiple-assignees.md)。
+
 ## Alternatives considered
 
 - 把日期和时分拆成两个动态字段：拒绝。它们是同一个截止期限，拆分会使一次编辑产生两条记录，也无法自然表达整体清空；沿用 DUE_DATE 和完整文本快照可兼容旧展示与筛选。

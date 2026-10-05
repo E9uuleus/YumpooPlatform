@@ -20,6 +20,8 @@ Status: implemented
 
 连接 Activity 的目标侧只包含目标项目和目标工作项引用，安全参数为空，不包含来源项目、来源工作项或列标识。来源侧只用事件中列名生成文案，普通关系的隐藏占位继续按[关系可见性决策](2026-08-31-cross-project-work-item-relation-visibility.md)执行。聚合、锁序和事件归属见[连接架构决策](../architecture/2026-09-30-work-item-connections.md)。
 
+连接卡片仍只显示主处理人并保持固定安全字段；候选搜索匹配任一处理人，完整处理人列表仅通过获授权的普通详情接口读取，见[多处理人决策](../data/2026-10-05-work-item-multiple-assignees.md)。
+
 ## Alternatives considered
 
 - 要求新建投递人也是目标成员：拒绝。会取消已确认的跨项目非成员投递用途；新增写权限仅限列授权的新建根项与连接。

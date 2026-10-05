@@ -24,6 +24,8 @@ V63 追加扩展原因约束和投影代码约束，以数据库 `clock_timestam
 
 OpenAPI 的 `NotificationReason` 响应枚举新增值由用户明确批准；精确例外 `2026-10-03-connection-created-notification` 保留于 `tools/openapi/breaking-change-exceptions.json`，含已批准连接筛选 20 项上限的当前规范另追加 `2026-10-03-connection-notification-filter-limits`。相对 PR-4 dev 基线，仅移除该新增响应枚举值的临时规范通过完整 openapi-diff，确认 UP5a 的可选查询参数及上限兼容。每条例外仅绑定对应两个完整规范的 SHA-256，不修改历史例外。新旧桌面壳通过[桌面提醒](../product/2026-09-25-desktop-inbox-alerts.md)的原因能力声明隔离，连接事务与事件仍由[连接架构](2026-09-30-work-item-connections.md)拥有。
 
+新增 workitem.work_item_assignees_changed v1 订阅，只向新增处理人投递 ASSIGNED；created 数组路径覆盖全部处理人，COMMENT 候选也包含全部当前处理人，标记与兼容规则见[多处理人决策](../data/2026-10-05-work-item-multiple-assignees.md)。
+
 ## Alternatives considered
 
 - 将标题与评论快照写入投影：读取更简单，但移出项目后会泄露历史业务文本，且编辑删除后难以保持一致。

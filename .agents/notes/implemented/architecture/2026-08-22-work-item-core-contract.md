@@ -68,6 +68,8 @@ workitem 通过公开只读端口向 administration 报告 `OPEN_WORK_ITEMS`，�
 
 行菜单的下方创建通过 `useWorkItemInlineCreate` 在当前同级表格插入内存草稿，自动聚焦空名称输入框，`*新工作项` 仅作浅灰占位，不作为默认名称保存；确认前以白色半透明蒙版覆盖其余字段，禁用选中、拖动、详情和字段操作，不为草稿注册计时观察。输入有效名称后失焦或 Enter 才请求创建，空白失焦、空白 Enter 或 Escape 丢弃草稿；可空字段显式为 null，必填类别沿用快速创建默认值，初始状态由服务端 `NOT_STARTED` 标签决定。重复失焦不并发提交，失败保留草稿与原幂等键；创建成功后才定位，定位失败结束草稿并提示已创建，避免重复生成事项。项目或父项切换会清除本地草稿，旧请求不会插入新上下文。
 
+PATCH /work-items/{id}/assignees 写入完整处理人集合；列表排序按主处理人，assigned/unassigned 只表示主处理人变化，集合变化走 assignees_changed，备份共同覆盖关联表，兼容与顺序规则由[多处理人决策](../data/2026-10-05-work-item-multiple-assignees.md)拥有。
+
 ## Alternatives considered
 
 - 将工作项归档复用软删除或终止状态：拒绝。归档只是列表收纳，不能丢失原业务状态、恢复位置和生命周期区别。独立标记允许稳定链接恢复，并保持开放项治理统计。
