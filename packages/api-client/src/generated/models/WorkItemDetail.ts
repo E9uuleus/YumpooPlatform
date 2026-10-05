@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemAssignee } from './WorkItemAssignee';
+import {
+    WorkItemAssigneeFromJSON,
+    WorkItemAssigneeFromJSONTyped,
+    WorkItemAssigneeToJSON,
+    WorkItemAssigneeToJSONTyped,
+} from './WorkItemAssignee';
 import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
 import {
     WorkItemLabelColorTokenFromJSON,
@@ -40,6 +47,12 @@ import {
  * @interface WorkItemDetail
  */
 export interface WorkItemDetail {
+    /**
+     * 按指派顺序排列的平等处理人，第一位等于 assigneeUserId。
+     * @type {Array<WorkItemAssignee>}
+     * @memberof WorkItemDetail
+     */
+    readonly assignees?: Array<WorkItemAssignee>;
     /**
      * 不透明 UUID；客户端不得从值中推导业务语义。
      * @type {string}
@@ -101,13 +114,13 @@ export interface WorkItemDetail {
      */
     priority: string | null;
     /**
-     *
+     * 主处理人
      * @type {string}
      * @memberof WorkItemDetail
      */
     assigneeUserId: string | null;
     /**
-     *
+     * 主处理人
      * @type {string}
      * @memberof WorkItemDetail
      */
@@ -287,6 +300,7 @@ export function WorkItemDetailFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
 
+        ...(json['assignees'] == null ? {} : { 'assignees': ((json['assignees'] as Array<any>).map(WorkItemAssigneeFromJSON)) }),
         'id': json['id'],
         'projectId': json['projectId'],
         'contentId': json['contentId'],
@@ -327,7 +341,7 @@ export function WorkItemDetailToJSON(json: any): WorkItemDetail {
     return WorkItemDetailToJSONTyped(json, false);
 }
 
-export function WorkItemDetailToJSONTyped(value?: Omit<WorkItemDetail, 'completedAt'|'rowVersion'|'etag'|'createdAt'|'updatedAt'|'updatedByUserId'|'updatedByDisplayName'|'archived'|'deleted'|'deletedAt'|'deletedByUserId'|'deleteReason'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemDetailToJSONTyped(value?: Omit<WorkItemDetail, 'assignees'|'completedAt'|'rowVersion'|'etag'|'createdAt'|'updatedAt'|'updatedByUserId'|'updatedByDisplayName'|'archived'|'deleted'|'deletedAt'|'deletedByUserId'|'deleteReason'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

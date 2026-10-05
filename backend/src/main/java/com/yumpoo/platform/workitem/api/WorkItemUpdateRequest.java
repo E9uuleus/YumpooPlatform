@@ -4,11 +4,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import tools.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.List;
 
 public record WorkItemUpdateRequest(
         @JsonProperty(required = true) @NotBlank @Size(max = 300) String title,
@@ -20,5 +22,6 @@ public record WorkItemUpdateRequest(
         @JsonProperty(required = true) LocalDate timelineStartDate,
         @JsonProperty(required = true) LocalDate timelineEndDate,
         @JsonProperty(required = true) LocalDate dueDate,
-        @JsonInclude(JsonInclude.Include.NON_NULL) JsonNode dueTime
+        @JsonInclude(JsonInclude.Include.NON_NULL) JsonNode dueTime,
+        @JsonInclude(JsonInclude.Include.NON_NULL) List<UUID> assigneeUserIds
 ) {}

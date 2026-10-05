@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workItemAssigneeIds } from './workItemAssignees'
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElInput, ElMessage, type InputInstance } from 'element-plus'
 import { readCsrfToken, type ProjectWorkItemListItem, type WorkItemDetail } from '@yumpoo/api-client'
@@ -75,7 +76,7 @@ async function save(): Promise<void> {
       const updated = await workItemsApi.updateWorkItem({
         workItemId: props.item.id, xXSRFTOKEN: token, ifMatch: current.etag,
         workItemUpdateRequest: {
-          title: value, priority: current.priority, assigneeUserId: current.assigneeUserId,
+          title: value, priority: current.priority, assigneeUserId: current.assigneeUserId, assigneeUserIds: workItemAssigneeIds(current),
           description: current.description, notes: current.notes,
           timelineStartDate: current.timelineStartDate, timelineEndDate: current.timelineEndDate,
           dueDate: current.dueDate, dueTime: current.dueTime ?? null,

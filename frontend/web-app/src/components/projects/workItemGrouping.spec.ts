@@ -22,6 +22,7 @@ describe('工作项分组规则', () => {
   it('根项按字段稳定身份分组，空值独立归组', () => {
     expect(['ASSIGNEE', 'PRIORITY', 'CONTENT', 'STATUS', 'DUE_DATE'].map(field =>
       itemGroupKey(sample, field as Parameters<typeof itemGroupKey>[1], '2026-09-14'))).toEqual(['a', EMPTY_GROUP, 'bug', 'TODO', 'TOMORROW'])
+    expect(itemGroupKey({ ...sample, assignees: [{ userId: 'b', displayName: '李四' }, { userId: 'a', displayName: '张三' }] }, 'ASSIGNEE', '2026-09-14')).toBe('a,b')
   })
   it('标签顺序和颜色来自目录，已使用的停用标签仍展示', () => {
     const groups = buildWorkItemGroups('STATUS', 'DEFAULT', true,
@@ -76,6 +77,10 @@ describe('工作项分组规则', () => {
     expect(request.dueTo!.toISOString().slice(0, 10)).toBe('2026-09-18')
     expect(groupListRequest({ ...base, dueTo: new Date('2026-09-15') }, 'DUE_DATE', group)).toBeNull()
     expect(groupListRequest({ ...base, status: new Set(['DONE']) }, 'STATUS', { ...group, key: 'TODO' })).toBeNull()
+    const combo = groupListRequest({ ...base, assigneeUserId: new Set(['b']) }, 'ASSIGNEE', { ...group, key: 'a,b' })!
+    expect(combo.assigneeSetUserId).toEqual(new Set(['a', 'b']))
+    expect(combo.assigneeUserId).toEqual(new Set(['b']))
+    expect(groupListRequest({ ...base, assigneeUserId: new Set(['c']) }, 'ASSIGNEE', { ...group, key: 'a,b' })).toBeNull()
   })
   it('空值组使用新增查询参数，并保留互斥筛选供服务端求交集', () => {
     const group = dateGroups('2026-09-14').at(-1)!

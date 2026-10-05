@@ -24,6 +24,8 @@ Status: implemented
 
 自定义外观的分类和拆分系列默认读取统计结果的 colorToken / seriesColorToken，状态、状态分类、优先级和工作项类型沿用原标签色；设置色块与所有适用图表（包含气泡图）共用 [chartColors](../../../../frontend/web-app/src/components/dashboard/chartColors.ts) 解析规则。只修改名称或顺序不会固化默认颜色，打开设置不产生颜色覆盖。用户明确选色才写入十六进制覆盖，恢复默认只清除该颜色覆盖并保留名称与顺序，随后继续跟随源标签色。
 
+ASSIGNEE 维度或系列的耗时样本为「成员×工作项」，只计成员本人记录；分类排序值仅在横轴为 ASSIGNEE 时按展开计算，其他横轴仍每项一次，见[多处理人统计口径](../data/2026-10-05-work-item-multiple-assignees.md)。
+
 ## Alternatives considered
 
 - 继续为每种预设维护专用抽屉：坐标轴、过滤及显示设置会重复且行为容易分叉，因此统一为 Charts 配置和渲染器，保留预设作为快捷起点。

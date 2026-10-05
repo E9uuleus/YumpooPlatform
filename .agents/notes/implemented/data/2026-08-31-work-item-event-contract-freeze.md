@@ -16,6 +16,8 @@ M2-23 以 `contracts/events/freeze/workitem-m2-v1.json` 冻结 14 类 Work Item 
 
 跨项目 Relation 事件保留双端引用以支持可靠投影，但消费者必须按 left/right Project 分别建立端点投影；任一投影不得持久化或展示另一侧 Work Item ID。Activity 继续采用当前端点范围的双投影和实时查询授权，不把完整双端事件当成可直接展示的读模型。
 
+冻结清单继续保持原 14 类。收件箱对新集合事件使用 addedUserIds、创建使用 assigneeUserIds；assigned/unassigned 中 assigneeUserIds 字段存在即跳过（含空数组），历史无标记事件照旧，见[多处理人决策](2026-10-05-work-item-multiple-assignees.md)。
+
 ## Alternatives considered
 
 - 把当前 Schema 复制为一份永久 baseline：拒绝。重复快照会形成第二真源并增加同步噪声；PR 目标提交已经是准确的历史基线。

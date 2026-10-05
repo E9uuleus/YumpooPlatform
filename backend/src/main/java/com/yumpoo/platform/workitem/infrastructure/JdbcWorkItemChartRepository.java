@@ -34,19 +34,28 @@ public class JdbcWorkItemChartRepository implements WorkItemChartRepository {
                 }).list();
         return counts;
     }
-    private record Dimension(String key, String label, String color) {}
+    private record Dimension(String key, String label, String color, boolean member) {
+        Dimension(String key, String label, String color) { this(key, label, color, false); }
+    }
 
     public List<ChartStatistics.Point> aggregate(UUID company, StatisticsFilter global, StatisticsFilter local,
             ChartStatistics.Request chart, Instant asOf) {
         var base = base(company, global, local, chart, null, asOf, false);
         var x = dimension(chart.dimension()); var series = dimension(chart.series());
-        String sql = ",category_totals AS (SELECT " + x.key() + " AS category_key," + measure(chart.measure())
-                + " AS category_value FROM scoped GROUP BY 1) SELECT " + x.key() + " AS key,MAX(" + x.label() + ") AS label,MAX(" + x.color() + ") AS color,"
+        boolean fan = x.member() || series.member();
+        String source = fan ? "member_rows" : "scoped";
+        String duration = fan ? "member_duration_ms" : "duration_ms";
+        String memberRows = fan ? JdbcWorkItemStatisticsRepository.memberRows("scoped", true,
+                java.util.stream.Stream.of("assignees", "local_assignees").filter(base.parameters()::containsKey).toArray(String[]::new)) : "";
+        String sql = ",category_totals AS (SELECT " + x.key() + " AS category_key,"
+                + measure(chart.measure(), x.member() ? "member_duration_ms" : "duration_ms")
+                + " AS category_value FROM " + (x.member() ? "member_rows" : "scoped") + " GROUP BY 1) SELECT "
+                + x.key() + " AS key,MAX(" + x.label() + ") AS label,MAX(" + x.color() + ") AS color,"
                 + series.key() + " AS series_key,MAX(" + series.label() + ") AS series_label,MAX(" + series.color() + ") AS series_color,"
-                + "COUNT(*) AS count," + measure(chart.measure()) + " AS value," + measure(chart.xMeasure()) + " AS x_value,"
-                + measure(chart.sizeMeasure()) + " AS size_value,MAX(category_value) AS category_value,MIN(project_id::text) AS project_hint FROM scoped JOIN category_totals ON "
-                + x.key() + "=category_key GROUP BY 1,4 ORDER BY 1,4";
-        return jdbc.sql(base.sql() + sql).params(base.parameters()).query((rs, n) -> new ChartStatistics.Point(
+                + "COUNT(*) AS count," + measure(chart.measure(), duration) + " AS value," + measure(chart.xMeasure(), duration) + " AS x_value,"
+                + measure(chart.sizeMeasure(), duration) + " AS size_value,MAX(category_value) AS category_value,MIN(project_id::text) AS project_hint FROM "
+                + source + " JOIN category_totals ON " + x.key() + "=category_key GROUP BY 1,4 ORDER BY 1,4";
+        return jdbc.sql(base.sql() + memberRows + sql).params(base.parameters()).query((rs, n) -> new ChartStatistics.Point(
                 rs.getString("key"), rs.getString("label"), rs.getString("color"), rs.getString("series_key"),
                 rs.getString("series_label"), rs.getString("series_color"), rs.getLong("count"), rs.getDouble("value"),
                 rs.getDouble("x_value"), rs.getDouble("size_value"), rs.getDouble("category_value"), rs.getString("project_hint"))).list();
@@ -78,7 +87,10 @@ public class JdbcWorkItemChartRepository implements WorkItemChartRepository {
             }
         }
         if (!local.includeArchived()) clauses.add("NOT archived");
-        add(clauses, p, "COALESCE(assignee_user_id::text,'UNASSIGNED')", "assignees", local.assignees());
+        if (!local.assignees().isEmpty()) {
+            clauses.add(JdbcWorkItemStatisticsRepository.assigneeMatch("local_assignees"));
+            p.put("local_assignees", local.assignees());
+        }
         add(clauses, p, "project_id::text||':'||status_code", "statuses", local.statuses());
         add(clauses, p, "project_id::text||':'||COALESCE(priority,'UNASSIGNED')", "priorities", local.priorities());
         add(clauses, p, "content_id", "contents", local.contentIds());
@@ -91,16 +103,16 @@ public class JdbcWorkItemChartRepository implements WorkItemChartRepository {
             p.put("localQuery", "%" + local.query().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%");
         }
         var x = dimension(chart.dimension()); var s = dimension(chart.series());
-        if (!chart.showEmpty()) { clauses.add(x.key() + "<>'EMPTY'"); clauses.add(s.key() + "<>'EMPTY'"); }
-        if (selection != null && selection.key() != null) { clauses.add(x.key() + "=:selectedKey"); p.put("selectedKey", selection.key()); }
-        if (selection != null && selection.seriesKey() != null) { clauses.add(s.key() + "=:selectedSeries"); p.put("selectedSeries", selection.seriesKey()); }
+        if (!chart.showEmpty()) { clauses.add(x.member() ? "cardinality(assignee_ids)>0" : x.key() + "<>'EMPTY'"); clauses.add(s.member() ? "cardinality(assignee_ids)>0" : s.key() + "<>'EMPTY'"); }
+        if (selection != null && selection.key() != null) { clauses.add(x.member() ? "(CASE WHEN :selectedKey='EMPTY' THEN cardinality(assignee_ids)=0 ELSE :selectedKey=ANY(assignee_ids::text[]) END)" : x.key() + "=:selectedKey"); p.put("selectedKey", selection.key()); }
+        if (selection != null && selection.seriesKey() != null) { clauses.add(s.member() ? "(CASE WHEN :selectedSeries='EMPTY' THEN cardinality(assignee_ids)=0 ELSE :selectedSeries=ANY(assignee_ids::text[]) END)" : s.key() + "=:selectedSeries"); p.put("selectedSeries", selection.seriesKey()); }
         return new JdbcWorkItemStatisticsRepository.Query(base.sql() + ",scoped AS (SELECT * FROM filtered WHERE "
                 + (clauses.isEmpty() ? "TRUE" : String.join(" AND ", clauses)) + ") ", p);
     }
     private static void add(List<String> clauses, Map<String, Object> p, String column, String key, List<?> values) {
         if (!values.isEmpty()) { clauses.add(column + " IN (:local_" + key + ")"); p.put("local_" + key, values); }
     }
-    private static String measure(ChartStatistics.Measure m) {
+    private static String measure(ChartStatistics.Measure m, String durationColumn) {
         if (m == null) return "0";
         return switch (m.metric()) {
             case "TOTAL" -> "COUNT(*)";
@@ -108,9 +120,9 @@ public class JdbcWorkItemChartRepository implements WorkItemChartRepository {
             case "DONE" -> "COUNT(*) FILTER(WHERE status_category='DONE')";
             case "COMPLETION_RATE" -> "100.0*COUNT(*) FILTER(WHERE status_category='DONE')/NULLIF(COUNT(*),0)";
             case "DURATION" -> switch (m.calculation()) {
-                case "SUM" -> "SUM(duration_ms)"; case "AVG" -> "AVG(duration_ms)";
-                case "MEDIAN" -> "percentile_cont(0.5) WITHIN GROUP(ORDER BY duration_ms)";
-                case "MIN" -> "MIN(duration_ms)"; case "MAX" -> "MAX(duration_ms)";
+                case "SUM" -> "SUM(" + durationColumn + ")"; case "AVG" -> "AVG(" + durationColumn + ")";
+                case "MEDIAN" -> "percentile_cont(0.5) WITHIN GROUP(ORDER BY " + durationColumn + ")";
+                case "MIN" -> "MIN(" + durationColumn + ")"; case "MAX" -> "MAX(" + durationColumn + ")";
                 default -> throw new IllegalArgumentException("Invalid calculation");
             };
             default -> throw new IllegalArgumentException("Invalid metric");
@@ -124,7 +136,7 @@ public class JdbcWorkItemChartRepository implements WorkItemChartRepository {
             case "STATUS" -> new Dimension("jsonb_build_array(status_code,status_category,status_name,status_color)::text", "status_name", "status_color");
             case "PRIORITY" -> new Dimension("CASE WHEN priority IS NULL THEN 'EMPTY' ELSE jsonb_build_array(priority,priority_name,priority_color)::text END", "priority_name", "priority_color");
             case "CATEGORY" -> new Dimension("status_category", "status_category", "'GRAY'::text");
-            case "ASSIGNEE" -> new Dimension("COALESCE(assignee_user_id::text,'EMPTY')", "COALESCE(assignee_user_id::text,'EMPTY')", "'BRIGHT_BLUE'::text");
+            case "ASSIGNEE" -> new Dimension("COALESCE(member_id::text,'EMPTY')", "COALESCE(member_id::text,'EMPTY')", "'BRIGHT_BLUE'::text", true);
             case "REPORTER" -> new Dimension("COALESCE(reporter_user_id::text,'EMPTY')", "COALESCE(reporter_user_id::text,'EMPTY')", "'PURPLE'::text");
             default -> {
                 String column = switch (name) {

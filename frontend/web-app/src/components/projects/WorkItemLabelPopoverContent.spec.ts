@@ -30,18 +30,18 @@ function mockCatalog(): WorkItemLabelCatalog {
     etag: '"etag-1"',
     canManage: true,
     statuses: [
-      { code: 'DONE', displayName: '已完成', statusCategory: WorkItemStatusCategory.Done, colorToken: WorkItemLabelColorToken.Green, active: true, sortOrder: 1, inUse: true, protectedLabel: false },
-      { code: 'IN_PROGRESS', displayName: '进行中', statusCategory: WorkItemStatusCategory.InProgress, colorToken: WorkItemLabelColorToken.Orange, active: true, sortOrder: 2, inUse: false, protectedLabel: false },
-      { code: 'STUCK', displayName: '卡住', statusCategory: WorkItemStatusCategory.InProgress, colorToken: WorkItemLabelColorToken.Red, active: true, sortOrder: 3, inUse: false, protectedLabel: false },
-      { code: 'NOT_STARTED', displayName: '未开始', statusCategory: WorkItemStatusCategory.Todo, colorToken: WorkItemLabelColorToken.Gray, active: true, sortOrder: 4, inUse: false, protectedLabel: false },
-      { code: 'CLOSED', displayName: '已关闭', statusCategory: WorkItemStatusCategory.Canceled, colorToken: WorkItemLabelColorToken.Blue, active: false, sortOrder: 5, inUse: false, protectedLabel: false },
-      { code: 'CUSTOM_1', displayName: '自定义1', statusCategory: WorkItemStatusCategory.InProgress, colorToken: WorkItemLabelColorToken.Purple, active: true, sortOrder: 6, inUse: false, protectedLabel: false },
-      { code: 'CUSTOM_2', displayName: '自定义2', statusCategory: WorkItemStatusCategory.InProgress, colorToken: WorkItemLabelColorToken.Cyan, active: true, sortOrder: 7, inUse: false, protectedLabel: false },
+      { code: 'DONE', displayName: '已完成', statusCategory: WorkItemStatusCategory.Done, colorToken: WorkItemLabelColorToken.Green, active: true, sortOrder: 10, inUse: true, protectedLabel: false },
+      { code: 'IN_PROGRESS', displayName: '进行中', statusCategory: WorkItemStatusCategory.InProgress, colorToken: WorkItemLabelColorToken.Orange, active: true, sortOrder: 20, inUse: false, protectedLabel: false },
+      { code: 'STUCK', displayName: '卡住', statusCategory: WorkItemStatusCategory.InProgress, colorToken: WorkItemLabelColorToken.Red, active: true, sortOrder: 30, inUse: false, protectedLabel: false },
+      { code: 'NOT_STARTED', displayName: '未开始', statusCategory: WorkItemStatusCategory.Todo, colorToken: WorkItemLabelColorToken.Gray, active: true, sortOrder: 40, inUse: false, protectedLabel: false },
+      { code: 'CLOSED', displayName: '已关闭', statusCategory: WorkItemStatusCategory.Canceled, colorToken: WorkItemLabelColorToken.Blue, active: false, sortOrder: 50, inUse: false, protectedLabel: false },
+      { code: 'CUSTOM_1', displayName: '自定义1', statusCategory: WorkItemStatusCategory.InProgress, colorToken: WorkItemLabelColorToken.Purple, active: true, sortOrder: 60, inUse: false, protectedLabel: false },
+      { code: 'CUSTOM_2', displayName: '自定义2', statusCategory: WorkItemStatusCategory.InProgress, colorToken: WorkItemLabelColorToken.Cyan, active: true, sortOrder: 70, inUse: false, protectedLabel: false },
     ],
     priorities: [
-      { code: 'URGENT', displayName: '紧急', colorToken: WorkItemLabelColorToken.Red, active: true, sortOrder: 1, inUse: false },
-      { code: 'HIGH', displayName: '高', colorToken: WorkItemLabelColorToken.Orange, active: true, sortOrder: 2, inUse: false },
-      { code: 'LOW', displayName: '低', colorToken: WorkItemLabelColorToken.Blue, active: true, sortOrder: 3, inUse: false },
+      { code: 'URGENT', displayName: '紧急', colorToken: WorkItemLabelColorToken.Red, active: true, sortOrder: 10, inUse: false },
+      { code: 'HIGH', displayName: '高', colorToken: WorkItemLabelColorToken.Orange, active: true, sortOrder: 20, inUse: false },
+      { code: 'LOW', displayName: '低', colorToken: WorkItemLabelColorToken.Blue, active: true, sortOrder: 30, inUse: false },
     ],
   }
 }
@@ -49,6 +49,36 @@ function mockCatalog(): WorkItemLabelCatalog {
 describe('WorkItemLabelPopoverContent', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('直接进入编辑模式，按后端位置保存拖动顺序并在成功后发出 done', async () => {
+    const catalog = mockCatalog()
+    const updatedCatalog = {
+      ...catalog,
+      rowVersion: 2,
+      etag: '"etag-2"',
+      priorities: [
+        { ...catalog.priorities[2]!, sortOrder: 10 },
+        { ...catalog.priorities[0]!, sortOrder: 20 },
+        { ...catalog.priorities[1]!, sortOrder: 30 },
+      ],
+    }
+    vi.mocked(workItemsApi.updateProjectWorkItemPriorityLabel).mockResolvedValue(updatedCatalog)
+    const wrapper = mount(WorkItemLabelPopoverContent, {
+      props: { kind: 'priority', projectId: 'project-1', catalog, canManage: true, initialMode: 'edit' },
+    })
+    expect(wrapper.find('.label-edit-view').exists()).toBe(true)
+    const rows = wrapper.findAll('.label-edit-row')
+    await rows[2]!.trigger('dragstart')
+    await rows[0]!.trigger('drop')
+    await wrapper.get('.apply-action-btn').trigger('click')
+    await flushPromises()
+    expect(workItemsApi.updateProjectWorkItemPriorityLabel).toHaveBeenCalledTimes(1)
+    expect(workItemsApi.updateProjectWorkItemPriorityLabel).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'LOW', workItemLabelUpdateRequest: { displayName: null, colorToken: null, active: null, sortOrder: 10 },
+    }))
+    expect(wrapper.emitted('updated')).toEqual([[updatedCatalog]])
+    expect(wrapper.emitted('done')).toEqual([[]])
   })
 
   it('选择态：正确渲染状态列表，点击选项触发 selectStatus 事件', async () => {
@@ -182,7 +212,7 @@ describe('WorkItemLabelPopoverContent', () => {
           statusCategory: WorkItemStatusCategory.Todo,
           colorToken: WorkItemLabelColorToken.BrightBlue,
           active: true,
-          sortOrder: 8,
+          sortOrder: 80,
           inUse: false,
           protectedLabel: false,
         },

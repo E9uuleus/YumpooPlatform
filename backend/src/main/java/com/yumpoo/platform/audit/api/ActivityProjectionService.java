@@ -36,7 +36,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             "workitem.connection_created", "workitem.connection_deleted");
     private static final Set<String> WORK_ITEM_EVENTS = Set.of(
             "workitem.work_item_created", "workitem.work_item_fields_changed",
-            "workitem.work_item_assigned", "workitem.work_item_unassigned",
+            "workitem.work_item_assigned", "workitem.work_item_unassigned", "workitem.work_item_assignees_changed",
             "workitem.work_item_status_changed", "workitem.work_item_rank_changed",
             "workitem.work_item_deleted", "workitem.work_item_restored",
             "workitem.work_item_archived", "workitem.work_item_unarchived",
@@ -146,6 +146,8 @@ public class ActivityProjectionService implements OutboxEventConsumer {
             appendRelation(event);
             return;
         }
+        if ((event.eventType().equals("workitem.work_item_assigned") || event.eventType().equals("workitem.work_item_unassigned"))
+                && payload.has("assigneeUserIds")) return;
         UUID workItemId = uuid(payload, "workItemId");
         UUID projectId = uuid(payload, "projectId");
         String ref = optionalJoin(payload, "itemNo", "title");
@@ -174,6 +176,9 @@ public class ActivityProjectionService implements OutboxEventConsumer {
                 safe.put("previousContentColorToken", text(payload, "previousContentColorToken"));
                 safe.put("contentColorToken", text(payload, "contentColorToken"));
             }
+        } else if (type.equals("workitem.work_item_assignees_changed")) {
+            safe.put("addedMemberDisplayNames", memberNames(event, "addedUserIds"));
+            safe.put("removedMemberDisplayNames", memberNames(event, "removedUserIds"));
         } else if (type.equals("workitem.work_item_assigned")) {
             safe.put("memberDisplayName", user(event, uuid(payload, "assigneeUserId")));
         } else if (type.endsWith("status_changed")) {
@@ -194,6 +199,12 @@ public class ActivityProjectionService implements OutboxEventConsumer {
         append(event, ActivityAudienceType.PROJECT, projectId,
                 update ? "WORK_ITEM_UPDATE" : "WORK_ITEM", entityId, ref,
                 template(type), safe, workItemId, null);
+    }
+
+    private String memberNames(DomainEventEnvelope event, String field) {
+        java.util.List<String> names = new java.util.ArrayList<>();
+        for (JsonNode id : array(event.payload(), field)) names.add(user(event, UUID.fromString(id.asText())));
+        return String.join("、", names);
     }
 
     private void appendConnection(DomainEventEnvelope event) {

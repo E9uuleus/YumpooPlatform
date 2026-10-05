@@ -1,5 +1,6 @@
 import { ListProjectWorkItemsEmptyFieldEnum, type ListProjectWorkItemsRequest, type ProjectWorkItemListItem,
   type ProjectWorkItemFilterOption, type WorkItemLabelColorToken } from '@yumpoo/api-client'
+import { workItemAssigneeIds, assigneeSetKey } from './workItemAssignees'
 import { dueDateKey } from './workItemDueDate'
 import { mondayWorkItemLabelColors, workItemLabelColorValue } from './workItemLabelColors'
 
@@ -66,7 +67,7 @@ export function dateGroupKey(value: Date | string | null, today: string): string
 
 export function itemGroupKey(item: ProjectWorkItemListItem, field: GroupField, today: string): string {
   switch (field) {
-    case 'ASSIGNEE': return item.assigneeUserId ?? EMPTY_GROUP
+    case 'ASSIGNEE': { const ids = workItemAssigneeIds(item); return ids.length ? assigneeSetKey(ids) : EMPTY_GROUP }
     case 'STATUS': return item.statusCode
     case 'PRIORITY': return item.priority ?? EMPTY_GROUP
     case 'CONTENT': return item.contentId
@@ -139,8 +140,8 @@ export function groupListRequest(base: ListProjectWorkItemsRequest, field: Group
     else if (field === 'DUE_DATE') request.emptyField = ListProjectWorkItemsEmptyFieldEnum.DueDate
     else return null
   } else if (field === 'ASSIGNEE') {
-    if (!intersects(base.assigneeUserId)) return null
-    request.assigneeUserId = new Set([group.key])
+    if (base.assigneeUserId?.size && !group.key.split(',').some(id => base.assigneeUserId!.has(id))) return null
+    request.assigneeSetUserId = new Set(group.key.split(','))
   } else if (field === 'STATUS') {
     if (!intersects(base.status)) return null
     request.status = new Set([group.key])

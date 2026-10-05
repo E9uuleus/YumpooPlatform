@@ -1,0 +1,73 @@
+.cell:has(> .work-item-column-header, > .connect-table-header > .work-item-column-header) {
+  padding: 0 !important;
+}
+
+.work-item-column-header {
+  --work-item-header-actions-width: 0px;
+  --work-item-header-actions-opacity: 0;
+  --work-item-header-actions-pointer: none;
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+
+:is(th, td):is(:hover, :focus-within) .work-item-column-header,
+.work-item-column-header:is(:hover, :focus-within, .work-item-column-header--menu-open) {
+  --work-item-header-actions-width: 40px;
+  --work-item-header-actions-opacity: 1;
+  --work-item-header-actions-pointer: auto;
+}
+
+.work-item-column-header .monday-column-quick-sort {
+  box-sizing: border-box;
+  padding-right: var(--work-item-header-actions-width);
+}
+
+.work-item-column-header .sort-by-column:not(.sort-by-column--active) {
+  opacity: var(--work-item-header-actions-opacity);
+  pointer-events: var(--work-item-header-actions-pointer);
+}
+
+.work-item-column-header__menu {
+  position: absolute;
+  z-index: 13;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  pointer-events: var(--work-item-header-actions-pointer);
+}
+
+.work-item-column-menu__trigger {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--yp-radius-sm);
+  background: color-mix(in srgb, var(--yp-text-primary) 6%, transparent);
+  color: var(--yp-text-secondary);
+  cursor: pointer;
+  opacity: var(--work-item-header-actions-opacity);
+  transition: opacity 120ms ease;
+}
+
+.work-item-column-menu__trigger:hover,
+.work-item-column-menu__trigger[aria-expanded='true'] {
+  background: var(--yp-bg-selected);
+  color: var(--yp-action-primary);
+}
+
+.work-item-column-menu__trigger:focus-visible {
+  outline: 2px solid var(--yp-action-primary);
+  outline-offset: 1px;
+}
+
+@media (hover: none) {
+  .work-item-column-header {
+    --work-item-header-actions-width: 40px;
+    --work-item-header-actions-opacity: 1;
+    --work-item-header-actions-pointer: auto;
+  }
+}

@@ -32,7 +32,7 @@ public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
                 .forEach(item -> editable.put(item.id(), item)));
         return new Page(result.items().stream().map(row -> {
             var i = row.item();
-            return new Item(i.id(), i.projectId(), i.itemNo(), i.title(), i.assigneeUserId(), row.assigneeName(),
+            return new Item(i.id(), i.projectId(), i.itemNo(), i.title(), i.assigneeUserId(), row.assigneeName(), row.assignees(),
                     i.statusCode(), i.statusName(), i.statusCategory(), i.colorToken(), i.durationMs(), i.updatedAt(),
                     i.contentId(), i.contentName(), i.priority(), i.priorityName(), i.reporterUserId(), row.reporterName(),
                     i.dueDate(), i.timelineStartDate(), i.timelineEndDate(), i.createdAt(), i.completedAt(), editable.get(i.id()));
@@ -58,7 +58,7 @@ public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
         var request = new com.yumpoo.platform.workitem.application.WorkItemQuery.Request(c.q(), c.status(), c.priority(),
                 c.assigneeUserId(), c.contentId(), c.dueFrom(), c.dueTo(), c.updatedAfter(), c.sort(),
                 new com.yumpoo.platform.workitem.application.WorkItemQuery.TimeFilter(c.timeTrackingState(),
-                        c.timeTrackingMinMs(), c.timeTrackingMaxMs(), scope.asOf(), 0, 0), c.emptyField()).withScope(scope);
+                        c.timeTrackingMinMs(), c.timeTrackingMaxMs(), scope.asOf(), 0, 0), c.emptyField()).withScope(scope).withAssigneeSet(c.assigneeSetUserId());
         var page = com.yumpoo.platform.foundation.api.pagination.CursorPageRequest.of(c.cursor(), c.limit());
         if (c.field() != null) {
             var result = workItems.listProjectFilterOptions(actor, projectId, c.field(), request, page);

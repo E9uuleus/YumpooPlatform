@@ -35,6 +35,8 @@ public class ActivitySummaryRenderer {
             case "CONNECTION_DELETED_TARGET" -> "解除了来自其他项目的连接";
             case "WORK_ITEM_CREATED" -> "创建了事项 " + ref;
             case "WORK_ITEM_FIELDS_CHANGED" -> "更新了事项 " + ref;
+            case "WORK_ITEM_ASSIGNEES_CHANGED" -> "更新了事项 " + ref + " 的处理人"
+                    + assigneeChanges(parameters);
             case "WORK_ITEM_ASSIGNED" -> "将事项 " + ref + " 指派给 " + person;
             case "WORK_ITEM_UNASSIGNED" -> "取消了事项 " + ref + " 的指派";
             case "WORK_ITEM_STATUS_CHANGED" -> "将事项 " + ref + " 的状态改为 "
@@ -60,6 +62,13 @@ public class ActivitySummaryRenderer {
             case "ATTACHMENT_DELETED" -> "删除了附件 " + ref;
             default -> "更新了 " + ref;
         };
+    }
+
+    private static String assigneeChanges(JsonNode parameters) {
+        String added = text(parameters, "addedMemberDisplayNames", "");
+        String removed = text(parameters, "removedMemberDisplayNames", "");
+        return (added.isEmpty() ? "" : "：添加 " + added)
+                + (removed.isEmpty() ? "" : (added.isEmpty() ? "：" : "；") + "移除 " + removed);
     }
 
     private static String text(JsonNode parameters, String name, String fallback) {

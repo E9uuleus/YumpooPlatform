@@ -43,14 +43,14 @@ public class JdbcWorkItemCellActivityRepository implements WorkItemCellActivityR
                     content_display_name, event_type, column_code, change_type,
                     before_value, after_value, actor_type, actor_user_id,
                     actor_system_code, actor_display_name, occurred_at, request_id,
-                    correlation_id
+                    correlation_id, value_key
                 ) VALUES (
                     :id, :eventId, :companyId, :projectId, :workItemId, :contentId,
                     :contentDisplayName, :eventType, :columnCode, :changeType,
                     CAST(:beforeValue AS jsonb), CAST(:afterValue AS jsonb), :actorType,
                     :actorUserId, :actorSystemCode, :actorDisplayName, :occurredAt,
-                    :requestId, :correlationId
-                ) ON CONFLICT (event_id, projection_code, column_code) DO NOTHING
+                    :requestId, :correlationId, :valueKey
+                ) ON CONFLICT (event_id, projection_code, column_code, value_key) DO NOTHING
                 """)
                 .param("id", event.id()).param("eventId", event.eventId())
                 .param("companyId", event.companyId()).param("projectId", event.projectId())
@@ -58,6 +58,7 @@ public class JdbcWorkItemCellActivityRepository implements WorkItemCellActivityR
                 .param("contentDisplayName", event.contentDisplayName())
                 .param("eventType", event.eventType()).param("columnCode", event.columnCode())
                 .param("changeType", event.changeType())
+                .param("valueKey", event.valueKey())
                 .param("beforeValue", json(event.beforeValue())).param("afterValue", json(event.afterValue()))
                 .param("actorType", event.actorType()).param("actorUserId", event.actorUserId())
                 .param("actorSystemCode", event.actorSystemCode())
@@ -124,7 +125,7 @@ public class JdbcWorkItemCellActivityRepository implements WorkItemCellActivityR
                 rs.getObject("actor_user_id", UUID.class), rs.getString("actor_system_code"),
                 rs.getString("actor_display_name"),
                 rs.getObject("occurred_at", OffsetDateTime.class).toInstant(),
-                rs.getString("request_id"), rs.getString("correlation_id"));
+                rs.getString("request_id"), rs.getString("correlation_id"), rs.getString("value_key"));
     }
 
     private String json(JsonNode value) {

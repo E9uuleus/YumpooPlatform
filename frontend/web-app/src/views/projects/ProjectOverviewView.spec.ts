@@ -42,7 +42,7 @@ const state = vi.hoisted(() => ({
   getProjectWorkItemLabels: vi.fn(),
   moveProjectWorkItemOrder: vi.fn(),
   moveWorkItemSubitemOrder: vi.fn(),
-  patchWorkItemAssignee: vi.fn(),
+  patchWorkItemAssignees: vi.fn(),
   patchWorkItemPriority: vi.fn(),
   patchWorkItemDueDate: vi.fn(),
   createWorkItem: vi.fn(),
@@ -84,7 +84,7 @@ vi.mock('../../api/client', () => ({
     getProjectWorkItemLabels: state.getProjectWorkItemLabels,
     moveProjectWorkItemOrder: state.moveProjectWorkItemOrder,
     moveWorkItemSubitemOrder: state.moveWorkItemSubitemOrder,
-    patchWorkItemAssignee: state.patchWorkItemAssignee,
+    patchWorkItemAssignees: state.patchWorkItemAssignees,
     patchWorkItemPriority: state.patchWorkItemPriority,
     patchWorkItemDueDate: state.patchWorkItemDueDate,
     createWorkItem: state.createWorkItem,
@@ -643,10 +643,11 @@ describe('项目级工作项首页', () => {
   })
 
   it('分组保留发起位置的根项草稿，切换字段不重建输入框', async () => {
-    const anchor = { ...item('anchor'), statusCode: 'DONE', title: '草稿锚点' }
+    const anchor = { ...item('anchor'), statusCode: 'DONE', title: '草稿锚点', assigneeUserId: 'a', assigneeDisplayName: '张三',
+      assignees: [{ userId: 'a', displayName: '张三' }, { userId: 'b', displayName: '李四' }] }
     state.listProjectWorkItems.mockResolvedValue(page([anchor]))
     state.listProjectWorkItemFilterOptions.mockImplementation(async ({ field }: { field: string }) => ({
-      items: [{ value: field === 'STATUS' ? 'DONE' : '__NULL__', label: '分组', count: 1 }], nextCursor: null,
+      items: [{ value: field === 'STATUS' ? 'DONE' : 'a,b', label: field === 'STATUS' ? '分组' : '张三、李四', count: 1 }], nextCursor: null,
     }))
     const wrapper = mountView(); await flushPromises()
     const view = wrapper.vm as unknown as { changeGrouping: (field: string) => Promise<void> }
@@ -659,6 +660,8 @@ describe('项目级工作项首页', () => {
     expect(wrapper.get<HTMLInputElement>('.work-item-draft-row .work-item-name-input input').element === input.element).toBe(true)
     expect(input.element.value).toBe('未保存的根项')
     expect(state.createWorkItem).not.toHaveBeenCalled()
+    expect(state.listProjectWorkItemFilterOptions).toHaveBeenCalledWith(expect.objectContaining({ field: 'ASSIGNEE_SET' }), expect.anything())
+    expect(wrapper.text()).toContain('张三、李四')
   })
 
   it('文字编辑保存后同步主表名称，单元格空白不打开详情', async () => {
@@ -1331,6 +1334,46 @@ describe('项目级工作项首页', () => {
     expect(state.replace).toHaveBeenLastCalledWith({ query: {} })
     expect(wrapper.find('.sort-by-column--active').exists()).toBe(false)
     expect(wrapper.find('.clear-button-wrapper').exists()).toBe(false)
+    await wrapper.get('button[aria-label="状态列菜单"]').trigger('click')
+    await flushPromises()
+    const menu = wrapper.findAllComponents({ name: 'WorkItemColumnHeaderMenu' })
+      .find(component => component.props('state').label === '状态')!
+    await vi.waitFor(() => {
+      expect(menu.findComponent({ name: 'ElDropdownMenu' }).exists()).toBe(true)
+    })
+    expect(menu.getComponent({ name: 'ElDropdownMenu' }).text()).toMatch(/设置.*筛选.*排序.*折叠.*分组依据/s)
+    await menu.getComponent({ name: 'ElDropdownMenu' }).findAll('li[role="menuitem"]')
+      .find(option => option.text().trim() === '设置')!.trigger('click')
+    await vi.waitFor(() => {
+      expect(menu.getComponent({ name: 'ElDropdownMenu' }).find('button[role="menuitem"]').exists()).toBe(true)
+    })
+    await menu.getComponent({ name: 'ElDropdownMenu' }).get('button[role="menuitem"]').trigger('click')
+    await flushPromises()
+    const settings = wrapper.getComponent({ name: 'WorkItemColumnSettingsPopover' })
+    expect(settings.props('anchor')).toBe(wrapper.get('button[aria-label="状态列菜单"]').element.closest('th'))
+    const editor = settings.getComponent({ name: 'WorkItemLabelPopoverContent' })
+    expect(editor.props('initialMode')).toBe('edit')
+    const popover = settings.getComponent({ name: 'ElPopover' })
+    editor.vm.$emit('busyChange', true)
+    await nextTick()
+    popover.vm.$emit('update:visible', false)
+    await nextTick()
+    expect(settings.props('kind')).toBe('status')
+    editor.vm.$emit('busyChange', false)
+    await nextTick()
+    popover.vm.$emit('update:visible', false)
+    await nextTick()
+    expect(settings.props('kind')).toBeUndefined()
+    await wrapper.get('button[aria-label="状态列菜单"]').trigger('click')
+    await vi.waitFor(() => {
+      expect(menu.findComponent({ name: 'ElDropdownMenu' }).exists()).toBe(true)
+    })
+    const collapse = menu.getComponent({ name: 'ElDropdownMenu' }).findAll('li[role="menuitem"]')
+      .find(option => option.text().trim() === '折叠')!
+    await collapse.trigger('click')
+    await flushPromises()
+    expect(JSON.parse(localStorage.getItem('yumpoo:project-work-items:table:v1') ?? '{}').collapsed).toEqual(['status'])
+
   })
 
   it('保存排序时加载完整结果，并用相邻项避让接口固化新的工作项顺序', async () => {

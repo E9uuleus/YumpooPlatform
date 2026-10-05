@@ -57,7 +57,7 @@ describe('工作项名称单元格', () => {
     await flushPromises()
     expect(api.updateWorkItem).toHaveBeenCalledTimes(1)
     expect(api.updateWorkItem).toHaveBeenCalledWith({ workItemId: item.id, xXSRFTOKEN: 'csrf', ifMatch: '"5"', workItemUpdateRequest: {
-      title: '新名称', priority: 'HIGH', assigneeUserId: 'member-2', description: '保留描述', notes: '保留备注',
+      title: '新名称', priority: 'HIGH', assigneeUserId: 'member-2', assigneeUserIds: ['member-2'], description: '保留描述', notes: '保留备注',
       timelineStartDate: detail.timelineStartDate, timelineEndDate: detail.timelineEndDate, dueDate: detail.dueDate, dueTime: '18:30',
     } })
     expect(wrapper.emitted('updated')?.[0]?.[1]).toMatchObject({ title: '新名称' })

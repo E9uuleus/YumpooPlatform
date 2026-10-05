@@ -28,11 +28,11 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
               GROUP BY work_item_id)
             SELECT w.id, w.project_id, w.item_no, w.title, c.name AS content_name, c.code AS content_code,
               c.color_token AS content_color_token, w.status_category,
-              COALESCE(w.assignee_user_id=:user,false) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration
+              EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration
             FROM yumpoo.work_item w JOIN yumpoo.content c ON c.id=w.content_id AND c.company_id=w.company_id
             LEFT JOIN own ON own.work_item_id=w.id
             WHERE w.company_id=:company AND w.project_id IN (:projects) AND w.deleted_at IS NULL AND NOT w.archived
-              AND (:personal=false OR w.assignee_user_id=:user OR own.last_tracked_at IS NOT NULL)
+              AND (:personal=false OR EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) OR own.last_tracked_at IS NOT NULL)
               AND (:empty OR lower(w.title) LIKE :query ESCAPE '\\' OR lower(w.item_no) LIKE :query ESCAPE '\\'
             """ + projectMatch + """
               )

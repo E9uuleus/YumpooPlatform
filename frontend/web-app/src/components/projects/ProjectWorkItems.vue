@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import './workItemCompactTable.css'
-import { useWorkItemEdits } from './useWorkItemEdits'
+import { useWorkItemEdits, type WorkItemPatchField, type WorkItemPatchValue } from './useWorkItemEdits'
 import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
@@ -57,7 +57,10 @@ import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import WorkItemDetailPanel from '../../components/collaboration/WorkItemDetailPanel.vue'
-import MondayColumnQuickSort from './MondayColumnQuickSort.vue'
+import WorkItemColumnHeader from './WorkItemColumnHeader.vue'
+import WorkItemColumnExpandButton from './WorkItemColumnExpandButton.vue'
+import WorkItemColumnSettingsPopover from './WorkItemColumnSettingsPopover.vue'
+import { COLLAPSED_COLUMN_WIDTH, type ColumnMenuAction, type ColumnMenuState } from './workItemColumnMenu'
 import ProjectWorkItemSubitemsTable, {
   type ProjectWorkItemSubitemSortRule,
 } from './ProjectWorkItemSubitemsTable.vue'
@@ -67,6 +70,9 @@ import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
 import type { DueDateValue } from './workItemDueDate'
 import { workItemLabelColorValue } from './workItemLabelColors'
+import WorkItemAssigneePicker from './WorkItemAssigneePicker.vue'
+import { workItemAssignees, workItemAssigneeIds } from './workItemAssignees'
+import YpAssigneeStack from '../yp/YpAssigneeStack.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import WorkItemGroupingPopover from './WorkItemGroupingPopover.vue'
@@ -553,13 +559,94 @@ const visibleSubitemColumns = computed(() => orderedSubitemColumns.value.filter(
 const movableVisibleColumns = computed(() => builtInVisibleColumns.value.filter(item => item.key !== 'title'))
 const allHiddenColumns = computed(() => new Set<ColumnKey>([...hiddenColumns.value, ...connect.hidden]))
 const restorableColumns = computed(() => [...columns, ...connect.columns].filter(column => allHiddenColumns.value.has(column.key)))
-function columnWidth(key: ColumnKey): number { return isConnectColumnKey(key) ? connect.width(key) : columnWidths[key] }
+const collapsedColumns = ref(new Set<ColumnKey>())
+const columnSettingsKind = ref<'status' | 'priority' | 'content'>()
+const columnSettingsAnchor = ref<HTMLElement>()
+const assigneeFilterOpen = ref(false)
+const filterPopoverOpen = ref(false)
+const groupFieldByColumn: Partial<Record<BuiltInColumnKey, GroupField>> = {
+  assignee: 'ASSIGNEE', status: 'STATUS', priority: 'PRIORITY', content: 'CONTENT', dueDate: 'DUE_DATE',
+}
+function isColumnCollapsed(key: ColumnKey): boolean { return collapsedColumns.value.has(key) }
+// 替换原 columnWidth：折叠列在表格与添加行网格中统一使用折叠宽度
+function columnWidth(key: ColumnKey): number {
+  if (isColumnCollapsed(key)) return COLLAPSED_COLUMN_WIDTH
+  return isConnectColumnKey(key) ? connect.width(key) : columnWidths[key]
+}
+function columnMenuState(column: { key: BuiltInColumnKey; label: string }): ColumnMenuState {
+  const labels = column.key === 'status' || column.key === 'priority' ? labelCatalog.value
+    : column.key === 'content' ? catalog.value : undefined
+  const groupField = groupFieldByColumn[column.key]
+  return {
+    label: column.label,
+    settings: !labels ? 'unavailable' : labels.canManage ? 'editable' : 'readonly',
+    sortDirection: sortDirectionForColumn(column.key),
+    sortDisabled: savingSortOrder.value,
+    collapsible: column.key !== 'title',
+    groupField,
+    groupedByThis: Boolean(groupField) && groupingField.value === groupField,
+    groupDisabled: savingSortOrder.value,
+  }
+}
+function onColumnMenuAction(key: BuiltInColumnKey, action: ColumnMenuAction, anchor?: HTMLElement): void {
+  if (action.type === 'settings') {
+    if (anchor && (key === 'status' || key === 'priority' || key === 'content')) {
+      columnSettingsAnchor.value = anchor
+      columnSettingsKind.value = key
+    }
+  } else if (action.type === 'filter') openColumnFilter(key)
+  else if (action.type === 'sort') setColumnSort(key, action.direction)
+  else if (action.type === 'collapse') void toggleColumnCollapsed(key)
+  else {
+    const field = groupFieldByColumn[key]
+    if (field) void changeGrouping(groupingField.value === field ? '' : field)
+  }
+}
+function openColumnFilter(key: BuiltInColumnKey): void {
+  // 等列菜单关闭后再打开工具栏弹层，避免同一次点击被弹层判定为外部点击而立即关闭。
+  window.setTimeout(() => {
+    if (key === 'title') { searchExpanded.value = true; return }
+    void loadFilterOptions()
+    if (key === 'assignee') assigneeFilterOpen.value = true
+    else filterPopoverOpen.value = true
+  }, 0)
+}
+function setColumnSort(key: BuiltInColumnKey, direction: 'ASC' | 'DESC' | null): void {
+  if (savingSortOrder.value) return
+  if (!direction) { clearColumnSort(key); return }
+  const field = sortFieldByColumn[key]
+  const next = sortRules.value.map(rule => ({ ...rule }))
+  const index = next.findIndex(rule => rule.field === field)
+  if (index >= 0) next[index] = { field, direction }
+  else if (next.length < 3) next.push({ field, direction })
+  else next[next.length - 1] = { field, direction }
+  sortRules.value = next
+  void syncUrl()
+}
+async function toggleColumnCollapsed(key: ColumnKey): Promise<void> {
+  if (key === 'title') return
+  const snapshot = columnFlip.capture()
+  const next = new Set(collapsedColumns.value)
+  if (next.has(key)) next.delete(key); else next.add(key)
+  collapsedColumns.value = next
+  persistTablePrefs()
+  await nextTick()
+  flushResponsiveTableLayout()
+  columnFlip.play(snapshot)
+}
 function showHiddenColumn(key: string) { if (isConnectColumnKey(key) || columnByKey.has(key as BuiltInColumnKey)) void toggleColumn(key as ColumnKey, true) }
-const quickGridStyle = computed(() => ({
-  '--work-item-menu-column-width': `${TABLE_MENU_COLUMN_WIDTH}px`,
-  gridTemplateColumns: [`${TABLE_MENU_COLUMN_WIDTH}px`, `${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
-    ...visibleColumns.value.map(item => `${columnWidth(item.key)}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
-}))
+const QUICK_CHECKBOX_SIZE = 16
+const quickGridStyle = computed(() => {
+  const titleLeft = TABLE_MENU_COLUMN_WIDTH + TABLE_EXPAND_COLUMN_WIDTH + TABLE_SELECTION_COLUMN_WIDTH
+  return {
+    '--work-item-menu-column-width': `${TABLE_MENU_COLUMN_WIDTH}px`,
+    '--work-item-quick-checkbox-left': `${TABLE_MENU_COLUMN_WIDTH + TABLE_EXPAND_COLUMN_WIDTH + (TABLE_SELECTION_COLUMN_WIDTH - QUICK_CHECKBOX_SIZE) / 2}px`,
+    '--work-item-quick-title-left': `${titleLeft}px`,
+    '--work-item-quick-controls-left': `${titleLeft + columnWidths.title}px`,
+    gridTemplateColumns: [`${TABLE_MENU_COLUMN_WIDTH}px`, `${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
+      ...visibleColumns.value.map(item => `${columnWidth(item.key)}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
+  }
+})
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -623,7 +710,7 @@ function groupCreateDisabledReason(group: WorkItemGroup): string {
     case 'CONTENT': return activeContents.value.some(item => item.id === group.key) ? '' : '此类别已停用'
     case 'STATUS': return workflowStatuses.value.some(item => item.code === group.key && item.active) ? '' : '此状态已停用'
     case 'PRIORITY': return priorityOptions.value.some(item => item.code === group.key && item.active) ? '' : '此优先级已停用'
-    case 'ASSIGNEE': return activeMembers.value.some(item => item.userId === group.key) ? '' : '此处理人已不在项目中'
+    case 'ASSIGNEE': return group.key.split(',').every(id => activeMembers.value.some(item => item.userId === id)) ? '' : '此分组中有处理人已不在项目中'
     case 'DUE_DATE': return group.from && group.to && group.from > group.to ? '当前日期下此分组没有可用日期' : ''
     default: return ''
   }
@@ -1138,7 +1225,7 @@ function toggleSet<T>(set: Set<T>, value: T, checked: boolean): void {
 function countBy(field: 'statusCode' | 'priority' | 'contentId' | 'assigneeUserId', value: string | null): number {
   const apiField = ({ statusCode: 'STATUS', priority: 'PRIORITY', contentId: 'CONTENT', assigneeUserId: 'ASSIGNEE' } as const)[field]
   return filterOptionCounts.value.get(`${apiField}:${value ?? '__NULL__'}`)
-    ?? tableItems.value.filter(item => item[field] === value).length
+    ?? tableItems.value.filter(item => field === 'assigneeUserId' ? workItemAssigneeIds(item).includes(value ?? '') : item[field] === value).length
 }
 
 async function loadFilterOptions(): Promise<void> {
@@ -1684,6 +1771,7 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
       contentColorToken: updatedDetail.contentColorToken,
       statusCode: updatedDetail.statusCode, statusCategory: updatedDetail.statusCategory,
       priority: updatedDetail.priority,
+      assignees: workItemAssignees(updatedDetail),
       assigneeUserId: updatedDetail.assigneeUserId,
       assigneeDisplayName: updatedDetail.assigneeDisplayName,
       dueDate: updatedDetail.dueDate, dueTime: updatedDetail.dueTime ?? null,
@@ -1705,7 +1793,7 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
 }
 
 const cellEdits = useWorkItemEdits({ updated: replaceLightItem, failed: async problem => { error.value = problem; notifyChanged(); await loadTable(null, false) } })
-async function patchCell(item: ProjectWorkItemListItem, field: 'assignee' | 'priority' | 'dueDate' | 'content', value: string | Date | null, dueTime?: string | null): Promise<boolean> {
+async function patchCell(item: ProjectWorkItemListItem, field: WorkItemPatchField, value: WorkItemPatchValue, dueTime?: string | null): Promise<boolean> {
   if (editingCell.value) return false
   editingCell.value = item.id + ':' + field
   try {
@@ -1820,6 +1908,7 @@ function persistTablePrefs(): void {
     version: TABLE_PREFS_VERSION,
     widths: columnWidths,
     hidden: [...hiddenColumns.value],
+    collapsed: [...collapsedColumns.value],
     order: movableColumnOrder.value,
     subitemOrder: subitemMovableColumnOrder.value,
   }))
@@ -1830,6 +1919,7 @@ function loadTablePrefs(): void {
     const parsed = JSON.parse(localStorage.getItem(tablePrefsKey.value) ?? (embedded.value ? localStorage.getItem(projectTablePrefsKey) : null) ?? '{}') as {
       version?: number
       widths?: Partial<Record<BuiltInColumnKey, number>>
+      collapsed?: string[]
       hidden?: BuiltInColumnKey[]
       order?: BuiltInColumnKey[]
       subitemOrder?: BuiltInColumnKey[]
@@ -1840,6 +1930,8 @@ function loadTablePrefs(): void {
       if (typeof value === 'number') columnWidths[column.key] = Math.max(column.minWidth, value)
     })
     hiddenColumns.value = new Set((parsed.hidden ?? []).filter(key => key !== 'title'))
+    collapsedColumns.value = new Set((parsed.collapsed ?? []).filter((key): key is ColumnKey =>
+      key !== 'title' && (isConnectColumnKey(key) || columnByKey.has(key as BuiltInColumnKey))))
     const savedOrder = (parsed.order ?? []).filter((key): key is MovableColumnKey => key !== 'title' && defaultMovableColumnOrder.includes(key as MovableColumnKey))
     movableColumnOrder.value = [
       ...new Set(savedOrder),
@@ -1855,6 +1947,7 @@ function loadTablePrefs(): void {
 
 function onHeaderDragEnd(newWidth: number, _oldWidth: number, column: { property?: string; columnKey?: string }): void {
   const key = column.property ?? column.columnKey ?? ''
+  if (isColumnCollapsed(key as ColumnKey)) { scheduleResponsiveTableLayout(); return }
   if (isConnectColumnKey(key)) { connect.resizeColumn(key, newWidth); return }
   const config = columnByKey.get(key as BuiltInColumnKey)
   if (!config) return
@@ -2179,7 +2272,7 @@ function onTableColumnPointerDown(event: PointerEvent): void {
     onTableColumnResizePointerDown(event, resizeHandle)
     return
   }
-  if (target?.closest('.sort-by-column')) return
+  if (target?.closest('.sort-by-column, .work-item-column-menu, .work-item-column-expand')) return
   const header = target?.closest<HTMLTableCellElement>('.monday-movable-column-header')
   if (!header) return
   const rect = header.getBoundingClientRect()
@@ -2831,7 +2924,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <el-popover placement="bottom-start" :width="360" trigger="click" popper-class="work-items-popover work-item-view-control" @show="loadFilterOptions">
+          <el-popover v-model:visible="assigneeFilterOpen" placement="bottom-start" :width="360" trigger="click" popper-class="work-items-popover work-item-view-control" @show="loadFilterOptions">
             <template #reference>
               <button class="toolbar-button" :class="{ active: filters.assignees.size }">
                 <el-icon><user /></el-icon><span>处理人</span>
@@ -2853,7 +2946,7 @@ onBeforeUnmount(() => {
             </div>
           </el-popover>
 
-          <el-popover placement="bottom-start" :width="560" trigger="click" popper-class="work-items-popover work-items-filter-popover" @show="loadFilterOptions">
+          <el-popover v-model:visible="filterPopoverOpen" placement="bottom-start" :width="560" trigger="click" popper-class="work-items-popover work-items-filter-popover" @show="loadFilterOptions">
             <template #reference>
               <button class="toolbar-button" :class="{ active: filters.connectedColumnIds.size || filters.unconnectedColumnIds.size || filters.incomingProjectIds.size || filters.statuses.size || filters.priorities.size || filters.contents.size || filters.dueRange.length || filters.timeState || filters.timeMin || filters.timeMax || filters.updatedAfter }">
                 <el-icon><filter-icon /></el-icon><span>筛选</span>
@@ -3010,6 +3103,7 @@ onBeforeUnmount(() => {
                 <template #default="scope">
                   <div v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'add'" class="work-item-group-create">
                     <div v-if="groupCreate.draft(scope.row.group).open" class="quick-row monday-quick-row work-item-group-quick" :style="quickGridStyle">
+                      <span class="monday-quick-lead" aria-hidden="true" />
                       <span class="monday-quick-checkbox" aria-hidden="true" />
                       <el-input :ref="value => groupCreate.setInput((scope.row as WorkItemGroupDisplayRow).group, value)"
                         v-model="groupCreate.draft(scope.row.group).title" class="quick-title-field monday-quick-add__field"
@@ -3029,6 +3123,7 @@ onBeforeUnmount(() => {
                     <button v-else class="quick-add monday-quick-add work-item-group-quick" :style="quickGridStyle"
                       :disabled="Boolean(groupCreateDisabledReason(scope.row.group))" :title="groupCreateDisabledReason(scope.row.group) || undefined"
                       :aria-label="`添加工作项到${scope.row.group.label}`" @click="groupCreate.open(scope.row.group)">
+                      <span class="monday-quick-lead" aria-hidden="true" />
                       <span class="monday-quick-checkbox" aria-hidden="true" />
                       <span class="monday-quick-add__field">添加工作项</span>
                       <span class="work-item-group-add-mask" aria-hidden="true" />
@@ -3170,11 +3265,11 @@ onBeforeUnmount(() => {
                 resizable
               >
                 <template #header>
-                  <monday-column-quick-sort
-                    label="工作项名称"
-                    :direction="sortDirectionForColumn('title')"
+                  <work-item-column-header
+                    :state="columnMenuState(columnByKey.get('title')!)"
                     :saving="savingSortOrder"
                     @sort="applyColumnQuickSort('title')"
+                    @action="(action, anchor) => onColumnMenuAction('title', action, anchor)"
                     @clear="clearColumnSort('title')"
                     @save="saveSortedWorkItemOrder"
                   />
@@ -3186,9 +3281,10 @@ onBeforeUnmount(() => {
                 </template>
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
-                    <monday-column-quick-sort v-if="scope.row.groupRowKind === 'columns'" label="工作项名称"
-                      :direction="sortDirectionForColumn('title')" :saving="tableSorting" :allow-save="false"
-                      @sort="applyColumnQuickSort('title')" @clear="clearColumnSort('title')" />
+                    <work-item-column-header v-if="scope.row.groupRowKind === 'columns'" :state="columnMenuState(columnByKey.get('title')!)"
+                      :saving="tableSorting" :allow-save="false"
+                      @sort="applyColumnQuickSort('title')" @action="(action, anchor) => onColumnMenuAction('title', action, anchor)"
+                    @clear="clearColumnSort('title')" />
                     <span class="monday-column-resize-handle monday-title-column-resize-handle" data-column-key="title" aria-hidden="true" />
                   </template>
                   <div v-else class="title-cell" :data-work-item-id="scope.row.id">
@@ -3275,22 +3371,24 @@ onBeforeUnmount(() => {
                 :key="columnIndex"
                 :label="column.label"
                 :prop="column.key"
-                :width="columnWidths[column.key]"
+                :width="columnWidth(column.key)"
                 align="center"
-                :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' || column.key === 'content' ? ' monday-block-column' : ''}`"
-                :label-class-name="`monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key}${columnResizingKey === column.key ? ' monday-column-resizing' : ''}`"
+                :class-name="`monday-movable-column monday-column--${column.key}${column.key === 'status' || column.key === 'priority' || column.key === 'content' ? ' monday-block-column' : ''}${isColumnCollapsed(column.key) ? ' monday-column--collapsed' : ''}`"
+                :label-class-name="`monday-movable-column-header monday-sortable-column-header monday-column-header--${column.key}${columnResizingKey === column.key ? ' monday-column-resizing' : ''}${isColumnCollapsed(column.key) ? ' monday-column-header--collapsed' : ''}`"
                 resizable
               >
                 <template #header>
-                  <monday-column-quick-sort
-                    :label="column.label"
-                    :direction="sortDirectionForColumn(column.key)"
+                  <work-item-column-header
+                    :state="columnMenuState(column)"
+                    :collapsed="isColumnCollapsed(column.key)"
                     :saving="savingSortOrder"
                     @sort="applyColumnQuickSort(column.key)"
+                    @action="(action, anchor) => onColumnMenuAction(column.key, action, anchor)"
                     @clear="clearColumnSort(column.key)"
                     @save="saveSortedWorkItemOrder"
                   />
                   <span
+                    v-if="!isColumnCollapsed(column.key)"
                     class="monday-column-resize-handle"
                     :data-column-key="column.key"
                     aria-hidden="true"
@@ -3298,11 +3396,13 @@ onBeforeUnmount(() => {
                 </template>
                 <template #default="scope">
                   <template v-if="isGroupDisplayRow(scope.row)">
-                    <monday-column-quick-sort v-if="scope.row.groupRowKind === 'columns'" :label="column.label"
-                      :direction="sortDirectionForColumn(column.key)" :saving="tableSorting" :allow-save="false"
-                      @sort="applyColumnQuickSort(column.key)" @clear="clearColumnSort(column.key)" />
-                    <span class="monday-column-resize-handle" :data-column-key="column.key" aria-hidden="true" />
+                    <work-item-column-header v-if="scope.row.groupRowKind === 'columns'" :state="columnMenuState(column)"
+                      :collapsed="isColumnCollapsed(column.key)" :saving="tableSorting" :allow-save="false"
+                      @sort="applyColumnQuickSort(column.key)" @action="(action, anchor) => onColumnMenuAction(column.key, action, anchor)"
+                    @clear="clearColumnSort(column.key)" />
+                    <span v-if="!isColumnCollapsed(column.key)" class="monday-column-resize-handle" :data-column-key="column.key" aria-hidden="true" />
                   </template>
+                  <span v-else-if="isColumnCollapsed(column.key)" class="work-item-collapsed-cell" aria-hidden="true" />
                   <work-item-draft-cell
                     v-else-if="isDraft(scope.row as ProjectWorkItemListItem)"
                     :item="scope.row as ProjectWorkItemListItem"
@@ -3311,23 +3411,22 @@ onBeforeUnmount(() => {
                     :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
                   />
                   <template v-else-if="column.key === 'assignee'">
-                    <el-popover :persistent="false" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover" @show="assigneeSearch = ''">
+                    <el-popover :persistent="false" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover">
                       <template #reference>
                         <button
                           class="cell-editor-trigger monday-cell-centered"
                           :disabled="Boolean(editingCell)"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'assignee')"
                         >
-                          <yp-assignee :user-id="(scope.row as ProjectWorkItemListItem).assigneeUserId" :display-name="(scope.row as ProjectWorkItemListItem).assigneeDisplayName" :show-name="false" size="table" />
+                          <yp-assignee-stack :assignees="workItemAssignees(scope.row as ProjectWorkItemListItem)" />
                         </button>
                       </template>
-                      <div class="popover-stack">
-                        <el-input v-model="assigneeSearch" autofocus clearable placeholder="搜索项目成员" />
-                        <button class="popover-option" @click="patchCell(scope.row as ProjectWorkItemListItem, 'assignee', null)"><span class="empty-avatar">—</span><span>清空处理人</span></button>
-                        <button v-for="member in filteredMembers" :key="member.userId" class="popover-option" @click="patchCell(scope.row as ProjectWorkItemListItem, 'assignee', member.userId)">
-                          <yp-assignee :user-id="member.userId" :display-name="member.displayName" />
-                        </button>
-                      </div>
+                      <work-item-assignee-picker
+                        :project-id="projectId"
+                        :selected="workItemAssignees(scope.row as ProjectWorkItemListItem)"
+                        :busy="editingCell === `${scope.row.id}:assignees`"
+                        @change="patchCell(scope.row as ProjectWorkItemListItem, 'assignees', $event)"
+                      />
                     </el-popover>
                   </template>
 
@@ -3459,14 +3558,18 @@ onBeforeUnmount(() => {
                 :column-key="column.key"
                 :prop="column.key"
                 :label="column.label"
-                :width="column.width"
-                :min-width="column.minWidth"
+                :width="columnWidth(column.key)"
+                :min-width="isColumnCollapsed(column.key) ? COLLAPSED_COLUMN_WIDTH : column.minWidth"
                 class-name="monday-connect-column"
                 label-class-name="monday-connect-column-header"
                 resizable
               >
                 <template #header>
+                  <work-item-column-expand-button v-if="isColumnCollapsed(column.key)" :label="column.label" @expand="toggleColumnCollapsed(column.key)" />
                   <connect-table-column-header
+                    v-else
+                    collapsible
+                    @collapse="toggleColumnCollapsed"
                     :column="column"
                     :table="connect"
                     :project-id="projectId"
@@ -3474,14 +3577,18 @@ onBeforeUnmount(() => {
                   />
                 </template>
                 <template #default="scope">
+                  <work-item-column-expand-button v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns' && isColumnCollapsed(column.key)" :label="column.label" @expand="toggleColumnCollapsed(column.key)" />
                   <connect-table-column-header
-                    v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
+                    v-else-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'columns'"
+                    collapsible
+                    @collapse="toggleColumnCollapsed"
                     :column="column"
                     :table="connect"
                     :project-id="projectId"
                     :primary="false"
                     @hide="toggleColumn($event, false)"
                   />
+                  <span v-else-if="!isGroupDisplayRow(scope.row) && isColumnCollapsed(column.key)" class="work-item-collapsed-cell" aria-hidden="true" />
                   <connect-table-cell
                     v-else-if="!isGroupDisplayRow(scope.row) && !isDraft(scope.row as ProjectWorkItemListItem)"
                     :column="column"
@@ -3531,6 +3638,7 @@ onBeforeUnmount(() => {
                   class="quick-row monday-quick-row"
                   :style="quickGridStyle"
                 >
+                  <span class="monday-quick-lead" aria-hidden="true" />
                   <span class="monday-quick-checkbox" aria-hidden="true" />
                   <el-input
                     ref="quickTitleInput"
@@ -3563,6 +3671,7 @@ onBeforeUnmount(() => {
                   :disabled="!canCreate"
                   @click="openQuick"
                 >
+                  <span class="monday-quick-lead" aria-hidden="true" />
                   <span class="monday-quick-checkbox" aria-hidden="true" />
                   <span class="monday-quick-add__field">添加工作项</span>
                 </button>
@@ -3587,6 +3696,16 @@ onBeforeUnmount(() => {
               </template>
             </work-item-batch-bar>
           </teleport>
+          <work-item-column-settings-popover
+            :kind="columnSettingsKind"
+            :anchor="columnSettingsAnchor"
+            :project-id="projectId"
+            :label-catalog="labelCatalog"
+            :content-catalog="catalog"
+            @close="columnSettingsKind = undefined"
+            @labels-updated="onLabelsUpdated"
+            @contents-updated="onContentsUpdated"
+          />
         </div>
 
         <div
@@ -3750,6 +3869,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .work-item-group-toggle {
+  position: sticky; left: 33px; flex: none;
   display: flex; align-items: center; gap: 10px; width: min(540px, calc(100vw - 200px));
   height: 38px; padding: 0 14px 0 10px; border: 0; background: transparent;
   color: var(--yp-text-primary); text-align: left; cursor: pointer;
@@ -3758,22 +3878,28 @@ onBeforeUnmount(() => {
 .work-item-group-toggle svg.expanded { transform: rotate(90deg); }
 .work-item-group-name { color: var(--work-item-group-accent); font-size: 16px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .work-item-group-toggle small { flex: none; font-size: 12px; color: var(--yp-text-secondary); font-weight: 400; }
-.work-item-group-load { display: flex; gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
+.work-item-group-load { position: sticky; left: 33px; flex: none; display: flex; width: fit-content; max-width: min(540px, calc(100vw - 200px)); gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
 .work-item-group-load--complete { min-height: 0; height: 0; padding: 0; }
 :deep(.monday-table--grouped.el-table > .el-table__inner-wrapper > .el-table__body-wrapper) { height: 100% !important; }
 :deep(.monday-table--grouped > .el-table__inner-wrapper > .el-table__body-wrapper > .el-scrollbar > .el-scrollbar__wrap > .el-scrollbar__view > table > tbody > tr.work-item-group-collapsed:not(.work-item-group-heading):not(.work-item-group-spacer)),
 :deep(.monday-table--grouped tr.work-item-table-row.work-item-group-collapsed + tr:has(> .el-table__expanded-cell)) { display: none; }
 :deep(.monday-table--grouped tr.work-item-group-heading > td.el-table__cell),
 :deep(.monday-table--grouped tr.work-item-group-spacer > td.el-table__cell) { border: 0; background: var(--yp-bg-surface) !important; padding: 0; }
-:deep(.monday-table--grouped tr.work-item-group-heading > td > .cell) { padding: 0; height: 38px; }
+:deep(.monday-table--grouped tr.work-item-group-heading > td > .cell) { padding: 0; height: 38px; overflow: visible; }
 :deep(.monday-table--grouped tr.work-item-group-heading > .monday-selection-column),
 :deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column) { position: relative !important; left: auto !important; }
 :deep(.monday-table--grouped tr.work-item-group-heading > .monday-selection-column)::before,
-:deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column)::before,
-.work-item-group-toggle, .work-item-group-load { transform: translateX(var(--work-item-table-scroll-left, 0px)); }
+:deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column)::before { display: none; }
+:deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed) .work-item-group-toggle::before,
+.work-item-group-load:not(.work-item-group-load--complete)::before {
+  position: absolute; top: -1px; bottom: -1px; left: -1px; width: var(--work-item-hierarchy-bar-width);
+  background: var(--work-item-group-accent); content: ''; pointer-events: none;
+}
+:deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed) .work-item-group-toggle::before {
+  border-radius: var(--work-item-hierarchy-corner-radius) 0 0 var(--work-item-hierarchy-corner-radius);
+}
 :deep(.monday-table--grouped tr.work-item-group-heading > td > .cell),
 :deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { justify-content: flex-start !important; }
-:deep(.monday-table--grouped tr.work-item-group-heading:not(.work-item-group-collapsed) > .monday-selection-column)::before { display: none; }
 :deep(.monday-table--grouped tr.work-item-group-spacer > td.el-table__cell),
 :deep(.monday-table--grouped tr.work-item-group-spacer > td > .cell) { height: 24px; line-height: 0; padding: 0; }
 :deep(.monday-table--grouped tr.work-item-group-columns > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
@@ -3789,7 +3915,7 @@ onBeforeUnmount(() => {
 :deep(.monday-table--grouped tr.work-item-group-columns td.monday-movable-column-header > .cell) { overflow: visible; }
 :deep(.monday-table--grouped tr.work-item-group-load > td.el-table__cell) { padding: 0; height: auto; }
 :deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { min-height: 0 !important; height: auto !important; }
-:deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { padding: 0; }
+:deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { padding: 0; overflow: visible; }
 :deep(.monday-table--grouped tr.work-item-group-load:has(.work-item-group-load--complete) > td) { border-bottom: 0; }
 :deep(.monday-table--grouped tr.work-item-group-add > td.work-item-menu-column) {
   position: relative !important; left: auto !important; height: auto; padding: 0; border: 0;
@@ -3800,25 +3926,23 @@ onBeforeUnmount(() => {
 }
 .work-item-group-create { width: 100%; }
 .work-item-group-quick { --work-item-quick-add-accent: var(--work-item-group-accent); }
-.monday-quick-add.work-item-group-quick::before,
-.monday-quick-row.work-item-group-quick::before { opacity: 1; }
+.work-item-group-quick .monday-quick-lead::before { opacity: 1; }
 .work-item-group-quick .monday-quick-add__field,
-.work-item-group-quick .quick-controls { position: relative; z-index: 4; }
+.work-item-group-quick .quick-controls { z-index: 4; }
 .work-item-group-add-mask {
   position: absolute; z-index: 3; top: 0; right: 0; bottom: -1px; left: var(--work-item-quick-start);
   border-bottom-left-radius: var(--work-item-hierarchy-corner-radius);
   background: color-mix(in srgb, var(--yp-bg-surface) 50%, transparent); pointer-events: none;
 }
 .work-item-group-create-error {
-  margin: 0 12px 0 calc(81px + var(--work-item-table-scroll-left, 0px));
+  position: sticky;
+  left: 81px;
+  margin: 0 12px 0 81px;
   max-width: min(540px, calc(100vw - 220px)); white-space: normal;
 }
 :deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed > .monday-selection-column) {
   border: 1px solid var(--yp-monday-grid-border); border-radius: var(--work-item-hierarchy-corner-radius);
   background: var(--work-item-table-cell-bg) !important;
-}
-:deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed > .monday-selection-column)::before {
-  top: -1px; bottom: -1px; border-radius: var(--work-item-hierarchy-corner-radius) 0 0 var(--work-item-hierarchy-corner-radius);
 }
 @media (prefers-reduced-motion: reduce) { .work-item-group-toggle svg { transition: none; } }
 .work-items-home {
@@ -4768,16 +4892,29 @@ onBeforeUnmount(() => {
 
 .monday-quick-add,
 .monday-quick-row {
-  --work-item-quick-start: calc(var(--work-item-menu-column-width) + var(--work-item-table-scroll-left, 0px));
+  --work-item-quick-start: var(--work-item-menu-column-width);
   border-bottom: 1px solid transparent;
   box-sizing: border-box;
 }
 
-.monday-quick-add__field,
-.monday-quick-checkbox,
-.quick-controls {
-  transform: translateX(var(--work-item-table-scroll-left, 0px));
+/* 冻结区交给合成器按 sticky 定位；scroll 事件回写变量会晚一帧，导致添加行先跟随滚动再回弹。 */
+:deep(.monday-table .el-table__append-wrapper) { overflow: visible; }
+
+.monday-quick-lead {
+  position: sticky;
+  z-index: 2;
+  left: 0;
+  grid-column: 1 / 3;
+  grid-row: 1;
+  align-self: stretch;
+  margin: -1px 0;
+  background: var(--yp-bg-surface);
+  pointer-events: none;
 }
+
+.monday-quick-checkbox { position: sticky; left: var(--work-item-quick-checkbox-left); }
+.monday-quick-add__field { position: sticky; left: var(--work-item-quick-title-left); }
+.quick-controls { position: sticky; left: var(--work-item-quick-controls-left); justify-self: start; }
 
 .monday-quick-add::after,
 .monday-quick-row::after {
@@ -4791,19 +4928,16 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-.monday-quick-add::before,
-.monday-quick-row::before {
+.monday-quick-lead::before {
   position: absolute;
-  z-index: 2;
-  top: -1px;
-  bottom: -1px;
-  left: var(--work-item-quick-start);
+  top: 0;
+  bottom: 0;
+  left: var(--work-item-menu-column-width);
   width: 6px;
   border-radius: 0 0 0 6px;
   background: var(--work-item-quick-add-accent);
   content: '';
   opacity: .5;
-  pointer-events: none;
 }
 
 .cell-editor-trigger { padding: 0; border: 0; font: inherit; cursor: pointer; }
@@ -5102,6 +5236,9 @@ onBeforeUnmount(() => {
   color: var(--yp-text-muted);
 }
 
+:deep(.monday-table td.monday-column--collapsed > .cell),
+:deep(.monday-table th.monday-column-header--collapsed > .cell) { padding: 0; }
+.work-item-collapsed-cell { display: block; width: 100%; height: 100%; }
 </style>
 
 <style>
@@ -5298,6 +5435,9 @@ onBeforeUnmount(() => {
 .drawer-resize-handle--resizing .drawer-resize-grip {
   transform: scale(1);
 }
+:deep(.monday-table td.monday-column--collapsed > .cell),
+:deep(.monday-table th.monday-column-header--collapsed > .cell) { padding: 0; }
+.work-item-collapsed-cell { display: block; width: 100%; height: 100%; }
 </style>
 
 <style scoped>
@@ -5308,4 +5448,7 @@ onBeforeUnmount(() => {
 .work-items-embedded :deep(.el-scrollbar__bar) { display: block !important; }
 .work-items-embedded :deep(.el-scrollbar__wrap) { overscroll-behavior: auto; }
 .work-item-context-label { font-size: 11px; white-space: nowrap; color: var(--yp-text-secondary); padding: 0 5px; }
+:deep(.monday-table td.monday-column--collapsed > .cell),
+:deep(.monday-table th.monday-column-header--collapsed > .cell) { padding: 0; }
+.work-item-collapsed-cell { display: block; width: 100%; height: 100%; }
 </style>

@@ -14,6 +14,7 @@
         "additionalProperties": false,
         "required": ["workItemId", "projectId", "contentId", "itemNo", "previousAssigneeUserId", "assigneeUserId", "rowVersion"],
         "properties": {
+          "assigneeUserIds": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "format": "uuid"}},
           "workItemId": { "type": "string", "format": "uuid" },
           "projectId": { "type": "string", "format": "uuid" },
           "contentId": { "type": "string", "format": "uuid" },

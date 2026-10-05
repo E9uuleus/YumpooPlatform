@@ -10,7 +10,7 @@ public class WorkItemNotificationSourceAdapter implements WorkItemNotificationSo
     private final WorkItemNotificationSourceService service;
     public WorkItemNotificationSourceAdapter(WorkItemNotificationSourceService service) { this.service=service; }
     public Optional<Participants> findParticipants(UUID company,UUID item) {
-        return service.participants(company,item).map(p->new Participants(p.projectId(),p.assigneeUserId(),p.reporterUserId()));
+        return service.participants(company,item).map(p->new Participants(p.projectId(),p.assigneeUserIds(),p.reporterUserId()));
     }
     public Optional<Update> findUpdate(UUID company,UUID update) {
         return service.update(company,update).map(p->new Update(p.projectId(),p.workItemId(),p.authorUserId(),p.parentAuthorUserId()));

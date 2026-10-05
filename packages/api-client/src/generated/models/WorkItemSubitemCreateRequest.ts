@@ -19,6 +19,12 @@ import { mapValues } from '../runtime';
  */
 export interface WorkItemSubitemCreateRequest {
     /**
+     * 完整处理人列表。保留的成员维持原顺序，新增成员按此处顺序追加；第一位为主处理人；空数组表示清空。
+     * @type {Array<string>}
+     * @memberof WorkItemSubitemCreateRequest
+     */
+    assigneeUserIds?: Array<string>;
+    /**
      * 不透明 UUID；客户端不得从值中推导业务语义。
      * @type {string}
      * @memberof WorkItemSubitemCreateRequest
@@ -102,6 +108,7 @@ export function WorkItemSubitemCreateRequestFromJSONTyped(json: any, ignoreDiscr
     }
     return {
 
+        ...(json['assigneeUserIds'] == null ? {} : { 'assigneeUserIds': json['assigneeUserIds'] as Array<string> }),
         'contentId': json['contentId'],
         'title': json['title'],
         'priority': json['priority'],
@@ -126,6 +133,7 @@ export function WorkItemSubitemCreateRequestToJSONTyped(value?: WorkItemSubitemC
 
     return {
 
+        'assigneeUserIds': value['assigneeUserIds'] == null ? undefined : value['assigneeUserIds'],
         'contentId': value['contentId'],
         'title': value['title'],
         'priority': value['priority'],

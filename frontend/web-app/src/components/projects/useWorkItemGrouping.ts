@@ -1,3 +1,4 @@
+import { workItemAssignees } from './workItemAssignees'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch, type Ref } from 'vue'
 import { ListProjectWorkItemFilterOptionsFieldEnum, type ListProjectWorkItemsRequest,
   type ProjectWorkItemListItem, type ProjectWorkItemFilterOption } from '@yumpoo/api-client'
@@ -77,7 +78,7 @@ export function useWorkItemGrouping(options: Options) {
       const key = keyOf(item)
       page(key).items.push(item)
       const value = field.value === 'DUE_DATE' ? item.dueDate?.toISOString().slice(0, 10) ?? EMPTY_GROUP : key
-      const label = field.value === 'ASSIGNEE' ? item.assigneeDisplayName ?? '未分配'
+      const label = field.value === 'ASSIGNEE' ? workItemAssignees(item).map(assignee => assignee.displayName).join('、') || '未分配'
         : field.value === 'CONTENT' ? item.contentName : value
       const option = counts.get(value) ?? { value, label, count: 0 }
       option.count++
@@ -107,7 +108,7 @@ export function useWorkItemGrouping(options: Options) {
         const { view: _view, emptyField: _empty, ...context } = base
         void _view; void _empty
         const result = await (options.source?.() ?? workItemsApi).listProjectWorkItemFilterOptions({ ...context, ...(cursor ? { cursor } : {}),
-          field: requestedField as ListProjectWorkItemFilterOptionsFieldEnum, limit: 100 }, { signal })
+          field: (requestedField === 'ASSIGNEE' ? ListProjectWorkItemFilterOptionsFieldEnum.AssigneeSet : requestedField) as ListProjectWorkItemFilterOptionsFieldEnum, limit: 100 }, { signal })
         if (current !== revision || stopped) return
         loaded.push(...result.items)
         cursor = result.nextCursor

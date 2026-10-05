@@ -13,7 +13,7 @@
 
 import { mapValues } from '../runtime';
 /**
- *
+ * 将处理人设为 [id] 或清空。
  * @export
  * @interface WorkItemAssigneePatchRequest
  */

@@ -33,6 +33,7 @@ import type {
   TimeTrackingState,
   UpdateConnectColumn409Response,
   WorkItemAssigneePatchRequest,
+  WorkItemAssigneesPatchRequest,
   WorkItemConnection,
   WorkItemConnectionCellList,
   WorkItemConnectionLinkRequest,
@@ -101,6 +102,8 @@ import {
     UpdateConnectColumn409ResponseToJSON,
     WorkItemAssigneePatchRequestFromJSON,
     WorkItemAssigneePatchRequestToJSON,
+    WorkItemAssigneesPatchRequestFromJSON,
+    WorkItemAssigneesPatchRequestToJSON,
     WorkItemConnectionFromJSON,
     WorkItemConnectionToJSON,
     WorkItemConnectionCellListFromJSON,
@@ -312,6 +315,7 @@ export interface ListIncomingWorkItemConnectionsRequest {
 export interface ListProjectWorkItemFilterOptionsRequest {
     projectId: string;
     field: ListProjectWorkItemFilterOptionsFieldEnum;
+    assigneeSetUserId?: Set<string>;
     connectedColumnIds?: Set<string>;
     unconnectedColumnIds?: Set<string>;
     incomingProjectIds?: Set<string>;
@@ -333,6 +337,7 @@ export interface ListProjectWorkItemFilterOptionsRequest {
 
 export interface ListProjectWorkItemsRequest {
     projectId: string;
+    assigneeSetUserId?: Set<string>;
     connectedColumnIds?: Set<string>;
     unconnectedColumnIds?: Set<string>;
     incomingProjectIds?: Set<string>;
@@ -408,6 +413,14 @@ export interface PatchWorkItemAssigneeRequest {
     ifMatch: string;
     idempotencyKey: string;
     workItemAssigneePatchRequest: WorkItemAssigneePatchRequest;
+}
+
+export interface PatchWorkItemAssigneesRequest {
+    workItemId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    workItemAssigneesPatchRequest: WorkItemAssigneesPatchRequest;
 }
 
 export interface PatchWorkItemContentRequest {
@@ -2004,6 +2017,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
+     * ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。
      * 按当前项目查询上下文分页取得筛选选项及动态计数
      */
     async listProjectWorkItemFilterOptionsRaw(requestParameters: ListProjectWorkItemFilterOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectWorkItemFilterOptionCursorPage>> {
@@ -2022,6 +2036,10 @@ export class WorkItemsApi extends runtime.BaseAPI {
         }
 
         const queryParameters: any = {};
+
+        if (requestParameters['assigneeSetUserId'] != null) {
+            queryParameters['assigneeSetUserId'] = requestParameters['assigneeSetUserId'];
+        }
 
         if (requestParameters['connectedColumnIds'] != null) {
             queryParameters['connectedColumnIds'] = requestParameters['connectedColumnIds'];
@@ -2112,6 +2130,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
+     * ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。
      * 按当前项目查询上下文分页取得筛选选项及动态计数
      */
     async listProjectWorkItemFilterOptions(requestParameters: ListProjectWorkItemFilterOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectWorkItemFilterOptionCursorPage> {
@@ -2132,6 +2151,10 @@ export class WorkItemsApi extends runtime.BaseAPI {
         }
 
         const queryParameters: any = {};
+
+        if (requestParameters['assigneeSetUserId'] != null) {
+            queryParameters['assigneeSetUserId'] = requestParameters['assigneeSetUserId'];
+        }
 
         if (requestParameters['connectedColumnIds'] != null) {
             queryParameters['connectedColumnIds'] = requestParameters['connectedColumnIds'];
@@ -2729,6 +2752,86 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async patchWorkItemAssignee(requestParameters: PatchWorkItemAssigneeRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
         const response = await this.patchWorkItemAssigneeRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 单独更新完整处理人列表
+     */
+    async patchWorkItemAssigneesRaw(requestParameters: PatchWorkItemAssigneesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemDetail>> {
+        if (requestParameters['workItemId'] == null) {
+            throw new runtime.RequiredError(
+                'workItemId',
+                'Required parameter "workItemId" was null or undefined when calling patchWorkItemAssignees().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling patchWorkItemAssignees().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling patchWorkItemAssignees().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling patchWorkItemAssignees().'
+            );
+        }
+
+        if (requestParameters['workItemAssigneesPatchRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemAssigneesPatchRequest',
+                'Required parameter "workItemAssigneesPatchRequest" was null or undefined when calling patchWorkItemAssignees().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/work-items/{workItemId}/assignees`;
+        urlPath = urlPath.replace(`{${"workItemId"}}`, encodeURIComponent(String(requestParameters['workItemId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemAssigneesPatchRequestToJSON(requestParameters['workItemAssigneesPatchRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemDetailFromJSON(jsonValue));
+    }
+
+    /**
+     * 单独更新完整处理人列表
+     */
+    async patchWorkItemAssignees(requestParameters: PatchWorkItemAssigneesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemDetail> {
+        const response = await this.patchWorkItemAssigneesRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -3945,6 +4048,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
 export enum ListProjectWorkItemFilterOptionsFieldEnum {
     Title = 'TITLE',
     Assignee = 'ASSIGNEE',
+    AssigneeSet = 'ASSIGNEE_SET',
     Status = 'STATUS',
     Priority = 'PRIORITY',
     Content = 'CONTENT',

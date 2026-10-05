@@ -215,6 +215,29 @@ class ActivityProjectionServiceTest {
         assertThat(captor.getAllValues()).allSatisfy(stored -> assertThat(stored.safeParameters().toString()).doesNotContain("bodyHtml", "不能写入"));
     }
 
+    @Test
+    void assigneeSetChangesProduceOneActivityWithMemberNameSnapshots() {
+        UUID added=UUID.randomUUID(),removed=UUID.randomUUID();
+        when(context.userDisplayName(COMPANY,added)).thenReturn(Optional.of("张三"));
+        when(context.userDisplayName(COMPANY,removed)).thenReturn(Optional.of("李四"));
+        ObjectNode payload=workItem();payload.putArray("addedUserIds").add(added.toString());
+        payload.putArray("removedUserIds").add(removed.toString());
+        service.consume(event("workitem.work_item_assignees_changed",CUTOVER.plusSeconds(1),payload));
+        var captor=ArgumentCaptor.forClass(ActivityStoredEvent.class);verify(repository).append(captor.capture());
+        var row=captor.getValue();
+        assertThat(row.templateCode()).isEqualTo("WORK_ITEM_ASSIGNEES_CHANGED");
+        assertThat(new com.yumpoo.platform.audit.application.ActivitySummaryRenderer().render(row.templateCode(),row.safeParameters()))
+                .contains("添加 张三；移除 李四");
+    }
+
+    @Test
+    void markedLegacyAssignmentAndUnassignmentDoNotProduceActivity() {
+        ObjectNode payload=workItem();payload.putArray("assigneeUserIds");
+        service.consume(event("workitem.work_item_assigned",CUTOVER.plusSeconds(1),payload));
+        service.consume(event("workitem.work_item_unassigned",CUTOVER.plusSeconds(2),payload));
+        verify(repository,never()).append(any());
+    }
+
     private ObjectNode workItem() {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("workItemId", ITEM.toString());

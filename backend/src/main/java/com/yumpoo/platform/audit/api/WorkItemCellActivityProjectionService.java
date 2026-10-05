@@ -22,9 +22,10 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
     private static final String FIELDS_CHANGED = "workitem.work_item_fields_changed";
     private static final String ASSIGNED = "workitem.work_item_assigned";
     private static final String UNASSIGNED = "workitem.work_item_unassigned";
+    private static final String ASSIGNEES_CHANGED = "workitem.work_item_assignees_changed";
     private static final String STATUS_CHANGED = "workitem.work_item_status_changed";
     private static final Set<String> EVENTS = Set.of(CREATED, FIELDS_CHANGED, ASSIGNED,
-            UNASSIGNED, STATUS_CHANGED);
+            UNASSIGNED, ASSIGNEES_CHANGED, STATUS_CHANGED);
 
     private final WorkItemCellActivityRepository repository;
     private final ActivityProjectionContextPort context;
@@ -65,6 +66,7 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
                 case CREATED -> created(event);
                 case FIELDS_CHANGED -> fieldsChanged(event);
                 case ASSIGNED, UNASSIGNED -> assignee(event);
+                case ASSIGNEES_CHANGED -> assignees(event);
                 case STATUS_CHANGED -> status(event);
                 default -> throw invalid();
             }
@@ -117,7 +119,15 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
         }
     }
 
+    private void assignees(DomainEventEnvelope event) {
+        for (JsonNode id : event.payload().path("removedUserIds"))
+            append(event, "ASSIGNEE", "REMOVED", member(event, UUID.fromString(id.asText())), null);
+        for (JsonNode id : event.payload().path("addedUserIds"))
+            append(event, "ASSIGNEE", "ADDED", null, member(event, UUID.fromString(id.asText())));
+    }
+
     private void assignee(DomainEventEnvelope event) {
+        if (event.payload().has("assigneeUserIds")) return;
         UUID beforeId = nullableUuid(event.payload(), "previousAssigneeUserId");
         UUID afterId = nullableUuid(event.payload(), "assigneeUserId");
         append(event, "ASSIGNEE", change(beforeId, afterId), member(event, beforeId),
@@ -195,7 +205,8 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
                 event.companyId(), projectId, uuid(payload, "workItemId"), contentId, contentName,
                 event.eventType(), column, change, before, after, event.actor().type().name(),
                 actorUserId, event.actor().systemCode(), actorDisplay, event.occurredAt(),
-                event.requestId(), event.correlationId()));
+                event.requestId(), event.correlationId(), ASSIGNEES_CHANGED.equals(event.eventType())
+                        ? (after != null ? after : before).path("referenceId").asText() : ""));
     }
 
     private static String change(Object before, Object after) {

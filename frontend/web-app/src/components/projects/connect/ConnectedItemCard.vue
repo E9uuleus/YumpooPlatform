@@ -8,6 +8,8 @@ import { isProblemStatus, type ApiProblem } from '../../../api/problems'
 import { useSession } from '../../../composables/useSession'
 import { formatRelativeTime, formatTimestamp } from '../../../design-system/dates'
 import InlineProblem from '../../InlineProblem.vue'
+import { workItemAssignees } from '../workItemAssignees'
+import YpAssigneeStack from '../../yp/YpAssigneeStack.vue'
 import YpAssignee from '../../yp/YpAssignee.vue'
 import WorkItemCellActivityLog from '../../collaboration/WorkItemCellActivityLog.vue'
 import WorkItemAssigneePicker from '../WorkItemAssigneePicker.vue'
@@ -50,9 +52,7 @@ const priorityLabel = computed(() => {
   return priority ? { name: priority.displayName, colorToken: priority.colorToken } : null
 })
 const category = computed(() => detail.value ? { name: detail.value.contentName, colorToken: detail.value.contentColorToken } : card.value.category)
-const assignee = computed(() => detail.value
-  ? detail.value.assigneeUserId ? { userId: detail.value.assigneeUserId, displayName: detail.value.assigneeDisplayName ?? '' } : null
-  : card.value.assignee)
+const assignees = computed(() => detail.value ? workItemAssignees(detail.value) : card.value.assignee ? [card.value.assignee] : [])
 const connectedAt = computed(() => formatTimestamp(current.value.createdAt, timezone.value))
 let controller: AbortController | undefined, revision = 0
 
@@ -322,31 +322,32 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
                 @click="field = field === 'assignee' ? undefined : 'assignee'"
               >
                 <yp-assignee
-                  v-if="assignee"
-                  :user-id="assignee.userId"
-                  :display-name="assignee.displayName"
+                  v-if="assignees.length === 1"
+                  :user-id="assignees[0]!.userId"
+                  :display-name="assignees[0]!.displayName"
                   size="table"
                   show-name
-                /><span v-else>未分配</span>
+                /><yp-assignee-stack v-else-if="assignees.length > 1" :assignees="assignees" /><span v-else>未分配</span>
               </button>
             </template>
             <work-item-assignee-picker
               v-if="field === 'assignee'"
               :project-id="card.projectId"
-              :current-user-id="detail?.assigneeUserId"
-              @select="value => choose(() => item.patch('assignee', value))"
+              :selected="assignees"
+              :busy="Boolean(item.busy.value)"
+              @change="value => void item.patch('assignees', value)"
             />
           </el-popover>
           <span
             v-else
             class="connected-item-card__tile"
           ><yp-assignee
-            v-if="assignee"
-            :user-id="assignee.userId"
-            :display-name="assignee.displayName"
+            v-if="assignees.length === 1"
+            :user-id="assignees[0]!.userId"
+            :display-name="assignees[0]!.displayName"
             size="table"
             show-name
-          /><span v-else>未分配</span></span>
+          /><yp-assignee-stack v-else-if="assignees.length > 1" :assignees="assignees" /><span v-else>未分配</span></span>
         </dd>
       </div>
       <div

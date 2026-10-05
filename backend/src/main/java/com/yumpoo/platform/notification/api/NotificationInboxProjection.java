@@ -27,6 +27,7 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
                 new EventSubscription("workitem.work_item_update_edited",2),
                 new EventSubscription("workitem.work_item_created",2),
                 new EventSubscription("workitem.work_item_assigned",1),
+                new EventSubscription("workitem.work_item_assignees_changed",1),
                 new EventSubscription("catalog.project_member_added",1),
                 new EventSubscription("catalog.project_member_removed",1),
                 new EventSubscription("catalog.project_owner_reassigned",1),
@@ -67,14 +68,18 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
                 var comment=context.update(event.companyId(),update).orElseThrow();
                 if (!comment.workItemId().equals(item) || !comment.projectId().equals(project)) throw new IllegalArgumentException();
                 if (type.endsWith("published")) {
-                    add(recipients,participants.assigneeUserId(),Reason.COMMENT);
+                    participants.assigneeUserIds().forEach(id -> add(recipients,id,Reason.COMMENT));
                     add(recipients,participants.reporterUserId(),Reason.COMMENT);
                     add(recipients,comment.parentAuthorUserId(),Reason.REPLY);
                     mentions(p,"mentionedUserIds",recipients);
                 } else if (type.endsWith("edited")) mentions(p,"addedMentionedUserIds",recipients);
                 else throw new IllegalArgumentException();
+            } else if (type.endsWith("assignees_changed")) {
+                assignees(p,"addedUserIds",recipients);
             } else if (type.endsWith("created") || type.endsWith("assigned")) {
-                add(recipients,optionalUuid(p,"assigneeUserId"),Reason.ASSIGNED);
+                if (type.endsWith("assigned") && p.has("assigneeUserIds")) return;
+                if (p.has("assigneeUserIds")) assignees(p,"assigneeUserIds",recipients);
+                else add(recipients,optionalUuid(p,"assigneeUserId"),Reason.ASSIGNED);
             } else throw new IllegalArgumentException();
         } else {
             UUID owner=context.projectOwner(event.companyId(),project).orElseThrow();
@@ -114,6 +119,11 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
     }
     private static void add(Map<UUID,Reason> recipients, UUID user, Reason reason) {
         if (user!=null) recipients.put(user,reason);
+    }
+    private static void assignees(JsonNode p,String field,Map<UUID,Reason> recipients) {
+        JsonNode ids=p.get(field);
+        if (ids==null || !ids.isArray()) throw new IllegalArgumentException();
+        for (JsonNode id:ids) add(recipients,UUID.fromString(id.asText()),Reason.ASSIGNED);
     }
     private static void mentions(JsonNode p,String field,Map<UUID,Reason> recipients) {
         JsonNode array=p.get(field);

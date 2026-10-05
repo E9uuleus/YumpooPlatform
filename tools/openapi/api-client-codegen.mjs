@@ -190,6 +190,28 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
     fs.writeFileSync(modelPath, source, 'utf8')
   }
 
+  for (const model of ['WorkItemCreateRequest', 'WorkItemSubitemCreateRequest', 'WorkItemUpdateRequest', 'WorkItemAssigneesPatchRequest']) {
+    const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
+    let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
+    source = source.replaceAll('Set<string>', 'Array<string>')
+      .replaceAll("new Set(json['assigneeUserIds'])", "json['assigneeUserIds'] as Array<string>")
+      .replaceAll("Array.from(value['assigneeUserIds'] as Set<any>)", "value['assigneeUserIds']")
+    if (model !== 'WorkItemAssigneesPatchRequest') source = replaceExactlyOnce(source,
+      "        'assigneeUserIds': json['assigneeUserIds'] == null ? undefined : json['assigneeUserIds'] as Array<string>,",
+      "        ...(json['assigneeUserIds'] == null ? {} : { 'assigneeUserIds': json['assigneeUserIds'] as Array<string> }),",
+      `${model} 有序处理人列表与精确可选属性`)
+    fs.writeFileSync(modelPath, source, 'utf8')
+  }
+  for (const model of ['WorkItemSummary', 'WorkItemDetail', 'ProjectWorkItemListItem']) {
+    const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
+    let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
+    source = replaceExactlyOnce(source,
+      "        'assignees': json['assignees'] == null ? undefined : ((json['assignees'] as Array<any>).map(WorkItemAssigneeFromJSON)),",
+      "        ...(json['assignees'] == null ? {} : { 'assignees': ((json['assignees'] as Array<any>).map(WorkItemAssigneeFromJSON)) }),",
+      `${model} 处理人列表兼容旧响应与精确可选属性`)
+    fs.writeFileSync(modelPath, source, 'utf8')
+  }
+
   for (const [model, fields] of [['TimeTrackingCommand', ['startedAt', 'stoppedAt']]]) {
     const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
     let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
@@ -236,7 +258,7 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
     const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
     let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
     source = source.replace(/^        '([^']+)': json\['\1'\] == null \? undefined : (.+),$/gm, (_line, field, conversion) => {
-      const nullable = !['DashboardQuery', 'DashboardSnapshot', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest'].includes(model) && !(model === 'DashboardItem' && field === 'workItem')
+      const nullable = !['DashboardQuery', 'DashboardSnapshot', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest'].includes(model) && !(model === 'DashboardItem' && ['workItem', 'assignees'].includes(field))
       return nullable
         ? `        ...(json['${field}'] === undefined ? {} : { '${field}': json['${field}'] === null ? null : ${conversion} }),`
         : `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`

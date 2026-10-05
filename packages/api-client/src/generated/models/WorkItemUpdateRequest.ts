@@ -19,6 +19,12 @@ import { mapValues } from '../runtime';
  */
 export interface WorkItemUpdateRequest {
     /**
+     * 完整处理人列表。保留的成员维持原顺序，新增成员按此处顺序追加；第一位为主处理人；空数组表示清空。
+     * @type {Array<string>}
+     * @memberof WorkItemUpdateRequest
+     */
+    assigneeUserIds?: Array<string>;
+    /**
      *
      * @type {string}
      * @memberof WorkItemUpdateRequest
@@ -99,6 +105,7 @@ export function WorkItemUpdateRequestFromJSONTyped(json: any, ignoreDiscriminato
     }
     return {
 
+        ...(json['assigneeUserIds'] == null ? {} : { 'assigneeUserIds': json['assigneeUserIds'] as Array<string> }),
         'title': json['title'],
         'priority': json['priority'],
         'assigneeUserId': json['assigneeUserId'],
@@ -122,6 +129,7 @@ export function WorkItemUpdateRequestToJSONTyped(value?: WorkItemUpdateRequest |
 
     return {
 
+        'assigneeUserIds': value['assigneeUserIds'] == null ? undefined : value['assigneeUserIds'],
         'title': value['title'],
         'priority': value['priority'],
         'assigneeUserId': value['assigneeUserId'],
