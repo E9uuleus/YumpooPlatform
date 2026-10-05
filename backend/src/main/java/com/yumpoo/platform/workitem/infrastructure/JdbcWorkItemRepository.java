@@ -34,7 +34,10 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             status_code, status_category, priority, assignee_user_id, reporter_user_id,
             description, notes, timeline_start_date, timeline_end_date, due_date, due_time, completed_at, rank,
             project_sort_key, row_version, created_at, created_by_user_id, updated_at, updated_by_user_id,
-            deleted_at, deleted_by_user_id, delete_reason, archived
+            deleted_at, deleted_by_user_id, delete_reason, archived,
+            ARRAY(SELECT wia.user_id FROM yumpoo.work_item_assignee wia
+                  WHERE wia.company_id=yumpoo.work_item.company_id AND wia.work_item_id=yumpoo.work_item.id
+                  ORDER BY wia.position) AS assignee_user_ids
             """;
 
     private final JdbcClient jdbc;
@@ -111,7 +114,9 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 : OffsetDateTime.ofInstant(item.deletedAt(), ZoneOffset.UTC), Types.TIMESTAMP_WITH_TIMEZONE);
         statement = nullable(statement, "deletedByUserId", item.deletedByUserId(), Types.OTHER);
         statement = nullable(statement, "deleteReason", item.deleteReason(), Types.VARCHAR);
-        return statement.update() == 1;
+        boolean inserted = statement.update() == 1;
+        if (inserted && !item.assigneeUserIds().isEmpty()) replaceAssignees(item);
+        return inserted;
     }
 
     @Override
@@ -194,7 +199,8 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         statement = nullable(statement, "timelineEndDate", item.timelineEndDate(), Types.DATE);
         statement = nullable(statement, "dueDate", item.dueDate(), Types.DATE);
         statement = nullable(statement, "dueTime", item.dueTime(), Types.TIME);
-        return statement.query(JdbcWorkItemRepository::map).optional();
+        Optional<WorkItem> stored = statement.query(JdbcWorkItemRepository::map).optional();
+        return stored;
     }
 
     @Override
@@ -505,11 +511,10 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                  WHERE company_id=:companyId AND project_id=:projectId
                    AND content_id=:contentId AND deleted_at IS NULL
                 UNION
-                SELECT assignee_user_id AS user_id
-                  FROM yumpoo.work_item
-                 WHERE company_id=:companyId AND project_id=:projectId
-                   AND content_id=:contentId AND deleted_at IS NULL
-                   AND assignee_user_id IS NOT NULL
+                SELECT a.user_id
+                  FROM yumpoo.work_item w JOIN yumpoo.work_item_assignee a ON a.work_item_id=w.id
+                 WHERE w.company_id=:companyId AND w.project_id=:projectId
+                   AND w.content_id=:contentId AND w.deleted_at IS NULL
                 """).param("companyId", companyId).param("projectId", projectId)
                 .param("contentId", contentId).query(UUID.class).list());
     }
@@ -521,10 +526,9 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                   FROM yumpoo.work_item
                  WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL
                 UNION
-                SELECT assignee_user_id AS user_id
-                  FROM yumpoo.work_item
-                 WHERE company_id=:companyId AND project_id=:projectId AND deleted_at IS NULL
-                   AND assignee_user_id IS NOT NULL
+                SELECT a.user_id
+                  FROM yumpoo.work_item w JOIN yumpoo.work_item_assignee a ON a.work_item_id=w.id
+                 WHERE w.company_id=:companyId AND w.project_id=:projectId AND w.deleted_at IS NULL
                 """).param("companyId", companyId).param("projectId", projectId)
                 .query(UUID.class).list());
     }
@@ -1031,6 +1035,20 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         return bound;
     }
 
+    @Override
+    public void replaceAssignees(WorkItem item) {
+        jdbc.sql("DELETE FROM yumpoo.work_item_assignee WHERE company_id=:company AND work_item_id=:id")
+                .param("company", item.companyId()).param("id", item.id()).update();
+        for (int position = 0; position < item.assigneeUserIds().size(); position++) {
+            jdbc.sql("""
+                    INSERT INTO yumpoo.work_item_assignee(company_id, project_id, work_item_id, user_id, position)
+                    VALUES (:company, :project, :item, :user, :position)
+                    """).param("company", item.companyId()).param("project", item.projectId())
+                    .param("item", item.id()).param("user", item.assigneeUserIds().get(position))
+                    .param("position", position).update();
+        }
+    }
+
     private static WorkItem map(ResultSet rs, int row) throws SQLException {
         OffsetDateTime deleted = rs.getObject("deleted_at", OffsetDateTime.class);
         OffsetDateTime completed = rs.getObject("completed_at", OffsetDateTime.class);
@@ -1040,7 +1058,9 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
                 rs.getString("title"),
                 rs.getString("status_code"), WorkItemStatusCategory.valueOf(rs.getString("status_category")),
                 rs.getString("priority"),
-                rs.getObject("assignee_user_id", UUID.class), rs.getObject("reporter_user_id", UUID.class),
+                java.util.Arrays.stream((Object[]) rs.getArray("assignee_user_ids").getArray())
+                        .map(v -> v instanceof UUID u ? u : UUID.fromString(v.toString())).toList(),
+                rs.getObject("reporter_user_id", UUID.class),
                 rs.getString("description"), rs.getString("notes"), rs.getObject("timeline_start_date", java.time.LocalDate.class),
                 rs.getObject("timeline_end_date", java.time.LocalDate.class), rs.getObject("due_date", java.time.LocalDate.class),
                 rs.getObject("due_time", java.time.LocalTime.class), completed == null ? null : completed.toInstant(),

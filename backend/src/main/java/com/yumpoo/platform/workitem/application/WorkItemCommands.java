@@ -5,6 +5,7 @@ import com.yumpoo.platform.identityaccess.api.CurrentActor;
 
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.List;
 
 public final class WorkItemCommands {
     private WorkItemCommands() {}
@@ -12,17 +13,33 @@ public final class WorkItemCommands {
     public record Create(CurrentActor actor, UUID projectId, UUID contentId, String title, String priority,
             UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
             LocalDate timelineEndDate, LocalDate dueDate, UUID idempotencyKey,
-            RequestHash requestHash, DueTimeChange dueTime) {}
+            RequestHash requestHash, DueTimeChange dueTime, List<UUID> assigneeUserIds) {
+        public Create(CurrentActor actor, UUID projectId, UUID contentId, String title, String priority,
+                UUID assigneeUserId, String description, String notes, LocalDate timelineStartDate,
+                LocalDate timelineEndDate, LocalDate dueDate, UUID idempotencyKey,
+                RequestHash requestHash, DueTimeChange dueTime) {
+            this(actor, projectId, contentId, title, priority, assigneeUserId, description, notes,
+                    timelineStartDate, timelineEndDate, dueDate, idempotencyKey, requestHash, dueTime, null);
+        }
+    }
 
     public record CreateSubitem(CurrentActor actor, UUID parentWorkItemId, UUID contentId,
             String title, String priority, UUID assigneeUserId, String description, String notes,
             LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
-            UUID idempotencyKey, RequestHash requestHash, DueTimeChange dueTime) {}
+            UUID idempotencyKey, RequestHash requestHash, DueTimeChange dueTime, List<UUID> assigneeUserIds) {
+        public CreateSubitem(CurrentActor actor, UUID parentWorkItemId, UUID contentId, String title,
+                String priority, UUID assigneeUserId, String description, String notes,
+                LocalDate timelineStartDate, LocalDate timelineEndDate, LocalDate dueDate,
+                UUID idempotencyKey, RequestHash requestHash, DueTimeChange dueTime) {
+            this(actor, parentWorkItemId, contentId, title, priority, assigneeUserId, description, notes,
+                    timelineStartDate, timelineEndDate, dueDate, idempotencyKey, requestHash, dueTime, null);
+        }
+    }
 
     public record Update(CurrentActor actor, UUID workItemId, long expectedVersion,
             String title, String priority, UUID assigneeUserId, String description,
             String notes, LocalDate timelineStartDate, LocalDate timelineEndDate,
-            LocalDate dueDate, DueTimeChange dueTime) {}
+            LocalDate dueDate, DueTimeChange dueTime, List<UUID> assigneeUserIds) {}
 
     public record Transition(CurrentActor actor, UUID workItemId, long expectedVersion,
             String toStatus, String resolution, UUID idempotencyKey, RequestHash requestHash) {}
@@ -41,7 +58,7 @@ public final class WorkItemCommands {
 
     public record InlineUpdate(CurrentActor actor, UUID workItemId, long expectedVersion,
             String field, String priority, UUID assigneeUserId, LocalDate dueDate,
-            UUID idempotencyKey, RequestHash requestHash, DueTimeChange dueTime, String description) {}
+            UUID idempotencyKey, RequestHash requestHash, DueTimeChange dueTime, String description, List<UUID> assigneeUserIds) {}
 
     public record ChangeContent(CurrentActor actor, UUID workItemId, long expectedVersion,
             UUID contentId, UUID idempotencyKey, RequestHash requestHash) {}

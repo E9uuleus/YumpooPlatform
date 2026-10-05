@@ -4,6 +4,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Objects;
+import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Collection;
+import java.util.ArrayList;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -11,7 +15,7 @@ public record WorkItem(
         UUID id, UUID companyId, UUID projectId, UUID contentId,
         long itemSequence, String itemNo,
         String title, String statusCode, WorkItemStatusCategory statusCategory,
-        String priority, UUID assigneeUserId, UUID reporterUserId,
+        String priority, List<UUID> assigneeUserIds, UUID reporterUserId,
         String description, String notes, LocalDate timelineStartDate,
         LocalDate timelineEndDate, LocalDate dueDate, LocalTime dueTime, Instant completedAt,
         String rank, String projectSortKey,
@@ -25,7 +29,14 @@ public record WorkItem(
     private static final int MAX_NOTES_LENGTH = 16_384;
     private static final int MAX_DESCRIPTION_HTML_LENGTH = 65_536;
 
+    public static final int MAX_ASSIGNEES = 20;
+
     public WorkItem {
+        if (assigneeUserIds != null && assigneeUserIds.stream().anyMatch(Objects::isNull))
+            throw new IllegalArgumentException("assignee must not be null");
+        assigneeUserIds = assigneeUserIds == null ? List.of() : List.copyOf(assigneeUserIds);
+        if (assigneeUserIds.size() > MAX_ASSIGNEES || new LinkedHashSet<>(assigneeUserIds).size() != assigneeUserIds.size())
+            throw new IllegalArgumentException("assignees must be unique and contain at most 20 members");
         Objects.requireNonNull(id, "id must not be null");
         Objects.requireNonNull(companyId, "companyId must not be null");
         Objects.requireNonNull(projectId, "projectId must not be null");
@@ -97,7 +108,7 @@ public record WorkItem(
             LocalDate timelineEndDate, LocalDate dueDate, LocalTime dueTime, String rank,
             String projectSortKey, UUID reporterUserId, Instant now) {
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
-                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                title, statusCode, statusCategory, priority, assigneeUserId == null ? List.of() : List.of(assigneeUserId), reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime,
                 statusCategory == WorkItemStatusCategory.DONE ? now : null, rank,
                 projectSortKey, 0, now, reporterUserId, now, reporterUserId, null, null, null, false);
@@ -120,7 +131,9 @@ public record WorkItem(
         Objects.requireNonNull(now, "now must not be null");
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
-                nextTitle, statusCode, statusCategory, nextPriority, nextAssigneeUserId,
+                nextTitle, statusCode, statusCategory, nextPriority,
+                nextAssigneeUserId == null ? List.of() : Objects.equals(nextAssigneeUserId, assigneeUserId())
+                        ? assigneeUserIds : List.of(nextAssigneeUserId),
                 reporterUserId, nextDescription, nextNotes, nextTimelineStartDate,
                 nextTimelineEndDate, nextDueDate, nextDueTime, completedAt, rank,
                 projectSortKey, rowVersion, createdAt,
@@ -134,7 +147,7 @@ public record WorkItem(
         if (deletedAt != null) throw new IllegalStateException("deleted work item cannot change content");
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
         return new WorkItem(id, companyId, projectId, nextContentId, itemSequence, itemNo,
-                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                title, statusCode, statusCategory, priority, assigneeUserIds, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt, rank,
                 projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
                 deletedAt, deletedByUserId, deleteReason, archived);
@@ -150,7 +163,7 @@ public record WorkItem(
         if (Objects.equals(statusCode, nextStatusCode))
             throw new IllegalArgumentException("status transition endpoints must differ");
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
-                title, nextStatusCode, nextStatusCategory, priority, assigneeUserId,
+                title, nextStatusCode, nextStatusCategory, priority, assigneeUserIds,
                 reporterUserId, description, notes, timelineStartDate, timelineEndDate,
                 dueDate, dueTime, nextStatusCategory == WorkItemStatusCategory.DONE
                         ? (statusCategory == WorkItemStatusCategory.DONE ? completedAt : now) : null,
@@ -165,7 +178,7 @@ public record WorkItem(
         if (deletedAt != null) throw new IllegalStateException("deleted work item cannot move");
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
-                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                title, statusCode, statusCategory, priority, assigneeUserIds, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt, nextRank,
                 projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId, deletedAt,
                 deletedByUserId, deleteReason, archived);
@@ -175,7 +188,7 @@ public record WorkItem(
         Objects.requireNonNull(actorUserId, "actorUserId must not be null");
         if (deletedAt != null) throw new IllegalStateException("deleted work item cannot move");
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
-                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                title, statusCode, statusCategory, priority, assigneeUserIds, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt, rank,
                 nextProjectSortKey, rowVersion, createdAt, createdByUserId, updatedAt,
                 actorUserId, deletedAt, deletedByUserId, deleteReason, archived);
@@ -187,7 +200,7 @@ public record WorkItem(
         if (deletedAt != null) throw new IllegalStateException("work item is already deleted");
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
-                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                title, statusCode, statusCategory, priority, assigneeUserIds, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt, rank,
                 projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
                 now, actorUserId, reason, archived);
@@ -204,7 +217,7 @@ public record WorkItem(
         if (deletedAt == null) throw new IllegalStateException("work item is not deleted");
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
-                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                title, statusCode, statusCategory, priority, assigneeUserIds, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt, nextRank,
                 nextProjectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
                 null, null, null, archived);
@@ -216,10 +229,32 @@ public record WorkItem(
         if (deleted()) throw new IllegalStateException("deleted work item cannot change archive state");
         if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
         return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
-                title, statusCode, statusCategory, priority, assigneeUserId, reporterUserId,
+                title, statusCode, statusCategory, priority, assigneeUserIds, reporterUserId,
                 description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt,
                 rank, projectSortKey, rowVersion, createdAt, createdByUserId, now, actorUserId,
                 deletedAt, deletedByUserId, deleteReason, nextArchived);
+    }
+
+    public UUID assigneeUserId() {
+        return assigneeUserIds.isEmpty() ? null : assigneeUserIds.getFirst();
+    }
+
+    public WorkItem assign(Collection<UUID> requested, UUID actorUserId, Instant now) {
+        Objects.requireNonNull(requested, "requested must not be null");
+        Objects.requireNonNull(actorUserId, "actorUserId must not be null");
+        Objects.requireNonNull(now, "now must not be null");
+        if (deleted()) throw new IllegalStateException("deleted work item cannot be assigned");
+        if (now.isBefore(updatedAt)) throw new IllegalArgumentException("updatedAt must not move backwards");
+        List<UUID> ids = List.copyOf(requested);
+        if (ids.size() > MAX_ASSIGNEES || new LinkedHashSet<>(ids).size() != ids.size())
+            throw new IllegalArgumentException("assignees must be unique and contain at most 20 members");
+        List<UUID> ordered = new ArrayList<>(assigneeUserIds.stream().filter(ids::contains).toList());
+        ids.stream().filter(id -> !ordered.contains(id)).forEach(ordered::add);
+        return new WorkItem(id, companyId, projectId, contentId, itemSequence, itemNo,
+                title, statusCode, statusCategory, priority, ordered, reporterUserId,
+                description, notes, timelineStartDate, timelineEndDate, dueDate, dueTime, completedAt,
+                rank, projectSortKey, rowVersion, createdAt, createdByUserId, now,
+                actorUserId, deletedAt, deletedByUserId, deleteReason, archived);
     }
 
     public boolean deleted() {

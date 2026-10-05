@@ -75,6 +75,7 @@ public class WorkItemService {
     private static final String FIELDS_CHANGED = "workitem.work_item_fields_changed";
     private static final String ASSIGNED = "workitem.work_item_assigned";
     private static final String UNASSIGNED = "workitem.work_item_unassigned";
+    private static final String ASSIGNEES_CHANGED = "workitem.work_item_assignees_changed";
     private static final String STATUS_CHANGED = "workitem.work_item_status_changed";
     private static final String RANK_CHANGED = "workitem.work_item_rank_changed";
     private static final String DELETED = "workitem.work_item_deleted";
@@ -377,7 +378,8 @@ public class WorkItemService {
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             requireActiveContent(content);
             CreatedWorkItem created = createItem(ItemWriteTarget.from(project), content, new WorkItemDraft(
-                    command.title(), priority, command.assigneeUserId(), description,
+                    command.title(), priority, resolveAssignees(command.assigneeUserIds(), command.assigneeUserId(), null),
+                    command.assigneeUserIds() == null ? "assigneeUserId" : "assigneeUserIds", description,
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
                     command.dueDate(), command.dueTime()), command.actor());
             return stored(201, detail(created.item(),
@@ -417,7 +419,8 @@ public class WorkItemService {
                         "NESTED_SUBITEM_NOT_SUPPORTED");
             }
             CreatedWorkItem created = createItem(ItemWriteTarget.from(project), targetContent, new WorkItemDraft(
-                    command.title(), priority, command.assigneeUserId(), description,
+                    command.title(), priority, resolveAssignees(command.assigneeUserIds(), command.assigneeUserId(), null),
+                    command.assigneeUserIds() == null ? "assigneeUserId" : "assigneeUserIds", description,
                     command.notes(), command.timelineStartDate(), command.timelineEndDate(),
                     command.dueDate(), command.dueTime()), command.actor());
             ParentChildRelation relation = new ParentChildRelation(UUID.randomUUID(),
@@ -442,7 +445,7 @@ public class WorkItemService {
                 .orElseThrow(() -> validation("contentId", "CONTENT_NOT_AVAILABLE", "类别不属于目标项目或已删除"));
         if (!content.active() || content.deletedAt() != null)
             throw validation("contentId", "CONTENT_NOT_ACTIVE", "请选择目标项目的启用类别");
-        return createItem(target, content, new WorkItemDraft(title, null, null, null, null,
+        return createItem(target, content, new WorkItemDraft(title, null, List.of(), "assigneeUserIds", null, null,
                 null, null, null, DueTimeChange.unchanged()), actor).item();
     }
 
@@ -457,7 +460,7 @@ public class WorkItemService {
     private CreatedWorkItem createItem(ItemWriteTarget project, Content content,
             WorkItemDraft draft, CurrentActor actor) {
         markContentUsed(project, content, actor);
-        requireActiveAssignee(project, draft.assigneeUserId());
+        requireActiveAssignees(project, draft.assigneeUserIds(), draft.assigneeField());
         List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
                 project.companyId(), project.projectId());
         List<WorkItemLabelModels.PriorityLabel> priorityLabels = labels.priorities(
@@ -480,15 +483,16 @@ public class WorkItemService {
                         StandardErrorCode.INVALID_STATE_TRANSITION, "PROJECT_ORDER_DENSE"));
         long sequence = workItems.nextSequence(project.companyId(), project.projectId());
         WorkItem item;
+        Instant now = clock.instant();
         try {
             item = WorkItem.create(workItemId, project.companyId(), project.projectId(),
                     content.id(), sequence, project.projectCode() + "-" + sequence,
                     draft.title(), initial.code(),
                     WorkItemStatusCategory.valueOf(initial.statusCategory()), draft.priority(),
-                    draft.assigneeUserId(), draft.description(), draft.notes(),
+                    null, draft.description(), draft.notes(),
                     draft.timelineStartDate(), draft.timelineEndDate(), draft.dueDate(),
                     draft.dueTime().resolve(draft.dueDate(), null), rank,
-                    projectSortKey, actor.userId(), clock.instant());
+                    projectSortKey, actor.userId(), now).assign(draft.assigneeUserIds(), actor.userId(), now);
         } catch (IllegalArgumentException exception) {
             throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
         }
@@ -497,8 +501,8 @@ public class WorkItemService {
         return new CreatedWorkItem(item, statusLabels);
     }
 
-    private record WorkItemDraft(String title, String priority, UUID assigneeUserId,
-            String description, String notes, LocalDate timelineStartDate,
+    private record WorkItemDraft(String title, String priority, List<UUID> assigneeUserIds,
+            String assigneeField, String description, String notes, LocalDate timelineStartDate,
             LocalDate timelineEndDate, LocalDate dueDate, DueTimeChange dueTime) {}
 
     private record CreatedWorkItem(WorkItem item,
@@ -536,17 +540,20 @@ public class WorkItemService {
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireVersion(before, command.expectedVersion());
         requireDateRange(command.timelineStartDate(), command.timelineEndDate());
-        requireActiveAssignee(project, command.assigneeUserId());
+        List<UUID> assignees = resolveAssignees(command.assigneeUserIds(), command.assigneeUserId(), before);
+        requireActiveAssignees(project, assignees.stream().filter(id -> !before.assigneeUserIds().contains(id)).toList(),
+                command.assigneeUserIds() == null ? "assigneeUserId" : "assigneeUserIds");
         String description = description(command.description());
         WorkItem candidate;
         try {
             String nextPriority = priority(command.priority());
             requireSelectablePriority(nextPriority, priorityLabels, before.priority());
             candidate = before.updateFields(command.title(), nextPriority,
-                    command.assigneeUserId(), description, command.notes(),
+                    before.assigneeUserId(), description, command.notes(),
                     command.timelineStartDate(), command.timelineEndDate(), command.dueDate(),
                     command.dueTime().resolve(command.dueDate(), before.dueTime()),
                     command.actor().userId(), clock.instant());
+            candidate = candidate.assign(assignees, command.actor().userId(), candidate.updatedAt());
         } catch (IllegalArgumentException exception) {
             throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
         }
@@ -554,10 +561,12 @@ public class WorkItemService {
         if (changedFields.isEmpty()) {
             return detail(before, people(project.companyId(), List.of(before)), true, statusLabels);
         }
+        if (!before.assigneeUserIds().equals(candidate.assigneeUserIds())) workItems.replaceAssignees(candidate);
         WorkItem after = workItems.update(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         appendFieldsChanged(before, after, command.actor(), changedFields);
         appendAssignmentChange(before, after, command.actor());
+        appendAssigneesChange(before, after, command.actor());
         return detail(after, people(project.companyId(), List.of(after)), true, statusLabels);
     }
 
@@ -1039,8 +1048,13 @@ public class WorkItemService {
                         command.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         requireVersion(before, command.expectedVersion());
-        if ("ASSIGNEE".equals(command.field()))
-            requireActiveAssignee(project, command.assigneeUserId());
+        List<UUID> assignees = "ASSIGNEES".equals(command.field())
+                ? resolveAssignees(command.assigneeUserIds(), null, null)
+                : "ASSIGNEE".equals(command.field()) ? resolveAssignees(null, command.assigneeUserId(), null)
+                : before.assigneeUserIds();
+        if ("ASSIGNEE".equals(command.field()) || "ASSIGNEES".equals(command.field()))
+            requireActiveAssignees(project, assignees.stream().filter(id -> !before.assigneeUserIds().contains(id)).toList(),
+                    "ASSIGNEES".equals(command.field()) ? "assigneeUserIds" : "assigneeUserId");
         List<WorkItemLabelModels.StatusLabel> statusLabels = labels.statuses(
                 project.companyId(), project.projectId());
         List<WorkItemLabelModels.PriorityLabel> priorityLabels = labels.priorities(
@@ -1053,7 +1067,7 @@ public class WorkItemService {
         try {
             candidate = before.updateFields(before.title(),
                     nextPriority,
-                    "ASSIGNEE".equals(command.field()) ? command.assigneeUserId() : before.assigneeUserId(),
+                    before.assigneeUserId(),
                     "DESCRIPTION".equals(command.field()) ? description(command.description()) : before.description(),
                     before.notes(), before.timelineStartDate(),
                     before.timelineEndDate(),
@@ -1061,6 +1075,7 @@ public class WorkItemService {
                     "DUE_DATE".equals(command.field())
                             ? command.dueTime().resolve(command.dueDate(), before.dueTime()) : before.dueTime(),
                     command.actor().userId(), clock.instant());
+            candidate = candidate.assign(assignees, command.actor().userId(), candidate.updatedAt());
         } catch (IllegalArgumentException exception) {
             throw validation("body", "INVALID_WORK_ITEM", exception.getMessage());
         }
@@ -1068,10 +1083,12 @@ public class WorkItemService {
         if (changedFields.isEmpty())
             return stored(200, detail(before, people(project.companyId(), List.of(before)), true,
                     statusLabels));
+        if (!before.assigneeUserIds().equals(candidate.assigneeUserIds())) workItems.replaceAssignees(candidate);
         WorkItem after = workItems.update(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         appendFieldsChanged(before, after, command.actor(), changedFields);
         appendAssignmentChange(before, after, command.actor());
+        appendAssigneesChange(before, after, command.actor());
         return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
                 statusLabels));
     }
@@ -1101,7 +1118,7 @@ public class WorkItemService {
         for (WorkItem item : rows) {
             userIds.add(item.reporterUserId());
             userIds.add(item.updatedByUserId());
-            if (item.assigneeUserId() != null) userIds.add(item.assigneeUserId());
+            userIds.addAll(item.assigneeUserIds());
         }
         return users.findByUserIds(companyId, userIds);
     }
@@ -1149,7 +1166,7 @@ public class WorkItemService {
                 content == null ? "未知类别" : content.name(),
                 content == null ? "GRAY" : content.colorToken(), item.title(),
                 item.statusCode(), item.statusCategory().name(),
-                priorityName(item), item.assigneeUserId(), assigneeDisplayName(item, people),
+                priorityName(item), item.assigneeUserId(), assigneeDisplayName(item, people), assignees(item, people),
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
                 item.dueDate(), dueTimeText(item), item.completedAt(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
@@ -1196,7 +1213,7 @@ public class WorkItemService {
                 content == null ? "未知类别" : content.name(),
                 content == null ? "GRAY" : content.colorToken(), item.itemNo(),
                 item.title(), item.statusCode(), item.statusCategory().name(), priorityName(item),
-                item.assigneeUserId(), assigneeDisplayName(item, people), item.dueDate(), dueTimeText(item), item.completedAt(),
+                item.assigneeUserId(), assigneeDisplayName(item, people), assignees(item, people), item.dueDate(), dueTimeText(item), item.completedAt(),
                 item.rowVersion(), StrongEtag.format(item.rowVersion()),
                 new WorkItemCapabilities(canEditFields, canEditFields, canEditFields,
                         canEditFields, canEditFields, false,
@@ -1217,7 +1234,7 @@ public class WorkItemService {
                 content == null ? "未知类别" : content.name(),
                 content == null ? "GRAY" : content.colorToken(), item.title(),
                 item.statusCode(), item.statusCategory().name(),
-                priorityName(item), item.assigneeUserId(), assigneeDisplayName(item, people),
+                priorityName(item), item.assigneeUserId(), assigneeDisplayName(item, people), assignees(item, people),
                 item.reporterUserId(), displayName(people.get(item.reporterUserId())),
                 item.description(), item.notes(), item.timelineStartDate(), item.timelineEndDate(),
                 item.dueDate(), dueTimeText(item), item.completedAt(), item.rowVersion(), StrongEtag.format(item.rowVersion()),
@@ -1371,6 +1388,7 @@ public class WorkItemService {
     private void appendCreated(WorkItem item, CurrentActor actor) {
         Map<String, Object> payload = commonEventPayload(item);
         payload.put("reporterUserId", item.reporterUserId());
+        payload.put("assigneeUserIds", item.assigneeUserIds());
         append(CREATED, item, actor, payload);
     }
 
@@ -1405,10 +1423,26 @@ public class WorkItemService {
         payload.put("projectId", after.projectId());
         payload.put("contentId", after.contentId());
         payload.put("itemNo", after.itemNo());
+        payload.put("assigneeUserIds", after.assigneeUserIds());
         payload.put("previousAssigneeUserId", before.assigneeUserId());
         payload.put("assigneeUserId", after.assigneeUserId());
         payload.put("rowVersion", after.rowVersion());
         append(after.assigneeUserId() == null ? UNASSIGNED : ASSIGNED, after, actor, payload);
+    }
+
+    private void appendAssigneesChange(WorkItem before, WorkItem after, CurrentActor actor) {
+        if (new LinkedHashSet<>(before.assigneeUserIds()).equals(new LinkedHashSet<>(after.assigneeUserIds()))) return;
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("workItemId", after.id());
+        payload.put("projectId", after.projectId());
+        payload.put("contentId", after.contentId());
+        payload.put("itemNo", after.itemNo());
+        payload.put("previousAssigneeUserIds", before.assigneeUserIds());
+        payload.put("assigneeUserIds", after.assigneeUserIds());
+        payload.put("addedUserIds", after.assigneeUserIds().stream().filter(id -> !before.assigneeUserIds().contains(id)).toList());
+        payload.put("removedUserIds", before.assigneeUserIds().stream().filter(id -> !after.assigneeUserIds().contains(id)).toList());
+        payload.put("rowVersion", after.rowVersion());
+        append(ASSIGNEES_CHANGED, after, actor, payload);
     }
 
     private void appendStatusChanged(WorkItem before, WorkItem after,
@@ -1507,23 +1541,40 @@ public class WorkItemService {
         }
     }
 
-    private void requireActiveAssignee(ProjectFactWriteSnapshot project, UUID assigneeUserId) {
-        requireActiveAssignee(ItemWriteTarget.from(project), assigneeUserId);
+    private static List<UUID> requestedAssignees(List<UUID> ids) {
+        if (ids == null) return null;
+        if (ids.stream().anyMatch(Objects::isNull)) throw validation("assigneeUserIds", "INVALID_VALUE", "处理人无效");
+        if (new LinkedHashSet<>(ids).size() != ids.size()) throw validation("assigneeUserIds", "DUPLICATE", "处理人不可重复");
+        if (ids.size() > WorkItem.MAX_ASSIGNEES) throw validation("assigneeUserIds", "TOO_MANY", "最多可设置 20 位处理人");
+        return List.copyOf(ids);
     }
 
-    private void requireActiveAssignee(ItemWriteTarget project, UUID assigneeUserId) {
-        if (assigneeUserId != null && !activeMemberships.isActiveMember(
-                project.companyId(), project.projectId(), assigneeUserId)) {
-            throw validation("assigneeUserId", "NOT_ACTIVE_PROJECT_MEMBER",
-                    "处理人必须是当前 Project 的 ACTIVE 成员");
-        }
+    private List<UUID> resolveAssignees(List<UUID> requestIds, UUID legacyId, WorkItem current) {
+        List<UUID> requested = requestedAssignees(requestIds);
+        if (requested != null) return requested;
+        return current != null && legacyId != null && legacyId.equals(current.assigneeUserId())
+                ? current.assigneeUserIds() : legacyId == null ? List.of() : List.of(legacyId);
+    }
+
+    private void requireActiveAssignees(ProjectFactWriteSnapshot project, List<UUID> ids, String field) {
+        requireActiveAssignees(ItemWriteTarget.from(project), ids, field);
+    }
+
+    private void requireActiveAssignees(ItemWriteTarget project, List<UUID> ids, String field) {
+        if (!ids.isEmpty() && !activeMemberships.findActiveMemberIds(project.companyId(), project.projectId(), ids).containsAll(ids))
+            throw validation(field, "NOT_ACTIVE_PROJECT_MEMBER", "处理人必须是当前 Project 的 ACTIVE 成员");
+    }
+
+    private static List<WorkItemAssignee> assignees(WorkItem item, Map<UUID, MinimalUserSnapshot> people) {
+        return item.assigneeUserIds().stream().map(id -> new WorkItemAssignee(id,
+                people.containsKey(id) ? people.get(id).displayName() : "历史成员")).toList();
     }
 
     private static List<String> changed(WorkItem before, WorkItem after) {
         List<String> fields = new ArrayList<>();
         if (!before.title().equals(after.title())) fields.add("title");
         if (!Objects.equals(before.priority(), after.priority())) fields.add("priority");
-        if (!Objects.equals(before.assigneeUserId(), after.assigneeUserId()))
+        if (!before.assigneeUserIds().equals(after.assigneeUserIds()))
             fields.add("assigneeUserId");
         if (!Objects.equals(before.description(), after.description())) fields.add("description");
         if (!Objects.equals(before.notes(), after.notes())) fields.add("notes");

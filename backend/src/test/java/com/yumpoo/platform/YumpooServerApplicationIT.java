@@ -402,6 +402,7 @@ class YumpooServerApplicationIT {
                 "user_notification",
                 "wecom_oauth_attempt",
                 "work_item",
+                "work_item_assignee",
                 "work_item_cell_activity",
                 "work_item_connect_column",
                 "work_item_connect_column_catalog",

@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.List;
 
 public record WorkItemSubitemCreateRequest(
         @NotNull UUID contentId,
@@ -20,5 +21,6 @@ public record WorkItemSubitemCreateRequest(
         LocalDate timelineStartDate,
         LocalDate timelineEndDate,
         LocalDate dueDate,
-        @JsonInclude(JsonInclude.Include.NON_NULL) JsonNode dueTime
+        @JsonInclude(JsonInclude.Include.NON_NULL) JsonNode dueTime,
+        @JsonInclude(JsonInclude.Include.NON_NULL) List<UUID> assigneeUserIds
 ) {}

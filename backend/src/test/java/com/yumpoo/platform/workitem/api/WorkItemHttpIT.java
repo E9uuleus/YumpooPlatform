@@ -28,6 +28,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Clock;
 import java.util.UUID;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -75,6 +76,36 @@ class WorkItemHttpIT {
 
     @AfterEach
     void tearDown() { cleanUp(); }
+
+    @Test
+    void assigneesPatchPreservesDisplayOrderAndPrimaryAssignee() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "多人事项"), null, UUID.randomUUID()));
+        JsonNode updated = ok(mutate("PATCH", "/api/v1/work-items/" + item.path("id").asText() + "/assignees", member,
+                json.writeValueAsString(java.util.Map.of("assigneeUserIds", List.of(member.userId(), owner.userId()))),
+                item.path("etag").asText(), UUID.randomUUID()));
+        assertThat(updated.path("assigneeUserId").asText()).isEqualTo(member.userId().toString());
+        assertThat(updated.path("assignees").size()).isEqualTo(2);
+        assertThat(updated.path("assignees").get(0).path("userId").asText()).isEqualTo(member.userId().toString());
+        assertThat(updated.path("assignees").get(1).path("userId").asText()).isEqualTo(owner.userId().toString());
+        JsonNode detail = ok(get("/api/v1/work-items/" + item.path("id").asText(), member));
+        assertThat(detail.path("assignees")).isEqualTo(updated.path("assignees"));
+        var legacyBody = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "多人事项"));
+        legacyBody.put("assigneeUserId", member.userId().toString());
+        JsonNode legacy = ok(mutate("PATCH", "/api/v1/work-items/" + item.path("id").asText(), member,
+                legacyBody.toString(), updated.path("etag").asText(), null));
+        assertThat(legacy.path("assignees")).isEqualTo(updated.path("assignees"));
+        var invalid = mutate("PATCH", "/api/v1/work-items/" + item.path("id").asText() + "/assignees", member,
+                json.writeValueAsString(java.util.Map.of("assigneeUserIds", List.of(UUID.randomUUID()))),
+                legacy.path("etag").asText(), UUID.randomUUID());
+        assertThat(invalid.statusCode()).isEqualTo(422);
+        assertThat(invalid.body()).contains("assigneeUserIds", "NOT_ACTIVE_PROJECT_MEMBER");
+        JsonNode single = ok(mutate("PATCH", "/api/v1/work-items/" + item.path("id").asText() + "/assignee", member,
+                json.writeValueAsString(java.util.Map.of("assigneeUserId", owner.userId())),
+                legacy.path("etag").asText(), UUID.randomUUID()));
+        assertThat(single.path("assignees").size()).isEqualTo(1);
+        assertThat(single.path("assignees").get(0).path("userId").asText()).isEqualTo(owner.userId().toString());
+    }
 
     @Test
     void emptyGroupsIntersectFiltersAndBindCursorsToTheEmptyField() throws Exception {
@@ -799,6 +830,8 @@ class WorkItemHttpIT {
         assertThat(ok(get(candidates,member)).path("items").size()).isZero();
         jdbc.sql("UPDATE yumpoo.work_item SET assignee_user_id=:user WHERE id=:item")
                 .param("user",member.userId()).param("item",UUID.fromString(first.path("id").asText())).update();
+        jdbc.sql("INSERT INTO yumpoo.work_item_assignee SELECT company_id,project_id,id,:user,0 FROM yumpoo.work_item WHERE id=:item")
+                .param("user", member.userId()).param("item", java.util.UUID.fromString(first.path("id").asText())).update();
         assertThat(ok(get(candidates,member)).path("items").get(0).path("workItemId").asText()).isEqualTo(first.path("id").asText());
         JsonNode search=ok(get(candidates+"?scope=ALL&q=Timer%20Other",member));
         assertThat(search.path("items").size()).isEqualTo(1);
@@ -947,6 +980,7 @@ class WorkItemHttpIT {
         jdbc.sql("DELETE FROM yumpoo.work_item_update_mention WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_update WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_relation WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.work_item_assignee WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_project_counter WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.content WHERE company_id=:id").param("id", COMPANY_ID).update();

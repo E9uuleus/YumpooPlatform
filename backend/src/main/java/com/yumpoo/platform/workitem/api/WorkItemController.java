@@ -138,7 +138,7 @@ public final class WorkItemController {
                 body.timelineStartDate(), body.timelineEndDate(), body.dueDate(), key,
                 hasher.hash("createWorkItem", Map.of("projectId", projectId.toString(),
                                 "contentId", body.contentId().toString()),
-                        objectMapper.valueToTree(body)), dueTimeChange(body.dueTime()))).result();
+                        objectMapper.valueToTree(body)), dueTimeChange(body.dueTime()), body.assigneeUserIds())).result();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());
@@ -170,7 +170,7 @@ public final class WorkItemController {
                 body.timelineEndDate(), body.dueDate(), key,
                 hasher.hash("createWorkItemSubitem", Map.of(
                                 "parentWorkItemId", parentWorkItemId.toString()),
-                        objectMapper.valueToTree(body)), dueTimeChange(body.dueTime()))).result();
+                        objectMapper.valueToTree(body)), dueTimeChange(body.dueTime()), body.assigneeUserIds())).result();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setCacheControl(CacheControl.noStore());
@@ -220,7 +220,7 @@ public final class WorkItemController {
         WorkItemDetail detail = service.update(new Update(actor, workItemId, expectedVersion,
                 body.title(), body.priority(), body.assigneeUserId(), body.description(),
                 body.notes(), body.timelineStartDate(), body.timelineEndDate(), body.dueDate(),
-                dueTimeChange(body.dueTime())));
+                dueTimeChange(body.dueTime()), body.assigneeUserIds()));
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .eTag(Long.toString(detail.rowVersion())).body(detail);
     }
@@ -308,6 +308,17 @@ public final class WorkItemController {
                 null, body.assigneeUserId(), null, body);
     }
 
+    @PatchMapping("/work-items/{workItemId}/assignees")
+    ResponseEntity<String> patchAssignees(@PathVariable UUID workItemId,
+            @Valid @RequestBody WorkItemAssigneesPatchRequest body,
+            @RequestHeader(name = IfMatchParser.HEADER_NAME, required = false) String ifMatchHeader,
+            @RequestHeader(name = IdempotencyKeyParser.HEADER_NAME, required = false) String idempotencyHeader) {
+        if (body.assigneeUserIds() == null)
+            throw ApplicationException.validation(new FieldViolation("assigneeUserIds", "REQUIRED", "处理人列表必填"));
+        return inlineUpdate(workItemId, ifMatchHeader, idempotencyHeader, "ASSIGNEES",
+                null, null, null, body);
+    }
+
     @PatchMapping("/work-items/{workItemId}/priority")
     ResponseEntity<String> patchPriority(@PathVariable UUID workItemId,
             @RequestBody WorkItemPriorityPatchRequest body,
@@ -370,7 +381,8 @@ public final class WorkItemController {
                                 "ifMatch", Long.toString(expectedVersion)),
                         objectMapper.valueToTree(body)), body instanceof WorkItemDueDatePatchRequest deadline
                         ? dueTimeChange(deadline.dueTime()) : DueTimeChange.unchanged(),
-                body instanceof WorkItemDescriptionPatchRequest description ? description.description() : null)).result();
+                body instanceof WorkItemDescriptionPatchRequest description ? description.description() : null,
+                body instanceof WorkItemAssigneesPatchRequest assignees ? assignees.assigneeUserIds() : null)).result();
         return storedResponse(stored);
     }
 

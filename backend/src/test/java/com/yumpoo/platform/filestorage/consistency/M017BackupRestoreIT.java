@@ -987,6 +987,13 @@ class M017BackupRestoreIT {
                 }
                 assertThat(workItem.executeBatch()).hasSize(2);
             }
+            try (Statement assignees = connection.createStatement()) {
+                assertThat(assignees.executeUpdate("""
+                        INSERT INTO yumpoo.work_item_assignee(company_id, project_id, work_item_id, user_id, position)
+                        SELECT company_id, project_id, id, assignee_user_id, 0
+                        FROM yumpoo.work_item WHERE assignee_user_id IS NOT NULL
+                        """)).isEqualTo(1);
+            }
             try (PreparedStatement tombstone = connection.prepareStatement("""
                     UPDATE yumpoo.work_item
                        SET deleted_at=?, deleted_by_user_id='00000000-0000-4000-8000-000000000102',
@@ -1136,7 +1143,10 @@ class M017BackupRestoreIT {
                                 || item.updated_by_user_id || ':' || item.created_at || ':'
                                 || item.updated_at || ':' || COALESCE(item.deleted_at::text,'-') || ':'
                                 || COALESCE(item.deleted_by_user_id::text,'-') || ':'
-                                || COALESCE(item.delete_reason,'-'), ',' ORDER BY item.item_sequence)
+                                || COALESCE(item.delete_reason,'-') || ':'
+                                || COALESCE((SELECT string_agg(a.user_id::text,'+' ORDER BY a.position)
+                                     FROM yumpoo.work_item_assignee a WHERE a.work_item_id=item.id),'-'),
+                                ',' ORDER BY item.item_sequence)
                                FROM yumpoo.work_item item WHERE item.project_id=project.id)
                                 AS work_items,
                             string_agg(content.code || ':' || content.name || ':'

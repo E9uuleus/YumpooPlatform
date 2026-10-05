@@ -90,7 +90,7 @@ class WorkItemCreationCoreTest {
 
     @Test
     void rootCreationPreservesNumberFieldsRankAndCreatedEvent() {
-        when(members.isActiveMember(company, project, user)).thenReturn(true);
+        when(members.findActiveMemberIds(company, project, List.of(user))).thenReturn(Set.of(user));
         when(sanitizer.sanitizeDescription("<p>正文</p>")).thenReturn("<p>正文</p>");
         LocalDate date = LocalDate.of(2026, 10, 3);
         var result = service.create(new WorkItemCommands.Create(actor, project, content.id(), "  回归事项  ",
