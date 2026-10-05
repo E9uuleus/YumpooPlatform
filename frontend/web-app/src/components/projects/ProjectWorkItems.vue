@@ -555,11 +555,18 @@ const allHiddenColumns = computed(() => new Set<ColumnKey>([...hiddenColumns.val
 const restorableColumns = computed(() => [...columns, ...connect.columns].filter(column => allHiddenColumns.value.has(column.key)))
 function columnWidth(key: ColumnKey): number { return isConnectColumnKey(key) ? connect.width(key) : columnWidths[key] }
 function showHiddenColumn(key: string) { if (isConnectColumnKey(key) || columnByKey.has(key as BuiltInColumnKey)) void toggleColumn(key as ColumnKey, true) }
-const quickGridStyle = computed(() => ({
-  '--work-item-menu-column-width': `${TABLE_MENU_COLUMN_WIDTH}px`,
-  gridTemplateColumns: [`${TABLE_MENU_COLUMN_WIDTH}px`, `${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
-    ...visibleColumns.value.map(item => `${columnWidth(item.key)}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
-}))
+const QUICK_CHECKBOX_SIZE = 16
+const quickGridStyle = computed(() => {
+  const titleLeft = TABLE_MENU_COLUMN_WIDTH + TABLE_EXPAND_COLUMN_WIDTH + TABLE_SELECTION_COLUMN_WIDTH
+  return {
+    '--work-item-menu-column-width': `${TABLE_MENU_COLUMN_WIDTH}px`,
+    '--work-item-quick-checkbox-left': `${TABLE_MENU_COLUMN_WIDTH + TABLE_EXPAND_COLUMN_WIDTH + (TABLE_SELECTION_COLUMN_WIDTH - QUICK_CHECKBOX_SIZE) / 2}px`,
+    '--work-item-quick-title-left': `${titleLeft}px`,
+    '--work-item-quick-controls-left': `${titleLeft + columnWidths.title}px`,
+    gridTemplateColumns: [`${TABLE_MENU_COLUMN_WIDTH}px`, `${TABLE_EXPAND_COLUMN_WIDTH}px`, `${TABLE_SELECTION_COLUMN_WIDTH}px`,
+      ...visibleColumns.value.map(item => `${columnWidth(item.key)}px`), `${TABLE_ADD_COLUMN_MIN_WIDTH}px`].join(' '),
+  }
+})
 const hasExplicitSort = computed(() => sortRules.value.length > 0)
 const filteredMembers = computed(() => {
   const query = assigneeSearch.value.trim().toLocaleLowerCase()
@@ -3010,6 +3017,7 @@ onBeforeUnmount(() => {
                 <template #default="scope">
                   <div v-if="isGroupDisplayRow(scope.row) && scope.row.groupRowKind === 'add'" class="work-item-group-create">
                     <div v-if="groupCreate.draft(scope.row.group).open" class="quick-row monday-quick-row work-item-group-quick" :style="quickGridStyle">
+                      <span class="monday-quick-lead" aria-hidden="true" />
                       <span class="monday-quick-checkbox" aria-hidden="true" />
                       <el-input :ref="value => groupCreate.setInput((scope.row as WorkItemGroupDisplayRow).group, value)"
                         v-model="groupCreate.draft(scope.row.group).title" class="quick-title-field monday-quick-add__field"
@@ -3029,6 +3037,7 @@ onBeforeUnmount(() => {
                     <button v-else class="quick-add monday-quick-add work-item-group-quick" :style="quickGridStyle"
                       :disabled="Boolean(groupCreateDisabledReason(scope.row.group))" :title="groupCreateDisabledReason(scope.row.group) || undefined"
                       :aria-label="`添加工作项到${scope.row.group.label}`" @click="groupCreate.open(scope.row.group)">
+                      <span class="monday-quick-lead" aria-hidden="true" />
                       <span class="monday-quick-checkbox" aria-hidden="true" />
                       <span class="monday-quick-add__field">添加工作项</span>
                       <span class="work-item-group-add-mask" aria-hidden="true" />
@@ -3531,6 +3540,7 @@ onBeforeUnmount(() => {
                   class="quick-row monday-quick-row"
                   :style="quickGridStyle"
                 >
+                  <span class="monday-quick-lead" aria-hidden="true" />
                   <span class="monday-quick-checkbox" aria-hidden="true" />
                   <el-input
                     ref="quickTitleInput"
@@ -3563,6 +3573,7 @@ onBeforeUnmount(() => {
                   :disabled="!canCreate"
                   @click="openQuick"
                 >
+                  <span class="monday-quick-lead" aria-hidden="true" />
                   <span class="monday-quick-checkbox" aria-hidden="true" />
                   <span class="monday-quick-add__field">添加工作项</span>
                 </button>
@@ -3750,6 +3761,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .work-item-group-toggle {
+  position: sticky; left: 33px; flex: none;
   display: flex; align-items: center; gap: 10px; width: min(540px, calc(100vw - 200px));
   height: 38px; padding: 0 14px 0 10px; border: 0; background: transparent;
   color: var(--yp-text-primary); text-align: left; cursor: pointer;
@@ -3758,22 +3770,28 @@ onBeforeUnmount(() => {
 .work-item-group-toggle svg.expanded { transform: rotate(90deg); }
 .work-item-group-name { color: var(--work-item-group-accent); font-size: 16px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .work-item-group-toggle small { flex: none; font-size: 12px; color: var(--yp-text-secondary); font-weight: 400; }
-.work-item-group-load { display: flex; gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
+.work-item-group-load { position: sticky; left: 33px; flex: none; display: flex; width: fit-content; max-width: min(540px, calc(100vw - 200px)); gap: 8px; align-items: center; min-height: 36px; padding: 0 16px; color: var(--yp-text-secondary); font-size: 12px; }
 .work-item-group-load--complete { min-height: 0; height: 0; padding: 0; }
 :deep(.monday-table--grouped.el-table > .el-table__inner-wrapper > .el-table__body-wrapper) { height: 100% !important; }
 :deep(.monday-table--grouped > .el-table__inner-wrapper > .el-table__body-wrapper > .el-scrollbar > .el-scrollbar__wrap > .el-scrollbar__view > table > tbody > tr.work-item-group-collapsed:not(.work-item-group-heading):not(.work-item-group-spacer)),
 :deep(.monday-table--grouped tr.work-item-table-row.work-item-group-collapsed + tr:has(> .el-table__expanded-cell)) { display: none; }
 :deep(.monday-table--grouped tr.work-item-group-heading > td.el-table__cell),
 :deep(.monday-table--grouped tr.work-item-group-spacer > td.el-table__cell) { border: 0; background: var(--yp-bg-surface) !important; padding: 0; }
-:deep(.monday-table--grouped tr.work-item-group-heading > td > .cell) { padding: 0; height: 38px; }
+:deep(.monday-table--grouped tr.work-item-group-heading > td > .cell) { padding: 0; height: 38px; overflow: visible; }
 :deep(.monday-table--grouped tr.work-item-group-heading > .monday-selection-column),
 :deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column) { position: relative !important; left: auto !important; }
 :deep(.monday-table--grouped tr.work-item-group-heading > .monday-selection-column)::before,
-:deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column)::before,
-.work-item-group-toggle, .work-item-group-load { transform: translateX(var(--work-item-table-scroll-left, 0px)); }
+:deep(.monday-table--grouped tr.work-item-group-load > .monday-selection-column)::before { display: none; }
+:deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed) .work-item-group-toggle::before,
+.work-item-group-load:not(.work-item-group-load--complete)::before {
+  position: absolute; top: -1px; bottom: -1px; left: -1px; width: var(--work-item-hierarchy-bar-width);
+  background: var(--work-item-group-accent); content: ''; pointer-events: none;
+}
+:deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed) .work-item-group-toggle::before {
+  border-radius: var(--work-item-hierarchy-corner-radius) 0 0 var(--work-item-hierarchy-corner-radius);
+}
 :deep(.monday-table--grouped tr.work-item-group-heading > td > .cell),
 :deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { justify-content: flex-start !important; }
-:deep(.monday-table--grouped tr.work-item-group-heading:not(.work-item-group-collapsed) > .monday-selection-column)::before { display: none; }
 :deep(.monday-table--grouped tr.work-item-group-spacer > td.el-table__cell),
 :deep(.monday-table--grouped tr.work-item-group-spacer > td > .cell) { height: 24px; line-height: 0; padding: 0; }
 :deep(.monday-table--grouped tr.work-item-group-columns > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
@@ -3789,7 +3807,7 @@ onBeforeUnmount(() => {
 :deep(.monday-table--grouped tr.work-item-group-columns td.monday-movable-column-header > .cell) { overflow: visible; }
 :deep(.monday-table--grouped tr.work-item-group-load > td.el-table__cell) { padding: 0; height: auto; }
 :deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { min-height: 0 !important; height: auto !important; }
-:deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { padding: 0; }
+:deep(.monday-table--grouped tr.work-item-group-load > td > .cell) { padding: 0; overflow: visible; }
 :deep(.monday-table--grouped tr.work-item-group-load:has(.work-item-group-load--complete) > td) { border-bottom: 0; }
 :deep(.monday-table--grouped tr.work-item-group-add > td.work-item-menu-column) {
   position: relative !important; left: auto !important; height: auto; padding: 0; border: 0;
@@ -3800,25 +3818,23 @@ onBeforeUnmount(() => {
 }
 .work-item-group-create { width: 100%; }
 .work-item-group-quick { --work-item-quick-add-accent: var(--work-item-group-accent); }
-.monday-quick-add.work-item-group-quick::before,
-.monday-quick-row.work-item-group-quick::before { opacity: 1; }
+.work-item-group-quick .monday-quick-lead::before { opacity: 1; }
 .work-item-group-quick .monday-quick-add__field,
-.work-item-group-quick .quick-controls { position: relative; z-index: 4; }
+.work-item-group-quick .quick-controls { z-index: 4; }
 .work-item-group-add-mask {
   position: absolute; z-index: 3; top: 0; right: 0; bottom: -1px; left: var(--work-item-quick-start);
   border-bottom-left-radius: var(--work-item-hierarchy-corner-radius);
   background: color-mix(in srgb, var(--yp-bg-surface) 50%, transparent); pointer-events: none;
 }
 .work-item-group-create-error {
-  margin: 0 12px 0 calc(81px + var(--work-item-table-scroll-left, 0px));
+  position: sticky;
+  left: 81px;
+  margin: 0 12px 0 81px;
   max-width: min(540px, calc(100vw - 220px)); white-space: normal;
 }
 :deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed > .monday-selection-column) {
   border: 1px solid var(--yp-monday-grid-border); border-radius: var(--work-item-hierarchy-corner-radius);
   background: var(--work-item-table-cell-bg) !important;
-}
-:deep(.monday-table--grouped tr.work-item-group-heading.work-item-group-collapsed > .monday-selection-column)::before {
-  top: -1px; bottom: -1px; border-radius: var(--work-item-hierarchy-corner-radius) 0 0 var(--work-item-hierarchy-corner-radius);
 }
 @media (prefers-reduced-motion: reduce) { .work-item-group-toggle svg { transition: none; } }
 .work-items-home {
@@ -4768,16 +4784,29 @@ onBeforeUnmount(() => {
 
 .monday-quick-add,
 .monday-quick-row {
-  --work-item-quick-start: calc(var(--work-item-menu-column-width) + var(--work-item-table-scroll-left, 0px));
+  --work-item-quick-start: var(--work-item-menu-column-width);
   border-bottom: 1px solid transparent;
   box-sizing: border-box;
 }
 
-.monday-quick-add__field,
-.monday-quick-checkbox,
-.quick-controls {
-  transform: translateX(var(--work-item-table-scroll-left, 0px));
+/* 冻结区交给合成器按 sticky 定位；scroll 事件回写变量会晚一帧，导致添加行先跟随滚动再回弹。 */
+:deep(.monday-table .el-table__append-wrapper) { overflow: visible; }
+
+.monday-quick-lead {
+  position: sticky;
+  z-index: 2;
+  left: 0;
+  grid-column: 1 / 3;
+  grid-row: 1;
+  align-self: stretch;
+  margin: -1px 0;
+  background: var(--yp-bg-surface);
+  pointer-events: none;
 }
+
+.monday-quick-checkbox { position: sticky; left: var(--work-item-quick-checkbox-left); }
+.monday-quick-add__field { position: sticky; left: var(--work-item-quick-title-left); }
+.quick-controls { position: sticky; left: var(--work-item-quick-controls-left); justify-self: start; }
 
 .monday-quick-add::after,
 .monday-quick-row::after {
@@ -4791,19 +4820,16 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-.monday-quick-add::before,
-.monday-quick-row::before {
+.monday-quick-lead::before {
   position: absolute;
-  z-index: 2;
-  top: -1px;
-  bottom: -1px;
-  left: var(--work-item-quick-start);
+  top: 0;
+  bottom: 0;
+  left: var(--work-item-menu-column-width);
   width: 6px;
   border-radius: 0 0 0 6px;
   background: var(--work-item-quick-add-accent);
   content: '';
   opacity: .5;
-  pointer-events: none;
 }
 
 .cell-editor-trigger { padding: 0; border: 0; font: inherit; cursor: pointer; }

@@ -243,6 +243,8 @@
   body.yp-project-overview-scroll .app-shell--workspace .app-main {
     min-height: 0;
     overflow: hidden;
+    /* 仅为固定在底部的 12px 横向代理滚动条留位，避免表格下方出现整行空白。 */
+    padding-bottom: 12px;
   }
 
   body.yp-project-overview-scroll .app-shell--workspace .app-main > .project-workspace {
