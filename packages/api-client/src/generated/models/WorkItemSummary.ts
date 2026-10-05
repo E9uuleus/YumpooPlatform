@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemAssignee } from './WorkItemAssignee';
+import {
+    WorkItemAssigneeFromJSON,
+    WorkItemAssigneeFromJSONTyped,
+    WorkItemAssigneeToJSON,
+    WorkItemAssigneeToJSONTyped,
+} from './WorkItemAssignee';
 import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
 import {
     WorkItemLabelColorTokenFromJSON,
@@ -40,6 +47,12 @@ import {
  * @interface WorkItemSummary
  */
 export interface WorkItemSummary {
+    /**
+     * 按指派顺序排列的平等处理人，第一位等于 assigneeUserId。
+     * @type {Array<WorkItemAssignee>}
+     * @memberof WorkItemSummary
+     */
+    readonly assignees?: Array<WorkItemAssignee>;
     /**
      * 不透明 UUID；客户端不得从值中推导业务语义。
      * @type {string}
@@ -101,13 +114,13 @@ export interface WorkItemSummary {
      */
     priority: string | null;
     /**
-     *
+     * 主处理人
      * @type {string}
      * @memberof WorkItemSummary
      */
     assigneeUserId: string | null;
     /**
-     *
+     * 主处理人
      * @type {string}
      * @memberof WorkItemSummary
      */
@@ -234,6 +247,7 @@ export function WorkItemSummaryFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
 
+        ...(json['assignees'] == null ? {} : { 'assignees': ((json['assignees'] as Array<any>).map(WorkItemAssigneeFromJSON)) }),
         'id': json['id'],
         'projectId': json['projectId'],
         'contentId': json['contentId'],
@@ -266,7 +280,7 @@ export function WorkItemSummaryToJSON(json: any): WorkItemSummary {
     return WorkItemSummaryToJSONTyped(json, false);
 }
 
-export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'completedAt'|'rowVersion'|'etag'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemSummaryToJSONTyped(value?: Omit<WorkItemSummary, 'assignees'|'completedAt'|'rowVersion'|'etag'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

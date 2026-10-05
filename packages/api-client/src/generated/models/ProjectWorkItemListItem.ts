@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemAssignee } from './WorkItemAssignee';
+import {
+    WorkItemAssigneeFromJSON,
+    WorkItemAssigneeFromJSONTyped,
+    WorkItemAssigneeToJSON,
+    WorkItemAssigneeToJSONTyped,
+} from './WorkItemAssignee';
 import type { WorkItemLabelColorToken } from './WorkItemLabelColorToken';
 import {
     WorkItemLabelColorTokenFromJSON,
@@ -47,6 +54,12 @@ import {
  * @interface ProjectWorkItemListItem
  */
 export interface ProjectWorkItemListItem {
+    /**
+     * 按指派顺序排列的平等处理人，第一位等于 assigneeUserId。
+     * @type {Array<WorkItemAssignee>}
+     * @memberof ProjectWorkItemListItem
+     */
+    readonly assignees?: Array<WorkItemAssignee>;
     /**
      *
      * @type {TimeTrackingSummary}
@@ -114,13 +127,13 @@ export interface ProjectWorkItemListItem {
      */
     priority: string | null;
     /**
-     *
+     * 主处理人
      * @type {string}
      * @memberof ProjectWorkItemListItem
      */
     assigneeUserId: string | null;
     /**
-     *
+     * 主处理人
      * @type {string}
      * @memberof ProjectWorkItemListItem
      */
@@ -230,6 +243,7 @@ export function ProjectWorkItemListItemFromJSONTyped(json: any, ignoreDiscrimina
     }
     return {
 
+        ...(json['assignees'] == null ? {} : { 'assignees': ((json['assignees'] as Array<any>).map(WorkItemAssigneeFromJSON)) }),
         ...(json['timeTracking'] === undefined ? {} : { 'timeTracking': json['timeTracking'] === null ? null : TimeTrackingSummaryFromJSON(json['timeTracking']) }),
         'id': json['id'],
         'projectId': json['projectId'],
@@ -261,7 +275,7 @@ export function ProjectWorkItemListItemToJSON(json: any): ProjectWorkItemListIte
     return ProjectWorkItemListItemToJSONTyped(json, false);
 }
 
-export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemListItem, 'completedAt'|'rowVersion'|'etag'|'subitemCount'|'discussionCount'|'updatedAt'|'updatedByUserId'|'updatedByDisplayName'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectWorkItemListItemToJSONTyped(value?: Omit<ProjectWorkItemListItem, 'assignees'|'completedAt'|'rowVersion'|'etag'|'subitemCount'|'discussionCount'|'updatedAt'|'updatedByUserId'|'updatedByDisplayName'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

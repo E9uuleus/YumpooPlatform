@@ -44,6 +44,12 @@ export interface DashboardTableCriteria {
     assigneeUserId?: Array<string>;
     /**
      *
+     * @type {Set<string>}
+     * @memberof DashboardTableCriteria
+     */
+    assigneeSetUserId?: Set<string>;
+    /**
+     *
      * @type {Array<string>}
      * @memberof DashboardTableCriteria
      */
@@ -149,6 +155,7 @@ export enum DashboardTableCriteriaEmptyFieldEnum {
 export enum DashboardTableCriteriaFieldEnum {
     Title = 'TITLE',
     Assignee = 'ASSIGNEE',
+    AssigneeSet = 'ASSIGNEE_SET',
     Status = 'STATUS',
     Priority = 'PRIORITY',
     Content = 'CONTENT',
@@ -179,6 +186,7 @@ export function DashboardTableCriteriaFromJSONTyped(json: any, ignoreDiscriminat
         ...(json['status'] == null ? {} : { 'status': json['status'] }),
         ...(json['priority'] == null ? {} : { 'priority': json['priority'] }),
         ...(json['assigneeUserId'] == null ? {} : { 'assigneeUserId': json['assigneeUserId'] }),
+        ...(json['assigneeSetUserId'] == null ? {} : { 'assigneeSetUserId': new Set(json['assigneeSetUserId']) }),
         ...(json['contentId'] == null ? {} : { 'contentId': json['contentId'] }),
         ...(json['dueFrom'] == null ? {} : { 'dueFrom': (new Date(json['dueFrom'])) }),
         ...(json['dueTo'] == null ? {} : { 'dueTo': (new Date(json['dueTo'])) }),
@@ -210,6 +218,7 @@ export function DashboardTableCriteriaToJSONTyped(value?: DashboardTableCriteria
         'status': value['status'],
         'priority': value['priority'],
         'assigneeUserId': value['assigneeUserId'],
+        'assigneeSetUserId': value['assigneeSetUserId'] == null ? undefined : Array.from(value['assigneeSetUserId'] as Set<any>),
         'contentId': value['contentId'],
         'dueFrom': value['dueFrom'] == null ? value['dueFrom'] : value['dueFrom'].toISOString().substring(0,10),
         'dueTo': value['dueTo'] == null ? value['dueTo'] : value['dueTo'].toISOString().substring(0,10),

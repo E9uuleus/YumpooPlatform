@@ -2968,6 +2968,12 @@ paths:
         KANBAN 必须指定单一 status，并使用项目级状态泳道 rank。
       security: [{ sessionCookie: [] }]
       parameters:
+        - name: assigneeSetUserId
+          in: query
+          description: 精确匹配处理人集合，与其他筛选取交集并绑定游标；空集合使用 emptyField=ASSIGNEE。
+          style: form
+          explode: true
+          schema: { type: array, uniqueItems: true, maxItems: 20, items: { type: string, format: uuid } }
         - name: connectedColumnIds
           in: query
           description: 所选每个本项目有效连接列均至少有一条可读连接。 参与计数与游标，不提供连接排序或分组。
@@ -3033,6 +3039,7 @@ paths:
             uniqueItems: true
             items: { $ref: '#/components/schemas/WorkItemPriority' }
         - name: assigneeUserId
+          description: 任一所选成员是处理人即匹配。
           in: query
           style: form
           explode: true
@@ -3266,8 +3273,15 @@ paths:
       tags: [WorkItems]
       operationId: listProjectWorkItemFilterOptions
       summary: 按当前项目查询上下文分页取得筛选选项及动态计数
+      description: ASSIGNEE 按成员分别计数，同一工作项可计入多个成员；ASSIGNEE_SET 按处理人组合计数。
       security: [{ sessionCookie: [] }]
       parameters:
+        - name: assigneeSetUserId
+          in: query
+          description: 精确匹配处理人集合，与其他筛选取交集并绑定游标；空集合使用 emptyField=ASSIGNEE。
+          style: form
+          explode: true
+          schema: { type: array, uniqueItems: true, maxItems: 20, items: { type: string, format: uuid } }
         - name: connectedColumnIds
           in: query
           description: 所选每个本项目有效连接列均至少有一条可读连接。 参与计数与游标，不提供连接排序或分组。
@@ -3299,7 +3313,7 @@ paths:
         - name: field
           in: query
           required: true
-          schema: { type: string, enum: [TITLE, ASSIGNEE, STATUS, PRIORITY, CONTENT, DUE_DATE, UPDATED_AT, INCOMING_PROJECT] }
+          schema: { type: string, enum: [TITLE, ASSIGNEE, ASSIGNEE_SET, STATUS, PRIORITY, CONTENT, DUE_DATE, UPDATED_AT, INCOMING_PROJECT] }
         - { name: cursor, in: query, schema: { type: string, minLength: 1, maxLength: 2048 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
         - { name: q, in: query, schema: { type: string } }
@@ -3314,6 +3328,7 @@ paths:
           explode: true
           schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/WorkItemPriority' } }
         - name: assigneeUserId
+          description: 任一所选成员是处理人即匹配。
           in: query
           style: form
           explode: true
@@ -3750,6 +3765,37 @@ paths:
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemAssigneePatchRequest' } } }
+      responses:
+        '200':
+          description: 处理人已更新或返回幂等重放结果。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemDetail' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /work-items/{workItemId}/assignees:
+    patch:
+      tags: [WorkItems]
+      operationId: patchWorkItemAssignees
+      summary: 单独更新完整处理人列表
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Uuid' }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemAssigneesPatchRequest' } } }
       responses:
         '200':
           description: 处理人已更新或返回幂等重放结果。
@@ -7340,6 +7386,7 @@ components:
         status: {type: array, items: {type: string}}
         priority: {type: array, items: {type: string}}
         assigneeUserId: {type: array, items: {type: string, format: uuid}}
+        assigneeSetUserId: {type: array, uniqueItems: true, maxItems: 20, items: {type: string, format: uuid}}
         contentId: {type: array, items: {type: string, format: uuid}}
         dueFrom: {type: string, format: date}
         dueTo: {type: string, format: date}
@@ -7351,7 +7398,7 @@ components:
         emptyField: {type: string, enum: [ASSIGNEE, PRIORITY, DUE_DATE]}
         cursor: {type: string}
         limit: {type: integer, minimum: 1, maximum: 100, default: 25}
-        field: {type: string, enum: [TITLE, ASSIGNEE, STATUS, PRIORITY, CONTENT, DUE_DATE, UPDATED_AT]}
+        field: {type: string, enum: [TITLE, ASSIGNEE, ASSIGNEE_SET, STATUS, PRIORITY, CONTENT, DUE_DATE, UPDATED_AT]}
         parentWorkItemId: {type: string, format: uuid}
     DashboardTablePage:
       type: object
@@ -7486,6 +7533,7 @@ components:
         - durationMs
         - updatedAt
       properties:
+        assignees: { type: array, maxItems: 20, readOnly: true, description: 按指派顺序排列的平等处理人，第一位等于 assigneeUserId。, items: { $ref: '#/components/schemas/WorkItemAssignee' } }
         workItem:
           $ref: "#/components/schemas/ProjectWorkItemListItem"
         id: *a3
@@ -7493,10 +7541,12 @@ components:
         itemNo: *a4
         title: *a4
         assigneeUserId:
+          description: 主处理人
           type: string
           format: uuid
           nullable: true
         assigneeName:
+          description: 主处理人
           type: string
           nullable: true
         statusCode: *a4
@@ -8389,6 +8439,7 @@ components:
         reporterDisplayName, description, notes, timelineStartDate, timelineEndDate,
         dueDate, rowVersion, etag, capabilities, updatedAt]
       properties:
+        assignees: { type: array, maxItems: 20, readOnly: true, description: 按指派顺序排列的平等处理人，第一位等于 assigneeUserId。, items: { $ref: '#/components/schemas/WorkItemAssignee' } }
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
         contentId: { $ref: '#/components/schemas/Uuid' }
@@ -8399,8 +8450,8 @@ components:
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
-        assigneeUserId: { type: string, format: uuid, nullable: true }
-        assigneeDisplayName: { type: string, minLength: 1, nullable: true }
+        assigneeUserId: { type: string, format: uuid, nullable: true, description: 主处理人 }
+        assigneeDisplayName: { type: string, minLength: 1, nullable: true, description: 主处理人 }
         reporterUserId: { $ref: '#/components/schemas/Uuid' }
         reporterDisplayName: { type: string, minLength: 1 }
         description:
@@ -8432,6 +8483,7 @@ components:
         dueDate, rowVersion, etag, capabilities, createdAt, updatedAt, deleted,
         deletedAt, deletedByUserId, deleteReason]
       properties:
+        assignees: { type: array, maxItems: 20, readOnly: true, description: 按指派顺序排列的平等处理人，第一位等于 assigneeUserId。, items: { $ref: '#/components/schemas/WorkItemAssignee' } }
         id: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
         contentId: { $ref: '#/components/schemas/Uuid' }
@@ -8442,8 +8494,8 @@ components:
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
-        assigneeUserId: { type: string, format: uuid, nullable: true }
-        assigneeDisplayName: { type: string, minLength: 1, nullable: true }
+        assigneeUserId: { type: string, format: uuid, nullable: true, description: 主处理人 }
+        assigneeDisplayName: { type: string, minLength: 1, nullable: true, description: 主处理人 }
         reporterUserId: { $ref: '#/components/schemas/Uuid' }
         reporterDisplayName: { type: string, minLength: 1 }
         description:
@@ -8519,6 +8571,7 @@ components:
         statusCategory, priority, assigneeUserId, assigneeDisplayName, dueDate, rowVersion,
         etag, capabilities, subitemCount, updatedAt]
       properties:
+        assignees: { type: array, maxItems: 20, readOnly: true, description: 按指派顺序排列的平等处理人，第一位等于 assigneeUserId。, items: { $ref: '#/components/schemas/WorkItemAssignee' } }
         timeTracking:
           type: object
           nullable: true
@@ -8533,8 +8586,8 @@ components:
         statusCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
         statusCategory: { $ref: '#/components/schemas/WorkItemStatusCategory' }
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
-        assigneeUserId: { type: string, format: uuid, nullable: true }
-        assigneeDisplayName: { type: string, minLength: 1, nullable: true }
+        assigneeUserId: { type: string, format: uuid, nullable: true, description: 主处理人 }
+        assigneeDisplayName: { type: string, minLength: 1, nullable: true, description: 主处理人 }
         dueDate: { type: string, format: date, nullable: true }
         dueTime: { type: string, nullable: true, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$', description: '企业时区的截止时分；更新时省略保留原值，null 移除时间。' }
         completedAt: { type: string, format: date-time, nullable: true, readOnly: true, description: '当前 DONE 周期的实际完成时间；历史未记录时为空。' }
@@ -8725,8 +8778,29 @@ components:
         previousVisibleWorkItemId: { type: string, format: uuid, nullable: true }
         nextVisibleWorkItemId: { type: string, format: uuid, nullable: true }
 
+    WorkItemAssignee:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName]
+      properties:
+        userId: { type: string, format: uuid }
+        displayName: { type: string, minLength: 1 }
+
+    WorkItemAssigneesPatchRequest:
+      type: object
+      additionalProperties: false
+      required: [assigneeUserIds]
+      properties:
+        assigneeUserIds:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, format: uuid }
+          description: 完整处理人列表。保留的成员维持原顺序，新增成员按此处顺序追加；第一位为主处理人；空数组表示清空。
+
     WorkItemAssigneePatchRequest:
       type: object
+      description: 将处理人设为 [id] 或清空。
       additionalProperties: false
       required: [assigneeUserId]
       properties:
@@ -8869,6 +8943,12 @@ components:
       additionalProperties: false
       required: [contentId, title, priority, description, notes]
       properties:
+        assigneeUserIds:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, format: uuid }
+          description: 完整处理人列表。保留的成员维持原顺序，新增成员按此处顺序追加；第一位为主处理人；空数组表示清空。
         contentId: { $ref: '#/components/schemas/Uuid' }
         title: { type: string, minLength: 1, maxLength: 300 }
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
@@ -8893,6 +8973,12 @@ components:
       additionalProperties: false
       required: [contentId, title, priority, description, notes]
       properties:
+        assigneeUserIds:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, format: uuid }
+          description: 完整处理人列表。保留的成员维持原顺序，新增成员按此处顺序追加；第一位为主处理人；空数组表示清空。
         contentId: { $ref: '#/components/schemas/Uuid' }
         title: { type: string, minLength: 1, maxLength: 300 }
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
@@ -8925,6 +9011,12 @@ components:
       required: [title, priority, assigneeUserId, description, notes,
         timelineStartDate, timelineEndDate, dueDate]
       properties:
+        assigneeUserIds:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, format: uuid }
+          description: 完整处理人列表。保留的成员维持原顺序，新增成员按此处顺序追加；第一位为主处理人；空数组表示清空。
         title: { type: string, minLength: 1, maxLength: 300 }
         priority: { $ref: '#/components/schemas/NullableWorkItemPriority' }
         assigneeUserId: { type: string, format: uuid, nullable: true }

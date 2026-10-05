@@ -207,7 +207,7 @@ events:
   - eventType: workitem.work_item_created
     eventVersion: 2
     schema: schemas/workitem.work-item-created-v2.schema.json
-    validExamples: [examples/workitem.work-item-created-v2.json]
+    validExamples: [examples/workitem.work-item-created-v2.json, examples/workitem.work-item-created-v2.multiple-assignees.json]
     invalidExamples: [examples/workitem.work-item-created-v2.invalid.json]
   - eventType: workitem.work_item_relation_created
     eventVersion: 1
@@ -237,12 +237,12 @@ events:
   - eventType: workitem.work_item_assigned
     eventVersion: 1
     schema: schemas/workitem.work-item-assigned-v1.schema.json
-    validExamples: [examples/workitem.work-item-assigned-v1.json]
+    validExamples: [examples/workitem.work-item-assigned-v1.json, examples/workitem.work-item-assigned-v1.multiple-assignees.json]
     invalidExamples: [examples/workitem.work-item-assigned-v1.invalid.json]
   - eventType: workitem.work_item_unassigned
     eventVersion: 1
     schema: schemas/workitem.work-item-unassigned-v1.schema.json
-    validExamples: [examples/workitem.work-item-unassigned-v1.json]
+    validExamples: [examples/workitem.work-item-unassigned-v1.json, examples/workitem.work-item-unassigned-v1.multiple-assignees.json]
     invalidExamples: [examples/workitem.work-item-unassigned-v1.invalid.json]
   - eventType: workitem.work_item_status_changed
     eventVersion: 1
@@ -451,3 +451,8 @@ events:
       - examples/workitem.connection-deleted-v1.json
     invalidExamples:
       - examples/workitem.connection-deleted-v1.invalid.json
+  - eventType: workitem.work_item_assignees_changed
+    eventVersion: 1
+    schema: schemas/workitem.work-item-assignees-changed-v1.schema.json
+    validExamples: [examples/workitem.work-item-assignees-changed-v1.json]
+    invalidExamples: [examples/workitem.work-item-assignees-changed-v1.invalid.json]

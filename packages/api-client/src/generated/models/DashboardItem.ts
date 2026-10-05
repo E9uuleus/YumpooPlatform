@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemAssignee } from './WorkItemAssignee';
+import {
+    WorkItemAssigneeFromJSON,
+    WorkItemAssigneeFromJSONTyped,
+    WorkItemAssigneeToJSON,
+    WorkItemAssigneeToJSONTyped,
+} from './WorkItemAssignee';
 import type { ProjectWorkItemListItem } from './ProjectWorkItemListItem';
 import {
     ProjectWorkItemListItemFromJSON,
@@ -26,6 +33,12 @@ import {
  * @interface DashboardItem
  */
 export interface DashboardItem {
+    /**
+     * 按指派顺序排列的平等处理人，第一位等于 assigneeUserId。
+     * @type {Array<WorkItemAssignee>}
+     * @memberof DashboardItem
+     */
+    readonly assignees?: Array<WorkItemAssignee>;
     /**
      *
      * @type {ProjectWorkItemListItem}
@@ -57,13 +70,13 @@ export interface DashboardItem {
      */
     title: string;
     /**
-     *
+     * 主处理人
      * @type {string}
      * @memberof DashboardItem
      */
     assigneeUserId: string | null;
     /**
-     *
+     * 主处理人
      * @type {string}
      * @memberof DashboardItem
      */
@@ -201,6 +214,7 @@ export function DashboardItemFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
 
+        ...(json['assignees'] == null ? {} : { 'assignees': ((json['assignees'] as Array<any>).map(WorkItemAssigneeFromJSON)) }),
         ...(json['workItem'] == null ? {} : { 'workItem': ProjectWorkItemListItemFromJSON(json['workItem']) }),
         'id': json['id'],
         'projectId': json['projectId'],
@@ -232,7 +246,7 @@ export function DashboardItemToJSON(json: any): DashboardItem {
     return DashboardItemToJSONTyped(json, false);
 }
 
-export function DashboardItemToJSONTyped(value?: DashboardItem | null, ignoreDiscriminator: boolean = false): any {
+export function DashboardItemToJSONTyped(value?: Omit<DashboardItem, 'assignees'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
