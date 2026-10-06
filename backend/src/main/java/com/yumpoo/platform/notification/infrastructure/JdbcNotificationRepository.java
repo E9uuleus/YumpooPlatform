@@ -2,6 +2,7 @@ package com.yumpoo.platform.notification.infrastructure;
 
 import com.yumpoo.platform.notification.application.NotificationRepository;
 import com.yumpoo.platform.notification.application.NotificationModels.*;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import java.sql.ResultSet;
@@ -10,8 +11,10 @@ import java.sql.Types;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -95,6 +98,39 @@ public class JdbcNotificationRepository implements NotificationRepository {
         jdbc.sql("UPDATE yumpoo.user_notification SET state='READ',read_at=clock_timestamp(),updated_at=clock_timestamp()"
                 +" WHERE company_id=:company AND recipient_user_id=:user AND state='UNREAD' AND created_at<=:upTo"+groupSql(group,""))
                 .param("company",company).param("user",user).param("upTo",time(upTo)).update();
+    }
+    @Override public Map<UUID,ProjectPreference> preferences(UUID company,UUID project) {
+        var result=new HashMap<UUID,ProjectPreference>();
+        jdbc.sql("SELECT * FROM yumpoo.project_notification_preference WHERE company_id=:company AND project_id=:project")
+                .param("company",company).param("project",project)
+                .query((RowCallbackHandler) rs->result.put(rs.getObject("user_id",UUID.class),preference(rs)));
+        return result;
+    }
+    @Override public Optional<ProjectPreference> preference(UUID company,UUID project,UUID user) {
+        return jdbc.sql("""
+            SELECT * FROM yumpoo.project_notification_preference
+            WHERE company_id=:company AND project_id=:project AND user_id=:user
+            """).param("company",company).param("project",project).param("user",user)
+                .query((rs,n)->preference(rs)).optional();
+    }
+    @Override public ProjectPreference savePreference(UUID company,UUID project,UUID user,ProjectPreferenceUpdate u) {
+        return jdbc.sql("""
+            INSERT INTO yumpoo.project_notification_preference
+            (company_id,project_id,user_id,mode,notify_mention,notify_comment,notify_assigned,notify_connection_created)
+            VALUES (:company,:project,:user,:mode,:mention,:comment,:assigned,:connection)
+            ON CONFLICT (company_id,project_id,user_id) DO UPDATE SET mode=EXCLUDED.mode,
+              notify_mention=EXCLUDED.notify_mention,notify_comment=EXCLUDED.notify_comment,
+              notify_assigned=EXCLUDED.notify_assigned,notify_connection_created=EXCLUDED.notify_connection_created,
+              updated_at=clock_timestamp()
+            RETURNING *
+            """).param("company",company).param("project",project).param("user",user).param("mode",u.mode().name())
+                .param("mention",u.mention()).param("comment",u.comment()).param("assigned",u.assigned())
+                .param("connection",u.connectionCreated()).query((rs,n)->preference(rs)).single();
+    }
+    private static ProjectPreference preference(ResultSet rs) throws SQLException {
+        return new ProjectPreference(rs.getObject("project_id",UUID.class),PreferenceMode.valueOf(rs.getString("mode")),
+                rs.getBoolean("notify_mention"),rs.getBoolean("notify_comment"),rs.getBoolean("notify_assigned"),
+                rs.getBoolean("notify_connection_created"),instant(rs,"updated_at"));
     }
     private static String groupSql(Group group,String prefix) {
         if(group==null) return "";

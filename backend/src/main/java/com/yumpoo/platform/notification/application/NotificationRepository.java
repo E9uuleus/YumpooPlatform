@@ -4,6 +4,7 @@ import com.yumpoo.platform.notification.application.NotificationModels.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface NotificationRepository {
@@ -20,4 +21,7 @@ public interface NotificationRepository {
     Instant serverNow();
     boolean setState(UUID companyId, UUID userId, UUID id, State state);
     void readAll(UUID companyId, UUID userId, Instant upTo, Group group);
+    Map<UUID, ProjectPreference> preferences(UUID companyId, UUID projectId);
+    Optional<ProjectPreference> preference(UUID companyId, UUID projectId, UUID userId);
+    ProjectPreference savePreference(UUID companyId, UUID projectId, UUID userId, ProjectPreferenceUpdate update);
 }
