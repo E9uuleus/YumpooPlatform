@@ -5,21 +5,32 @@ import {
   readCsrfToken,
   type ProjectMemberCandidate,
 } from '@yumpoo/api-client'
-import { ElButton, ElDialog, ElIcon, ElInput, ElMessage } from 'element-plus'
+import { ElButton, ElDialog, ElIcon, ElInput, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { projectsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 import YpAssignee from '../yp/YpAssignee.vue'
 
-const props = defineProps<{ modelValue: boolean; projectId: string; reasonRequired: boolean }>()
-const emit = defineEmits<{ 'update:modelValue': [value: boolean]; added: [count: number] }>()
+const props = defineProps<{
+  modelValue: boolean
+  projectId: string
+  projectEtag: string
+  reasonRequired: boolean
+  canReassignOwner: boolean
+}>()
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  added: [count: number]
+  reassigned: []
+}>()
 
 const query = ref('')
 const candidates = ref<ProjectMemberCandidate[]>([])
 const selected = ref<ProjectMemberCandidate[]>([])
 const reason = ref('')
 const searching = ref(false)
+const searchFailed = ref(false)
 const submitting = ref(false)
 const problem = ref<ApiProblem>()
 const searchInput = ref<InstanceType<typeof ElInput>>()
@@ -31,6 +42,7 @@ const trimmedReason = computed(() => reason.value.trim())
 const reasonValid = computed(() => !props.reasonRequired
   || (trimmedReason.value.length >= 10 && trimmedReason.value.length <= 500))
 const canSubmit = computed(() => selected.value.length > 0 && reasonValid.value && !submitting.value)
+const canMakeOwner = computed(() => props.canReassignOwner && selected.value.length === 1 && !submitting.value)
 
 function stateHint(candidate: ProjectMemberCandidate): string {
   if (candidate.owner) return '项目负责人'
@@ -57,6 +69,7 @@ function toggle(candidate: ProjectMemberCandidate): void {
 async function search(): Promise<void> {
   controller?.abort()
   const name = query.value.trim()
+  searchFailed.value = false
   if (!name) {
     candidates.value = []
     searching.value = false
@@ -72,10 +85,30 @@ async function search(): Promise<void> {
     selected.value = selected.value
       .map(item => page.items.find(candidate => candidate.userId === item.userId) ?? item)
       .filter(selectable)
-  } catch (reasonValue) {
-    if (!signal.aborted) problem.value = await toApiProblem(reasonValue)
+  } catch {
+    if (signal.aborted) return
+    candidates.value = []
+    searchFailed.value = true
   } finally {
     if (!signal.aborted) searching.value = false
+  }
+}
+
+/** 失败后按姓名逐个刷新已选候选人，确保重新加入使用最新的成员 ETag，且不依赖当前搜索词。 */
+async function refreshSelected(): Promise<void> {
+  try {
+    const refreshed = await Promise.all(selected.value.map(async item => {
+      const page = await projectsApi.listProjectMemberCandidates({
+        projectId: props.projectId,
+        name: item.displayName,
+        page: 0,
+        size: 20,
+      })
+      return page.items.find(candidate => candidate.userId === item.userId) ?? item
+    }))
+    selected.value = refreshed.filter(selectable)
+  } catch {
+    // 刷新失败时保留提交失败的错误提示，已选快照不变。
   }
 }
 
@@ -111,15 +144,56 @@ async function submit(): Promise<void> {
       problem.value = await toApiProblem(reasonValue)
     }
   }
-  submitting.value = false
   selected.value = failed
+  if (failed.length) await refreshSelected()
+  submitting.value = false
   if (added) emit('added', added)
-  if (failed.length) {
-    void search()
-    return
-  }
+  if (failed.length) return
   ElMessage.success(`已添加 ${added} 位成员`)
   emit('update:modelValue', false)
+}
+
+async function makeOwner(): Promise<void> {
+  const candidate = selected.value[0]
+  if (!canMakeOwner.value || !candidate) return
+  let ownerReason: string
+  try {
+    ownerReason = (await ElMessageBox.prompt(
+      `将负责人转交给「${candidate.displayName}」；此操作必须记录治理理由。`,
+      '设为负责人',
+      {
+        inputValue: trimmedReason.value,
+        inputPlaceholder: '请输入 10～500 字治理理由',
+        inputPattern: /^(?=[\s\S]{10,500}$)(?=\s*\S)/,
+        inputErrorMessage: '治理理由必须为 10～500 字',
+      },
+    )).value.trim()
+  } catch {
+    return
+  }
+  const csrf = readCsrfToken()
+  if (!csrf) {
+    problem.value = localProblem('缺少 CSRF 凭据，请刷新后重试。')
+    return
+  }
+  submitting.value = true
+  problem.value = undefined
+  try {
+    await projectsApi.reassignProjectOwner({
+      projectId: props.projectId,
+      xXSRFTOKEN: csrf,
+      idempotencyKey: crypto.randomUUID(),
+      ifMatch: props.projectEtag,
+      projectOwnerReassignmentRequest: { newOwnerUserId: candidate.userId, reason: ownerReason },
+    })
+    ElMessage.success('负责人已转交')
+    emit('reassigned')
+    emit('update:modelValue', false)
+  } catch (reasonValue) {
+    problem.value = await toApiProblem(reasonValue)
+  } finally {
+    submitting.value = false
+  }
 }
 
 function close(done?: () => void): void {
@@ -137,11 +211,13 @@ watch(() => props.modelValue, open => {
   selected.value = []
   reason.value = ''
   problem.value = undefined
+  searchFailed.value = false
   attempts.clear()
 }, { immediate: true })
 
-watch(query, () => {
+watch(query, value => {
   clearTimeout(timer)
+  searching.value = Boolean(value.trim())
   timer = setTimeout(() => { void search() }, 250)
 })
 
@@ -261,7 +337,14 @@ onBeforeUnmount(() => {
             </el-icon>
           </button>
           <p
-            v-if="!searching && !candidates.length"
+            v-if="searchFailed"
+            class="member-add__hint"
+            role="alert"
+          >
+            成员搜索失败，请稍后重试
+          </p>
+          <p
+            v-else-if="!searching && !candidates.length"
             class="member-add__hint"
             role="status"
           >
@@ -287,7 +370,17 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <template #footer>
-      <span class="member-add__count">{{ selected.length ? `已选择 ${selected.length} 人` : '' }}</span>
+      <span class="member-add__footer-start">
+        <span class="member-add__count">{{ selected.length ? `已选择 ${selected.length} 人` : '' }}</span>
+        <el-button
+          v-if="canReassignOwner"
+          text
+          :disabled="!canMakeOwner"
+          @click="makeOwner"
+        >
+          设为负责人
+        </el-button>
+      </span>
       <span class="member-add__buttons">
         <el-button
           :disabled="submitting"
@@ -441,6 +534,12 @@ onBeforeUnmount(() => {
   gap: var(--yp-space-2);
   color: var(--yp-text-secondary);
   font-size: var(--yp-type-body-size);
+}
+
+.member-add__footer-start {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--yp-space-3);
 }
 
 .member-add__count {

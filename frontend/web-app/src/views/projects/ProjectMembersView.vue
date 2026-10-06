@@ -85,7 +85,13 @@ async function loadMembers(): Promise<void> {
       page: page.value,
       size,
     })
-    if (current === sequence) result.value = members
+    if (current !== sequence) return
+    if (!members.items.length && page.value > 0) {
+      page.value = Math.max(0, members.totalPages - 1)
+      void loadMembers()
+      return
+    }
+    result.value = members
   } catch (reason) {
     if (current === sequence) error.value = await toApiProblem(reason)
   } finally {
@@ -219,7 +225,7 @@ onBeforeUnmount(() => clearTimeout(timer))
           <h2 id="project-members-title">
             成员
             <span
-              v-if="result"
+              v-if="result && status === ProjectMembershipStatusFilter.Active && !searching"
               class="project-page-heading__count"
             >{{ result.totalElements }}</span>
           </h2>
@@ -356,8 +362,11 @@ onBeforeUnmount(() => clearTimeout(timer))
       v-if="canManage"
       v-model="addOpen"
       :project-id="projectId"
+      :project-etag="project?.etag ?? ''"
       :reason-required="governanceReasonRequired"
+      :can-reassign-owner="Boolean(project?.capabilities.canReassignOwner)"
       @added="onAdded"
+      @reassigned="refresh"
     />
   </div>
 </template>

@@ -21,11 +21,12 @@ describe('ProjectMemberAddDialog', () => {
     ], page: 0, size: 20, totalElements: 3, totalPages: 1 })
     api.add.mockResolvedValue({})
     const wrapper = mount(ProjectMemberAddDialog, {
-      props: { modelValue: true, projectId: 'p1', reasonRequired: false },
+      props: { modelValue: true, projectId: 'p1', projectEtag: '"0"', reasonRequired: false, canReassignOwner: false },
       global: { stubs: { teleport: true } },
     })
     await flushPromises()
     await wrapper.get('input[aria-label="搜索同企业成员"]').setValue('王')
+    expect(wrapper.text()).not.toContain('没有找到匹配的成员')
     await new Promise(resolve => setTimeout(resolve, 300))
     await flushPromises()
     const options = wrapper.findAll('.member-add__option')
