@@ -7,7 +7,6 @@ import { toApiProblem, type ApiProblem } from '../../api/problems'
 import ActivityTimeline from '../../components/collaboration/ActivityTimeline.vue'
 import InlineProblem from '../../components/InlineProblem.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
-import YpSurface from '../../components/yp/YpSurface.vue'
 
 const route = useRoute()
 const projectId = String(route.params.projectId)
@@ -24,18 +23,37 @@ onMounted(() => void loadProject())
 </script>
 
 <template>
-  <section class="project-activity-view">
-    <project-workspace-header section="activity" :project="project" title="项目动态" />
-    <inline-problem v-if="error" :problem="error" />
-    <yp-surface
+  <div class="project-view-stack">
+    <project-workspace-header
+      section="activity"
+      :project="project"
+      title="项目动态"
+    />
+    <inline-problem
+      v-if="error"
+      :problem="error"
+    />
+    <section
       v-else
-      class="project-activity-view__panel"
+      class="project-activity"
+      aria-labelledby="project-activity-title"
     >
+      <header class="project-page-heading">
+        <div>
+          <h2 id="project-activity-title">
+            动态
+          </h2>
+          <p>按时间查看工作项、讨论、成员与计时的变化。</p>
+        </div>
+      </header>
       <activity-timeline :project-id="projectId" />
-    </yp-surface>
-  </section>
+    </section>
+  </div>
 </template>
 
 <style scoped>
-.project-activity-view { display: grid; gap: var(--yp-space-5); }
+.project-activity {
+  display: grid;
+  gap: var(--yp-space-4);
+}
 </style>

@@ -92,7 +92,7 @@ describe('ActivityTimeline', () => {
     const wrapper = mount(ActivityTimeline, { props: { projectId: 'project-1' } })
     await flushPromises()
     await wrapper.get('.activity-timeline__older').trigger('click')
-    await wrapper.get('.activity-timeline__toolbar button').trigger('click')
+    await wrapper.get('.activity-timeline__refresh').trigger('click')
     await flushPromises()
 
     resolveOlder(page([
@@ -102,6 +102,17 @@ describe('ActivityTimeline', () => {
 
     expect(wrapper.text()).toContain('刷新动态')
     expect(wrapper.text()).not.toContain('迟到动态')
+    wrapper.unmount()
+  })
+  it('切换动态类型时按类别事件集合查询', async () => {
+    api.project.mockResolvedValue(page([], null))
+    const wrapper = mount(ActivityTimeline, { props: { projectId: 'project-1' } })
+    await flushPromises()
+    await wrapper.findAll('.yp-segmented__item').find(button => button.text() === '成员')!.trigger('click')
+    await flushPromises()
+    expect(api.project).toHaveBeenLastCalledWith(expect.objectContaining({
+      eventType: new Set(['catalog.project_member_added', 'catalog.project_member_removed', 'catalog.project_owner_reassigned']),
+    }))
     wrapper.unmount()
   })
 })
