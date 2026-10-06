@@ -10,6 +10,7 @@ interface ActivityCategoryDefinition {
   eventTypes: readonly string[]
 }
 
+// 事件类型须与后端 audit 模块的 Activity 白名单同步；未登记的类型只会出现在"全部"中。
 export const ACTIVITY_CATEGORIES: Record<ActivityCategory, ActivityCategoryDefinition> = {
   'work-item': {
     label: '工作项',
@@ -79,8 +80,12 @@ export const ACTIVITY_CATEGORY_ORDER: readonly ActivityCategory[] = [
   'work-item', 'discussion', 'member', 'time', 'connection', 'attachment', 'project',
 ]
 
+const CATEGORY_BY_EVENT_TYPE = new Map<string, ActivityCategory>(
+  ACTIVITY_CATEGORY_ORDER.flatMap(key => ACTIVITY_CATEGORIES[key].eventTypes.map(type => [type, key] as const)),
+)
+
 export function activityCategory(eventType: string): ActivityCategory {
-  const known = ACTIVITY_CATEGORY_ORDER.find(key => ACTIVITY_CATEGORIES[key].eventTypes.includes(eventType))
+  const known = CATEGORY_BY_EVENT_TYPE.get(eventType)
   if (known) return known
   if (eventType.startsWith('catalog.')) return 'project'
   if (eventType.startsWith('filestorage.')) return 'attachment'

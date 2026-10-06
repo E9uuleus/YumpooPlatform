@@ -63,3 +63,25 @@ export function formatRelativeTime(value: Date | string, now: Date = new Date(),
   if (months < 12) return `${months}个月前`
   return `${Math.floor(months / 12)}年前`
 }
+
+function timezoneOffset(instant: number, timezone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(new Date(instant))
+  const value = (type: Intl.DateTimeFormatPartTypes) => Number(part(parts, type))
+  return Date.UTC(value('year'), value('month') - 1, value('day'), value('hour'), value('minute'), value('second')) - instant
+}
+
+/** 公司时区下某自然日 00:00 对应的时刻；只取 date 的本地年月日（日期选择器返回本地零点）。 */
+export function zonedStartOfDay(date: Date, timezone: string): Date {
+  const wallClock = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  const guess = wallClock - timezoneOffset(wallClock, timezone)
+  return new Date(wallClock - timezoneOffset(guess, timezone))
+}

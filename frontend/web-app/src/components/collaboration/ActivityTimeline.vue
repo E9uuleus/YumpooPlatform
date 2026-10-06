@@ -2,11 +2,11 @@
 import { Refresh } from '@element-plus/icons-vue'
 import type { ActivityItem } from '@yumpoo/api-client'
 import { ElButton, ElDatePicker, ElIcon, ElTooltip } from 'element-plus'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { activityApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
-import { formatChineseTimestamp, formatDateOnly, formatTimestamp } from '../../design-system/dates'
+import { formatChineseTimestamp, formatDateOnly, formatTimestamp, zonedStartOfDay } from '../../design-system/dates'
 import InlineProblem from '../InlineProblem.vue'
 import YpAssignee from '../yp/YpAssignee.vue'
 import YpEmptyState from '../yp/YpEmptyState.vue'
@@ -31,6 +31,8 @@ const loading = ref(false)
 const loadingOlder = ref(false)
 const error = ref<ApiProblem>()
 let requestSequence = 0
+const now = ref(Date.now())
+let clock: ReturnType<typeof setInterval> | undefined
 
 const categoryOptions = [
   { value: 'all' as const, label: '全部' },
@@ -43,8 +45,9 @@ const rangeShortcuts = [
 const filtered = computed(() => category.value !== 'all' || Boolean(dateRange.value))
 
 const groups = computed(() => {
-  const today = formatDateOnly(new Date(), timezone.value)
-  const yesterday = formatDateOnly(new Date(Date.now() - DAY), timezone.value)
+  const today = formatDateOnly(new Date(now.value), timezone.value)
+  const [year, month, day] = today.split('-').map(Number) as [number, number, number]
+  const yesterday = formatDateOnly(new Date(Date.UTC(year, month - 1, day - 1, 12)), 'UTC')
   const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: timezone.value, weekday: 'short' })
   const grouped = new Map<string, ActivityItem[]>()
   for (const item of items.value) {
@@ -56,24 +59,12 @@ const groups = computed(() => {
   return [...grouped.entries()].map(([date, values]) => ({
     date,
     label: `${date === today ? '今天 · ' : date === yesterday ? '昨天 · ' : ''}${date} ${weekday.format(values[0]!.occurredAt)}`,
-    items: values,
+    entries: values.map(item => ({ item, view: ACTIVITY_CATEGORIES[activityCategory(item.sourceEventType)] })),
   }))
 })
 
-function startOfDay(value: Date): Date {
-  const date = new Date(value)
-  date.setHours(0, 0, 0, 0)
-  return date
-}
-
-function endOfDay(value: Date): Date {
-  const date = new Date(value)
-  date.setHours(23, 59, 59, 999)
-  return date
-}
-
-function presentation(item: ActivityItem) {
-  return ACTIVITY_CATEGORIES[activityCategory(item.sourceEventType)]
+function nextDay(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate() + 1)
 }
 
 function timeOfDay(value: Date): string {
@@ -86,8 +77,8 @@ async function request(cursor?: string): Promise<Awaited<ReturnType<typeof activ
     size: 25,
     ...(category.value !== 'all' ? { eventType: new Set(ACTIVITY_CATEGORIES[category.value].eventTypes) } : {}),
     ...(dateRange.value ? {
-      occurredFrom: startOfDay(dateRange.value[0]),
-      occurredTo: endOfDay(dateRange.value[1]),
+      occurredFrom: zonedStartOfDay(dateRange.value[0], timezone.value),
+      occurredTo: new Date(zonedStartOfDay(nextDay(dateRange.value[1]), timezone.value).getTime() - 1),
     } : {}),
   }
   if (props.workItemId) {
@@ -136,7 +127,11 @@ async function loadOlder(): Promise<void> {
 
 watch([() => props.projectId, () => props.workItemId], () => void load())
 watch([category, dateRange], () => void load())
-onMounted(() => void load())
+onMounted(() => {
+  void load()
+  clock = setInterval(() => { now.value = Date.now() }, 60_000)
+})
+onBeforeUnmount(() => clearInterval(clock))
 </script>
 
 <template>
@@ -210,51 +205,51 @@ onMounted(() => void load())
         </h3>
         <ol class="activity-day__entries">
           <li
-            v-for="item in group.items"
-            :key="item.id"
+            v-for="entry in group.entries"
+            :key="entry.item.id"
             class="activity-entry"
-            :style="{ '--activity-tone': presentation(item).tone }"
+            :style="{ '--activity-tone': entry.view.tone }"
           >
             <span
               class="activity-entry__marker"
               aria-hidden="true"
             >
               <el-icon>
-                <component :is="presentation(item).icon" />
+                <component :is="entry.view.icon" />
               </el-icon>
             </span>
             <div class="activity-entry__content">
               <p class="activity-entry__summary">
                 <span
-                  v-if="item.actor.userId"
+                  v-if="entry.item.actor.userId"
                   class="activity-entry__avatar"
                 >
                   <yp-assignee
-                    :user-id="item.actor.userId"
-                    :display-name="item.actor.displayName"
+                    :user-id="entry.item.actor.userId"
+                    :display-name="entry.item.actor.displayName"
                     :show-name="false"
                     size="table"
                   />
                 </span>
-                <strong>{{ item.actor.displayName }}</strong> {{ item.summary }}
+                <strong>{{ entry.item.actor.displayName }}</strong> {{ entry.item.summary }}
               </p>
               <p class="activity-entry__meta">
-                <span>{{ presentation(item).label }}</span>
+                <span>{{ entry.view.label }}</span>
                 <span
-                  v-if="item.entityRef"
+                  v-if="entry.item.entityRef"
                   class="activity-entry__ref"
-                >{{ item.entityRef }}</span>
+                >{{ entry.item.entityRef }}</span>
               </p>
             </div>
-            <el-tooltip
-              :content="formatChineseTimestamp(item.occurredAt, timezone)"
-              placement="top"
-            >
+            <el-tooltip placement="top">
+              <template #content>
+                {{ formatChineseTimestamp(entry.item.occurredAt, timezone) }}<br>请求 ID：{{ entry.item.requestId }}
+              </template>
               <time
                 class="activity-entry__time"
-                :datetime="item.occurredAt.toISOString()"
+                :datetime="entry.item.occurredAt.toISOString()"
                 tabindex="0"
-              >{{ timeOfDay(item.occurredAt) }}</time>
+              >{{ timeOfDay(entry.item.occurredAt) }}</time>
             </el-tooltip>
           </li>
         </ol>
