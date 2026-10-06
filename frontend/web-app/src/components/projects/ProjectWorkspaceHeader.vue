@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Bell, Calendar, Clock, Grid, Setting, User } from '@element-plus/icons-vue'
-import { ProjectActorAccess, type ProjectDetail, type ProjectNotificationPreference } from '@yumpoo/api-client'
+import { ProjectActorAccess, ProjectLifecycle, type ProjectDetail, type ProjectNotificationPreference } from '@yumpoo/api-client'
 import { ElIcon, ElPopover, ElTooltip } from 'element-plus'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -8,6 +8,7 @@ import { notificationsApi } from '../../api/client'
 import { useSession } from '../../composables/useSession'
 import { formatChineseTimestamp } from '../../design-system/dates'
 import YpAssignee from '../yp/YpAssignee.vue'
+import YpStatusTag from '../yp/YpStatusTag.vue'
 import ProjectNotificationSettingsDialog from './ProjectNotificationSettingsDialog.vue'
 import { projectNotificationSummary } from './projectNotificationPreference'
 
@@ -117,124 +118,133 @@ watch(projectId, () => { preference.value = undefined })
         </p>
       </div>
     </div>
-    <h1
+    <div
       v-else
-      class="project-workspace-header__title"
+      class="project-workspace-header__heading"
     >
-      <el-popover
-        v-model:visible="infoOpen"
-        role="dialog"
-        trigger="click"
-        placement="bottom-start"
-        :width="320"
-        :offset="6"
-        :show-arrow="false"
-        :persistent="false"
-        :disabled="!project"
-        popper-class="project-info-popover"
-        @show="loadPreference"
-      >
-        <template #reference>
-          <button
-            type="button"
-            class="project-workspace-header__title-trigger"
-            aria-haspopup="dialog"
-            :aria-expanded="infoOpen"
-            :disabled="!project"
-          >
-            <span class="project-workspace-header__title-text">{{ heading }}</span>
-            <svg
-              class="project-workspace-header__title-chevron"
-              :class="{ 'is-open': infoOpen }"
-              width="20"
-              height="20"
-              viewBox="0 0 20 20"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M6 8l4 4 4-4"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
-        </template>
-        <div
-          v-if="project"
-          class="project-info"
+      <h1 class="project-workspace-header__title">
+        <el-popover
+          v-model:visible="infoOpen"
+          role="dialog"
+          trigger="click"
+          placement="bottom-start"
+          :width="320"
+          :offset="6"
+          :show-arrow="false"
+          :persistent="false"
+          :disabled="!project"
+          popper-class="project-info-popover"
+          @show="loadPreference"
         >
-          <dl class="project-info__facts">
-            <div class="project-info__row">
-              <dt>
-                <el-icon aria-hidden="true">
-                  <user />
-                </el-icon>
-                负责人
-              </dt>
-              <dd>
-                <yp-assignee
-                  :user-id="project.ownerUserId"
-                  :display-name="project.ownerDisplayName"
-                  size="table"
-                />
-              </dd>
-            </div>
-            <div class="project-info__row">
-              <dt>
-                <el-icon aria-hidden="true">
-                  <calendar />
-                </el-icon>
-                创建时间
-              </dt>
-              <dd>{{ formatChineseTimestamp(project.createdAt, timezone) }}</dd>
-            </div>
-          </dl>
-          <div
-            class="project-info__divider"
-            aria-hidden="true"
-          />
-          <button
-            v-if="canConfigureNotifications"
-            type="button"
-            class="project-info__action"
-            @click="openNotifications"
-          >
-            <el-icon aria-hidden="true">
-              <bell />
-            </el-icon>
-            <span class="project-info__action-label">通知提醒</span>
-            <span
-              v-if="preference"
-              class="project-info__action-value"
-            >{{ projectNotificationSummary(preference) }}</span>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 20 20"
-              fill="none"
-              aria-hidden="true"
+          <template #reference>
+            <button
+              type="button"
+              class="project-workspace-header__title-trigger"
+              aria-haspopup="dialog"
+              :aria-expanded="infoOpen"
+              :disabled="!project"
             >
-              <path
-                d="M8 6l4 4-4 4"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
-          <p
-            v-else
-            class="project-info__note"
+              <span class="project-workspace-header__title-text">{{ heading }}</span>
+              <svg
+                class="project-workspace-header__title-chevron"
+                :class="{ 'is-open': infoOpen }"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M6 8l4 4 4-4"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+          </template>
+          <div
+            v-if="project"
+            class="project-info"
           >
-            你正以企业管理员身份只读查看此项目，加入项目后可设置通知提醒。
-          </p>
-        </div>
-      </el-popover>
-    </h1>
+            <dl class="project-info__facts">
+              <div class="project-info__row">
+                <dt>
+                  <el-icon aria-hidden="true">
+                    <user />
+                  </el-icon>
+                  负责人
+                </dt>
+                <dd>
+                  <yp-assignee
+                    :user-id="project.ownerUserId"
+                    :display-name="project.ownerDisplayName"
+                    size="table"
+                  />
+                </dd>
+              </div>
+              <div class="project-info__row">
+                <dt>
+                  <el-icon aria-hidden="true">
+                    <calendar />
+                  </el-icon>
+                  创建时间
+                </dt>
+                <dd>{{ formatChineseTimestamp(project.createdAt, timezone) }}</dd>
+              </div>
+            </dl>
+            <div
+              class="project-info__divider"
+              aria-hidden="true"
+            />
+            <button
+              v-if="canConfigureNotifications"
+              type="button"
+              class="project-info__action"
+              @click="openNotifications"
+            >
+              <el-icon aria-hidden="true">
+                <bell />
+              </el-icon>
+              <span class="project-info__action-label">通知提醒</span>
+              <span
+                v-if="preference"
+                class="project-info__action-value"
+              >{{ projectNotificationSummary(preference) }}</span>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 20 20"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M8 6l4 4-4 4"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <p
+              v-else
+              class="project-info__note"
+            >
+              你正以企业管理员身份只读查看此项目，加入项目后可设置通知提醒。
+            </p>
+          </div>
+        </el-popover>
+      </h1>
+      <yp-status-tag
+        v-if="project?.lifecycle === ProjectLifecycle.Archived"
+        domain="project-lifecycle"
+        :status="project.lifecycle"
+        effect="soft"
+        size="small"
+      />
+    </div>
     <div
       v-if="project || $slots['primary-action']"
       class="project-workspace-header__actions"
@@ -291,6 +301,13 @@ watch(projectId, () => { preference.value = undefined })
   gap: var(--yp-space-6);
   min-height: 48px;
   padding: var(--yp-space-2) 0 var(--yp-space-4);
+}
+
+.project-workspace-header__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--yp-space-2);
+  min-width: 0;
 }
 
 .project-workspace-header__title {

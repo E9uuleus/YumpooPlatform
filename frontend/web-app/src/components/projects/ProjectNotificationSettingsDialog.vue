@@ -157,7 +157,7 @@ watch(() => props.modelValue, open => {
         v-model="draft.mode"
         :options="modeOptions"
         label="我的通知"
-        :disabled="loading || saving"
+        :disabled="!baseline || saving"
       />
       <div
         v-if="draft.mode === ProjectNotificationMode.Custom"
@@ -169,7 +169,7 @@ watch(() => props.modelValue, open => {
           v-for="category in PROJECT_NOTIFICATION_CATEGORIES"
           :key="category.key"
           v-model="draft[category.key]"
-          :disabled="saving"
+          :disabled="!baseline || saving"
         >
           <strong>{{ category.label }}</strong>
           <small>{{ category.description }}</small>
