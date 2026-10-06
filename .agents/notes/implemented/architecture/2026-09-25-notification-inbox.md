@@ -16,7 +16,7 @@ V57 只建立 `notification_projection_state`、`notification_event` 和 `user_n
 
 HTTP 提供本人分页、分组计数、read/unread/archive 和带 `upTo` 水位的 read-all。游标绑定公司、用户、状态与分组，排序使用投影创建时间和 ID；本人状态设置天然幂等，仅要求会话与 XSRF，不增加幂等键或资源版本门槛。已归档通知执行 read 时只补 `read_at`，保留 ARCHIVED 状态及原 `archived_at`，重复 read 不改变已有已读时间；阅读归档内容不会将其移回普通列表。跨用户 ID 返回 404，响应 `Cache-Control: no-store`。水位来自数据库时钟，并裁剪未来传入时间，避免请求完成前后到达的新通知被无意标为已读。
 
-Web 采用页面可见时每 30 秒轮询计数，并在 focus、online、visibilitychange 刷新；Electron 主窗口保持轮询。首次加载、未读水位或总数变化、跨标签页失效消息、状态修改都会刷新最新未读列表；打开收件箱另行读取当前筛选列表。这先解决站内提醒，Delivery/Attempt、SSE/ACK、管理重试、投递偏好与保留期仍不在本次模型内。
+Web 采用页面可见时每 30 秒轮询计数，并在 focus、online、visibilitychange 刷新；Electron 主窗口保持轮询。首次加载、未读水位或总数变化、跨标签页失效消息、状态修改都会刷新最新未读列表；打开收件箱另行读取当前筛选列表。这先解决站内提醒，Delivery/Attempt、SSE/ACK、管理重试与保留期仍不在本次模型内。
 
 UP5c 为 `workitem.connection_created` v1 建立独立消费分支，先检查 `origin=CREATED`，再仅通过 `targetProjectId`、`targetWorkItemId` 获取目标项目当前 OWNER。接收人须为启用账号和目标项目有效成员，且不是操作者；目标工作项必须属于该目标项目。使用新增原因 `CONNECTION_CREATED`、既有 `WORK_ITEM` 目标与 ID 字段，不保存任何来源项目/工作项/连接/列标识或列名、标题、正文。列表、未读计数及按组 read-all 均将该原因归入 `PROJECT`。读取继续按当前主体批量鉴权，失权时清空全部目标引用；点击后的工作项读取仍独立鉴权，不把已收到通知作为权限凭据。
 
@@ -25,6 +25,8 @@ V63 追加扩展原因约束和投影代码约束，以数据库 `clock_timestam
 OpenAPI 的 `NotificationReason` 响应枚举新增值由用户明确批准；精确例外 `2026-10-03-connection-created-notification` 保留于 `tools/openapi/breaking-change-exceptions.json`，含已批准连接筛选 20 项上限的当前规范另追加 `2026-10-03-connection-notification-filter-limits`。相对 PR-4 dev 基线，仅移除该新增响应枚举值的临时规范通过完整 openapi-diff，确认 UP5a 的可选查询参数及上限兼容。每条例外仅绑定对应两个完整规范的 SHA-256，不修改历史例外。新旧桌面壳通过[桌面提醒](../product/2026-09-25-desktop-inbox-alerts.md)的原因能力声明隔离，连接事务与事件仍由[连接架构](2026-09-30-work-item-connections.md)拥有。
 
 新增 workitem.work_item_assignees_changed v1 订阅，只向新增处理人投递 ASSIGNED；created 数组路径覆盖全部处理人，COMMENT 候选也包含全部当前处理人，标记与兼容规则见[多处理人决策](../data/2026-10-05-work-item-multiple-assignees.md)。
+
+UP8 起，投影在写入 `user_notification` 前按[项目通知偏好](../product/2026-10-06-project-notification-preferences.md)过滤 MENTION、COMMENT/REPLY、ASSIGNED 与 CONNECTION_CREATED；项目成员与负责人原因始终送达。Delivery/Attempt、SSE/ACK、管理重试与保留期仍不在本模型内。
 
 ## Alternatives considered
 
