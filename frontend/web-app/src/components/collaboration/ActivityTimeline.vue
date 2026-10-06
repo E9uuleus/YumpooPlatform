@@ -1,19 +1,17 @@
 <script setup lang="ts">
+import { Refresh } from '@element-plus/icons-vue'
 import type { ActivityItem } from '@yumpoo/api-client'
-import {
-  ElAlert,
-  ElButton,
-  ElDatePicker,
-  ElOption as ElOptionRaw,
-  ElSelect as ElSelectRaw,
-} from 'element-plus'
-import { computed, onMounted, ref, watch, type DefineComponent } from 'vue'
+import { ElButton, ElDatePicker, ElIcon, ElTooltip } from 'element-plus'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { activityApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
-import { formatDateOnly, formatTimestamp } from '../../design-system/dates'
+import { formatChineseTimestamp, formatDateOnly, formatTimestamp, zonedStartOfDay } from '../../design-system/dates'
 import InlineProblem from '../InlineProblem.vue'
+import YpAssignee from '../yp/YpAssignee.vue'
 import YpEmptyState from '../yp/YpEmptyState.vue'
+import YpSegmented from '../yp/YpSegmented.vue'
+import { ACTIVITY_CATEGORIES, ACTIVITY_CATEGORY_ORDER, activityCategory, type ActivityCategory } from './activityPresentation'
 
 const props = defineProps<{
   projectId?: string | undefined
@@ -21,62 +19,66 @@ const props = defineProps<{
   compact?: boolean | undefined
 }>()
 
-const ElOption = ElOptionRaw as unknown as DefineComponent
-const ElSelect = ElSelectRaw as unknown as DefineComponent
+const DAY = 86_400_000
 const session = useSession()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const items = ref<ActivityItem[]>([])
 const nextCursor = ref<string | null>(null)
 const historyStartedAt = ref<Date>()
-const eventTypes = ref<string[]>([])
-const entityTypes = ref<string[]>([])
-const occurredRange = ref<[Date, Date] | null>(null)
+const category = ref<'all' | ActivityCategory>('all')
+const dateRange = ref<[Date, Date] | null>(null)
 const loading = ref(false)
 const loadingOlder = ref(false)
 const error = ref<ApiProblem>()
 let requestSequence = 0
+const now = ref(Date.now())
+let clock: ReturnType<typeof setInterval> | undefined
 
-const eventOptions = [
-  ['catalog.project_updated', '项目资料'],
-  ['catalog.project_member_added', '添加成员'],
-  ['catalog.project_member_removed', '移除成员'],
-  ['workitem.time_tracking_started', '开始计时'],
-  ['workitem.time_tracking_stopped', '停止计时'],
-  ['workitem.time_tracking_added', '补录工时'],
-  ['workitem.time_tracking_edited', '修正工时'],
-  ['workitem.time_tracking_deleted', '删除工时'],
-  ['workitem.work_item_created', '创建事项'],
-  ['workitem.work_item_archived', '归档事项'],
-  ['workitem.work_item_unarchived', '取消归档'],
-  ['workitem.work_item_fields_changed', '修改事项'],
-  ['workitem.work_item_status_changed', '状态变化'],
-  ['workitem.work_item_update_published', '事项讨论'],
-  ['filestorage.attachment_available', '附件可用'],
-] as const
-const entityOptions = [
-  ['PROJECT', '项目'], ['PROJECT_MEMBER', '成员'],
-  ['CONTENT', '事项集合'], ['WORK_ITEM', '事项'], ['WORK_ITEM_UPDATE', '事项动态'],
-  ['WORK_ITEM_RELATION', '事项关系'], ['ATTACHMENT', '附件'],
-] as const
+const categoryOptions = [
+  { value: 'all' as const, label: '全部' },
+  ...ACTIVITY_CATEGORY_ORDER.map(key => ({ value: key, label: ACTIVITY_CATEGORIES[key].label })),
+]
+const rangeShortcuts = [
+  { text: '最近 7 天', value: () => [new Date(Date.now() - 6 * DAY), new Date()] },
+  { text: '最近 30 天', value: () => [new Date(Date.now() - 29 * DAY), new Date()] },
+]
+const filtered = computed(() => category.value !== 'all' || Boolean(dateRange.value))
 
 const groups = computed(() => {
+  const today = formatDateOnly(new Date(now.value), timezone.value)
+  const [year, month, day] = today.split('-').map(Number) as [number, number, number]
+  const yesterday = formatDateOnly(new Date(Date.UTC(year, month - 1, day - 1, 12)), 'UTC')
+  const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: timezone.value, weekday: 'short' })
   const grouped = new Map<string, ActivityItem[]>()
   for (const item of items.value) {
     const key = formatDateOnly(item.occurredAt, timezone.value)
-    grouped.set(key, [...(grouped.get(key) ?? []), item])
+    const bucket = grouped.get(key)
+    if (bucket) bucket.push(item)
+    else grouped.set(key, [item])
   }
-  return [...grouped.entries()].map(([date, values]) => ({ date, items: values }))
+  return [...grouped.entries()].map(([date, values]) => ({
+    date,
+    label: `${date === today ? '今天 · ' : date === yesterday ? '昨天 · ' : ''}${date} ${weekday.format(values[0]!.occurredAt)}`,
+    entries: values.map(item => ({ item, view: ACTIVITY_CATEGORIES[activityCategory(item.sourceEventType)] })),
+  }))
 })
+
+function nextDay(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate() + 1)
+}
+
+function timeOfDay(value: Date): string {
+  return formatTimestamp(value, timezone.value).slice(11)
+}
 
 async function request(cursor?: string): Promise<Awaited<ReturnType<typeof activityApi.listProjectActivity>>> {
   const common = {
     ...(cursor ? { cursor } : {}),
     size: 25,
-    ...(eventTypes.value.length ? { eventType: new Set(eventTypes.value) } : {}),
-    ...(entityTypes.value.length ? { entityType: new Set(entityTypes.value) } : {}),
-    ...(occurredRange.value ? {
-      occurredFrom: occurredRange.value[0],
-      occurredTo: occurredRange.value[1],
+    ...(category.value !== 'all' ? { eventType: new Set(ACTIVITY_CATEGORIES[category.value].eventTypes) } : {}),
+    ...(dateRange.value ? {
+      occurredFrom: zonedStartOfDay(dateRange.value[0], timezone.value),
+      occurredTo: new Date(zonedStartOfDay(nextDay(dateRange.value[1]), timezone.value).getTime() - 1),
     } : {}),
   }
   if (props.workItemId) {
@@ -123,81 +125,343 @@ async function loadOlder(): Promise<void> {
   }
 }
 
-function initials(name: string): string {
-  return name.trim().slice(0, 1).toUpperCase() || '系'
-}
-
 watch([() => props.projectId, () => props.workItemId], () => void load())
-watch([eventTypes, entityTypes, occurredRange], () => void load(), { deep: true })
-onMounted(() => void load())
+watch([category, dateRange], () => void load())
+onMounted(() => {
+  void load()
+  clock = setInterval(() => { now.value = Date.now() }, 60_000)
+})
+onBeforeUnmount(() => clearInterval(clock))
 </script>
 
 <template>
-  <section class="activity-timeline" :class="{ 'activity-timeline--compact': compact }" aria-label="动态时间线">
-    <el-alert
-      v-if="historyStartedAt"
-      type="info"
-      :closable="false"
-      show-icon
-      class="activity-timeline__cutover"
-      :title="`动态从 ${formatTimestamp(historyStartedAt, timezone)} 开始记录，更早历史未回填。`"
-    />
+  <section
+    class="activity-timeline"
+    :class="{ 'activity-timeline--compact': compact }"
+    aria-label="动态时间线"
+  >
     <div class="activity-timeline__toolbar">
-      <el-select v-model="eventTypes" multiple clearable collapse-tags placeholder="事件类型" aria-label="筛选事件类型">
-        <el-option v-for="option in eventOptions" :key="option[0]" :label="option[1]" :value="option[0]" />
-      </el-select>
-      <el-select v-model="entityTypes" multiple clearable collapse-tags placeholder="对象类型" aria-label="筛选对象类型">
-        <el-option v-for="option in entityOptions" :key="option[0]" :label="option[1]" :value="option[0]" />
-      </el-select>
-      <el-date-picker
-        v-model="occurredRange"
-        type="datetimerange"
-        start-placeholder="开始时间"
-        end-placeholder="结束时间"
-        range-separator="至"
-        aria-label="筛选发生时间"
+      <div class="activity-timeline__categories">
+        <yp-segmented
+          v-model="category"
+          :options="categoryOptions"
+          label="动态类型"
+        />
+      </div>
+      <div class="activity-timeline__tools">
+        <el-date-picker
+          v-if="!compact"
+          v-model="dateRange"
+          type="daterange"
+          unlink-panels
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          range-separator="至"
+          :shortcuts="rangeShortcuts"
+          aria-label="筛选发生日期"
+        />
+        <el-tooltip
+          content="刷新"
+          placement="top"
+        >
+          <el-button
+            class="activity-timeline__refresh"
+            :icon="Refresh"
+            :loading="loading"
+            aria-label="刷新动态"
+            @click="load"
+          />
+        </el-tooltip>
+      </div>
+    </div>
+    <div
+      v-if="error"
+      class="activity-timeline__error"
+    >
+      <inline-problem
+        :problem="error"
+        title="动态加载失败"
       />
-      <el-button :loading="loading" @click="load">刷新</el-button>
+      <el-button
+        type="primary"
+        plain
+        @click="load"
+      >
+        重试
+      </el-button>
     </div>
-    <div v-if="error" class="activity-timeline__error">
-      <inline-problem :problem="error" title="动态加载失败" />
-      <el-button type="primary" plain @click="load">重试</el-button>
+    <div
+      v-loading="loading"
+      class="activity-timeline__feed"
+      aria-live="polite"
+    >
+      <section
+        v-for="group in groups"
+        :key="group.date"
+        class="activity-day"
+      >
+        <h3 class="activity-timeline__date">
+          {{ group.label }}
+        </h3>
+        <ol class="activity-day__entries">
+          <li
+            v-for="entry in group.entries"
+            :key="entry.item.id"
+            class="activity-entry"
+            :style="{ '--activity-tone': entry.view.tone }"
+          >
+            <span
+              class="activity-entry__marker"
+              aria-hidden="true"
+            >
+              <el-icon>
+                <component :is="entry.view.icon" />
+              </el-icon>
+            </span>
+            <div class="activity-entry__content">
+              <p class="activity-entry__summary">
+                <span
+                  v-if="entry.item.actor.userId"
+                  class="activity-entry__avatar"
+                >
+                  <yp-assignee
+                    :user-id="entry.item.actor.userId"
+                    :display-name="entry.item.actor.displayName"
+                    :show-name="false"
+                    size="table"
+                  />
+                </span>
+                <strong>{{ entry.item.actor.displayName }}</strong> {{ entry.item.summary }}
+              </p>
+              <p class="activity-entry__meta">
+                <span>{{ entry.view.label }}</span>
+                <span
+                  v-if="entry.item.entityRef"
+                  class="activity-entry__ref"
+                >{{ entry.item.entityRef }}</span>
+              </p>
+            </div>
+            <el-tooltip placement="top">
+              <template #content>
+                {{ formatChineseTimestamp(entry.item.occurredAt, timezone) }}<br>请求 ID：{{ entry.item.requestId }}
+              </template>
+              <time
+                class="activity-entry__time"
+                :datetime="entry.item.occurredAt.toISOString()"
+                tabindex="0"
+              >{{ timeOfDay(entry.item.occurredAt) }}</time>
+            </el-tooltip>
+          </li>
+        </ol>
+      </section>
+      <yp-empty-state
+        v-if="!loading && !items.length && !error"
+        :reason="filtered ? 'no-results' : 'empty'"
+        :title="filtered ? '没有匹配的动态' : '还没有动态'"
+        :description="filtered ? '换个类型或日期范围试试。' : '项目中的操作会显示在这里。'"
+        compact
+      />
+      <div
+        v-if="nextCursor || historyStartedAt"
+        class="activity-timeline__footer"
+      >
+        <el-button
+          v-if="nextCursor"
+          class="activity-timeline__older"
+          :loading="loadingOlder"
+          @click="loadOlder"
+        >
+          加载更早动态
+        </el-button>
+        <p
+          v-if="historyStartedAt"
+          class="activity-timeline__cutover"
+        >
+          动态从 {{ formatTimestamp(historyStartedAt, timezone) }} 开始记录，更早历史未回填。
+        </p>
+      </div>
     </div>
-    <div v-loading="loading" class="activity-timeline__body" aria-live="polite">
-      <template v-for="group in groups" :key="group.date">
-        <h3 class="activity-timeline__date">{{ group.date }}</h3>
-        <article v-for="item in group.items" :key="item.id" class="activity-entry">
-          <span class="activity-entry__avatar" aria-hidden="true">{{ initials(item.actor.displayName) }}</span>
-          <div class="activity-entry__content">
-            <p><strong>{{ item.actor.displayName }}</strong> {{ item.summary }}</p>
-            <p class="activity-entry__meta" :title="`requestId: ${item.requestId}`">
-              <span>{{ formatTimestamp(item.occurredAt, timezone) }}</span>
-              <span>{{ item.entityType }}</span>
-              <span v-if="item.entityRef">{{ item.entityRef }}</span>
-            </p>
-          </div>
-        </article>
-      </template>
-      <yp-empty-state v-if="!loading && !items.length && !error" title="还没有动态" description="切点后的项目操作会显示在这里。" />
-    </div>
-    <el-button v-if="nextCursor" class="activity-timeline__older" :loading="loadingOlder" @click="loadOlder">
-      加载更早动态
-    </el-button>
   </section>
 </template>
 
 <style scoped>
-.activity-timeline { display: grid; gap: var(--yp-space-4); }
-.activity-timeline__toolbar { display: flex; flex-wrap: wrap; gap: var(--yp-space-2); align-items: center; }
-.activity-timeline__toolbar :deep(.el-select) { width: min(240px, 100%); }
-.activity-timeline__error { display: flex; flex-wrap: wrap; gap: var(--yp-space-2); align-items: center; }
-.activity-timeline__body { min-height: 160px; }
-.activity-timeline__date { position: sticky; top: 0; z-index: 1; margin: var(--yp-space-4) 0 var(--yp-space-2); padding: var(--yp-space-1) 0; color: var(--yp-text-secondary); background: var(--yp-bg-surface); font-size: var(--yp-type-caption-size); }
-.activity-entry { display: flex; gap: var(--yp-space-3); padding: var(--yp-space-3) 0; border-bottom: 1px solid var(--yp-border-subtle); }
-.activity-entry__avatar { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; border-radius: 50%; color: var(--yp-link); background: var(--yp-bg-selected); font-weight: 600; }
-.activity-entry__content { min-width: 0; }
-.activity-entry__content p { margin: 0; line-height: 1.55; overflow-wrap: anywhere; }
-.activity-entry__meta { display: flex; flex-wrap: wrap; gap: var(--yp-space-2); margin-top: var(--yp-space-1) !important; color: var(--yp-text-muted); font-size: var(--yp-type-caption-size); }
-.activity-timeline__older { justify-self: center; }
-.activity-timeline--compact .activity-timeline__toolbar :deep(.el-select) { width: 180px; }
+.activity-timeline {
+  display: grid;
+  gap: var(--yp-space-4);
+}
+
+.activity-timeline__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yp-space-2) var(--yp-space-3);
+}
+
+.activity-timeline__categories {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.activity-timeline__tools {
+  display: flex;
+  align-items: center;
+  gap: var(--yp-space-2);
+  margin-left: auto;
+}
+
+.activity-timeline__tools :deep(.el-date-editor) {
+  width: 260px;
+}
+
+.activity-timeline__error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yp-space-2);
+}
+
+.activity-timeline__feed {
+  min-height: 200px;
+  padding: 0 var(--yp-space-5) var(--yp-space-5);
+  border: 1px solid var(--yp-border-subtle);
+  border-radius: var(--yp-radius-md);
+  background: var(--yp-bg-surface);
+}
+
+.activity-timeline__date {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: var(--yp-space-4) 0 var(--yp-space-2);
+  color: var(--yp-text-secondary);
+  background: var(--yp-bg-surface);
+  font: 600 var(--yp-type-caption-size) / var(--yp-type-caption-line) var(--yp-font-family);
+}
+
+.activity-day__entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--yp-space-3);
+  padding: var(--yp-space-3) 0;
+}
+
+.activity-entry:not(:last-child)::after {
+  position: absolute;
+  top: calc(var(--yp-space-3) + 28px);
+  bottom: calc(0px - var(--yp-space-3));
+  left: 13.5px;
+  width: 1px;
+  background: var(--yp-border-subtle);
+  content: "";
+}
+
+.activity-entry__marker {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--activity-tone);
+  background: color-mix(in srgb, var(--activity-tone) 14%, var(--yp-bg-surface));
+  font-size: 14px;
+}
+
+.activity-entry__content {
+  min-width: 0;
+}
+
+.activity-entry__summary {
+  margin: 0;
+  color: var(--yp-text-primary);
+  line-height: var(--yp-type-body-line);
+  overflow-wrap: anywhere;
+}
+
+.activity-entry__summary strong {
+  font-weight: 600;
+}
+
+.activity-entry__avatar {
+  display: inline-flex;
+  margin-right: var(--yp-space-2);
+  vertical-align: -6px;
+}
+
+.activity-entry__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yp-space-2);
+  margin: 2px 0 0;
+  color: var(--yp-text-muted);
+  font-size: var(--yp-type-caption-size);
+  line-height: var(--yp-type-caption-line);
+}
+
+.activity-entry__ref {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 var(--yp-space-2);
+  border-radius: var(--yp-radius-xs);
+  color: var(--yp-text-secondary);
+  background: var(--yp-bg-sunken);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-entry__time {
+  color: var(--yp-text-muted);
+  font-size: var(--yp-type-caption-size);
+  line-height: var(--yp-type-body-line);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-entry__time:focus-visible {
+  border-radius: var(--yp-radius-xs);
+  outline: 2px solid var(--yp-focus-ring);
+  outline-offset: 2px;
+}
+
+.activity-timeline__footer {
+  display: grid;
+  justify-items: center;
+  gap: var(--yp-space-2);
+  padding-top: var(--yp-space-4);
+}
+
+.activity-timeline__cutover {
+  margin: 0;
+  color: var(--yp-text-muted);
+  font-size: var(--yp-type-caption-size);
+}
+
+.activity-timeline--compact .activity-timeline__feed {
+  padding: 0;
+  border: 0;
+}
+
+@media (max-width: 720px) {
+  .activity-timeline__tools {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .activity-timeline__tools :deep(.el-date-editor) {
+    flex: 1;
+    width: auto;
+  }
+
+  .activity-timeline__feed {
+    padding: 0 var(--yp-space-3) var(--yp-space-4);
+  }
+}
 </style>

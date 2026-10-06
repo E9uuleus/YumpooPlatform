@@ -263,6 +263,28 @@ class NotificationHttpIT {
         notifications.append(e,java.util.Map.of(member.userId(),com.yumpoo.platform.notification.application.NotificationModels.Reason.PROJECT_MEMBER_ADDED));
         assertThat(notifications.counts(COMPANY_ID,member.userId()).total()).isOne();
     }
+    @Test void projectPreferenceDefaultsReplacesAndRejectsNonMembers() throws Exception {
+        String path="/api/v1/me/projects/"+PROJECT_ID+"/notification-preference";
+        var defaults=ok(get(path,member));
+        assertThat(defaults.path("mode").asText()).isEqualTo("ALL");
+        assertThat(defaults.path("updatedAt").isNull()).isTrue();
+        String body="{\"mode\":\"CUSTOM\",\"mention\":false,\"comment\":true,\"assigned\":true,\"connectionCreated\":false}";
+        var saved=ok(mutate("PUT",path,member,body,null,null));
+        assertThat(saved.path("projectId").asText()).isEqualTo(PROJECT_ID.toString());
+        assertThat(saved.path("mode").asText()).isEqualTo("CUSTOM");
+        assertThat(saved.path("mention").asBoolean()).isFalse();
+        assertThat(saved.path("comment").asBoolean()).isTrue();
+        assertThat(saved.path("assigned").asBoolean()).isTrue();
+        assertThat(saved.path("connectionCreated").asBoolean()).isFalse();
+        assertThat(saved.path("updatedAt").isTextual()).isTrue();
+        assertThat(ok(get(path,member))).isEqualTo(saved);
+        var noCsrf=HttpRequest.newBuilder(uri(path)).header("Cookie",cookies(member))
+                .header("Content-Type","application/json").PUT(HttpRequest.BodyPublishers.ofString(body)).build();
+        assertThat(client.send(noCsrf,HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(403);
+        jdbc.sql("DELETE FROM yumpoo.project_membership WHERE project_id=:project AND user_id=:user")
+                .param("project",PROJECT_ID).param("user",member.userId()).update();
+        assertThat(get(path,member).statusCode()).isEqualTo(404);
+    }
     private JsonNode ok(HttpResponse<String> response) throws Exception {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
         return json.readTree(response.body());
@@ -341,6 +363,7 @@ class NotificationHttpIT {
     }
 
     private void cleanUp() {
+        jdbc.sql("DELETE FROM yumpoo.project_notification_preference WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.notification_event WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.personal_dashboard WHERE company_id=:id").param("id", COMPANY_ID).update();
         for (String table : java.util.List.of("work_item_time_session", "work_item_timer_state", "work_item_time_revision"))

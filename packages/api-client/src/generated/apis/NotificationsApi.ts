@@ -20,6 +20,8 @@ import type {
   NotificationPage,
   NotificationReadAllRequest,
   NotificationUnreadCounts,
+  ProjectNotificationPreference,
+  ProjectNotificationPreferenceUpdateRequest,
 } from '../models/index';
 import {
     ErrorResponseFromJSON,
@@ -34,11 +36,19 @@ import {
     NotificationReadAllRequestToJSON,
     NotificationUnreadCountsFromJSON,
     NotificationUnreadCountsToJSON,
+    ProjectNotificationPreferenceFromJSON,
+    ProjectNotificationPreferenceToJSON,
+    ProjectNotificationPreferenceUpdateRequestFromJSON,
+    ProjectNotificationPreferenceUpdateRequestToJSON,
 } from '../models/index';
 
 export interface ArchiveNotificationRequest {
     xXSRFTOKEN: string;
     id: string;
+}
+
+export interface GetMyProjectNotificationPreferenceRequest {
+    projectId: string;
 }
 
 export interface ListNotificationsRequest {
@@ -61,6 +71,12 @@ export interface MarkNotificationReadRequest {
 export interface MarkNotificationUnreadRequest {
     xXSRFTOKEN: string;
     id: string;
+}
+
+export interface UpdateMyProjectNotificationPreferenceRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    projectNotificationPreferenceUpdateRequest: ProjectNotificationPreferenceUpdateRequest;
 }
 
 /**
@@ -113,6 +129,45 @@ export class NotificationsApi extends runtime.BaseAPI {
      */
     async archiveNotification(requestParameters: ArchiveNotificationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<NotificationUnreadCounts> {
         const response = await this.archiveNotificationRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅项目 ACTIVE 成员可读；从未设置时返回 ALL 默认值且 updatedAt 为 null。
+     * 查询本人在项目中的通知偏好
+     */
+    async getMyProjectNotificationPreferenceRaw(requestParameters: GetMyProjectNotificationPreferenceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectNotificationPreference>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling getMyProjectNotificationPreference().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/me/projects/{projectId}/notification-preference`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectNotificationPreferenceFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅项目 ACTIVE 成员可读；从未设置时返回 ALL 默认值且 updatedAt 为 null。
+     * 查询本人在项目中的通知偏好
+     */
+    async getMyProjectNotificationPreference(requestParameters: GetMyProjectNotificationPreferenceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectNotificationPreference> {
+        const response = await this.getMyProjectNotificationPreferenceRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -333,6 +388,66 @@ export class NotificationsApi extends runtime.BaseAPI {
      */
     async markNotificationUnread(requestParameters: MarkNotificationUnreadRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<NotificationUnreadCounts> {
         const response = await this.markNotificationUnreadRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 天然幂等，仅要求会话与 XSRF；只影响此后产生的通知。成员加入、移出与负责人变更通知不受偏好影响。
+     * 整体替换本人在项目中的通知偏好
+     */
+    async updateMyProjectNotificationPreferenceRaw(requestParameters: UpdateMyProjectNotificationPreferenceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectNotificationPreference>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateMyProjectNotificationPreference().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateMyProjectNotificationPreference().'
+            );
+        }
+
+        if (requestParameters['projectNotificationPreferenceUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'projectNotificationPreferenceUpdateRequest',
+                'Required parameter "projectNotificationPreferenceUpdateRequest" was null or undefined when calling updateMyProjectNotificationPreference().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+
+        let urlPath = `/me/projects/{projectId}/notification-preference`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PUT',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectNotificationPreferenceUpdateRequestToJSON(requestParameters['projectNotificationPreferenceUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectNotificationPreferenceFromJSON(jsonValue));
+    }
+
+    /**
+     * 天然幂等，仅要求会话与 XSRF；只影响此后产生的通知。成员加入、移出与负责人变更通知不受偏好影响。
+     * 整体替换本人在项目中的通知偏好
+     */
+    async updateMyProjectNotificationPreference(requestParameters: UpdateMyProjectNotificationPreferenceRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectNotificationPreference> {
+        const response = await this.updateMyProjectNotificationPreferenceRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

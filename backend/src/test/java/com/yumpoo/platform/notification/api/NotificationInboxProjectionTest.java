@@ -147,6 +147,19 @@ class NotificationInboxProjectionTest {
         projection.consume(event);
         verify(repository,never()).append(any(),any());
     }
+    @Test void projectPreferencesFilterBeforeAppendAndKeepAllowedReason() {
+        when(repository.preferences(company,project)).thenReturn(Map.of(
+                assignee,new ProjectPreference(project,PreferenceMode.CUSTOM,false,true,true,true,cutover),
+                parent,new ProjectPreference(project,PreferenceMode.MUTED,true,true,true,true,cutover)));
+        ObjectNode p=payload();p.putArray("mentionedUserIds").add(assignee.toString()).add(parent.toString());
+        projection.consume(event("workitem.work_item_update_published",2,p,cutover));
+        verify(repository).append(any(),eq(Map.of(assignee,Reason.COMMENT,creator,Reason.COMMENT)));
+        clearInvocations(repository);
+        when(repository.preference(company,project,creator)).thenReturn(Optional.of(
+                new ProjectPreference(project,PreferenceMode.MUTED,true,true,true,true,cutover)));
+        projection.consume(event("workitem.connection_created",1,connectionPayload("CREATED"),connectionCutover));
+        verify(repository,never()).append(any(),any());
+    }
     private ObjectNode connectionPayload(String origin) {
         return mapper.createObjectNode().put("targetProjectId",project.toString()).put("targetWorkItemId",item.toString())
                 .put("sourceProjectId",UUID.randomUUID().toString()).put("sourceWorkItemId",UUID.randomUUID().toString())

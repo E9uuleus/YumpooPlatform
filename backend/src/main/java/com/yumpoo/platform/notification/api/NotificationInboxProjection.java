@@ -55,9 +55,11 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
         JsonNode p = event.payload();
         UUID project = uuid(p,"projectId"), item = null, update = null, subject = null;
         TargetKind kind = TargetKind.PROJECT;
+        String type = event.eventType();
+        Map<UUID,ProjectPreference> preferences = type.startsWith("workitem.")
+                ? repository.preferences(event.companyId(),project) : Map.of();
         Map<UUID,Reason> recipients = new LinkedHashMap<>();
         Set<UUID> membershipExempt = new HashSet<>();
-        String type = event.eventType();
         if (type.startsWith("workitem.")) {
             item=uuid(p,"workItemId");
             var participants = context.workItemParticipants(event.companyId(),item).orElseThrow();
@@ -68,18 +70,18 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
                 var comment=context.update(event.companyId(),update).orElseThrow();
                 if (!comment.workItemId().equals(item) || !comment.projectId().equals(project)) throw new IllegalArgumentException();
                 if (type.endsWith("published")) {
-                    participants.assigneeUserIds().forEach(id -> add(recipients,id,Reason.COMMENT));
-                    add(recipients,participants.reporterUserId(),Reason.COMMENT);
-                    add(recipients,comment.parentAuthorUserId(),Reason.REPLY);
-                    mentions(p,"mentionedUserIds",recipients);
-                } else if (type.endsWith("edited")) mentions(p,"addedMentionedUserIds",recipients);
+                    participants.assigneeUserIds().forEach(id -> add(recipients,preferences,id,Reason.COMMENT));
+                    add(recipients,preferences,participants.reporterUserId(),Reason.COMMENT);
+                    add(recipients,preferences,comment.parentAuthorUserId(),Reason.REPLY);
+                    mentions(p,"mentionedUserIds",recipients,preferences);
+                } else if (type.endsWith("edited")) mentions(p,"addedMentionedUserIds",recipients,preferences);
                 else throw new IllegalArgumentException();
             } else if (type.endsWith("assignees_changed")) {
-                assignees(p,"addedUserIds",recipients);
+                assignees(p,"addedUserIds",recipients,preferences);
             } else if (type.endsWith("created") || type.endsWith("assigned")) {
                 if (type.endsWith("assigned") && p.has("assigneeUserIds")) return;
-                if (p.has("assigneeUserIds")) assignees(p,"assigneeUserIds",recipients);
-                else add(recipients,optionalUuid(p,"assigneeUserId"),Reason.ASSIGNED);
+                if (p.has("assigneeUserIds")) assignees(p,"assigneeUserIds",recipients,preferences);
+                else add(recipients,preferences,optionalUuid(p,"assigneeUserId"),Reason.ASSIGNED);
             } else throw new IllegalArgumentException();
         } else {
             UUID owner=context.projectOwner(event.companyId(),project).orElseThrow();
@@ -87,12 +89,12 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
                 if (type.endsWith("member_added") && "OWNER_REASSIGNMENT".equals(p.path("changeSource").asText())) return;
                 subject=uuid(p,"userId");
                 Reason reason=type.endsWith("member_added")?Reason.PROJECT_MEMBER_ADDED:Reason.PROJECT_MEMBER_REMOVED;
-                add(recipients,subject,reason); add(recipients,owner,reason);
+                add(recipients,preferences,subject,reason); add(recipients,preferences,owner,reason);
                 if (reason==Reason.PROJECT_MEMBER_REMOVED) membershipExempt.add(subject);
             } else if (type.endsWith("owner_reassigned")) {
                 subject=uuid(p,"newOwnerUserId");
-                add(recipients,uuid(p,"previousOwnerUserId"),Reason.PROJECT_OWNER_TRANSFERRED);
-                add(recipients,subject,Reason.PROJECT_OWNER_ASSIGNED);
+                add(recipients,preferences,uuid(p,"previousOwnerUserId"),Reason.PROJECT_OWNER_TRANSFERRED);
+                add(recipients,preferences,subject,Reason.PROJECT_OWNER_ASSIGNED);
             } else throw new IllegalArgumentException();
         }
         recipients.remove(event.actor().userId());
@@ -113,24 +115,26 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
         UUID owner=context.projectOwner(event.companyId(),targetProject).orElseThrow();
         if (owner.equals(event.actor().userId())
                 || !context.eligibleProjectRecipients(event.companyId(),targetProject,Set.of(owner)).contains(owner)) return;
+        var preference=repository.preference(event.companyId(),targetProject,owner);
+        if (preference.isPresent() && !preference.get().allows(Reason.CONNECTION_CREATED)) return;
         repository.append(new NotificationRepository.Event(UUID.randomUUID(),event.companyId(),event.eventId(),
                 event.eventType(),event.eventVersion(),TargetKind.WORK_ITEM,targetProject,targetItem,null,null,
                 event.actor().userId(),event.occurredAt()),Map.of(owner,Reason.CONNECTION_CREATED));
     }
-    private static void add(Map<UUID,Reason> recipients, UUID user, Reason reason) {
-        if (user!=null) recipients.put(user,reason);
+    private static void add(Map<UUID,Reason> recipients,Map<UUID,ProjectPreference> preferences,UUID user,Reason reason) {
+        if (user!=null && (!preferences.containsKey(user) || preferences.get(user).allows(reason))) recipients.put(user,reason);
     }
-    private static void assignees(JsonNode p,String field,Map<UUID,Reason> recipients) {
+    private static void assignees(JsonNode p,String field,Map<UUID,Reason> recipients,Map<UUID,ProjectPreference> preferences) {
         JsonNode ids=p.get(field);
         if (ids==null || !ids.isArray()) throw new IllegalArgumentException();
-        for (JsonNode id:ids) add(recipients,UUID.fromString(id.asText()),Reason.ASSIGNED);
+        for (JsonNode id:ids) add(recipients,preferences,UUID.fromString(id.asText()),Reason.ASSIGNED);
     }
-    private static void mentions(JsonNode p,String field,Map<UUID,Reason> recipients) {
+    private static void mentions(JsonNode p,String field,Map<UUID,Reason> recipients,Map<UUID,ProjectPreference> preferences) {
         JsonNode array=p.get(field);
         if (array==null || !array.isArray()) throw new IllegalArgumentException();
         for (JsonNode value:array) {
             if (!value.isTextual()) throw new IllegalArgumentException();
-            add(recipients,UUID.fromString(value.asText()),Reason.MENTION);
+            add(recipients,preferences,UUID.fromString(value.asText()),Reason.MENTION);
         }
     }
     private static UUID optionalUuid(JsonNode p,String field) {

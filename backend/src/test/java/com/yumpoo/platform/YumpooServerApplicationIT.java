@@ -395,6 +395,7 @@ class YumpooServerApplicationIT {
                 "platform_role_assignment",
                 "project",
                 "project_membership",
+                "project_notification_preference",
                 "project_work_item_label_catalog",
                 "project_work_item_priority_label",
                 "project_work_item_status_label",

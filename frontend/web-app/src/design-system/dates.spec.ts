@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatChineseTimestamp, formatDateOnly, formatRelativeTime, formatTimestamp } from './dates'
+import { formatChineseTimestamp, formatDateOnly, formatRelativeTime, formatTimestamp, zonedStartOfDay } from './dates'
 
 describe('日期格式化约定', () => {
   it('短日期只显示到日（列表/表格默认）', () => {
@@ -33,5 +33,9 @@ describe('日期格式化约定', () => {
     }
     expect(formatRelativeTime(start, new Date(start.getTime() + 400 * 86400 * 1000))).toBe('1年前')
   })
-
+  it('按公司时区计算自然日起点并处理夏令时', () => {
+    expect(zonedStartOfDay(new Date(2026, 9, 5), 'Asia/Shanghai').toISOString()).toBe('2026-10-04T16:00:00.000Z')
+    expect(zonedStartOfDay(new Date(2026, 2, 8), 'America/New_York').toISOString()).toBe('2026-03-08T05:00:00.000Z')
+    expect(zonedStartOfDay(new Date(2026, 2, 9), 'America/New_York').toISOString()).toBe('2026-03-09T04:00:00.000Z')
+  })
 })

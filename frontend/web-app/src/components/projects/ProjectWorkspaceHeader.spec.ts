@@ -49,4 +49,18 @@ describe('项目头部分区切换器', () => {
     expect(wrapper.find('nav').exists()).toBe(false)
     expect(wrapper.find('.primary').exists()).toBe(true)
   })
+  it('项目分区只显示可展开的项目标题', () => {
+    const wrapper = render()
+    const trigger = wrapper.get('h1 .project-workspace-header__title-trigger')
+    expect(trigger.text()).toBe('项目')
+    expect(trigger.attributes()).toMatchObject({ 'aria-haspopup': 'dialog', 'aria-expanded': 'false' })
+    expect(wrapper.find('.project-workspace-header__code').exists()).toBe(false)
+  })
+  it('只有归档项目在标题旁显示状态', () => {
+    const archived = mount(ProjectWorkspaceHeader, {
+      props: { project: { ...project, lifecycle: 'ARCHIVED' } as ProjectDetail, section: 'overview' },
+    })
+    expect(archived.get('.project-workspace-header__heading').text()).toContain('已归档')
+    expect(render().get('.project-workspace-header__heading').text()).toBe('项目')
+  })
 })

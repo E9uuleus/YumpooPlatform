@@ -1125,6 +1125,44 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '500': { $ref: '#/components/responses/InternalError' }
+  /me/projects/{projectId}/notification-preference:
+    get:
+      tags: [Notifications]
+      operationId: getMyProjectNotificationPreference
+      summary: 查询本人在项目中的通知偏好
+      description: 仅项目 ACTIVE 成员可读；从未设置时返回 ALL 默认值且 updatedAt 为 null。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 本人项目通知偏好。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectNotificationPreference' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+    put:
+      tags: [Notifications]
+      operationId: updateMyProjectNotificationPreference
+      summary: 整体替换本人在项目中的通知偏好
+      description: 天然幂等，仅要求会话与 XSRF；只影响此后产生的通知。成员加入、移出与负责人变更通知不受偏好影响。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectNotificationPreferenceUpdateRequest' } } }
+      responses:
+        '200':
+          description: 保存后的本人项目通知偏好。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectNotificationPreference' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
   /admin/members/{userId}/platform-role:
     put:
       tags: [IdentityGovernance]
@@ -6850,6 +6888,31 @@ components:
       properties:
         upTo: { type: string, format: date-time }
         group: { $ref: '#/components/schemas/NotificationGroup' }
+    ProjectNotificationMode:
+      type: string
+      enum: [ALL, MUTED, CUSTOM]
+    ProjectNotificationPreferenceUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [mode, mention, comment, assigned, connectionCreated]
+      properties:
+        mode: { $ref: '#/components/schemas/ProjectNotificationMode' }
+        mention: { type: boolean, description: CUSTOM 时是否接收 @提及。 }
+        comment: { type: boolean, description: CUSTOM 时是否接收评论与回复。 }
+        assigned: { type: boolean, description: CUSTOM 时是否接收指派。 }
+        connectionCreated: { type: boolean, description: CUSTOM 时负责人是否接收关联新建工作项。 }
+    ProjectNotificationPreference:
+      type: object
+      additionalProperties: false
+      required: [projectId, mode, mention, comment, assigned, connectionCreated, updatedAt]
+      properties:
+        projectId: { $ref: '#/components/schemas/Uuid' }
+        mode: { $ref: '#/components/schemas/ProjectNotificationMode' }
+        mention: { type: boolean }
+        comment: { type: boolean }
+        assigned: { type: boolean }
+        connectionCreated: { type: boolean }
+        updatedAt: { type: string, format: date-time, nullable: true }
     DashboardChartMeasure:
       type: object
       required:
