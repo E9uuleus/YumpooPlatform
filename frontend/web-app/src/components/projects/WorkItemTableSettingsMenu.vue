@@ -84,6 +84,15 @@ function setHeight(field: HeightField, value: WorkItemTableHeight): void {
   open.value = false
 }
 
+function setHeightVisible(field: HeightField, visible: boolean): void {
+  if (visible) {
+    if (open.value && panel.value === 'menu') openHeight.value = field
+  } else if (openHeight.value === field) {
+    // 旧子菜单的延迟隐藏或离场事件不能关闭刚打开的另一个子菜单。
+    openHeight.value = null
+  }
+}
+
 function onDocumentPointerDown(event: PointerEvent): void {
   const target = event.target
   if (!(target instanceof Element) || root.value?.contains(target) || target.closest(`.${popperClass}`)) return
@@ -95,8 +104,11 @@ function onDocumentPointerDown(event: PointerEvent): void {
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
-  if (openHeight.value) openHeight.value = null
-  else open.value = false
+  if (openHeight.value) {
+    event.preventDefault()
+    event.stopPropagation()
+    openHeight.value = null
+  } else open.value = false
 }
 
 function unbind(): void {
@@ -118,6 +130,7 @@ onBeforeUnmount(unbind)
   <span
     ref="root"
     class="table-settings-menu"
+    @keydown.esc="onKeydown"
   >
     <!-- 只传 visible、不监听 update:visible：ElPopover 处于受控模式，外部点击由本组件判断。 -->
     <el-popover
@@ -153,7 +166,7 @@ onBeforeUnmount(unbind)
         <button v-if="state === 'error'" type="button" class="table-settings-link" @click="emit('retry')">重试</button>
       </div>
 
-      <div v-else-if="panel === 'menu'" class="table-settings-list" role="menu" aria-label="表格设置">
+      <div v-else-if="panel === 'menu'" class="table-settings-list" role="menu" aria-label="表格设置" @keydown.esc="onKeydown">
         <button type="button" role="menuitem" class="table-settings-item" @click="showPanel('pin')">
           <svg class="table-settings-item__icon" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor"
             stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -171,7 +184,7 @@ onBeforeUnmount(unbind)
           :show-after="80"
           :hide-after="120"
           :popper-class="`work-items-popover work-item-view-control ${popperClass}`"
-          @update:visible="openHeight = $event ? item.field : null"
+          @update:visible="setHeightVisible(item.field, $event)"
         >
           <template #reference>
             <button type="button" role="menuitem" aria-haspopup="menu" class="table-settings-item">
@@ -183,7 +196,7 @@ onBeforeUnmount(unbind)
               <small class="table-settings-item__value">{{ heightOption(settings[item.field]).label }}</small>
             </button>
           </template>
-          <div class="table-settings-list" role="menu" :aria-label="item.label">
+          <div class="table-settings-list" role="menu" :aria-label="item.label" @keydown.esc="onKeydown">
             <button
               v-for="option in HEIGHT_OPTIONS"
               :key="option.value"

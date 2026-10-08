@@ -1,5 +1,5 @@
 import { DOMWrapper, enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { WorkItemColoringTarget, WorkItemLabelColorToken } from '@yumpoo/api-client'
+import { WorkItemColoringTarget, WorkItemLabelColorToken, WorkItemTableHeight } from '@yumpoo/api-client'
 import { ElPopover } from 'element-plus'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WorkItemTableSettingsMenu from './WorkItemTableSettingsMenu.vue'
@@ -17,6 +17,41 @@ function menu() {
 }
 
 describe('表格设置菜单浮层边界', () => {
+  it.each([
+    ['表头高度', '行高', 'rowHeight'],
+    ['行高', '表头高度', 'headerHeight'],
+  ] as const)('从%s移到%s后，旧菜单的延迟关闭不会关掉新菜单', async (from, to, field) => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = menu()
+      await wrapper.get('.table-settings-toolbar-button').trigger('click'); await flushPromises()
+      const trigger = (label: string) => new DOMWrapper(
+        [...document.querySelectorAll('button[role="menuitem"]')].find(button => button.textContent?.includes(label))!,
+      )
+      const submenu = (label: string) => document.querySelector(`[role="menu"][aria-label="${label}"]`)!
+
+      await trigger(from).trigger('mouseenter')
+      await vi.advanceTimersByTimeAsync(80)
+      await flushPromises()
+      expect(new DOMWrapper(submenu(from)).isVisible()).toBe(true)
+
+      await trigger(from).trigger('mouseleave')
+      await trigger(to).trigger('mouseenter')
+      await vi.advanceTimersByTimeAsync(80)
+      await flushPromises()
+      expect(new DOMWrapper(submenu(to)).isVisible()).toBe(true)
+
+      await vi.advanceTimersByTimeAsync(200)
+      await flushPromises()
+      expect(new DOMWrapper(submenu(to)).isVisible()).toBe(true)
+      expect(new DOMWrapper(submenu(from)).isVisible()).toBe(false)
+      const triple = [...submenu(to).querySelectorAll('button')].find(button => button.textContent?.trim() === '三行')!
+      await new DOMWrapper(triple).trigger('click')
+      expect(wrapper.emitted('update')).toEqual([[{ [field]: WorkItemTableHeight.Triple }]])
+      expect(wrapper.findComponent(ElPopover).props('visible')).toBe(false)
+    } finally { vi.useRealTimers() }
+  })
+
   it.each(['el-popper', 'el-overlay'])('点击不属于本菜单的 %s 会关闭菜单', async className => {
     const wrapper = menu()
     await wrapper.get('.table-settings-toolbar-button').trigger('click'); await flushPromises()
@@ -26,6 +61,30 @@ describe('表格设置菜单浮层边界', () => {
       await flushPromises()
       expect(wrapper.findComponent(ElPopover).props('visible')).toBe(false)
     } finally { outside.remove() }
+  })
+
+  it('焦点在高度菜单入口时，Escape 关闭子菜单后主菜单仍可继续操作', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = menu()
+      await wrapper.get('.table-settings-toolbar-button').trigger('click'); await flushPromises()
+      const trigger = [...document.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]')]
+        .find(button => button.textContent?.includes('表头高度'))!
+      trigger.focus()
+      await new DOMWrapper(trigger).trigger('mouseenter')
+      await vi.advanceTimersByTimeAsync(80)
+      await flushPromises()
+      const mainMenu = document.querySelector('[role="menu"][aria-label="表格设置"]')!
+      const heightMenu = document.querySelector('[role="menu"][aria-label="表头高度"]')!
+      expect(new DOMWrapper(heightMenu).isVisible()).toBe(true)
+
+      await new DOMWrapper(trigger).trigger('keydown', { key: 'Escape', code: 'Escape' })
+      await vi.advanceTimersByTimeAsync(300)
+      await flushPromises()
+      expect(new DOMWrapper(heightMenu).isVisible()).toBe(false)
+      expect(new DOMWrapper(mainMenu).isVisible()).toBe(true)
+      expect(wrapper.findComponent(ElPopover).props('visible')).toBe(true)
+    } finally { vi.useRealTimers() }
   })
 
   it('颜色面板中的 Escape 只关闭颜色子面板，再次 Escape 才关闭设置菜单', async () => {
