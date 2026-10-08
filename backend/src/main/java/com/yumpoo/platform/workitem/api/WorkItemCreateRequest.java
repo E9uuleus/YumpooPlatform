@@ -16,7 +16,7 @@ public record WorkItemCreateRequest(
         @NotNull UUID contentId,
         @JsonProperty(required = true) @NotBlank @Size(max = 300) String title,
         @JsonProperty(required = true)
-        @Pattern(regexp = "LOW|MEDIUM|HIGH|URGENT") String priority,
+        @Pattern(regexp = "[A-Z][A-Z0-9_]{1,31}") String priority,
         UUID assigneeUserId,
         @JsonProperty(required = true) @Size(max = 65536) String description,
         @JsonProperty(required = true) @Size(max = 16384) String notes,
