@@ -78,6 +78,27 @@ class WorkItemHttpIT {
     void tearDown() { cleanUp(); }
 
     @Test
+    void tableSettingsRejectASecondWriterWithTheSameRevision() throws Exception {
+        String path = "/api/v1/me/projects/" + PROJECT_ID + "/work-item-table-settings";
+        String body = """
+            {"pinnedColumnCount":0,"headerHeight":"DOUBLE","rowHeight":"SINGLE","coloringRules":[],
+             "defaultValues":{"assigneeUserIds":[],"statusCode":null,"priority":null,"contentId":null,"dueDateOffsetDays":null}}
+            """;
+        var first = mutate("PUT", path, member, body, "\"0\"", null);
+        JsonNode firstSaved = ok(first);
+        String firstEtag = firstSaved.path("etag").asText();
+        assertThat(first.headers().firstValue("ETag")).contains(firstEtag);
+        assertThat(mutate("PUT", path, member, body.replace("DOUBLE", "TRIPLE"), "\"0\"", null).statusCode()).isEqualTo(412);
+        assertThat(ok(get(path, member)).path("headerHeight").asText()).isEqualTo("DOUBLE");
+        JsonNode updated = ok(mutate("PUT", path, member, body.replace("DOUBLE", "TRIPLE"), firstEtag, null));
+        assertThat(updated.path("etag").asText()).isNotEqualTo(firstEtag);
+        assertThat(mutate("PUT", path, member, body, firstEtag, null).statusCode()).isEqualTo(412);
+        var latest = get(path, member);
+        assertThat(latest.headers().firstValue("ETag")).contains(updated.path("etag").asText());
+        assertThat(ok(latest).path("headerHeight").asText()).isEqualTo("TRIPLE");
+    }
+
+    @Test
     void tableSettingsDefaultsReplaceValidateAndRequireVisibleProject() throws Exception {
         String path = "/api/v1/me/projects/" + PROJECT_ID + "/work-item-table-settings";
         JsonNode defaults = ok(get(path, member));
@@ -86,13 +107,15 @@ class WorkItemHttpIT {
         assertThat(defaults.path("coloringRules").size()).isZero();
         assertThat(defaults.path("defaultValues").path("statusCode").isNull()).isTrue();
         assertThat(defaults.path("updatedAt").isNull()).isTrue();
+        assertThat(defaults.path("etag").asText()).isEqualTo("\"0\"");
         String body = """
             {"pinnedColumnCount":2,"headerHeight":"DOUBLE","rowHeight":"TRIPLE",
              "coloringRules":[{"id":"%s","target":"ROW","colorToken":"SOFIA_PINK","column":"STATUS","operator":"IS","values":["STUCK"]},
                               {"id":"%s","target":"CELL","colorToken":"SKY","column":null,"operator":null,"values":[]}],
              "defaultValues":{"assigneeUserIds":["%s"],"statusCode":"IN_PROGRESS","priority":"HIGH","contentId":"%s","dueDateOffsetDays":3}}
             """.formatted(UUID.randomUUID(), UUID.randomUUID(), member.userId(), tasksId);
-        JsonNode saved = ok(mutate("PUT", path, member, body, null, null));
+        assertThat(mutate("PUT", path, member, body, null, null).statusCode()).isEqualTo(428);
+        JsonNode saved = ok(mutate("PUT", path, member, body, defaults.path("etag").asText(), null));
         assertThat(saved.path("projectId").asText()).isEqualTo(PROJECT_ID.toString());
         assertThat(saved.path("headerHeight").asText()).isEqualTo("DOUBLE");
         assertThat(saved.path("coloringRules").get(1).path("column").isNull()).isTrue();
@@ -100,7 +123,7 @@ class WorkItemHttpIT {
         assertThat(saved.path("updatedAt").isTextual()).isTrue();
         assertThat(ok(get(path, member))).isEqualTo(saved);
         assertThat(ok(get(path, owner)).path("updatedAt").isNull()).isTrue();
-        assertThat(mutate("PUT", path, member, body.replace("\"pinnedColumnCount\":2", "\"pinnedColumnCount\":51"), null, null)
+        assertThat(mutate("PUT", path, member, body.replace("\"pinnedColumnCount\":2", "\"pinnedColumnCount\":51"), saved.path("etag").asText(), null)
                 .statusCode()).isEqualTo(422);
         jdbc.sql("DELETE FROM yumpoo.project_membership WHERE project_id=:project AND user_id=:user")
                 .param("project", PROJECT_ID).param("user", member.userId()).update();

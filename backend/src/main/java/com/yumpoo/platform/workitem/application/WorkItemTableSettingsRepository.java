@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public interface WorkItemTableSettingsRepository {
     Optional<Stored> find(UUID companyId, UUID projectId, UUID userId);
-    Stored save(UUID companyId, UUID projectId, UUID userId, Write settings);
+    Optional<Stored> save(UUID companyId, UUID projectId, UUID userId, Write settings, long expectedVersion);
 
     record Stored(Write settings, Instant updatedAt) {}
 }

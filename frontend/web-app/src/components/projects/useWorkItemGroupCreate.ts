@@ -5,6 +5,7 @@ import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from './workItemGrouping'
 import type { WorkItemCreateDefaults } from './workItemTableSettings'
+import { applyDefaultStatus } from './workItemDefaultStatus'
 
 interface GroupCreateDraft {
   open: boolean
@@ -74,7 +75,9 @@ export function useWorkItemGroupCreate(options: {
       state.created ??= await workItemsApi.createWorkItem({ projectId, xXSRFTOKEN: csrf,
         idempotencyKey: state.request.key, workItemCreateRequest: state.request.body })
       const toStatus = state.request.status
-      if (toStatus && state.created.statusCode !== toStatus) {
+      if (field !== 'STATUS') {
+        state.created = await applyDefaultStatus(state.created, toStatus, csrf)
+      } else if (toStatus && state.created.statusCode !== toStatus) {
         const transition = state.created.capabilities.availableTransitions.find(option => option.toStatus === toStatus)
         if (!state.created.capabilities.canMoveInKanban || !transition) throw localProblem('工作项已创建，但当前无法迁移到目标状态。请重试。')
         let resolution = state.transition?.resolution ?? null

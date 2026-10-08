@@ -693,7 +693,8 @@ const { draft: inlineDraft, rows: displayWorkItemRows, isDraft, start: createBel
 })
 const session = useSession()
 const groupingClock = useWorkItemDueClock()
-const { settings: tableViewSettings, state: tableSettingsState, update: updateTableSettings, load: reloadTableSettings }
+const { settings: tableViewSettings, state: tableSettingsState, update: updateTableSettings, load: reloadTableSettings,
+  saveState: tableSettingsSaveState, saveError: tableSettingsSaveError, retrySave: retrySaveTableSettings }
   = useWorkItemTableSettings(() => projectId.value)
 const companyToday = computed(() => companyDate(groupingClock.value, session.authentication.value?.company.timezone ?? 'Asia/Shanghai'))
 const createDefaults = computed(() => resolveWorkItemCreateDefaults(tableViewSettings.value.defaultValues, {
@@ -2434,9 +2435,20 @@ function onTableSelectionChange(rows: TableDisplayRow[]): void {
   selectedWorkItemIds.value = new Set(rows.filter(row => !isGroupDisplayRow(row) && !isDraft(row)).map(row => row.id))
 }
 
+const tableColoring = computed(() => {
+  const colors = new Map<string, WorkItemColoring>()
+  const rules = tableViewSettings.value.coloringRules
+  if (!rules.length) return colors
+  for (const row of displayTableItems.value) {
+    if (isGroupDisplayRow(row) || isDraft(row)) continue
+    const color = evaluateWorkItemColoring(rules, row, companyToday.value)
+    if (color) colors.set(row.id, color)
+  }
+  return colors
+})
+
 function rowColoring(row: TableDisplayRow): WorkItemColoring | undefined {
-  if (isGroupDisplayRow(row) || isDraft(row) || !tableViewSettings.value.coloringRules.length) return undefined
-  return evaluateWorkItemColoring(tableViewSettings.value.coloringRules, row, companyToday.value)
+  return tableColoring.value.get(row.id)
 }
 
 function cellColoring(row: TableDisplayRow, column: { property?: string; columnKey?: string }): string | undefined {
@@ -3122,6 +3134,8 @@ onBeforeUnmount(() => {
           <work-item-table-settings-menu
             :settings="tableViewSettings"
             :state="tableSettingsState"
+            :save-state="tableSettingsSaveState"
+            :save-error="tableSettingsSaveError"
             :disabled="selectedView === 'kanban'"
             :pin-columns="tablePinColumns"
             :pin-width-budget="tablePinWidthBudget"
@@ -3130,6 +3144,7 @@ onBeforeUnmount(() => {
             :default-columns="defaultValueColumns"
             @update="updateTableSettings"
             @retry="reloadTableSettings"
+            @retry-save="retrySaveTableSettings"
           />
         </div>
 
@@ -4096,6 +4111,7 @@ onBeforeUnmount(() => {
 .toolbar-button:hover:not(:disabled), .toolbar-button.active, :deep(.grouping-toolbar-button:hover:not(:disabled)), :deep(.grouping-toolbar-button.active), :deep(.table-settings-toolbar-button:hover:not(:disabled)), :deep(.table-settings-toolbar-button.active) { background: var(--yp-bg-hover); color: var(--yp-action-primary); }
 .toolbar-button:disabled, :deep(.grouping-toolbar-button:disabled), :deep(.table-settings-toolbar-button:disabled) { color: var(--yp-text-disabled); cursor: not-allowed; }
 :deep(.table-settings-toolbar-button) { width: 36px; justify-content: center; padding: 0; }
+:deep(.table-settings-toolbar-button--unsaved) { width: auto; padding: 0 var(--yp-space-3); }
 .toolbar-count { min-width: 18px; padding: 1px 5px; border-radius: var(--yp-radius-pill); color: var(--yp-priority-foreground); background: var(--yp-action-primary); font-size: 11px; }
 .toolbar-search { width: 94px; flex: 0 0 auto; transition: width 100ms cubic-bezier(0, 0, .35, 1); }
 .toolbar-search > .toolbar-button { width: 100%; }
@@ -4280,20 +4296,23 @@ onBeforeUnmount(() => {
 :deep(.monday-table.monday-table--row-double tr.work-item-table-row .work-item-title-text) { -webkit-line-clamp: 2; }
 :deep(.monday-table.monday-table--row-triple tr.work-item-table-row .work-item-title-text) { -webkit-line-clamp: 3; }
 
-:deep(.monday-table.monday-table--header-double > .el-table__inner-wrapper > .el-table__header-wrapper .monday-column-quick-sort__label),
-:deep(.monday-table.monday-table--header-double tr.work-item-group-columns .monday-column-quick-sort__label),
-:deep(.monday-table.monday-table--header-triple > .el-table__inner-wrapper > .el-table__header-wrapper .monday-column-quick-sort__label),
-:deep(.monday-table.monday-table--header-triple tr.work-item-group-columns .monday-column-quick-sort__label) {
+:deep(.monday-table > .el-table__inner-wrapper > .el-table__header-wrapper .connect-column-header),
+:deep(.monday-table tr.work-item-group-columns .connect-column-header) { height: var(--work-item-table-header-height); }
+
+:deep(.monday-table.monday-table--header-double > .el-table__inner-wrapper > .el-table__header-wrapper :is(.monday-column-quick-sort__label, .connect-column-header__label)),
+:deep(.monday-table.monday-table--header-double tr.work-item-group-columns :is(.monday-column-quick-sort__label, .connect-column-header__label)),
+:deep(.monday-table.monday-table--header-triple > .el-table__inner-wrapper > .el-table__header-wrapper :is(.monday-column-quick-sort__label, .connect-column-header__label)),
+:deep(.monday-table.monday-table--header-triple tr.work-item-group-columns :is(.monday-column-quick-sort__label, .connect-column-header__label)) {
   display: -webkit-box;
   line-height: 1.3;
   white-space: normal;
   word-break: break-word;
   -webkit-box-orient: vertical;
 }
-:deep(.monday-table.monday-table--header-double > .el-table__inner-wrapper > .el-table__header-wrapper .monday-column-quick-sort__label),
-:deep(.monday-table.monday-table--header-double tr.work-item-group-columns .monday-column-quick-sort__label) { -webkit-line-clamp: 2; }
-:deep(.monday-table.monday-table--header-triple > .el-table__inner-wrapper > .el-table__header-wrapper .monday-column-quick-sort__label),
-:deep(.monday-table.monday-table--header-triple tr.work-item-group-columns .monday-column-quick-sort__label) { -webkit-line-clamp: 3; }
+:deep(.monday-table.monday-table--header-double > .el-table__inner-wrapper > .el-table__header-wrapper :is(.monday-column-quick-sort__label, .connect-column-header__label)),
+:deep(.monday-table.monday-table--header-double tr.work-item-group-columns :is(.monday-column-quick-sort__label, .connect-column-header__label)) { -webkit-line-clamp: 2; }
+:deep(.monday-table.monday-table--header-triple > .el-table__inner-wrapper > .el-table__header-wrapper :is(.monday-column-quick-sort__label, .connect-column-header__label)),
+:deep(.monday-table.monday-table--header-triple tr.work-item-group-columns :is(.monday-column-quick-sort__label, .connect-column-header__label)) { -webkit-line-clamp: 3; }
 
 :deep(.monday-table .el-scrollbar__wrap) {
   overscroll-behavior: contain;

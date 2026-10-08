@@ -541,6 +541,7 @@ export interface UpdateConnectColumnRequest {
 export interface UpdateMyWorkItemTableSettingsRequest {
     projectId: string;
     xXSRFTOKEN: string;
+    ifMatch: string;
     workItemTableSettingsUpdateRequest: WorkItemTableSettingsUpdateRequest;
 }
 
@@ -1715,7 +1716,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 项目对当前账号可见即可读取；从未保存时返回默认值且 updatedAt 为 null。只影响本人的表格展示与新建默认值。
+     * 项目对当前账号可见即可读取；从未保存时返回默认值、updatedAt 为 null、etag 为 \"0\"。只影响本人的表格展示与新建默认值。
      * 查询本人在项目中的工作项表格设置
      */
     async getMyWorkItemTableSettingsRaw(requestParameters: GetMyWorkItemTableSettingsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemTableSettings>> {
@@ -1745,7 +1746,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 项目对当前账号可见即可读取；从未保存时返回默认值且 updatedAt 为 null。只影响本人的表格展示与新建默认值。
+     * 项目对当前账号可见即可读取；从未保存时返回默认值、updatedAt 为 null、etag 为 \"0\"。只影响本人的表格展示与新建默认值。
      * 查询本人在项目中的工作项表格设置
      */
     async getMyWorkItemTableSettings(requestParameters: GetMyWorkItemTableSettingsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemTableSettings> {
@@ -3870,7 +3871,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 天然幂等，仅要求会话与 XSRF。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
+     * 要求会话、XSRF 和最近读取的 If-Match。ETag 由 updatedAt 的微秒时间戳生成，保存以原子比较更新防止覆盖其他窗口或设备的修改；版本过期返回 412。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
      * 整体替换本人在项目中的工作项表格设置
      */
     async updateMyWorkItemTableSettingsRaw(requestParameters: UpdateMyWorkItemTableSettingsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemTableSettings>> {
@@ -3885,6 +3886,13 @@ export class WorkItemsApi extends runtime.BaseAPI {
             throw new runtime.RequiredError(
                 'xXSRFTOKEN',
                 'Required parameter "xXSRFTOKEN" was null or undefined when calling updateMyWorkItemTableSettings().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateMyWorkItemTableSettings().'
             );
         }
 
@@ -3905,6 +3913,10 @@ export class WorkItemsApi extends runtime.BaseAPI {
             headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
         }
 
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
 
         let urlPath = `/me/projects/{projectId}/work-item-table-settings`;
         urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
@@ -3921,7 +3933,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 天然幂等，仅要求会话与 XSRF。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
+     * 要求会话、XSRF 和最近读取的 If-Match。ETag 由 updatedAt 的微秒时间戳生成，保存以原子比较更新防止覆盖其他窗口或设备的修改；版本过期返回 412。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
      * 整体替换本人在项目中的工作项表格设置
      */
     async updateMyWorkItemTableSettings(requestParameters: UpdateMyWorkItemTableSettingsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemTableSettings> {

@@ -44,7 +44,7 @@ describe('条件着色', () => {
 })
 
 describe('新建默认值', () => {
-  it('忽略失效值与初始状态，截止日期按今天偏移', () => {
+  it('忽略失效值，初始状态计入默认值但不重复迁移，截止日期按今天偏移', () => {
     const resolved = resolveWorkItemCreateDefaults({
       assigneeUserIds: new Set(['gone', 'user-2']), statusCode: 'NOT_STARTED', priority: 'OLD', contentId: 'content-2', dueDateOffsetDays: 3,
     }, {
@@ -52,7 +52,7 @@ describe('新建默认值', () => {
       contentIds: new Set(['content-2']), today: TODAY,
     })
     expect(resolved).toEqual({
-      contentId: 'content-2', statusCode: null, count: 3,
+      contentId: 'content-2', statusCode: null, count: 4,
       fields: { assigneeUserIds: ['user-2'], assigneeUserId: 'user-2', dueDate: new Date('2026-10-10T00:00:00Z') },
     })
   })

@@ -7,7 +7,7 @@ import {
   type WorkItemColoringRule,
 } from '@yumpoo/api-client'
 import { ElDatePicker, ElInput, ElOption as ElOptionRaw, ElPopover, ElSelect as ElSelectRaw } from 'element-plus'
-import type { DefineComponent } from 'vue'
+import { onBeforeUnmount, reactive, ref, type DefineComponent } from 'vue'
 import { mondayWorkItemLabelColors } from './workItemLabelColors'
 import {
   COLORING_COLUMNS,
@@ -19,7 +19,7 @@ import {
   type TableSettingsCatalog,
 } from './workItemTableSettings'
 
-const props = defineProps<{ rules: WorkItemColoringRule[]; catalog: TableSettingsCatalog }>()
+const props = defineProps<{ rules: WorkItemColoringRule[]; catalog: TableSettingsCatalog; popperClass?: string }>()
 const emit = defineEmits<{ change: [rules: WorkItemColoringRule[]]; back: [] }>()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
@@ -27,25 +27,60 @@ const TARGETS = [
   { value: WorkItemColoringTarget.Cell, label: '单元格' },
   { value: WorkItemColoringTarget.Row, label: '整行' },
 ]
+const textDrafts = reactive<Record<string, string>>({})
+const colorPicker = ref<string | null>(null)
+let textTimer: ReturnType<typeof setTimeout> | undefined
+
+function commit(rules: WorkItemColoringRule[]): void {
+  clearTimeout(textTimer)
+  textTimer = undefined
+  const next = rules.map(rule => {
+    const value = textDrafts[rule.id]
+    return value === undefined || coloringValueKind(rule.operator) !== 'text' ? rule
+      : { ...rule, values: value.trim() ? [value] : [] }
+  })
+  for (const id of Object.keys(textDrafts)) delete textDrafts[id]
+  emit('change', next)
+}
+
+function flushText(): void {
+  if (Object.keys(textDrafts).length) commit(props.rules)
+}
+
+function setText(id: string, value: string): void {
+  textDrafts[id] = value
+  clearTimeout(textTimer)
+  textTimer = setTimeout(flushText, 400)
+}
+
+function onEscape(event: KeyboardEvent): void {
+  if (!colorPicker.value) return
+  colorPicker.value = null
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+onBeforeUnmount(flushText)
 
 function replace(index: number, next: WorkItemColoringRule): void {
-  emit('change', props.rules.map((rule, current) => current === index ? next : rule))
+  commit(props.rules.map((rule, current) => current === index ? next : rule))
 }
 
 function add(): void {
   if (props.rules.length >= MAX_COLORING_RULES) return
   const color = mondayWorkItemLabelColors[props.rules.length % mondayWorkItemLabelColors.length]!
-  emit('change', [...props.rules, {
+  commit([...props.rules, {
     id: globalThis.crypto.randomUUID(), target: WorkItemColoringTarget.Row, colorToken: color.token,
     column: null, operator: null, values: [],
   }])
 }
 
 function remove(index: number): void {
-  emit('change', props.rules.filter((_, current) => current !== index))
+  commit(props.rules.filter((_, current) => current !== index))
 }
 
 function setColumn(index: number, rule: WorkItemColoringRule, value: WorkItemColoringColumn): void {
+  delete textDrafts[rule.id]
   const column = coloringColumn(value)
   replace(index, {
     ...rule, column: value, operator: column?.operators[0] ?? null, values: [],
@@ -55,6 +90,7 @@ function setColumn(index: number, rule: WorkItemColoringRule, value: WorkItemCol
 
 function setOperator(index: number, rule: WorkItemColoringRule, value: WorkItemColoringOperator): void {
   const kind = coloringValueKind(value)
+  if (kind !== coloringValueKind(rule.operator)) delete textDrafts[rule.id]
   replace(index, { ...rule, operator: value, values: kind !== 'none' && kind === coloringValueKind(rule.operator) ? rule.values : [] })
 }
 
@@ -77,7 +113,7 @@ function listValues(rule: WorkItemColoringRule): string[] {
 </script>
 
 <template>
-  <section class="table-settings-panel" aria-label="条件着色">
+  <section class="table-settings-panel" aria-label="条件着色" @keydown.esc="onEscape">
     <header class="table-settings-panel__header">
       <button type="button" class="table-settings-back" aria-label="返回表格设置" @click="emit('back')">‹</button>
       <strong>条件着色</strong>
@@ -86,7 +122,14 @@ function listValues(rule: WorkItemColoringRule): string[] {
     <p v-if="!rules.length" class="table-settings-empty">还没有条件</p>
     <div v-else class="table-settings-rules">
       <div v-for="(rule, index) in rules" :key="rule.id" class="table-settings-rule">
-        <el-popover trigger="click" placement="bottom-start" :width="248" popper-class="work-items-popover work-item-view-control">
+        <el-popover
+          :visible="colorPicker === rule.id"
+          trigger="click"
+          placement="bottom-start"
+          :width="248"
+          :popper-class="`work-items-popover work-item-view-control ${popperClass ?? ''}`"
+          @update:visible="colorPicker = $event ? rule.id : null"
+        >
           <template #reference>
             <button
               type="button"
@@ -95,7 +138,7 @@ function listValues(rule: WorkItemColoringRule): string[] {
               :aria-label="`第 ${index + 1} 条条件的背景色`"
             />
           </template>
-          <div class="table-settings-palette" role="listbox" aria-label="背景色">
+          <div class="table-settings-palette" role="listbox" aria-label="背景色" @keydown.esc="onEscape">
             <button
               v-for="color in mondayWorkItemLabelColors"
               :key="color.token"
@@ -113,7 +156,7 @@ function listValues(rule: WorkItemColoringRule): string[] {
         <el-select
           :model-value="rule.target"
           aria-label="作用范围"
-          popper-class="work-item-view-control"
+          :popper-class="`work-item-view-control ${popperClass ?? ''}`"
           @update:model-value="replace(index, { ...rule, target: $event })"
         >
           <el-option
@@ -129,7 +172,7 @@ function listValues(rule: WorkItemColoringRule): string[] {
           :model-value="rule.column ?? undefined"
           placeholder="选择列"
           aria-label="条件列"
-          popper-class="work-item-view-control"
+          :popper-class="`work-item-view-control ${popperClass ?? ''}`"
           @update:model-value="setColumn(index, rule, $event)"
         >
           <el-option v-for="column in COLORING_COLUMNS" :key="column.value" :value="column.value" :label="column.label" />
@@ -139,7 +182,7 @@ function listValues(rule: WorkItemColoringRule): string[] {
           :disabled="!rule.column"
           placeholder="条件"
           aria-label="条件运算"
-          popper-class="work-item-view-control"
+          :popper-class="`work-item-view-control ${popperClass ?? ''}`"
           @update:model-value="setOperator(index, rule, $event)"
         >
           <el-option
@@ -159,18 +202,19 @@ function listValues(rule: WorkItemColoringRule): string[] {
           :multiple-limit="20"
           placeholder="选择值"
           aria-label="条件值"
-          popper-class="work-item-view-control"
+          :popper-class="`work-item-view-control ${popperClass ?? ''}`"
           @update:model-value="replace(index, { ...rule, values: $event })"
         >
           <el-option v-for="option in valueOptions(rule.column)" :key="option.value" :value="option.value" :label="option.label" />
         </el-select>
         <el-input
           v-else-if="coloringValueKind(rule.operator) === 'text'"
-          :model-value="rule.values[0] ?? ''"
+          :model-value="textDrafts[rule.id] ?? rule.values[0] ?? ''"
           maxlength="100"
           placeholder="输入文本"
           aria-label="条件文本"
-          @update:model-value="replace(index, { ...rule, values: $event.trim() ? [$event] : [] })"
+          @update:model-value="setText(rule.id, $event)"
+          @blur="flushText"
         />
         <el-date-picker
           v-else-if="coloringValueKind(rule.operator) === 'date'"
@@ -180,7 +224,7 @@ function listValues(rule: WorkItemColoringRule): string[] {
           :clearable="false"
           placeholder="选择日期"
           aria-label="条件日期"
-          popper-class="work-item-view-control"
+          :popper-class="`work-item-view-control ${popperClass ?? ''}`"
           @update:model-value="replace(index, { ...rule, values: $event ? [String($event)] : [] })"
         />
         <span v-else aria-hidden="true" />

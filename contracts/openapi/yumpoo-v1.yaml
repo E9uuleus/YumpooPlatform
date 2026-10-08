@@ -1168,14 +1168,16 @@ paths:
       tags: [WorkItems]
       operationId: getMyWorkItemTableSettings
       summary: 查询本人在项目中的工作项表格设置
-      description: 项目对当前账号可见即可读取；从未保存时返回默认值且 updatedAt 为 null。只影响本人的表格展示与新建默认值。
+      description: 项目对当前账号可见即可读取；从未保存时返回默认值、updatedAt 为 null、etag 为 "0"。只影响本人的表格展示与新建默认值。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
       responses:
         '200':
           description: 本人工作项表格设置。
-          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
           content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemTableSettings' } } }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '404': { $ref: '#/components/responses/ResourceNotFound' }
@@ -1183,24 +1185,29 @@ paths:
       tags: [WorkItems]
       operationId: updateMyWorkItemTableSettings
       summary: 整体替换本人在项目中的工作项表格设置
-      description: 天然幂等，仅要求会话与 XSRF。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
+      description: 要求会话、XSRF 和最近读取的 If-Match。ETag 由 updatedAt 的微秒时间戳生成，保存以原子比较更新防止覆盖其他窗口或设备的修改；版本过期返回 412。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemTableSettingsUpdateRequest' } } }
       responses:
         '200':
           description: 保存后的本人工作项表格设置。
-          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
           content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemTableSettings' } } }
         '400': { $ref: '#/components/responses/MalformedRequest' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
 
   /admin/members/{userId}/platform-role:
     put:
@@ -7017,7 +7024,7 @@ components:
     WorkItemTableSettings:
       type: object
       additionalProperties: false
-      required: [projectId, pinnedColumnCount, headerHeight, rowHeight, coloringRules, defaultValues, updatedAt]
+      required: [projectId, pinnedColumnCount, headerHeight, rowHeight, coloringRules, defaultValues, updatedAt, etag]
       properties:
         projectId: { $ref: '#/components/schemas/Uuid' }
         pinnedColumnCount: { type: integer, format: int32, minimum: 0, maximum: 50 }
@@ -7029,6 +7036,7 @@ components:
           items: { $ref: '#/components/schemas/WorkItemColoringRule' }
         defaultValues: { $ref: '#/components/schemas/WorkItemCreateDefaultValues' }
         updatedAt: { type: string, format: date-time, nullable: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
 
     DashboardChartMeasure:
       type: object

@@ -43,9 +43,10 @@ public class WorkItemTableSettingsService {
     }
 
     @Transactional
-    public View update(CurrentActor actor, UUID projectId, Write body) {
+    public View update(CurrentActor actor, UUID projectId, Write body, long expectedVersion) {
         UUID companyId = visibleCompany(actor, projectId);
-        var stored = repository.save(companyId, projectId, actor.userId(), normalize(body));
+        var stored = repository.save(companyId, projectId, actor.userId(), normalize(body), expectedVersion)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         return View.of(projectId, stored.settings(), stored.updatedAt());
     }
 

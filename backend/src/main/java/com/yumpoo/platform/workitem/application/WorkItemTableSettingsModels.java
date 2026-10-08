@@ -1,5 +1,6 @@
 package com.yumpoo.platform.workitem.application;
 
+import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -27,10 +28,11 @@ public final class WorkItemTableSettingsModels {
     }
 
     public record View(UUID projectId, int pinnedColumnCount, Height headerHeight, Height rowHeight,
-            List<ColoringRule> coloringRules, DefaultValues defaultValues, Instant updatedAt) {
+            List<ColoringRule> coloringRules, DefaultValues defaultValues, Instant updatedAt, String etag) {
         static View of(UUID projectId, Write settings, Instant updatedAt) {
+            long version = updatedAt == null ? 0 : updatedAt.getEpochSecond() * 1_000_000 + updatedAt.getNano() / 1_000;
             return new View(projectId, settings.pinnedColumnCount(), settings.headerHeight(), settings.rowHeight(),
-                    settings.coloringRules(), settings.defaultValues(), updatedAt);
+                    settings.coloringRules(), settings.defaultValues(), updatedAt, StrongEtag.format(version));
         }
     }
 }

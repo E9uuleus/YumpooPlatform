@@ -82,6 +82,12 @@ export interface WorkItemTableSettings {
      * @memberof WorkItemTableSettings
      */
     updatedAt: Date | null;
+    /**
+     *
+     * @type {string}
+     * @memberof WorkItemTableSettings
+     */
+    readonly etag: string;
 }
 
 
@@ -97,6 +103,7 @@ export function instanceOfWorkItemTableSettings(value: object): value is WorkIte
     if (!('coloringRules' in value) || value['coloringRules'] === undefined) return false;
     if (!('defaultValues' in value) || value['defaultValues'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
+    if (!('etag' in value) || value['etag'] === undefined) return false;
     return true;
 }
 
@@ -117,6 +124,7 @@ export function WorkItemTableSettingsFromJSONTyped(json: any, ignoreDiscriminato
         'coloringRules': ((json['coloringRules'] as Array<any>).map(WorkItemColoringRuleFromJSON)),
         'defaultValues': WorkItemCreateDefaultValuesFromJSON(json['defaultValues']),
         'updatedAt': (json['updatedAt'] == null ? null : new Date(json['updatedAt'])),
+        'etag': json['etag'],
     };
 }
 
@@ -124,7 +132,7 @@ export function WorkItemTableSettingsToJSON(json: any): WorkItemTableSettings {
     return WorkItemTableSettingsToJSONTyped(json, false);
 }
 
-export function WorkItemTableSettingsToJSONTyped(value?: WorkItemTableSettings | null, ignoreDiscriminator: boolean = false): any {
+export function WorkItemTableSettingsToJSONTyped(value?: Omit<WorkItemTableSettings, 'etag'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

@@ -2,9 +2,10 @@
 import './workItemTableSettings.css'
 import { WorkItemTableHeight, type WorkItemTableSettingsUpdateRequest } from '@yumpoo/api-client'
 import { ElCheckbox, ElPopover } from 'element-plus'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import WorkItemColoringRulesPanel from './WorkItemColoringRulesPanel.vue'
 import WorkItemDefaultValuesPanel from './WorkItemDefaultValuesPanel.vue'
+import type { TableSettingsSaveState } from './useWorkItemTableSettings'
 import {
   HEIGHT_OPTIONS,
   heightOption,
@@ -19,6 +20,8 @@ type HeightField = 'headerHeight' | 'rowHeight'
 const props = defineProps<{
   settings: WorkItemTableSettingsUpdateRequest
   state: 'loading' | 'ready' | 'error'
+  saveState: TableSettingsSaveState
+  saveError?: string | undefined
   disabled: boolean
   /** 当前从左到右的可见列，第一项为恒固定的工作项名称列。 */
   pinColumns: Array<{ key: string; label: string; width: number }>
@@ -28,7 +31,7 @@ const props = defineProps<{
   catalog: TableSettingsCatalog
   defaultColumns: Array<{ key: DefaultValueColumnKey; label: string }>
 }>()
-const emit = defineEmits<{ update: [patch: Partial<WorkItemTableSettingsUpdateRequest>]; retry: [] }>()
+const emit = defineEmits<{ update: [patch: Partial<WorkItemTableSettingsUpdateRequest>]; retry: []; retrySave: [] }>()
 
 const PANEL_WIDTHS: Record<Panel, number> = { menu: 240, pin: 300, coloring: 820, defaults: 480 }
 const HEIGHT_FIELDS: Array<{ field: HeightField; label: string; icon: string }> = [
@@ -39,6 +42,8 @@ const root = ref<HTMLElement>()
 const open = ref(false)
 const panel = ref<Panel>('menu')
 const widthBudget = ref(0)
+const openHeight = ref<HeightField | null>(null)
+const popperClass = `table-settings-owner-${useId().replace(/[^\w-]/g, '-')}`
 
 const pinnedCount = computed(() => Math.min(props.settings.pinnedColumnCount, Math.max(0, props.pinColumns.length - 1)))
 const coloringCount = computed(() => props.settings.coloringRules.filter(isColoringRuleComplete).length)
@@ -81,14 +86,17 @@ function setHeight(field: HeightField, value: WorkItemTableHeight): void {
 
 function onDocumentPointerDown(event: PointerEvent): void {
   const target = event.target
-  if (!(target instanceof Element) || root.value?.contains(target) || target.closest('.el-popper, .el-overlay')) return
+  if (!(target instanceof Element) || root.value?.contains(target) || target.closest(`.${popperClass}`)) return
   // 固定列面板打开时允许直接拖拽列头调整顺序，菜单保持打开并实时刷新列顺序。
-  if (panel.value === 'pin' && target.closest('.monday-table th.el-table__cell, .monday-table tr.work-item-group-columns')) return
+  if (panel.value === 'pin' && target.closest('.monday-table th.el-table__cell, .monday-table tr.work-item-group-columns')
+    && root.value?.closest('.project-overview-stack') === target.closest('.project-overview-stack')) return
   open.value = false
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') open.value = false
+  if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
+  if (openHeight.value) openHeight.value = null
+  else open.value = false
 }
 
 function unbind(): void {
@@ -98,7 +106,7 @@ function unbind(): void {
 
 watch(open, value => {
   unbind()
-  if (!value) return
+  if (!value) { openHeight.value = null; return }
   document.addEventListener('pointerdown', onDocumentPointerDown, true)
   document.addEventListener('keydown', onKeydown)
 })
@@ -114,16 +122,18 @@ onBeforeUnmount(unbind)
     <!-- 只传 visible、不监听 update:visible：ElPopover 处于受控模式，外部点击由本组件判断。 -->
     <el-popover
       :visible="open"
+      :persistent="false"
       placement="bottom-end"
       :width="PANEL_WIDTHS[panel]"
-      popper-class="work-items-popover work-item-view-control"
+      :popper-class="`work-items-popover work-item-view-control ${popperClass}`"
     >
       <template #reference>
         <button
           type="button"
           class="table-settings-toolbar-button"
-          :class="{ active: customized }"
+          :class="{ active: customized, 'table-settings-toolbar-button--unsaved': saveState === 'error' }"
           :disabled="disabled"
+          :title="saveState === 'error' ? saveError : undefined"
           aria-label="表格设置"
           aria-haspopup="menu"
           :aria-expanded="open"
@@ -134,6 +144,7 @@ onBeforeUnmount(unbind)
             <circle cx="10" cy="10" r="1.6" />
             <circle cx="15.5" cy="10" r="1.6" />
           </svg>
+          <small v-if="saveState === 'error'" class="table-settings-unsaved">未保存</small>
         </button>
       </template>
 
@@ -153,12 +164,14 @@ onBeforeUnmount(unbind)
         <el-popover
           v-for="item in HEIGHT_FIELDS"
           :key="item.field"
+          :visible="openHeight === item.field"
           trigger="hover"
           placement="left-start"
           :width="148"
           :show-after="80"
           :hide-after="120"
-          popper-class="work-items-popover work-item-view-control"
+          :popper-class="`work-items-popover work-item-view-control ${popperClass}`"
+          @update:visible="openHeight = $event ? item.field : null"
         >
           <template #reference>
             <button type="button" role="menuitem" aria-haspopup="menu" class="table-settings-item">
@@ -226,6 +239,7 @@ onBeforeUnmount(unbind)
         v-else-if="panel === 'coloring'"
         :rules="settings.coloringRules"
         :catalog="catalog"
+        :popper-class="popperClass"
         @back="panel = 'menu'"
         @change="emit('update', { coloringRules: $event })"
       />
@@ -235,9 +249,14 @@ onBeforeUnmount(unbind)
         :values="settings.defaultValues"
         :catalog="catalog"
         :columns="defaultColumns"
+        :popper-class="popperClass"
         @back="panel = 'menu'"
         @change="emit('update', { defaultValues: $event })"
       />
+      <div v-if="state === 'ready' && saveState !== 'saved'" class="table-settings-save-state" role="status">
+        <span>{{ saveState === 'error' ? saveError : saveState === 'saving' ? '正在保存…' : '等待保存…' }}</span>
+        <button v-if="saveState === 'error'" type="button" class="table-settings-link" @click="emit('retrySave')">重试保存</button>
+      </div>
     </el-popover>
   </span>
 </template>

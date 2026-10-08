@@ -1,4 +1,7 @@
 .table-settings-menu { display: inline-flex; flex: 0 0 auto; }
+.table-settings-unsaved { color: var(--yp-status-red); font-size: 11px; white-space: nowrap; }
+.table-settings-save-state { display: grid; gap: 4px; margin-top: 10px; padding: 8px 4px 0; border-top: 1px solid var(--yp-border-default); color: var(--yp-text-secondary); font-size: 12px; }
+.table-settings-save-state .table-settings-link { justify-self: start; }
 .table-settings-list { display: grid; gap: 2px; }
 .table-settings-item {
   display: flex;

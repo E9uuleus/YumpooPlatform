@@ -9,6 +9,7 @@ type DueMode = 'NONE' | 'TODAY' | 'AFTER'
 const props = defineProps<{
   values: WorkItemCreateDefaultValues
   catalog: TableSettingsCatalog
+  popperClass?: string
   /** 按当前列顺序排列的可设置默认值的列。 */
   columns: Array<{ key: DefaultValueColumnKey; label: string }>
 }>()
@@ -68,7 +69,7 @@ function clearAll(): void {
           :multiple-limit="20"
           placeholder="不设置"
           :aria-label="`${column.label}默认值`"
-          popper-class="work-item-view-control"
+          :popper-class="`work-item-view-control ${popperClass ?? ''}`"
           @update:model-value="change({ assigneeUserIds: new Set<string>($event) })"
         >
           <el-option v-for="member in catalog.members" :key="member.userId" :value="member.userId" :label="member.displayName" />
@@ -79,7 +80,7 @@ function clearAll(): void {
           clearable
           placeholder="不设置（初始状态）"
           :aria-label="`${column.label}默认值`"
-          popper-class="work-item-view-control"
+          :popper-class="`work-item-view-control ${popperClass ?? ''}`"
           @update:model-value="change({ statusCode: $event || null })"
         >
           <el-option v-for="item in statuses" :key="item.code" :value="item.code" :label="item.displayName" />
@@ -90,7 +91,7 @@ function clearAll(): void {
           clearable
           placeholder="不设置"
           :aria-label="`${column.label}默认值`"
-          popper-class="work-item-view-control"
+          :popper-class="`work-item-view-control ${popperClass ?? ''}`"
           @update:model-value="change({ priority: $event || null })"
         >
           <el-option v-for="item in priorities" :key="item.code" :value="item.code" :label="item.displayName" />
@@ -101,7 +102,7 @@ function clearAll(): void {
           clearable
           placeholder="不设置（第一个启用的类别）"
           :aria-label="`${column.label}默认值`"
-          popper-class="work-item-view-control"
+          :popper-class="`work-item-view-control ${popperClass ?? ''}`"
           @update:model-value="change({ contentId: $event || null })"
         >
           <el-option v-for="item in contents" :key="item.id" :value="item.id" :label="item.name" />
@@ -110,7 +111,7 @@ function clearAll(): void {
           <el-select
             :model-value="dueMode"
             :aria-label="`${column.label}默认值`"
-            popper-class="work-item-view-control"
+            :popper-class="`work-item-view-control ${popperClass ?? ''}`"
             @update:model-value="setDueMode($event)"
           >
             <el-option v-for="mode in DUE_MODES" :key="mode.value" :value="mode.value" :label="mode.label" />

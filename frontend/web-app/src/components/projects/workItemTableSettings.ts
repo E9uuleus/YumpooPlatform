@@ -187,10 +187,10 @@ export function resolveWorkItemCreateDefaults(values: WorkItemCreateDefaultValue
   if (values.dueDateOffsetDays !== null)
     fields.dueDate = new Date(Date.parse(`${context.today}T00:00:00Z`) + values.dueDateOffsetDays * 86_400_000)
   const contentId = values.contentId && context.contentIds.has(values.contentId) ? values.contentId : undefined
-  const statusCode = values.statusCode && values.statusCode !== INITIAL_STATUS_CODE && context.statusCodes.has(values.statusCode)
-    ? values.statusCode : null
+  const selectedStatus = values.statusCode && context.statusCodes.has(values.statusCode) ? values.statusCode : null
+  const statusCode = selectedStatus === INITIAL_STATUS_CODE ? null : selectedStatus
   const count = [assignees.length > 0, fields.priority !== undefined, fields.dueDate !== undefined,
-    contentId !== undefined, statusCode !== null].filter(Boolean).length
+    contentId !== undefined, selectedStatus !== null].filter(Boolean).length
   return { contentId, statusCode, fields, count }
 }
 
