@@ -59,6 +59,8 @@ import type {
   WorkItemRelationType,
   WorkItemSubitemCreateRequest,
   WorkItemSubitemList,
+  WorkItemTableSettings,
+  WorkItemTableSettingsUpdateRequest,
   WorkItemTransitionRequest,
   WorkItemUpdateRequest,
   WorkItemViewType,
@@ -154,6 +156,10 @@ import {
     WorkItemSubitemCreateRequestToJSON,
     WorkItemSubitemListFromJSON,
     WorkItemSubitemListToJSON,
+    WorkItemTableSettingsFromJSON,
+    WorkItemTableSettingsToJSON,
+    WorkItemTableSettingsUpdateRequestFromJSON,
+    WorkItemTableSettingsUpdateRequestToJSON,
     WorkItemTransitionRequestFromJSON,
     WorkItemTransitionRequestToJSON,
     WorkItemUpdateRequestFromJSON,
@@ -275,6 +281,10 @@ export interface GetConnectCreateOptionsRequest {
     projectId: string;
     columnId: string;
     targetProjectId: string;
+}
+
+export interface GetMyWorkItemTableSettingsRequest {
+    projectId: string;
 }
 
 export interface GetProjectWorkItemLabelsRequest {
@@ -526,6 +536,12 @@ export interface UpdateConnectColumnRequest {
     xXSRFTOKEN: string;
     ifMatch: string;
     connectColumnUpdateRequest: ConnectColumnUpdateRequest;
+}
+
+export interface UpdateMyWorkItemTableSettingsRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    workItemTableSettingsUpdateRequest: WorkItemTableSettingsUpdateRequest;
 }
 
 export interface UpdateProjectWorkItemPriorityLabelRequest {
@@ -1695,6 +1711,45 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async getConnectCreateOptions(requestParameters: GetConnectCreateOptionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectCreateOptions> {
         const response = await this.getConnectCreateOptionsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 项目对当前账号可见即可读取；从未保存时返回默认值且 updatedAt 为 null。只影响本人的表格展示与新建默认值。
+     * 查询本人在项目中的工作项表格设置
+     */
+    async getMyWorkItemTableSettingsRaw(requestParameters: GetMyWorkItemTableSettingsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemTableSettings>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling getMyWorkItemTableSettings().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/me/projects/{projectId}/work-item-table-settings`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemTableSettingsFromJSON(jsonValue));
+    }
+
+    /**
+     * 项目对当前账号可见即可读取；从未保存时返回默认值且 updatedAt 为 null。只影响本人的表格展示与新建默认值。
+     * 查询本人在项目中的工作项表格设置
+     */
+    async getMyWorkItemTableSettings(requestParameters: GetMyWorkItemTableSettingsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemTableSettings> {
+        const response = await this.getMyWorkItemTableSettingsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -3811,6 +3866,66 @@ export class WorkItemsApi extends runtime.BaseAPI {
      */
     async updateConnectColumn(requestParameters: UpdateConnectColumnRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConnectColumn> {
         const response = await this.updateConnectColumnRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 天然幂等，仅要求会话与 XSRF。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
+     * 整体替换本人在项目中的工作项表格设置
+     */
+    async updateMyWorkItemTableSettingsRaw(requestParameters: UpdateMyWorkItemTableSettingsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemTableSettings>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling updateMyWorkItemTableSettings().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateMyWorkItemTableSettings().'
+            );
+        }
+
+        if (requestParameters['workItemTableSettingsUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workItemTableSettingsUpdateRequest',
+                'Required parameter "workItemTableSettingsUpdateRequest" was null or undefined when calling updateMyWorkItemTableSettings().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+
+        let urlPath = `/me/projects/{projectId}/work-item-table-settings`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PUT',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkItemTableSettingsUpdateRequestToJSON(requestParameters['workItemTableSettingsUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkItemTableSettingsFromJSON(jsonValue));
+    }
+
+    /**
+     * 天然幂等，仅要求会话与 XSRF。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
+     * 整体替换本人在项目中的工作项表格设置
+     */
+    async updateMyWorkItemTableSettings(requestParameters: UpdateMyWorkItemTableSettingsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemTableSettings> {
+        const response = await this.updateMyWorkItemTableSettingsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
