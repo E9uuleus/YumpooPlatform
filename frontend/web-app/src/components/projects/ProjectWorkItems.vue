@@ -79,7 +79,7 @@ import WorkItemGroupingPopover from './WorkItemGroupingPopover.vue'
 import WorkItemTableSettingsMenu from './WorkItemTableSettingsMenu.vue'
 import { useWorkItemTableSettings } from './useWorkItemTableSettings'
 import { DEFAULT_VALUE_COLUMN_KEYS, heightOption, resolveWorkItemCreateDefaults, type DefaultValueColumnKey,
-  type TableSettingsCatalog } from './workItemTableSettings'
+  type TableSettingsCatalog, evaluateWorkItemColoring, type ColoringColumnKey, type WorkItemColoring } from './workItemTableSettings'
 import { useWorkItemGrouping, isGroupDisplayRow, type WorkItemGroupDisplayRow } from './useWorkItemGrouping'
 import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from './workItemGrouping'
 import { useWorkItemGroupCreate } from './useWorkItemGroupCreate'
@@ -341,10 +341,13 @@ function tableCellClassName({
   column,
 }: {
   row: ProjectWorkItemListItem
-  column: { property?: string }
+  column: { property?: string; columnKey?: string }
 }): string {
-  if (!column.property || column.property === 'title') return ''
-  return selectedCellKey.value === `${row.id}:${column.property}` ? 'monday-cell--selected' : ''
+  const classes: string[] = []
+  if (column.property && column.property !== 'title' && selectedCellKey.value === `${row.id}:${column.property}`)
+    classes.push('monday-cell--selected')
+  if (cellColoring(row, column)) classes.push('work-item-cell--colored')
+  return classes.join(' ')
 }
 
 function syncProjectPageScrollLayout(): void {
@@ -837,7 +840,7 @@ function groupRowStyles(context: { row: TableDisplayRow; rowIndex: number }): CS
   if (isGroupDisplayRow(row)) return style
   return { ...style, ...tableRowStyle({ row, rowIndex: tableItems.value.findIndex(item => item.id === row.id) }) }
 }
-function groupCellClasses(context: { row: TableDisplayRow; column: { property?: string } }): string {
+function groupCellClasses(context: { row: TableDisplayRow; column: { property?: string; columnKey?: string } }): string {
   if (isGroupDisplayRow(context.row) && context.row.groupRowKind === 'subitems') return 'el-table__expanded-cell'
   if (isGroupDisplayRow(context.row) && context.row.groupRowKind === 'columns' && isConnectColumnKey(context.column.property ?? '')) return 'work-item-group-column-header monday-connect-column-header'
   if (isGroupDisplayRow(context.row)) return context.row.groupRowKind === 'columns'
@@ -2194,8 +2197,10 @@ function tableColumnDragStyle(columnKey?: string): CSSProperties {
   return { transform: 'translateX(0px)' }
 }
 
-function tableCellStyle({ column }: { column: { property?: string } }): CSSProperties {
-  return tableColumnDragStyle(column.property)
+function tableCellStyle({ row, column }: { row: TableDisplayRow; column: { property?: string; columnKey?: string } }): CSSProperties {
+  const style = tableColumnDragStyle(column.property)
+  const color = cellColoring(row, column)
+  return color ? { ...style, '--work-item-condition-cell-bg': color } : style
 }
 
 function tableHeaderCellStyle({ column }: { column: { property?: string } }): CSSProperties {
@@ -2424,6 +2429,16 @@ function onTableSelectionChange(rows: TableDisplayRow[]): void {
   selectedWorkItemIds.value = new Set(rows.filter(row => !isGroupDisplayRow(row) && !isDraft(row)).map(row => row.id))
 }
 
+function rowColoring(row: TableDisplayRow): WorkItemColoring | undefined {
+  if (isGroupDisplayRow(row) || isDraft(row) || !tableViewSettings.value.coloringRules.length) return undefined
+  return evaluateWorkItemColoring(tableViewSettings.value.coloringRules, row, companyToday.value)
+}
+
+function cellColoring(row: TableDisplayRow, column: { property?: string; columnKey?: string }): string | undefined {
+  const key = column.property ?? column.columnKey
+  return key ? rowColoring(row)?.cells[key as ColoringColumnKey] : undefined
+}
+
 function tableRowClassName({ row }: { row: ProjectWorkItemListItem; rowIndex: number }): string {
   const classes = ['work-item-table-row']
   if (isDraft(row)) classes.push('work-item-draft-row')
@@ -2431,10 +2446,17 @@ function tableRowClassName({ row }: { row: ProjectWorkItemListItem; rowIndex: nu
   if (tableDragging.value?.id === row.id) classes.push('work-item-table-row--dragging')
   if (tableSorting.value) classes.push('work-item-table-row--sorting')
   if (isRowSelected(row.id)) classes.push('work-item-table-row--selected')
+  if (rowColoring(row)?.row) classes.push('work-item-table-row--colored')
   return classes.join(' ')
 }
 
-function tableRowStyle({ rowIndex }: { row: ProjectWorkItemListItem; rowIndex: number }): CSSProperties {
+function tableRowStyle(context: { row: ProjectWorkItemListItem; rowIndex: number }): CSSProperties {
+  const style = tableRowDragStyle(context)
+  const color = rowColoring(context.row)?.row
+  return color ? { ...style, '--work-item-condition-row-bg': color } : style
+}
+
+function tableRowDragStyle({ rowIndex }: { row: ProjectWorkItemListItem; rowIndex: number }): CSSProperties {
   if (!tableDragging.value || tableDraggingIndex.value < 0 || tableDropIndex.value === undefined) {
     return {}
   }
@@ -4325,6 +4347,15 @@ onBeforeUnmount(() => {
 
 .project-table-scrollbar__vertical-spacer {
   width: 1px;
+}
+
+/* 条件着色：行色铺满除菜单列与展开列外的单元格，单元格规则覆盖行色；选中行高亮（!important）仍优先。 */
+:deep(.monday-table .el-table__body tr.work-item-table-row--colored > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
+  background-color: var(--work-item-condition-row-bg);
+}
+
+:deep(.monday-table .el-table__body tr.work-item-table-row > td.el-table__cell.work-item-cell--colored:not(.work-item-menu-column):not(.monday-expand-column)) {
+  background-color: var(--work-item-condition-cell-bg);
 }
 
 :deep(.monday-table .el-table__body tr.work-item-table-row--selected > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
