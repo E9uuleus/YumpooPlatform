@@ -78,6 +78,36 @@ class WorkItemHttpIT {
     void tearDown() { cleanUp(); }
 
     @Test
+    void tableSettingsDefaultsReplaceValidateAndRequireVisibleProject() throws Exception {
+        String path = "/api/v1/me/projects/" + PROJECT_ID + "/work-item-table-settings";
+        JsonNode defaults = ok(get(path, member));
+        assertThat(defaults.path("pinnedColumnCount").asInt()).isZero();
+        assertThat(defaults.path("rowHeight").asText()).isEqualTo("SINGLE");
+        assertThat(defaults.path("coloringRules").size()).isZero();
+        assertThat(defaults.path("defaultValues").path("statusCode").isNull()).isTrue();
+        assertThat(defaults.path("updatedAt").isNull()).isTrue();
+        String body = """
+            {"pinnedColumnCount":2,"headerHeight":"DOUBLE","rowHeight":"TRIPLE",
+             "coloringRules":[{"id":"%s","target":"ROW","colorToken":"SOFIA_PINK","column":"STATUS","operator":"IS","values":["STUCK"]},
+                              {"id":"%s","target":"CELL","colorToken":"SKY","column":null,"operator":null,"values":[]}],
+             "defaultValues":{"assigneeUserIds":["%s"],"statusCode":"IN_PROGRESS","priority":"HIGH","contentId":"%s","dueDateOffsetDays":3}}
+            """.formatted(UUID.randomUUID(), UUID.randomUUID(), member.userId(), tasksId);
+        JsonNode saved = ok(mutate("PUT", path, member, body, null, null));
+        assertThat(saved.path("projectId").asText()).isEqualTo(PROJECT_ID.toString());
+        assertThat(saved.path("headerHeight").asText()).isEqualTo("DOUBLE");
+        assertThat(saved.path("coloringRules").get(1).path("column").isNull()).isTrue();
+        assertThat(saved.path("defaultValues").path("dueDateOffsetDays").asInt()).isEqualTo(3);
+        assertThat(saved.path("updatedAt").isTextual()).isTrue();
+        assertThat(ok(get(path, member))).isEqualTo(saved);
+        assertThat(ok(get(path, owner)).path("updatedAt").isNull()).isTrue();
+        assertThat(mutate("PUT", path, member, body.replace("\"pinnedColumnCount\":2", "\"pinnedColumnCount\":51"), null, null)
+                .statusCode()).isEqualTo(422);
+        jdbc.sql("DELETE FROM yumpoo.project_membership WHERE project_id=:project AND user_id=:user")
+                .param("project", PROJECT_ID).param("user", member.userId()).update();
+        assertThat(get(path, member).statusCode()).isEqualTo(404);
+    }
+
+    @Test
     void assigneesPatchPreservesDisplayOrderAndPrimaryAssignee() throws Exception {
         JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
                 workItemBody(tasksId, "多人事项"), null, UUID.randomUUID()));
@@ -991,6 +1021,7 @@ class WorkItemHttpIT {
     }
 
     private void cleanUp() {
+        jdbc.sql("DELETE FROM yumpoo.work_item_table_settings WHERE company_id=:id").param("id", COMPANY_ID).update();
         for (String table : java.util.List.of("work_item_time_session", "work_item_timer_state", "work_item_time_revision"))
             jdbc.sql("DELETE FROM yumpoo." + table + " WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_update_mention WHERE company_id=:id").param("id", COMPANY_ID).update();

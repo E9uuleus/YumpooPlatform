@@ -413,6 +413,7 @@ class YumpooServerApplicationIT {
                 "work_item_project_order",
                 "work_item_rank_lane",
                 "work_item_relation",
+                "work_item_table_settings",
                 "work_item_time_revision",
                 "work_item_time_session",
                 "work_item_timer_state",
