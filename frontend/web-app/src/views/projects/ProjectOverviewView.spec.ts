@@ -25,6 +25,8 @@ import ConnectColumnSetupPopover from '../../components/projects/connect/Connect
 import ConnectedItemCard from '../../components/projects/connect/ConnectedItemCard.vue'
 import ConnectFilterSection from '../../components/projects/connect/ConnectFilterSection.vue'
 import ConnectKanbanConnections from '../../components/projects/connect/ConnectKanbanConnections.vue'
+import WorkItemNameCell from '../../components/projects/WorkItemNameCell.vue'
+import * as tableSettings from '../../components/projects/workItemTableSettings'
 import { connection, connectionCatalog } from '../../components/projects/connect/connectTestFixtures'
 
 enableAutoUnmount(afterEach)
@@ -40,6 +42,7 @@ const state = vi.hoisted(() => ({
   listWorkItemSubitems: vi.fn(),
   listProjectWorkItemFilterOptions: vi.fn(),
   getProjectWorkItemLabels: vi.fn(),
+  getMyWorkItemTableSettings: vi.fn(),
   moveProjectWorkItemOrder: vi.fn(),
   moveWorkItemSubitemOrder: vi.fn(),
   patchWorkItemAssignees: vi.fn(),
@@ -82,6 +85,7 @@ vi.mock('../../api/client', () => ({
     listWorkItemSubitems: state.listWorkItemSubitems,
     listProjectWorkItemFilterOptions: state.listProjectWorkItemFilterOptions,
     getProjectWorkItemLabels: state.getProjectWorkItemLabels,
+    getMyWorkItemTableSettings: state.getMyWorkItemTableSettings,
     moveProjectWorkItemOrder: state.moveProjectWorkItemOrder,
     moveWorkItemSubitemOrder: state.moveWorkItemSubitemOrder,
     patchWorkItemAssignees: state.patchWorkItemAssignees,
@@ -200,6 +204,30 @@ describe('项目级工作项首页', () => {
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it('行和单元格重复访问共用一次着色计算，编辑名称后使缓存失效', async () => {
+    const target = item(), other = item('other')
+    state.listProjectWorkItems.mockResolvedValue(page([target, other]))
+    state.getMyWorkItemTableSettings.mockResolvedValue({ ...tableSettings.emptyTableSettings(), projectId: 'project-1', etag: '"1"', updatedAt: new Date(),
+      coloringRules: [{ id: 'rule-1', target: 'ROW', colorToken: 'SKY', column: 'TITLE', operator: 'CONTAINS', values: ['首页'] }] })
+    const evaluate = vi.spyOn(tableSettings, 'evaluateWorkItemColoring')
+    const wrapper = mountView(); await flushPromises()
+    const view = wrapper.vm as unknown as {
+      tableRowStyle: (context: { row: ProjectWorkItemListItem; rowIndex: number }) => Record<string, unknown>
+      tableCellStyle: (context: { row: ProjectWorkItemListItem; column: { property: string } }) => Record<string, unknown>
+    }
+    evaluate.mockClear()
+    for (let i = 0; i < 20; i++) {
+      view.tableRowStyle({ row: target, rowIndex: 0 })
+      view.tableCellStyle({ row: target, column: { property: 'title' } })
+    }
+    expect(evaluate).not.toHaveBeenCalled()
+    expect(view.tableRowStyle({ row: target, rowIndex: 0 })['--work-item-condition-row-bg']).toBeDefined()
+    wrapper.findAllComponents(WorkItemNameCell)[0]!.vm.$emit('updated', target.id, { ...target, title: '修改后的名称' })
+    await flushPromises()
+    expect(view.tableRowStyle({ row: target, rowIndex: 0 })['--work-item-condition-row-bg']).toBeUndefined()
+    expect(view.tableRowStyle({ row: other, rowIndex: 1 })['--work-item-condition-row-bg']).toBeDefined()
+  })
 
   it('连接列固定在内置列之后，列宽按 key 更新，加号打开真实列中心', async () => {
     state.listConnectColumns.mockResolvedValue(connectionCatalog)

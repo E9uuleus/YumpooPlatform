@@ -4,6 +4,8 @@ import { nextTick, reactive, watch } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from './workItemGrouping'
+import type { WorkItemCreateDefaults } from './workItemTableSettings'
+import { applyDefaultStatus } from './workItemDefaultStatus'
 
 interface GroupCreateDraft {
   open: boolean
@@ -11,7 +13,7 @@ interface GroupCreateDraft {
   saving: boolean
   error?: ApiProblem | undefined
   created?: WorkItemDetail | undefined
-  request?: { body: WorkItemCreateRequest; key: string } | undefined
+  request?: { body: WorkItemCreateRequest; key: string; status: string | null } | undefined
   transition?: { key: string; resolution: string | null } | undefined
 }
 
@@ -27,6 +29,8 @@ export function groupCreateFields(field: GroupField, group: WorkItemGroup): Part
 }
 
 export function useWorkItemGroupCreate(options: {
+  /** 本人的新建默认值；所在分组的字段值优先。 */
+  defaults?: () => WorkItemCreateDefaults
   projectId: () => string
   field: () => GroupField | ''
   contentId: () => string | undefined
@@ -62,16 +66,20 @@ export function useWorkItemGroupCreate(options: {
     state.saving = true
     state.error = undefined
     try {
-      state.request ??= { key: globalThis.crypto.randomUUID(), body: {
+      state.request ??= { key: globalThis.crypto.randomUUID(),
+        status: field === 'STATUS' ? group.key : options.defaults?.().statusCode ?? null, body: {
         contentId: options.contentId()!, title: state.title.trim(), priority: null, assigneeUserId: null,
         description: null, notes: null, timelineStartDate: null, timelineEndDate: null, dueDate: null,
-        ...groupCreateFields(field, group),
+        ...options.defaults?.().fields, ...groupCreateFields(field, group),
       } }
       state.created ??= await workItemsApi.createWorkItem({ projectId, xXSRFTOKEN: csrf,
         idempotencyKey: state.request.key, workItemCreateRequest: state.request.body })
-      if (field === 'STATUS' && state.created.statusCode !== group.key) {
-        const transition = state.created.capabilities.availableTransitions.find(option => option.toStatus === group.key)
-        if (!state.created.capabilities.canMoveInKanban || !transition) throw localProblem('工作项已创建，但当前无法移入此状态。请重试归组。')
+      const toStatus = state.request.status
+      if (field !== 'STATUS') {
+        state.created = await applyDefaultStatus(state.created, toStatus, csrf)
+      } else if (toStatus && state.created.statusCode !== toStatus) {
+        const transition = state.created.capabilities.availableTransitions.find(option => option.toStatus === toStatus)
+        if (!state.created.capabilities.canMoveInKanban || !transition) throw localProblem('工作项已创建，但当前无法迁移到目标状态。请重试。')
         let resolution = state.transition?.resolution ?? null
         if (!state.transition && transition.requiresResolution) {
           const answer = await ElMessageBox.prompt('该状态迁移需要填写说明。', `迁移到${transition.displayName}`, {
@@ -83,7 +91,7 @@ export function useWorkItemGroupCreate(options: {
         state.transition ??= { key: globalThis.crypto.randomUUID(), resolution }
         state.created = await workItemsApi.transitionWorkItem({ workItemId: state.created.id, xXSRFTOKEN: csrf,
           ifMatch: state.created.etag, idempotencyKey: state.transition.key,
-          workItemTransitionRequest: { toStatus: group.key, resolution: state.transition.resolution } })
+          workItemTransitionRequest: { toStatus, resolution: state.transition.resolution } })
       }
       ElMessage.success(`已创建 ${state.created.itemNo}`)
       state.created = undefined
@@ -93,7 +101,7 @@ export function useWorkItemGroupCreate(options: {
       state.open = continueAdding
       if (options.projectId() === projectId) await options.changed()
     } catch (reason) {
-      state.error = state.created ? localProblem('工作项已创建，归组未完成。点击重试继续归组，不会重复创建。') : await toApiProblem(reason)
+      state.error = state.created ? localProblem('工作项已创建，状态设置未完成。点击重试继续，不会重复创建。') : await toApiProblem(reason)
       if (!state.created && state.error.kind === 'response' && state.error.status >= 400 && state.error.status < 500 && state.error.status !== 408)
         state.request = undefined
     } finally {

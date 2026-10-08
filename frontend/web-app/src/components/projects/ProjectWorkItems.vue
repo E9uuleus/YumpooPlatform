@@ -76,6 +76,11 @@ import YpAssigneeStack from '../yp/YpAssigneeStack.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import WorkItemGroupingPopover from './WorkItemGroupingPopover.vue'
+import WorkItemTableSettingsMenu from './WorkItemTableSettingsMenu.vue'
+import { useWorkItemTableSettings } from './useWorkItemTableSettings'
+import { applyDefaultStatus } from './workItemDefaultStatus'
+import { DEFAULT_VALUE_COLUMN_KEYS, heightOption, resolveWorkItemCreateDefaults, type DefaultValueColumnKey,
+  type TableSettingsCatalog, evaluateWorkItemColoring, type ColoringColumnKey, type WorkItemColoring } from './workItemTableSettings'
 import { useWorkItemGrouping, isGroupDisplayRow, type WorkItemGroupDisplayRow } from './useWorkItemGrouping'
 import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from './workItemGrouping'
 import { useWorkItemGroupCreate } from './useWorkItemGroupCreate'
@@ -87,7 +92,7 @@ import ConnectTableColumnHeader from './connect/ConnectTableColumnHeader.vue'
 import ConnectColumnDeleteDialog from './connect/ConnectColumnDeleteDialog.vue'
 import ConnectTableCell from './connect/ConnectTableCell.vue'
 import ConnectedItemCard from './connect/ConnectedItemCard.vue'
-import { isConnectColumnKey, type ConnectColumnKey } from './connect/connectColumnKeys'
+import { CONNECT_DRAFT_KEY, isConnectColumnKey, type ConnectColumnKey } from './connect/connectColumnKeys'
 import ConnectFilterSection from './connect/ConnectFilterSection.vue'
 import ConnectKanbanConnections from './connect/ConnectKanbanConnections.vue'
 import type { ProjectWorkItemFilterOption } from '@yumpoo/api-client'
@@ -337,10 +342,13 @@ function tableCellClassName({
   column,
 }: {
   row: ProjectWorkItemListItem
-  column: { property?: string }
+  column: { property?: string; columnKey?: string }
 }): string {
-  if (!column.property || column.property === 'title') return ''
-  return selectedCellKey.value === `${row.id}:${column.property}` ? 'monday-cell--selected' : ''
+  const classes: string[] = []
+  if (column.property && column.property !== 'title' && selectedCellKey.value === `${row.id}:${column.property}`)
+    classes.push('monday-cell--selected')
+  if (cellColoring(row, column)) classes.push('work-item-cell--colored')
+  return classes.join(' ')
 }
 
 function syncProjectPageScrollLayout(): void {
@@ -657,7 +665,6 @@ const filteredMembers = computed(() => {
 
 const contentsById = computed(() => new Map((catalog.value?.items ?? []).map(item => [item.id, item])))
 const activeContents = computed(() => (catalog.value?.items ?? []).filter(item => item.active))
-const defaultContentId = computed(() => activeContents.value[0]?.id)
 const workflowStatuses = computed(() => [...(labelCatalog.value?.statuses ?? [])]
   .sort((left, right) => left.sortOrder - right.sortOrder)
   .map(status => ({ ...status, statusCode: status.code })))
@@ -673,8 +680,9 @@ const { draft: inlineDraft, rows: displayWorkItemRows, isDraft, start: createBel
   contextId: () => projectId.value,
   items: () => tableItems.value,
   canCreate: () => canCreate.value && !hasExplicitSort.value && !editingCell.value && !tableSorting.value,
-  content: () => activeContents.value[0],
-  status: () => workflowStatuses.value.find(status => status.active && status.statusCode === 'NOT_STARTED'),
+  content: () => activeContents.value.find(item => item.id === defaultContentId.value),
+  status: () => workflowStatuses.value.find(status => status.active && status.statusCode === (createDefaults.value.statusCode ?? 'NOT_STARTED')),
+  defaults: () => createDefaults.value,
   created: (created, anchorId) => {
     const next = [...tableItems.value]
     next.splice(next.findIndex(item => item.id === anchorId) + 1, 0, { ...created, subitemCount: 0, discussionCount: 0 })
@@ -685,6 +693,45 @@ const { draft: inlineDraft, rows: displayWorkItemRows, isDraft, start: createBel
 })
 const session = useSession()
 const groupingClock = useWorkItemDueClock()
+const { settings: tableViewSettings, state: tableSettingsState, update: updateTableSettings, load: reloadTableSettings,
+  saveState: tableSettingsSaveState, saveError: tableSettingsSaveError, retrySave: retrySaveTableSettings }
+  = useWorkItemTableSettings(() => projectId.value)
+const companyToday = computed(() => companyDate(groupingClock.value, session.authentication.value?.company.timezone ?? 'Asia/Shanghai'))
+const createDefaults = computed(() => resolveWorkItemCreateDefaults(tableViewSettings.value.defaultValues, {
+  memberIds: new Set(activeMembers.value.map(item => item.userId)),
+  statusCodes: new Set(workflowStatuses.value.filter(item => item.active).map(item => item.code)),
+  priorityCodes: new Set(priorityOptions.value.filter(item => item.active).map(item => item.code)),
+  contentIds: new Set(activeContents.value.map(item => item.id)),
+  today: companyToday.value,
+}))
+const defaultContentId = computed(() => createDefaults.value.contentId ?? activeContents.value[0]?.id)
+const tableSettingsCatalog = computed<TableSettingsCatalog>(() => ({
+  members: activeMembers.value, statuses: workflowStatuses.value, priorities: priorityOptions.value,
+  contents: catalog.value?.items ?? [],
+}))
+const defaultValueColumns = computed(() => movableColumnOrder.value
+  .filter((key): key is DefaultValueColumnKey => (DEFAULT_VALUE_COLUMN_KEYS as readonly string[]).includes(key))
+  .map(key => ({ key, label: columnByKey.get(key)!.label })))
+// 冻结前 N 列：按当前可见列顺序（内置列在前、连接列在后），新建连接列草稿不参与。
+const pinnableColumns = computed(() => visibleColumns.value.filter(column => column.key !== 'title' && column.key !== CONNECT_DRAFT_KEY))
+const pinnedColumnKeys = computed(() => new Set<string>(pinnableColumns.value
+  .slice(0, tableViewSettings.value.pinnedColumnCount).map(column => column.key)))
+const tablePinColumns = computed(() => [columnByKey.get('title')!, ...pinnableColumns.value]
+  .map(column => ({ key: column.key, label: column.label, width: columnWidth(column.key) })))
+const tableRowHeight = computed(() => heightOption(tableViewSettings.value.rowHeight).row)
+const tableHeightClasses = computed(() => [
+  `monday-table--header-${tableViewSettings.value.headerHeight.toLowerCase()}`,
+  `monday-table--row-${tableViewSettings.value.rowHeight.toLowerCase()}`,
+])
+const PIN_SCROLL_RESERVE = 200
+function tablePinWidthBudget(): number {
+  const width = resolveTableScrollElement()?.clientWidth ?? 0
+  return width > 0
+    ? Math.max(1, width - TABLE_MENU_COLUMN_WIDTH - TABLE_EXPAND_COLUMN_WIDTH - TABLE_SELECTION_COLUMN_WIDTH - PIN_SCROLL_RESERVE)
+    : 0
+}
+watch(() => [[...pinnedColumnKeys.value].join('|'), tableViewSettings.value.headerHeight, tableViewSettings.value.rowHeight].join(':'),
+  () => void nextTick(flushResponsiveTableLayout))
 const projectGroupingPrefsKey = () => `yumpoo:project-work-items:grouping:v1:${session.authentication.value?.company.id ?? 'unknown'}:${session.authentication.value?.user.id ?? 'unknown'}:${projectId.value}`
 const grouping = useWorkItemGrouping({
   source: () => tableSource,
@@ -716,6 +763,7 @@ function groupCreateDisabledReason(group: WorkItemGroup): string {
   }
 }
 const groupCreate = useWorkItemGroupCreate({
+  defaults: () => createDefaults.value,
   projectId: () => projectId.value, field: () => groupingField.value, contentId: () => defaultContentId.value,
   disabledReason: groupCreateDisabledReason, changed: () => { notifyChanged(); return reloadSortedTableInPlace() },
 })
@@ -796,7 +844,7 @@ function groupRowStyles(context: { row: TableDisplayRow; rowIndex: number }): CS
   if (isGroupDisplayRow(row)) return style
   return { ...style, ...tableRowStyle({ row, rowIndex: tableItems.value.findIndex(item => item.id === row.id) }) }
 }
-function groupCellClasses(context: { row: TableDisplayRow; column: { property?: string } }): string {
+function groupCellClasses(context: { row: TableDisplayRow; column: { property?: string; columnKey?: string } }): string {
   if (isGroupDisplayRow(context.row) && context.row.groupRowKind === 'subitems') return 'el-table__expanded-cell'
   if (isGroupDisplayRow(context.row) && context.row.groupRowKind === 'columns' && isConnectColumnKey(context.column.property ?? '')) return 'work-item-group-column-header monday-connect-column-header'
   if (isGroupDisplayRow(context.row)) return context.row.groupRowKind === 'columns'
@@ -1525,7 +1573,7 @@ async function createQuick(continueAdding: boolean): Promise<void> {
   quickCreating.value = true
   error.value = undefined
   try {
-    const created = await workItemsApi.createWorkItem({
+    const inserted = await workItemsApi.createWorkItem({
       projectId: projectId.value,
       xXSRFTOKEN: csrf,
       idempotencyKey: globalThis.crypto.randomUUID(),
@@ -1539,8 +1587,10 @@ async function createQuick(continueAdding: boolean): Promise<void> {
         timelineStartDate: null,
         timelineEndDate: null,
         dueDate: null,
+        ...createDefaults.value.fields,
       },
     })
+    const created = await applyDefaultStatus(inserted, createDefaults.value.statusCode, csrf)
     notifyChanged()
     ElMessage.success(`已创建 ${created.itemNo}`)
     if (continueAdding) {
@@ -1974,7 +2024,6 @@ async function toggleColumn(key: ColumnKey, checked: boolean): Promise<void> {
   columnFlip.play(snapshot)
 }
 
-const TABLE_ROW_HEIGHT = 36
 const TABLE_DRAG_TILT_DEGREES = 1
 const TABLE_DRAG_POINTER_THRESHOLD = 5
 const TABLE_COLUMN_RESIZE_HANDLE_WIDTH = 8
@@ -1995,7 +2044,7 @@ function createTableDragPreview(source: HTMLElement, clientX: number, clientY: n
   removeTableDragPreview()
   const rect = source.getBoundingClientRect()
   const width = Math.max(rect.width, source.offsetWidth, 1)
-  const height = Math.max(rect.height, source.offsetHeight, TABLE_ROW_HEIGHT)
+  const height = Math.max(rect.height, source.offsetHeight, tableRowHeight.value)
   tableDragPointerOffset = {
     x: Math.min(Math.max(clientX - rect.left, 0), width),
     y: Math.min(Math.max(clientY - rect.top, 0), height),
@@ -2154,8 +2203,10 @@ function tableColumnDragStyle(columnKey?: string): CSSProperties {
   return { transform: 'translateX(0px)' }
 }
 
-function tableCellStyle({ column }: { column: { property?: string } }): CSSProperties {
-  return tableColumnDragStyle(column.property)
+function tableCellStyle({ row, column }: { row: TableDisplayRow; column: { property?: string; columnKey?: string } }): CSSProperties {
+  const style = tableColumnDragStyle(column.property)
+  const color = cellColoring(row, column)
+  return color ? { ...style, '--work-item-condition-cell-bg': color } : style
 }
 
 function tableHeaderCellStyle({ column }: { column: { property?: string } }): CSSProperties {
@@ -2384,6 +2435,27 @@ function onTableSelectionChange(rows: TableDisplayRow[]): void {
   selectedWorkItemIds.value = new Set(rows.filter(row => !isGroupDisplayRow(row) && !isDraft(row)).map(row => row.id))
 }
 
+const tableColoring = computed(() => {
+  const colors = new Map<string, WorkItemColoring>()
+  const rules = tableViewSettings.value.coloringRules
+  if (!rules.length) return colors
+  for (const row of displayTableItems.value) {
+    if (isGroupDisplayRow(row) || isDraft(row)) continue
+    const color = evaluateWorkItemColoring(rules, row, companyToday.value)
+    if (color) colors.set(row.id, color)
+  }
+  return colors
+})
+
+function rowColoring(row: TableDisplayRow): WorkItemColoring | undefined {
+  return tableColoring.value.get(row.id)
+}
+
+function cellColoring(row: TableDisplayRow, column: { property?: string; columnKey?: string }): string | undefined {
+  const key = column.property ?? column.columnKey
+  return key ? rowColoring(row)?.cells[key as ColoringColumnKey] : undefined
+}
+
 function tableRowClassName({ row }: { row: ProjectWorkItemListItem; rowIndex: number }): string {
   const classes = ['work-item-table-row']
   if (isDraft(row)) classes.push('work-item-draft-row')
@@ -2391,10 +2463,17 @@ function tableRowClassName({ row }: { row: ProjectWorkItemListItem; rowIndex: nu
   if (tableDragging.value?.id === row.id) classes.push('work-item-table-row--dragging')
   if (tableSorting.value) classes.push('work-item-table-row--sorting')
   if (isRowSelected(row.id)) classes.push('work-item-table-row--selected')
+  if (rowColoring(row)?.row) classes.push('work-item-table-row--colored')
   return classes.join(' ')
 }
 
-function tableRowStyle({ rowIndex }: { row: ProjectWorkItemListItem; rowIndex: number }): CSSProperties {
+function tableRowStyle(context: { row: ProjectWorkItemListItem; rowIndex: number }): CSSProperties {
+  const style = tableRowDragStyle(context)
+  const color = rowColoring(context.row)?.row
+  return color ? { ...style, '--work-item-condition-row-bg': color } : style
+}
+
+function tableRowDragStyle({ rowIndex }: { row: ProjectWorkItemListItem; rowIndex: number }): CSSProperties {
   if (!tableDragging.value || tableDraggingIndex.value < 0 || tableDropIndex.value === undefined) {
     return {}
   }
@@ -2405,9 +2484,9 @@ function tableRowStyle({ rowIndex }: { row: ProjectWorkItemListItem; rowIndex: n
   if (rowIndex === from) {
     return { opacity: 0, pointerEvents: 'none' }
   } else if (from < to && rowIndex > from && rowIndex < to) {
-    offset = -TABLE_ROW_HEIGHT
+    offset = -tableRowHeight.value
   } else if (from > to && rowIndex >= to && rowIndex < from) {
-    offset = TABLE_ROW_HEIGHT
+    offset = tableRowHeight.value
   }
 
   if (offset === 0) {
@@ -2509,7 +2588,7 @@ function updateTableDropTarget(clientY: number): void {
       const scrollTop = resolveTableScrollElement()?.scrollTop ?? bodyWrapper.scrollTop
       const relativeY = clientY - rect.top + scrollTop
       tableDropIndex.value = Math.max(0, Math.min(tableItems.value.length,
-        Math.round(relativeY / TABLE_ROW_HEIGHT)))
+        Math.round(relativeY / tableRowHeight.value)))
     }
   }
   if (clientY >= window.innerHeight - 48) {
@@ -3052,6 +3131,21 @@ onBeforeUnmount(() => {
             :disabled="selectedView === 'kanban' || savingSortOrder"
             @field="changeGrouping" @order="groupingOrder = $event" @show-empty="showEmptyGroups = $event" />
           <button class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
+          <work-item-table-settings-menu
+            :settings="tableViewSettings"
+            :state="tableSettingsState"
+            :save-state="tableSettingsSaveState"
+            :save-error="tableSettingsSaveError"
+            :disabled="selectedView === 'kanban'"
+            :pin-columns="tablePinColumns"
+            :pin-width-budget="tablePinWidthBudget"
+            :defaults-count="createDefaults.count"
+            :catalog="tableSettingsCatalog"
+            :default-columns="defaultValueColumns"
+            @update="updateTableSettings"
+            @retry="reloadTableSettings"
+            @retry-save="retrySaveTableSettings"
+          />
         </div>
 
         <template v-if="!embedded && (connect.catalogError || connect.cellError)">
@@ -3087,7 +3181,7 @@ onBeforeUnmount(() => {
               :header-cell-style="tableHeaderCellStyle"
               row-key="id"
               class="monday-table work-item-table-base"
-              :class="{ 'monday-table--column-dragging': columnDraggingKey, 'monday-table--empty': !displayTableItems.length, 'monday-table--grouped': grouped }"
+              :class="[tableHeightClasses, { 'monday-table--column-dragging': columnDraggingKey, 'monday-table--empty': !displayTableItems.length, 'monday-table--grouped': grouped }]"
               height="100%"
               empty-text="当前项目暂无工作项"
               border
@@ -3368,6 +3462,7 @@ onBeforeUnmount(() => {
               <!-- 按位置复用列；prop 会响应字段变化，column-key 只在 Element Plus 初始化列时读取。 -->
               <el-table-column
                 v-for="(column, columnIndex) in movableVisibleColumns"
+                :fixed="pinnedColumnKeys.has(column.key)"
                 :key="columnIndex"
                 :label="column.label"
                 :prop="column.key"
@@ -3554,6 +3649,7 @@ onBeforeUnmount(() => {
 
               <el-table-column
                 v-for="column in connect.visibleColumns"
+                :fixed="pinnedColumnKeys.has(column.key)"
                 :key="column.key"
                 :column-key="column.key"
                 :prop="column.key"
@@ -3996,7 +4092,7 @@ onBeforeUnmount(() => {
   overflow-x: auto;
 }
 
-.toolbar-button, :deep(.grouping-toolbar-button) {
+.toolbar-button, :deep(.grouping-toolbar-button), :deep(.table-settings-toolbar-button) {
   display: inline-flex;
   height: 36px;
   flex: 0 0 auto;
@@ -4012,8 +4108,10 @@ onBeforeUnmount(() => {
   transition: background var(--yp-motion-fast) var(--yp-ease-standard), color var(--yp-motion-fast) var(--yp-ease-standard);
 }
 
-.toolbar-button:hover:not(:disabled), .toolbar-button.active, :deep(.grouping-toolbar-button:hover:not(:disabled)), :deep(.grouping-toolbar-button.active) { background: var(--yp-bg-hover); color: var(--yp-action-primary); }
-.toolbar-button:disabled, :deep(.grouping-toolbar-button:disabled) { color: var(--yp-text-disabled); cursor: not-allowed; }
+.toolbar-button:hover:not(:disabled), .toolbar-button.active, :deep(.grouping-toolbar-button:hover:not(:disabled)), :deep(.grouping-toolbar-button.active), :deep(.table-settings-toolbar-button:hover:not(:disabled)), :deep(.table-settings-toolbar-button.active) { background: var(--yp-bg-hover); color: var(--yp-action-primary); }
+.toolbar-button:disabled, :deep(.grouping-toolbar-button:disabled), :deep(.table-settings-toolbar-button:disabled) { color: var(--yp-text-disabled); cursor: not-allowed; }
+:deep(.table-settings-toolbar-button) { width: 36px; justify-content: center; padding: 0; }
+:deep(.table-settings-toolbar-button--unsaved) { width: auto; padding: 0 var(--yp-space-3); }
 .toolbar-count { min-width: 18px; padding: 1px 5px; border-radius: var(--yp-radius-pill); color: var(--yp-priority-foreground); background: var(--yp-action-primary); font-size: 11px; }
 .toolbar-search { width: 94px; flex: 0 0 auto; transition: width 100ms cubic-bezier(0, 0, .35, 1); }
 .toolbar-search > .toolbar-button { width: 100%; }
@@ -4179,6 +4277,43 @@ onBeforeUnmount(() => {
   border-top-left-radius: var(--yp-radius-md);
 }
 
+:deep(.monday-table.el-table.monday-table--header-double) { --work-item-table-header-height: 56px; }
+:deep(.monday-table.el-table.monday-table--header-triple) { --work-item-table-header-height: 76px; }
+
+/* 只放大真实工作项行；分组标题、添加行与子项表保持单行高度。 */
+:deep(.monday-table.monday-table--row-double .el-table__body tr.work-item-table-row) { --work-item-table-row-height: 56px; }
+:deep(.monday-table.monday-table--row-triple .el-table__body tr.work-item-table-row) { --work-item-table-row-height: 76px; }
+
+:deep(.monday-table.monday-table--row-double tr.work-item-table-row .work-item-title-text),
+:deep(.monday-table.monday-table--row-triple tr.work-item-table-row .work-item-title-text) {
+  display: -webkit-box;
+  width: auto;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+}
+:deep(.monday-table.monday-table--row-double tr.work-item-table-row .work-item-title-text) { -webkit-line-clamp: 2; }
+:deep(.monday-table.monday-table--row-triple tr.work-item-table-row .work-item-title-text) { -webkit-line-clamp: 3; }
+
+:deep(.monday-table > .el-table__inner-wrapper > .el-table__header-wrapper .connect-column-header),
+:deep(.monday-table tr.work-item-group-columns .connect-column-header) { height: var(--work-item-table-header-height); }
+
+:deep(.monday-table.monday-table--header-double > .el-table__inner-wrapper > .el-table__header-wrapper :is(.monday-column-quick-sort__label, .connect-column-header__label)),
+:deep(.monday-table.monday-table--header-double tr.work-item-group-columns :is(.monday-column-quick-sort__label, .connect-column-header__label)),
+:deep(.monday-table.monday-table--header-triple > .el-table__inner-wrapper > .el-table__header-wrapper :is(.monday-column-quick-sort__label, .connect-column-header__label)),
+:deep(.monday-table.monday-table--header-triple tr.work-item-group-columns :is(.monday-column-quick-sort__label, .connect-column-header__label)) {
+  display: -webkit-box;
+  line-height: 1.3;
+  white-space: normal;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+}
+:deep(.monday-table.monday-table--header-double > .el-table__inner-wrapper > .el-table__header-wrapper :is(.monday-column-quick-sort__label, .connect-column-header__label)),
+:deep(.monday-table.monday-table--header-double tr.work-item-group-columns :is(.monday-column-quick-sort__label, .connect-column-header__label)) { -webkit-line-clamp: 2; }
+:deep(.monday-table.monday-table--header-triple > .el-table__inner-wrapper > .el-table__header-wrapper :is(.monday-column-quick-sort__label, .connect-column-header__label)),
+:deep(.monday-table.monday-table--header-triple tr.work-item-group-columns :is(.monday-column-quick-sort__label, .connect-column-header__label)) { -webkit-line-clamp: 3; }
+
 :deep(.monday-table .el-scrollbar__wrap) {
   overscroll-behavior: contain;
 }
@@ -4236,6 +4371,15 @@ onBeforeUnmount(() => {
 
 .project-table-scrollbar__vertical-spacer {
   width: 1px;
+}
+
+/* 条件着色：行色铺满除菜单列与展开列外的单元格，单元格规则覆盖行色；选中行高亮（!important）仍优先。 */
+:deep(.monday-table .el-table__body tr.work-item-table-row--colored > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
+  background-color: var(--work-item-condition-row-bg);
+}
+
+:deep(.monday-table .el-table__body tr.work-item-table-row > td.el-table__cell.work-item-cell--colored:not(.work-item-menu-column):not(.monday-expand-column)) {
+  background-color: var(--work-item-condition-cell-bg);
 }
 
 :deep(.monday-table .el-table__body tr.work-item-table-row--selected > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {

@@ -1163,6 +1163,52 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
+  /me/projects/{projectId}/work-item-table-settings:
+    get:
+      tags: [WorkItems]
+      operationId: getMyWorkItemTableSettings
+      summary: 查询本人在项目中的工作项表格设置
+      description: 项目对当前账号可见即可读取；从未保存时返回默认值、updatedAt 为 null、etag 为 "0"。只影响本人的表格展示与新建默认值。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: 本人工作项表格设置。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemTableSettings' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+    put:
+      tags: [WorkItems]
+      operationId: updateMyWorkItemTableSettings
+      summary: 整体替换本人在项目中的工作项表格设置
+      description: 要求会话、XSRF 和最近读取的 If-Match。ETag 由 updatedAt 的微秒时间戳生成，保存以原子比较更新防止覆盖其他窗口或设备的修改；版本过期返回 412。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemTableSettingsUpdateRequest' } } }
+      responses:
+        '200':
+          description: 保存后的本人工作项表格设置。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemTableSettings' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /admin/members/{userId}/platform-role:
     put:
       tags: [IdentityGovernance]
@@ -6913,6 +6959,85 @@ components:
         assigned: { type: boolean }
         connectionCreated: { type: boolean }
         updatedAt: { type: string, format: date-time, nullable: true }
+    WorkItemTableHeight:
+      type: string
+      enum: [SINGLE, DOUBLE, TRIPLE]
+      description: 表头或行的高度档位，SINGLE 为默认单行。
+    WorkItemColoringTarget:
+      type: string
+      enum: [CELL, ROW]
+    WorkItemColoringColumn:
+      type: string
+      enum: [TITLE, ASSIGNEE, STATUS, PRIORITY, CONTENT, DUE_DATE]
+    WorkItemColoringOperator:
+      type: string
+      enum: [IS, IS_NOT, IS_EMPTY, IS_NOT_EMPTY, CONTAINS, NOT_CONTAINS, PAST, TODAY, BEFORE, AFTER]
+    WorkItemColoringRule:
+      type: object
+      additionalProperties: false
+      required: [id, target, colorToken, column, operator, values]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        target: { $ref: '#/components/schemas/WorkItemColoringTarget' }
+        colorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
+        column:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/WorkItemColoringColumn' }]
+          nullable: true
+          description: null 表示规则尚未填写完整，不生效。
+        operator:
+          type: string
+          allOf: [{ $ref: '#/components/schemas/WorkItemColoringOperator' }]
+          nullable: true
+        values:
+          type: array
+          maxItems: 20
+          items: { type: string, minLength: 1, maxLength: 100 }
+          description: IS/IS_NOT 为成员 ID、标签代码或类别 ID；CONTAINS/NOT_CONTAINS 为一段文本；BEFORE/AFTER 为一个 YYYY-MM-DD 日期；其余运算符为空数组。
+    WorkItemCreateDefaultValues:
+      type: object
+      additionalProperties: false
+      required: [assigneeUserIds, statusCode, priority, contentId, dueDateOffsetDays]
+      properties:
+        assigneeUserIds:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        statusCode: { type: string, nullable: true, pattern: '^[A-Z][A-Z0-9_]{1,31}$', description: 创建后迁移到的状态代码。 }
+        priority: { type: string, nullable: true, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        contentId: { type: string, format: uuid, nullable: true }
+        dueDateOffsetDays: { type: integer, format: int32, minimum: 0, maximum: 365, nullable: true, description: null 为不设置；0 为创建当天（企业时区）。 }
+    WorkItemTableSettingsUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [pinnedColumnCount, headerHeight, rowHeight, coloringRules, defaultValues]
+      properties:
+        pinnedColumnCount: { type: integer, format: int32, minimum: 0, maximum: 50, description: 工作项名称列之后按当前可见列顺序冻结的列数。 }
+        headerHeight: { $ref: '#/components/schemas/WorkItemTableHeight' }
+        rowHeight: { $ref: '#/components/schemas/WorkItemTableHeight' }
+        coloringRules:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/WorkItemColoringRule' }
+        defaultValues: { $ref: '#/components/schemas/WorkItemCreateDefaultValues' }
+    WorkItemTableSettings:
+      type: object
+      additionalProperties: false
+      required: [projectId, pinnedColumnCount, headerHeight, rowHeight, coloringRules, defaultValues, updatedAt, etag]
+      properties:
+        projectId: { $ref: '#/components/schemas/Uuid' }
+        pinnedColumnCount: { type: integer, format: int32, minimum: 0, maximum: 50 }
+        headerHeight: { $ref: '#/components/schemas/WorkItemTableHeight' }
+        rowHeight: { $ref: '#/components/schemas/WorkItemTableHeight' }
+        coloringRules:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/WorkItemColoringRule' }
+        defaultValues: { $ref: '#/components/schemas/WorkItemCreateDefaultValues' }
+        updatedAt: { type: string, format: date-time, nullable: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+
     DashboardChartMeasure:
       type: object
       required:

@@ -1,0 +1,96 @@
+.table-settings-menu { display: inline-flex; flex: 0 0 auto; }
+.table-settings-unsaved { color: var(--yp-status-red); font-size: 11px; white-space: nowrap; }
+.table-settings-save-state { display: grid; gap: 4px; margin-top: 10px; padding: 8px 4px 0; border-top: 1px solid var(--yp-border-default); color: var(--yp-text-secondary); font-size: 12px; }
+.table-settings-save-state .table-settings-link { justify-self: start; }
+.table-settings-list { display: grid; gap: 2px; }
+.table-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-primary);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.table-settings-item:hover, .table-settings-item:focus-visible { background: var(--yp-bg-hover); outline: none; }
+.table-settings-item--current { color: var(--yp-action-primary); background: var(--yp-bg-selected); }
+.table-settings-item__icon { flex: none; color: var(--yp-text-secondary); }
+.table-settings-item__value { margin-left: auto; color: var(--yp-text-secondary); font-size: 12px; }
+.table-settings-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  padding: 0 8px;
+  color: var(--yp-text-secondary);
+  font-size: 13px;
+}
+.table-settings-link {
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-action-primary);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.table-settings-link:hover:not(:disabled) { background: var(--yp-bg-hover); }
+.table-settings-link:disabled { color: var(--yp-text-disabled); cursor: not-allowed; }
+.table-settings-panel { display: grid; gap: 12px; padding: 4px; }
+.table-settings-panel__header { display: flex; align-items: center; gap: 6px; min-height: 28px; }
+.table-settings-panel__header strong { font-size: 15px; font-weight: 600; }
+.table-settings-panel__action { margin-left: auto; }
+.table-settings-panel__hint { margin: 0; color: var(--yp-text-secondary); font-size: 12px; line-height: 1.5; }
+.table-settings-back, .table-settings-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.table-settings-back:hover, .table-settings-icon-button:hover { color: var(--yp-text-primary); background: var(--yp-bg-hover); }
+.table-settings-empty { margin: 0; padding: 12px 0; color: var(--yp-text-secondary); font-size: 13px; text-align: center; }
+.table-settings-pin-list { display: grid; gap: 2px; max-height: min(420px, calc(100dvh - 240px)); overflow-y: auto; }
+.table-settings-pin-option { height: 34px; margin: 0; padding: 0 8px; border-radius: var(--yp-radius-sm); }
+.table-settings-pin-option:hover { background: var(--yp-bg-hover); }
+.table-settings-rules { display: grid; gap: 10px; max-height: min(440px, calc(100dvh - 260px)); overflow-y: auto; }
+.table-settings-rule {
+  display: grid;
+  grid-template-columns: 28px 96px auto 136px 112px minmax(160px, 1fr) 28px;
+  gap: 8px;
+  align-items: center;
+}
+.table-settings-rule__when { color: var(--yp-text-secondary); font-size: 13px; }
+.table-settings-swatch, .table-settings-palette__color {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--yp-border-default);
+  border-radius: var(--yp-radius-sm);
+  cursor: pointer;
+}
+.table-settings-palette { display: grid; grid-template-columns: repeat(8, 22px); gap: 6px; }
+.table-settings-palette__color { width: 22px; height: 22px; }
+.table-settings-palette__color--current { outline: 2px solid var(--yp-action-primary); outline-offset: 1px; }
+.table-settings-defaults { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: center; }
+.table-settings-defaults__label { color: var(--yp-text-secondary); font-size: 13px; }
+.table-settings-due { display: flex; align-items: center; gap: 8px; }
+.table-settings-due > .el-select { flex: 1 1 0; }
+.table-settings-due > .el-input-number { width: 112px; }
