@@ -4930,7 +4930,7 @@ onBeforeUnmount(() => {
   width: calc(100% - 48px);
   height: 26px;
   min-width: 0;
-  margin: 5px 24px;
+  margin: calc((var(--work-item-table-row-height) - 26px) / 2) 24px;
   padding: 0 16px;
   align-items: center;
   justify-content: center;
