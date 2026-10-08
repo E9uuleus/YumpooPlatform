@@ -4,6 +4,7 @@ import { defineComponent, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { dateGroups, EMPTY_GROUP, itemGroupKey, type GroupField, type WorkItemGroup } from './workItemGrouping'
 import { useWorkItemGroupCreate } from './useWorkItemGroupCreate'
+import type { WorkItemCreateDefaults } from './workItemTableSettings'
 
 const api = vi.hoisted(() => ({ createWorkItem: vi.fn(), transitionWorkItem: vi.fn() }))
 vi.mock('../../api/client', () => ({ workItemsApi: api }))
@@ -13,13 +14,13 @@ enableAutoUnmount(afterEach)
 const group = (key: string): WorkItemGroup => ({ key, label: key, color: 'blue', count: 1, rank: 0 })
 const created = () => ({ id: 'new', itemNo: 'WI-1', etag: '"1"', statusCode: 'TODO',
   capabilities: { canMoveInKanban: true, availableTransitions: [{ toStatus: 'DONE', requiresResolution: false }] } } as WorkItemDetail)
-function harness(initial: GroupField = 'ASSIGNEE') {
+function harness(initial: GroupField = 'ASSIGNEE', defaults?: WorkItemCreateDefaults) {
   const field = ref<GroupField | ''>(initial), project = ref('project-1'), disabled = ref('')
   const changed = vi.fn(async () => {})
   let create!: ReturnType<typeof useWorkItemGroupCreate>
   mount(defineComponent({ setup() {
     create = useWorkItemGroupCreate({ field: () => field.value, projectId: () => project.value, contentId: () => 'default',
-      disabledReason: () => disabled.value, changed })
+      disabledReason: () => disabled.value, changed, ...(defaults ? { defaults: () => defaults } : {}) })
     return () => null
   } }))
   return { create, field, project, disabled, changed }
@@ -31,6 +32,17 @@ beforeEach(() => {
 })
 
 describe('分组末尾新增', () => {
+  it('套用新建默认值：分组字段优先，默认状态在创建后迁移', async () => {
+    const { create } = harness('PRIORITY', { contentId: undefined, statusCode: 'DONE', count: 3,
+      fields: { priority: 'LOW', assigneeUserIds: ['user-9'], assigneeUserId: 'user-9' } })
+    const target = group('HIGH')
+    create.open(target); create.draft(target).title = '默认值新项'
+    await create.save(target)
+    expect(api.createWorkItem).toHaveBeenCalledWith(expect.objectContaining({ workItemCreateRequest: expect.objectContaining({
+      priority: 'HIGH', assigneeUserIds: ['user-9'], assigneeUserId: 'user-9' }) }))
+    expect(api.transitionWorkItem).toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'new',
+      workItemTransitionRequest: { toStatus: 'DONE', resolution: null } }))
+  })
   it.each<[GroupField, string, Partial<WorkItemCreateRequest>]>([
     ['ASSIGNEE', 'user-2', { assigneeUserId: 'user-2', assigneeUserIds: ['user-2'] }], ['ASSIGNEE', EMPTY_GROUP, { assigneeUserId: null, assigneeUserIds: [] }],
     ['PRIORITY', 'HIGH', { priority: 'HIGH' }], ['PRIORITY', EMPTY_GROUP, { priority: null }],

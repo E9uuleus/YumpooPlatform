@@ -3,8 +3,12 @@ import { ElMessage } from 'element-plus'
 import { readCsrfToken, WorkItemStatusCategory, type ProjectWorkItemListItem, type WorkItemDetail, type WorkItemLabelColorToken } from '@yumpoo/api-client'
 import { workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
+import type { WorkItemCreateDefaults } from './workItemTableSettings'
+import { applyDefaultStatus } from './workItemDefaultStatus'
 
 interface Options {
+  /** 仅主表根项传入；子项表不套用新建默认值。 */
+  defaults?: () => WorkItemCreateDefaults
   contextId: () => string
   items: () => ProjectWorkItemListItem[]
   canCreate: () => boolean
@@ -15,7 +19,7 @@ interface Options {
 }
 
 export function useWorkItemInlineCreate(options: Options) {
-  const draft = ref<{ row: ProjectWorkItemListItem; anchorId: string; requestKey: string; parentId: string | undefined }>()
+  const draft = ref<{ row: ProjectWorkItemListItem; anchorId: string; requestKey: string; parentId: string | undefined; defaults: WorkItemCreateDefaults | undefined }>()
   const saving = ref(false)
   const rows = computed(() => {
     const result = [...options.items()]
@@ -32,7 +36,7 @@ export function useWorkItemInlineCreate(options: Options) {
     if (!options.canCreate() || !content || draft.value || saving.value) return
     const status = options.status()
     draft.value = {
-      anchorId: anchor.id, requestKey: crypto.randomUUID(), parentId: options.parentId?.(),
+      anchorId: anchor.id, requestKey: crypto.randomUUID(), parentId: options.parentId?.(), defaults: options.defaults?.(),
       row: {
         id: `draft-${crypto.randomUUID()}`, projectId: anchor.projectId,
         title: '', itemNo: '', contentId: content.id, contentName: content.name, contentColorToken: content.colorToken,
@@ -56,7 +60,8 @@ export function useWorkItemInlineCreate(options: Options) {
       const token = readCsrfToken()
       if (!token) throw new Error('缺少 CSRF 凭据，请刷新后重试。')
       const body = { contentId: current.row.contentId, title, priority: null, assigneeUserId: null,
-        description: null, notes: null, timelineStartDate: null, timelineEndDate: null, dueDate: null }
+        description: null, notes: null, timelineStartDate: null, timelineEndDate: null, dueDate: null,
+        ...current.defaults?.fields }
       const parentId = current.parentId
       const common = { xXSRFTOKEN: token, idempotencyKey: current.requestKey }
       let created = parentId
@@ -71,6 +76,7 @@ export function useWorkItemInlineCreate(options: Options) {
       } catch (reason) {
         ElMessage.warning(`已创建 ${created.itemNo}，但放置到指定位置失败：${problemMessage(await toApiProblem(reason))}`)
       }
+      created = await applyDefaultStatus(created, current.defaults?.statusCode ?? null, token)
       if (draft.value === current) {
         draft.value = undefined
         options.created(created, current.anchorId)

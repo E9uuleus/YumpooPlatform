@@ -78,6 +78,7 @@ import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import WorkItemGroupingPopover from './WorkItemGroupingPopover.vue'
 import WorkItemTableSettingsMenu from './WorkItemTableSettingsMenu.vue'
 import { useWorkItemTableSettings } from './useWorkItemTableSettings'
+import { applyDefaultStatus } from './workItemDefaultStatus'
 import { DEFAULT_VALUE_COLUMN_KEYS, heightOption, resolveWorkItemCreateDefaults, type DefaultValueColumnKey,
   type TableSettingsCatalog, evaluateWorkItemColoring, type ColoringColumnKey, type WorkItemColoring } from './workItemTableSettings'
 import { useWorkItemGrouping, isGroupDisplayRow, type WorkItemGroupDisplayRow } from './useWorkItemGrouping'
@@ -679,8 +680,9 @@ const { draft: inlineDraft, rows: displayWorkItemRows, isDraft, start: createBel
   contextId: () => projectId.value,
   items: () => tableItems.value,
   canCreate: () => canCreate.value && !hasExplicitSort.value && !editingCell.value && !tableSorting.value,
-  content: () => activeContents.value[0],
-  status: () => workflowStatuses.value.find(status => status.active && status.statusCode === 'NOT_STARTED'),
+  content: () => activeContents.value.find(item => item.id === defaultContentId.value),
+  status: () => workflowStatuses.value.find(status => status.active && status.statusCode === (createDefaults.value.statusCode ?? 'NOT_STARTED')),
+  defaults: () => createDefaults.value,
   created: (created, anchorId) => {
     const next = [...tableItems.value]
     next.splice(next.findIndex(item => item.id === anchorId) + 1, 0, { ...created, subitemCount: 0, discussionCount: 0 })
@@ -760,6 +762,7 @@ function groupCreateDisabledReason(group: WorkItemGroup): string {
   }
 }
 const groupCreate = useWorkItemGroupCreate({
+  defaults: () => createDefaults.value,
   projectId: () => projectId.value, field: () => groupingField.value, contentId: () => defaultContentId.value,
   disabledReason: groupCreateDisabledReason, changed: () => { notifyChanged(); return reloadSortedTableInPlace() },
 })
@@ -1569,7 +1572,7 @@ async function createQuick(continueAdding: boolean): Promise<void> {
   quickCreating.value = true
   error.value = undefined
   try {
-    const created = await workItemsApi.createWorkItem({
+    const inserted = await workItemsApi.createWorkItem({
       projectId: projectId.value,
       xXSRFTOKEN: csrf,
       idempotencyKey: globalThis.crypto.randomUUID(),
@@ -1583,8 +1586,10 @@ async function createQuick(continueAdding: boolean): Promise<void> {
         timelineStartDate: null,
         timelineEndDate: null,
         dueDate: null,
+        ...createDefaults.value.fields,
       },
     })
+    const created = await applyDefaultStatus(inserted, createDefaults.value.statusCode, csrf)
     notifyChanged()
     ElMessage.success(`已创建 ${created.itemNo}`)
     if (continueAdding) {
