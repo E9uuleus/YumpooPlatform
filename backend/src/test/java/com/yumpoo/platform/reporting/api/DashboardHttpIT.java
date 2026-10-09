@@ -2,10 +2,14 @@ package com.yumpoo.platform.reporting.api;
 
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
+import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleCommand;
+import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleMode;
+import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMaintenanceUseCase;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningResult;
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
+import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -52,6 +56,8 @@ class DashboardHttpIT {
     @Autowired private ObjectMapper json;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private WorkItemLabelRepository labels;
+    @Autowired private PlatformRoleMaintenanceUseCase maintenanceUseCase;
+    @Autowired private CompanyConfigurationQuery companyQuery;
 
     private ActorFixture owner;
     private ActorFixture member;
@@ -75,6 +81,52 @@ class DashboardHttpIT {
 
     @AfterEach
     void tearDown() { cleanUp(); }
+
+    @Test
+    void teamDashboardRequiresAdministratorAndSplitsTimeByCompanyDay() throws Exception {
+        ActorFixture admin;
+        try (var ignored = RequestCorrelationContext.open(RequestCorrelation.root("team-dashboard-" + UUID.randomUUID()))) {
+            var adminUser = provisioner.provision("team-dashboard-admin", "Team Admin");
+            maintenanceUseCase.execute(new MaintenanceRoleCommand(companyQuery.current().companyId(), adminUser.userId(),
+                    MaintenanceRoleMode.BOOTSTRAP, "UP10 team dashboard fixture"));
+            admin = actor(adminUser.userId());
+        }
+        var body = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "跨日计时"));
+        body.set("assigneeUserIds", json.createArrayNode().add(member.userId().toString()));
+        body.put("dueDate", "2020-01-01");
+        var assigned = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, body.toString(), null, UUID.randomUUID()));
+        created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "未分配"), null, UUID.randomUUID()));
+        var zone = companyQuery.current().timezone();
+        var midnight = java.time.LocalDate.of(2026, 1, 2).atStartOfDay(zone).toInstant();
+        var time = json.createObjectNode().put("startedAt", midnight.minusSeconds(3600).toString()).put("stoppedAt", midnight.plusSeconds(7200).toString());
+        ok(mutate("POST", "/api/v1/work-items/" + assigned.path("id").asText() + "/time-sessions", member, time.toString(), null, UUID.randomUUID()));
+
+        String base = "/api/v1/company/team-dashboard", sheetBody = "{\"from\":\"2026-01-01\",\"to\":\"2026-01-07\",\"projectIds\":[],\"userIds\":[]}";
+        assertThat(mutate("POST", base + "/timesheet/query", member, sheetBody, null, null).statusCode()).isEqualTo(403);
+        assertThat(get(base + "/options", member).statusCode()).isEqualTo(403);
+        var sheet = ok(mutate("POST", base + "/timesheet/query", admin, sheetBody, null, null));
+        assertThat(sheet.path("timezone").asText()).isEqualTo(zone.getId());
+        assertThat(sheet.path("entries").toString()).contains("\"date\":\"2026-01-01\",\"durationMs\":3600000")
+                .contains("\"date\":\"2026-01-02\",\"durationMs\":7200000");
+        assertThat(sheet.path("workItems").get(0).path("projectName").asText()).isEqualTo("Category Work");
+        assertThat(sheet.path("members").toString()).contains(member.userId().toString()).contains(admin.userId().toString());
+        assertThat(mutate("POST", base + "/timesheet/query", admin, sheetBody.replace("2026-01-07", "2026-04-05"), null, null).statusCode()).isEqualTo(422);
+
+        var workload = ok(mutate("POST", base + "/workload/query", admin, "{\"projectIds\":[],\"userIds\":[]}", null, null));
+        var memberLoad = java.util.stream.StreamSupport.stream(workload.path("members").spliterator(), false)
+                .filter(m -> m.path("userId").asText().equals(member.userId().toString())).findFirst().orElseThrow();
+        assertThat(memberLoad.path("todo").asLong() + memberLoad.path("inProgress").asLong()).isEqualTo(1);
+        assertThat(memberLoad.path("overdue").asLong()).isEqualTo(1);
+        assertThat(workload.path("unassigned").path("todo").asLong() + workload.path("unassigned").path("inProgress").asLong()).isEqualTo(1);
+        var tasks = ok(mutate("POST", base + "/workload/tasks/query", admin,
+                "{\"userId\":\"" + member.userId() + "\",\"projectIds\":[],\"offset\":0,\"limit\":50}", null, null));
+        assertThat(tasks.path("totalElements").asLong()).isEqualTo(1);
+        assertThat(tasks.path("items").get(0).path("overdue").asBoolean()).isTrue();
+        assertThat(tasks.path("items").get(0).path("projectName").asText()).isEqualTo("Category Work");
+        assertThat(ok(mutate("POST", base + "/workload/tasks/query", admin, "{\"userId\":null,\"projectIds\":[],\"offset\":0,\"limit\":50}", null, null))
+                .path("items").get(0).path("title").asText()).isEqualTo("未分配");
+        assertThat(ok(get(base + "/options", admin)).path("projects").get(0).path("name").asText()).isEqualTo("Category Work");
+    }
 
     @Test
     void privateDashboardsPersistAndRequireOwnerAndVersion() throws Exception {
@@ -507,8 +559,11 @@ class DashboardHttpIT {
         jdbc.sql("DELETE FROM yumpoo.idempotency_record WHERE actor_user_id IN (SELECT id FROM yumpoo.identity_user WHERE company_id=:id)").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.login_session WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.outbox_event WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.platform_role_assignment WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.external_identity WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.identity_user WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("UPDATE yumpoo.app_manager_governance_state SET lifecycle_status='UNINITIALIZED', initialized_at=NULL, missing_since=NULL, "
+                + "event_version=0, row_version=0, updated_at=transaction_timestamp() WHERE company_id=:id").param("id", COMPANY_ID).update();
     }
 
     private record ActorFixture(UUID userId, IssuedSession session) {}

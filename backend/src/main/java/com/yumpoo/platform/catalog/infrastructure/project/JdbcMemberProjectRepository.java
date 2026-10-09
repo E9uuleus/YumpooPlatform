@@ -34,6 +34,10 @@ public class JdbcMemberProjectRepository implements MemberProjectRepository {
     public long count(CurrentActor actor, String query, boolean archived) {
         return search("SELECT COUNT(*) " + SCOPE + SEARCH, actor, query, archived).query(Long.class).single();
     }
+    public List<Project> listCompany(UUID companyId) {
+        return projects(jdbc.sql("SELECT id,name,project_code,lifecycle FROM yumpoo.project WHERE company_id=:company ORDER BY name,id")
+                .param("company", companyId));
+    }
     private JdbcClient.StatementSpec scope(String sql, CurrentActor actor) {
         return jdbc.sql(sql).param("company", actor.companyId()).param("user", actor.userId());
     }

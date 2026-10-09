@@ -10,4 +10,5 @@ public interface MemberProjectRepository {
     List<Project> find(CurrentActor actor, Collection<UUID> ids);
     List<Project> search(CurrentActor actor, String query, boolean includeArchived, int offset, int limit);
     long count(CurrentActor actor, String query, boolean includeArchived);
+    List<Project> listCompany(UUID companyId);
 }

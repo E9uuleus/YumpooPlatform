@@ -2,7 +2,9 @@ package com.yumpoo.platform.catalog.application.project;
 
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
+import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
+import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.Collection;
@@ -25,6 +27,10 @@ public class MemberProjectService {
         String normalized = query == null ? "" : query.strip();
         return new Page(repository.search(actor, normalized, archived, offset, limit),
                 repository.count(actor, normalized, archived));
+    }
+    public List<MemberProjectRepository.Project> listCompany(CurrentActor actor) {
+        if (actor == null || !actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+        return repository.listCompany(actor.companyId());
     }
     public record Page(List<MemberProjectRepository.Project> items, long totalElements) {}
 }
