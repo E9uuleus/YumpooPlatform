@@ -1,4 +1,4 @@
-import { defineComponent, h, nextTick, ref } from 'vue'
+import { defineComponent, h, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TeamMemberTask, TeamMemberTaskPage, TeamWorkload } from '@yumpoo/api-client'
@@ -67,18 +67,16 @@ describe('expanded team tasks', () => {
     expect(team.tasks.value.get('member-0')?.loading).toBe(false)
   })
 
-  it.each(['projectIds', 'userIds'] as const)('reloads active expanded rows when %s changes and drops rows without tasks', async filter => {
+  it('reloads active expanded rows after a workload refresh and drops rows without tasks', async () => {
     await row('张三').trigger('click'); await row('李四').trigger('click'); await row('未分配').trigger('click'); await flushPromises()
     api.queryTeamMemberTasks.mockClear()
     api.queryTeamWorkload.mockResolvedValueOnce({ ...workload(), members: [workload().members[0]!, { ...workload().members[1]!, todo: 0 }],
       unassigned: { todo: 0, inProgress: 0, overdue: 0 } })
-    team[filter].value = [filter === 'projectIds' ? 'project-1' : 'member-0']
-    await nextTick(); await vi.advanceTimersByTimeAsync(250); await flushPromises()
+    await team.loadWorkload(); await flushPromises()
     expect(row('张三').attributes('aria-expanded')).toBe('true')
     expect(wrapper.findAll('.team-workload__tasks')).toHaveLength(1)
     expect(api.queryTeamMemberTasks).toHaveBeenCalledTimes(1)
-    expect(api.queryTeamMemberTasks.mock.calls[0]![0].teamMemberTasksQuery).toMatchObject({ userId: 'member-0', offset: 0,
-      projectIds: new Set(team.projectIds.value) })
+    expect(api.queryTeamMemberTasks.mock.calls[0]![0].teamMemberTasksQuery).toMatchObject({ userId: 'member-0', offset: 0, projectIds: new Set() })
     await team.loadWorkload(); await flushPromises()
     expect(row('李四').attributes('aria-expanded')).toBe('false')
     expect(row('未分配').attributes('aria-expanded')).toBe('false')
