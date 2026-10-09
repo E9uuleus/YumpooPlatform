@@ -153,7 +153,8 @@
 }
 
 :root,
-:root[data-theme='light'] {
+:root[data-theme='light'],
+.yp-theme-light {
   --yp-bg-canvas: #ffffff;
   --yp-bg-surface: #ffffff;
   --yp-bg-raised: #ffffff;

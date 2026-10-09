@@ -2,12 +2,14 @@
 import { ElIcon, ElInput, ElButton, ElTooltip, ElDropdown, ElDropdownMenu, ElDropdownItem, ElTag, ElAlert, ElSkeleton, ElDialog, ElDrawer, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Close, Connection, DataAnalysis, Filter, MoreFilled, Plus, Refresh, FullScreen, Setting, List, CopyDocument, Delete, Edit, RefreshLeft, User } from '@element-plus/icons-vue'
+import { Close, Connection, DataAnalysis, Download, Filter, MoreFilled, Plus, Refresh, FullScreen, Setting, List, CopyDocument, Delete, Edit, RefreshLeft, User } from '@element-plus/icons-vue'
 import { type DashboardFilters, type DashboardWidget, type DashboardChartSelection } from '@yumpoo/api-client'
 import { problemMessage, toApiProblem } from '../api/problems'
 import { useSession } from '../composables/useSession'
 import { useDashboard } from '../components/dashboard/useDashboard'
 import { clone, defaultConfiguration, emptyFilters, newWidget, TEAM_VIEW_ID, widgetCatalog } from '../components/dashboard/dashboardModel'
+import { exportFileName, PDF_TYPE, saveExportFile } from '../components/dashboard/exportFile'
+import { formatTimestamp } from '../design-system/dates'
 import { resolveChart } from '../components/dashboard/chartModel'
 import DashboardChart from '../components/dashboard/DashboardChart.vue'
 import DashboardGrid from '../components/dashboard/DashboardGrid.vue'
@@ -24,7 +26,7 @@ const TeamDashboard = defineAsyncComponent(() => import('../components/dashboard
 const session = useSession(), route = useRoute()
 const { dashboards, dashboard, snapshot, loading, refreshing, error, saveError, name, configuration, saving, changed, save, refresh, create, remove, switchTo, load, reload, reloading, recovery, resolveRecovery } = useDashboard()
 const projectDialog = ref(false), filterDialog = ref(false), filterField = ref('assignees'), gallery = ref(false), galleryClosing = ref(false)
-const grid = ref<InstanceType<typeof DashboardGrid>>(), teamView = ref<{ refresh: () => void; loading: boolean }>()
+const grid = ref<InstanceType<typeof DashboardGrid>>(), teamView = ref<{ refresh: () => void; loading: boolean }>(), exporting = ref(false)
 const teamAllowed = computed(() => session.isCompanyAdmin.value)
 const teamActive = computed(() => teamAllowed.value && route.params.dashboardId === TEAM_VIEW_ID)
 const activeTabId = computed(() => teamActive.value ? TEAM_VIEW_ID : dashboard.value?.id ?? '')
@@ -116,6 +118,18 @@ async function dashboardAction(command: string) {
 }
 function refreshAll() { if (teamActive.value) teamView.value?.refresh(); else void reload() }
 function renameDashboard(value: string) { name.value = value; changed() }
+async function exportPdf() {
+  if (exporting.value || !dashboard.value) return
+  exporting.value = true
+  try {
+    const timezone = session.authentication.value?.company.timezone ?? 'Asia/Shanghai'
+    const { exportDashboardPdf } = await import('../components/dashboard/dashboardPdf')
+    const blob = await exportDashboardPdf({ name: name.value, exportedAt: formatTimestamp(new Date(), timezone), widgets: configuration.value.widgets, results: results.value,
+      projects: connections.value.filter(p => p.available && p.name).map(p => p.name!), filters: filterChips.value.map(chip => chip.label) })
+    if (await saveExportFile(blob, exportFileName(name.value, 'pdf'), PDF_TYPE)) ElMessage.success('已导出 PDF')
+  } catch (reason) { ElMessage.error(reason instanceof Error && reason.message ? reason.message : '导出失败，请重试') }
+  finally { exporting.value = false }
+}
 let detailTrigger: HTMLElement | undefined
 function closeDetails() {
   detailId.value = ''
@@ -158,6 +172,16 @@ async function discardReload() {
           />
         </el-tooltip>
         <template v-if="!teamActive">
+          <el-button
+            :icon="Download"
+            text
+            aria-label="导出 PDF"
+            :loading="exporting"
+            :disabled="!dashboard || !snapshot || refreshing || !configuration.widgets.length"
+            @click="exportPdf"
+          >
+            <span class="dashboard-export-label">导出 PDF</span>
+          </el-button>
           <el-dropdown
             trigger="click"
             @command="dashboardAction"

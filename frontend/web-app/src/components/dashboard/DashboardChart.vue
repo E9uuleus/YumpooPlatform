@@ -10,7 +10,7 @@ import { metrics } from './dashboardModel'
 import { chartColor, chartPalette } from './chartColors'
 
 use([BarChart, PieChart, LineChart, ScatterChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, AriaComponent, SVGRenderer])
-const props = defineProps<{ widget: DashboardWidget; result?: DashboardChartResult | undefined; loading?: boolean | undefined; selection?: DashboardChartSelection | undefined }>()
+const props = defineProps<{ widget: DashboardWidget; result?: DashboardChartResult | undefined; loading?: boolean | undefined; selection?: DashboardChartSelection | undefined; printing?: boolean }>()
 const emit = defineEmits<{ select: [selection?: DashboardChartSelection] }>()
 const config = computed(() => resolveChart(props.widget)), groups = computed(() => chartGroups(config.value, props.result))
 const host = ref<HTMLElement>()
@@ -31,7 +31,7 @@ function render() {
   const scaled = (value: number) => percent ? total ? value / total * 100 : 0 : c.measure.metric === 'DURATION' ? value / 3600000 : value
   const axisFormat = (value: number) => percent || c.measure.metric === 'COMPLETION_RATE' ? `${Math.round(value)}%` : c.measure.metric === 'DURATION' ? `${Math.round(value * 10) / 10}h` : String(value)
   const shown = (value: number) => percent ? `${Math.round(scaled(value) * 10) / 10}%` : formatMeasure(value, c.measure)
-  const common = { animationDuration: 180, color: chartPalette, textStyle: { color: text, fontFamily: 'Figtree, Microsoft YaHei, sans-serif' },
+  const common = { animation: !props.printing, animationDuration: 180, color: chartPalette, textStyle: { color: text, fontFamily: 'Figtree, Microsoft YaHei, sans-serif' },
     aria: { enabled: true, label: { description: props.widget.title } }, tooltip: { trigger: 'item', renderMode: 'richText', confine: true },
     legend: { show: c.showLegend, type: 'scroll', bottom: 0, textStyle: { color: text, fontSize: small ? 10 : 12 }, icon: 'circle', itemWidth: 8, itemHeight: 8 } }
   let option: EChartsCoreOption
