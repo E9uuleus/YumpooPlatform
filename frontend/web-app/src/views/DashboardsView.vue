@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ElIcon, ElPopover, ElInput, ElButton, ElTooltip, ElDropdown, ElDropdownMenu, ElDropdownItem, ElTag, ElAlert, ElSkeleton, ElDialog, ElDrawer, ElMessage, ElMessageBox } from 'element-plus'
-import { computed, nextTick, ref, watch } from 'vue'
-import { ArrowDown, Check, Close, Connection, DataAnalysis, Filter, MoreFilled, Plus, Refresh, FullScreen, Setting, List, CopyDocument, Delete, Edit, RefreshLeft, Search, User } from '@element-plus/icons-vue'
+import { ElIcon, ElInput, ElButton, ElTooltip, ElDropdown, ElDropdownMenu, ElDropdownItem, ElTag, ElAlert, ElSkeleton, ElDialog, ElDrawer, ElMessage, ElMessageBox } from 'element-plus'
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { Close, Connection, DataAnalysis, Filter, MoreFilled, Plus, Refresh, FullScreen, Setting, List, CopyDocument, Delete, Edit, RefreshLeft, User } from '@element-plus/icons-vue'
 import { type DashboardFilters, type DashboardWidget, type DashboardChartSelection } from '@yumpoo/api-client'
 import { problemMessage, toApiProblem } from '../api/problems'
 import { useSession } from '../composables/useSession'
 import { useDashboard } from '../components/dashboard/useDashboard'
-import { clone, defaultConfiguration, emptyFilters, newWidget, widgetCatalog } from '../components/dashboard/dashboardModel'
+import { clone, defaultConfiguration, emptyFilters, newWidget, TEAM_VIEW_ID, widgetCatalog } from '../components/dashboard/dashboardModel'
 import { resolveChart } from '../components/dashboard/chartModel'
 import DashboardChart from '../components/dashboard/DashboardChart.vue'
 import DashboardGrid from '../components/dashboard/DashboardGrid.vue'
@@ -15,19 +16,24 @@ import DashboardProjectsDialog from '../components/dashboard/DashboardProjectsDi
 import DashboardFiltersDialog from '../components/dashboard/DashboardFiltersDialog.vue'
 import ChartTypeIcon from '../components/dashboard/ChartTypeIcon.vue'
 import DashboardExploreDialog from '../components/dashboard/DashboardExploreDialog.vue'
+import DashboardTabs from '../components/dashboard/DashboardTabs.vue'
 import YpEmptyState from '../components/yp/YpEmptyState.vue'
 
-const session = useSession()
+const TeamDashboard = defineAsyncComponent(() => import('../components/dashboard/team/TeamDashboard.vue'))
+
+const session = useSession(), route = useRoute()
 const { dashboards, dashboard, snapshot, loading, refreshing, error, saveError, name, configuration, saving, changed, save, refresh, create, remove, switchTo, load, reload, reloading, recovery, resolveRecovery } = useDashboard()
 const projectDialog = ref(false), filterDialog = ref(false), filterField = ref('assignees'), gallery = ref(false), galleryClosing = ref(false)
-const switchSearch = ref(''), switchOpen = ref(false), grid = ref<InstanceType<typeof DashboardGrid>>()
+const grid = ref<InstanceType<typeof DashboardGrid>>(), teamView = ref<{ refresh: () => void; loading: boolean }>()
+const teamAllowed = computed(() => session.isCompanyAdmin.value)
+const teamActive = computed(() => teamAllowed.value && route.params.dashboardId === TEAM_VIEW_ID)
+const activeTabId = computed(() => teamActive.value ? TEAM_VIEW_ID : dashboard.value?.id ?? '')
 const createOpen = ref(false), createName = ref(''), createBlank = ref(false), creating = ref(false), createError = ref('')
 const settingsId = ref(''), settings = computed(() => configuration.value.widgets.find(w => w.id === settingsId.value))
 const removed = ref<{ widget: DashboardWidget; index: number }>(), pendingReveal = ref('')
 const detailId = ref(''), detailSelection = ref<DashboardChartSelection>()
 const detailWidget = computed(() => configuration.value.widgets.find(w => w.id === detailId.value))
 const connections = computed(() => snapshot.value?.projects || dashboard.value?.projects || [])
-const choices = computed(() => dashboards.value.filter(d => d.name.toLowerCase().includes(switchSearch.value.toLowerCase())))
 const results = computed(() => new Map(snapshot.value?.charts?.map(c => [c.id, c]) || []))
 const filtersCount = computed(() => Object.entries(configuration.value.filters).reduce((count, [key, value]) => count + (Array.isArray(value) ? value.length : key === 'query' ? 0 : value ? 1 : 0), 0))
 const filterChips = computed(() => {
@@ -58,7 +64,7 @@ async function applyProjects(ids: string[]) {
   if (await save()) await refresh()
 }
 async function guarded(action: () => Promise<unknown>) { try { await action() } catch (reason) { ElMessage.error(problemMessage(await toApiProblem(reason))) } }
-function startCreate() { createName.value = '新仪表板'; createBlank.value = false; createError.value = ''; createOpen.value = true; switchOpen.value = false }
+function startCreate() { createName.value = '新仪表板'; createBlank.value = false; createError.value = ''; createOpen.value = true }
 async function submitCreate() {
   if (creating.value) return
   creating.value = true; createError.value = ''
@@ -108,6 +114,8 @@ async function dashboardAction(command: string) {
     if (command === 'delete') { await ElMessageBox.confirm(`删除“${name.value}”后无法恢复。`, '删除仪表板', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }); await remove() }
   } catch (reason) { if (reason !== 'cancel' && reason !== 'close') ElMessage.error(problemMessage(await toApiProblem(reason))) }
 }
+function refreshAll() { if (teamActive.value) teamView.value?.refresh(); else void reload() }
+function renameDashboard(value: string) { name.value = value; changed() }
 let detailTrigger: HTMLElement | undefined
 function closeDetails() {
   detailId.value = ''
@@ -126,363 +134,336 @@ async function discardReload() {
 <template>
   <section class="dashboard-page">
     <header class="dashboard-header">
-      <div class="dashboard-heading">
-        <el-popover
-          v-model:visible="switchOpen"
-          placement="bottom-start"
-          :width="320"
-          trigger="click"
-        >
-          <template #reference>
-            <button
-              class="dashboard-title-button"
-              aria-label="切换仪表板"
-            >
-              <h1>{{ name }}</h1><el-icon><ArrowDown /></el-icon>
-            </button>
-          </template>
-          <el-input
-            v-model="switchSearch"
-            :prefix-icon="Search"
-            placeholder="查找仪表板"
-            clearable
-          />
-          <div class="dashboard-switch-list">
-            <button
-              v-for="d in choices"
-              :key="d.id"
-              :class="{ active: d.id === dashboard?.id }"
-              @click="switchTo(d.id); switchOpen = false"
-            >
-              <el-icon><DataAnalysis /></el-icon><span>{{ d.name }}</span><el-icon v-if="d.id === dashboard?.id">
-                <Check />
-              </el-icon>
-            </button><yp-empty-state
-              v-if="!choices.length"
-              title="暂无仪表板"
-              description=""
-              compact
-            />
-          </div>
-          <el-button
-            text
-            type="primary"
-            :icon="Plus"
-            @click="startCreate"
-          >
-            新建仪表板
-          </el-button>
-        </el-popover>
-      </div>
+      <h1 class="dashboard-sr-only">
+        仪表板
+      </h1>
+      <DashboardTabs
+        :dashboards="dashboards"
+        :active-id="activeTabId"
+        :active-name="name"
+        :team="teamAllowed"
+        :renamable="!!dashboard && !saving"
+        @select="switchTo"
+        @create="startCreate"
+        @rename="renameDashboard"
+      />
       <div class="dashboard-header-actions">
         <el-tooltip content="刷新数据">
           <el-button
             :icon="Refresh"
             aria-label="刷新仪表板"
-            :loading="refreshing || reloading"
+            :loading="teamActive ? !!teamView?.loading : refreshing || reloading"
             text
-            @click="reload()"
+            @click="refreshAll"
           />
         </el-tooltip>
-        <el-dropdown
-          trigger="click"
-          @command="dashboardAction"
-        >
-          <el-button
-            :icon="MoreFilled"
-            aria-label="仪表板更多操作"
-            text
-            :disabled="!dashboard || saving"
-          /><template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="rename">
-                <el-icon><Edit /></el-icon>
-                重命名
-              </el-dropdown-item><el-dropdown-item command="copy">
-                <el-icon><CopyDocument /></el-icon>
-                复制仪表板
-              </el-dropdown-item><el-dropdown-item
-                command="reset"
-                divided
-              >
-                <el-icon><RefreshLeft /></el-icon>
-                恢复默认布局
-              </el-dropdown-item><el-dropdown-item
-                command="delete"
-                divided
-              >
-                <el-icon><Delete /></el-icon>
-                删除仪表板
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <template v-if="!teamActive">
+          <el-dropdown
+            trigger="click"
+            @command="dashboardAction"
+          >
+            <el-button
+              :icon="MoreFilled"
+              aria-label="仪表板更多操作"
+              text
+              :disabled="!dashboard || saving"
+            /><template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="rename">
+                  <el-icon><Edit /></el-icon>
+                  重命名
+                </el-dropdown-item><el-dropdown-item command="copy">
+                  <el-icon><CopyDocument /></el-icon>
+                  复制仪表板
+                </el-dropdown-item><el-dropdown-item
+                  command="reset"
+                  divided
+                >
+                  <el-icon><RefreshLeft /></el-icon>
+                  恢复默认布局
+                </el-dropdown-item><el-dropdown-item
+                  command="delete"
+                  divided
+                >
+                  <el-icon><Delete /></el-icon>
+                  删除仪表板
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </template>
       </div>
     </header>
-    <div class="dashboard-toolbar">
-      <el-button
-        type="primary"
-        :icon="Plus"
-        :disabled="!dashboard"
-        @click="gallery = true"
-      >
-        添加组件
-      </el-button>
-      <el-button
-        :icon="Connection"
-        text
-        @click="projectDialog = true"
-      >
-        {{ configuration.projectIds.length ? `${configuration.projectIds.length} 个连接项目` : '连接项目' }}
-      </el-button>
-      <span class="toolbar-divider" />
-      <el-button
-        :icon="User"
-        :class="{ 'filter-active': configuration.filters.assignees.length }"
-        text
-        @click="openFilters('assignees')"
-      >
-        处理人
-      </el-button>
-      <el-button
-        :icon="Filter"
-        :class="{ 'filter-active': filtersCount }"
-        text
-        @click="openFilters('statuses')"
-      >
-        筛选<span
-          v-if="filtersCount"
-          class="toolbar-count"
-        >{{ filtersCount }}</span>
-      </el-button>
-    </div>
-    <div
-      v-if="filterChips.length"
-      class="dashboard-filter-chips"
-    >
-      <el-tag
-        v-for="chip in filterChips"
-        :key="chip.key"
-        closable
-        effect="plain"
-        @close="clearChip(chip.key)"
-      >
-        {{ chip.label }}
-      </el-tag><el-button
-        link
-        @click="applyFilters(emptyFilters())"
-      >
-        清除全部
-      </el-button>
-    </div>
-    <main class="dashboard-canvas">
-      <el-alert
-        v-if="saveError"
-        class="dashboard-notice"
-        type="warning"
-        :closable="false"
-      >
-        <template #title>
-          {{ `更改尚未保存：${saveError}` }}
-        </template><el-button
-          text
-          @click="save"
-        >
-          重试保存
-        </el-button><el-button
-          text
-          @click="discardReload"
-        >
-          放弃修改并重新载入
-        </el-button>
-      </el-alert>
-      <el-alert
-        v-if="error"
-        class="dashboard-notice"
-        type="error"
-        :closable="false"
-        :title="snapshot ? `刷新失败，当前显示上次数据。${error}` : error"
-      >
+    <TeamDashboard
+      v-if="teamActive"
+      ref="teamView"
+    />
+    <template v-else>
+      <div class="dashboard-toolbar">
         <el-button
-          text
-          @click="dashboard ? refresh() : load()"
+          type="primary"
+          :icon="Plus"
+          :disabled="!dashboard"
+          @click="gallery = true"
         >
-          重试
+          添加组件
         </el-button>
-      </el-alert>
-      <el-alert
-        v-if="connections.some(p => !p.available)"
-        class="dashboard-notice"
-        type="warning"
-        :closable="false"
-        title="部分连接项目已无法访问，已从统计中排除。"
-      >
         <el-button
+          :icon="Connection"
           text
           @click="projectDialog = true"
         >
-          管理连接
+          {{ configuration.projectIds.length ? `${configuration.projectIds.length} 个连接项目` : '连接项目' }}
         </el-button>
-      </el-alert>
-      <div
-        v-if="removed"
-        class="dashboard-undo"
-      >
-        已移除“{{ removed.widget.title }}”<el-button
-          link
-          type="primary"
-          @click="undoRemove"
-        >
-          撤销
-        </el-button><el-button
-          :icon="Close"
+        <span class="toolbar-divider" />
+        <el-button
+          :icon="User"
+          :class="{ 'filter-active': configuration.filters.assignees.length }"
           text
-          aria-label="关闭撤销提示"
-          @click="removed = undefined"
-        />
-      </div>
-      <el-skeleton
-        v-if="loading"
-        animated
-        :rows="12"
-        class="dashboard-skeleton"
-      />
-      <div
-        v-else-if="!dashboard || !configuration.projectIds.length"
-        class="dashboard-welcome"
-      >
-        <yp-empty-state
-          ambient
-          title="连接项目"
-          description=""
+          @click="openFilters('assignees')"
         >
-          <template #icon>
-            <el-icon><DataAnalysis /></el-icon>
+          处理人
+        </el-button>
+        <el-button
+          :icon="Filter"
+          :class="{ 'filter-active': filtersCount }"
+          text
+          @click="openFilters('statuses')"
+        >
+          筛选<span
+            v-if="filtersCount"
+            class="toolbar-count"
+          >{{ filtersCount }}</span>
+        </el-button>
+      </div>
+      <div
+        v-if="filterChips.length"
+        class="dashboard-filter-chips"
+      >
+        <el-tag
+          v-for="chip in filterChips"
+          :key="chip.key"
+          closable
+          effect="plain"
+          @close="clearChip(chip.key)"
+        >
+          {{ chip.label }}
+        </el-tag><el-button
+          link
+          @click="applyFilters(emptyFilters())"
+        >
+          清除全部
+        </el-button>
+      </div>
+      <main class="dashboard-canvas">
+        <el-alert
+          v-if="saveError"
+          class="dashboard-notice"
+          type="warning"
+          :closable="false"
+        >
+          <template #title>
+            {{ `更改尚未保存：${saveError}` }}
+          </template><el-button
+            text
+            @click="save"
+          >
+            重试保存
+          </el-button><el-button
+            text
+            @click="discardReload"
+          >
+            放弃修改并重新载入
+          </el-button>
+        </el-alert>
+        <el-alert
+          v-if="error"
+          class="dashboard-notice"
+          type="error"
+          :closable="false"
+          :title="snapshot ? `刷新失败，当前显示上次数据。${error}` : error"
+        >
+          <el-button
+            text
+            @click="dashboard ? refresh() : load()"
+          >
+            重试
+          </el-button>
+        </el-alert>
+        <el-alert
+          v-if="connections.some(p => !p.available)"
+          class="dashboard-notice"
+          type="warning"
+          :closable="false"
+          title="部分连接项目已无法访问，已从统计中排除。"
+        >
+          <el-button
+            text
+            @click="projectDialog = true"
+          >
+            管理连接
+          </el-button>
+        </el-alert>
+        <div
+          v-if="removed"
+          class="dashboard-undo"
+        >
+          已移除“{{ removed.widget.title }}”<el-button
+            link
+            type="primary"
+            @click="undoRemove"
+          >
+            撤销
+          </el-button><el-button
+            :icon="Close"
+            text
+            aria-label="关闭撤销提示"
+            @click="removed = undefined"
+          />
+        </div>
+        <el-skeleton
+          v-if="loading"
+          animated
+          :rows="12"
+          class="dashboard-skeleton"
+        />
+        <div
+          v-else-if="!dashboard || !configuration.projectIds.length"
+          class="dashboard-welcome"
+        >
+          <yp-empty-state
+            ambient
+            title="连接项目"
+            description=""
+          >
+            <template #icon>
+              <el-icon><DataAnalysis /></el-icon>
+            </template>
+            <template #action>
+              <div class="dashboard-empty-actions">
+                <el-button
+                  type="primary"
+                  :icon="Connection"
+                  @click="projectDialog = true"
+                >
+                  连接第一个项目
+                </el-button><el-button
+                  v-if="!dashboard"
+                  text
+                  @click="startCreate"
+                >
+                  从空白仪表板开始
+                </el-button>
+              </div>
+            </template>
+          </yp-empty-state>
+        </div>
+        <DashboardGrid
+          v-else-if="configuration.widgets.length"
+          ref="grid"
+          :key="dashboard?.id"
+          :widgets="configuration.widgets"
+          @layout="configuration.widgets = $event; changed(); save()"
+          @ready="revealPending"
+        >
+          <template #default="{ widget, narrow }">
+            <article
+              class="dashboard-card"
+              :class="{ 'dashboard-card--metric': resolveChart(widget).type === 'NUMBER' }"
+            >
+              <header class="dashboard-card__header">
+                <div class="dashboard-card__handle">
+                  <span
+                    class="drag-grip"
+                    aria-hidden="true"
+                  >⠿</span><h2>{{ widget.title }}</h2>
+                </div><el-dropdown
+                  trigger="click"
+                  @command="widgetAction($event, widget)"
+                >
+                  <button
+                    class="dashboard-card__menu"
+                    :aria-label="`${widget.title}操作`"
+                  >
+                    <el-icon><MoreFilled /></el-icon>
+                  </button><template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="fullscreen">
+                        <el-icon><FullScreen /></el-icon>全屏
+                      </el-dropdown-item><el-dropdown-item command="settings">
+                        <el-icon><Setting /></el-icon>
+                        组件设置
+                      </el-dropdown-item><el-dropdown-item command="details">
+                        <el-icon><List /></el-icon>
+                        查看工作项
+                      </el-dropdown-item><el-dropdown-item command="copy">
+                        <el-icon><CopyDocument /></el-icon>
+                        复制组件
+                      </el-dropdown-item><el-dropdown-item
+                        command="remove"
+                        divided
+                      >
+                        <el-icon><Delete /></el-icon>
+                        移除组件
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </header>
+              <div class="dashboard-card__chart">
+                <DashboardChart
+                  :widget="widget"
+                  :result="results.get(widget.id)"
+                  :loading="refreshing"
+                  @select="showDetails(widget, $event)"
+                />
+              </div>
+              <div
+                v-if="narrow"
+                class="dashboard-mobile-order"
+              >
+                <el-button
+                  text
+                  size="small"
+                  @click="moveWidget(widget, -1)"
+                >
+                  上移
+                </el-button><el-button
+                  text
+                  size="small"
+                  @click="moveWidget(widget, 1)"
+                >
+                  下移
+                </el-button>
+              </div>
+            </article>
           </template>
-          <template #action>
-            <div class="dashboard-empty-actions">
+        </DashboardGrid>
+        <div
+          v-else
+          class="dashboard-empty-widgets"
+        >
+          <yp-empty-state
+            ambient
+            title="添加第一个组件"
+            description=""
+          >
+            <template #icon>
+              <el-icon><DataAnalysis /></el-icon>
+            </template>
+            <template #action>
               <el-button
                 type="primary"
-                :icon="Connection"
-                @click="projectDialog = true"
+                :icon="Plus"
+                @click="gallery = true"
               >
-                连接第一个项目
-              </el-button><el-button
-                v-if="!dashboard"
-                text
-                @click="startCreate"
-              >
-                从空白仪表板开始
+                添加组件
               </el-button>
-            </div>
-          </template>
-        </yp-empty-state>
-      </div>
-      <DashboardGrid
-        v-else-if="configuration.widgets.length"
-        ref="grid"
-        :key="dashboard?.id"
-        :widgets="configuration.widgets"
-        @layout="configuration.widgets = $event; changed(); save()"
-        @ready="revealPending"
-      >
-        <template #default="{ widget, narrow }">
-          <article
-            class="dashboard-card"
-            :class="{ 'dashboard-card--metric': resolveChart(widget).type === 'NUMBER' }"
-          >
-            <header class="dashboard-card__header">
-              <div class="dashboard-card__handle">
-                <span
-                  class="drag-grip"
-                  aria-hidden="true"
-                >⠿</span><h2>{{ widget.title }}</h2>
-              </div><el-dropdown
-                trigger="click"
-                @command="widgetAction($event, widget)"
-              >
-                <button
-                  class="dashboard-card__menu"
-                  :aria-label="`${widget.title}操作`"
-                >
-                  <el-icon><MoreFilled /></el-icon>
-                </button><template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="fullscreen">
-                      <el-icon><FullScreen /></el-icon>全屏
-                    </el-dropdown-item><el-dropdown-item command="settings">
-                      <el-icon><Setting /></el-icon>
-                      组件设置
-                    </el-dropdown-item><el-dropdown-item command="details">
-                      <el-icon><List /></el-icon>
-                      查看工作项
-                    </el-dropdown-item><el-dropdown-item command="copy">
-                      <el-icon><CopyDocument /></el-icon>
-                      复制组件
-                    </el-dropdown-item><el-dropdown-item
-                      command="remove"
-                      divided
-                    >
-                      <el-icon><Delete /></el-icon>
-                      移除组件
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </header>
-            <div class="dashboard-card__chart">
-              <DashboardChart
-                :widget="widget"
-                :result="results.get(widget.id)"
-                :loading="refreshing"
-                @select="showDetails(widget, $event)"
-              />
-            </div>
-            <div
-              v-if="narrow"
-              class="dashboard-mobile-order"
-            >
-              <el-button
-                text
-                size="small"
-                @click="moveWidget(widget, -1)"
-              >
-                上移
-              </el-button><el-button
-                text
-                size="small"
-                @click="moveWidget(widget, 1)"
-              >
-                下移
-              </el-button>
-            </div>
-          </article>
-        </template>
-      </DashboardGrid>
-      <div
-        v-else
-        class="dashboard-empty-widgets"
-      >
-        <yp-empty-state
-          ambient
-          title="添加第一个组件"
-          description=""
-        >
-          <template #icon>
-            <el-icon><DataAnalysis /></el-icon>
-          </template>
-          <template #action>
-            <el-button
-              type="primary"
-              :icon="Plus"
-              @click="gallery = true"
-            >
-              添加组件
-            </el-button>
-          </template>
-        </yp-empty-state>
-      </div>
-    </main>
+            </template>
+          </yp-empty-state>
+        </div>
+      </main>
+    </template>
     <DashboardProjectsDialog
       v-model="projectDialog"
       :selected="configuration.projectIds"

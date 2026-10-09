@@ -9,7 +9,7 @@ vi.mock('../../api/client', () => ({ dashboardsApi: mocks }))
 const route = reactive({ params: { dashboardId: 'one', workspaceSlug: 'member' } })
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => mocks, onBeforeRouteLeave: (guard: unknown) => mocks.guard(guard), onBeforeRouteUpdate: vi.fn() }))
 vi.mock('../../api/problems', () => ({ toApiProblem: async (reason: unknown) => reason, problemMessage: () => '保存失败' }))
-vi.mock('../../composables/useSession', () => ({ useSession: () => ({ authentication: ref({ company: { id: 'company' }, user: { id: 'user' } }) }) }))
+vi.mock('../../composables/useSession', () => ({ useSession: () => ({ authentication: ref({ company: { id: 'company' }, user: { id: 'user' } }), isCompanyAdmin: ref(false) }) }))
 const view = (version = 0) => ({ id: 'one', name: '我的仪表板', _configuration: defaultConfiguration(), projects: [], version, etag: `"${version}"`, updatedAt: new Date() })
 let wrapper: ReturnType<typeof mount>, state: ReturnType<typeof useDashboard>
 beforeEach(async () => {

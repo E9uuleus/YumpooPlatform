@@ -9,6 +9,8 @@ export const widgetCatalog = [
   { kind: 'MEMBER_WORKLOAD', title: '成员工作量', description: '了解每位处理人的任务分配', icon: 'bars' },
   { kind: 'PROJECT_TIME', title: '项目耗时', description: '汇总各项目实际投入的计时时长', icon: 'time' },
 ] as const
+/** Reserved route id for the company-admin team view; personal dashboard ids are UUIDs. */
+export const TEAM_VIEW_ID = 'team'
 export const metrics = { TOTAL: '工作项总数', IN_PROGRESS: '进行中', DONE: '已完成', COMPLETION_RATE: '完成率', DURATION: '累计耗时' }
 export const categories: Record<string, { name: string; color: string }> = {
   TODO: { name: '待开始', color: 'GRAY' }, IN_PROGRESS: { name: '进行中', color: 'ORANGE' },
