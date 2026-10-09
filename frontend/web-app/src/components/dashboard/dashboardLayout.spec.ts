@@ -24,14 +24,14 @@ describe('dashboard collision and compaction', () => {
     widgets[0]!.wide.h = 10
     const grown = settleDashboardLayout(widgets, true)
     valid(grown)
-    expect(grown[2]!.medium.y).toBe(10)
+    expect(grown[3]!.medium.y).toBe(10)
     expect(grown[4]!.wide.y).toBe(10)
     grown[0]!.wide.h = 3
     const shrunk = settleDashboardLayout(grown, true)
     valid(shrunk)
-    expect(shrunk[2]!.medium.y).toBe(3)
-    expect(shrunk[4]!.wide.y).toBe(4)
-    expect(widgets[2]!.medium.y).toBe(4)
+    expect(shrunk[3]!.medium.y).toBe(3)
+    expect(shrunk[4]!.wide.y).toBe(7)
+    expect(widgets[3]!.medium.y).toBe(7)
     expect(settleDashboardLayout(shrunk)).toEqual(shrunk)
   })
   it.each([6, 12])('persists all displaced engine nodes at %i columns across movement, growth, shrink and reload', columns => {

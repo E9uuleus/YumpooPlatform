@@ -22,8 +22,8 @@ export function newWidget(kind: `${DashboardWidget['kind']}`, existing: Dashboar
   const metric = kind === 'METRIC'
   return { id: crypto.randomUUID(), kind: kind as DashboardWidget['kind'], title: widgetCatalog.find(c => c.kind === kind)!.title,
     metric: 'TOTAL' as DashboardWidget['metric'], grouping: 'STATUS' as DashboardWidget['grouping'], sort: 'DESC' as DashboardWidget['sort'], showLegend: true, showValues: true,
-    wide: { x: 0, y: Math.max(0, ...existing.map(w => w.wide.y + w.wide.h)), w: metric ? 3 : 6, h: metric ? 4 : 9 },
-    medium: { x: 0, y: Math.max(0, ...existing.map(w => w.medium.y + w.medium.h)), w: metric ? 3 : 6, h: metric ? 4 : 9 },
+    wide: { x: 0, y: Math.max(0, ...existing.map(w => w.wide.y + w.wide.h)), w: metric ? 3 : 6, h: metric ? 7 : 9 },
+    medium: { x: 0, y: Math.max(0, ...existing.map(w => w.medium.y + w.medium.h)), w: metric ? 2 : 6, h: metric ? 7 : 9 },
     ...(kind === 'CHART' ? { chart: defaultChart(), title: '图表' } : {}) }
 }
 export function defaultConfiguration(blank = false): DashboardConfiguration {
@@ -31,13 +31,13 @@ export function defaultConfiguration(blank = false): DashboardConfiguration {
   if (!blank) {
     ;(['TOTAL', 'IN_PROGRESS', 'DONE', 'DURATION'] as const).forEach((metric, i) => {
       const widget = newWidget('METRIC'); widget.metric = metric as DashboardWidget['metric']; widget.title = metrics[metric]
-      widget.wide = { x: i * 3, y: 0, w: 3, h: 4 }; widget.medium = { x: (i % 2) * 3, y: Math.floor(i / 2) * 4, w: 3, h: 4 }
+      widget.wide = { x: i * 3, y: 0, w: 3, h: 7 }; widget.medium = { x: (i % 3) * 2, y: Math.floor(i / 3) * 7, w: 2, h: 7 }
       widgets.push(widget)
     })
     ;(['STATUS', 'PROJECT_WORKLOAD', 'MEMBER_WORKLOAD', 'PROJECT_TIME'] as const).forEach((kind, i) => {
       const widget = newWidget(kind)
-      widget.wide = { x: i % 2 === 0 ? 0 : i === 1 ? 5 : 6, y: 4 + Math.floor(i / 2) * 9, w: i === 0 ? 5 : i === 1 ? 7 : 6, h: 9 }
-      widget.medium = { x: 0, y: 8 + i * 9, w: 6, h: 9 }; widgets.push(widget)
+      widget.wide = { x: i % 2 === 0 ? 0 : i === 1 ? 5 : 6, y: 7 + Math.floor(i / 2) * 9, w: i === 0 ? 5 : i === 1 ? 7 : 6, h: 9 }
+      widget.medium = { x: 0, y: 14 + i * 9, w: 6, h: 9 }; widgets.push(widget)
     })
   }
   return { projectIds: [], widgets, filters: emptyFilters() }
