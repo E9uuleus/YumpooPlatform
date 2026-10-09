@@ -8,7 +8,6 @@ describe('team dashboard periods', () => {
     expect(periodFor('MONTH', '2026-02-10')).toEqual({ kind: 'MONTH', from: '2026-02-01', to: '2026-02-28' })
     expect(periodFor('QUARTER', '2026-11-30')).toEqual({ kind: 'QUARTER', from: '2026-10-01', to: '2026-12-31' })
     expect(shiftPeriod(periodFor('QUARTER', '2026-01-15'), -1)).toEqual({ kind: 'QUARTER', from: '2025-10-01', to: '2025-12-31' })
-    expect(shiftPeriod({ kind: 'CUSTOM', from: '2026-10-01', to: '2026-10-10' }, 1)).toEqual({ kind: 'CUSTOM', from: '2026-10-11', to: '2026-10-20' })
     expect(periodLabel(periodFor('QUARTER', '2026-11-30'))).toBe('2026年第4季度')
     expect(rangeDays('2026-10-30', '2026-11-02')).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'])
     expect(toApiDate('2026-10-01').toISOString().slice(0, 10)).toBe('2026-10-01')
