@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DashboardChartResult } from '@yumpoo/api-client'
-import { additive, chartGroups, chartLabel, defaultChart, resolveChart } from './chartModel'
+import { additive, chartGroups, chartLabel, defaultChart, resolveChart, selectedProjectIds } from './chartModel'
 import { newWidget } from './dashboardModel'
 
 describe('custom chart configurations', () => {
@@ -21,6 +21,15 @@ describe('custom chart configurations', () => {
     expect(chartGroups(c, result)[0]).toMatchObject({ key: 'b', name: '自定义名称', color: '#ff0000' })
     expect(chartLabel(c, 'PROJECT', 'b', '项目').name).toBe('项目')
     expect(result.points[1]?.label).toBe('B')
+  })
+  it('pins drill-down tables to the project carried by the selection', () => {
+    const workload = resolveChart(newWidget('PROJECT_WORKLOAD', []))
+    expect(selectedProjectIds(workload, { key: 'p2', seriesKey: 'p2:OPEN' })).toEqual(['p2'])
+    expect(selectedProjectIds(workload)).toBeUndefined()
+    const bySeries = { ...defaultChart(), dimension: 'STATUS', series: 'PROJECT' } as ReturnType<typeof defaultChart>
+    expect(selectedProjectIds(bySeries, { key: 'OPEN', seriesKey: 'p3' })).toEqual(['p3'])
+    expect(selectedProjectIds({ ...bySeries, type: 'DONUT' } as typeof bySeries, { key: 'OPEN', seriesKey: 'p3' })).toBeUndefined()
+    expect(selectedProjectIds(resolveChart(newWidget('MEMBER_WORKLOAD', [])), { key: 'user' })).toBeUndefined()
   })
   it('does not stack percentages or average and median durations', () => {
     const c = defaultChart()

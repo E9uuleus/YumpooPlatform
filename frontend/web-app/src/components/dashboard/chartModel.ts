@@ -1,4 +1,4 @@
-import type { DashboardChart, DashboardChartMeasure, DashboardChartPoint, DashboardChartResult, DashboardWidget } from '@yumpoo/api-client'
+import type { DashboardChart, DashboardChartMeasure, DashboardChartPoint, DashboardChartResult, DashboardChartSelection, DashboardWidget } from '@yumpoo/api-client'
 import { duration } from './dashboardModel'
 
 export const chartTypes = [
@@ -27,6 +27,13 @@ export function resolveChart(widget: DashboardWidget): DashboardChart {
   c.sort = (widget.sort === 'ASC' ? 'VALUE_ASC' : 'VALUE_DESC') as DashboardChart['sort']
   c.valueFormat = (widget.kind === 'STATUS' ? 'PERCENT' : 'VALUE') as DashboardChart['valueFormat']
   return c
+}
+/** Project ids pinned by a chart selection; the server returns nothing for the other project tables. */
+export function selectedProjectIds(c: DashboardChart, selection?: DashboardChartSelection): string[] | undefined {
+  if (!selection) return undefined
+  if (c.type !== 'NUMBER' && c.dimension === 'PROJECT' && selection.key) return [selection.key]
+  if (!['NUMBER', 'PIE', 'DONUT', 'BUBBLE'].includes(c.type) && c.series === 'PROJECT' && selection.seriesKey) return [selection.seriesKey]
+  return undefined
 }
 export function chartLabelKey(dimension: string, key: string) { return `${dimension}:${key}` }
 export function chartLabel(c: DashboardChart, dimension: string, key: string, fallback: string, colorToken = '') {
