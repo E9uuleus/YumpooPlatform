@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElAlert, ElButton, ElIcon, ElTable, ElTableColumn } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
@@ -26,6 +26,11 @@ const idle = computed(() => rows.value.filter(row => row.total === 0))
 const visible = computed(() => showIdle.value ? [...busy.value, ...idle.value] : busy.value)
 const max = computed(() => Math.max(1, ...rows.value.map(row => row.total)))
 const totals = computed(() => busy.value.filter(row => row.userId).reduce((sum, row) => ({ inProgress: sum.inProgress + row.inProgress, todo: sum.todo + row.todo, overdue: sum.overdue + row.overdue }), { inProgress: 0, todo: 0, overdue: 0 }))
+
+watch(() => props.workload, () => {
+  expanded.value = new Set(busy.value.filter(row => expanded.value.has(row.key)).map(row => row.key))
+  for (const key of expanded.value) emit('load', key, false)
+})
 
 function toggle(row: Row) {
   const next = new Set(expanded.value)

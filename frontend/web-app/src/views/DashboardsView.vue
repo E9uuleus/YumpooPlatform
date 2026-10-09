@@ -37,6 +37,8 @@ const detailId = ref(''), detailSelection = ref<DashboardChartSelection>()
 const detailWidget = computed(() => configuration.value.widgets.find(w => w.id === detailId.value))
 const connections = computed(() => snapshot.value?.projects || dashboard.value?.projects || [])
 const results = computed(() => new Map(snapshot.value?.charts?.map(c => [c.id, c]) || []))
+const exportReady = computed(() => !!dashboard.value && !!snapshot.value && !refreshing.value && configuration.value.widgets.length > 0
+  && configuration.value.widgets.every(widget => results.value.has(widget.id)))
 const filtersCount = computed(() => Object.entries(configuration.value.filters).reduce((count, [key, value]) => count + (Array.isArray(value) ? value.length : key === 'query' ? 0 : value ? 1 : 0), 0))
 const filterChips = computed(() => {
   const f = configuration.value.filters, result: { key: string; label: string }[] = []
@@ -119,11 +121,12 @@ async function dashboardAction(command: string) {
 function refreshAll() { if (teamActive.value) teamView.value?.refresh(); else void reload() }
 function renameDashboard(value: string) { name.value = value; changed() }
 async function exportPdf() {
-  if (exporting.value || !dashboard.value) return
+  if (exporting.value || !exportReady.value) return
   exporting.value = true
   try {
     const timezone = session.authentication.value?.company.timezone ?? 'Asia/Shanghai'
     const { exportDashboardPdf } = await import('../components/dashboard/dashboardPdf')
+    if (!exportReady.value) return
     const blob = await exportDashboardPdf({ name: name.value, exportedAt: formatTimestamp(new Date(), timezone), widgets: configuration.value.widgets, results: results.value,
       projects: connections.value.filter(p => p.available && p.name).map(p => p.name!), filters: filterChips.value.map(chip => chip.label) })
     if (await saveExportFile(blob, exportFileName(name.value, 'pdf'), PDF_TYPE)) ElMessage.success('已导出 PDF')
@@ -177,7 +180,7 @@ async function discardReload() {
             text
             aria-label="导出 PDF"
             :loading="exporting"
-            :disabled="!dashboard || !snapshot || refreshing || !configuration.widgets.length"
+            :disabled="!exportReady"
             @click="exportPdf"
           >
             <span class="dashboard-export-label">导出 PDF</span>

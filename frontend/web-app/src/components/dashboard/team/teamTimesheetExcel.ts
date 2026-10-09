@@ -2,7 +2,7 @@ import type { Workbook as WorkbookType } from 'exceljs'
 import { XLSX_TYPE } from '../exportFile'
 import { hours, isWeekend, weekday, type TimesheetRow } from './teamDashboardModel'
 
-export interface TimesheetWorkbookInput { rows: TimesheetRow[]; days: string[]; timezone: string; scopeLabel: string; exportedAt: string }
+export interface TimesheetWorkbookInput { rows: TimesheetRow[]; days: string[]; timezone: string; scopeLabel: string; memberScopeLabel: string; exportedAt: string }
 
 // ExcelJS takes ARGB strings; these mirror the light-theme brand and table tokens.
 const BRAND = 'FF0073EA', WHITE = 'FFFFFFFF', WEEKEND = 'FFE6E9EF', TOTAL = 'FFF6F7FB', BORDER = 'FFD0D4E4'
@@ -22,7 +22,7 @@ export async function buildTimesheetWorkbook(input: TimesheetWorkbookInput): Pro
   summary.getCell(1, 1).value = `成员工时统计（小时） ${range}`
   summary.getCell(1, 1).font = { bold: true, size: 14 }
   summary.mergeCells(2, 1, 2, lastColumn)
-  summary.getCell(2, 1).value = `时区 ${input.timezone} · 项目范围：${input.scopeLabel} · 导出时间 ${input.exportedAt}`
+  summary.getCell(2, 1).value = `时区 ${input.timezone} · 项目范围：${input.scopeLabel} · 成员范围：${input.memberScopeLabel} · 导出时间 ${input.exportedAt}`
   summary.getCell(2, 1).font = { color: { argb: 'FF5B6070' } }
   const header = summary.getRow(3)
   header.values = ['成员', '状态', '合计', ...input.days.map(day => `${day.slice(5)} ${weekday(day)}`)]

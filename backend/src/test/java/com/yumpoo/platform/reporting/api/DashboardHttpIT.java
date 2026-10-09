@@ -103,6 +103,7 @@ class DashboardHttpIT {
 
         String base = "/api/v1/company/team-dashboard", sheetBody = "{\"from\":\"2026-01-01\",\"to\":\"2026-01-07\",\"projectIds\":[],\"userIds\":[]}";
         assertThat(mutate("POST", base + "/timesheet/query", member, sheetBody, null, null).statusCode()).isEqualTo(403);
+        assertThat(mutate("POST", base + "/timesheet/query", member, sheetBody.replace("2026-01-07", "2026-04-05"), null, null).statusCode()).isEqualTo(403);
         assertThat(get(base + "/options", member).statusCode()).isEqualTo(403);
         var sheet = ok(mutate("POST", base + "/timesheet/query", admin, sheetBody, null, null));
         assertThat(sheet.path("timezone").asText()).isEqualTo(zone.getId());

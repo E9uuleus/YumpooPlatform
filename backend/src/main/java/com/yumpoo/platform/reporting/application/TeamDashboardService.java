@@ -49,10 +49,10 @@ public class TeamDashboardService {
     }
 
     public Timesheet timesheet(CurrentActor actor, TimesheetQuery query) {
+        var scope = scope(actor, ids(query == null ? null : query.projectIds(), MAX_PROJECTS, "projectIds"), true);
         if (query == null || query.from() == null || query.to() == null || query.to().isBefore(query.from())
                 || ChronoUnit.DAYS.between(query.from(), query.to()) >= MAX_DAYS)
             throw invalid("to", "统计区间需在 1–93 天之间");
-        var scope = scope(actor, ids(query.projectIds(), MAX_PROJECTS, "projectIds"), true);
         var userIds = ids(query.userIds(), MAX_USERS, "userIds");
         ZoneId zone = zone();
         Instant asOf = clock.instant();

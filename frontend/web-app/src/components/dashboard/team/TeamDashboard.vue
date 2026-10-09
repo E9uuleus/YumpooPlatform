@@ -12,6 +12,9 @@ const { options, optionsError, timezone, projectIds, userIds, period, timesheet,
 const scopeLabel = computed(() => projectIds.value.length
   ? options.value?.projects.filter(p => projectIds.value.includes(p.id)).map(p => p.name).join('、') || `${projectIds.value.length} 个项目`
   : '全部项目')
+const memberScopeLabel = computed(() => userIds.value.length
+  ? options.value?.members.filter(m => userIds.value.includes(m.userId)).map(m => m.displayName).join('、') || `${userIds.value.length} 位成员`
+  : '全部成员')
 const loading = computed(() => timesheetLoading.value || workloadLoading.value)
 defineExpose({ refresh: team.refresh, loading })
 </script>
@@ -79,6 +82,7 @@ defineExpose({ refresh: team.refresh, loading })
         :error="timesheetError"
         :timezone="timezone"
         :scope-label="scopeLabel"
+        :member-scope-label="memberScopeLabel"
         @retry="team.loadTimesheet()"
       />
       <TeamWorkload

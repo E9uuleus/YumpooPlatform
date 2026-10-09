@@ -10,7 +10,7 @@ import { exportFileName, saveExportFile, XLSX_TYPE } from '../exportFile'
 import { buildTimesheet, formatHours, hours, isWeekend, MAX_RANGE_DAYS, periodFor, periodLabel, periodOptions, rangeDays, shiftPeriod, todayIn, weekday,
   type Period, type PeriodKind, type TimesheetItemRow, type TimesheetRow } from './teamDashboardModel'
 
-const props = defineProps<{ sheet?: TeamTimesheet | undefined; loading: boolean; error: string; timezone: string; scopeLabel: string }>()
+const props = defineProps<{ sheet?: TeamTimesheet | undefined; loading: boolean; error: string; timezone: string; scopeLabel: string; memberScopeLabel: string }>()
 const period = defineModel<Period>('period', { required: true })
 const emit = defineEmits<{ retry: [] }>()
 const hideEmpty = ref(false), exporting = ref(false)
@@ -42,7 +42,7 @@ async function exportExcel() {
   try {
     const { buildTimesheetWorkbook } = await import('./teamTimesheetExcel')
     const blob = await buildTimesheetWorkbook({ rows: rows.value, days: days.value, timezone: props.sheet.timezone, scopeLabel: props.scopeLabel,
-      exportedAt: formatTimestamp(new Date(), props.timezone) })
+      memberScopeLabel: props.memberScopeLabel, exportedAt: formatTimestamp(new Date(), props.timezone) })
     if (await saveExportFile(blob, exportFileName(`成员工时 ${days.value[0]}至${days.value[days.value.length - 1]}`, 'xlsx'), XLSX_TYPE)) ElMessage.success('已导出 Excel')
   } catch (reason) { ElMessage.error(reason instanceof Error && reason.message ? reason.message : '导出失败，请重试') }
   finally { exporting.value = false }

@@ -37,7 +37,7 @@ export function useTeamDashboard() {
     const token = ++workloadToken; workloadLoading.value = true; workloadError.value = ''
     try {
       const result = await teamDashboardApi.queryTeamWorkload({ xXSRFTOKEN: csrf(), teamWorkloadQuery: { projectIds: new Set(projectIds.value), userIds: new Set(userIds.value) } })
-      if (token === workloadToken) { workload.value = result; tasks.value = new Map() }
+      if (token === workloadToken) { tasks.value = new Map(); workload.value = result }
     } catch (reason) { if (token === workloadToken) workloadError.value = await message(reason) }
     finally { if (token === workloadToken) workloadLoading.value = false }
   }
