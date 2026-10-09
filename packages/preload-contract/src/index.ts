@@ -34,6 +34,19 @@ export interface DesktopBridge {
   readonly auth: DesktopAuthBridge
   readonly timer: DesktopTimerBridge
   readonly inbox?: DesktopInboxBridge
+  /** Optional because the remotely deployed web app can be newer than the installed shell. */
+  readonly files?: DesktopFilesBridge
+}
+
+export interface DesktopExportFile {
+  fileName: string
+  mimeType: 'application/pdf' | 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  data: Uint8Array
+}
+
+export interface DesktopFilesBridge {
+  /** Shows the native save dialog; resolves false when the user cancels. */
+  saveExport(file: DesktopExportFile): Promise<boolean>
 }
 
 export type DesktopInboxReason = 'MENTION' | 'REPLY' | 'COMMENT' | 'ASSIGNED' | 'PROJECT_MEMBER_ADDED' | 'PROJECT_MEMBER_REMOVED' | 'PROJECT_OWNER_ASSIGNED' | 'PROJECT_OWNER_TRANSFERRED' | 'CONNECTION_CREATED'

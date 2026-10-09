@@ -3,9 +3,11 @@ import { TimerPreferenceStore } from './timer-preferences'
 import { InboxNotifier, InboxPreferenceStore } from './inbox-notifier'
 import { applicationIcon } from './application-icon'
 import path from 'node:path'
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
+import { writeFile } from 'node:fs/promises'
 import type { DesktopAuthStatus } from '@yumpoo/preload-contract'
 import { AUTH_STATUS_CHANNEL, installAuthIpc } from './auth-ipc'
+import { installExportFileIpc } from './export-files'
 import {
   DesktopAuthController,
   exchangeDesktopAuthCode,
@@ -197,6 +199,14 @@ async function startApplication(): Promise<void> {
     allowedOrigin: webAppUrl.origin,
     controller,
     clearSession: clearDesktopSession,
+  })
+  installExportFileIpc({
+    ipcMain,
+    dialog,
+    getMainWindow: () => mainWindow,
+    allowedOrigin: webAppUrl.origin,
+    downloadsPath: () => app.getPath('downloads'),
+    writeFile: (filePath, data) => writeFile(filePath, data),
   })
   await createMainWindow()
 }
