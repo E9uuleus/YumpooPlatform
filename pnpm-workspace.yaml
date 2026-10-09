@@ -4,6 +4,7 @@ packages:
   - packages/*
 allowBuilds:
   '@openapitools/openapi-generator-cli': true
+  core-js: false
   esbuild: true
 minimumReleaseAgeExclude:
   - '@tiptap/core@3.30.3'

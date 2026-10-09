@@ -4,7 +4,7 @@ import type { DashboardChartSelection, DashboardConnection, DashboardFilters, Da
 import ProjectWorkItems from '../projects/ProjectWorkItems.vue'
 import type { WorkItemTableSource } from '../projects/workItemTableSource'
 import { useSession } from '../../composables/useSession'
-import { resolveChart } from './chartModel'
+import { resolveChart, selectedProjectIds } from './chartModel'
 import { dashboardTableSource } from './dashboardTableSource'
 
 const props = defineProps<{
@@ -20,8 +20,9 @@ const session = useSession()
 const tables = new Map<string, InstanceType<typeof ProjectWorkItems>>()
 const sources = new Map<string, WorkItemTableSource>()
 const visibleProjects = computed(() => {
-  const chart = resolveChart(props.widget)
+  const chart = resolveChart(props.widget), selected = selectedProjectIds(chart, props.selection)
   return props.projects.filter(project => project.available
+    && (!selected || selected.includes(project.id))
     && (!props.filters.projectIds.length || props.filters.projectIds.includes(project.id))
     && (chart.projectIds == null || chart.projectIds.includes(project.id))
     && (!chart.filters?.projectIds.length || chart.filters.projectIds.includes(project.id)))

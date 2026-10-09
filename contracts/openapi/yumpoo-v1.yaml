@@ -18,6 +18,8 @@ tags:
     description: 本人站内收件箱与未读计数。
   - name: Dashboards
     description: 用户私有仪表板、跨项目统计与布局配置。
+  - name: TeamDashboard
+    description: 公司管理员团队视图：成员工时与当前任务统计。
   - name: TimeTracking
     description: 工作项原始计时与本人跨端计时器。
   - name: Authentication
@@ -1547,6 +1549,83 @@ paths:
         "412": *a6
         "422": *a7
         "428": *a8
+  /company/team-dashboard/options:
+    get:
+      tags: [TeamDashboard]
+      operationId: getTeamDashboardOptions
+      summary: 查询团队视图的项目、成员与公司时区
+      description: 仅公司管理员（含平台管理员）可用。返回本公司全部项目（含已归档）与在职启用成员。
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 团队视图筛选选项。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TeamDashboardOptions' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /company/team-dashboard/timesheet/query:
+    post:
+      tags: [TeamDashboard]
+      operationId: queryTeamTimesheet
+      summary: 按成员、自然日与工作项统计原始计时
+      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TeamTimesheetQuery' } } }
+      responses:
+        '200':
+          description: 成员工时统计。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TeamTimesheet' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /company/team-dashboard/workload/query:
+    post:
+      tags: [TeamDashboard]
+      operationId: queryTeamWorkload
+      summary: 按处理人统计当前待开始与进行中的工作项
+      description: 仅公司管理员可用。只统计未删除、未归档且状态分类为 TODO 或 IN_PROGRESS 的工作项，多处理人分别计入；projectIds 为空表示全公司未归档项目。逾期为截止日期早于公司时区今天。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TeamWorkloadQuery' } } }
+      responses:
+        '200':
+          description: 成员当前任务统计。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TeamWorkload' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /company/team-dashboard/workload/tasks/query:
+    post:
+      tags: [TeamDashboard]
+      operationId: queryTeamMemberTasks
+      summary: 分页查询某成员（或未分配）的当前任务
+      description: 仅公司管理员可用，范围与成员当前任务统计一致。按截止日期升序（无截止日期在后）、进行中优先、更新时间倒序排列。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TeamMemberTasksQuery' } } }
+      responses:
+        '200':
+          description: 成员当前任务分页。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TeamMemberTaskPage' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
   /me/time-tracker/candidates:
     get:
       tags: [TimeTracking]
@@ -7802,6 +7881,174 @@ components:
         - deleted
       properties:
         deleted: *a2
+    TeamDashboardProject:
+      type: object
+      additionalProperties: false
+      required: [id, name, code, lifecycle]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        code: { type: string }
+        lifecycle: { type: string, enum: [ACTIVE, ARCHIVED] }
+    TeamDashboardMember:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, active]
+      properties:
+        userId: { type: string, format: uuid }
+        displayName: { type: string, description: 已无资料的成员显示为“历史成员”。 }
+        active: { type: boolean, description: 在职且账号启用。 }
+    TeamDashboardOptions:
+      type: object
+      additionalProperties: false
+      required: [projects, members, timezone]
+      properties:
+        projects:
+          type: array
+          items: { $ref: '#/components/schemas/TeamDashboardProject' }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/TeamDashboardMember' }
+        timezone: { type: string, description: 公司 IANA 时区，自然日与逾期判断均以此为准。 }
+    TeamTimesheetQuery:
+      type: object
+      additionalProperties: false
+      required: [from, to, projectIds, userIds]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date, description: 含当天；与 from 最多相差 92 天。 }
+        projectIds:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        userIds:
+          type: array
+          maxItems: 1000
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    TeamTimesheetWorkItem:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, projectName, itemNo, title]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        projectName: { type: string }
+        itemNo: { type: string }
+        title: { type: string }
+    TeamTimesheetEntry:
+      type: object
+      additionalProperties: false
+      required: [userId, workItemId, date, durationMs]
+      properties:
+        userId: { type: string, format: uuid }
+        workItemId: { type: string, format: uuid }
+        date: { type: string, format: date }
+        durationMs: { type: integer, format: int64, minimum: 1 }
+    TeamTimesheet:
+      type: object
+      additionalProperties: false
+      required: [from, to, timezone, asOf, members, workItems, entries]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        timezone: { type: string }
+        asOf: { type: string, format: date-time }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/TeamDashboardMember' }
+        workItems:
+          type: array
+          items: { $ref: '#/components/schemas/TeamTimesheetWorkItem' }
+        entries:
+          type: array
+          description: 每个成员、工作项、自然日一条，只包含大于 0 的耗时。
+          items: { $ref: '#/components/schemas/TeamTimesheetEntry' }
+    TeamWorkloadQuery:
+      type: object
+      additionalProperties: false
+      required: [projectIds, userIds]
+      properties:
+        projectIds:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        userIds:
+          type: array
+          maxItems: 1000
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    TeamWorkloadCounts:
+      type: object
+      additionalProperties: false
+      required: [todo, inProgress, overdue]
+      properties:
+        todo: { type: integer, format: int64, minimum: 0 }
+        inProgress: { type: integer, format: int64, minimum: 0 }
+        overdue: { type: integer, format: int64, minimum: 0 }
+    TeamWorkloadMember:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, active, todo, inProgress, overdue]
+      properties:
+        userId: { type: string, format: uuid }
+        displayName: { type: string }
+        active: { type: boolean }
+        todo: { type: integer, format: int64, minimum: 0 }
+        inProgress: { type: integer, format: int64, minimum: 0 }
+        overdue: { type: integer, format: int64, minimum: 0 }
+    TeamWorkload:
+      type: object
+      additionalProperties: false
+      required: [asOf, today, members, unassigned]
+      properties:
+        asOf: { type: string, format: date-time }
+        today: { type: string, format: date }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/TeamWorkloadMember' }
+        unassigned: { $ref: '#/components/schemas/TeamWorkloadCounts' }
+    TeamMemberTasksQuery:
+      type: object
+      additionalProperties: false
+      required: [userId, projectIds, offset, limit]
+      properties:
+        userId: { type: string, format: uuid, nullable: true, description: null 表示未分配。 }
+        projectIds:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        offset: { type: integer, format: int32, minimum: 0, maximum: 100000 }
+        limit: { type: integer, format: int32, minimum: 1, maximum: 100 }
+    TeamMemberTask:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, projectName, itemNo, title, statusName, statusCategory, statusColor, priorityName, priorityColor, dueDate, overdue]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        projectName: { type: string }
+        itemNo: { type: string }
+        title: { type: string }
+        statusName: { type: string }
+        statusCategory: { type: string, enum: [TODO, IN_PROGRESS] }
+        statusColor: { type: string, description: 项目状态标签色 token。 }
+        priorityName: { type: string, nullable: true }
+        priorityColor: { type: string, nullable: true }
+        dueDate: { type: string, format: date, nullable: true }
+        overdue: { type: boolean }
+    TeamMemberTaskPage:
+      type: object
+      additionalProperties: false
+      required: [items, totalElements]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TeamMemberTask' }
+        totalElements: { type: integer, format: int64, minimum: 0 }
     TimeTrackingState:
       type: string
       enum: [RUNNING, STOPPED, EMPTY]

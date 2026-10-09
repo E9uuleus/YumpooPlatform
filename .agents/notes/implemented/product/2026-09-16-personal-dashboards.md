@@ -31,7 +31,7 @@ catalog 的 MemberProjectQuery 只提供当前主体具有 ACTIVE 成员关系�
 
 保存恢复、显式刷新和可编辑展开视图见 [统一展开视图决策](2026-09-18-dashboard-recovery-and-exploration.md)，不改变本 Note 的私人所有权和统计边界。
 
-新增配置与 API 需保持后向兼容；后续共享、导出或历史趋势必须重新明确权限及数据口径。当前最多连接 100 个项目、40 个组件，筛选列表每字段最多 500 项，明细分页最多 100 项。自动保存串行化；窗口独立草稿与版本竞争行为见[自动避让与窗口独立保存](2026-09-19-dashboard-layout-autosave.md)。刷新失败保留上一次数据并明确标识。
+新增配置与 API 需保持后向兼容；后续共享、导出或历史趋势必须重新明确权限及数据口径。PDF 导出与公司管理员团队视图的边界见[仪表板标签栏、PDF 导出与团队视图](2026-10-08-dashboard-tabs-export-team-view.md)。当前最多连接 100 个项目、40 个组件，筛选列表每字段最多 500 项，明细分页最多 100 项。自动保存串行化；窗口独立草稿与版本竞争行为见[自动避让与窗口独立保存](2026-09-19-dashboard-layout-autosave.md)。刷新失败保留上一次数据并明确标识。
 
 本决策补充 [工作项核心合同](../architecture/2026-08-22-work-item-core-contract.md)、[父子关系](../data/2026-08-28-work-item-parent-child-relations.md)、[项目标签目录](../data/2026-08-26-project-work-item-label-catalog.md) 和 [原始计时](../architecture/2026-09-07-work-item-time-tracking.md)。既有“不要创建私人工作项表格视图”的选择针对 Content 共享默认，本次独立仪表板不取代它；没有需要归档的活动 Note。
 

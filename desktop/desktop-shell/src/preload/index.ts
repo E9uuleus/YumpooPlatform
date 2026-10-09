@@ -3,6 +3,8 @@ import type {
   DesktopAuthPhase,
   DesktopAuthStatus,
   DesktopBridge,
+  DesktopExportFile,
+  DesktopFilesBridge,
   DesktopInboxBridge,
   DesktopInboxState,
   DesktopInboxPreferences,
@@ -175,11 +177,21 @@ const desktopInbox: DesktopInboxBridge = Object.freeze({
   },
 })
 
+const desktopFiles: DesktopFilesBridge = Object.freeze({
+  saveExport: async (file: DesktopExportFile) => {
+    if (!file || typeof file.fileName !== 'string' || typeof file.mimeType !== 'string' || !(file.data instanceof Uint8Array)) {
+      throw new TypeError('Export file is invalid')
+    }
+    return (await ipcRenderer.invoke('yumpoo:files:save-export', { fileName: file.fileName, mimeType: file.mimeType, data: file.data })) === true
+  },
+})
+
 const desktopBridge: DesktopBridge = Object.freeze({
   client: 'electron',
   auth: desktopAuth,
   timer: desktopTimer,
   inbox: desktopInbox,
+  files: desktopFiles,
 })
 
 contextBridge.exposeInMainWorld('yumpooDesktop', desktopBridge)

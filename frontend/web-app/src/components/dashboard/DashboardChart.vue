@@ -10,7 +10,7 @@ import { metrics } from './dashboardModel'
 import { chartColor, chartPalette } from './chartColors'
 
 use([BarChart, PieChart, LineChart, ScatterChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, AriaComponent, SVGRenderer])
-const props = defineProps<{ widget: DashboardWidget; result?: DashboardChartResult | undefined; loading?: boolean | undefined; selection?: DashboardChartSelection | undefined }>()
+const props = defineProps<{ widget: DashboardWidget; result?: DashboardChartResult | undefined; loading?: boolean | undefined; selection?: DashboardChartSelection | undefined; printing?: boolean }>()
 const emit = defineEmits<{ select: [selection?: DashboardChartSelection] }>()
 const config = computed(() => resolveChart(props.widget)), groups = computed(() => chartGroups(config.value, props.result))
 const host = ref<HTMLElement>()
@@ -31,7 +31,7 @@ function render() {
   const scaled = (value: number) => percent ? total ? value / total * 100 : 0 : c.measure.metric === 'DURATION' ? value / 3600000 : value
   const axisFormat = (value: number) => percent || c.measure.metric === 'COMPLETION_RATE' ? `${Math.round(value)}%` : c.measure.metric === 'DURATION' ? `${Math.round(value * 10) / 10}h` : String(value)
   const shown = (value: number) => percent ? `${Math.round(scaled(value) * 10) / 10}%` : formatMeasure(value, c.measure)
-  const common = { animationDuration: 180, color: chartPalette, textStyle: { color: text, fontFamily: 'Figtree, Microsoft YaHei, sans-serif' },
+  const common = { animation: !props.printing, animationDuration: 180, color: chartPalette, textStyle: { color: text, fontFamily: 'Figtree, Microsoft YaHei, sans-serif' },
     aria: { enabled: true, label: { description: props.widget.title } }, tooltip: { trigger: 'item', renderMode: 'richText', confine: true },
     legend: { show: c.showLegend, type: 'scroll', bottom: 0, textStyle: { color: text, fontSize: small ? 10 : 12 }, icon: 'circle', itemWidth: 8, itemHeight: 8 } }
   let option: EChartsCoreOption
@@ -123,5 +123,5 @@ onBeforeUnmount(() => { observer?.disconnect(); themeObserver?.disconnect(); cha
   </div>
 </template>
 <style scoped>
-.dashboard-chart{position:relative;width:100%;height:100%;min-height:0;min-width:0;color:var(--yp-text-primary);container-type:inline-size}.dashboard-chart__canvas{width:100%;height:100%}.is-empty{visibility:hidden}.dashboard-chart__empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--yp-text-secondary);font-size:13px}.chart-number{position:absolute;inset:0;width:100%;border:0;background:none;color:inherit;font:600 clamp(24px,16cqw,58px)/1.2 var(--yp-font-family);letter-spacing:-1px;cursor:pointer;text-align:center;padding:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chart-number:focus-visible{outline:2px solid var(--yp-action-primary);outline-offset:-4px}
+.dashboard-chart{position:relative;width:100%;height:100%;min-height:0;min-width:0;color:var(--yp-text-primary);container-type:size}.dashboard-chart__canvas{width:100%;height:100%}.is-empty{visibility:hidden}.dashboard-chart__empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--yp-text-secondary);font-size:13px}.chart-number{position:absolute;inset:0;width:100%;border:0;background:none;color:inherit;font:600 clamp(16px,min(18cqw,60cqh),64px)/1.2 var(--yp-font-family);letter-spacing:-1px;cursor:pointer;text-align:center;padding:4px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chart-number:focus-visible{outline:2px solid var(--yp-action-primary);outline-offset:-4px}
 </style>

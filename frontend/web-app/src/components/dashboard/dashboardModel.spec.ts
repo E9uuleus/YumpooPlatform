@@ -13,7 +13,8 @@ describe('dashboard model', () => {
       }
     }
     const added = newWidget('STATUS', widgets)
-    expect(added.wide.y).toBe(22); expect(added.medium.y).toBe(44)
+    expect(added.wide.y).toBe(25); expect(added.medium.y).toBe(50)
+    expect(newWidget('METRIC')).toMatchObject({ wide: { w: 3, h: 7 }, medium: { w: 2, h: 7 } })
   })
   it('merges only identical status definitions and preserves drilldown keys', () => {
     const bucket = (project: string, color: string): DashboardBucket => ({ kind: 'STATUS', key: `${project}:OPEN`, projectId: project, userId: null, label: '进行中', code: 'OPEN', category: 'IN_PROGRESS', colorToken: color, count: 2, inProgress: 2, done: 0, durationMs: 0 })
