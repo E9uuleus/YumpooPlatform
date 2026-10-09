@@ -10,6 +10,7 @@ export * from './IdentityGovernanceApi';
 export * from './NotificationsApi';
 export * from './OperationsApi';
 export * from './ProjectsApi';
+export * from './TeamDashboardApi';
 export * from './TimeTrackingApi';
 export * from './WorkItemUpdatesApi';
 export * from './WorkItemsApi';
