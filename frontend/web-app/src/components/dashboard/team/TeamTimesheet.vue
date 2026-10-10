@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onUpdated, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onUpdated, ref, watch } from 'vue'
 import { ElAlert, ElButton, ElCheckbox, ElIcon, ElMessage, ElPopover } from 'element-plus'
 import { ArrowLeft, ArrowRight, Calendar, Download } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
@@ -9,14 +9,15 @@ import YpSegmented from '../../yp/YpSegmented.vue'
 import '../../projects/workItemAccentBar.css'
 import { formatTimestamp } from '../../../design-system/dates'
 import { exportFileName, saveExportFile, XLSX_TYPE } from '../exportFile'
-import { buildTimesheet, dayBreakdown, isWeekend, periodFor, periodLabel, periodOptions, projectColors, rangeDays, shiftPeriod, shortHours, todayIn, weekday,
+import { buildTimesheet, dayBreakdown, hoursMinutes, isWeekend, periodFor, periodLabel, periodOptions, projectColors, rangeDays, shiftPeriod, shortHours, todayIn, weekday,
   type Period, type PeriodKind, type TimesheetRow } from './teamDashboardModel'
+import { staggerIn, useTweenedNumber, type StaggerFrom } from './teamMotion'
 
 const props = defineProps<{ sheet?: TeamTimesheet | undefined; loading: boolean; error: string; timezone: string }>()
 const period = defineModel<Period>('period', { required: true })
 const emit = defineEmits<{ retry: [] }>()
 const hideEmpty = ref(false), exporting = ref(false), calendarOpen = ref(false)
-const grid = ref<HTMLTableElement>(), selected = ref(new Set<string>()), sortTotal = ref<'desc' | 'asc'>()
+const grid = ref<HTMLTableElement>(), sheetBox = ref<HTMLElement>(), selected = ref(new Set<string>()), sortTotal = ref<'desc' | 'asc'>()
 const active = ref<{ row: TimesheetRow; day: string; anchor: HTMLElement }>()
 const model = computed(() => props.sheet ? buildTimesheet(props.sheet) : { rows: [], dayTotals: {}, totalMs: 0 })
 const days = computed(() => props.sheet ? rangeDays(props.sheet.from.toISOString().slice(0, 10), props.sheet.to.toISOString().slice(0, 10)) : [])
@@ -32,12 +33,17 @@ const rows = computed(() => {
 const checkedRows = computed(() => rows.value.filter(row => selected.value.has(row.userId)))
 const allChecked = computed(() => rows.value.length > 0 && checkedRows.value.length === rows.value.length)
 const breakdown = computed(() => active.value ? dayBreakdown(active.value.row, active.value.day) : [])
+const membersWithTime = computed(() => model.value.rows.filter(row => row.totalMs > 0).length)
+const shownTotalMs = useTweenedNumber(() => model.value.totalMs), shownMembers = useTweenedNumber(() => membersWithTime.value)
 
+// Rows slide in from the side the user paged towards once the next sheet arrives.
+let enterFrom: StaggerFrom = 'up'
 function changeKind(kind: PeriodKind) { period.value = periodFor(kind, todayIn(props.timezone)) }
+function step(direction: -1 | 1) { enterFrom = direction < 0 ? 'left' : 'right'; period.value = shiftPeriod(period.value, direction) }
 function pickDay(day: string) { calendarOpen.value = false; period.value = periodFor(period.value.kind, day) }
 function heat(ms: number) {
-  const mix = ms >= 8 * 3_600_000 ? 38 : ms >= 4 * 3_600_000 ? 26 : ms >= 2 * 3_600_000 ? 16 : 8
-  return { background: `color-mix(in srgb, var(--yp-action-primary) ${mix}%, transparent)` }
+  const mix = ms >= 8 * 3_600_000 ? 52 : ms >= 4 * 3_600_000 ? 36 : ms >= 2 * 3_600_000 ? 24 : 14
+  return { background: `color-mix(in srgb, var(--yp-label-bright-blue) ${mix}%, transparent)` }
 }
 function toggleAll(checked: boolean) { selected.value = new Set(checked ? rows.value.map(row => row.userId) : []) }
 function toggleRow(userId: string, checked: boolean) {
@@ -80,7 +86,13 @@ watch(() => Boolean(active.value), open => {
   document.addEventListener('pointerdown', closeDayOnOutside, true)
   document.addEventListener('keydown', closeDayOnEscape)
 })
-watch(() => props.sheet, () => { active.value = undefined })
+watch(() => props.sheet, async () => {
+  active.value = undefined
+  const from = enterFrom
+  enterFrom = 'up'
+  await nextTick()
+  if (grid.value?.tBodies[0] && sheetBox.value) staggerIn(grid.value.tBodies[0].rows, sheetBox.value, from)
+})
 onBeforeUnmount(stopListening)
 /** The dashboard hides this view with `v-show`, which would leave teleported popovers floating over the other view. */
 function closePopovers() { active.value = undefined; calendarOpen.value = false }
@@ -102,7 +114,7 @@ async function exportExcel() {
 
 <template>
   <section
-    class="team-view"
+    class="team-view team-view--timesheet"
     aria-label="成员工时"
   >
     <div class="dashboard-toolbar team-toolbar">
@@ -122,7 +134,7 @@ async function exportExcel() {
           :icon="ArrowLeft"
           text
           aria-label="上一周期"
-          @click="period = shiftPeriod(period, -1)"
+          @click="step(-1)"
         />
         <el-popover
           v-model:visible="calendarOpen"
@@ -130,6 +142,7 @@ async function exportExcel() {
           placement="bottom"
           :width="320"
           popper-class="team-calendar-popover"
+          transition="team-pop"
         >
           <template #reference>
             <button
@@ -140,7 +153,9 @@ async function exportExcel() {
             >
               <el-icon aria-hidden="true">
                 <Calendar />
-              </el-icon>{{ periodLabel(period) }}
+              </el-icon><span class="team-period__text"><Transition name="team-label">
+                <span :key="periodLabel(period)">{{ periodLabel(period) }}</span>
+              </Transition></span>
             </button>
           </template>
           <TimeCalendar
@@ -155,7 +170,7 @@ async function exportExcel() {
           :icon="ArrowRight"
           text
           aria-label="下一周期"
-          @click="period = shiftPeriod(period, 1)"
+          @click="step(1)"
         />
       </div>
       <div class="team-toolbar__end">
@@ -190,11 +205,14 @@ async function exportExcel() {
         </el-button>
       </el-alert>
       <p class="team-summary">
-        合计 <strong>{{ shortHours(model.totalMs) }}</strong> 小时 · 有工时成员 <strong>{{ model.rows.filter(row => row.totalMs > 0).length }}</strong> / {{ model.rows.length }}<template v-if="sheet">
+        合计 <strong>{{ shortHours(shownTotalMs) }}</strong> 小时 · 有工时成员 <strong>{{ Math.round(shownMembers) }}</strong> / {{ model.rows.length }}<template v-if="sheet">
           · 统计至 {{ formatTimestamp(sheet.asOf, timezone) }}
         </template>
       </p>
-      <div class="team-sheet">
+      <div
+        ref="sheetBox"
+        class="team-sheet"
+      >
         <table
           ref="grid"
           class="team-grid"
@@ -249,6 +267,7 @@ async function exportExcel() {
             <tr
               v-for="row in rows"
               :key="row.key"
+              :class="{ 'is-selected': selected.has(row.userId) }"
             >
               <td class="team-sticky team-sticky--check">
                 <el-checkbox
@@ -334,25 +353,27 @@ async function exportExcel() {
       :width="360"
       :persistent="false"
       popper-class="team-day-popover"
+      transition="team-pop"
     >
       <header class="team-day__head">
         <strong>{{ active.row.name }} · {{ active.day.slice(5) }} 周{{ weekday(active.day) }}</strong>
-        <span>{{ shortHours(active.row.days[active.day] ?? 0) }} 小时</span>
+        <span>{{ hoursMinutes(active.row.days[active.day] ?? 0) }}</span>
       </header>
       <section
-        v-for="project in breakdown"
+        v-for="(project, index) in breakdown"
         :key="project.projectId"
         class="team-day__project"
-        :style="{ '--work-item-accent': colors.get(project.projectId) }"
+        :style="{ '--team-project-color': colors.get(project.projectId), '--i': Math.min(index, 8) }"
       >
-        <h4>{{ project.projectName }}<small>{{ shortHours(project.totalMs) }} 小时</small></h4>
+        <h4>{{ project.projectName }}<small>{{ hoursMinutes(project.totalMs) }}</small></h4>
         <div
-          v-for="item in project.items"
+          v-for="(item, row) in project.items"
           :key="item.key"
           class="team-day__item work-item-accent-bar"
+          :style="{ '--j': Math.min(row, 8) }"
         >
           <span class="team-day__text"><strong>{{ item.title }}</strong><small>{{ item.itemNo }}</small></span>
-          <span class="team-day__hours">{{ shortHours(item.ms) }}</span>
+          <span class="team-day__hours">{{ hoursMinutes(item.ms) }}</span>
         </div>
       </section>
     </el-popover>

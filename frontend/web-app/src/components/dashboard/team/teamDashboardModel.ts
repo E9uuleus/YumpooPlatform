@@ -50,6 +50,12 @@ export function periodLabel(period: Period): string {
 export const hours = (ms: number) => Math.round(ms / 36_000) / 100
 /** Reference-sheet style `8`, `6.5`, `0`; recorded time never rounds down to `0`. */
 export const shortHours = (ms: number) => ms > 0 ? String(Math.max(1, Math.round(ms / 360_000)) / 10) : '0'
+/** Exact `2h 05m` / `45m` for drill-downs; floors to whole minutes like the running timer. */
+export function hoursMinutes(ms: number): string {
+  const minutes = Math.floor(Math.max(0, ms) / 60_000)
+  if (!minutes) return ms > 0 ? '< 1m' : '0m'
+  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
+}
 
 export interface TimesheetItemRow { key: string; workItemId: string; projectId: string; projectName: string; itemNo: string; title: string; label: string; totalMs: number; days: Record<string, number> }
 export interface TimesheetRow { key: string; userId: string; name: string; active: boolean; totalMs: number; days: Record<string, number>; children: TimesheetItemRow[] }
@@ -98,9 +104,9 @@ export function dayBreakdown(row: TimesheetRow, day: string): DayProject[] {
   return list
 }
 
-const PROJECT_COLORS = [WorkItemLabelColorToken.Royal, WorkItemLabelColorToken.DarkOrange, WorkItemLabelColorToken.DarkPurple, WorkItemLabelColorToken.Teal,
-  WorkItemLabelColorToken.SofiaPink, WorkItemLabelColorToken.Indigo, WorkItemLabelColorToken.Brown, WorkItemLabelColorToken.DarkRed,
-  WorkItemLabelColorToken.Navy, WorkItemLabelColorToken.Berry].map(workItemLabelColorValue)
+const PROJECT_COLORS = [WorkItemLabelColorToken.BrightBlue, WorkItemLabelColorToken.DarkOrange, WorkItemLabelColorToken.DarkPurple, WorkItemLabelColorToken.Aquamarine,
+  WorkItemLabelColorToken.SofiaPink, WorkItemLabelColorToken.Indigo, WorkItemLabelColorToken.BrightGreen, WorkItemLabelColorToken.Lipstick,
+  WorkItemLabelColorToken.Royal, WorkItemLabelColorToken.Sunset].map(workItemLabelColorValue)
 
 /** Hashes each project id into the preset palette and probes past taken colours: projects in one sheet stay distinct, but a colour may change when the sheet's project set changes. */
 export function projectColors(projectIds: Iterable<string>): Map<string, string> {

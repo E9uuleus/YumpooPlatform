@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TeamTimesheet } from '@yumpoo/api-client'
-import { buildTimesheet, dayBreakdown, periodFor, periodLabel, projectColors, rangeDays, shiftPeriod, shortHours, toApiDate } from './teamDashboardModel'
+import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, projectColors, rangeDays, shiftPeriod, shortHours, toApiDate } from './teamDashboardModel'
 
 describe('team dashboard periods', () => {
   it('builds Monday weeks, calendar months and quarters and steps between them', () => {
@@ -29,6 +29,10 @@ describe('team dashboard periods', () => {
   })
   it('shows short hours without rounding recorded time down to zero', () => {
     expect([8 * 3_600_000, 6.5 * 3_600_000, 0.95 * 3_600_000, 30_000, 0].map(shortHours)).toEqual(['8', '6.5', '1', '0.1', '0'])
+  })
+  it('shows exact hours and minutes for drill-downs, flooring like the timer', () => {
+    expect([0, 30_000, 45 * 60_000 + 59_000, 2 * 3_600_000 + 5 * 60_000 + 40_000, 3 * 3_600_000].map(hoursMinutes))
+      .toEqual(['0m', '< 1m', '45m', '2h 05m', '3h 00m'])
   })
   it('groups one member day by project with larger totals first', () => {
     const sheet = {

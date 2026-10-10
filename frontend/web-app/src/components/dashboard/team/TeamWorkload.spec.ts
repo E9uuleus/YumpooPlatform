@@ -67,6 +67,15 @@ describe('expanded team tasks', () => {
     expect(team.tasks.value.get('member-0')?.loading).toBe(false)
   })
 
+  it('shows only the work item name in the task column', async () => {
+    api.queryTeamMemberTasks.mockResolvedValueOnce({ items: [{ id: 't1', itemNo: 'DEL-9', title: '登录页改版' } as TeamMemberTask], totalElements: 1 })
+    await row('张三').trigger('click'); await flushPromises()
+    const link = wrapper.find('.team-task-link')
+    expect(link.text()).toBe('登录页改版')
+    expect(link.attributes('title')).toBe('登录页改版')
+    expect(wrapper.find('.team-workload__tasks').text()).not.toContain('DEL-9')
+  })
+
   it('reloads active expanded rows after a workload refresh and drops rows without tasks', async () => {
     await row('张三').trigger('click'); await row('李四').trigger('click'); await row('未分配').trigger('click'); await flushPromises()
     api.queryTeamMemberTasks.mockClear()
