@@ -68,7 +68,7 @@
 .team-legend__swatch--progress,.team-workload__segment--progress{background:var(--yp-status-orange)}
 .team-legend__swatch--todo,.team-workload__segment--todo{background:var(--yp-label-gray)}
 .team-overdue{color:var(--yp-status-red)}
-.team-groups{overflow:auto;gap:4px}
+.team-groups{display:flex;flex-direction:column;flex:1;min-height:0;gap:4px;overflow:auto}
 .team-workload__row{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 8px;border:0;border-radius:var(--yp-radius-sm);background:none;color:var(--yp-text-primary);font:inherit;text-align:left;cursor:pointer}
 .team-workload__row:hover:not(:disabled){background:var(--yp-bg-hover)}
 .team-workload__row:disabled{cursor:default;opacity:.7}
