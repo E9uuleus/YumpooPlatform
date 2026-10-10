@@ -19,10 +19,12 @@ import {
 } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 import DiscussionComposer from './DiscussionComposer.vue'
-import { discussionExtensions, discussionHasDraft } from './discussionEditor'
+import { discussionExtensions, discussionHasContent, discussionHasDraft } from './discussionEditor'
 import DiscussionCommentCard from './DiscussionCommentCard.vue'
 import DiscussionReplyComposer from './DiscussionReplyComposer.vue'
 import { Refresh } from '@element-plus/icons-vue'
+import { editorAttachmentAccept, useEditorAttachments } from './useEditorAttachments'
+import { descriptionImageTypes } from './descriptionImages'
 import { useSession } from '../../composables/useSession'
 
 const props = defineProps<{
@@ -58,8 +60,11 @@ let loadController: AbortController | undefined
 let olderController: AbortController | undefined
 let frame: number | undefined
 let disposed = false
-const draftText = ref('')
-const editDraftText = ref('')
+const revision = ref(0)
+const fileInput = ref<HTMLInputElement>()
+const editFileInput = ref<HTMLInputElement>()
+const fileAccept = ref(editorAttachmentAccept)
+const editFileAccept = ref(editorAttachmentAccept)
 const editingItemId = ref<string>()
 const editDialogVisible = ref(false)
 const savingEdit = ref(false)
@@ -78,14 +83,25 @@ let publishKey = crypto.randomUUID()
 let publishKeyBody = ''
 let clock: ReturnType<typeof setInterval> | undefined
 
+const draftAttachments = useEditorAttachments({
+  editor: () => editor.value, ownerId: () => props.workItemId,
+  canUpload: () => props.canPublish && !publishing.value,
+})
+const editAttachments = useEditorAttachments({
+  editor: () => editEditor.value, ownerId: () => props.workItemId,
+  canUpload: () => editDialogVisible.value && props.canPublish && !savingEdit.value,
+})
+const pendingUploads = draftAttachments.pendingUploads
+const pendingEditUploads = editAttachments.pendingUploads
+
 const editor = useEditor({
-  editorProps: { attributes: { role: 'textbox', 'aria-label': '讨论正文', 'aria-multiline': 'true' } },
+  editorProps: { ...draftAttachments.editorProps, attributes: { role: 'textbox', 'aria-label': '讨论正文', 'aria-multiline': 'true' } },
   content: '',
   editable: props.canPublish,
-  extensions: discussionExtensions(() => props.members, () => composer.value?.closePanel()),
+  extensions: [...discussionExtensions(() => props.members, () => composer.value?.closePanel()), ...draftAttachments.extensions],
+  onTransaction: () => { revision.value++; draftAttachments.onTransaction() },
   onUpdate: ({ editor: current }) => {
     const html = current.getHTML()
-    draftText.value = current.getText()
     draftHtml.value = html
     if (html !== publishKeyBody) {
       publishKey = crypto.randomUUID()
@@ -95,16 +111,18 @@ const editor = useEditor({
 })
 
 const editEditor = useEditor({
-  editorProps: { attributes: { role: 'textbox', 'aria-label': '编辑讨论正文', 'aria-multiline': 'true' } },
+  editorProps: { ...editAttachments.editorProps, attributes: { role: 'textbox', 'aria-label': '编辑讨论正文', 'aria-multiline': 'true' } },
   content: '',
   editable: true,
-  extensions: discussionExtensions(() => props.members, () => editComposer.value?.closePanel()),
+  extensions: [...discussionExtensions(() => props.members, () => editComposer.value?.closePanel()), ...editAttachments.extensions],
+  onTransaction: () => { revision.value++; editAttachments.onTransaction() },
   onUpdate: ({ editor: current }) => {
-    editDraftText.value = current.getText()
     editHtml.value = current.getHTML()
   },
 })
 
+const canSubmit = computed(() => { void revision.value; return discussionHasContent(editor.value) && !pendingUploads.value })
+const canSaveEdit = computed(() => { void revision.value; return discussionHasContent(editEditor.value) && !pendingEditUploads.value })
 const hasEditDraft = computed(() => editDialogVisible.value && editHtml.value !== editOriginalHtml.value)
 const hasDraft = computed(() => { void draftHtml.value; return discussionHasDraft(editor.value) || hasEditDraft.value || Object.values(replyDrafts).some(Boolean) })
 const busy = computed(() => publishing.value || savingEdit.value || Boolean(mutatingId.value) || Object.values(replyBusy).some(Boolean))
@@ -259,7 +277,6 @@ function startEdit(item: WorkItemUpdate): void {
   editingItemId.value = item.id
   editProblem.value = undefined
   editEditor.value?.commands.setContent(item.bodyHtml)
-  editDraftText.value = editEditor.value?.getText() ?? ''
   editOriginalHtml.value = editEditor.value?.getHTML() ?? ''
   editHtml.value = editOriginalHtml.value
   editDialogVisible.value = true
@@ -302,7 +319,7 @@ async function handleMutationProblem(reason: unknown, updateId: string, preserve
 
 async function saveEdit(): Promise<void> {
   const item = currentEditingItem()
-  if (!item || !editEditor.value || !editDraftText.value.trim() || savingEdit.value) return
+  if (!item || !editEditor.value || !canSaveEdit.value || savingEdit.value) return
   const current = generation
   const csrf = readCsrfToken()
   if (!csrf) {
@@ -373,7 +390,7 @@ async function confirmDelete(item: WorkItemUpdate): Promise<void> {
 }
 
 async function publish(): Promise<void> {
-  if (!editor.value || !props.canPublish || !draftText.value.trim() || publishing.value || loading.value) return
+  if (!editor.value || !props.canPublish || !canSubmit.value || publishing.value || loading.value) return
   const current = generation
   const csrf = readCsrfToken()
   if (!csrf) {
@@ -413,6 +430,8 @@ async function publish(): Promise<void> {
 }
 
 function discardDraft(): void {
+  draftAttachments.abortUploads()
+  editAttachments.abortUploads()
   editDialogVisible.value = false
   replyComposers.forEach(composer => composer.discard())
   Object.keys(replyDrafts).forEach(id => { delete replyDrafts[id] })
@@ -429,6 +448,8 @@ async function closeEdit(done: () => void): Promise<void> {
     try { await ElMessageBox.confirm('离开将丢弃未保存的编辑内容。', '放弃编辑', { confirmButtonText: '放弃编辑', cancelButtonText: '继续编辑' }) }
     catch { return }
   }
+  editAttachments.abortUploads()
+  editEditor.value?.commands.clearContent(true)
   done()
 }
 
@@ -448,6 +469,24 @@ watch(() => props.workItemId, () => {
   void loadLatest()
 })
 watch(busy, value => { if (!value) queueFill() })
+
+async function pickFiles(edit: boolean, imageOnly: boolean): Promise<void> {
+  if (edit) editFileAccept.value = imageOnly ? descriptionImageTypes.join(',') : editorAttachmentAccept
+  else fileAccept.value = imageOnly ? descriptionImageTypes.join(',') : editorAttachmentAccept
+  await nextTick()
+  const input = edit ? editFileInput.value : fileInput.value
+  input?.click()
+}
+
+function chooseFiles(event: Event, edit: boolean): void {
+  const input = event.target as HTMLInputElement
+  const files = [...(input.files ?? [])]
+  input.value = ''
+  const attachments = edit ? editAttachments : draftAttachments
+  attachments.insertFiles(files)
+}
+
+watch(editDialogVisible, visible => { if (!visible) editAttachments.abortUploads() })
 
 defineExpose({ hasDraft, busy, discardDraft, editor, editEditor, saveEdit, loadLatest, loadOlder })
 onMounted(() => {
@@ -496,9 +535,30 @@ onBeforeUnmount(() => {
       ref="composer"
       :editor="editor"
       :busy="publishing"
-      :submit-disabled="!draftText.trim() || loading"
+      :submit-disabled="!canSubmit || loading"
+      allow-image
+      allow-file
+      @pick-image="pickFiles(false, true)"
+      @pick-file="pickFiles(false, false)"
       @submit="publish"
     />
+    <input
+      ref="fileInput"
+      class="discussion__file"
+      type="file"
+      :accept="fileAccept"
+      multiple
+      tabindex="-1"
+      aria-hidden="true"
+      @change="chooseFiles($event, false)"
+    >
+    <p
+      v-if="pendingUploads"
+      class="discussion__upload-hint"
+      role="status"
+    >
+      {{ pendingUploads }} 个附件处理中，完成或移除后可发布
+    </p>
     <inline-problem
       v-if="problem"
       :problem="problem"
@@ -633,7 +693,28 @@ onBeforeUnmount(() => {
         :busy="savingEdit"
         :collapsible="false"
         :show-submit="false"
+        allow-image
+        allow-file
+        @pick-image="pickFiles(true, true)"
+        @pick-file="pickFiles(true, false)"
       />
+      <input
+        ref="editFileInput"
+        class="discussion__file"
+        type="file"
+        :accept="editFileAccept"
+        multiple
+        tabindex="-1"
+        aria-hidden="true"
+        @change="chooseFiles($event, true)"
+      >
+      <p
+        v-if="pendingEditUploads"
+        class="discussion__upload-hint"
+        role="status"
+      >
+        {{ pendingEditUploads }} 个附件处理中，完成或移除后可保存
+      </p>
       <template #footer>
         <el-button @click="closeEdit(() => { editDialogVisible = false })">
           取消
@@ -641,7 +722,7 @@ onBeforeUnmount(() => {
         <el-button
           type="primary"
           :loading="savingEdit"
-          :disabled="!editDraftText.trim()"
+          :disabled="!canSaveEdit"
           @click="saveEdit"
         >
           保存
@@ -653,6 +734,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .discussion { display: grid; min-width: 0; gap: 8px; }
+.discussion__file { display: none; }
+.discussion__upload-hint { margin: 0; color: var(--yp-text-muted); font-size: 12px; }
 .discussion__actions { display: flex; justify-content: flex-end; height: 24px; }
 .discussion__refresh-icon { width: 16px; height: 16px; }
 .discussion__timeline { display: grid; min-width: 0; align-content: start; gap: 12px; }

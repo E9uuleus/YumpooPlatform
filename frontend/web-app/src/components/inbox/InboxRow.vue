@@ -5,7 +5,7 @@ import { Check, FolderOpened, Lock, Message } from '@element-plus/icons-vue'
 import type { NotificationItem } from '@yumpoo/api-client'
 import YpAssignee from '../yp/YpAssignee.vue'
 import { formatChineseTimestamp } from '../../design-system/dates'
-import { isOwnProjectRemoval, notificationKind, notificationLink, notificationText, relativeTime, type NotificationKind } from './inboxPresentation'
+import { isOwnProjectRemoval, notificationKind, notificationLink, notificationText, notificationExcerpt, relativeTime, type NotificationKind } from './inboxPresentation'
 
 const props = defineProps<{ item: NotificationItem; readerId?: string | undefined; now: Date; compact?: boolean; timezone?: string | undefined }>()
 defineEmits<{ open: [item: NotificationItem]; change: [item: NotificationItem, action: 'read' | 'unread' | 'archive'] }>()
@@ -64,10 +64,10 @@ const exactTime = computed(() => formatChineseTimestamp(props.item.createdAt, pr
           <strong v-if="showActor">{{ item.actor?.displayName || '系统' }}</strong> {{ notificationText(item, readerId) }}
         </p>
         <p
-          v-if="item.target.accessible && item.target.excerpt"
+          v-if="notificationExcerpt(item)"
           class="inbox-row__excerpt"
         >
-          {{ item.target.excerpt }}
+          {{ notificationExcerpt(item) }}
         </p>
         <span
           v-if="!compact && kind !== 'project' && item.target.accessible && item.target.projectName"

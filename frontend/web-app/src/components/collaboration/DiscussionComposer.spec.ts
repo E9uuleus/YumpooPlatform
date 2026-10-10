@@ -2,8 +2,9 @@ import { Editor } from '@tiptap/vue-3'
 import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ProjectMember } from '@yumpoo/api-client'
+import { AttachmentFile, DescriptionImage, ImageUploadPlaceholder } from './descriptionImages'
 import DiscussionComposer from './DiscussionComposer.vue'
-import { discussionExtensions, discussionFontSizes, safeDiscussionLink } from './discussionEditor'
+import { discussionExtensions, discussionFontSizes, discussionHasContent, discussionHasDraft, safeDiscussionLink } from './discussionEditor'
 
 let editor: Editor
 let wrapper: ReturnType<typeof mount>
@@ -48,6 +49,36 @@ describe('DiscussionComposer', () => {
     expect(wrapper.find('[aria-label="提及项目成员"]').exists()).toBe(false)
     await wrapper.get('[aria-label="插入图片"]').trigger('click')
     expect(wrapper.emitted('pickImage')).toHaveLength(1)
+  })
+  it('添加附件按钮独立启用并发出文件选择事件', async () => {
+    await setup()
+    expect(wrapper.find('[aria-label="添加附件"]').exists()).toBe(false)
+    await wrapper.setProps({ allowFile: true })
+    await wrapper.get('[aria-label="添加附件"]').trigger('click')
+    expect(wrapper.emitted('pickFile')).toHaveLength(1)
+    editor.setEditable(false)
+    await flushPromises()
+    expect(wrapper.get('[aria-label="添加附件"]').attributes('disabled')).toBeDefined()
+  })
+  it('附件文件卡片与图片在编辑器中往返，只有占位的草稿没有可发布内容', async () => {
+    const href = '/api/v1/attachments/35000000-0000-4000-8000-000000000009/content'
+    const extensions = [...discussionExtensions(() => []), DescriptionImage, AttachmentFile, ImageUploadPlaceholder]
+    editor = new Editor({ content: `<a data-type="attachment" href="${href}" data-size="12345">方案.pdf</a><img src="${href}" alt="截图.png">`, extensions })
+    wrapper = mount(DiscussionComposer, { props: { editor, collapsible: false, allowFile: true, allowImage: true } })
+    await flushPromises()
+    const value = editor.getHTML()
+    expect(value).toContain(`data-type="attachment" href="${href}" data-size="12345">方案.pdf</a>`)
+    const copy = new Editor({ content: value, extensions })
+    expect(copy.getJSON()).toEqual(editor.getJSON())
+    expect(discussionHasContent(copy)).toBe(true)
+    copy.destroy()
+    editor.commands.setContent('<p> </p>')
+    editor.commands.insertContent({ type: 'imageUpload', attrs: { uploadId: 'pending' } })
+    expect(discussionHasDraft(editor)).toBe(true)
+    expect(discussionHasContent(editor)).toBe(false)
+    editor.commands.setContent('<a data-type="attachment" href="/relative" data-size="1">坏链接</a><img src="data:image/png;base64,AAAA">')
+    expect(editor.getHTML()).not.toContain('data-type="attachment"')
+    expect(editor.getHTML()).not.toContain('<img')
   })
   it('可写状态恢复后工具栏同步恢复可用', async () => {
     await setup()

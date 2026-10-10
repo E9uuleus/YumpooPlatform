@@ -40,11 +40,15 @@ public final class JsoupCollaborationHtmlSanitizer implements CollaborationHtmlS
             .addAttributes("th", "colspan", "rowspan")
             .addAttributes("td", "colspan", "rowspan")
             .preserveRelativeLinks(true);
-    private static final Safelist DESCRIPTION_SAFELIST = new Safelist(SAFELIST)
-            .addAttributes("img", "src", "alt");
+    private static final Safelist DISCUSSION_SAFELIST = new Safelist(SAFELIST)
+            .addTags("img")
+            .addAttributes("img", "src", "alt")
+            .addAttributes("a", "data-type", "data-size")
+            .removeProtocols("a", "href", "http", "https", "mailto");
     private static final Pattern ATTACHMENT_IMAGE_SRC = Pattern.compile(
             "^/api/v1/attachments/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/content$");
     private static final int MAX_IMAGE_ALT_LENGTH = 255;
+    private static final long MAX_ATTACHMENT_BYTES = 104_857_600;
 
     @Override
     public String sanitizeDescription(String untrustedHtml) {
@@ -53,17 +57,8 @@ public final class JsoupCollaborationHtmlSanitizer implements CollaborationHtmlS
         for (Element span : dirty.body().select("span[data-type], span[data-mention-user-id]")) {
             span.removeAttr("data-type").removeAttr("data-mention-user-id");
         }
-        Document clean = new Cleaner(DESCRIPTION_SAFELIST).clean(dirty);
+        Document clean = new Cleaner(DISCUSSION_SAFELIST).clean(dirty);
         normalizeStructure(clean.body());
-        for (Element image : clean.body().select("img")) {
-            if (!ATTACHMENT_IMAGE_SRC.matcher(image.attr("src")).matches()) {
-                image.remove();
-                continue;
-            }
-            String alt = image.attr("alt").strip();
-            if (alt.isEmpty()) image.removeAttr("alt");
-            else image.attr("alt", alt.length() > MAX_IMAGE_ALT_LENGTH ? alt.substring(0, MAX_IMAGE_ALT_LENGTH) : alt);
-        }
         clean.outputSettings(outputSettings());
         String html = clean.body().html();
         String text = clean.body().text().strip();
@@ -78,7 +73,7 @@ public final class JsoupCollaborationHtmlSanitizer implements CollaborationHtmlS
         if (untrustedHtml == null) throw new IllegalArgumentException("bodyHtml must not be null");
         Document dirty = Jsoup.parseBodyFragment(untrustedHtml);
         validateMentionMarkup(dirty.body());
-        Document clean = new Cleaner(SAFELIST).clean(dirty);
+        Document clean = new Cleaner(DISCUSSION_SAFELIST).clean(dirty);
         normalizeStructure(clean.body());
         clean.outputSettings(outputSettings());
         List<UUID> mentionIds = mentionIds(clean.body());
@@ -104,9 +99,11 @@ public final class JsoupCollaborationHtmlSanitizer implements CollaborationHtmlS
         String html = document.body().html();
         String text = document.body().text().strip();
         if (html.length() > MAX_HTML_LENGTH) throw new IllegalArgumentException("bodyHtml is too long");
-        if (text.isEmpty()) throw new IllegalArgumentException("bodyHtml must contain text");
+        if (text.isEmpty() && document.body().select("img").isEmpty()) {
+            throw new IllegalArgumentException("bodyHtml must contain text or an image");
+        }
         if (text.length() > MAX_TEXT_LENGTH) throw new IllegalArgumentException("bodyText is too long");
-        return new SanitizedHtml(html, text, parsed.mentionedUserIds());
+        return new SanitizedHtml(html, text.isEmpty() ? "[图片]" : text, parsed.mentionedUserIds());
     }
 
     private static void validateMentionMarkup(Element body) {
@@ -124,6 +121,7 @@ public final class JsoupCollaborationHtmlSanitizer implements CollaborationHtmlS
     }
 
     private static void normalizeStructure(Element body) {
+        normalizeImages(body);
         for (Element element : body.getAllElements()) {
             if (element.hasAttr("style")) normalizeStyle(element);
             if (element.hasAttr("dir") && !Set.of("ltr", "rtl").contains(element.attr("dir"))) element.removeAttr("dir");
@@ -154,7 +152,14 @@ public final class JsoupCollaborationHtmlSanitizer implements CollaborationHtmlS
                 if (!span.hasAttr("style")) span.unwrap();
             }
         }
-        for (Element anchor : body.select("a[href]")) {
+        for (Element anchor : body.select("a")) {
+            if ("attachment".equals(anchor.attr("data-type"))
+                    && ATTACHMENT_IMAGE_SRC.matcher(anchor.attr("href")).matches()) {
+                anchor.removeAttr("target").removeAttr("rel");
+                normalizeAttachmentSize(anchor);
+                continue;
+            }
+            anchor.removeAttr("data-type").removeAttr("data-size");
             if (!absoluteSafeLink(anchor.attr("href"))) {
                 anchor.removeAttr("href");
                 anchor.removeAttr("target");
@@ -164,6 +169,32 @@ public final class JsoupCollaborationHtmlSanitizer implements CollaborationHtmlS
                 anchor.attr("rel", "nofollow noopener noreferrer");
             }
         }
+    }
+
+    private static void normalizeImages(Element body) {
+        for (Element image : body.select("img")) {
+            if (!ATTACHMENT_IMAGE_SRC.matcher(image.attr("src")).matches()) {
+                image.remove();
+                continue;
+            }
+            String alt = image.attr("alt").strip();
+            if (alt.isEmpty()) image.removeAttr("alt");
+            else image.attr("alt", alt.length() > MAX_IMAGE_ALT_LENGTH ? alt.substring(0, MAX_IMAGE_ALT_LENGTH) : alt);
+        }
+    }
+
+    private static void normalizeAttachmentSize(Element anchor) {
+        String raw = anchor.attr("data-size");
+        if (raw.matches("[0-9]+")) {
+            try {
+                long size = Long.parseLong(raw);
+                if (size >= 1 && size <= MAX_ATTACHMENT_BYTES) {
+                    anchor.attr("data-size", String.valueOf(size));
+                    return;
+                }
+            } catch (NumberFormatException ignored) { }
+        }
+        anchor.removeAttr("data-size");
     }
 
     private static void normalizeStyle(Element element) {
