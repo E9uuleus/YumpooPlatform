@@ -163,6 +163,31 @@ class DashboardHttpIT {
     }
 
     @Test
+    void membersReadOnlyTheirOwnTimesheetAndCurrentTasks() throws Exception {
+        var body = (tools.jackson.databind.node.ObjectNode) json.readTree(workItemBody(tasksId, "本人任务"));
+        body.set("assigneeUserIds", json.createArrayNode().add(member.userId().toString()));
+        var mine = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, body.toString(), null, UUID.randomUUID()));
+        var others = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", owner, workItemBody(tasksId, "他人任务"), null, UUID.randomUUID()));
+        var midnight = java.time.LocalDate.of(2026, 1, 2).atStartOfDay(companyQuery.current().timezone()).toInstant();
+        var time = json.createObjectNode().put("startedAt", midnight.minusSeconds(3600).toString()).put("stoppedAt", midnight.plusSeconds(7200).toString());
+        ok(mutate("POST", "/api/v1/work-items/" + mine.path("id").asText() + "/time-sessions", member, time.toString(), null, UUID.randomUUID()));
+        ok(mutate("POST", "/api/v1/work-items/" + others.path("id").asText() + "/time-sessions", owner, time.toString(), null, UUID.randomUUID()));
+
+        var sheet = ok(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-01-07", member));
+        assertThat(sheet.path("members").size()).isEqualTo(1);
+        assertThat(sheet.path("members").get(0).path("userId").asText()).isEqualTo(member.userId().toString());
+        assertThat(sheet.path("entries").size()).isEqualTo(2);
+        assertThat(sheet.path("entries").toString()).contains("\"date\":\"2026-01-01\",\"durationMs\":3600000")
+                .contains("\"date\":\"2026-01-02\",\"durationMs\":7200000").doesNotContain(owner.userId().toString());
+        assertThat(get("/api/v1/me/timesheet?from=2026-01-01&to=2026-04-05", member).statusCode()).isEqualTo(422);
+
+        var tasks = ok(get("/api/v1/me/current-tasks", member));
+        assertThat(tasks.path("totalElements").asLong()).isEqualTo(1);
+        assertThat(tasks.path("items").get(0).path("title").asText()).isEqualTo("本人任务");
+        assertThat(tasks.path("items").get(0).path("projectName").asText()).isEqualTo("Category Work");
+    }
+
+    @Test
     void privateDashboardsPersistAndRequireOwnerAndVersion() throws Exception {
         var body = dashboardBody();
         UUID key = UUID.randomUUID();
