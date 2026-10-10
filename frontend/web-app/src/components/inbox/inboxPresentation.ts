@@ -26,6 +26,12 @@ export function notificationText(item: NotificationItem, readerId?: string): str
   }
 }
 
+export function notificationExcerpt(item: NotificationItem): string {
+  if (!item.target.accessible) return ''
+  const excerpt = item.target.excerpt?.trim() ?? ''
+  return excerpt || (['MENTION', 'REPLY', 'COMMENT'].includes(item.reason) ? '[图片]' : '')
+}
+
 export function notificationLink(item: NotificationItem, readerId?: string): RouteLocationRaw | undefined {
   const target = item.target
   if (!target.accessible || !target.projectId || isOwnProjectRemoval(item, readerId)) return

@@ -10,6 +10,8 @@ Status: implemented
 
 本 Note 部分替代[工作项核心契约](../architecture/2026-08-22-work-item-core-contract.md)中“描述规范化为最多 16 KiB 纯文本”的决定；备注仍为纯文本，其余字段、锁序、ETag、事件与幂等理由继续由原 Note 持有。讨论正文的白名单、Mention 与编辑规则仍由[讨论编辑器决定](2026-09-05-work-item-discussion-composer.md)持有。
 
+[讨论内嵌附件决定](2026-10-09-work-item-discussion-attachments.md)扩展讨论与描述共用的图片和文件卡片净化档，上传逻辑统一为 `useEditorAttachments`。描述当前继续提供图片入口，并可读取、编辑和保留合法文件卡片；父工作项归属、下载逐次鉴权和未引用附件后果不变。
+
 `work_item.description` 成为唯一描述真源，保存受限协作富文本 HTML。服务端描述净化档复用讨论白名单与样式归一化，另允许 `img[src,alt]`；`src` 必须精确匹配同源 `/api/v1/attachments/{uuid}/content`，其余图片地址（绝对 URL、协议相对、`data:`、`javascript:`、带查询串）整体移除，`alt` 截断到 255 字。Mention 在描述中降级为纯文本，不校验成员、不触发提醒。净化后 HTML 最多 65536 字、纯文本最多 16384 字；既无文本又无图片时保存为 null。净化结果幂等，使改名等全量快照回传原描述时仍为无版本、无事件 no-op。创建、子项创建、全量 PATCH 与新增 `PATCH /work-items/{id}/description` 共用同一净化入口；新命令沿用单字段命令的 XSRF、强 If-Match、持久化幂等键和 `work_item_fields_changed(changedFields=[description])`，事件仍不携带正文，Activity 继续过滤描述变更。V55 将历史纯文本按行转义为 `<p>` 段落，不推进版本或更新时间。
 
 服务端不校验图片附件是否属于当前工作项：workitem 不反向依赖 filestorage，下载端点每次实时复核父对象读取权，引用他项附件的图片对无权读者只显示为损坏图片，不泄露内容。

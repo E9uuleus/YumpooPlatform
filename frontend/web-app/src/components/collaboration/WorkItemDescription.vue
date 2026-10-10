@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { useEditor } from '@tiptap/vue-3'
-import { AttachmentOwnerType, ErrorCode, readCsrfToken, type WorkItemDetail } from '@yumpoo/api-client'
+import { ErrorCode, readCsrfToken, type WorkItemDetail } from '@yumpoo/api-client'
 import { ElButton, ElImageViewer, ElMessage, ElMessageBox } from 'element-plus'
 import { EditPen } from '@element-plus/icons-vue'
-import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { isProblemCode, isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 import DiscussionComposer from './DiscussionComposer.vue'
-import { attachmentContentUrl, isUploadAborted, uploadAttachment } from './attachmentUpload'
-import {
-  DescriptionImage, ImageUploadPlaceholder, countImageUploads, descriptionImageMaxBytes,
-  descriptionImageTypes, resolveImageUpload, type ImageUploadState,
-} from './descriptionImages'
+import { decorateAttachmentCards, descriptionImageTypes } from './descriptionImages'
+import { useEditorAttachments } from './useEditorAttachments'
 import { discussionExtensions, discussionHasDraft } from './discussionEditor'
 import './discussionRichText.css'
 
@@ -31,41 +28,35 @@ const problem = ref<ApiProblem>()
 const conflict = ref(false)
 const draftHtml = ref('')
 const originalHtml = ref('')
-const revision = ref(0)
 const viewerIndex = ref<number>()
 const body = ref<HTMLElement>()
 const fileInput = ref<HTMLInputElement>()
 const composer = ref<InstanceType<typeof DiscussionComposer>>()
-const uploads = reactive<Record<string, ImageUploadState>>({})
-const uploadControllers = new Map<string, AbortController>()
 let saveKey = crypto.randomUUID()
 let saveKeyBody: string | null = null
 let disposed = false
+
+const attachments = useEditorAttachments({
+  editor: () => editor.value, ownerId: () => props.workItemId,
+  canUpload: () => editing.value && props.canEdit && !saving.value, allowFile: false,
+})
+const { insertFiles, abortUploads, pendingUploads } = attachments
 
 const editor = useEditor({
   content: '',
   editable: true,
   extensions: [
     ...discussionExtensions(() => [], () => composer.value?.closePanel(), { mention: false }),
-    DescriptionImage,
-    ImageUploadPlaceholder.configure({ getUpload: id => uploads[id], onRemove: removeUpload }),
+    ...attachments.extensions,
   ],
   editorProps: {
+    ...attachments.editorProps,
     attributes: { role: 'textbox', 'aria-label': '工作项描述', 'aria-multiline': 'true' },
-    handlePaste: (_view, event) => insertFiles(imageFiles(event.clipboardData?.files)),
-    handleDrop: (view, event, _slice, moved) => {
-      if (moved) return false
-      const files = imageFiles(event.dataTransfer?.files)
-      if (!files.length) return false
-      event.preventDefault()
-      return insertFiles(files, view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos)
-    },
   },
   onUpdate: ({ editor: current }) => { draftHtml.value = current.getHTML() },
-  onTransaction: () => { revision.value++ },
+  onTransaction: attachments.onTransaction,
 })
 
-const pendingUploads = computed(() => { void revision.value; return countImageUploads(editor.value) })
 const hasDraft = computed(() => editing.value && (draftHtml.value !== originalHtml.value || pendingUploads.value > 0))
 const busy = computed(() => saving.value)
 const imageSources = computed(() => {
@@ -77,62 +68,10 @@ const imageSources = computed(() => {
 
 watch(saving, value => editor.value?.setEditable(!value))
 watch(() => props.workItemId, () => discardDraft())
-
-function imageFiles(list: FileList | null | undefined): File[] {
-  return [...(list ?? [])].filter(file => file.type.startsWith('image/'))
-}
-
-function insertFiles(files: File[], position?: number): boolean {
-  if (!files.length || !editor.value || saving.value) return false
-  const accepted = files.filter(file => {
-    if (!descriptionImageTypes.includes(file.type)) { ElMessage.warning(`${file.name}：仅支持 PNG、JPG、GIF 图片。`); return false }
-    if (file.size > descriptionImageMaxBytes) { ElMessage.warning(`${file.name}：单张图片不能超过 20 MiB。`); return false }
-    return true
-  })
-  if (!accepted.length) return true
-  const started = accepted.map(file => ({ file, uploadId: crypto.randomUUID() }))
-  started.forEach(({ file, uploadId }) => { uploads[uploadId] = { name: file.name || '粘贴的图片', phase: 'uploading' } })
-  const nodes = started.map(({ uploadId }) => ({ type: 'imageUpload', attrs: { uploadId } }))
-  const chain = editor.value.chain().focus()
-  if (position === undefined) chain.insertContent(nodes).run()
-  else chain.insertContentAt(position, nodes).run()
-  started.forEach(({ file, uploadId }) => void runUpload(file, uploadId))
-  return true
-}
-
-async function runUpload(file: File, uploadId: string): Promise<void> {
-  const controller = new AbortController()
-  uploadControllers.set(uploadId, controller)
-  try {
-    const metadata = await uploadAttachment({
-      ownerType: AttachmentOwnerType.WorkItem,
-      ownerId: props.workItemId,
-      file,
-      signal: controller.signal,
-      onPhase: phase => { if (uploads[uploadId]) uploads[uploadId].phase = phase },
-    })
-    if (disposed || controller.signal.aborted) return
-    resolveImageUpload(editor.value, uploadId, { src: attachmentContentUrl(metadata.id), alt: metadata.originalFileName })
-    delete uploads[uploadId]
-  } catch (reason) {
-    if (disposed || isUploadAborted(reason)) return
-    if (uploads[uploadId]) uploads[uploadId] = { ...uploads[uploadId], phase: 'failed', message: (reason as Error).message }
-  } finally {
-    uploadControllers.delete(uploadId)
-  }
-}
-
-function removeUpload(uploadId: string): void {
-  uploadControllers.get(uploadId)?.abort()
-  resolveImageUpload(editor.value, uploadId)
-  delete uploads[uploadId]
-}
-
-function abortUploads(): void {
-  uploadControllers.forEach(controller => controller.abort())
-  uploadControllers.clear()
-  Object.keys(uploads).forEach(id => { delete uploads[id] })
-}
+watch([() => props.description, editing], async () => {
+  await nextTick()
+  decorateAttachmentCards(body.value)
+}, { immediate: true })
 
 function pickImage(): void { fileInput.value?.click() }
 

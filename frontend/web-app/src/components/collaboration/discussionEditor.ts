@@ -188,7 +188,17 @@ export function discussionExtensions(getMembers: () => ProjectMember[], onMentio
   ]
 }
 
+export function discussionHasContent(editor: Editor | undefined): boolean {
+  if (!editor) return false
+  if (editor.getText().trim()) return true
+  let content = false
+  editor.state.doc.descendants(node => {
+    if (node.type.name === 'image' || node.type.name === 'attachmentFile') content = true
+  })
+  return content
+}
+
 export function discussionHasDraft(editor: Editor | undefined): boolean {
   if (!editor) return false
-  return Boolean(editor.getText().trim()) || /<(?:table|hr|pre|ul|ol|h2|blockquote|img)\b|data-image-upload/.test(editor.getHTML())
+  return Boolean(editor.getText().trim()) || /<(?:table|hr|pre|ul|ol|h2|blockquote|img)\b|data-image-upload|data-type="attachment"/.test(editor.getHTML())
 }

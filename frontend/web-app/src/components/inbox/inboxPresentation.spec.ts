@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { NotificationReason, NotificationState, NotificationTargetKind, type NotificationItem } from '@yumpoo/api-client'
-import { notificationDateGroup, notificationLink, notificationText, parseInboxFilter, relativeTime } from './inboxPresentation'
+import { notificationDateGroup, notificationExcerpt, notificationLink, notificationText, parseInboxFilter, relativeTime } from './inboxPresentation'
 
 const item: NotificationItem = { id: 'notification', reason: NotificationReason.Mention, state: NotificationState.Unread, createdAt: new Date(), readAt: null,
   actor: { id: 'author', displayName: '张三' }, subject: { id: 'reader', displayName: '李四' },
   target: { kind: NotificationTargetKind.WorkItemUpdate, accessible: true, projectId: 'project', workItemId: 'item', itemNo: 'YP-12', title: '整理验收', projectName: '平台', excerpt: '你好' } }
 describe('notification presentation', () => {
+  it('纯图片讨论以图片摘要展示，不可访问的摘要仍隐藏', () => {
+    expect(notificationExcerpt({ ...item, target: { ...item.target, excerpt: ' ' } })).toBe('[图片]')
+    expect(notificationExcerpt(item)).toBe('你好')
+    expect(notificationExcerpt({ ...item, target: { ...item.target, accessible: false, excerpt: '[图片]' } })).toBe('')
+    expect(notificationExcerpt({ ...item, reason: NotificationReason.Assigned, target: { ...item.target, excerpt: null } })).toBe('')
+  })
   it.each([
     [NotificationReason.Mention, '在 YP-12 整理验收 中提到了你'], [NotificationReason.Reply, '回复了你在 YP-12 整理验收 的评论'],
     [NotificationReason.Comment, '评论了 YP-12 整理验收'], [NotificationReason.Assigned, '将 YP-12 整理验收 指派给你'],

@@ -8,8 +8,9 @@ import {
   type WorkItemUpdate,
 } from '@yumpoo/api-client'
 import { flushPromises, mount } from '@vue/test-utils'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Editor } from '@tiptap/core'
 import WorkItemDiscussion from './WorkItemDiscussion.vue'
 import DiscussionReplyComposer from './DiscussionReplyComposer.vue'
 import DiscussionCommentCard from './DiscussionCommentCard.vue'
@@ -23,6 +24,7 @@ const api = vi.hoisted(() => ({
   listAttachments: vi.fn(),
   pin: vi.fn(),
   replies: vi.fn(),
+  upload: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => ({
@@ -38,6 +40,10 @@ vi.mock('../../api/client', () => ({
   attachmentsApi: {
     listWorkItemUpdateAttachments: api.listAttachments,
   },
+}))
+vi.mock('./attachmentUpload', async importOriginal => ({
+  ...await importOriginal<typeof import('./attachmentUpload')>(),
+  uploadAttachment: api.upload,
 }))
 vi.mock('@yumpoo/api-client', async importOriginal => ({
   ...await importOriginal<typeof import('@yumpoo/api-client')>(),
@@ -107,6 +113,14 @@ async function clickMenu(wrapper: ReturnType<typeof mount>, label: string) {
   await flushPromises()
 }
 
+const attachmentId = '35000000-0000-4000-8000-000000000009'
+const imageSource = `/api/v1/attachments/${attachmentId}/content`
+async function chooseFiles(wrapper: ReturnType<typeof mount>, files: File[]): Promise<void> {
+  const input = wrapper.get<HTMLInputElement>('input[type="file"]')
+  Object.defineProperty(input.element, 'files', { value: files, configurable: true })
+  await input.trigger('change')
+}
+
 describe('WorkItemDiscussion', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -114,15 +128,165 @@ describe('WorkItemDiscussion', () => {
       items: [update('35000000-0000-4000-8000-000000000032', '较新讨论', '2026-08-24T10:02:00Z')],
       nextCursor: 'older-cursor',
     })
+    api.upload.mockReset().mockImplementation(async ({ file }: { file: File }) => ({ id: '35000000-0000-4000-8000-000000000009', originalFileName: file.name, sizeBytes: file.size }))
     api.listAttachments.mockResolvedValue({ items: [], nextCursor: null })
   })
 
-  it('评论页面不再提供附件入口或请求', async () => {
+  it('提供正文内图片与文件按钮，沿用父工作项附件而不请求旧讨论附件列表', async () => {
     const wrapper = mount(WorkItemDiscussion, { props: { workItemId: 'item', members: [member], canPublish: true } })
     await flushPromises()
-    expect(wrapper.text()).not.toContain('附件')
+    expect(wrapper.find('[aria-label="插入图片"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="添加附件"]').exists()).toBe(true)
     expect(api.listAttachments).not.toHaveBeenCalled()
     expect(wrapper.get('[aria-label="刷新评论"]').find('svg').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('纯图片发布等待上传完成，占位节点不能发布，上传归属父工作项', async () => {
+    let resolve!: (metadata: unknown) => void
+    api.upload.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+    const published = { ...update('image-only', '[图片]', '2026-08-24T10:03:00Z'), bodyHtml: `<img src="${imageSource}" alt="截图.png">` }
+    api.publish.mockResolvedValueOnce(published)
+    const wrapper = mount(WorkItemDiscussion, { props: { workItemId: 'parent-work-item', members: [], canPublish: true } })
+    await flushPromises()
+    await chooseFiles(wrapper, [new File(['png'], '截图.png', { type: 'image/png' })])
+    await flushPromises()
+    expect(api.upload).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'WORK_ITEM', ownerId: 'parent-work-item' }))
+    expect(wrapper.find('[data-image-upload]').exists()).toBe(true)
+    expect(wrapper.get('.discussion-submit').attributes('disabled')).toBeDefined()
+    expect((wrapper.vm as unknown as { hasDraft: boolean }).hasDraft).toBe(true)
+    await wrapper.get('.discussion-submit').trigger('click')
+    expect(api.publish).not.toHaveBeenCalled()
+    resolve({ id: attachmentId, originalFileName: '截图.png' })
+    await flushPromises()
+    expect(wrapper.find('[data-image-upload]').exists()).toBe(false)
+    expect(wrapper.get('.discussion-submit').attributes('disabled')).toBeUndefined()
+    await wrapper.get('.discussion-submit').trigger('click')
+    await flushPromises()
+    expect(api.publish).toHaveBeenCalledWith(expect.objectContaining({ workItemUpdateCreateRequest: {
+      bodyHtml: expect.stringContaining(`<img src="${imageSource}" alt="截图.png">`),
+    } }))
+    expect(wrapper.get('.discussion-update__body img').attributes('src')).toBe(imageSource)
+    wrapper.unmount()
+  })
+
+  it('粘贴文件卡片并拖入图片，文件类型与大小沿用白名单', async () => {
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({ close: () => {} }) as never)
+    const wrapper = mount(WorkItemDiscussion, { props: { workItemId: 'parent', members: [], canPublish: true } })
+    await flushPromises()
+    const editor = (wrapper.vm as unknown as { editor: Editor }).editor
+    const clipboard = { clipboardData: { files: [new File(['pdf'], '方案.pdf', { type: 'application/pdf' })] } } as unknown as ClipboardEvent
+    editor.view.props.handlePaste!.call(editor.view, editor.view, clipboard, editor.state.selection.content())
+    await flushPromises()
+    expect(editor.getHTML()).toContain(`data-type="attachment" href="${imageSource}" data-size="3">方案.pdf</a>`)
+    expect(wrapper.text()).toContain('PDF')
+    expect(wrapper.text()).toContain('3 B')
+    vi.spyOn(editor.view, 'posAtCoords').mockReturnValue({ pos: 0, inside: -1 })
+    const drop = { dataTransfer: { files: [new File(['png'], '拖入.png', { type: 'image/png' })] }, clientX: 1, clientY: 1, preventDefault: vi.fn() } as unknown as DragEvent
+    editor.view.props.handleDrop!.call(editor.view, editor.view, drop, editor.state.selection.content(), false)
+    await flushPromises()
+    expect(drop.preventDefault).toHaveBeenCalled()
+    expect(editor.getHTML()).toContain(`src="${imageSource}" alt="拖入.png"`)
+    const oversized = new File(['x'], '超大.zip', { type: 'application/zip' })
+    Object.defineProperty(oversized, 'size', { value: 100 * 1024 * 1024 + 1 })
+    await chooseFiles(wrapper, [new File(['doc'], '旧格式.doc'), new File(['svg'], '外部.svg', { type: 'image/svg+xml' }), oversized])
+    expect(api.upload).toHaveBeenCalledTimes(2)
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('仅支持 PDF、DOCX'))
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('仅支持 PNG、JPG、GIF'))
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('100 MiB'))
+    warning.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('失败占位阻止文字发布，移除后恢复，丢弃草稿中止在途上传', async () => {
+    api.upload.mockRejectedValueOnce(new Error('完整性检查失败'))
+    const wrapper = mount(WorkItemDiscussion, { props: { workItemId: 'parent', members: [], canPublish: true } })
+    await flushPromises()
+    const handle = wrapper.vm as unknown as { editor: Editor; discardDraft: () => void }
+    handle.editor.commands.setContent('<p>有文字也须等附件完成</p>')
+    await chooseFiles(wrapper, [new File(['txt'], '说明.txt', { type: 'text/plain' })])
+    await flushPromises()
+    expect(wrapper.get('.discussion-submit').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-image-upload]').text()).toContain('完整性检查失败')
+    await wrapper.get('[data-image-upload] button').trigger('click')
+    expect(wrapper.get('.discussion-submit').attributes('disabled')).toBeUndefined()
+    let signal: AbortSignal | undefined
+    api.upload.mockImplementationOnce((options: { signal: AbortSignal }) => { signal = options.signal; return new Promise(() => {}) })
+    await chooseFiles(wrapper, [new File(['png'], '未完成.png', { type: 'image/png' })])
+    handle.discardDraft()
+    await flushPromises()
+    expect(signal?.aborted).toBe(true)
+    expect(wrapper.find('[data-image-upload]').exists()).toBe(false)
+    expect(wrapper.find('.discussion-submit').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('编辑讨论可保存纯图片，文件上传中禁止保存且关闭时取消上传', async () => {
+    const existing = actionableUpdate({ canEdit: true, canDelete: false, canReply: false, canPin: false })
+    api.list.mockResolvedValueOnce({ items: [existing], nextCursor: null })
+    api.edit.mockResolvedValueOnce({ ...existing, bodyHtml: `<img src="${imageSource}">`, bodyText: '[图片]' })
+    const wrapper = mount(WorkItemDiscussion, { props: { workItemId: existing.workItemId, members: [], canPublish: true }, attachTo: document.body })
+    await flushPromises()
+    await clickMenu(wrapper, '编辑')
+    const handle = wrapper.vm as unknown as { editEditor: Editor; saveEdit: () => Promise<void> }
+    handle.editEditor.commands.setContent(`<img src="${imageSource}">`)
+    await flushPromises()
+    await handle.saveEdit()
+    expect(api.edit).toHaveBeenCalledWith(expect.objectContaining({ workItemUpdateEditRequest: { bodyHtml: expect.stringContaining(`<img src="${imageSource}">`) } }))
+    wrapper.unmount()
+  })
+
+  it('编辑文件占位与回复图片占位均禁用提交，回复完成后携带同源图片', async () => {
+    const existing = { ...actionableUpdate({ canEdit: true, canDelete: false, canReply: true, canPin: false }), replies: [], replyCount: 0 }
+    api.list.mockResolvedValueOnce({ items: [existing], nextCursor: null })
+    const wrapper = mount(WorkItemDiscussion, { props: { workItemId: existing.workItemId, members: [], canPublish: true }, attachTo: document.body })
+    await flushPromises()
+    await clickMenu(wrapper, '编辑')
+    let editSignal: AbortSignal | undefined
+    api.upload.mockImplementationOnce((options: { signal: AbortSignal }) => { editSignal = options.signal; return new Promise(() => {}) })
+    const editInput = document.querySelectorAll<HTMLInputElement>('input.discussion__file')[1]!
+    Object.defineProperty(editInput, 'files', { value: [new File(['md'], '编辑.md')], configurable: true })
+    editInput.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+    await (wrapper.vm as unknown as { saveEdit: () => Promise<void> }).saveEdit()
+    expect(api.edit).not.toHaveBeenCalled()
+    expect([...document.querySelectorAll<HTMLButtonElement>('.el-dialog button')].find(button => button.textContent?.trim() === '保存')?.disabled).toBe(true)
+    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValueOnce('confirm' as never)
+    const cancel = [...document.querySelectorAll<HTMLButtonElement>('.el-dialog button')].find(button => button.textContent?.trim() === '取消')!
+    cancel.click()
+    await flushPromises()
+    expect(editSignal?.aborted).toBe(true)
+    await wrapper.get('.discussion-update__reply').trigger('click')
+    await flushPromises()
+    const reply = wrapper.findComponent(DiscussionReplyComposer)
+    let resolve!: (value: unknown) => void
+    api.upload.mockImplementationOnce(() => new Promise(done => { resolve = done }))
+    await chooseFiles(reply, [new File(['png'], '回复.png', { type: 'image/png' })])
+    await flushPromises()
+    expect(reply.get('.discussion-submit').attributes('disabled')).toBeDefined()
+    await (reply.vm as unknown as { publish: () => Promise<void> }).publish()
+    expect(api.publish).not.toHaveBeenCalled()
+    resolve({ id: attachmentId, originalFileName: '回复.png' })
+    await flushPromises()
+    api.publish.mockResolvedValueOnce({ ...update('reply-image', '[图片]', '2026-08-24T10:05:00Z'), parentUpdateId: existing.id, bodyHtml: `<img src="${imageSource}" alt="回复.png">` })
+    await reply.get('.discussion-submit').trigger('click')
+    await flushPromises()
+    expect(api.publish).toHaveBeenCalledWith(expect.objectContaining({ workItemUpdateCreateRequest: {
+      bodyHtml: expect.stringContaining(`<img src="${imageSource}" alt="回复.png">`), parentUpdateId: existing.id,
+    } }))
+    wrapper.unmount()
+  })
+
+  it('图片打开查看器，文件卡片展示扩展名和大小并直接下载同源附件', async () => {
+    api.list.mockResolvedValueOnce({ items: [{ ...update('with-attachments', '方案.pdf', '2026-08-24T10:00:00Z'), bodyHtml: `<img src="${imageSource}"><a data-type="attachment" href="${imageSource}" data-size="12345">方案.pdf</a>` }], nextCursor: null })
+    const wrapper = mount(WorkItemDiscussion, { props: { workItemId: 'item', members: [], canPublish: false } })
+    await flushPromises()
+    const card = wrapper.get('a[data-type="attachment"]')
+    expect(card.text()).toContain('PDF方案.pdf12.1 KiB')
+    expect(card.attributes('href')).toBe(imageSource)
+    expect(card.attributes('target')).toBeUndefined()
+    await wrapper.get('.discussion-update__body img').trigger('click')
+    expect(wrapper.findComponent({ name: 'ElImageViewer' }).props('urlList')).toEqual([imageSource])
     wrapper.unmount()
   })
 
