@@ -8,7 +8,7 @@ Status: implemented
 
 ## Decision
 
-Canvas 只用于非工作面：登录品牌区的协作星座、404/403/会话状态页的四种 `StatusScene`，以及页面级空态 `YpEmptyState ambient` 的轨道光晕（仪表板欢迎态、空组件态与收件箱空态）。紧凑空态、表格、表单、看板、详情抽屉和运维中心不使用 Canvas。
+Canvas 只用于非工作面：登录品牌区的协作星座、404/403/会话状态页的四种 `StatusScene`，页面级空态 `YpEmptyState ambient` 的轨道光晕（仪表板欢迎态、空组件态与收件箱空态），以及[工作中台首页](2026-10-10-work-hub-and-my-time.md) hero 的极光几何 `auroraShapes`（30fps，指针视差，固定种子颗粒）。紧凑空态、表格、表单、看板、详情抽屉和运维中心不使用 Canvas。
 
 `src/motion/canvasStage.ts` 统一驱动所有场景：按设备像素比（上限 2）缩放；rAF 循环有帧率上限（登录 60fps，其余 30fps），单步最长 50ms；IntersectionObserver 判定离屏、`visibilitychange` 判定页面隐藏时停止循环；`prefers-reduced-motion: reduce` 时预热后只绘制一帧静态画面，并随系统设置实时切换；`getContext('2d')` 为空时整体空转。场景颜色经探针元素解析 `--yp-*` Token，`watchTheme` 在 `<html>` 的 `class` 或 `data-theme` 变化时重读颜色并重绘。随机源使用固定种子，静态帧与每次访问的布局一致。所有画布 `aria-hidden`，只有登录品牌区转发指针位置。
 
