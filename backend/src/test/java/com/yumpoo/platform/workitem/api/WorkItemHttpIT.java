@@ -911,7 +911,7 @@ class WorkItemHttpIT {
     }
 
     @Test
-    void timerCanStopAfterItemDeletionAndProjectArchival() throws Exception {
+    void projectArchivalStopsTimerLeftRunningOnDeletedItem() throws Exception {
         JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
                 workItemBody(tasksId, "关闭前停止"), null, UUID.randomUUID()));
         String id = item.path("id").asText();
@@ -921,8 +921,9 @@ class WorkItemHttpIT {
         assertThat(redacted.path("session").path("workItemId").isNull()).isTrue();
         JsonNode project = ok(get("/api/v1/projects/" + PROJECT_ID, owner));
         ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/archive", owner, "{\"reason\":\"验收归档\"}", project.path("etag").asText(), UUID.randomUUID()));
-        JsonNode stopped = ok(mutate("POST", "/api/v1/me/time-tracker/stop", member, "{\"sessionId\":\"" + running.path("session").path("id").asText() + "\"}", running.path("etag").asText(), UUID.randomUUID()));
-        assertThat(stopped.path("session").isNull()).isTrue();
+        assertThat(ok(get("/api/v1/me/time-tracker", member)).path("session").isNull()).isTrue();
+        assertThat(mutate("POST", "/api/v1/me/time-tracker/stop", member, "{\"sessionId\":\"" + running.path("session").path("id").asText() + "\"}", running.path("etag").asText(), UUID.randomUUID())
+                .statusCode()).isEqualTo(412);
     }
 
 

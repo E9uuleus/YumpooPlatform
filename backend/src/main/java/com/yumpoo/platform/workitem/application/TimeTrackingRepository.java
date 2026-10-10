@@ -15,6 +15,7 @@ public interface TimeTrackingRepository {
     long stateVersion(UUID companyId, UUID userId, boolean lock);
     void advanceState(UUID companyId, UUID userId);
     Optional<Session> running(UUID companyId, UUID userId);
+    List<UUID> runningUserIds(UUID companyId, UUID projectId);
     Optional<Session> find(UUID companyId, UUID sessionId);
     List<Session> history(UUID companyId, UUID workItemId, Instant before, UUID beforeId, int limit);
     boolean overlaps(UUID companyId, UUID userId, Instant start, Instant stop, UUID excludedId);

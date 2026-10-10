@@ -80,6 +80,10 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         return jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND stopped_at IS NULL AND deleted_at IS NULL")
                 .param("c", companyId).param("u", userId).query(JdbcTimeTrackingRepository::map).optional();
     }
+    public List<UUID> runningUserIds(UUID companyId, UUID projectId) {
+        return jdbc.sql("SELECT DISTINCT user_id FROM yumpoo.work_item_time_session WHERE company_id=:c AND project_id=:p AND stopped_at IS NULL AND deleted_at IS NULL ORDER BY user_id")
+                .param("c", companyId).param("p", projectId).query(UUID.class).list();
+    }
     public Optional<Session> find(UUID companyId, UUID id) {
         return jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND id=:id")
                 .param("c", companyId).param("id", id).query(JdbcTimeTrackingRepository::map).optional();

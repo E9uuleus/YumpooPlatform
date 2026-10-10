@@ -26,6 +26,7 @@ import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
+import com.yumpoo.platform.workitem.api.ProjectTimerStopPort;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -42,6 +43,7 @@ import java.util.stream.Collectors;
 public final class ProjectLifecycleGovernanceService {
     private final ProjectLifecycleCommandPort projects;
     private final ProjectArchiveBlockerCollector blockers;
+    private final ProjectTimerStopPort timers;
     private final ActiveUserSnapshotQuery users;
     private final IdempotentCommandExecutor idempotency;
     private final TransactionalEventPort events;
@@ -50,11 +52,11 @@ public final class ProjectLifecycleGovernanceService {
     private final Clock clock;
 
     public ProjectLifecycleGovernanceService(ProjectLifecycleCommandPort projects,
-            ProjectArchiveBlockerCollector blockers, ActiveUserSnapshotQuery users,
+            ProjectArchiveBlockerCollector blockers, ProjectTimerStopPort timers, ActiveUserSnapshotQuery users,
             IdempotentCommandExecutor idempotency,
             TransactionalEventPort events, SecurityAuditAppendPort audits,
             ObjectMapper objectMapper, Clock clock) {
-        this.projects = projects; this.blockers = blockers; this.users = users;
+        this.projects = projects; this.blockers = blockers; this.timers = timers; this.users = users;
         this.idempotency = idempotency; this.events = events;
         this.audits = audits; this.objectMapper = objectMapper; this.clock = clock;
     }
@@ -67,6 +69,7 @@ public final class ProjectLifecycleGovernanceService {
                     !command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN));
             ProjectSnapshot before = projects.lockForArchive(mutation);
             ProjectSnapshot after = projects.archive(mutation);
+            timers.stopRunningTimers(command.actor(), after.projectId());
             appendArchive(before, after, command.actor(), "NORMAL", List.of(), command.idempotencyKey(), null);
             return stored(after);
         });
@@ -97,6 +100,7 @@ public final class ProjectLifecycleGovernanceService {
                 version, actor.userId(), false);
         ProjectSnapshot before = projects.lockForArchive(mutation);
         ProjectSnapshot after = projects.archive(mutation);
+        timers.stopRunningTimers(actor, after.projectId());
         appendArchive(before, after, actor, "GOVERNANCE_OVERRIDE", found, idempotencyKey, reason);
         return after;
     }

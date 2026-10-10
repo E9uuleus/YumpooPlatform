@@ -75,7 +75,8 @@ class TimeTrackingHttpIT {
     @ValueSource(strings = {"stop", "switch"})
     void purgingProjectRejectsLateTimerStopAndSwitchWithoutRecreatingOutboxOrRevision(String action) throws Exception {
         JsonNode running = start(source);
-        scheduleDue(source);
+        // Projects archived before archive stopped timers can still carry a running session into purge.
+        markDueProject(source);
         advanceToWorkItem(source);
         UUID session = UUID.fromString(running.path("session").path("id").asText());
         var before = jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE id=:id").param("id", session).query().singleRow();
@@ -97,12 +98,33 @@ class TimeTrackingHttpIT {
                 .param("project", source.id()).query(String.class).single()).isEqualTo("WORKITEM");
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"ARCHIVED", "REMOVED"})
-    void archivedOrFormerMemberCanStillStopTheirOwnTimer(String accessChange) throws Exception {
+    @Test
+    void archivingProjectStopsRunningTimersAsTheArchivingActor() throws Exception {
         JsonNode running = start(source);
-        if (accessChange.equals("ARCHIVED")) archive(source);
-        else jdbc.sql("""
+        UUID session = UUID.fromString(running.path("session").path("id").asText());
+
+        archive(source);
+
+        JsonNode current = ok(get("/api/v1/me/time-tracker", member));
+        assertThat(current.path("session").isNull()).isTrue();
+        assertThat(jdbc.sql("SELECT stopped_at IS NOT NULL FROM yumpoo.work_item_time_session WHERE id=:id")
+                .param("id", session).query(Boolean.class).single()).isTrue();
+        assertThat(stateVersion()).isEqualTo(running.path("rowVersion").asLong() + 1);
+        assertThat(revision(source)).isEqualTo(2);
+        assertThat(jdbc.sql("""
+                SELECT actor_user_id FROM yumpoo.outbox_event WHERE event_type='workitem.time_tracking_stopped'
+                  AND payload_json->>'sessionId'=:session
+                """).param("session", session.toString()).query(UUID.class).single()).isEqualTo(owner.userId());
+        var lateStop = timer("stop", Map.of("sessionId", session), running.path("etag").asText());
+        assertThat(lateStop.statusCode()).as(lateStop.body()).isEqualTo(412);
+        JsonNode restarted = ok(timer("start", Map.of("workItemId", target.itemId()), current.path("etag").asText()));
+        assertThat(restarted.path("session").path("projectId").asText()).isEqualTo(target.id().toString());
+    }
+
+    @Test
+    void formerMemberCanStillStopTheirOwnTimer() throws Exception {
+        JsonNode running = start(source);
+        jdbc.sql("""
                 UPDATE yumpoo.project_membership SET status='REMOVED',removed_at=transaction_timestamp(),
                     removed_by_user_id=:owner,remove_reason='计时停止失权回归' WHERE project_id=:project AND user_id=:user
                 """).param("owner", owner.userId()).param("project", source.id()).param("user", member.userId()).update();
@@ -120,7 +142,7 @@ class TimeTrackingHttpIT {
     @Test
     void stopKeepsProjectShareLockUntilCommitSoPurgeCannotStartWhileWaitingForTimerState() throws Exception {
         JsonNode running = start(source);
-        scheduleDue(source);
+        markDueProject(source);
         var locked = new CountDownLatch(1);
         var release = new CountDownLatch(1);
         try (var pool = Executors.newFixedThreadPool(2)) {
@@ -214,15 +236,6 @@ class TimeTrackingHttpIT {
     private void archive(Project project) throws Exception {
         String etag = ok(get("/api/v1/projects/" + project.id(), owner)).path("etag").asText();
         ok(mutate("POST", "/api/v1/projects/" + project.id() + "/archive", owner, "", etag));
-    }
-
-    private void scheduleDue(Project project) throws Exception {
-        archive(project);
-        String etag = ok(get("/api/v1/projects/" + project.id(), owner)).path("etag").asText();
-        ok(mutate("POST", "/api/v1/projects/" + project.id() + "/deletion", owner,
-                json.writeValueAsString(Map.of("confirmationCode", project.code())), etag));
-        jdbc.sql("UPDATE yumpoo.project SET deletion_requested_at=transaction_timestamp()-interval '31 days',purge_after=transaction_timestamp()-interval '1 day' WHERE id=:project")
-                .param("project", project.id()).update();
     }
 
     private void markDueProject(Project project) {

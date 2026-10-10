@@ -10,6 +10,7 @@ import com.yumpoo.platform.audit.api.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import tools.jackson.databind.ObjectMapper;
 import java.time.*;
 import java.time.temporal.ChronoUnit;
@@ -190,6 +191,24 @@ public class TimeTrackingService {
             var v=view(after,actor,true,now,true); result=v; etag=v.etag(); resourceId=id;
         }
         return new StoredCommandResult(200,json.writeValueAsString(result),resourceId,etag);
+    }
+
+    /** Runs inside the archive transaction after the project row lock, matching the project-then-timer_state order of timer commands. */
+    @Transactional(propagation=Propagation.MANDATORY)
+    public int stopRunningInArchivedProject(CurrentActor actor, UUID projectId) {
+        Instant now=now(); int stoppedCount=0;
+        for(UUID userId:timers.runningUserIds(actor.companyId(),projectId)) {
+            timers.stateVersion(actor.companyId(),userId,true);
+            Session running=timers.running(actor.companyId(),userId).filter(s -> s.projectId().equals(projectId)).orElse(null);
+            if(running==null) continue;
+            Session stopped=new Session(running.id(),running.companyId(),running.projectId(),running.workItemId(),running.userId(),
+                    running.startedAt(),now.isBefore(running.startedAt()) ? running.startedAt() : now,running.source(),running.rowVersion()+1,null,null);
+            timers.save(stopped); publish(actor,"stopped",running,stopped,null,now);
+            timers.advanceState(actor.companyId(),userId);
+            stoppedCount++;
+        }
+        if(stoppedCount>0) timers.advanceProjects(actor.companyId(),List.of(projectId));
+        return stoppedCount;
     }
 
     private void publish(CurrentActor actor, String action, Session before, Session after, String reason, Instant now) {
