@@ -5,7 +5,6 @@ import { computed, ref, type DefineComponent } from 'vue'
 import WorkItemDescription from './WorkItemDescription.vue'
 import WorkItemDiscussion from './WorkItemDiscussion.vue'
 import WorkItemCellActivityLog from './WorkItemCellActivityLog.vue'
-import WorkItemRelations from './WorkItemRelations.vue'
 
 interface DraftHandle {
   hasDraft: boolean
@@ -14,18 +13,16 @@ interface DraftHandle {
 }
 
 const props = defineProps<{
-  modelValue: 'details' | 'discussion' | 'relations' | 'activity'
+  modelValue: 'details' | 'discussion' | 'activity'
   detail: WorkItemDetail
   members: ProjectMember[]
   canPublish: boolean
   readOnlyReason?: string | undefined
 }>()
 const emit = defineEmits<{
-  'update:modelValue': [value: 'details' | 'discussion' | 'relations' | 'activity']
-  'relationsChanged': [affectedWorkItemIds: string[]]
+  'update:modelValue': [value: 'details' | 'discussion' | 'activity']
   'discussionChanged': [workItemId: string]
   'descriptionUpdated': [detail: WorkItemDetail]
-  'openWorkItem': [target: { workItemId: string, projectId: string }]
 }>()
 const ElTabs = ElTabsRaw as unknown as DefineComponent
 const ElTabPane = ElTabPaneRaw as unknown as DefineComponent
@@ -33,7 +30,7 @@ const description = ref<DraftHandle>()
 const discussion = ref<DraftHandle>()
 const tab = computed({
   get: () => props.modelValue,
-  set: value => emit('update:modelValue', value as 'details' | 'discussion' | 'relations' | 'activity'),
+  set: value => emit('update:modelValue', value as 'details' | 'discussion' | 'activity'),
 })
 const hasDraft = computed(() => Boolean(description.value?.hasDraft || discussion.value?.hasDraft))
 const busy = computed(() => Boolean(description.value?.busy || discussion.value?.busy))
@@ -92,19 +89,6 @@ defineExpose({ hasDraft, busy, discardDraft })
         :can-publish="canPublish"
         :read-only-reason="readOnlyReason"
         @changed="emit('discussionChanged', $event)"
-      />
-    </el-tab-pane>
-    <el-tab-pane
-      label="关系"
-      name="relations"
-      lazy
-    >
-      <work-item-relations
-        v-if="tab === 'relations'"
-        :work-item-id="detail.id"
-        :current-project-id="detail.projectId"
-        @changed="emit('relationsChanged', $event)"
-        @open-work-item="emit('openWorkItem', $event)"
       />
     </el-tab-pane>
     <el-tab-pane
