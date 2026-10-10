@@ -1,10 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ElMessage } from 'element-plus'
-import type { ProjectWorkItemListItem, WorkItemRelationCandidate } from '@yumpoo/api-client'
+import { ResponseError, type ProjectWorkItemListItem, type WorkItemRelationCandidate } from '@yumpoo/api-client'
 import WorkItemParentPicker from './WorkItemParentPicker.vue'
 
-const api = vi.hoisted(() => ({ listWorkItemRelationCandidates: vi.fn(), createWorkItemRelation: vi.fn() }))
+const api = vi.hoisted(() => ({ listWorkItemRelationCandidates: vi.fn(), createWorkItemRelation: vi.fn(), changeWorkItemParent: vi.fn() }))
 vi.mock('../../api/client', () => ({ workItemsApi: api }))
 vi.mock('@yumpoo/api-client', async original => ({ ...await original<typeof import('@yumpoo/api-client')>(), readCsrfToken: () => 'csrf' }))
 
@@ -15,12 +15,17 @@ function candidate(id: string, eligible = true): WorkItemRelationCandidate {
 function page(items: WorkItemRelationCandidate[], current = 0, pages = 1) {
   return { items, page: current, totalPages: pages }
 }
-function render() {
-  return mount(WorkItemParentPicker, { props: { item: { id: 'child', projectId: 'project', itemNo: 'MY-PROJ-12', title: '待转换工作项' } as ProjectWorkItemListItem },
+function render(props: { mode?: 'attach' | 'reparent'; parentId?: string } = {}) {
+  return mount(WorkItemParentPicker, { props: { item: { id: 'child', projectId: 'project', itemNo: 'MY-PROJ-12', title: '待转换工作项' } as ProjectWorkItemListItem, ...props },
     global: { stubs: {
       ElInput: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
       InlineProblem: true,
     } } })
+}
+
+function reparentCandidate(id: string, etag = '"relation-8"'): WorkItemRelationCandidate {
+  return { ...candidate(id), eligibility: 'REPARENT_REQUIRED', reasonCode: 'CHILD_ALREADY_HAS_PARENT',
+    activeParent: { relationId: 'active-relation', etag, parent: { id: 'old-parent', title: '原父项' } } } as WorkItemRelationCandidate
 }
 
 describe('选择父工作项', () => {
@@ -60,6 +65,65 @@ describe('选择父工作项', () => {
     expect(wrapper.emitted('choose')).toEqual([[candidate('parent').item]])
     expect(wrapper.emitted('close')).toHaveLength(1)
     expect(api.createWorkItemRelation).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('换父允许 REPARENT_REQUIRED 候选并排除原父项，使用 activeParent ETag 原子换父', async () => {
+    api.listWorkItemRelationCandidates.mockResolvedValue(page([
+      candidate('old-parent', false), reparentCandidate('new-parent'), candidate('nested', false),
+      { ...reparentCandidate('incomplete'), activeParent: null },
+    ]))
+    const wrapper = render({ mode: 'reparent', parentId: 'old-parent' })
+    await flushPromises()
+    expect(api.listWorkItemRelationCandidates).toHaveBeenCalledWith(expect.objectContaining({
+      relationType: 'PARENT_CHILD', currentRole: 'CHILD', targetProjectId: 'project',
+    }))
+    const buttons = wrapper.findAll('.parent-picker-option')
+    expect(buttons.map(button => button.text())).toEqual(['new-parent', 'nested', 'incomplete'])
+    expect(buttons[0]!.attributes('disabled')).toBeUndefined()
+    expect(buttons[1]!.attributes('disabled')).toBeDefined()
+    expect(buttons[2]!.attributes('disabled')).toBeDefined()
+    await buttons[0]!.trigger('click')
+    await flushPromises()
+    expect(api.changeWorkItemParent).toHaveBeenCalledWith({ relationId: 'active-relation', ifMatch: '"relation-8"',
+      xXSRFTOKEN: 'csrf', idempotencyKey: expect.any(String),
+      workItemParentChangeRequest: { newParentWorkItemId: 'new-parent', reason: '通过表格行菜单更换父项' } })
+    expect(api.createWorkItemRelation).not.toHaveBeenCalled()
+    expect(wrapper.emitted('changed')).toEqual([[['child', 'old-parent', 'new-parent']]])
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    expect(wrapper.emitted('busyChange')).toEqual([[true], [false]])
+    wrapper.unmount()
+  })
+
+  it('普通转换仍拒绝需要换父的候选', async () => {
+    api.listWorkItemRelationCandidates.mockResolvedValue(page([reparentCandidate('parent')]))
+    const wrapper = render()
+    await flushPromises()
+    expect(wrapper.get('.parent-picker-option').attributes('disabled')).toBeDefined()
+    await wrapper.get('.parent-picker-option').trigger('click')
+    expect(api.createWorkItemRelation).not.toHaveBeenCalled()
+    expect(api.changeWorkItemParent).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('换父冲突后保持选择器并刷新关系版本，重试使用最新 ETag', async () => {
+    api.listWorkItemRelationCandidates.mockResolvedValueOnce(page([reparentCandidate('new-parent')]))
+      .mockResolvedValueOnce(page([reparentCandidate('new-parent', '"relation-9"')]))
+    api.changeWorkItemParent.mockRejectedValueOnce(new ResponseError(new Response(JSON.stringify({ code: 'VERSION_CONFLICT',
+      message: '父子关系已变化', requestId: 'request-1', retryable: false, fieldErrors: [], details: {} }), { status: 412 })))
+      .mockResolvedValueOnce({})
+    const wrapper = render({ mode: 'reparent', parentId: 'old-parent' })
+    await flushPromises()
+    await wrapper.get('.parent-picker-option').trigger('click')
+    await flushPromises()
+    expect(api.listWorkItemRelationCandidates).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('inline-problem-stub').exists()).toBe(true)
+    expect(wrapper.emitted('changed')).toBeUndefined()
+    expect(wrapper.emitted('close')).toBeUndefined()
+    await wrapper.get('.parent-picker-option').trigger('click')
+    await flushPromises()
+    expect(api.changeWorkItemParent).toHaveBeenLastCalledWith(expect.objectContaining({ ifMatch: '"relation-9"' }))
+    expect(wrapper.emitted('changed')).toEqual([[['child', 'old-parent', 'new-parent']]])
     wrapper.unmount()
   })
 

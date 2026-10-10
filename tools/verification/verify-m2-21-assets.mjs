@@ -11,8 +11,10 @@ const integration = read('backend/src/test/java/com/yumpoo/platform/workitem/api
 const openapi = read('contracts/openapi/yumpoo-v1.yaml')
 const sdk = read('packages/api-client/src/generated/apis/WorkItemsApi.ts')
 const activity = read('backend/src/main/java/com/yumpoo/platform/audit/api/ActivityProjectionService.java')
-const web = read('frontend/web-app/src/components/collaboration/WorkItemRelations.vue')
-const webTest = read('frontend/web-app/src/components/collaboration/WorkItemRelations.spec.ts')
+const web = read('frontend/web-app/src/components/projects/WorkItemRowActions.vue')
+  + read('frontend/web-app/src/components/projects/WorkItemParentPicker.vue')
+const webTest = read('frontend/web-app/src/components/projects/WorkItemRowActions.spec.ts')
+  + read('frontend/web-app/src/components/projects/WorkItemParentPicker.spec.ts')
 const note = read('.agents/notes/implemented/data/2026-08-28-work-item-parent-child-relations.md')
 const acceptance = JSON.parse(read('evidence/m2-21/acceptance-matrix.json'))
 const report = JSON.parse(read('evidence/m2-21/verification-report.json'))
@@ -40,8 +42,8 @@ for (const fragment of ['switchingCategoryPreservesIdentityHierarchyDiscussionAn
   'right_work_item_id', 'projectSortBefore', '.isOne()']) assert(integration.includes(fragment), `HTTP 验收缺少 ${fragment}`)
 for (const fragment of ['workitem.work_item_relation_deleted', 'workitem.work_item_parent_changed']) assert(activity.includes(fragment), `Activity 缺少 ${fragment}`)
 for (const fragment of ['WorkItemRelationCandidateEligibilityEnum.ReparentRequired', 'ElMessageBox.confirm', 'deleteWorkItemRelation',
-  'mutationKey', '关系事实已刷新', 'counterpart.deleted']) assert(web.includes(fragment), `Web 缺少 ${fragment}`)
-for (const fragment of ['已删除对端', '原子接口', '提交原因与 ETag']) assert(webTest.includes(fragment), `Web 验收缺少 ${fragment}`)
+  'active.etag', 'relation.etag', '通过表格行菜单更换父项', '通过表格行菜单解除父项']) assert(web.includes(fragment), `Web 缺少 ${fragment}`)
+for (const fragment of ['使用 activeParent ETag 原子换父', '带关系 ETag 并刷新两侧', '重试使用最新 ETag']) assert(webTest.includes(fragment), `Web 验收缺少 ${fragment}`)
 for (const fragment of ['永久限定为两层', '不实现递归 DAG', 'M2-22', '原子换父']) assert(note.includes(fragment), `Agent Note 缺少 ${fragment}`)
 assert(report.milestone === 'M2-21' && report.flywayVersion === '43', '验证报告无效')
 for (const requirement of ['WORK-ITEM-GENERAL-RELATIONS', 'WORK-ITEM-PARENT-CHANGE',
@@ -51,7 +53,7 @@ for (const requirement of ['WORK-ITEM-GENERAL-RELATIONS', 'WORK-ITEM-PARENT-CHAN
 assert(acceptance.deferredRequirements.some(item => item.requirementId === 'WORK-ITEM-CROSS-PROJECT-RELATIONS'
   && item.targetMilestone === 'M2-22'), 'M2-22 边界未诚实延期')
 
-console.log('M2-21 同项目普通关系、两层父子、事件、Web 与证据资产有效。')
+console.log('M2-21 普通关系、两层父子、事件、当前表格入口与历史证据资产有效。')
 function assert(condition, message) {
   if (!condition) throw new Error(`M2-21 资产验证失败：${message}`)
 }

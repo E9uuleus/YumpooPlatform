@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, shallowRef } from 'vue'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElMessage, ElMessageBox, ElPopover } from 'element-plus'
-import { readCsrfToken, type ProjectWorkItemListItem } from '@yumpoo/api-client'
+import { readCsrfToken, WorkItemRelationRole, WorkItemRelationType, type ProjectWorkItemListItem } from '@yumpoo/api-client'
 import { workItemsApi } from '../../api/client'
 import { problemMessage, toApiProblem } from '../../api/problems'
 import WorkItemActionIcon from './WorkItemActionIcon.vue'
@@ -48,7 +48,7 @@ function menuVisibility(visible: boolean): void {
 }
 
 async function showParentPicker(event: Event, focusSearch = false): Promise<void> {
-  if (locked.value || !props.item.capabilities.canEditFields || convertReason.value) return
+  if (locked.value || !props.item.capabilities.canEditFields || (!props.parentId && convertReason.value)) return
   if (event.currentTarget instanceof HTMLElement) parentMenuElement.value = event.currentTarget
   choosingParent.value = true
   if (focusSearch) {
@@ -65,7 +65,10 @@ function closeParentPicker(): void {
 
 function openItem(): void { if (!locked.value) { closeMenu(); emit('open', props.item) } }
 function addSubitem(): void { if (!locked.value) { closeMenu(); emit('addSubitem', props.item) } }
-function converted(ids: string[]): void { closeMenu(); emit('changed', ids) }
+function converted(ids: string[]): void {
+  closeMenu()
+  emit('changed', [...new Set([...ids, ...(props.parentId ? [props.parentId] : [])])])
+}
 
 function csrf(): string {
   const token = readCsrfToken()
@@ -138,6 +141,36 @@ async function remove(archive: boolean): Promise<void> {
     emit('removed', props.item)
     emit('changed', [props.item.id, ...(props.parentId ? [props.parentId] : [])])
     ElMessage.success(`工作项已${action}`)
+  })
+}
+
+async function makeIndependent(): Promise<void> {
+  const parentId = props.parentId
+  const item = props.item
+  if (!parentId || !item.capabilities.canEditFields) return
+  await run(async () => {
+    await ElMessageBox.confirm(`确定将“${item.title}”转为独立工作项？解除父项后将显示在主表中。`,
+      '转为独立工作项', { confirmButtonText: '转为独立工作项', cancelButtonText: '取消', type: 'warning' })
+    let page = 0
+    let totalPages = 1
+    do {
+      const result = await workItemsApi.listWorkItemRelations({ workItemId: item.id,
+        relationType: WorkItemRelationType.ParentChild, page, size: 100 })
+      const relation = result.items.find(relation => relation.relationType === WorkItemRelationType.ParentChild
+        && relation.currentRole === WorkItemRelationRole.Child)
+      if (relation) {
+        await workItemsApi.deleteWorkItemRelation({ relationId: relation.id, xXSRFTOKEN: csrf(),
+          ifMatch: relation.etag, idempotencyKey: crypto.randomUUID(),
+          workItemRelationDeleteRequest: { reason: '通过表格行菜单解除父项' } })
+        converted([item.id, relation.counterpart.id])
+        ElMessage.success('已转为独立工作项')
+        return
+      }
+      page += 1
+      totalPages = result.totalPages
+    } while (page < totalPages)
+    emit('changed', [item.id, parentId])
+    ElMessage.info('该工作项已没有父项，列表已刷新')
   })
 }
 </script>
@@ -228,8 +261,30 @@ async function remove(archive: boolean): Promise<void> {
             <work-item-action-icon name="convert" />转为子工作项
             <work-item-action-icon name="chevron" class="row-action-submenu-arrow" />
           </el-dropdown-item>
+          <el-dropdown-item
+            v-if="parentId"
+            divided
+            class="row-action-convert"
+            :class="{ 'row-action-convert--open': choosingParent }"
+            :disabled="!item.capabilities.canEditFields || locked"
+            :aria-expanded="choosingParent"
+            aria-haspopup="dialog"
+            @pointermove="showParentPicker($event)"
+            @click="showParentPicker($event, true)"
+            @keydown.right.stop.prevent="showParentPicker($event, true)"
+          >
+            <work-item-action-icon name="move" />移到其他父项
+            <work-item-action-icon name="chevron" class="row-action-submenu-arrow" />
+          </el-dropdown-item>
+          <el-dropdown-item
+            v-if="parentId"
+            :disabled="!item.capabilities.canEditFields || locked"
+            @click="makeIndependent"
+          >
+            <work-item-action-icon name="open" />转为独立工作项
+          </el-dropdown-item>
           <el-popover
-            v-if="!parentId && parentMenuElement"
+            v-if="parentMenuElement"
             :visible="choosingParent"
             virtual-triggering
             :virtual-ref="parentMenuElement"
@@ -246,6 +301,8 @@ async function remove(archive: boolean): Promise<void> {
               v-if="choosingParent || converting"
               ref="parentPicker"
               :item="item"
+              :mode="parentId ? 'reparent' : 'attach'"
+              :parent-id="parentId"
               @close="closeParentPicker"
               @changed="converted"
               @busy-change="converting = $event"

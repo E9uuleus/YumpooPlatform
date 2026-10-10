@@ -4,13 +4,21 @@ import { ElInput, ElMessage } from 'element-plus'
 import { readCsrfToken, WorkItemRelationType, WorkItemRelationRole, WorkItemRelationCandidateEligibilityEnum,
   type ProjectWorkItemListItem, type WorkItemRelationCandidate } from '@yumpoo/api-client'
 import { workItemsApi } from '../../api/client'
-import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
+import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 import './workItemAccentBar.css'
 
-const props = defineProps<{ item?: ProjectWorkItemListItem | undefined; items?: ProjectWorkItemListItem[] }>()
+const props = defineProps<{
+  item?: ProjectWorkItemListItem | undefined
+  items?: ProjectWorkItemListItem[]
+  mode?: 'attach' | 'reparent'
+  parentId?: string | undefined
+}>()
 const sourceItem = computed(() => props.item ?? props.items?.[0])
-const excludedIds = computed(() => new Set(props.items?.map(item => item.id) ?? []))
+const excludedIds = computed(() => new Set([
+  ...(props.items?.map(item => item.id) ?? []),
+  ...(props.mode === 'reparent' && props.parentId ? [props.parentId] : []),
+]))
 const visibleCandidates = computed(() => candidates.value.filter(candidate => !excludedIds.value.has(candidate.item.id)))
 const emit = defineEmits<{ choose: [parent: WorkItemRelationCandidate['item']]; close: []; changed: [affectedIds: string[]]; busyChange: [busy: boolean] }>()
 const query = ref('')
@@ -52,7 +60,7 @@ async function search(nextPage = 0): Promise<void> {
   finally {
     if (current === revision) {
       loading.value = false; loadingMore.value = false
-      if (props.items && !problem.value && !visibleCandidates.value.length && page.value + 1 < pages.value) void search(page.value + 1)
+      if (!problem.value && !visibleCandidates.value.length && page.value + 1 < pages.value) void search(page.value + 1)
     }
   }
 }
@@ -63,8 +71,15 @@ function loadMore(event: Event): void {
   if (list.scrollHeight - list.scrollTop - list.clientHeight <= 72) void search(page.value + 1)
 }
 
+function canChoose(candidate: WorkItemRelationCandidate): boolean {
+  if (props.mode === 'reparent') return Boolean(candidate.activeParent)
+    && candidate.eligibility === WorkItemRelationCandidateEligibilityEnum.ReparentRequired
+  return candidate.eligibility === WorkItemRelationCandidateEligibilityEnum.Eligible
+}
+
 async function choose(candidate: WorkItemRelationCandidate): Promise<void> {
-  if (saving.value || loading.value || candidate.eligibility !== WorkItemRelationCandidateEligibilityEnum.Eligible) return
+  const item = sourceItem.value
+  if (!item || saving.value || loading.value || !canChoose(candidate)) return
   if (excludedIds.value.has(candidate.item.id)) return
   if (props.items) { emit('choose', candidate.item); emit('close'); return }
   const token = readCsrfToken()
@@ -72,15 +87,28 @@ async function choose(candidate: WorkItemRelationCandidate): Promise<void> {
   saving.value = true
   problem.value = undefined
   try {
-    await workItemsApi.createWorkItemRelation({ workItemId: sourceItem.value!.id, xXSRFTOKEN: token,
-      idempotencyKey: crypto.randomUUID(), workItemRelationCreateRequest: {
-        relationType: WorkItemRelationType.ParentChild, currentRole: WorkItemRelationRole.Child,
-        targetProjectId: sourceItem.value!.projectId, targetWorkItemId: candidate.item.id,
-      } })
-    emit('changed', [sourceItem.value!.id, candidate.item.id])
-    ElMessage.success(`已转为“${candidate.item.title}”的子工作项`)
+    if (props.mode === 'reparent' && candidate.activeParent) {
+      const active = candidate.activeParent
+      await workItemsApi.changeWorkItemParent({ relationId: active.relationId, xXSRFTOKEN: token,
+        ifMatch: active.etag, idempotencyKey: crypto.randomUUID(),
+        workItemParentChangeRequest: { newParentWorkItemId: candidate.item.id, reason: '通过表格行菜单更换父项' } })
+      emit('changed', [item.id, active.parent.id, candidate.item.id])
+      ElMessage.success(`已移到“${candidate.item.title}”下`)
+    } else {
+      await workItemsApi.createWorkItemRelation({ workItemId: item.id, xXSRFTOKEN: token,
+        idempotencyKey: crypto.randomUUID(), workItemRelationCreateRequest: {
+          relationType: WorkItemRelationType.ParentChild, currentRole: WorkItemRelationRole.Child,
+          targetProjectId: item.projectId, targetWorkItemId: candidate.item.id,
+        } })
+      emit('changed', [item.id, candidate.item.id])
+      ElMessage.success(`已转为“${candidate.item.title}”的子工作项`)
+    }
     emit('close')
-  } catch (reason) { problem.value = await toApiProblem(reason) }
+  } catch (reason) {
+    const failure = await toApiProblem(reason)
+    if (isProblemStatus(failure, 409) || isProblemStatus(failure, 412)) await search()
+    problem.value = failure
+  }
   finally { saving.value = false }
 }
 
@@ -140,8 +168,8 @@ defineExpose({ focusSearch: () => searchInput.value?.focus() })
         :key="candidate.item.id"
         type="button"
         class="parent-picker-option work-item-accent-bar"
-        :title="candidate.reasonCode ? reasons[candidate.reasonCode] ?? '该工作项不可选择' : candidate.item.title"
-        :disabled="saving || loading || candidate.eligibility !== WorkItemRelationCandidateEligibilityEnum.Eligible"
+        :title="!canChoose(candidate) && candidate.reasonCode ? reasons[candidate.reasonCode] ?? '该工作项不可选择' : candidate.item.title"
+        :disabled="saving || loading || !canChoose(candidate)"
         @click="choose(candidate)"
       >
         <span>{{ candidate.item.title }}</span>
