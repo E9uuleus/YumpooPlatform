@@ -52,7 +52,7 @@ watch([query, archived], () => { clearTimeout(timer); timer = setTimeout(() => v
         closable
         @close="draft = draft.filter(id => id !== p!.id)"
       >
-        {{ p!.name || '无法访问的项目' }}
+        {{ p!.name || '无法访问的项目' }}{{ p!.lifecycle === 'ARCHIVED' ? ' · 已归档（不计入统计）' : '' }}
       </el-tag>
     </div>
     <el-alert

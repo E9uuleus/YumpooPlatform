@@ -163,9 +163,10 @@ class WorkItemConnectionIT {
         var linked = link(both, targetItem.id());
         var read = connections.find(sourceOwner, linked.resourceId());
         Set<String> expected = Set.of("workItemId", "itemNo", "title", "archived", "projectId", "projectCode",
-                "projectName", "projectLifecycle", "status", "priority", "category", "assignee", "canOpen");
+                "projectName", "projectLifecycle", "status", "priority", "category", "assignee", "canOpen", "available");
         assertThat(json.valueToTree(read.target()).propertyNames()).containsExactlyInAnyOrderElementsOf(expected);
         assertThat(read.target().canOpen()).isFalse();
+        assertThat(read.target().available()).isTrue();
         var cells = connections.cells(sourceOwner, source.id(), List.of(sourceItem.id(), targetItem.id(), UUID.randomUUID()));
         assertThat(cells.items()).singleElement().satisfies(cell -> {
             assertThat(cell.workItemId()).isEqualTo(sourceItem.id());
@@ -177,6 +178,81 @@ class WorkItemConnectionIT {
         assertCode(() -> connections.find(sourceOwner, linked.resourceId()), StandardErrorCode.RESOURCE_NOT_FOUND);
         deleteItem(targetItem.id(), false);
         assertThat(connections.find(sourceOwner, linked.resourceId()).id()).isEqualTo(linked.resourceId());
+    }
+
+    @Test
+    void archivedEndpointMetadataIsHiddenThroughCardsAndColumnCatalogsUntilRestored() {
+        var linked = link(both, targetItem.id());
+        fixture.archive(target);
+        for (CurrentActor actor : List.of(sourceOwner, both)) {
+            var view = connections.find(actor, linked.resourceId());
+            assertUnavailable(view.target(), targetItem.id(), target.id());
+            assertThat(view.source().available()).isTrue();
+            assertThat(view.source().title()).isEqualTo(sourceItem.title());
+            assertThat(view.capabilities().canUnlink()).isFalse();
+            var outgoing = connections.cells(actor, source.id(), List.of(sourceItem.id())).items().getFirst()
+                    .outgoing().getFirst().connections();
+            assertThat(outgoing).singleElement().satisfies(value -> assertUnavailable(value.target(), targetItem.id(), target.id()));
+            assertThat(columns.catalog(actor, source.id()).items().getFirst().targets()).singleElement().satisfies(value -> {
+                assertThat(value.projectId()).isEqualTo(target.id());
+                assertThat(value.available()).isFalse();
+                assertThat(value.name()).isEqualTo("不可访问的项目");
+                assertThat(value.code()).isEqualTo("—");
+                assertThat(value.actorCanLinkExisting()).isFalse();
+            });
+            assertCode(() -> connections.createOptions(actor, source.id(), column.id(), target.id()), StandardErrorCode.RESOURCE_NOT_FOUND);
+            assertCode(() -> connections.candidates(actor, source.id(), column.id(), target.id(), sourceItem.id(), search(""),
+                    new OffsetPageRequest(0, 20)), StandardErrorCode.RESOURCE_NOT_FOUND);
+        }
+        var adminUser = fixture.user("连接只读管理员");
+        var admin = new CurrentActor(adminUser.userId(), COMPANY, 0, Set.of(PlatformRoleCode.COMPANY_ADMIN));
+        for (CurrentActor actor : List.of(targetOwner, admin)) {
+            var view = connections.find(actor, linked.resourceId());
+            assertThat(view.target().available()).isTrue();
+            assertThat(view.target().canOpen()).isTrue();
+            assertThat(view.target().title()).isEqualTo(targetItem.title());
+            assertThat(view.target().projectName()).isEqualTo("目标项目");
+            assertThat(view.capabilities().canUnlink()).isFalse();
+        }
+        assertThat(columns.catalog(admin, source.id()).items().getFirst().targets()).singleElement().satisfies(value -> {
+            assertThat(value.available()).isTrue();
+            assertThat(value.name()).isEqualTo("目标项目");
+        });
+        jdbc.sql("UPDATE yumpoo.project SET lifecycle='ACTIVE', archived_at=NULL WHERE id=:id").param("id", target.id()).update();
+        assertThat(connections.find(both, linked.resourceId()).target().title()).isEqualTo(targetItem.title());
+        fixture.archive(source);
+        var incoming = connections.find(targetOwner, linked.resourceId());
+        assertUnavailable(incoming.source(), sourceItem.id(), source.id());
+        assertThat(incoming.columnName()).isEqualTo("不可访问的连接列");
+        assertThat(incoming.target().available()).isTrue();
+        assertCode(() -> connections.reverseCandidates(targetOwner, targetItem.id(), column.id(), search(""),
+                new OffsetPageRequest(0, 20)), StandardErrorCode.RESOURCE_NOT_FOUND);
+        assertThat(columns.catalog(targetOwner, target.id()).incomingColumns()).singleElement().satisfies(value -> {
+            assertThat(value.available()).isFalse();
+            assertThat(value.columnName()).isEqualTo("不可访问的连接列");
+            assertThat(value.projectName()).isEqualTo("不可访问的项目");
+            assertThat(value.projectCode()).isEqualTo("—");
+        });
+        assertCode(() -> connections.cells(both, source.id(), List.of(sourceItem.id())), StandardErrorCode.RESOURCE_NOT_FOUND);
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_connection WHERE id=:id AND deleted_at IS NULL")
+                .param("id", linked.resourceId()).query(Long.class).single()).isEqualTo(1);
+        assertThat(jdbc.sql("SELECT lifecycle FROM yumpoo.project WHERE id=:id").param("id", target.id())
+                .query(String.class).single()).isEqualTo("ACTIVE");
+    }
+
+    private static void assertUnavailable(ConnectionCard card, UUID itemId, UUID projectId) {
+        assertThat(card.workItemId()).isEqualTo(itemId);
+        assertThat(card.projectId()).isEqualTo(projectId);
+        assertThat(card.available()).isFalse();
+        assertThat(card.canOpen()).isFalse();
+        assertThat(card.title()).isEqualTo("不可访问的工作项");
+        assertThat(card.itemNo()).isEqualTo("—");
+        assertThat(card.projectName()).isEqualTo("不可访问的项目");
+        assertThat(card.projectCode()).isEqualTo("—");
+        assertThat(card.status().name()).isEqualTo("不可访问");
+        assertThat(card.category().name()).isEqualTo("不可访问");
+        assertThat(card.priority()).isNull();
+        assertThat(card.assignee()).isNull();
     }
 
     @Test
@@ -314,7 +390,7 @@ class WorkItemConnectionIT {
         });
         assertThat(columns.catalog(targetOwner, target.id()).incomingColumns().getFirst().actorCanLinkExisting()).isFalse();
         fixture.archive(source);
-        assertReason(() -> connections.reverseCandidates(both, targetItem.id(), column.id(), search(""), page), "PROJECT_ARCHIVED");
+        assertCode(() -> connections.reverseCandidates(both, targetItem.id(), column.id(), search(""), page), StandardErrorCode.RESOURCE_NOT_FOUND);
     }
 
     @Test

@@ -34,7 +34,7 @@ public class DashboardService {
     @Transactional(readOnly = true)
     public ListResponse list(CurrentActor actor) {
         return new ListResponse(repository.list(actor.companyId(), actor.userId()).stream().map(d ->
-                new Summary(d.id(), d.name(), d.configuration().projectIds().size(), d.configuration().widgets().size(), d.updatedAt())).toList());
+                new Summary(d.id(), d.name(), activeProjectIds(actor, d).size(), d.configuration().widgets().size(), d.updatedAt())).toList());
     }
     @Transactional(readOnly = true)
     public Stored requireOwned(CurrentActor actor, UUID id, boolean includeDeleted) {
@@ -73,11 +73,12 @@ public class DashboardService {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public QueryResponse query(CurrentActor actor, UUID id, Query query) {
         var dashboard = requireOwned(actor, id, false);
-        var result = statistics.aggregate(actor, dashboard.configuration().projectIds(),
+        var activeProjects = activeProjectIds(actor, dashboard);
+        var result = statistics.aggregate(actor, activeProjects,
                 query == null || query.filters() == null ? dashboard.configuration().filters() : query.filters());
         var widgets = query == null || query.widgets() == null ? dashboard.configuration().widgets() : query.widgets();
         validateQueryWidgets(widgets);
-        var charts = statistics.charts(actor, dashboard.configuration().projectIds(),
+        var charts = statistics.charts(actor, activeProjects,
                 query == null || query.filters() == null ? dashboard.configuration().filters() : query.filters(),
                 widgets.stream().map(DashboardCharts::request).toList(), result.asOf());
         return new QueryResponse(result.buckets(), result.options(), result.asOf(), view(actor, dashboard).projects(), charts);
@@ -85,13 +86,14 @@ public class DashboardService {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public WorkItemStatisticsQuery.Page items(CurrentActor actor, UUID id, ItemsQuery query) {
         var dashboard = requireOwned(actor, id, false);
+        var activeProjects = activeProjectIds(actor, dashboard);
         if (query.widget() != null) {
             validateQueryWidgets(List.of(query.widget()));
-            return statistics.chartItems(actor, dashboard.configuration().projectIds(),
+            return statistics.chartItems(actor, activeProjects,
                     query.filters() == null ? dashboard.configuration().filters() : query.filters(),
                     DashboardCharts.request(query.widget()), query.selection(), query.offset(), query.limit());
         }
-        return statistics.items(actor, dashboard.configuration().projectIds(),
+        return statistics.items(actor, activeProjects,
                 query.filters() == null ? dashboard.configuration().filters() : query.filters(), query.offset(), query.limit());
     }
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -100,10 +102,16 @@ public class DashboardService {
         if (query.widget() == null) throw ApplicationException.validation(
                 new com.yumpoo.platform.foundation.application.error.FieldViolation("widget", "REQUIRED", "图表不能为空"));
         validateQueryWidgets(List.of(query.widget()));
-        return statistics.table(actor, dashboard.configuration().projectIds(),
+        return statistics.table(actor, activeProjectIds(actor, dashboard),
                 query.filters() == null ? dashboard.configuration().filters() : query.filters(),
                 DashboardCharts.request(query.widget()), query.selection(), query.projectId(), query.table());
     }
+    private List<UUID> activeProjectIds(CurrentActor actor, Stored dashboard) {
+        return projects.find(actor, dashboard.configuration().projectIds()).stream()
+                .filter(project -> "ACTIVE".equals(project.lifecycle()))
+                .map(MemberProjectQuery.Project::id).toList();
+    }
+
     private View view(CurrentActor actor, Stored d) {
         Map<UUID, MemberProjectQuery.Project> visible = projects.find(actor, d.configuration().projectIds()).stream()
                 .collect(Collectors.toMap(MemberProjectQuery.Project::id, p -> p));

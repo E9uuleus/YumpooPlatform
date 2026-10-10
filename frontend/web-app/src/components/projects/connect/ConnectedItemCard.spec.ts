@@ -77,6 +77,19 @@ describe('已连接工作项卡片', () => {
     expect(document.querySelector('button.connected-item-card__tile')).toBeNull()
     expect([...document.querySelectorAll('.connected-item-card__row dt')].map(node => node.textContent?.trim())).toEqual(['工作项类别', '处理人', '状态', '优先级'])
   })
+  it('归档端不可见时仅显示不可访问提示，不请求详情或渲染字段', async () => {
+    const unavailable = { ...connection, target: { ...connection.target, available: false, canOpen: false,
+      itemNo: '—', title: '不可访问的工作项', projectName: '不可访问的项目', projectCode: '—', assignee: null },
+      capabilities: { canUnlink: false } }
+    render({ connection: unavailable }); await flushPromises()
+    expect(api.getWorkItem).not.toHaveBeenCalled()
+    expect(text()).toContain('连接对端已不可访问，恢复项目后可重新查看。')
+    expect(text()).not.toContain(connection.target.title)
+    expect(text()).not.toContain(connection.target.projectName)
+    expect(document.querySelector('.connected-item-card__fields')).toBeNull()
+    expect(document.querySelector('.activity-stub')).toBeNull()
+    expect(document.querySelector('[role="tab"]')).toBeNull()
+  })
   it('详情返回 403 时退回最小卡片，工作项不可编辑时字段只读', async () => {
     api.getWorkItem.mockRejectedValueOnce(new ResponseError(new Response(JSON.stringify({ code: 'ACCESS_DENIED', message: '无权访问', requestId: 'r', retryable: false,
       fieldErrors: [], details: {} }), { status: 403 })))

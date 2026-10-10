@@ -127,6 +127,24 @@ class DashboardHttpIT {
         assertThat(ok(mutate("POST", base + "/workload/tasks/query", admin, "{\"userId\":null,\"projectIds\":[],\"offset\":0,\"limit\":50}", null, null))
                 .path("items").get(0).path("title").asText()).isEqualTo("未分配");
         assertThat(ok(get(base + "/options", admin)).path("projects").get(0).path("name").asText()).isEqualTo("Category Work");
+        var currentProject = ok(get("/api/v1/projects/" + PROJECT_ID, admin));
+        ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/archive", admin, "", currentProject.path("etag").asText(), UUID.randomUUID()));
+        String requestedProject = "[\"" + PROJECT_ID + "\"]";
+        for (String scope : java.util.List.of("[]", requestedProject)) {
+            var archivedSheet = ok(mutate("POST", base + "/timesheet/query", admin,
+                    sheetBody.replace("\"projectIds\":[]", "\"projectIds\":" + scope), null, null));
+            assertThat(archivedSheet.path("entries").isEmpty()).isTrue();
+            assertThat(archivedSheet.path("workItems").isEmpty()).isTrue();
+            var archivedLoad = ok(mutate("POST", base + "/workload/query", admin, "{\"projectIds\":" + scope + ",\"userIds\":[]}", null, null));
+            for (var row : archivedLoad.path("members")) {
+                assertThat(row.path("todo").asLong() + row.path("inProgress").asLong()).isZero();
+                assertThat(row.path("overdue").asLong()).isZero();
+            }
+            assertThat(archivedLoad.path("unassigned").path("todo").asLong() + archivedLoad.path("unassigned").path("inProgress").asLong()).isZero();
+            assertThat(ok(mutate("POST", base + "/workload/tasks/query", admin,
+                    "{\"userId\":null,\"projectIds\":" + scope + ",\"offset\":0,\"limit\":50}", null, null)).path("totalElements").asLong()).isZero();
+        }
+        assertThat(ok(get(base + "/options", admin)).path("projects").isEmpty()).isTrue();
     }
 
     @Test
@@ -241,7 +259,7 @@ class DashboardHttpIT {
     }
 
     @Test
-    void editableDetailsRespectVersionFilterAndReadOnlyProject() throws Exception {
+    void editableDetailsRespectVersionAndExcludeArchivedProject() throws Exception {
         var item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "可编辑明细"), null, UUID.randomUUID()));
         String path = "/api/v1/me/dashboards/" + created(mutate("POST", "/api/v1/me/dashboards", member, dashboardBody(), null, UUID.randomUUID())).path("id").asText();
         String query = "{\"offset\":0,\"limit\":25,\"filters\":{\"includeArchived\":false,\"hasTime\":false,\"assignees\":[\"UNASSIGNED\"]}}";
@@ -252,8 +270,39 @@ class DashboardHttpIT {
         assertThat(mutate("PATCH", editPath, member, body, row.path("etag").asText(), UUID.randomUUID()).statusCode()).isEqualTo(412);
         assertThat(ok(mutate("POST", path + "/items/query", member, query, null, null)).path("totalElements").asLong()).isZero();
         jdbc.sql("UPDATE yumpoo.project SET lifecycle='ARCHIVED',archived_at=transaction_timestamp(),updated_at=transaction_timestamp() WHERE id=:id").param("id", PROJECT_ID).update();
-        var readOnly = ok(mutate("POST", path + "/items/query", member, "{\"offset\":0,\"limit\":25}", null, null)).path("items").get(0).path("workItem");
-        assertThat(readOnly.path("capabilities").path("canEditFields").asBoolean()).isFalse();
+        var excluded = ok(mutate("POST", path + "/items/query", member, "{\"offset\":0,\"limit\":25}", null, null));
+        assertThat(excluded.path("items").isEmpty()).isTrue();
+        assertThat(excluded.path("totalElements").asLong()).isZero();
+        assertThat(ok(get(path, member)).path("projects").get(0).path("available").asBoolean()).isFalse();
+    }
+
+    @Test
+    void archivedConnectionsRemainVisibleToOwnerButNeverEnterCountsTimeChartsOrDetails() throws Exception {
+        var item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "归档统计"), null, UUID.randomUUID()));
+        ok(mutate("POST", "/api/v1/work-items/" + item.path("id").asText() + "/time-sessions", member,
+                "{\"startedAt\":\"2026-01-01T00:00:00Z\",\"stoppedAt\":\"2026-01-01T01:00:00Z\"}", null, UUID.randomUUID()));
+        var input = (tools.jackson.databind.node.ObjectNode) json.readTree(dashboardBody());
+        var widget = chartWidget();
+        ((tools.jackson.databind.node.ObjectNode) widget.path("chart")).put("dimension", "CONTENT");
+        ((tools.jackson.databind.node.ObjectNode) input.path("configuration")).set("widgets", json.createArrayNode().add(widget));
+        var dash = created(mutate("POST", "/api/v1/me/dashboards", owner, input.toString(), null, UUID.randomUUID()));
+        String path = "/api/v1/me/dashboards/" + dash.path("id").asText();
+        var active = ok(mutate("POST", path + "/query", owner, "{}", null, null));
+        assertThat(total(active).path("count").asLong()).isEqualTo(1);
+        assertThat(total(active).path("durationMs").asLong()).isEqualTo(3600000);
+        var project = ok(get("/api/v1/projects/" + PROJECT_ID, owner));
+        ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/archive", owner, "", project.path("etag").asText(), UUID.randomUUID()));
+        var connection = ok(get(path, owner)).path("projects").get(0);
+        assertThat(connection.path("lifecycle").asText()).isEqualTo("ARCHIVED");
+        assertThat(connection.path("available").asBoolean()).isTrue();
+        assertThat(ok(get("/api/v1/me/dashboards", owner)).path("items").get(0).path("projectCount").asLong()).isZero();
+        var query = ok(mutate("POST", path + "/query", owner, "{\"filters\":{\"includeArchived\":true,\"hasTime\":false}}", null, null));
+        assertThat(query.path("buckets").isEmpty()).isTrue();
+        assertThat(query.path("options").isEmpty()).isTrue();
+        assertThat(query.path("charts").get(0).path("points").isEmpty()).isTrue();
+        assertThat(ok(mutate("POST", path + "/items/query", owner, "{\"offset\":0,\"limit\":25}", null, null)).path("totalElements").asLong()).isZero();
+        var tableQuery = json.createObjectNode().put("projectId", PROJECT_ID.toString()).set("widget", widget).set("table", json.createObjectNode());
+        assertThat(mutate("POST", path + "/table/query", owner, tableQuery.toString(), null, null).statusCode()).isEqualTo(404);
     }
 
     @Test

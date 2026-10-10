@@ -8,6 +8,8 @@ Status: implemented
 
 ## Decision
 
+归档项目 Owner 仍可删除讨论的旧例外由[项目归档访问与统计范围](2026-10-09-project-archive-and-deletion.md)部分替代，当前归档期间业务内容只读，必须先恢复项目；本文继续拥有活动项目中的作者/Owner 删除权限、级联范围、版本和事务审计理由。
+
 本文部分替代[独立讨论契约](../architecture/2026-08-24-work-item-update-contract.md)的操作时限、删除能力、页面墓碑与事件版本，以及[富文本编辑器](2026-09-05-work-item-discussion-composer.md)的单层展示和附件入口决定。原记录继续拥有独立聚合、正文净化、Mention 身份、强 ETag、幂等、事务审计与草稿保护理由。
 
 作者不限时编辑、删除自己的评论；当前 ProjectOwner 可删除所有评论，不能编辑他人评论。后端统一输出 canEdit/canDelete/canReply/canPin，不再公开截止时间、治理删除能力或理由输入。CompanyAdmin 只读；归档项目仍只允许当前 Owner 删除，不能发布、编辑或置顶。取消时间限制不取消可见性、成员资格或归档边界。

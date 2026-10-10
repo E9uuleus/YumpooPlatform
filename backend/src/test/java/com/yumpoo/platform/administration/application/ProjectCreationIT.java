@@ -188,12 +188,13 @@ class ProjectCreationIT {
     }
 
     @Test
-    void ownerCanArchiveAndAdministratorCanRestoreWithoutTemplateDependencies() {
+    void ownerAndAdministratorCanArchiveAndRestoreWithoutTemplateDependencies() {
         UUID projectId = create("UP2_LIFECYCLE", "b")
                 .result().resourceId();
         try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
                 RequestCorrelation.root("up1-project-lifecycle"))) {
-            assertThatThrownBy(() -> lifecycle.archive(new ProjectArchiveOperationCommand(admin(), projectId,
+            CurrentActor ordinary = new CurrentActor(ADMIN_ID, COMPANY_ID, 0, Set.of());
+            assertThatThrownBy(() -> lifecycle.archive(new ProjectArchiveOperationCommand(ordinary, projectId,
                     0, UUID.randomUUID(), new RequestHash("c".repeat(64)))))
                     .isInstanceOfSatisfying(ApplicationException.class, error ->
                             assertThat(error.errorCode()).isEqualTo(StandardErrorCode.ACCESS_DENIED));
@@ -203,9 +204,16 @@ class ProjectCreationIT {
             var restored = lifecycle.restore(new ProjectRestoreOperationCommand(admin(), projectId,
                     1, UUID.randomUUID(), new RequestHash("e".repeat(64))));
             assertThat(restored.result().responseJson()).contains("ACTIVE");
+            assertThat(projectService.findVisible(admin(), projectId).capabilities().canArchive()).isTrue();
+            lifecycle.archive(new ProjectArchiveOperationCommand(admin(), projectId,
+                    2, UUID.randomUUID(), new RequestHash("f".repeat(64))));
+            assertThat(projectService.findVisible(owner(), projectId).capabilities().canRestore()).isTrue();
+            var ownerRestored = lifecycle.restore(new ProjectRestoreOperationCommand(owner(), projectId,
+                    3, UUID.randomUUID(), new RequestHash("1".repeat(64))));
+            assertThat(ownerRestored.result().responseJson()).contains("ACTIVE");
         }
         assertThat(jdbcClient.sql("SELECT row_version FROM yumpoo.project WHERE id=:id")
-                .param("id", projectId).query(Long.class).single()).isEqualTo(2);
+                .param("id", projectId).query(Long.class).single()).isEqualTo(4);
     }
 
     @Test

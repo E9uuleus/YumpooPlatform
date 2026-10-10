@@ -18,6 +18,7 @@ public record ProjectSummary(
         long rowVersion,
         String etag,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        Instant archivedAt
 ) {
 }

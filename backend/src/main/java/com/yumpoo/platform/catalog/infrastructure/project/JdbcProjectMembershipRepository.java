@@ -177,6 +177,7 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
                 LEFT JOIN yumpoo.project_membership m
                   ON m.project_id=p.id AND m.user_id=:actorUserId AND m.status='ACTIVE'
                 WHERE p.id=:projectId AND p.company_id=:companyId AND (:admin OR m.id IS NOT NULL)
+                  AND (p.lifecycle='ACTIVE' OR p.owner_user_id=:actorUserId OR :admin)
                 """).param("actorUserId", actor.userId()).param("projectId", projectId)
                 .param("companyId", actor.companyId()).param("admin", admin)
                 .query(JdbcProjectMembershipRepository::mapAccess)
@@ -213,6 +214,7 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
                   ON m.project_id=p.id AND m.user_id=:actorUserId AND m.status='ACTIVE'
                 WHERE p.id IN (:projectIds) AND p.company_id=:companyId
                   AND (:admin OR m.id IS NOT NULL)
+                  AND (p.lifecycle='ACTIVE' OR p.owner_user_id=:actorUserId OR :admin)
                 """).param("actorUserId", actor.userId()).param("projectIds", projectIds)
                 .param("companyId", actor.companyId()).param("admin", admin)
                 .query(JdbcProjectMembershipRepository::mapAccess).list().stream()

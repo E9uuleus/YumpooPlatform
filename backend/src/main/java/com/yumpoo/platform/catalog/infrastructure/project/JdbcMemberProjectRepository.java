@@ -2,6 +2,7 @@ package com.yumpoo.platform.catalog.infrastructure.project;
 
 import com.yumpoo.platform.catalog.application.project.MemberProjectRepository;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
+import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import java.util.Collection;
@@ -14,6 +15,7 @@ public class JdbcMemberProjectRepository implements MemberProjectRepository {
         FROM yumpoo.project p JOIN yumpoo.project_membership m
           ON m.company_id=p.company_id AND m.project_id=p.id AND m.user_id=:user AND m.status='ACTIVE'
         WHERE p.company_id=:company
+          AND (p.lifecycle='ACTIVE' OR p.owner_user_id=:user OR :admin)
         """;
     private static final String SEARCH = """
         AND (:archived OR p.lifecycle<>'ARCHIVED')
@@ -39,7 +41,8 @@ public class JdbcMemberProjectRepository implements MemberProjectRepository {
                 .param("company", companyId));
     }
     private JdbcClient.StatementSpec scope(String sql, CurrentActor actor) {
-        return jdbc.sql(sql).param("company", actor.companyId()).param("user", actor.userId());
+        return jdbc.sql(sql).param("company", actor.companyId()).param("user", actor.userId())
+                .param("admin", actor.hasRole(PlatformRoleCode.COMPANY_ADMIN));
     }
     private JdbcClient.StatementSpec search(String sql, CurrentActor actor, String query, boolean archived) {
         return scope(sql, actor).param("archived", archived).param("empty", query.isEmpty())

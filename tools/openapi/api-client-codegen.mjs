@@ -254,6 +254,12 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   )
   fs.writeFileSync(attachmentMetadataPath, attachmentMetadata, 'utf8')
 
+  const projectSummaryPath = path.join(sourceRoot, 'models', 'ProjectSummary.ts')
+  fs.writeFileSync(projectSummaryPath, replaceExactlyOnce(normalizeText(fs.readFileSync(projectSummaryPath, 'utf8')),
+    "        'archivedAt': json['archivedAt'] == null ? undefined : (new Date(json['archivedAt'])),",
+    "        ...(json['archivedAt'] === undefined ? {} : { 'archivedAt': json['archivedAt'] === null ? null : new Date(json['archivedAt']) }),",
+    'ProjectSummary 可选归档时间精确属性兼容'), 'utf8')
+
   for (const model of ['DashboardChart', 'DashboardChartSelection', 'DashboardItem', 'DashboardItemsQuery', 'DashboardQuery', 'DashboardSnapshot', 'DashboardWidget', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'NotificationTarget']) {
     const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
     let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))

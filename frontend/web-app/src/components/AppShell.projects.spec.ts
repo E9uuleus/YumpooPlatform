@@ -92,7 +92,7 @@ describe('项目侧栏导航', () => {
     await flushPromises()
 
     expect(api.listProjects).toHaveBeenCalledWith({
-      lifecycle: ProjectLifecycleFilter.All,
+      lifecycle: ProjectLifecycleFilter.Active,
       page: 0,
       size: 11,
     })
@@ -108,6 +108,9 @@ describe('项目侧栏导航', () => {
     expect(projects.every(item => item.attributes('title') === undefined)).toBe(true)
     expect(wrapper.findAll('#desktop-project-navigation .project-navigation__more svg circle')).toHaveLength(3)
     expect(wrapper.get('#desktop-project-navigation').text()).not.toContain('产品')
+    const archived = wrapper.findAll('#desktop-project-navigation button').find(button => button.text() === '归档项目')!
+    await archived.trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'archived-projects' })
 
     await projects[0]?.trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'project-overview', params: { projectId: 'project-1' } })
@@ -127,6 +130,7 @@ describe('项目侧栏导航', () => {
     const navigation = new DOMWrapper(navigationElement!)
     expect(navigation.findAll('button').some(button => button.text() === '产品')).toBe(false)
     expect(navigation.text()).toContain('管理项目')
+    expect(navigation.text()).toContain('归档项目')
     await navigation.get('.project-navigation__project').trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'project-overview', params: { projectId: 'project-1' } })
     wrapper.unmount()
@@ -151,7 +155,7 @@ describe('项目侧栏导航', () => {
     await flushPromises()
     expect(api.listProjects).toHaveBeenLastCalledWith({
       query: 'YP_02',
-      lifecycle: ProjectLifecycleFilter.All,
+      lifecycle: ProjectLifecycleFilter.Active,
       page: 0,
       size: 11,
     })

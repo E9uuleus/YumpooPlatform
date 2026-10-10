@@ -54,6 +54,7 @@ public class JdbcProjectRepository implements ProjectRepository {
               ON m.project_id = p.id AND m.company_id = p.company_id
              AND m.user_id = :actorUserId AND m.status = 'ACTIVE'
             WHERE p.company_id = :companyId AND (:admin OR m.id IS NOT NULL)
+              AND (p.lifecycle='ACTIVE' OR p.owner_user_id=:actorUserId OR :admin)
             """;
 
     private final JdbcClient jdbcClient;

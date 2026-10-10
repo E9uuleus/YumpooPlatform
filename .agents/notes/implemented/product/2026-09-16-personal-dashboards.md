@@ -8,6 +8,8 @@ Status: implemented
 
 ## Decision
 
+归档项目保持普通成员可读及纳入统计的旧范围由[项目归档访问与统计范围](2026-10-09-project-archive-and-deletion.md)部分替代。当前归档项目仅负责人/管理员可读，私人仪表板保留已有连接但排除其计数、工时、图表与明细；本文其余私人所有权、成员查询边界及原始计时理由继续有效。
+
 reporting 通过 V54 personal_dashboard 保存当前公司、当前用户拥有的多个私人仪表板，以及连接项目、组件设置、宽屏/中等画布布局和统一筛选。配置命令复用强 ETag、幂等键与既有 Session/CSRF，读取、统计、编辑和软删除均先验证所有权。公司管理员不能读取他人的私人配置。
 
 catalog 的 MemberProjectQuery 只提供当前主体具有 ACTIVE 成员关系的同公司项目，不沿用管理员只读旁路。workitem 的 WorkItemStatisticsQuery 在每次聚合和明细查询重新交集连接项目与成员权限；reporting 仅调用公开端口，不读取其他模块表。失去访问权限的连接仅保留 ID 与不可访问标记，不返回名称、编码或数据。归档项目保持成员可读，新增连接必须当时有权限。

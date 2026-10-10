@@ -37,7 +37,7 @@ const editingTitle = ref(false), draftTitle = ref(''), titleInput = ref<Instance
 const card = computed(() => props.perspective === 'source' ? current.value.target : current.value.source)
 const item = useConnectedItem({ changed: () => { activityKey.value++; emit('changed', current.value) } })
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'UTC')
-const detail = computed(() => item.detail.value)
+const detail = computed(() => card.value.available === false ? undefined : item.detail.value)
 const full = computed(() => Boolean(detail.value))
 const title = computed(() => detail.value?.title ?? card.value.title)
 const overview = computed(() => ({ path: `/projects/${card.value.projectId}/overview`, query: { view: 'table' } }))
@@ -82,7 +82,8 @@ watch([() => props.open, () => props.connection.id], () => {
   current.value = props.connection
   void refresh()
 }, { immediate: true })
-watch([() => props.open, () => card.value.workItemId, () => card.value.canOpen], () => {
+watch([() => props.open, () => card.value.workItemId, () => card.value.canOpen, () => card.value.available], () => {
+  if (card.value.available === false) { item.reset(); editingTitle.value = false; field.value = undefined; tab.value = 'fields'; return }
   if (props.open && card.value.canOpen && item.detail.value?.id !== card.value.workItemId) void item.load(card.value.workItemId)
 }, { immediate: true })
 onBeforeUnmount(() => { revision++; controller?.abort() })
@@ -104,7 +105,7 @@ async function unlink() {
 }
 function command(action: string) { if (action === 'open') void openWorkItem(); else if (action === 'unlink') void unlink() }
 function startTitle() {
-  if (!item.editable.value) return
+  if (card.value.available === false || !item.editable.value) return
   draftTitle.value = title.value; editingTitle.value = true
   void nextTick(() => titleInput.value?.focus())
 }
@@ -255,13 +256,19 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
       </button>
     </div>
     <p
+      v-else-if="card.available === false"
+      class="connected-item-card__notice"
+    >
+      连接对端已不可访问，恢复项目后可重新查看。
+    </p>
+    <p
       v-else-if="!card.canOpen || item.forbidden.value"
       class="connected-item-card__notice"
     >
       你无权访问「{{ card.projectName }}」，仅显示连接摘要。
     </p>
     <dl
-      v-if="tab === 'fields' || !full"
+      v-if="card.available !== false && (tab === 'fields' || !full)"
       class="connected-item-card__fields"
       :aria-busy="refreshing || item.loading.value"
     >
@@ -327,7 +334,10 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
                   :display-name="assignees[0]!.displayName"
                   size="table"
                   show-name
-                /><yp-assignee-stack v-else-if="assignees.length > 1" :assignees="assignees" /><span v-else>未分配</span>
+                /><yp-assignee-stack
+                  v-else-if="assignees.length > 1"
+                  :assignees="assignees"
+                /><span v-else>未分配</span>
               </button>
             </template>
             <work-item-assignee-picker
@@ -347,7 +357,10 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
             :display-name="assignees[0]!.displayName"
             size="table"
             show-name
-          /><yp-assignee-stack v-else-if="assignees.length > 1" :assignees="assignees" /><span v-else>未分配</span></span>
+          /><yp-assignee-stack
+            v-else-if="assignees.length > 1"
+            :assignees="assignees"
+          /><span v-else>未分配</span></span>
         </dd>
       </div>
       <div
@@ -481,7 +494,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
       </template>
     </dl>
     <work-item-cell-activity-log
-      v-else
+      v-else-if="full"
       :key="activityKey"
       class="connected-item-card__activity"
       :work-item-id="card.workItemId"

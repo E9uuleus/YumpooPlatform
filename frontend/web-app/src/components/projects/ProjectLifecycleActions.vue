@@ -1,117 +1,86 @@
 <script setup lang="ts">
 import {
-  GovernanceOverrideCreateAction,
-  GovernanceOverrideRequestTargetTypeEnum,
-  ProjectLifecycle,
-  readCsrfToken,
-  type ProjectDetail,
-  type SafeBlocker,
+  ListProjectWorkItemFilterOptionsFieldEnum, ProjectLifecycle, WorkItemStatusCategory,
+  readCsrfToken, type ProjectDetail,
 } from '@yumpoo/api-client'
-import {
-  ElAlert,
-  ElButton,
-  ElDialog,
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElMessage,
-  ElMessageBox,
-} from 'element-plus'
-import { computed, reactive, ref } from 'vue'
-import { administrationApi, projectsApi } from '../../api/client'
+import { ElButton, ElMessage, ElMessageBox } from 'element-plus'
+import { computed, ref } from 'vue'
+import { projectsApi, workItemsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
+import { notifyProjectLifecycleChanged } from '../../composables/projectLifecycleEvents'
 
 const props = defineProps<{ project: ProjectDetail }>()
-const emit = defineEmits<{
-  changed: []
-  problem: [problem: ApiProblem]
-}>()
-
+const emit = defineEmits<{ changed: []; problem: [problem: ApiProblem] }>()
 const busy = ref(false)
-const overrideOpen = ref(false)
-const blockers = ref<SafeBlocker[]>([])
-const form = reactive({ reason: '' })
-
-const blockerLabels: Record<string, string> = {
-  OPEN_WORK_ITEMS: '未关闭工作项',
-  PENDING_WORKLOG_APPROVALS: '待审批工时',
-  CURRENT_PROJECTS: '当前项目',
-}
-
-const canOperate = computed(() => props.project.capabilities.canArchive
-  || props.project.capabilities.canRestore
-  || props.project.capabilities.canOverrideArchive)
-const validReason = computed(() => form.reason.trim().length >= 10 && form.reason.trim().length <= 500)
-
-function csrf(): string | undefined {
-  const token = readCsrfToken()
-  if (!token) emit('problem', localProblem('缺少 CSRF 凭据，请刷新后重试。'))
-  return token
-}
+const canOperate = computed(() => props.project.capabilities.canArchive || props.project.capabilities.canRestore)
 
 async function run(operation: (token: string) => Promise<unknown>, success: string): Promise<void> {
-  const token = csrf()
-  if (!token) return
+  const token = readCsrfToken()
+  if (!token) { emit('problem', localProblem('缺少 CSRF 凭据，请刷新后重试。')); return }
   busy.value = true
-  blockers.value = []
   try {
     await operation(token)
     ElMessage.success(success)
-    overrideOpen.value = false
-    form.reason = ''
+    notifyProjectLifecycleChanged(props.project.id)
     emit('changed')
   } catch (reason) {
     const problem = await toApiProblem(reason)
-    if (isProblemStatus(problem, 409) && problem.kind === 'response') {
-      blockers.value = problem.error.details.blockers ?? []
-    }
     if (isProblemStatus(problem, 412)) {
       ElMessage.warning('项目已被其他操作更新，已刷新为最新状态。')
       emit('changed')
+      notifyProjectLifecycleChanged(props.project.id)
     }
     emit('problem', problem)
-  } finally {
-    busy.value = false
-  }
+  } finally { busy.value = false }
+}
+
+async function openWorkItemCount(): Promise<number> {
+  const projectId = props.project.id
+  const labels = await workItemsApi.getProjectWorkItemLabels({ projectId })
+  const openStatuses = new Set(labels.statuses
+    .filter(label => label.statusCategory === WorkItemStatusCategory.Todo || label.statusCategory === WorkItemStatusCategory.InProgress)
+    .map(label => label.code))
+  let count = 0, cursor: string | undefined
+  do {
+    const page = await workItemsApi.listProjectWorkItemFilterOptions({
+      projectId, field: ListProjectWorkItemFilterOptionsFieldEnum.Status, limit: 100,
+      ...(cursor ? { cursor } : {}),
+    })
+    count += page.items.filter(option => openStatuses.has(option.value)).reduce((total, option) => total + option.count, 0)
+    cursor = page.nextCursor ?? undefined
+  } while (cursor)
+  return count
 }
 
 async function archive(): Promise<void> {
+  if (busy.value) return
+  busy.value = true
+  let warning: string
+  try { warning = `当前有 ${await openWorkItemCount()} 个未关闭工作项，仍可归档。` }
+  catch { warning = '未关闭工作项数量暂无法读取，仍可归档。' }
   try {
-    await ElMessageBox.confirm('归档后项目只读，可由企业管理员恢复。', '归档项目', {
+    await ElMessageBox.confirm(`${warning}归档后普通成员将无法访问，项目不再计入统计。负责人或企业管理员可只读浏览和恢复。`, '归档项目', {
       type: 'warning', confirmButtonText: '确认归档', cancelButtonText: '取消',
     })
+    await run(token => projectsApi.archiveProject({
+      projectId: props.project.id, xXSRFTOKEN: token, ifMatch: props.project.etag,
+      idempotencyKey: crypto.randomUUID(),
+    }), '项目已归档')
   } catch { return }
-  await run((token) => projectsApi.archiveProject({
-    projectId: props.project.id, xXSRFTOKEN: token, ifMatch: props.project.etag,
-    idempotencyKey: crypto.randomUUID(),
-  }), '项目已归档')
+  finally { busy.value = false }
 }
 
 async function restore(): Promise<void> {
+  if (busy.value) return
   try {
-    await ElMessageBox.confirm('恢复前将重新验证负责人和主工作空间。', '恢复项目', {
+    await ElMessageBox.confirm('恢复后项目重新对成员可见，并计入统计。', '恢复项目', {
       type: 'warning', confirmButtonText: '确认恢复', cancelButtonText: '取消',
     })
   } catch { return }
-  await run((token) => projectsApi.restoreProject({
+  await run(token => projectsApi.restoreProject({
     projectId: props.project.id, xXSRFTOKEN: token, ifMatch: props.project.etag,
     idempotencyKey: crypto.randomUUID(),
   }), '项目已恢复')
-}
-
-async function overrideArchive(): Promise<void> {
-  if (!validReason.value) return
-  await run((token) => administrationApi.createGovernanceOverride({
-    xXSRFTOKEN: token,
-    ifMatch: props.project.etag,
-    idempotencyKey: crypto.randomUUID(),
-    governanceOverrideRequest: {
-      action: GovernanceOverrideCreateAction.ProjectArchiveWithOpenItems,
-      targetType: GovernanceOverrideRequestTargetTypeEnum.Project,
-      targetId: props.project.id,
-      reason: form.reason.trim(),
-    },
-  }), '项目已通过治理覆盖归档')
 }
 </script>
 
@@ -125,7 +94,7 @@ async function overrideArchive(): Promise<void> {
       <h2 id="lifecycle-actions-title">
         危险区域
       </h2>
-      <p>归档后项目将只读，企业管理员可以恢复。</p>
+      <p>归档项目仅负责人和企业管理员可只读浏览或恢复，不再计入统计。</p>
     </div>
     <div class="lifecycle-actions__buttons">
       <el-button
@@ -136,15 +105,6 @@ async function overrideArchive(): Promise<void> {
         归档项目
       </el-button>
       <el-button
-        v-if="project.capabilities.canOverrideArchive"
-        type="danger"
-        plain
-        :loading="busy"
-        @click="form.reason = ''; overrideOpen = true"
-      >
-        治理覆盖归档
-      </el-button>
-      <el-button
         v-if="project.capabilities.canRestore"
         type="primary"
         :loading="busy"
@@ -153,45 +113,6 @@ async function overrideArchive(): Promise<void> {
         恢复项目
       </el-button>
     </div>
-    <el-alert
-      v-if="blockers.length"
-      type="warning"
-      :closable="false"
-      title="普通归档被当前事实阻止"
-    >
-      <ul class="blocker-list">
-        <li
-          v-for="blocker in blockers"
-          :key="blocker.code"
-        >
-          {{ blockerLabels[blocker.code] ?? blocker.code }}：{{ blocker.count }}
-        </li>
-      </ul>
-    </el-alert>
-
-    <el-dialog
-      v-model="overrideOpen"
-      title="治理覆盖归档"
-      width="520px"
-    >
-      <p class="dialog-note">
-        此操作会保存理由、安全前后快照与 blocker 分类计数。
-      </p>
-      <el-form label-position="top">
-        <el-form-item label="覆盖理由（10–500 字）" required>
-          <el-input v-model="form.reason" type="textarea" maxlength="500" show-word-limit />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="overrideOpen = false">
-          取消
-        </el-button>
-        <el-button type="danger" :disabled="!validReason" :loading="busy" @click="overrideArchive">
-          确认覆盖归档
-        </el-button>
-      </template>
-    </el-dialog>
-
   </section>
 </template>
 
@@ -210,6 +131,4 @@ async function overrideArchive(): Promise<void> {
 .lifecycle-actions h2 { font-size: 16px; font-weight: 600; }
 .lifecycle-actions p { margin-top: var(--yp-space-1); color: var(--yp-text-secondary); }
 .lifecycle-actions__buttons { display: flex; flex-wrap: wrap; gap: var(--yp-space-2); }
-.blocker-list { margin: var(--yp-space-2) 0 0; padding-left: 20px; }
-.dialog-note { margin: 0 0 var(--yp-space-4); color: var(--yp-text-secondary); }
 </style>

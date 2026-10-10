@@ -156,7 +156,10 @@ public class WorkItemConnectionService {
         requireTarget(column, targetProjectId);
         var target = targets.findByIds(actor.companyId(), List.of(targetProjectId)).get(targetProjectId);
         if (target == null) throw missing();
-        if (target.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ACTIVE) throw conflict("PROJECT_ARCHIVED");
+        if (target.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ACTIVE) {
+            if (access.findVisible(actor, targetProjectId).isEmpty()) throw missing();
+            throw conflict("PROJECT_ARCHIVED");
+        }
         var categories = connections.findActiveCategories(actor.companyId(), targetProjectId);
         if (categories.isEmpty()) throw invalid("contentId", "CONTENT_NOT_ACTIVE", "目标项目没有启用的工作项类别");
         return new CreateOptions(targetProjectId, target.name(), categories, categories.getFirst().id());
@@ -169,7 +172,7 @@ public class WorkItemConnectionService {
         requirePage(page, 20);
         var column = column(actor.companyId(), projectId, columnId, false);
         requireTarget(column, targetProjectId);
-        requireWritable(access.findVisible(actor, targetProjectId).orElse(null));
+        requireWritableEndpoint(actor, targetProjectId);
         items.findLocator(actor.companyId(), projectId, sourceWorkItemId).orElseThrow(ConnectionAccess::missing);
         return candidatePage(actor, new CandidateQuery(targetProjectId, columnId, sourceWorkItemId, true, search.text(),
                 search.fields(), assignees(actor, search), search.sort()), page);
@@ -215,7 +218,7 @@ public class WorkItemConnectionService {
         var column = column(command.actor().companyId(), source.projectId(), command.columnId(), false);
         var target = items.findLocator(command.actor().companyId(), command.targetWorkItemId()).orElseThrow(ConnectionAccess::missing);
         requireTarget(column, target.projectId());
-        requireWritable(access.findVisible(command.actor(), target.projectId()).orElse(null));
+        requireWritableEndpoint(command.actor(), target.projectId());
         return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(command.actor().userId(), "POST",
                 "linkWorkItemConnection", command.idempotencyKey()), command.requestHash()), () -> {
             lockProjects(command.actor(), source.projectId(), target.projectId(), Set.of(source.projectId(), target.projectId()));
@@ -344,13 +347,22 @@ public class WorkItemConnectionService {
         var column = columns.findActiveById(actor.companyId(), columnId)
                 .filter(value -> value.targetProjectIds().contains(target.projectId()))
                 .orElseThrow(ConnectionAccess::missing);
-        requireWritable(access.findVisible(actor, column.projectId()).orElse(null));
+        requireWritableEndpoint(actor, column.projectId());
         return new Reverse(target, column);
     }
 
     private ProjectAccessSnapshot visible(CurrentActor actor, UUID projectId) {
         requireActor(actor);
         return access.findVisible(actor, projectId).orElseThrow(ConnectionAccess::missing);
+    }
+
+    private void requireWritableEndpoint(CurrentActor actor, UUID projectId) {
+        var project = access.findVisible(actor, projectId).orElse(null);
+        if (project == null) {
+            var endpoint = targets.findByIds(actor.companyId(), List.of(projectId)).get(projectId);
+            if (endpoint == null || endpoint.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ACTIVE) throw missing();
+        }
+        requireWritable(project);
     }
 
     private ConnectColumn column(UUID companyId, UUID projectId, UUID columnId, boolean lock) {

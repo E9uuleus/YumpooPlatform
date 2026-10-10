@@ -116,6 +116,29 @@ class NotificationHttpIT {
         assertThat(ok(get("/api/v1/me/notifications",member)).path("items").size()).isZero();
     }
 
+    @Test void archivedProjectRedactsBothProjectAndDiscussionTargetsForMember() throws Exception {
+        seed(com.yumpoo.platform.notification.application.NotificationModels.Reason.PROJECT_MEMBER_ADDED, member.userId());
+        seed(com.yumpoo.platform.notification.application.NotificationModels.Reason.PROJECT_MEMBER_ADDED, owner.userId());
+        var item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "归档通知目标"), null, UUID.randomUUID()));
+        created(mutate("POST", "/api/v1/work-items/" + item.path("id").asText() + "/updates", owner,
+                "{\"bodyHtml\":\"<p>归档前摘要</p>\"}", null, UUID.randomUUID()));
+        dispatcher.dispatchOnce();
+        var project = ok(get("/api/v1/projects/" + PROJECT_ID, owner));
+        ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/archive", owner, "", project.path("etag").asText(), UUID.randomUUID()));
+        var hidden = ok(get("/api/v1/me/notifications", member)).path("items");
+        assertThat(hidden.size()).isEqualTo(2);
+        for (var row : hidden) {
+            var target = row.path("target");
+            assertThat(target.path("accessible").asBoolean()).isFalse();
+            assertThat(target.path("projectId").isNull()).isTrue();
+            assertThat(target.path("workItemId").isNull()).isTrue();
+            assertThat(target.path("title").isNull()).isTrue();
+            assertThat(target.path("excerpt").isNull()).isTrue();
+        }
+        assertThat(ok(get("/api/v1/me/notifications", owner)).path("items").get(0).path("target").path("accessible").asBoolean()).isTrue();
+    }
+
     @Test void commentNotifiesBusinessReporterWhenAuditCreatorDiffers() throws Exception {
         var item=created(mutate("POST","/api/v1/projects/"+PROJECT_ID+"/work-items",owner,
                 workItemBody(tasksId,"报告人与审计创建人不同"),null,UUID.randomUUID()));
