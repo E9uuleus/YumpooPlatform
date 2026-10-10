@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { EditorContent, type Editor } from '@tiptap/vue-3'
 import { exitSuggestion } from '@tiptap/suggestion'
-import { Picture as PictureIcon } from '@element-plus/icons-vue'
+import { Picture as PictureIcon, Paperclip } from '@element-plus/icons-vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { discussionColors, discussionFontSizes, discussionHasDraft, safeDiscussionLink } from './discussionEditor'
 import './discussionRichText.css'
@@ -17,8 +17,9 @@ const props = withDefaults(defineProps<{
   submitDisabled?: boolean
   allowMention?: boolean
   allowImage?: boolean
-}>(), { editor: undefined, busy: false, collapsible: true, showSubmit: true, submitDisabled: false, compact: false, placeholder: '写下讨论，输入 @ 提及项目成员…', submitLabel: '发布讨论', allowMention: true, allowImage: false })
-const emit = defineEmits<{ submit: []; pickImage: [] }>()
+  allowFile?: boolean
+}>(), { editor: undefined, busy: false, collapsible: true, showSubmit: true, submitDisabled: false, compact: false, placeholder: '写下讨论，输入 @ 提及项目成员…', submitLabel: '发布讨论', allowMention: true, allowImage: false, allowFile: false })
+const emit = defineEmits<{ submit: []; pickImage: []; pickFile: [] }>()
 type Panel = 'format' | 'color' | 'size' | 'table' | 'link' | 'align' | 'direction' | 'emoji'
 const panelNames: Record<Panel, string> = { format: '正文格式', color: '文字颜色与高亮', size: '字号', table: '表格', link: '链接', align: '对齐', direction: '文字方向', emoji: '表情' }
 const root = ref<HTMLElement>()
@@ -387,6 +388,18 @@ defineExpose({ closePanel, reset })
           @click="closePanel(); emit('pickImage')"
         >
           <picture-icon />
+        </button>
+        <button
+          v-if="allowFile"
+          type="button"
+          class="discussion-composer__image"
+          aria-label="添加附件"
+          title="添加附件（也可粘贴或拖入）"
+          :disabled="unavailable"
+          @mousedown.prevent
+          @click="closePanel(); emit('pickFile')"
+        >
+          <paperclip />
         </button>
       </div>
       <button

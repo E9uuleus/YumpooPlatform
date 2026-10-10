@@ -1,13 +1,31 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ElPopover, ElTooltip } from 'element-plus'
+import { ElImageViewer, ElPopover, ElTooltip } from 'element-plus'
 import { MoreFilled, Edit, Delete, CollectionTag, ChatLineSquare } from '@element-plus/icons-vue'
 import type { WorkItemUpdate } from '@yumpoo/api-client'
 import { formatChineseTimestamp, formatRelativeTime } from '../../design-system/dates'
+import { decorateAttachmentCards } from './descriptionImages'
 import YpAssignee from '../yp/YpAssignee.vue'
 const props = defineProps<{ item: WorkItemUpdate; now: Date; timezone: string; busy: boolean; reply?: boolean }>()
 const emit = defineEmits<{ edit: []; delete: []; pin: []; reply: [] }>()
 const menu = ref(false)
+const body = ref<HTMLElement>()
+const viewerIndex = ref<number>()
+const imageSources = computed(() => {
+  const template = document.createElement('template')
+  template.innerHTML = props.item.bodyHtml ?? ''
+  return [...template.content.querySelectorAll('img')].map(image => image.getAttribute('src') ?? '')
+})
+watch(() => props.item.bodyHtml, async () => {
+  viewerIndex.value = undefined
+  await nextTick()
+  decorateAttachmentCards(body.value)
+}, { immediate: true })
+function onBodyClick(event: MouseEvent): void {
+  if (!(event.target instanceof HTMLImageElement)) return
+  const index = [...(body.value?.querySelectorAll('img') ?? [])].indexOf(event.target)
+  if (index >= 0) viewerIndex.value = index
+}
 const menuElement = ref<HTMLElement>()
 const moreButton = ref<HTMLButtonElement>()
 const hasActions = computed(() => props.item.capabilities.canEdit || props.item.capabilities.canDelete || props.item.capabilities.canPin)
@@ -124,7 +142,9 @@ function navigateMenu(event: KeyboardEvent) {
           </el-popover>
         </header>
         <div
+          ref="body"
           class="discussion-update__body discussion-rich-text"
+          @click="onBodyClick"
           v-html="item.bodyHtml"
         />
       </div>
@@ -143,6 +163,14 @@ function navigateMenu(event: KeyboardEvent) {
       </button>
     </div>
     <slot />
+    <el-image-viewer
+      v-if="viewerIndex !== undefined"
+      :url-list="imageSources"
+      :initial-index="viewerIndex"
+      hide-on-click-modal
+      teleported
+      @close="viewerIndex = undefined"
+    />
   </article>
 </template>
 
@@ -162,6 +190,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 svg { width: 18px; height: 18px; flex: 0 0 auto; }
 .discussion-update__pin { display: inline-flex; align-items: center; gap: 3px; color: var(--yp-link); font-size: 12px; }
 .discussion-update__body { margin-top: 8px; line-height: 1.65; overflow-wrap: anywhere; }
+.discussion-update__body :deep(img) { cursor: zoom-in; }
 .discussion-update__body :deep(p) { margin: 0 0 8px; }
 .discussion-update__footer { display: flex; justify-content: flex-end; padding: 0 12px 8px; }
 .discussion-update__reply { opacity: 0; }
