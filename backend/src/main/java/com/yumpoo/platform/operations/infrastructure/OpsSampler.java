@@ -603,12 +603,6 @@ public class OpsSampler implements OperationsRuntime, SmartLifecycle {
             !java.nio.charset.Charset.defaultCharset().equals(java.nio.charset.StandardCharsets.UTF_8)
         );
         check(checks, "LOG_FILE_NOT_CONFIGURED", "WARNING", environment.getProperty("logging.file.name", "").isBlank());
-        check(
-            checks,
-            "DEFENDER_NOT_CONFIGURED",
-            "WARNING",
-            environment.getProperty("yumpoo.attachments.defender-executable", "").isBlank()
-        );
         check(checks, "ATTACHMENT_CLEANUP_DELETE_ENABLED", "INFO", flag("yumpoo.attachments.cleanup-delete-enabled"));
         try {
             String until = environment.getProperty("yumpoo.session.previous-accept-until", "");

@@ -37,7 +37,7 @@ class AttachmentSafetyProcessorTest {
     void cleanMatchingContentPublishesOnlyAfterParentReauthorization() throws Exception {
         SealedUpload upload = textUpload();
         AtomicInteger authorizations = new AtomicInteger();
-        AttachmentSafetyProcessor processor = processor(path -> MalwareScanVerdict.CLEAN);
+        AttachmentSafetyProcessor processor = processor();
 
         AttachmentProcessingOutcome outcome = processor.process(
                 upload,
@@ -54,32 +54,22 @@ class AttachmentSafetyProcessorTest {
     }
 
     @Test
-    void declaredMimeMismatchAndThreatAreRejectedAndRemoved() throws Exception {
-        AttachmentProcessingOutcome mismatch = processor(path -> MalwareScanVerdict.CLEAN).process(
+    void declaredMimeMismatchIsRejectedAndRemoved() throws Exception {
+        AttachmentProcessingOutcome mismatch = processor().process(
                 textUpload(),
                 AttachmentFileNamePolicy.normalize("notes.txt"),
                 "application/pdf",
                 () -> true
         );
-        AttachmentProcessingOutcome threat = processor(path -> MalwareScanVerdict.THREAT_DETECTED).process(
-                textUpload(),
-                AttachmentFileNamePolicy.normalize("notes.txt"),
-                "text/plain",
-                () -> true
-        );
-
         assertRejected(mismatch, AttachmentRejectedCode.FILE_TYPE_NOT_ALLOWED, false, false);
-        assertRejected(threat, AttachmentRejectedCode.MALWARE_DETECTED, false, false);
         assertThat(regularFileCount(tempDirectory.resolve("quarantine"))).isZero();
         assertThat(regularFileCount(tempDirectory.resolve("published"))).isZero();
     }
 
     @Test
-    void unavailableScannerRetriesFinitelyAndRetainsSealedContent() throws Exception {
-        AtomicInteger attempts = new AtomicInteger();
-        AttachmentProcessingOutcome outcome = processor(path -> {
-            attempts.incrementAndGet();
-            return MalwareScanVerdict.UNAVAILABLE;
+    void contentDetectionFailureRejectsWithoutPublishing() throws Exception {
+        AttachmentProcessingOutcome outcome = new AttachmentSafetyProcessor(storage, (path, name) -> {
+            throw new IOException("controlled detector failure");
         }).process(
                 textUpload(),
                 AttachmentFileNamePolicy.normalize("notes.txt"),
@@ -87,33 +77,14 @@ class AttachmentSafetyProcessorTest {
                 () -> true
         );
 
-        assertRejected(outcome, AttachmentRejectedCode.SCAN_UNAVAILABLE, true, false);
-        assertThat(attempts).hasValue(AttachmentSafetyProcessor.DEFAULT_MAX_SCAN_ATTEMPTS);
-        assertThat(regularFileCount(tempDirectory.resolve("quarantine"))).isOne();
-    }
-
-    @Test
-    void scannerRuntimeFailureIsRetriedAndFailsClosed() throws Exception {
-        AtomicInteger attempts = new AtomicInteger();
-        AttachmentProcessingOutcome outcome = processor(path -> {
-            attempts.incrementAndGet();
-            throw new IllegalStateException("controlled scanner failure");
-        }).process(
-                textUpload(),
-                AttachmentFileNamePolicy.normalize("notes.txt"),
-                "text/plain",
-                () -> true
-        );
-
-        assertRejected(outcome, AttachmentRejectedCode.SCAN_UNAVAILABLE, true, false);
-        assertThat(attempts).hasValue(AttachmentSafetyProcessor.DEFAULT_MAX_SCAN_ATTEMPTS);
-        assertThat(regularFileCount(tempDirectory.resolve("quarantine"))).isOne();
+        assertRejected(outcome, AttachmentRejectedCode.INTEGRITY_CHECK_FAILED, false, false);
+        assertThat(regularFileCount(tempDirectory.resolve("quarantine"))).isZero();
         assertThat(regularFileCount(tempDirectory.resolve("published"))).isZero();
     }
 
     @Test
     void revokedParentLeavesOnlyAnInaccessiblePublishedOrphan() throws Exception {
-        AttachmentProcessingOutcome outcome = processor(path -> MalwareScanVerdict.CLEAN).process(
+        AttachmentProcessingOutcome outcome = processor().process(
                 textUpload(),
                 AttachmentFileNamePolicy.normalize("notes.txt"),
                 "text/plain",
@@ -125,11 +96,10 @@ class AttachmentSafetyProcessorTest {
         assertThat(regularFileCount(tempDirectory.resolve("published"))).isOne();
     }
 
-    private AttachmentSafetyProcessor processor(MalwareScanner scanner) {
+    private AttachmentSafetyProcessor processor() {
         return new AttachmentSafetyProcessor(
                 storage,
-                new TikaAttachmentContentDetector(),
-                scanner
+                new TikaAttachmentContentDetector()
         );
     }
 

@@ -19,9 +19,8 @@ class AttachmentDownloadDeleteServiceTest {
     private final AttachmentRepository repository=mock(AttachmentRepository.class);
     private final QuarantineStorage storage=mock(QuarantineStorage.class);
     private final AttachmentLifecycleService service=new AttachmentLifecycleService(repository,storage,
-            mock(AttachmentContentDetector.class),mock(MalwareScanner.class),new AttachmentRuntimeSettings(
-            100L<<30,10L<<30,Duration.ofMinutes(5),Duration.ofMinutes(15),
-            Duration.ofSeconds(5),Duration.ofSeconds(30)));
+            mock(AttachmentContentDetector.class),new AttachmentRuntimeSettings(
+            100L<<30,10L<<30,Duration.ofMinutes(5),Duration.ofMinutes(15)));
 
     @Test
     void verifiesTheBlobBeforeOpeningTheDownloadStream() throws Exception {

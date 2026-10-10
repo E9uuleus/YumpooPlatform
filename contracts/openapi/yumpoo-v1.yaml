@@ -39,7 +39,7 @@ tags:
   - name: WorkItemUpdates
     description: Work Item 下独立版本、独立时间线的项目讨论流。
   - name: Attachments
-    description: Work Item 与已发布 Update 的附件意图、流式上传、扫描状态和受控重扫。
+    description: Work Item 与已发布 Update 的附件意图、流式上传、处理状态和受控重新处理。
   - name: Activity
     description: Project 与 Work Item 的追加式安全动态时间线。
 paths:
@@ -4586,7 +4586,7 @@ paths:
             schema: { type: string, format: binary }
       responses:
         '202':
-          description: 内容已封存并排入安全扫描。
+          description: 内容已封存并排入类型识别、完整性校验与发布处理。
           headers: { ETag: { $ref: '#/components/headers/ETag' } }
           content:
             application/json:
@@ -4650,7 +4650,7 @@ paths:
             schema: { $ref: '#/components/schemas/AttachmentRescanRequest' }
       responses:
         '202':
-          description: 已重新预约配额并排入完整扫描。
+          description: 已重新预约配额并排入完整处理；宽限期内的历史 SCAN_UNAVAILABLE 附件重新检测类型后可发布。
           headers: { ETag: { $ref: '#/components/headers/ETag' } }
           content: { application/json: { schema: { $ref: '#/components/schemas/AttachmentRescanResult' } } }
         '400': { $ref: '#/components/responses/MalformedRequest' }

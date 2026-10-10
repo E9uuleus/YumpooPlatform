@@ -8,6 +8,8 @@ Work Item 与已发布讨论需要上传附件，但一次 HTTP 请求内完成�
 
 ## Decision
 
+恶意软件扫描、扫描失败重试、MIME 安全检查点和 Defender 运行条件已由[移除附件恶意软件扫描](../security/2026-10-09-remove-attachment-malware-scan.md)部分替代；本文涉及这些机制的内容解释原方案。当前队列仍使用既有表名，类型、完整性、配额、鉴权与清理决定保持有效。
+
 V37 将 `attachment`、`attachment_scan_task` 与 `attachment_quota_usage` 作为 filestorage 独占真源。附件业务状态固定为 `UPLOADING/AVAILABLE/REJECTED/DELETED`，接收、排队、扫描和最终化只记录在隐藏的处理阶段。当前 owner 仅为 `WORK_ITEM` 与 `WORK_ITEM_UPDATE`；[删除产品决定](../product/2026-09-30-remove-product-concept.md)取消反馈 owner 规划，V60 在确认不存在反馈附件后收紧数据库约束，发现引用则整笔迁移失败。`AVAILABLE` 由数据库约束强制具备正数大小、SHA-256、探测 MIME、storage key 和可用时刻。
 
 创建意图使用持久幂等键，缺省预约 100 MiB，显式 `sizeBytes` 作为本意图的接收上限。Company 与 Project 配额行按 COMPANY → PROJECT 固定顺序锁定，默认上限分别为 100 GiB 与 10 GiB。接收使用固定 64 KiB 缓冲并同步计算 SHA-256，不持有数据库事务；同一附件通过上传租约只允许一个活动 PUT。断流清理 `.part` 并解除租约以允许复用原意图，超出固定 100 MiB 或预约量分别稳定拒绝，封存后释放预约差额。
