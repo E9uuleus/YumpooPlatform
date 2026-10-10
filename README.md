@@ -137,9 +137,8 @@ Vite 将 `/api` 代理至后端。修改 `YUMPOO_SERVER_PORT` 后，需同步修
 | `YUMPOO_LOCAL_AUTH_ENABLED` | 本地免登录身份开关，默认关闭 |
 | `YUMPOO_SESSION_CURRENT_KEY_VERSION`、`YUMPOO_SESSION_CURRENT_KEY` | 生产会话密钥版本与 Base64 密钥；解码后至少 32 字节 |
 | `YUMPOO_WEB_URL` | Electron 加载地址；开发限定本机 HTTP，发行包要求 HTTPS |
-| `YUMPOO_DEFENDER_EXECUTABLE` | Microsoft Defender `MpCmdRun.exe` 路径，生产必填 |
 
-本地附件和上传临时目录默认使用 `out/attachments`、`out/upload-temp`，可分别通过 `YUMPOO_ATTACHMENT_ROOT`、`YUMPOO_UPLOAD_TEMP_ROOT` 配置。未配置 Defender 时后端仍可在本地启动，但附件不会通过扫描并变为可下载状态。开发日志默认写入 `out/logs/yumpoo-server.log`，可通过 `YUMPOO_LOG_FILE` 调整。
+本地附件和上传临时目录默认使用 `out/attachments`、`out/upload-temp`，可分别通过 `YUMPOO_ATTACHMENT_ROOT`、`YUMPOO_UPLOAD_TEMP_ROOT` 配置。附件经类型、宏/ZIP 与完整性检查后发布，无需配置服务端恶意软件扫描器。开发日志默认写入 `out/logs/yumpoo-server.log`，可通过 `YUMPOO_LOG_FILE` 调整。
 
 生产目录以部署模板中的路径为准，配置与 Secret 文件需保存在部署机受保护的目录内。
 
@@ -172,7 +171,7 @@ REST 契约以 [yumpoo-v1.yaml](contracts/openapi/yumpoo-v1.yaml) 为唯一来�
 
 ## Windows 部署
 
-部署目标需要 Windows x64、JDK 21、PostgreSQL 17、Nginx / HTTPS 和 Microsoft Defender。服务拓扑为：
+部署目标需要 Windows x64、JDK 21、PostgreSQL 17、Nginx / HTTPS。服务拓扑为：
 
 ```text
 浏览器 / Electron → Nginx HTTPS :443
@@ -198,7 +197,7 @@ pnpm --filter @yumpoo/desktop-shell package:win
 1. 使用 [数据库初始化脚本](deployment/windows/database/initialize-database.sql) 创建 `yumpoo` 数据库及 `yumpoo_app`、`yumpoo_migrator` 两个独立账号，设置各自密码。
 2. 将服务器包解压到版本目录，准备 `C:/ProgramData/Yumpoo/` 下的配置、Secret、附件、临时目录与日志目录，并设置服务账号权限。
 3. 按目标机修改 [生产配置模板](deployment/windows/config/application-prod.yml) 和 [Nginx 模板](deployment/windows/nginx/yumpoo-wecom.conf)：数据库端口、公开域名、证书和文件路径均需匹配实际环境。
-4. 注入数据库密码、会话密钥、Defender 路径及独立的企业微信 OAuth / 通讯录 / 成员资料 Secret，配置可信 IP 与回调地址。首次部署按运行手册执行停服身份引导，创建初始管理员。
+4. 注入数据库密码、会话密钥及独立的企业微信 OAuth / 通讯录 / 成员资料 Secret，配置可信 IP 与回调地址。首次部署按运行手册执行停服身份引导，创建初始管理员。
 
 准备完成后，在部署机前台启动后端（按实际版本目录调整 JAR 路径）：
 
@@ -211,7 +210,7 @@ java '-Dfile.encoding=UTF-8' -jar 'C:/Program Files/Yumpoo/releases/current/serv
 
 启动 Nginx 后，从 HTTPS 域名访问平台；发行桌面端需在启动环境中设置 `YUMPOO_WEB_URL=https://<实际域名>`。生产提供静态 Web 构建产物，预览命令用于本地检查。
 
-首次身份引导、备份、验收与回退步骤见 [Windows 运行手册](deployment/windows/RUNBOOK.md)。目标环境的企业微信、HTTPS、Defender 和恢复验收需实际执行，构建或 CI 通过不能替代这些检查。
+首次身份引导、备份、验收与回退步骤见 [Windows 运行手册](deployment/windows/RUNBOOK.md)。目标环境的企业微信、HTTPS 和恢复验收需实际执行，构建或 CI 通过不能替代这些检查。
 
 ## 开发约定
 

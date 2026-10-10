@@ -57,12 +57,8 @@ yumpoo:
     scan-concurrency: 2
     scan-lease: 5m
     upload-lease: 15m
-    first-scan-retry: 5s
-    second-scan-retry: 30s
     attachment-root: C:/ProgramData/Yumpoo/data/attachments
     upload-temp-root: C:/ProgramData/Yumpoo/temp/uploads
-    defender-executable: ${YUMPOO_DEFENDER_EXECUTABLE}
-    defender-timeout: 2m
     cleanup-delete-enabled: ${YUMPOO_ATTACHMENT_CLEANUP_DELETE_ENABLED:false}
     cleanup-approval-reference: ${YUMPOO_ATTACHMENT_CLEANUP_APPROVAL_REFERENCE:}
     maintenance-initial-delay: 5m

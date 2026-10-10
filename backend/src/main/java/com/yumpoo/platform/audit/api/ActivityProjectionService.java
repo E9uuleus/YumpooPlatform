@@ -367,7 +367,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
 
     private static String systemDisplay(String code) {
         return switch (code == null ? "" : code) {
-            case "ATTACHMENT_SCANNER" -> "附件安全扫描服务";
+            case "ATTACHMENT_SCANNER" -> "附件处理服务";
             default -> "系统";
         };
     }

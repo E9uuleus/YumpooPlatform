@@ -54,7 +54,7 @@ describe('uploadAttachment', () => {
   })
   afterEach(() => { vi.useRealTimers() })
 
-  it('创建意图、上传内容并轮询到扫描通过', async () => {
+  it('创建意图、上传内容并轮询到处理完成', async () => {
     api.get.mockResolvedValueOnce(metadata(AttachmentStatus.Uploading)).mockResolvedValueOnce(metadata(AttachmentStatus.Available))
     const phases: string[] = []
     const result = uploadAttachment({ ownerType: AttachmentOwnerType.WorkItem, ownerId, file, onPhase: phase => phases.push(phase) })
@@ -80,7 +80,7 @@ describe('uploadAttachment', () => {
     expect(api.upload).toHaveBeenCalledTimes(2)
   })
 
-  it('扫描拒绝与超时转换为中文错误', async () => {
+  it('处理拒绝与超时转换为中文错误', async () => {
     api.get.mockResolvedValue(metadata(AttachmentStatus.Rejected, { rejectedCode: AttachmentRejectedCode.MalwareDetected }))
     const rejected = uploadAttachment({ ownerType: AttachmentOwnerType.WorkItem, ownerId, file })
     const rejectedAssertion = expect(rejected).rejects.toThrow('文件未通过安全检查')

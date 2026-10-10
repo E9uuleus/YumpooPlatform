@@ -29,21 +29,18 @@ import java.util.UUID;
 @Service
 public class AttachmentLifecycleService {
     private static final Duration INTENT_LIFETIME = Duration.ofHours(24);
-    private static final Duration QUARANTINE_RETENTION = Duration.ofHours(24);
 
     private final AttachmentRepository repository;
     private final QuarantineStorage storage;
     private final AttachmentContentDetector detector;
-    private final MalwareScanner scanner;
     private final AttachmentRuntimeSettings settings;
 
     public AttachmentLifecycleService(AttachmentRepository repository, QuarantineStorage storage,
-            AttachmentContentDetector detector, MalwareScanner scanner,
+            AttachmentContentDetector detector,
             AttachmentRuntimeSettings settings) {
         this.repository = repository;
         this.storage = storage;
         this.detector = detector;
-        this.scanner = scanner;
         this.settings = settings;
     }
 
@@ -166,19 +163,6 @@ public class AttachmentLifecycleService {
                     return new ScanOutcome.Rejected(AttachmentRejectedCode.FILE_TYPE_NOT_ALLOWED);
                 }
                 detectedMime = detected.detectedMime();
-                MalwareScanVerdict verdict;
-                try {
-                    verdict = scanner.scan(upload.quarantinedPath());
-                } catch (RuntimeException exception) {
-                    verdict = MalwareScanVerdict.UNAVAILABLE;
-                }
-                if (verdict == MalwareScanVerdict.UNAVAILABLE) return new ScanOutcome.Unavailable();
-                if (verdict == MalwareScanVerdict.THREAT_DETECTED) {
-                    storage.discard(upload);
-                    return new ScanOutcome.Rejected(AttachmentRejectedCode.MALWARE_DETECTED);
-                }
-                // detected_mime 同时是本代扫描已通过的持久检查点。必须在查毒成功后写入，
-                // 否则 SCAN_UNAVAILABLE 重试会误把仅完成类型探测的内容当作安全内容发布。
                 repository.recordDetected(claim, detectedMime, Instant.now());
             }
             PublishedBlob published;
@@ -225,15 +209,8 @@ public class AttachmentLifecycleService {
         repository.completeRejected(claim, code, now, null);
     }
 
-    public void retryOrExhaust(ScanClaim claim, Instant now) {
-        if (claim.attemptCount() < 3) {
-            Duration delay = claim.attemptCount() == 1
-                    ? settings.firstScanRetry() : settings.secondScanRetry();
-            repository.retry(claim, now.plus(delay), now);
-        } else {
-            repository.completeRejected(claim, AttachmentRejectedCode.SCAN_UNAVAILABLE, now,
-                    now.plus(QUARANTINE_RETENTION));
-        }
+    public void retryProcessing(ScanClaim claim, Instant now) {
+        repository.retry(claim, now.plusSeconds(1), now);
     }
 
     public RescanResult rescan(UUID companyId, UUID attachmentId, long expectedVersion, Instant now) {
@@ -289,7 +266,7 @@ public class AttachmentLifecycleService {
         completeRejected(internal(value),AttachmentRejectedCode.valueOf(code),now);
     }
 
-    public void retryBoundary(AttachmentBoundaryData.Claim value,Instant now) { retryOrExhaust(internal(value),now); }
+    public void retryBoundary(AttachmentBoundaryData.Claim value,Instant now) { retryProcessing(internal(value),now); }
 
     public AttachmentBoundaryData.Rescan rescanBoundary(UUID companyId,UUID id,long version,Instant now) {
         RescanResult result=rescan(companyId,id,version,now);

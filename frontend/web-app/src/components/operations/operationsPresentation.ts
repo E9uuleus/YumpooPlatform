@@ -63,7 +63,6 @@ export const postureNames: Record<string, string> = {
   SERVER_NOT_LOOPBACK: '服务监听地址',
   DEFAULT_CHARSET_NOT_UTF8: '默认字符集',
   LOG_FILE_NOT_CONFIGURED: '文件日志',
-  DEFENDER_NOT_CONFIGURED: '附件扫描程序',
   ATTACHMENT_CLEANUP_DELETE_ENABLED: '附件清理删除',
   SESSION_PREVIOUS_KEY_EXPIRED: '旧会话密钥期限',
 }

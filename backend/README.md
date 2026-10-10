@@ -160,9 +160,9 @@ exchange 成功只返回一次短期 HMAC 收据；其中 requestId、企业/成
 
 ## M0-14 file-security PoC
 
-`filestorage` 现包含固定 64 KiB 缓冲的隔离接收、100 MiB 精确上限、SHA-256 内容寻址、Tika 类型识别、ZIP/OOXML 判别、扫描端口、Defender 适配器和同卷原子发布。它们是后续正式附件功能可复用的技术核心；当前没有生产 Attachment 表、Controller 或正式 OpenAPI operation。
+`filestorage` 现包含固定 64 KiB 缓冲的隔离接收、100 MiB 精确上限、SHA-256 内容寻址、Tika 类型识别、ZIP/OOXML 判别和同卷原子发布。它们是后续正式附件功能可复用的技术核心；当前没有生产 Attachment 表、Controller 或正式 OpenAPI operation。
 
-从仓库根目录运行 `pnpm verify:m0-14`。该命令额外在 `-Xmx96m` 下点名运行 `M014BoundedHeapVerification`，并通过 test-only HTTP/PostgreSQL 探针覆盖断流、并发完成、扫描事务边界、授权撤销、413/415、隐藏 404 和最终事务回滚。真实 Defender/NTFS 验证及所需变量见仓库根 README；受控 Windows 环境具备后运行 `pnpm verify:m0-14:live` 并取得签名 `PASS` 证据，未执行前保持 `NOT_RUN`，不阻塞 M0 本地开发门禁。
+从仓库根目录运行 `pnpm verify:m0-14`。该命令额外在 `-Xmx96m` 下点名运行 `M014BoundedHeapVerification`，并通过 test-only HTTP/PostgreSQL 探针覆盖断流、并发完成、处理事务边界、授权撤销、413/415、隐藏 404 和最终事务回滚。Windows NTFS 与同卷原子移动验证可通过 `pnpm verify:m0-14:live` 运行；旧恶意软件扫描证据仅保留历史含义，不再更新。
 
 YumpooPlatform Spring 后端是单 Maven 模块、单可执行 JAR 的模块化单体，包含 PostgreSQL、Flyway、真实库测试、统一错误、请求关联、乐观锁、持久化幂等、事务 Outbox、消费去重、身份治理、固定 Project 模板目录，以及 Workspace、Product 与 Project 真源。
 
