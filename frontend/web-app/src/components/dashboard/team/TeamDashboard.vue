@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElAlert, ElButton } from 'element-plus'
 import YpSegmented from '../../yp/YpSegmented.vue'
 import TeamTimesheet from './TeamTimesheet.vue'
@@ -9,8 +9,9 @@ import { useTeamDashboard } from './useTeamDashboard'
 
 const team = useTeamDashboard()
 const { optionsError, timezone, period, timesheet, timesheetLoading, timesheetError, workload, workloadLoading, workloadError, tasks } = team
-const view = ref<TeamView>('TIMESHEET')
+const view = ref<TeamView>('TIMESHEET'), timesheetView = ref<InstanceType<typeof TeamTimesheet>>()
 const loading = computed(() => timesheetLoading.value || workloadLoading.value)
+watch(view, () => timesheetView.value?.closePopovers())
 defineExpose({ refresh: team.refresh, loading })
 </script>
 
@@ -32,6 +33,7 @@ defineExpose({ refresh: team.refresh, loading })
     </el-alert>
     <TeamTimesheet
       v-show="view === 'TIMESHEET'"
+      ref="timesheetView"
       v-model:period="period"
       :sheet="timesheet"
       :loading="timesheetLoading"

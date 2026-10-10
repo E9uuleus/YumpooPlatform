@@ -65,7 +65,7 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
     </div>
     <div
       v-loading="loading"
-      class="team-body team-groups"
+      class="team-body"
     >
       <el-alert
         v-if="error"
@@ -80,160 +80,162 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
           重试
         </el-button>
       </el-alert>
-      <div
-        v-for="row in visible"
-        :key="row.key"
-        class="team-group"
-        :style="{ '--team-group-accent': row.color }"
-      >
-        <button
-          type="button"
-          class="team-workload__row"
-          :aria-expanded="expanded.has(row.key)"
-          :disabled="!row.total"
-          @click="toggle(row)"
-        >
-          <el-icon
-            class="team-workload__chevron"
-            :class="{ open: expanded.has(row.key) }"
-          >
-            <ArrowRight />
-          </el-icon>
-          <YpAssignee
-            v-if="row.userId"
-            :user-id="row.userId"
-            :display-name="row.name"
-            size="table"
-            :show-name="false"
-            tooltip-disabled
-          />
-          <span class="team-group__name">{{ row.name }}</span>
-          <small v-if="!row.active">非在职</small>
-          <small>{{ row.total }} 个工作项</small>
-          <span
-            class="team-workload__bar"
-            aria-hidden="true"
-          >
-            <i
-              class="team-workload__segment team-workload__segment--progress"
-              :style="{ width: width(row.inProgress) }"
-            /><i
-              class="team-workload__segment team-workload__segment--todo"
-              :style="{ width: width(row.todo) }"
-            />
-          </span>
-          <small>进行中 {{ row.inProgress }} · 待开始 {{ row.todo }}</small>
-          <small
-            v-if="row.overdue"
-            class="team-overdue"
-          >逾期 {{ row.overdue }}</small>
-        </button>
+      <div class="team-groups">
         <div
-          v-if="expanded.has(row.key)"
-          class="team-workload__tasks"
+          v-for="row in visible"
+          :key="row.key"
+          class="team-group"
+          :style="{ '--team-group-accent': row.color }"
         >
-          <el-alert
-            v-if="tasks.get(row.key)?.error"
-            :title="tasks.get(row.key)!.error"
-            type="error"
-            :closable="false"
-          />
+          <button
+            type="button"
+            class="team-workload__row"
+            :aria-expanded="expanded.has(row.key)"
+            :disabled="!row.total"
+            @click="toggle(row)"
+          >
+            <el-icon
+              class="team-workload__chevron"
+              :class="{ open: expanded.has(row.key) }"
+            >
+              <ArrowRight />
+            </el-icon>
+            <YpAssignee
+              v-if="row.userId"
+              :user-id="row.userId"
+              :display-name="row.name"
+              size="table"
+              :show-name="false"
+              tooltip-disabled
+            />
+            <span class="team-group__name">{{ row.name }}</span>
+            <small v-if="!row.active">非在职</small>
+            <small>{{ row.total }} 个工作项</small>
+            <span
+              class="team-workload__bar"
+              aria-hidden="true"
+            >
+              <i
+                class="team-workload__segment team-workload__segment--progress"
+                :style="{ width: width(row.inProgress) }"
+              /><i
+                class="team-workload__segment team-workload__segment--todo"
+                :style="{ width: width(row.todo) }"
+              />
+            </span>
+            <small>进行中 {{ row.inProgress }} · 待开始 {{ row.todo }}</small>
+            <small
+              v-if="row.overdue"
+              class="team-overdue"
+            >逾期 {{ row.overdue }}</small>
+          </button>
           <div
-            v-loading="tasks.get(row.key)?.loading && !tasks.get(row.key)?.items.length"
-            class="team-tasks-wrap work-item-accent-bar"
+            v-if="expanded.has(row.key)"
+            class="team-workload__tasks"
           >
-            <table class="team-tasks">
-              <colgroup>
-                <col>
-                <col class="team-tasks__project">
-                <col class="team-tasks__label">
-                <col class="team-tasks__label">
-                <col class="team-tasks__due">
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>工作项</th>
-                  <th>项目</th>
-                  <th class="team-task__label">
-                    状态
-                  </th>
-                  <th class="team-task__label">
-                    优先级
-                  </th>
-                  <th>截止日期</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="task in tasks.get(row.key)?.items ?? []"
-                  :key="task.id"
-                >
-                  <td>
-                    <span class="team-task__title"><span class="team-task__no">{{ task.itemNo }}</span><button
-                      type="button"
-                      class="team-task-link"
-                      @click="open(task)"
-                    >{{ task.title }}</button></span>
-                  </td>
-                  <td :title="task.projectName">
-                    {{ task.projectName }}
-                  </td>
-                  <td class="team-task__label">
-                    <span :style="labelStyle(task.statusColor)">{{ task.statusName }}</span>
-                  </td>
-                  <td class="team-task__label">
-                    <span
-                      v-if="task.priorityName"
-                      :style="labelStyle(task.priorityColor)"
-                    >{{ task.priorityName }}</span>
-                  </td>
-                  <td
-                    class="team-task__due"
-                    :class="{ 'team-overdue': task.overdue }"
+            <el-alert
+              v-if="tasks.get(row.key)?.error"
+              :title="tasks.get(row.key)!.error"
+              type="error"
+              :closable="false"
+            />
+            <div
+              v-loading="tasks.get(row.key)?.loading && !tasks.get(row.key)?.items.length"
+              class="team-tasks-wrap work-item-accent-bar"
+            >
+              <table class="team-tasks">
+                <colgroup>
+                  <col>
+                  <col class="team-tasks__project">
+                  <col class="team-tasks__label">
+                  <col class="team-tasks__label">
+                  <col class="team-tasks__due">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>工作项</th>
+                    <th>项目</th>
+                    <th class="team-task__label">
+                      状态
+                    </th>
+                    <th class="team-task__label">
+                      优先级
+                    </th>
+                    <th>截止日期</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="task in tasks.get(row.key)?.items ?? []"
+                    :key="task.id"
                   >
-                    {{ task.dueDate ? task.dueDate.toISOString().slice(0, 10) : '—' }}
-                  </td>
-                </tr>
-                <tr v-if="tasks.get(row.key)?.loading === false && !tasks.get(row.key)?.items.length && !tasks.get(row.key)?.error">
-                  <td
-                    colspan="5"
-                    class="team-empty"
-                  >
-                    暂无当前任务
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                    <td>
+                      <span class="team-task__title"><span class="team-task__no">{{ task.itemNo }}</span><button
+                        type="button"
+                        class="team-task-link"
+                        @click="open(task)"
+                      >{{ task.title }}</button></span>
+                    </td>
+                    <td :title="task.projectName">
+                      {{ task.projectName }}
+                    </td>
+                    <td class="team-task__label">
+                      <span :style="labelStyle(task.statusColor)">{{ task.statusName }}</span>
+                    </td>
+                    <td class="team-task__label">
+                      <span
+                        v-if="task.priorityName"
+                        :style="labelStyle(task.priorityColor)"
+                      >{{ task.priorityName }}</span>
+                    </td>
+                    <td
+                      class="team-task__due"
+                      :class="{ 'team-overdue': task.overdue }"
+                    >
+                      {{ task.dueDate ? task.dueDate.toISOString().slice(0, 10) : '—' }}
+                    </td>
+                  </tr>
+                  <tr v-if="tasks.get(row.key)?.loading === false && !tasks.get(row.key)?.items.length && !tasks.get(row.key)?.error">
+                    <td
+                      colspan="5"
+                      class="team-empty"
+                    >
+                      暂无当前任务
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <el-button
+              v-if="(tasks.get(row.key)?.items.length ?? 0) < (tasks.get(row.key)?.total ?? 0)"
+              text
+              type="primary"
+              :loading="!!tasks.get(row.key)?.loading"
+              @click="emit('load', row.key, true)"
+            >
+              加载更多（{{ tasks.get(row.key)!.items.length }} / {{ tasks.get(row.key)!.total }}）
+            </el-button>
           </div>
-          <el-button
-            v-if="(tasks.get(row.key)?.items.length ?? 0) < (tasks.get(row.key)?.total ?? 0)"
-            text
-            type="primary"
-            :loading="!!tasks.get(row.key)?.loading"
-            @click="emit('load', row.key, true)"
-          >
-            加载更多（{{ tasks.get(row.key)!.items.length }} / {{ tasks.get(row.key)!.total }}）
-          </el-button>
         </div>
-      </div>
-      <p
-        v-if="idle.length"
-        class="team-note"
-      >
-        另有 {{ idle.length }} 位成员当前无任务<el-button
-          link
-          type="primary"
-          @click="showIdle = !showIdle"
+        <p
+          v-if="idle.length"
+          class="team-note"
         >
-          {{ showIdle ? '收起' : '显示' }}
-        </el-button>
-      </p>
-      <p
-        v-if="workload && !rows.length"
-        class="team-note"
-      >
-        当前没有成员
-      </p>
+          另有 {{ idle.length }} 位成员当前无任务<el-button
+            link
+            type="primary"
+            @click="showIdle = !showIdle"
+          >
+            {{ showIdle ? '收起' : '显示' }}
+          </el-button>
+        </p>
+        <p
+          v-if="workload && !rows.length"
+          class="team-note"
+        >
+          当前没有成员
+        </p>
+      </div>
     </div>
   </section>
 </template>

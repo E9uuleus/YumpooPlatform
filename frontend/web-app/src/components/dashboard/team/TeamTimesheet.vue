@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onUpdated, ref, watch } from 'vue'
 import { ElAlert, ElButton, ElCheckbox, ElIcon, ElMessage, ElPopover } from 'element-plus'
 import { ArrowLeft, ArrowRight, Calendar, Download } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
@@ -16,7 +16,7 @@ const props = defineProps<{ sheet?: TeamTimesheet | undefined; loading: boolean;
 const period = defineModel<Period>('period', { required: true })
 const emit = defineEmits<{ retry: [] }>()
 const hideEmpty = ref(false), exporting = ref(false), calendarOpen = ref(false)
-const selected = ref(new Set<string>()), hoverDay = ref<string>(), sortTotal = ref<'desc' | 'asc'>()
+const grid = ref<HTMLTableElement>(), selected = ref(new Set<string>()), sortTotal = ref<'desc' | 'asc'>()
 const active = ref<{ row: TimesheetRow; day: string; anchor: HTMLElement }>()
 const model = computed(() => props.sheet ? buildTimesheet(props.sheet) : { rows: [], dayTotals: {}, totalMs: 0 })
 const days = computed(() => props.sheet ? rangeDays(props.sheet.from.toISOString().slice(0, 10), props.sheet.to.toISOString().slice(0, 10)) : [])
@@ -47,10 +47,19 @@ function toggleRow(userId: string, checked: boolean) {
   selected.value = next
 }
 function cycleSort() { sortTotal.value = !sortTotal.value ? 'desc' : sortTotal.value === 'desc' ? 'asc' : undefined }
-function trackDay(event: MouseEvent) {
-  const day = (event.target as Element).closest<HTMLElement>('[data-day]')?.dataset.day
-  if (day !== hoverDay.value) hoverDay.value = day
+// Column hover is painted on the DOM instead of through reactive state, so crossing columns does not re-render every cell.
+let hoverDay: string | undefined
+function paintHoverDay() {
+  grid.value?.querySelectorAll('.is-col-hover').forEach(cell => cell.classList.remove('is-col-hover'))
+  if (hoverDay) grid.value?.querySelectorAll(`[data-day="${hoverDay}"]`).forEach(cell => cell.classList.add('is-col-hover'))
 }
+function setHoverDay(day: string | undefined) {
+  if (day === hoverDay) return
+  hoverDay = day
+  paintHoverDay()
+}
+function trackDay(event: MouseEvent) { setHoverDay((event.target as Element).closest<HTMLElement>('[data-day]')?.dataset.day) }
+onUpdated(paintHoverDay)
 function openDay(row: TimesheetRow, day: string, event: MouseEvent) {
   const anchor = event.currentTarget as HTMLElement
   active.value = active.value?.anchor === anchor ? undefined : { row, day, anchor }
@@ -73,6 +82,9 @@ watch(() => Boolean(active.value), open => {
 })
 watch(() => props.sheet, () => { active.value = undefined })
 onBeforeUnmount(stopListening)
+/** The dashboard hides this view with `v-show`, which would leave teleported popovers floating over the other view. */
+function closePopovers() { active.value = undefined; calendarOpen.value = false }
+defineExpose({ closePopovers })
 
 async function exportExcel() {
   if (!props.sheet || exporting.value) return
@@ -81,7 +93,7 @@ async function exportExcel() {
   try {
     const { buildTimesheetWorkbook } = await import('./teamTimesheetExcel')
     const blob = await buildTimesheetWorkbook({ rows: exported, days: days.value, timezone: props.sheet.timezone, scopeLabel: '全部项目',
-      memberScopeLabel: picked.length ? picked.map(row => row.name).join('、') : '全部成员', exportedAt: formatTimestamp(new Date(), props.timezone) })
+      memberScopeLabel: picked.length ? picked.map(row => row.name).join('、') : hideEmpty.value ? '有工时成员' : '全部成员', exportedAt: formatTimestamp(new Date(), props.timezone) })
     if (await saveExportFile(blob, exportFileName(`成员工时 ${days.value[0]}至${days.value[days.value.length - 1]}`, 'xlsx'), XLSX_TYPE)) ElMessage.success('已导出 Excel')
   } catch (reason) { ElMessage.error(reason instanceof Error && reason.message ? reason.message : '导出失败，请重试') }
   finally { exporting.value = false }
@@ -160,7 +172,10 @@ async function exportExcel() {
         </el-button>
       </div>
     </div>
-    <div class="team-body">
+    <div
+      v-loading="loading"
+      class="team-body"
+    >
       <el-alert
         v-if="error"
         :title="sheet ? `刷新失败，当前显示上次数据。${error}` : error"
@@ -179,15 +194,13 @@ async function exportExcel() {
           · 统计至 {{ formatTimestamp(sheet.asOf, timezone) }}
         </template>
       </p>
-      <div
-        v-loading="loading"
-        class="team-sheet"
-      >
+      <div class="team-sheet">
         <table
+          ref="grid"
           class="team-grid"
           :style="{ minWidth: `${276 + columns.length * 64}px` }"
           @mouseover="trackDay"
-          @mouseleave="hoverDay = undefined"
+          @mouseleave="setHoverDay(undefined)"
         >
           <colgroup>
             <col class="team-col-check">
@@ -226,7 +239,7 @@ async function exportExcel() {
                 :key="column.day"
                 :data-day="column.day"
                 class="team-day-head"
-                :class="{ 'is-weekend': column.weekend, 'is-today': column.day === today, 'is-col-hover': column.day === hoverDay }"
+                :class="{ 'is-weekend': column.weekend, 'is-today': column.day === today }"
               >
                 <b>{{ column.label }}</b><small>{{ column.weekday }}</small>
               </th>
@@ -259,7 +272,7 @@ async function exportExcel() {
                 v-for="column in columns"
                 :key="column.day"
                 :data-day="column.day"
-                :class="{ 'is-weekend': column.weekend, 'is-col-hover': column.day === hoverDay }"
+                :class="{ 'is-weekend': column.weekend }"
               >
                 <button
                   v-if="row.days[column.day]"
@@ -283,7 +296,7 @@ async function exportExcel() {
                 :colspan="columns.length + 3"
                 class="team-empty"
               >
-                当前没有成员
+                {{ model.rows.length ? '当前周期没有成员记录工时' : '当前没有成员' }}
               </td>
             </tr>
           </tbody>
@@ -300,7 +313,6 @@ async function exportExcel() {
                 v-for="column in columns"
                 :key="column.day"
                 :data-day="column.day"
-                :class="{ 'is-col-hover': column.day === hoverDay }"
               >
                 {{ model.dayTotals[column.day] ? shortHours(model.dayTotals[column.day] ?? 0) : '' }}
               </td>

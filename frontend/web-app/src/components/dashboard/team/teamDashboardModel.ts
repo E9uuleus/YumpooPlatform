@@ -48,7 +48,6 @@ export function periodLabel(period: Period): string {
 }
 
 export const hours = (ms: number) => Math.round(ms / 36_000) / 100
-export const formatHours = (ms: number) => ms > 0 ? (Math.round(ms / 360_000) / 10).toFixed(1) : ''
 /** Reference-sheet style `8`, `6.5`, `0`; recorded time never rounds down to `0`. */
 export const shortHours = (ms: number) => ms > 0 ? String(Math.max(1, Math.round(ms / 360_000)) / 10) : '0'
 
@@ -103,7 +102,7 @@ const PROJECT_COLORS = [WorkItemLabelColorToken.Royal, WorkItemLabelColorToken.D
   WorkItemLabelColorToken.SofiaPink, WorkItemLabelColorToken.Indigo, WorkItemLabelColorToken.Brown, WorkItemLabelColorToken.DarkRed,
   WorkItemLabelColorToken.Navy, WorkItemLabelColorToken.Berry].map(workItemLabelColorValue)
 
-/** Hashes each project id into the preset palette and probes past taken colours, so projects in one sheet stay distinct and stable. */
+/** Hashes each project id into the preset palette and probes past taken colours: projects in one sheet stay distinct, but a colour may change when the sheet's project set changes. */
 export function projectColors(projectIds: Iterable<string>): Map<string, string> {
   const colors = new Map<string, string>(), used = new Set<number>()
   for (const id of [...new Set(projectIds)].sort()) {
