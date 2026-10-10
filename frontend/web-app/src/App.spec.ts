@@ -56,7 +56,7 @@ describe('M1-12 Web 全局壳', () => {
     expect(wrapper.text()).toContain('项目管理')
     expect(wrapper.text()).toContain('Yumpoo 测试公司')
     expect(wrapper.text()).toContain('Web 浏览器')
-    expect(wrapper.findAll('.module-rail__item-label').map(item => item.text())).toEqual(['工作台'])
+    expect(wrapper.findAll('.module-rail__item-label').map(item => item.text())).toEqual(['首页', '工作台'])
   })
 
   it('管理员显示全局身份入口且保留三个子入口', async () => {
