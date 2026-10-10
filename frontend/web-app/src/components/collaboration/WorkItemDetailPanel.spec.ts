@@ -26,7 +26,6 @@ function mountPanel(tab: 'details' | 'discussion') {
       stubs: {
         WorkItemDescription: stub('WorkItemDescription', handles.description),
         WorkItemDiscussion: stub('WorkItemDiscussion', handles.discussion),
-        WorkItemRelations: true,
         WorkItemCellActivityLog: true,
       },
     },
@@ -38,6 +37,14 @@ describe('WorkItemDetailPanel', () => {
     vi.restoreAllMocks()
     handles.description = reactive({ hasDraft: false, busy: false, discardDraft: vi.fn() })
     handles.discussion = reactive({ hasDraft: false, busy: false, discardDraft: vi.fn() })
+  })
+
+  it('详情抽屉只保留详情、协作讨论和动态页签', async () => {
+    const wrapper = mountPanel('details')
+    await flushPromises()
+    expect(wrapper.findAll('[role="tab"]').map(tab => tab.text())).toEqual(['详情', '协作讨论', '动态'])
+    expect(wrapper.findAllComponents({ name: 'ElTabPane' }).map(pane => pane.props('name')))
+      .toEqual(['details', 'discussion', 'activity'])
   })
 
   it('详情页传入描述真源，离开详情标签不丢弃常驻的描述草稿', async () => {
