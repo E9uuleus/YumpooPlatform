@@ -8,6 +8,7 @@ import YpAssignee from '../../yp/YpAssignee.vue'
 import { assigneeGroupColor } from '../../projects/workItemGrouping'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import '../../projects/workItemAccentBar.css'
+import { useTweenedNumber } from './teamMotion'
 import type { MemberTasks } from './useTeamDashboard'
 
 const props = defineProps<{ workload?: TeamWorkload | undefined; loading: boolean; error: string; tasks: Map<string, MemberTasks> }>()
@@ -31,6 +32,7 @@ const idle = computed(() => rows.value.filter(row => row.total === 0))
 const visible = computed(() => showIdle.value ? [...busy.value, ...idle.value] : busy.value)
 const max = computed(() => Math.max(1, ...rows.value.map(row => row.total)))
 const totals = computed(() => busy.value.filter(row => row.userId).reduce((sum, row) => ({ inProgress: sum.inProgress + row.inProgress, todo: sum.todo + row.todo, overdue: sum.overdue + row.overdue }), { inProgress: 0, todo: 0, overdue: 0 }))
+const shownInProgress = useTweenedNumber(() => totals.value.inProgress), shownTodo = useTweenedNumber(() => totals.value.todo), shownOverdue = useTweenedNumber(() => totals.value.overdue)
 
 watch(() => props.workload, () => {
   expanded.value = new Set(busy.value.filter(row => expanded.value.has(row.key)).map(row => row.key))
@@ -47,20 +49,23 @@ function open(task: TeamMemberTask) {
   void router.push({ name: 'project-overview', params: { projectId: task.projectId }, query: { view: 'table', workItemId: task.id } })
 }
 const width = (value: number) => `${value / max.value * 100}%`
+/** Entrance stagger slot: idle members count from zero when they are revealed, and appended task pages restart at the top. */
+const groupDelay = (index: number) => Math.min(index < busy.value.length ? index : index - busy.value.length, 12)
+const taskDelay = (index: number) => Math.min(index % 50, 12)
 const labelStyle = (token: string | null | undefined) => ({ backgroundColor: workItemLabelColorValue(token ?? undefined), color: 'var(--yp-text-inverse)' })
 </script>
 
 <template>
   <section
-    class="team-view"
+    class="team-view team-view--workload"
     aria-label="成员当前任务"
   >
     <div class="dashboard-toolbar team-toolbar">
       <slot name="switch" />
       <div class="team-toolbar__end team-legend">
-        <span><i class="team-legend__swatch team-legend__swatch--progress" />进行中 <b>{{ totals.inProgress }}</b></span>
-        <span><i class="team-legend__swatch team-legend__swatch--todo" />待开始 <b>{{ totals.todo }}</b></span>
-        <span class="team-overdue">逾期 <b>{{ totals.overdue }}</b></span>
+        <span><i class="team-legend__swatch team-legend__swatch--progress" />进行中 <b>{{ Math.round(shownInProgress) }}</b></span>
+        <span><i class="team-legend__swatch team-legend__swatch--todo" />待开始 <b>{{ Math.round(shownTodo) }}</b></span>
+        <span class="team-overdue">逾期 <b>{{ Math.round(shownOverdue) }}</b></span>
       </div>
     </div>
     <div
@@ -82,10 +87,10 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
       </el-alert>
       <div class="team-groups">
         <div
-          v-for="row in visible"
+          v-for="(row, index) in visible"
           :key="row.key"
           class="team-group"
-          :style="{ '--team-group-accent': row.color }"
+          :style="{ '--team-group-accent': row.color, '--i': groupDelay(index) }"
         >
           <button
             type="button"
@@ -129,93 +134,103 @@ const labelStyle = (token: string | null | undefined) => ({ backgroundColor: wor
               class="team-overdue"
             >逾期 {{ row.overdue }}</small>
           </button>
-          <div
-            v-if="expanded.has(row.key)"
-            class="team-workload__tasks"
-          >
-            <el-alert
-              v-if="tasks.get(row.key)?.error"
-              :title="tasks.get(row.key)!.error"
-              type="error"
-              :closable="false"
-            />
+          <Transition name="team-expand">
             <div
-              v-loading="tasks.get(row.key)?.loading && !tasks.get(row.key)?.items.length"
-              class="team-tasks-wrap work-item-accent-bar"
+              v-if="expanded.has(row.key)"
+              class="team-workload__tasks"
             >
-              <table class="team-tasks">
-                <colgroup>
-                  <col>
-                  <col class="team-tasks__project">
-                  <col class="team-tasks__label">
-                  <col class="team-tasks__label">
-                  <col class="team-tasks__due">
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>工作项</th>
-                    <th>项目</th>
-                    <th class="team-task__label">
-                      状态
-                    </th>
-                    <th class="team-task__label">
-                      优先级
-                    </th>
-                    <th>截止日期</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="task in tasks.get(row.key)?.items ?? []"
-                    :key="task.id"
-                  >
-                    <td>
-                      <span class="team-task__title"><span class="team-task__no">{{ task.itemNo }}</span><button
-                        type="button"
-                        class="team-task-link"
-                        @click="open(task)"
-                      >{{ task.title }}</button></span>
-                    </td>
-                    <td :title="task.projectName">
-                      {{ task.projectName }}
-                    </td>
-                    <td class="team-task__label">
-                      <span :style="labelStyle(task.statusColor)">{{ task.statusName }}</span>
-                    </td>
-                    <td class="team-task__label">
-                      <span
-                        v-if="task.priorityName"
-                        :style="labelStyle(task.priorityColor)"
-                      >{{ task.priorityName }}</span>
-                    </td>
-                    <td
-                      class="team-task__due"
-                      :class="{ 'team-overdue': task.overdue }"
-                    >
-                      {{ task.dueDate ? task.dueDate.toISOString().slice(0, 10) : '—' }}
-                    </td>
-                  </tr>
-                  <tr v-if="tasks.get(row.key)?.loading === false && !tasks.get(row.key)?.items.length && !tasks.get(row.key)?.error">
-                    <td
-                      colspan="5"
-                      class="team-empty"
-                    >
-                      暂无当前任务
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <div class="team-workload__tasks-inner">
+                <el-alert
+                  v-if="tasks.get(row.key)?.error"
+                  :title="tasks.get(row.key)!.error"
+                  type="error"
+                  :closable="false"
+                />
+                <div
+                  v-loading="tasks.get(row.key)?.loading && !tasks.get(row.key)?.items.length"
+                  class="team-tasks-wrap work-item-accent-bar"
+                >
+                  <table class="team-tasks">
+                    <colgroup>
+                      <col>
+                      <col class="team-tasks__project">
+                      <col class="team-tasks__label">
+                      <col class="team-tasks__label">
+                      <col class="team-tasks__due">
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>工作项</th>
+                        <th>项目</th>
+                        <th class="team-task__label">
+                          状态
+                        </th>
+                        <th class="team-task__label">
+                          优先级
+                        </th>
+                        <th class="team-task__due">
+                          截止日期
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="(task, position) in tasks.get(row.key)?.items ?? []"
+                        :key="task.id"
+                        :style="{ '--i': taskDelay(position) }"
+                      >
+                        <td>
+                          <button
+                            type="button"
+                            class="team-task-link"
+                            :title="task.title"
+                            @click="open(task)"
+                          >
+                            {{ task.title }}
+                          </button>
+                        </td>
+                        <td :title="task.projectName">
+                          {{ task.projectName }}
+                        </td>
+                        <td class="team-task__label">
+                          <span :style="labelStyle(task.statusColor)">{{ task.statusName }}</span>
+                        </td>
+                        <td class="team-task__label">
+                          <span
+                            v-if="task.priorityName"
+                            :style="labelStyle(task.priorityColor)"
+                          >{{ task.priorityName }}</span>
+                        </td>
+                        <td
+                          class="team-task__due"
+                          :class="{ 'team-overdue': task.overdue }"
+                        >
+                          {{ task.dueDate ? task.dueDate.toISOString().slice(0, 10) : '—' }}
+                        </td>
+                      </tr>
+                      <tr v-if="tasks.get(row.key)?.loading === false && !tasks.get(row.key)?.items.length && !tasks.get(row.key)?.error">
+                        <td
+                          colspan="5"
+                          class="team-empty"
+                        >
+                          暂无当前任务
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <el-button
+                  v-if="(tasks.get(row.key)?.items.length ?? 0) < (tasks.get(row.key)?.total ?? 0)"
+                  text
+                  type="primary"
+                  :loading="!!tasks.get(row.key)?.loading"
+                  @click="emit('load', row.key, true)"
+                >
+                  加载更多（{{ tasks.get(row.key)!.items.length }} / {{ tasks.get(row.key)!.total }}）
+                </el-button>
+              </div>
             </div>
-            <el-button
-              v-if="(tasks.get(row.key)?.items.length ?? 0) < (tasks.get(row.key)?.total ?? 0)"
-              text
-              type="primary"
-              :loading="!!tasks.get(row.key)?.loading"
-              @click="emit('load', row.key, true)"
-            >
-              加载更多（{{ tasks.get(row.key)!.items.length }} / {{ tasks.get(row.key)!.total }}）
-            </el-button>
-          </div>
+          </Transition>
         </div>
         <p
           v-if="idle.length"
