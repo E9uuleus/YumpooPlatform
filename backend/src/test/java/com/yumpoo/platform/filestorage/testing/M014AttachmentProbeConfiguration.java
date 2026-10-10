@@ -1,7 +1,6 @@
 package com.yumpoo.platform.filestorage.testing;
 
 import com.yumpoo.platform.filestorage.application.AttachmentSafetyProcessor;
-import com.yumpoo.platform.filestorage.infrastructure.TikaAttachmentContentDetector;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
@@ -28,19 +27,18 @@ public class M014AttachmentProbeConfiguration {
 
     @Bean
     @Primary
-    M014ControllableMalwareScanner m014ControllableMalwareScanner() {
-        return new M014ControllableMalwareScanner();
+    M014ControllableContentDetector m014ControllableContentDetector() {
+        return new M014ControllableContentDetector();
     }
 
     @Bean
     AttachmentSafetyProcessor m014AttachmentSafetyProcessor(
             M014StorageFixture storageFixture,
-            M014ControllableMalwareScanner scanner
+            M014ControllableContentDetector detector
     ) {
         return new AttachmentSafetyProcessor(
                 storageFixture.storage(),
-                new TikaAttachmentContentDetector(),
-                scanner
+                detector
         );
     }
 

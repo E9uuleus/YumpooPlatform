@@ -30,6 +30,6 @@ public interface AttachmentLifecyclePort {
     Optional<Finalization> prepareFinalization(ScanClaim claim, ScanOutcome.Clean clean, Instant now);
     AttachmentMetadata completeAvailable(Finalization finalization, Instant now);
     void completeRejected(ScanClaim claim, AttachmentRejectedCode code, Instant now);
-    void retryOrExhaust(ScanClaim claim, Instant now);
+    void retryProcessing(ScanClaim claim, Instant now);
     RescanResult rescan(UUID companyId, UUID attachmentId, long expectedVersion, Instant now);
 }

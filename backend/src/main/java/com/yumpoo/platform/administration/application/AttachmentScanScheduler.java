@@ -52,9 +52,9 @@ public class AttachmentScanScheduler implements DisposableBean {
             if(outcome instanceof ScanOutcome.Clean clean) finalizer.finalizeClean(claim,clean);
             else if(outcome instanceof ScanOutcome.Rejected rejected)
                 finalizer.finalizeRejected(claim,rejected.code());
-            else attachments.retryOrExhaust(claim,clock.instant());
+            else attachments.retryProcessing(claim,clock.instant());
         } catch (RuntimeException failure) {
-            attachments.retryOrExhaust(claim,clock.instant());
+            attachments.retryProcessing(claim,clock.instant());
         } finally {
             inFlight.decrementAndGet();
         }

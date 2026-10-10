@@ -1,8 +1,6 @@
 package com.yumpoo.platform.filestorage.infrastructure;
 
 import com.yumpoo.platform.filestorage.application.AttachmentContentDetector;
-import com.yumpoo.platform.filestorage.application.MalwareScanner;
-import com.yumpoo.platform.filestorage.application.MalwareScanVerdict;
 import com.yumpoo.platform.filestorage.application.QuarantineStorage;
 import com.yumpoo.platform.filestorage.application.AttachmentRuntimeSettings;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -24,8 +22,7 @@ public class AttachmentRuntimeConfiguration {
         validateMaintenance(properties);
         return new AttachmentRuntimeSettings(properties.getCompanyQuotaBytes(),
                 properties.getProjectQuotaBytes(), properties.getScanLease(),
-                properties.getUploadLease(), properties.getFirstScanRetry(),
-                properties.getSecondScanRetry());
+                properties.getUploadLease());
     }
 
     private static void validateMaintenance(AttachmentProperties properties) {
@@ -53,23 +50,6 @@ public class AttachmentRuntimeConfiguration {
     @Bean
     AttachmentContentDetector attachmentContentDetector() {
         return new TikaAttachmentContentDetector();
-    }
-
-    @Bean
-    MalwareScanner attachmentMalwareScanner(AttachmentProperties properties,
-            Environment environment) {
-        String configured = properties.getDefenderExecutable();
-        if (configured != null && !configured.isBlank()) {
-            Path executable = Path.of(configured).toAbsolutePath().normalize();
-            if (!Files.isRegularFile(executable)) {
-                throw new IllegalStateException("configured Defender executable is unavailable");
-            }
-            return new DefenderMpCmdRunScanner(executable, properties.getDefenderTimeout());
-        }
-        if (environment.acceptsProfiles(Profiles.of("prod"))) {
-            throw new IllegalStateException("production requires yumpoo.attachments.defender-executable");
-        }
-        return ignored -> MalwareScanVerdict.UNAVAILABLE;
     }
 
     private static void requirePrevalidatedDirectory(Path directory, String property) {

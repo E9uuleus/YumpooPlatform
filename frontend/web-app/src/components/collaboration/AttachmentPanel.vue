@@ -32,7 +32,7 @@ function statusLabel(item: AttachmentMetadata) {
   if (item.status === AttachmentStatus.Available) return '可用'
   if (item.status === AttachmentStatus.Rejected) return rejectedLabel(item.rejectedCode)
   if (item.capabilities.canUploadContent) return '待上传'
-  return '安全扫描中'
+  return '处理中'
 }
 
 function rejectedLabel(code?: string | null) {
@@ -40,7 +40,7 @@ function rejectedLabel(code?: string | null) {
     FILE_TOO_LARGE: '文件超过 100 MiB',
     FILE_TYPE_NOT_ALLOWED: '文件类型不允许',
     MALWARE_DETECTED: '文件未通过安全检查',
-    SCAN_UNAVAILABLE: '安全扫描暂不可用',
+    SCAN_UNAVAILABLE: '历史附件处理暂不可用',
     UPLOAD_INCOMPLETE: '上传不完整',
     INTEGRITY_CHECK_FAILED: '完整性检查失败',
     PARENT_NOT_WRITABLE: '父对象已不可写',

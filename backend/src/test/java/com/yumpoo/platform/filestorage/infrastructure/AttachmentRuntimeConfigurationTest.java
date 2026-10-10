@@ -32,7 +32,7 @@ class AttachmentRuntimeConfigurationTest {
     }
 
     @Test
-    void productionFailsClosedWithoutAConfiguredDefenderExecutable() throws Exception {
+    void productionStartsWithPrevalidatedStorageDirectories() throws Exception {
         AttachmentProperties properties = new AttachmentProperties();
         Path upload = Files.createDirectory(tempDirectory.resolve("upload"));
         Path attachments = Files.createDirectory(tempDirectory.resolve("attachments"));
@@ -40,11 +40,10 @@ class AttachmentRuntimeConfigurationTest {
         properties.setAttachmentRoot(attachments.toString());
         Environment environment = productionEnvironment();
 
-        new AttachmentRuntimeConfiguration().attachmentStorage(properties, environment);
-        assertThatThrownBy(() -> new AttachmentRuntimeConfiguration()
-                .attachmentMalwareScanner(properties, environment))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("requires yumpoo.attachments.defender-executable");
+        org.assertj.core.api.Assertions.assertThat(new AttachmentRuntimeConfiguration()
+                .attachmentStorage(properties, environment)).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(new AttachmentRuntimeConfiguration()
+                .attachmentRuntimeSettings(properties)).isNotNull();
     }
 
     @Test

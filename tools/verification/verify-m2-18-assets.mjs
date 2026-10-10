@@ -30,8 +30,7 @@ for (const fragment of ['ORDER BY scope_type', 'FOR UPDATE SKIP LOCKED', 'attemp
   "status='RUNNING'", 'quarantine_retain_until', 'completeAvailable', 'rescan(']) {
   assert(repository.includes(fragment), `JDBC 闭环缺少 ${fragment}`)
 }
-for (const fragment of ['AttachmentUploadPolicy.MAX_BYTES', 'settings.firstScanRetry()',
-  'settings.secondScanRetry()', 'repository.recordDetected', 'storage.publish(upload)']) {
+for (const fragment of ['AttachmentUploadPolicy.MAX_BYTES', 'repository.recordDetected', 'storage.publish(upload)']) {
   assert(lifecycle.includes(fragment), `生命周期缺少 ${fragment}`)
 }
 for (const fragment of ['@PostMapping("/attachments")', '@PutMapping(path="/attachments/{attachmentId}/content"',
@@ -65,7 +64,7 @@ for (const fragment of ['"37"', 'v36DatabaseUpgradesForwardThroughV37WithoutRewr
 }
 for (const fragment of ['createAttachmentFact', 'readAttachmentFact', 'attachment_quota_usage',
   'attachment_scan_task']) assert(backup.includes(fragment), `备份恢复缺少 ${fragment}`)
-for (const fragment of ['持久队列', '固定顺序锁定', '安全扫描已通过', 'M2-19', 'M3B']) {
+for (const fragment of ['持久队列', '固定顺序锁定', '内容类型已验证', 'M2-19', 'M3B']) {
   assert(note.includes(fragment), `Agent Note 缺少 ${fragment}`)
 }
 assert(report.milestone === 'M2-18' && report.flywayVersion === '37', '验证报告无效')
