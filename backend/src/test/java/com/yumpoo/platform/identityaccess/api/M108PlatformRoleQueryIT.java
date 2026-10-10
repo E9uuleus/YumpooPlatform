@@ -32,6 +32,9 @@ class M108PlatformRoleQueryIT {
     @Autowired
     private ActiveUserSnapshotQuery activeUserQuery;
 
+    @Autowired
+    private ActiveCompanyAdminQuery activeCompanyAdmins;
+
     @BeforeEach
     void setUp() {
         deleteFixture();
@@ -65,6 +68,30 @@ class M108PlatformRoleQueryIT {
         assertThat(roles).containsExactly(PlatformRoleCode.APP_MANAGER);
         assertThatThrownBy(() -> roles.add(PlatformRoleCode.APP_MANAGER))
                 .isInstanceOf(UnsupportedOperationException.class);
+        assertThat(activeCompanyAdmins.findUserIds(COMPANY_ID)).contains(USER_ID);
+    }
+
+    @Test
+    void activeCompanyAdminAudienceRequiresAnEnabledActiveAccountAndEffectiveCompanyAdminRole() {
+        assertThat(activeCompanyAdmins.findUserIds(COMPANY_ID)).doesNotContain(USER_ID);
+        insertActive(UUID.randomUUID(), "COMPANY_ADMIN", "COMPANY");
+        var recipients=activeCompanyAdmins.findUserIds(COMPANY_ID);
+        assertThat(recipients).contains(USER_ID);
+        assertThat(activeCompanyAdmins.findUserIds(UUID.randomUUID())).isEmpty();
+        assertThatThrownBy(()->recipients.add(UUID.randomUUID())).isInstanceOf(UnsupportedOperationException.class);
+        jdbcClient.sql("""
+                UPDATE yumpoo.identity_user SET account_status='DISABLED', account_disabled_at=transaction_timestamp(),
+                    account_disabled_by_user_id=id, account_disabled_reason='recipient test', updated_at=transaction_timestamp()
+                WHERE id=:user
+                """).param("user",USER_ID).update();
+        assertThat(activeCompanyAdmins.findUserIds(COMPANY_ID)).doesNotContain(USER_ID);
+        jdbcClient.sql("""
+                UPDATE yumpoo.identity_user SET account_status='ENABLED', account_disabled_at=NULL,
+                    account_disabled_by_user_id=NULL, account_disabled_reason=NULL, employment_status='LEFT',
+                    left_at=transaction_timestamp(), left_reason='recipient test', updated_at=transaction_timestamp()
+                WHERE id=:user
+                """).param("user",USER_ID).update();
+        assertThat(activeCompanyAdmins.findUserIds(COMPANY_ID)).doesNotContain(USER_ID);
     }
 
     @Test
@@ -82,6 +109,7 @@ class M108PlatformRoleQueryIT {
                 .param("id", revokedId)
                 .update();
         assertThat(roleQuery.findActiveRoleCodes(COMPANY_ID, USER_ID)).isEmpty();
+        assertThat(activeCompanyAdmins.findUserIds(COMPANY_ID)).doesNotContain(USER_ID);
 
         insertActive(UUID.fromString("81000000-0000-4000-8000-000000000112"), "COMPANY_ADMIN", "COMPANY");
 
@@ -169,6 +197,7 @@ class M108PlatformRoleQueryIT {
                 .containsExactly(PlatformRoleCode.APP_MANAGER);
         assertThat(activeUserQuery.findByUserId(USER_ID)).hasValueSatisfying(snapshot ->
                 assertThat(snapshot.activeAndEnabled()).isFalse());
+        assertThat(activeCompanyAdmins.findUserIds(COMPANY_ID)).doesNotContain(USER_ID);
     }
 
     private void insertActive(UUID id, String role, String scope) {

@@ -54,6 +54,7 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
         }
         JsonNode p = event.payload();
         UUID project = uuid(p,"projectId"), item = null, update = null, subject = null;
+        if (!context.ordinaryNotificationsEnabled(event.companyId(), project)) return;
         TargetKind kind = TargetKind.PROJECT;
         String type = event.eventType();
         Map<UUID,ProjectPreference> preferences = type.startsWith("workitem.")
@@ -110,6 +111,7 @@ public class NotificationInboxProjection implements OutboxEventConsumer {
         JsonNode payload = event.payload();
         if (event.eventVersion()!=1 || !"CREATED".equals(payload.path("origin").asText())) return;
         UUID targetProject=uuid(payload,"targetProjectId"), targetItem=uuid(payload,"targetWorkItemId");
+        if (!context.ordinaryNotificationsEnabled(event.companyId(), targetProject)) return;
         var participants=context.workItemParticipants(event.companyId(),targetItem).orElseThrow();
         if (!targetProject.equals(participants.projectId())) throw new IllegalArgumentException();
         UUID owner=context.projectOwner(event.companyId(),targetProject).orElseThrow();

@@ -29,6 +29,26 @@ describe('notification presentation', () => {
     expect(notificationText(hidden)).toBe('相关内容已不可访问')
     expect(notificationLink(hidden)).toBeUndefined()
   })
+  it.each([
+    [NotificationReason.ProjectDeletionScheduled, '已申请删除项目 平台，将于 2026-11-08 永久删除'],
+    [NotificationReason.ProjectDeletionReminder, '提醒：项目 平台 将于 2026-11-08 永久删除'],
+    [NotificationReason.ProjectDeletionCancelled, '已撤销项目 平台 的删除计划'],
+  ] as const)('renders %s with the event deadline and a project link', (reason, expected) => {
+    const deletion: NotificationItem = { ...item, reason, deletionPurgeAfter: new Date('2026-11-08T02:00:00Z'),
+      target: { kind: NotificationTargetKind.Project, accessible: true, projectId: 'project', projectName: '平台' } }
+    expect(notificationText(deletion, 'reader', 'Asia/Shanghai')).toBe(expected)
+    expect(notificationLink(deletion)).toEqual({ path: '/projects/project/overview', query: {} })
+    const hidden = { ...deletion, target: { ...deletion.target, accessible: false } }
+    expect(notificationText(hidden)).toBe('相关内容已不可访问')
+    expect(notificationLink(hidden)).toBeUndefined()
+  })
+  it('uses the company calendar date for a deletion deadline across UTC midnight', () => {
+    expect(notificationText({ ...item, reason: NotificationReason.ProjectDeletionReminder,
+      deletionPurgeAfter: new Date('2026-11-08T02:00:00Z') }, undefined, 'America/New_York'))
+      .toBe('提醒：项目 平台 将于 2026-11-07 永久删除')
+    expect(notificationText({ ...item, reason: NotificationReason.ProjectDeletionReminder, deletionPurgeAfter: null }))
+      .toBe('提醒：项目 平台 即将永久删除')
+  })
   it('explains removal to the removed reader even after project access is lost', () => {
     const removed = { ...item, reason: NotificationReason.ProjectMemberRemoved, target: { ...item.target, accessible: false } }
     expect(notificationText(removed, 'reader')).toBe('将你移出了一个项目')

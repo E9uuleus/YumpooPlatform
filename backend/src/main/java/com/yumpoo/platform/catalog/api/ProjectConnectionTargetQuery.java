@@ -12,7 +12,11 @@ public interface ProjectConnectionTargetQuery {
     record ConnectTargetProjectPage(List<ConnectTargetProject> items, int page, int size,
             long totalElements, int totalPages) {}
     record ConnectTargetProjectSnapshot(UUID projectId, String code, String name,
-            ProjectAccessSnapshot.ProjectLifecycle lifecycle) {}
+            ProjectAccessSnapshot.ProjectLifecycle lifecycle,boolean purging) {
+        public ConnectTargetProjectSnapshot(UUID id,String code,String name,ProjectAccessSnapshot.ProjectLifecycle lifecycle) {
+            this(id,code,name,lifecycle,false);
+        }
+    }
 
     ConnectTargetProjectPage searchActive(UUID companyId, String query, OffsetPageRequest page);
     Map<UUID, ConnectTargetProjectSnapshot> findByIds(UUID companyId, Collection<UUID> ids);

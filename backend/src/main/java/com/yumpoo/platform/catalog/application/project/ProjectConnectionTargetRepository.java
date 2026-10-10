@@ -7,7 +7,9 @@ import java.util.List;
 import java.util.UUID;
 
 public interface ProjectConnectionTargetRepository {
-    record Target(UUID projectId, String code, String name, String lifecycle) {}
+    record Target(UUID projectId,String code,String name,String lifecycle,boolean purging) {
+        public Target(UUID id,String code,String name,String lifecycle) { this(id,code,name,lifecycle,false); }
+    }
 
     List<Target> searchActive(UUID companyId, String query, OffsetPageRequest page);
     long countActive(UUID companyId, String query);

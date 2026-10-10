@@ -456,3 +456,23 @@ events:
     schema: schemas/workitem.work-item-assignees-changed-v1.schema.json
     validExamples: [examples/workitem.work-item-assignees-changed-v1.json]
     invalidExamples: [examples/workitem.work-item-assignees-changed-v1.invalid.json]
+  - eventType: catalog.project_deletion_scheduled
+    eventVersion: 1
+    schema: schemas/catalog.project-deletion-scheduled-v1.schema.json
+    validExamples: [examples/catalog.project-deletion-scheduled-v1.json]
+    invalidExamples: [examples/catalog.project-deletion-scheduled-v1.invalid.json]
+  - eventType: catalog.project_deletion_cancelled
+    eventVersion: 1
+    schema: schemas/catalog.project-deletion-cancelled-v1.schema.json
+    validExamples: [examples/catalog.project-deletion-cancelled-v1.json]
+    invalidExamples: [examples/catalog.project-deletion-cancelled-v1.invalid.json]
+  - eventType: catalog.project_deletion_reminder_due
+    eventVersion: 1
+    schema: schemas/catalog.project-deletion-reminder-due-v1.schema.json
+    validExamples: [examples/catalog.project-deletion-reminder-due-v1.json]
+    invalidExamples: [examples/catalog.project-deletion-reminder-due-v1.invalid.json]
+  - eventType: catalog.project_purged
+    eventVersion: 1
+    schema: schemas/catalog.project-purged-v1.schema.json
+    validExamples: [examples/catalog.project-purged-v1.json]
+    invalidExamples: [examples/catalog.project-purged-v1.invalid.json]

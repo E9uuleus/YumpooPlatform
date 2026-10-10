@@ -70,6 +70,13 @@
       "newSha256": "03c395a184e8d06b6a9e1bc09c98544ae56e767011f6df041ced554ab5870029",
       "reason": "保留既有通知原因例外，追加本轮已批准的三个连接筛选数组 maxItems:20 后的精确规范指纹。仅移除已批准 CONNECTION_CREATED 响应枚举的临时规范通过完整 openapi-diff，确认上限及其余变更相对 dev 兼容；无新增破坏性变更，既有例外条目不变。",
       "agentNote": ".agents/notes/implemented/architecture/2026-09-25-notification-inbox.md"
+    },
+    {
+      "id": "2026-10-09-project-deletion-notification-reasons",
+      "oldSha256": "717ca77350c574007677ea0781c291d495ba9f41b10c8023586b81f32c2071cd",
+      "newSha256": "6dd97e43694c5d31cced5cefce730a184bb0e605291a82e190231fac6319e312",
+      "reason": "项目删除计划、提醒与撤销新增三个 NotificationReason 响应枚举。仅移除这三个新增原因的临时规范已通过完整 openapi-diff，确认新增 API、可选状态/能力与截止时间，以及永久清除后连接列响应 targets 下限放宽的其余变更兼容；精确哈希只覆盖该响应枚举扩展。",
+      "agentNote": ".agents/notes/implemented/product/2026-10-09-project-archive-and-deletion.md"
     }
   ]
 }

@@ -254,17 +254,11 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   )
   fs.writeFileSync(attachmentMetadataPath, attachmentMetadata, 'utf8')
 
-  const projectSummaryPath = path.join(sourceRoot, 'models', 'ProjectSummary.ts')
-  fs.writeFileSync(projectSummaryPath, replaceExactlyOnce(normalizeText(fs.readFileSync(projectSummaryPath, 'utf8')),
-    "        'archivedAt': json['archivedAt'] == null ? undefined : (new Date(json['archivedAt'])),",
-    "        ...(json['archivedAt'] === undefined ? {} : { 'archivedAt': json['archivedAt'] === null ? null : new Date(json['archivedAt']) }),",
-    'ProjectSummary 可选归档时间精确属性兼容'), 'utf8')
-
-  for (const model of ['DashboardChart', 'DashboardChartSelection', 'DashboardItem', 'DashboardItemsQuery', 'DashboardQuery', 'DashboardSnapshot', 'DashboardWidget', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'NotificationTarget']) {
+  for (const model of ['DashboardChart', 'DashboardChartSelection', 'DashboardItem', 'DashboardItemsQuery', 'DashboardQuery', 'DashboardSnapshot', 'DashboardWidget', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'NotificationTarget', 'NotificationItem', 'ProjectSummary', 'ProjectDetail', 'ProjectDeletionMutation']) {
     const modelPath = path.join(sourceRoot, 'models', `${model}.ts`)
     let source = normalizeText(fs.readFileSync(modelPath, 'utf8'))
     source = source.replace(/^        '([^']+)': json\['\1'\] == null \? undefined : (.+),$/gm, (_line, field, conversion) => {
-      const nullable = !['DashboardQuery', 'DashboardSnapshot', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest'].includes(model) && !(model === 'DashboardItem' && ['workItem', 'assignees'].includes(field))
+      const nullable = (model === 'ProjectSummary' && field === 'archivedAt') || (!['DashboardQuery', 'DashboardSnapshot', 'DashboardTableCriteria', 'DashboardTableQuery', 'NotificationReadAllRequest', 'ProjectSummary', 'ProjectDetail', 'ProjectDeletionMutation'].includes(model) && !(model === 'DashboardItem' && ['workItem', 'assignees'].includes(field)))
       return nullable
         ? `        ...(json['${field}'] === undefined ? {} : { '${field}': json['${field}'] === null ? null : ${conversion} }),`
         : `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`

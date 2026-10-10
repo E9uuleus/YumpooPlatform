@@ -24,6 +24,7 @@ public class TimeTrackingService {
     private final WorkItemRepository items;
     private final ProjectAccessSnapshotQuery access;
     private final ProjectFactWriteGuard guard;
+    private final ProjectDeletionQuery deletion;
     private final MinimalUserSnapshotQuery users;
     private final IdempotentCommandExecutor idempotency;
     private final TransactionalEventPort events;
@@ -32,10 +33,10 @@ public class TimeTrackingService {
     private final Clock clock;
 
     public TimeTrackingService(TimeTrackingRepository timers, WorkItemRepository items,
-            ProjectAccessSnapshotQuery access, ProjectFactWriteGuard guard, MinimalUserSnapshotQuery users,
+            ProjectAccessSnapshotQuery access, ProjectFactWriteGuard guard, ProjectDeletionQuery deletion, MinimalUserSnapshotQuery users,
             IdempotentCommandExecutor idempotency, TransactionalEventPort events, SecurityAuditAppendPort audits,
             ObjectMapper json, Clock clock) {
-        this.timers=timers; this.items=items; this.access=access; this.guard=guard; this.users=users;
+        this.timers=timers; this.items=items; this.access=access; this.guard=guard; this.deletion=deletion; this.users=users;
         this.idempotency=idempotency; this.events=events; this.audits=audits; this.json=json; this.clock=clock;
     }
 
@@ -117,9 +118,19 @@ public class TimeTrackingService {
     }
 
     private StoredCommandResult mutate(CurrentActor actor, String action, Input input, long expectedVersion) {
-        WorkItemModels.WorkItemLocator target=null;
-        if(!action.equals("stop")) {
-            target=locator(actor,input.workItemId());
+        boolean timerCommand=Set.of("start","switch","stop").contains(action);
+        WorkItemModels.WorkItemLocator target=action.equals("stop") ? null : locator(actor,input.workItemId());
+        Session observedRunning=timerCommand ? timers.running(actor.companyId(),actor.userId()).orElse(null) : null;
+        if(timerCommand) {
+            Set<UUID> projects=new TreeSet<>();
+            if(target!=null) projects.add(target.projectId());
+            if(observedRunning!=null) projects.add(observedRunning.projectId());
+            for(UUID projectId:projects) {
+                deletion.lockForProjection(actor.companyId(),projectId).filter(project -> project.purgeStartedAt()==null)
+                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            }
+        }
+        if(target!=null) {
             var project=guard.lockForFactWrite(actor,target.projectId());
             if(project.actorAccess()==ProjectFactWriteSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
                 throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
@@ -129,13 +140,14 @@ public class TimeTrackingService {
         if(target!=null) items.lockProjectItem(actor.companyId(),target.projectId(),target.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         Instant now=now(); Set<UUID> changedProjects=new HashSet<>();
-        boolean timerCommand=Set.of("start","switch","stop").contains(action);
         Object result; String etag; UUID resourceId;
         if(timerCommand) {
             requireVersion(stateVersion,expectedVersion);
             Session running=timers.running(actor.companyId(),actor.userId()).orElse(null);
             if(action.equals("start") && running!=null) throw invalid("TIMER_ALREADY_RUNNING");
             if(!action.equals("start") && (running==null || !running.id().equals(input.sessionId()))) throw invalid("TIMER_CHANGED");
+            // A changed session would require taking another project lock after timer_state.
+            if(running!=null && (observedRunning==null || !running.id().equals(observedRunning.id()))) throw invalid("TIMER_CHANGED");
             if(running!=null) {
                 Session stopped=new Session(running.id(),running.companyId(),running.projectId(),running.workItemId(),running.userId(),
                         running.startedAt(),now.isBefore(running.startedAt()) ? running.startedAt() : now,running.source(),running.rowVersion()+1,null,null);

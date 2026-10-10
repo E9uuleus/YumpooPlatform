@@ -24,7 +24,9 @@ public record ConnectColumn(UUID id, UUID companyId, UUID projectId, String name
         Objects.requireNonNull(updatedByUserId);
         Objects.requireNonNull(updatedAt);
         name = normalizeName(name);
-        targetProjectIds = normalizeTargets(projectId, targetProjectIds);
+        // Permanent project removal can leave a retained column without targets; user commands still require one.
+        targetProjectIds = targetProjectIds != null && targetProjectIds.isEmpty()
+                ? List.of() : normalizeTargets(projectId, targetProjectIds);
         if (rowVersion < 0 || updatedAt.isBefore(createdAt)
                 || (deletedAt != null && deletedAt.isBefore(createdAt)))
             throw new IllegalArgumentException("invalid version or timestamps");
@@ -50,12 +52,12 @@ public record ConnectColumn(UUID id, UUID companyId, UUID projectId, String name
 
     public static ConnectColumn create(UUID id, UUID companyId, UUID projectId, String name,
             List<UUID> targets, UUID actor, Instant now) {
-        return new ConnectColumn(id, companyId, projectId, name, targets, 0, actor, now, actor, now, null, null);
+        return new ConnectColumn(id, companyId, projectId, name, normalizeTargets(projectId,targets), 0, actor, now, actor, now, null, null);
     }
 
     public ConnectColumn update(String nextName, List<UUID> nextTargets, UUID actor, Instant now) {
         if (!active()) throw new IllegalStateException("column is deleted");
-        return new ConnectColumn(id, companyId, projectId, nextName, nextTargets, rowVersion + 1,
+        return new ConnectColumn(id, companyId, projectId, nextName, normalizeTargets(projectId,nextTargets), rowVersion + 1,
                 createdByUserId, createdAt, actor, now, null, null);
     }
 

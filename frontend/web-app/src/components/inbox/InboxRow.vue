@@ -61,7 +61,7 @@ const exactTime = computed(() => formatChineseTimestamp(props.item.createdAt, pr
       </span>
       <div class="inbox-row__copy">
         <p class="inbox-row__sentence">
-          <strong v-if="showActor">{{ item.actor?.displayName || '系统' }}</strong> {{ notificationText(item, readerId) }}
+          <strong v-if="showActor">{{ item.actor?.displayName || '系统' }}</strong> {{ notificationText(item, readerId, timezone) }}
         </p>
         <p
           v-if="notificationExcerpt(item)"

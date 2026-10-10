@@ -4,6 +4,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ActivityProjectionContextPort {
+    default boolean projectPurging(UUID companyId, UUID projectId) { return false; }
     Optional<String> userDisplayName(UUID companyId, UUID userId);
     Optional<WorkItemReference> workItem(UUID companyId, UUID workItemId);
     Optional<WorkItemReference> attachmentOwnerWorkItem(UUID companyId, String ownerType,

@@ -1,6 +1,7 @@
 package com.yumpoo.platform.administration.api;
 
 import com.yumpoo.platform.audit.api.ActivityProjectionContextPort;
+import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.workitem.api.WorkItemActivitySourceQuery;
 import org.springframework.stereotype.Component;
@@ -12,11 +13,17 @@ import java.util.UUID;
 public class ActivityProjectionContextAdapter implements ActivityProjectionContextPort {
     private final MinimalUserSnapshotQuery users;
     private final WorkItemActivitySourceQuery workItems;
+    private final ProjectDeletionQuery deletion;
 
     public ActivityProjectionContextAdapter(MinimalUserSnapshotQuery users,
-            WorkItemActivitySourceQuery workItems) {
+            WorkItemActivitySourceQuery workItems, ProjectDeletionQuery deletion) {
         this.users = users;
         this.workItems = workItems;
+        this.deletion = deletion;
+    }
+
+    @Override public boolean projectPurging(UUID companyId, UUID projectId) {
+        return deletion.purgingOrPurged(companyId, projectId);
     }
 
     @Override

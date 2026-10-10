@@ -19,6 +19,10 @@ describe('inbox preload bridge', () => {
     const bridge = mocks.bridge!.inbox!
     expect(Object.isFrozen(bridge)).toBe(true)
     expect(bridge.supportedReasons).toContain('CONNECTION_CREATED')
+    expect(bridge.supportedReasons).toEqual(expect.arrayContaining([
+      'PROJECT_DELETION_SCHEDULED', 'PROJECT_DELETION_REMINDER', 'PROJECT_DELETION_CANCELLED',
+    ]))
+    expect(bridge.supportedReasons).toHaveLength(12)
     expect(Object.isFrozen(bridge.supportedReasons)).toBe(true)
     const state = { accountId: null, unreadCount: 0, latest: [] }
     await bridge.publishState(state)

@@ -152,7 +152,7 @@ public class ProjectService {
                 row.workspaceName(), project.code(), project.name(),
                 project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
                 capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()),
-                project.createdAt(), project.updatedAt(), project.archivedAt());
+                project.createdAt(), project.updatedAt(), project.archivedAt(), deletion(project));
     }
 
     private static ProjectDetail detail(CurrentActor actor, ProjectQueryRow row, String ownerName) {
@@ -160,7 +160,7 @@ public class ProjectService {
         return new ProjectDetail(project.id(), project.workspaceId(), row.workspaceCode(),
                 row.workspaceName(), project.code(), project.name(), project.description(), project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
                 capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()),
-                project.createdAt(), project.updatedAt(), project.archivedAt());
+                project.createdAt(), project.updatedAt(), project.archivedAt(), deletion(project));
     }
 
     private static ProjectActorAccess access(ProjectQueryRow row) {
@@ -178,9 +178,16 @@ public class ProjectService {
         return new ProjectCapabilities(owner && mutable,
                 (owner || admin) && mutable, admin && mutable,
                 (owner || admin) && project.lifecycle() == ProjectLifecycle.ACTIVE,
-                (owner || admin) && project.lifecycle() == ProjectLifecycle.ARCHIVED,
+                (owner || admin) && !mutable && project.deletionRequestedAt() == null,
                 false,
-                admin && project.lifecycle() == ProjectLifecycle.ACTIVE);
+                admin && project.lifecycle() == ProjectLifecycle.ACTIVE,
+                (owner || admin) && !mutable && project.deletionRequestedAt() == null,
+                (owner || admin) && !mutable && project.deletionRequestedAt() != null);
+    }
+
+    private static ProjectDeletion deletion(Project project) {
+        return project.deletionRequestedAt()==null ? null : new ProjectDeletion(project.deletionRequestedAt(),
+                project.deletionRequestedBy(),project.purgeAfter());
     }
 
     private static void requireVersion(Project project, long version) {

@@ -37,11 +37,13 @@ describe('inbox owner', () => {
     target: { kind: NotificationTargetKind.WorkItem, accessible: true, projectId: 'target-project', workItemId: 'target-item',
       title: '不发送到桌面的目标标题', projectName: '目标项目' },
   })
-  it.each([undefined, [NotificationReason.Mention]])('filters connection reasons for an old or non-supporting shell (%s) without rejecting the packet', async supportedReasons => {
+  it.each([undefined, [NotificationReason.Mention]])('filters new reasons for an old or non-supporting shell (%s) without rejecting the packet', async supportedReasons => {
     const publishState = vi.fn(async (value: DesktopInboxState) => {
       if (value.latest.some(item => item.reason !== 'MENTION')) throw new Error('OLD_SHELL_REJECTED_PACKET')
     })
-    useInbox().latest.value = [notification('connection', NotificationReason.ConnectionCreated), notification('mention', NotificationReason.Mention)]
+    useInbox().latest.value = [notification('connection', NotificationReason.ConnectionCreated),
+      notification('scheduled', NotificationReason.ProjectDeletionScheduled), notification('reminder', NotificationReason.ProjectDeletionReminder),
+      notification('cancelled', NotificationReason.ProjectDeletionCancelled), notification('mention', NotificationReason.Mention)]
     vi.stubGlobal('yumpooDesktop', { timer: { getWindowState: async () => ({ surface: 'main' }) },
       inbox: { supportedReasons, publishState, onOpen: () => vi.fn() } })
     await host()
@@ -61,6 +63,18 @@ describe('inbox owner', () => {
       { id: 'connection', reason: 'CONNECTION_CREATED', actorName: '张三', createdAt: '2026-10-03T00:00:00.000Z' },
     ])
     expect(JSON.stringify(publishState.mock.lastCall![0])).not.toMatch(/目标标题|target-project|target-item|projectName/)
+  })
+  it.each([NotificationReason.ProjectDeletionScheduled, NotificationReason.ProjectDeletionReminder,
+    NotificationReason.ProjectDeletionCancelled])('forwards %s only after capability declaration without its deadline', async reason => {
+    const publishState = vi.fn(async (_value: DesktopInboxState) => undefined)
+    useInbox().latest.value = [{ ...notification('deletion', reason), deletionPurgeAfter: new Date('2026-11-08T02:00:00Z') }]
+    vi.stubGlobal('yumpooDesktop', { timer: { getWindowState: async () => ({ surface: 'main' }) },
+      inbox: { supportedReasons: [reason], publishState, onOpen: () => vi.fn() } })
+    await host()
+    expect(publishState.mock.lastCall![0].latest).toEqual([
+      { id: 'deletion', reason, actorName: '张三', createdAt: '2026-10-03T00:00:00.000Z' },
+    ])
+    expect(JSON.stringify(publishState.mock.lastCall![0])).not.toMatch(/deletionPurgeAfter|2026-11-08|目标项目|target-project|target-item|projectName/)
   })
   it('activates in Web and stops on logout', async () => {
     await host()

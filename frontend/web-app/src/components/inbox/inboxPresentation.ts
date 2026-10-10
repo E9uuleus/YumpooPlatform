@@ -6,12 +6,15 @@ export function isOwnProjectRemoval(item: NotificationItem, readerId?: string): 
   return Boolean(readerId) && item.reason === 'PROJECT_MEMBER_REMOVED' && item.subject?.id === readerId
 }
 
-export function notificationText(item: NotificationItem, readerId?: string): string {
+export function notificationText(item: NotificationItem, readerId?: string, timezone = Intl.DateTimeFormat().resolvedOptions().timeZone): string {
   if (isOwnProjectRemoval(item, readerId)) return '将你移出了一个项目'
   if (!item.target.accessible) return '相关内容已不可访问'
   const target = [item.target.itemNo, item.target.title].filter(Boolean).join(' ') || '工作项'
   const project = item.target.projectName || '一个项目'
   const subject = item.subject?.id === readerId ? '你' : item.subject?.displayName || '成员'
+  const purgeDate = item.deletionPurgeAfter
+    ? new Intl.DateTimeFormat('sv-SE', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(item.deletionPurgeAfter)
+    : undefined
   switch (item.reason) {
     case 'MENTION': return `在 ${target} 中提到了你`
     case 'REPLY': return `回复了你在 ${target} 的评论`
@@ -22,6 +25,9 @@ export function notificationText(item: NotificationItem, readerId?: string): str
     case 'PROJECT_MEMBER_REMOVED': return `将${subject}移出项目 ${project}`
     case 'PROJECT_OWNER_ASSIGNED': return `将项目 ${project} 的负责人转交给你`
     case 'PROJECT_OWNER_TRANSFERRED': return `将项目 ${project} 的负责人转交给 ${subject}`
+    case 'PROJECT_DELETION_SCHEDULED': return `已申请删除项目 ${project}${purgeDate ? `，将于 ${purgeDate} 永久删除` : ''}`
+    case 'PROJECT_DELETION_REMINDER': return `提醒：项目 ${project}${purgeDate ? ` 将于 ${purgeDate} 永久删除` : ' 即将永久删除'}`
+    case 'PROJECT_DELETION_CANCELLED': return `已撤销项目 ${project} 的删除计划`
     default: return '更新了与你相关的内容'
   }
 }

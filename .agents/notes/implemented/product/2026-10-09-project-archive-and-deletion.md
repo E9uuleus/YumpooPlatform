@@ -1,4 +1,4 @@
-# Agent Note: 项目归档访问、只读浏览与统计范围
+# Agent Note: 项目归档访问、删除缓冲期与永久清除
 
 Status: implemented
 
@@ -18,9 +18,29 @@ Status: implemented
 
 工作台与项目侧栏仅列进行中项目，所有登录用户均可进入独立“归档项目”页；该页展示服务端授权的项目、编号、负责人、真实归档时间和打开/恢复操作。已缓存的最近项目在展示前重新读取权限与生命周期，归档或不可见记录移出缓存。归档详情统一显示只读横幅，归档/恢复完成后侧栏和横幅刷新。
 
-`PROJECT_ARCHIVE_WITH_OPEN_ITEMS` 治理覆盖接口与能力字段继续兼容，仍校验管理员、理由、版本、幂等并保存分类计数与治理审计；前端移除覆盖入口。blocker 收集器的真实 provider 和关闭失败规则只约束该兼容入口，普通归档不调用它。项目生命周期仍为 ACTIVE/ARCHIVED；本阶段没有建立删除状态、缓冲期或永久清除机制。
+`PROJECT_ARCHIVE_WITH_OPEN_ITEMS` 治理覆盖接口与能力字段继续兼容，仍校验管理员、理由、版本、幂等并保存分类计数与治理审计；前端移除覆盖入口。blocker 收集器的真实 provider 和关闭失败规则只约束该兼容入口，普通归档不调用它。项目生命周期仍为 ACTIVE/ARCHIVED；删除状态使用独立可选字段，不扩展生命周期枚举。
+
+### 删除缓冲期与通知
+
+删除必须先归档，负责人或 CompanyAdmin 通过新增 POST/DELETE `/projects/{projectId}/deletion` 计划或撤销。写入要求 XSRF、强 If-Match、幂等键；计划请求必须精确输入项目编号。默认缓冲 30 天、提前 1 天提醒、每分钟轮询，每批最多删除 500 行；所有时间与批次上界在启动时校验。计划期间不能恢复（409 `DELETION_SCHEDULED`），撤销后仍保持归档。列表/详情可选 deletion 字段提供请求时间、操作者与确切截止时间，能力控制删除、撤销与恢复按钮。
+
+计划、撤销、提醒和清除事件仅含 ID 与时间，均为 v1。负责人和当前 ACTIVE 的有效企业管理员接收通知（平台管理员继承企业管理员权限）；计划与撤销排除操作者，提醒包含全部接收人。通知绕过偏好，采用 V69 独立部署水位，旧事件不补发；确切截止时间保存为独立事件字段，读取失权时清空它。三个新增响应原因及桌面原因能力同步，合同例外绑定精确规范哈希。收件箱和桌面协议细节仍由[收件箱决定](../architecture/2026-09-25-notification-inbox.md)和[桌面提醒决定](2026-09-25-desktop-inbox-alerts.md)拥有。
+
+### 可恢复的永久清除
+
+V68 使用 `purge_started_at` 和 `project_purge_run` 的 token/lease 领取到期项目，领取与撤销使用同一项目行锁。开始后对所有人不可见，不能撤销。administration 通过 foundation 的 ProjectDataPurger 编排 NOTIFICATION、AUDIT、FILESTORAGE、OUTBOX、WORKITEM、REPORTING、CATALOG 七个显式阶段；缺失、重复或顺序错误的 provider 在启动时关闭失败。新到期与续跑公平轮换；每批锁定并校验当前 run token，旧 worker 不得先删业务行再发现租约失效。数据库阶段在独立短事务提交，失败保留阶段与租约以续跑。阶段进度以有界剩余集合重读，不依赖易跳过新行的游标。
+
+通知/动态消费在共享项目行锁下核验清除状态，防止已清除阶段被迟到事件重新创建。普通通知在计划删除期间停止生成；删除通知与偏好操作也在当前项目状态锁下执行。OUTBOX 等待未完成事件结束，再有界删除消费回执和完成/死信事件；死信也可能含文件名或列名，永久清除同样覆盖它们。最终仅发 ID/时间的 project_purged，安全审计 `security_audit_event` 与治理 `admin_override` 保留；计划/撤销保留用户主体，最终清除记录系统主体。幂等记录沿既有 expires_at 策略自然失效。
+
+FILESTORAGE 先独立提交只含 ID/时间的 `attachment_project_purge` fence，以公司配额锁阻止已鉴权的过期写者。附件元数据保留到临时文件及无外部引用 blob 物理清完，摘要可定位尚未记录 storage_key 的发布成果。issues/tasks/metadata/project quota 的 DELETE 共享累计批次预算，公司配额按实际清除回补。共享 blob 用实时引用保护；CLEANUP token/lease 行锁下只执行短 unlink，摘要/内容读取在事务外。该业务清除不受维护 dry-run 开关控制；物理失败保留 checkpoint，重启重试。完成标记与摘要 blob registry 可保留，不含文件名。项目成员在 purge_started_at 后解除 active-owner 约束，以允许小批删除；最终项目行、完成标记、系统安全审计与 ID/时间事件在同一事务提交。V60 已移除 project_product_link，本阶段不再访问不存在的表。
+
+跨项目关系和连接移除两个方向的受影响边，对端项目、工作项、其他边、共享计时状态与文件引用保留。对端连接列的目标在 catalog→column 锁下删除并更新列/目录版本，防止旧 ETag 重插目标。最后一个目标被永久清除时保留用户命名的连接列，响应 targets 可为空（创建/更新请求仍要求 1–20 个）；读取使用不可访问占位和 null-safe 映射，避免清除期间泄漏隐藏项目或产生 500。此存量状态适配部分替代[连接核心](../architecture/2026-09-30-work-item-connections.md)的响应非空假设。个人看板删除相应顶层和 widget 项目 ID，但保留其余配置。
 
 本记录部分替代[生命周期治理](2026-08-21-project-lifecycle-governance-contract.md)的普通归档 blocker 与权限、[团队报表](../security/2026-10-08-admin-team-reporting.md)的归档工时范围、[个人仪表板](2026-09-16-personal-dashboards.md)的归档成员可读和统计范围，以及[两级评论](2026-09-05-work-item-discussion-threads.md)和[独立讨论契约](../architecture/2026-08-24-work-item-update-contract.md)的归档 Owner 删除例外。原记录继续保留事务锁序、最小治理快照、事件隐私、真实 provider、独立聚合和原始计时口径的独特理由。
+
+文件创建、临时文件替换、发布 rename 与清除 unlink 均在短事务中复核当前 upload/PUBLISH/CLEANUP token 和项目 fence。内容流读写、摘要、fsync 与 verify 留在事务外；暂停后恢复的旧 worker 不能在已清除项目中重建文件或删除新 worker 的临时文件。独立提交的 marker 与可重入物理步骤允许编排器租约失效后安全重试。
+
+个人看板同时清除顶层、全局 filters、widget chart 及 chart filters 中的 projectIds，保留其他配置并更新版本。看板保存、个人表格设置、计时关闭/切换和连接列目标保存持有共享项目锁并拒绝 missing/purgeStarted；多项目写入按稳定顺序取锁，防止清除经过对应阶段后被已鉴权的迟到请求重新写入。归档期间本人停止计时及既有个人配置的兼容例外继续保留。
 
 ## Alternatives considered
 
@@ -31,6 +51,11 @@ Status: implemented
 - 删除治理覆盖接口和 blocker provider：会破坏已有客户端和审计解释；保留兼容入口而移除日常 UI。
 - 归档后允许 Owner 删除历史讨论：曾用于敏感内容治理；当前只读浏览要求一致，需先恢复项目再进行内容删除，原删除审计与级联事务规则保持有效。
 
+- 单一大事务删除所有业务行：会持有长锁并难以恢复文件 I/O 失败；七阶段有界批次保留 durable checkpoint。
+- 删除整个对端连接列：会连带丢失对端用户配置及历史边；只移除目标，并允许永久清除后的空目标存量列。
+- 先删附件 metadata 再清物理文件：进程中断会遗失恢复 key；保留 metadata 到物理步骤完成。
+- 只在消费开始时检查项目状态而不加锁：消费可能在清除阶段之后重新写入；共享状态锁与清除标记关闭该窗口。
+
 ## Consequences
 
 归档后普通成员立即失去项目读取权限，已有通知和私人连接不会因此物理删除。管理员的公司只读访问不扩大私人仪表板的成员统计范围。归档项目的历史工时仍保留但不进入导出和统计；恢复后重新纳入。
@@ -38,3 +63,6 @@ Status: implemented
 归档成功不会关闭工作项，也不会自动停止已有计时。计时器沿已有失权/删除逻辑隐去目标，同时保留本人停止会话的能力；后续统计仍排除归档项目。真正的永久数据清除不由归档代替。
 
 `ProjectLifecycleGovernanceServiceTest` 和 `ProjectCreationIT` 验证普通归档不调用 blocker 及负责人/管理员归档恢复；`WorkItemHttpIT` 验证开放工作项不阻止归档、成员资源 404、负责人和管理员只读拒绝，以及恢复后重新可读。`NotificationHttpIT`、`DashboardHttpIT` 和 `WorkItemConnectionIT` 分别覆盖批量通知失权、所有统计入口排除归档，以及保留连接时遮蔽归档端卡片/列名和候选读取 404；连接批量固定 SQL 数回归保持通过。前端目标组件测试覆盖活动与归档列表、最近缓存复核、侧栏入口、只读横幅、确认数量提示及不可访问连接卡片。
+
+删除与清除的验证分别由 ProjectDeletionHttpIT、ProjectPurgeIT、AttachmentProjectPurgeIT、ProjectDeletionNotificationMigrationIT 和 NotificationHttpIT 覆盖；真实 PostgreSQL 的租约、FK 顺序、批次预算、恢复、跨项目与共享引用是验收依据。
+

@@ -51,6 +51,12 @@ yumpoo:
     attachment-root: C:/ProgramData/Yumpoo/data/attachments
     upload-temp-root: C:/ProgramData/Yumpoo/temp/uploads
     log-root: C:/ProgramData/Yumpoo/logs
+  projects:
+    deletion:
+      grace-period: ${YUMPOO_PROJECT_DELETION_GRACE_PERIOD:P30D}
+      reminder-lead: ${YUMPOO_PROJECT_DELETION_REMINDER_LEAD:P1D}
+      purge-poll-delay: 1m
+      purge-batch-size: 500
   attachments:
     company-quota-bytes: 107374182400
     project-quota-bytes: 10737418240

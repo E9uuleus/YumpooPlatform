@@ -3,6 +3,8 @@ package com.yumpoo.platform.administration.application;
 import com.yumpoo.platform.filestorage.api.AttachmentLifecyclePort;
 import com.yumpoo.platform.filestorage.api.AttachmentModels.ScanClaim;
 import com.yumpoo.platform.filestorage.api.AttachmentModels.ScanOutcome;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
+import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -47,7 +49,8 @@ public class AttachmentScanScheduler implements DisposableBean {
     }
 
     private void process(ScanClaim claim) {
-        try {
+        try (var ignored = RequestCorrelationContext.open(RequestCorrelation.root(
+                "attachment-processing-" + UUID.randomUUID()))) {
             ScanOutcome outcome=attachments.scan(claim);
             if(outcome instanceof ScanOutcome.Clean clean) finalizer.finalizeClean(claim,clean);
             else if(outcome instanceof ScanOutcome.Rejected rejected)

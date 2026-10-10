@@ -8,6 +8,7 @@ import com.yumpoo.platform.filestorage.domain.AttachmentOwnerType;
 import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
 
 import java.time.Instant;
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,12 +17,15 @@ public interface AttachmentRepository {
     AttachmentRecord insertIntent(CreateIntent command, AttachmentFileName fileName,
             long reservedBytes, long companyLimit, long projectLimit, Instant expiresAt);
     Optional<AttachmentRecord> find(UUID companyId, UUID attachmentId);
+    default boolean isProjectPurging(UUID companyId, UUID projectId) { return false; }
     List<AttachmentRecord> list(UUID companyId, AttachmentOwnerType ownerType, UUID ownerId,
             Instant beforeCreatedAt, UUID beforeId, int limit);
     Optional<AttachmentRecord> beginUpload(UUID companyId, UUID attachmentId, UUID leaseToken,
             Instant now, Instant leaseUntil);
     AttachmentRecord seal(UUID companyId, UUID attachmentId, UUID leaseToken,
             long sizeBytes, String sha256, Instant now);
+    void mutateUpload(UUID companyId, UUID attachmentId, UUID leaseToken, Instant now,
+            QuarantineStorage.Mutation mutation) throws IOException;
     void cancelUpload(UUID companyId, UUID attachmentId, UUID leaseToken, Instant now);
     AttachmentRecord rejectUpload(UUID companyId, UUID attachmentId, UUID leaseToken,
             AttachmentRejectedCode code, Instant now);
@@ -30,6 +34,8 @@ public interface AttachmentRepository {
     void recordPublished(ScanClaim claim, String storageKey, Instant now);
     Boolean claimPublish(ScanClaim claim,String storageKey,String owner,UUID operationToken,
             Instant now,Instant leaseUntil);
+    void mutatePublish(ScanClaim claim,String storageKey,UUID operationToken,Instant now,
+            QuarantineStorage.Mutation mutation) throws IOException;
     void completePublish(String storageKey,UUID operationToken,Instant now);
     void releasePublish(String storageKey,UUID operationToken,Instant now);
     Optional<Finalization> prepareFinalization(ScanClaim claim, String detectedMime,

@@ -201,6 +201,8 @@ Flyway V16 在 `templateworkflow` owner 目录创建模板版本、Content bluep
 
 ## 数据库配置与运行
 
+项目归档仅负责人/企业管理员可访问，不计入统计。V68/V69 支持归档后计划永久删除、默认30天缓冲期及独立删除通知水位。清除按 notification/audit/filestorage/outbox/workitem/reporting/catalog 七阶段短事务推进，`project_purge_run` 保存可续跑的 token/lease；项目行删除、完成标记、系统安全审计和 ID/时间事件原子提交。`attachment_project_purge` 在文件清除前建立 fence，防止旧上传任务重新写入；无外部引用的 blob 会实际删除，该业务清除不受附件维护 dry-run 控制。
+
 应用运行账号通过标准 Spring Boot 环境变量配置：
 
 ```powershell

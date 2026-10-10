@@ -4,7 +4,7 @@ import { ElMessageBox } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ArchivedProjectsView from './ArchivedProjectsView.vue'
 
-const api = vi.hoisted(() => ({ listProjects: vi.fn(), restoreProject: vi.fn() }))
+const api = vi.hoisted(() => ({ listProjects: vi.fn(), restoreProject: vi.fn(), scheduleProjectDeletion: vi.fn(), cancelProjectDeletion: vi.fn() }))
 const push = vi.hoisted(() => vi.fn())
 vi.mock('../../api/client', () => ({ projectsApi: api }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
@@ -35,7 +35,7 @@ describe('归档项目页', () => {
     const wrapper = mount(ArchivedProjectsView)
     await flushPromises()
     expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: ProjectLifecycleFilter.Archived, page: 0, size: 20 })
-    expect(wrapper.findAll('th').map(cell => cell.text())).toEqual(['项目名称', '项目编号', '负责人', '归档时间', '操作'])
+    expect(wrapper.findAll('th').map(cell => cell.text())).toEqual(['项目名称', '项目编号', '负责人', '归档时间', '删除状态', '操作'])
     expect(wrapper.text()).toContain('历史项目')
     expect(wrapper.text()).toContain('2026-10-09')
     await wrapper.findAll('button').find(button => button.text() === '打开')!.trigger('click')
@@ -68,5 +68,24 @@ describe('归档项目页', () => {
     await flushPromises()
     expect(wrapper.find('table').exists()).toBe(false)
     expect(wrapper.text()).toContain('暂无可访问的归档项目')
+  })
+
+  it('计划删除显示确切日期与倒计时，只提供撤销并刷新列表', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-10T12:00:00Z'))
+    api.listProjects.mockResolvedValue(page([{ ...archived,
+      deletion: { requestedAt: new Date('2026-10-01T12:00:00Z'), requestedBy: 'owner', purgeAfter: new Date('2026-10-31T12:00:00Z') },
+      capabilities: { ...archived.capabilities, canRestore: false, canScheduleDeletion: false, canCancelDeletion: true },
+    }]))
+    const wrapper = mount(ArchivedProjectsView)
+    await flushPromises()
+    expect(wrapper.text()).toContain('将于 2026-10-31 12:00 永久删除（剩 21 天）')
+    expect(wrapper.findAll('button').some(button => button.text() === '恢复')).toBe(false)
+    api.listProjects.mockResolvedValue(page([archived]))
+    await wrapper.findAll('button').find(button => button.text() === '撤销删除')!.trigger('click')
+    await flushPromises()
+    expect(api.cancelProjectDeletion).toHaveBeenCalledWith(expect.objectContaining({ projectId: archived.id, ifMatch: archived.etag }))
+    expect(api.listProjects).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('未计划删除')
   })
 })

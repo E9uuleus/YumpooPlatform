@@ -4,6 +4,7 @@ import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery;
 import com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery.ConnectTargetProjectSnapshot;
+import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
 import com.yumpoo.platform.catalog.api.ProjectFactWriteGuard;
 import com.yumpoo.platform.catalog.api.ProjectFactWriteSnapshot;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
@@ -40,6 +41,7 @@ public class ConnectColumnService {
     private final ProjectAccessSnapshotQuery access;
     private final ProjectConnectionTargetQuery targets;
     private final ProjectFactWriteGuard guard;
+    private final ProjectDeletionQuery deletion;
     private final IdempotentCommandExecutor idempotency;
     private final TransactionalEventPort events;
     private final ObjectMapper json;
@@ -47,12 +49,14 @@ public class ConnectColumnService {
 
     public ConnectColumnService(ConnectColumnRepository columns, WorkItemConnectionRepository connections,
             ProjectAccessSnapshotQuery access, ProjectConnectionTargetQuery targets, ProjectFactWriteGuard guard,
-            IdempotentCommandExecutor idempotency, TransactionalEventPort events, ObjectMapper json, Clock clock) {
+            ProjectDeletionQuery deletion, IdempotentCommandExecutor idempotency,
+            TransactionalEventPort events, ObjectMapper json, Clock clock) {
         this.columns = columns;
         this.connections = connections;
         this.access = access;
         this.targets = targets;
         this.guard = guard;
+        this.deletion = deletion;
         this.idempotency = idempotency;
         this.events = events;
         this.json = json;
@@ -74,7 +78,7 @@ public class ConnectColumnService {
             boolean available = available(source, visibility.get(column.projectId()));
             return new IncomingColumn(column.columnId(), available ? column.columnName() : "不可访问的连接列", column.projectId(),
                     available ? source.code() : "—", available ? source.name() : "不可访问的项目",
-                    source.lifecycle().name(), writable(project) && writable(visibility.get(column.projectId())), available);
+                    lifecycle(source), available && writable(project) && writable(visibility.get(column.projectId())), available);
         }).toList();
         return new Catalog(items.stream().map(column -> view(column, project, snapshots, visibility)).toList(),
                 !incomingViews.isEmpty(), incomingViews, writable(project), writable(project)
@@ -94,6 +98,7 @@ public class ConnectColumnService {
         List<UUID> targetIds = targetIds(command.projectId(), command.targetProjectIds());
         return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(command.actor().userId(),
                 "POST", "createConnectColumn", command.idempotencyKey()), command.requestHash()), () -> {
+            lockRequestedProjects(command.actor().companyId(), command.projectId(), targetIds);
             var locked = guard.lockForFactWrite(command.actor(), command.projectId());
             requireWritable(locked);
             Instant now = clock.instant();
@@ -115,6 +120,8 @@ public class ConnectColumnService {
     @Transactional
     public Column update(Update command) {
         visible(command.actor(), command.projectId());
+        var targetIds = targetIds(command.projectId(), command.targetProjectIds());
+        lockRequestedProjects(command.actor().companyId(), command.projectId(), targetIds);
         var project = guard.lockForFactWrite(command.actor(), command.projectId());
         requireWritable(project);
         Instant now = clock.instant();
@@ -123,7 +130,6 @@ public class ConnectColumnService {
                 .filter(ConnectColumn::active).orElseThrow(ConnectionAccess::missing);
         requireVersion(before.rowVersion(), command.expectedVersion());
         String name = name(command.name());
-        var targetIds = targetIds(command.projectId(), command.targetProjectIds());
         if (before.name().equals(name) && before.targetProjectIds().equals(targetIds)) return response(command.actor(), before);
         requireUniqueName(project.companyId(), project.projectId(), name, before.id());
         validateTargets(project.companyId(), targetIds, before.targetProjectIds());
@@ -183,23 +189,34 @@ public class ConnectColumnService {
         return new Column(column.id(), column.projectId(), column.name(), column.targetProjectIds().stream().map(id -> {
             var target = targets.get(id);
             boolean available = available(target, visibility.get(id));
-            return new Target(id, available ? target.code() : "—", available ? target.name() : "不可访问的项目", target.lifecycle().name(),
-                    writable(source) && writable(visibility.get(id)), available);
+            return new Target(id, available ? target.code() : "—", available ? target.name() : "不可访问的项目", lifecycle(target),
+                    available && writable(source) && writable(visibility.get(id)), available);
         }).toList(), column.rowVersion(), StrongEtag.format(column.rowVersion()), column.createdAt());
     }
 
     private static boolean available(ConnectTargetProjectSnapshot project, ProjectAccessSnapshot visible) {
-        return project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE || visible != null;
+        return project != null && !project.purging()
+                && (project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE || visible != null);
+    }
+    private static String lifecycle(ConnectTargetProjectSnapshot project) {
+        return project==null ? "ARCHIVED" : project.lifecycle().name();
     }
 
     private void validateTargets(UUID companyId, List<UUID> ids, List<UUID> existing) {
         var snapshots = targets.findByIds(companyId, ids);
         for (UUID id : ids) {
             var target = snapshots.get(id);
-            if (target == null) throw missing();
+            if (target == null || target.purging()) throw missing();
             if (!existing.contains(id) && target.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ACTIVE)
                 throw conflict("PROJECT_ARCHIVED");
         }
+    }
+
+    private void lockRequestedProjects(UUID companyId, UUID source, List<UUID> targets) {
+        for (UUID id : java.util.stream.Stream.concat(java.util.stream.Stream.of(source), targets.stream())
+                .distinct().sorted(java.util.Comparator.comparing(UUID::toString)).toList())
+            deletion.lockForProjection(companyId, id).filter(project -> project.purgeStartedAt() == null)
+                    .orElseThrow(ConnectionAccess::missing);
     }
 
     private void requireUniqueName(UUID companyId, UUID projectId, String name, UUID excludingId) {

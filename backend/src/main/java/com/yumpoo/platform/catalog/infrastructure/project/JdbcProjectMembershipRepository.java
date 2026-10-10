@@ -177,6 +177,7 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
                 LEFT JOIN yumpoo.project_membership m
                   ON m.project_id=p.id AND m.user_id=:actorUserId AND m.status='ACTIVE'
                 WHERE p.id=:projectId AND p.company_id=:companyId AND (:admin OR m.id IS NOT NULL)
+                  AND p.purge_started_at IS NULL
                   AND (p.lifecycle='ACTIVE' OR p.owner_user_id=:actorUserId OR :admin)
                 """).param("actorUserId", actor.userId()).param("projectId", projectId)
                 .param("companyId", actor.companyId()).param("admin", admin)
@@ -191,7 +192,7 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
                 SELECT p.id, p.name, p.project_code AS code FROM yumpoo.project p
                 JOIN yumpoo.project_membership m ON m.project_id=p.id AND m.company_id=p.company_id
                   AND m.user_id=:userId AND m.status='ACTIVE'
-                WHERE p.company_id=:companyId AND p.lifecycle<>'ARCHIVED'
+                WHERE p.company_id=:companyId AND p.lifecycle<>'ARCHIVED' AND p.purge_started_at IS NULL
                 ORDER BY p.id
                 """).param("companyId", actor.companyId()).param("userId", actor.userId())
                 .query((rs, n) -> new com.yumpoo.platform.catalog.application.project.ProjectMembershipModels.WritableProject(
@@ -213,6 +214,7 @@ public class JdbcProjectMembershipRepository implements ProjectMembershipReposit
                 LEFT JOIN yumpoo.project_membership m
                   ON m.project_id=p.id AND m.user_id=:actorUserId AND m.status='ACTIVE'
                 WHERE p.id IN (:projectIds) AND p.company_id=:companyId
+                  AND p.purge_started_at IS NULL
                   AND (:admin OR m.id IS NOT NULL)
                   AND (p.lifecycle='ACTIVE' OR p.owner_user_id=:actorUserId OR :admin)
                 """).param("actorUserId", actor.userId()).param("projectIds", projectIds)

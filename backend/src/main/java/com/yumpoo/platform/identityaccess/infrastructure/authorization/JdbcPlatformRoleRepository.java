@@ -37,4 +37,14 @@ public class JdbcPlatformRoleRepository implements PlatformRoleRepository {
                 .query(String.class)
                 .list()));
     }
+
+    @Override
+    public Set<UUID> findActiveCompanyAdminIds(UUID companyId) {
+        return Set.copyOf(jdbcClient.sql("""
+                SELECT DISTINCT u.id FROM yumpoo.identity_user u
+                JOIN yumpoo.platform_role_assignment a ON a.company_id=u.company_id AND a.user_id=u.id
+                WHERE u.company_id=:company AND u.employment_status='ACTIVE' AND u.account_status='ENABLED'
+                  AND a.role_code IN ('COMPANY_ADMIN','APP_MANAGER') AND a.status='ACTIVE'
+                """).param("company", companyId).query(UUID.class).list());
+    }
 }

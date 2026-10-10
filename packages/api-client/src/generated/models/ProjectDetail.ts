@@ -26,6 +26,13 @@ import {
     ProjectCapabilitiesToJSON,
     ProjectCapabilitiesToJSONTyped,
 } from './ProjectCapabilities';
+import type { ProjectDeletion } from './ProjectDeletion';
+import {
+    ProjectDeletionFromJSON,
+    ProjectDeletionFromJSONTyped,
+    ProjectDeletionToJSON,
+    ProjectDeletionToJSONTyped,
+} from './ProjectDeletion';
 import type { ProjectActorAccess } from './ProjectActorAccess';
 import {
     ProjectActorAccessFromJSON,
@@ -142,6 +149,12 @@ export interface ProjectDetail {
      * @memberof ProjectDetail
      */
     readonly archivedAt: Date | null;
+    /**
+     *
+     * @type {ProjectDeletion}
+     * @memberof ProjectDetail
+     */
+    deletion?: ProjectDeletion;
 }
 
 
@@ -197,6 +210,7 @@ export function ProjectDetailFromJSONTyped(json: any, ignoreDiscriminator: boole
         'createdAt': (new Date(json['createdAt'])),
         'updatedAt': (new Date(json['updatedAt'])),
         'archivedAt': (json['archivedAt'] == null ? null : new Date(json['archivedAt'])),
+        ...(json['deletion'] == null ? {} : { 'deletion': ProjectDeletionFromJSON(json['deletion']) }),
     };
 }
 
@@ -223,5 +237,6 @@ export function ProjectDetailToJSONTyped(value?: Omit<ProjectDetail, 'rowVersion
         'ownerDisplayName': value['ownerDisplayName'],
         'actorAccess': ProjectActorAccessToJSON(value['actorAccess']),
         'capabilities': ProjectCapabilitiesToJSON(value['capabilities']),
+        'deletion': ProjectDeletionToJSON(value['deletion']),
     };
 }

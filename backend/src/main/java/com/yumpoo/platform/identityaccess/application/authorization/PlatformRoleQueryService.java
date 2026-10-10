@@ -20,4 +20,9 @@ public class PlatformRoleQueryService {
         Objects.requireNonNull(userId, "userId must not be null");
         return Set.copyOf(repository.findActiveRoleCodes(companyId, userId));
     }
+
+    public Set<UUID> findActiveCompanyAdminIds(UUID companyId) {
+        Objects.requireNonNull(companyId, "companyId must not be null");
+        return Set.copyOf(repository.findActiveCompanyAdminIds(companyId));
+    }
 }

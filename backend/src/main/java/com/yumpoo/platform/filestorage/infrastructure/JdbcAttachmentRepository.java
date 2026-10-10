@@ -10,6 +10,7 @@ import com.yumpoo.platform.filestorage.domain.AttachmentState;
 import com.yumpoo.platform.filestorage.application.AttachmentFileName;
 import com.yumpoo.platform.filestorage.application.AttachmentRecord;
 import com.yumpoo.platform.filestorage.application.AttachmentRepository;
+import com.yumpoo.platform.filestorage.application.QuarantineStorage;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -50,6 +52,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                  FOR UPDATE
                 """).param("companyId", command.companyId()).param("projectId", command.projectId())
                 .query((rs, row) -> new Quota(rs.getString(1), rs.getLong(2), rs.getLong(3))).list();
+        JdbcAttachmentPurgeFence.requireWritable(jdbc, command.companyId(), command.projectId());
         for (Quota quota : quotas) {
             long limit = quota.scopeType().equals("COMPANY") ? companyLimit : projectLimit;
             if (quota.reserved() + quota.available() + reservedBytes > limit) {
@@ -86,6 +89,12 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     }
 
     @Override
+    public boolean isProjectPurging(UUID companyId, UUID projectId) {
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM yumpoo.attachment_project_purge WHERE company_id=:company AND project_id=:project)")
+                .param("company", companyId).param("project", projectId).query(Boolean.class).single();
+    }
+
+    @Override
     public List<AttachmentRecord> list(UUID companyId, AttachmentOwnerType ownerType, UUID ownerId,
             Instant beforeCreatedAt, UUID beforeId, int limit) {
         String cursor = beforeCreatedAt == null ? "" :
@@ -105,6 +114,8 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     @Transactional
     public Optional<AttachmentRecord> beginUpload(UUID companyId, UUID attachmentId, UUID leaseToken,
             Instant now, Instant leaseUntil) {
+        AttachmentRecord current = locked(companyId, attachmentId);
+        JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
         int updated = jdbc.sql("""
                 UPDATE yumpoo.attachment
                    SET processing_stage='RECEIVING', upload_lease_token=:leaseToken,
@@ -118,11 +129,26 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     }
 
     @Override
+    @Transactional(rollbackFor = IOException.class)
+    public void mutateUpload(UUID companyId, UUID attachmentId, UUID leaseToken, Instant now,
+            QuarantineStorage.Mutation mutation) throws IOException {
+        AttachmentRecord current = locked(companyId, attachmentId);
+        requireLease(current, leaseToken);
+        JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
+        if (current.status() != AttachmentState.UPLOADING || current.uploadLeaseUntil() == null
+                || !current.uploadLeaseUntil().isAfter(now)) throw invalid("UPLOAD_NOT_ACTIVE");
+        // Only opening/replacing the empty part or an atomic rename/unlink belongs under this fence.
+        // Streaming, digest calculation and fsync run outside the transaction.
+        mutation.run();
+    }
+
+    @Override
     @Transactional
     public AttachmentRecord seal(UUID companyId, UUID attachmentId, UUID leaseToken,
             long sizeBytes, String sha256, Instant now) {
         AttachmentRecord current = locked(companyId, attachmentId);
         requireLease(current, leaseToken);
+        JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
         long released = current.reservedBytes() - sizeBytes;
         if (released < 0) throw invalid("QUOTA_EXCEEDED");
         adjustQuota(companyId, current.projectId(), -released, 0, now);
@@ -166,6 +192,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
             AttachmentRejectedCode code, Instant now) {
         AttachmentRecord current = locked(companyId, attachmentId);
         requireLease(current, leaseToken);
+        JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
         adjustQuota(companyId, current.projectId(), -current.reservedBytes(), 0, now);
         jdbc.sql("""
                 UPDATE yumpoo.attachment SET status='REJECTED', rejected_code=:code,
@@ -185,14 +212,17 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
             Instant leaseUntil) {
         Optional<ScanClaim> claim = jdbc.sql("""
                 WITH candidate AS (
-                    SELECT id FROM yumpoo.attachment_scan_task
-                     WHERE (status='READY' AND next_attempt_at <= :now)
-                        OR (status='RUNNING' AND lease_until < :now)
-                     ORDER BY next_attempt_at, created_at, id
-                     FOR UPDATE SKIP LOCKED LIMIT 1
+                    SELECT t.id FROM yumpoo.attachment_scan_task t
+                      JOIN yumpoo.attachment a ON a.id=t.attachment_id
+                     WHERE ((t.status='READY' AND t.next_attempt_at <= :now)
+                        OR (t.status='RUNNING' AND t.lease_until < :now))
+                       AND NOT EXISTS (SELECT 1 FROM yumpoo.attachment_project_purge p
+                            WHERE p.company_id=a.company_id AND p.project_id=a.quota_project_id)
+                     ORDER BY t.next_attempt_at, t.created_at, t.id
+                     FOR UPDATE OF t SKIP LOCKED LIMIT 1
                 ), claimed AS (
                     UPDATE yumpoo.attachment_scan_task t
-                       SET status='RUNNING', attempt_count=LEAST(attempt_count+1,3),
+                       SET status='RUNNING', attempt_count=LEAST(t.attempt_count+1,3),
                            lease_owner=:workerId, lease_token=:leaseToken,
                            lease_until=:leaseUntil, updated_at=:now
                       FROM candidate c WHERE t.id=c.id
@@ -204,6 +234,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                 """).param("now", utc(now)).param("workerId", workerId)
                 .param("leaseToken", leaseToken).param("leaseUntil", utc(leaseUntil))
                 .query(this::mapClaim).optional();
+        claim.ifPresent(value -> JdbcAttachmentPurgeFence.requireWritable(jdbc, value.companyId(), value.projectId()));
         claim.ifPresent(value -> jdbc.sql("""
                 UPDATE yumpoo.attachment SET processing_stage='SCANNING',
                     row_version=row_version+1, updated_at=:now
@@ -249,6 +280,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     @Transactional
     public Boolean claimPublish(ScanClaim claim,String storageKey,String owner,UUID operationToken,
             Instant now,Instant leaseUntil) {
+        requireTaskLease(claim);
         jdbc.sql("""
                 INSERT INTO yumpoo.attachment_blob (
                     storage_key,sha256,size_bytes,presence_status,created_at,updated_at
@@ -264,6 +296,21 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                 """).param("owner",owner).param("token",operationToken).param("until",utc(leaseUntil))
                 .param("now",utc(now)).param("key",storageKey).param("sha256",claim.sha256())
                 .param("size",claim.sizeBytes()).update()==1;
+    }
+
+    @Override
+    @Transactional(rollbackFor = IOException.class)
+    public void mutatePublish(ScanClaim claim,String storageKey,UUID operationToken,Instant now,
+            QuarantineStorage.Mutation mutation) throws IOException {
+        requireTaskLease(claim);
+        boolean owned = jdbc.sql("""
+                SELECT storage_key FROM yumpoo.attachment_blob WHERE storage_key=:key
+                    AND operation_type='PUBLISH' AND operation_token=:token AND operation_lease_until>:now FOR UPDATE
+                """).param("key", storageKey).param("token", operationToken).param("now", utc(now))
+                .query(String.class).optional().isPresent();
+        if (!owned) throw new IOException("publish lease is no longer active");
+        // Verification happens outside this transaction; the guard covers only rename or sealed unlink.
+        mutation.run();
     }
 
     @Override
@@ -305,6 +352,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     @Transactional
     public AttachmentRecord completeAvailable(Finalization finalization, Instant now) {
         AttachmentRecord current = locked(finalization.companyId(), finalization.attachmentId());
+        JdbcAttachmentPurgeFence.requireWritable(jdbc, current.companyId(), current.projectId());
         if (current.status() == AttachmentState.AVAILABLE) return current;
         if (current.status() != AttachmentState.UPLOADING
                 || current.scanGeneration() != finalization.generation()) throw invalid("STALE_SCAN_TASK");
@@ -366,6 +414,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     public RescanResult rescan(UUID companyId, UUID attachmentId, long expectedVersion,
             long companyLimit, long projectLimit, Instant now) {
         AttachmentRecord current = locked(companyId, attachmentId);
+        JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
         if (current.rowVersion() != expectedVersion) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
         if (current.status() != AttachmentState.REJECTED
                 || current.rejectedCode() != AttachmentRejectedCode.SCAN_UNAVAILABLE
@@ -398,6 +447,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     public AttachmentRecord delete(UUID companyId, UUID attachmentId, UUID deletedByUserId,
             String reason, long expectedVersion, Instant now) {
         AttachmentRecord current = locked(companyId, attachmentId);
+        JdbcAttachmentPurgeFence.requireWritable(jdbc, companyId, current.projectId());
         if (current.rowVersion() != expectedVersion) {
             throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
         }
@@ -435,6 +485,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     @Transactional
     public void recordReconciliationIssue(String issueCode,String subjectType,String subjectKey,
             UUID attachmentId,UUID companyId,Instant now) {
+        if (!JdbcAttachmentPurgeFence.allowObservation(jdbc, subjectType, subjectKey, attachmentId)) return;
         int updated=jdbc.sql("""
                 UPDATE yumpoo.attachment_reconciliation_issue
                    SET last_detected_at=:now,detection_count=detection_count+1,
@@ -522,11 +573,12 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
     }
 
     private void requireTaskLease(ScanClaim claim) {
-        Integer count = jdbc.sql("SELECT count(*) FROM yumpoo.attachment_scan_task "
-                + "WHERE id=:id AND lease_token=:token AND status='RUNNING'")
+        boolean active = jdbc.sql("SELECT id FROM yumpoo.attachment_scan_task "
+                + "WHERE id=:id AND attachment_id=:attachment AND lease_token=:token AND status='RUNNING' FOR UPDATE")
                 .param("id", claim.taskId()).param("token", claim.leaseToken())
-                .query(Integer.class).single();
-        if (count != 1) throw invalid("STALE_SCAN_TASK");
+                .param("attachment", claim.attachmentId()).query(UUID.class).optional().isPresent();
+        if (!active) throw invalid("STALE_SCAN_TASK");
+        JdbcAttachmentPurgeFence.requireWritable(jdbc, claim.companyId(), claim.projectId());
     }
 
     private void completeTask(UUID taskId, UUID leaseToken, String result, Instant now) {

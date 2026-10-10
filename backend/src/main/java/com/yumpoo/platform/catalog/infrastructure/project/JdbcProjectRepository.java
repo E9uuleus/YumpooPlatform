@@ -32,7 +32,8 @@ public class JdbcProjectRepository implements ProjectRepository {
     private static final String COLUMNS = """
             id, company_id, workspace_id, project_code, name, description,
             lifecycle, owner_user_id, row_version, created_at,
-            created_by_user_id, updated_at, updated_by_user_id, archived_at
+            created_by_user_id, updated_at, updated_by_user_id, archived_at,
+            deletion_requested_at, deletion_requested_by, purge_after, purge_started_at
             """;
 
     private static final String INSERT = """
@@ -54,6 +55,7 @@ public class JdbcProjectRepository implements ProjectRepository {
               ON m.project_id = p.id AND m.company_id = p.company_id
              AND m.user_id = :actorUserId AND m.status = 'ACTIVE'
             WHERE p.company_id = :companyId AND (:admin OR m.id IS NOT NULL)
+              AND p.purge_started_at IS NULL
               AND (p.lifecycle='ACTIVE' OR p.owner_user_id=:actorUserId OR :admin)
             """;
 
@@ -100,7 +102,7 @@ public class JdbcProjectRepository implements ProjectRepository {
 
     @Override public List<Project> findAll(UUID companyId,Collection<UUID> ids) {
         if(ids.isEmpty()) return List.of();
-        return jdbcClient.sql("SELECT "+COLUMNS+" FROM yumpoo.project WHERE company_id=:companyId AND id IN (:ids)")
+        return jdbcClient.sql("SELECT "+COLUMNS+" FROM yumpoo.project WHERE company_id=:companyId AND id IN (:ids) AND purge_started_at IS NULL")
                 .param("companyId",companyId).param("ids",ids).query(JdbcProjectRepository::map).list();
     }
 
@@ -112,7 +114,7 @@ public class JdbcProjectRepository implements ProjectRepository {
     @Override
     public Optional<Project> lockByIdForShare(UUID companyId, UUID projectId) {
         return jdbcClient.sql("SELECT " + COLUMNS + " FROM yumpoo.project "
-                        + "WHERE company_id = :companyId AND id = :projectId FOR SHARE")
+                        + "WHERE company_id = :companyId AND id = :projectId AND purge_started_at IS NULL FOR SHARE")
                 .param("companyId", companyId).param("projectId", projectId)
                 .query(JdbcProjectRepository::map).optional();
     }
@@ -259,7 +261,7 @@ public class JdbcProjectRepository implements ProjectRepository {
 
     private Optional<Project> find(UUID companyId, UUID projectId, boolean lock) {
         return jdbcClient.sql("SELECT " + COLUMNS + " FROM yumpoo.project "
-                        + "WHERE company_id = :companyId AND id = :projectId"
+                        + "WHERE company_id = :companyId AND id = :projectId AND purge_started_at IS NULL"
                         + (lock ? " FOR UPDATE" : ""))
                 .param("companyId", companyId).param("projectId", projectId)
                 .query(JdbcProjectRepository::map).optional();
@@ -274,7 +276,7 @@ public class JdbcProjectRepository implements ProjectRepository {
                 .query(JdbcProjectRepository::map).list();
     }
 
-    private static Project map(ResultSet rs, int row) throws SQLException {
+    static Project map(ResultSet rs, int row) throws SQLException {
         return new Project(rs.getObject("id", UUID.class), rs.getObject("company_id", UUID.class),
                 rs.getObject("workspace_id", UUID.class), rs.getString("project_code"),
                 rs.getString("name"), rs.getString("description"),
@@ -282,7 +284,9 @@ public class JdbcProjectRepository implements ProjectRepository {
                 rs.getObject("owner_user_id", UUID.class), rs.getLong("row_version"), instant(rs, "created_at"),
                 rs.getObject("created_by_user_id", UUID.class), instant(rs, "updated_at"),
                 rs.getObject("updated_by_user_id", UUID.class),
-                nullableInstant(rs, "archived_at"));
+                nullableInstant(rs, "archived_at"), nullableInstant(rs, "deletion_requested_at"),
+                rs.getObject("deletion_requested_by", UUID.class), nullableInstant(rs, "purge_after"),
+                nullableInstant(rs, "purge_started_at"));
     }
 
     private static ProjectQueryRow mapQueryRow(ResultSet rs, int row) throws SQLException {

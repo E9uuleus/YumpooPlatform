@@ -59,6 +59,7 @@ public class ProjectLifecycleService {
         Project project = requiredLocked(command.companyId(), command.projectId());
         requireVersion(project, command.expectedRowVersion());
         requireLifecycle(project, ProjectLifecycle.ARCHIVED);
+        requireNotScheduled(project);
         boolean membershipActive = memberships.find(project.companyId(), project.id(),
                         project.ownerUserId()).map(member -> member.status() == ProjectMembershipStatus.ACTIVE)
                 .orElse(false);
@@ -70,6 +71,7 @@ public class ProjectLifecycleService {
         Project before = requiredLocked(command.companyId(), command.projectId());
         requireVersion(before, command.expectedRowVersion());
         requireLifecycle(before, ProjectLifecycle.ARCHIVED);
+        requireNotScheduled(before);
         if (workspaces.findMainForShare(before.companyId())
                 .filter(workspace -> workspace.id().equals(before.workspaceId())).isEmpty()) {
             throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION,
@@ -113,6 +115,12 @@ public class ProjectLifecycleService {
     private static void requireLifecycle(Project project, ProjectLifecycle expected) {
         if (project.lifecycle() != expected) {
             throw new ApplicationException(StandardErrorCode.INVALID_STATE_TRANSITION);
+        }
+    }
+
+    private static void requireNotScheduled(Project project) {
+        if (project.deletionRequestedAt() != null) {
+            throw ApplicationException.withReason(StandardErrorCode.INVALID_STATE_TRANSITION, "DELETION_SCHEDULED");
         }
     }
 

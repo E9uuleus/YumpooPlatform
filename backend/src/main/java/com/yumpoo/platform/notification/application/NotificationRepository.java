@@ -10,11 +10,19 @@ import java.util.UUID;
 public interface NotificationRepository {
     record Event(UUID id, UUID companyId, UUID sourceEventId, String eventType, int version,
             TargetKind kind, UUID projectId, UUID workItemId, UUID updateId, UUID subjectUserId,
-            UUID actorUserId, Instant occurredAt) {}
+            UUID actorUserId, Instant occurredAt, Instant deletionPurgeAfter) {
+        public Event(UUID id, UUID companyId, UUID sourceEventId, String eventType, int version,
+                TargetKind kind, UUID projectId, UUID workItemId, UUID updateId, UUID subjectUserId,
+                UUID actorUserId, Instant occurredAt) {
+            this(id, companyId, sourceEventId, eventType, version, kind, projectId, workItemId, updateId,
+                    subjectUserId, actorUserId, occurredAt, null);
+        }
+    }
     record Row(UUID id, Reason reason, State state, Instant createdAt, Instant readAt, Event event) {}
     record Anchor(Instant createdAt, UUID id) {}
     Instant acceptedFrom();
     Instant connectionAcceptedFrom();
+    Instant projectDeletionAcceptedFrom();
     void append(Event event, Map<UUID, Reason> recipients);
     List<Row> find(UUID companyId, UUID userId, ListState state, Group group, Anchor before, int limit);
     UnreadCounts counts(UUID companyId, UUID userId);
