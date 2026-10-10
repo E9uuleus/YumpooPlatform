@@ -930,6 +930,38 @@ describe('项目级工作项首页', () => {
     expect(view.subitemState('parent').loading).toBe(false)
   })
 
+  it('子项换父事件重取主表及两个已展开子表，移除旧父项中的缓存行', async () => {
+    const oldParent = { ...item('old-parent'), subitemCount: 1 }
+    const newParent = { ...item('new-parent'), subitemCount: 1 }
+    const child = { ...item('child'), title: '待移动子项' }
+    const otherChild = { ...item('other-child'), title: '新父项已有子项' }
+    state.listProjectWorkItems.mockResolvedValue(page([oldParent, newParent]))
+    state.listWorkItemSubitems.mockImplementation(({ parentWorkItemId }: { parentWorkItemId: string }) =>
+      Promise.resolve({ items: parentWorkItemId === oldParent.id ? [child] : [otherChild] }))
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button[aria-label="展开子项"]')[0]!.trigger('click')
+    await flushPromises()
+    await wrapper.get('button[aria-label="展开子项"]').trigger('click')
+    await flushPromises()
+    const oldTable = wrapper.findAllComponents({ name: 'ProjectWorkItemSubitemsTable' })
+      .find(table => table.props('parent').id === oldParent.id)!
+    const rootCalls = state.listProjectWorkItems.mock.calls.length
+    const childCalls = state.listWorkItemSubitems.mock.calls.length
+    state.listProjectWorkItems.mockResolvedValue(page([{ ...oldParent, subitemCount: 0 }, { ...newParent, subitemCount: 2 }]))
+    state.listWorkItemSubitems.mockImplementation(({ parentWorkItemId }: { parentWorkItemId: string }) =>
+      Promise.resolve({ items: parentWorkItemId === oldParent.id ? [] : [otherChild, child] }))
+    oldTable.vm.$emit('rowChanged', [child.id, oldParent.id, newParent.id])
+    await flushPromises()
+    expect(state.listProjectWorkItems).toHaveBeenCalledTimes(rootCalls + 1)
+    expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(childCalls + 2)
+    const view = wrapper.vm as unknown as { subitemState: (id: string) => { items: ProjectWorkItemListItem[] } }
+    expect(view.subitemState(oldParent.id).items).toEqual([])
+    expect(view.subitemState(newParent.id).items).toEqual([otherChild, child])
+    expect(wrapper.findAll('.monday-subitem-table .work-item-title-text').map(title => title.text()))
+      .toEqual(['新父项已有子项', '待移动子项'])
+  })
+
   it('恢复已有自定义列宽，并将低于最小值的已保存列宽限制到最小值', async () => {
     localStorage.setItem('yumpoo:project-work-items:table:v1', JSON.stringify({
       version: 1, widths: { status: 155, priority: 188, content: 80 },
@@ -1660,17 +1692,20 @@ describe('项目级工作项首页', () => {
     wrapper.unmount()
   })
 
-  it('跨项目关系跳转到目标项目上下文并携带 workItemId', async () => {
+  it('旧关系页链接回退详情，清理 tab 后不会再次加载或沿用当前讨论页', async () => {
+    state.route.query = { workItemId: 'item-1', tab: 'relations' }
     const wrapper = mountView()
     await flushPromises()
-    await (wrapper.vm as unknown as {
-      openRelatedWorkItem: (target: { workItemId: string, projectId: string }) => Promise<void>
-    }).openRelatedWorkItem({ workItemId: 'remote-item', projectId: 'project-2' })
-    expect(state.push).toHaveBeenCalledWith({
-      name: 'project-overview',
-      params: { projectId: 'project-2' },
-      query: { workItemId: 'remote-item' },
-    })
+    const view = wrapper.vm as unknown as { detailTab: string }
+    expect(view.detailTab).toBe('details')
+    expect(state.route.query).toEqual({ workItemId: 'item-1' })
+    expect(state.getWorkItem).toHaveBeenCalledTimes(1)
+    view.detailTab = 'discussion'
+    state.route.query.tab = 'relations'
+    await nextTick(); await flushPromises()
+    expect(view.detailTab).toBe('details')
+    expect(state.route.query).toEqual({ workItemId: 'item-1' })
+    expect(state.getWorkItem).toHaveBeenCalledTimes(2)
   })
 
   it('选择具体截止日期立即提交自然日字段命令', async () => {
