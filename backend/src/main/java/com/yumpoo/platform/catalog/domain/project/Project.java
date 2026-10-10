@@ -19,8 +19,20 @@ public record Project(
         UUID createdByUserId,
         Instant updatedAt,
         UUID updatedByUserId,
-        Instant archivedAt
+        Instant archivedAt,
+        Instant deletionRequestedAt,
+        UUID deletionRequestedBy,
+        Instant purgeAfter,
+        Instant purgeStartedAt
 ) {
+
+    public Project(UUID id, UUID companyId, UUID workspaceId, String code, String name,
+            String description, ProjectLifecycle lifecycle, UUID ownerUserId, long rowVersion,
+            Instant createdAt, UUID createdByUserId, Instant updatedAt, UUID updatedByUserId,
+            Instant archivedAt) {
+        this(id, companyId, workspaceId, code, name, description, lifecycle, ownerUserId, rowVersion,
+                createdAt, createdByUserId, updatedAt, updatedByUserId, archivedAt, null, null, null, null);
+    }
 
     private static final Pattern CODE = Pattern.compile("^[A-Z][A-Z0-9_]{1,31}$");
 
@@ -43,6 +55,14 @@ public record Project(
         if ((lifecycle == ProjectLifecycle.ARCHIVED) != (archivedAt != null)
                 || (archivedAt != null && (archivedAt.isBefore(createdAt) || archivedAt.isAfter(updatedAt)))) {
             throw new IllegalArgumentException("project lifecycle timestamps are invalid");
+        }
+        if (deletionRequestedAt == null) {
+            if (deletionRequestedBy != null || purgeAfter != null || purgeStartedAt != null)
+                throw new IllegalArgumentException("project deletion facts are incomplete");
+        } else if (lifecycle != ProjectLifecycle.ARCHIVED || deletionRequestedBy == null || purgeAfter == null
+                || !purgeAfter.isAfter(deletionRequestedAt)
+                || (purgeStartedAt != null && purgeStartedAt.isBefore(purgeAfter))) {
+            throw new IllegalArgumentException("project deletion facts are invalid");
         }
     }
 
@@ -108,6 +128,7 @@ public record Project(
         if (lifecycle != ProjectLifecycle.ARCHIVED) {
             throw new IllegalStateException("only archived project can be reopened");
         }
+        if (deletionRequestedAt != null) throw new IllegalStateException("scheduled deletion must be cancelled before restore");
         return new Project(id, companyId, workspaceId, code, name, description,
                 ProjectLifecycle.ACTIVE, ownerUserId, rowVersion + 1, createdAt,
                 createdByUserId, now, actorUserId, null);

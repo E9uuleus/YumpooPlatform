@@ -76,6 +76,7 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     @Override
     public Set<EventSubscription> subscriptions() {
         LinkedHashSet<EventSubscription> subscriptions = new LinkedHashSet<>();
+        subscriptions.add(new EventSubscription("catalog.project_purged", 1));
         allEvents().stream().filter(type -> !V2_ONLY_EVENTS.contains(type))
                 .forEach(type -> subscriptions.add(new EventSubscription(type, 1)));
         V2_EVENTS.forEach(type -> subscriptions.add(new EventSubscription(type, 2)));
@@ -86,6 +87,11 @@ public class ActivityProjectionService implements OutboxEventConsumer {
     public void consume(DomainEventEnvelope event) {
         if (event.occurredAt().isBefore(repository.acceptedFrom())) return;
         try {
+            if ("catalog.project_purged".equals(event.eventType())) return;
+            for (String field : java.util.List.of("projectId", "sourceProjectId", "targetProjectId", "leftProjectId", "rightProjectId")) {
+                JsonNode project = event.payload().get(field);
+                if (project != null && project.isTextual() && context.projectPurging(event.companyId(), UUID.fromString(project.asText()))) return;
+            }
             if (PROJECT_EVENTS.contains(event.eventType())) appendProject(event);
             else if (CONTENT_EVENTS.contains(event.eventType())) appendContent(event);
             else if (CONNECTION_EVENTS.contains(event.eventType())) appendConnection(event);

@@ -37,6 +37,6 @@ public class ProjectConnectionTargetAdapter implements ProjectConnectionTargetQu
 
     private static ConnectTargetProjectSnapshot snapshot(Target target) {
         return new ConnectTargetProjectSnapshot(target.projectId(), target.code(), target.name(),
-                ProjectAccessSnapshot.ProjectLifecycle.valueOf(target.lifecycle()));
+                ProjectAccessSnapshot.ProjectLifecycle.valueOf(target.lifecycle()),target.purging());
     }
 }

@@ -16,6 +16,7 @@ import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshot;
 import com.yumpoo.platform.identityaccess.api.ActiveUserSnapshotQuery;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
+import com.yumpoo.platform.workitem.api.ProjectTimerStopPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -37,6 +38,7 @@ class ProjectLifecycleGovernanceServiceTest {
     private final UUID companyId = UUID.randomUUID(), projectId = UUID.randomUUID(), ownerId = UUID.randomUUID();
     private final ProjectLifecycleCommandPort projects = mock(ProjectLifecycleCommandPort.class);
     private final ProjectArchiveBlockerCollector blockers = mock(ProjectArchiveBlockerCollector.class);
+    private final ProjectTimerStopPort timers = mock(ProjectTimerStopPort.class);
     private final ActiveUserSnapshotQuery users = mock(ActiveUserSnapshotQuery.class);
     private final IdempotentCommandExecutor idempotency = mock(IdempotentCommandExecutor.class);
     private final SecurityAuditAppendPort audits = mock(SecurityAuditAppendPort.class);
@@ -47,7 +49,7 @@ class ProjectLifecycleGovernanceServiceTest {
     void setUp() {
         when(idempotency.execute(any(), any())).thenAnswer(invocation ->
                 IdempotencyExecutionResult.executed(invocation.<Supplier<StoredCommandResult>>getArgument(1).get()));
-        service = new ProjectLifecycleGovernanceService(projects, blockers, users, idempotency, events, audits,
+        service = new ProjectLifecycleGovernanceService(projects, blockers, timers, users, idempotency, events, audits,
                 new ObjectMapper(), Clock.systemUTC());
     }
 
@@ -62,6 +64,7 @@ class ProjectLifecycleGovernanceServiceTest {
         assertThat(result.result().responseJson()).contains("ARCHIVED");
         verify(projects).lockForArchive(new ProjectArchiveMutation(companyId, projectId, 0, actor.userId(), !admin));
         verifyNoInteractions(blockers);
+        verify(timers).stopRunningTimers(actor, projectId);
         verify(audits).append(any());
         verify(events).append(any());
     }

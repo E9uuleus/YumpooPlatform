@@ -7,6 +7,7 @@ import { projectsApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
+import ProjectDeletionActions from '../../components/projects/ProjectDeletionActions.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import { vBrandLoading as vLoading } from '../../brand/loading'
@@ -17,8 +18,10 @@ import { formatTimestamp } from '../../design-system/dates'
 const router = useRouter(), session = useSession()
 const result = ref<ProjectPage>(), error = ref<ApiProblem>(), query = ref(''), page = ref(0)
 const loading = ref(false), busyProjectId = ref(''), size = 20
+const now = ref(Date.now())
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'UTC')
 let searchTimer: ReturnType<typeof setTimeout> | undefined, request = 0
+let countdownTimer: ReturnType<typeof setInterval> | undefined
 
 async function load(): Promise<void> {
   const sequence = ++request
@@ -42,6 +45,12 @@ function search(): void {
 }
 function open(project: ProjectSummary): void {
   void router.push({ name: 'project-overview', params: { projectId: project.id } })
+}
+function deletionStatus(project: ProjectSummary): string {
+  if (!project.deletion) return '未计划删除'
+  const deadline = project.deletion.purgeAfter
+  const days = Math.max(0, Math.ceil((deadline.getTime() - now.value) / 86_400_000))
+  return `将于 ${formatTimestamp(deadline, timezone.value)} 永久删除（${days > 0 ? `剩 ${days} 天` : '等待清除'}）`
 }
 async function restore(project: ProjectSummary): Promise<void> {
   if (busyProjectId.value) return
@@ -67,8 +76,15 @@ async function restore(project: ProjectSummary): Promise<void> {
     error.value = problem
   } finally { busyProjectId.value = '' }
 }
-onMounted(load)
-onBeforeUnmount(() => { request++; if (searchTimer) clearTimeout(searchTimer) })
+onMounted(() => {
+  void load()
+  countdownTimer = setInterval(() => { now.value = Date.now() }, 60_000)
+})
+onBeforeUnmount(() => {
+  request++
+  if (searchTimer) clearTimeout(searchTimer)
+  if (countdownTimer) clearInterval(countdownTimer)
+})
 </script>
 
 <template>
@@ -149,8 +165,16 @@ onBeforeUnmount(() => { request++; if (searchTimer) clearTimeout(searchTimer) })
             </template>
           </el-table-column>
           <el-table-column
+            label="删除状态"
+            min-width="300"
+          >
+            <template #default="scope">
+              {{ deletionStatus(scope.row as ProjectSummary) }}
+            </template>
+          </el-table-column>
+          <el-table-column
             label="操作"
-            width="170"
+            width="280"
             fixed="right"
           >
             <template #default="scope">
@@ -170,6 +194,11 @@ onBeforeUnmount(() => { request++; if (searchTimer) clearTimeout(searchTimer) })
               >
                 恢复
               </el-button>
+              <project-deletion-actions
+                :project="scope.row as ProjectSummary"
+                @changed="load"
+                @problem="problem => { error = problem }"
+              />
             </template>
           </el-table-column>
         </el-table>

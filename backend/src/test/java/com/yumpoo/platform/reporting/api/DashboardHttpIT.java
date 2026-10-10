@@ -1,7 +1,10 @@
 package com.yumpoo.platform.reporting.api;
 
+import com.yumpoo.platform.catalog.api.ProjectPurgeQueue;
+import com.yumpoo.platform.foundation.application.idempotency.RequestHash;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelation;
 import com.yumpoo.platform.foundation.application.request.RequestCorrelationContext;
+import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleCommand;
 import com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleMode;
 import com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMaintenanceUseCase;
@@ -10,6 +13,9 @@ import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
+import com.yumpoo.platform.reporting.application.DashboardModels;
+import com.yumpoo.platform.reporting.application.DashboardService;
+import com.yumpoo.platform.reporting.infrastructure.JdbcReportingProjectDataPurger;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import com.yumpoo.platform.workitem.application.WorkItemLabelRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -31,14 +37,20 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Clock;
+import java.time.Duration;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ActiveProfiles("test")
 @Import(PostgreSqlTestContainerConfiguration.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "yumpoo.outbox.enabled=false")
+        properties = {"yumpoo.outbox.enabled=false","yumpoo.projects.deletion.purge-poll-delay=1h"})
 class DashboardHttpIT {
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-4000-8000-000000000001");
     private static final UUID WORKSPACE_ID = UUID.fromString("a460aa25-7180-490b-ab14-f9ec09049024");
@@ -58,6 +70,9 @@ class DashboardHttpIT {
     @Autowired private WorkItemLabelRepository labels;
     @Autowired private PlatformRoleMaintenanceUseCase maintenanceUseCase;
     @Autowired private CompanyConfigurationQuery companyQuery;
+    @Autowired private DashboardService dashboards;
+    @Autowired private ProjectPurgeQueue purgeQueue;
+    @Autowired private JdbcReportingProjectDataPurger reportingPurger;
 
     private ActorFixture owner;
     private ActorFixture member;
@@ -170,6 +185,70 @@ class DashboardHttpIT {
     }
 
     @Test
+    void dashboardWriteHoldsProjectThroughCommitAndPurgePreventsNestedReferenceResurrection() throws Exception {
+        var initial=created(mutate("POST","/api/v1/me/dashboards",owner,dashboardBody(),null,UUID.randomUUID()));
+        UUID id=UUID.fromString(initial.path("id").asText());
+        String path="/api/v1/me/dashboards/"+id;
+        jdbc.sql("""
+                UPDATE yumpoo.project SET lifecycle='ARCHIVED',archived_at=CURRENT_TIMESTAMP,
+                    updated_at=CURRENT_TIMESTAMP,updated_by_user_id=:owner,
+                    deletion_requested_at=CURRENT_TIMESTAMP-interval '2 seconds',deletion_requested_by=:owner,
+                    purge_after=CURRENT_TIMESTAMP-interval '1 second' WHERE id=:project
+                """).param("owner",owner.userId()).param("project",PROJECT_ID).update();
+        var input=json.readValue(dashboardReferenceBody(PROJECT_ID,"ALL",true).toString(),DashboardModels.Write.class);
+        var written=new CountDownLatch(1);
+        var commit=new CountDownLatch(1);
+        var executor=Executors.newSingleThreadExecutor();
+        var writer=executor.submit(()->{
+            try (var ignored=RequestCorrelationContext.open(RequestCorrelation.root("dashboard-purge-write-"+UUID.randomUUID()))) {
+                return new TransactionTemplate(transactionManager).execute(status->{
+                    var result=dashboards.command(new CurrentActor(owner.userId(),COMPANY_ID,0,Set.of()),"PATCH",id,input,0,
+                            UUID.randomUUID(),new RequestHash("0".repeat(64)));
+                    written.countDown();
+                    awaitCommit(commit);
+                    return result;
+                });
+            }
+        });
+        try {
+            assertThat(written.await(15,TimeUnit.SECONDS)).isTrue();
+            assertThat(purgeQueue.claim(clock.instant(),"dashboard-lock-test",Duration.ofMinutes(3),true)).isEmpty();
+            assertThat(jdbc.sql("SELECT purge_started_at IS NOT NULL FROM yumpoo.project WHERE id=:id")
+                    .param("id",PROJECT_ID).query(Boolean.class).single()).isFalse();
+            commit.countDown();
+            assertThat(writer.get(15,TimeUnit.SECONDS).result().httpStatus()).isEqualTo(200);
+            assertThat(purgeQueue.claim(clock.instant(),"dashboard-lock-test",Duration.ofMinutes(3),true))
+                    .isPresent().get().satisfies(lease->assertThat(lease.projectId()).isEqualTo(PROJECT_ID));
+            reportingPurger.purgeBatch(COMPANY_ID,PROJECT_ID,500);
+            String cleared=jdbc.sql("SELECT configuration::text FROM yumpoo.personal_dashboard WHERE id=:id")
+                    .param("id",id).query(String.class).single();
+            assertThat(cleared).doesNotContain(PROJECT_ID.toString());
+            var after=ok(get(path,owner));
+            assertThat(mutate("PATCH",path,owner,dashboardReferenceBody(PROJECT_ID,"ALL",false).toString(),
+                    after.path("etag").asText(),UUID.randomUUID()).statusCode()).isEqualTo(404);
+            assertThat(jdbc.sql("SELECT configuration::text FROM yumpoo.personal_dashboard WHERE id=:id")
+                    .param("id",id).query(String.class).single()).isEqualTo(cleared);
+        } finally {
+            commit.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(15,TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    @Test
+    void missingNestedProjectsAreRejectedWithoutChangingDashboard() throws Exception {
+        var initial=created(mutate("POST","/api/v1/me/dashboards",member,dashboardBody(),null,UUID.randomUUID()));
+        String path="/api/v1/me/dashboards/"+initial.path("id").asText();
+        UUID missing=UUID.randomUUID();
+        for (String location : List.of("GLOBAL","CHART","CHART_FILTER"))
+            assertThat(mutate("PATCH",path,member,dashboardReferenceBody(missing,location,true).toString(),
+                    initial.path("etag").asText(),UUID.randomUUID()).statusCode()).as(location).isEqualTo(404);
+        var after=ok(get(path,member));
+        assertThat(after.path("version").asLong()).isZero();
+        assertThat(after.path("configuration")).isEqualTo(initial.path("configuration"));
+    }
+
+    @Test
     void statisticsCountParentsAndChildrenOnceAndSumRawTimeWithFilters() throws Exception {
         var parent = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member, workItemBody(tasksId, "父项"), null, UUID.randomUUID()));
         var child = created(mutate("POST", "/api/v1/work-items/" + parent.path("id").asText() + "/subitems", member, workItemBody(tasksId, "子项"), null, UUID.randomUUID()));
@@ -274,6 +353,9 @@ class DashboardHttpIT {
         assertThat(excluded.path("items").isEmpty()).isTrue();
         assertThat(excluded.path("totalElements").asLong()).isZero();
         assertThat(ok(get(path, member)).path("projects").get(0).path("available").asBoolean()).isFalse();
+        var retained=ok(mutate("PATCH",path,member,dashboardBody().replace("我的仪表板","归档后保留连接"),"\"0\"",UUID.randomUUID()));
+        assertThat(retained.path("projects").get(0).path("available").asBoolean()).isFalse();
+        assertThat(retained.path("configuration").path("projectIds").get(0).asText()).isEqualTo(PROJECT_ID.toString());
     }
 
     @Test
@@ -303,6 +385,8 @@ class DashboardHttpIT {
         assertThat(ok(mutate("POST", path + "/items/query", owner, "{\"offset\":0,\"limit\":25}", null, null)).path("totalElements").asLong()).isZero();
         var tableQuery = json.createObjectNode().put("projectId", PROJECT_ID.toString()).set("widget", widget).set("table", json.createObjectNode());
         assertThat(mutate("POST", path + "/table/query", owner, tableQuery.toString(), null, null).statusCode()).isEqualTo(404);
+        assertThat(ok(mutate("PATCH",path,owner,input.toString(),"\"0\"",UUID.randomUUID()))
+                .path("projects").get(0).path("available").asBoolean()).isTrue();
     }
 
     @Test
@@ -475,6 +559,35 @@ class DashboardHttpIT {
         assertThat(preview(path, chartWidget(), null).path("charts").get(0).path("points").isEmpty()).isTrue();
         var body = json.createObjectNode().put("offset", 0).put("limit", 25).set("widget", widget);
         assertThat(ok(mutate("POST", path + "/items/query", member, body.toString(), null, null)).path("totalElements").asLong()).isZero();
+        assertThat(ok(mutate("PATCH",path,member,dashboardBody(),"\"0\"",UUID.randomUUID()))
+                .path("projects").get(0).path("available").asBoolean()).isFalse();
+    }
+
+    private tools.jackson.databind.node.ObjectNode dashboardReferenceBody(UUID reference,String location,boolean includeRoot) throws Exception {
+        var body=(tools.jackson.databind.node.ObjectNode) json.readTree(dashboardBody());
+        var configuration=(tools.jackson.databind.node.ObjectNode) body.path("configuration");
+        if (!includeRoot) configuration.set("projectIds",json.createArrayNode());
+        if (location.equals("GLOBAL") || location.equals("ALL"))
+            ((tools.jackson.databind.node.ObjectNode) configuration.path("filters"))
+                    .set("projectIds",json.createArrayNode().add(reference.toString()));
+        if (!location.equals("GLOBAL")) {
+            var widget=chartWidget();
+            var chart=(tools.jackson.databind.node.ObjectNode) widget.path("chart");
+            if (location.equals("CHART") || location.equals("ALL")) chart.set("projectIds",json.createArrayNode().add(reference.toString()));
+            if (location.equals("CHART_FILTER") || location.equals("ALL")) chart.set("filters",json.createObjectNode()
+                    .put("includeArchived",false).put("hasTime",false).set("projectIds",json.createArrayNode().add(reference.toString())));
+            configuration.set("widgets",json.createArrayNode().add(widget));
+        }
+        return body;
+    }
+
+    private static void awaitCommit(CountDownLatch commit) {
+        try {
+            if (!commit.await(15,TimeUnit.SECONDS)) throw new IllegalStateException("dashboard commit was not released");
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(failure);
+        }
     }
 
     private JsonNode preview(String path, JsonNode widget, JsonNode filters) throws Exception {
@@ -590,6 +703,7 @@ class DashboardHttpIT {
     }
 
     private void cleanUp() {
+        jdbc.sql("DELETE FROM yumpoo.project_purge_run WHERE company_id=:id").param("id",COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.personal_dashboard WHERE company_id=:id").param("id", COMPANY_ID).update();
         for (String table : java.util.List.of("work_item_time_session", "work_item_timer_state", "work_item_time_revision"))
             jdbc.sql("DELETE FROM yumpoo." + table + " WHERE company_id=:id").param("id", COMPANY_ID).update();

@@ -18,6 +18,8 @@ import type {
   Project,
   ProjectActorAccess,
   ProjectCreateRequest,
+  ProjectDeletionMutation,
+  ProjectDeletionRequest,
   ProjectDetail,
   ProjectLifecycleFilter,
   ProjectMember,
@@ -41,6 +43,10 @@ import {
     ProjectActorAccessToJSON,
     ProjectCreateRequestFromJSON,
     ProjectCreateRequestToJSON,
+    ProjectDeletionMutationFromJSON,
+    ProjectDeletionMutationToJSON,
+    ProjectDeletionRequestFromJSON,
+    ProjectDeletionRequestToJSON,
     ProjectDetailFromJSON,
     ProjectDetailToJSON,
     ProjectLifecycleFilterFromJSON,
@@ -78,6 +84,13 @@ export interface AddProjectMemberRequest {
 }
 
 export interface ArchiveProjectRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+}
+
+export interface CancelProjectDeletionRequest {
     projectId: string;
     xXSRFTOKEN: string;
     ifMatch: string;
@@ -149,6 +162,14 @@ export interface RestoreProjectRequest {
     xXSRFTOKEN: string;
     ifMatch: string;
     idempotencyKey: string;
+}
+
+export interface ScheduleProjectDeletionRequest {
+    projectId: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    idempotencyKey: string;
+    projectDeletionRequest: ProjectDeletionRequest;
 }
 
 export interface UpdateProjectRequest {
@@ -305,6 +326,78 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async archiveProject(requestParameters: ArchiveProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
         const response = await this.archiveProjectRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅负责人或公司管理员可用；撤销后仍保持归档，可再恢复项目。
+     * 撤销尚未开始清除的项目删除计划
+     */
+    async cancelProjectDeletionRaw(requestParameters: CancelProjectDeletionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectDeletionMutation>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling cancelProjectDeletion().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling cancelProjectDeletion().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling cancelProjectDeletion().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling cancelProjectDeletion().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/deletion`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'DELETE',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectDeletionMutationFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅负责人或公司管理员可用；撤销后仍保持归档，可再恢复项目。
+     * 撤销尚未开始清除的项目删除计划
+     */
+    async cancelProjectDeletion(requestParameters: CancelProjectDeletionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectDeletionMutation> {
+        const response = await this.cancelProjectDeletionRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -921,6 +1014,88 @@ export class ProjectsApi extends runtime.BaseAPI {
      */
     async restoreProject(requestParameters: RestoreProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
         const response = await this.restoreProjectRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅负责人或公司管理员可用；确认编号必须精确匹配项目编号。默认30天缓冲期内可撤销，清除开始后项目不可见。
+     * 计划永久删除已归档项目
+     */
+    async scheduleProjectDeletionRaw(requestParameters: ScheduleProjectDeletionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectDeletionMutation>> {
+        if (requestParameters['projectId'] == null) {
+            throw new runtime.RequiredError(
+                'projectId',
+                'Required parameter "projectId" was null or undefined when calling scheduleProjectDeletion().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling scheduleProjectDeletion().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling scheduleProjectDeletion().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling scheduleProjectDeletion().'
+            );
+        }
+
+        if (requestParameters['projectDeletionRequest'] == null) {
+            throw new runtime.RequiredError(
+                'projectDeletionRequest',
+                'Required parameter "projectDeletionRequest" was null or undefined when calling scheduleProjectDeletion().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/projects/{projectId}/deletion`;
+        urlPath = urlPath.replace(`{${"projectId"}}`, encodeURIComponent(String(requestParameters['projectId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ProjectDeletionRequestToJSON(requestParameters['projectDeletionRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ProjectDeletionMutationFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅负责人或公司管理员可用；确认编号必须精确匹配项目编号。默认30天缓冲期内可撤销，清除开始后项目不可见。
+     * 计划永久删除已归档项目
+     */
+    async scheduleProjectDeletion(requestParameters: ScheduleProjectDeletionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectDeletionMutation> {
+        const response = await this.scheduleProjectDeletionRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

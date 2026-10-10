@@ -1,0 +1,24 @@
+{
+  "eventId": "49000000-0000-4000-8000-000000000010",
+  "eventType": "catalog.project_deletion_scheduled",
+  "eventVersion": 1,
+  "occurredAt": "2026-10-09T12:00:00Z",
+  "aggregateType": "Project",
+  "aggregateId": "49000000-0000-4000-8000-000000000002",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": {
+    "type": "USER",
+    "userId": "49000000-0000-4000-8000-000000000003"
+  },
+  "requestId": "up11-project-deletion",
+  "correlationId": "up11-project-deletion",
+  "causationId": null,
+  "payload": {
+    "projectId": "49000000-0000-4000-8000-000000000002",
+    "requestedAt": "2026-10-09T12:00:00Z",
+    "requestedBy": "49000000-0000-4000-8000-000000000003",
+    "purgeAfter": "2026-11-08T12:00:00Z",
+    "projectName": "不可传播的项目名称"
+  }
+}

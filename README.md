@@ -142,6 +142,8 @@ Vite 将 `/api` 代理至后端。修改 `YUMPOO_SERVER_PORT` 后，需同步修
 
 生产目录以部署模板中的路径为准，配置与 Secret 文件需保存在部署机受保护的目录内。
 
+项目永久删除先要求归档和输入项目编号，默认有30天缓冲期，负责人或企业管理员可在清除开始前撤销。`YUMPOO_PROJECT_DELETION_GRACE_PERIOD`、`YUMPOO_PROJECT_DELETION_REMINDER_LEAD` 分别覆盖缓冲期与提醒提前量（默认 `P30D`、`P1D`）；`yumpoo.projects.deletion.purge-poll-delay` 默认 `1m`，`purge-batch-size` 默认且最大为500。到期清除移除业务数据和无共享引用的物理附件，保留安全审计与治理记录；失败批次依靠持久租约自动续跑。
+
 ## 构建与验证
 
 ```powershell

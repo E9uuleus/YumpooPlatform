@@ -39,6 +39,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -80,7 +81,7 @@ public class OpsSampler implements OperationsRuntime, SmartLifecycle {
     private final AtomicReference<RuntimeSnapshot> current = new AtomicReference<>();
     private ScheduledExecutorService sampler;
     private ExecutorService worker;
-    private Future<?> inFlight;
+    private volatile Future<?> inFlight;
     private volatile boolean running;
     private long lostSamples;
     private int dbFailures;
@@ -246,7 +247,11 @@ public class OpsSampler implements OperationsRuntime, SmartLifecycle {
         );
         if (inFlight == null || inFlight.isDone()) {
             Map<String, Double> local = new LinkedHashMap<>(values);
-            inFlight = worker.submit(() -> collectIo(now, local, posture));
+            try {
+                inFlight = worker.submit(() -> collectIo(now, local, posture));
+            } catch (RejectedExecutionException busyOrStopped) {
+                // The single IO worker is still busy (its future may not be published yet) or stopping; skip this round.
+            }
         }
     }
 

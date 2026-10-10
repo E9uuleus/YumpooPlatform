@@ -19,7 +19,7 @@ class NotificationContextAdapterTest {
         var projects=mock(ProjectOwnerScopeQuery.class);
         var source=mock(WorkItemNotificationSourceQuery.class);
         var items=mock(WorkItemReferenceQuery.class);
-        var adapter=new NotificationContextAdapter(users,members,access,projects,source,items);
+        var adapter=new NotificationContextAdapter(users,members,access,projects,source,items,mock(ProjectDeletionQuery.class));
         UUID company=UUID.randomUUID(), project=UUID.randomUUID(), item=UUID.randomUUID(), user=UUID.randomUUID();
         var actor=new CurrentActor(user,company,0,Set.of());
         List<Reference> references=new ArrayList<>();
@@ -40,7 +40,7 @@ class NotificationContextAdapterTest {
     @Test void recipientEligibilityRequiresMembershipAndActiveEnabledAccount() {
         var users=mock(MinimalUserSnapshotQuery.class);var members=mock(ProjectActiveMembershipQuery.class);
         var adapter=new NotificationContextAdapter(users,members,mock(ProjectAccessSnapshotQuery.class),mock(ProjectOwnerScopeQuery.class),
-                mock(WorkItemNotificationSourceQuery.class),mock(WorkItemReferenceQuery.class));
+                mock(WorkItemNotificationSourceQuery.class),mock(WorkItemReferenceQuery.class),mock(ProjectDeletionQuery.class));
         UUID company=UUID.randomUUID(),project=UUID.randomUUID(),active=UUID.randomUUID(),disabled=UUID.randomUUID();
         when(members.findActiveMemberIds(company,project,Set.of(active,disabled))).thenReturn(Set.of(active,disabled));
         when(users.findByUserIds(company,Set.of(active,disabled))).thenReturn(Map.of(

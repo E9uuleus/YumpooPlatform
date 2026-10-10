@@ -14,7 +14,7 @@ public class JdbcMemberProjectRepository implements MemberProjectRepository {
     private static final String SCOPE = """
         FROM yumpoo.project p JOIN yumpoo.project_membership m
           ON m.company_id=p.company_id AND m.project_id=p.id AND m.user_id=:user AND m.status='ACTIVE'
-        WHERE p.company_id=:company
+        WHERE p.company_id=:company AND p.purge_started_at IS NULL
           AND (p.lifecycle='ACTIVE' OR p.owner_user_id=:user OR :admin)
         """;
     private static final String SEARCH = """
@@ -37,7 +37,7 @@ public class JdbcMemberProjectRepository implements MemberProjectRepository {
         return search("SELECT COUNT(*) " + SCOPE + SEARCH, actor, query, archived).query(Long.class).single();
     }
     public List<Project> listCompany(UUID companyId) {
-        return projects(jdbc.sql("SELECT id,name,project_code,lifecycle FROM yumpoo.project WHERE company_id=:company ORDER BY name,id")
+        return projects(jdbc.sql("SELECT id,name,project_code,lifecycle FROM yumpoo.project WHERE company_id=:company AND purge_started_at IS NULL ORDER BY name,id")
                 .param("company", companyId));
     }
     private JdbcClient.StatementSpec scope(String sql, CurrentActor actor) {

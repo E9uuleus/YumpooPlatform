@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -110,6 +111,31 @@ class LocalFileQuarantineStorageTest {
         )).isInstanceOf(UploadRejectedException.class)
                 .extracting(exception -> ((UploadRejectedException) exception).rejectedCode())
                 .isEqualTo(AttachmentRejectedCode.FILE_TYPE_NOT_ALLOWED);
+    }
+
+    @Test
+    void projectPurgeIsIdempotentForMissingTemporaryAndPublishedFiles() throws Exception {
+        LocalFileQuarantineStorage storage = storage();
+        UUID id = UUID.randomUUID();
+        Files.writeString(tempDirectory.resolve("quarantine").resolve(id + ".part"), "partial");
+        storage.purgeTemporary(id);
+        storage.purgeTemporary(id);
+        SealedUpload sealed = storage.receive(id, new ByteArrayInputStream(new byte[]{1, 2, 3}), OptionalLong.of(3));
+        PublishedBlob blob = storage.publish(sealed);
+        storage.purgePublished(blob.storageKey());
+        storage.purgePublished(blob.storageKey());
+        assertThat(storage.temporaryEntryExists(id + ".part")).isFalse();
+        assertThat(filesUnder(tempDirectory.resolve("published"))).isZero();
+    }
+
+    @Test
+    void projectPurgeRejectsUnsafeEntriesAndKeysWithoutLosingTheirEvidence() throws Exception {
+        LocalFileQuarantineStorage storage = storage();
+        UUID id = UUID.randomUUID();
+        Path unsafe = Files.createDirectory(tempDirectory.resolve("quarantine").resolve(id + ".sealed"));
+        assertThatThrownBy(() -> storage.purgeTemporary(id)).isInstanceOf(IOException.class);
+        assertThat(Files.isDirectory(unsafe)).isTrue();
+        assertThatThrownBy(() -> storage.purgePublished("../outside.txt")).isInstanceOf(IOException.class);
     }
 
     private LocalFileQuarantineStorage storage() throws IOException {

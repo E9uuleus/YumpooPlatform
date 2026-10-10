@@ -29,6 +29,7 @@ class NotificationInboxProjectionTest {
         when(context.workItemParticipants(company,item)).thenReturn(Optional.of(new NotificationContextPort.Participants(project,List.of(assignee),creator)));
         when(context.update(company,update)).thenReturn(Optional.of(new NotificationContextPort.Update(project,item,actor,parent)));
         when(context.projectOwner(company,project)).thenReturn(Optional.of(creator));
+        when(context.ordinaryNotificationsEnabled(company,project)).thenReturn(true);
         when(context.eligibleProjectRecipients(eq(company),eq(project),any())).thenAnswer(i->new HashSet<>((Collection<UUID>)i.getArgument(2)));
         when(context.activeAccounts(eq(company),any())).thenAnswer(i->new HashSet<>((Collection<UUID>)i.getArgument(1)));
     }
@@ -36,6 +37,19 @@ class NotificationInboxProjectionTest {
         ObjectNode p=payload();p.putArray("mentionedUserIds").add(assignee.toString()).add(parent.toString()).add(actor.toString());
         projection.consume(event("workitem.work_item_update_published",2,p,cutover));
         verify(repository).append(any(),eq(Map.of(assignee,Reason.MENTION,parent,Reason.MENTION,creator,Reason.COMMENT)));
+    }
+    @Test void projectsScheduledForDeletionDoNotProduceOrdinaryNotifications() {
+        when(context.ordinaryNotificationsEnabled(company,project)).thenReturn(false);
+        ObjectNode p=payload();p.putArray("mentionedUserIds").add(assignee.toString());
+        projection.consume(event("workitem.work_item_update_published",2,p,cutover));
+        p.put("assigneeUserId",assignee.toString());
+        projection.consume(event("workitem.work_item_created",2,p,cutover));
+        p.put("userId",assignee.toString());
+        projection.consume(event("catalog.project_member_added",1,p,cutover));
+        projection.consume(event("workitem.connection_created",1,connectionPayload("CREATED"),connectionCutover));
+        verify(repository,never()).append(any(),any());
+        verify(context,never()).workItemParticipants(any(),any());
+        verify(context,never()).eligibleProjectRecipients(any(),any(),any());
     }
     @Test void replyOverridesCommentAndEditOnlyNotifiesAddedMentions() {
         when(context.update(company,update)).thenReturn(Optional.of(new NotificationContextPort.Update(project,item,actor,assignee)));

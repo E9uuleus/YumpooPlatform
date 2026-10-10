@@ -57,6 +57,7 @@ public class WorkItemCellActivityProjectionService implements OutboxEventConsume
     @Override
     public void consume(DomainEventEnvelope event) {
         if (event.occurredAt().isBefore(repository.acceptedFrom())) return;
+        if (context.projectPurging(event.companyId(), uuid(event.payload(), "projectId"))) return;
         try {
             switch (event.eventType()) {
                 case "workitem.time_tracking_edited" -> timeTrackingEdited(event);

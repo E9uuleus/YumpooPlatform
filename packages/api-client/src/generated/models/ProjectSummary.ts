@@ -26,6 +26,13 @@ import {
     ProjectCapabilitiesToJSON,
     ProjectCapabilitiesToJSONTyped,
 } from './ProjectCapabilities';
+import type { ProjectDeletion } from './ProjectDeletion';
+import {
+    ProjectDeletionFromJSON,
+    ProjectDeletionFromJSONTyped,
+    ProjectDeletionToJSON,
+    ProjectDeletionToJSONTyped,
+} from './ProjectDeletion';
 import type { ProjectActorAccess } from './ProjectActorAccess';
 import {
     ProjectActorAccessFromJSON,
@@ -132,6 +139,12 @@ export interface ProjectSummary {
     readonly updatedAt: Date;
     /**
      *
+     * @type {ProjectDeletion}
+     * @memberof ProjectSummary
+     */
+    deletion?: ProjectDeletion;
+    /**
+     *
      * @type {Date}
      * @memberof ProjectSummary
      */
@@ -187,7 +200,8 @@ export function ProjectSummaryFromJSONTyped(json: any, ignoreDiscriminator: bool
         'etag': json['etag'],
         'createdAt': (new Date(json['createdAt'])),
         'updatedAt': (new Date(json['updatedAt'])),
-        ...(json['archivedAt'] === undefined ? {} : { 'archivedAt': json['archivedAt'] === null ? null : new Date(json['archivedAt']) }),
+        ...(json['deletion'] == null ? {} : { 'deletion': ProjectDeletionFromJSON(json['deletion']) }),
+        ...(json['archivedAt'] === undefined ? {} : { 'archivedAt': json['archivedAt'] === null ? null : (new Date(json['archivedAt'])) }),
     };
 }
 
@@ -213,5 +227,6 @@ export function ProjectSummaryToJSONTyped(value?: Omit<ProjectSummary, 'rowVersi
         'ownerDisplayName': value['ownerDisplayName'],
         'actorAccess': ProjectActorAccessToJSON(value['actorAccess']),
         'capabilities': ProjectCapabilitiesToJSON(value['capabilities']),
+        'deletion': ProjectDeletionToJSON(value['deletion']),
     };
 }

@@ -50,6 +50,7 @@ export interface DesktopFilesBridge {
 }
 
 export type DesktopInboxReason = 'MENTION' | 'REPLY' | 'COMMENT' | 'ASSIGNED' | 'PROJECT_MEMBER_ADDED' | 'PROJECT_MEMBER_REMOVED' | 'PROJECT_OWNER_ASSIGNED' | 'PROJECT_OWNER_TRANSFERRED' | 'CONNECTION_CREATED'
+  | 'PROJECT_DELETION_SCHEDULED' | 'PROJECT_DELETION_REMINDER' | 'PROJECT_DELETION_CANCELLED'
 
 export interface DesktopInboxState {
   accountId: string | null

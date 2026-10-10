@@ -195,7 +195,7 @@ public final class JdbcAttachmentMaintenanceService {
         List<Blob> rows=jdbc.sql("""
                 SELECT storage_key,sha256,size_bytes FROM yumpoo.attachment_blob
                  WHERE (:cursor IS NULL OR storage_key>:cursor)
-                   AND presence_status<>'DELETED' ORDER BY storage_key LIMIT :limit
+                   AND presence_status<>'DELETED' AND operation_type IS NULL ORDER BY storage_key LIMIT :limit
                 """).param("cursor",run.cursor(),Types.VARCHAR).param("limit",properties.getMaintenanceBatchSize())
                 .query((rs,row)->new Blob(rs.getString(1),rs.getString(2),rs.getLong(3))).list();
         long issues=0;
@@ -203,14 +203,14 @@ public final class JdbcAttachmentMaintenanceService {
             try {
                 BlobVerification result=storage.inspect(new PublishedBlob(row.key(),row.size(),row.sha256()));
                 if(result==BlobVerification.VERIFIED) {
-                    jdbc.sql("UPDATE yumpoo.attachment_blob SET presence_status='PRESENT',last_verified_at=:now,updated_at=:now WHERE storage_key=:key")
+                    jdbc.sql("UPDATE yumpoo.attachment_blob SET presence_status='PRESENT',last_verified_at=:now,updated_at=:now WHERE storage_key=:key AND presence_status<>'DELETED' AND operation_type IS NULL")
                             .param("now",utc(now)).param("key",row.key()).update();
                     resolveIssue("MISSING_BLOB","BLOB",row.key(),now);
                     resolveIssue("SIZE_MISMATCH","BLOB",row.key(),now);
                     resolveIssue("HASH_MISMATCH","BLOB",row.key(),now);
                 } else {
                     observe(issueCode(result),"BLOB",row.key(),null,null,now,null); issues++;
-                    if(result==BlobVerification.MISSING) jdbc.sql("UPDATE yumpoo.attachment_blob SET presence_status='MISSING',updated_at=:now WHERE storage_key=:key")
+                    if(result==BlobVerification.MISSING) jdbc.sql("UPDATE yumpoo.attachment_blob SET presence_status='MISSING',updated_at=:now WHERE storage_key=:key AND presence_status<>'DELETED' AND operation_type IS NULL")
                             .param("now",utc(now)).param("key",row.key()).update();
                 }
             } catch(IOException failure) { observe("MISSING_BLOB","BLOB",row.key(),null,null,now,null); issues++; }
@@ -282,13 +282,12 @@ public final class JdbcAttachmentMaintenanceService {
             issues++;
             if(!run.dryRun()&&!first.isAfter(now.minus(STALE_AFTER))&&!activeBlobLease(row.key(),now)) {
                 try {
-                    if(claimCleanup(row.key(),row.sizeBytes(),run,now)&&storage.deletePublished(row.key())) {
+                    UUID cleanupToken=transactions.execute(status -> claimCleanup(row.key(),row.sizeBytes(),run,now));
+                    if(cleanupToken!=null&&Boolean.TRUE.equals(transactions.execute(status -> unlinkOrphan(row.key(),cleanupToken)))) {
                         deleted++;
-                        jdbc.sql("UPDATE yumpoo.attachment_blob SET presence_status='DELETED',operation_type=NULL,operation_owner=NULL,operation_token=NULL,operation_lease_until=NULL,updated_at=:now WHERE storage_key=:key")
-                                .param("now",utc(now)).param("key",row.key()).update();
                         resolveIssue("PUBLISHED_ORPHAN","BLOB",row.key(),now);
                     }
-                } catch(IOException ignored) { }
+                } catch(IllegalStateException ignored) { }
             }
         }
         return batch(rows,rows.size(),issues,deleted);
@@ -300,24 +299,63 @@ public final class JdbcAttachmentMaintenanceService {
         return count>0;
     }
 
-    private boolean claimCleanup(String key,long size,Run run,Instant now) {
+    private UUID claimCleanup(String key,long size,Run run,Instant now) {
         String sha=key.substring(key.length()-64);
+        UUID token=UUID.randomUUID();
         jdbc.sql("""
                 INSERT INTO yumpoo.attachment_blob (storage_key,sha256,size_bytes,presence_status,created_at,updated_at)
                 VALUES (:key,:sha,:size,'PRESENT',:now,:now) ON CONFLICT (storage_key) DO NOTHING
                 """).param("key",key).param("sha",sha).param("size",size).param("now",utc(now)).update();
-        return jdbc.sql("""
+        int claimed=jdbc.sql("""
                 UPDATE yumpoo.attachment_blob SET operation_type='CLEANUP',operation_owner=:owner,
                     operation_token=:token,operation_lease_until=:until,updated_at=:now
                  WHERE storage_key=:key AND (operation_lease_until IS NULL OR operation_lease_until<=:now)
                    AND NOT EXISTS (SELECT 1 FROM yumpoo.attachment a WHERE
                        (a.storage_key=:key AND a.status IN ('UPLOADING','AVAILABLE','DELETED'))
                        OR (a.sha256=yumpoo.attachment_blob.sha256 AND a.status='UPLOADING'))
-                """).param("owner","maintenance:"+run.id()).param("token",UUID.randomUUID())
-                .param("until",utc(now.plus(LEASE))).param("now",utc(now)).param("key",key).update()==1;
+                """).param("owner","maintenance:"+run.id()).param("token",token)
+                .param("until",utc(now.plus(LEASE))).param("now",utc(now)).param("key",key).update();
+        return claimed==1?token:null;
+    }
+
+    private boolean unlinkOrphan(String key,UUID token) {
+        Instant now=clock.instant();
+        boolean guarded=jdbc.sql("""
+                SELECT storage_key FROM yumpoo.attachment_blob WHERE storage_key=:key
+                   AND operation_type='CLEANUP' AND operation_token=:token AND operation_lease_until>:now FOR UPDATE
+                """).param("key",key).param("token",token).param("now",utc(now)).query(String.class).optional().isPresent();
+        if(!guarded) return false;
+        boolean referenced=jdbc.sql("""
+                SELECT EXISTS (SELECT 1 FROM yumpoo.attachment
+                    WHERE storage_key=:key OR sha256=:sha)
+                """).param("key",key).param("sha",key.substring(key.length()-64)).query(Boolean.class).single();
+        if(!referenced) {
+            // Keep the token lock through a single unlink so an expired cleanup cannot erase a newer publish.
+            try { storage.purgePublished(key); }
+            catch(IOException failure) { throw new IllegalStateException("attachment orphan unlink failed",failure); }
+        }
+        jdbc.sql("""
+                UPDATE yumpoo.attachment_blob SET presence_status=CASE WHEN :deleted THEN 'DELETED' ELSE presence_status END,
+                    operation_type=NULL,operation_owner=NULL,operation_token=NULL,operation_lease_until=NULL,
+                    updated_at=:now,row_version=row_version+1
+                 WHERE storage_key=:key AND operation_type='CLEANUP' AND operation_token=:token
+                """).param("deleted",!referenced).param("now",utc(now)).param("key",key).param("token",token).update();
+        return !referenced;
     }
 
     private Instant observe(String code,String subjectType,String subjectKey,UUID attachmentId,
+            UUID companyId,Instant now,Instant eligibleAt) {
+        return transactions.execute(status -> {
+            if (!JdbcAttachmentPurgeFence.allowObservation(jdbc, subjectType, subjectKey, attachmentId)) return now;
+            if ("QUARANTINE".equals(subjectType)) {
+                try { if (!storage.temporaryEntryExists(subjectKey)) return now; }
+                catch (IOException failure) { return now; }
+            }
+            return insertObservation(code, subjectType, subjectKey, attachmentId, companyId, now, eligibleAt);
+        });
+    }
+
+    private Instant insertObservation(String code,String subjectType,String subjectKey,UUID attachmentId,
             UUID companyId,Instant now,Instant eligibleAt) {
         return jdbc.sql("""
                 INSERT INTO yumpoo.attachment_reconciliation_issue (

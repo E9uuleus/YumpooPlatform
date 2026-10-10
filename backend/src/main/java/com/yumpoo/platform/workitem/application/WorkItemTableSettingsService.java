@@ -2,6 +2,7 @@ package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
+import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
@@ -28,10 +29,13 @@ public class WorkItemTableSettingsService {
 
     private final WorkItemTableSettingsRepository repository;
     private final ProjectAccessSnapshotQuery access;
+    private final ProjectDeletionQuery deletion;
 
-    public WorkItemTableSettingsService(WorkItemTableSettingsRepository repository, ProjectAccessSnapshotQuery access) {
+    public WorkItemTableSettingsService(WorkItemTableSettingsRepository repository, ProjectAccessSnapshotQuery access,
+            ProjectDeletionQuery deletion) {
         this.repository = repository;
         this.access = access;
+        this.deletion = deletion;
     }
 
     @Transactional(readOnly = true)
@@ -44,6 +48,9 @@ public class WorkItemTableSettingsService {
 
     @Transactional
     public View update(CurrentActor actor, UUID projectId, Write body, long expectedVersion) {
+        if (actor == null) throw new ApplicationException(StandardErrorCode.AUTHENTICATION_REQUIRED);
+        deletion.lockForProjection(actor.companyId(), projectId).filter(project -> project.purgeStartedAt() == null)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         UUID companyId = visibleCompany(actor, projectId);
         var stored = repository.save(companyId, projectId, actor.userId(), normalize(body), expectedVersion)
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));

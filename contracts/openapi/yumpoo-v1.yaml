@@ -2830,6 +2830,60 @@ paths:
         '412': { $ref: '#/components/responses/VersionConflict' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /projects/{projectId}/deletion:
+    post:
+      tags: [Projects]
+      operationId: scheduleProjectDeletion
+      summary: 计划永久删除已归档项目
+      description: 仅负责人或公司管理员可用；确认编号必须精确匹配项目编号。默认30天缓冲期内可撤销，清除开始后项目不可见。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectDeletionRequest' }
+      responses:
+        '200':
+          description: 已计划删除的项目状态。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectDeletionMutation' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+    delete:
+      tags: [Projects]
+      operationId: cancelProjectDeletion
+      summary: 撤销尚未开始清除的项目删除计划
+      description: 仅负责人或公司管理员可用；撤销后仍保持归档，可再恢复项目。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 删除计划已撤销。
+          headers: { ETag: { $ref: '#/components/headers/ETag' } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectDeletionMutation' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /projects/{projectId}/workspace-moves:
     post:
       tags: [Projects]
@@ -5644,8 +5698,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ConnectColumnTarget"
-          minItems: 1
+          minItems: 0
           maxItems: 20
+          description: 永久清除目标项目后，保留的连接列可以暂时没有目标；创建与更新仍要求1–20个目标。
         rowVersion:
           type: integer
           format: int64
@@ -6949,7 +7004,7 @@ components:
         changedAt: { type: string, format: date-time }
     NotificationReason:
       type: string
-      enum: [MENTION, REPLY, COMMENT, ASSIGNED, PROJECT_MEMBER_ADDED, PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED, CONNECTION_CREATED]
+      enum: [MENTION, REPLY, COMMENT, ASSIGNED, PROJECT_MEMBER_ADDED, PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED, CONNECTION_CREATED, PROJECT_DELETION_SCHEDULED, PROJECT_DELETION_REMINDER, PROJECT_DELETION_CANCELLED]
     NotificationState:
       type: string
       enum: [UNREAD, READ, ARCHIVED]
@@ -6995,6 +7050,11 @@ components:
         actor: { $ref: '#/components/schemas/NotificationPerson' }
         subject: { $ref: '#/components/schemas/NotificationPerson' }
         target: { $ref: '#/components/schemas/NotificationTarget' }
+        deletionPurgeAfter:
+          type: string
+          format: date-time
+          nullable: true
+          description: 计划删除或到期提醒事件的永久删除日期快照；目标不可访问时为空，撤销不会改写已存在的快照。
     NotificationPage:
       type: object
       required: [items, nextCursor, serverNow]
@@ -8465,6 +8525,35 @@ components:
           deprecated: true
           description: v1 兼容字段；MAIN 单例启用后永远为 false。
         canOverrideArchive: { type: boolean, readOnly: true }
+        canScheduleDeletion: { type: boolean, readOnly: true }
+        canCancelDeletion: { type: boolean, readOnly: true }
+
+    ProjectDeletion:
+      type: object
+      additionalProperties: false
+      required: [requestedAt, requestedBy, purgeAfter]
+      properties:
+        requestedAt: { type: string, format: date-time, readOnly: true }
+        requestedBy: { $ref: '#/components/schemas/Uuid' }
+        purgeAfter: { type: string, format: date-time, readOnly: true }
+
+    ProjectDeletionRequest:
+      type: object
+      additionalProperties: false
+      required: [confirmationCode]
+      properties:
+        confirmationCode: { type: string, minLength: 2, maxLength: 32 }
+
+    ProjectDeletionMutation:
+      type: object
+      additionalProperties: false
+      required: [id, lifecycle, rowVersion, etag]
+      properties:
+        id: { $ref: '#/components/schemas/Uuid' }
+        lifecycle: { $ref: '#/components/schemas/ProjectLifecycle' }
+        rowVersion: { type: integer, format: int64, minimum: 0, readOnly: true }
+        etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
+        deletion: { $ref: '#/components/schemas/ProjectDeletion' }
 
     ProjectWorkspaceMoveRequest:
       type: object
@@ -8607,6 +8696,7 @@ components:
         etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
         createdAt: { type: string, format: date-time, readOnly: true }
         updatedAt: { type: string, format: date-time, readOnly: true }
+        deletion: { $ref: '#/components/schemas/ProjectDeletion' }
         archivedAt: { type: string, format: date-time, nullable: true, readOnly: true }
 
     ProjectOwnerOption:
@@ -8655,6 +8745,7 @@ components:
             createdAt: { type: string, format: date-time, readOnly: true }
             updatedAt: { type: string, format: date-time, readOnly: true }
             archivedAt: { type: string, format: date-time, nullable: true, readOnly: true }
+            deletion: { $ref: '#/components/schemas/ProjectDeletion' }
 
     ProjectUpdateRequest:
       type: object

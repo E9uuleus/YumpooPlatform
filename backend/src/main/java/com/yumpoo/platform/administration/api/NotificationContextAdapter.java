@@ -4,6 +4,7 @@ import com.yumpoo.platform.catalog.api.ProjectActiveMembershipQuery;
 import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.catalog.api.ProjectOwnerScopeQuery;
 import com.yumpoo.platform.catalog.api.ProjectSnapshot;
+import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.notification.api.NotificationContextPort;
@@ -22,9 +23,12 @@ public class NotificationContextAdapter implements NotificationContextPort {
     private final ProjectOwnerScopeQuery projects;
     private final WorkItemNotificationSourceQuery source;
     private final WorkItemReferenceQuery items;
+    private final ProjectDeletionQuery deletion;
     public NotificationContextAdapter(MinimalUserSnapshotQuery users,ProjectActiveMembershipQuery memberships,
-            ProjectAccessSnapshotQuery access,ProjectOwnerScopeQuery projects,WorkItemNotificationSourceQuery source,WorkItemReferenceQuery items) {
+            ProjectAccessSnapshotQuery access,ProjectOwnerScopeQuery projects,WorkItemNotificationSourceQuery source,WorkItemReferenceQuery items,
+            ProjectDeletionQuery deletion) {
         this.users=users;this.memberships=memberships;this.access=access;this.projects=projects;this.source=source;this.items=items;
+        this.deletion=deletion;
     }
     public Optional<Participants> workItemParticipants(UUID company,UUID item) {
         return source.findParticipants(company,item).map(p->new Participants(p.projectId(),p.assigneeUserIds(),p.reporterUserId()));
@@ -32,7 +36,14 @@ public class NotificationContextAdapter implements NotificationContextPort {
     public Optional<Update> update(UUID company,UUID id) {
         return source.findUpdate(company,id).map(u->new Update(u.projectId(),u.workItemId(),u.authorUserId(),u.parentAuthorUserId()));
     }
-    public Optional<UUID> projectOwner(UUID company,UUID project) { return projects.find(company,project).map(ProjectSnapshot::ownerUserId); }
+    public Optional<UUID> projectOwner(UUID company,UUID project) {
+        return deletion.lockForProjection(company,project).filter(p -> p.purgeStartedAt()==null)
+                .map(ProjectDeletionQuery.State::ownerUserId);
+    }
+    public boolean ordinaryNotificationsEnabled(UUID company,UUID project) {
+        return deletion.lockForProjection(company,project)
+                .filter(p -> p.requestedAt()==null && p.purgeStartedAt()==null).isPresent();
+    }
     public Set<UUID> activeAccounts(UUID company,Collection<UUID> ids) {
         if(ids.isEmpty()) return Set.of();
         return users.findByUserIds(company,ids).values().stream().filter(u->u.activeAndEnabled()).map(u->u.userId()).collect(Collectors.toUnmodifiableSet());

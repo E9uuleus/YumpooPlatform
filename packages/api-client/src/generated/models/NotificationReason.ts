@@ -26,6 +26,9 @@ export enum NotificationReason {
     ProjectOwnerAssigned = 'PROJECT_OWNER_ASSIGNED',
     ProjectOwnerTransferred = 'PROJECT_OWNER_TRANSFERRED',
     ConnectionCreated = 'CONNECTION_CREATED',
+    ProjectDeletionScheduled = 'PROJECT_DELETION_SCHEDULED',
+    ProjectDeletionReminder = 'PROJECT_DELETION_REMINDER',
+    ProjectDeletionCancelled = 'PROJECT_DELETION_CANCELLED',
     UnknownDefaultOpenApi = '11184809'
 }
 

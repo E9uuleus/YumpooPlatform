@@ -73,7 +73,8 @@ public class AttachmentLifecycleService {
                 .orElseThrow(() -> invalid("ATTACHMENT_NOT_UPLOADABLE"));
         try {
             SealedUpload sealed = storage.receive(command.attachmentId(), command.content(),
-                    command.contentLength(), claimed.reservedBytes());
+                    command.contentLength(), claimed.reservedBytes(), mutation -> repository.mutateUpload(
+                            command.companyId(), command.attachmentId(), leaseToken, Instant.now(), mutation));
             return repository.seal(command.companyId(), command.attachmentId(), leaseToken,
                     sealed.sizeBytes(), sealed.sha256(), Instant.now());
         } catch (UploadRejectedException exception) {
@@ -89,6 +90,13 @@ public class AttachmentLifecycleService {
         } catch (IOException exception) {
             repository.cancelUpload(command.companyId(), command.attachmentId(), leaseToken, Instant.now());
             throw invalid("UPLOAD_INCOMPLETE");
+        } catch (RuntimeException exception) {
+            if (repository.isProjectPurging(claimed.companyId(), claimed.projectId())) {
+                try { storage.purgeTemporary(command.attachmentId()); }
+                catch (IOException cleanupFailure) { exception.addSuppressed(cleanupFailure); }
+            }
+            repository.cancelUpload(command.companyId(), command.attachmentId(), leaseToken, Instant.now());
+            throw exception;
         }
     }
 
@@ -179,7 +187,8 @@ public class AttachmentLifecycleService {
                     return new ScanOutcome.Unavailable();
                 }
                 try {
-                    published = storage.publish(upload);
+                    published = storage.publish(upload, mutation -> repository.mutatePublish(
+                            claim, expectedKey, operationToken, Instant.now(), mutation));
                     repository.recordPublished(claim, published.storageKey(), Instant.now());
                     repository.completePublish(published.storageKey(),operationToken,Instant.now());
                 } catch(IOException|RuntimeException failure) {

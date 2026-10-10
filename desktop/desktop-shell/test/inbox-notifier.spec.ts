@@ -48,6 +48,25 @@ beforeEach(() => { mocks.handlers.clear(); mocks.alerts.length = 0; vi.clearAllM
 afterEach(async () => { vi.useRealTimers(); for (const directory of directories.splice(0)) await rm(directory, { recursive: true, force: true }) })
 
 describe('inbox IPC and native alerts', () => {
+  it.each([
+    ['PROJECT_DELETION_SCHEDULED', '张三 申请了项目删除'],
+    ['PROJECT_DELETION_REMINDER', '张三 提醒你项目即将永久删除'],
+    ['PROJECT_DELETION_CANCELLED', '张三 撤销了项目删除'],
+  ] as const)('accepts %s with minimal native text and rejects deadline or project data', (reason, expected) => {
+    const deletion = { ...item(2), reason }
+    const value = { accountId: account, unreadCount: 1, latest: [deletion] }
+    expect(validInboxState(value)).toBe(true)
+    expect(validInboxState({ ...value, latest: [{ ...deletion, deletionPurgeAfter: '2026-11-08T02:00:00Z' }] })).toBe(false)
+    expect(validInboxState({ ...value, latest: [{ ...deletion, projectName: '私有项目' }] })).toBe(false)
+    expect(inboxAlertText(deletion)).toBe(expected)
+    const { publish, tray } = setup()
+    publish(state()); publish(value)
+    expect(tray.displayBalloon).toHaveBeenCalledWith(expect.objectContaining({ content: expected }))
+  })
+  it('labels deletion reminders from the scheduler as system reminders', () => {
+    expect(inboxAlertText({ ...item(2), reason: 'PROJECT_DELETION_REMINDER', actorName: null }))
+      .toBe('系统 提醒你项目即将永久删除')
+  })
   it('accepts connection reasons and emits only minimal text while still rejecting source data', () => {
     const connection = { ...item(2), reason: 'CONNECTION_CREATED' as const }
     const value = { accountId: account, unreadCount: 1, latest: [connection] }

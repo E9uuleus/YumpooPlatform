@@ -45,7 +45,7 @@ export interface ConnectColumn {
      */
     name: string;
     /**
-     *
+     * 永久清除目标项目后，保留的连接列可以暂时没有目标；创建与更新仍要求1–20个目标。
      * @type {Array<ConnectColumnTarget>}
      * @memberof ConnectColumn
      */

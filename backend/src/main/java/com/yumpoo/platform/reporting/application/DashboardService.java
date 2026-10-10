@@ -1,6 +1,7 @@
 package com.yumpoo.platform.reporting.application;
 
 import com.yumpoo.platform.catalog.api.MemberProjectQuery;
+import com.yumpoo.platform.catalog.api.ProjectDeletionQuery;
 import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
@@ -12,8 +13,11 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import java.time.Clock;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import static com.yumpoo.platform.reporting.application.DashboardModels.*;
@@ -22,13 +26,14 @@ import static com.yumpoo.platform.reporting.application.DashboardModels.*;
 public class DashboardService {
     private final DashboardRepository repository;
     private final MemberProjectQuery projects;
+    private final ProjectDeletionQuery deletion;
     private final WorkItemStatisticsQuery statistics;
     private final IdempotentCommandExecutor idempotency;
     private final ObjectMapper json;
     private final Clock clock;
-    public DashboardService(DashboardRepository repository, MemberProjectQuery projects,
+    public DashboardService(DashboardRepository repository, MemberProjectQuery projects, ProjectDeletionQuery deletion,
             WorkItemStatisticsQuery statistics, IdempotentCommandExecutor idempotency, ObjectMapper json, Clock clock) {
-        this.repository = repository; this.projects = projects; this.statistics = statistics;
+        this.repository = repository; this.projects = projects; this.deletion = deletion; this.statistics = statistics;
         this.idempotency = idempotency; this.json = json; this.clock = clock;
     }
     @Transactional(readOnly = true)
@@ -59,6 +64,7 @@ public class DashboardService {
                 return new StoredCommandResult(200, "{\"deleted\":true}", id, null);
             }
             Write valid = DashboardValidation.normalize(input, statistics);
+            lockReferencedProjects(actor, valid.configuration());
             List<UUID> added = valid.configuration().projectIds().stream()
                     .filter(project -> before == null || !before.configuration().projectIds().contains(project)).toList();
             if (projects.find(actor, added).size() != added.size())
@@ -69,6 +75,24 @@ public class DashboardService {
             else if (!repository.update(next, expected)) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
             return new StoredCommandResult(before == null ? 201 : 200, json.writeValueAsString(view(actor, next)), next.id(), StrongEtag.format(next.version()));
         });
+    }
+
+    private void lockReferencedProjects(CurrentActor actor, Configuration configuration) {
+        Set<UUID> ids = new HashSet<>(configuration.projectIds());
+        addProjectIds(ids, configuration.filters().projectIds());
+        for (var widget : configuration.widgets()) {
+            if (widget.chart() == null) continue;
+            addProjectIds(ids, widget.chart().projectIds());
+            if (widget.chart().filters() != null) addProjectIds(ids, widget.chart().filters().projectIds());
+        }
+        // Hold every persisted project reference until the dashboard transaction commits, including retained connections.
+        for (UUID id : ids.stream().sorted(Comparator.comparing(UUID::toString)).toList())
+            deletion.lockForProjection(actor.companyId(), id).filter(project -> project.purgeStartedAt() == null)
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    private static void addProjectIds(Set<UUID> ids, List<UUID> projectIds) {
+        if (projectIds != null) projectIds.stream().filter(java.util.Objects::nonNull).forEach(ids::add);
     }
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public QueryResponse query(CurrentActor actor, UUID id, Query query) {

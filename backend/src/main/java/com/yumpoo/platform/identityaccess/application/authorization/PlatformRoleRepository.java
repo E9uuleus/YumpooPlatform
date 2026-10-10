@@ -6,4 +6,5 @@ import java.util.UUID;
 public interface PlatformRoleRepository {
 
     Set<String> findActiveRoleCodes(UUID companyId, UUID userId);
+    Set<UUID> findActiveCompanyAdminIds(UUID companyId);
 }

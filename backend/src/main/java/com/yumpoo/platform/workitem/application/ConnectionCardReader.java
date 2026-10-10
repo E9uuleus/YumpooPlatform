@@ -55,12 +55,14 @@ public class ConnectionCardReader {
                     && active(context.projects().get(connection.targetProjectId()))
                     && (ConnectionAccess.member(context.access().get(connection.sourceProjectId()))
                         || ConnectionAccess.member(context.access().get(connection.targetProjectId())));
-            var source = context.cards().get(connection.sourceWorkItemId());
+            var source = context.cards().getOrDefault(connection.sourceWorkItemId(),unavailable(
+                    connection.sourceWorkItemId(),connection.sourceProjectId(),"ARCHIVED"));
             boolean sourceAvailable = source != null && source.available();
             result.put(connection.id(), new ConnectionView(connection.id(), StrongEtag.format(connection.rowVersion()),
                     connection.rowVersion(), connection.columnId(), sourceAvailable ? row.columnName() : "不可访问的连接列", connection.origin().name(),
                     connection.active(), source,
-                    context.cards().get(connection.targetWorkItemId()), connection.createdAt(),
+                    context.cards().getOrDefault(connection.targetWorkItemId(),unavailable(
+                            connection.targetWorkItemId(),connection.targetProjectId(),"ARCHIVED")), connection.createdAt(),
                     sourceAvailable ? person(connection.createdByUserId(), context.people())
                             : new ConnectionCardAssignee(connection.createdByUserId(), "不可访问的成员"), new Capabilities(writable)));
         }
@@ -84,11 +86,8 @@ public class ConnectionCardReader {
         Map<UUID, ConnectionCard> cards = new LinkedHashMap<>();
         for (CardRow row : rows) {
             var project = snapshots.get(row.projectId());
-            if (!active(project) && !visibility.containsKey(row.projectId())) {
-                cards.put(row.workItemId(), new ConnectionCard(row.workItemId(), "—", "不可访问的工作项", false,
-                        row.projectId(), "—", "不可访问的项目", project.lifecycle().name(),
-                        new ConnectionCardStatus("UNAVAILABLE", "不可访问", "GRAY", "TODO"), null,
-                        new ConnectionCardCategory(UNAVAILABLE_CATEGORY_ID, "不可访问", "GRAY"), null, false, false));
+            if (project==null || project.purging() || (!active(project) && !visibility.containsKey(row.projectId()))) {
+                cards.put(row.workItemId(),unavailable(row.workItemId(),row.projectId(),project==null ? "ARCHIVED" : project.lifecycle().name()));
                 continue;
             }
             cards.put(row.workItemId(), new ConnectionCard(row.workItemId(), row.itemNo(), row.title(), row.archived(),
@@ -100,7 +99,13 @@ public class ConnectionCardReader {
     }
 
     private static boolean active(ConnectTargetProjectSnapshot project) {
-        return project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE;
+        return project!=null && !project.purging() && project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE;
+    }
+
+    private static ConnectionCard unavailable(UUID item,UUID project,String lifecycle) {
+        return new ConnectionCard(item,"—","不可访问的工作项",false,project,"—","不可访问的项目",lifecycle,
+                new ConnectionCardStatus("UNAVAILABLE","不可访问","GRAY","TODO"),null,
+                new ConnectionCardCategory(UNAVAILABLE_CATEGORY_ID,"不可访问","GRAY"),null,false,false);
     }
 
     private static ConnectionCardAssignee person(UUID userId, Map<UUID, MinimalUserSnapshot> people) {

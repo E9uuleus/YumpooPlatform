@@ -95,6 +95,12 @@ export interface NotificationItem {
      * @memberof NotificationItem
      */
     target: NotificationTarget;
+    /**
+     * 计划删除或到期提醒事件的永久删除日期快照；目标不可访问时为空，撤销不会改写已存在的快照。
+     * @type {Date}
+     * @memberof NotificationItem
+     */
+    deletionPurgeAfter?: Date | null;
 }
 
 
@@ -132,6 +138,7 @@ export function NotificationItemFromJSONTyped(json: any, ignoreDiscriminator: bo
         'actor': NotificationPersonFromJSON(json['actor']),
         'subject': NotificationPersonFromJSON(json['subject']),
         'target': NotificationTargetFromJSON(json['target']),
+        ...(json['deletionPurgeAfter'] === undefined ? {} : { 'deletionPurgeAfter': json['deletionPurgeAfter'] === null ? null : (new Date(json['deletionPurgeAfter'])) }),
     };
 }
 
@@ -154,5 +161,6 @@ export function NotificationItemToJSONTyped(value?: NotificationItem | null, ign
         'actor': NotificationPersonToJSON(value['actor']),
         'subject': NotificationPersonToJSON(value['subject']),
         'target': NotificationTargetToJSON(value['target']),
+        'deletionPurgeAfter': value['deletionPurgeAfter'] == null ? value['deletionPurgeAfter'] : value['deletionPurgeAfter'].toISOString(),
     };
 }

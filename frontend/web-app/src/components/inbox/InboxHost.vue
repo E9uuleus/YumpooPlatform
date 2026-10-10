@@ -12,7 +12,8 @@ const legacyReasons: readonly DesktopInboxReason[] = [
   'MENTION', 'REPLY', 'COMMENT', 'ASSIGNED', 'PROJECT_MEMBER_ADDED', 'PROJECT_MEMBER_REMOVED',
   'PROJECT_OWNER_ASSIGNED', 'PROJECT_OWNER_TRANSFERRED',
 ]
-const knownReasons = new Set<DesktopInboxReason>([...legacyReasons, 'CONNECTION_CREATED'])
+const knownReasons = new Set<DesktopInboxReason>([...legacyReasons, 'CONNECTION_CREATED',
+  'PROJECT_DELETION_SCHEDULED', 'PROJECT_DELETION_REMINDER', 'PROJECT_DELETION_CANCELLED'])
 const supportedReasons = new Set<DesktopInboxReason>(bridge?.supportedReasons ?? legacyReasons)
 const surface = ref<'main' | 'timer' | undefined>(window.yumpooDesktop ? undefined : 'main')
 let disposed = false

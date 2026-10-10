@@ -10,6 +10,7 @@ import com.yumpoo.platform.audit.api.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import tools.jackson.databind.ObjectMapper;
 import java.time.*;
 import java.time.temporal.ChronoUnit;
@@ -24,6 +25,7 @@ public class TimeTrackingService {
     private final WorkItemRepository items;
     private final ProjectAccessSnapshotQuery access;
     private final ProjectFactWriteGuard guard;
+    private final ProjectDeletionQuery deletion;
     private final MinimalUserSnapshotQuery users;
     private final IdempotentCommandExecutor idempotency;
     private final TransactionalEventPort events;
@@ -32,10 +34,10 @@ public class TimeTrackingService {
     private final Clock clock;
 
     public TimeTrackingService(TimeTrackingRepository timers, WorkItemRepository items,
-            ProjectAccessSnapshotQuery access, ProjectFactWriteGuard guard, MinimalUserSnapshotQuery users,
+            ProjectAccessSnapshotQuery access, ProjectFactWriteGuard guard, ProjectDeletionQuery deletion, MinimalUserSnapshotQuery users,
             IdempotentCommandExecutor idempotency, TransactionalEventPort events, SecurityAuditAppendPort audits,
             ObjectMapper json, Clock clock) {
-        this.timers=timers; this.items=items; this.access=access; this.guard=guard; this.users=users;
+        this.timers=timers; this.items=items; this.access=access; this.guard=guard; this.deletion=deletion; this.users=users;
         this.idempotency=idempotency; this.events=events; this.audits=audits; this.json=json; this.clock=clock;
     }
 
@@ -117,9 +119,19 @@ public class TimeTrackingService {
     }
 
     private StoredCommandResult mutate(CurrentActor actor, String action, Input input, long expectedVersion) {
-        WorkItemModels.WorkItemLocator target=null;
-        if(!action.equals("stop")) {
-            target=locator(actor,input.workItemId());
+        boolean timerCommand=Set.of("start","switch","stop").contains(action);
+        WorkItemModels.WorkItemLocator target=action.equals("stop") ? null : locator(actor,input.workItemId());
+        Session observedRunning=timerCommand ? timers.running(actor.companyId(),actor.userId()).orElse(null) : null;
+        if(timerCommand) {
+            Set<UUID> projects=new TreeSet<>();
+            if(target!=null) projects.add(target.projectId());
+            if(observedRunning!=null) projects.add(observedRunning.projectId());
+            for(UUID projectId:projects) {
+                deletion.lockForProjection(actor.companyId(),projectId).filter(project -> project.purgeStartedAt()==null)
+                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            }
+        }
+        if(target!=null) {
             var project=guard.lockForFactWrite(actor,target.projectId());
             if(project.actorAccess()==ProjectFactWriteSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
                 throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
@@ -129,13 +141,14 @@ public class TimeTrackingService {
         if(target!=null) items.lockProjectItem(actor.companyId(),target.projectId(),target.workItemId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
         Instant now=now(); Set<UUID> changedProjects=new HashSet<>();
-        boolean timerCommand=Set.of("start","switch","stop").contains(action);
         Object result; String etag; UUID resourceId;
         if(timerCommand) {
             requireVersion(stateVersion,expectedVersion);
             Session running=timers.running(actor.companyId(),actor.userId()).orElse(null);
             if(action.equals("start") && running!=null) throw invalid("TIMER_ALREADY_RUNNING");
             if(!action.equals("start") && (running==null || !running.id().equals(input.sessionId()))) throw invalid("TIMER_CHANGED");
+            // A changed session would require taking another project lock after timer_state.
+            if(running!=null && (observedRunning==null || !running.id().equals(observedRunning.id()))) throw invalid("TIMER_CHANGED");
             if(running!=null) {
                 Session stopped=new Session(running.id(),running.companyId(),running.projectId(),running.workItemId(),running.userId(),
                         running.startedAt(),now.isBefore(running.startedAt()) ? running.startedAt() : now,running.source(),running.rowVersion()+1,null,null);
@@ -178,6 +191,24 @@ public class TimeTrackingService {
             var v=view(after,actor,true,now,true); result=v; etag=v.etag(); resourceId=id;
         }
         return new StoredCommandResult(200,json.writeValueAsString(result),resourceId,etag);
+    }
+
+    /** Runs inside the archive transaction after the project row lock, matching the project-then-timer_state order of timer commands. */
+    @Transactional(propagation=Propagation.MANDATORY)
+    public int stopRunningInArchivedProject(CurrentActor actor, UUID projectId) {
+        Instant now=now(); int stoppedCount=0;
+        for(UUID userId:timers.runningUserIds(actor.companyId(),projectId)) {
+            timers.stateVersion(actor.companyId(),userId,true);
+            Session running=timers.running(actor.companyId(),userId).filter(s -> s.projectId().equals(projectId)).orElse(null);
+            if(running==null) continue;
+            Session stopped=new Session(running.id(),running.companyId(),running.projectId(),running.workItemId(),running.userId(),
+                    running.startedAt(),now.isBefore(running.startedAt()) ? running.startedAt() : now,running.source(),running.rowVersion()+1,null,null);
+            timers.save(stopped); publish(actor,"stopped",running,stopped,null,now);
+            timers.advanceState(actor.companyId(),userId);
+            stoppedCount++;
+        }
+        if(stoppedCount>0) timers.advanceProjects(actor.companyId(),List.of(projectId));
+        return stoppedCount;
     }
 
     private void publish(CurrentActor actor, String action, Session before, Session after, String reason, Instant now) {

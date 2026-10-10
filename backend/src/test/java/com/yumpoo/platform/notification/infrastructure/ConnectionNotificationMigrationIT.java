@@ -12,7 +12,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 
@@ -30,7 +29,16 @@ class ConnectionNotificationMigrationIT {
         UUID company=UUID.fromString("00000000-0000-4000-8000-000000000001"), recipient=UUID.randomUUID();
         var event=new NotificationRepository.Event(UUID.randomUUID(),company,UUID.randomUUID(),"workitem.work_item_assigned",1,
                 TargetKind.WORK_ITEM,UUID.randomUUID(),UUID.randomUUID(),null,null,UUID.randomUUID(),Instant.now());
-        repository.append(event,Map.of(recipient,Reason.ASSIGNED));
+        jdbc.sql("""
+                INSERT INTO yumpoo.notification_event
+                (id,company_id,source_event_id,event_type,payload_schema_version,target_kind,project_id,work_item_id,actor_user_id,occurred_at)
+                VALUES (:id,:company,:source,'workitem.work_item_assigned',1,'WORK_ITEM',:project,:item,:actor,clock_timestamp())
+                """).param("id",event.id()).param("company",company).param("source",event.sourceEventId())
+                .param("project",event.projectId()).param("item",event.workItemId()).param("actor",event.actorUserId()).update();
+        jdbc.sql("""
+                INSERT INTO yumpoo.user_notification (id,company_id,notification_event_id,recipient_user_id,reason)
+                VALUES (:id,:company,:event,:recipient,'ASSIGNED')
+                """).param("id",UUID.randomUUID()).param("company",company).param("event",event.id()).param("recipient",recipient).update();
         var events=jdbc.sql("SELECT * FROM yumpoo.notification_event").query().listOfRows();
         var notifications=jdbc.sql("SELECT * FROM yumpoo.user_notification").query().listOfRows();
         var oldCutover=repository.acceptedFrom();

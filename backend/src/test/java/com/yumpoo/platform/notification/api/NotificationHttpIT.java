@@ -57,6 +57,7 @@ class NotificationHttpIT {
     @Autowired private com.yumpoo.platform.foundation.application.outbox.OutboxDispatcher dispatcher;
     @Autowired private com.yumpoo.platform.foundation.application.event.TransactionalEventPort events;
     @Autowired private com.yumpoo.platform.notification.application.NotificationInboxQueryService inbox;
+    @Autowired private ProjectDeletionNotificationProjection deletionProjection;
     private ActorFixture owner;
     private ActorFixture member;
     private UUID requirementsId;
@@ -234,6 +235,93 @@ class NotificationHttpIT {
         assertThat(get("/api/v1/work-items/"+itemId,owner).statusCode()).isEqualTo(404);
     }
 
+    @Test void deletionNotificationsHaveGovernanceRecipientsAndRetainDeadlineSnapshotsAfterCancellation() throws Exception {
+        ActorFixture admin;
+        try(var ignored=RequestCorrelationContext.open(RequestCorrelation.root("deletion-notification-admin-"+UUID.randomUUID()))) {
+            admin=actor(provisioner.provision("notification-admin","Notification Admin").userId());
+        }
+        jdbc.sql("""
+                INSERT INTO yumpoo.platform_role_assignment(id,company_id,user_id,role_code,scope_type,scope_id,status,
+                    granted_by_actor_type,granted_by_system_code,grant_reason,granted_at)
+                VALUES (:id,:company,:user,'COMPANY_ADMIN','COMPANY',:company,'ACTIVE','SYSTEM','NOTIFICATION_TEST',
+                    'notification test',transaction_timestamp())
+                """).param("id",UUID.randomUUID()).param("company",COMPANY_ID).param("user",admin.userId()).update();
+        for (UUID recipient:java.util.List.of(owner.userId(),admin.userId()))
+            notifications.savePreference(COMPANY_ID,PROJECT_ID,recipient,
+                    new com.yumpoo.platform.notification.application.NotificationModels.ProjectPreferenceUpdate(
+                            com.yumpoo.platform.notification.application.NotificationModels.PreferenceMode.MUTED,false,false,false,false));
+        var requestedAt=clock.instant().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        var deadline=requestedAt.plusSeconds(30L*86400);
+        jdbc.sql("""
+                UPDATE yumpoo.project SET lifecycle='ARCHIVED',archived_at=transaction_timestamp(),updated_at=transaction_timestamp(),
+                    deletion_requested_at=:requested,deletion_requested_by=:owner,purge_after=:deadline WHERE id=:project
+                """).param("requested",java.time.OffsetDateTime.ofInstant(requestedAt,java.time.ZoneOffset.UTC))
+                .param("owner",owner.userId()).param("deadline",java.time.OffsetDateTime.ofInstant(deadline,java.time.ZoneOffset.UTC))
+                .param("project",PROJECT_ID).update();
+        var scheduled=json.createObjectNode().put("projectId",PROJECT_ID.toString()).put("requestedAt",requestedAt.toString())
+                .put("requestedBy",owner.userId().toString()).put("purgeAfter",deadline.toString());
+        var backlog=new com.yumpoo.platform.foundation.application.event.DomainEventEnvelope(UUID.randomUUID(),
+                "catalog.project_deletion_scheduled",1,notifications.projectDeletionAcceptedFrom().minusNanos(1),"Project",PROJECT_ID,
+                1,COMPANY_ID,com.yumpoo.platform.foundation.application.event.EventActor.user(owner.userId()),
+                "notification-backlog","notification-backlog",null,scheduled);
+        new TransactionTemplate(transactionManager).executeWithoutResult(status->deletionProjection.consume(backlog));
+        assertThat(notifications.counts(COMPANY_ID,admin.userId()).total()).isZero();
+        emitDeletion("catalog.project_deletion_scheduled",scheduled,
+                com.yumpoo.platform.foundation.application.event.EventActor.user(owner.userId()),1);
+        assertThat(ok(get("/api/v1/me/notifications?group=PROJECT",owner)).path("items").size()).isZero();
+        var initial=ok(get("/api/v1/me/notifications?group=PROJECT",admin)).path("items");
+        assertThat(initial.size()).isOne();
+        assertThat(initial.get(0).path("reason").asText()).isEqualTo("PROJECT_DELETION_SCHEDULED");
+        assertThat(initial.get(0).path("target").path("kind").asText()).isEqualTo("PROJECT");
+        assertThat(initial.get(0).path("deletionPurgeAfter").asText()).isEqualTo(deadline.toString());
+        var reminder=json.createObjectNode().put("projectId",PROJECT_ID.toString()).put("purgeAfter",deadline.toString())
+                .put("remindedAt",clock.instant().toString());
+        emitDeletion("catalog.project_deletion_reminder_due",reminder,
+                com.yumpoo.platform.foundation.application.event.EventActor.system("PROJECT_PURGER"),2);
+        assertThat(notifications.counts(COMPANY_ID,owner.userId()).project()).isOne();
+        assertThat(notifications.counts(COMPANY_ID,admin.userId()).project()).isEqualTo(2);
+        jdbc.sql("UPDATE yumpoo.project SET deletion_requested_at=NULL,deletion_requested_by=NULL,purge_after=NULL WHERE id=:project")
+                .param("project",PROJECT_ID).update();
+        var cancelled=json.createObjectNode().put("projectId",PROJECT_ID.toString()).put("cancelledAt",clock.instant().toString())
+                .put("cancelledBy",admin.userId().toString());
+        emitDeletion("catalog.project_deletion_cancelled",cancelled,
+                com.yumpoo.platform.foundation.application.event.EventActor.user(admin.userId()),3);
+        assertThat(notifications.counts(COMPANY_ID,admin.userId()).project()).isEqualTo(2);
+        var ownerPage=ok(get("/api/v1/me/notifications?group=PROJECT",owner)).path("items");
+        assertThat(ownerPage.size()).isEqualTo(2);
+        assertThat(ownerPage.get(0).path("reason").asText()).isEqualTo("PROJECT_DELETION_CANCELLED");
+        assertThat(ownerPage.get(0).path("deletionPurgeAfter").isNull()).isTrue();
+        var historical=ok(get("/api/v1/me/notifications?group=PROJECT",admin)).path("items");
+        for (var item:historical) {
+            assertThat(item.path("target").path("accessible").asBoolean()).isTrue();
+            assertThat(item.path("deletionPurgeAfter").asText()).isEqualTo(deadline.toString());
+        }
+        assertThat(ok(get("/api/v1/me/notifications",member)).path("items").size()).isZero();
+        var counts=ok(get("/api/v1/me/notifications/unread-count",admin));
+        assertThat(ok(mutate("POST","/api/v1/me/notifications/read-all",admin,
+                json.writeValueAsString(java.util.Map.of("group","PROJECT","upTo",counts.path("serverNow").asText())),null,null))
+                .path("total").asInt()).isZero();
+        jdbc.sql("""
+                UPDATE yumpoo.platform_role_assignment SET status='REVOKED',revoked_by_actor_type='USER',revoked_by_user_id=:user,
+                    revoked_at=transaction_timestamp(),revoke_reason='notification test',updated_at=transaction_timestamp()
+                WHERE user_id=:user
+                """).param("user",admin.userId()).update();
+        var hidden=ok(get("/api/v1/me/notifications?state=ALL&group=PROJECT",admin)).path("items");
+        for (var item:hidden) {
+            assertThat(item.path("target").path("accessible").asBoolean()).isFalse();
+            assertThat(item.path("deletionPurgeAfter").isNull()).isTrue();
+        }
+    }
+
+    private void emitDeletion(String type,tools.jackson.databind.node.ObjectNode payload,
+            com.yumpoo.platform.foundation.application.event.EventActor actor,long version) {
+        try(var ignored=RequestCorrelationContext.open(RequestCorrelation.root("notification-deletion-"+UUID.randomUUID()))) {
+            new TransactionTemplate(transactionManager).executeWithoutResult(status->events.append(
+                    new com.yumpoo.platform.foundation.application.event.EventDraft(type,1,"Project",PROJECT_ID,version,COMPANY_ID,actor,payload)));
+        }
+        dispatcher.dispatchOnce();
+    }
+
     @Test void personalStateMutationsRequireCsrfAndHideOtherUsersRows() throws Exception {
         UUID id=seed(com.yumpoo.platform.notification.application.NotificationModels.Reason.MENTION,member.userId());
         String path="/api/v1/me/notifications/"+id;
@@ -307,6 +395,29 @@ class NotificationHttpIT {
         jdbc.sql("DELETE FROM yumpoo.project_membership WHERE project_id=:project AND user_id=:user")
                 .param("project",PROJECT_ID).param("user",member.userId()).update();
         assertThat(get(path,member).statusCode()).isEqualTo(404);
+    }
+
+    @Test void preferencesFollowArchiveVisibilityAndCannotBeRecreatedAfterPurgeStarts() throws Exception {
+        String path="/api/v1/me/projects/"+PROJECT_ID+"/notification-preference";
+        String body="{\"mode\":\"MUTED\",\"mention\":false,\"comment\":false,\"assigned\":false,\"connectionCreated\":false}";
+        jdbc.sql("""
+                UPDATE yumpoo.project SET lifecycle='ARCHIVED',archived_at=transaction_timestamp(),updated_at=transaction_timestamp()
+                WHERE id=:project
+                """).param("project",PROJECT_ID).update();
+        assertThat(get(path,member).statusCode()).isEqualTo(404);
+        assertThat(mutate("PUT",path,member,body,null,null).statusCode()).isEqualTo(404);
+        assertThat(ok(mutate("PUT",path,owner,body,null,null)).path("mode").asText()).isEqualTo("MUTED");
+        jdbc.sql("""
+                UPDATE yumpoo.project SET deletion_requested_at=transaction_timestamp()-interval '2 seconds',
+                    deletion_requested_by=:owner,purge_after=transaction_timestamp()-interval '1 second',
+                    purge_started_at=transaction_timestamp() WHERE id=:project
+                """).param("owner",owner.userId()).param("project",PROJECT_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.project_notification_preference WHERE company_id=:company AND project_id=:project")
+                .param("company",COMPANY_ID).param("project",PROJECT_ID).update();
+        assertThat(get(path,owner).statusCode()).isEqualTo(404);
+        assertThat(mutate("PUT",path,owner,body,null,null).statusCode()).isEqualTo(404);
+        assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.project_notification_preference WHERE company_id=:company AND project_id=:project")
+                .param("company",COMPANY_ID).param("project",PROJECT_ID).query(Long.class).single()).isZero();
     }
     private JsonNode ok(HttpResponse<String> response) throws Exception {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
@@ -408,6 +519,7 @@ class NotificationHttpIT {
         jdbc.sql("DELETE FROM yumpoo.login_session WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.outbox_event WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.external_identity WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.platform_role_assignment WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.identity_user WHERE company_id=:id").param("id", COMPANY_ID).update();
     }
 

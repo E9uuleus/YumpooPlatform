@@ -19,6 +19,7 @@ public interface NotificationContextPort {
     Optional<Participants> workItemParticipants(UUID companyId, UUID workItemId);
     Optional<Update> update(UUID companyId, UUID updateId);
     Optional<UUID> projectOwner(UUID companyId, UUID projectId);
+    boolean ordinaryNotificationsEnabled(UUID companyId, UUID projectId);
     Set<UUID> eligibleProjectRecipients(UUID companyId, UUID projectId, Collection<UUID> users);
     Set<UUID> activeAccounts(UUID companyId, Collection<UUID> users);
     Rendered render(CurrentActor actor, RenderRequest request);

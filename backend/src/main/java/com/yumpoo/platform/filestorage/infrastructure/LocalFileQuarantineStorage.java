@@ -19,6 +19,8 @@ import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
@@ -31,6 +33,7 @@ import java.util.Comparator;
 import java.time.Instant;
 import java.util.stream.Stream;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 /** 本机隔离目录和内容寻址正式目录适配器。 */
@@ -70,6 +73,12 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             OptionalLong contentLength,
             long reservationLimit
     ) throws IOException {
+        return receive(uploadId, source, contentLength, reservationLimit, mutation -> mutation.run());
+    }
+
+    @Override
+    public SealedUpload receive(UUID uploadId, InputStream source, OptionalLong contentLength,
+            long reservationLimit, MutationGuard guard) throws IOException {
         Objects.requireNonNull(uploadId, "uploadId must not be null");
         Objects.requireNonNull(source, "source must not be null");
         Objects.requireNonNull(contentLength, "contentLength must not be null");
@@ -85,20 +94,17 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
 
         Path part = quarantinePath(uploadId, ".part");
         Path sealed = quarantinePath(uploadId, ".sealed");
-        if (Files.exists(sealed, LinkOption.NOFOLLOW_LINKS)) {
-            throw new UploadIncompleteException();
-        }
-        Files.deleteIfExists(part);
         MessageDigest digest = sha256Digest();
         long total = 0;
         boolean sealedSuccessfully = false;
+        var opened = new AtomicReference<FileChannel>();
         try {
-            try (FileChannel channel = FileChannel.open(
-                    part,
-                    StandardOpenOption.CREATE_NEW,
-                    StandardOpenOption.WRITE,
-                    LinkOption.NOFOLLOW_LINKS
-            )) {
+            guard.run(() -> {
+                if (Files.exists(sealed, LinkOption.NOFOLLOW_LINKS)) throw new UploadIncompleteException();
+                Files.deleteIfExists(part);
+                opened.set(FileChannel.open(part, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS));
+            });
+            try (FileChannel channel = opened.get()) {
                 byte[] buffer = new byte[AttachmentUploadPolicy.BUFFER_BYTES];
                 int read;
                 while ((read = source.read(buffer)) != -1) {
@@ -126,7 +132,7 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             if (total == 0) {
                 throw new UploadRejectedException(AttachmentRejectedCode.FILE_TYPE_NOT_ALLOWED);
             }
-            Files.move(part, sealed, StandardCopyOption.ATOMIC_MOVE);
+            guard.run(() -> Files.move(part, sealed, StandardCopyOption.ATOMIC_MOVE));
             sealedSuccessfully = true;
             return new SealedUpload(uploadId, sealed, total, HEX.formatHex(digest.digest()));
         } catch (UploadRejectedException exception) {
@@ -136,8 +142,13 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
         } catch (IOException exception) {
             throw new UploadIncompleteException();
         } finally {
+            FileChannel channel = opened.get();
+            if (channel != null && channel.isOpen()) channel.close();
             if (!sealedSuccessfully) {
-                Files.deleteIfExists(part);
+                try { guard.run(() -> Files.deleteIfExists(part)); }
+                catch (IOException | RuntimeException lostLease) {
+                    // A newer upload lease or project purge may already own this path.
+                }
             }
         }
     }
@@ -149,6 +160,11 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
 
     @Override
     public PublishedBlob publish(SealedUpload upload) throws IOException {
+        return publish(upload, mutation -> mutation.run());
+    }
+
+    @Override
+    public PublishedBlob publish(SealedUpload upload, MutationGuard guard) throws IOException {
         Objects.requireNonNull(upload, "upload must not be null");
         Path sealed = requireContained(quarantineRoot, upload.quarantinedPath());
         String storageKey = storageKey(upload.sha256());
@@ -164,13 +180,13 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
             if (!verify(existing)) {
                 throw new IOException("existing blob failed integrity verification");
             }
-            Files.deleteIfExists(sealed);
+            guard.run(() -> Files.deleteIfExists(sealed));
             return existing;
         }
         if (!Files.isRegularFile(sealed, LinkOption.NOFOLLOW_LINKS)) {
             throw new IOException("sealed upload is unavailable");
         }
-        Files.move(sealed, destination, StandardCopyOption.ATOMIC_MOVE);
+        guard.run(() -> Files.move(sealed, destination, StandardCopyOption.ATOMIC_MOVE));
         PublishedBlob published = new PublishedBlob(storageKey, upload.sizeBytes(), upload.sha256());
         if (!verify(published)) {
             throw new IOException("published blob failed integrity verification");
@@ -286,6 +302,34 @@ public final class LocalFileQuarantineStorage implements QuarantineStorage {
         Path target=resolveStorageKey(storageKey);
         if(Files.isSymbolicLink(target)||!Files.isRegularFile(target,LinkOption.NOFOLLOW_LINKS)) return false;
         return Files.deleteIfExists(target);
+    }
+
+    @Override
+    public void purgeTemporary(UUID attachmentId) throws IOException {
+        purgeFile(quarantinePath(attachmentId, ".part"));
+        purgeFile(quarantinePath(attachmentId, ".sealed"));
+    }
+
+    @Override
+    public boolean temporaryEntryExists(String key) throws IOException {
+        if (!key.matches("^[0-9a-f-]{36}\\.(part|sealed)$")) return true;
+        UUID id = UUID.fromString(key.substring(0, 36));
+        return Files.exists(quarantinePath(id, key.substring(36)), LinkOption.NOFOLLOW_LINKS);
+    }
+
+    @Override
+    public void purgePublished(String storageKey) throws IOException {
+        purgeFile(resolveStorageKey(storageKey));
+    }
+
+    private static void purgeFile(Path target) throws IOException {
+        BasicFileAttributes attributes;
+        try { attributes = Files.readAttributes(target, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS); }
+        catch (NoSuchFileException missing) { return; }
+        if (attributes.isSymbolicLink() || !attributes.isRegularFile()) {
+            throw new IOException("project purge cannot remove an unsafe storage entry");
+        }
+        Files.deleteIfExists(target);
     }
 
     private static StorageEntry entry(Path root,Path path,boolean published) {

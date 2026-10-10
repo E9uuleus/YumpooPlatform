@@ -37,10 +37,13 @@ public class NotificationInboxQueryService {
             references.add(new NotificationContext.Reference(row.id(),e.kind(),e.projectId(),e.workItemId(),e.updateId()));
         }
         var rendered=context.render(actor,new NotificationContext.RenderRequest(references,people));
-        var items=rows.stream().map(row->new Item(row.id(),row.reason(),row.state(),row.createdAt(),row.readAt(),
+        var items=rows.stream().map(row->{
+            var target=rendered.targets().getOrDefault(row.id(),Target.inaccessible(row.event().kind()));
+            return new Item(row.id(),row.reason(),row.state(),row.createdAt(),row.readAt(),
                 row.event().actorUserId()==null?null:rendered.people().get(row.event().actorUserId()),
                 row.event().subjectUserId()==null?null:rendered.people().get(row.event().subjectUserId()),
-                rendered.targets().getOrDefault(row.id(),Target.inaccessible(row.event().kind())))).toList();
+                target,target.accessible()?row.event().deletionPurgeAfter():null);
+        }).toList();
         String next=null;
         if(more) { var last=rows.getLast(); next=cursors.encode(fingerprint,new NotificationRepository.Anchor(last.createdAt(),last.id())); }
         return new Page(items,next,now);

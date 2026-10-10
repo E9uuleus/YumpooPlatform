@@ -81,6 +81,12 @@ yumpoo:
     batch-size: 50
     concurrency: 2
     lease-duration: 5m
+  projects:
+    deletion:
+      grace-period: ${YUMPOO_PROJECT_DELETION_GRACE_PERIOD:P30D}
+      reminder-lead: ${YUMPOO_PROJECT_DELETION_REMINDER_LEAD:P1D}
+      purge-poll-delay: 1m
+      purge-batch-size: 500
   attachments:
     company-quota-bytes: ${YUMPOO_ATTACHMENT_COMPANY_QUOTA_BYTES:107374182400}
     project-quota-bytes: ${YUMPOO_ATTACHMENT_PROJECT_QUOTA_BYTES:10737418240}

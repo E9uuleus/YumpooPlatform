@@ -18,9 +18,18 @@ public interface QuarantineStorage {
         return receive(uploadId, source, contentLength);
     }
 
+    default SealedUpload receive(UUID uploadId, InputStream source, OptionalLong contentLength,
+            long reservationLimit, MutationGuard guard) throws IOException {
+        throw new IOException("guarded upload storage operation is not supported");
+    }
+
     SealedUpload resume(UUID uploadId, long sizeBytes, String sha256) throws IOException;
 
     PublishedBlob publish(SealedUpload upload) throws IOException;
+
+    default PublishedBlob publish(SealedUpload upload, MutationGuard guard) throws IOException {
+        throw new IOException("guarded publish storage operation is not supported");
+    }
 
     InputStream open(PublishedBlob blob) throws IOException;
 
@@ -44,7 +53,23 @@ public interface QuarantineStorage {
 
     default boolean deleteTemporary(String key) throws IOException { return false; }
 
+    default boolean temporaryEntryExists(String key) throws IOException { return true; }
+
     default boolean deletePublished(String storageKey) throws IOException { return false; }
+
+    default void purgeTemporary(UUID attachmentId) throws IOException {
+        throw new IOException("project purge storage operation is not supported");
+    }
+
+    default void purgePublished(String storageKey) throws IOException {
+        throw new IOException("project purge storage operation is not supported");
+    }
+
+    @FunctionalInterface
+    interface Mutation { void run() throws IOException; }
+
+    @FunctionalInterface
+    interface MutationGuard { void run(Mutation mutation) throws IOException; }
 
     record StorageEntry(String key, Instant modifiedAt, long sizeBytes,
             boolean regularFile, boolean unsafeEntry) {}

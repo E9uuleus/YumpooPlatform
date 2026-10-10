@@ -27,6 +27,9 @@ public class JdbcNotificationRepository implements NotificationRepository {
     @Override public Instant connectionAcceptedFrom() {
         return acceptedFrom("CONNECTION_CREATED_V1");
     }
+    @Override public Instant projectDeletionAcceptedFrom() {
+        return acceptedFrom("PROJECT_DELETION_V1");
+    }
     private Instant acceptedFrom(String projection) {
         return jdbc.sql("SELECT accepted_from FROM yumpoo.notification_projection_state WHERE projection_code=:projection")
                 .param("projection",projection)
@@ -39,14 +42,15 @@ public class JdbcNotificationRepository implements NotificationRepository {
         jdbc.sql("""
             INSERT INTO yumpoo.notification_event
             (id,company_id,source_event_id,event_type,payload_schema_version,target_kind,project_id,
-             work_item_id,update_id,subject_user_id,actor_user_id,occurred_at)
-            VALUES (:id,:company,:source,:type,:version,:kind,:project,:item,:update,:subject,:actor,:occurred)
+             work_item_id,update_id,subject_user_id,actor_user_id,occurred_at,deletion_purge_after)
+            VALUES (:id,:company,:source,:type,:version,:kind,:project,:item,:update,:subject,:actor,:occurred,:purgeAfter)
             ON CONFLICT DO NOTHING
             """).param("id",e.id()).param("company",e.companyId()).param("source",e.sourceEventId())
                 .param("type",e.eventType()).param("version",e.version()).param("kind",e.kind().name())
                 .param("project",e.projectId()).param("item",e.workItemId(),Types.OTHER)
                 .param("update",e.updateId(),Types.OTHER).param("subject",e.subjectUserId(),Types.OTHER)
-                .param("actor",e.actorUserId(),Types.OTHER).param("occurred",time(e.occurredAt())).update();
+                .param("actor",e.actorUserId(),Types.OTHER).param("occurred",time(e.occurredAt()))
+                .param("purgeAfter",e.deletionPurgeAfter()==null?null:time(e.deletionPurgeAfter()),Types.TIMESTAMP_WITH_TIMEZONE).update();
         UUID eventId=jdbc.sql("SELECT id FROM yumpoo.notification_event WHERE source_event_id=:source AND company_id=:company")
                 .param("source",e.sourceEventId()).param("company",e.companyId()).query(UUID.class).single();
         recipients.forEach((user,reason)->jdbc.sql("""
@@ -70,7 +74,8 @@ public class JdbcNotificationRepository implements NotificationRepository {
                 new Event(rs.getObject("id",UUID.class),company,rs.getObject("source_event_id",UUID.class),rs.getString("event_type"),
                         rs.getInt("payload_schema_version"),TargetKind.valueOf(rs.getString("target_kind")),
                         rs.getObject("project_id",UUID.class),rs.getObject("work_item_id",UUID.class),rs.getObject("update_id",UUID.class),
-                        rs.getObject("subject_user_id",UUID.class),rs.getObject("actor_user_id",UUID.class),instant(rs,"occurred_at")))).list();
+                        rs.getObject("subject_user_id",UUID.class),rs.getObject("actor_user_id",UUID.class),instant(rs,"occurred_at"),
+                        instant(rs,"deletion_purge_after")))).list();
     }
     @Override public UnreadCounts counts(UUID company,UUID user) {
         return jdbc.sql("""
