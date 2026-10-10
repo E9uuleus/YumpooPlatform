@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Box, Clock, Close, FolderOpened, Grid, Menu as MenuIcon, Search, Setting, User, OfficeBuilding, Monitor } from '@element-plus/icons-vue'
+import { Box, Clock, Close, FolderOpened, Grid, House, Menu as MenuIcon, Search, Setting, User, OfficeBuilding, Monitor } from '@element-plus/icons-vue'
 import { AuthenticationClientType, ProjectLifecycleFilter, type ProjectSummary } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -31,7 +31,7 @@ import brandLogo from '../assets/brand/logo.svg'
 interface ModuleItem {
   section: ShellSection
   label: string
-  routeName: 'workspace' | 'company-overview' | 'operations-overview'
+  routeName: 'home' | 'workspace' | 'company-overview' | 'operations-overview'
   icon: Component
 }
 
@@ -68,6 +68,7 @@ const clientLabel = computed(() => window.yumpooDesktop?.client === 'electron' |
   : 'Web 浏览器')
 const activeSection = computed<ShellSection>(() => route.meta.shellSection ?? 'work')
 const isWorkspaceSection = computed(() => activeSection.value === 'work')
+const hasContextNavigation = computed(() => activeSection.value !== 'home')
 const projectRecentScope = computed(() => {
   const authentication = session.authentication.value
   return authentication ? `${authentication.company.id}:${authentication.user.id}` : undefined
@@ -75,6 +76,7 @@ const projectRecentScope = computed(() => {
 const projectRecents = useProjectRecents(() => projectRecentScope.value)
 const operationsAlertCount = ref(0)
 const moduleItems = computed<ModuleItem[]>(() => [
+  { section: 'home', label: '首页', routeName: 'home', icon: House },
   { section: 'work', label: '工作台', routeName: 'workspace', icon: Grid },
   ...(session.isIdentityReader.value
     ? [{ section: 'company', label: '公司管理', routeName: 'company-overview', icon: OfficeBuilding } as const]
@@ -82,6 +84,7 @@ const moduleItems = computed<ModuleItem[]>(() => [
   ...(session.isPlatformAdmin.value ? [{ section: 'operations', label: '运维', routeName: 'operations-overview', icon: Monitor } as const] : []),
 ])
 const contextTitle = computed(() => ({
+  home: '首页',
   work: '工作台',
   company: '公司管理',
   inbox: '收件箱',
@@ -250,7 +253,7 @@ onBeforeUnmount(() => {
   <div
     class="app-shell"
     :class="{
-      'app-shell--context-open': contextNavigationOpen,
+      'app-shell--context-open': contextNavigationOpen && hasContextNavigation,
       'app-shell--workspace': isWorkspaceSection,
       'app-shell--dashboard': route.name === 'dashboards',
     }"
@@ -262,8 +265,8 @@ onBeforeUnmount(() => {
       <button
         class="module-rail__brand"
         type="button"
-        aria-label="返回工作台"
-        @click="navigate('workspace')"
+        aria-label="返回首页"
+        @click="navigate('home')"
       >
         <img
           :src="brandLogo"
@@ -274,9 +277,10 @@ onBeforeUnmount(() => {
       </button>
       <nav
         class="module-rail__items"
-        :class="{ 'module-rail__items--shifted': !contextNavigationOpen }"
+        :class="{ 'module-rail__items--shifted': !contextNavigationOpen && hasContextNavigation }"
       >
         <button
+          v-if="hasContextNavigation"
           class="module-rail__expand"
           type="button"
           aria-label="展开工作台菜单"
@@ -379,6 +383,7 @@ onBeforeUnmount(() => {
     </header>
 
     <aside
+      v-if="hasContextNavigation"
       id="desktop-context-navigation"
       class="context-navigation"
       :aria-hidden="!contextNavigationOpen"
