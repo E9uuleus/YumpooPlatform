@@ -19,6 +19,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -103,6 +104,33 @@ class ConnectionConcurrencyIT {
             assertThat(jdbc.sql("SELECT count(*) FROM yumpoo.work_item_connection WHERE column_id=:id AND delete_reason<>'COLUMN_DELETED'")
                     .param("id", forward.id()).query(Long.class).single()).isZero();
         }
+    }
+
+    @Test
+    void columnDeleteStampsDeletionAfterLinkCommittedWhileItWaitedForTheColumn() throws Exception {
+        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+            var holding = new CountDownLatch(1);
+            var proceed = new CountDownLatch(1);
+            var creating = pool.submit(() -> transaction(() -> {
+                jdbc.sql("SELECT id FROM yumpoo.work_item_connect_column WHERE id=:id FOR SHARE")
+                        .param("id", forward.id()).query(UUID.class).single();
+                holding.countDown();
+                await(proceed);
+                return link(left.id(), forward.id(), right.id()).httpStatus();
+            }));
+            await(holding);
+            var deleting = pool.submit(() -> transaction(() -> columns.delete(new ConnectColumnCommands.Delete(actor, first.id(),
+                    forward.id(), 0, UUID.randomUUID(), hash())).result()));
+            awaitDatabaseLock("work_item_connect_column c");
+            proceed.countDown();
+            assertThat(creating.get(15, TimeUnit.SECONDS)).isEqualTo(201);
+            assertThat(deleting.get(15, TimeUnit.SECONDS).httpStatus()).isEqualTo(200);
+        }
+        assertThat(activeConnections()).isZero();
+        assertThat(jdbc.sql("""
+                SELECT bool_and(deleted_at>=created_at AND delete_reason='COLUMN_DELETED')
+                FROM yumpoo.work_item_connection WHERE column_id=:id
+                """).param("id", forward.id()).query(Boolean.class).single()).isTrue();
     }
 
     @Test
@@ -335,6 +363,11 @@ class ConnectionConcurrencyIT {
 
     private long targetItemCount() {
         return jdbc.sql("SELECT count(*) FROM yumpoo.work_item WHERE project_id=:id").param("id", second.id()).query(Long.class).single();
+    }
+
+    private static void await(CountDownLatch latch) {
+        try { if (!latch.await(10, TimeUnit.SECONDS)) throw new AssertionError("connection test latch timed out"); }
+        catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new AssertionError(error); }
     }
 
     private void awaitDatabaseLock(String table) {

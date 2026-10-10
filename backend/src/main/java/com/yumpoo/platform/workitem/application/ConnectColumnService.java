@@ -160,10 +160,11 @@ public class ConnectColumnService {
             requireWritable(project);
             if (project.actorAccess() != ProjectFactWriteSnapshot.ActorProjectAccess.OWNER)
                 throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
-            Instant now = clock.instant();
-            columns.lockCatalog(project.companyId(), project.projectId(), now);
+            columns.lockCatalog(project.companyId(), project.projectId(), clock.instant());
             var before = columns.lock(project.companyId(), project.projectId(), command.columnId(), false)
                     .filter(ConnectColumn::active).orElseThrow(ConnectionAccess::missing);
+            // Links stamp created_at under the column share lock; read the clock only after waiting for them.
+            Instant now = clock.instant();
             requireVersion(before.rowVersion(), command.expectedVersion());
             var after = before.delete(command.actor().userId(), now);
             if (!columns.update(after, before.rowVersion())) throw new ApplicationException(StandardErrorCode.VERSION_CONFLICT);
