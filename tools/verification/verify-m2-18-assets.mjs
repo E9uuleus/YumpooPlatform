@@ -26,7 +26,7 @@ for (const fragment of ['CREATE TABLE yumpoo.attachment (', 'CREATE TABLE yumpoo
   "status IN ('UPLOADING', 'AVAILABLE', 'REJECTED', 'DELETED')", 'ck_attachment_available']) {
   assert(migration.includes(fragment), `V37 缺少 ${fragment}`)
 }
-for (const fragment of ['ORDER BY scope_type', 'FOR UPDATE SKIP LOCKED', 'attempt_count=attempt_count+1',
+for (const fragment of ['ORDER BY scope_type', 'FOR UPDATE SKIP LOCKED', 'attempt_count=LEAST(attempt_count+1,3)',
   "status='RUNNING'", 'quarantine_retain_until', 'completeAvailable', 'rescan(']) {
   assert(repository.includes(fragment), `JDBC 闭环缺少 ${fragment}`)
 }
