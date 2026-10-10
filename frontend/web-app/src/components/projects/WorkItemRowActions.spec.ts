@@ -1,13 +1,13 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { ProjectWorkItemListItem } from '@yumpoo/api-client'
+import { ResponseError, type ProjectWorkItemListItem, type WorkItemRelation } from '@yumpoo/api-client'
 import WorkItemRowActions from './WorkItemRowActions.vue'
 
 const api = vi.hoisted(() => ({
   listProjectWorkItems: vi.fn(), listWorkItemSubitems: vi.fn(), moveProjectWorkItemOrder: vi.fn(),
   moveWorkItemSubitemOrder: vi.fn(), createWorkItem: vi.fn(), createWorkItemSubitem: vi.fn(),
-  deleteWorkItem: vi.fn(), archiveWorkItem: vi.fn(),
+  deleteWorkItem: vi.fn(), archiveWorkItem: vi.fn(), listWorkItemRelations: vi.fn(), deleteWorkItemRelation: vi.fn(),
 }))
 vi.mock('../../api/client', () => ({ workItemsApi: api }))
 vi.mock('@yumpoo/api-client', async original => ({ ...await original<typeof import('@yumpoo/api-client')>(), readCsrfToken: () => 'csrf' }))
@@ -23,12 +23,17 @@ function render(props = {}) {
       ElDropdownMenu: { template: '<div><slot /></div>' },
       ElDropdownItem: { props: ['disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>' },
       ElPopover: { template: '<div><slot name="reference" /><slot /></div>' },
-      WorkItemParentPicker: { emits: ['close'], methods: { focusSearch() {} }, template: '<section data-test="parent-picker"><button @click="$emit(\'close\')">关闭父项选择</button></section>' },
+      WorkItemParentPicker: { name: 'WorkItemParentPicker', props: ['item', 'mode', 'parentId'], emits: ['close', 'changed'], methods: { focusSearch() {} }, template: '<section data-test="parent-picker"><button @click="$emit(\'close\')">关闭父项选择</button></section>' },
     } } })
 }
 async function click(wrapper: ReturnType<typeof render>, text: string) {
   await wrapper.findAll('button').find(button => button.text().endsWith(text))!.trigger('click')
   await flushPromises()
+}
+
+function parentRelation(id = 'relation-1', parentId = 'parent-1'): WorkItemRelation {
+  return { id, relationType: 'PARENT_CHILD', currentRole: 'CHILD', counterpart: { id: parentId },
+    etag: '"parent-relation-7"' } as WorkItemRelation
 }
 
 describe('工作项行菜单', () => {
@@ -39,6 +44,7 @@ describe('工作项行菜单', () => {
     vi.spyOn(ElMessage, 'success').mockImplementation(() => ({ close() {} }))
     vi.spyOn(ElMessage, 'error').mockImplementation(() => ({ close() {} }))
     vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({ close() {} }))
+    vi.spyOn(ElMessage, 'info').mockImplementation(() => ({ close() {} }))
   })
   afterEach(() => vi.restoreAllMocks())
 
@@ -89,6 +95,73 @@ describe('工作项行菜单', () => {
     expect(api.moveProjectWorkItemOrder).not.toHaveBeenCalled()
     expect(wrapper.emitted('moved')).toEqual([[item()]])
     expect(ElMessage.success).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('子项菜单复用换父选择器，刷新子项和实际及原表格父项', async () => {
+    const wrapper = render({ parentId: 'parent-1' })
+    expect(wrapper.text()).toContain('转为独立工作项')
+    await click(wrapper, '移到其他父项')
+    const picker = wrapper.getComponent({ name: 'WorkItemParentPicker' })
+    expect(picker.props()).toMatchObject({ mode: 'reparent', parentId: 'parent-1', item: item() })
+    picker.vm.$emit('changed', ['work-1', 'actual-parent', 'new-parent'])
+    await flushPromises()
+    expect(wrapper.emitted('changed')).toEqual([[['work-1', 'actual-parent', 'new-parent', 'parent-1']]])
+    expect(wrapper.find('[data-test="parent-picker"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('转为独立时按 CHILD 角色读取父子关系，带关系 ETag 并刷新两侧', async () => {
+    api.listWorkItemRelations.mockResolvedValue({ items: [
+      { ...parentRelation('other-edge'), currentRole: 'PARENT' }, parentRelation(),
+    ], totalPages: 1 })
+    const wrapper = render({ parentId: 'parent-1' })
+    await click(wrapper, '转为独立工作项')
+    expect(ElMessageBox.confirm).toHaveBeenCalledWith(expect.stringContaining('解除父项后将显示在主表中'),
+      '转为独立工作项', expect.objectContaining({ confirmButtonText: '转为独立工作项' }))
+    expect(api.listWorkItemRelations).toHaveBeenCalledWith({ workItemId: 'work-1', relationType: 'PARENT_CHILD', page: 0, size: 100 })
+    expect(api.deleteWorkItemRelation).toHaveBeenCalledWith({ relationId: 'relation-1', ifMatch: '"parent-relation-7"',
+      xXSRFTOKEN: 'csrf', idempotencyKey: expect.any(String), workItemRelationDeleteRequest: { reason: '通过表格行菜单解除父项' } })
+    expect(wrapper.emitted('changed')).toEqual([[['work-1', 'parent-1']]])
+    expect(ElMessage.success).toHaveBeenCalledWith('已转为独立工作项')
+    expect(api.deleteWorkItem).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('解除使用实时父项，列表为空只刷新；取消确认不读取或写入关系', async () => {
+    api.listWorkItemRelations.mockResolvedValueOnce({ items: [parentRelation('latest-edge', 'latest-parent')], totalPages: 1 })
+    const wrapper = render({ parentId: 'parent-1' })
+    await click(wrapper, '转为独立工作项')
+    expect(wrapper.emitted('changed')?.[0]).toEqual([['work-1', 'latest-parent', 'parent-1']])
+    api.listWorkItemRelations.mockResolvedValueOnce({ items: [], totalPages: 0 })
+    await click(wrapper, '转为独立工作项')
+    expect(api.deleteWorkItemRelation).toHaveBeenCalledTimes(1)
+    expect(ElMessage.info).toHaveBeenCalledWith('该工作项已没有父项，列表已刷新')
+    expect(wrapper.emitted('changed')?.at(-1)).toEqual([['work-1', 'parent-1']])
+    vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel')
+    await click(wrapper, '转为独立工作项')
+    expect(api.listWorkItemRelations).toHaveBeenCalledTimes(2)
+    expect(api.deleteWorkItemRelation).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('父项关系版本冲突不会显示成功，通知表格重取关系事实', async () => {
+    api.listWorkItemRelations.mockResolvedValue({ items: [parentRelation()], totalPages: 1 })
+    api.deleteWorkItemRelation.mockRejectedValue(new ResponseError(new Response(JSON.stringify({ code: 'VERSION_CONFLICT',
+      message: '父子关系已变化', requestId: 'request-1', retryable: false, fieldErrors: [], details: {} }), { status: 412 })))
+    const wrapper = render({ parentId: 'parent-1' })
+    await click(wrapper, '转为独立工作项')
+    expect(ElMessage.error).toHaveBeenCalledWith('父子关系已变化')
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(wrapper.emitted('changed')).toEqual([[['work-1', 'parent-1']]])
+    wrapper.unmount()
+  })
+
+  it('子项写权限不足时禁止换父和解除父项', () => {
+    const wrapper = render({ parentId: 'parent-1', item: { ...item(), capabilities: { ...item().capabilities, canEditFields: false } } })
+    for (const text of ['移到其他父项', '转为独立工作项']) {
+      expect(wrapper.findAll('button').find(button => button.text().endsWith(text))!.attributes('disabled')).toBeDefined()
+    }
     wrapper.unmount()
   })
 

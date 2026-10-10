@@ -208,7 +208,7 @@ onBeforeRouteUpdate((to, from) => to.params.projectId !== from.params.projectId
   ? canClose() : to.query.workItemId !== from.query.workItemId ? beforeDraftLeave() : true)
 const detailLoading = ref(false)
 const detail = ref<WorkItemDetail>()
-const detailTab = ref<'details' | 'discussion' | 'relations' | 'activity'>('details')
+const detailTab = ref<'details' | 'discussion' | 'activity'>('details')
 const dragging = ref<ProjectWorkItemListItem>()
 const tableDragging = ref<ProjectWorkItemListItem>()
 const tableDraggingIndex = ref<number>(-1)
@@ -1629,7 +1629,7 @@ function onDocumentPointerDown(event: PointerEvent): void {
   closeQuick()
 }
 
-async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'relations' | 'activity' = 'details'): Promise<void> {
+async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'activity' = 'details'): Promise<void> {
   const current = ++detailGeneration
   detailOpen.value = true
   detailTab.value = tab
@@ -1647,19 +1647,6 @@ async function loadDetail(workItemId: string, tab: 'details' | 'discussion' | 'r
   } finally {
     if (current === detailGeneration) detailLoading.value = false
   }
-}
-
-async function openRelatedWorkItem(target: { workItemId: string, projectId: string }): Promise<void> {
-  if (target.projectId === projectId.value) {
-    if (!await beforeDraftLeave()) return
-    await loadDetail(target.workItemId)
-    return
-  }
-  await router.push({
-    name: 'project-overview',
-    params: { projectId: target.projectId },
-    query: { workItemId: target.workItemId },
-  })
 }
 
 async function onDiscussionChanged(workItemId: string): Promise<void> {
@@ -2814,7 +2801,8 @@ watch([() => route.query.workItemId, () => route.query.tab], ([value, tab], [pre
     if (!selectedCellKey.value || !selectedCellKey.value.startsWith(`${workItemId}:`)) {
       selectedCellKey.value = `${workItemId}:title`
     }
-    void loadDetail(String(workItemId), tab === 'discussion' ? 'discussion' : detailTab.value)
+    void loadDetail(String(workItemId), tab === undefined ? detailTab.value
+      : tab === 'discussion' || tab === 'activity' ? tab : 'details')
   } else {
     detailGeneration++
     detailOpen.value = false
@@ -3918,10 +3906,8 @@ onBeforeUnmount(() => {
             :members="activeMembers"
             :can-publish="canPublishDiscussion"
             :read-only-reason="discussionReadOnlyReason"
-            @relations-changed="onRelationsChanged"
             @discussion-changed="onDiscussionChanged"
             @description-updated="replaceLightItem($event.id, $event)"
-            @open-work-item="openRelatedWorkItem"
           />
         </template>
       </div>

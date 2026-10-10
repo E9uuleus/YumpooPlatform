@@ -14,7 +14,7 @@ Work Item 需要统一承载父子、相关、阻塞、来源和重复五类普�
 
 关系写命令先锁 Project，再按 UUID 顺序锁 Work Item，最后锁 Relation。同项目 Project 锁串行化跨行层级约束并与项目归档竞争保持一致。换父在一个事务内软删除旧关系、创建新关系、保存幂等结果并只发出 `workitem.work_item_parent_changed`；不额外产生一删一建两条 Activity。挂接、换父和解除不修改 Work Item 版本或 `project_sort_key`。
 
-项目与 Content 的 Table、Kanban、筛选计数只返回没有有效 `PARENT_CHILD` 入边的根项；直接子项继续从 `/work-items/{parentId}/subitems` 查询。关系查询与候选查询使用全部同项目事项语义，包括子项；候选批量返回 `ELIGIBLE`、`REPARENT_REQUIRED` 或 `INELIGIBLE` 及稳定原因。Web 保持单层子表，不在子行增加递归入口，并在共享详情抽屉增加懒加载“关系”页签。
+项目与 Content 的 Table、Kanban、筛选计数只返回没有有效 `PARENT_CHILD` 入边的根项；直接子项继续从 `/work-items/{parentId}/subitems` 查询。关系查询与候选查询使用全部同项目事项语义，包括子项；候选批量返回 `ELIGIBLE`、`REPARENT_REQUIRED` 或 `INELIGIBLE` 及稳定原因。Web 保持单层子表，不在子行增加递归入口。原先在共享详情抽屉增加懒加载“关系”页签的决定，已由 [下线关系页并在表格管理父子关系](../product/2026-10-09-retire-relations-tab.md) 部分替代；该记录拥有当前 Web 管理入口，本文继续拥有两层父子和关系事实模型。
 
 删除 Work Item 不级联关系。关系查询保留已删除对端的编号、标题和 `deleted=true` 占位，有写权限者仍可解除；候选搜索排除已删除事项。ACTIVE MEMBER/OWNER 可管理关系，CompanyAdmin 与归档项目只读。M2-22 已开放四类普通关系跨项目，父子关系继续永久保持同项目；双侧授权、失权裁剪、不可见端匿名占位和跨项目锁序由 [跨项目 Work Item 关系的双侧授权与不可见端脱敏](../security/2026-08-31-cross-project-work-item-relation-visibility.md) 约束。
 
