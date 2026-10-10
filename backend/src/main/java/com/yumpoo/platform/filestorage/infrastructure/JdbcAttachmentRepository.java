@@ -192,7 +192,7 @@ public class JdbcAttachmentRepository implements AttachmentRepository {
                      FOR UPDATE SKIP LOCKED LIMIT 1
                 ), claimed AS (
                     UPDATE yumpoo.attachment_scan_task t
-                       SET status='RUNNING', attempt_count=attempt_count+1,
+                       SET status='RUNNING', attempt_count=LEAST(attempt_count+1,3),
                            lease_owner=:workerId, lease_token=:leaseToken,
                            lease_until=:leaseUntil, updated_at=:now
                       FROM candidate c WHERE t.id=c.id

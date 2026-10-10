@@ -10,7 +10,7 @@ const state = computed<ImageUploadState>(() =>
   (props.extension.options.getUpload as (id: string) => ImageUploadState | undefined)(uploadId.value)
   ?? { name: '图片', phase: 'failed', message: '上传已中断' })
 const label = computed(() => state.value.phase === 'uploading' ? '正在上传…'
-  : state.value.phase === 'scanning' ? '安全扫描中，通过后自动显示' : state.value.message ?? '上传失败')
+  : state.value.phase === 'scanning' ? '处理中，完成后自动显示' : state.value.message ?? '上传失败')
 function remove() { (props.extension.options.onRemove as (id: string) => void)(uploadId.value) }
 </script>
 

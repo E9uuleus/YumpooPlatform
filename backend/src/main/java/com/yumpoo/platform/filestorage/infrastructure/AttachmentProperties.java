@@ -11,12 +11,8 @@ public class AttachmentProperties {
     private int scanConcurrency = 2;
     private Duration scanLease = Duration.ofMinutes(5);
     private Duration uploadLease = Duration.ofMinutes(15);
-    private Duration firstScanRetry = Duration.ofSeconds(5);
-    private Duration secondScanRetry = Duration.ofSeconds(30);
     private String attachmentRoot = "out/attachments";
     private String uploadTempRoot = "out/upload-temp";
-    private String defenderExecutable = "";
-    private Duration defenderTimeout = Duration.ofMinutes(2);
     private boolean cleanupDeleteEnabled;
     private String cleanupApprovalReference = "";
     private Duration maintenanceInitialDelay = Duration.ofMinutes(5);
@@ -34,18 +30,10 @@ public class AttachmentProperties {
     public void setScanLease(Duration value) { scanLease = value; }
     public Duration getUploadLease() { return uploadLease; }
     public void setUploadLease(Duration value) { uploadLease = value; }
-    public Duration getFirstScanRetry() { return firstScanRetry; }
-    public void setFirstScanRetry(Duration value) { firstScanRetry = value; }
-    public Duration getSecondScanRetry() { return secondScanRetry; }
-    public void setSecondScanRetry(Duration value) { secondScanRetry = value; }
     public String getAttachmentRoot() { return attachmentRoot; }
     public void setAttachmentRoot(String value) { attachmentRoot = value; }
     public String getUploadTempRoot() { return uploadTempRoot; }
     public void setUploadTempRoot(String value) { uploadTempRoot = value; }
-    public String getDefenderExecutable() { return defenderExecutable; }
-    public void setDefenderExecutable(String value) { defenderExecutable = value; }
-    public Duration getDefenderTimeout() { return defenderTimeout; }
-    public void setDefenderTimeout(Duration value) { defenderTimeout = value; }
     public boolean isCleanupDeleteEnabled() { return cleanupDeleteEnabled; }
     public void setCleanupDeleteEnabled(boolean value) { cleanupDeleteEnabled = value; }
     public String getCleanupApprovalReference() { return cleanupApprovalReference; }

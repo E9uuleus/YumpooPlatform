@@ -132,7 +132,7 @@ public final class M014AttachmentProbeService {
         } catch (RejectedExecutionException exception) {
             repository.finalizeRejected(
                     attachmentId,
-                    com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode.SCAN_UNAVAILABLE,
+                    com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode.INTEGRITY_CHECK_FAILED,
                     true
             );
             throw new ApplicationException(StandardErrorCode.DEPENDENCY_UNAVAILABLE);
@@ -215,7 +215,7 @@ public final class M014AttachmentProbeService {
         } catch (RuntimeException exception) {
             repository.finalizeRejected(
                     attachmentId,
-                    com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode.SCAN_UNAVAILABLE,
+                    com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode.INTEGRITY_CHECK_FAILED,
                     true
             );
             throw exception;

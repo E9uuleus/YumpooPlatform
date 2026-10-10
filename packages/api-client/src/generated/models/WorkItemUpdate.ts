@@ -76,7 +76,7 @@ export interface WorkItemUpdate {
      */
     bodyHtml: string | null;
     /**
-     *
+     * 正文摘要；纯图片正文为 [图片]。
      * @type {string}
      * @memberof WorkItemUpdate
      */

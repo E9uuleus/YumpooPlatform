@@ -314,7 +314,7 @@ class WorkItemHttpIT {
         JsonNode published = created(mutate("POST", collection, member, body, null, UUID.randomUUID()));
         String html = published.path("bodyHtml").asText();
         assertThat(html).contains("<h2", "<table>", "<pre><code>", "<u><s>", "font-size: 24px",
-                "data-checked=\"true\"", "data-checked=\"false\"", "@Work Category Owner", "🎉");
+                "data-checked=\"true\"", "data-checked=\"false\"", "@Work Category Owner", "🎉", "<img src=", "data-type=\"attachment\"", "data-size=\"12345\"", "方案.pdf");
         String path = "/api/v1/work-item-updates/" + published.path("id").asText();
         JsonNode read = ok(get(path, member));
         assertThat(read.path("bodyHtml").asText()).isEqualTo(html);
@@ -328,6 +328,45 @@ class WorkItemHttpIT {
                 "<p onclick='evil()'><a href='javascript:evil()'>安全正文</a><span style='position:fixed;color:#fff'>样式</span><script>evil()</script></p>"));
         JsonNode safe = created(mutate("POST", collection, member, tampered, null, UUID.randomUUID()));
         assertThat(safe.path("bodyHtml").asText()).doesNotContain("javascript", "onclick", "position", "script");
+    }
+
+    @Test
+    void discussionAttachmentImagesAndCardsSurvivePureImagePublishEditAndReply() throws Exception {
+        JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "讨论附件"), null, UUID.randomUUID()));
+        String collection = "/api/v1/work-items/" + item.path("id").asText() + "/updates";
+        String attachment = "/api/v1/attachments/35000000-0000-4000-8000-000000000009/content";
+        String image = "<img src=\"" + attachment + "\" alt=\"截图.png\">";
+        String card = "<a data-type=\"attachment\" href=\"" + attachment + "\" data-size=\"12345\">方案.pdf</a>";
+        String body = json.writeValueAsString(java.util.Map.of("bodyHtml", image));
+        UUID key = UUID.randomUUID();
+        HttpResponse<String> published = mutate("POST", collection, member, body, null, key);
+        JsonNode root = created(published);
+        assertThat(root.path("bodyHtml").asText()).isEqualTo(image);
+        assertThat(root.path("bodyText").asText()).isEqualTo("[图片]");
+        assertThat(mutate("POST", collection, member, body, null, key).body()).isEqualTo(published.body());
+        String path = "/api/v1/work-item-updates/" + root.path("id").asText();
+        JsonNode edited = ok(mutate("PATCH", path, member,
+                json.writeValueAsString(java.util.Map.of("bodyHtml", image + card)), root.path("etag").asText(), null));
+        assertThat(edited.path("bodyHtml").asText()).isEqualTo(image + card);
+        assertThat(edited.path("bodyText").asText()).isEqualTo("方案.pdf");
+        JsonNode imageEdit = ok(mutate("PATCH", path, member, body, edited.path("etag").asText(), null));
+        assertThat(imageEdit.path("bodyText").asText()).isEqualTo("[图片]");
+        assertThat(ok(get(path, member)).path("bodyHtml").asText()).isEqualTo(image);
+        JsonNode reply = created(mutate("POST", collection, member,
+                json.writeValueAsString(java.util.Map.of("bodyHtml", image, "parentUpdateId", root.path("id").asText())),
+                null, UUID.randomUUID()));
+        assertThat(reply.path("bodyHtml").asText()).isEqualTo(image);
+        assertThat(reply.path("bodyText").asText()).isEqualTo("[图片]");
+        String replyPath = "/api/v1/work-item-updates/" + reply.path("id").asText();
+        JsonNode replyEdit = ok(mutate("PATCH", replyPath, member,
+                json.writeValueAsString(java.util.Map.of("bodyHtml", image + card)), reply.path("etag").asText(), null));
+        assertThat(replyEdit.path("bodyHtml").asText()).isEqualTo(image + card);
+        assertThat(replyEdit.path("bodyText").asText()).isEqualTo("方案.pdf");
+        for (String empty : java.util.List.of("<p> </p>", "<div data-image-upload=upload></div>", "<img src=/relative>")) {
+            assertThat(mutate("POST", collection, member, json.writeValueAsString(java.util.Map.of("bodyHtml", empty)),
+                    null, UUID.randomUUID()).statusCode()).isEqualTo(422);
+        }
     }
 
     @Test

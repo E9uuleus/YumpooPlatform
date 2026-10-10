@@ -10,6 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JsoupCollaborationHtmlSanitizerTest {
     private static final UUID USER_ID = UUID.fromString("35000000-0000-4000-8000-000000000007");
+    private static final String ATTACHMENT = "/api/v1/attachments/35000000-0000-4000-8000-000000000009/content";
     private final JsoupCollaborationHtmlSanitizer sanitizer = new JsoupCollaborationHtmlSanitizer();
 
     @Test
@@ -155,5 +156,61 @@ class JsoupCollaborationHtmlSanitizerTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> sanitizer.sanitizeDescription("<p>x" + "<br>".repeat(16_383) + "</p>"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void discussionAndDescriptionShareStrictAttachmentImageRules() {
+        String source = "<img src=\"" + ATTACHMENT + "\" alt=\" " + "字".repeat(260) + " \" onerror=evil()>"
+                + "<img src=\"https://evil.example" + ATTACHMENT + "\"><img src=\"//evil.example" + ATTACHMENT + "\">"
+                + "<img src=\"data:image/png;base64,AAAA\"><img src=\"javascript:evil()\">"
+                + "<img src=\"" + ATTACHMENT + "?download=1\"><img src=\"/api/v1/attachments/not-uuid/content\">";
+        var result = sanitizer.canonicalize(sanitizer.parse(source), Map.of());
+        assertThat(result.bodyHtml()).isEqualTo("<img src=\"" + ATTACHMENT + "\" alt=\"" + "字".repeat(255) + "\">");
+        assertThat(result.bodyText()).isEqualTo("[图片]");
+        assertThat(sanitizer.sanitizeDescription(source)).isEqualTo(result.bodyHtml());
+        assertThat(sanitizer.canonicalize(sanitizer.parse(result.bodyHtml()), Map.of())).isEqualTo(result);
+    }
+
+    @Test
+    void attachmentCardsAllowOnlyExactMarkedContentLinksAndCanonicalByteSizes() {
+        String source = "<a data-type=attachment href=\"" + ATTACHMENT
+                + "\" data-size=00012345 target=_blank rel=evil onclick=evil()>方案.pdf</a>";
+        var result = sanitizer.canonicalize(sanitizer.parse(source), Map.of());
+        assertThat(result.bodyHtml()).contains("data-type=\"attachment\"", "href=\"" + ATTACHMENT + "\"", "data-size=\"12345\"")
+                .doesNotContain("target", "rel=", "onclick");
+        assertThat(result.bodyText()).isEqualTo("方案.pdf");
+        assertThat(sanitizer.sanitizeDescription(source)).isEqualTo(result.bodyHtml());
+        assertThat(sanitizer.canonicalize(sanitizer.parse(result.bodyHtml()), Map.of())).isEqualTo(result);
+
+        for (String href : java.util.List.of("/relative", ATTACHMENT + "?x=1", "//evil.example" + ATTACHMENT,
+                "javascript:evil()", "/api/v1/attachments/not-uuid/content")) {
+            String unsafe = "<a data-type=attachment data-size=1 href=\"" + href + "\">文件.pdf</a>";
+            assertThat(sanitizer.canonicalize(sanitizer.parse(unsafe), Map.of()).bodyHtml())
+                    .isEqualTo("<a>文件.pdf</a>");
+            assertThat(sanitizer.sanitizeDescription(unsafe)).isEqualTo("<a>文件.pdf</a>");
+        }
+        String absolute = "<a data-type=attachment data-size=1 href=\"https://example.com/file\">普通链接</a>";
+        assertThat(sanitizer.canonicalize(sanitizer.parse(absolute), Map.of()).bodyHtml())
+                .contains("target=\"_blank\"", "rel=\"nofollow noopener noreferrer\"").doesNotContain("data-type", "data-size");
+        assertThat(sanitizer.canonicalize(sanitizer.parse("<a href=\"" + ATTACHMENT + "\">无标记</a>"), Map.of()).bodyHtml())
+                .isEqualTo("<a>无标记</a>");
+    }
+
+    @Test
+    void attachmentCardSizeBoundariesAndUploadPlaceholdersCannotBecomeContent() {
+        for (String size : java.util.List.of("1", "104857600")) {
+            String html = "<a data-type=attachment href=\"" + ATTACHMENT + "\" data-size=\"" + size + "\">文件.zip</a>";
+            assertThat(sanitizer.canonicalize(sanitizer.parse(html), Map.of()).bodyHtml()).contains("data-size=\"" + size + "\"");
+        }
+        for (String size : java.util.List.of("0", "-1", "104857601", "1.5", "+1", "1e3", "1;evil", "9999999999999999999999", "")) {
+            String html = "<a data-type=attachment href=\"" + ATTACHMENT + "\" data-size=\"" + size + "\">文件.zip</a>";
+            assertThat(sanitizer.canonicalize(sanitizer.parse(html), Map.of()).bodyHtml()).doesNotContain("data-size");
+            assertThat(sanitizer.sanitizeDescription(html)).doesNotContain("data-size");
+        }
+        for (String empty : java.util.List.of("<p> </p>", "<div data-image-upload=upload></div>", "<img src=/evil>",
+                "<a data-type=attachment href=\"" + ATTACHMENT + "\"></a>")) {
+            assertThatThrownBy(() -> sanitizer.canonicalize(sanitizer.parse(empty), Map.of()))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
     }
 }

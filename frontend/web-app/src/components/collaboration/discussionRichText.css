@@ -38,3 +38,12 @@
 .discussion-link-form label { display: block; }.discussion-link-form p { color: var(--yp-status-red); }
 .discussion-emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); }.discussion-emoji-grid button { padding: 6px 0; text-align: center; font-size: 22px; }
 .discussion-popup-close { margin-top: 6px; border-top: 1px solid var(--yp-border-subtle) !important; }
+
+.discussion-rich-text a[data-type='attachment'] { display: flex; align-items: center; gap: 12px; box-sizing: border-box; width: min(100%, 380px); margin: 12px 0; padding: 12px; border: 1px solid var(--yp-border-strong); border-radius: 8px; color: var(--yp-text-primary); background: var(--yp-bg-surface); text-decoration: none; }
+.discussion-rich-text a[data-type='attachment']:hover { border-color: var(--yp-action-primary); background: var(--yp-bg-selected); }
+.discussion-rich-text a[data-type='attachment']:focus-visible { outline: 2px solid var(--yp-action-primary); outline-offset: 2px; }
+.attachment-file__icon { display: grid; place-items: center; flex: none; width: 42px; height: 48px; border: 1px solid var(--yp-border-strong); border-radius: 3px 10px 3px 3px; color: var(--yp-action-primary); background: var(--yp-bg-sunken); font-size: 10px; font-weight: 650; }
+.attachment-file__text { display: grid; gap: 2px; min-width: 0; }
+.attachment-file__name { color: var(--yp-text-primary); overflow-wrap: anywhere; font-size: 14px; }
+.attachment-file__size { color: var(--yp-text-muted); font-size: 12px; }
+.attachment-file--selected a { outline: 2px solid var(--yp-action-primary); outline-offset: 2px; }

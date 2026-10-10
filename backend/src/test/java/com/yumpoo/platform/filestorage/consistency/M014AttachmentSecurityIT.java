@@ -2,12 +2,11 @@ package com.yumpoo.platform.filestorage.consistency;
 
 import com.yumpoo.platform.filestorage.api.AttachmentStatus;
 import com.yumpoo.platform.filestorage.application.AttachmentUploadPolicy;
-import com.yumpoo.platform.filestorage.application.MalwareScanVerdict;
 import com.yumpoo.platform.filestorage.testing.M014AttachmentProbeConfiguration;
 import com.yumpoo.platform.filestorage.testing.M014AttachmentProbeController;
 import com.yumpoo.platform.filestorage.testing.M014AttachmentProbeRepository;
 import com.yumpoo.platform.filestorage.testing.M014AttachmentProbeService;
-import com.yumpoo.platform.filestorage.testing.M014ControllableMalwareScanner;
+import com.yumpoo.platform.filestorage.testing.M014ControllableContentDetector;
 import com.yumpoo.platform.filestorage.testing.M014ParentAccessResolver;
 import com.yumpoo.platform.filestorage.testing.M014StorageFixture;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
@@ -101,14 +100,14 @@ class M014AttachmentSecurityIT {
     private M014ParentAccessResolver accessResolver;
 
     @Autowired
-    private M014ControllableMalwareScanner scanner;
+    private M014ControllableContentDetector detector;
 
     @Autowired
     private M014StorageFixture storageFixture;
 
     @BeforeEach
     void resetProbe() throws Exception {
-        scanner.reset();
+        detector.reset();
         service.awaitAll(Duration.ofSeconds(5));
         repository.clearFaults();
         jdbcClient.sql("TRUNCATE TABLE yumpoo.m014_attachment_probe").update();
@@ -118,15 +117,15 @@ class M014AttachmentSecurityIT {
     }
 
     @Test
-    void scanRunsOutsideDatabaseTransactionAndOnlyAvailableContentCanBeDownloaded()
+    void detectionRunsOutsideDatabaseTransactionAndOnlyAvailableContentCanBeDownloaded()
             throws Exception {
         UUID attachmentId = create("report.pdf", "application/pdf", ACTOR);
-        scanner.blockWithVerdict(MalwareScanVerdict.CLEAN);
+        detector.block();
 
         HttpResponse<String> accepted = put(attachmentId, ACTOR, PDF);
 
         assertThat(accepted.statusCode()).isEqualTo(202);
-        assertThat(scanner.awaitScanEntered(Duration.ofSeconds(5))).isTrue();
+        assertThat(detector.awaitDetectionEntered(Duration.ofSeconds(5))).isTrue();
         assertThat(repository.find(attachmentId)).hasValueSatisfying(row -> {
             assertThat(row.status()).isEqualTo(AttachmentStatus.UPLOADING);
             assertThat(row.processingStage().name()).isEqualTo("SCANNING");
@@ -138,7 +137,7 @@ class M014AttachmentSecurityIT {
         );
         independentWrite.get(2, TimeUnit.SECONDS);
 
-        scanner.release();
+        detector.release();
         service.awaitProcessing(attachmentId, Duration.ofSeconds(5));
         JsonNode available = metadata(attachmentId, ACTOR);
         assertThat(available.get("status").asText()).isEqualTo("AVAILABLE");
@@ -213,15 +212,15 @@ class M014AttachmentSecurityIT {
     }
 
     @Test
-    void writeRevocationDuringScanRejectsAndReadRevocationHidesAvailableBytes()
+    void writeRevocationDuringProcessingRejectsAndReadRevocationHidesAvailableBytes()
             throws Exception {
         UUID revokedDuringScan = create("revoked.pdf", "application/pdf", ACTOR);
-        scanner.blockWithVerdict(MalwareScanVerdict.CLEAN);
+        detector.block();
         assertThat(put(revokedDuringScan, ACTOR, PDF).statusCode()).isEqualTo(202);
-        assertThat(scanner.awaitScanEntered(Duration.ofSeconds(5))).isTrue();
+        assertThat(detector.awaitDetectionEntered(Duration.ofSeconds(5))).isTrue();
 
         accessResolver.revokeWrite(OWNER, ACTOR);
-        scanner.release();
+        detector.release();
         service.awaitProcessing(revokedDuringScan, Duration.ofSeconds(5));
 
         assertThat(metadata(revokedDuringScan, ACTOR).get("rejectedCode").asText())
@@ -230,7 +229,7 @@ class M014AttachmentSecurityIT {
         assertThat(storageFixture.blobFileCount()).isOne();
 
         accessResolver.grantWrite(OWNER, ACTOR);
-        scanner.returnVerdict(MalwareScanVerdict.CLEAN);
+        detector.reset();
         UUID available = create("available.pdf", "application/pdf", ACTOR);
         assertThat(put(available, ACTOR, PDF).statusCode()).isEqualTo(202);
         service.awaitProcessing(available, Duration.ofSeconds(5));
@@ -262,17 +261,16 @@ class M014AttachmentSecurityIT {
     }
 
     @Test
-    void scannerAmbiguityRetriesFinitelyAndNeverPublishes() throws Exception {
-        UUID attachmentId = create("ambiguous.pdf", "application/pdf", ACTOR);
-        scanner.returnVerdict(MalwareScanVerdict.INDETERMINATE);
+    void failedDetectionRejectsAndNeverPublishes() throws Exception {
+        UUID attachmentId = create("failed.pdf", "application/pdf", ACTOR);
+        detector.failDetection();
 
         assertThat(put(attachmentId, ACTOR, PDF).statusCode()).isEqualTo(202);
         service.awaitProcessing(attachmentId, Duration.ofSeconds(5));
 
-        assertThat(scanner.calls()).isEqualTo(3);
         assertThat(metadata(attachmentId, ACTOR).get("rejectedCode").asText())
-                .isEqualTo("SCAN_UNAVAILABLE");
-        assertThat(storageFixture.quarantineFileCount()).isOne();
+                .isEqualTo("INTEGRITY_CHECK_FAILED");
+        assertThat(storageFixture.quarantineFileCount()).isZero();
         assertThat(storageFixture.blobFileCount()).isZero();
         assertThat(getContent(attachmentId, ACTOR).statusCode()).isEqualTo(404);
     }
@@ -280,7 +278,7 @@ class M014AttachmentSecurityIT {
     @Test
     void concurrentContentCompletionPublishesAtMostOnce() throws Exception {
         UUID attachmentId = create("once.pdf", "application/pdf", ACTOR);
-        scanner.blockWithVerdict(MalwareScanVerdict.CLEAN);
+        detector.block();
         CountDownLatch start = new CountDownLatch(1);
 
         CompletableFuture<Integer> first = concurrentPut(attachmentId, start);
@@ -290,8 +288,8 @@ class M014AttachmentSecurityIT {
         statuses.sort(Comparator.naturalOrder());
 
         assertThat(statuses).containsExactly(202, 409);
-        assertThat(scanner.awaitScanEntered(Duration.ofSeconds(5))).isTrue();
-        scanner.release();
+        assertThat(detector.awaitDetectionEntered(Duration.ofSeconds(5))).isTrue();
+        detector.release();
         service.awaitProcessing(attachmentId, Duration.ofSeconds(5));
         assertThat(repository.find(attachmentId).orElseThrow().status())
                 .isEqualTo(AttachmentStatus.AVAILABLE);

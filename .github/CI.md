@@ -43,7 +43,7 @@ pnpm run ci
 
 Actions 始终尝试上传故障诊断：`out/ci` 阶段记录和 Maven Surefire/Failsafe 报告。未产生诊断文件时只警告；交付所需的 handoff/报告缺失必须失败。handoff 名称绑定 run ID 与 attempt，Windows 校验提交、文件集合和哈希。SHA 固定的 Actions、只读 token 与不持久化 checkout 凭据继续保留。
 
-Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必需 Linux job 执行。公司 HTTPS/企微、Defender、干净 Windows Server、真实生产迁移及灾备环境验收继续遵守现有 evidence 延期清单；CI 阶段报告仍标记 `WINDOWS_X64_CI_STAGE` 和相应 `NOT_RUN`，不代表生产部署或 `WINDOWS_X64_FULL`。
+Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必需 Linux job 执行。公司 HTTPS/企微、干净 Windows Server、真实生产迁移及灾备环境验收继续遵守现有 evidence 延期清单；CI 阶段报告仍标记 `WINDOWS_X64_CI_STAGE` 和相应 `NOT_RUN`，不代表生产部署或 `WINDOWS_X64_FULL`。
 
 ## 已核验的故障来源
 

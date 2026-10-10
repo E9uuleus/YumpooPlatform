@@ -51,7 +51,7 @@ public class AttachmentLifecycleAdapter implements AttachmentLifecyclePort {
     }
     public AttachmentMetadata completeAvailable(Finalization value,Instant now){return map(service.completeAvailableBoundary(internal(value),now));}
     public void completeRejected(ScanClaim claim,AttachmentRejectedCode code,Instant now){service.completeRejectedBoundary(internal(claim),code.name(),now);}
-    public void retryOrExhaust(ScanClaim claim,Instant now){service.retryBoundary(internal(claim),now);}
+    public void retryProcessing(ScanClaim claim,Instant now){service.retryBoundary(internal(claim),now);}
     public RescanResult rescan(UUID companyId,UUID id,long version,Instant now){
         AttachmentBoundaryData.Rescan result=service.rescanBoundary(companyId,id,version,now);
         return new RescanResult(result.attachmentId(),AttachmentStatus.valueOf(result.status()),result.generation(),result.rowVersion(),result.etag());

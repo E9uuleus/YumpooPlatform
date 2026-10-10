@@ -138,7 +138,7 @@ describe('WorkItemDescription', () => {
     expect(api.patch).toHaveBeenCalledTimes(1)
   })
 
-  it('图片先显示上传占位，扫描通过后替换为同源附件图片', async () => {
+  it('图片先显示上传占位，处理完成后替换为同源附件图片', async () => {
     const upload = deferred<{ id: string; originalFileName: string }>()
     api.upload.mockImplementationOnce(({ onPhase }: { onPhase: (phase: string) => void }) => { onPhase('scanning'); return upload.promise })
     wrapper = mountDescription()
@@ -147,7 +147,7 @@ describe('WorkItemDescription', () => {
     await flushPromises()
 
     expect(api.upload).toHaveBeenCalledWith(expect.objectContaining({ ownerType: 'WORK_ITEM', ownerId: workItemId }))
-    expect(wrapper.get('[data-image-upload]').text()).toContain('安全扫描中')
+    expect(wrapper.get('[data-image-upload]').text()).toContain('处理中')
     expect(wrapper.text()).toContain('1 张图片处理中')
     expect(saveButton(wrapper).attributes('disabled')).toBeDefined()
 
