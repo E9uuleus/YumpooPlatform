@@ -8,6 +8,8 @@ Status: implemented
 
 ## Decision
 
+归档端最小卡片和列目录的读取例外已被[项目归档访问与统计范围](../product/2026-10-09-project-archive-and-deletion.md)部分替代：ARCHIVED 项目仅负责人和 CompanyAdmin 可读真实内容，其他连接读者收到 available=false 与不可访问占位值；ACTIVE 项目的投递及最小卡片授权继续遵循本记录。下文固定字段集合和归档保留读取是建立连接能力时的历史边界，新增可选 available 不授予更多内容读取。
+
 新建并关联要求来源项目 OWNER/MEMBER、两端项目 ACTIVE、目标位于连接列目标集合，不要求目标项目成员。新建项固定为目标项目根项，状态 `NOT_STARTED`，报告人为操作人；优先级、处理人、描述、日期为空。只能选择目标项目启用类别，省略时使用第一个启用类别。工作项与连接由同一创建内核、事务和 `createConnectedWorkItem` 幂等作用域提交，任何失败都回滚。
 
 关联已有和候选搜索要求两端 OWNER/MEMBER；从[双向连接列](../product/2026-10-04-two-way-connect-columns.md)的目标侧搜索、关联或在连接列所在项目新建同样要求两端 OWNER/MEMBER，因此不新增投递权限，反向新建的连接 `origin` 为 `LINKED`。解除连接只需任一端 OWNER/MEMBER，同时要求两端项目 ACTIVE、列未删除。列创建和修改要求来源项目成员，删除要求 OWNER。企业管理员的公司级可见性不授予写权限。不可见资源返回 404，可见但无写权限返回 403。所有写命令在事务内取得有序项目锁后重新复核权限与生命周期，预检不构成最终授权。

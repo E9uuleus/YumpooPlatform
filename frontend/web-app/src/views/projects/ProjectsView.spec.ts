@@ -1,6 +1,6 @@
 import {
   AccountStatus, AuthenticationClientType, AuthenticationRole, ClientCompatibility, EmploymentStatus,
-  ProjectActorAccess, ProjectLifecycle, ProjectLifecycleFilter,
+  ProjectActorAccess, ProjectLifecycle, ProjectLifecycleFilter, ResponseError,
     type CurrentAuthentication, type Member,
   type Project, type ProjectPage, type ProjectSummary,
 } from '@yumpoo/api-client'
@@ -12,11 +12,11 @@ import ProjectsView from './ProjectsView.vue'
 
 const push = vi.hoisted(() => vi.fn())
 const api = vi.hoisted(() => ({
-  listProjects: vi.fn(), listProjectOwnerOptions: vi.fn(), createProject: vi.fn(),
+  listProjects: vi.fn(), listProjectOwnerOptions: vi.fn(), createProject: vi.fn(), getProject: vi.fn(),
 }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('../../api/client', () => ({
-  projectsApi: { listProjects: api.listProjects, listProjectOwnerOptions: api.listProjectOwnerOptions, createProject: api.createProject },
+  projectsApi: api,
 }))
 vi.mock('@yumpoo/api-client', async importOriginal => ({
   ...await importOriginal<typeof import('@yumpoo/api-client')>(), readCsrfToken: () => 'csrf-token',
@@ -59,17 +59,18 @@ describe('项目管理页', () => {
     push.mockReset()
     Object.values(api).forEach(mock => mock.mockReset())
     api.listProjects.mockResolvedValue(page())
+    api.getProject.mockResolvedValue(summary)
     api.listProjectOwnerOptions.mockResolvedValue([{ userId: owner.userId, displayName: owner.displayName }])
     api.createProject.mockResolvedValue({ id: 'project-created' } as Project)
   })
 
   afterEach(() => vi.useRealTimers())
 
-  it('默认请求全部生命周期并按精确列序展示单表', async () => {
+  it('默认只请求进行中项目并按精确列序展示单表', async () => {
     useSession().authentication.value = authentication(AuthenticationRole.CompanyMember)
     const wrapper = mount(ProjectsView, { attachTo: document.body })
     await flushPromises()
-    expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: ProjectLifecycleFilter.All, page: 0, size: 20 })
+    expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: ProjectLifecycleFilter.Active, page: 0, size: 20 })
     expect(wrapper.findAll('.project-management-table th').map(cell => cell.text())).toEqual([
       '项目名称', '状态', '负责人', '创建时间', '最后修改时间', '我的角色',
     ])
@@ -93,6 +94,7 @@ describe('项目管理页', () => {
     await wrapper.get('.project-name-cell__link').trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'project-overview', params: { projectId: summary.id } })
     await wrapper.get('#project-recent-tab').trigger('click')
+    await flushPromises()
 
     expect(wrapper.get('#project-recent-tab').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('.project-recent-list').text()).toContain(summary.name)
@@ -104,7 +106,7 @@ describe('项目管理页', () => {
     wrapper.unmount()
   })
 
-  it('筛选即时请求并保持生命周期 ALL', async () => {
+  it('筛选即时请求并保持生命周期 ACTIVE', async () => {
     useSession().authentication.value = authentication(AuthenticationRole.CompanyMember)
     const wrapper = mount(ProjectsView)
     await flushPromises()
@@ -114,26 +116,29 @@ describe('项目管理页', () => {
     await flushPromises()
     expect(api.listProjects).toHaveBeenLastCalledWith(expect.objectContaining({
       ownerUserIds: ['owner-1'],
-      lifecycle: ProjectLifecycleFilter.All,
+      lifecycle: ProjectLifecycleFilter.Active,
     }))
   })
 
-  it('生命周期筛选只提供全部、进行中和已归档并同时过滤最近项目', async () => {
+  it('最近项目实时校验并移除已归档或不可见的本地记录', async () => {
     useSession().authentication.value = authentication(AuthenticationRole.CompanyMember)
+    const recent = (project: ProjectSummary) => ({ ...project, createdAt: now.toISOString(), updatedAt: now.toISOString(), openedAt: 1, pinned: true })
+    window.localStorage.setItem('yumpoo.projects.recents.v1.company-1%3Auser-1', JSON.stringify([
+      recent(summary), recent({ ...summary, id: 'archived' }), recent({ ...summary, id: 'hidden' }),
+    ]))
+    api.getProject.mockImplementation(({ projectId }: { projectId: string }) => {
+      if (projectId === 'archived') return Promise.resolve({ ...summary, id: projectId, lifecycle: ProjectLifecycle.Archived })
+      if (projectId === 'hidden') return Promise.reject(new ResponseError(new Response(JSON.stringify({ code: 'RESOURCE_NOT_FOUND', message: '不可见', requestId: 'archive-test', retryable: false, fieldErrors: [], details: {} }), { status: 404 })))
+      return Promise.resolve(summary)
+    })
     const wrapper = mount(ProjectsView, { attachTo: document.body })
     await flushPromises()
-    const vm = wrapper.vm as unknown as { lifecycle: ProjectLifecycleFilter; refreshForFilters: () => void; recentProjectItems: unknown[]; clearFilters: () => void }
-    await wrapper.get('.project-name-cell__link').trigger('click')
-    expect(vm.recentProjectItems).toHaveLength(1)
-    vm.lifecycle = ProjectLifecycleFilter.Archived
-    vm.refreshForFilters()
+    await wrapper.get('#project-recent-tab').trigger('click')
     await flushPromises()
-    expect(api.listProjects).toHaveBeenLastCalledWith(expect.objectContaining({ lifecycle: ProjectLifecycleFilter.Archived, page: 0 }))
-    expect(vm.recentProjectItems).toHaveLength(0)
-    vm.clearFilters()
-    await flushPromises()
-    expect(api.listProjects).toHaveBeenLastCalledWith(expect.objectContaining({ lifecycle: ProjectLifecycleFilter.All }))
-    expect(vm.recentProjectItems).toHaveLength(1)
+    expect(api.getProject).toHaveBeenCalledTimes(3)
+    expect(wrapper.findAll('.project-recent-list__identity')).toHaveLength(1)
+    expect(window.localStorage.getItem('yumpoo.projects.recents.v1.company-1%3Auser-1')).not.toContain('archived')
+    expect(window.localStorage.getItem('yumpoo.projects.recents.v1.company-1%3Auser-1')).not.toContain('hidden')
     wrapper.unmount()
   })
 
@@ -166,7 +171,7 @@ describe('项目管理页', () => {
     await vi.advanceTimersByTimeAsync(300)
     await flushPromises()
     expect(api.listProjects).toHaveBeenLastCalledWith(expect.objectContaining({
-      query: 'YP_01', lifecycle: ProjectLifecycleFilter.All, page: 0,
+      query: 'YP_01', lifecycle: ProjectLifecycleFilter.Active, page: 0,
     }))
     wrapper.unmount()
   })

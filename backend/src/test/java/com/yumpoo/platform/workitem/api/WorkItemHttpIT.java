@@ -53,6 +53,8 @@ class WorkItemHttpIT {
     @Autowired private ObjectMapper json;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private WorkItemLabelRepository labels;
+    @Autowired private com.yumpoo.platform.identityaccess.application.authorization.PlatformRoleMaintenanceUseCase maintenance;
+    @Autowired private com.yumpoo.platform.organization.api.CompanyConfigurationQuery company;
 
     private ActorFixture owner;
     private ActorFixture member;
@@ -752,23 +754,57 @@ class WorkItemHttpIT {
     }
 
     @Test
-    void archivedProjectAllowsOnlyOwnerDeletionAndNoPin() throws Exception {
+    void archivalWithOpenWorkHidesAllResourcesFromMembersAndKeepsOwnerAndAdministratorReadOnly() throws Exception {
+        ActorFixture admin;
+        try (var ignored = RequestCorrelationContext.open(RequestCorrelation.root("archive-admin-" + UUID.randomUUID()))) {
+            var user = provisioner.provision("archive-admin", "Archive Administrator");
+            maintenance.execute(new com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleCommand(
+                    company.current().companyId(), user.userId(),
+                    com.yumpoo.platform.identityaccess.application.authorization.MaintenanceRoleMode.BOOTSTRAP,
+                    "UP11 archive fixture"));
+            admin = actor(user.userId());
+        }
         JsonNode item = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
                 workItemBody(tasksId, "归档权限"), null, UUID.randomUUID()));
         String collection = "/api/v1/work-items/" + item.path("id").asText() + "/updates";
         JsonNode root = publishComment(collection, member, "归档前评论", null);
         String path = "/api/v1/work-item-updates/" + root.path("id").asText();
-        ok(mutate("POST", "/api/v1/work-items/" + item.path("id").asText() + "/transitions", member,
-                "{\"toStatus\":\"" + transitionTo(item, "DONE") + "\"}", item.path("etag").asText(), UUID.randomUUID()));
+        String attachmentBody = json.createObjectNode().put("ownerType", "WORK_ITEM")
+                .put("ownerId", item.path("id").asText()).put("originalFileName", "report.pdf")
+                .put("declaredMime", "application/pdf").toString();
+        var attachment = created(mutate("POST", "/api/v1/attachments", member, attachmentBody, null, UUID.randomUUID()))
+                .path("metadata");
+        String attachmentPath = "/api/v1/attachments/" + attachment.path("id").asText();
         JsonNode project = ok(get("/api/v1/projects/" + PROJECT_ID, owner));
         ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/archive", owner,
                 "{\"reason\":\"验收归档\"}", project.path("etag").asText(), UUID.randomUUID()));
-        JsonNode view = ok(get(path, member));
-        assertThat(view.path("capabilities").path("canDelete").asBoolean()).isFalse();
-        assertThat(view.path("capabilities").path("canPin").asBoolean()).isFalse();
-        assertThat(mutate("DELETE", path, member, "{}", root.path("etag").asText(), null).statusCode()).isEqualTo(403);
+        assertThat(get(path, member).statusCode()).isEqualTo(404);
+        assertThat(get("/api/v1/projects/" + PROJECT_ID, member).statusCode()).isEqualTo(404);
+        assertThat(get("/api/v1/work-items/" + item.path("id").asText(), member).statusCode()).isEqualTo(404);
+        assertThat(get(attachmentPath, member).statusCode()).isEqualTo(404);
+        assertThat(get(attachmentPath + "/content", member).statusCode()).isEqualTo(404);
+        assertThat(ok(get("/api/v1/projects?lifecycle=ARCHIVED", member)).path("items").isEmpty()).isTrue();
+        assertThat(ok(get("/api/v1/projects?lifecycle=ALL", member)).path("totalElements").asLong()).isZero();
+        for (ActorFixture reader : List.of(owner, admin)) {
+            JsonNode view = ok(get(path, reader));
+            assertThat(view.path("capabilities").path("canDelete").asBoolean()).isFalse();
+            assertThat(view.path("capabilities").path("canPin").asBoolean()).isFalse();
+            assertThat(ok(get(attachmentPath, reader)).path("id").asText()).isEqualTo(attachment.path("id").asText());
+            assertThat(ok(get("/api/v1/projects?lifecycle=ARCHIVED", reader)).path("items").size()).isOne();
+            assertThat(ok(get("/api/v1/projects/" + PROJECT_ID, reader)).path("capabilities").path("canRestore").asBoolean()).isTrue();
+            assertThat(ok(get("/api/v1/work-items/" + item.path("id").asText(), reader))
+                    .path("capabilities").path("canEditFields").asBoolean()).isFalse();
+            assertThat(mutate("DELETE", path, reader, "{}", root.path("etag").asText(), null).statusCode()).isEqualTo(409);
+            assertThat(mutate("PATCH", "/api/v1/work-items/" + item.path("id").asText() + "/description", reader,
+                    "{\"description\":\"归档后不可写\"}", item.path("etag").asText(), UUID.randomUUID()).statusCode())
+                    .isEqualTo(reader == owner ? 409 : 403);
+        }
+        assertThat(mutate("DELETE", path, member, "{}", root.path("etag").asText(), null).statusCode()).isEqualTo(404);
         assertThat(mutate("PATCH", path + "/pin", owner, "{\"pinned\":true}", root.path("etag").asText(), null).statusCode()).isEqualTo(409);
-        ok(mutate("DELETE", path, owner, "{}", root.path("etag").asText(), null));
+        var archived = ok(get("/api/v1/projects/" + PROJECT_ID, owner));
+        ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/restore", owner, "", archived.path("etag").asText(), UUID.randomUUID()));
+        assertThat(get(path, member).statusCode()).isEqualTo(200);
+        assertThat(get(attachmentPath, member).statusCode()).isEqualTo(200);
     }
 
     @Test
@@ -1083,6 +1119,10 @@ class WorkItemHttpIT {
     }
 
     private void cleanUp() {
+        jdbc.sql("DELETE FROM yumpoo.attachment_scan_task WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.attachment WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.attachment_quota_usage WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("DELETE FROM yumpoo.platform_role_assignment WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.work_item_table_settings WHERE company_id=:id").param("id", COMPANY_ID).update();
         for (String table : java.util.List.of("work_item_time_session", "work_item_timer_state", "work_item_time_revision"))
             jdbc.sql("DELETE FROM yumpoo." + table + " WHERE company_id=:id").param("id", COMPANY_ID).update();
@@ -1105,6 +1145,9 @@ class WorkItemHttpIT {
         jdbc.sql("DELETE FROM yumpoo.outbox_event WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.external_identity WHERE company_id=:id").param("id", COMPANY_ID).update();
         jdbc.sql("DELETE FROM yumpoo.identity_user WHERE company_id=:id").param("id", COMPANY_ID).update();
+        jdbc.sql("UPDATE yumpoo.app_manager_governance_state SET lifecycle_status='UNINITIALIZED', initialized_at=NULL, "
+                + "missing_since=NULL, event_version=0, row_version=0, updated_at=transaction_timestamp() WHERE company_id=:id")
+                .param("id", COMPANY_ID).update();
     }
 
     private record ActorFixture(UUID userId, IssuedSession session) {}

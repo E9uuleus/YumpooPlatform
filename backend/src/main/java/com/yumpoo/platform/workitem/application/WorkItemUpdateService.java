@@ -127,7 +127,8 @@ public class WorkItemUpdateService {
                 : null;
         boolean writable = !item.archived() && project.lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
                 && project.actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
-        boolean owner = project.actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER;
+        boolean owner = project.actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER
+                && project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE;
         return new WorkItemUpdatePage(rows.stream()
                 .map(row -> view(row, actor, writable, owner)).toList(), nextCursor,
                 before == null ? updates.findPinned(project.companyId(), workItemId).stream()
@@ -142,7 +143,8 @@ public class WorkItemUpdateService {
         boolean writable = !context.item().archived() && context.project().lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
                 && context.project().actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
         return view(update, actor, writable,
-                context.project().actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER);
+                context.project().actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER
+                        && context.project().lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE);
     }
 
     @Transactional
@@ -188,8 +190,10 @@ public class WorkItemUpdateService {
         UpdateLocator locator = requiredLocator(command.actor(), command.updateId());
         ProjectModerationSnapshot project = moderationGuard.lockForModeration(command.actor(), locator.projectId());
         boolean owner = project.actorAccess() == ProjectModerationSnapshot.ActorProjectAccess.OWNER;
-        if (project.actorAccess() == ProjectModerationSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY
-                || (!owner && project.lifecycle() == ProjectModerationSnapshot.ProjectLifecycle.ARCHIVED)) {
+        if (project.lifecycle() == ProjectModerationSnapshot.ProjectLifecycle.ARCHIVED) {
+            throw invalidState("PROJECT_ARCHIVED");
+        }
+        if (project.actorAccess() == ProjectModerationSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY) {
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         }
         contents.lockForShare(project.companyId(), project.projectId(), locator.contentId())
@@ -270,7 +274,8 @@ public class WorkItemUpdateService {
         boolean writable = !context.item().archived() && context.project().lifecycle() != ProjectAccessSnapshot.ProjectLifecycle.ARCHIVED
                 && context.project().actorAccess() != ProjectAccessSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY;
         return replyPage(parent, actor, writable,
-                context.project().actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER, cursor, pageSize(size));
+                context.project().actorAccess() == ProjectAccessSnapshot.ActorProjectAccess.OWNER
+                        && context.project().lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE, cursor, pageSize(size));
     }
 
     private WorkItemUpdatePage replyPage(WorkItemUpdate parent, CurrentActor actor, boolean writable,

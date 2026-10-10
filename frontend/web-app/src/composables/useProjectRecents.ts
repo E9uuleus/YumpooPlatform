@@ -109,6 +109,14 @@ export function useProjectRecents(scope: () => string | undefined) {
     persist(items.value.map(item => item.id === projectId ? { ...item, pinned: !item.pinned } : item))
   }
 
+  function reconcile(projects: ProjectRecentSource[], removedIds: string[]): void {
+    const verified = new Map(projects.map(project => [project.id, project]))
+    persist(items.value.filter(item => !removedIds.includes(item.id)).map(item => {
+      const next = verified.get(item.id)
+      return next ? { ...item, ...next, createdAt: isoDate(next.createdAt), updatedAt: isoDate(next.updatedAt) } : item
+    }))
+  }
+
   function handleRecentsChanged(event: Event): void {
     const changedScope = (event as CustomEvent<{ scope?: string }>).detail?.scope
     if (changedScope === scope()) refresh()
@@ -129,5 +137,5 @@ export function useProjectRecents(scope: () => string | undefined) {
     window.removeEventListener('storage', handleStorage)
   })
 
-  return { items, record, refresh, togglePinned }
+  return { items, record, refresh, togglePinned, reconcile }
 }

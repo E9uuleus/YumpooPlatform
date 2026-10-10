@@ -86,7 +86,7 @@ export interface PublishWorkItemUpdateRequest {
 export class WorkItemUpdatesApi extends runtime.BaseAPI {
 
     /**
-     * 作者可不限时删除自己的评论；当前 ProjectOwner 可删除所有评论，包括归档历史。删除主评论会原子删除全部回复。
+     * 可写项目中作者可不限时删除自己的评论，当前 ProjectOwner 可删除所有评论。归档项目只读，需先恢复才能删除；删除主评论会原子删除全部回复。
      * 删除 Work Item 评论或讨论串
      */
     async deleteWorkItemUpdateRaw(requestParameters: DeleteWorkItemUpdateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemUpdate>> {
@@ -148,7 +148,7 @@ export class WorkItemUpdatesApi extends runtime.BaseAPI {
     }
 
     /**
-     * 作者可不限时删除自己的评论；当前 ProjectOwner 可删除所有评论，包括归档历史。删除主评论会原子删除全部回复。
+     * 可写项目中作者可不限时删除自己的评论，当前 ProjectOwner 可删除所有评论。归档项目只读，需先恢复才能删除；删除主评论会原子删除全部回复。
      * 删除 Work Item 评论或讨论串
      */
     async deleteWorkItemUpdate(requestParameters: DeleteWorkItemUpdateRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemUpdate> {

@@ -237,8 +237,8 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 锁定 Project 后按声明的真实 provider 顺序收集 blocker；存在 blocker 时安全返回分类计数。
-     * Owner 普通归档 ACTIVE Project
+     * 锁定 Project 并验证版本和权限；未关闭工作项不阻止归档。归档后普通成员不可访问，负责人和 CompanyAdmin 保留只读访问与恢复权限。
+     * 负责人或 CompanyAdmin 归档 ACTIVE Project
      */
     async archiveProjectRaw(requestParameters: ArchiveProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
         if (requestParameters['projectId'] == null) {
@@ -300,8 +300,8 @@ export class ProjectsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 锁定 Project 后按声明的真实 provider 顺序收集 blocker；存在 blocker 时安全返回分类计数。
-     * Owner 普通归档 ACTIVE Project
+     * 锁定 Project 并验证版本和权限；未关闭工作项不阻止归档。归档后普通成员不可访问，负责人和 CompanyAdmin 保留只读访问与恢复权限。
+     * 负责人或 CompanyAdmin 归档 ACTIVE Project
      */
     async archiveProject(requestParameters: ArchiveProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
         const response = await this.archiveProjectRaw(requestParameters, initOverrides);
@@ -854,7 +854,7 @@ export class ProjectsApi extends runtime.BaseAPI {
 
     /**
      * 锁内重验 Owner、ACTIVE membership、用户状态和 ACTIVE Workspace。
-     * CompanyAdmin 恢复 ARCHIVED Project
+     * 负责人或 CompanyAdmin 恢复 ARCHIVED Project
      */
     async restoreProjectRaw(requestParameters: RestoreProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Project>> {
         if (requestParameters['projectId'] == null) {
@@ -917,7 +917,7 @@ export class ProjectsApi extends runtime.BaseAPI {
 
     /**
      * 锁内重验 Owner、ACTIVE membership、用户状态和 ACTIVE Workspace。
-     * CompanyAdmin 恢复 ARCHIVED Project
+     * 负责人或 CompanyAdmin 恢复 ARCHIVED Project
      */
     async restoreProject(requestParameters: RestoreProjectRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Project> {
         const response = await this.restoreProjectRaw(requestParameters, initOverrides);

@@ -8,6 +8,8 @@ Status: implemented
 
 ## Decision
 
+按[项目归档访问与统计范围](../product/2026-10-09-project-archive-and-deletion.md)，归档项目对普通成员不可见。已有通知与未读计数保留，实时批量可见性端口令其目标 `accessible=false` 并清空引用与摘要；负责人和管理员仍可在授权范围只读打开历史目标。
+
 notification 仅依赖 foundation 与 identityaccess，通过 `NotificationContextPort` 请求业务上下文；API 桥接器把公开 DTO 转换为 application 内部模型，内部层不反向依赖本模块 API；administration 的 `NotificationContextAdapter` 组合 catalog 和 workitem 的公开端口。消费时按账号 ACTIVE/ENABLED 与当前项目 ACTIVE 成员资格取交集；被移出成员本人仅校验账号。作者不接收自己的通知，单事件同一接收人的原因优先级为 MENTION、REPLY、COMMENT。负责人转交引起的自动 member_added 不单独投递。评论接收人的业务发起人取 `work_item.reporter_user_id`，与公开工作项契约中的 `reporterUserId` 一致，不使用审计字段 `created_by_user_id`；常规创建时两者相同，但导入或代理创建后的业务归属不能靠审计创建人推断。仅在被回复父评论仍未删除时加入其作者；父评论已为 DELETED 时不产生该 REPLY 接收人。
 
 V57 只建立 `notification_projection_state`、`notification_event` 和 `user_notification`。数据库唯一键及 `ON CONFLICT DO NOTHING` 支持重放；不为项目、工作项和接收人建立额外外键，以免通知投影反向约束源模块的数据清理。只保存目标与人员 ID，不持久化正文和标题。读取使用当前主体的批量可见性端口，评论摘要实时压缩空白后取 120 字；目标不可访问时返回 `accessible=false` 且全部目标引用置空。页内查询按集合批量执行，SQL 数量不随通知条数线性增长。非空混合目标页的渲染最多 9 次业务 SQL，加列表与数据库时钟共最多 11 次（不含会话认证）；高于最初约 5 次的估计，是因为工作项引用与评论端口各自重新校验当前主体的项目范围，避免把调用方传入的项目 ID 当作授权凭据。空集合会短路，单独未读计数只用 1 次 SQL。

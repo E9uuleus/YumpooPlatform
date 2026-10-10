@@ -49,7 +49,7 @@ import {
 } from './ConnectionCardCategory';
 
 /**
- * 连接授权的固定 13 字段只读卡片。canOpen 仅表明当前用户能否打开该卡片所在项目。
+ * 连接授权的只读卡片。ACTIVE 项目保持跨项目最小卡片授权；ARCHIVED 项目仅负责人或 CompanyAdmin 可读取真实卡片。省略 available 视为 true。
  * @export
  * @interface ConnectionCard
  */
@@ -132,6 +132,12 @@ export interface ConnectionCard {
      * @memberof ConnectionCard
      */
     canOpen: boolean;
+    /**
+     * false 表示归档项目对当前用户不可见。除连接已持有的端点 ID 外，真实卡片内容返回不可访问占位值。
+     * @type {boolean}
+     * @memberof ConnectionCard
+     */
+    available?: boolean;
 }
 
 
@@ -179,6 +185,7 @@ export function ConnectionCardFromJSONTyped(json: any, ignoreDiscriminator: bool
         'category': ConnectionCardCategoryFromJSON(json['category']),
         'assignee': ConnectionCardAssigneeFromJSON(json['assignee']),
         'canOpen': json['canOpen'],
+        'available': json['available'] == null ? undefined : json['available'],
     };
 }
 
@@ -206,5 +213,6 @@ export function ConnectionCardToJSONTyped(value?: ConnectionCard | null, ignoreD
         'category': ConnectionCardCategoryToJSON(value['category']),
         'assignee': ConnectionCardAssigneeToJSON(value['assignee']),
         'canOpen': value['canOpen'],
+        'available': value['available'],
     };
 }

@@ -63,26 +63,25 @@ public final class ProjectLifecycleGovernanceService {
         return idempotency.execute(key(command.actor(), "archiveProject", command.idempotencyKey(),
                 command.requestHash()), () -> {
             ProjectArchiveMutation mutation = new ProjectArchiveMutation(command.actor().companyId(),
-                    command.projectId(), command.expectedRowVersion(), command.actor().userId(), true);
+                    command.projectId(), command.expectedRowVersion(), command.actor().userId(),
+                    !command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN));
             ProjectSnapshot before = projects.lockForArchive(mutation);
-            List<SafeBlocker> found = blockers.collect(before.companyId(), before.projectId());
-            if (!found.isEmpty()) {
-                throw ApplicationException.withBlockers(StandardErrorCode.INVALID_STATE_TRANSITION,
-                        "PROJECT_ARCHIVE_BLOCKED", found);
-            }
             ProjectSnapshot after = projects.archive(mutation);
-            appendArchive(before, after, command.actor(), "NORMAL", found, command.idempotencyKey(), null);
+            appendArchive(before, after, command.actor(), "NORMAL", List.of(), command.idempotencyKey(), null);
             return stored(after);
         });
     }
 
     public IdempotencyExecutionResult restore(ProjectRestoreOperationCommand command) {
-        requireAdmin(command.actor());
         return idempotency.execute(key(command.actor(), "restoreProject", command.idempotencyKey(),
                 command.requestHash()), () -> {
             ProjectRestoreMutation mutation = new ProjectRestoreMutation(command.actor().companyId(),
                     command.projectId(), command.expectedRowVersion(), command.actor().userId());
             ProjectRestoreSnapshot locked = projects.lockForRestore(mutation);
+            if (!command.actor().hasRole(PlatformRoleCode.COMPANY_ADMIN)
+                    && !locked.project().ownerUserId().equals(command.actor().userId())) {
+                throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
+            }
             requireRestoreReady(locked);
             ProjectSnapshot before = locked.project();
             ProjectSnapshot after = projects.reopen(mutation);

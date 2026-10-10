@@ -36,6 +36,7 @@ const removed = ref<{ widget: DashboardWidget; index: number }>(), pendingReveal
 const detailId = ref(''), detailSelection = ref<DashboardChartSelection>()
 const detailWidget = computed(() => configuration.value.widgets.find(w => w.id === detailId.value))
 const connections = computed(() => snapshot.value?.projects || dashboard.value?.projects || [])
+const activeConnectionCount = computed(() => connections.value.filter(project => project.available && project.lifecycle === 'ACTIVE').length)
 const results = computed(() => new Map(snapshot.value?.charts?.map(c => [c.id, c]) || []))
 const exportReady = computed(() => !!dashboard.value && !!snapshot.value && !refreshing.value && configuration.value.widgets.length > 0
   && configuration.value.widgets.every(widget => results.value.has(widget.id)))
@@ -240,7 +241,7 @@ async function discardReload() {
           text
           @click="projectDialog = true"
         >
-          {{ configuration.projectIds.length ? `${configuration.projectIds.length} 个连接项目` : '连接项目' }}
+          {{ activeConnectionCount ? `${activeConnectionCount} 个连接项目` : '连接项目' }}
         </el-button>
         <span class="toolbar-divider" />
         <el-button

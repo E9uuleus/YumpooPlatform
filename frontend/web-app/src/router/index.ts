@@ -93,6 +93,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { shellSection: 'work' },
       },
       {
+        path: 'projects/archived',
+        name: 'archived-projects',
+        component: () => import('../views/projects/ArchivedProjectsView.vue'),
+        meta: { shellSection: 'work' },
+      },
+      {
         path: 'projects/:projectId',
         component: ProjectLayout,
         redirect: route => ({ name: 'project-overview', params: route.params }),

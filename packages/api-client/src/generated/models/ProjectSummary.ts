@@ -130,6 +130,12 @@ export interface ProjectSummary {
      * @memberof ProjectSummary
      */
     readonly updatedAt: Date;
+    /**
+     *
+     * @type {Date}
+     * @memberof ProjectSummary
+     */
+    readonly archivedAt?: Date | null;
 }
 
 
@@ -181,6 +187,7 @@ export function ProjectSummaryFromJSONTyped(json: any, ignoreDiscriminator: bool
         'etag': json['etag'],
         'createdAt': (new Date(json['createdAt'])),
         'updatedAt': (new Date(json['updatedAt'])),
+        ...(json['archivedAt'] === undefined ? {} : { 'archivedAt': json['archivedAt'] === null ? null : new Date(json['archivedAt']) }),
     };
 }
 
@@ -188,7 +195,7 @@ export function ProjectSummaryToJSON(json: any): ProjectSummary {
     return ProjectSummaryToJSONTyped(json, false);
 }
 
-export function ProjectSummaryToJSONTyped(value?: Omit<ProjectSummary, 'rowVersion'|'etag'|'createdAt'|'updatedAt'> | null, ignoreDiscriminator: boolean = false): any {
+export function ProjectSummaryToJSONTyped(value?: Omit<ProjectSummary, 'rowVersion'|'etag'|'createdAt'|'updatedAt'|'archivedAt'> | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }

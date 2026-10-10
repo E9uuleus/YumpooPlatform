@@ -68,6 +68,12 @@ export interface ConnectColumnIncoming {
      * @memberof ConnectColumnIncoming
      */
     actorCanLinkExisting: boolean;
+    /**
+     * false 表示归档来源项目对当前用户不可见，项目名称、编码及列名返回不可访问占位值。
+     * @type {boolean}
+     * @memberof ConnectColumnIncoming
+     */
+    available?: boolean;
 }
 
 
@@ -103,6 +109,7 @@ export function ConnectColumnIncomingFromJSONTyped(json: any, ignoreDiscriminato
         'projectName': json['projectName'],
         'projectLifecycle': ProjectLifecycleFromJSON(json['projectLifecycle']),
         'actorCanLinkExisting': json['actorCanLinkExisting'],
+        'available': json['available'] == null ? undefined : json['available'],
     };
 }
 
@@ -124,5 +131,6 @@ export function ConnectColumnIncomingToJSONTyped(value?: ConnectColumnIncoming |
         'projectName': value['projectName'],
         'projectLifecycle': ProjectLifecycleToJSON(value['projectLifecycle']),
         'actorCanLinkExisting': value['actorCanLinkExisting'],
+        'available': value['available'],
     };
 }

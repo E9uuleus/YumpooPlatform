@@ -44,12 +44,14 @@ public class TeamDashboardService {
     }
 
     public Options options(CurrentActor actor) {
-        var all = projects.listForAdministrator(actor).stream().map(p -> new Project(p.id(), p.name(), p.code(), p.lifecycle())).toList();
+        var all = projects.listForAdministrator(actor).stream()
+                .filter(p -> "ACTIVE".equals(p.lifecycle()))
+                .map(p -> new Project(p.id(), p.name(), p.code(), p.lifecycle())).toList();
         return new Options(all, activeMembers(actor.companyId()), zone().getId());
     }
 
     public Timesheet timesheet(CurrentActor actor, TimesheetQuery query) {
-        var scope = scope(actor, ids(query == null ? null : query.projectIds(), MAX_PROJECTS, "projectIds"), true);
+        var scope = scope(actor, ids(query == null ? null : query.projectIds(), MAX_PROJECTS, "projectIds"));
         if (query == null || query.from() == null || query.to() == null || query.to().isBefore(query.from())
                 || ChronoUnit.DAYS.between(query.from(), query.to()) >= MAX_DAYS)
             throw invalid("to", "统计区间需在 1–93 天之间");
@@ -66,7 +68,7 @@ public class TeamDashboardService {
     }
 
     public Workload workload(CurrentActor actor, WorkloadQuery query) {
-        var scope = scope(actor, ids(query == null ? null : query.projectIds(), MAX_PROJECTS, "projectIds"), false);
+        var scope = scope(actor, ids(query == null ? null : query.projectIds(), MAX_PROJECTS, "projectIds"));
         var userIds = ids(query == null ? null : query.userIds(), MAX_USERS, "userIds");
         Instant asOf = clock.instant();
         LocalDate today = LocalDate.ofInstant(asOf, zone());
@@ -88,7 +90,7 @@ public class TeamDashboardService {
         if (query == null || query.offset() == null || query.limit() == null || query.offset() < 0 || query.offset() > 100_000
                 || query.limit() < 1 || query.limit() > 100)
             throw invalid("limit", "分页范围无效");
-        var scope = scope(actor, ids(query.projectIds(), MAX_PROJECTS, "projectIds"), false);
+        var scope = scope(actor, ids(query.projectIds(), MAX_PROJECTS, "projectIds"));
         LocalDate today = LocalDate.ofInstant(clock.instant(), zone());
         var page = work.currentTasks(actor, List.copyOf(scope.keySet()), query.userId(), today, query.offset(), query.limit());
         return new TaskPage(page.items().stream().map(t -> new Task(t.id(), t.projectId(), scope.get(t.projectId()).name(), t.itemNo(), t.title(),
@@ -96,11 +98,10 @@ public class TeamDashboardService {
                 page.totalElements());
     }
 
-    /** An empty request means every project (archived ones only for time history); explicit ids are intersected with the company. */
-    private Map<UUID, MemberProjectQuery.Project> scope(CurrentActor actor, List<UUID> requested, boolean includeArchived) {
+    private Map<UUID, MemberProjectQuery.Project> scope(CurrentActor actor, List<UUID> requested) {
         Map<UUID, MemberProjectQuery.Project> result = new LinkedHashMap<>();
         for (var project : projects.listForAdministrator(actor)) {
-            if (requested.isEmpty() ? includeArchived || !"ARCHIVED".equals(project.lifecycle()) : requested.contains(project.id()))
+            if ("ACTIVE".equals(project.lifecycle()) && (requested.isEmpty() || requested.contains(project.id())))
                 result.put(project.id(), project);
         }
         return result;

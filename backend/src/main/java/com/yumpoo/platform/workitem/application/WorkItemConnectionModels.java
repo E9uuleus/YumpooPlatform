@@ -14,7 +14,7 @@ public final class WorkItemConnectionModels {
     public record ConnectionCard(UUID workItemId, String itemNo, String title, boolean archived,
             UUID projectId, String projectCode, String projectName, String projectLifecycle,
             ConnectionCardStatus status, ConnectionCardLabel priority, ConnectionCardCategory category,
-            ConnectionCardAssignee assignee, boolean canOpen) {}
+            ConnectionCardAssignee assignee, boolean canOpen, boolean available) {}
     public record Capabilities(boolean canUnlink) {}
     public record ConnectionView(UUID id, String etag, long rowVersion, UUID columnId, String columnName,
             String origin, boolean active, ConnectionCard source, ConnectionCard target, Instant createdAt,

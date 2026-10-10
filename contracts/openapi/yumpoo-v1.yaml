@@ -2789,8 +2789,8 @@ paths:
     post:
       tags: [Projects]
       operationId: archiveProject
-      summary: Owner 普通归档 ACTIVE Project
-      description: 锁定 Project 后按声明的真实 provider 顺序收集 blocker；存在 blocker 时安全返回分类计数。
+      summary: 负责人或 CompanyAdmin 归档 ACTIVE Project
+      description: 锁定 Project 并验证版本和权限；未关闭工作项不阻止归档。归档后普通成员不可访问，负责人和 CompanyAdmin 保留只读访问与恢复权限。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -2812,7 +2812,7 @@ paths:
     post:
       tags: [Projects]
       operationId: restoreProject
-      summary: CompanyAdmin 恢复 ARCHIVED Project
+      summary: 负责人或 CompanyAdmin 恢复 ARCHIVED Project
       description: 锁内重验 Owner、ACTIVE membership、用户状态和 ACTIVE Workspace。
       security: [{ sessionCookie: [] }]
       parameters:
@@ -4371,7 +4371,7 @@ paths:
       tags: [WorkItemUpdates]
       operationId: deleteWorkItemUpdate
       summary: 删除 Work Item 评论或讨论串
-      description: 作者可不限时删除自己的评论；当前 ProjectOwner 可删除所有评论，包括归档历史。删除主评论会原子删除全部回复。
+      description: 可写项目中作者可不限时删除自己的评论，当前 ProjectOwner 可删除所有评论。归档项目只读，需先恢复才能删除；删除主评论会原子删除全部回复。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: updateId
@@ -5590,6 +5590,9 @@ components:
         actorCanLinkExisting:
           type: boolean
           description: 当前用户是两端项目 OWNER/MEMBER 且两端 ACTIVE，可从反向列关联、新建或搜索。
+        available:
+          type: boolean
+          description: false 表示归档来源项目对当前用户不可见，项目名称、编码及列名返回不可访问占位值。
     ConnectColumnTarget:
       type: object
       additionalProperties: false
@@ -5613,6 +5616,9 @@ components:
         actorCanLinkExisting:
           type: boolean
           description: 当前用户是来源及目标项目 OWNER/MEMBER，且双方 ACTIVE。
+        available:
+          type: boolean
+          description: false 表示归档目标项目对当前用户不可见，项目名称及编码返回不可访问占位值。
 
     ConnectColumn:
       type: object
@@ -5916,7 +5922,10 @@ components:
         canOpen:
           type: boolean
           description: 当前用户能看见该卡片所在项目。
-      description: 连接授权的固定 13 字段只读卡片。canOpen 仅表明当前用户能否打开该卡片所在项目。
+        available:
+          type: boolean
+          description: false 表示归档项目对当前用户不可见。除连接已持有的端点 ID 外，真实卡片内容返回不可访问占位值。
+      description: 连接授权的只读卡片。ACTIVE 项目保持跨项目最小卡片授权；ARCHIVED 项目仅负责人或 CompanyAdmin 可读取真实卡片。省略 available 视为 true。
     WorkItemConnectionCapabilities:
       type: object
       additionalProperties: false
@@ -8598,6 +8607,7 @@ components:
         etag: { type: string, pattern: '^"[0-9]+"$', readOnly: true }
         createdAt: { type: string, format: date-time, readOnly: true }
         updatedAt: { type: string, format: date-time, readOnly: true }
+        archivedAt: { type: string, format: date-time, nullable: true, readOnly: true }
 
     ProjectOwnerOption:
       type: object

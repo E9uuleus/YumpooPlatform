@@ -23,6 +23,7 @@ import static com.yumpoo.platform.workitem.application.WorkItemConnectionReposit
 
 @Service
 public class ConnectionCardReader {
+    private static final UUID UNAVAILABLE_CATEGORY_ID = UUID.fromString("00000000-0000-4000-8000-000000000000");
     private final WorkItemConnectionRepository connections;
     private final ProjectConnectionTargetQuery projects;
     private final ProjectAccessSnapshotQuery access;
@@ -54,11 +55,14 @@ public class ConnectionCardReader {
                     && active(context.projects().get(connection.targetProjectId()))
                     && (ConnectionAccess.member(context.access().get(connection.sourceProjectId()))
                         || ConnectionAccess.member(context.access().get(connection.targetProjectId())));
+            var source = context.cards().get(connection.sourceWorkItemId());
+            boolean sourceAvailable = source != null && source.available();
             result.put(connection.id(), new ConnectionView(connection.id(), StrongEtag.format(connection.rowVersion()),
-                    connection.rowVersion(), connection.columnId(), row.columnName(), connection.origin().name(),
-                    connection.active(), context.cards().get(connection.sourceWorkItemId()),
+                    connection.rowVersion(), connection.columnId(), sourceAvailable ? row.columnName() : "不可访问的连接列", connection.origin().name(),
+                    connection.active(), source,
                     context.cards().get(connection.targetWorkItemId()), connection.createdAt(),
-                    person(connection.createdByUserId(), context.people()), new Capabilities(writable)));
+                    sourceAvailable ? person(connection.createdByUserId(), context.people())
+                            : new ConnectionCardAssignee(connection.createdByUserId(), "不可访问的成员"), new Capabilities(writable)));
         }
         return result;
     }
@@ -80,10 +84,17 @@ public class ConnectionCardReader {
         Map<UUID, ConnectionCard> cards = new LinkedHashMap<>();
         for (CardRow row : rows) {
             var project = snapshots.get(row.projectId());
+            if (!active(project) && !visibility.containsKey(row.projectId())) {
+                cards.put(row.workItemId(), new ConnectionCard(row.workItemId(), "—", "不可访问的工作项", false,
+                        row.projectId(), "—", "不可访问的项目", project.lifecycle().name(),
+                        new ConnectionCardStatus("UNAVAILABLE", "不可访问", "GRAY", "TODO"), null,
+                        new ConnectionCardCategory(UNAVAILABLE_CATEGORY_ID, "不可访问", "GRAY"), null, false, false));
+                continue;
+            }
             cards.put(row.workItemId(), new ConnectionCard(row.workItemId(), row.itemNo(), row.title(), row.archived(),
                     row.projectId(), project.code(), project.name(), project.lifecycle().name(), row.status(),
                     row.priority(), row.category(), row.assigneeUserId() == null ? null : person(row.assigneeUserId(), people),
-                    visibility.containsKey(row.projectId())));
+                    visibility.containsKey(row.projectId()), true));
         }
         return new Context(cards, snapshots, visibility, people);
     }

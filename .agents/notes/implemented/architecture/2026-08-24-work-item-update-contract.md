@@ -10,6 +10,8 @@ Work Item 需要可分页、可提及项目成员的独立讨论流，但既有 
 
 ## Decision
 
+Project 归档后的普通成员历史可读与 Owner 治理删除例外由[项目归档访问与统计范围](../product/2026-10-09-project-archive-and-deletion.md)部分替代；现有公开治理锁保留接口但在锁内复核 ACTIVE，归档项目内容只读。独立讨论聚合、删除审计和事件隐私理由继续有效。
+
 `WorkItemUpdate` 是独立聚合。发布 Update 不改变父 Work Item 的 `rowVersion`、ETag 或 `updatedAt`。V35 使用 `work_item_update` 保存作者显示名、净化 HTML、纯文本、状态、固定 `createdAt + 15 分钟` 的编辑截止、版本以及 M2-17 所需编辑/删除预留字段；`work_item_update_mention` 保存发布时 Mention 用户与显示名快照，并以 `(updateId, mentionedUserId)` 去重。两表都通过企业边界外键连接父事项、作者和 Mention 用户。
 
 服务端 `CollaborationHtmlSanitizer` 是 foundation 端口。白名单只允许 `p/br/strong/em/ul/ol/li/blockquote/code/a`，以及同时带有 `data-type="mention"` 和合法 UUID `data-mention-user-id` 的 `span`。链接必须是绝对 `http/https/mailto`，并重写 `target="_blank"` 与 `rel="nofollow noopener noreferrer"`；样式、class、事件属性、图片、标题、表格、代码块和未知标签均不保留。Mention 显示名一律按发布时的权威用户快照重写；净化后正文纯文本非空，HTML 最多 65,536 字符，纯文本最多 16,384 字符。

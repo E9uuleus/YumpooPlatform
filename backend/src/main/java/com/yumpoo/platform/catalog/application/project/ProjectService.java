@@ -152,7 +152,7 @@ public class ProjectService {
                 row.workspaceName(), project.code(), project.name(),
                 project.lifecycle().name(), project.ownerUserId(), ownerName, access(row),
                 capabilities(actor, project), project.rowVersion(), StrongEtag.format(project.rowVersion()),
-                project.createdAt(), project.updatedAt());
+                project.createdAt(), project.updatedAt(), project.archivedAt());
     }
 
     private static ProjectDetail detail(CurrentActor actor, ProjectQueryRow row, String ownerName) {
@@ -177,8 +177,8 @@ public class ProjectService {
         boolean mutable = project.lifecycle() != ProjectLifecycle.ARCHIVED;
         return new ProjectCapabilities(owner && mutable,
                 (owner || admin) && mutable, admin && mutable,
-                owner && project.lifecycle() == ProjectLifecycle.ACTIVE,
-                admin && project.lifecycle() == ProjectLifecycle.ARCHIVED,
+                (owner || admin) && project.lifecycle() == ProjectLifecycle.ACTIVE,
+                (owner || admin) && project.lifecycle() == ProjectLifecycle.ARCHIVED,
                 false,
                 admin && project.lifecycle() == ProjectLifecycle.ACTIVE);
     }

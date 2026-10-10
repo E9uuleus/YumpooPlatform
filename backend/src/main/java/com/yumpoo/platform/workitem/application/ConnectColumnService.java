@@ -71,8 +71,10 @@ public class ConnectColumnService {
         var visibility = access.findVisible(actor, ids);
         var incomingViews = incoming.stream().map(column -> {
             var source = snapshots.get(column.projectId());
-            return new IncomingColumn(column.columnId(), column.columnName(), column.projectId(), source.code(), source.name(),
-                    source.lifecycle().name(), writable(project) && writable(visibility.get(column.projectId())));
+            boolean available = available(source, visibility.get(column.projectId()));
+            return new IncomingColumn(column.columnId(), available ? column.columnName() : "不可访问的连接列", column.projectId(),
+                    available ? source.code() : "—", available ? source.name() : "不可访问的项目",
+                    source.lifecycle().name(), writable(project) && writable(visibility.get(column.projectId())), available);
         }).toList();
         return new Catalog(items.stream().map(column -> view(column, project, snapshots, visibility)).toList(),
                 !incomingViews.isEmpty(), incomingViews, writable(project), writable(project)
@@ -180,9 +182,14 @@ public class ConnectColumnService {
             Map<UUID, ConnectTargetProjectSnapshot> targets, Map<UUID, ProjectAccessSnapshot> visibility) {
         return new Column(column.id(), column.projectId(), column.name(), column.targetProjectIds().stream().map(id -> {
             var target = targets.get(id);
-            return new Target(id, target.code(), target.name(), target.lifecycle().name(),
-                    writable(source) && writable(visibility.get(id)));
+            boolean available = available(target, visibility.get(id));
+            return new Target(id, available ? target.code() : "—", available ? target.name() : "不可访问的项目", target.lifecycle().name(),
+                    writable(source) && writable(visibility.get(id)), available);
         }).toList(), column.rowVersion(), StrongEtag.format(column.rowVersion()), column.createdAt());
+    }
+
+    private static boolean available(ConnectTargetProjectSnapshot project, ProjectAccessSnapshot visible) {
+        return project.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE || visible != null;
     }
 
     private void validateTargets(UUID companyId, List<UUID> ids, List<UUID> existing) {
