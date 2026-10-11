@@ -5,6 +5,7 @@ import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
+import { useOnboarding } from '../../onboarding/useOnboarding'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
 import WorkItemColumnVisibilityMenu from './WorkItemColumnVisibilityMenu.vue'
 import { createWorkItemColumnFlip, measureWorkItemColumns, visibleWorkItemColumnCells } from './workItemColumnFlip'
@@ -167,6 +168,9 @@ const tableItems = ref<ProjectWorkItemListItem[]>([])
 const tableNextCursor = ref<string | null>(null)
 const loading = ref(false)
 const tableLoading = ref(false)
+watch(() => !embedded.value && Boolean(project.value) && !loading.value && !tableLoading.value, ready => {
+  if (ready) void useOnboarding().ready('project-work-items')
+})
 const tableSorting = ref(false)
 const error = ref<ApiProblem>()
 const lanes = reactive<Record<string, KanbanLane>>({})
@@ -2935,6 +2939,7 @@ onBeforeUnmount(() => {
         <div v-if="!embedded" class="monday-view-header">
           <div
             class="view-tabs"
+            data-tour="work-item-views"
             role="tablist"
             aria-label="项目工作项视图"
           >
@@ -2973,7 +2978,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="work-items-toolbar" aria-label="工作项工具栏" data-work-item-view-control>
+        <div class="work-items-toolbar" aria-label="工作项工具栏" data-work-item-view-control data-tour="work-item-toolbar">
           <div class="toolbar-search" :class="{ 'toolbar-search--expanded': searchExpanded }">
             <el-input
               v-if="searchExpanded"
@@ -3150,6 +3155,7 @@ onBeforeUnmount(() => {
           v-loading="tableLoading && !tableItems.length && !grouped"
           :aria-busy="tableLoading || tableSorting || groupsLoading"
           class="table-surface monday-table-surface"
+          data-tour="work-item-table"
         >
           <div
             class="monday-table-wrapper"
@@ -3348,6 +3354,7 @@ onBeforeUnmount(() => {
               >
                 <template #header>
                   <work-item-column-header
+                    data-tour="work-item-column-header"
                     :state="columnMenuState(columnByKey.get('title')!)"
                     :saving="savingSortOrder"
                     @sort="applyColumnQuickSort('title')"
@@ -3435,6 +3442,7 @@ onBeforeUnmount(() => {
                     </work-item-name-cell>
                     <button
                       class="monday-discussion-btn"
+                      data-tour="work-item-discussion"
                       :disabled="isDraft(scope.row as ProjectWorkItemListItem)"
                       :class="{ 'monday-cell--selected': selectedCellKey === `${(scope.row as ProjectWorkItemListItem).id}:discussion` }"
                       :aria-label="(scope.row as ProjectWorkItemListItem).discussionCount ? `打开协作讨论，${(scope.row as ProjectWorkItemListItem).discussionCount}条讨论` : '打开协作讨论'"
@@ -3751,6 +3759,7 @@ onBeforeUnmount(() => {
                 <button
                   v-else-if="!grouped"
                   class="quick-add monday-quick-add"
+                  data-tour="work-item-quick-add"
                   :style="quickGridStyle"
                   :disabled="!canCreate"
                   @click="openQuick"

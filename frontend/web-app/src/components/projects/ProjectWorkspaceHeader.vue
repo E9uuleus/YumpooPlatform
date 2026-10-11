@@ -122,7 +122,10 @@ watch(projectId, () => { preference.value = undefined })
       v-else
       class="project-workspace-header__heading"
     >
-      <h1 class="project-workspace-header__title">
+      <h1
+        class="project-workspace-header__title"
+        data-tour="project-title"
+      >
         <el-popover
           v-model:visible="infoOpen"
           role="dialog"
@@ -254,6 +257,7 @@ watch(projectId, () => { preference.value = undefined })
         v-if="project && section !== 'catalog'"
         class="project-workspace-header__sections"
         aria-label="项目分区"
+        data-tour="project-sections"
       >
         <div
           v-for="(group, index) in sectionGroups"
