@@ -6,6 +6,7 @@ import { Check, Loading, WarningFilled } from '@element-plus/icons-vue'
 import type { NotificationItem } from '@yumpoo/api-client'
 import { useInbox, useInboxList } from '../../composables/useInbox'
 import { useSession } from '../../composables/useSession'
+import { useOnboarding } from '../../onboarding/useOnboarding'
 import { inboxEmptyCopy, inboxFilterLabel, notificationDateGroup, notificationLink, parseInboxFilter } from '../../components/inbox/inboxPresentation'
 import InboxRow from '../../components/inbox/InboxRow.vue'
 import YpPageHeader from '../../components/yp/YpPageHeader.vue'
@@ -44,6 +45,7 @@ async function readAll() {
 }
 let observer: IntersectionObserver | undefined
 onMounted(() => {
+  void useOnboarding().ready('inbox')
   if (typeof IntersectionObserver === 'undefined') return
   observer = new IntersectionObserver(entries => {
     if (entries.some(entry => entry.isIntersecting) && !list.error.value) void list.load(true)
@@ -68,6 +70,7 @@ onBeforeUnmount(() => observer?.disconnect())
       <template #actions>
         <el-button
           v-if="filter !== 'archived'"
+          data-tour="inbox-read-all"
           :icon="Check"
           :disabled="!inbox.unread.value || !list.serverNow.value"
           :loading="marking"
@@ -79,6 +82,7 @@ onBeforeUnmount(() => observer?.disconnect())
     </yp-page-header>
     <div
       class="inbox-page__list"
+      data-tour="inbox-list"
       :aria-busy="list.loading.value"
     >
       <div

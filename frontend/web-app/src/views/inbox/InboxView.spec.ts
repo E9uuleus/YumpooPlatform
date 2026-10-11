@@ -5,6 +5,7 @@ import { NotificationReason, NotificationState, NotificationTargetKind, type Lis
 
 const api = vi.hoisted(() => ({ getNotificationUnreadCounts: vi.fn(), listNotifications: vi.fn(), markNotificationRead: vi.fn(), markNotificationUnread: vi.fn(), archiveNotification: vi.fn(), markAllNotificationsRead: vi.fn() }))
 vi.mock('../../api/client', () => ({ notificationsApi: api }))
+vi.mock('../../onboarding/useOnboarding', () => ({ useOnboarding: () => ({ ready: async () => undefined }) }))
 vi.mock('@yumpoo/api-client', async importOriginal => ({ ...await importOriginal<object>(), readCsrfToken: () => 'csrf' }))
 vi.mock('../../composables/useSession', async () => {
   const { ref } = await import('vue')

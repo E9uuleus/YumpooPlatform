@@ -6,6 +6,7 @@ import { Close, Connection, DataAnalysis, Download, Filter, MoreFilled, Plus, Re
 import { type DashboardFilters, type DashboardWidget, type DashboardChartSelection } from '@yumpoo/api-client'
 import { problemMessage, toApiProblem } from '../api/problems'
 import { useSession } from '../composables/useSession'
+import { useOnboarding } from '../onboarding/useOnboarding'
 import { useDashboard } from '../components/dashboard/useDashboard'
 import { clone, defaultConfiguration, emptyFilters, MY_TIME_VIEW_ID, newWidget, TEAM_VIEW_ID, widgetCatalog } from '../components/dashboard/dashboardModel'
 import { exportFileName, PDF_TYPE, saveExportFile } from '../components/dashboard/exportFile'
@@ -33,6 +34,9 @@ const mineActive = computed(() => route.params.dashboardId === MY_TIME_VIEW_ID)
 const teamActive = computed(() => teamAllowed.value && route.params.dashboardId === TEAM_VIEW_ID)
 const fixedActive = computed(() => mineActive.value || teamActive.value)
 const activeTabId = computed(() => mineActive.value ? MY_TIME_VIEW_ID : teamActive.value ? TEAM_VIEW_ID : dashboard.value?.id ?? '')
+watch(() => !loading.value || fixedActive.value, ready => {
+  if (ready) void useOnboarding().ready('dashboards')
+}, { immediate: true })
 const createOpen = ref(false), createName = ref(''), createBlank = ref(false), creating = ref(false), createError = ref('')
 const settingsId = ref(''), settings = computed(() => configuration.value.widgets.find(w => w.id === settingsId.value))
 const removed = ref<{ widget: DashboardWidget; index: number }>(), pendingReveal = ref('')
@@ -159,6 +163,7 @@ async function discardReload() {
         仪表板
       </h1>
       <DashboardTabs
+        data-tour="dashboard-tabs"
         :dashboards="dashboards"
         :active-id="activeTabId"
         :active-name="name"
@@ -168,7 +173,10 @@ async function discardReload() {
         @create="startCreate"
         @rename="renameDashboard"
       />
-      <div class="dashboard-header-actions">
+      <div
+        class="dashboard-header-actions"
+        data-tour="dashboard-actions"
+      >
         <el-tooltip content="刷新数据">
           <el-button
             :icon="Refresh"
@@ -237,6 +245,7 @@ async function discardReload() {
       <div class="dashboard-toolbar">
         <el-button
           type="primary"
+          data-tour="dashboard-add-widget"
           :icon="Plus"
           :disabled="!dashboard"
           @click="gallery = true"
@@ -244,6 +253,7 @@ async function discardReload() {
           添加组件
         </el-button>
         <el-button
+          data-tour="dashboard-projects"
           :icon="Connection"
           text
           @click="projectDialog = true"
@@ -260,6 +270,7 @@ async function discardReload() {
           处理人
         </el-button>
         <el-button
+          data-tour="dashboard-filters"
           :icon="Filter"
           :class="{ 'filter-active': filtersCount }"
           text

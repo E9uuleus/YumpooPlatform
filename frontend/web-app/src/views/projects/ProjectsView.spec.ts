@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   listProjects: vi.fn(), listProjectOwnerOptions: vi.fn(), createProject: vi.fn(), getProject: vi.fn(),
 }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+vi.mock('../../onboarding/useOnboarding', () => ({ useOnboarding: () => ({ ready: async () => undefined }) }))
 vi.mock('../../api/client', () => ({
   projectsApi: api,
 }))

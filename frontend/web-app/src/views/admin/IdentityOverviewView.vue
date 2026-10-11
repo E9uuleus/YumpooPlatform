@@ -9,6 +9,7 @@ import InlineProblem from '../../components/InlineProblem.vue'
 import YpDefinitionList, { type DefinitionItem } from '../../components/yp/YpDefinitionList.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import YpSurface from '../../components/yp/YpSurface.vue'
+import { useOnboarding } from '../../onboarding/useOnboarding'
 
 const company = ref<Company>()
 const status = ref<WeComIntegrationStatus>()
@@ -60,7 +61,10 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  void useOnboarding().ready('company')
+})
 </script>
 
 <template>
@@ -81,6 +85,7 @@ onMounted(load)
     <yp-surface
       v-if="company"
       class="identity-overview__company"
+      data-tour="company-profile"
     >
       <div class="company-identity">
         <span
@@ -103,6 +108,7 @@ onMounted(load)
     <div
       v-if="status"
       class="identity-overview__integrations"
+      data-tour="company-integrations"
     >
       <yp-surface title="企微 Web OAuth">
         <template #actions>
