@@ -1,25 +1,28 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { ElButton, ElIcon, ElInput, ElPopover, ElTooltip } from 'element-plus'
-import { Check, DataAnalysis, Menu, Plus, Search, User } from '@element-plus/icons-vue'
+import { Calendar, Check, DataAnalysis, Menu, Plus, Search, User } from '@element-plus/icons-vue'
 import type { DashboardSummary } from '@yumpoo/api-client'
 import YpEmptyState from '../yp/YpEmptyState.vue'
-import { TEAM_VIEW_ID } from './dashboardModel'
+import { MY_TIME_VIEW_ID, TEAM_VIEW_ID } from './dashboardModel'
+
+interface Tab { id: string; name: string; fixed?: 'mine' | 'team' }
 
 const props = defineProps<{ dashboards: DashboardSummary[]; activeId: string; activeName: string; team: boolean; renamable: boolean }>()
 const emit = defineEmits<{ select: [id: string]; create: []; rename: [name: string] }>()
 const strip = ref<HTMLElement>()
 const listOpen = ref(false), search = ref(''), editing = ref(false), draft = ref('')
-const tabs = computed(() => [
-  ...(props.team ? [{ id: TEAM_VIEW_ID, name: '团队视图', team: true }] : []),
-  ...props.dashboards.map(d => ({ id: d.id, name: d.id === props.activeId ? props.activeName : d.name, team: false })),
+const tabs = computed<Tab[]>(() => [
+  { id: MY_TIME_VIEW_ID, name: '我的工时', fixed: 'mine' },
+  ...(props.team ? [{ id: TEAM_VIEW_ID, name: '团队视图', fixed: 'team' as const }] : []),
+  ...props.dashboards.map(d => ({ id: d.id, name: d.id === props.activeId ? props.activeName : d.name })),
 ])
 const choices = computed(() => tabs.value.filter(tab => tab.name.toLowerCase().includes(search.value.trim().toLowerCase())))
 
 function select(id: string) { listOpen.value = false; if (id !== props.activeId) emit('select', id) }
 function create() { listOpen.value = false; emit('create') }
-async function startRename(tab: { id: string; name: string; team: boolean }) {
-  if (tab.team || tab.id !== props.activeId || !props.renamable) return
+async function startRename(tab: Tab) {
+  if (tab.fixed || tab.id !== props.activeId || !props.renamable) return
   draft.value = tab.name; editing.value = true
   await nextTick()
   const input = strip.value?.querySelector<HTMLInputElement>('.dashboard-tab-rename input')
@@ -75,22 +78,22 @@ watch(() => [props.activeId, tabs.value.length], async () => {
         <button
           v-else
           class="dashboard-tab"
-          :class="{ active: tab.id === activeId, 'dashboard-tab--team': tab.team }"
+          :class="{ active: tab.id === activeId, 'dashboard-tab--fixed': tab.fixed }"
           type="button"
           role="tab"
           :aria-selected="tab.id === activeId"
           :tabindex="tab.id === activeId ? 0 : -1"
-          :title="tab.team ? '成员工时与当前任务（仅公司管理员可见）' : tab.name"
+          :title="tab.fixed === 'mine' ? '本人每日工时（按公司时区）' : tab.fixed ? '成员工时与当前任务（仅公司管理员可见）' : tab.name"
           @click="select(tab.id)"
           @dblclick="startRename(tab)"
           @keydown="move($event, index)"
         >
-          <el-icon v-if="tab.team">
-            <User />
+          <el-icon v-if="tab.fixed">
+            <Calendar v-if="tab.fixed === 'mine'" /><User v-else />
           </el-icon><span>{{ tab.name }}</span>
         </button>
         <span
-          v-if="tab.team && tabs.length > 1"
+          v-if="tab.fixed && tabs[index + 1] && !tabs[index + 1]!.fixed"
           class="dashboard-tabs__divider"
           aria-hidden="true"
         />
@@ -128,7 +131,7 @@ watch(() => [props.activeId, tabs.value.length], async () => {
           @click="select(tab.id)"
         >
           <el-icon>
-            <User v-if="tab.team" /><DataAnalysis v-else />
+            <Calendar v-if="tab.fixed === 'mine'" /><User v-else-if="tab.fixed" /><DataAnalysis v-else />
           </el-icon><span>{{ tab.name }}</span><el-icon v-if="tab.id === activeId">
             <Check />
           </el-icon>
@@ -170,7 +173,7 @@ watch(() => [props.activeId, tabs.value.length], async () => {
 .dashboard-tab.active{color:var(--yp-text-primary)}
 .dashboard-tab.active::after{content:'';position:absolute;left:10px;right:10px;bottom:0;height:3px;border-radius:3px 3px 0 0;background:var(--yp-action-primary)}
 .dashboard-tab:focus-visible{outline:2px solid var(--yp-focus-ring);outline-offset:-2px}
-.dashboard-tab--team .el-icon{color:var(--yp-action-primary)}
+.dashboard-tab--fixed .el-icon{color:var(--yp-action-primary)}
 .dashboard-tabs__divider{flex:none;align-self:center;width:1px;height:20px;margin:0 6px;background:var(--yp-border-default)}
 .dashboard-tab-rename{flex:none;align-self:center;width:200px;margin:0 6px}
 .dashboard-tabs__action{display:inline-flex;flex:none;align-self:center}

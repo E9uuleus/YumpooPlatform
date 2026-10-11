@@ -70,9 +70,9 @@ export const routes: RouteRecordRaw[] = [
       },
       {
         path: '',
-        name: 'workspace-root',
-        component: ProjectsView,
-        meta: { shellSection: 'work' },
+        name: 'home',
+        component: () => import('../views/home/HomeView.vue'),
+        meta: { shellSection: 'home' },
       },
       {
         path: 'workspace',
@@ -220,7 +220,7 @@ export function sessionDestination(to: RouteLocationNormalized) {
     return to.name === 'forbidden' ? true : { name: 'forbidden' }
   }
   const workspaceSlug = session.authentication.value.user.workspaceSlug
-  if (to.name === 'workspace-root' || to.name === 'workspace-entry') {
+  if (to.name === 'workspace-entry') {
     return { name: 'workspace', params: { workspaceSlug }, replace: true }
   }
   if ((to.name === 'workspace' || to.name === 'dashboards') && to.params.workspaceSlug !== workspaceSlug) {

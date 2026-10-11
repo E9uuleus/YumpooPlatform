@@ -6,11 +6,10 @@ describe('Project 工作台路由', () => {
     const shell = routes.find(route => route.path === '/')
     const detail = shell?.children?.find(route => route.path === 'projects/:projectId')
 
-    expect(shell?.children?.find(route => route.path === '')?.name).toBe('workspace-root')
+    expect(shell?.children?.find(route => route.path === '')?.name).toBe('home')
     expect(shell?.children?.find(route => route.path === 'workspace')?.name).toBe('workspace-entry')
     expect(shell?.children?.find(route => route.path === 'workspace/:workspaceSlug')?.name).toBe('workspace')
     expect(shell?.children?.some(route => route.path === 'projects')).toBe(false)
-    expect(shell?.children?.some(route => route.name === 'home')).toBe(false)
     expect(shell?.children?.some(route => route.path.startsWith('products'))).toBe(false)
     expect(detail?.meta?.shellSection).toBe('work')
     expect(detail?.children?.map(route => route.path)).toEqual([

@@ -22,6 +22,8 @@ tags:
     description: 公司管理员团队视图：成员工时与当前任务统计。
   - name: TimeTracking
     description: 工作项原始计时与本人跨端计时器。
+  - name: MyWork
+    description: 本人跨项目工时日历与当前任务。
   - name: Authentication
     description: Web 企微登录、会话退出与当前主体查询。
   - name: IdentityGovernance
@@ -1623,6 +1625,55 @@ paths:
           headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
           content: { application/json: { schema: { $ref: '#/components/schemas/TeamMemberTaskPage' } } }
         '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /me/timesheet:
+    get:
+      tags: [MyWork]
+      operationId: getMyTimesheet
+      summary: 按自然日与工作项统计本人原始计时
+      description: 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf。区间最多 93 天。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          description: 含当天；与 from 最多相差 92 天。
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: 本人工时统计。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TeamTimesheet' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /me/current-tasks:
+    get:
+      tags: [MyWork]
+      operationId: listMyCurrentTasks
+      summary: 分页查询分配给本人的当前任务
+      description: 任意有效成员可用。范围为本人当前有效成员身份的未归档项目中分配给本人、未删除未归档且状态分类为 TODO 或 IN_PROGRESS 的工作项；排序与成员当前任务一致：截止日期升序且无截止日期在后、进行中优先、更新时间倒序。逾期为截止日期早于公司时区今天。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 100000, default: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: 本人当前任务分页。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TeamMemberTaskPage' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationFailed' }

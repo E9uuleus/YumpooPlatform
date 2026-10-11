@@ -11,6 +11,8 @@ export const widgetCatalog = [
 ] as const
 /** Reserved route id for the company-admin team view; personal dashboard ids are UUIDs. */
 export const TEAM_VIEW_ID = 'team'
+/** Reserved route id for every member's own hours calendar. */
+export const MY_TIME_VIEW_ID = 'my-time'
 export const metrics = { TOTAL: '工作项总数', IN_PROGRESS: '进行中', DONE: '已完成', COMPLETION_RATE: '完成率', DURATION: '累计耗时' }
 export const categories: Record<string, { name: string; color: string }> = {
   TODO: { name: '待开始', color: 'GRAY' }, IN_PROGRESS: { name: '进行中', color: 'ORANGE' },

@@ -16,6 +16,8 @@ Status: implemented
 
 项目目录的唯一规范前端地址是 `/workspace/{workspaceSlug}`。登录后的 `/` 与 `/workspace` 使用 `replace` 导航到当前会话别名；地址包含错误或其他人员别名时，不解析或查询目标身份，同样直接替换为当前用户地址。旧 `/projects` 目录不保留重定向并进入 404，以关闭第二个目录地址；既有 `/projects/{projectId}/overview` 等项目资源深链保持不变。
 
+其中 `/` 的处理由[工作中台首页与本人工时日历](2026-10-10-work-hub-and-my-time.md)部分替代：`/` 现在是工作中台首页，不再替换到工作台；`/workspace` 与别名规范化规则不变。
+
 个人工作台只是当前会话项目目录的 URL 命名空间和壳层展示身份，不创建个人 `catalog.workspace`，不参与后端授权，也不改变 Project 的内部 MAIN `workspace_id`。Company 单例 MAIN 的数据归属、生命周期和权限边界继续由 [MAIN 单工作空间契约](2026-08-23-main-workspace-contract.md)拥有；项目可见范围仍只由现有 Company、membership、Owner 和 CompanyAdmin 谓词决定。
 
 ## Alternatives considered

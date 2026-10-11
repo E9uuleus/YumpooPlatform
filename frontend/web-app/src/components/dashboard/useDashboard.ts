@@ -4,7 +4,7 @@ import { readCsrfToken, type DashboardConfiguration, type DashboardSnapshot, typ
 import { dashboardsApi } from '../../api/client'
 import { problemMessage, toApiProblem, type ApiProblem } from '../../api/problems'
 import { useSession } from '../../composables/useSession'
-import { clone, defaultConfiguration, TEAM_VIEW_ID } from './dashboardModel'
+import { clone, defaultConfiguration, MY_TIME_VIEW_ID, TEAM_VIEW_ID } from './dashboardModel'
 import { settleDashboardLayout } from './dashboardLayout'
 
 export function useDashboard() {
@@ -61,13 +61,14 @@ export function useDashboard() {
     try {
       await list(); if (token !== epoch) return
       const remembered = localStorage.getItem(storageKey.value), teamAllowed = session.isCompanyAdmin.value
+      if (id === MY_TIME_VIEW_ID) { localStorage.setItem(storageKey.value, MY_TIME_VIEW_ID); return }
       if (id === TEAM_VIEW_ID) {
         if (teamAllowed) localStorage.setItem(storageKey.value, TEAM_VIEW_ID)
         else await router.replace({ name: 'dashboards', params: { workspaceSlug: route.params.workspaceSlug } })
         return
       }
-      const selected = id || (teamAllowed && remembered === TEAM_VIEW_ID ? TEAM_VIEW_ID : undefined)
-        || dashboards.value.find(d => d.id === remembered)?.id || dashboards.value[0]?.id
+      const fixed = remembered === MY_TIME_VIEW_ID || (teamAllowed && remembered === TEAM_VIEW_ID) ? remembered : undefined
+      const selected = id || fixed || dashboards.value.find(d => d.id === remembered)?.id || dashboards.value[0]?.id
       if (!selected) { name.value = '我的仪表板'; configuration.value = defaultConfiguration(); return }
       if (!id) { await router.replace({ name: 'dashboards', params: { ...route.params, dashboardId: selected } }); return }
       const result = await dashboardsApi.getDashboard({ id: selected }); if (token !== epoch) return

@@ -7,7 +7,7 @@ import { type DashboardFilters, type DashboardWidget, type DashboardChartSelecti
 import { problemMessage, toApiProblem } from '../api/problems'
 import { useSession } from '../composables/useSession'
 import { useDashboard } from '../components/dashboard/useDashboard'
-import { clone, defaultConfiguration, emptyFilters, newWidget, TEAM_VIEW_ID, widgetCatalog } from '../components/dashboard/dashboardModel'
+import { clone, defaultConfiguration, emptyFilters, MY_TIME_VIEW_ID, newWidget, TEAM_VIEW_ID, widgetCatalog } from '../components/dashboard/dashboardModel'
 import { exportFileName, PDF_TYPE, saveExportFile } from '../components/dashboard/exportFile'
 import { formatTimestamp } from '../design-system/dates'
 import { resolveChart } from '../components/dashboard/chartModel'
@@ -22,14 +22,17 @@ import DashboardTabs from '../components/dashboard/DashboardTabs.vue'
 import YpEmptyState from '../components/yp/YpEmptyState.vue'
 
 const TeamDashboard = defineAsyncComponent(() => import('../components/dashboard/team/TeamDashboard.vue'))
+const MyTimeView = defineAsyncComponent(() => import('../components/dashboard/my-time/MyTimeView.vue'))
 
 const session = useSession(), route = useRoute()
 const { dashboards, dashboard, snapshot, loading, refreshing, error, saveError, name, configuration, saving, changed, save, refresh, create, remove, switchTo, load, reload, reloading, recovery, resolveRecovery } = useDashboard()
 const projectDialog = ref(false), filterDialog = ref(false), filterField = ref('assignees'), gallery = ref(false), galleryClosing = ref(false)
-const grid = ref<InstanceType<typeof DashboardGrid>>(), teamView = ref<{ refresh: () => void; loading: boolean }>(), exporting = ref(false)
+const grid = ref<InstanceType<typeof DashboardGrid>>(), fixedView = ref<{ refresh: () => void; loading: boolean }>(), exporting = ref(false)
 const teamAllowed = computed(() => session.isCompanyAdmin.value)
+const mineActive = computed(() => route.params.dashboardId === MY_TIME_VIEW_ID)
 const teamActive = computed(() => teamAllowed.value && route.params.dashboardId === TEAM_VIEW_ID)
-const activeTabId = computed(() => teamActive.value ? TEAM_VIEW_ID : dashboard.value?.id ?? '')
+const fixedActive = computed(() => mineActive.value || teamActive.value)
+const activeTabId = computed(() => mineActive.value ? MY_TIME_VIEW_ID : teamActive.value ? TEAM_VIEW_ID : dashboard.value?.id ?? '')
 const createOpen = ref(false), createName = ref(''), createBlank = ref(false), creating = ref(false), createError = ref('')
 const settingsId = ref(''), settings = computed(() => configuration.value.widgets.find(w => w.id === settingsId.value))
 const removed = ref<{ widget: DashboardWidget; index: number }>(), pendingReveal = ref('')
@@ -119,7 +122,7 @@ async function dashboardAction(command: string) {
     if (command === 'delete') { await ElMessageBox.confirm(`删除“${name.value}”后无法恢复。`, '删除仪表板', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }); await remove() }
   } catch (reason) { if (reason !== 'cancel' && reason !== 'close') ElMessage.error(problemMessage(await toApiProblem(reason))) }
 }
-function refreshAll() { if (teamActive.value) teamView.value?.refresh(); else void reload() }
+function refreshAll() { if (fixedActive.value) fixedView.value?.refresh(); else void reload() }
 function renameDashboard(value: string) { name.value = value; changed() }
 async function exportPdf() {
   if (exporting.value || !exportReady.value) return
@@ -170,12 +173,12 @@ async function discardReload() {
           <el-button
             :icon="Refresh"
             aria-label="刷新仪表板"
-            :loading="teamActive ? !!teamView?.loading : refreshing || reloading"
+            :loading="fixedActive ? !!fixedView?.loading : refreshing || reloading"
             text
             @click="refreshAll"
           />
         </el-tooltip>
-        <template v-if="!teamActive">
+        <template v-if="!fixedActive">
           <el-button
             :icon="Download"
             text
@@ -222,9 +225,13 @@ async function discardReload() {
         </template>
       </div>
     </header>
+    <MyTimeView
+      v-if="mineActive"
+      ref="fixedView"
+    />
     <TeamDashboard
-      v-if="teamActive"
-      ref="teamView"
+      v-else-if="teamActive"
+      ref="fixedView"
     />
     <template v-else>
       <div class="dashboard-toolbar">

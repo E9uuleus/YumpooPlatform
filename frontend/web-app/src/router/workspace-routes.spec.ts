@@ -40,16 +40,14 @@ describe('个人工作台规范路由守卫', () => {
     session.authentication.value = authentication
   })
 
-  it.each(['/', '/workspace'])(
-    '%s 替换为当前用户规范地址',
-    path => {
-      expect(destination(path)).toEqual({
-        name: 'workspace',
-        params: { workspaceSlug: 'hanzhoujiangshangyu' },
-        replace: true,
-      })
-    },
-  )
+  it('/ 是工作中台首页，/workspace 替换为当前用户规范地址', () => {
+    expect(destination('/')).toBe(true)
+    expect(destination('/workspace')).toEqual({
+      name: 'workspace',
+      params: { workspaceSlug: 'hanzhoujiangshangyu' },
+      replace: true,
+    })
+  })
 
   it('错误或其他用户别名不查询身份，直接替换为当前用户地址', () => {
     expect(destination('/workspace/someone-else')).toEqual({

@@ -98,7 +98,7 @@ describe('项目侧栏导航', () => {
     })
     const toggle = wrapper.get('.context-navigation .project-navigation__toggle')
     expect(wrapper.get('.workspace-navigation-heading__identity').text()).toBe('工作台')
-    expect(wrapper.findAll('.module-rail__item-label').map(item => item.text())).toEqual(['工作台'])
+    expect(wrapper.findAll('.module-rail__item-label').map(item => item.text())).toEqual(['首页', '工作台'])
     expect(toggle.element.children[0]?.textContent).toBe('项目')
     expect(toggle.element.children[1]?.tagName).toBe('svg')
     const projects = wrapper.findAll('#desktop-project-navigation .project-navigation__project')
