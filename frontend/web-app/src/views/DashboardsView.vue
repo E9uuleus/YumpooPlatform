@@ -26,18 +26,20 @@ const TeamDashboard = defineAsyncComponent(() => import('../components/dashboard
 const MyTimeView = defineAsyncComponent(() => import('../components/dashboard/my-time/MyTimeView.vue'))
 
 const session = useSession(), route = useRoute()
-const onboarding = usePageOnboarding()
 const { dashboards, dashboard, snapshot, loading, refreshing, error, saveError, name, configuration, saving, changed, save, refresh, create, remove, switchTo, load, reload, reloading, recovery, resolveRecovery } = useDashboard()
 const projectDialog = ref(false), filterDialog = ref(false), filterField = ref('assignees'), gallery = ref(false), galleryClosing = ref(false)
-const grid = ref<InstanceType<typeof DashboardGrid>>(), fixedView = ref<{ refresh: () => void; loading: boolean }>(), exporting = ref(false)
+const grid = ref<InstanceType<typeof DashboardGrid>>(), fixedView = ref<{ refresh: () => void; loading: boolean; ready: boolean }>(), exporting = ref(false)
 const teamAllowed = computed(() => session.isCompanyAdmin.value)
 const mineActive = computed(() => route.params.dashboardId === MY_TIME_VIEW_ID)
 const teamActive = computed(() => teamAllowed.value && route.params.dashboardId === TEAM_VIEW_ID)
 const fixedActive = computed(() => mineActive.value || teamActive.value)
 const activeTabId = computed(() => mineActive.value ? MY_TIME_VIEW_ID : teamActive.value ? TEAM_VIEW_ID : dashboard.value?.id ?? '')
-watch(() => !loading.value || fixedActive.value, ready => {
+const onboardingReady = computed(() => !loading.value && !refreshing.value && !error.value
+  && (!fixedActive.value || Boolean(fixedView.value?.ready)))
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => {
   if (ready) void onboarding.ready()
-}, { immediate: true })
+}, { immediate: true, flush: 'post' })
 const createOpen = ref(false), createName = ref(''), createBlank = ref(false), creating = ref(false), createError = ref('')
 const settingsId = ref(''), settings = computed(() => configuration.value.widgets.find(w => w.id === settingsId.value))
 const removed = ref<{ widget: DashboardWidget; index: number }>(), pendingReveal = ref('')

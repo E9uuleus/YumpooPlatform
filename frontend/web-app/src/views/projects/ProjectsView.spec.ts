@@ -11,11 +11,12 @@ import { useSession } from '../../composables/useSession'
 import ProjectsView from './ProjectsView.vue'
 
 const push = vi.hoisted(() => vi.fn())
+const onboardingReady = vi.hoisted(() => vi.fn())
 const api = vi.hoisted(() => ({
   listProjects: vi.fn(), listProjectOwnerOptions: vi.fn(), createProject: vi.fn(), getProject: vi.fn(),
 }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
-vi.mock('../../onboarding/useOnboarding', () => ({ usePageOnboarding: () => ({ ready: async () => undefined }) }))
+vi.mock('../../onboarding/useOnboarding', () => ({ usePageOnboarding: () => ({ ready: onboardingReady }) }))
 vi.mock('../../api/client', () => ({
   projectsApi: api,
 }))
@@ -58,6 +59,7 @@ describe('项目管理页', () => {
     document.body.innerHTML = ''
     window.localStorage.clear()
     push.mockReset()
+    onboardingReady.mockClear()
     Object.values(api).forEach(mock => mock.mockReset())
     api.listProjects.mockResolvedValue(page())
     api.getProject.mockResolvedValue(summary)
@@ -66,6 +68,23 @@ describe('项目管理页', () => {
   })
 
   afterEach(() => vi.useRealTimers())
+
+  it.each(['listProjects', 'listProjectOwnerOptions'] as const)('does not start onboarding when %s fails', async method => {
+    useSession().authentication.value = authentication(AuthenticationRole.CompanyMember)
+    api[method].mockRejectedValue(new Error('offline'))
+    const wrapper = mount(ProjectsView)
+    await flushPromises()
+    expect(onboardingReady).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('starts onboarding after both project and reference data succeed', async () => {
+    useSession().authentication.value = authentication(AuthenticationRole.CompanyMember)
+    const wrapper = mount(ProjectsView)
+    await flushPromises()
+    expect(onboardingReady).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
 
   it('默认只请求进行中项目并按精确列序展示单表', async () => {
     useSession().authentication.value = authentication(AuthenticationRole.CompanyMember)

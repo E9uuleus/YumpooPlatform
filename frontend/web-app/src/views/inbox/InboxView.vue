@@ -13,9 +13,11 @@ import YpPageHeader from '../../components/yp/YpPageHeader.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 
 const route = useRoute(), router = useRouter(), session = useSession(), inbox = useInbox()
-const onboarding = usePageOnboarding()
 const filter = computed(() => parseInboxFilter(route.query.filter))
 const list = useInboxList(filter)
+const onboardingReady = computed(() => Boolean(list.serverNow.value) && !list.loading.value && !list.error.value)
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush: 'post' })
 const marking = ref(false), sentinel = ref<HTMLElement>()
 const now = computed(() => inbox.counts.value?.serverNow || new Date())
 const timezone = computed(() => session.authentication.value?.company.timezone || 'UTC')
@@ -46,7 +48,6 @@ async function readAll() {
 }
 let observer: IntersectionObserver | undefined
 onMounted(() => {
-  void onboarding.ready()
   if (typeof IntersectionObserver === 'undefined') return
   observer = new IntersectionObserver(entries => {
     if (entries.some(entry => entry.isIntersecting) && !list.error.value) void list.load(true)

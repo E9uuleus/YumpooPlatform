@@ -6,9 +6,8 @@ import { useSession } from '../composables/useSession'
 import { TOURS, type TourId } from './tours'
 
 const records = ref<Map<string, number>>()
-const active = ref<TourId>()
+const active = ref<{ id: TourId; mode: 'automatic' | 'replay' }>()
 const welcomeOpen = ref(false)
-let replaying = false
 let loaded: { userId: string; request: Promise<void> } | undefined
 
 // 每个账号只读取一次；读取失败时本次会话不再自动触发引导。
@@ -35,32 +34,30 @@ async function ready(id: TourId, isCurrentPage: () => boolean): Promise<void> {
   if (!isCurrentPage() || useSession().authentication.value?.user.id !== userId) return
   if (!records.value || active.value || welcomeOpen.value || handled(id)) return
   if (id === 'welcome') welcomeOpen.value = true
-  else if (handled('welcome')) active.value = id
+  else if (handled('welcome')) start(id)
 }
 
 function start(id: TourId): void {
-  replaying = false
   welcomeOpen.value = false
-  active.value = id
+  active.value = { id, mode: 'automatic' }
 }
 
 function replay(id: TourId): void {
-  start(id)
-  replaying = true
+  welcomeOpen.value = false
+  active.value = { id, mode: 'replay' }
 }
 
 function stop(): void {
   active.value = undefined
   welcomeOpen.value = false
-  replaying = false
 }
 
-/** 完成、跳过和关闭都视为已处理。 */
+/** 自动引导的完成、跳过和关闭均记为已处理；重放只关闭本地导览。 */
 function complete(id: TourId): void {
-  if (active.value !== id && !(id === 'welcome' && welcomeOpen.value)) return
-  const shouldRecord = !replaying
+  const tour = active.value
+  if (tour?.id !== id && !(id === 'welcome' && welcomeOpen.value)) return
   stop()
-  if (!shouldRecord || handled(id)) return
+  if (tour?.mode === 'replay' || handled(id)) return
   const version = TOURS[id].version
   records.value?.set(id, version)
   const csrf = readCsrfToken()
@@ -74,7 +71,7 @@ export function useOnboarding() {
 }
 
 /** 在页面 setup 中绑定生命周期，数据加载后的回调不能启动已离开页面的引导。 */
-export function usePageOnboarding() {
+export function usePageOnboarding(isReady: () => boolean = () => true) {
   const router = useRouter()
   const id = router?.currentRoute?.value.meta.onboardingTour
   let disposed = false
@@ -83,7 +80,7 @@ export function usePageOnboarding() {
     ready: async () => {
       const route = router?.currentRoute?.value
       if (!id || route?.meta.onboardingTour !== id) return
-      await ready(id, () => !disposed && router.currentRoute.value === route)
+      await ready(id, () => !disposed && router.currentRoute.value === route && isReady())
     },
   }
 }

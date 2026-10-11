@@ -12,10 +12,11 @@ const onboarding = useOnboarding()
 const router = useRouter()
 const steps = ref<TourStep[]>([])
 const current = ref(0)
+let resizeFrame: number | undefined
 const open = computed({
   get: () => steps.value.length > 0,
   set: value => {
-    const id = onboarding.active.value
+    const id = onboarding.active.value?.id
     if (!value && id) onboarding.complete(id)
   },
 })
@@ -33,12 +34,12 @@ function visible(selector: string): boolean {
 }
 
 async function refreshSteps(): Promise<void> {
-  const id = onboarding.active.value
-  if (!id) return
+  const tour = onboarding.active.value
+  if (!tour) return
   await nextTick()
-  if (onboarding.active.value !== id) return
+  if (onboarding.active.value !== tour) return
   const currentTitle = steps.value[current.value]?.title
-  const available = TOURS[id].steps
+  const available = TOURS[tour.id].steps
     .filter(step => !step.target || visible(step.target))
     .map(step => {
       if (window.innerWidth >= 1100) return step
@@ -66,16 +67,31 @@ async function refreshSteps(): Promise<void> {
   else onboarding.stop()
 }
 
+function cancelResize(): void {
+  if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame)
+  resizeFrame = undefined
+}
+
+function scheduleResize(): void {
+  if (resizeFrame !== undefined || !onboarding.active.value) return
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = undefined
+    void refreshSteps()
+  })
+}
+
 watch(onboarding.active, () => {
+  cancelResize()
   steps.value = []
   current.value = 0
   void refreshSteps()
 }, { flush: 'sync' })
 watch(router.currentRoute, () => onboarding.stop(), { flush: 'sync' })
 watch(() => session.authentication.value?.user.id, () => onboarding.stop(), { flush: 'sync' })
-onMounted(() => window.addEventListener('resize', refreshSteps))
+onMounted(() => window.addEventListener('resize', scheduleResize))
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', refreshSteps)
+  window.removeEventListener('resize', scheduleResize)
+  cancelResize()
   onboarding.stop()
 })
 </script>

@@ -19,7 +19,7 @@ function deferred<T = void>() {
   return { promise, resolve }
 }
 
-async function page(id: TourId) {
+async function page(id: TourId, isReady: () => boolean = () => true) {
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/page', name: 'renamed-route', component: { template: '<div />' }, meta: { onboardingTour: id } },
     { path: '/other', component: { template: '<div />' } },
@@ -27,7 +27,7 @@ async function page(id: TourId) {
   await router.push('/page')
   let onboarding!: ReturnType<typeof usePageOnboarding>
   const wrapper = mount(defineComponent({ setup() {
-    onboarding = usePageOnboarding()
+    onboarding = usePageOnboarding(isReady)
     return () => null
   } }), { global: { plugins: [router] } })
   return { ready: onboarding.ready, router, wrapper }
@@ -53,7 +53,7 @@ describe('onboarding triggers', () => {
     onboarding.complete('welcome')
     expect(api.completeMyOnboardingTour).toHaveBeenCalledWith({ tourId: 'welcome', xXSRFTOKEN: 'csrf', onboardingTourCompleteRequest: { version: 1 } })
     await project.ready()
-    expect(onboarding.active.value).toBe('project-work-items')
+    expect(onboarding.active.value).toEqual({ id: 'project-work-items', mode: 'automatic' })
     expect(api.getMyOnboarding).toHaveBeenCalledOnce()
   })
 
@@ -69,7 +69,7 @@ describe('onboarding triggers', () => {
     TOURS.inbox.version = 2
     try {
       await inbox.ready()
-      expect(onboarding.active.value).toBe('inbox')
+      expect(onboarding.active.value).toEqual({ id: 'inbox', mode: 'automatic' })
     } finally {
       TOURS.inbox.version = 1
     }
@@ -82,12 +82,17 @@ describe('onboarding triggers', () => {
     const inbox = await page('inbox')
     await home.ready()
     onboarding.replay('inbox')
-    expect(onboarding.active.value).toBe('inbox')
+    expect(onboarding.active.value).toEqual({ id: 'inbox', mode: 'replay' })
     onboarding.complete('inbox')
     expect(onboarding.active.value).toBeUndefined()
     expect(api.completeMyOnboardingTour).not.toHaveBeenCalled()
     await inbox.ready()
-    expect(onboarding.active.value).toBe(handled ? undefined : 'inbox')
+    expect(onboarding.active.value?.id).toBe(handled ? undefined : 'inbox')
+    if (!handled) {
+      expect(onboarding.active.value?.mode).toBe('automatic')
+      onboarding.complete('inbox')
+      expect(api.completeMyOnboardingTour).toHaveBeenCalledOnce()
+    }
   })
 
   it('allows local replay when records could not be loaded without writing or retrying', async () => {
@@ -147,6 +152,32 @@ describe('onboarding triggers', () => {
     onboarding.start('welcome')
     onboarding.stop()
     onboarding.complete('welcome')
+    expect(api.completeMyOnboardingTour).not.toHaveBeenCalled()
+  })
+
+  it('waits for successful page data and keeps the tour eligible after a failure', async () => {
+    api.getMyOnboarding.mockResolvedValue(records(['welcome', 1]))
+    let succeeded = false
+    const workspace = await page('workspace', () => succeeded)
+    await workspace.ready()
+    expect(api.getMyOnboarding).not.toHaveBeenCalled()
+    expect(useOnboarding().active.value).toBeUndefined()
+    succeeded = true
+    await workspace.ready()
+    expect(useOnboarding().active.value).toEqual({ id: 'workspace', mode: 'automatic' })
+    expect(api.completeMyOnboardingTour).not.toHaveBeenCalled()
+  })
+
+  it('rechecks page readiness after loading onboarding records', async () => {
+    const response = deferred<ReturnType<typeof records>>()
+    api.getMyOnboarding.mockReturnValue(response.promise)
+    let succeeded = true
+    const company = await page('company', () => succeeded)
+    const pending = company.ready()
+    succeeded = false
+    response.resolve(records(['welcome', 1]))
+    await pending
+    expect(useOnboarding().active.value).toBeUndefined()
     expect(api.completeMyOnboardingTour).not.toHaveBeenCalled()
   })
 })

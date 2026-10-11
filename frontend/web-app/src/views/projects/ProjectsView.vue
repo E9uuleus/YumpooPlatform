@@ -31,10 +31,10 @@ type ModifiedPreset = 'TODAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS'
 type ProjectCatalogView = 'recent' | 'content'
 
 const router = useRouter()
-const onboarding = usePageOnboarding()
 const session = useSession()
 const result = ref<ProjectPage>()
 const ownerOptions = ref<ProjectOwnerOption[]>([])
+const referenceReady = ref(false)
 const activeView = ref<ProjectCatalogView>('content')
 const catalogTabs: TabItem[] = [
   { value: 'recent', label: '最近', id: 'project-recent-tab', controls: 'project-recent-panel' },
@@ -49,6 +49,9 @@ const page = ref(0)
 const size = ref(20)
 const loading = ref(false)
 const error = ref<ApiProblem>()
+const onboardingReady = computed(() => Boolean(result.value) && referenceReady.value && !loading.value && !error.value)
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush: 'post' })
 const createOpen = ref(false)
 const verifiedRecentIds = ref<Set<string>>(new Set())
 const recentLoading = ref(false)
@@ -139,7 +142,10 @@ async function load(): Promise<void> {
 }
 
 async function loadReferenceData(): Promise<void> {
-  try { ownerOptions.value = await projectsApi.listProjectOwnerOptions() } catch (reason) {
+  try {
+    ownerOptions.value = await projectsApi.listProjectOwnerOptions()
+    referenceReady.value = true
+  } catch (reason) {
     error.value = await toApiProblem(reason)
   }
 }
@@ -203,7 +209,6 @@ function projectCreated(project: Project): void {
 
 onMounted(async () => {
   await Promise.all([load(), loadReferenceData()])
-  void onboarding.ready()
 })
 onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTimer) })
 </script>

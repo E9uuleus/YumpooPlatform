@@ -2,7 +2,7 @@
 import { OfficeBuilding } from '@element-plus/icons-vue'
 import type { Company, WeComIntegrationStatus } from '@yumpoo/api-client'
 import { ElAlert, ElIcon, ElSkeleton } from 'element-plus'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { identityAdministrationApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
@@ -12,10 +12,12 @@ import YpSurface from '../../components/yp/YpSurface.vue'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 
 const company = ref<Company>()
-const onboarding = usePageOnboarding()
 const status = ref<WeComIntegrationStatus>()
 const loading = ref(true)
 const error = ref<ApiProblem>()
+const onboardingReady = computed(() => Boolean(company.value && status.value) && !loading.value && !error.value)
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush: 'post' })
 
 function formatTime(value?: Date | null): string {
   return value ? value.toLocaleString('zh-CN') : '暂无'
@@ -62,10 +64,7 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(async () => {
-  await load()
-  void onboarding.ready()
-})
+onMounted(load)
 </script>
 
 <template>

@@ -92,7 +92,8 @@ watch(month, () => { active.value = undefined; void load() })
 const stopTracking = onTimeTrackingChanged(() => void load())
 onBeforeUnmount(() => { ++token; stopListening(); stopTracking() })
 void load()
-defineExpose({ refresh: load, loading })
+const ready = computed(() => Boolean(sheet.value) && sheetMonth.value === month.value && !loading.value && !error.value)
+defineExpose({ refresh: load, loading, ready })
 </script>
 
 <template>

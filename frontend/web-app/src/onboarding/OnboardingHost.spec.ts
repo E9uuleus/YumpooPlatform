@@ -11,11 +11,21 @@ vi.mock('../composables/useSession', () => ({ useSession: () => ({ authenticatio
 
 enableAutoUnmount(afterEach)
 let targets: HTMLElement
+let frames: Map<number, FrameRequestCallback>
+let nextFrame: number
 
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal('innerWidth', 1440)
   vi.stubGlobal('innerHeight', 900)
+  frames = new Map()
+  nextFrame = 0
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    const id = ++nextFrame
+    frames.set(id, callback)
+    return id
+  })
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => { frames.delete(id) })
   targets = document.createElement('main')
   document.body.append(targets)
 })
@@ -24,6 +34,13 @@ afterEach(() => {
   targets.remove()
   vi.unstubAllGlobals()
 })
+
+async function flushFrame() {
+  const callbacks = [...frames.values()]
+  frames.clear()
+  callbacks.forEach(callback => callback(0))
+  await flushPromises()
+}
 
 function target(name: string, height = 100) {
   const element = document.createElement('div')
@@ -48,6 +65,15 @@ async function host() {
 }
 
 describe('onboarding host lifecycle', () => {
+  it('keeps the welcome dialog open when login repeats the same home URL', async () => {
+    const { router } = await host()
+    useOnboarding().welcomeOpen.value = true
+    await router.replace('/')
+    await flushPromises()
+    expect(useOnboarding().welcomeOpen.value).toBe(true)
+    expect(api.completeMyOnboardingTour).not.toHaveBeenCalled()
+  })
+
   it.each(['welcome', 'active'] as const)('cancels %s on route changes without completing it', async kind => {
     const { wrapper, router } = await host()
     const onboarding = useOnboarding()
@@ -74,7 +100,7 @@ describe('onboarding host lifecycle', () => {
     vi.stubGlobal('innerWidth', 375)
     vi.stubGlobal('innerHeight', 812)
     window.dispatchEvent(new Event('resize'))
-    await flushPromises()
+    await flushFrame()
     expect(task().props('placement')).toBe('bottom')
     expect(task().props('contentStyle')).toMatchObject({ position: 'fixed', top: '50%', left: '50%' })
     expect(task().props('showArrow')).toBe(false)
@@ -82,7 +108,7 @@ describe('onboarding host lifecycle', () => {
 
     vi.stubGlobal('innerWidth', 1440)
     window.dispatchEvent(new Event('resize'))
-    await flushPromises()
+    await flushFrame()
     expect(task().props('placement')).toBe('right-start')
     expect(task().props('contentStyle')).toBeUndefined()
     expect(wrapper.findComponent(ElTour).props('current')).toBe(1)
@@ -101,12 +127,34 @@ describe('onboarding host lifecycle', () => {
     const currentTitle = () => wrapper.findAllComponents(ElTourStep)[wrapper.findComponent(ElTour).props('current') ?? 0]!.props('title')
     modules.setAttribute('inert', '')
     window.dispatchEvent(new Event('resize'))
-    await flushPromises()
+    await flushFrame()
     expect(currentTitle()).toBe('我的工作项')
     tasks.setAttribute('inert', '')
     window.dispatchEvent(new Event('resize'))
-    await flushPromises()
+    await flushFrame()
     expect(currentTitle()).toBe('工时日历')
     expect(api.completeMyOnboardingTour).not.toHaveBeenCalled()
+  })
+
+  it('measures once for a burst of resize events and cancels pending work when the tour stops', async () => {
+    const tasks = target('home-tasks')
+    const measure = vi.spyOn(tasks, 'getClientRects')
+    const { wrapper } = await host()
+    useOnboarding().replay('welcome')
+    await flushPromises()
+    measure.mockClear()
+    for (let index = 0; index < 20; index++) window.dispatchEvent(new Event('resize'))
+    expect(frames.size).toBe(1)
+    expect(measure).not.toHaveBeenCalled()
+    await flushFrame()
+    expect(measure).toHaveBeenCalledOnce()
+    window.dispatchEvent(new Event('resize'))
+    useOnboarding().stop()
+    expect(frames.size).toBe(0)
+    useOnboarding().replay('welcome')
+    await flushPromises()
+    window.dispatchEvent(new Event('resize'))
+    wrapper.unmount()
+    expect(frames.size).toBe(0)
   })
 })

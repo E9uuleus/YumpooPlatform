@@ -60,7 +60,10 @@ const state = vi.hoisted(() => ({
   unlinkWorkItemConnection: vi.fn(),
   routeLeave: vi.fn(),
   routeUpdate: vi.fn(),
+  onboardingReady: vi.fn(),
 }))
+
+vi.mock('../../onboarding/useOnboarding', () => ({ usePageOnboarding: () => ({ ready: state.onboardingReady }) }))
 
 vi.mock('@yumpoo/api-client', async importOriginal => ({
   ...await importOriginal<typeof import('@yumpoo/api-client')>(),
@@ -204,6 +207,31 @@ describe('项目级工作项首页', () => {
   })
 
   afterEach(() => vi.restoreAllMocks())
+
+  it.each(['table', 'kanban'])('does not start onboarding when %s work items fail after project metadata has loaded', async view => {
+    state.route.query = { view }
+    state.listProjectWorkItems.mockRejectedValueOnce(new Error('offline'))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(state.getProject).toHaveBeenCalled()
+    expect(state.onboardingReady).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('waits for failed grouping data to recover before starting onboarding', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    state.onboardingReady.mockClear()
+    state.listProjectWorkItemFilterOptions.mockRejectedValueOnce(new Error('offline'))
+    const view = wrapper.vm as unknown as { changeGrouping: (field: string) => Promise<void>; refreshCurrentView: () => Promise<void> }
+    await view.changeGrouping('STATUS')
+    await flushPromises()
+    expect(state.onboardingReady).not.toHaveBeenCalled()
+    await view.refreshCurrentView()
+    await flushPromises()
+    expect(state.onboardingReady).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
 
   it('行和单元格重复访问共用一次着色计算，编辑名称后使缓存失效', async () => {
     const target = item(), other = item('other')
