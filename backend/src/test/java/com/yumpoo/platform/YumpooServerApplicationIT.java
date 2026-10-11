@@ -403,6 +403,7 @@ class YumpooServerApplicationIT {
                 "project_work_item_status_label",
                 "security_audit_event",
                 "user_notification",
+                "user_onboarding_tour",
                 "wecom_oauth_attempt",
                 "work_item",
                 "work_item_assignee",
