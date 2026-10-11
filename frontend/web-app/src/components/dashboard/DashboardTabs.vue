@@ -34,7 +34,7 @@ function select(id: string) { listOpen.value = false; if (id !== props.activeId)
 function create() { listOpen.value = false; emit('create') }
 async function startRename(tab: Tab) {
   if (tab.fixed || tab.id !== props.activeId || !props.renamable) return
-  draft.value = tab.name; editing.value = true
+  draft.value = tab.name; editing.value = true; hover.shown = false
   await nextTick()
   const input = strip.value?.querySelector<HTMLInputElement>('.dashboard-tab-rename input')
   input?.focus(); input?.select()

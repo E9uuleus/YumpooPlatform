@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ProjectActorAccess, ProjectLifecycleFilter, type ProjectPage, type ProjectSummary } from '@yumpoo/api-client'
 import { ElButton, ElInput, ElPagination, ElTable, ElTableColumn } from 'element-plus'
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { projectsApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
@@ -49,6 +49,8 @@ function open(project: ProjectSummary): void {
   void router.push({ name: 'project-overview', params: { projectId: project.id } })
 }
 onBeforeUnmount(() => { request++; if (searchTimer) clearTimeout(searchTimer) })
+// Restoring in the archived tab changes this list, so it reloads whenever the tab is shown again.
+watch(tab, value => { if (value === 'active') void load() })
 void load()
 </script>
 
