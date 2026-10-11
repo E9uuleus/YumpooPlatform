@@ -19,6 +19,9 @@ import { useProjectRecents } from '../composables/useProjectRecents'
 import { PROJECT_LIFECYCLE_CHANGED } from '../composables/projectLifecycleEvents'
 import { useSession } from '../composables/useSession'
 import { useInbox, type InboxFilter } from '../composables/useInbox'
+import OnboardingHost from '../onboarding/OnboardingHost.vue'
+import { ROUTE_TOURS } from '../onboarding/tours'
+import { useOnboarding } from '../onboarding/useOnboarding'
 import { INBOX_FILTERS, parseInboxFilter } from './inbox/inboxPresentation'
 import InboxBell from './inbox/InboxBell.vue'
 import OperationsBadge from './operations/OperationsBadge.vue'
@@ -51,6 +54,8 @@ const router = useRouter()
 const session = useSession()
 const inbox = useInbox()
 const appearance = useAppearance()
+const onboarding = useOnboarding()
+const routeTour = computed(() => typeof route.name === 'string' ? ROUTE_TOURS[route.name] : undefined)
 const mobileNavigationOpen = ref(false)
 const projectNavigationOpen = ref(true)
 const sidebarSearchOpen = ref(false)
@@ -280,6 +285,7 @@ onBeforeUnmount(() => {
       </button>
       <nav
         class="module-rail__items"
+        data-tour="shell-modules"
         :class="{ 'module-rail__items--shifted': !contextNavigationOpen && hasContextNavigation }"
       >
         <button
@@ -360,7 +366,10 @@ onBeforeUnmount(() => {
           @update:density="appearance.setDensityMode"
         />
         <el-dropdown trigger="click">
-          <el-button class="user-menu-trigger">
+          <el-button
+            class="user-menu-trigger"
+            data-tour="topbar-user"
+          >
             <yp-assignee
               :user-id="session.authentication.value?.user.id"
               :display-name="session.authentication.value?.user.displayName"
@@ -371,6 +380,13 @@ onBeforeUnmount(() => {
             <el-dropdown-menu>
               <el-dropdown-item disabled>
                 {{ clientLabel }}
+              </el-dropdown-item>
+              <el-dropdown-item
+                divided
+                :disabled="!routeTour"
+                @click="routeTour && onboarding.start(routeTour)"
+              >
+                查看本页引导
               </el-dropdown-item>
               <el-dropdown-item
                 divided
@@ -489,6 +505,7 @@ onBeforeUnmount(() => {
       <nav
         class="global-navigation"
         aria-label="当前区域导航"
+        data-tour="context-nav"
       >
         <template v-if="isWorkspaceSection">
           <button
@@ -982,6 +999,7 @@ onBeforeUnmount(() => {
         <menu-icon />
       </el-icon>
     </button>
+    <onboarding-host />
   </div>
 </template>
 

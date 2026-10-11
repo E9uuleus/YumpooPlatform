@@ -42,6 +42,7 @@ async function readAll() {
     <template #reference>
       <el-button
         class="inbox-trigger"
+        data-tour="topbar-inbox"
         :class="{ 'is-open': open }"
         :aria-label="`收件箱，${inbox.unread.value} 条未读`"
       >
