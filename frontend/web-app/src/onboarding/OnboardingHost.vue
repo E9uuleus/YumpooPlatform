@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { DataAnalysis, FolderOpened, Message, Timer } from '@element-plus/icons-vue'
 import { ElButton, ElDialog, ElIcon, ElTour, ElTourStep } from 'element-plus'
-import { computed, nextTick, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
+import { useRouter } from 'vue-router'
 import { useSession } from '../composables/useSession'
 import { TOURS, type TourStep } from './tours'
 import { useOnboarding } from './useOnboarding'
 
 const session = useSession()
 const onboarding = useOnboarding()
+const router = useRouter()
 const steps = ref<TourStep[]>([])
+const current = ref(0)
 const open = computed({
   get: () => steps.value.length > 0,
   set: value => {
@@ -29,11 +32,12 @@ function visible(selector: string): boolean {
   return Boolean(element && element.getClientRects().length && !element.closest('[inert]'))
 }
 
-watch(onboarding.active, async id => {
-  steps.value = []
+async function refreshSteps(): Promise<void> {
+  const id = onboarding.active.value
   if (!id) return
   await nextTick()
   if (onboarding.active.value !== id) return
+  const currentTitle = steps.value[current.value]?.title
   const available = TOURS[id].steps
     .filter(step => !step.target || visible(step.target))
     .map(step => {
@@ -54,8 +58,25 @@ watch(onboarding.active, async id => {
         } : {}),
       }
     })
-  if (available.length) steps.value = available
+  if (available.length) {
+    const index = available.findIndex(step => step.title === currentTitle)
+    current.value = index < 0 ? Math.min(current.value, available.length - 1) : index
+    steps.value = available
+  }
   else onboarding.stop()
+}
+
+watch(onboarding.active, () => {
+  steps.value = []
+  current.value = 0
+  void refreshSteps()
+}, { flush: 'sync' })
+watch(router.currentRoute, () => onboarding.stop(), { flush: 'sync' })
+watch(() => session.authentication.value?.user.id, () => onboarding.stop(), { flush: 'sync' })
+onMounted(() => window.addEventListener('resize', refreshSteps))
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', refreshSteps)
+  onboarding.stop()
 })
 </script>
 
@@ -104,6 +125,7 @@ watch(onboarding.active, async id => {
   </el-dialog>
   <el-tour
     v-model="open"
+    v-model:current="current"
     :target-area-clickable="false"
   >
     <el-tour-step

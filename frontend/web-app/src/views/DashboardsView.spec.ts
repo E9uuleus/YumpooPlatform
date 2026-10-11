@@ -7,6 +7,7 @@ import { defaultConfiguration, newWidget } from '../components/dashboard/dashboa
 const mocks = vi.hoisted(() => ({ state: vi.fn(), pdf: vi.fn() }))
 vi.mock('../components/dashboard/useDashboard', () => ({ useDashboard: mocks.state }))
 vi.mock('../components/dashboard/dashboardPdf', () => ({ exportDashboardPdf: mocks.pdf }))
+vi.mock('../onboarding/useOnboarding', () => ({ usePageOnboarding: () => ({ ready: async () => undefined }) }))
 vi.mock('../composables/useSession', () => ({ useSession: () => ({ isCompanyAdmin: ref(false), authentication: ref({ company: { timezone: 'Asia/Shanghai' }, user: { id: 'user' } }) }) }))
 vi.mock('vue-router', () => ({ useRoute: () => ({ params: { dashboardId: 'one' } }) }))
 

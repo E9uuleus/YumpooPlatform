@@ -22,7 +22,7 @@ import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import YpTabs, { type TabItem } from '../../components/yp/YpTabs.vue'
 import { useProjectRecents, type ProjectRecentSource } from '../../composables/useProjectRecents'
 import { useSession } from '../../composables/useSession'
-import { useOnboarding } from '../../onboarding/useOnboarding'
+import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { formatDateOnly, formatTimestamp } from '../../design-system/dates'
 import { businessLabel } from '../../design-system/labels'
 import type { ActiveFilter } from '../../design-system/types'
@@ -31,6 +31,7 @@ type ModifiedPreset = 'TODAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'LAST_90_DAYS'
 type ProjectCatalogView = 'recent' | 'content'
 
 const router = useRouter()
+const onboarding = usePageOnboarding()
 const session = useSession()
 const result = ref<ProjectPage>()
 const ownerOptions = ref<ProjectOwnerOption[]>([])
@@ -202,7 +203,7 @@ function projectCreated(project: Project): void {
 
 onMounted(async () => {
   await Promise.all([load(), loadReferenceData()])
-  void useOnboarding().ready('workspace')
+  void onboarding.ready()
 })
 onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTimer) })
 </script>

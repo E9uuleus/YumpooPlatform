@@ -15,13 +15,14 @@ import YpSegmented from '../../components/yp/YpSegmented.vue'
 import { useInbox } from '../../composables/useInbox'
 import { useSession } from '../../composables/useSession'
 import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
-import { useOnboarding } from '../../onboarding/useOnboarding'
+import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, type TaskFilter } from './homeModel'
 
 type JumpTone = 'blue' | 'purple' | 'teal' | 'red' | 'green' | 'amber'
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
 
 const router = useRouter(), session = useSession(), tracker = useTimeTracker(), inbox = useInbox()
+const onboarding = usePageOnboarding()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 // The tracker clock is server-calibrated and ticks every second, so the greeting follows the company time of day.
 const now = computed(() => new Date(tracker.now.value))
@@ -103,7 +104,7 @@ void dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).
 void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
 loadMonth()
 onBeforeUnmount(onTimeTrackingChanged(loadMonth))
-onMounted(() => { void useOnboarding().ready('welcome') })
+onMounted(() => { void onboarding.ready() })
 </script>
 
 <template>

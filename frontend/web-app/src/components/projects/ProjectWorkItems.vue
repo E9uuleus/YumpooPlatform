@@ -5,7 +5,7 @@ import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
-import { useOnboarding } from '../../onboarding/useOnboarding'
+import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
 import WorkItemColumnVisibilityMenu from './WorkItemColumnVisibilityMenu.vue'
 import { createWorkItemColumnFlip, measureWorkItemColumns, visibleWorkItemColumnCells } from './workItemColumnFlip'
@@ -155,6 +155,7 @@ async function setViewQuery(query: LocationQuery, replace = false) {
 function notifyChanged() { if (embedded.value) emit('changed') }
 function visibleSubitemCount(item: ProjectWorkItemListItem) { return props.source?.subitemCount?.(item.id) ?? item.subitemCount }
 const router = useRouter()
+const onboarding = usePageOnboarding()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 const projectId = computed(() => String(route.params.projectId))
@@ -169,7 +170,7 @@ const tableNextCursor = ref<string | null>(null)
 const loading = ref(false)
 const tableLoading = ref(false)
 watch(() => !embedded.value && Boolean(project.value) && !loading.value && !tableLoading.value, ready => {
-  if (ready) void useOnboarding().ready('project-work-items')
+  if (ready) void onboarding.ready()
 })
 const tableSorting = ref(false)
 const error = ref<ApiProblem>()

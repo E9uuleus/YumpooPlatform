@@ -78,18 +78,48 @@ class OnboardingHttpIT {
         assertThat(put("welcome", 0).statusCode()).isEqualTo(422);
     }
 
+    @Test
+    void rejectsMissingAndIncorrectXsrfTokensWithoutWritingRecords() throws Exception {
+        assertThat(put(session, "welcome", 1, null).statusCode()).isEqualTo(403);
+        assertThat(put(session, "welcome", 1, "incorrect-token").statusCode()).isEqualTo(403);
+        assertThat(ok(get()).path("tours").size()).isZero();
+    }
+
+    @Test
+    void isolatesReadsAndWritesBetweenMembers() throws Exception {
+        IssuedSession other;
+        try (RequestCorrelationContext.Scope ignored = RequestCorrelationContext.open(
+                RequestCorrelation.root("onboarding-isolation-" + UUID.randomUUID()))) {
+            UUID userId = provisioner.provision("onboarding-other", "Other Member").userId();
+            other = sessions.issueWebSession(userId, "onboarding-http");
+        }
+        JsonNode original = ok(put("welcome", 1)).path("tours").get(0);
+        assertThat(ok(get(other)).path("tours").size()).isZero();
+        assertThat(ok(put(other, "welcome", 3, other.csrfCredential().value()))
+                .path("tours").get(0).path("version").asInt()).isEqualTo(3);
+        assertThat(ok(get()).path("tours").get(0)).isEqualTo(original);
+    }
+
     private HttpResponse<String> get() throws Exception {
-        return client.send(HttpRequest.newBuilder(uri("/api/v1/me/onboarding")).header("Cookie", cookies()).GET().build(),
+        return get(session);
+    }
+
+    private HttpResponse<String> get(IssuedSession actor) throws Exception {
+        return client.send(HttpRequest.newBuilder(uri("/api/v1/me/onboarding")).header("Cookie", cookies(actor)).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> put(String tourId, int version) throws Exception {
-        return client.send(HttpRequest.newBuilder(uri("/api/v1/me/onboarding/tours/" + tourId))
-                .header("Cookie", cookies())
-                .header("X-XSRF-TOKEN", session.csrfCredential().value())
+        return put(session, tourId, version, session.csrfCredential().value());
+    }
+
+    private HttpResponse<String> put(IssuedSession actor, String tourId, int version, String csrf) throws Exception {
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri("/api/v1/me/onboarding/tours/" + tourId))
+                .header("Cookie", cookies(actor))
                 .header("Content-Type", "application/json")
-                .PUT(HttpRequest.BodyPublishers.ofString("{\"version\":" + version + "}")).build(),
-                HttpResponse.BodyHandlers.ofString());
+                .PUT(HttpRequest.BodyPublishers.ofString("{\"version\":" + version + "}"));
+        if (csrf != null) request.header("X-XSRF-TOKEN", csrf);
+        return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }
 
     private JsonNode ok(HttpResponse<String> response) throws Exception {
@@ -100,9 +130,9 @@ class OnboardingHttpIT {
 
     private URI uri(String path) { return URI.create("http://127.0.0.1:" + port + path); }
 
-    private String cookies() {
-        return "__Host-yumpoo-session=" + session.sessionCredential().value()
-                + "; __Host-yumpoo-csrf=" + session.csrfCredential().value();
+    private String cookies(IssuedSession actor) {
+        return "__Host-yumpoo-session=" + actor.sessionCredential().value()
+                + "; __Host-yumpoo-csrf=" + actor.csrfCredential().value();
     }
 
     private void cleanUp() {

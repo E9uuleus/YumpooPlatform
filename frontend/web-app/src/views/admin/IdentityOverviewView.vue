@@ -9,9 +9,10 @@ import InlineProblem from '../../components/InlineProblem.vue'
 import YpDefinitionList, { type DefinitionItem } from '../../components/yp/YpDefinitionList.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import YpSurface from '../../components/yp/YpSurface.vue'
-import { useOnboarding } from '../../onboarding/useOnboarding'
+import { usePageOnboarding } from '../../onboarding/useOnboarding'
 
 const company = ref<Company>()
+const onboarding = usePageOnboarding()
 const status = ref<WeComIntegrationStatus>()
 const loading = ref(true)
 const error = ref<ApiProblem>()
@@ -63,7 +64,7 @@ async function load(): Promise<void> {
 
 onMounted(async () => {
   await load()
-  void useOnboarding().ready('company')
+  void onboarding.ready()
 })
 </script>
 

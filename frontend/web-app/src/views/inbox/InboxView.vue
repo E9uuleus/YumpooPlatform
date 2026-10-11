@@ -6,13 +6,14 @@ import { Check, Loading, WarningFilled } from '@element-plus/icons-vue'
 import type { NotificationItem } from '@yumpoo/api-client'
 import { useInbox, useInboxList } from '../../composables/useInbox'
 import { useSession } from '../../composables/useSession'
-import { useOnboarding } from '../../onboarding/useOnboarding'
+import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { inboxEmptyCopy, inboxFilterLabel, notificationDateGroup, notificationLink, parseInboxFilter } from '../../components/inbox/inboxPresentation'
 import InboxRow from '../../components/inbox/InboxRow.vue'
 import YpPageHeader from '../../components/yp/YpPageHeader.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 
 const route = useRoute(), router = useRouter(), session = useSession(), inbox = useInbox()
+const onboarding = usePageOnboarding()
 const filter = computed(() => parseInboxFilter(route.query.filter))
 const list = useInboxList(filter)
 const marking = ref(false), sentinel = ref<HTMLElement>()
@@ -45,7 +46,7 @@ async function readAll() {
 }
 let observer: IntersectionObserver | undefined
 onMounted(() => {
-  void useOnboarding().ready('inbox')
+  void onboarding.ready()
   if (typeof IntersectionObserver === 'undefined') return
   observer = new IntersectionObserver(entries => {
     if (entries.some(entry => entry.isIntersecting) && !list.error.value) void list.load(true)

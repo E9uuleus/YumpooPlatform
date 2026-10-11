@@ -82,12 +82,3 @@ export const TOURS: Record<TourId, TourDefinition> = {
     ],
   },
 }
-
-export const ROUTE_TOURS: Partial<Record<string, TourId>> = {
-  home: 'welcome',
-  'project-overview': 'project-work-items',
-  workspace: 'workspace',
-  dashboards: 'dashboards',
-  inbox: 'inbox',
-  'company-overview': 'company',
-}

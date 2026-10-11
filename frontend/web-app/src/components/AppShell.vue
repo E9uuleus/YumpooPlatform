@@ -20,7 +20,6 @@ import { PROJECT_LIFECYCLE_CHANGED } from '../composables/projectLifecycleEvents
 import { useSession } from '../composables/useSession'
 import { useInbox, type InboxFilter } from '../composables/useInbox'
 import OnboardingHost from '../onboarding/OnboardingHost.vue'
-import { ROUTE_TOURS } from '../onboarding/tours'
 import { useOnboarding } from '../onboarding/useOnboarding'
 import { INBOX_FILTERS, parseInboxFilter } from './inbox/inboxPresentation'
 import InboxBell from './inbox/InboxBell.vue'
@@ -55,7 +54,7 @@ const session = useSession()
 const inbox = useInbox()
 const appearance = useAppearance()
 const onboarding = useOnboarding()
-const routeTour = computed(() => typeof route.name === 'string' ? ROUTE_TOURS[route.name] : undefined)
+const routeTour = computed(() => route.meta.onboardingTour)
 const mobileNavigationOpen = ref(false)
 const projectNavigationOpen = ref(true)
 const sidebarSearchOpen = ref(false)
@@ -384,7 +383,7 @@ onBeforeUnmount(() => {
               <el-dropdown-item
                 divided
                 :disabled="!routeTour"
-                @click="routeTour && onboarding.start(routeTour)"
+                @click="routeTour && onboarding.replay(routeTour)"
               >
                 查看本页引导
               </el-dropdown-item>

@@ -6,7 +6,7 @@ import { Close, Connection, DataAnalysis, Download, Filter, MoreFilled, Plus, Re
 import { type DashboardFilters, type DashboardWidget, type DashboardChartSelection } from '@yumpoo/api-client'
 import { problemMessage, toApiProblem } from '../api/problems'
 import { useSession } from '../composables/useSession'
-import { useOnboarding } from '../onboarding/useOnboarding'
+import { usePageOnboarding } from '../onboarding/useOnboarding'
 import { useDashboard } from '../components/dashboard/useDashboard'
 import { clone, defaultConfiguration, emptyFilters, MY_TIME_VIEW_ID, newWidget, TEAM_VIEW_ID, widgetCatalog } from '../components/dashboard/dashboardModel'
 import { exportFileName, PDF_TYPE, saveExportFile } from '../components/dashboard/exportFile'
@@ -26,6 +26,7 @@ const TeamDashboard = defineAsyncComponent(() => import('../components/dashboard
 const MyTimeView = defineAsyncComponent(() => import('../components/dashboard/my-time/MyTimeView.vue'))
 
 const session = useSession(), route = useRoute()
+const onboarding = usePageOnboarding()
 const { dashboards, dashboard, snapshot, loading, refreshing, error, saveError, name, configuration, saving, changed, save, refresh, create, remove, switchTo, load, reload, reloading, recovery, resolveRecovery } = useDashboard()
 const projectDialog = ref(false), filterDialog = ref(false), filterField = ref('assignees'), gallery = ref(false), galleryClosing = ref(false)
 const grid = ref<InstanceType<typeof DashboardGrid>>(), fixedView = ref<{ refresh: () => void; loading: boolean }>(), exporting = ref(false)
@@ -35,7 +36,7 @@ const teamActive = computed(() => teamAllowed.value && route.params.dashboardId 
 const fixedActive = computed(() => mineActive.value || teamActive.value)
 const activeTabId = computed(() => mineActive.value ? MY_TIME_VIEW_ID : teamActive.value ? TEAM_VIEW_ID : dashboard.value?.id ?? '')
 watch(() => !loading.value || fixedActive.value, ready => {
-  if (ready) void useOnboarding().ready('dashboards')
+  if (ready) void onboarding.ready()
 }, { immediate: true })
 const createOpen = ref(false), createName = ref(''), createBlank = ref(false), creating = ref(false), createError = ref('')
 const settingsId = ref(''), settings = computed(() => configuration.value.widgets.find(w => w.id === settingsId.value))
