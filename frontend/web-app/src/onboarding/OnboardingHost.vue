@@ -41,7 +41,7 @@ watch(onboarding.active, async id => {
       const target = step.target ? document.querySelector(step.target) : null
       return {
         ...step,
-        placement: /^(left|right)/.test(step.placement ?? '') ? 'bottom' as const : step.placement,
+        ...(/^(left|right)/.test(step.placement ?? '') ? { placement: 'bottom' as const } : {}),
         ...(target && target.getBoundingClientRect().height > window.innerHeight * 0.6 ? {
           showArrow: false,
           contentStyle: {
