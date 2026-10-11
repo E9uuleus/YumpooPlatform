@@ -3,7 +3,7 @@ import { AuthenticationRole } from '@yumpoo/api-client'
 import { routes } from './index'
 
 describe('公司管理路由', () => {
-  it('发布概览、同步运行和成员管理三个直达页面', () => {
+  it('发布概览、项目、同步运行和成员管理四个直达页面', () => {
     const shell = routes.find(route => route.path === '/')
     const identity = shell?.children?.find(route => route.path === 'admin/company')
 
@@ -14,6 +14,7 @@ describe('公司管理路由', () => {
     ])
     expect(identity?.children?.map(child => child.path)).toEqual([
       'overview',
+      'projects',
       'sync-runs',
       'members',
     ])

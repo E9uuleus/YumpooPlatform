@@ -1,5 +1,4 @@
 import { TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask } from '@yumpoo/api-client'
-import { addDays } from '../../components/dashboard/team/teamDashboardModel'
 import { companyDateTime } from '../../components/timer/timeFormat'
 import type { HeroDaypart } from '../../motion/scenes/auroraShapes'
 
@@ -44,12 +43,6 @@ export function daypart(now: Date, timezone: string): HeroDaypart {
 export function heroDate(now: Date, timezone: string): string {
   const date = new Date(`${companyClock(now, timezone).date}T00:00:00Z`)
   return `${date.getUTCMonth() + 1}月${date.getUTCDate()}日 ${WEEKDAYS[date.getUTCDay()]}`
-}
-
-/** Monday-first week that contains `today`. */
-export function weekDays(today: string): string[] {
-  const offset = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7
-  return Array.from({ length: 7 }, (_, index) => addDays(today, index - offset))
 }
 
 const inProgress = (task: TeamMemberTask) => task.statusCategory === TeamMemberTaskStatusCategoryEnum.InProgress

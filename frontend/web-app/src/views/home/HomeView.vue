@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import { Calendar, DataAnalysis, FolderOpened, Message, OfficeBuilding, Timer, TopRight } from '@element-plus/icons-vue'
+import { DataAnalysis, FolderOpened, Message, OfficeBuilding, Timer, TopRight } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask, type TeamTimesheet } from '@yumpoo/api-client'
 import { ElIcon } from 'element-plus'
 import { computed, onBeforeUnmount, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { dashboardsApi, myWorkApi, projectsApi } from '../../api/client'
 import { MY_TIME_VIEW_ID } from '../../components/dashboard/dashboardModel'
-import { runningExtraMs } from '../../components/dashboard/my-time/myTimeModel'
-import { buildTimesheet, fromApiDate, projectColors, shortHours, todayIn, toApiDate } from '../../components/dashboard/team/teamDashboardModel'
+import { monthGrid, monthStats, runningExtraMs, shiftMonth, STANDARD_DAY_MS, weekdayLabels } from '../../components/dashboard/my-time/myTimeModel'
+import { addDays, buildTimesheet, fromApiDate, projectColors, shortHours, todayIn, toApiDate } from '../../components/dashboard/team/teamDashboardModel'
 import AuroraShapes from '../../components/motion/AuroraShapes.vue'
+import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
 import { workItemLabelColorValue } from '../../components/projects/workItemLabelColors'
 import YpSegmented from '../../components/yp/YpSegmented.vue'
 import { useInbox } from '../../composables/useInbox'
 import { useSession } from '../../composables/useSession'
 import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
-import { daypart, greeting, heroDate, hubProjects, sortTasks, weekDays, type HubProject, type TaskFilter } from './homeModel'
+import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, type TaskFilter } from './homeModel'
 
 type JumpTone = 'blue' | 'purple' | 'teal' | 'red' | 'green' | 'amber'
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
@@ -25,8 +26,8 @@ const timezone = computed(() => session.authentication.value?.company.timezone ?
 const now = computed(() => new Date(tracker.now.value))
 const hero = computed(() => ({ date: heroDate(now.value, timezone.value), greeting: greeting(now.value, timezone.value), daypart: daypart(now.value, timezone.value) }))
 const today = computed(() => todayIn(timezone.value, now.value))
-const week = computed(() => weekDays(today.value))
-const tasks = ref<TeamMemberTask[]>([]), projects = ref<DashboardProject[]>([]), weekSheet = ref<TeamTimesheet>(), projectTotal = ref<number>()
+const month = computed(() => today.value.slice(0, 7))
+const tasks = ref<TeamMemberTask[]>([]), projects = ref<DashboardProject[]>([]), monthSheet = ref<TeamTimesheet>(), projectTotal = ref<number>()
 const filter = ref<TaskFilter>('ALL')
 const running = computed(() => tracker.current.value?.session ?? undefined)
 
@@ -44,24 +45,28 @@ const taskOptions = computed<{ value: TaskFilter; label: string }[]>(() => [
 ])
 const homeProjects = computed(() => hubProjects(projects.value, tasks.value).slice(0, 6))
 const colors = computed(() => projectColors([...projects.value.map(project => project.id), ...tasks.value.map(task => task.projectId)]))
-const weekTotals = computed(() => weekSheet.value ? buildTimesheet(weekSheet.value).rows[0]?.days ?? {} : {})
-const weekDaily = computed(() => {
-  const extra = weekSheet.value ? runningExtraMs(weekSheet.value.asOf, running.value?.startedAt, tracker.now.value) : 0
-  return week.value.map(day => ({ day, today: day === today.value, ms: (weekTotals.value[day] ?? 0) + (day === today.value ? extra : 0) }))
+// Rows holding only next-month days are dropped so the card stays compact.
+const calendar = computed(() => {
+  const cells = monthGrid(month.value, today.value)
+  const lastRow = cells.reduce((row, cell) => cell.inMonth ? cell.row : row, 0)
+  return cells.slice(0, (lastRow + 1) * 7)
 })
-const weekMs = computed(() => weekDaily.value.reduce((sum, day) => sum + day.ms, 0))
+const recordedDays = computed(() => monthSheet.value ? buildTimesheet(monthSheet.value).rows[0]?.days ?? {} : {})
+const monthDays = computed<Record<string, number>>(() => {
+  const extra = monthSheet.value ? runningExtraMs(monthSheet.value.asOf, running.value?.startedAt, tracker.now.value) : 0
+  return extra ? { ...recordedDays.value, [today.value]: (recordedDays.value[today.value] ?? 0) + extra } : recordedDays.value
+})
+const monthTotal = computed(() => monthStats(monthDays.value, month.value).totalMs)
 const jumps = computed<JumpCard[]>(() => [
   { key: 'projects', label: '管理项目', meta: projectTotal.value === undefined ? '全部项目目录' : `${projectTotal.value} 个进行中项目`,
     icon: FolderOpened, tone: 'blue', open: () => openWorkspace('workspace') },
   { key: 'dashboards', label: '仪表板', meta: '个人看板与统计', icon: DataAnalysis, tone: 'purple', open: () => openWorkspace('dashboards') },
-  { key: 'time', label: '我的工时', meta: `本周 ${shortHours(weekMs.value)} 小时`, icon: Calendar, tone: 'teal',
-    open: () => openWorkspace('dashboards', MY_TIME_VIEW_ID) },
   { key: 'inbox', label: '收件箱', meta: inbox.unread.value ? `${inbox.unread.value} 条未读` : '没有未读消息', icon: Message, tone: 'red',
     open: () => void router.push({ name: 'inbox' }) },
   { key: 'timer', label: running.value ? '计时中' : '开始计时', meta: running.value ? formatDuration(tracker.runningDuration.value) : '选择工作项开始计时',
     icon: Timer, tone: 'green', open: () => window.dispatchEvent(new Event('yumpoo:open-timer')) },
   ...(session.isCompanyAdmin.value
-    ? [{ key: 'company', label: '公司管理', meta: '成员、角色与组织', icon: OfficeBuilding, tone: 'amber' as const, open: () => void router.push({ name: 'company-overview' }) }]
+    ? [{ key: 'company', label: '公司管理', meta: '项目、成员与组织', icon: OfficeBuilding, tone: 'amber' as const, open: () => void router.push({ name: 'company-overview' }) }]
     : []),
 ])
 
@@ -82,18 +87,17 @@ function spotlight(event: PointerEvent): void {
 }
 const dueLabel = (date: Date) => fromApiDate(date).slice(5).replace('-', '/')
 const statusStyle = (task: TeamMemberTask) => ({ backgroundColor: workItemLabelColorValue(task.statusColor), color: 'var(--yp-text-inverse)' })
-const sparkHeight = (ms: number) => `${Math.max(2, Math.min(1, ms / 32_400_000) * 18)}px`
 
 const quiet = () => undefined
-function loadWeek(): void {
-  void myWorkApi.getMyTimesheet({ from: toApiDate(week.value[0]!), to: toApiDate(week.value[6]!) })
-    .then(sheet => { weekSheet.value = sheet }, quiet)
+function loadMonth(): void {
+  void myWorkApi.getMyTimesheet({ from: toApiDate(`${month.value}-01`), to: toApiDate(addDays(`${shiftMonth(month.value, 1)}-01`, -1)) })
+    .then(sheet => { monthSheet.value = sheet }, quiet)
 }
 void myWorkApi.listMyCurrentTasks({ offset: 0, limit: 100 }).then(page => { tasks.value = page.items }, quiet)
 void dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).then(page => { projects.value = page.items }, quiet)
-void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
-loadWeek()
-onBeforeUnmount(onTimeTrackingChanged(loadWeek))
+void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
+loadMonth()
+onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 </script>
 
 <template>
@@ -148,22 +152,13 @@ onBeforeUnmount(onTimeTrackingChanged(loadWeek))
           <TopRight />
         </el-icon>
         <strong>{{ card.label }}</strong>
-        <span class="home-jump__meta">{{ card.meta }}<span
-          v-if="card.key === 'time'"
-          class="home-spark"
-          aria-hidden="true"
-        ><i
-          v-for="day in weekDaily"
-          :key="day.day"
-          :class="{ 'is-today': day.today }"
-          :style="{ height: sparkHeight(day.ms) }"
-        /></span></span>
+        <span class="home-jump__meta">{{ card.meta }}</span>
       </button>
     </nav>
 
     <div class="home-columns">
       <section
-        class="home-panel"
+        class="home-panel home-panel--tasks"
         aria-labelledby="home-tasks-title"
       >
         <header class="home-panel__head">
@@ -188,7 +183,7 @@ onBeforeUnmount(onTimeTrackingChanged(loadWeek))
               class="home-task__accent"
               :style="{ background: colors.get(task.projectId) }"
             />
-            <span class="home-task__text"><strong>{{ task.title }}</strong><small>{{ task.itemNo }} · {{ task.projectName }}</small></span>
+            <span class="home-task__text"><strong>{{ task.title }}</strong><small>{{ task.projectName }}</small></span>
             <span
               class="home-task__status"
               :style="statusStyle(task)"
@@ -207,60 +202,103 @@ onBeforeUnmount(onTimeTrackingChanged(loadWeek))
         </div>
       </section>
 
-      <section
-        class="home-panel home-panel--projects"
-        aria-labelledby="home-projects-title"
-      >
-        <header class="home-panel__head">
-          <h2 id="home-projects-title">
-            我的项目
-          </h2>
+      <div class="home-side">
+        <section
+          class="home-panel home-panel--projects"
+          aria-labelledby="home-projects-title"
+        >
+          <header class="home-panel__head">
+            <h2 id="home-projects-title">
+              我的项目
+            </h2>
+            <button
+              type="button"
+              class="home-link"
+              @click="openWorkspace('workspace')"
+            >
+              全部项目
+            </button>
+          </header>
           <button
+            v-for="project in homeProjects"
+            :key="project.id"
             type="button"
-            class="home-link"
-            @click="openWorkspace('workspace')"
+            class="home-project"
+            @click="openProject(project)"
           >
-            全部项目
+            <span
+              class="home-project__mark"
+              :style="{ '--mark': colors.get(project.id) }"
+            >{{ project.name.slice(0, 1) }}</span>
+            <span class="home-project__text">
+              <strong>{{ project.name }}</strong>
+              <small v-if="project.inProgress + project.todo">
+                {{ project.inProgress }} 进行中 · {{ project.todo }} 待开始<b
+                  v-if="project.overdue"
+                  class="home-project__overdue"
+                > · {{ project.overdue }} 逾期</b>
+              </small>
+              <small v-else>暂无分配给你的工作项</small>
+              <span class="home-project__bar"><i
+                v-if="project.inProgress"
+                class="is-progress"
+                :style="{ flex: project.inProgress }"
+              /><i
+                v-if="project.todo"
+                class="is-todo"
+                :style="{ flex: project.todo }"
+              /></span>
+            </span>
           </button>
-        </header>
-        <button
-          v-for="project in homeProjects"
-          :key="project.id"
-          type="button"
-          class="home-project"
-          @click="openProject(project)"
+          <p
+            v-if="!homeProjects.length"
+            class="home-empty"
+          >
+            你还没有加入进行中的项目
+          </p>
+        </section>
+        <section
+          class="home-panel home-panel--calendar"
+          aria-labelledby="home-calendar-title"
         >
-          <span
-            class="home-project__mark"
-            :style="{ '--mark': colors.get(project.id) }"
-          >{{ project.name.slice(0, 1) }}</span>
-          <span class="home-project__text">
-            <strong>{{ project.name }}</strong>
-            <small v-if="project.inProgress + project.todo">
-              {{ project.inProgress }} 进行中 · {{ project.todo }} 待开始<b
-                v-if="project.overdue"
-                class="home-project__overdue"
-              > · {{ project.overdue }} 逾期</b>
-            </small>
-            <small v-else>暂无分配给你的工作项</small>
-            <span class="home-project__bar"><i
-              v-if="project.inProgress"
-              class="is-progress"
-              :style="{ flex: project.inProgress }"
-            /><i
-              v-if="project.todo"
-              class="is-todo"
-              :style="{ flex: project.todo }"
-            /></span>
-          </span>
-        </button>
-        <p
-          v-if="!homeProjects.length"
-          class="home-empty"
-        >
-          你还没有加入进行中的项目
-        </p>
-      </section>
+          <header class="home-panel__head">
+            <h2 id="home-calendar-title">
+              工时日历<small class="home-calendar__total">{{ Number(month.slice(5)) }}月 · 合计 {{ shortHours(monthTotal) }}h</small>
+            </h2>
+            <button
+              type="button"
+              class="home-link"
+              @click="openWorkspace('dashboards', MY_TIME_VIEW_ID)"
+            >
+              查看明细
+            </button>
+          </header>
+          <div
+            class="home-calendar"
+            role="group"
+            :aria-label="`${Number(month.slice(5))}月每日工时`"
+          >
+            <span
+              v-for="label in weekdayLabels"
+              :key="label"
+              class="home-calendar__weekday"
+              aria-hidden="true"
+            >{{ label }}</span>
+            <span
+              v-for="cell in calendar"
+              :key="cell.date"
+              class="home-calendar__day"
+              :class="{
+                'is-recorded': cell.inMonth && monthDays[cell.date],
+                'is-full': cell.inMonth && (monthDays[cell.date] ?? 0) >= STANDARD_DAY_MS,
+                'is-today': cell.today,
+              }"
+              :style="{ '--d': cell.row + cell.column }"
+              :title="cell.inMonth && monthDays[cell.date] ? `${shortHours(monthDays[cell.date] ?? 0)} 小时` : undefined"
+            >{{ cell.inMonth ? cell.day : '' }}</span>
+          </div>
+        </section>
+      </div>
     </div>
   </section>
 </template>
@@ -490,30 +528,79 @@ onBeforeUnmount(onTimeTrackingChanged(loadWeek))
   font-variant-numeric: tabular-nums;
 }
 
-.home-spark {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 18px;
-}
-
-.home-spark i {
-  width: 6px;
-  border-radius: 2px;
-  background: linear-gradient(var(--yp-label-aquamarine), var(--yp-label-bright-blue));
-  opacity: 0.55;
-  transition: height var(--yp-motion-overlay) var(--yp-ease-standard);
-}
-
-.home-spark i.is-today {
-  opacity: 1;
-}
-
 .home-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
   gap: var(--yp-space-4);
+}
+
+.home-side {
+  display: grid;
+  align-content: start;
+  gap: var(--yp-space-4);
+  min-width: 0;
+}
+
+/* Size containment lets the right column set the row height; the task list scrolls inside it. */
+.home-panel--tasks {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  contain: size;
+}
+
+.home-panel--tasks .home-tasks {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.home-calendar__total {
+  margin-left: var(--yp-space-2);
+  color: var(--yp-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.home-calendar__weekday {
+  padding-bottom: 2px;
+  color: var(--yp-text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.home-calendar__day {
+  display: grid;
+  height: 30px;
+  place-items: center;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-secondary);
+  font: 500 12px/1 var(--yp-font-mono);
+  font-variant-numeric: tabular-nums;
+  animation: home-rise 280ms var(--yp-ease-standard) backwards;
+  animation-delay: calc(var(--d) * 12ms + 480ms);
+}
+
+.home-calendar__day.is-recorded {
+  background: color-mix(in srgb, var(--yp-action-primary) 18%, transparent);
+  color: var(--yp-text-primary);
+}
+
+.home-calendar__day.is-full {
+  background: var(--yp-action-primary);
+  color: var(--yp-status-blue-foreground);
+}
+
+.home-calendar__day.is-today {
+  box-shadow: inset 0 0 0 1.5px var(--yp-action-primary);
 }
 
 .home-panel {
@@ -530,6 +617,10 @@ onBeforeUnmount(onTimeTrackingChanged(loadWeek))
 
 .home-panel--projects {
   animation-delay: 380ms;
+}
+
+.home-panel--calendar {
+  animation-delay: 440ms;
 }
 
 .home-panel__head {
@@ -708,7 +799,8 @@ onBeforeUnmount(onTimeTrackingChanged(loadWeek))
 
 @media (prefers-reduced-motion: reduce) {
   .home-jump,
-  .home-panel {
+  .home-panel,
+  .home-calendar__day {
     animation: none;
   }
 
@@ -721,6 +813,15 @@ onBeforeUnmount(onTimeTrackingChanged(loadWeek))
 @media (max-width: 1099.98px) {
   .home-columns {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-panel--tasks {
+    min-height: 0;
+    contain: none;
+  }
+
+  .home-panel--tasks .home-tasks {
+    max-height: 376px;
   }
 }
 

@@ -24,6 +24,7 @@ import InboxBell from './inbox/InboxBell.vue'
 import OperationsBadge from './operations/OperationsBadge.vue'
 import type { ShellSection } from '../router/shell-navigation'
 import InlineProblem from './InlineProblem.vue'
+import { MY_PROJECT_ACCESSES } from './projects/projectScope'
 import YpAssignee from './yp/YpAssignee.vue'
 import YpThemeSwitcher from './yp/YpThemeSwitcher.vue'
 import brandLogo from '../assets/brand/logo.svg'
@@ -108,6 +109,7 @@ const contextItems = computed<ContextItem[]>(() => {
   if (activeSection.value === 'company') {
     return [
       { label: '概览', routeName: 'company-overview' },
+      { label: '项目', routeName: 'company-projects' },
       { label: '成员与角色', routeName: 'company-members' },
       { label: '同步运行', routeName: 'company-sync-runs' },
     ]
@@ -163,6 +165,7 @@ async function loadNavigationProjects(query = sidebarSearchQuery.value.trim()): 
     const projectPage = await projectsApi.listProjects({
       ...(query ? { query } : {}),
       lifecycle: ProjectLifecycleFilter.Active,
+      actorAccesses: MY_PROJECT_ACCESSES,
       page: 0,
       size: 11,
     })

@@ -93,6 +93,7 @@ describe('项目侧栏导航', () => {
 
     expect(api.listProjects).toHaveBeenCalledWith({
       lifecycle: ProjectLifecycleFilter.Active,
+      actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member],
       page: 0,
       size: 11,
     })
@@ -156,6 +157,7 @@ describe('项目侧栏导航', () => {
     expect(api.listProjects).toHaveBeenLastCalledWith({
       query: 'YP_02',
       lifecycle: ProjectLifecycleFilter.Active,
+      actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member],
       page: 0,
       size: 11,
     })

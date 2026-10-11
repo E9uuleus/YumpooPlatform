@@ -14,6 +14,7 @@ import { isProblemStatus, toApiProblem, type ApiProblem } from '../../api/proble
 import InlineProblem from '../../components/InlineProblem.vue'
 import ProjectCreateDialog from '../../components/projects/ProjectCreateDialog.vue'
 import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHeader.vue'
+import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import YpFilterBar from '../../components/yp/YpFilterBar.vue'
@@ -66,7 +67,8 @@ const modifiedOptions: Array<{ value: ModifiedPreset; label: string; days: numbe
   { value: 'LAST_30_DAYS', label: '最近 30 天', days: 30 },
   { value: 'LAST_90_DAYS', label: '最近 90 天', days: 90 },
 ]
-const accessOptions = [ProjectActorAccess.Owner, ProjectActorAccess.Member, ProjectActorAccess.CompanyAdmin]
+const accessOptions = MY_PROJECT_ACCESSES
+const scopedAccesses = computed(() => actorAccesses.value.length ? actorAccesses.value : MY_PROJECT_ACCESSES)
 const activeFilters = computed<ActiveFilter[]>(() => [
   ...(modifiedPreset.value ? [{ key: 'modified', label: '最后修改时间', valueLabel: modifiedOptions.find(item => item.value === modifiedPreset.value)?.label ?? '' }] : []),
   ...(ownerUserIds.value.length ? [{ key: 'owners', label: '负责人', valueLabel: ownerUserIds.value.map(id => ownerOptions.value.find(item => item.userId === id)?.displayName ?? id).join('、') }] : []),
@@ -107,7 +109,7 @@ const recentProjectItems = computed(() => {
     if (normalizedQuery && !`${item.name} ${item.code}`.toLocaleLowerCase().includes(normalizedQuery)) return false
     if (item.lifecycle !== ProjectLifecycle.Active) return false
     if (ownerUserIds.value.length && !ownerUserIds.value.includes(item.ownerUserId)) return false
-    if (actorAccesses.value.length && !actorAccesses.value.includes(item.actorAccess)) return false
+    if (!scopedAccesses.value.includes(item.actorAccess)) return false
     return since === undefined || new Date(item.updatedAt).getTime() >= since
   })
 })
@@ -123,7 +125,7 @@ async function load(): Promise<void> {
     result.value = await projectsApi.listProjects({
       ...(appliedQuery.value ? { query: appliedQuery.value } : {}),
       ...(ownerUserIds.value.length ? { ownerUserIds: ownerUserIds.value } : {}),
-      ...(actorAccesses.value.length ? { actorAccesses: actorAccesses.value } : {}),
+      actorAccesses: scopedAccesses.value,
       ...(since ? { updatedSince: since } : {}),
       lifecycle: ProjectLifecycleFilter.Active, page: page.value, size: size.value,
     })
@@ -206,7 +208,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
     <project-workspace-header
       section="catalog"
       title="管理项目"
-      description="查看进行中的项目、负责人和协作角色。"
+      description="查看你负责或参与的进行中项目、负责人和协作角色。"
     />
     <inline-problem
       v-if="error"

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { ElButton, ElIcon, ElInput, ElPopover, ElTooltip } from 'element-plus'
 import { Calendar, Check, DataAnalysis, Menu, Plus, Search, User } from '@element-plus/icons-vue'
 import type { DashboardSummary } from '@yumpoo/api-client'
 import YpEmptyState from '../yp/YpEmptyState.vue'
+import { useSlidingIndicator } from '../yp/useSlidingIndicator'
 import { MY_TIME_VIEW_ID, TEAM_VIEW_ID } from './dashboardModel'
 
 interface Tab { id: string; name: string; fixed?: 'mine' | 'team' }
@@ -18,12 +19,22 @@ const tabs = computed<Tab[]>(() => [
   ...props.dashboards.map(d => ({ id: d.id, name: d.id === props.activeId ? props.activeName : d.name })),
 ])
 const choices = computed(() => tabs.value.filter(tab => tab.name.toLowerCase().includes(search.value.trim().toLowerCase())))
+const activeIndex = computed(() => editing.value ? -1 : tabs.value.findIndex(tab => tab.id === props.activeId))
+const { indicatorStyle, animated, measure } = useSlidingIndicator(strip, '.dashboard-tab', () => activeIndex.value)
+const hover = reactive({ left: 0, width: 0, shown: false, sliding: false })
+
+function hoverTab(event: PointerEvent) {
+  const tab = event.currentTarget as HTMLElement
+  // The pill slides only between tabs; entering the strip fades it in at the hovered tab.
+  hover.sliding = hover.shown
+  Object.assign(hover, { left: tab.offsetLeft, width: tab.offsetWidth, shown: true })
+}
 
 function select(id: string) { listOpen.value = false; if (id !== props.activeId) emit('select', id) }
 function create() { listOpen.value = false; emit('create') }
 async function startRename(tab: Tab) {
   if (tab.fixed || tab.id !== props.activeId || !props.renamable) return
-  draft.value = tab.name; editing.value = true
+  draft.value = tab.name; editing.value = true; hover.shown = false
   await nextTick()
   const input = strip.value?.querySelector<HTMLInputElement>('.dashboard-tab-rename input')
   input?.focus(); input?.select()
@@ -48,8 +59,10 @@ function move(event: KeyboardEvent, index: number) {
 watch(() => [props.activeId, tabs.value.length], async () => {
   editing.value = false
   await nextTick()
+  measure()
   strip.value?.querySelector('.dashboard-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }, { immediate: true })
+watch(() => props.activeName, () => { void nextTick(measure) })
 </script>
 
 <template>
@@ -60,7 +73,14 @@ watch(() => [props.activeId, tabs.value.length], async () => {
       role="tablist"
       aria-label="仪表板"
       @wheel="scrollStrip"
+      @pointerleave="hover.shown = false"
     >
+      <span
+        class="dashboard-tabs__hover"
+        :class="{ 'is-shown': hover.shown, 'is-sliding': hover.sliding }"
+        :style="{ width: `${hover.width}px`, transform: `translateX(${hover.left}px)` }"
+        aria-hidden="true"
+      />
       <template
         v-for="(tab, index) in tabs"
         :key="tab.id"
@@ -87,6 +107,7 @@ watch(() => [props.activeId, tabs.value.length], async () => {
           @click="select(tab.id)"
           @dblclick="startRename(tab)"
           @keydown="move($event, index)"
+          @pointerenter="hoverTab"
         >
           <el-icon v-if="tab.fixed">
             <Calendar v-if="tab.fixed === 'mine'" /><User v-else />
@@ -98,6 +119,12 @@ watch(() => [props.activeId, tabs.value.length], async () => {
           aria-hidden="true"
         />
       </template>
+      <span
+        class="dashboard-tabs__ink"
+        :class="{ 'is-animated': animated }"
+        :style="indicatorStyle"
+        aria-hidden="true"
+      />
     </div>
     <el-popover
       v-model:visible="listOpen"
@@ -165,17 +192,23 @@ watch(() => [props.activeId, tabs.value.length], async () => {
 
 <style scoped>
 .dashboard-tabs{display:flex;align-items:stretch;gap:4px;min-width:0;flex:1}
-.dashboard-tabs__strip{display:flex;align-items:stretch;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+.dashboard-tabs__strip{position:relative;display:flex;align-items:stretch;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
 .dashboard-tabs__strip::-webkit-scrollbar{display:none}
 .dashboard-tab{position:relative;display:inline-flex;align-items:center;gap:6px;flex:none;max-width:240px;padding:0 14px;border:0;border-radius:6px 6px 0 0;background:none;color:var(--yp-text-secondary);font:500 15px/22px var(--yp-font-family);white-space:nowrap;cursor:pointer;transition:color var(--yp-motion-fast) var(--yp-ease-standard),background var(--yp-motion-fast) var(--yp-ease-standard)}
 .dashboard-tab span{overflow:hidden;text-overflow:ellipsis}
-.dashboard-tab:hover{color:var(--yp-text-primary);background:var(--yp-bg-hover)}
+.dashboard-tab:hover{color:var(--yp-text-primary)}
 .dashboard-tab.active{color:var(--yp-text-primary)}
-.dashboard-tab.active::after{content:'';position:absolute;left:10px;right:10px;bottom:0;height:3px;border-radius:3px 3px 0 0;background:var(--yp-action-primary)}
+.dashboard-tabs__hover{position:absolute;top:8px;bottom:8px;left:0;border-radius:8px;background:var(--yp-bg-hover);opacity:0;pointer-events:none;transition:opacity var(--yp-motion-fast) var(--yp-ease-standard)}
+.dashboard-tabs__hover.is-shown{opacity:1}
+.dashboard-tabs__hover.is-sliding{transition:opacity var(--yp-motion-fast) var(--yp-ease-standard),transform var(--yp-motion-overlay) var(--yp-ease-standard),width var(--yp-motion-overlay) var(--yp-ease-standard)}
+.dashboard-tabs__ink{position:absolute;bottom:0;left:0;height:3px;pointer-events:none}
+.dashboard-tabs__ink::after{content:'';position:absolute;inset:0 10px;border-radius:3px 3px 0 0;background:var(--yp-action-primary)}
+.dashboard-tabs__ink.is-animated{transition:transform var(--yp-motion-progress) var(--yp-ease-standard),width var(--yp-motion-progress) var(--yp-ease-standard)}
 .dashboard-tab:focus-visible{outline:2px solid var(--yp-focus-ring);outline-offset:-2px}
 .dashboard-tab--fixed .el-icon{color:var(--yp-action-primary)}
 .dashboard-tabs__divider{flex:none;align-self:center;width:1px;height:20px;margin:0 6px;background:var(--yp-border-default)}
 .dashboard-tab-rename{flex:none;align-self:center;width:200px;margin:0 6px}
 .dashboard-tabs__action{display:inline-flex;flex:none;align-self:center}
 .dashboard-tabs .el-button+.el-button{margin-left:0}
+@media (prefers-reduced-motion:reduce){.dashboard-tabs__hover,.dashboard-tabs__hover.is-sliding,.dashboard-tabs__ink,.dashboard-tabs__ink.is-animated{transition:none}}
 </style>
