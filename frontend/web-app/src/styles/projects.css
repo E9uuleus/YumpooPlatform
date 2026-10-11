@@ -1032,23 +1032,32 @@
   background: var(--yp-action-primary-hover);
 }
 
-.project-workspace .el-button.is-link,
-.project-catalog .el-button.is-link,
-.project-create-drawer .el-button.is-link,
-.project-filter-popover .el-button.is-link {
+:is(.project-workspace, .project-catalog, .project-create-drawer, .project-filter-popover, .archived-project-table) .el-button.is-link {
+  --project-link-color: var(--yp-text-primary);
+
   min-height: auto;
   padding: 2px;
   border-color: transparent;
+  color: var(--project-link-color);
   background: transparent;
 }
 
-.project-workspace .el-button--danger.is-link {
-  color: var(--yp-status-red);
+:is(.project-workspace, .project-catalog, .project-create-drawer, .project-filter-popover, .archived-project-table) .el-button--primary.is-link {
+  --project-link-color: var(--yp-link);
 }
 
-.project-workspace .el-button--danger.is-link:hover {
-  color: var(--yp-status-red);
-  background: color-mix(in srgb, var(--yp-status-red) 10%, transparent);
+:is(.project-workspace, .project-catalog, .project-create-drawer, .project-filter-popover, .archived-project-table) .el-button--danger.is-link {
+  --project-link-color: var(--yp-status-red);
+}
+
+:is(.project-workspace, .project-catalog, .project-create-drawer, .project-filter-popover, .archived-project-table) .el-button.is-link:not(.is-disabled):is(:hover, :focus-visible, :active) {
+  border-color: transparent;
+  color: var(--project-link-color);
+  background: color-mix(in srgb, var(--project-link-color) 10%, transparent);
+}
+
+:is(.project-workspace, .project-catalog, .project-create-drawer, .project-filter-popover, .archived-project-table) .el-button.is-link.is-disabled {
+  color: var(--yp-text-disabled);
 }
 
 .project-workspace .el-input__wrapper,

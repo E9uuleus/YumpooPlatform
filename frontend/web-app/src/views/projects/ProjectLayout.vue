@@ -25,11 +25,15 @@ onBeforeUnmount(() => { request++; window.removeEventListener(PROJECT_LIFECYCLE_
 </script>
 
 <template>
-  <section class="project-workspace">
+  <section
+    class="project-workspace"
+    :class="{ 'project-workspace--archived': project?.lifecycle === ProjectLifecycle.Archived }"
+  >
     <el-alert
       v-if="project?.lifecycle === ProjectLifecycle.Archived"
       class="archived-project-banner"
-      type="info"
+      type="error"
+      effect="dark"
       :closable="false"
       show-icon
       title="项目已归档，当前为只读浏览。仅负责人和企业管理员可访问或恢复，归档项目不计入统计。"
@@ -39,5 +43,28 @@ onBeforeUnmount(() => { request++; window.removeEventListener(PROJECT_LIFECYCLE_
 </template>
 
 <style scoped>
-.archived-project-banner { margin-bottom: var(--yp-space-4); }
+.project-workspace--archived {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: max-content minmax(0, 1fr);
+  gap: var(--yp-space-2);
+}
+
+.project-workspace--archived:has(> .project-overview-stack) {
+  height: 100%;
+  min-height: 0;
+}
+
+.archived-project-banner {
+  --el-color-error: var(--yp-status-red);
+  --el-color-white: var(--yp-status-red-foreground);
+
+  align-self: start;
+  min-height: 36px;
+  padding: var(--yp-space-2) var(--yp-space-3);
+}
+
+.archived-project-banner :deep(.el-alert__title) {
+  line-height: 20px;
+}
+
 </style>
