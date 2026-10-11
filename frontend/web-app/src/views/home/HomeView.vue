@@ -9,6 +9,7 @@ import { MY_TIME_VIEW_ID } from '../../components/dashboard/dashboardModel'
 import { monthGrid, monthStats, runningExtraMs, shiftMonth, STANDARD_DAY_MS, weekdayLabels } from '../../components/dashboard/my-time/myTimeModel'
 import { addDays, buildTimesheet, fromApiDate, projectColors, shortHours, todayIn, toApiDate } from '../../components/dashboard/team/teamDashboardModel'
 import AuroraShapes from '../../components/motion/AuroraShapes.vue'
+import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
 import { workItemLabelColorValue } from '../../components/projects/workItemLabelColors'
 import YpSegmented from '../../components/yp/YpSegmented.vue'
 import { useInbox } from '../../composables/useInbox'
@@ -94,7 +95,7 @@ function loadMonth(): void {
 }
 void myWorkApi.listMyCurrentTasks({ offset: 0, limit: 100 }).then(page => { tasks.value = page.items }, quiet)
 void dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).then(page => { projects.value = page.items }, quiet)
-void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
+void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
 loadMonth()
 onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 </script>

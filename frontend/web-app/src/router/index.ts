@@ -127,6 +127,7 @@ export const routes: RouteRecordRaw[] = [
             name: 'company-overview',
             component: IdentityOverviewView,
           },
+          { path: 'projects', name: 'company-projects', component: () => import('../views/admin/CompanyProjectsView.vue') },
           {
             path: 'sync-runs',
             name: 'company-sync-runs',

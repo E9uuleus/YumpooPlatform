@@ -70,7 +70,7 @@ describe('项目管理页', () => {
     useSession().authentication.value = authentication(AuthenticationRole.CompanyMember)
     const wrapper = mount(ProjectsView, { attachTo: document.body })
     await flushPromises()
-    expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: ProjectLifecycleFilter.Active, page: 0, size: 20 })
+    expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: [ProjectActorAccess.Owner, ProjectActorAccess.Member], page: 0, size: 20 })
     expect(wrapper.findAll('.project-management-table th').map(cell => cell.text())).toEqual([
       '项目名称', '状态', '负责人', '创建时间', '最后修改时间', '我的角色',
     ])

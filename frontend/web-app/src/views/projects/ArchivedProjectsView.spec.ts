@@ -34,7 +34,7 @@ describe('归档项目页', () => {
   it('请求归档范围并展示真实归档时间，打开项目进入只读详情', async () => {
     const wrapper = mount(ArchivedProjectsView)
     await flushPromises()
-    expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: ProjectLifecycleFilter.Archived, page: 0, size: 20 })
+    expect(api.listProjects).toHaveBeenCalledWith({ lifecycle: ProjectLifecycleFilter.Archived, actorAccesses: [ProjectActorAccess.Owner], page: 0, size: 20 })
     expect(wrapper.findAll('th').map(cell => cell.text())).toEqual(['项目名称', '项目编号', '负责人', '归档时间', '删除状态', '操作'])
     expect(wrapper.text()).toContain('历史项目')
     expect(wrapper.text()).toContain('2026-10-09')
