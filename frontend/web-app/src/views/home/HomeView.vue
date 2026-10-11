@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { DataAnalysis, FolderOpened, Message, OfficeBuilding, Timer, TopRight } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask, type TeamTimesheet } from '@yumpoo/api-client'
-import { ElIcon } from 'element-plus'
+import { ElIcon, ElTooltip } from 'element-plus'
 import { computed, onBeforeUnmount, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { dashboardsApi, myWorkApi, projectsApi } from '../../api/client'
@@ -87,6 +87,10 @@ function spotlight(event: PointerEvent): void {
 }
 const dueLabel = (date: Date) => fromApiDate(date).slice(5).replace('-', '/')
 const statusStyle = (task: TeamMemberTask) => ({ backgroundColor: workItemLabelColorValue(task.statusColor), color: 'var(--yp-text-inverse)' })
+function calendarDuration(ms: number): string {
+  const minutes = Math.floor(Math.max(0, ms) / 60_000)
+  return `${Math.floor(minutes / 60)} H ${String(minutes % 60).padStart(2, '0')} m`
+}
 
 const quiet = () => undefined
 function loadMonth(): void {
@@ -284,18 +288,23 @@ onBeforeUnmount(onTimeTrackingChanged(loadMonth))
               class="home-calendar__weekday"
               aria-hidden="true"
             >{{ label }}</span>
-            <span
+            <el-tooltip
               v-for="cell in calendar"
               :key="cell.date"
-              class="home-calendar__day"
-              :class="{
-                'is-recorded': cell.inMonth && monthDays[cell.date],
-                'is-full': cell.inMonth && (monthDays[cell.date] ?? 0) >= STANDARD_DAY_MS,
-                'is-today': cell.today,
-              }"
-              :style="{ '--d': cell.row + cell.column }"
-              :title="cell.inMonth && monthDays[cell.date] ? `${shortHours(monthDays[cell.date] ?? 0)} 小时` : undefined"
-            >{{ cell.inMonth ? cell.day : '' }}</span>
+              :content="calendarDuration(monthDays[cell.date] ?? 0)"
+              :disabled="!cell.inMonth || (monthDays[cell.date] ?? 0) <= 0"
+              placement="top"
+            >
+              <span
+                class="home-calendar__day"
+                :class="{
+                  'is-recorded': cell.inMonth && (monthDays[cell.date] ?? 0) > 0,
+                  'is-full': cell.inMonth && (monthDays[cell.date] ?? 0) >= STANDARD_DAY_MS,
+                  'is-today': cell.today,
+                }"
+                :style="{ '--d': cell.row + cell.column }"
+              >{{ cell.inMonth ? cell.day : '' }}</span>
+            </el-tooltip>
           </div>
         </section>
       </div>
@@ -530,7 +539,7 @@ onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 
 .home-columns {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   align-items: stretch;
   gap: var(--yp-space-4);
 }
@@ -557,11 +566,17 @@ onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 }
 
 .home-calendar__total {
-  margin-left: var(--yp-space-2);
   color: var(--yp-text-muted);
   font-size: 12px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
+}
+
+.home-panel--calendar h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--yp-space-2);
 }
 
 .home-calendar {
@@ -625,6 +640,7 @@ onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 
 .home-panel__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--yp-space-3);
@@ -773,12 +789,14 @@ onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 }
 
 .home-link {
+  flex-shrink: 0;
   padding: 0;
   border: 0;
   background: none;
   color: var(--yp-link);
   font: inherit;
   font-size: 12px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
