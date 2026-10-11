@@ -24,6 +24,8 @@ tags:
     description: 工作项原始计时与本人跨端计时器。
   - name: MyWork
     description: 本人跨项目工时日历与当前任务。
+  - name: Onboarding
+    description: 本人新手引导的处理记录。
   - name: Authentication
     description: Web 企微登录、会话退出与当前主体查询。
   - name: IdentityGovernance
@@ -1212,6 +1214,46 @@ paths:
         '412': { $ref: '#/components/responses/VersionConflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /me/onboarding:
+    get:
+      tags: [Onboarding]
+      operationId: getMyOnboarding
+      summary: 查询本人已处理的新手引导
+      description: 返回当前账号已完成或跳过的引导及其版本；从未处理过任何引导时 tours 为空数组。上线前已存在的账号由迁移预置为全部已处理。
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 本人新手引导记录。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/OnboardingState' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+  /me/onboarding/tours/{tourId}:
+    put:
+      tags: [Onboarding]
+      operationId: completeMyOnboardingTour
+      summary: 记录本人已处理某个新手引导
+      description: 完成与跳过都调用本接口。版本只升不降，天然幂等，仅要求会话与 XSRF；服务端不校验 tourId 是否为前端已定义的引导。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: tourId
+          in: path
+          required: true
+          description: 前端定义的引导标识。
+          schema: { $ref: '#/components/schemas/OnboardingTourId' }
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/OnboardingTourCompleteRequest' } } }
+      responses:
+        '200':
+          description: 写入后的本人新手引导记录。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/OnboardingState' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
 
   /admin/members/{userId}/platform-role:
     put:
@@ -7158,6 +7200,32 @@ components:
         assigned: { type: boolean }
         connectionCreated: { type: boolean }
         updatedAt: { type: string, format: date-time, nullable: true }
+    OnboardingTourId:
+      type: string
+      pattern: '^[a-z][a-z0-9-]{1,47}$'
+      description: 前端定义的新手引导标识，例如 welcome、project-work-items。
+    OnboardingTourRecord:
+      type: object
+      additionalProperties: false
+      required: [tourId, version, completedAt]
+      properties:
+        tourId: { $ref: '#/components/schemas/OnboardingTourId' }
+        version: { type: integer, minimum: 1, maximum: 1000, description: 已处理的引导内容版本。 }
+        completedAt: { type: string, format: date-time, description: 最近一次版本提升的时间。 }
+    OnboardingState:
+      type: object
+      additionalProperties: false
+      required: [tours]
+      properties:
+        tours:
+          type: array
+          items: { $ref: '#/components/schemas/OnboardingTourRecord' }
+    OnboardingTourCompleteRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: { type: integer, minimum: 1, maximum: 1000, description: 本次处理的引导内容版本。 }
     WorkItemTableHeight:
       type: string
       enum: [SINGLE, DOUBLE, TRIPLE]
