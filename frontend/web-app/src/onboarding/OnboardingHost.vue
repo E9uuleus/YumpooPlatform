@@ -36,9 +36,24 @@ watch(onboarding.active, async id => {
   if (onboarding.active.value !== id) return
   const available = TOURS[id].steps
     .filter(step => !step.target || visible(step.target))
-    .map(step => window.innerWidth < 960 && /^(left|right)/.test(step.placement ?? '')
-      ? { ...step, placement: 'bottom' as const }
-      : step)
+    .map(step => {
+      if (window.innerWidth >= 1100) return step
+      const target = step.target ? document.querySelector(step.target) : null
+      return {
+        ...step,
+        placement: /^(left|right)/.test(step.placement ?? '') ? 'bottom' as const : step.placement,
+        ...(target && target.getBoundingClientRect().height > window.innerHeight * 0.6 ? {
+          showArrow: false,
+          contentStyle: {
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate3d(-50%, -50%, 0)',
+            maxWidth: 'calc(100vw - 32px)',
+          },
+        } : {}),
+      }
+    })
   if (available.length) steps.value = available
   else onboarding.stop()
 })
