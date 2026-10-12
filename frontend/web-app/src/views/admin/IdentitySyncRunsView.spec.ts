@@ -21,6 +21,10 @@ const api = vi.hoisted(() => ({
 }))
 
 vi.mock('../../api/client', () => ({ identityAdministrationApi: api }))
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: {} }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}))
 vi.mock('@yumpoo/api-client', async (importOriginal) => ({
   ...await importOriginal<typeof import('@yumpoo/api-client')>(),
   readCsrfToken: () => 'csrf-token',
