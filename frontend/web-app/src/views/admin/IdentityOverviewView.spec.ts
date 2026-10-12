@@ -1,11 +1,14 @@
-import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import IdentityOverviewView from './IdentityOverviewView.vue'
 
 const api = vi.hoisted(() => ({
   getCompany: vi.fn(),
   getWeComIntegrationStatus: vi.fn(),
 }))
+const onboardingReady = vi.hoisted(() => vi.fn())
+vi.mock('../../onboarding/useOnboarding', () => ({ usePageOnboarding: () => ({ ready: onboardingReady }) }))
+enableAutoUnmount(afterEach)
 
 vi.mock('../../api/client', () => ({
   identityAdministrationApi: api,
@@ -13,6 +16,7 @@ vi.mock('../../api/client', () => ({
 
 describe('M1-11 身份管理概览', () => {
   beforeEach(() => {
+    onboardingReady.mockClear()
     api.getCompany.mockResolvedValue({
       id: '00000000-0000-4000-8000-000000000001',
       displayName: 'Yumpoo 测试公司',
@@ -54,5 +58,14 @@ describe('M1-11 身份管理概览', () => {
     expect(wrapper.text()).toContain('凭据由外部安全配置注入')
     expect(wrapper.find('input[type="password"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('oauth-super-secret')
+    expect(onboardingReady).toHaveBeenCalledOnce()
+  })
+
+  it.each(['getCompany', 'getWeComIntegrationStatus'] as const)('does not start onboarding when %s fails', async method => {
+    api[method].mockRejectedValueOnce(new Error('offline'))
+    const wrapper = mount(IdentityOverviewView)
+    await flushPromises()
+    expect(wrapper.text()).toContain('概览加载失败')
+    expect(onboardingReady).not.toHaveBeenCalled()
   })
 })

@@ -9,6 +9,7 @@ export * from './IdentityAdministrationApi';
 export * from './IdentityGovernanceApi';
 export * from './MyWorkApi';
 export * from './NotificationsApi';
+export * from './OnboardingApi';
 export * from './OperationsApi';
 export * from './ProjectsApi';
 export * from './TeamDashboardApi';

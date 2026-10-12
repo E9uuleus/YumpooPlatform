@@ -6,6 +6,7 @@ import { Check, Loading, WarningFilled } from '@element-plus/icons-vue'
 import type { NotificationItem } from '@yumpoo/api-client'
 import { useInbox, useInboxList } from '../../composables/useInbox'
 import { useSession } from '../../composables/useSession'
+import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { inboxEmptyCopy, inboxFilterLabel, notificationDateGroup, notificationLink, parseInboxFilter } from '../../components/inbox/inboxPresentation'
 import InboxRow from '../../components/inbox/InboxRow.vue'
 import YpPageHeader from '../../components/yp/YpPageHeader.vue'
@@ -14,6 +15,9 @@ import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 const route = useRoute(), router = useRouter(), session = useSession(), inbox = useInbox()
 const filter = computed(() => parseInboxFilter(route.query.filter))
 const list = useInboxList(filter)
+const onboardingReady = computed(() => Boolean(list.serverNow.value) && !list.loading.value && !list.error.value)
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush: 'post' })
 const marking = ref(false), sentinel = ref<HTMLElement>()
 const now = computed(() => inbox.counts.value?.serverNow || new Date())
 const timezone = computed(() => session.authentication.value?.company.timezone || 'UTC')
@@ -68,6 +72,7 @@ onBeforeUnmount(() => observer?.disconnect())
       <template #actions>
         <el-button
           v-if="filter !== 'archived'"
+          data-tour="inbox-read-all"
           :icon="Check"
           :disabled="!inbox.unread.value || !list.serverNow.value"
           :loading="marking"
@@ -79,6 +84,7 @@ onBeforeUnmount(() => observer?.disconnect())
     </yp-page-header>
     <div
       class="inbox-page__list"
+      data-tour="inbox-list"
       :aria-busy="list.loading.value"
     >
       <div

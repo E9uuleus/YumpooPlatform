@@ -72,7 +72,7 @@ export const routes: RouteRecordRaw[] = [
         path: '',
         name: 'home',
         component: () => import('../views/home/HomeView.vue'),
-        meta: { shellSection: 'home' },
+        meta: { shellSection: 'home', onboardingTour: 'welcome' },
       },
       {
         path: 'workspace',
@@ -84,13 +84,13 @@ export const routes: RouteRecordRaw[] = [
         path: 'workspace/:workspaceSlug',
         name: 'workspace',
         component: ProjectsView,
-        meta: { shellSection: 'work' },
+        meta: { shellSection: 'work', onboardingTour: 'workspace' },
       },
       {
         path: 'workspace/:workspaceSlug/dashboards/:dashboardId?',
         name: 'dashboards',
         component: () => import('../views/DashboardsView.vue'),
-        meta: { shellSection: 'work' },
+        meta: { shellSection: 'work', onboardingTour: 'dashboards' },
       },
       {
         path: 'projects/archived',
@@ -104,7 +104,7 @@ export const routes: RouteRecordRaw[] = [
         redirect: route => ({ name: 'project-overview', params: route.params }),
         meta: { shellSection: 'work' },
         children: [
-          { path: 'overview', name: 'project-overview', component: ProjectOverviewView },
+          { path: 'overview', name: 'project-overview', component: ProjectOverviewView, meta: { onboardingTour: 'project-work-items' } },
           { path: 'members', name: 'project-members', component: ProjectMembersView },
           { path: 'activity', name: 'project-activity', component: ProjectActivityView },
           { path: 'settings', name: 'project-settings', component: ProjectSettingsView },
@@ -126,6 +126,7 @@ export const routes: RouteRecordRaw[] = [
             path: 'overview',
             name: 'company-overview',
             component: IdentityOverviewView,
+            meta: { onboardingTour: 'company' },
           },
           { path: 'projects', name: 'company-projects', component: () => import('../views/admin/CompanyProjectsView.vue') },
           {
@@ -154,7 +155,7 @@ export const routes: RouteRecordRaw[] = [
         path: 'inbox',
         name: 'inbox',
         component: () => import('../views/inbox/InboxView.vue'),
-        meta: { shellSection: 'inbox' },
+        meta: { shellSection: 'inbox', onboardingTour: 'inbox' },
       },
       {
         path: ':pathMatch(.*)*',

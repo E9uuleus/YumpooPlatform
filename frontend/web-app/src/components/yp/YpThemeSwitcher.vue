@@ -21,7 +21,10 @@ defineEmits<{
     trigger="click"
   >
     <template #reference>
-      <el-button class="yp-theme-trigger">
+      <el-button
+        class="yp-theme-trigger"
+        data-tour="topbar-appearance"
+      >
         <el-icon aria-hidden="true">
           <appearance-icon />
         </el-icon>

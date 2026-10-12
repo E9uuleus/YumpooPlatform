@@ -58,6 +58,7 @@ const total = computed(() => {
       <div
         ref="anchor"
         class="timer-cell"
+        data-tour="work-item-timer"
         role="button"
         tabindex="0"
         aria-label="查看计时日志"

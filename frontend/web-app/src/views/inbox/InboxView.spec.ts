@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NotificationReason, NotificationState, NotificationTargetKind, type ListNotificationsRequest, type NotificationItem } from '@yumpoo/api-client'
 
 const api = vi.hoisted(() => ({ getNotificationUnreadCounts: vi.fn(), listNotifications: vi.fn(), markNotificationRead: vi.fn(), markNotificationUnread: vi.fn(), archiveNotification: vi.fn(), markAllNotificationsRead: vi.fn() }))
+const onboardingReady = vi.hoisted(() => vi.fn())
 vi.mock('../../api/client', () => ({ notificationsApi: api }))
+vi.mock('../../onboarding/useOnboarding', () => ({ usePageOnboarding: () => ({ ready: onboardingReady }) }))
 vi.mock('@yumpoo/api-client', async importOriginal => ({ ...await importOriginal<object>(), readCsrfToken: () => 'csrf' }))
 vi.mock('../../composables/useSession', async () => {
   const { ref } = await import('vue')
@@ -49,6 +51,16 @@ beforeEach(() => {
 afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); activateInbox(false); vi.unstubAllGlobals() })
 
 describe('inbox page', () => {
+  it('waits for a successful inbox response and remains eligible after retry', async () => {
+    api.listNotifications.mockRejectedValue(new Error('offline'))
+    const { wrapper } = await setup()
+    expect(onboardingReady).not.toHaveBeenCalled()
+    api.listNotifications.mockResolvedValue({ items: [], nextCursor: null, serverNow: pageTime })
+    await button(wrapper, '重试').trigger('click')
+    await flushPromises()
+    expect(onboardingReady).toHaveBeenCalledOnce()
+  })
+
   it('maps route filters to list state/group and hides read-all for archives', async () => {
     const { wrapper, router } = await setup('?filter=mention')
     expect(api.listNotifications).toHaveBeenLastCalledWith({ state: 'ALL', group: 'MENTION', limit: 20 })

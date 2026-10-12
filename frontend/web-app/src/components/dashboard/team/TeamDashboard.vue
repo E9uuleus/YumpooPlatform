@@ -11,8 +11,10 @@ const team = useTeamDashboard()
 const { optionsError, timezone, period, timesheet, timesheetLoading, timesheetError, workload, workloadLoading, workloadError, tasks } = team
 const view = ref<TeamView>('TIMESHEET'), timesheetView = ref<InstanceType<typeof TeamTimesheet>>()
 const loading = computed(() => timesheetLoading.value || workloadLoading.value)
+const ready = computed(() => Boolean(team.options.value && timesheet.value && workload.value)
+  && !loading.value && !optionsError.value && !timesheetError.value && !workloadError.value)
 watch(view, () => timesheetView.value?.closePopovers())
-defineExpose({ refresh: team.refresh, loading })
+defineExpose({ refresh: team.refresh, loading, ready })
 </script>
 
 <template>

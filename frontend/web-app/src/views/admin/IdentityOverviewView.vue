@@ -2,18 +2,22 @@
 import { OfficeBuilding } from '@element-plus/icons-vue'
 import type { Company, WeComIntegrationStatus } from '@yumpoo/api-client'
 import { ElAlert, ElIcon, ElSkeleton } from 'element-plus'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { identityAdministrationApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import YpDefinitionList, { type DefinitionItem } from '../../components/yp/YpDefinitionList.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import YpSurface from '../../components/yp/YpSurface.vue'
+import { usePageOnboarding } from '../../onboarding/useOnboarding'
 
 const company = ref<Company>()
 const status = ref<WeComIntegrationStatus>()
 const loading = ref(true)
 const error = ref<ApiProblem>()
+const onboardingReady = computed(() => Boolean(company.value && status.value) && !loading.value && !error.value)
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush: 'post' })
 
 function formatTime(value?: Date | null): string {
   return value ? value.toLocaleString('zh-CN') : '暂无'
@@ -81,6 +85,7 @@ onMounted(load)
     <yp-surface
       v-if="company"
       class="identity-overview__company"
+      data-tour="company-profile"
     >
       <div class="company-identity">
         <span
@@ -103,6 +108,7 @@ onMounted(load)
     <div
       v-if="status"
       class="identity-overview__integrations"
+      data-tour="company-integrations"
     >
       <yp-surface title="企微 Web OAuth">
         <template #actions>

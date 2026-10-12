@@ -22,6 +22,7 @@ import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import YpTabs, { type TabItem } from '../../components/yp/YpTabs.vue'
 import { useProjectRecents, type ProjectRecentSource } from '../../composables/useProjectRecents'
 import { useSession } from '../../composables/useSession'
+import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { formatDateOnly, formatTimestamp } from '../../design-system/dates'
 import { businessLabel } from '../../design-system/labels'
 import type { ActiveFilter } from '../../design-system/types'
@@ -33,6 +34,7 @@ const router = useRouter()
 const session = useSession()
 const result = ref<ProjectPage>()
 const ownerOptions = ref<ProjectOwnerOption[]>([])
+const referenceReady = ref(false)
 const activeView = ref<ProjectCatalogView>('content')
 const catalogTabs: TabItem[] = [
   { value: 'recent', label: '最近', id: 'project-recent-tab', controls: 'project-recent-panel' },
@@ -47,6 +49,9 @@ const page = ref(0)
 const size = ref(20)
 const loading = ref(false)
 const error = ref<ApiProblem>()
+const onboardingReady = computed(() => Boolean(result.value) && referenceReady.value && !loading.value && !error.value)
+const onboarding = usePageOnboarding(() => onboardingReady.value)
+watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush: 'post' })
 const createOpen = ref(false)
 const verifiedRecentIds = ref<Set<string>>(new Set())
 const recentLoading = ref(false)
@@ -137,7 +142,10 @@ async function load(): Promise<void> {
 }
 
 async function loadReferenceData(): Promise<void> {
-  try { ownerOptions.value = await projectsApi.listProjectOwnerOptions() } catch (reason) {
+  try {
+    ownerOptions.value = await projectsApi.listProjectOwnerOptions()
+    referenceReady.value = true
+  } catch (reason) {
     error.value = await toApiProblem(reason)
   }
 }
@@ -199,7 +207,9 @@ function projectCreated(project: Project): void {
   void router.push({ name: 'project-overview', params: { projectId: project.id } })
 }
 
-onMounted(async () => { await Promise.all([load(), loadReferenceData()]) })
+onMounted(async () => {
+  await Promise.all([load(), loadReferenceData()])
+})
 onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTimer) })
 </script>
 
@@ -218,6 +228,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
     <div class="project-list-surface">
       <yp-tabs
         class="project-catalog-tabs"
+        data-tour="project-catalog-tabs"
         label="项目视图"
         :items="catalogTabs"
         :model-value="activeView"
@@ -272,6 +283,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
       </yp-tabs>
 
       <yp-filter-bar
+        data-tour="project-filter"
         :filters="activeFilters"
         :result-count="visibleResultCount"
         :loading="loading"
@@ -367,6 +379,7 @@ onBeforeUnmount(() => { recentRevision++; if (searchTimer) clearTimeout(searchTi
         <template #actions>
           <el-button
             type="primary"
+            data-tour="project-create"
             @click="createOpen = true"
           >
             <el-icon><plus /></el-icon>创建项目

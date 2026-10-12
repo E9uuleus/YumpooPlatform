@@ -2,7 +2,7 @@
 import { DataAnalysis, FolderOpened, Message, OfficeBuilding, Timer, TopRight } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask, type TeamTimesheet } from '@yumpoo/api-client'
 import { ElIcon, ElTooltip } from 'element-plus'
-import { computed, onBeforeUnmount, ref, type Component } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { dashboardsApi, myWorkApi, projectsApi } from '../../api/client'
 import { MY_TIME_VIEW_ID } from '../../components/dashboard/dashboardModel'
@@ -15,12 +15,14 @@ import YpSegmented from '../../components/yp/YpSegmented.vue'
 import { useInbox } from '../../composables/useInbox'
 import { useSession } from '../../composables/useSession'
 import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
+import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, type TaskFilter } from './homeModel'
 
 type JumpTone = 'blue' | 'purple' | 'teal' | 'red' | 'green' | 'amber'
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
 
 const router = useRouter(), session = useSession(), tracker = useTimeTracker(), inbox = useInbox()
+const onboarding = usePageOnboarding()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 // The tracker clock is server-calibrated and ticks every second, so the greeting follows the company time of day.
 const now = computed(() => new Date(tracker.now.value))
@@ -102,6 +104,7 @@ void dashboardsApi.listDashboardProjects({ includeArchived: false, limit: 50 }).
 void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, actorAccesses: MY_PROJECT_ACCESSES, page: 0, size: 1 }).then(page => { projectTotal.value = page.totalElements }, quiet)
 loadMonth()
 onBeforeUnmount(onTimeTrackingChanged(loadMonth))
+onMounted(() => { void onboarding.ready() })
 </script>
 
 <template>
@@ -136,6 +139,7 @@ onBeforeUnmount(onTimeTrackingChanged(loadMonth))
 
     <nav
       class="home-jumps"
+      data-tour="home-jumps"
       aria-label="快捷入口"
     >
       <button
@@ -163,6 +167,7 @@ onBeforeUnmount(onTimeTrackingChanged(loadMonth))
     <div class="home-columns">
       <section
         class="home-panel home-panel--tasks"
+        data-tour="home-tasks"
         aria-labelledby="home-tasks-title"
       >
         <header class="home-panel__head">
@@ -209,6 +214,7 @@ onBeforeUnmount(onTimeTrackingChanged(loadMonth))
       <div class="home-side">
         <section
           class="home-panel home-panel--projects"
+          data-tour="home-projects"
           aria-labelledby="home-projects-title"
         >
           <header class="home-panel__head">
@@ -263,6 +269,7 @@ onBeforeUnmount(onTimeTrackingChanged(loadMonth))
         </section>
         <section
           class="home-panel home-panel--calendar"
+          data-tour="home-calendar"
           aria-labelledby="home-calendar-title"
         >
           <header class="home-panel__head">
