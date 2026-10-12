@@ -1,26 +1,43 @@
 <script setup lang="ts">
-import { OfficeBuilding } from '@element-plus/icons-vue'
-import type { Company, WeComIntegrationStatus } from '@yumpoo/api-client'
+import { AlarmClock, FolderOpened, OfficeBuilding, Refresh, Tickets, User } from '@element-plus/icons-vue'
+import {
+  EmploymentStatus,
+  ProjectLifecycleFilter,
+  type Company,
+  type ScheduledJob,
+  type WeComIntegrationStatus,
+} from '@yumpoo/api-client'
 import { ElAlert, ElIcon, ElSkeleton } from 'element-plus'
-import { computed, onMounted, ref, watch } from 'vue'
-import { identityAdministrationApi } from '../../api/client'
+import { computed, onMounted, ref, watch, type Component } from 'vue'
+import { useRouter } from 'vue-router'
+import { administrationApi, identityAdministrationApi, projectsApi } from '../../api/client'
 import { toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import YpDefinitionList, { type DefinitionItem } from '../../components/yp/YpDefinitionList.vue'
+import YpJumpCard, { type JumpTone } from '../../components/yp/YpJumpCard.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import YpSurface from '../../components/yp/YpSurface.vue'
+import { useSession } from '../../composables/useSession'
+import { formatRelativeTime, formatTimestamp } from '../../design-system/dates'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 
+interface EntryCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; routeName: string }
+
+const router = useRouter(), session = useSession()
+const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const company = ref<Company>()
 const status = ref<WeComIntegrationStatus>()
 const loading = ref(true)
 const error = ref<ApiProblem>()
+const projectTotal = ref<number>()
+const memberTotal = ref<number>()
+const jobs = ref<ScheduledJob[]>()
 const onboardingReady = computed(() => Boolean(company.value && status.value) && !loading.value && !error.value)
 const onboarding = usePageOnboarding(() => onboardingReady.value)
 watch(onboardingReady, ready => { if (ready) void onboarding.ready() }, { flush: 'post' })
 
 function formatTime(value?: Date | null): string {
-  return value ? value.toLocaleString('zh-CN') : '暂无'
+  return value ? formatTimestamp(value, timezone.value) : '暂无'
 }
 
 const companyItems = computed<DefinitionItem[]>(() => company.value
@@ -47,6 +64,30 @@ const directoryItems = computed<DefinitionItem[]>(() => status.value
     ]
   : [])
 
+const syncMeta = computed(() => {
+  const value = status.value
+  if (!value) return '通讯录同步记录'
+  if (!value.directory.enabled) return '通讯录同步未启用'
+  if (value.activeRunId) return '同步进行中'
+  return value.lastSuccessfulRunAt ? `最近成功 ${formatRelativeTime(value.lastSuccessfulRunAt)}` : '尚未成功同步'
+})
+
+const jobMeta = computed(() => {
+  if (!jobs.value) return '定时同步等计划任务'
+  const enabled = jobs.value.filter(job => job.enabled).length
+  return enabled ? `${enabled} 个任务已启用` : '暂无启用的任务'
+})
+
+const entries = computed<EntryCard[]>(() => [
+  { key: 'projects', label: '项目', meta: projectTotal.value === undefined ? '全公司项目总览' : `${projectTotal.value} 个进行中项目`, icon: FolderOpened, tone: 'blue', routeName: 'company-projects' },
+  { key: 'members', label: '成员与角色', meta: memberTotal.value === undefined ? '账号与平台角色' : `${memberTotal.value} 名在职成员`, icon: User, tone: 'teal', routeName: 'company-members' },
+  { key: 'activity', label: '活动日志', meta: '跨项目操作记录与导出', icon: Tickets, tone: 'purple', routeName: 'company-activity' },
+  { key: 'sync', label: '同步运行', meta: syncMeta.value, icon: Refresh, tone: 'green', routeName: 'company-sync-runs' },
+  { key: 'jobs', label: '定时任务', meta: jobMeta.value, icon: AlarmClock, tone: 'amber', routeName: 'company-scheduled-jobs' },
+])
+
+const quiet = () => undefined
+
 async function load(): Promise<void> {
   loading.value = true
   error.value = undefined
@@ -64,7 +105,20 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load)
+// Entry-card counts are decorative; a failure keeps the default meta text instead of blocking the page.
+function loadCounts(): void {
+  void projectsApi.listProjects({ lifecycle: ProjectLifecycleFilter.Active, page: 0, size: 1 })
+    .then(page => { projectTotal.value = page.totalElements }, quiet)
+  void identityAdministrationApi.listMembers({ employmentStatus: EmploymentStatus.Active, page: 0, size: 1 })
+    .then(page => { memberTotal.value = page.totalElements }, quiet)
+  void administrationApi.listScheduledJobs()
+    .then(result => { jobs.value = result.items }, quiet)
+}
+
+onMounted(() => {
+  void load()
+  loadCounts()
+})
 </script>
 
 <template>
@@ -80,11 +134,11 @@ onMounted(load)
   />
   <div
     v-else
-    class="identity-overview"
+    class="company-overview"
   >
     <yp-surface
       v-if="company"
-      class="identity-overview__company"
+      class="company-overview__profile"
       data-tour="company-profile"
     >
       <div class="company-identity">
@@ -105,9 +159,26 @@ onMounted(load)
       />
     </yp-surface>
 
+    <nav
+      class="company-overview__entries"
+      data-tour="company-entries"
+      aria-label="公司管理入口"
+    >
+      <yp-jump-card
+        v-for="(entry, index) in entries"
+        :key="entry.key"
+        :label="entry.label"
+        :meta="entry.meta"
+        :icon="entry.icon"
+        :tone="entry.tone"
+        :index="index"
+        @open="router.push({ name: entry.routeName })"
+      />
+    </nav>
+
     <div
       v-if="status"
-      class="identity-overview__integrations"
+      class="company-overview__integrations"
       data-tour="company-integrations"
     >
       <yp-surface title="企微 Web OAuth">
@@ -154,9 +225,15 @@ onMounted(load)
 </template>
 
 <style scoped>
-.identity-overview {
+.company-overview {
   display: grid;
   gap: var(--yp-space-4);
+}
+
+.company-overview__entries {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--yp-space-3);
 }
 
 .company-identity {
@@ -191,7 +268,7 @@ onMounted(load)
   font: 500 var(--yp-type-section-title-size) / var(--yp-type-section-title-line) var(--yp-font-heading);
 }
 
-.identity-overview__integrations {
+.company-overview__integrations {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
@@ -199,7 +276,7 @@ onMounted(load)
 }
 
 @media (max-width: 960px) {
-  .identity-overview__integrations {
+  .company-overview__integrations {
     grid-template-columns: minmax(0, 1fr);
   }
 }

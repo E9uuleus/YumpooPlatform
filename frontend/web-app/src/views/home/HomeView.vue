@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { DataAnalysis, FolderOpened, Message, OfficeBuilding, Timer, TopRight } from '@element-plus/icons-vue'
+import { DataAnalysis, FolderOpened, Message, OfficeBuilding, Timer } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask, type TeamTimesheet } from '@yumpoo/api-client'
-import { ElIcon, ElTooltip } from 'element-plus'
+import { ElTooltip } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { dashboardsApi, myWorkApi, projectsApi } from '../../api/client'
@@ -11,6 +11,7 @@ import { addDays, buildTimesheet, fromApiDate, projectColors, shortHours, todayI
 import AuroraShapes from '../../components/motion/AuroraShapes.vue'
 import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
 import { workItemLabelColorValue } from '../../components/projects/workItemLabelColors'
+import YpJumpCard, { type JumpTone } from '../../components/yp/YpJumpCard.vue'
 import YpSegmented from '../../components/yp/YpSegmented.vue'
 import { useInbox } from '../../composables/useInbox'
 import { useSession } from '../../composables/useSession'
@@ -18,7 +19,6 @@ import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../com
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, type TaskFilter } from './homeModel'
 
-type JumpTone = 'blue' | 'purple' | 'teal' | 'red' | 'green' | 'amber'
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
 
 const router = useRouter(), session = useSession(), tracker = useTimeTracker(), inbox = useInbox()
@@ -82,11 +82,6 @@ function openTask(task: TeamMemberTask): void {
 function openProject(project: HubProject): void {
   void router.push({ name: 'project-overview', params: { projectId: project.id } })
 }
-function spotlight(event: PointerEvent): void {
-  const card = event.currentTarget as HTMLElement, bounds = card.getBoundingClientRect()
-  card.style.setProperty('--spot-x', `${event.clientX - bounds.left}px`)
-  card.style.setProperty('--spot-y', `${event.clientY - bounds.top}px`)
-}
 const dueLabel = (date: Date) => fromApiDate(date).slice(5).replace('-', '/')
 const statusStyle = (task: TeamMemberTask) => ({ backgroundColor: workItemLabelColorValue(task.statusColor), color: 'var(--yp-text-inverse)' })
 function calendarDuration(ms: number): string {
@@ -142,26 +137,16 @@ onMounted(() => { void onboarding.ready() })
       data-tour="home-jumps"
       aria-label="快捷入口"
     >
-      <button
+      <yp-jump-card
         v-for="(card, index) in jumps"
         :key="card.key"
-        type="button"
-        class="home-jump"
-        :class="`home-jump--${card.tone}`"
-        :style="{ '--i': index }"
-        @pointermove="spotlight"
-        @click="card.open"
-      >
-        <span class="home-jump__icon"><el-icon aria-hidden="true"><component :is="card.icon" /></el-icon></span>
-        <el-icon
-          class="home-jump__arrow"
-          aria-hidden="true"
-        >
-          <TopRight />
-        </el-icon>
-        <strong>{{ card.label }}</strong>
-        <span class="home-jump__meta">{{ card.meta }}</span>
-      </button>
+        :label="card.label"
+        :meta="card.meta"
+        :icon="card.icon"
+        :tone="card.tone"
+        :index="index"
+        @open="card.open"
+      />
     </nav>
 
     <div class="home-columns">
@@ -426,122 +411,6 @@ onMounted(() => { void onboarding.ready() })
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--yp-space-3);
-}
-
-.home-jump {
-  --from: var(--yp-action-primary);
-  --to: var(--yp-label-bright-blue);
-
-  position: relative;
-  display: grid;
-  justify-items: start;
-  gap: 6px;
-  min-width: 0;
-  padding: var(--yp-space-4);
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--yp-border-subtle) 80%, transparent);
-  border-radius: var(--yp-radius-xl);
-  background:
-    radial-gradient(160px circle at var(--spot-x, -200px) var(--spot-y, -200px), color-mix(in srgb, var(--from) 12%, transparent), transparent 70%),
-    color-mix(in srgb, var(--yp-bg-surface) 76%, transparent);
-  box-shadow: var(--yp-shadow-card);
-  color: var(--yp-text-primary);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  backdrop-filter: blur(14px) saturate(1.3);
-  animation: home-rise 320ms var(--yp-ease-standard) backwards;
-  animation-delay: calc(var(--i) * 40ms + 80ms);
-  transition:
-    transform var(--yp-motion-overlay) var(--yp-ease-standard),
-    box-shadow var(--yp-motion-overlay) var(--yp-ease-standard),
-    border-color var(--yp-motion-overlay) var(--yp-ease-standard);
-}
-
-.home-jump:hover {
-  border-color: color-mix(in srgb, var(--from) 35%, var(--yp-border-subtle));
-  box-shadow: var(--yp-shadow-hover);
-  transform: translateY(-2px);
-}
-
-.home-jump:active {
-  transform: scale(0.98);
-}
-
-.home-jump:focus-visible {
-  outline: 2px solid var(--yp-focus-ring);
-  outline-offset: 2px;
-}
-
-.home-jump--purple {
-  --from: var(--yp-label-dark-purple);
-  --to: var(--yp-label-lavender);
-}
-
-.home-jump--teal {
-  --from: var(--yp-status-teal);
-  --to: var(--yp-label-aquamarine);
-}
-
-.home-jump--red {
-  --from: var(--yp-label-red);
-  --to: var(--yp-label-sunset);
-}
-
-.home-jump--green {
-  --from: var(--yp-status-green);
-  --to: var(--yp-label-bright-green);
-}
-
-.home-jump--amber {
-  --from: var(--yp-label-dark-orange);
-  --to: var(--yp-label-egg-yolk);
-}
-
-.home-jump__icon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--from), var(--to));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--yp-status-blue-foreground) 35%, transparent),
-    0 6px 14px -4px color-mix(in srgb, var(--from) 55%, transparent);
-  color: var(--yp-status-blue-foreground);
-  font-size: 18px;
-}
-
-.home-jump__arrow {
-  position: absolute;
-  top: var(--yp-space-4);
-  right: var(--yp-space-4);
-  color: var(--yp-text-muted);
-  opacity: 0;
-  translate: -4px 4px;
-  transition:
-    opacity var(--yp-motion-overlay) var(--yp-ease-standard),
-    translate var(--yp-motion-overlay) var(--yp-ease-standard);
-}
-
-.home-jump:hover .home-jump__arrow,
-.home-jump:focus-visible .home-jump__arrow {
-  opacity: 1;
-  translate: none;
-}
-
-.home-jump strong {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.home-jump__meta {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--yp-space-2);
-  color: var(--yp-text-secondary);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
 }
 
 .home-columns {
@@ -823,15 +692,9 @@ onMounted(() => { void onboarding.ready() })
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-jump,
   .home-panel,
   .home-calendar__day {
     animation: none;
-  }
-
-  .home-jump:hover,
-  .home-jump:active {
-    transform: none;
   }
 }
 

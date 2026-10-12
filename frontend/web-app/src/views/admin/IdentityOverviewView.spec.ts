@@ -5,6 +5,9 @@ import IdentityOverviewView from './IdentityOverviewView.vue'
 const api = vi.hoisted(() => ({
   getCompany: vi.fn(),
   getWeComIntegrationStatus: vi.fn(),
+  listMembers: vi.fn(),
+  listProjects: vi.fn(),
+  listScheduledJobs: vi.fn(),
 }))
 const onboardingReady = vi.hoisted(() => vi.fn())
 vi.mock('../../onboarding/useOnboarding', () => ({ usePageOnboarding: () => ({ ready: onboardingReady }) }))
@@ -12,11 +15,17 @@ enableAutoUnmount(afterEach)
 
 vi.mock('../../api/client', () => ({
   identityAdministrationApi: api,
+  projectsApi: { listProjects: api.listProjects },
+  administrationApi: { listScheduledJobs: api.listScheduledJobs },
 }))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 describe('M1-11 身份管理概览', () => {
   beforeEach(() => {
     onboardingReady.mockClear()
+    api.listMembers.mockResolvedValue({ totalElements: 8, items: [] })
+    api.listProjects.mockResolvedValue({ totalElements: 3, items: [] })
+    api.listScheduledJobs.mockResolvedValue({ items: [] })
     api.getCompany.mockResolvedValue({
       id: '00000000-0000-4000-8000-000000000001',
       displayName: 'Yumpoo 测试公司',
@@ -59,6 +68,8 @@ describe('M1-11 身份管理概览', () => {
     expect(wrapper.find('input[type="password"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('oauth-super-secret')
     expect(onboardingReady).toHaveBeenCalledOnce()
+    expect(wrapper.findAll('.yp-jump-card').map(card => card.find('strong').text()))
+      .toEqual(['项目', '成员与角色', '活动日志', '同步运行', '定时任务'])
   })
 
   it.each(['getCompany', 'getWeComIntegrationStatus'] as const)('does not start onboarding when %s fails', async method => {

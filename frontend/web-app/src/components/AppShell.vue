@@ -116,7 +116,9 @@ const contextItems = computed<ContextItem[]>(() => {
       { label: '概览', routeName: 'company-overview' },
       { label: '项目', routeName: 'company-projects' },
       { label: '成员与角色', routeName: 'company-members' },
+      { label: '活动日志', routeName: 'company-activity' },
       { label: '同步运行', routeName: 'company-sync-runs' },
+      { label: '定时任务', routeName: 'company-scheduled-jobs' },
     ]
   }
   if (isWorkspaceSection.value) {
