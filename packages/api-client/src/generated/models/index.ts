@@ -22,6 +22,8 @@ export * from './AuthenticationClientType';
 export * from './AuthenticationRole';
 export * from './ClientCompatibility';
 export * from './Company';
+export * from './CompanyActivityItem';
+export * from './CompanyActivityPage';
 export * from './ConnectCandidate';
 export * from './ConnectCandidateField';
 export * from './ConnectCandidatePage';

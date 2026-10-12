@@ -15,6 +15,7 @@
 import * as runtime from '../runtime';
 import type {
   ActivityPage,
+  CompanyActivityPage,
   ErrorResponse,
   WorkItemCellActivityColumn,
   WorkItemCellActivityPage,
@@ -23,6 +24,8 @@ import type {
 import {
     ActivityPageFromJSON,
     ActivityPageToJSON,
+    CompanyActivityPageFromJSON,
+    CompanyActivityPageToJSON,
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
     WorkItemCellActivityColumnFromJSON,
@@ -32,6 +35,16 @@ import {
     WorkItemCellActivityTimeRangeFromJSON,
     WorkItemCellActivityTimeRangeToJSON,
 } from '../models/index';
+
+export interface ListCompanyActivityRequest {
+    cursor?: string;
+    size?: number;
+    eventType?: Set<string>;
+    projectId?: Set<string>;
+    actorUserId?: Set<string>;
+    occurredFrom?: Date;
+    occurredTo?: Date;
+}
 
 export interface ListProjectActivityRequest {
     projectId: string;
@@ -66,6 +79,65 @@ export interface ListWorkItemCellActivityRequest {
  *
  */
 export class ActivityApi extends runtime.BaseAPI {
+
+    /**
+     * 仅 COMPANY_ADMIN（含 APP_MANAGER）可读；返回 V44 切点后全部项目动态，项目清除中时 projectName 为 null。游标绑定 Company 与全部筛选。
+     * 公司管理员查询全公司项目动态
+     */
+    async listCompanyActivityRaw(requestParameters: ListCompanyActivityRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CompanyActivityPage>> {
+        const queryParameters: any = {};
+
+        if (requestParameters['cursor'] != null) {
+            queryParameters['cursor'] = requestParameters['cursor'];
+        }
+
+        if (requestParameters['size'] != null) {
+            queryParameters['size'] = requestParameters['size'];
+        }
+
+        if (requestParameters['eventType'] != null) {
+            queryParameters['eventType'] = requestParameters['eventType'];
+        }
+
+        if (requestParameters['projectId'] != null) {
+            queryParameters['projectId'] = requestParameters['projectId'];
+        }
+
+        if (requestParameters['actorUserId'] != null) {
+            queryParameters['actorUserId'] = requestParameters['actorUserId'];
+        }
+
+        if (requestParameters['occurredFrom'] != null) {
+            queryParameters['occurredFrom'] = (requestParameters['occurredFrom'] as any).toISOString();
+        }
+
+        if (requestParameters['occurredTo'] != null) {
+            queryParameters['occurredTo'] = (requestParameters['occurredTo'] as any).toISOString();
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/admin/company/activity`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => CompanyActivityPageFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅 COMPANY_ADMIN（含 APP_MANAGER）可读；返回 V44 切点后全部项目动态，项目清除中时 projectName 为 null。游标绑定 Company 与全部筛选。
+     * 公司管理员查询全公司项目动态
+     */
+    async listCompanyActivity(requestParameters: ListCompanyActivityRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CompanyActivityPage> {
+        const response = await this.listCompanyActivityRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * 仅返回 V44 切点后的白名单事实；每次请求按当前 Project 可见性重新鉴权。

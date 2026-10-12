@@ -14,6 +14,8 @@ public interface ActivityRepository {
     List<ActivityStoredEvent> findWorkItem(UUID companyId, UUID projectId, UUID workItemId,
             Set<String> eventTypes, Set<String> entityTypes, Instant occurredFrom,
             Instant occurredTo, CursorAnchor anchor, int limit);
+    List<ActivityStoredEvent> findCompany(UUID companyId, Set<UUID> projectIds, Set<UUID> actorUserIds,
+            Set<String> eventTypes, Instant occurredFrom, Instant occurredTo, CursorAnchor anchor, int limit);
 
     record CursorAnchor(Instant occurredAt, UUID id) {
     }

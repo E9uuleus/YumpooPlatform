@@ -155,6 +155,29 @@ class ActivityProjectionIT {
                 .query(Long.class).single()).isOne();
     }
 
+    @Test
+    void companyQuerySpansProjectsAndFiltersByProjectAndActor() {
+        Instant from = Instant.parse("2099-01-01T00:00:00Z");
+        UUID projectB = UUID.randomUUID(), user = UUID.randomUUID();
+        ActivityStoredEvent first = new ActivityStoredEvent(UUID.randomUUID(), UUID.randomUUID(),
+                "PROJECT", COMPANY, PROJECT, "PROJECT", PROJECT, "A", "catalog.project_created",
+                "SYSTEM", null, "COMPANY_ACTIVITY_TEST", "系统", from, "PROJECT_CREATED",
+                objectMapper.createObjectNode(), 0, "company-activity-a", "company-activity-a", null, null);
+        ActivityStoredEvent second = new ActivityStoredEvent(UUID.randomUUID(), UUID.randomUUID(),
+                "PROJECT", COMPANY, projectB, "PROJECT", projectB, "B", "catalog.project_created",
+                "USER", user, null, "操作人", from.plusSeconds(1), "PROJECT_CREATED",
+                objectMapper.createObjectNode(), 0, "company-activity-b", "company-activity-b", null, null);
+        repository.append(first);
+        repository.append(second);
+
+        assertThat(repository.findCompany(COMPANY, Set.of(), Set.of(), Set.of(), from, null, null, 10))
+                .extracting(ActivityStoredEvent::scopeId).containsExactly(projectB, PROJECT);
+        assertThat(repository.findCompany(COMPANY, Set.of(PROJECT), Set.of(), Set.of(), from, null, null, 10))
+                .extracting(ActivityStoredEvent::scopeId).containsExactly(PROJECT);
+        assertThat(repository.findCompany(COMPANY, Set.of(), Set.of(user), Set.of(), from, null, null, 10))
+                .extracting(ActivityStoredEvent::scopeId).containsExactly(projectB);
+    }
+
     private DomainEventEnvelope projectCreated(UUID eventId, Instant occurredAt, String code) {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("projectId", PROJECT.toString());

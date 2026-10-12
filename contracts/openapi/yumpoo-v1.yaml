@@ -4898,6 +4898,40 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
 
+  /admin/company/activity:
+    get:
+      tags: [Activity]
+      operationId: listCompanyActivity
+      summary: 公司管理员查询全公司项目动态
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）可读；返回 V44 切点后全部项目动态，项目清除中时 projectName 为 null。游标绑定 Company 与全部筛选。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ActivityCursor'
+        - $ref: '#/components/parameters/ActivitySize'
+        - $ref: '#/components/parameters/ActivityEventType'
+        - name: projectId
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+        - name: actorUserId
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema: { type: array, uniqueItems: true, items: { $ref: '#/components/schemas/Uuid' } }
+        - $ref: '#/components/parameters/ActivityOccurredFrom'
+        - $ref: '#/components/parameters/ActivityOccurredTo'
+      responses:
+        '200':
+          description: 按 occurredAt、id 倒序的全公司项目动态。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/CompanyActivityPage' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
   /admin/operations/overview:
     get:
       tags:
@@ -8412,6 +8446,24 @@ components:
           type: string
           format: date-time
           description: Activity V1 投影开始接收事件的明确切点，更早历史未回填。
+
+    CompanyActivityItem:
+      type: object
+      additionalProperties: false
+      required: [projectId, projectName, activity]
+      properties:
+        projectId: { $ref: '#/components/schemas/Uuid' }
+        projectName: { type: string, nullable: true, description: 项目处于清除流程时为 null。 }
+        activity: { $ref: '#/components/schemas/ActivityItem' }
+
+    CompanyActivityPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, historyStartedAt]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CompanyActivityItem' } }
+        nextCursor: { type: string, minLength: 1, maxLength: 2048, nullable: true }
+        historyStartedAt: { type: string, format: date-time, description: Activity V1 投影开始接收事件的明确切点，更早历史未回填。 }
 
     WorkItemCellActivityColumn:
       type: string
