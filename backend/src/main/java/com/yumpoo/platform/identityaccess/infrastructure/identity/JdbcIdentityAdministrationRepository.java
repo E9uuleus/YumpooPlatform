@@ -82,8 +82,8 @@ public class JdbcIdentityAdministrationRepository implements IdentityAdministrat
 
     private static final String RUN_FILTER = """
             WHERE r.company_id = :companyId
-              AND (:status IS NULL OR r.status = CAST(:status AS varchar))
-              AND (:triggerType IS NULL OR r.trigger_type = CAST(:triggerType AS varchar))
+              AND (CAST(:status AS varchar) IS NULL OR r.status = CAST(:status AS varchar))
+              AND (CAST(:triggerType AS varchar) IS NULL OR r.trigger_type = CAST(:triggerType AS varchar))
             """;
 
     private final JdbcClient jdbcClient;

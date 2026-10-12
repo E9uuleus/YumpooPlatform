@@ -168,6 +168,10 @@ class DirectorySyncRepositoryIT {
                 COMPANY_ID,
                 new DirectoryRunQuery("SUCCEEDED", "SCHEDULED", firstPage)
         );
+        var unfiltered = administrationRepository.findRuns(COMPANY_ID,
+                new DirectoryRunQuery(null, null, firstPage));
+        assertThat(unfiltered.total()).isOne();
+        assertThat(unfiltered.items()).extracting("runId").containsExactly(run.runId());
         jdbcClient.sql("""
                         INSERT INTO yumpoo.directory_sync_item (
                             run_id, external_user_id, profile_hash, user_id,
