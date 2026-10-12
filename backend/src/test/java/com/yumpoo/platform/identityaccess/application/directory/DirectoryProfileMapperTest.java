@@ -32,6 +32,16 @@ class DirectoryProfileMapperTest {
     }
 
     @Test
+    void includesProviderAccountStatusInTheProfileAndFingerprint() {
+        var active = profile(DirectoryOptionalField.unavailable());
+        var disabled = new WeComRawMemberProfile(active.externalUserId(), active.displayName(),
+                active.email(), active.mobile(), active.departmentIds(), true);
+        var mapped = DirectoryProfileMapper.map(disabled, Map.of(3L, "研发部"));
+        assertThat(mapped.accountDisabled()).isTrue();
+        assertThat(mapped.rawProfileHash()).isNotEqualTo(DirectoryCanonicalHash.profile(active, "研发部"));
+    }
+
+    @Test
     void failsWhenDepartmentNameIsOutsideReadableScope() {
         WeComRawMemberProfile raw = new WeComRawMemberProfile(
                 "member-a",

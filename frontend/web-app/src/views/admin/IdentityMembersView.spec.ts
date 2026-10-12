@@ -21,8 +21,11 @@ const api = vi.hoisted(() => ({
   listMembers: vi.fn(), getMember: vi.fn(),
   disableMemberAccount: vi.fn(), enableMemberAccount: vi.fn(), changeMemberPlatformRole: vi.fn(),
 }))
+const route = vi.hoisted(() => ({ fullPath: '/admin/company/members', query: {} as Record<string, string> }))
+const beginAuthentication = vi.hoisted(() => vi.fn())
 
-vi.mock('vue-router', () => ({ useRoute: () => ({ fullPath: '/admin/company/members' }) }))
+vi.mock('vue-router', () => ({ useRoute: () => route }))
+vi.mock('../../auth/navigation', () => ({ beginAuthentication }))
 
 vi.mock('../../api/client', () => ({
   identityAdministrationApi: { listMembers: api.listMembers, getMember: api.getMember },
@@ -67,6 +70,8 @@ describe('成员版本冲突', () => {
       client: { type: AuthenticationClientType.Web, compatibility: ClientCompatibility.Supported },
     } as import('@yumpoo/api-client').CurrentAuthentication
     Object.values(api).forEach(mock => mock.mockReset())
+    beginAuthentication.mockReset()
+    route.query = {}
     vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({
       value: '例行账号治理',
       action: 'confirm',
@@ -93,6 +98,52 @@ describe('成员版本冲突', () => {
     expect(api.getMember).toHaveBeenCalledTimes(2)
     expect(document.body.textContent).toContain('数据已被其他人修改，请复核最新状态。')
     expect(document.body.textContent).toContain('req-version')
+    wrapper.unmount()
+  })
+
+  it.each([true, false])('在成员详情展示账号拒绝原因，仅认证过期 %s 提供重新认证入口', async expired => {
+    const original = member()
+    api.listMembers.mockResolvedValue(page(original))
+    api.getMember.mockResolvedValue(original)
+    api.disableMemberAccount.mockRejectedValue(new ResponseError(new Response(JSON.stringify({
+      code: ErrorCode.AccessDenied, message: expired ? '最近认证已过期，请重新认证后再试' : '无权执行此操作',
+      requestId: 'req-account-denied', retryable: false, fieldErrors: [],
+      details: expired ? { reason: 'RECENT_AUTHENTICATION_REQUIRED' } : {},
+    }), { status: 403 })))
+    const wrapper = mount(IdentityMembersView, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text().includes('详情'))?.trigger('click')
+    await flushPromises()
+    document.querySelector<HTMLButtonElement>('.member-profile__access button')!.click()
+    await flushPromises()
+
+    const detail = document.querySelector('.member-profile')!
+    expect(detail.textContent).toContain('req-account-denied')
+    expect(detail.textContent).toContain(expired ? '最近认证已过期' : '无权执行此操作')
+    const reauthenticate = Array.from(detail.querySelectorAll('button')).find(button => button.textContent?.includes('重新认证并返回'))
+    expect(!!reauthenticate).toBe(expired)
+    if (expired) {
+      reauthenticate!.click()
+      expect(beginAuthentication).toHaveBeenCalledWith(`/admin/company/members?memberId=${original.userId}`)
+    }
+    expect(api.disableMemberAccount).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
+  it('重新认证返回时打开目标成员详情，复核后可以成功停用', async () => {
+    const original = member()
+    route.query = { memberId: original.userId }
+    api.listMembers.mockResolvedValue(page(original))
+    api.getMember.mockResolvedValueOnce(original).mockResolvedValueOnce(member(AccountStatus.Disabled, '"v2"'))
+    api.disableMemberAccount.mockResolvedValue({})
+    const wrapper = mount(IdentityMembersView, { attachTo: document.body })
+    await flushPromises()
+    expect(api.getMember).toHaveBeenCalledWith({ userId: original.userId })
+    expect(api.disableMemberAccount).not.toHaveBeenCalled()
+    document.querySelector<HTMLButtonElement>('.member-profile__access button')!.click()
+    await flushPromises()
+    expect(api.disableMemberAccount).toHaveBeenCalledOnce()
+    expect(document.querySelector('.member-profile__access')!.textContent).toContain('启用账号')
     wrapper.unmount()
   })
   it('仅平台管理员可更改角色，本人行禁止操作，成员显示普通员工', async () => {

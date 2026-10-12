@@ -10,8 +10,15 @@ public record WeComMemberProfile(
         DirectoryOptionalField email,
         DirectoryOptionalField mobile,
         String departmentSummary,
-        ProfileHash rawProfileHash
+        ProfileHash rawProfileHash,
+        boolean accountDisabled
 ) {
+
+    public WeComMemberProfile(String externalUserId, String displayName,
+            DirectoryOptionalField email, DirectoryOptionalField mobile,
+            String departmentSummary, ProfileHash rawProfileHash) {
+        this(externalUserId, displayName, email, mobile, departmentSummary, rawProfileHash, false);
+    }
 
     public WeComMemberProfile {
         externalUserId = normalizeRequired(externalUserId, 256, "externalUserId");

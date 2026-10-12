@@ -120,8 +120,19 @@ public final class RestClientWeComDirectoryProfileGateway
                 displayName,
                 optionalField(response, "email"),
                 optionalField(response, "mobile"),
-                List.copyOf(departmentIds)
+                List.copyOf(departmentIds),
+                accountDisabled(response)
         );
+    }
+
+    private static boolean accountDisabled(Map<String, Object> response) {
+        Object status = response.get("status");
+        if (status == null) return false;
+        return switch (status.toString()) {
+            case "1", "4" -> false;
+            case "2", "5" -> true;
+            default -> throw malformed("DIRECTORY_PROFILE_STATUS_INVALID", DirectorySyncFailureScope.ITEM_ISOLATABLE);
+        };
     }
 
     private Map<String, Object> authorizedGet(String path, String memberId) {

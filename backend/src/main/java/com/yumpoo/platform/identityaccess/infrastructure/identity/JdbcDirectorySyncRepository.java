@@ -3,6 +3,7 @@ package com.yumpoo.platform.identityaccess.infrastructure.identity;
 import com.yumpoo.platform.foundation.application.event.EventActor;
 import com.yumpoo.platform.foundation.application.event.EventDraft;
 import com.yumpoo.platform.foundation.application.event.TransactionalEventPort;
+import com.yumpoo.platform.identityaccess.application.account.DirectoryAccountStatusService;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryCanonicalHash;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryMemberProvisioningResult;
 import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptionalField;
@@ -71,6 +72,7 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
     private final ObjectMapper objectMapper;
     private final Clock clock;
     private final IdentitySecurityAuditRecorder auditRecorder;
+    private final DirectoryAccountStatusService accountStatusService;
 
     public JdbcDirectorySyncRepository(
             JdbcClient jdbcClient,
@@ -79,7 +81,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
             AppManagerAvailabilityCoordinator availabilityCoordinator,
             ObjectMapper objectMapper,
             Clock clock,
-            IdentitySecurityAuditRecorder auditRecorder
+            IdentitySecurityAuditRecorder auditRecorder,
+            DirectoryAccountStatusService accountStatusService
     ) {
         this.jdbcClient = Objects.requireNonNull(jdbcClient, "jdbcClient must not be null");
         this.eventPort = Objects.requireNonNull(eventPort, "eventPort must not be null");
@@ -92,6 +95,7 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder must not be null");
+        this.accountStatusService = accountStatusService;
     }
 
     @Override
@@ -340,6 +344,7 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                             mobile_state = :mobileState,
                             mobile = :mobile,
                             department_summary = :departmentSummary,
+                            account_disabled = :accountDisabled,
                             profile_hash = :profileHash,
                             updated_at = :now
                         WHERE run_id = :runId
@@ -351,6 +356,7 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                 .param("mobileState", profile.mobile().state().name())
                 .param("mobile", profile.mobile().value())
                 .param("departmentSummary", profile.departmentSummary())
+                .param("accountDisabled", profile.accountDisabled())
                 .param("profileHash", profile.rawProfileHash().value())
                 .param("now", databaseNow)
                 .param("runId", runId)
@@ -472,6 +478,7 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                                staging.mobile_state,
                                staging.mobile,
                                staging.department_summary,
+                               staging.account_disabled,
                                staging.profile_hash
                         FROM yumpoo.directory_sync_staging_member staging
                         JOIN yumpoo.directory_sync_item item
@@ -490,7 +497,8 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                         field(resultSet, "email_state", "email"),
                         field(resultSet, "mobile_state", "mobile"),
                         resultSet.getString("department_summary"),
-                        new ProfileHash(resultSet.getString("profile_hash"))
+                        new ProfileHash(resultSet.getString("profile_hash")),
+                        resultSet.getBoolean("account_disabled")
                 ))
                 .list();
     }
@@ -700,6 +708,7 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
             );
         }
         reconcileMissingMembers(runId, current.companyId(), actor, now);
+        disableMissingMembers(runId, current.companyId(), actor);
         availabilityCoordinator.reconcile(
                 availabilityBefore,
                 "EMPLOYMENT_LEFT",
@@ -867,6 +876,31 @@ public class JdbcDirectorySyncRepository implements DirectorySyncRepository {
                     actor
             );
         }
+    }
+
+    private void disableMissingMembers(UUID runId, UUID companyId, EventActor actor) {
+        List<UUID> missing = jdbcClient.sql("""
+                        SELECT identity_user.id
+                        FROM yumpoo.identity_user identity_user
+                        JOIN yumpoo.external_identity external_identity
+                          ON external_identity.user_id = identity_user.id
+                         AND external_identity.company_id = identity_user.company_id
+                        WHERE identity_user.company_id = :companyId
+                          AND identity_user.employment_status = 'LEFT'
+                          AND identity_user.account_status = 'ENABLED'
+                          AND external_identity.provider = 'WECOM'
+                          AND external_identity.provider_employment_status = 'LEFT'
+                          AND NOT EXISTS (
+                              SELECT 1 FROM yumpoo.directory_sync_item item
+                              WHERE item.run_id = :runId AND item.action = 'PROVISION'
+                                AND item.external_user_id = external_identity.external_user_id
+                          )
+                        ORDER BY identity_user.id
+                        """)
+                .param("companyId", companyId).param("runId", runId)
+                .query(UUID.class).list();
+        missing.forEach(userId -> accountStatusService.disable(companyId, userId,
+                DirectoryAccountStatusService.SNAPSHOT_MISSING, actor));
     }
 
     @Override

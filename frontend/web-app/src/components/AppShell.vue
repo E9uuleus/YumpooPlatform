@@ -17,6 +17,7 @@ import { beginAuthentication } from '../auth/navigation'
 import { useAppearance } from '../composables/useAppearance'
 import { useProjectRecents } from '../composables/useProjectRecents'
 import { PROJECT_LIFECYCLE_CHANGED } from '../composables/projectLifecycleEvents'
+import { PROJECT_SETTINGS_CHANGED } from '../composables/projectSettingsEvents'
 import { useSession } from '../composables/useSession'
 import { useInbox, type InboxFilter } from '../composables/useInbox'
 import OnboardingHost from '../onboarding/OnboardingHost.vue'
@@ -249,10 +250,20 @@ watch(
 function lifecycleChanged(): void {
   if (isWorkspaceSection.value) void loadNavigationProjects()
 }
-onMounted(() => window.addEventListener(PROJECT_LIFECYCLE_CHANGED, lifecycleChanged))
+function projectSettingsChanged(event: Event): void {
+  const project = (event as CustomEvent<ProjectSummary>).detail
+  navigationProjects.value = navigationProjects.value.map(item => item.id === project.id ? { ...item, ...project } : item)
+  projectRecents.reconcile([project], [])
+  if (isWorkspaceSection.value) void loadNavigationProjects()
+}
+onMounted(() => {
+  window.addEventListener(PROJECT_LIFECYCLE_CHANGED, lifecycleChanged)
+  window.addEventListener(PROJECT_SETTINGS_CHANGED, projectSettingsChanged)
+})
 onBeforeUnmount(() => {
   if (sidebarSearchTimer) clearTimeout(sidebarSearchTimer)
   window.removeEventListener(PROJECT_LIFECYCLE_CHANGED, lifecycleChanged)
+  window.removeEventListener(PROJECT_SETTINGS_CHANGED, projectSettingsChanged)
 })
 </script>
 

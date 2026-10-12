@@ -55,6 +55,9 @@ public final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             WebRequest request
     ) {
         String requestId = requestId(request);
+        if (request instanceof ServletWebRequest web) {
+            HttpAccessLog.applicationError(web.getRequest(), exception);
+        }
         return response(
                 ApiErrorResponses.from(exception, requestId),
                 ApiErrorStatus.forCode(exception.errorCode()),

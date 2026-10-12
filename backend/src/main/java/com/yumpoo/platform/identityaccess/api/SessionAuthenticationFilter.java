@@ -169,6 +169,7 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         response.resetBuffer();
+        HttpAccessLog.applicationError(request, exception);
         Object requestId = request.getAttribute(RequestIdContext.ATTRIBUTE_NAME);
         errorWriter.write(
                 response,

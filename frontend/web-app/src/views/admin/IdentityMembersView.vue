@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   AccountStatus,
+  ErrorCode,
   EmploymentStatus,
   PlatformRoleTier,
   ManagedPlatformRole,
@@ -123,6 +124,7 @@ async function submitRole(): Promise<void> {
 const result = ref<MemberPage>()
 const loading = ref(false)
 const error = ref<ApiProblem>()
+const accountProblem = ref<ApiProblem>()
 const name = ref('')
 const externalUserId = ref('')
 const employmentStatus = ref<EmploymentStatus>()
@@ -181,6 +183,7 @@ async function load(): Promise<void> {
 
 async function openMember(userId: string): Promise<void> {
   error.value = undefined
+  accountProblem.value = undefined
   try {
     selected.value = await identityAdministrationApi.getMember({ userId })
     drawerOpen.value = true
@@ -233,6 +236,8 @@ function resetAll(): void {
 }
 
 async function changeAccount(member: Member): Promise<void> {
+  if (changingUserId.value) return
+  accountProblem.value = undefined
   const disable = member.accountStatus === AccountStatus.Enabled
   const action = disable ? '停用' : '启用'
   const sessionImpact = disable
@@ -259,7 +264,7 @@ async function changeAccount(member: Member): Promise<void> {
 
   const csrf = readCsrfToken()
   if (!csrf) {
-    error.value = localProblem('缺少 CSRF 凭据，请刷新页面后重试。')
+    accountProblem.value = localProblem('缺少 CSRF 凭据，请刷新页面后重试。')
     return
   }
 
@@ -285,9 +290,8 @@ async function changeAccount(member: Member): Promise<void> {
     const problem = await toApiProblem(failure)
     if (isProblemStatus(problem, 412)) {
       await refreshAfterConflict(member.userId, problem)
-    } else {
-      error.value = problem
     }
+    accountProblem.value = problem
   } finally {
     changingUserId.value = undefined
   }
@@ -303,7 +307,23 @@ async function refreshAfterConflict(userId: string, conflict: ApiProblem): Promi
   }
 }
 
-onMounted(load)
+function needsReauthentication(problem?: ApiProblem): boolean {
+  return problem?.kind === 'response' && problem.status === 403
+    && problem.error.code === ErrorCode.AccessDenied
+    && problem.error.details.reason === 'RECENT_AUTHENTICATION_REQUIRED'
+}
+
+function reauthenticate(member?: Member): void {
+  const target = new URL(route.fullPath, window.location.origin)
+  if (member) target.searchParams.set('memberId', member.userId)
+  beginAuthentication(`${target.pathname}${target.search}${target.hash}`)
+}
+
+onMounted(async () => {
+  await load()
+  const memberId = route.query?.memberId
+  if (typeof memberId === 'string') await openMember(memberId)
+})
 onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
 </script>
 
@@ -650,10 +670,10 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
           :problem="roleProblem"
         />
         <el-button
-          v-if="roleProblem && isProblemStatus(roleProblem, 403)"
-          @click="beginAuthentication(route.fullPath)"
+          v-if="needsReauthentication(roleProblem)"
+          @click="reauthenticate(roleMember)"
         >
-          重新登录
+          重新认证并返回成员详情
         </el-button>
       </div>
       <template #footer>
@@ -723,6 +743,17 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
             </div>
           </div>
         </header>
+
+        <div v-if="accountProblem">
+          <inline-problem :problem="accountProblem" />
+          <el-button
+            v-if="needsReauthentication(accountProblem)"
+            type="primary"
+            @click="reauthenticate(selected)"
+          >
+            重新认证并返回成员详情
+          </el-button>
+        </div>
 
         <section class="member-profile__section">
           <h4>联系方式</h4>

@@ -1,6 +1,7 @@
 package com.yumpoo.platform.foundation.api.web;
 
 import com.yumpoo.platform.foundation.application.logging.LogFields;
+import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.LoggerFactory;
@@ -12,8 +13,15 @@ public final class HttpAccessLog {
     public static final String USER_ID = HttpAccessLog.class.getName() + ".userId";
     public static final String CLIENT_TYPE = HttpAccessLog.class.getName() + ".clientType";
     public static final String ERROR_LOGGED = HttpAccessLog.class.getName() + ".errorLogged";
+    private static final String ERROR_CODE = HttpAccessLog.class.getName() + ".errorCode";
+    private static final String ERROR_REASON = HttpAccessLog.class.getName() + ".errorReason";
 
     private HttpAccessLog() {}
+
+    public static void applicationError(HttpServletRequest request, ApplicationException exception) {
+        request.setAttribute(ERROR_CODE, exception.errorCode().name());
+        request.setAttribute(ERROR_REASON, exception.reason());
+    }
 
     public static String route(HttpServletRequest request) {
         Object route = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
@@ -30,7 +38,7 @@ public final class HttpAccessLog {
             route.equals("/api/v1/admin/operations/logs/tail") ||
             route.equals("/api/v1/admin/operations/alerts/summary");
         Level level =
-            status >= 500 || millis >= 1000
+            status >= 500 || status == 403 || millis >= 1000
                 ? Level.WARN
                 : status >= 400 || !read || (route.startsWith("/api/v1/admin/") && !polling)
                   ? Level.INFO
@@ -53,6 +61,8 @@ public final class HttpAccessLog {
             .addKeyValue(LogFields.DURATION_MS, millis);
         if (request.getAttribute(USER_ID) != null) log.addKeyValue("userId", request.getAttribute(USER_ID));
         if (request.getAttribute(CLIENT_TYPE) != null) log.addKeyValue("clientType", request.getAttribute(CLIENT_TYPE));
+        if (request.getAttribute(ERROR_CODE) != null) log.addKeyValue("errorCode", request.getAttribute(ERROR_CODE));
+        if (request.getAttribute(ERROR_REASON) != null) log.addKeyValue("reason", request.getAttribute(ERROR_REASON));
         log.log();
     }
 }

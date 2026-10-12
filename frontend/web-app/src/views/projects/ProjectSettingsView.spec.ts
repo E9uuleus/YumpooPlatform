@@ -3,6 +3,7 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { ElInput, ElMessageBox } from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ProjectSettingsView from './ProjectSettingsView.vue'
+import { PROJECT_SETTINGS_CHANGED } from '../../composables/projectSettingsEvents'
 
 const api = vi.hoisted(() => ({ getProject: vi.fn(), updateProject: vi.fn(), listConnectColumns: vi.fn() }))
 const guard = vi.hoisted(() => vi.fn())
@@ -47,6 +48,8 @@ describe('项目设置', () => {
     expect(wrapper.get('.project-connections-overview').text()).toContain('实施问题')
   })
   it('发送名称和描述完整快照，并使用当前 ETag', async () => {
+    const changed = vi.fn()
+    window.addEventListener(PROJECT_SETTINGS_CHANGED, changed)
     const wrapper = mount(ProjectSettingsView)
     await flushPromises()
     api.updateProject.mockResolvedValue({ ...project, name: '新名称', rowVersion: 1, etag: '"1"' })
@@ -54,6 +57,9 @@ describe('项目设置', () => {
     await (wrapper.vm as unknown as { save: () => Promise<void> }).save()
     expect(api.updateProject).toHaveBeenCalledWith({ projectId: project.id, xXSRFTOKEN: 'csrf', ifMatch: '"0"', projectUpdateRequest: { name: '新名称', description: null } })
     expect((wrapper.findComponent(ElInput).props('modelValue'))).toBe('新名称')
+    expect(changed).toHaveBeenCalledOnce()
+    expect((changed.mock.calls[0]![0] as CustomEvent<ProjectDetail>).detail).toMatchObject({ id: project.id, name: '新名称', etag: '"1"' })
+    window.removeEventListener(PROJECT_SETTINGS_CHANGED, changed)
   })
   it('412 刷新版本而保留输入，再提交使用最新 ETag', async () => {
     const wrapper = mount(ProjectSettingsView)

@@ -126,6 +126,16 @@ class IdentityOutboxIT {
     }
 
     @Test
+    void directoryAccountDisableUsesTheExistingProjectOwnerGovernanceProjection() {
+        insertProjectWithDisabledOwner();
+        DomainEventEnvelope disabled = append("identity.user_account_disabled", 2, USER_ID, 2);
+        assertThat(dispatcher.dispatchOnce()).isOne();
+        assertThat(row(disabled)).containsEntry("status", "COMPLETED");
+        assertThat(openIssues()).isOne();
+        assertThat(receipts(disabled)).containsExactly("administration-project-owner-governance-v1");
+    }
+
+    @Test
     void startupRecoveryUnblocksTheNextUserVersionAndRunsItsGovernanceProjection() {
         insertProjectWithDisabledOwner();
         DomainEventEnvelope revoked = append("identity.user_sessions_revoked", 2, USER_ID, 1);

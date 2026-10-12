@@ -24,6 +24,7 @@ import ProjectWorkspaceHeader from '../../components/projects/ProjectWorkspaceHe
 import ProjectConnectionsOverview from '../../components/projects/connect/ProjectConnectionsOverview.vue'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import { useSession } from '../../composables/useSession'
+import { notifyProjectSettingsChanged } from '../../composables/projectSettingsEvents'
 import { formatTimestamp } from '../../design-system/dates'
 import { businessLabel } from '../../design-system/labels'
 
@@ -87,6 +88,7 @@ async function save(): Promise<void> {
       projectUpdateRequest: snapshot,
     })
     fill(project.value)
+    notifyProjectSettingsChanged(project.value)
     ElMessage.success('项目设置已保存')
   } catch (reason) {
     const problem = await toApiProblem(reason)

@@ -12,6 +12,7 @@ Status: implemented
 - System Log 使用内部 `userId` UUID 关联请求，允许 `APP_MANAGER` 读取统一映射处理后的异常。堆栈限制长度和帧数，文件及浏览器都不接受原始 Throwable 的无界输出。会话详情在 SQL 中按公司过滤，采样器的跨公司会话端口只返回汇总数量。
 - 凭据、请求正文、SQL 明细、电子邮件、手机号、IP 和文件路径需脱敏；URL 保留端点，移除 userinfo 和查询数据，保留之后的故障原因。pgJDBC 关闭服务器明细输出。三种日志输出共用映射规则，规则预编译，缓冲映射在写锁外执行。
 - 管理读取保留 INFO 访问日志及安全路由；仅 `logs/tail` 与 `alerts/summary` 两个正常轮询请求使用 DEBUG。失败、慢请求不因轮询而降级。规则变更与确认操作使用 CSRF 和安全审计，规则修改另外要求条件版本；不为每次日志读取写数据库审计以免形成反馈循环。
+- 应用层拒绝在同一条访问日志中附带稳定 `errorCode` 和 `reason`，403 使用 WARN，保留 `requestId`、方法及模板路由供运维追踪。界面摘要展示拒绝码与原因；不记录请求正文、人工操作理由或任意异常消息。最近认证过期可通过 `RECENT_AUTHENTICATION_REQUIRED` 定位，数据库安全审计仍独立保存。
 - 文件检索只允许配置的活动文件及规定归档，拒绝任意路径及符号链接，限制扫描预算和并发。无 `fileKey` 的 Windows 文件以创建时间、大小不回退及前缀内容验证快照；滚动或替换使游标结果显式 partial。
 
 行为依据：[访问日志](../../../../backend/src/main/java/com/yumpoo/platform/foundation/api/web/HttpAccessLog.java)、[日志脱敏](../../../../backend/src/main/java/com/yumpoo/platform/foundation/infrastructure/logging/LogSanitizer.java)、[文件检索](../../../../backend/src/main/java/com/yumpoo/platform/foundation/infrastructure/logging/LogQueryAdapter.java)、[会话查询](../../../../backend/src/main/java/com/yumpoo/platform/identityaccess/infrastructure/session/JdbcActiveSessionQueryRepository.java)、[HTTP 集成验证](../../../../backend/src/test/java/com/yumpoo/platform/operations/api/OperationsHttpIT.java)。运行时设计由[架构 Note](../architecture/2026-09-26-operations-center.md)维护。

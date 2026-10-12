@@ -128,6 +128,7 @@ public final class RequestIdFilter extends OncePerRequestFilter {
         String requestId
     ) throws IOException {
         response.reset();
+        HttpAccessLog.applicationError(request, exception);
         preventOperationsCaching(request, response);
         apiErrorWriter.write(response, exception, requestId);
     }

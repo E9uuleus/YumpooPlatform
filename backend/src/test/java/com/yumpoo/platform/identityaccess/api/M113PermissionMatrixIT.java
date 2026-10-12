@@ -179,6 +179,32 @@ class M113PermissionMatrixIT {
     }
 
     @Test
+    void expiredAccountAuthenticationIsActionableTraceableAndSucceedsAfterReauthentication() throws Exception {
+        String from = java.time.Instant.now().toString();
+        jdbcClient.sql("UPDATE yumpoo.login_session SET issued_at = issued_at - interval '16 minutes' WHERE id = :id")
+                .param("id", companyAdmin.session().session().id()).update();
+        String version = etag(target.userId());
+        String path = "/api/v1/admin/members/" + target.userId() + "/account-disable";
+        var rejected = post(path, companyAdmin, "{\"reason\":\"Private account review reason\"}", version);
+        assertThat(rejected.statusCode()).isEqualTo(403);
+        assertThat(rejected.body()).contains("ACCESS_DENIED", "RECENT_AUTHENTICATION_REQUIRED");
+        assertThat(etag(target.userId())).isEqualTo(version);
+        String requestId = rejected.headers().firstValue("X-Request-Id").orElseThrow();
+        org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(5)).untilAsserted(() -> {
+            var logs = get("/api/v1/admin/operations/logs?from=" + from + "&requestId=" + requestId, appManager);
+            assertThat(logs.statusCode()).isEqualTo(200);
+            assertThat(logs.body()).contains("http.request.rejected", "WARN", "ACCESS_DENIED",
+                    "RECENT_AUTHENTICATION_REQUIRED", requestId, "/api/v1/admin/members/{userId}/account-disable");
+            assertThat(logs.body()).doesNotContain("Private account review reason",
+                    companyAdmin.session().sessionCredential().value());
+        });
+        companyAdmin = actor(companyAdmin.userId());
+        var disabled = post(path, companyAdmin, "{\"reason\":\"Confirmed after reauthentication\"}", version);
+        assertThat(disabled.statusCode()).as(disabled.body()).isEqualTo(200);
+        assertThat(get("/api/v1/company", target).statusCode()).isEqualTo(403);
+    }
+
+    @Test
     void dualRoleReceivesTheUnionOfBothCapabilities() throws Exception {
         assertThat(get("/api/v1/admin/members", dualRole).statusCode()).isEqualTo(200);
         assertThat(post(

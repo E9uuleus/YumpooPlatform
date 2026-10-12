@@ -35,6 +35,7 @@ public class JdbcProjectOwnerGovernanceProjection implements OutboxEventConsumer
         return Set.of(new EventSubscription("identity.user_employment_left",1),
                 new EventSubscription("identity.user_employment_returned",1),
                 new EventSubscription("identity.user_account_disabled",1),
+                new EventSubscription("identity.user_account_disabled",2),
                 new EventSubscription("identity.user_account_enabled",1),
                 new EventSubscription("catalog.project_owner_reassigned",1),
                 new EventSubscription("catalog.project_created",2));

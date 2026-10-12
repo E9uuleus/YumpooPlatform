@@ -2570,6 +2570,7 @@ paths:
       tags: [IdentityGovernance]
       operationId: disableMemberAccount
       summary: 禁用成员账号
+      description: 要求 15 分钟内的认证；过期返回 403 ACCESS_DENIED，details.reason 为 RECENT_AUTHENTICATION_REQUIRED，客户端应引导重新认证并复核后提交。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/UserId'
@@ -2594,6 +2595,7 @@ paths:
       tags: [IdentityGovernance]
       operationId: enableMemberAccount
       summary: 启用成员账号
+      description: 要求 15 分钟内的认证；过期返回 403 ACCESS_DENIED，details.reason 为 RECENT_AUTHENTICATION_REQUIRED，客户端应引导重新认证并复核后提交。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/UserId'
@@ -10280,6 +10282,7 @@ components:
             - PROJECT_ARCHIVE_BLOCKED
             - WORKSPACE_ARCHIVE_BLOCKED
             - WORKSPACE_UNCHANGED
+            - RECENT_AUTHENTICATION_REQUIRED
         blockers:
           type: array
           description: 仅包含稳定分类 code 与非负聚合 count，不含对象标识或业务正文。
