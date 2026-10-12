@@ -5,6 +5,7 @@ export type StatusDomain =
   | 'account'
   | 'employment'
   | 'directory-sync'
+  | 'scheduled-job'
   | 'integration'
   | 'operations'
 
@@ -48,6 +49,13 @@ const statusMappings: Record<StatusDomain, Record<string, StatusPresentation>> =
     PARTIALLY_SUCCEEDED: { label: '部分成功', tone: 'yellow' },
     SUCCEEDED: { label: '成功', tone: 'green' },
     FAILED: { label: '失败', tone: 'red' },
+  },
+  'scheduled-job': {
+    RUNNING: { label: '运行中', tone: 'blue' },
+    SUCCEEDED: { label: '成功', tone: 'green' },
+    PARTIAL: { label: '部分成功', tone: 'yellow' },
+    FAILED: { label: '失败', tone: 'red' },
+    SKIPPED: { label: '已跳过', tone: 'gray' },
   },
   integration: {
     ENABLED: { label: '已启用', tone: 'green' },

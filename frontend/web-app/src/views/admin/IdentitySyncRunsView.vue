@@ -18,16 +18,20 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, ref, type DefineComponent } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type DefineComponent } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { identityAdministrationApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
+import { logTraceLocation } from '../../components/operations/operationsPresentation'
 import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpEmptyState from '../../components/yp/YpEmptyState.vue'
 import YpFilterBar from '../../components/yp/YpFilterBar.vue'
 import YpProgress from '../../components/yp/YpProgress.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import { useIdentityAdmin } from '../../composables/useIdentityAdmin'
+import { useSession } from '../../composables/useSession'
+import { formatTimestamp } from '../../design-system/dates'
 import { businessLabel } from '../../design-system/labels'
 import type { ActiveFilter } from '../../design-system/types'
 
@@ -41,11 +45,16 @@ const statusOptions = [
 ]
 
 const { canWrite } = useIdentityAdmin()
+const triggerOptions = [DirectorySyncTriggerType.Manual, DirectorySyncTriggerType.Scheduled]
+const route = useRoute(), router = useRouter(), session = useSession()
+const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const result = ref<DirectorySyncRunPage>()
 const loading = ref(false)
 const error = ref<ApiProblem>()
-const status = ref<DirectorySyncRunStatus>()
-const triggerType = ref<DirectorySyncTriggerType>()
+const routeStatus = () => statusOptions.find(value => value === route.query.status)
+const routeTriggerType = () => triggerOptions.find(value => value === route.query.triggerType)
+const status = ref(routeStatus())
+const triggerType = ref(routeTriggerType())
 const page = ref(0)
 const size = ref(20)
 const selected = ref<DirectorySyncRun>()
@@ -75,7 +84,13 @@ function statusLabel(value: DirectorySyncRunStatus): string {
 }
 
 function formatTime(value?: Date | null): string {
-  return value ? value.toLocaleString('zh-CN') : '—'
+  return value ? formatTimestamp(value, timezone.value) : '—'
+}
+
+function duration(run: DirectorySyncRun): string {
+  if (!run.finishedAt) return '进行中'
+  const seconds = Math.max(0, Math.round((run.finishedAt.getTime() - run.startedAt.getTime()) / 1000))
+  return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`
 }
 
 function progressState(value: DirectorySyncRunStatus): 'default' | 'complete' | 'blocked' {
@@ -154,8 +169,8 @@ async function triggerSync(): Promise<void> {
       xXSRFTOKEN: csrf,
       idempotencyKey: crypto.randomUUID(),
     })
-    await load()
     await openRun(run.runId)
+    await load()
   } catch (reason) {
     const problem = await toApiProblem(reason)
     if (isProblemStatus(problem, 409) && problem.kind === 'response' && problem.location) {
@@ -184,8 +199,22 @@ function syncRunIdFromLocation(location: string): string | undefined {
 
 function applyFilters(): void {
   page.value = 0
+  void router.replace({ query: {
+    ...(status.value ? { status: status.value } : {}),
+    ...(triggerType.value ? { triggerType: triggerType.value } : {}),
+  } })
   void load()
 }
+
+// Same-route navigation (context nav, deep links) reuses this instance, so filters follow the URL.
+watch(() => [route.query.status, route.query.triggerType], () => {
+  if (route.name !== 'company-sync-runs') return
+  if (status.value === routeStatus() && triggerType.value === routeTriggerType()) return
+  status.value = routeStatus()
+  triggerType.value = routeTriggerType()
+  page.value = 0
+  void load()
+})
 
 function removeFilter(key: string): void {
   if (key === 'status') status.value = undefined
@@ -263,7 +292,7 @@ onBeforeUnmount(clearPoll)
 
     <div
       v-if="loading || result?.items.length"
-      class="table-surface table-scroll"
+      class="table-surface table-scroll sync-runs__surface"
     >
       <el-table
         v-loading="loading"
@@ -283,6 +312,23 @@ onBeforeUnmount(clearPoll)
         >
           <template #default="scope">
             {{ businessLabel(scope.row.triggerType) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="触发人"
+          min-width="140"
+        >
+          <template #default="scope">
+            <yp-assignee
+              v-if="scope.row.triggeredByUserId"
+              :user-id="scope.row.triggeredByUserId"
+              :display-name="scope.row.triggeredByDisplayName"
+              size="table"
+            />
+            <span
+              v-else
+              class="muted-text"
+            >系统任务</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -309,6 +355,14 @@ onBeforeUnmount(clearPoll)
           </template>
         </el-table-column>
         <el-table-column
+          label="耗时"
+          width="110"
+        >
+          <template #default="scope">
+            <span class="numeric">{{ duration(scope.row as DirectorySyncRun) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
           prop="errorCode"
           label="错误码"
           min-width="170"
@@ -329,22 +383,22 @@ onBeforeUnmount(clearPoll)
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        v-if="result && result.totalElements > 0"
+        class="page-control sync-runs__pagination"
+        layout="total, sizes, prev, pager, next"
+        :total="result.totalElements"
+        :current-page="page + 1"
+        :page-size="size"
+        :page-sizes="[20, 50, 100]"
+        @update:current-page="value => { page = value - 1; load() }"
+        @update:page-size="value => { size = value; page = 0; load() }"
+      />
     </div>
     <yp-empty-state
       v-else
-      description="暂无通讯录同步运行。"
-    />
-
-    <el-pagination
-      v-if="result && result.totalElements > 0"
-      class="page-control"
-      layout="total, sizes, prev, pager, next"
-      :total="result.totalElements"
-      :current-page="page + 1"
-      :page-size="size"
-      :page-sizes="[20, 50, 100]"
-      @update:current-page="value => { page = value - 1; load() }"
-      @update:page-size="value => { size = value; page = 0; load() }"
+      :reason="status || triggerType ? 'no-results' : 'empty'"
+      :description="status || triggerType ? '没有符合当前条件的同步运行。' : '暂无通讯录同步运行。'"
     />
 
     <el-drawer
@@ -393,6 +447,14 @@ onBeforeUnmount(clearPoll)
           </el-descriptions-item>
           <el-descriptions-item label="requestId">
             <code>{{ selected.requestId }}</code>
+            <el-button
+              v-if="session.isPlatformAdmin.value"
+              link
+              type="primary"
+              @click="router.push(logTraceLocation(selected.requestId, selected.startedAt, selected.finishedAt))"
+            >
+              查看运行日志
+            </el-button>
           </el-descriptions-item>
           <el-descriptions-item
             label="安全摘要"
@@ -448,3 +510,16 @@ onBeforeUnmount(clearPoll)
     </el-drawer>
   </section>
 </template>
+
+<style scoped>
+.sync-runs__surface {
+  border-color: var(--yp-border-subtle);
+  border-radius: var(--yp-radius-md);
+  background: var(--yp-bg-surface);
+}
+
+.sync-runs__pagination {
+  margin: 0;
+  padding: var(--yp-space-3) var(--yp-space-4);
+}
+</style>

@@ -20,6 +20,9 @@ import type {
   GovernanceOverrideRequest,
   GovernanceOverrideResult,
   GovernanceTargetType,
+  ScheduledJob,
+  ScheduledJobList,
+  ScheduledJobUpdateRequest,
 } from '../models/index';
 import {
     ErrorResponseFromJSON,
@@ -34,6 +37,12 @@ import {
     GovernanceOverrideResultToJSON,
     GovernanceTargetTypeFromJSON,
     GovernanceTargetTypeToJSON,
+    ScheduledJobFromJSON,
+    ScheduledJobToJSON,
+    ScheduledJobListFromJSON,
+    ScheduledJobListToJSON,
+    ScheduledJobUpdateRequestFromJSON,
+    ScheduledJobUpdateRequestToJSON,
 } from '../models/index';
 
 export interface CreateGovernanceOverrideRequest {
@@ -50,6 +59,13 @@ export interface ListGovernanceOverridesRequest {
     result?: GovernanceOverrideResult;
     offset?: number;
     size?: number;
+}
+
+export interface UpdateScheduledJobRequest {
+    jobCode: string;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    scheduledJobUpdateRequest: ScheduledJobUpdateRequest;
 }
 
 /**
@@ -181,6 +197,108 @@ export class AdministrationApi extends runtime.BaseAPI {
      */
     async listGovernanceOverrides(requestParameters: ListGovernanceOverridesRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<GovernanceOverridePage> {
         const response = await this.listGovernanceOverridesRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅 COMPANY_ADMIN（含 APP_MANAGER）可读；未保存的任务返回 enabled=false、默认 cron、etag 为 \"0\"。
+     * 查询定时任务配置与最近一次执行
+     */
+    async listScheduledJobsRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ScheduledJobList>> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/admin/scheduled-jobs`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ScheduledJobListFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅 COMPANY_ADMIN（含 APP_MANAGER）可读；未保存的任务返回 enabled=false、默认 cron、etag 为 \"0\"。
+     * 查询定时任务配置与最近一次执行
+     */
+    async listScheduledJobs(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ScheduledJobList> {
+        const response = await this.listScheduledJobsRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 要求会话、XSRF 和最近读取的 If-Match；cron 为 Spring 6 段表达式，按保存时的企业时区解释；停机后最多补跑一次。
+     * 启用、停用或修改定时任务计划
+     */
+    async updateScheduledJobRaw(requestParameters: UpdateScheduledJobRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ScheduledJob>> {
+        if (requestParameters['jobCode'] == null) {
+            throw new runtime.RequiredError(
+                'jobCode',
+                'Required parameter "jobCode" was null or undefined when calling updateScheduledJob().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateScheduledJob().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateScheduledJob().'
+            );
+        }
+
+        if (requestParameters['scheduledJobUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'scheduledJobUpdateRequest',
+                'Required parameter "scheduledJobUpdateRequest" was null or undefined when calling updateScheduledJob().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/admin/scheduled-jobs/{jobCode}`;
+        urlPath = urlPath.replace(`{${"jobCode"}}`, encodeURIComponent(String(requestParameters['jobCode'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PUT',
+            headers: headerParameters,
+            query: queryParameters,
+            body: ScheduledJobUpdateRequestToJSON(requestParameters['scheduledJobUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ScheduledJobFromJSON(jsonValue));
+    }
+
+    /**
+     * 要求会话、XSRF 和最近读取的 If-Match；cron 为 Spring 6 段表达式，按保存时的企业时区解释；停机后最多补跑一次。
+     * 启用、停用或修改定时任务计划
+     */
+    async updateScheduledJob(requestParameters: UpdateScheduledJobRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ScheduledJob> {
+        const response = await this.updateScheduledJobRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

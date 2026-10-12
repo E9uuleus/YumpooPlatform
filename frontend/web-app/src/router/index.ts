@@ -122,23 +122,12 @@ export const routes: RouteRecordRaw[] = [
           ],
         },
         children: [
-          {
-            path: 'overview',
-            name: 'company-overview',
-            component: IdentityOverviewView,
-            meta: { onboardingTour: 'company' },
-          },
+          { path: 'overview', name: 'company-overview', component: IdentityOverviewView, meta: { onboardingTour: 'company' } },
           { path: 'projects', name: 'company-projects', component: () => import('../views/admin/CompanyProjectsView.vue') },
-          {
-            path: 'sync-runs',
-            name: 'company-sync-runs',
-            component: IdentitySyncRunsView,
-          },
-          {
-            path: 'members',
-            name: 'company-members',
-            component: IdentityMembersView,
-          },
+          { path: 'members', name: 'company-members', component: IdentityMembersView },
+          { path: 'activity', name: 'company-activity', component: () => import('../views/admin/CompanyActivityView.vue') },
+          { path: 'sync-runs', name: 'company-sync-runs', component: IdentitySyncRunsView },
+          { path: 'scheduled-jobs', name: 'company-scheduled-jobs', component: () => import('../views/admin/CompanyScheduledJobsView.vue') },
         ],
       },
       {

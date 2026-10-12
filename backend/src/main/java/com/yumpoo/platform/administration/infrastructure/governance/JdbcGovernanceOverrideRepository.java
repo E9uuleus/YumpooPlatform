@@ -19,6 +19,13 @@ import java.util.UUID;
 
 @Repository
 public class JdbcGovernanceOverrideRepository implements GovernanceOverrideRepository {
+    private static final String FILTER = """
+            WHERE company_id = :companyId
+              AND (CAST(:action AS varchar) IS NULL OR action = CAST(:action AS varchar))
+              AND (CAST(:targetType AS varchar) IS NULL OR target_type = CAST(:targetType AS varchar))
+              AND (CAST(:targetId AS uuid) IS NULL OR target_id = CAST(:targetId AS uuid))
+              AND (CAST(:result AS varchar) IS NULL OR result = CAST(:result AS varchar))
+            """;
     private final JdbcClient jdbc;
     private final ObjectMapper objectMapper;
 
@@ -54,13 +61,7 @@ public class JdbcGovernanceOverrideRepository implements GovernanceOverrideRepos
     @Override
     public List<GovernanceOverrideRecord> findAll(UUID companyId, GovernanceOverrideAction action,
             String targetType, UUID targetId, GovernanceOverrideResult result, int offset, int size) {
-        return query("""
-                SELECT * FROM yumpoo.admin_override
-                WHERE company_id = :companyId
-                  AND (:action IS NULL OR action = :action)
-                  AND (:targetType IS NULL OR target_type = :targetType)
-                  AND (:targetId IS NULL OR target_id = :targetId)
-                  AND (:result IS NULL OR result = :result)
+        return query("SELECT * FROM yumpoo.admin_override " + FILTER + """
                 ORDER BY occurred_at DESC, id DESC
                 OFFSET :offset ROWS FETCH NEXT :size ROWS ONLY
                 """, companyId, action, targetType, targetId, result)
@@ -70,14 +71,8 @@ public class JdbcGovernanceOverrideRepository implements GovernanceOverrideRepos
     @Override
     public long count(UUID companyId, GovernanceOverrideAction action, String targetType,
             UUID targetId, GovernanceOverrideResult result) {
-        return query("""
-                SELECT count(*) FROM yumpoo.admin_override
-                WHERE company_id = :companyId
-                  AND (:action IS NULL OR action = :action)
-                  AND (:targetType IS NULL OR target_type = :targetType)
-                  AND (:targetId IS NULL OR target_id = :targetId)
-                  AND (:result IS NULL OR result = :result)
-                """, companyId, action, targetType, targetId, result).query(Long.class).single();
+        return query("SELECT count(*) FROM yumpoo.admin_override " + FILTER,
+                companyId, action, targetType, targetId, result).query(Long.class).single();
     }
 
     private JdbcClient.StatementSpec query(String sql, UUID companyId, GovernanceOverrideAction action,

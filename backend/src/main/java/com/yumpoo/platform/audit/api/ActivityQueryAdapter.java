@@ -13,6 +13,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Component
 public class ActivityQueryAdapter implements ActivityQueryPort {
@@ -33,6 +35,20 @@ public class ActivityQueryAdapter implements ActivityQueryPort {
     public ActivityPage findWorkItem(UUID companyId, UUID projectId, UUID workItemId,
             ActivityQuery query) {
         return page(service.findWorkItem(companyId, projectId, workItemId, criteria(query)));
+    }
+
+    @Override
+    public CompanyActivityPage findCompany(UUID companyId, List<UUID> projectIds, List<UUID> actorUserIds,
+            ActivityQuery query) {
+        ActivityResultPage result = service.findCompany(companyId, ids(projectIds), ids(actorUserIds), criteria(query));
+        return new CompanyActivityPage(result.items().stream()
+                .map(event -> new CompanyActivityItemView(event.scopeId(), item(event))).toList(),
+                result.nextCursor(), result.historyStartedAt());
+    }
+
+    private static Set<UUID> ids(List<UUID> values) {
+        return values == null ? Set.of() : values.stream().filter(Objects::nonNull)
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     private ActivityPage page(ActivityResultPage result) {

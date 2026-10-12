@@ -100,6 +100,21 @@ public class JdbcActivityRepository implements ActivityRepository {
         return statement.query(this::map).list();
     }
 
+    @Override
+    public List<ActivityStoredEvent> findCompany(UUID companyId, Set<UUID> projectIds, Set<UUID> actorUserIds,
+            Set<String> eventTypes, Instant occurredFrom, Instant occurredTo, CursorAnchor anchor, int limit) {
+        String sql = "SELECT * FROM yumpoo.activity_event WHERE company_id = :companyId AND scope_type = 'PROJECT'"
+                + (projectIds.isEmpty() ? "" : " AND scope_id IN (:projectIds)")
+                + (actorUserIds.isEmpty() ? "" : " AND actor_user_id IN (:actorUserIds)")
+                + filters(eventTypes, Set.of(), occurredFrom, occurredTo, anchor)
+                + " ORDER BY occurred_at DESC, id DESC LIMIT :limit";
+        JdbcClient.StatementSpec statement = base(jdbcClient.sql(sql), companyId, eventTypes, Set.of(),
+                occurredFrom, occurredTo, anchor).param("limit", limit);
+        if (!projectIds.isEmpty()) statement = statement.param("projectIds", projectIds);
+        if (!actorUserIds.isEmpty()) statement = statement.param("actorUserIds", actorUserIds);
+        return statement.query(this::map).list();
+    }
+
     private static String filters(Set<String> eventTypes, Set<String> entityTypes,
             Instant from, Instant to, CursorAnchor anchor) {
         StringBuilder sql = new StringBuilder();

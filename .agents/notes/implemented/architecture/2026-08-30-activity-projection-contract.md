@@ -18,6 +18,8 @@ V44 建立 append-only `activity_event` 和单行 `activity_projection_state`。
 
 游标绑定 Company、Project、可选 Work Item 和完整筛选指纹，锚点为 `(occurred_at, id)`；响应不返回总数。当前受众仅为 `PROJECT`；产品事件订阅、渲染和 PRODUCT/FEEDBACK 历史行由[删除产品决定](../product/2026-09-30-remove-product-concept.md)移除，V60 收紧数据库范围约束。
 
+公司级活动查询由 administration 组合 audit 与 catalog 的公开端口，只对 COMPANY_ADMIN（含 APP_MANAGER）开放，不扩大普通项目成员的可见性。查询复用综合投影与摘要渲染，游标 scope 绑定公司、所选项目和操作人，V72 的公司时间游标索引支撑跨项目倒序分页；项目名在读取时由 CompanyProjectQuery 关联，项目清除窗口内允许为空。既有项目和工作项游标指纹保持逐字节兼容。
+
 工作项详情的字段审计使用独立 `WORK_ITEM_CELL_ACTIVITY_V1` 追加投影，不改变上述综合 Activity V1。V46 建立自己的迁移切点和一事件多字段拆行幂等键；V46 已执行后保持冻结，V47 仅以追加迁移移除 facet 索引中的 Content 键。投影只记录创建名称、名称、处理人、状态、优先级和截止日期，明确排除描述、备注、计划日期、排序、删除恢复、讨论、关系、附件和派生更新时间。Content 只保存事件发生时的类别 ID/显示名快照，不作为查询筛选或统计维度，不产生伪造的类别变更，也不引入跨 Content 移动能力。字段值是白名单结构快照：状态/优先级保存代码、显示名和颜色，成员保存 ID 与当时显示名，自然日保存日期文本。
 
 截止日期的自然日与可选时分共用一个 DUE_DATE 字段。fields-changed v2 兼容追加 dueTime / previousDueTime；日期或时分任一变化都只在 changedFields 中出现一次 dueDate，并由生产者保存完整前后快照。专用投影的 DATE 值文本为 `YYYY-MM-DD` 或 `YYYY-MM-DD HH:mm`，不按当前年度缩写历史；清空两者产生一次 REMOVED，移除时分但保留日期仍是一次字段变更。缺少时间字段的旧事件继续按纯日期展示，不回填既有动态，不改变 V46 切点、权限与投影幂等键。
@@ -28,6 +30,8 @@ V44 建立 append-only `activity_event` 和单行 `activity_projection_state`。
 
 ## Alternatives considered
 
+- 复制扁平 ActivityItem 或用 allOf 组合公司级响应：拒绝，`additionalProperties: false` 下 allOf 无法校验；使用 projectId、projectName 与 activity 的组合结构复用既有契约。
+- 公司级查询使用 MemberProjectQuery：拒绝，它要求当前成员身份，不能覆盖公司管理员的全公司项目报告范围；由 administration 组合 CompanyProjectQuery 读取项目名。
 - 把日期和时分拆成两个动态字段：拒绝。它们是同一个截止期限，拆分会使一次编辑产生两条记录，也无法自然表达整体清空；沿用 DUE_DATE 和完整文本快照可兼容旧展示与筛选。
 - 在各业务事务中同步写 Activity：拒绝，因为会复制映射、安全裁剪与幂等逻辑，并让业务模块持有审计读模型。
 - 查询时直接扫描 Outbox：拒绝，因为 Outbox 可清理，载荷不是展示契约，而且会扩大敏感字段和权限侧信道。
@@ -44,3 +48,5 @@ Activity 的历史从 V44 切点开始，产品界面必须持续显示未回填
 工作项详情必须持续展示 V46 的准确切点并区分无历史与筛选无结果。标签或成员后续改名不会重写既有单元格动态；筛选只按企业日历范围、操作成员 ID 和字段列进行。新增工作项字段若要进入详情动态，必须同时补生产者前值、专用投影白名单、结构化值契约、筛选枚举和展示测试，不能默认继承综合 Activity。
 
 本文仅 APP_MANAGER 不获得业务读取权的历史边界由[平台角色层级决策](../security/2026-09-25-platform-role-tiers.md)部分替代：平台管理员现在包含公司管理员的业务可见性；其余投影、附件安全与审计约束保持有效。
+
+公司管理员可跨项目筛选并导出活动；行为人显示名仍取投影快照，项目名取读取时当前值，公司查询继续公开 V44 切点且不回填。

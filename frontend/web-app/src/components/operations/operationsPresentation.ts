@@ -1,3 +1,5 @@
+import type { RouteLocationRaw } from 'vue-router'
+
 export const ruleNames: Record<string, string> = {
   HOST_CPU_HIGH: '系统 CPU 过高',
   JVM_HEAP_HIGH: 'JVM 堆使用率过高',
@@ -95,6 +97,9 @@ export const MODULE_LABELS: Record<string, string> = {
   other: '其他',
 }
 export const EVENT_LABELS: Record<string, string> = {
+  'scheduler.job.completed': '定时任务完成',
+  'scheduler.job.failed': '定时任务失败',
+  'scheduler.job.skipped': '定时任务跳过',
   'http.request.completed': '请求完成',
   'http.request.failed': '请求失败',
   'http.request.rejected': '请求被拒绝',
@@ -146,6 +151,23 @@ export function volumePurpose(value: string): string {
 }
 export function time(value?: Date | null): string {
   return value ? value.toLocaleString('zh-CN', { hour12: false }) : '—'
+}
+
+/**
+ * Pad the request window because runtime-log search defaults to the last 15 minutes.
+ * A finish before the start belongs to an earlier run, so the current one is treated as unfinished.
+ */
+export function logTraceLocation(requestId: string, startedAt: Date, finishedAt?: Date | null): RouteLocationRaw {
+  const pad = 60_000
+  const end = finishedAt && finishedAt >= startedAt ? finishedAt : new Date(startedAt.getTime() + 3_600_000)
+  return {
+    name: 'operations-logs',
+    query: {
+      requestId,
+      from: new Date(startedAt.getTime() - pad).toISOString(),
+      to: new Date(end.getTime() + pad).toISOString(),
+    },
+  }
 }
 export function formatOperationsTimeRange(from: Date, to: Date, utc = false): string {
   if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) return '—'
