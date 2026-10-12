@@ -10,8 +10,14 @@ public record WeComRawMemberProfile(
         String displayName,
         DirectoryOptionalField email,
         DirectoryOptionalField mobile,
-        List<Long> departmentIds
+        List<Long> departmentIds,
+        boolean accountDisabled
 ) {
+
+    public WeComRawMemberProfile(String externalUserId, String displayName,
+            DirectoryOptionalField email, DirectoryOptionalField mobile, List<Long> departmentIds) {
+        this(externalUserId, displayName, email, mobile, departmentIds, false);
+    }
 
     public WeComRawMemberProfile {
         externalUserId = required(externalUserId, 256, "externalUserId");

@@ -203,6 +203,7 @@ export class IdentityGovernanceApi extends runtime.BaseAPI {
     }
 
     /**
+     * 要求 15 分钟内的认证；过期返回 403 ACCESS_DENIED，details.reason 为 RECENT_AUTHENTICATION_REQUIRED，客户端应引导重新认证并复核后提交。
      * 禁用成员账号
      */
     async disableMemberAccountRaw(requestParameters: DisableMemberAccountRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<AccountStatusChangeResult>> {
@@ -275,6 +276,7 @@ export class IdentityGovernanceApi extends runtime.BaseAPI {
     }
 
     /**
+     * 要求 15 分钟内的认证；过期返回 403 ACCESS_DENIED，details.reason 为 RECENT_AUTHENTICATION_REQUIRED，客户端应引导重新认证并复核后提交。
      * 禁用成员账号
      */
     async disableMemberAccount(requestParameters: DisableMemberAccountRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<AccountStatusChangeResult> {
@@ -283,6 +285,7 @@ export class IdentityGovernanceApi extends runtime.BaseAPI {
     }
 
     /**
+     * 要求 15 分钟内的认证；过期返回 403 ACCESS_DENIED，details.reason 为 RECENT_AUTHENTICATION_REQUIRED，客户端应引导重新认证并复核后提交。
      * 启用成员账号
      */
     async enableMemberAccountRaw(requestParameters: EnableMemberAccountRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<AccountStatusChangeResult>> {
@@ -355,6 +358,7 @@ export class IdentityGovernanceApi extends runtime.BaseAPI {
     }
 
     /**
+     * 要求 15 分钟内的认证；过期返回 403 ACCESS_DENIED，details.reason 为 RECENT_AUTHENTICATION_REQUIRED，客户端应引导重新认证并复核后提交。
      * 启用成员账号
      */
     async enableMemberAccount(requestParameters: EnableMemberAccountRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<AccountStatusChangeResult> {

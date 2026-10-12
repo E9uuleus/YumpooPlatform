@@ -42,6 +42,30 @@ public class JdbcAccountStatusRepository implements AccountStatusRepository {
         return changed.getFirst();
     }
 
+    @Override
+    public Optional<AccountStatusSnapshot> disableFromDirectory(
+            java.util.UUID companyId, java.util.UUID userId, String reason, java.time.Instant now) {
+        return jdbcClient.sql("""
+                        UPDATE yumpoo.identity_user
+                        SET account_status = 'DISABLED',
+                            account_disabled_at = :now,
+                            account_disabled_by_user_id = NULL,
+                            account_disabled_reason = :reason,
+                            authorization_version = authorization_version + 1,
+                            row_version = row_version + 1,
+                            updated_at = :now
+                        WHERE id = :userId AND company_id = :companyId
+                          AND account_status = 'ENABLED'
+                        RETURNING %s
+                        """.formatted(RESULT_COLUMNS))
+                .param("companyId", companyId)
+                .param("userId", userId)
+                .param("reason", reason)
+                .param("now", java.time.OffsetDateTime.ofInstant(now, java.time.ZoneOffset.UTC))
+                .query(JdbcAccountStatusRepository::mapSnapshot)
+                .optional();
+    }
+
     private List<AccountStatusSnapshot> disable(AccountStatusChangeCommand command) {
         return jdbcClient.sql("""
                         UPDATE yumpoo.identity_user target

@@ -1,6 +1,7 @@
 package com.yumpoo.platform.identityaccess.application.directory;
 
 import com.yumpoo.platform.foundation.application.event.EventActor;
+import com.yumpoo.platform.identityaccess.application.account.DirectoryAccountStatusService;
 import com.yumpoo.platform.identityaccess.application.authorization.AppManagerAvailabilityCoordinator;
 import com.yumpoo.platform.identityaccess.application.authorization.AvailabilitySnapshot;
 import com.yumpoo.platform.identityaccess.domain.identity.ExternalIdentityProvider;
@@ -21,12 +22,14 @@ public class DirectoryMemberProvisioningService {
     private final DirectoryMemberProvisioningRepository repository;
     private final AppManagerAvailabilityCoordinator availabilityCoordinator;
     private final Clock clock;
+    private final DirectoryAccountStatusService accountStatusService;
 
     public DirectoryMemberProvisioningService(
             CompanyConfigurationQuery companyConfigurationQuery,
             DirectoryMemberProvisioningRepository repository,
             AppManagerAvailabilityCoordinator availabilityCoordinator,
-            Clock clock
+            Clock clock,
+            DirectoryAccountStatusService accountStatusService
     ) {
         this.companyConfigurationQuery = Objects.requireNonNull(
                 companyConfigurationQuery,
@@ -36,6 +39,7 @@ public class DirectoryMemberProvisioningService {
         this.availabilityCoordinator = Objects.requireNonNull(
                 availabilityCoordinator, "availabilityCoordinator must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.accountStatusService = accountStatusService;
     }
 
     @Transactional
@@ -69,6 +73,17 @@ public class DirectoryMemberProvisioningService {
                         repository.create(companyId, profile, now),
                         DirectoryMemberProvisioningOutcome.CREATED
                 ));
+        if (profile.accountDisabled()) {
+            var disabled = accountStatusService.disable(companyId, result.userId(),
+                    DirectoryAccountStatusService.PROVIDER_DISABLED, actor);
+            if (disabled.isPresent()) {
+                var changed = disabled.orElseThrow();
+                result = new DirectoryMemberProvisioningResult(result.userId(), result.externalIdentityId(),
+                        changed.employmentStatus(), changed.accountStatus(), changed.authorizationVersion(),
+                        changed.rowVersion(), result.outcome() == DirectoryMemberProvisioningOutcome.UNCHANGED
+                                ? DirectoryMemberProvisioningOutcome.UPDATED : result.outcome());
+            }
+        }
         availabilityCoordinator.reconcile(
                 availabilityBefore,
                 result.outcome() == DirectoryMemberProvisioningOutcome.RETURNED
@@ -92,7 +107,8 @@ public class DirectoryMemberProvisioningService {
                 resolved(effectiveEmail),
                 resolved(effectiveMobile),
                 profile.departmentSummary(),
-                profile.rawProfileHash()
+                profile.rawProfileHash(),
+                profile.accountDisabled()
         );
         boolean profileChanged = !current.user().displayName().equals(profile.displayName())
                 || !Objects.equals(current.user().email(), effectiveEmail)

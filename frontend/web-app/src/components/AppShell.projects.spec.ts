@@ -15,6 +15,7 @@ import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useSession } from '../composables/useSession'
 import AppShell from './AppShell.vue'
+import { notifyProjectSettingsChanged } from '../composables/projectSettingsEvents'
 
 const route = vi.hoisted(() => ({
   name: 'workspace',
@@ -210,5 +211,26 @@ describe('项目侧栏导航', () => {
     expect(wrapper.findAll('#desktop-project-navigation .project-navigation__project').map(item => item.text()))
       .toEqual(['项目 2'])
     wrapper.unmount()
+  })
+
+  it('设置保存后同步桌面与移动导航，并更新最近项目名称', async () => {
+    const wrapper = mount(AppShell, { attachTo: document.body, global: { stubs: { RouterView: true } } })
+    await flushPromises()
+    await wrapper.get('#desktop-project-navigation .project-navigation__project').trigger('click')
+    await wrapper.get('.mobile-nav-toggle').trigger('click')
+    await flushPromises()
+    const renamed = { ...project(1), name: '保存后的完整名称', description: null, archivedAt: null }
+    api.listProjects.mockResolvedValue({ items: [renamed], page: 0, size: 11, totalElements: 1, totalPages: 1 })
+    notifyProjectSettingsChanged(renamed)
+    await flushPromises()
+
+    expect(wrapper.get('#desktop-project-navigation .project-navigation__project').text()).toBe(renamed.name)
+    expect(document.querySelector('nav[aria-label="移动端当前区域导航"] .project-navigation__project')?.textContent).toContain(renamed.name)
+    const recents = JSON.parse(window.localStorage.getItem('yumpoo.projects.recents.v1.company-1%3Auser-1') ?? '[]')
+    expect(recents).toEqual([expect.objectContaining({ id: renamed.id, name: renamed.name })])
+    wrapper.unmount()
+    const requests = api.listProjects.mock.calls.length
+    notifyProjectSettingsChanged(renamed)
+    expect(api.listProjects).toHaveBeenCalledTimes(requests)
   })
 })

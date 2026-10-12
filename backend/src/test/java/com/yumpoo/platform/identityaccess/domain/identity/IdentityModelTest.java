@@ -142,6 +142,22 @@ class IdentityModelTest {
                 .hasMessageContaining("DISABLED user");
     }
 
+    @Test
+    void directoryDisableAllowsSystemActorButManualDisableStillRequiresAnActor() {
+        for (String reason : java.util.List.of("DIRECTORY_ACCOUNT_DISABLED", "DIRECTORY_SNAPSHOT_MISSING")) {
+            User disabled = new User(UUID.randomUUID(), UUID.randomUUID(), EmploymentStatus.ACTIVE,
+                    AccountStatus.DISABLED, "Alice", null, null, null, NOW, null, null,
+                    NOW, null, reason, 1, 1, NOW, NOW);
+            assertThat(disabled.accountDisabledByUserId()).isNull();
+            assertThat(disabled.accountStatus()).isEqualTo(AccountStatus.DISABLED);
+        }
+        assertThatThrownBy(() -> new User(UUID.randomUUID(), UUID.randomUUID(), EmploymentStatus.ACTIVE,
+                AccountStatus.DISABLED, "Alice", null, null, null, NOW, null, null,
+                NOW, null, "Manual security review", 1, 1, NOW, NOW))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("account-disabled facts");
+    }
+
     private static User activeUser(UUID userId, UUID companyId) {
         return new User(
                 userId,

@@ -16,6 +16,8 @@ Status: implemented
 
 Web 入口更名公司管理，路径 `/admin/company/{overview,members,sync-runs}`；旧 `/admin/identity/*` 链接带 query/hash 重定向。成员列表展示单层级、支持角色筛选和原子变更。
 
+角色与账号启停保留 15 分钟的最近认证要求。认证过期保持 `403 ACCESS_DENIED`，并返回稳定 `details.reason=RECENT_AUTHENTICATION_REQUIRED`。成员详情及角色对话框据此提供重新认证入口，认证完成返回对应成员详情，由管理员复核后重新提交；普通权限不足不伪装成可重新登录解决的问题，也不自动重放账号操作。
+
 ## Alternatives considered
 
 - 保留叠加角色：无法提供单一可理解身份，授予和撤销需要多次请求并暴露中间状态。

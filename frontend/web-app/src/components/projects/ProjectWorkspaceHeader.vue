@@ -309,25 +309,28 @@ watch(projectId, () => { preference.value = undefined })
 
 .project-workspace-header__heading {
   display: flex;
+  flex: 1 1 0%;
   align-items: center;
   gap: var(--yp-space-2);
   min-width: 0;
 }
 
 .project-workspace-header__title {
+  display: flex;
   min-width: 0;
-  margin: 0;
+  max-width: 100%;
+  margin: 0 0 0 calc(0px - var(--yp-space-2));
   font-size: inherit;
 }
 
 .project-workspace-header__title-trigger {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--yp-space-1);
+  width: max-content;
   max-width: 100%;
   min-width: 0;
   height: 40px;
-  margin-left: calc(0px - var(--yp-space-2));
   padding: 0 var(--yp-space-2);
   border: 0;
   border-radius: var(--yp-radius-sm);
@@ -702,6 +705,11 @@ watch(projectId, () => { preference.value = undefined })
   .project-workspace-header__actions {
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+
+  .project-workspace-header__heading {
+    flex: 0 1 auto;
+    width: 100%;
   }
 
   .project-workspace-header__title-trigger {

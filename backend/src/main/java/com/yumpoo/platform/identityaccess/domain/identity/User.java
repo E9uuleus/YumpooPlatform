@@ -55,8 +55,11 @@ public record User(
                 && accountDisabledByUserId == null
                 && accountDisabledReason == null;
         boolean disabledFactsComplete = accountDisabledAt != null
-                && accountDisabledByUserId != null
-                && accountDisabledReason != null;
+                && accountDisabledReason != null
+                && !accountDisabledReason.isBlank()
+                && (accountDisabledByUserId != null
+                    || accountDisabledReason.equals("DIRECTORY_ACCOUNT_DISABLED")
+                    || accountDisabledReason.equals("DIRECTORY_SNAPSHOT_MISSING"));
         if (!disabledFactsAbsent && !disabledFactsComplete) {
             throw new IllegalArgumentException("account-disabled facts must be complete");
         }

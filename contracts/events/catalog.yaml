@@ -84,6 +84,13 @@ events:
       - examples/identity.user-account-disabled-v1.json
     invalidExamples:
       - examples/identity.user-account-disabled-v1.invalid.json
+  - eventType: identity.user_account_disabled
+    eventVersion: 2
+    schema: schemas/identity.user-account-disabled-v2.schema.json
+    validExamples:
+      - examples/identity.user-account-disabled-v2.json
+    invalidExamples:
+      - examples/identity.user-account-disabled-v2.invalid.json
   - eventType: identity.user_account_enabled
     eventVersion: 1
     schema: schemas/identity.user-account-enabled-v1.schema.json

@@ -25,6 +25,16 @@ function entry(time: string, event: string | null = 'http.request.failed'): Oper
 }
 
 describe('运行日志摘要', () => {
+  it('直接展示请求拒绝的错误码与认证原因，并保留请求追踪', () => {
+    const rejected = entry('2026-10-12T12:00:00Z', 'http.request.rejected')
+    rejected.record.requestId = 'req-auth-expired'
+    rejected.record.fields = { method: 'POST', route: '/api/v1/admin/members/{userId}/account-disable',
+      status: 403, errorCode: 'ACCESS_DENIED', reason: 'RECENT_AUTHENTICATION_REQUIRED' }
+    const wrapper = mount(OperationsLogStream, { props: { entries: [rejected] } })
+    expect(wrapper.get('summary').text()).toContain('ACCESS_DENIED / RECENT_AUTHENTICATION_REQUIRED')
+    expect(wrapper.get('.ops-log-detail').text()).toContain('req-auth-expired')
+    wrapper.unmount()
+  })
   it('显示中文事件与模块以及请求方法和安全路由', () => {
     const wrapper = mount(OperationsLogStream, {
       props: { entries: [entry('2026-09-26T23:59:00Z')] },

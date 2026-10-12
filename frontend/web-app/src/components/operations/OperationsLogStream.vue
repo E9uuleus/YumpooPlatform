@@ -89,6 +89,9 @@ async function copy(value: string) {
           v-if="entry.record.fields.method && entry.record.fields.route"
           class="ops-log-route"
         > · {{ entry.record.fields.method }} {{ entry.record.fields.route }}</span><span
+          v-if="entry.record.fields.errorCode"
+          class="ops-log-cause"
+        > · {{ entry.record.fields.errorCode }}<template v-if="entry.record.fields.reason"> / {{ entry.record.fields.reason }}</template></span><span
           v-if="entry.record.error"
           class="ops-log-cause"
         > · {{ entry.record.error.msg }}</span></span>

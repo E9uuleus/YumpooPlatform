@@ -449,7 +449,7 @@ public class PlatformRoleManagementService
         if (actor.authenticatedAt().isBefore(now.minus(RECENT_AUTHENTICATION_WINDOW))
                 || actor.authenticatedAt().isAfter(now)) {
             throw new ApplicationException(StandardErrorCode.ACCESS_DENIED,
-                    "最近认证已过期，请重新登录后再试");
+                    "最近认证已过期，请重新认证后再试", java.util.List.of(), "RECENT_AUTHENTICATION_REQUIRED");
         }
         RoleUserSnapshot user = repository.lockUser(companyId, actor.userId())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.ACCESS_DENIED));

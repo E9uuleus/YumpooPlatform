@@ -4,6 +4,9 @@ import com.yumpoo.platform.identityaccess.application.directory.DirectoryOptiona
 import com.yumpoo.platform.identityaccess.application.directory.DirectorySyncException;
 import com.yumpoo.platform.identityaccess.application.directory.WeComRawMemberProfile;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -24,6 +27,32 @@ class RestClientWeComDirectoryProfileGatewayTest {
     private static final String BASE = "https://qyapi.weixin.qq.com";
     private static final String CORP_ID = "ww-profile-test";
     private static final String PROFILE_SECRET = "profile-secret";
+
+    @ParameterizedTest
+    @CsvSource({"1,false", "2,true", "4,false", "5,true", "null,false"})
+    void mapsProviderDisabledAndDepartedStatusesWithoutDisablingUnactivatedMembers(String status, boolean disabled) {
+        Fixture fixture = fixture();
+        expectToken(fixture.server(), "token-a");
+        expectMember(fixture.server(), "token-a", """
+                {"errcode":0,"userid":"member-a","name":"Alice","department":[3],"status":%s}
+                """.formatted(status));
+        assertThat(fixture.gateway().fetchMemberProfile("member-a").accountDisabled()).isEqualTo(disabled);
+        fixture.server().verify();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "3", "2.5", "true", "{}"})
+    void rejectsMalformedStatusesInsteadOfTreatingThemAsEnabled(String status) {
+        Fixture fixture = fixture();
+        expectToken(fixture.server(), "token-a");
+        expectMember(fixture.server(), "token-a", """
+                {"errcode":0,"userid":"member-a","name":"Alice","department":[3],"status":%s}
+                """.formatted(status));
+        assertThatThrownBy(() -> fixture.gateway().fetchMemberProfile("member-a"))
+                .isInstanceOfSatisfying(DirectorySyncException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo("DIRECTORY_PROFILE_STATUS_INVALID"));
+        fixture.server().verify();
+    }
 
     @Test
     void readsDepartmentAndMemberWithOneProfileTokenAndPreservesVisibilityStates() {

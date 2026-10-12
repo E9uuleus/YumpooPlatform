@@ -1,0 +1,21 @@
+{
+  "eventId": "00000000-0000-4000-8000-000000000721",
+  "eventType": "identity.user_account_disabled",
+  "eventVersion": 2,
+  "occurredAt": "2026-10-12T12:00:00Z",
+  "aggregateType": "User",
+  "aggregateId": "00000000-0000-4000-8000-000000000722",
+  "aggregateVersion": 3,
+  "companyId": "00000000-0000-4000-8000-000000000723",
+  "actor": { "type": "SYSTEM", "systemCode": "WECOM_DIRECTORY_SYNC" },
+  "requestId": "directory-account-disabled",
+  "correlationId": "directory-account-disabled",
+  "causationId": null,
+  "payload": {
+    "userId": "00000000-0000-4000-8000-000000000722",
+    "fromStatus": "ENABLED",
+    "toStatus": "DISABLED",
+    "reasonCode": "DIRECTORY_ACCOUNT_DISABLED",
+    "authorizationVersion": 2
+  }
+}

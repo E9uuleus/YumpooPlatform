@@ -42,7 +42,8 @@ public final class DirectoryProfileMapper {
                 raw.email(),
                 raw.mobile(),
                 summary,
-                DirectoryCanonicalHash.profile(raw, summary)
+                DirectoryCanonicalHash.profile(raw, summary),
+                raw.accountDisabled()
         );
     }
 }

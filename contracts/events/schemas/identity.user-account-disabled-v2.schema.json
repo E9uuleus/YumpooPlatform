@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://contracts.yumpoo.local/events/identity.user-account-disabled-v2.schema.json",
+  "title": "User account disabled by directory synchronization",
+  "allOf": [
+    { "$ref": "event-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.user_account_disabled" },
+        "eventVersion": { "const": 2 },
+        "aggregateType": { "const": "User" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["userId", "fromStatus", "toStatus", "reasonCode", "authorizationVersion"],
+          "properties": {
+            "userId": { "type": "string", "format": "uuid" },
+            "fromStatus": { "const": "ENABLED" },
+            "toStatus": { "const": "DISABLED" },
+            "reasonCode": { "enum": ["DIRECTORY_ACCOUNT_DISABLED", "DIRECTORY_SNAPSHOT_MISSING"] },
+            "authorizationVersion": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    }
+  ]
+}

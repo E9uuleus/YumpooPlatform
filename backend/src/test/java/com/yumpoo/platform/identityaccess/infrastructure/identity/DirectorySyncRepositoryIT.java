@@ -80,6 +80,7 @@ class DirectorySyncRepositoryIT {
                         WHERE event_type LIKE 'identity.directory_sync_%'
                            OR event_type LIKE 'identity.user_employment_%'
                            OR event_type = 'identity.user_sessions_revoked'
+                           OR event_type = 'identity.user_account_disabled'
                         """)
                 .update();
         jdbcClient.sql("DELETE FROM yumpoo.directory_sync_run").update();
@@ -327,7 +328,7 @@ class DirectorySyncRepositoryIT {
 
         assertThat(left.counts().left()).isOne();
         assertThat(memberState("member-b"))
-                .isEqualTo("LEFT|LEFT|ENABLED|1|DIRECTORY_SNAPSHOT_MISSING");
+                .isEqualTo("LEFT|LEFT|DISABLED|2|DIRECTORY_SNAPSHOT_MISSING");
         assertThatThrownBy(() -> sessionService.authenticate(bobSession.sessionCredential()))
                 .isInstanceOfSatisfying(ApplicationException.class, exception ->
                         assertThat(exception.errorCode())
@@ -360,7 +361,7 @@ class DirectorySyncRepositoryIT {
         assertThat(returned.counts().returned()).isOne();
         assertThat(userId("member-b")).isEqualTo(bobUserId);
         assertThat(memberState("member-b"))
-                .isEqualTo("ACTIVE|ACTIVE|ENABLED|2|DIRECTORY_SNAPSHOT_MISSING");
+                .isEqualTo("ACTIVE|ACTIVE|DISABLED|3|DIRECTORY_SNAPSHOT_MISSING");
         assertThatThrownBy(() -> sessionService.authenticate(bobSession.sessionCredential()))
                 .isInstanceOfSatisfying(ApplicationException.class, exception ->
                         assertThat(exception.errorCode())
@@ -383,6 +384,79 @@ class DirectorySyncRepositoryIT {
                 .param("userId", bobUserId)
                 .query(Integer.class)
                 .single()).isOne();
+    }
+
+    @Test
+    void providerDisableRevokesSessionsAndIsIdempotentWithoutAutomaticallyReenablingAccounts() {
+        var alice = profile("member-a", "Alice", "a");
+        var bob = profile("member-b", "Bob", "b");
+        executeProfiles("provider-baseline", List.of(alice, bob));
+        UUID userId = userId("member-b");
+        var session = sessionService.issueWebSession(userId, "directory-account-test");
+        var disabled = new WeComMemberProfile(bob.externalUserId(), bob.displayName(), bob.email(), bob.mobile(),
+                bob.departmentSummary(), bob.rawProfileHash(), true);
+        var newDisabled = new WeComMemberProfile("member-c", "Disabled New Member", alice.email(), alice.mobile(),
+                alice.departmentSummary(), new ProfileHash("c".repeat(64)), true);
+
+        var first = executeProfiles("provider-disabled", List.of(alice, disabled, newDisabled));
+        assertThat(first.counts().updated()).isOne();
+        assertThat(first.counts().created()).isOne();
+        assertThat(memberState("member-b")).isEqualTo("ACTIVE|ACTIVE|DISABLED|1|");
+        assertThat(memberState("member-c")).isEqualTo("ACTIVE|ACTIVE|DISABLED|1|");
+        assertThat(jdbcClient.sql("SELECT status || '|' || revoke_reason FROM yumpoo.login_session WHERE id = :id")
+                .param("id", session.session().id()).query(String.class).single()).isEqualTo("REVOKED|ACCOUNT_DISABLED");
+        assertThatThrownBy(() -> sessionService.authenticate(session.sessionCredential()))
+                .isInstanceOfSatisfying(ApplicationException.class,
+                        error -> assertThat(error.errorCode()).isEqualTo(StandardErrorCode.ACCOUNT_DISABLED));
+
+        executeProfiles("provider-disabled-repeat", List.of(alice, disabled, newDisabled));
+        executeProfiles("provider-restored", List.of(alice, bob, newDisabled));
+        assertThat(memberState("member-b")).isEqualTo("ACTIVE|ACTIVE|DISABLED|1|");
+        assertThat(jdbcClient.sql("""
+                        SELECT count(*) FROM yumpoo.outbox_event
+                        WHERE aggregate_id = :id AND event_type = 'identity.user_account_disabled'
+                          AND event_version = 2 AND payload_json ->> 'reasonCode' = 'DIRECTORY_ACCOUNT_DISABLED'
+                        """).param("id", userId).query(Integer.class).single()).isOne();
+        assertThat(jdbcClient.sql("""
+                        SELECT count(*) FROM yumpoo.security_audit_event
+                        WHERE target_id = :id AND action = 'ACCOUNT_DISABLED'
+                        """).param("id", userId.toString()).query(Integer.class).single()).isOne();
+        assertThat(jdbcClient.sql("SELECT account_disabled_by_user_id FROM yumpoo.identity_user WHERE id = :id")
+                .param("id", userId).query().singleRow().get("account_disabled_by_user_id")).isNull();
+    }
+
+    @Test
+    void successfulScanAlsoDisablesPreviouslyLeftMembersWithoutChangingManualDisableFacts() {
+        var alice = profile("member-a", "Alice", "a");
+        var bob = profile("member-b", "Bob", "b");
+        var carol = profile("member-c", "Carol", "c");
+        executeProfiles("legacy-left-baseline", List.of(alice, bob, carol));
+        UUID bobId = userId("member-b");
+        UUID carolId = userId("member-c");
+        jdbcClient.sql("""
+                        UPDATE yumpoo.identity_user SET employment_status = 'LEFT',
+                            left_at = transaction_timestamp(), left_reason = 'DIRECTORY_SNAPSHOT_MISSING',
+                            authorization_version = authorization_version + 1, row_version = row_version + 1,
+                            updated_at = transaction_timestamp() WHERE id IN (:bob, :carol)
+                        """).param("bob", bobId).param("carol", carolId).update();
+        jdbcClient.sql("""
+                        UPDATE yumpoo.external_identity SET provider_employment_status = 'LEFT',
+                            updated_at = transaction_timestamp() WHERE user_id IN (:bob, :carol)
+                        """).param("bob", bobId).param("carol", carolId).update();
+        jdbcClient.sql("""
+                        UPDATE yumpoo.identity_user SET account_status = 'DISABLED',
+                            account_disabled_at = transaction_timestamp(), account_disabled_by_user_id = id,
+                            account_disabled_reason = 'Manual security review', updated_at = transaction_timestamp()
+                        WHERE id = :id
+                        """).param("id", carolId).update();
+
+        var completed = executeProfiles("legacy-left-repair", List.of(alice));
+        assertThat(completed.counts().left()).isZero();
+        assertThat(memberState("member-b")).isEqualTo("LEFT|LEFT|DISABLED|2|DIRECTORY_SNAPSHOT_MISSING");
+        assertThat(jdbcClient.sql("SELECT account_disabled_reason FROM yumpoo.identity_user WHERE id = :id")
+                .param("id", carolId).query(String.class).single()).isEqualTo("Manual security review");
+        executeProfiles("legacy-left-repeat", List.of(alice));
+        assertThat(memberState("member-b")).isEqualTo("LEFT|LEFT|DISABLED|2|DIRECTORY_SNAPSHOT_MISSING");
     }
 
     @Test
@@ -421,7 +495,7 @@ class DirectorySyncRepositoryIT {
             assertThat(partial.status()).isEqualTo(DirectorySyncRunStatus.PARTIALLY_SUCCEEDED);
             assertThat(partial.counts().failed()).isOne();
             assertThat(partial.counts().left()).isZero();
-            assertThat(memberState("member-b")).startsWith("ACTIVE|ACTIVE|");
+            assertThat(memberState("member-b")).startsWith("ACTIVE|ACTIVE|ENABLED|");
             assertThat(count("directory_sync_staging_member")).isZero();
         }
     }
@@ -462,7 +536,9 @@ class DirectorySyncRepositoryIT {
                     LEASE
             ));
             repository.beginApplying(runId, leaseToken, LEASE);
-            profiles.forEach(profile -> itemApplyService.apply(
+            var staged = repository.stagedProfiles(runId, leaseToken);
+            assertThat(staged).containsExactlyInAnyOrderElementsOf(profiles);
+            staged.forEach(profile -> itemApplyService.apply(
                     runId,
                     leaseToken,
                     profile,
