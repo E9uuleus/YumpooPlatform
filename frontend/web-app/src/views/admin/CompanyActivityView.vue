@@ -183,11 +183,14 @@ function openProject(item: CompanyActivityItem): void {
 async function exportExcel(): Promise<void> {
   if (exporting.value) return
   exporting.value = true
+  // Snapshot the filters: the cursor is bound to them, and they may change while pages load.
+  const query = criteria()
+  const filterSummary = activeFilters.value.map(filter => filter.valueLabel).join('；') || '全部'
   try {
     const rows: CompanyActivityItem[] = []
     let cursor: string | null = null
     do {
-      const page = await activityApi.listCompanyActivity({ ...criteria(), size: EXPORT_PAGE_SIZE, ...(cursor ? { cursor } : {}) })
+      const page = await activityApi.listCompanyActivity({ ...query, size: EXPORT_PAGE_SIZE, ...(cursor ? { cursor } : {}) })
       rows.push(...page.items)
       cursor = page.nextCursor
     } while (cursor && rows.length < COMPANY_ACTIVITY_EXPORT_LIMIT)
@@ -203,7 +206,7 @@ async function exportExcel(): Promise<void> {
         entityRef: item.activity.entityRef ?? '',
       })),
       timezone: timezone.value,
-      filterSummary: activeFilters.value.map(filter => filter.valueLabel).join('；') || '全部',
+      filterSummary,
       exportedAt: formatTimestamp(new Date(), timezone.value),
       truncated,
     })

@@ -18,7 +18,7 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, ref, type DefineComponent } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch, type DefineComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { identityAdministrationApi } from '../../api/client'
 import { isProblemStatus, localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
@@ -51,8 +51,10 @@ const timezone = computed(() => session.authentication.value?.company.timezone ?
 const result = ref<DirectorySyncRunPage>()
 const loading = ref(false)
 const error = ref<ApiProblem>()
-const status = ref(statusOptions.find(value => value === route.query.status))
-const triggerType = ref(triggerOptions.find(value => value === route.query.triggerType))
+const routeStatus = () => statusOptions.find(value => value === route.query.status)
+const routeTriggerType = () => triggerOptions.find(value => value === route.query.triggerType)
+const status = ref(routeStatus())
+const triggerType = ref(routeTriggerType())
 const page = ref(0)
 const size = ref(20)
 const selected = ref<DirectorySyncRun>()
@@ -203,6 +205,16 @@ function applyFilters(): void {
   } })
   void load()
 }
+
+// Same-route navigation (context nav, deep links) reuses this instance, so filters follow the URL.
+watch(() => [route.query.status, route.query.triggerType], () => {
+  if (route.name !== 'company-sync-runs') return
+  if (status.value === routeStatus() && triggerType.value === routeTriggerType()) return
+  status.value = routeStatus()
+  triggerType.value = routeTriggerType()
+  page.value = 0
+  void load()
+})
 
 function removeFilter(key: string): void {
   if (key === 'status') status.value = undefined

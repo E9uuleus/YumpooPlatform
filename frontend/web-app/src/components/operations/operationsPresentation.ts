@@ -153,10 +153,13 @@ export function time(value?: Date | null): string {
   return value ? value.toLocaleString('zh-CN', { hour12: false }) : '—'
 }
 
-/** Pad the request window because runtime-log search defaults to the last 15 minutes. */
+/**
+ * Pad the request window because runtime-log search defaults to the last 15 minutes.
+ * A finish before the start belongs to an earlier run, so the current one is treated as unfinished.
+ */
 export function logTraceLocation(requestId: string, startedAt: Date, finishedAt?: Date | null): RouteLocationRaw {
   const pad = 60_000
-  const end = finishedAt ?? new Date(startedAt.getTime() + 3_600_000)
+  const end = finishedAt && finishedAt >= startedAt ? finishedAt : new Date(startedAt.getTime() + 3_600_000)
   return {
     name: 'operations-logs',
     query: {
