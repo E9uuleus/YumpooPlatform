@@ -257,6 +257,11 @@
   background-color: color-mix(in srgb, var(--yp-bg-surface) 78%, transparent);
 }
 
+/* 加载中表格数据为空数组，空状态文案会透过半透明遮罩与加载文案重叠。 */
+.el-table:has(> .el-loading-mask:not(.el-loading-fade-leave-active)) .el-table__empty-text {
+  visibility: hidden;
+}
+
 .el-message {
   background: var(--yp-bg-raised);
   border-color: var(--yp-border-default);

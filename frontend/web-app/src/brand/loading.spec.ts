@@ -1,6 +1,9 @@
 import { mount } from '@vue/test-utils'
 import { defineComponent, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import logo from '../assets/brand/logo.svg?raw'
+import textureUrl from '../assets/brand/logo-texture.png'
+import textureInline from '../assets/brand/logo-texture.png?inline'
 import { vBrandLoading } from './loading'
 
 describe('品牌加载指令', () => {
@@ -26,6 +29,8 @@ describe('品牌加载指令', () => {
       expect(pieces).toEqual(['yp-loader-cloud', 'yp-loader-left-body', 'yp-loader-left-head',
         'yp-loader-center-body', 'yp-loader-center-head', 'yp-loader-right-body', 'yp-loader-right-head'])
       expect(mask.querySelectorAll('clipPath path')).toHaveLength(7)
+      expect(mask.querySelector('image')?.getAttribute('href')).toBe(textureUrl)
+      expect(mask.innerHTML).not.toContain('data:')
       const references = Array.from(mask.querySelectorAll('use, [clip-path], [fill^="url"]'), element =>
         (element.getAttribute('href') ?? element.getAttribute('clip-path') ?? element.getAttribute('fill'))!.replace(/^url\(|\)$/gu, '').slice(1))
       expect(references.every(id => mask.querySelector(`[id="${id}"]`))).toBe(true)
@@ -42,5 +47,9 @@ describe('品牌加载指令', () => {
     wrapper.unmount()
     await vi.advanceTimersByTimeAsync(500)
     expect(document.querySelectorAll('.el-loading-mask')).toHaveLength(0)
+  })
+
+  it('加载纹理与品牌 Logo 内嵌纹理保持一致', () => {
+    expect(logo).toContain(`href="${textureInline}"`)
   })
 })
