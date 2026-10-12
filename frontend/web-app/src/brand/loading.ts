@@ -1,6 +1,7 @@
 import { ElLoading } from 'element-plus'
 import type { ObjectDirective } from 'vue'
 import logo from '../assets/brand/logo.svg?raw'
+import textureUrl from '../assets/brand/logo-texture.png'
 import './loading.css'
 
 const loading = ElLoading.directive as ObjectDirective<HTMLElement, boolean>
@@ -9,7 +10,8 @@ let nextId = 0
 
 // 头、身体拆成独立切片，才能分别做弹跳和落地形变；品牌资产本身保持不变。
 const logoMarkup = (() => {
-  const texture = logo.match(/<image\b[^>]*\/>/u)?.[0] ?? ''
+  // 内联 SVG 受页面 CSP 约束，生产 default-src 'self' 会拦截 data: 纹理，改用同源静态资源。
+  const texture = (logo.match(/<image\b[^>]*\/>/u)?.[0] ?? '').replace(/href="[^"]*"/u, `href="${textureUrl}"`)
   const shapes = new Map(Array.from(logo.matchAll(/<clipPath id="yp-brand-(\w+)">([\s\S]*?)<\/clipPath>/gu),
     ([, name, body]) => [name, Array.from((body ?? '').matchAll(/<path\b[^>]*\/>/gu), ([path]) => path)]))
   const pieces: Array<[string, string | undefined]> = [['cloud', shapes.get('cloud')?.[0]]]
