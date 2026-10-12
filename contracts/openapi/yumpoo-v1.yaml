@@ -3006,6 +3006,50 @@ paths:
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /admin/scheduled-jobs:
+    get:
+      tags: [Administration]
+      operationId: listScheduledJobs
+      summary: 查询定时任务配置与最近一次执行
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）可读；未保存的任务返回 enabled=false、默认 cron、etag 为 "0"。
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 已注册定时任务。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ScheduledJobList' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/scheduled-jobs/{jobCode}:
+    put:
+      tags: [Administration]
+      operationId: updateScheduledJob
+      summary: 启用、停用或修改定时任务计划
+      description: 要求会话、XSRF 和最近读取的 If-Match；cron 为 Spring 6 段表达式，按保存时的企业时区解释；停机后最多补跑一次。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: jobCode, in: path, required: true, schema: { type: string, pattern: '^[A-Z][A-Z0-9_]{0,63}$' } }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ScheduledJobUpdateRequest' } } }
+      responses:
+        '200':
+          description: 保存后的定时任务。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ScheduledJob' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /admin/governance-overrides:
     post:
       tags: [Administration]
@@ -8446,6 +8490,40 @@ components:
           type: string
           format: date-time
           description: Activity V1 投影开始接收事件的明确切点，更早历史未回填。
+
+    ScheduledJob:
+      type: object
+      additionalProperties: false
+      required: [code, available, enabled, cron, zoneId, nextRunAt, lastStartedAt, lastFinishedAt,
+        lastOutcome, lastErrorCode, lastRequestId, etag]
+      properties:
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{0,63}$' }
+        available: { type: boolean, description: 当前部署是否启用该任务依赖；为 false 时到点记录 SKIPPED。 }
+        enabled: { type: boolean }
+        cron: { type: string, minLength: 1, maxLength: 64 }
+        zoneId: { type: string, minLength: 1, maxLength: 100 }
+        nextRunAt: { type: string, format: date-time, nullable: true }
+        lastStartedAt: { type: string, format: date-time, nullable: true }
+        lastFinishedAt: { type: string, format: date-time, nullable: true }
+        lastOutcome: { type: string, nullable: true, enum: [SUCCEEDED, PARTIAL, FAILED, SKIPPED] }
+        lastErrorCode: { type: string, maxLength: 96, nullable: true }
+        lastRequestId: { type: string, maxLength: 64, nullable: true }
+        etag: { type: string, pattern: '^"[0-9]+"$' }
+
+    ScheduledJobList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ScheduledJob' } }
+
+    ScheduledJobUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled, cron]
+      properties:
+        enabled: { type: boolean }
+        cron: { type: string, minLength: 1, maxLength: 64 }
 
     CompanyActivityItem:
       type: object

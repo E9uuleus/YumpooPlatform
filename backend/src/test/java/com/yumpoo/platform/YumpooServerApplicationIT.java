@@ -401,6 +401,7 @@ class YumpooServerApplicationIT {
                 "project_work_item_label_catalog",
                 "project_work_item_priority_label",
                 "project_work_item_status_label",
+                "scheduled_job",
                 "security_audit_event",
                 "user_notification",
                 "user_onboarding_tour",
