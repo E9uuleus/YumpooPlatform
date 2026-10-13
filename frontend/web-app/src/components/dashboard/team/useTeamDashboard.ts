@@ -1,4 +1,5 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { readCsrfToken, type TeamDashboardOptions, type TeamMemberTask, type TeamTimesheet, type TeamWorkload } from '@yumpoo/api-client'
 import { teamDashboardApi } from '../../../api/client'
 import { problemMessage, toApiProblem } from '../../../api/problems'
@@ -10,9 +11,12 @@ export interface MemberTasks { items: TeamMemberTask[]; total: number; loading: 
 /** Company-wide team reporting; the view has no project or member filter, so every query sends empty sets. */
 export function useTeamDashboard() {
   const session = useSession()
+  const route = useRoute()
+  const linkedDate = () => typeof route.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(route.query.date) ? route.query.date : undefined
   const timezone = computed(() => options.value?.timezone ?? session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
   const options = ref<TeamDashboardOptions>(), optionsError = ref('')
-  const period = ref<Period>(periodFor('WEEK', todayIn(session.authentication.value?.company.timezone ?? 'Asia/Shanghai')))
+  const period = ref<Period>(periodFor('WEEK', linkedDate() ?? todayIn(session.authentication.value?.company.timezone ?? 'Asia/Shanghai')))
+  watch(() => route.query.date, () => { const date = linkedDate(); if (date) period.value = periodFor(period.value.kind, date) })
   const timesheet = ref<TeamTimesheet>(), timesheetLoading = ref(false), timesheetError = ref('')
   const workload = ref<TeamWorkload>(), workloadLoading = ref(false), workloadError = ref('')
   const tasks = ref(new Map<string, MemberTasks>())

@@ -126,3 +126,4 @@
 @media(prefers-reduced-motion:reduce){.team-view,.team-group,.team-workload__bar,.team-tasks tbody tr,.team-day__project,.team-day__item{animation:none}.team-chip:hover,.team-chip:active{transform:none}}
 @media(max-width:959.98px){.team-body{padding:12px 20px}.team-toolbar__end{margin-left:0}.team-workload__bar{display:none}}
 @media(max-width:600px){.team-body{padding:12px}.team-col-name{width:120px}.team-grid .team-sticky--total{left:164px}.team-workload__tasks{padding-left:0}.team-workload__row small:not(.team-overdue){display:none}}
+.team-day-head.is-holiday small{color:var(--yp-status-red)}

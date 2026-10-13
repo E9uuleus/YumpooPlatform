@@ -33,6 +33,13 @@ import {
     TeamDashboardMemberToJSON,
     TeamDashboardMemberToJSONTyped,
 } from './TeamDashboardMember';
+import type { TeamTimesheetDay } from './TeamTimesheetDay';
+import {
+    TeamTimesheetDayFromJSON,
+    TeamTimesheetDayFromJSONTyped,
+    TeamTimesheetDayToJSON,
+    TeamTimesheetDayToJSONTyped,
+} from './TeamTimesheetDay';
 
 /**
  *
@@ -82,6 +89,12 @@ export interface TeamTimesheet {
      * @memberof TeamTimesheet
      */
     entries: Array<TeamTimesheetEntry>;
+    /**
+     *
+     * @type {Array<TeamTimesheetDay>}
+     * @memberof TeamTimesheet
+     */
+    days: Array<TeamTimesheetDay>;
 }
 
 /**
@@ -95,6 +108,7 @@ export function instanceOfTeamTimesheet(value: object): value is TeamTimesheet {
     if (!('members' in value) || value['members'] === undefined) return false;
     if (!('workItems' in value) || value['workItems'] === undefined) return false;
     if (!('entries' in value) || value['entries'] === undefined) return false;
+    if (!('days' in value) || value['days'] === undefined) return false;
     return true;
 }
 
@@ -115,6 +129,7 @@ export function TeamTimesheetFromJSONTyped(json: any, ignoreDiscriminator: boole
         'members': ((json['members'] as Array<any>).map(TeamDashboardMemberFromJSON)),
         'workItems': ((json['workItems'] as Array<any>).map(TeamTimesheetWorkItemFromJSON)),
         'entries': ((json['entries'] as Array<any>).map(TeamTimesheetEntryFromJSON)),
+        'days': ((json['days'] as Array<any>).map(TeamTimesheetDayFromJSON)),
     };
 }
 
@@ -136,5 +151,6 @@ export function TeamTimesheetToJSONTyped(value?: TeamTimesheet | null, ignoreDis
         'members': ((value['members'] as Array<any>).map(TeamDashboardMemberToJSON)),
         'workItems': ((value['workItems'] as Array<any>).map(TeamTimesheetWorkItemToJSON)),
         'entries': ((value['entries'] as Array<any>).map(TeamTimesheetEntryToJSON)),
+        'days': ((value['days'] as Array<any>).map(TeamTimesheetDayToJSON)),
     };
 }

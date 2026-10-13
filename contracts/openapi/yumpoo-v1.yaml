@@ -8263,7 +8263,7 @@ components:
     TeamTimesheet:
       type: object
       additionalProperties: false
-      required: [from, to, timezone, asOf, members, workItems, entries]
+      required: [from, to, timezone, asOf, members, workItems, entries, days]
       properties:
         from: { type: string, format: date }
         to: { type: string, format: date }
@@ -8279,6 +8279,15 @@ components:
           type: array
           description: 每个成员、工作项、自然日一条，只包含大于 0 的耗时。
           items: { $ref: '#/components/schemas/TeamTimesheetEntry' }
+        days: { type: array, items: { $ref: '#/components/schemas/TeamTimesheetDay' } }
+    TeamTimesheetDay:
+      type: object
+      additionalProperties: false
+      required: [date, dayType, note]
+      properties:
+        date: { type: string, format: date }
+        dayType: { $ref: '#/components/schemas/CalendarDayType' }
+        note: { type: string, nullable: true }
     TeamWorkloadQuery:
       type: object
       additionalProperties: false

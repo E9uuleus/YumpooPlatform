@@ -1,8 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import type { TeamTimesheet } from '@yumpoo/api-client'
-import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, projectColors, rangeDays, shiftPeriod, shortHours, toApiDate } from './teamDashboardModel'
+import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, projectColors, rangeDays, restrictTimesheet, shiftPeriod, shortHours, toApiDate } from './teamDashboardModel'
 
 describe('team dashboard periods', () => {
+  it('restricts member, item and daily totals to Saturday and Sunday', () => {
+    const sheet: TeamTimesheet = {
+      from: toApiDate('2026-10-05'), to: toApiDate('2026-10-11'), timezone: 'Asia/Shanghai', asOf: new Date(), days: [],
+      members: [{ userId: 'u1', displayName: '李四', active: true }, { userId: 'u2', displayName: '王五', active: true }],
+      workItems: [{ id: 'w1', projectId: 'p', projectName: '交付', itemNo: 'DEL-1', title: '周内任务' },
+        { id: 'w2', projectId: 'p', projectName: '交付', itemNo: 'DEL-2', title: '周末任务' }],
+      entries: [
+        { userId: 'u1', workItemId: 'w1', date: toApiDate('2026-10-05'), durationMs: 28_800_000 },
+        { userId: 'u1', workItemId: 'w2', date: toApiDate('2026-10-10'), durationMs: 3_600_000 },
+        { userId: 'u2', workItemId: 'w2', date: toApiDate('2026-10-11'), durationMs: 7_200_000 },
+      ],
+    }
+    const model = restrictTimesheet(buildTimesheet(sheet), ['2026-10-10', '2026-10-11'])
+    expect(model.rows.map(row => row.totalMs)).toEqual([3_600_000, 7_200_000])
+    expect(model.rows[0]!.children.map(child => child.workItemId)).toEqual(['w2'])
+    expect(model.rows[0]!.children[0]!.totalMs).toBe(3_600_000)
+    expect(model.dayTotals).toEqual({ '2026-10-10': 3_600_000, '2026-10-11': 7_200_000 })
+    expect(model.totalMs).toBe(10_800_000)
+  })
   it('builds Monday weeks, calendar months and quarters and steps between them', () => {
     expect(periodFor('WEEK', '2026-10-08')).toEqual({ kind: 'WEEK', from: '2026-10-05', to: '2026-10-11' })
     expect(periodFor('MONTH', '2026-02-10')).toEqual({ kind: 'MONTH', from: '2026-02-01', to: '2026-02-28' })

@@ -7,8 +7,8 @@ export type PeriodKind = 'WEEK' | 'MONTH' | 'QUARTER'
 export interface Period { kind: PeriodKind; from: string; to: string }
 export const MAX_RANGE_DAYS = 93
 export const periodOptions = [{ value: 'WEEK', label: '周' }, { value: 'MONTH', label: '月' }, { value: 'QUARTER', label: '季' }] as const
-export type TeamView = 'TIMESHEET' | 'WORKLOAD'
-export const viewOptions = [{ value: 'TIMESHEET', label: '成员工时' }, { value: 'WORKLOAD', label: '成员当前任务' }] as const
+export type TeamView = 'TIMESHEET' | 'OVERTIME' | 'WORKLOAD'
+export const viewOptions = [{ value: 'TIMESHEET', label: '成员工时' }, { value: 'OVERTIME', label: '加班统计' }, { value: 'WORKLOAD', label: '成员当前任务' }] as const
 
 const DAY = 86_400_000
 const weekdays = ['日', '一', '二', '三', '四', '五', '六']
@@ -18,7 +18,6 @@ export const fromApiDate = (date: Date) => date.toISOString().slice(0, 10)
 export const addDays = (date: string, days: number) => fromApiDate(new Date(toApiDate(date).getTime() + days * DAY))
 export const todayIn = (timezone: string, now = new Date()) => formatDateOnly(now, timezone)
 export const weekday = (date: string) => weekdays[toApiDate(date).getUTCDay()]!
-export const isWeekend = (date: string) => [0, 6].includes(toApiDate(date).getUTCDay())
 
 export function rangeDays(from: string, to: string): string[] {
   const days: string[] = []
@@ -60,6 +59,21 @@ export function hoursMinutes(ms: number): string {
 export interface TimesheetItemRow { key: string; workItemId: string; projectId: string; projectName: string; itemNo: string; title: string; label: string; totalMs: number; days: Record<string, number> }
 export interface TimesheetRow { key: string; userId: string; name: string; active: boolean; totalMs: number; days: Record<string, number>; children: TimesheetItemRow[] }
 export interface DayItem { key: string; itemNo: string; title: string; ms: number }
+
+export type TimesheetModel = ReturnType<typeof buildTimesheet>
+/** Keeps only `days` (the period's non-workdays) and recomputes every total from what remains. */
+export function restrictTimesheet(model: TimesheetModel, days: string[]): TimesheetModel {
+  const keep = new Set(days)
+  const pick = (source: Record<string, number>) => Object.fromEntries(Object.entries(source).filter(([day]) => keep.has(day)))
+  const sum = (source: Record<string, number>) => Object.values(source).reduce((total, ms) => total + ms, 0)
+  const rows = model.rows.map(row => {
+    const children = row.children.map(child => { const d = pick(child.days); return { ...child, days: d, totalMs: sum(d) } }).filter(child => child.totalMs > 0)
+    const d = pick(row.days)
+    return { ...row, days: d, totalMs: sum(d), children }
+  })
+  const dayTotals = pick(model.dayTotals)
+  return { rows, dayTotals, totalMs: sum(dayTotals) }
+}
 export interface DayProject { projectId: string; projectName: string; totalMs: number; items: DayItem[] }
 
 /** Member rows sorted by name with per-item children; the server already split cross-midnight sessions. */

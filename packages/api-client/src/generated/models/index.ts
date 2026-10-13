@@ -213,6 +213,7 @@ export * from './TeamMemberTask';
 export * from './TeamMemberTaskPage';
 export * from './TeamMemberTasksQuery';
 export * from './TeamTimesheet';
+export * from './TeamTimesheetDay';
 export * from './TeamTimesheetEntry';
 export * from './TeamTimesheetQuery';
 export * from './TeamTimesheetWorkItem';

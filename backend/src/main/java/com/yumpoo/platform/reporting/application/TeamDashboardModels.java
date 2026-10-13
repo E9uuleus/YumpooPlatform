@@ -1,5 +1,8 @@
 package com.yumpoo.platform.reporting.application;
 
+import com.yumpoo.platform.organization.api.CalendarDayType;
+import com.yumpoo.platform.organization.api.CompanyCalendarDaySnapshot;
+
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -13,8 +16,13 @@ public final class TeamDashboardModels {
     public record TimesheetQuery(LocalDate from, LocalDate to, List<UUID> projectIds, List<UUID> userIds) {}
     public record TimesheetWorkItem(UUID id, UUID projectId, String projectName, String itemNo, String title) {}
     public record TimesheetEntry(UUID userId, UUID workItemId, LocalDate date, long durationMs) {}
+    public record CalendarDay(LocalDate date, CalendarDayType dayType, String note) {
+        public static List<CalendarDay> of(List<CompanyCalendarDaySnapshot> days) {
+            return days.stream().map(d -> new CalendarDay(d.date(), d.dayType(), d.note())).toList();
+        }
+    }
     public record Timesheet(LocalDate from, LocalDate to, String timezone, Instant asOf, List<Member> members,
-            List<TimesheetWorkItem> workItems, List<TimesheetEntry> entries) {}
+            List<TimesheetWorkItem> workItems, List<TimesheetEntry> entries, List<CalendarDay> days) {}
     public record WorkloadQuery(List<UUID> projectIds, List<UUID> userIds) {}
     public record WorkloadCounts(long todo, long inProgress, long overdue) {}
     public record WorkloadMember(UUID userId, String displayName, boolean active, long todo, long inProgress, long overdue) {}

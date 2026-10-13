@@ -6,6 +6,7 @@ import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.MinimalUserSnapshotQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
+import com.yumpoo.platform.organization.api.CompanyCalendarQuery;
 import com.yumpoo.platform.workitem.api.TeamWorkQuery;
 import org.springframework.stereotype.Service;
 import java.time.Clock;
@@ -27,10 +28,11 @@ public class MyWorkService {
     private final TeamWorkQuery work;
     private final MinimalUserSnapshotQuery users;
     private final CompanyConfigurationQuery company;
+    private final CompanyCalendarQuery calendar;
     private final Clock clock;
     public MyWorkService(MemberProjectQuery projects, TeamWorkQuery work, MinimalUserSnapshotQuery users,
-            CompanyConfigurationQuery company, Clock clock) {
-        this.projects = projects; this.work = work; this.users = users; this.company = company; this.clock = clock;
+            CompanyConfigurationQuery company, CompanyCalendarQuery calendar, Clock clock) {
+        this.projects = projects; this.work = work; this.users = users; this.company = company; this.calendar = calendar; this.clock = clock;
     }
 
     public Timesheet timesheet(CurrentActor actor, LocalDate from, LocalDate to) {
@@ -44,7 +46,8 @@ public class MyWorkService {
                 new TimesheetWorkItem(e.workItemId(), e.projectId(), scope.get(e.projectId()).name(), e.itemNo(), e.title())));
         var self = users.findByUserIds(actor.companyId(), List.of(actor.userId())).get(actor.userId());
         return new Timesheet(from, to, zone.getId(), asOf, List.of(new Member(actor.userId(), self.displayName(), self.activeAndEnabled())),
-                List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs())).toList());
+                List.copyOf(items.values()), entries.stream().map(e -> new TimesheetEntry(e.userId(), e.workItemId(), e.date(), e.durationMs())).toList(),
+                CalendarDay.of(calendar.days(from, to)));
     }
 
     public TaskPage currentTasks(CurrentActor actor, int offset, int limit) {
