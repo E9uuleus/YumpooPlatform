@@ -1,6 +1,7 @@
 package com.yumpoo.platform.organization.infrastructure;
 
 import com.yumpoo.platform.organization.api.CalendarDayType;
+import com.yumpoo.platform.organization.api.CompanyCalendarCommand;
 import com.yumpoo.platform.organization.api.CompanyCalendarDaySnapshot;
 import com.yumpoo.platform.organization.api.CompanyCalendarQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
@@ -48,6 +49,9 @@ class OrganizationQueriesIT {
     private CompanyCalendarQuery companyCalendarQuery;
 
     @Autowired
+    private CompanyCalendarCommand companyCalendarCommand;
+
+    @Autowired
     private JdbcClient jdbcClient;
 
     @BeforeEach
@@ -70,6 +74,21 @@ class OrganizationQueriesIT {
     @AfterEach
     void restoreCompanyFixture() {
         resetCompanyAndCalendar();
+    }
+
+    @Test
+    void replacesYearWithVersionCheck() {
+        LocalDate date = LocalDate.parse("2026-10-01");
+        UUID actor = UUID.randomUUID();
+        assertThat(companyCalendarCommand.replaceYear(2026, 0,
+                List.of(new CompanyCalendarCommand.Day(date, CalendarDayType.HOLIDAY, null, "国庆节")), actor, NOW)).isTrue();
+        assertThat(companyCalendarCommand.yearVersion(2026)).isEqualTo(1);
+        assertThat(companyCalendarQuery.day(date).dayType()).isEqualTo(CalendarDayType.HOLIDAY);
+        assertThat(companyCalendarQuery.day(date).note()).isEqualTo("国庆节");
+        assertThat(companyCalendarCommand.replaceYear(2026, 0, List.of(), actor, NOW)).isFalse();
+        assertThat(companyCalendarCommand.replaceYear(2026, 1, List.of(), actor, NOW)).isTrue();
+        assertThat(companyCalendarQuery.day(date).dayType()).isEqualTo(CalendarDayType.WORKDAY);
+        assertThat(companyCalendarQuery.day(date).explicitOverride()).isFalse();
     }
 
     @Test

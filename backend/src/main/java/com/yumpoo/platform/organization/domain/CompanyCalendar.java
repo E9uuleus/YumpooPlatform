@@ -40,7 +40,7 @@ public final class CompanyCalendar {
         Objects.requireNonNull(overrides, "overrides must not be null");
         CalendarDayOverride override = overrides.get(date);
         if (override != null) {
-            int minutes = override.dayType() == CalendarDayOverride.DayType.NON_WORKDAY
+            int minutes = override.dayType() != CalendarDayOverride.DayType.WORKDAY
                     ? 0
                     : override.standardMinutes() == null
                     ? company.defaultWorkdayMinutes()
@@ -51,7 +51,8 @@ public final class CompanyCalendar {
                     minutes,
                     true,
                     company.rowVersion(),
-                    OptionalLong.of(override.rowVersion())
+                    OptionalLong.of(override.rowVersion()),
+                    override.note()
             );
         }
 
@@ -62,7 +63,8 @@ public final class CompanyCalendar {
                 weekday ? company.defaultWorkdayMinutes() : 0,
                 false,
                 company.rowVersion(),
-                OptionalLong.empty()
+                OptionalLong.empty(),
+                null
         );
     }
 

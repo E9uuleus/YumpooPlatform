@@ -23,6 +23,8 @@ import type {
   ScheduledJob,
   ScheduledJobList,
   ScheduledJobUpdateRequest,
+  WorkCalendarUpdateRequest,
+  WorkCalendarYear,
 } from '../models/index';
 import {
     ErrorResponseFromJSON,
@@ -43,6 +45,10 @@ import {
     ScheduledJobListToJSON,
     ScheduledJobUpdateRequestFromJSON,
     ScheduledJobUpdateRequestToJSON,
+    WorkCalendarUpdateRequestFromJSON,
+    WorkCalendarUpdateRequestToJSON,
+    WorkCalendarYearFromJSON,
+    WorkCalendarYearToJSON,
 } from '../models/index';
 
 export interface CreateGovernanceOverrideRequest {
@@ -50,6 +56,10 @@ export interface CreateGovernanceOverrideRequest {
     ifMatch: string;
     idempotencyKey: string;
     governanceOverrideRequest: GovernanceOverrideRequest;
+}
+
+export interface GetWorkCalendarYearRequest {
+    year: number;
 }
 
 export interface ListGovernanceOverridesRequest {
@@ -66,6 +76,13 @@ export interface UpdateScheduledJobRequest {
     xXSRFTOKEN: string;
     ifMatch: string;
     scheduledJobUpdateRequest: ScheduledJobUpdateRequest;
+}
+
+export interface UpdateWorkCalendarYearRequest {
+    year: number;
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    workCalendarUpdateRequest: WorkCalendarUpdateRequest;
 }
 
 /**
@@ -144,6 +161,45 @@ export class AdministrationApi extends runtime.BaseAPI {
      */
     async createGovernanceOverride(requestParameters: CreateGovernanceOverrideRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<object> {
         const response = await this.createGovernanceOverrideRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅 COMPANY_ADMIN（含 APP_MANAGER）；返回全年逐日解析结果；未显式设置的日期按周一至周五工作、周末休息；从未保存过的年份 etag 为 \"0\"。
+     * 查询公司年度工作日历
+     */
+    async getWorkCalendarYearRaw(requestParameters: GetWorkCalendarYearRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkCalendarYear>> {
+        if (requestParameters['year'] == null) {
+            throw new runtime.RequiredError(
+                'year',
+                'Required parameter "year" was null or undefined when calling getWorkCalendarYear().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/admin/work-calendar/{year}`;
+        urlPath = urlPath.replace(`{${"year"}}`, encodeURIComponent(String(requestParameters['year'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkCalendarYearFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅 COMPANY_ADMIN（含 APP_MANAGER）；返回全年逐日解析结果；未显式设置的日期按周一至周五工作、周末休息；从未保存过的年份 etag 为 \"0\"。
+     * 查询公司年度工作日历
+     */
+    async getWorkCalendarYear(requestParameters: GetWorkCalendarYearRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkCalendarYear> {
+        const response = await this.getWorkCalendarYearRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -299,6 +355,77 @@ export class AdministrationApi extends runtime.BaseAPI {
      */
     async updateScheduledJob(requestParameters: UpdateScheduledJobRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ScheduledJob> {
         const response = await this.updateScheduledJobRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅 COMPANY_ADMIN（含 APP_MANAGER）；请求中的 days 即该年全部显式设置，未列出的日期恢复默认规则；要求会话、XSRF 和最近读取的 If-Match；写入安全审计。
+     * 整体替换公司年度工作日历
+     */
+    async updateWorkCalendarYearRaw(requestParameters: UpdateWorkCalendarYearRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkCalendarYear>> {
+        if (requestParameters['year'] == null) {
+            throw new runtime.RequiredError(
+                'year',
+                'Required parameter "year" was null or undefined when calling updateWorkCalendarYear().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateWorkCalendarYear().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateWorkCalendarYear().'
+            );
+        }
+
+        if (requestParameters['workCalendarUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'workCalendarUpdateRequest',
+                'Required parameter "workCalendarUpdateRequest" was null or undefined when calling updateWorkCalendarYear().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/admin/work-calendar/{year}`;
+        urlPath = urlPath.replace(`{${"year"}}`, encodeURIComponent(String(requestParameters['year'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PUT',
+            headers: headerParameters,
+            query: queryParameters,
+            body: WorkCalendarUpdateRequestToJSON(requestParameters['workCalendarUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => WorkCalendarYearFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅 COMPANY_ADMIN（含 APP_MANAGER）；请求中的 days 即该年全部显式设置，未列出的日期恢复默认规则；要求会话、XSRF 和最近读取的 If-Match；写入安全审计。
+     * 整体替换公司年度工作日历
+     */
+    async updateWorkCalendarYear(requestParameters: UpdateWorkCalendarYearRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkCalendarYear> {
+        const response = await this.updateWorkCalendarYearRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

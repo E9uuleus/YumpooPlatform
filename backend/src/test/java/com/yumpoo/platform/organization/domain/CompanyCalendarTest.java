@@ -20,6 +20,18 @@ class CompanyCalendarTest {
     private final CompanyCalendar calendar = new CompanyCalendar();
 
     @Test
+    void resolvesHolidayWithZeroMinutesAndNote() {
+        LocalDate date = LocalDate.parse("2026-10-01");
+        ResolvedCalendarDay result = calendar.resolve(company("Asia/Shanghai"), date,
+                Map.of(date, new CalendarDayOverride(date, CalendarDayOverride.DayType.HOLIDAY, 0,
+                        CalendarDayOverride.Source.MANUAL, "国庆节", 0)));
+
+        assertThat(result.workday()).isFalse();
+        assertThat(result.standardMinutes()).isZero();
+        assertThat(result.note()).isEqualTo("国庆节");
+    }
+
+    @Test
     void resolvesMondayThroughFridayAsWorkdaysAndWeekendsAsNonWorkdays() {
         Company company = company("Asia/Shanghai");
 

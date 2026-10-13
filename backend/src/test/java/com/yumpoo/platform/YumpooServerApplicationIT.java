@@ -372,6 +372,7 @@ class YumpooServerApplicationIT {
                 "attachment_scan_task",
                 "company",
                 "company_calendar_day",
+                "company_calendar_year",
                 "content",
                 "content_catalog_version",
                 "desktop_auth_attempt",
