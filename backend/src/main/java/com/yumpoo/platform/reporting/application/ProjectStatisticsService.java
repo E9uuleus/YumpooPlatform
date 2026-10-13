@@ -33,6 +33,7 @@ public class ProjectStatisticsService {
     }
 
     public StatisticsResponse query(CurrentActor actor, UUID projectId, StatisticsQuery query) {
+        if (query.widgets() == null) throw ApplicationException.validation(new FieldViolation("widgets", "REQUIRED", "图表配置不能为空"));
         DashboardService.validateQueryWidgets(query.widgets(), statistics);
         Instant asOf = clock.instant();
         return new StatisticsResponse(asOf, statistics.projectCharts(actor, projectId, query.filters(),

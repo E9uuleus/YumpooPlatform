@@ -74,9 +74,9 @@ class ProjectStatisticsHttpIT {
             DirectoryMemberProvisioningResult memberUser = provisioner.provision("dashboard-member", "Work Category Member");
             owner = actor(ownerUser.userId());
             member = actor(memberUser.userId());
-            createProject(owner.userId(), member.userId());
-            requirementsId = createContent("需求", "BRIGHT_BLUE");
-            tasksId = createContent("任务", "BRIGHT_GREEN");
+            createProject(PROJECT_ID, "CATEGORY_WORK", owner.userId(), member.userId());
+            requirementsId = createContent(PROJECT_ID, "需求", "BRIGHT_BLUE");
+            tasksId = createContent(PROJECT_ID, "任务", "BRIGHT_GREEN");
         }
     }
 
@@ -108,6 +108,11 @@ class ProjectStatisticsHttpIT {
         }
         var items = json.createObjectNode().put("offset", 0).put("limit", 10).set("filters", filters).set("widget", widget);
         assertThat(ok(mutate("POST", path + "/items/query", admin, items.toString(), null, null)).path("totalElements").asLong()).isEqualTo(1);
+        var table = json.createObjectNode().put("projectId", PROJECT_ID.toString()).set("filters", filters)
+                .set("widget", widget).set("table", json.createObjectNode().put("limit", 25));
+        var adminRows = ok(mutate("POST", path + "/table/query", admin, table.toString(), null, null)).path("items");
+        assertThat(adminRows.size()).isEqualTo(1);
+        assertThat(adminRows.get(0).path("capabilities").path("canEditFields").asBoolean()).isFalse();
         var log = ok(get(path + "/worklog?from=2026-10-05&to=2026-10-11", member));
         assertThat(log.path("entries").get(0).path("durationMs").asLong()).isEqualTo(3600000);
         assertThat(log.path("members").get(0).path("projectMember").asBoolean()).isTrue();
@@ -123,6 +128,41 @@ class ProjectStatisticsHttpIT {
         String path = "/api/v1/projects/" + PROJECT_ID + "/statistics";
         assertThat(mutate("POST", path + "/query", owner, query.toString(), null, null).statusCode()).isEqualTo(404);
         assertThat(get(path + "/worklog?from=2026-10-05&to=2026-10-11", owner).statusCode()).isEqualTo(404);
+    }
+
+    @Test
+    void missingWidgetsReturnRequiredValidation() throws Exception {
+        String path = "/api/v1/projects/" + PROJECT_ID + "/statistics/query";
+        assertThat(mutate("POST", path, member, "{\"filters\":{}}", null, null).statusCode()).isEqualTo(400);
+        var query = json.createObjectNode().set("filters", json.createObjectNode().put("includeArchived", false).put("hasTime", false));
+        for (boolean explicitNull : List.of(false, true)) {
+            if (explicitNull) query.putNull("widgets");
+            var response = mutate("POST", path, member, query.toString(), null, null);
+            assertThat(response.statusCode()).as(response.body()).isEqualTo(422);
+            var error = json.readTree(response.body());
+            assertThat(error.path("code").asText()).isEqualTo("VALIDATION_FAILED");
+            assertThat(error.path("fieldErrors").get(0).path("field").asText()).isEqualTo("widgets");
+            assertThat(error.path("fieldErrors").get(0).path("code").asText()).isEqualTo("REQUIRED");
+        }
+    }
+
+    @Test
+    void tableUsesPathProjectWhenBodyNamesAnotherReadableProject() throws Exception {
+        var otherProjectId = UUID.randomUUID();
+        createProject(otherProjectId, "OTHER_STATISTICS", owner.userId(), member.userId());
+        var otherContentId = createContent(otherProjectId, "另一个项目的任务", "BRIGHT_GREEN");
+        var pathItem = created(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/work-items", member,
+                workItemBody(tasksId, "路径项目工作项"), null, UUID.randomUUID()));
+        created(mutate("POST", "/api/v1/projects/" + otherProjectId + "/work-items", member,
+                workItemBody(otherContentId, "请求体项目工作项"), null, UUID.randomUUID()));
+        var query = json.createObjectNode().put("projectId", otherProjectId.toString()).set("widget", chartWidget())
+                .set("table", json.createObjectNode().put("limit", 25));
+        var rows = ok(mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/statistics/table/query", member,
+                query.toString(), null, null)).path("items");
+        assertThat(rows.size()).isEqualTo(1);
+        assertThat(rows.get(0).path("id").asText()).isEqualTo(pathItem.path("id").asText());
+        assertThat(rows.get(0).path("title").asText()).isEqualTo("路径项目工作项");
+        assertThat(rows.get(0).path("capabilities").path("canEditFields").asBoolean()).isTrue();
     }
 
     private tools.jackson.databind.node.ObjectNode chartWidget() throws Exception {
@@ -145,8 +185,8 @@ class ProjectStatisticsHttpIT {
         return json.readTree(response.body());
     }
 
-    private UUID createContent(String name, String color) throws Exception {
-        HttpResponse<String> response = mutate("POST", "/api/v1/projects/" + PROJECT_ID + "/contents", owner,
+    private UUID createContent(UUID projectId, String name, String color) throws Exception {
+        HttpResponse<String> response = mutate("POST", "/api/v1/projects/" + projectId + "/contents", owner,
                 json.writeValueAsString(java.util.Map.of("name", name, "colorToken", color)), null, UUID.randomUUID());
         assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
         return UUID.fromString(json.readTree(response.body()).path("id").asText());
@@ -182,27 +222,27 @@ class ProjectStatisticsHttpIT {
 
     private URI uri(String path) { return URI.create("http://127.0.0.1:" + port + path); }
 
-    private void createProject(UUID ownerId, UUID memberId) {
+    private void createProject(UUID projectId, String code, UUID ownerId, UUID memberId) {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             jdbc.sql("""
                 INSERT INTO yumpoo.project (id,company_id,workspace_id,project_code,name,
                     lifecycle,owner_user_id,row_version,created_at,
                     created_by_user_id,updated_at,updated_by_user_id)
-                VALUES (:id,:companyId,:workspaceId,'CATEGORY_WORK','Category Work',
+                VALUES (:id,:companyId,:workspaceId,:code,'Category Work',
                     'ACTIVE',:ownerId,0,transaction_timestamp(),:ownerId,
                     transaction_timestamp(),:ownerId)
-                """).param("id", PROJECT_ID).param("companyId", COMPANY_ID)
+                """).param("id", projectId).param("code", code).param("companyId", COMPANY_ID)
                     .param("workspaceId", WORKSPACE_ID).param("ownerId", ownerId).update();
             jdbc.sql("""
                 INSERT INTO yumpoo.project_membership (id,company_id,project_id,user_id,status,joined_at,joined_by_user_id,row_version)
                 VALUES (:ownerMembership,:companyId,:projectId,:ownerId,'ACTIVE',transaction_timestamp(),:ownerId,0),
                        (:memberMembership,:companyId,:projectId,:memberId,'ACTIVE',transaction_timestamp(),:ownerId,0)
                 """).param("ownerMembership", UUID.randomUUID()).param("memberMembership", UUID.randomUUID())
-                    .param("companyId", COMPANY_ID).param("projectId", PROJECT_ID)
+                    .param("companyId", COMPANY_ID).param("projectId", projectId)
                     .param("ownerId", ownerId).param("memberId", memberId).update();
             jdbc.sql("INSERT INTO yumpoo.content_catalog_version (project_id,company_id) VALUES (:projectId,:companyId)")
-                    .param("projectId", PROJECT_ID).param("companyId", COMPANY_ID).update();
-            labels.initialize(COMPANY_ID, PROJECT_ID, clock.instant());
+                    .param("projectId", projectId).param("companyId", COMPANY_ID).update();
+            labels.initialize(COMPANY_ID, projectId, clock.instant());
         });
     }
 
