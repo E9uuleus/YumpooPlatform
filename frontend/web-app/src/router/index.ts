@@ -128,6 +128,7 @@ export const routes: RouteRecordRaw[] = [
           { path: 'activity', name: 'company-activity', component: () => import('../views/admin/CompanyActivityView.vue') },
           { path: 'sync-runs', name: 'company-sync-runs', component: IdentitySyncRunsView },
           { path: 'scheduled-jobs', name: 'company-scheduled-jobs', component: () => import('../views/admin/CompanyScheduledJobsView.vue') },
+          { path: 'work-calendar', name: 'company-work-calendar', component: () => import('../views/admin/CompanyWorkCalendarView.vue') },
         ],
       },
       {
