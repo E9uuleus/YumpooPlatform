@@ -1,10 +1,10 @@
 import { ref } from 'vue'
-import { readCsrfToken, type DashboardTableCriteria, type DashboardTableQuery } from '@yumpoo/api-client'
-import { dashboardsApi } from '../../api/client'
+import { type DashboardTableCriteria, type DashboardTableQuery } from '@yumpoo/api-client'
+import type { StatisticsSource } from './statisticsSource'
 import type { WorkItemTableSource } from '../projects/workItemTableSource'
 import { clone } from './dashboardModel'
 
-export function dashboardTableSource(dashboardId: () => string, scope: () => Omit<DashboardTableQuery, 'table'>): WorkItemTableSource {
+export function dashboardTableSource(source: () => StatisticsSource, scope: () => Omit<DashboardTableQuery, 'table'>): WorkItemTableSource {
   const contextIds = ref(new Set<string>())
   const subitemCounts = ref(new Map<string, number>())
   async function query(request: object, init?: Parameters<WorkItemTableSource['listProjectWorkItems']>[1]) {
@@ -16,8 +16,7 @@ export function dashboardTableSource(dashboardId: () => string, scope: () => Omi
     const table = Object.fromEntries(Object.entries(request)
       .filter(([key, value]) => key !== 'projectId' && key !== 'view' && value !== undefined && value !== null)
       .map(([key, value]) => [key, value instanceof Set ? [...value] : value])) as DashboardTableCriteria
-    return dashboardsApi.queryDashboardTable({ id: dashboardId(), xXSRFTOKEN: readCsrfToken() || '',
-      dashboardTableQuery: { ...snapshot, table } }, init)
+    return source().table({ ...snapshot, table }, init)
   }
   return {
     listProjectWorkItems: async (request, init) => {

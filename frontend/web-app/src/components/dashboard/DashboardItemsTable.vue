@@ -5,10 +5,11 @@ import ProjectWorkItems from '../projects/ProjectWorkItems.vue'
 import type { WorkItemTableSource } from '../projects/workItemTableSource'
 import { useSession } from '../../composables/useSession'
 import { resolveChart, selectedProjectIds } from './chartModel'
+import type { StatisticsSource } from './statisticsSource'
 import { dashboardTableSource } from './dashboardTableSource'
 
 const props = defineProps<{
-  dashboardId: string
+  source: StatisticsSource
   widget: DashboardWidget
   filters: DashboardFilters
   selection?: DashboardChartSelection | undefined
@@ -27,14 +28,14 @@ const visibleProjects = computed(() => {
     && (chart.projectIds == null || chart.projectIds.includes(project.id))
     && (!chart.filters?.projectIds.length || chart.filters.projectIds.includes(project.id)))
 })
-function source(projectId: string) {
-  if (!sources.has(projectId)) sources.set(projectId, dashboardTableSource(() => props.dashboardId,
+function tableSource(projectId: string) {
+  if (!sources.has(projectId)) sources.set(projectId, dashboardTableSource(() => props.source,
     () => ({ projectId, widget: props.widget, filters: props.filters, ...(props.selection ? { selection: props.selection } : {}) })))
   return sources.get(projectId)!
 }
 function preferenceScope(projectId: string) {
   const identity = session.authentication.value
-  return `yumpoo:dashboard-table:v1:${identity?.company.id ?? 'unknown'}:${identity?.user.id ?? 'unknown'}:${props.dashboardId}:${props.widget.id}:${projectId}`
+  return `yumpoo:dashboard-table:v1:${identity?.company.id ?? 'unknown'}:${identity?.user.id ?? 'unknown'}:${props.source.key}:${props.widget.id}:${projectId}`
 }
 function setTable(id: string, instance: unknown) {
   if (instance) tables.set(id, instance as InstanceType<typeof ProjectWorkItems>)
@@ -57,7 +58,7 @@ defineExpose({ canClose })
         :ref="instance => setTable(project.id, instance)"
         :embedded-project-id="project.id"
         :preference-scope="preferenceScope(project.id)"
-        :source="source(project.id)"
+        :source="tableSource(project.id)"
         :refresh-key="refreshKey"
         @changed="emit('changed')"
       />

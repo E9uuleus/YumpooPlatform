@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, Calendar, Clock, Grid, Setting, User } from '@element-plus/icons-vue'
+import { Bell, Calendar, DataAnalysis, Clock, Grid, Setting, User } from '@element-plus/icons-vue'
 import { ProjectActorAccess, ProjectLifecycle, type ProjectDetail, type ProjectNotificationPreference } from '@yumpoo/api-client'
 import { ElIcon, ElPopover, ElTooltip } from 'element-plus'
 import { computed, ref, watch } from 'vue'
@@ -12,7 +12,7 @@ import YpStatusTag from '../yp/YpStatusTag.vue'
 import ProjectNotificationSettingsDialog from './ProjectNotificationSettingsDialog.vue'
 import { projectNotificationSummary } from './projectNotificationPreference'
 
-type ProjectSection = 'catalog' | 'overview' | 'members' | 'activity' | 'settings'
+type ProjectSection = 'catalog' | 'overview' | 'statistics' | 'members' | 'activity' | 'settings'
 
 const props = withDefaults(defineProps<{
   section: ProjectSection
@@ -38,6 +38,7 @@ const canConfigureNotifications = computed(() => Boolean(props.project)
 const sectionGroups = [
   [
     { section: 'overview', route: 'project-overview', label: '工作项', icon: Grid },
+    { section: 'statistics', route: 'project-statistics', label: '统计', icon: DataAnalysis },
     { section: 'members', route: 'project-members', label: '成员', icon: User },
     { section: 'activity', route: 'project-activity', label: '动态', icon: Clock },
   ],

@@ -1,3 +1,4 @@
+import { dashboardSource } from './statisticsSource'
 import { describe, expect, it, vi } from 'vitest'
 import { ListProjectWorkItemFilterOptionsFieldEnum } from '@yumpoo/api-client'
 import { dashboardTableSource } from './dashboardTableSource'
@@ -12,7 +13,7 @@ describe('图表范围中的共享表格查询', () => {
     const widget = newWidget('CHART')
     const filters = { ...emptyFilters(), dueFrom: new Date('2026-09-01') }
     let selection = { key: 'category', seriesKey: 'series' }
-    const source = dashboardTableSource(() => 'dashboard', () => ({ widget, filters, selection, projectId: 'p' }))
+    const source = dashboardTableSource(() => dashboardSource('dashboard'), () => ({ widget, filters, selection, projectId: 'p' }))
     const signal = new AbortController().signal
     await source.listProjectWorkItems({ projectId: 'p', cursor: 'cursor', status: new Set(['DONE']), dueFrom: new Date('2026-09-10') }, { signal })
     let query = api.queryDashboardTable.mock.calls.at(-1)!

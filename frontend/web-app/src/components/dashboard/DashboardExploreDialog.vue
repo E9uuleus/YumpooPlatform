@@ -2,8 +2,8 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElIcon, ElAlert, ElButton, ElDialog, ElDropdown, ElDropdownItem, ElDropdownMenu, ElTag, ElTooltip } from 'element-plus'
 import { Close, DataAnalysis, Grid, Refresh, Setting } from '@element-plus/icons-vue'
-import { readCsrfToken, type DashboardChartResult, type DashboardChartSelection, type DashboardConnection, type DashboardFilters, type DashboardItemPage, type DashboardWidget } from '@yumpoo/api-client'
-import { dashboardsApi } from '../../api/client'
+import { type DashboardChartResult, type DashboardChartSelection, type DashboardConnection, type DashboardFilters, type DashboardItemPage, type DashboardWidget } from '@yumpoo/api-client'
+import type { StatisticsSource } from './statisticsSource'
 import { problemMessage, toApiProblem } from '../../api/problems'
 import { clone } from './dashboardModel'
 import { chartGroups, resolveChart } from './chartModel'
@@ -11,7 +11,7 @@ import DashboardChart from './DashboardChart.vue'
 import DashboardItemsTable from './DashboardItemsTable.vue'
 
 
-const props = defineProps<{ dashboardId: string; widget: DashboardWidget; result?: DashboardChartResult | undefined; filters: DashboardFilters; projects: DashboardConnection[]; initialSelection?: DashboardChartSelection | undefined; loading?: boolean; hidden?: boolean }>()
+const props = defineProps<{ source: StatisticsSource; widget: DashboardWidget; result?: DashboardChartResult | undefined; filters: DashboardFilters; projects: DashboardConnection[]; initialSelection?: DashboardChartSelection | undefined; loading?: boolean; hidden?: boolean; hideSettings?: boolean }>()
 const emit = defineEmits<{ close: []; settings: []; refresh: [] }>()
 const selection = ref(props.initialSelection), page = ref<DashboardItemPage>(), loadingItems = ref(false), error = ref(''), mode = ref('split')
 const table = ref<InstanceType<typeof DashboardItemsTable>>()
@@ -26,7 +26,7 @@ async function load() {
   const filters = clone(props.filters), widget = clone(props.widget)
   for (const f of [filters, widget.chart?.filters]) { if (f?.dueFrom) f.dueFrom = new Date(f.dueFrom); if (f?.dueTo) f.dueTo = new Date(f.dueTo) }
   try {
-    const result = await dashboardsApi.queryDashboardItems({ id: props.dashboardId, xXSRFTOKEN: readCsrfToken() || '', dashboardItemsQuery: { filters, widget, offset: 0, limit: 1, ...(selection.value ? { selection: selection.value } : {}) } })
+    const result = await props.source.items({ filters, widget, offset: 0, limit: 1, ...(selection.value ? { selection: selection.value } : {}) })
     if (token !== sequence) return
     page.value = result
   } catch (reason) { const p = await toApiProblem(reason); if (token === sequence) error.value = problemMessage(p) }
@@ -45,7 +45,7 @@ function changed() {
   refreshTimer = setTimeout(() => { emit('refresh'); void load() }, 80)
 }
 
-watch(() => [props.dashboardId, props.widget, props.filters], () => { void load() }, { immediate: true, deep: true })
+watch(() => [props.source.key, props.widget, props.filters], () => { void load() }, { immediate: true, deep: true })
 watch(() => props.hidden, hidden => { if (!hidden) void load() })
 onBeforeUnmount(() => { ++sequence; if (refreshTimer) clearTimeout(refreshTimer) })
 </script>
@@ -83,7 +83,10 @@ onBeforeUnmount(() => { ++sequence; if (refreshTimer) clearTimeout(refreshTimer)
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-tooltip content="组件设置">
+          <el-tooltip
+            v-if="!hideSettings"
+            content="组件设置"
+          >
             <el-button
               :icon="Setting"
               text
@@ -155,7 +158,7 @@ onBeforeUnmount(() => { ++sequence; if (refreshTimer) clearTimeout(refreshTimer)
         </el-alert>
         <DashboardItemsTable
           ref="table"
-          :dashboard-id="dashboardId"
+          :source="source"
           :widget="widget"
           :filters="filters"
           :selection="selection"
