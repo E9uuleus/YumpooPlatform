@@ -4,12 +4,15 @@ import {
   ClientCompatibility,
   type CurrentAuthentication,
 } from '@yumpoo/api-client'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.vue'
+import { operationsApi } from './api/client'
 import { useSession } from './composables/useSession'
 import { routes } from './router'
+
+enableAutoUnmount(afterEach)
 
 function authentication(
   type = AuthenticationClientType.Web,
@@ -45,6 +48,7 @@ describe('M1-12 Web 全局壳', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     Reflect.deleteProperty(window, 'yumpooDesktop')
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
@@ -69,6 +73,38 @@ describe('M1-12 Web 全局壳', () => {
     expect(wrapper.text()).toContain('概览')
     expect(wrapper.text()).toContain('同步运行')
     expect(wrapper.text()).toContain('成员与角色')
+  })
+
+  it('首页和桌面、移动导航共用告警汇总及轮询', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    useSession().authentication.value = authentication(
+      AuthenticationClientType.Web,
+      new Set([AuthenticationRole.AppManager]),
+    )
+    const summary = vi.spyOn(operationsApi, 'getOperationsAlertSummary').mockResolvedValue({ critical: 1, warning: 2 })
+    const wrapper = await mountApplication('/')
+    await flushPromises()
+    expect(wrapper.text()).toContain('运维告警 3')
+    expect(wrapper.get('.module-rail .operations-badge').text()).toBe('3')
+    expect(summary).toHaveBeenCalledOnce()
+
+    await wrapper.get('[aria-label="打开导航"]').trigger('click')
+    await flushPromises()
+    expect(summary).toHaveBeenCalledOnce()
+    summary.mockResolvedValue({ critical: 2, warning: 3 })
+    await vi.advanceTimersByTimeAsync(60000)
+    await flushPromises()
+    expect(summary).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('运维告警 5')
+    expect(wrapper.get('.module-rail .operations-badge').text()).toBe('5')
+
+    window.dispatchEvent(new Event('yumpoo-operations-alerts-changed'))
+    await flushPromises()
+    expect(summary).toHaveBeenCalledTimes(3)
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(summary).toHaveBeenCalledTimes(3)
   })
 
   it('项目层级导航默认展开，管理项目与详情入口正确高亮', async () => {

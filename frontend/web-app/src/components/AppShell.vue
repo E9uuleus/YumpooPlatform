@@ -10,21 +10,23 @@ import {
   ElIcon,
   ElTooltip,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, readonly, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { projectsApi } from '../api/client'
+import { operationsApi, projectsApi } from '../api/client'
 import { beginAuthentication } from '../auth/navigation'
 import { useAppearance } from '../composables/useAppearance'
 import { useProjectRecents } from '../composables/useProjectRecents'
 import { PROJECT_LIFECYCLE_CHANGED } from '../composables/projectLifecycleEvents'
 import { PROJECT_SETTINGS_CHANGED } from '../composables/projectSettingsEvents'
 import { useSession } from '../composables/useSession'
+import { useOperationsQuery } from '../composables/useOperationsQuery'
 import { useInbox, type InboxFilter } from '../composables/useInbox'
 import OnboardingHost from '../onboarding/OnboardingHost.vue'
 import { useOnboarding } from '../onboarding/useOnboarding'
 import { INBOX_FILTERS, parseInboxFilter } from './inbox/inboxPresentation'
 import InboxBell from './inbox/InboxBell.vue'
 import OperationsBadge from './operations/OperationsBadge.vue'
+import { operationsAlertSummaryContext } from './operations/operationsContext'
 import type { ShellSection } from '../router/shell-navigation'
 import InlineProblem from './InlineProblem.vue'
 import { MY_PROJECT_ACCESSES } from './projects/projectScope'
@@ -81,7 +83,15 @@ const projectRecentScope = computed(() => {
   return authentication ? `${authentication.company.id}:${authentication.user.id}` : undefined
 })
 const projectRecents = useProjectRecents(() => projectRecentScope.value)
-const operationsAlertCount = ref(0)
+const operationsAlerts = useOperationsQuery((signal) => operationsApi.getOperationsAlertSummary({ signal }), {
+  interval: () => 60000,
+  enabled: () => session.isPlatformAdmin.value && session.phase.value === 'authenticated',
+})
+const operationsAlertCount = computed(() => (operationsAlerts.data.value?.critical ?? 0) + (operationsAlerts.data.value?.warning ?? 0))
+provide(operationsAlertSummaryContext, readonly(operationsAlerts.data))
+function operationsAlertsChanged() { void operationsAlerts.refresh() }
+onMounted(() => window.addEventListener('yumpoo-operations-alerts-changed', operationsAlertsChanged))
+onBeforeUnmount(() => window.removeEventListener('yumpoo-operations-alerts-changed', operationsAlertsChanged))
 const moduleItems = computed<ModuleItem[]>(() => [
   { section: 'home', label: '首页', routeName: 'home', icon: House },
   { section: 'work', label: '工作台', routeName: 'workspace', icon: Grid },
@@ -365,7 +375,6 @@ onBeforeUnmount(() => {
             <span class="module-rail__item-label">{{ item.label }}</span>
             <operations-badge
               v-if="item.section === 'operations'"
-              @count="operationsAlertCount = $event"
             />
           </button>
         </el-tooltip>
@@ -751,7 +760,6 @@ onBeforeUnmount(() => {
           {{ item.label }}
           <operations-badge
             v-if="item.section === 'operations' && mobileNavigationOpen"
-            @count="operationsAlertCount = $event"
           />
         </button>
       </nav>

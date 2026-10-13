@@ -23,7 +23,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
     steps: [
       { title: '欢迎来到工作中台', description: '接下来用 1 分钟带你认识首页和主要入口，随时可以按 Esc 退出。' },
       { target: at('shell-modules'), placement: 'right-start', title: '功能模块', description: '在首页和工作台之间切换；如果你是管理员，这里还会出现团队、公司管理与运维。' },
-      { target: at('home-jumps'), placement: 'bottom', title: '快捷入口', description: '直达管理项目、仪表板、收件箱，或直接开始计时。' },
+      { target: at('home-jumps'), placement: 'bottom', title: '快捷入口', description: '直达管理项目、收件箱，或直接开始计时；这里还会按你的角色显示仪表板、团队视图和管理入口。' },
       { target: at('home-tasks'), placement: 'right-start', title: '我的工作项', description: '分配给你、进行中和待开始的工作项都在这里，逾期会标红；点击即可打开所在项目。' },
       { target: at('home-calendar'), placement: 'left-start', title: '工时日历', description: '本月每天记录的工时，满 8 小时的日期以深色显示；“查看明细”进入我的工时。' },
       { target: at('topbar-inbox'), placement: 'bottom-end', title: '收件箱', description: '有人 @你、评论或给你指派工作项时，这里会提醒。' },

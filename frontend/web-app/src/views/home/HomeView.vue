@@ -2,9 +2,9 @@
 import { DataAnalysis, DataLine, Monitor, FolderOpened, Message, OfficeBuilding, Timer } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask, type TeamTimesheet } from '@yumpoo/api-client'
 import { ElTooltip } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
-import { dashboardsApi, operationsApi, myWorkApi, projectsApi } from '../../api/client'
+import { dashboardsApi, myWorkApi, projectsApi } from '../../api/client'
 import { monthGrid, monthStats, runningExtraMs, shiftMonth, STANDARD_DAY_MS, weekdayLabels } from '../../components/my-time/myTimeModel'
 import { addDays, buildTimesheet, fromApiDate, projectColors, shortHours, todayIn, toApiDate } from '../../components/team/teamDashboardModel'
 import AuroraShapes from '../../components/motion/AuroraShapes.vue'
@@ -13,7 +13,7 @@ import { workItemLabelColorValue } from '../../components/projects/workItemLabel
 import YpJumpCard, { type JumpTone } from '../../components/yp/YpJumpCard.vue'
 import YpSegmented from '../../components/yp/YpSegmented.vue'
 import { useInbox } from '../../composables/useInbox'
-import { useOperationsQuery } from '../../composables/useOperationsQuery'
+import { operationsAlertSummaryContext } from '../../components/operations/operationsContext'
 import { useSession } from '../../composables/useSession'
 import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
@@ -22,11 +22,8 @@ import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, t
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
 
 const router = useRouter(), session = useSession(), tracker = useTimeTracker(), inbox = useInbox()
-const alerts = useOperationsQuery((signal) => operationsApi.getOperationsAlertSummary({ signal }), {
-  interval: () => 60000,
-  enabled: () => session.isPlatformAdmin.value && session.phase.value === 'authenticated',
-})
-const alertCount = computed(() => (alerts.data.value?.critical ?? 0) + (alerts.data.value?.warning ?? 0))
+const alerts = inject(operationsAlertSummaryContext)!
+const alertCount = computed(() => (alerts.value?.critical ?? 0) + (alerts.value?.warning ?? 0))
 const onboarding = usePageOnboarding()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 // The tracker clock is server-calibrated and ticks every second, so the greeting follows the company time of day.
