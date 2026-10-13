@@ -8,7 +8,6 @@ export interface Period { kind: PeriodKind; from: string; to: string }
 export const MAX_RANGE_DAYS = 93
 export const periodOptions = [{ value: 'WEEK', label: '周' }, { value: 'MONTH', label: '月' }, { value: 'QUARTER', label: '季' }] as const
 export type TeamView = 'TIMESHEET' | 'OVERTIME' | 'WORKLOAD'
-export const viewOptions = [{ value: 'TIMESHEET', label: '成员工时' }, { value: 'OVERTIME', label: '加班统计' }, { value: 'WORKLOAD', label: '成员当前任务' }] as const
 
 const DAY = 86_400_000
 const weekdays = ['日', '一', '二', '三', '四', '五', '六']

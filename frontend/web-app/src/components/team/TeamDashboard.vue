@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElAlert, ElButton } from 'element-plus'
-import YpSegmented from '../yp/YpSegmented.vue'
 import TeamTimesheet from './TeamTimesheet.vue'
 import TeamWorkload from './TeamWorkload.vue'
-import { viewOptions, type TeamView } from './teamDashboardModel'
+import { type TeamView } from './teamDashboardModel'
 import { useTeamDashboard } from './useTeamDashboard'
 
+const props = defineProps<{ view: TeamView }>()
 const team = useTeamDashboard()
 const { optionsError, timezone, period, timesheet, timesheetLoading, timesheetError, workload, workloadLoading, workloadError, tasks } = team
-const view = ref<TeamView>('TIMESHEET'), timesheetView = ref<InstanceType<typeof TeamTimesheet>>()
+const timesheetView = ref<InstanceType<typeof TeamTimesheet>>()
 const loading = computed(() => timesheetLoading.value || workloadLoading.value)
 const ready = computed(() => Boolean(team.options.value && timesheet.value && workload.value)
   && !loading.value && !optionsError.value && !timesheetError.value && !workloadError.value)
-watch(view, () => timesheetView.value?.closePopovers())
+watch(() => props.view, () => timesheetView.value?.closePopovers())
 defineExpose({ refresh: team.refresh, loading, ready })
 </script>
 
@@ -34,41 +34,25 @@ defineExpose({ refresh: team.refresh, loading, ready })
       </el-button>
     </el-alert>
     <TeamTimesheet
-      v-show="view !== 'WORKLOAD'"
+      v-show="props.view !== 'WORKLOAD'"
       ref="timesheetView"
       v-model:period="period"
       :sheet="timesheet"
       :loading="timesheetLoading"
       :error="timesheetError"
       :timezone="timezone"
-      :overtime="view === 'OVERTIME'"
+      :overtime="props.view === 'OVERTIME'"
       @retry="team.loadTimesheet()"
-    >
-      <template #switch>
-        <YpSegmented
-          v-model="view"
-          :options="viewOptions"
-          label="团队视图内容"
-        />
-      </template>
-    </TeamTimesheet>
+    />
     <TeamWorkload
-      v-show="view === 'WORKLOAD'"
+      v-show="props.view === 'WORKLOAD'"
       :workload="workload"
       :loading="workloadLoading"
       :error="workloadError"
       :tasks="tasks"
       @retry="team.loadWorkload()"
       @load="(key, append) => team.loadTasks(key, append)"
-    >
-      <template #switch>
-        <YpSegmented
-          v-model="view"
-          :options="viewOptions"
-          label="团队视图内容"
-        />
-      </template>
-    </TeamWorkload>
+    />
   </div>
 </template>
 

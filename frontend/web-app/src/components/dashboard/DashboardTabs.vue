@@ -1,23 +1,18 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { ElButton, ElIcon, ElInput, ElPopover, ElTooltip } from 'element-plus'
-import { Calendar, Check, DataAnalysis, Menu, Plus, Search, User } from '@element-plus/icons-vue'
+import { Check, DataAnalysis, Menu, Plus, Search } from '@element-plus/icons-vue'
 import type { DashboardSummary } from '@yumpoo/api-client'
 import YpEmptyState from '../yp/YpEmptyState.vue'
 import { useSlidingIndicator } from '../yp/useSlidingIndicator'
-import { MY_TIME_VIEW_ID, TEAM_VIEW_ID } from './dashboardModel'
 
-interface Tab { id: string; name: string; fixed?: 'mine' | 'team' }
+interface Tab { id: string; name: string }
 
-const props = defineProps<{ dashboards: DashboardSummary[]; activeId: string; activeName: string; team: boolean; renamable: boolean }>()
+const props = defineProps<{ dashboards: DashboardSummary[]; activeId: string; activeName: string; renamable: boolean }>()
 const emit = defineEmits<{ select: [id: string]; create: []; rename: [name: string] }>()
 const strip = ref<HTMLElement>()
 const listOpen = ref(false), search = ref(''), editing = ref(false), draft = ref('')
-const tabs = computed<Tab[]>(() => [
-  { id: MY_TIME_VIEW_ID, name: '我的工时', fixed: 'mine' },
-  ...(props.team ? [{ id: TEAM_VIEW_ID, name: '团队视图', fixed: 'team' as const }] : []),
-  ...props.dashboards.map(d => ({ id: d.id, name: d.id === props.activeId ? props.activeName : d.name })),
-])
+const tabs = computed<Tab[]>(() => props.dashboards.map(d => ({ id: d.id, name: d.id === props.activeId ? props.activeName : d.name })))
 const choices = computed(() => tabs.value.filter(tab => tab.name.toLowerCase().includes(search.value.trim().toLowerCase())))
 const activeIndex = computed(() => editing.value ? -1 : tabs.value.findIndex(tab => tab.id === props.activeId))
 const { indicatorStyle, animated, measure } = useSlidingIndicator(strip, '.dashboard-tab', () => activeIndex.value)
@@ -33,7 +28,7 @@ function hoverTab(event: PointerEvent) {
 function select(id: string) { listOpen.value = false; if (id !== props.activeId) emit('select', id) }
 function create() { listOpen.value = false; emit('create') }
 async function startRename(tab: Tab) {
-  if (tab.fixed || tab.id !== props.activeId || !props.renamable) return
+  if (tab.id !== props.activeId || !props.renamable) return
   draft.value = tab.name; editing.value = true; hover.shown = false
   await nextTick()
   const input = strip.value?.querySelector<HTMLInputElement>('.dashboard-tab-rename input')
@@ -98,26 +93,19 @@ watch(() => props.activeName, () => { void nextTick(measure) })
         <button
           v-else
           class="dashboard-tab"
-          :class="{ active: tab.id === activeId, 'dashboard-tab--fixed': tab.fixed }"
+          :class="{ active: tab.id === activeId }"
           type="button"
           role="tab"
           :aria-selected="tab.id === activeId"
           :tabindex="tab.id === activeId ? 0 : -1"
-          :title="tab.fixed === 'mine' ? '本人每日工时（按公司时区）' : tab.fixed ? '成员工时与当前任务（仅公司管理员可见）' : tab.name"
+          :title="tab.name"
           @click="select(tab.id)"
           @dblclick="startRename(tab)"
           @keydown="move($event, index)"
           @pointerenter="hoverTab"
         >
-          <el-icon v-if="tab.fixed">
-            <Calendar v-if="tab.fixed === 'mine'" /><User v-else />
-          </el-icon><span>{{ tab.name }}</span>
+          <span>{{ tab.name }}</span>
         </button>
-        <span
-          v-if="tab.fixed && tabs[index + 1] && !tabs[index + 1]!.fixed"
-          class="dashboard-tabs__divider"
-          aria-hidden="true"
-        />
       </template>
       <span
         class="dashboard-tabs__ink"
@@ -158,7 +146,7 @@ watch(() => props.activeName, () => { void nextTick(measure) })
           @click="select(tab.id)"
         >
           <el-icon>
-            <Calendar v-if="tab.fixed === 'mine'" /><User v-else-if="tab.fixed" /><DataAnalysis v-else />
+            <DataAnalysis />
           </el-icon><span>{{ tab.name }}</span><el-icon v-if="tab.id === activeId">
             <Check />
           </el-icon>
@@ -205,8 +193,6 @@ watch(() => props.activeName, () => { void nextTick(measure) })
 .dashboard-tabs__ink::after{content:'';position:absolute;inset:0 10px;border-radius:3px 3px 0 0;background:var(--yp-action-primary)}
 .dashboard-tabs__ink.is-animated{transition:transform var(--yp-motion-progress) var(--yp-ease-standard),width var(--yp-motion-progress) var(--yp-ease-standard)}
 .dashboard-tab:focus-visible{outline:2px solid var(--yp-focus-ring);outline-offset:-2px}
-.dashboard-tab--fixed .el-icon{color:var(--yp-action-primary)}
-.dashboard-tabs__divider{flex:none;align-self:center;width:1px;height:20px;margin:0 6px;background:var(--yp-border-default)}
 .dashboard-tab-rename{flex:none;align-self:center;width:200px;margin:0 6px}
 .dashboard-tabs__action{display:inline-flex;flex:none;align-self:center}
 .dashboard-tabs .el-button+.el-button{margin-left:0}
