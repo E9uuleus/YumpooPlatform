@@ -80,6 +80,24 @@ export interface NotificationTarget {
      * @memberof NotificationTarget
      */
     excerpt?: string | null;
+    /**
+     *
+     * @type {Date}
+     * @memberof NotificationTarget
+     */
+    workDate?: Date | null;
+    /**
+     *
+     * @type {number}
+     * @memberof NotificationTarget
+     */
+    durationMs?: number | null;
+    /**
+     *
+     * @type {number}
+     * @memberof NotificationTarget
+     */
+    thresholdMinutes?: number | null;
 }
 
 
@@ -112,6 +130,9 @@ export function NotificationTargetFromJSONTyped(json: any, ignoreDiscriminator: 
         ...(json['title'] === undefined ? {} : { 'title': json['title'] === null ? null : json['title'] }),
         ...(json['updateId'] === undefined ? {} : { 'updateId': json['updateId'] === null ? null : json['updateId'] }),
         ...(json['excerpt'] === undefined ? {} : { 'excerpt': json['excerpt'] === null ? null : json['excerpt'] }),
+        ...(json['workDate'] === undefined ? {} : { 'workDate': json['workDate'] === null ? null : (new Date(json['workDate'])) }),
+        ...(json['durationMs'] === undefined ? {} : { 'durationMs': json['durationMs'] === null ? null : json['durationMs'] }),
+        ...(json['thresholdMinutes'] === undefined ? {} : { 'thresholdMinutes': json['thresholdMinutes'] === null ? null : json['thresholdMinutes'] }),
     };
 }
 
@@ -135,5 +156,8 @@ export function NotificationTargetToJSONTyped(value?: NotificationTarget | null,
         'title': value['title'],
         'updateId': value['updateId'],
         'excerpt': value['excerpt'],
+        'workDate': value['workDate'] == null ? value['workDate'] : value['workDate'].toISOString().substring(0,10),
+        'durationMs': value['durationMs'],
+        'thresholdMinutes': value['thresholdMinutes'],
     };
 }

@@ -57,6 +57,7 @@ class ProjectDeletionNotificationMigrationIT {
         }
         assertThatThrownBy(()->jdbc.sql("UPDATE yumpoo.user_notification SET reason='UNKNOWN'").update())
                 .isInstanceOf(DataIntegrityViolationException.class);
+        migration(source,"76").migrate();
         Instant deadline=Instant.now().plus(30,ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
         UUID project=UUID.randomUUID(), sourceId=UUID.randomUUID();
         var row=new NotificationRepository.Event(UUID.randomUUID(),company,sourceId,"catalog.project_deletion_scheduled",1,

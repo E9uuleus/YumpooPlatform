@@ -29,6 +29,7 @@ export enum NotificationReason {
     ProjectDeletionScheduled = 'PROJECT_DELETION_SCHEDULED',
     ProjectDeletionReminder = 'PROJECT_DELETION_REMINDER',
     ProjectDeletionCancelled = 'PROJECT_DELETION_CANCELLED',
+    WorkHoursAnomaly = 'WORK_HOURS_ANOMALY',
     UnknownDefaultOpenApi = '11184809'
 }
 

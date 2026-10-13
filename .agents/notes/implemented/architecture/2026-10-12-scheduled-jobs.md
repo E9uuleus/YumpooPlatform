@@ -20,7 +20,7 @@ identityaccess 的 DIRECTORY_SYNC bean 通过 ObjectProvider 取得现有通讯�
 
 - 共享 `@Scheduled`：通讯录耗时会阻塞单线程 Outbox，采用独立执行线程。
 - Quartz 或 ShedLock：现有单实例需求只需 next_run_at CAS 与持久化配置，不增加调度依赖。
-- 通用 scheduled_job_run 历史表：当前只有通讯录任务，业务运行表和既有日志足够，不重复保存历史。
+- 通用 scheduled_job_run 历史表：现有任务的业务数据和运行日志足够，不重复保存历史。
 - 通过 last_slot_at 迭代补跑：停机恢复可能连续触发大量全量同步，选择最多补跑一次。
 - YAML 静态配置：公司管理员无法在页面配置，采用数据库和乐观并发控制。
 - 新增日志模块：调度是触发上下文，采用 MDC job 与现有运行日志，保留代码归属模块。
@@ -28,3 +28,5 @@ identityaccess 的 DIRECTORY_SYNC bean 通过 ObjectProvider 取得现有通讯�
 ## Consequences
 
 配置只保存最近一次结果，历史留在业务运行表和运行日志；公司时区变更后需重新保存计划才能使用新时区。执行中进程崩溃会留下 lastStartedAt 大于 lastFinishedAt 的运行中状态，直到下次运行覆盖。新增任务需要一个 ScheduledJob bean 和前端任务元数据，不依赖 foundation 反向调用业务模块。活动记录仍由各业务事件负责，调度不产生额外活动投影。
+
+第二个任务 WORK_HOURS_ANOMALY 以计划时刻 triggerKey 推导前一自然日的检查日，口径与去重由[工作日历与工时异常决策](../product/2026-10-12-work-calendar-and-overtime.md)拥有。

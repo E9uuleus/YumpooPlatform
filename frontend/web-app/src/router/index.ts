@@ -8,6 +8,7 @@ import {
 } from 'vue-router'
 import { consumeReturnPath, rememberReturnPath } from '../auth/navigation'
 import TimerPanel from '../components/timer/TimerPanel.vue'
+import { TEAM_VIEW_ID } from '../components/dashboard/dashboardModel'
 import AppShell from '../components/AppShell.vue'
 import { useSession } from '../composables/useSession'
 import LoginView from '../views/auth/LoginView.vue'
@@ -85,6 +86,12 @@ export const routes: RouteRecordRaw[] = [
         name: 'workspace',
         component: ProjectsView,
         meta: { shellSection: 'work', onboardingTour: 'workspace' },
+      },
+      {
+        path: 'dashboards/team',
+        name: 'team-dashboard-entry',
+        component: () => import('../views/DashboardsView.vue'),
+        meta: { shellSection: 'work' },
       },
       {
         path: 'workspace/:workspaceSlug/dashboards/:dashboardId?',
@@ -214,6 +221,9 @@ export function sessionDestination(to: RouteLocationNormalized) {
   const workspaceSlug = session.authentication.value.user.workspaceSlug
   if (to.name === 'workspace-entry') {
     return { name: 'workspace', params: { workspaceSlug }, replace: true }
+  }
+  if (to.name === 'team-dashboard-entry') {
+    return { name: 'dashboards', params: { workspaceSlug, dashboardId: TEAM_VIEW_ID }, query: to.query, hash: to.hash, replace: true }
   }
   if ((to.name === 'workspace' || to.name === 'dashboards') && to.params.workspaceSlug !== workspaceSlug) {
     return { name: to.name, params: { ...to.params, workspaceSlug }, replace: true }

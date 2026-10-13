@@ -40,6 +40,8 @@ V69 使用数据库时钟建立独立 `PROJECT_DELETION_V1` 水位，保留原�
 
 notification 自有 `ProjectDataPurger` 声明 `NOTIFICATION`、order 10。每批累计最多 500 行，先删 `user_notification`，再锁定并只删除无接收人子行的 `notification_event`，余量用于 `project_notification_preference`；返回是否仍有自有记录，支持中断后重入。父事件锁定和删除采用两条语句，第二条语句重新观察已提交子行，避免并发外键插入触发超过批次预算的级联删除。
 
+[工作日历与工时异常](../product/2026-10-12-work-calendar-and-overtime.md)由独立消费者 `notification-work-hours-v1` 投影 `reporting.work_hours_anomaly_detected` v1。`MEMBER_DAY` 目标允许 project_id 为空，保存成员、工作日、时长和阈值；不归入任何分组，仍计入总未读。新事件类型没有历史积压，因此不新增投影水位。接收人为 ACTIVE/ENABLED 有效公司管理员，列表读取时再次要求 COMPANY_ADMIN，并跳过业务目标 references，仅批量读取成员信息。
+
 ## Alternatives considered
 
 - 将标题与评论快照写入投影：读取更简单，但移出项目后会泄露历史业务文本，且编辑删除后难以保持一致。

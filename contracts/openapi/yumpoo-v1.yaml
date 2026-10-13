@@ -7265,7 +7265,7 @@ components:
         changedAt: { type: string, format: date-time }
     NotificationReason:
       type: string
-      enum: [MENTION, REPLY, COMMENT, ASSIGNED, PROJECT_MEMBER_ADDED, PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED, CONNECTION_CREATED, PROJECT_DELETION_SCHEDULED, PROJECT_DELETION_REMINDER, PROJECT_DELETION_CANCELLED]
+      enum: [MENTION, REPLY, COMMENT, ASSIGNED, PROJECT_MEMBER_ADDED, PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED, CONNECTION_CREATED, PROJECT_DELETION_SCHEDULED, PROJECT_DELETION_REMINDER, PROJECT_DELETION_CANCELLED, WORK_HOURS_ANOMALY]
     NotificationState:
       type: string
       enum: [UNREAD, READ, ARCHIVED]
@@ -7278,7 +7278,7 @@ components:
       enum: [MENTION, COMMENT, ASSIGNED, PROJECT]
     NotificationTargetKind:
       type: string
-      enum: [PROJECT, WORK_ITEM, WORK_ITEM_UPDATE]
+      enum: [PROJECT, WORK_ITEM, WORK_ITEM_UPDATE, MEMBER_DAY]
     NotificationPerson:
       type: object
       nullable: true
@@ -7299,6 +7299,9 @@ components:
         title: { type: string, nullable: true }
         updateId: { type: string, format: uuid, nullable: true }
         excerpt: { type: string, nullable: true }
+        workDate: { type: string, format: date, nullable: true }
+        durationMs: { type: integer, format: int64, nullable: true }
+        thresholdMinutes: { type: integer, nullable: true }
     NotificationItem:
       type: object
       required: [id, reason, state, createdAt, readAt, actor, subject, target]

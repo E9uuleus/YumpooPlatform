@@ -1,6 +1,7 @@
 package com.yumpoo.platform.notification.application;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -8,14 +9,19 @@ public final class NotificationModels {
     private NotificationModels() {}
     public enum Reason { MENTION, REPLY, COMMENT, ASSIGNED, PROJECT_MEMBER_ADDED,
         PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED, CONNECTION_CREATED,
-        PROJECT_DELETION_SCHEDULED, PROJECT_DELETION_REMINDER, PROJECT_DELETION_CANCELLED }
+        PROJECT_DELETION_SCHEDULED, PROJECT_DELETION_REMINDER, PROJECT_DELETION_CANCELLED, WORK_HOURS_ANOMALY }
     public enum State { UNREAD, READ, ARCHIVED }
     public enum ListState { UNREAD, ALL, ARCHIVED }
     public enum Group { MENTION, COMMENT, ASSIGNED, PROJECT }
-    public enum TargetKind { PROJECT, WORK_ITEM, WORK_ITEM_UPDATE }
+    public enum TargetKind { PROJECT, WORK_ITEM, WORK_ITEM_UPDATE, MEMBER_DAY }
     public record Person(UUID id, String displayName) {}
     public record Target(TargetKind kind, boolean accessible, UUID projectId, String projectName,
-            UUID workItemId, String itemNo, String title, UUID updateId, String excerpt) {
+            UUID workItemId, String itemNo, String title, UUID updateId, String excerpt,
+            LocalDate workDate, Long durationMs, Integer thresholdMinutes) {
+        public Target(TargetKind kind, boolean accessible, UUID projectId, String projectName,
+                UUID workItemId, String itemNo, String title, UUID updateId, String excerpt) {
+            this(kind, accessible, projectId, projectName, workItemId, itemNo, title, updateId, excerpt, null, null, null);
+        }
         public static Target inaccessible(TargetKind kind) {
             return new Target(kind, false, null, null, null, null, null, null, null);
         }
@@ -35,7 +41,7 @@ public final class NotificationModels {
         public boolean allows(Reason reason) {
             return switch (reason) {
                 case PROJECT_MEMBER_ADDED, PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED,
-                     PROJECT_DELETION_SCHEDULED, PROJECT_DELETION_REMINDER, PROJECT_DELETION_CANCELLED -> true;
+                     PROJECT_DELETION_SCHEDULED, PROJECT_DELETION_REMINDER, PROJECT_DELETION_CANCELLED, WORK_HOURS_ANOMALY -> true;
                 case MENTION -> enabled(mention);
                 case COMMENT, REPLY -> enabled(comment);
                 case ASSIGNED -> enabled(assigned);

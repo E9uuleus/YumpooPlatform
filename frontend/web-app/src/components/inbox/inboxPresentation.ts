@@ -16,6 +16,11 @@ export function notificationText(item: NotificationItem, readerId?: string, time
     ? new Intl.DateTimeFormat('sv-SE', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(item.deletionPurgeAfter)
     : undefined
   switch (item.reason) {
+    case 'WORK_HOURS_ANOMALY': {
+      const date = item.target.workDate?.toISOString().slice(0, 10) ?? ''
+      const hours = Math.round((item.target.durationMs ?? 0) / 360_000) / 10
+      return `提醒：${item.subject?.displayName || '成员'} ${date} 工时 ${hours} 小时，超过 ${(item.target.thresholdMinutes ?? 0) / 60} 小时，该成员工时数据异常请关注`
+    }
     case 'MENTION': return `在 ${target} 中提到了你`
     case 'REPLY': return `回复了你在 ${target} 的评论`
     case 'COMMENT': return `评论了 ${target}`
@@ -40,6 +45,7 @@ export function notificationExcerpt(item: NotificationItem): string {
 
 export function notificationLink(item: NotificationItem, readerId?: string): RouteLocationRaw | undefined {
   const target = item.target
+  if (target.accessible && target.kind === 'MEMBER_DAY' && target.workDate) return { path: '/dashboards/team', query: { date: target.workDate.toISOString().slice(0, 10) } }
   if (!target.accessible || !target.projectId || isOwnProjectRemoval(item, readerId)) return
   return { path: `/projects/${target.projectId}/overview`, query: {
     ...(target.workItemId ? { workItemId: target.workItemId } : {}),
