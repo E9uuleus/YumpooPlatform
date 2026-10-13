@@ -8,6 +8,8 @@ Status: implemented
 
 ## Decision
 
+其中我的工时作为固定标签的入口决策由[团队审阅模块](2026-10-13-team-review-module.md)部分替代。
+
 - **本人接口：** `GET /me/timesheet` 与 `GET /me/current-tasks` 对任意有效成员开放，只读本人数据。
   - 计时固定为 `actor.userId()` 的未删除计时，排除已删除工作项；当前任务固定为分配给本人、未删除未归档且状态分类为 TODO 或 IN_PROGRESS 的工作项。
   - 项目范围沿用[私人仪表板](2026-09-16-personal-dashboards.md)的 `MemberProjectQuery`：本人当前有效成员身份的未归档项目，最多 100 个。
