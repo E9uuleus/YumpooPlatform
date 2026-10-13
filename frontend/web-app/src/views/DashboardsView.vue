@@ -6,6 +6,7 @@ import { type DashboardFilters, type DashboardWidget, type DashboardChartSelecti
 import { problemMessage, toApiProblem } from '../api/problems'
 import { useSession } from '../composables/useSession'
 import { usePageOnboarding } from '../onboarding/useOnboarding'
+import { dashboardSource } from '../components/dashboard/statisticsSource'
 import { useDashboard } from '../components/dashboard/useDashboard'
 import { clone, defaultConfiguration, emptyFilters, newWidget, widgetCatalog } from '../components/dashboard/dashboardModel'
 import { exportFileName, PDF_TYPE, saveExportFile } from '../components/dashboard/exportFile'
@@ -35,6 +36,7 @@ const createOpen = ref(false), createName = ref(''), createBlank = ref(false), c
 const settingsId = ref(''), settings = computed(() => configuration.value.widgets.find(w => w.id === settingsId.value))
 const removed = ref<{ widget: DashboardWidget; index: number }>(), pendingReveal = ref('')
 const detailId = ref(''), detailSelection = ref<DashboardChartSelection>()
+const exploreSource = computed(() => dashboard.value ? dashboardSource(dashboard.value.id) : undefined)
 const detailWidget = computed(() => configuration.value.widgets.find(w => w.id === detailId.value))
 const connections = computed(() => snapshot.value?.projects || dashboard.value?.projects || [])
 const activeConnectionCount = computed(() => connections.value.filter(project => project.available && project.lifecycle === 'ACTIVE').length)
@@ -597,7 +599,7 @@ async function discardReload() {
     <DashboardExploreDialog
       v-if="detailWidget && dashboard"
       :key="detailWidget.id"
-      :dashboard-id="dashboard.id"
+      :source="exploreSource!"
       :widget="detailWidget"
       :result="results.get(detailWidget.id)"
       :filters="configuration.filters"

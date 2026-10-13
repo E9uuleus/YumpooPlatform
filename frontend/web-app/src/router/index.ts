@@ -124,6 +124,7 @@ export const routes: RouteRecordRaw[] = [
         meta: { shellSection: 'work' },
         children: [
           { path: 'overview', name: 'project-overview', component: ProjectOverviewView, meta: { onboardingTour: 'project-work-items' } },
+          { path: 'statistics', name: 'project-statistics', component: () => import('../views/projects/ProjectStatisticsView.vue') },
           { path: 'members', name: 'project-members', component: ProjectMembersView },
           { path: 'activity', name: 'project-activity', component: ProjectActivityView },
           { path: 'settings', name: 'project-settings', component: ProjectSettingsView },

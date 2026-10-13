@@ -1,5 +1,7 @@
 package com.yumpoo.platform.workitem.application;
 
+import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
+import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
@@ -18,7 +20,15 @@ import java.util.UUID;
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class TeamWorkService {
     private final TeamWorkRepository repository;
-    public TeamWorkService(TeamWorkRepository repository) { this.repository = repository; }
+    private final ProjectAccessSnapshotQuery access;
+    public TeamWorkService(TeamWorkRepository repository, ProjectAccessSnapshotQuery access) { this.repository = repository; this.access = access; }
+
+    public List<TeamWorkRepository.TimeEntry> projectTimeEntries(CurrentActor actor, UUID projectId, LocalDate from, LocalDate to,
+            ZoneId zone, Instant asOf) {
+        access.findVisible(actor, projectId).filter(p -> p.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        return repository.timeEntries(actor.companyId(), List.of(projectId), List.of(), from, to, zone, asOf);
+    }
 
     public List<TeamWorkRepository.TimeEntry> timeEntries(CurrentActor actor, List<UUID> projectIds, List<UUID> userIds,
             LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {

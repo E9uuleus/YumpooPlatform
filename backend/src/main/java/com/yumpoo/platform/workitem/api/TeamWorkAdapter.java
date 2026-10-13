@@ -27,6 +27,9 @@ public class TeamWorkAdapter implements TeamWorkQuery {
     public TaskPage currentTasks(CurrentActor actor, List<UUID> projectIds, UUID userId, LocalDate today, int offset, int limit) {
         return tasks(service.currentTasks(actor, projectIds, userId, today, offset, limit));
     }
+    public List<TimeEntry> projectTimeEntries(CurrentActor actor, UUID projectId, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
+        return entries(service.projectTimeEntries(actor, projectId, from, to, zone, asOf));
+    }
     public List<TimeEntry> ownTimeEntries(CurrentActor actor, List<UUID> projectIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
         return entries(service.ownTimeEntries(actor, projectIds, from, to, zone, asOf));
     }

@@ -1,6 +1,10 @@
 package com.yumpoo.platform.workitem.application;
 
 import com.yumpoo.platform.catalog.api.MemberProjectQuery;
+import com.yumpoo.platform.catalog.api.ProjectAccessSnapshot;
+import com.yumpoo.platform.catalog.api.ProjectAccessSnapshotQuery;
+import com.yumpoo.platform.catalog.api.ProjectConnectionTargetQuery;
+import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.FieldViolation;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
@@ -19,10 +23,13 @@ import java.util.*;
 public class WorkItemChartService {
     private final WorkItemChartRepository repository;
     private final MemberProjectQuery projects;
+    private final ProjectAccessSnapshotQuery access;
+    private final ProjectConnectionTargetQuery targets;
     private final MinimalUserSnapshotQuery users;
     private final Clock clock;
-    public WorkItemChartService(WorkItemChartRepository repository, MemberProjectQuery projects, MinimalUserSnapshotQuery users, Clock clock) {
-        this.repository = repository; this.projects = projects; this.users = users; this.clock = clock;
+    public WorkItemChartService(WorkItemChartRepository repository, MemberProjectQuery projects, ProjectAccessSnapshotQuery access,
+            ProjectConnectionTargetQuery targets, MinimalUserSnapshotQuery users, Clock clock) {
+        this.repository = repository; this.projects = projects; this.access = access; this.targets = targets; this.users = users; this.clock = clock;
     }
     public void validate(ChartStatistics.Request request) { ChartStatistics.validate(request); local(request); }
     private static StatisticsFilter local(ChartStatistics.Request r) {
@@ -40,9 +47,39 @@ public class WorkItemChartService {
     }
     public List<ChartStatistics.Result> charts(CurrentActor actor, List<UUID> connected, WorkItemStatisticsService.Request global,
             List<ChartStatistics.Request> requests, Instant asOf) {
+        return chartsWithin(actor, projects.find(actor, connected), global, requests, asOf);
+    }
+    public List<ChartStatistics.Result> projectCharts(CurrentActor actor, UUID projectId, WorkItemStatisticsService.Request global,
+            List<ChartStatistics.Request> requests, Instant asOf) {
+        return chartsWithin(actor, project(actor, projectId), global, requests, asOf);
+    }
+    public WorkItemStatisticsService.Page items(CurrentActor actor, List<UUID> connected, WorkItemStatisticsService.Request global,
+            ChartStatistics.Request chart, ChartStatistics.Selection selection, int offset, int limit) {
+        return itemsWithin(actor, projects.find(actor, connected), global, chart, selection, offset, limit);
+    }
+    public WorkItemStatisticsService.Page projectItems(CurrentActor actor, UUID projectId, WorkItemStatisticsService.Request global,
+            ChartStatistics.Request chart, ChartStatistics.Selection selection, int offset, int limit) {
+        return itemsWithin(actor, project(actor, projectId), global, chart, selection, offset, limit);
+    }
+    public ChartStatistics.TableScope tableScope(CurrentActor actor, List<UUID> connected, WorkItemStatisticsService.Request global,
+            ChartStatistics.Request chart, ChartStatistics.Selection selection, UUID projectId) {
+        return tableScopeWithin(actor, projects.find(actor, connected), global, chart, selection, projectId);
+    }
+    public ChartStatistics.TableScope projectTableScope(CurrentActor actor, UUID projectId, WorkItemStatisticsService.Request global,
+            ChartStatistics.Request chart, ChartStatistics.Selection selection) {
+        return tableScopeWithin(actor, project(actor, projectId), global, chart, selection, projectId);
+    }
+    private List<MemberProjectQuery.Project> project(CurrentActor actor, UUID projectId) {
+        var visible = access.findVisible(actor, projectId)
+                .filter(p -> p.lifecycle() == ProjectAccessSnapshot.ProjectLifecycle.ACTIVE)
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        var target = targets.findByIds(actor.companyId(), List.of(projectId)).get(projectId);
+        return List.of(new MemberProjectQuery.Project(visible.projectId(), target.name(), target.code(), "ACTIVE"));
+    }
+    private List<ChartStatistics.Result> chartsWithin(CurrentActor actor, List<MemberProjectQuery.Project> allowed, WorkItemStatisticsService.Request global,
+            List<ChartStatistics.Request> requests, Instant asOf) {
         global.filter();
         if (requests == null || requests.size() > 40) throw invalid("最多查询 40 个图表");
-        var allowed = projects.find(actor, connected);
         var output = new ArrayList<ChartStatistics.Result>();
         var cache = new HashMap<ChartStatistics.Request, List<ChartStatistics.Point>>();
         Set<String> ids = new HashSet<>();
@@ -76,13 +113,13 @@ public class WorkItemChartService {
         }
         return result;
     }
-    public WorkItemStatisticsService.Page items(CurrentActor actor, List<UUID> connected, WorkItemStatisticsService.Request global,
+    private WorkItemStatisticsService.Page itemsWithin(CurrentActor actor, List<MemberProjectQuery.Project> allowed, WorkItemStatisticsService.Request global,
             ChartStatistics.Request chart, ChartStatistics.Selection selection, int offset, int limit) {
         validate(chart);
         if (offset < 0 || offset > 100000 || limit < 1 || limit > 100) throw invalid("分页范围无效");
         if (selection != null && (selection.key() != null && selection.key().length() > 2000
                 || selection.seriesKey() != null && selection.seriesKey().length() > 2000)) throw invalid("图表分类无效");
-        var s = scope(projects.find(actor, connected), global, chart); var now = clock.instant();
+        var s = scope(allowed, global, chart); var now = clock.instant();
         if (s.global().projectIds().isEmpty()) return new WorkItemStatisticsService.Page(List.of(), 0, now);
         var rows = repository.items(actor.companyId(), s.global(), s.local(), chart, selection, now, offset, limit);
         var people = users.findByUserIds(actor.companyId(), rows.stream().flatMap(r -> java.util.stream.Stream.concat(r.assigneeUserIds().stream(), java.util.stream.Stream.of(r.reporterUserId())))
@@ -92,12 +129,12 @@ public class WorkItemChartService {
                         .map(id -> new WorkItemModels.WorkItemAssignee(id, person(id, people))).toList())).toList(),
                 repository.count(actor.companyId(), s.global(), s.local(), chart, selection, now), now);
     }
-    public ChartStatistics.TableScope tableScope(CurrentActor actor, List<UUID> connected, WorkItemStatisticsService.Request global,
+    private ChartStatistics.TableScope tableScopeWithin(CurrentActor actor, List<MemberProjectQuery.Project> allowed, WorkItemStatisticsService.Request global,
             ChartStatistics.Request chart, ChartStatistics.Selection selection, UUID projectId) {
         validate(chart);
         if (selection != null && (selection.key() != null && selection.key().length() > 2000
                 || selection.seriesKey() != null && selection.seriesKey().length() > 2000)) throw invalid("图表分类无效");
-        var scoped = scope(projects.find(actor, connected), global, chart);
+        var scoped = scope(allowed, global, chart);
         if (projectId == null || !scoped.global().projectIds().contains(projectId))
             throw new ApplicationException(com.yumpoo.platform.foundation.application.error.StandardErrorCode.RESOURCE_NOT_FOUND);
         return new ChartStatistics.TableScope(scoped.global().within(List.of(projectId)), scoped.local(), chart, selection, clock.instant());

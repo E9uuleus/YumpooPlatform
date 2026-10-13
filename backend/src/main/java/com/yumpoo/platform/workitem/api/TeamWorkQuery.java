@@ -10,7 +10,7 @@ import java.util.UUID;
 /**
  * Administrator reporting across the company; rejects actors without COMPANY_ADMIN. The own* variants read only the
  * actor's own sessions and assignments and need no administrator role. Project ids must come from the caller's scope.
- * Time is split per company-calendar day; open work counts each assignee once.
+ * The project variant checks readable active project access. Time is split per company-calendar day; open work counts each assignee once.
  */
 public interface TeamWorkQuery {
     List<TimeEntry> timeEntries(CurrentActor actor, List<UUID> projectIds, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);
@@ -18,6 +18,7 @@ public interface TeamWorkQuery {
     List<TimeEntry> timeEntriesForScheduler(UUID companyId, List<UUID> projectIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);
     List<Load> currentLoad(CurrentActor actor, List<UUID> projectIds, LocalDate today);
     TaskPage currentTasks(CurrentActor actor, List<UUID> projectIds, UUID userId, LocalDate today, int offset, int limit);
+    List<TimeEntry> projectTimeEntries(CurrentActor actor, UUID projectId, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);
     List<TimeEntry> ownTimeEntries(CurrentActor actor, List<UUID> projectIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);
     TaskPage ownCurrentTasks(CurrentActor actor, List<UUID> projectIds, LocalDate today, int offset, int limit);
 

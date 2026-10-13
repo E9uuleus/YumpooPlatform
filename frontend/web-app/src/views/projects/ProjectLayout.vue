@@ -38,7 +38,7 @@ onBeforeUnmount(() => { request++; window.removeEventListener(PROJECT_LIFECYCLE_
       show-icon
       title="项目已归档，当前为只读浏览。仅负责人和企业管理员可访问或恢复，归档项目不计入统计。"
     />
-    <router-view />
+    <router-view :key="route.name === 'project-statistics' ? String(route.params.projectId) : 'project-page'" />
   </section>
 </template>
 

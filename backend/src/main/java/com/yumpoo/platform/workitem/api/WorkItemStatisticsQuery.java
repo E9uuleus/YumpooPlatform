@@ -14,6 +14,10 @@ public interface WorkItemStatisticsQuery {
     List<ChartResult> charts(CurrentActor actor, List<UUID> connectedProjectIds, Filters filters, List<ChartRequest> charts, Instant asOf);
     Page chartItems(CurrentActor actor, List<UUID> connectedProjectIds, Filters filters, ChartRequest chart, ChartSelection selection, int offset, int limit);
 
+    List<ChartResult> projectCharts(CurrentActor actor, UUID projectId, Filters filters, List<ChartRequest> charts, Instant asOf);
+    Page projectChartItems(CurrentActor actor, UUID projectId, Filters filters, ChartRequest chart, ChartSelection selection, int offset, int limit);
+    TablePage projectTable(CurrentActor actor, UUID projectId, Filters filters, ChartRequest chart, ChartSelection selection, TableCriteria criteria);
+
     TablePage table(CurrentActor actor, List<UUID> connectedProjectIds, Filters filters, ChartRequest chart,
             ChartSelection selection, UUID projectId, TableCriteria criteria);
     record TableCriteria(String q, List<String> status, List<String> priority, List<UUID> assigneeUserId,

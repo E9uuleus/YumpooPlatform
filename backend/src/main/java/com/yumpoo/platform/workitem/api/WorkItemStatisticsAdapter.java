@@ -1,6 +1,7 @@
 package com.yumpoo.platform.workitem.api;
 
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
+import com.yumpoo.platform.workitem.application.ChartStatistics;
 import com.yumpoo.platform.workitem.application.WorkItemStatisticsRepository;
 import com.yumpoo.platform.workitem.application.WorkItemStatisticsService;
 import org.springframework.stereotype.Component;
@@ -41,7 +42,13 @@ public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
     public void validate(Filters filters) { service.validate(filter(filters)); }
     public void validateChart(ChartRequest chart) { charts.validate(chart(chart)); }
     public List<ChartResult> charts(CurrentActor actor, List<UUID> projects, Filters filters, List<ChartRequest> requests, java.time.Instant asOf) {
-        return charts.charts(actor, projects, filter(filters), requests.stream().map(WorkItemStatisticsAdapter::chart).toList(), asOf).stream()
+        return results(charts.charts(actor, projects, filter(filters), requests.stream().map(WorkItemStatisticsAdapter::chart).toList(), asOf));
+    }
+    public List<ChartResult> projectCharts(CurrentActor actor, UUID projectId, Filters filters, List<ChartRequest> requests, java.time.Instant asOf) {
+        return results(charts.projectCharts(actor, projectId, filter(filters), requests.stream().map(WorkItemStatisticsAdapter::chart).toList(), asOf));
+    }
+    private static List<ChartResult> results(List<ChartStatistics.Result> rows) {
+        return rows.stream()
                 .map(r -> new ChartResult(r.id(), r.points().stream().map(p -> new ChartPoint(p.key(), p.label(), p.colorToken(),
                         p.seriesKey(), p.seriesLabel(), p.seriesColorToken(), p.count(), p.value(), p.xValue(), p.sizeValue(), p.categoryValue())).toList())).toList();
     }
@@ -49,12 +56,25 @@ public class WorkItemStatisticsAdapter implements WorkItemStatisticsQuery {
         return page(actor, charts.items(actor, projects, filter(filters), chart(request), selection == null ? null
                 : new com.yumpoo.platform.workitem.application.ChartStatistics.Selection(selection.key(), selection.seriesKey()), offset, limit));
     }
+    public Page projectChartItems(CurrentActor actor, UUID projectId, Filters filters, ChartRequest request, ChartSelection selection, int offset, int limit) {
+        return page(actor, charts.projectItems(actor, projectId, filter(filters), chart(request), selection == null ? null
+                : new ChartStatistics.Selection(selection.key(), selection.seriesKey()), offset, limit));
+    }
+    public TablePage projectTable(CurrentActor actor, UUID projectId, Filters filters, ChartRequest chart,
+            ChartSelection selection, TableCriteria c) {
+        var scope = charts.projectTableScope(actor, projectId, filter(filters), chart(chart), selection == null ? null
+                : new ChartStatistics.Selection(selection.key(), selection.seriesKey()));
+        return table(actor, scope, projectId, c);
+    }
     public TablePage table(CurrentActor actor, List<UUID> projects, Filters filters, ChartRequest chart,
             ChartSelection selection, UUID projectId, TableCriteria c) {
-        if (c == null) throw com.yumpoo.platform.foundation.application.error.ApplicationException.validation(
-                new com.yumpoo.platform.foundation.application.error.FieldViolation("table", "REQUIRED", "表格查询不能为空"));
         var scope = charts.tableScope(actor, projects, filter(filters), chart(chart), selection == null ? null
                 : new com.yumpoo.platform.workitem.application.ChartStatistics.Selection(selection.key(), selection.seriesKey()), projectId);
+        return table(actor, scope, projectId, c);
+    }
+    private TablePage table(CurrentActor actor, ChartStatistics.TableScope scope, UUID projectId, TableCriteria c) {
+        if (c == null) throw com.yumpoo.platform.foundation.application.error.ApplicationException.validation(
+                new com.yumpoo.platform.foundation.application.error.FieldViolation("table", "REQUIRED", "表格查询不能为空"));
         var request = new com.yumpoo.platform.workitem.application.WorkItemQuery.Request(c.q(), c.status(), c.priority(),
                 c.assigneeUserId(), c.contentId(), c.dueFrom(), c.dueTo(), c.updatedAfter(), c.sort(),
                 new com.yumpoo.platform.workitem.application.WorkItemQuery.TimeFilter(c.timeTrackingState(),

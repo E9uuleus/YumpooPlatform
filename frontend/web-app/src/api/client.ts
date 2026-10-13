@@ -3,6 +3,7 @@ import {
   NotificationsApi,
   DashboardsApi,
   TeamDashboardApi,
+  ProjectStatisticsApi,
   MyWorkApi,
   OnboardingApi,
   TimeTrackingApi,
@@ -38,6 +39,7 @@ export const activityApi = new ActivityApi(yumpooApiClient)
 
 export const timeTrackingApi = new TimeTrackingApi(yumpooApiClient)
 export const dashboardsApi = new DashboardsApi(yumpooApiClient)
+export const projectStatisticsApi = new ProjectStatisticsApi(yumpooApiClient)
 export const teamDashboardApi = new TeamDashboardApi(yumpooApiClient)
 export const myWorkApi = new MyWorkApi(yumpooApiClient)
 export const onboardingApi = new OnboardingApi(yumpooApiClient)

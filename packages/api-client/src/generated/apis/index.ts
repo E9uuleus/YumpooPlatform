@@ -11,6 +11,7 @@ export * from './MyWorkApi';
 export * from './NotificationsApi';
 export * from './OnboardingApi';
 export * from './OperationsApi';
+export * from './ProjectStatisticsApi';
 export * from './ProjectsApi';
 export * from './TeamDashboardApi';
 export * from './TimeTrackingApi';
