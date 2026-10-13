@@ -4247,9 +4247,6 @@ onBeforeUnmount(() => {
   --work-item-hierarchy-bar-width: 6px;
   --work-item-hierarchy-bar-center: 3px;
   --work-item-hierarchy-corner-radius: var(--work-item-hierarchy-bar-width);
-  --work-item-hierarchy-spine-offset: calc(
-    var(--work-item-hierarchy-bar-center) - (var(--work-item-hierarchy-line-width) / 2)
-  );
   --work-item-column-resize-idle: rgb(208, 212, 228);
   --work-item-column-resize-accent: rgb(87, 155, 252);
   --work-item-table-cell-bg: var(--yp-bg-surface);

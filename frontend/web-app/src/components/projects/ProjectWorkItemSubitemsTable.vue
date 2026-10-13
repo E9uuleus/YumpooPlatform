@@ -1361,8 +1361,7 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 .subitem-add__field { position: sticky; left: calc(var(--subitem-menu-column-width) + 48px); }
-.subitem-quick-controls { position: sticky; left: calc(var(--subitem-menu-column-width) + 48px + var(--subitem-title-column-width, 320px)); justify-self: start; }
-.subitem-quick-controls { grid-column: 4; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+.subitem-quick-controls { position: sticky; left: calc(var(--subitem-menu-column-width) + 48px + var(--subitem-title-column-width, 320px)); justify-self: start; grid-column: 4; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
 .subitem-quick-title.subitem-add__field { width: 100%; min-width: 0; margin: 0; outline: none; border-color: var(--yp-input-border-focus); background: var(--yp-bg-surface); color: var(--yp-text-primary); }
 .subitem-quick-title :deep(.el-input__wrapper) {
   height: 100%;

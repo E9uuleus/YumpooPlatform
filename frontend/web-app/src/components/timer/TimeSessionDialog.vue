@@ -254,11 +254,11 @@ onMounted(() => load())
 </template>
 
 <style scoped>
-.time-log{height:400px;max-height:min(var(--time-log-max-height,100dvh),calc(100dvh - 120px));display:flex;flex-direction:column;color:var(--el-text-color-primary);font-size:14px;white-space:normal}
+.time-log{height:400px;max-height:min(var(--time-log-max-height,100dvh),calc(100dvh - 24px));overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;color:var(--el-text-color-primary);font-size:14px;white-space:normal}
 header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 8px;flex-shrink:0}h3{margin:0;font-size:20px;font-weight:600}
 .plain-button{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;border-radius:5px;padding:7px 9px}.plain-button:hover:not(:disabled){background:var(--yp-bg-hover)}.plain-button:disabled{cursor:default;opacity:.5}.plain-button:focus-visible{outline:2px solid var(--el-color-primary);outline-offset:2px}
 .add-session{display:flex;justify-content:center;min-height:52px;align-items:center;flex-shrink:0}.add-session span{font-size:21px;margin-right:7px}
-.log-body{overflow-y:auto;overscroll-behavior:contain;flex:1;min-height:0;padding:0 12px 10px;scrollbar-gutter:stable}
+.log-body{overflow-y:auto;overscroll-behavior:contain;flex:1;min-height:50px;padding:0 12px 10px;scrollbar-gutter:stable}
 .log-row{display:grid;grid-template-columns:26px 48px minmax(105px,1fr) 76px 26px;gap:6px;align-items:center;min-height:50px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .member-badge{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;background:var(--yp-status-teal);color:var(--yp-status-teal-foreground);font-size:14px;font-weight:600}.time-range{text-align:center}.record-duration{padding:6px 0;font-variant-numeric:tabular-nums}.record-duration:disabled{opacity:1}
 .delete-button{padding:5px;display:grid;place-items:center}.delete-button svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}

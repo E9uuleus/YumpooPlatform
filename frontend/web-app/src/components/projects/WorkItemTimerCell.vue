@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { ProjectWorkItemListItem } from '@yumpoo/api-client'
 import { ElPopover } from 'element-plus'
 import { formatTrackingDuration, observeTimer, useTimeTracker } from '../../composables/useTimeTracker'
@@ -13,6 +13,7 @@ async function toggle() { if (await tracker.toggle(props.item.id)) emit('changed
 const tracker = useTimeTracker()
 const open = ref(false)
 const anchor = ref<HTMLElement>()
+const popover = ref<InstanceType<typeof ElPopover>>()
 const panelHeight = ref(400)
 const placement = ref<TimeLogPlacement>('bottom')
 const maxHeight = ref(400)
@@ -22,11 +23,29 @@ function place(keep?: TimeLogPlacement) {
   const next = timeLogPlacement(rect, window.innerHeight, panelHeight.value, keep)
   placement.value = next.placement
   maxHeight.value = next.maxHeight
+  void nextTick(() => { void popover.value?.popperRef?.popperInstanceRef?.update() })
 }
-watch(open, visible => {
+let placementFrame: number | undefined
+function schedulePlace(event: Event) {
+  if (event.target instanceof Element && event.target.closest('.time-log-popover')) return
+  if (placementFrame !== undefined) return
+  placementFrame = requestAnimationFrame(() => {
+    placementFrame = undefined
+    if (open.value) place()
+  })
+}
+watch(open, (visible, _previous, onCleanup) => {
   if (!visible) return
   panelHeight.value = 400
   place()
+  window.addEventListener('scroll', schedulePlace, { capture: true, passive: true })
+  window.addEventListener('resize', schedulePlace)
+  onCleanup(() => {
+    window.removeEventListener('scroll', schedulePlace, true)
+    window.removeEventListener('resize', schedulePlace)
+    if (placementFrame !== undefined) cancelAnimationFrame(placementFrame)
+    placementFrame = undefined
+  })
 })
 watch(panelHeight, () => { if (open.value) place(placement.value) })
 let release: (() => void) | undefined
@@ -45,13 +64,14 @@ const total = computed(() => {
 
 <template>
   <el-popover
+    ref="popover"
     v-model:visible="open"
     trigger="click"
     :placement="placement"
     :width="420"
     :persistent="false"
     :show-arrow="true"
-    :popper-options="{ modifiers: [{ name: 'flip', enabled: false }, { name: 'preventOverflow', options: { padding: 12 } }] }"
+    :popper-options="{ modifiers: [{ name: 'flip', enabled: false }, { name: 'preventOverflow', options: { padding: 12, altAxis: true, tether: false } }] }"
     popper-class="time-log-popover"
     :popper-style="{ '--time-log-max-height': `${maxHeight}px` }"
   >

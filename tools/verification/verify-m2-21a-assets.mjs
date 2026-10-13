@@ -84,8 +84,13 @@ for (const fragment of ['aria-label', '--work-item-hierarchy-indent, 40px',
   'subitem-quick-checkbox', 'color-mix(in srgb, var(--yp-border-strong) 50%, transparent)',
   '--subitem-quick-control-height: 26px', '.subitem-quick-row:focus-within',
   '.monday-subitem-table.el-table--border::after',
-  '.subitem-hierarchy-rail', '.subitem-hierarchy-spine', 'position: sticky',
   'createWorkItemSubitem', 'moveWorkItemSubitemOrder']) assert(subtable.includes(fragment), `子表格缺少 ${fragment}`)
+for (const selector of ['.subitem-hierarchy-rail', '.subitem-quick-lead', '.subitem-add__field', '.subitem-quick-controls', '.subitem-quick-checkbox']) {
+  const rule = new RegExp(`(?:^|\\n)\\s*${selector.replaceAll('.', '\\.')}\\s*\\{[^}]*\\bposition:\\s*sticky\\s*;`, 'u')
+  assert(rule.test(subtable), `${selector} 必须使用原生 sticky 定位`)
+}
+assert(/\.subitem-hierarchy-spine\s*\{[^}]*position:\s*absolute;/u.test(subtable),
+  '层级连接线必须随 sticky 轨道定位')
 assert(!subtable.includes('subitem-hierarchy-branch--header'), '子表头不应渲染层级连接锚点')
 for (const fragment of ['connect-column-add-button', 'aria-label="添加列"', 'viewBox="0 0 20 20"',
   'width="18"', 'height="18"', 'fill="currentColor"', 'M10 2.25C10.4142 2.25']) {
