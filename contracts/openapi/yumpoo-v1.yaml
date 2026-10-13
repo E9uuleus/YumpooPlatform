@@ -20,6 +20,8 @@ tags:
     description: 用户私有仪表板、跨项目统计与布局配置。
   - name: TeamDashboard
     description: 公司管理员团队视图：成员工时与当前任务统计。
+  - name: ProjectStatistics
+    description: 项目固定统计。
   - name: TimeTracking
     description: 工作项原始计时与本人跨端计时器。
   - name: MyWork
@@ -1669,6 +1671,96 @@ paths:
         '400': { $ref: '#/components/responses/MalformedRequest' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /projects/{projectId}/statistics/query:
+    post:
+      tags: [ProjectStatistics]
+      operationId: queryProjectStatistics
+      summary: 按固定模板统计单个项目
+      description: 负责人、成员与公司管理员（只读）可用；范围固定为路径项目，归档或不可见项目返回 404。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProjectStatisticsQuery' } } }
+      responses:
+        '200':
+          description: 项目统计结果。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectStatisticsSnapshot' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /projects/{projectId}/statistics/items/query:
+    post:
+      tags: [ProjectStatistics]
+      operationId: queryProjectStatisticsItems
+      summary: 分页查询项目统计组件对应的工作项
+      description: 负责人、成员与公司管理员（只读）可用；范围固定为路径项目，归档或不可见项目返回 404。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DashboardItemsQuery' } } }
+      responses:
+        '200':
+          description: 项目统计工作项分页。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/DashboardItemPage' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /projects/{projectId}/statistics/table/query:
+    post:
+      tags: [ProjectStatistics]
+      operationId: queryProjectStatisticsTable
+      summary: 查询项目统计组件范围内的工作项表格、分组选项或子项
+      description: 负责人、成员与公司管理员（只读）可用；范围固定为路径项目，归档或不可见项目返回 404。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/XsrfToken'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DashboardTableQuery' } } }
+      responses:
+        '200':
+          description: 项目统计工作项表格。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/DashboardTablePage' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /projects/{projectId}/statistics/worklog:
+    get:
+      tags: [ProjectStatistics]
+      operationId: getProjectWorklog
+      summary: 按成员与工作项汇总项目区间计时
+      description: 按公司时区切分自然日并合计到区间；跨日记录按重叠时长拆分，运行中计时统计到 asOf。区间最多 93 天。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, description: 含当天；与 from 最多相差 92 天。, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: 项目区间计时。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/ProjectWorklog' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
   /me/timesheet:
     get:
@@ -8325,6 +8417,48 @@ components:
           description: 每个成员、工作项、自然日一条，只包含大于 0 的耗时。
           items: { $ref: '#/components/schemas/TeamTimesheetEntry' }
         days: { type: array, items: { $ref: '#/components/schemas/TeamTimesheetDay' } }
+    ProjectStatisticsQuery:
+      type: object
+      additionalProperties: false
+      required: [filters, widgets]
+      properties:
+        filters: { $ref: '#/components/schemas/DashboardFilters' }
+        widgets: { type: array, maxItems: 40, items: { $ref: '#/components/schemas/DashboardWidget' } }
+    ProjectStatisticsSnapshot:
+      type: object
+      additionalProperties: false
+      required: [asOf, charts]
+      properties:
+        asOf: { type: string, format: date-time }
+        charts: { type: array, items: { $ref: '#/components/schemas/DashboardChartResult' } }
+    ProjectWorklogMember:
+      type: object
+      additionalProperties: false
+      required: [userId, displayName, projectMember]
+      properties:
+        userId: { type: string, format: uuid }
+        displayName: { type: string, description: 已无资料的成员显示为“历史成员”。 }
+        projectMember: { type: boolean, description: 当前仍是项目有效成员。 }
+    ProjectWorklogEntry:
+      type: object
+      additionalProperties: false
+      required: [userId, workItemId, itemNo, title, durationMs]
+      properties:
+        userId: { type: string, format: uuid }
+        workItemId: { type: string, format: uuid }
+        itemNo: { type: string }
+        title: { type: string }
+        durationMs: { type: integer, format: int64, minimum: 1 }
+    ProjectWorklog:
+      type: object
+      additionalProperties: false
+      required: [from, to, asOf, members, entries]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        asOf: { type: string, format: date-time }
+        members: { type: array, items: { $ref: '#/components/schemas/ProjectWorklogMember' } }
+        entries: { type: array, items: { $ref: '#/components/schemas/ProjectWorklogEntry' } }
     TeamTimesheetDay:
       type: object
       additionalProperties: false

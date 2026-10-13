@@ -101,7 +101,7 @@ public class DashboardService {
         var result = statistics.aggregate(actor, activeProjects,
                 query == null || query.filters() == null ? dashboard.configuration().filters() : query.filters());
         var widgets = query == null || query.widgets() == null ? dashboard.configuration().widgets() : query.widgets();
-        validateQueryWidgets(widgets);
+        validateQueryWidgets(widgets, statistics);
         var charts = statistics.charts(actor, activeProjects,
                 query == null || query.filters() == null ? dashboard.configuration().filters() : query.filters(),
                 widgets.stream().map(DashboardCharts::request).toList(), result.asOf());
@@ -112,7 +112,7 @@ public class DashboardService {
         var dashboard = requireOwned(actor, id, false);
         var activeProjects = activeProjectIds(actor, dashboard);
         if (query.widget() != null) {
-            validateQueryWidgets(List.of(query.widget()));
+            validateQueryWidgets(List.of(query.widget()), statistics);
             return statistics.chartItems(actor, activeProjects,
                     query.filters() == null ? dashboard.configuration().filters() : query.filters(),
                     DashboardCharts.request(query.widget()), query.selection(), query.offset(), query.limit());
@@ -125,7 +125,7 @@ public class DashboardService {
         var dashboard = requireOwned(actor, id, false);
         if (query.widget() == null) throw ApplicationException.validation(
                 new com.yumpoo.platform.foundation.application.error.FieldViolation("widget", "REQUIRED", "图表不能为空"));
-        validateQueryWidgets(List.of(query.widget()));
+        validateQueryWidgets(List.of(query.widget()), statistics);
         return statistics.table(actor, activeProjectIds(actor, dashboard),
                 query.filters() == null ? dashboard.configuration().filters() : query.filters(),
                 DashboardCharts.request(query.widget()), query.selection(), query.projectId(), query.table());
@@ -145,7 +145,7 @@ public class DashboardService {
         }).toList();
         return new View(d.id(), d.name(), d.configuration(), connections, d.version(), StrongEtag.format(d.version()), d.updatedAt());
     }
-    private void validateQueryWidgets(List<Widget> widgets) {
+    static void validateQueryWidgets(List<Widget> widgets, WorkItemStatisticsQuery statistics) {
         if (widgets.size() > 40 || widgets.stream().anyMatch(w -> w == null || w.kind() == null || w.metric() == null || w.grouping() == null || w.sort() == null))
             throw ApplicationException.validation(new com.yumpoo.platform.foundation.application.error.FieldViolation("widgets", "INVALID_VALUE", "图表配置无效"));
         for (var w : widgets) {
