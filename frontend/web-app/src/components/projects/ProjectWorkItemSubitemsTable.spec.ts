@@ -343,12 +343,11 @@ describe('项目工作项子表格', () => {
   it('表头不渲染连接锚点，仅为每条子项和添加行渲染不可交互的层级连接锚点', async () => {
     const wrapper = mountTable()
 
-    expect(wrapper.get('.subitem-hierarchy-branches').attributes('aria-hidden')).toBe('true')
+    expect(wrapper.get('.subitem-hierarchy-rail').attributes('aria-hidden')).toBe('true')
     expect(wrapper.findAll('.subitem-hierarchy-branch--header')).toHaveLength(0)
     expect(wrapper.findAll('.subitem-hierarchy-branch--data')).toHaveLength(2)
     expect(wrapper.findAll('.subitem-hierarchy-branch--add')).toHaveLength(1)
     expect(wrapper.findAll('.subitem-hierarchy-branch')).toHaveLength(3)
-    expect(wrapper.get('.subitem-hierarchy-bar').attributes('aria-hidden')).toBe('true')
     expect(wrapper.findAll('.subitem-hierarchy-bar__trailing')).toHaveLength(1)
     expect(wrapper.get('.subitem-add').text()).toBe('添加子项')
     expect(wrapper.find('.subitem-add svg').exists()).toBe(false)
@@ -425,7 +424,7 @@ describe('项目工作项子表格', () => {
     expect(selectionColumn?.props('className')).toBe('subitem-selection-column')
     expect(selectionColumn?.props('labelClassName')).toBe('subitem-selection-column')
     expect(titleColumn?.props('fixed')).toBe(true)
-    expect(addColumn?.props('minWidth')).toBe(96)
+    expect(addColumn?.props('minWidth')).toBe(57)
     expect(addColumn?.props('resizable')).toBe(false)
 
     expect(wrapper.get('.test-add-column').attributes('aria-label')).toBe('添加列')

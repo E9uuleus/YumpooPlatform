@@ -386,15 +386,7 @@ function syncTableHeaderScrollPosition(): void {
   }
 }
 
-function syncSubitemFixedColumnScrollPosition(): void {
-  tableRef.value?.$el?.style.setProperty(
-    '--work-item-table-scroll-left',
-    `${tableScrollElement?.scrollLeft ?? 0}px`,
-  )
-}
-
 function onTableScroll(): void {
-  syncSubitemFixedColumnScrollPosition()
   syncTableHeaderScrollPosition()
   syncPageScrollbarPositions()
 }
@@ -404,7 +396,6 @@ function bindTableScrollElement(next: HTMLElement | undefined): void {
   tableScrollElement?.removeEventListener('scroll', onTableScroll)
   tableScrollElement = next
   tableScrollElement?.addEventListener('scroll', onTableScroll, { passive: true })
-  syncSubitemFixedColumnScrollPosition()
 }
 
 function syncPageScrollbars(): void {
@@ -486,7 +477,6 @@ function onHorizontalPageScroll(): void {
   if (Math.abs(tableScrollElement.scrollLeft - horizontalPageScrollbar.value.scrollLeft) > 0.5) {
     tableScrollElement.scrollLeft = horizontalPageScrollbar.value.scrollLeft
   }
-  syncSubitemFixedColumnScrollPosition()
   syncTableHeaderScrollPosition()
 }
 
@@ -5265,32 +5255,20 @@ onBeforeUnmount(() => {
 
 :deep(.monday-table .el-table__expanded-cell > .cell) {
   padding: 0;
+  overflow: visible;
 }
 
 :deep(.monday-table .el-table__expanded-cell)::after {
   position: absolute;
   right: 0;
   bottom: -1px;
-  left: calc(32px + var(--work-item-table-scroll-left, 0px));
+  left: 32px;
   height: 1px;
   background: var(--yp-monday-grid-border);
   content: '';
   pointer-events: none;
 }
 
-:deep(.monday-table .el-table__expanded-cell)::before {
-  position: absolute;
-  z-index: 4;
-  top: -1px;
-  bottom: -1px;
-  left: calc(32px + var(--work-item-hierarchy-spine-offset));
-  width: var(--work-item-hierarchy-line-width);
-  border-radius: var(--work-item-hierarchy-line-width);
-  background: var(--work-item-group-accent);
-  content: '';
-  pointer-events: none;
-  transform: translateX(var(--work-item-table-scroll-left, 0px));
-}
 
 .table-pagination {
   justify-content: flex-end;
