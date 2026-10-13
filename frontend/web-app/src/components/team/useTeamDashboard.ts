@@ -1,9 +1,9 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { readCsrfToken, type TeamDashboardOptions, type TeamMemberTask, type TeamTimesheet, type TeamWorkload } from '@yumpoo/api-client'
-import { teamDashboardApi } from '../../../api/client'
-import { problemMessage, toApiProblem } from '../../../api/problems'
-import { useSession } from '../../../composables/useSession'
+import { teamDashboardApi } from '../../api/client'
+import { problemMessage, toApiProblem } from '../../api/problems'
+import { useSession } from '../../composables/useSession'
 import { periodFor, todayIn, toApiDate, type Period } from './teamDashboardModel'
 
 export interface MemberTasks { items: TeamMemberTask[]; total: number; loading: boolean; error: string }

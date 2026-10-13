@@ -10,7 +10,7 @@ import {
   parseCalendarWorkbook, yearDates, type CalendarOverride,
 } from '../../components/company/workCalendarModel'
 import { exportFileName, saveExportFile, XLSX_TYPE } from '../../components/dashboard/exportFile'
-import { todayIn, toApiDate, weekday } from '../../components/dashboard/team/teamDashboardModel'
+import { todayIn, toApiDate, weekday } from '../../components/team/teamDashboardModel'
 import YpSegmented from '../../components/yp/YpSegmented.vue'
 import { useIdentityAdmin } from '../../composables/useIdentityAdmin'
 import { useSession } from '../../composables/useSession'

@@ -8,6 +8,8 @@ Status: implemented
 
 ## Decision
 
+其中团队视图作为固定标签及页内分段切换的入口决策由[团队审阅模块](2026-10-13-team-review-module.md)部分替代。
+
 [DashboardTabs](../../../../frontend/web-app/src/components/dashboard/DashboardTabs.vue) 用页内标签栏替代标题下拉，标签按创建顺序排列，可以横向滚动。双击当前标签可重命名，“全部仪表板”弹层提供搜索，末尾 `+` 用于新建。路由仍为 `dashboards/:dashboardId?`，切换前沿用自动保存守卫，不增加新页面。
 
 团队视图使用保留的路由 ID `team`，作为第一个固定标签，仅公司管理员可见。它不是私人仪表板，没有连接项目、组件或布局配置。页面工具栏用分段控件在成员工时和成员当前任务之间切换，同一时刻只显示一张表。页面不提供项目或成员筛选，始终统计全公司。非管理员访问 `team` 时重定向到默认仪表板。权限与数据边界见[团队视图管理员报表](../security/2026-10-08-admin-team-reporting.md)。

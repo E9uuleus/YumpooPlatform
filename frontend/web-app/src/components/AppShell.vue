@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Box, Clock, Close, FolderOpened, Grid, House, Menu as MenuIcon, Search, Setting, User, OfficeBuilding, Monitor } from '@element-plus/icons-vue'
+import { Calendar, DataLine, Box, Clock, Close, FolderOpened, Grid, House, Menu as MenuIcon, Search, Setting, User, OfficeBuilding, Monitor } from '@element-plus/icons-vue'
 import { AuthenticationClientType, ProjectLifecycleFilter, type ProjectSummary } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -10,21 +10,23 @@ import {
   ElIcon,
   ElTooltip,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, readonly, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { projectsApi } from '../api/client'
+import { operationsApi, projectsApi } from '../api/client'
 import { beginAuthentication } from '../auth/navigation'
 import { useAppearance } from '../composables/useAppearance'
 import { useProjectRecents } from '../composables/useProjectRecents'
 import { PROJECT_LIFECYCLE_CHANGED } from '../composables/projectLifecycleEvents'
 import { PROJECT_SETTINGS_CHANGED } from '../composables/projectSettingsEvents'
 import { useSession } from '../composables/useSession'
+import { useOperationsQuery } from '../composables/useOperationsQuery'
 import { useInbox, type InboxFilter } from '../composables/useInbox'
 import OnboardingHost from '../onboarding/OnboardingHost.vue'
 import { useOnboarding } from '../onboarding/useOnboarding'
 import { INBOX_FILTERS, parseInboxFilter } from './inbox/inboxPresentation'
 import InboxBell from './inbox/InboxBell.vue'
 import OperationsBadge from './operations/OperationsBadge.vue'
+import { operationsAlertSummaryContext } from './operations/operationsContext'
 import type { ShellSection } from '../router/shell-navigation'
 import InlineProblem from './InlineProblem.vue'
 import { MY_PROJECT_ACCESSES } from './projects/projectScope'
@@ -35,7 +37,7 @@ import brandLogo from '../assets/brand/logo.svg'
 interface ModuleItem {
   section: ShellSection
   label: string
-  routeName: 'home' | 'workspace' | 'company-overview' | 'operations-overview'
+  routeName: 'home' | 'workspace' | 'team-entry' | 'company-overview' | 'operations-overview'
   icon: Component
 }
 
@@ -73,6 +75,7 @@ const clientLabel = computed(() => window.yumpooDesktop?.client === 'electron' |
   ? 'Electron 在线壳'
   : 'Web 浏览器')
 const activeSection = computed<ShellSection>(() => route.meta.shellSection ?? 'work')
+const dashboardFrame = computed(() => route.name === 'dashboards' || route.name === 'my-time' || route.name === 'team')
 const isWorkspaceSection = computed(() => activeSection.value === 'work')
 const hasContextNavigation = computed(() => activeSection.value !== 'home')
 const projectRecentScope = computed(() => {
@@ -80,10 +83,19 @@ const projectRecentScope = computed(() => {
   return authentication ? `${authentication.company.id}:${authentication.user.id}` : undefined
 })
 const projectRecents = useProjectRecents(() => projectRecentScope.value)
-const operationsAlertCount = ref(0)
+const operationsAlerts = useOperationsQuery((signal) => operationsApi.getOperationsAlertSummary({ signal }), {
+  interval: () => 60000,
+  enabled: () => session.isPlatformAdmin.value && session.phase.value === 'authenticated',
+})
+const operationsAlertCount = computed(() => (operationsAlerts.data.value?.critical ?? 0) + (operationsAlerts.data.value?.warning ?? 0))
+provide(operationsAlertSummaryContext, readonly(operationsAlerts.data))
+function operationsAlertsChanged() { void operationsAlerts.refresh() }
+onMounted(() => window.addEventListener('yumpoo-operations-alerts-changed', operationsAlertsChanged))
+onBeforeUnmount(() => window.removeEventListener('yumpoo-operations-alerts-changed', operationsAlertsChanged))
 const moduleItems = computed<ModuleItem[]>(() => [
   { section: 'home', label: '首页', routeName: 'home', icon: House },
   { section: 'work', label: '工作台', routeName: 'workspace', icon: Grid },
+  ...(session.isCompanyAdmin.value ? [{ section: 'team', label: '团队', routeName: 'team-entry', icon: DataLine } as const] : []),
   ...(session.isIdentityReader.value
     ? [{ section: 'company', label: '公司管理', routeName: 'company-overview', icon: OfficeBuilding } as const]
     : []),
@@ -92,6 +104,7 @@ const moduleItems = computed<ModuleItem[]>(() => [
 const contextTitle = computed(() => ({
   home: '首页',
   work: '工作台',
+  team: '团队视图',
   company: '公司管理',
   inbox: '收件箱',
   operations: '运维中心',
@@ -111,6 +124,11 @@ const contextItems = computed<ContextItem[]>(() => {
     }
     return INBOX_FILTERS.map(({ value, label }) => ({ label, routeName: 'inbox', query: { filter: value }, badge: badges[value] ?? 0 }))
   }
+  if (activeSection.value === 'team') return [
+    { label: '成员工时', routeName: 'team', params: { view: 'timesheet' } },
+    { label: '加班统计', routeName: 'team', params: { view: 'overtime' } },
+    { label: '成员当前任务', routeName: 'team', params: { view: 'workload' } },
+  ]
   if (activeSection.value === 'company') {
     return [
       { label: '概览', routeName: 'company-overview' },
@@ -140,7 +158,7 @@ const contextItems = computed<ContextItem[]>(() => {
 
 function navigate(name: string, params?: Record<string, string>, query?: Record<string, string>): void {
   mobileNavigationOpen.value = false
-  if (name === 'workspace' || name === 'dashboards') {
+  if (name === 'workspace' || name === 'dashboards' || name === 'my-time') {
     const workspaceSlug = session.authentication.value?.user.workspaceSlug
     if (workspaceSlug) void router.push({ name, params: { workspaceSlug } })
     return
@@ -155,7 +173,9 @@ function navigateProject(project: ProjectSummary): void {
 }
 
 function isContextItemActive(item: ContextItem): boolean {
-  return route.name === item.routeName && (!item.query?.filter || parseInboxFilter(route.query.filter) === item.query.filter)
+  return route.name === item.routeName
+    && (!item.params?.view || route.params.view === item.params.view)
+    && (!item.query?.filter || parseInboxFilter(route.query.filter) === item.query.filter)
 }
 
 async function signOut(): Promise<void> {
@@ -276,7 +296,7 @@ onBeforeUnmount(() => {
     :class="{
       'app-shell--context-open': contextNavigationOpen && hasContextNavigation,
       'app-shell--workspace': isWorkspaceSection,
-      'app-shell--dashboard': route.name === 'dashboards',
+      'app-shell--dashboard': dashboardFrame,
     }"
   >
     <aside
@@ -355,7 +375,6 @@ onBeforeUnmount(() => {
             <span class="module-rail__item-label">{{ item.label }}</span>
             <operations-badge
               v-if="item.section === 'operations'"
-              @count="operationsAlertCount = $event"
             />
           </button>
         </el-tooltip>
@@ -532,6 +551,16 @@ onBeforeUnmount(() => {
             </el-icon><span>仪表板</span>
           </button>
           <button
+            type="button"
+            :class="{ active: route.name === 'my-time' }"
+            :aria-current="route.name === 'my-time' ? 'page' : undefined"
+            @click="navigate('my-time')"
+          >
+            <el-icon aria-hidden="true">
+              <calendar />
+            </el-icon><span>我的工时</span>
+          </button>
+          <button
             class="project-navigation__toggle"
             type="button"
             :aria-expanded="projectNavigationOpen"
@@ -701,7 +730,7 @@ onBeforeUnmount(() => {
 
     <main
       class="app-main"
-      :class="{ 'app-main--dashboard': route.name === 'dashboards' }"
+      :class="{ 'app-main--dashboard': dashboardFrame }"
     >
       <inline-problem
         v-if="session.actionProblem.value"
@@ -731,7 +760,6 @@ onBeforeUnmount(() => {
           {{ item.label }}
           <operations-badge
             v-if="item.section === 'operations' && mobileNavigationOpen"
-            @count="operationsAlertCount = $event"
           />
         </button>
       </nav>
@@ -842,6 +870,16 @@ onBeforeUnmount(() => {
             <el-icon aria-hidden="true">
               <grid />
             </el-icon><span>仪表板</span>
+          </button>
+          <button
+            type="button"
+            :class="{ active: route.name === 'my-time' }"
+            :aria-current="route.name === 'my-time' ? 'page' : undefined"
+            @click="navigate('my-time')"
+          >
+            <el-icon aria-hidden="true">
+              <calendar />
+            </el-icon><span>我的工时</span>
           </button>
           <button
             type="button"

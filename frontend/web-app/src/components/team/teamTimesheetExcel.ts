@@ -1,5 +1,5 @@
 import type { Workbook as WorkbookType } from 'exceljs'
-import { XLSX_TYPE } from '../exportFile'
+import { XLSX_TYPE } from '../dashboard/exportFile'
 import { hours, weekday, type TimesheetRow } from './teamDashboardModel'
 
 export interface TimesheetWorkbookInput { rows: TimesheetRow[]; days: string[]; timezone: string; scopeLabel: string; memberScopeLabel: string; exportedAt: string; title: string; nonWorkdays: Set<string> }

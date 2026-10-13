@@ -22,8 +22,8 @@ export const TOURS: Record<TourId, TourDefinition> = {
     version: 1,
     steps: [
       { title: '欢迎来到工作中台', description: '接下来用 1 分钟带你认识首页和主要入口，随时可以按 Esc 退出。' },
-      { target: at('shell-modules'), placement: 'right-start', title: '功能模块', description: '在首页和工作台之间切换；如果你是管理员，这里还会出现公司管理与运维。' },
-      { target: at('home-jumps'), placement: 'bottom', title: '快捷入口', description: '直达管理项目、仪表板、收件箱，或直接开始计时。' },
+      { target: at('shell-modules'), placement: 'right-start', title: '功能模块', description: '在首页和工作台之间切换；如果你是管理员，这里还会出现团队、公司管理与运维。' },
+      { target: at('home-jumps'), placement: 'bottom', title: '快捷入口', description: '直达管理项目、收件箱，或直接开始计时；这里还会按你的角色显示仪表板、团队视图和管理入口。' },
       { target: at('home-tasks'), placement: 'right-start', title: '我的工作项', description: '分配给你、进行中和待开始的工作项都在这里，逾期会标红；点击即可打开所在项目。' },
       { target: at('home-calendar'), placement: 'left-start', title: '工时日历', description: '本月每天记录的工时，满 8 小时的日期以深色显示；“查看明细”进入我的工时。' },
       { target: at('topbar-inbox'), placement: 'bottom-end', title: '收件箱', description: '有人 @你、评论或给你指派工作项时，这里会提醒。' },
@@ -49,7 +49,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
   workspace: {
     version: 1,
     steps: [
-      { target: at('context-nav'), placement: 'right-start', title: '工作台导航', description: '仪表板、管理项目、归档项目，以及你参与的项目列表；顶部的搜索按钮可以快速查找项目。' },
+      { target: at('context-nav'), placement: 'right-start', title: '工作台导航', description: '仪表板、我的工时、管理项目、归档项目，以及你参与的项目列表；顶部的搜索按钮可以快速查找项目。' },
       { target: at('project-catalog-tabs'), placement: 'bottom-start', title: '最近与内容', description: '“最近”是你最近打开的项目，可置顶常用项目；“内容”是全部项目目录。' },
       { target: at('project-filter'), placement: 'bottom', title: '搜索与筛选', description: '按名称或编码搜索，按最后修改时间、负责人和你的角色筛选。' },
       { target: at('project-create'), placement: 'bottom-end', title: '创建项目', description: '新建一个项目，开始组织工作项与成员。' },
@@ -58,7 +58,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
   dashboards: {
     version: 1,
     steps: [
-      { target: at('dashboard-tabs'), placement: 'bottom-start', title: '仪表板标签', description: '“我的工时”查看每天的工时明细；管理员还能看到“团队视图”；点“+”新建自己的仪表板。' },
+      { target: at('dashboard-tabs'), placement: 'bottom-start', title: '仪表板标签', description: '在标签之间切换你的仪表板；点“+”新建自己的仪表板。' },
       { target: at('dashboard-add-widget'), placement: 'bottom-start', title: '添加组件', description: '添加图表、表格等组件，拖动即可调整布局，修改会自动保存。' },
       { target: at('dashboard-projects'), placement: 'bottom', title: '连接项目', description: '选择这个仪表板要统计的项目范围。' },
       { target: at('dashboard-filters'), placement: 'bottom', title: '筛选', description: '按处理人、状态等条件过滤所有组件的数据。' },

@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { DataAnalysis, FolderOpened, Message, OfficeBuilding, Timer } from '@element-plus/icons-vue'
+import { DataAnalysis, DataLine, Monitor, FolderOpened, Message, OfficeBuilding, Timer } from '@element-plus/icons-vue'
 import { ProjectLifecycleFilter, TeamMemberTaskStatusCategoryEnum, type DashboardProject, type TeamMemberTask, type TeamTimesheet } from '@yumpoo/api-client'
 import { ElTooltip } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { dashboardsApi, myWorkApi, projectsApi } from '../../api/client'
-import { MY_TIME_VIEW_ID } from '../../components/dashboard/dashboardModel'
-import { monthGrid, monthStats, runningExtraMs, shiftMonth, STANDARD_DAY_MS, weekdayLabels } from '../../components/dashboard/my-time/myTimeModel'
-import { addDays, buildTimesheet, fromApiDate, projectColors, shortHours, todayIn, toApiDate } from '../../components/dashboard/team/teamDashboardModel'
+import { monthGrid, monthStats, runningExtraMs, shiftMonth, STANDARD_DAY_MS, weekdayLabels } from '../../components/my-time/myTimeModel'
+import { addDays, buildTimesheet, fromApiDate, projectColors, shortHours, todayIn, toApiDate } from '../../components/team/teamDashboardModel'
 import AuroraShapes from '../../components/motion/AuroraShapes.vue'
 import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
 import { workItemLabelColorValue } from '../../components/projects/workItemLabelColors'
 import YpJumpCard, { type JumpTone } from '../../components/yp/YpJumpCard.vue'
 import YpSegmented from '../../components/yp/YpSegmented.vue'
 import { useInbox } from '../../composables/useInbox'
+import { operationsAlertSummaryContext } from '../../components/operations/operationsContext'
 import { useSession } from '../../composables/useSession'
 import { formatDuration, onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
@@ -22,6 +22,8 @@ import { daypart, greeting, heroDate, hubProjects, sortTasks, type HubProject, t
 interface JumpCard { key: string; label: string; meta: string; icon: Component; tone: JumpTone; open: () => void }
 
 const router = useRouter(), session = useSession(), tracker = useTimeTracker(), inbox = useInbox()
+const alerts = inject(operationsAlertSummaryContext)!
+const alertCount = computed(() => (alerts.value?.critical ?? 0) + (alerts.value?.warning ?? 0))
 const onboarding = usePageOnboarding()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 // The tracker clock is server-calibrated and ticks every second, so the greeting follows the company time of day.
@@ -62,7 +64,9 @@ const monthTotal = computed(() => monthStats(monthDays.value, month.value).total
 const jumps = computed<JumpCard[]>(() => [
   { key: 'projects', label: '管理项目', meta: projectTotal.value === undefined ? '全部项目目录' : `${projectTotal.value} 个进行中项目`,
     icon: FolderOpened, tone: 'blue', open: () => openWorkspace('workspace') },
-  { key: 'dashboards', label: '仪表板', meta: '个人看板与统计', icon: DataAnalysis, tone: 'purple', open: () => openWorkspace('dashboards') },
+  session.isCompanyAdmin.value
+    ? { key: 'team', label: '团队视图', meta: '成员工时、加班与当前任务', icon: DataLine, tone: 'purple', open: () => void router.push({ name: 'team', params: { view: 'timesheet' } }) }
+    : { key: 'dashboards', label: '仪表板', meta: '个人看板与统计', icon: DataAnalysis, tone: 'purple', open: () => openWorkspace('dashboards') },
   { key: 'inbox', label: '收件箱', meta: inbox.unread.value ? `${inbox.unread.value} 条未读` : '没有未读消息', icon: Message, tone: 'red',
     open: () => void router.push({ name: 'inbox' }) },
   { key: 'timer', label: running.value ? '计时中' : '开始计时', meta: running.value ? formatDuration(tracker.runningDuration.value) : '选择工作项开始计时',
@@ -70,11 +74,14 @@ const jumps = computed<JumpCard[]>(() => [
   ...(session.isCompanyAdmin.value
     ? [{ key: 'company', label: '公司管理', meta: '项目、成员与组织', icon: OfficeBuilding, tone: 'amber' as const, open: () => void router.push({ name: 'company-overview' }) }]
     : []),
+  ...(session.isPlatformAdmin.value
+    ? [{ key: 'operations', label: '运维', meta: alertCount.value ? `${alertCount.value} 条告警` : '运行正常', icon: Monitor, tone: 'teal' as const, open: () => void router.push({ name: 'operations-overview' }) }]
+    : []),
 ])
 
-function openWorkspace(name: 'workspace' | 'dashboards', dashboardId?: string): void {
+function openWorkspace(name: 'workspace' | 'dashboards' | 'my-time'): void {
   const workspaceSlug = session.authentication.value?.user.workspaceSlug
-  if (workspaceSlug) void router.push({ name, params: { workspaceSlug, ...(dashboardId ? { dashboardId } : {}) } })
+  if (workspaceSlug) void router.push({ name, params: { workspaceSlug } })
 }
 function openTask(task: TeamMemberTask): void {
   void router.push({ name: 'project-overview', params: { projectId: task.projectId }, query: { workItemId: task.id } })
@@ -124,6 +131,10 @@ onMounted(() => { void onboarding.ready() })
             v-if="counts.overdue"
             class="home-chip home-chip--danger"
           >{{ counts.overdue }} 项逾期</span>
+          <span
+            v-if="session.isPlatformAdmin.value && alertCount"
+            class="home-chip home-chip--danger"
+          >运维告警 {{ alertCount }}</span>
           <span
             v-if="inbox.unread.value"
             class="home-chip"
@@ -264,7 +275,7 @@ onMounted(() => { void onboarding.ready() })
             <button
               type="button"
               class="home-link"
-              @click="openWorkspace('dashboards', MY_TIME_VIEW_ID)"
+              @click="openWorkspace('my-time')"
             >
               查看明细
             </button>

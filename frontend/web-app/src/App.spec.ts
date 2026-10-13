@@ -4,12 +4,15 @@ import {
   ClientCompatibility,
   type CurrentAuthentication,
 } from '@yumpoo/api-client'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App.vue'
+import { operationsApi } from './api/client'
 import { useSession } from './composables/useSession'
 import { routes } from './router'
+
+enableAutoUnmount(afterEach)
 
 function authentication(
   type = AuthenticationClientType.Web,
@@ -45,6 +48,7 @@ describe('M1-12 Web 全局壳', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     Reflect.deleteProperty(window, 'yumpooDesktop')
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
@@ -71,24 +75,56 @@ describe('M1-12 Web 全局壳', () => {
     expect(wrapper.text()).toContain('成员与角色')
   })
 
+  it('首页和桌面、移动导航共用告警汇总及轮询', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    useSession().authentication.value = authentication(
+      AuthenticationClientType.Web,
+      new Set([AuthenticationRole.AppManager]),
+    )
+    const summary = vi.spyOn(operationsApi, 'getOperationsAlertSummary').mockResolvedValue({ critical: 1, warning: 2 })
+    const wrapper = await mountApplication('/')
+    await flushPromises()
+    expect(wrapper.text()).toContain('运维告警 3')
+    expect(wrapper.get('.module-rail .operations-badge').text()).toBe('3')
+    expect(summary).toHaveBeenCalledOnce()
+
+    await wrapper.get('[aria-label="打开导航"]').trigger('click')
+    await flushPromises()
+    expect(summary).toHaveBeenCalledOnce()
+    summary.mockResolvedValue({ critical: 2, warning: 3 })
+    await vi.advanceTimersByTimeAsync(60000)
+    await flushPromises()
+    expect(summary).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('运维告警 5')
+    expect(wrapper.get('.module-rail .operations-badge').text()).toBe('5')
+
+    window.dispatchEvent(new Event('yumpoo-operations-alerts-changed'))
+    await flushPromises()
+    expect(summary).toHaveBeenCalledTimes(3)
+    wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(summary).toHaveBeenCalledTimes(3)
+  })
+
   it('项目层级导航默认展开，管理项目与详情入口正确高亮', async () => {
     const catalog = await mountApplication('/workspace/member')
     await flushPromises()
     const catalogItems = catalog.findAll('.context-navigation > .global-navigation button')
-    expect(catalogItems.map(item => item.text())).toEqual(['仪表板', '项目', '管理项目', '归档项目'])
-    expect(catalogItems[1]?.attributes('aria-expanded')).toBe('true')
-    expect(catalogItems[2]?.attributes('aria-current')).toBe('page')
-    expect(catalogItems[1]?.find('svg[width="12"]').exists()).toBe(true)
-    expect(catalogItems[2]?.find('svg[width="16"]').exists()).toBe(true)
-    await catalogItems[1]?.trigger('click')
-    expect(catalogItems[1]?.attributes('aria-expanded')).toBe('false')
+    expect(catalogItems.map(item => item.text())).toEqual(['仪表板', '我的工时', '项目', '管理项目', '归档项目'])
+    expect(catalogItems[2]?.attributes('aria-expanded')).toBe('true')
+    expect(catalogItems[3]?.attributes('aria-current')).toBe('page')
+    expect(catalogItems[2]?.find('svg[width="12"]').exists()).toBe(true)
+    expect(catalogItems[3]?.find('svg[width="16"]').exists()).toBe(true)
+    await catalogItems[2]?.trigger('click')
+    expect(catalogItems[2]?.attributes('aria-expanded')).toBe('false')
     expect(catalog.get('#desktop-project-navigation').attributes('style')).toContain('display: none')
     catalog.unmount()
 
     const details = await mountApplication('/projects/project-42/members')
     await flushPromises()
     const detailItems = details.findAll('.context-navigation > .global-navigation button')
-    expect(detailItems.map(item => item.text())).toEqual(['仪表板', '项目', '管理项目', '归档项目', '工作项', '成员', '动态', '设置'])
+    expect(detailItems.map(item => item.text())).toEqual(['仪表板', '我的工时', '项目', '管理项目', '归档项目', '工作项', '成员', '动态', '设置'])
     expect(detailItems.find(item => item.text() === '成员')?.attributes('aria-current')).toBe('page')
     details.unmount()
   })

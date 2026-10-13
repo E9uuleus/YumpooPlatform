@@ -8,6 +8,8 @@ Status: implemented
 
 ## Decision
 
+其中提醒入口归一化到工作台团队视图的目标由[团队审阅模块](2026-10-13-team-review-module.md)部分替代。
+
 日类型增量新增 `HOLIDAY` 表示法定节假日，保留 `NON_WORKDAY` 表示休息日。未显式设置的日期按周一至周五工作、周末休息，工作日标准工时可继承公司默认值。
 
 管理员按年度整体替换全部显式日期，未列出的日期恢复默认规则。V74 的 `company_calendar_year` 保存年度版本，HTTP 通过 If-Match 做乐观并发控制，并写入年度替换安全审计。年度替换在同一事务内批量写入日期。管理响应保留解析后的 `standardMinutes`，另以 `configuredStandardMinutes` 返回原始工作日设置，空值表示继承；编辑回填只使用原始设置，避免保存后固定公司默认工时。`source` 保留每个日期的 `MANUAL` / `IMPORT` 来源，导入草稿标记 IMPORT，手工修改的日期改为 MANUAL，未编辑日期保存时保留来源。
