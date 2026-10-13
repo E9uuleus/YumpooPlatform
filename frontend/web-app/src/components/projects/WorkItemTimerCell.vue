@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { ProjectWorkItemListItem } from '@yumpoo/api-client'
 import { ElPopover } from 'element-plus'
 import { formatTrackingDuration, observeTimer, useTimeTracker } from '../../composables/useTimeTracker'
 import TimeSessionDialog from '../timer/TimeSessionDialog.vue'
+import { timeLogPlacement, type TimeLogPlacement } from '../timer/timeLogPlacement'
 import './workItemTimer.css'
 
 const props = defineProps<{ item: ProjectWorkItemListItem; projectId: string; disabled?: boolean }>()
@@ -13,21 +14,21 @@ const tracker = useTimeTracker()
 const open = ref(false)
 const anchor = ref<HTMLElement>()
 const panelHeight = ref(400)
-const reservePanelSpace = ref(false)
-watch([open, panelHeight], async ([visible]) => {
-  if (!visible) return
-  reservePanelSpace.value = true
-  await nextTick()
-  const cell = anchor.value
-  if (cell && cell.getBoundingClientRect().bottom + panelHeight.value + 26 > window.innerHeight) {
-    cell.scrollIntoView({ block: 'center', inline: 'nearest' })
-  }
-})
-function afterLeave() {
-  if (open.value) return
-  reservePanelSpace.value = false
-  panelHeight.value = 400
+const placement = ref<TimeLogPlacement>('bottom')
+const maxHeight = ref(400)
+function place(keep?: TimeLogPlacement) {
+  const rect = anchor.value?.getBoundingClientRect()
+  if (!rect) return
+  const next = timeLogPlacement(rect, window.innerHeight, panelHeight.value, keep)
+  placement.value = next.placement
+  maxHeight.value = next.maxHeight
 }
+watch(open, visible => {
+  if (!visible) return
+  panelHeight.value = 400
+  place()
+})
+watch(panelHeight, () => { if (open.value) place(placement.value) })
 let release: (() => void) | undefined
 watch(() => [props.item.id, props.projectId] as const, ([id, project]) => {
   release?.(); release = observeTimer(id, project, props.item.timeTracking)
@@ -46,13 +47,13 @@ const total = computed(() => {
   <el-popover
     v-model:visible="open"
     trigger="click"
-    placement="bottom"
+    :placement="placement"
     :width="420"
     :persistent="false"
     :show-arrow="true"
     :popper-options="{ modifiers: [{ name: 'flip', enabled: false }, { name: 'preventOverflow', options: { padding: 12 } }] }"
     popper-class="time-log-popover"
-    @after-leave="afterLeave"
+    :popper-style="{ '--time-log-max-height': `${maxHeight}px` }"
   >
     <template #reference>
       <div
@@ -63,8 +64,6 @@ const total = computed(() => {
         tabindex="0"
         aria-label="查看计时日志"
         :aria-expanded="open"
-        :data-log-height="panelHeight"
-        :data-log-space="reservePanelSpace"
         @click.stop
         @pointerdown.stop
         @dblclick.stop

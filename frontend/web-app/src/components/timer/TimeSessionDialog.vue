@@ -254,7 +254,7 @@ onMounted(() => load())
 </template>
 
 <style scoped>
-.time-log{height:400px;max-height:calc(100dvh - 120px);display:flex;flex-direction:column;color:var(--el-text-color-primary);font-size:14px;white-space:normal}
+.time-log{height:400px;max-height:min(var(--time-log-max-height,100dvh),calc(100dvh - 120px));display:flex;flex-direction:column;color:var(--el-text-color-primary);font-size:14px;white-space:normal}
 header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 8px;flex-shrink:0}h3{margin:0;font-size:20px;font-weight:600}
 .plain-button{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;border-radius:5px;padding:7px 9px}.plain-button:hover:not(:disabled){background:var(--yp-bg-hover)}.plain-button:disabled{cursor:default;opacity:.5}.plain-button:focus-visible{outline:2px solid var(--el-color-primary);outline-offset:2px}
 .add-session{display:flex;justify-content:center;min-height:52px;align-items:center;flex-shrink:0}.add-session span{font-size:21px;margin-right:7px}
