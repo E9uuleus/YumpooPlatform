@@ -6,8 +6,8 @@ import TeamWorkloadView from './TeamWorkload.vue'
 import { useTeamDashboard } from './useTeamDashboard'
 
 const api = vi.hoisted(() => ({ getTeamDashboardOptions: vi.fn(), queryTeamTimesheet: vi.fn(), queryTeamWorkload: vi.fn(), queryTeamMemberTasks: vi.fn() }))
-vi.mock('../../../api/client', () => ({ teamDashboardApi: api }))
-vi.mock('../../../composables/useSession', () => ({ useSession: () => ({ authentication: ref({ company: { timezone: 'Asia/Shanghai' } }) }) }))
+vi.mock('../../api/client', () => ({ teamDashboardApi: api }))
+vi.mock('../../composables/useSession', () => ({ useSession: () => ({ authentication: ref({ company: { timezone: 'Asia/Shanghai' } }) }) }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => ({ query: {} }) }))
 
 const workload = (): TeamWorkload => ({ asOf: new Date(), today: new Date(),

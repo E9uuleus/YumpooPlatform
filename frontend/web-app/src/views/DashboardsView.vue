@@ -22,8 +22,8 @@ import DashboardExploreDialog from '../components/dashboard/DashboardExploreDial
 import DashboardTabs from '../components/dashboard/DashboardTabs.vue'
 import YpEmptyState from '../components/yp/YpEmptyState.vue'
 
-const TeamDashboard = defineAsyncComponent(() => import('../components/dashboard/team/TeamDashboard.vue'))
-const MyTimeView = defineAsyncComponent(() => import('../components/dashboard/my-time/MyTimeView.vue'))
+const TeamDashboard = defineAsyncComponent(() => import('../components/team/TeamDashboard.vue'))
+const MyTimeView = defineAsyncComponent(() => import('../components/my-time/MyTimeView.vue'))
 
 const session = useSession(), route = useRoute()
 const { dashboards, dashboard, snapshot, loading, refreshing, error, saveError, name, configuration, saving, changed, save, refresh, create, remove, switchTo, load, reload, reloading, recovery, resolveRecovery } = useDashboard()

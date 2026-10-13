@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElAlert, ElButton } from 'element-plus'
-import YpSegmented from '../../yp/YpSegmented.vue'
+import YpSegmented from '../yp/YpSegmented.vue'
 import TeamTimesheet from './TeamTimesheet.vue'
 import TeamWorkload from './TeamWorkload.vue'
 import { viewOptions, type TeamView } from './teamDashboardModel'

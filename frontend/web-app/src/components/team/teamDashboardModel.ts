@@ -1,6 +1,6 @@
 import { WorkItemLabelColorToken, type TeamTimesheet } from '@yumpoo/api-client'
-import { formatDateOnly } from '../../../design-system/dates'
-import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
+import { formatDateOnly } from '../../design-system/dates'
+import { workItemLabelColorValue } from '../projects/workItemLabelColors'
 
 export type PeriodKind = 'WEEK' | 'MONTH' | 'QUARTER'
 /** Inclusive company-calendar dates as `YYYY-MM-DD`. */

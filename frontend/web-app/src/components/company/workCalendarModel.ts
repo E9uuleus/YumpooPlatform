@@ -1,7 +1,7 @@
 import { CalendarDaySource, CalendarDayType, type WorkCalendarDay } from '@yumpoo/api-client'
 import type { CellValue } from 'exceljs'
 import { XLSX_TYPE } from '../dashboard/exportFile'
-import { addDays, fromApiDate, toApiDate } from '../dashboard/team/teamDashboardModel'
+import { addDays, fromApiDate, toApiDate } from '../team/teamDashboardModel'
 
 export const DAY_TYPE_LABELS: Record<string, string> = { WORKDAY: '工作日', NON_WORKDAY: '休息日', HOLIDAY: '法定节假日' }
 export interface CalendarOverride { date: string; dayType: CalendarDayType; standardMinutes: number | null; note: string | null; source: CalendarDaySource }
