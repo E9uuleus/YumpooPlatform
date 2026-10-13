@@ -139,7 +139,6 @@ const columnDraggingIndex = ref(-1)
 const columnDropIndex = ref<number>()
 const columnDropAllowed = ref(false)
 const subitemTableRef = ref<{ $el: HTMLElement; clearSelection: () => void; toggleRowSelection: (item: ProjectWorkItemListItem, selected: boolean) => void }>()
-const subitemScrollLeft = ref(0)
 const savingSortOrder = ref(false)
 const nameEditingId = ref('')
 const { draft: inlineDraft, rows: displayItems, isDraft, start: createBelow, save: saveInlineDraft, cancel: cancelInlineDraft } = useWorkItemInlineCreate({
@@ -167,7 +166,8 @@ let columnPointerCandidate: {
 const COLUMN_DRAG_POINTER_THRESHOLD = 5
 const COLUMN_DRAG_TILT_DEGREES = 1
 const COLUMN_RESIZE_HANDLE_WIDTH = 8
-const SUBITEM_ADD_COLUMN_MIN_WIDTH = 96
+// 子表菜单列 72px 比父表菜单+展开列宽 39px，添加列让出同等宽度，子表不会宽于父行单元格。
+const SUBITEM_ADD_COLUMN_MIN_WIDTH = 57
 const SUBITEM_MENU_COLUMN_WIDTH = 72
 
 
@@ -656,7 +656,6 @@ onBeforeUnmount(() => {
     class="subitem-table-shell"
     :style="{
       '--subitem-title-column-width': `${columnWidths.title}px`,
-      '--subitem-table-scroll-left': `${subitemScrollLeft}px`,
       '--subitem-menu-column-width': `${SUBITEM_MENU_COLUMN_WIDTH}px`,
     }"
     :aria-label="`${parent.title} 的子项`"
@@ -665,27 +664,30 @@ onBeforeUnmount(() => {
     <inline-problem v-if="error" :problem="error" @retry="$emit('retry')" />
     <inline-problem v-if="quickError" :problem="quickError" />
     <div class="subitem-table-frame">
-      <div
-        class="subitem-hierarchy-bar"
-        :class="{ 'subitem-hierarchy-bar--quick': quickOpen }"
-        aria-hidden="true"
-      >
-        <span class="subitem-hierarchy-bar__main" />
-        <span class="subitem-hierarchy-bar__trailing" />
-      </div>
-      <div class="subitem-hierarchy-branches" aria-hidden="true">
-        <template v-if="displayItems.length">
+      <div class="subitem-hierarchy-rail" aria-hidden="true">
+        <span class="subitem-hierarchy-spine" />
+        <div
+          class="subitem-hierarchy-bar"
+          :class="{ 'subitem-hierarchy-bar--quick': quickOpen }"
+        >
+          <span class="subitem-hierarchy-bar__main" />
+          <span class="subitem-hierarchy-bar__trailing" />
+        </div>
+        <div class="subitem-hierarchy-branches">
+          <template v-if="displayItems.length">
+            <span
+              v-for="item in displayItems"
+              :key="item.id"
+              class="subitem-hierarchy-branch subitem-hierarchy-branch--data"
+            />
+          </template>
+          <span v-else-if="loading || error" class="subitem-hierarchy-branch subitem-hierarchy-branch--empty" />
           <span
-            v-for="item in displayItems"
-            :key="item.id"
-            class="subitem-hierarchy-branch subitem-hierarchy-branch--data"
+            class="subitem-hierarchy-branch"
+            :class="quickOpen ? 'subitem-hierarchy-branch--quick' : 'subitem-hierarchy-branch--add'"
           />
-        </template>
-        <span v-else-if="loading || error" class="subitem-hierarchy-branch subitem-hierarchy-branch--empty" />
-        <span
-          class="subitem-hierarchy-branch"
-          :class="quickOpen ? 'subitem-hierarchy-branch--quick' : 'subitem-hierarchy-branch--add'"
-        />
+        </div>
+        <span class="subitem-hierarchy-mask" />
       </div>
 
       <el-table
@@ -703,7 +705,6 @@ onBeforeUnmount(() => {
         border
         :cell-style="subitemCellStyle"
         :header-cell-style="subitemHeaderCellStyle"
-        @scroll="subitemScrollLeft = $event.scrollLeft"
         @selection-change="$emit('selectionChange', parent.id, $event)"
         @header-dragend="(newWidth: number, oldWidth: number, column: { property?: string; columnKey?: string }) => $emit('headerResize', newWidth, oldWidth, column)"
       >
@@ -941,6 +942,7 @@ onBeforeUnmount(() => {
 
         <template #append>
           <div v-if="quickOpen" ref="quickRow" class="subitem-quick-row">
+            <span class="subitem-quick-lead" aria-hidden="true" />
             <span class="subitem-quick-checkbox" aria-hidden="true" />
             <el-input
               ref="quickTitleInput"
@@ -958,6 +960,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <button v-else class="subitem-add" :disabled="!canCreate || !defaultContentId" @click="openQuick">
+            <span class="subitem-quick-lead" aria-hidden="true" />
             <span class="subitem-quick-checkbox" aria-hidden="true" />
             <span class="subitem-add__field">添加子项</span>
           </button>
@@ -979,7 +982,6 @@ onBeforeUnmount(() => {
   --subitem-table-row-height: 36px;
   --subitem-table-empty-height: 60px;
   --subitem-table-quick-height: var(--subitem-table-row-height);
-  --subitem-quick-scroll-left: calc(var(--work-item-table-scroll-left, 0px) + var(--subitem-table-scroll-left, 0px));
   position: relative;
   width: 100%;
   box-sizing: border-box;
@@ -988,21 +990,50 @@ onBeforeUnmount(() => {
 
 .subitem-table-frame {
   position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   isolation: isolate;
 }
 
 .subitem-table-frame::after {
   position: absolute;
-  z-index: 2;
+  z-index: 1;
   right: 0;
   bottom: 0;
-  left: calc(var(--subitem-menu-column-width) + var(--subitem-hierarchy-bar-width) + var(--work-item-table-scroll-left, 0px));
+  left: calc(var(--subitem-menu-column-width) + var(--subitem-hierarchy-bar-width));
   height: 1px;
   background: var(--yp-monday-grid-border, var(--yp-border-subtle));
   content: '';
   pointer-events: none;
 }
 
+.subitem-hierarchy-rail {
+  position: sticky;
+  z-index: 7;
+  left: 0;
+  grid-area: 1 / 1;
+  width: calc(var(--subitem-menu-column-width) + var(--subitem-hierarchy-bar-width));
+  pointer-events: none;
+}
+.subitem-hierarchy-spine {
+  position: absolute;
+  top: calc(-1 * var(--work-item-hierarchy-gap, 14px) - 1px);
+  bottom: calc(-1 * var(--work-item-hierarchy-gap, 14px) - 1px);
+  left: calc(var(--subitem-menu-column-width) - var(--subitem-hierarchy-indent) + var(--subitem-hierarchy-bar-center) - (var(--subitem-hierarchy-line-width) / 2));
+  width: var(--subitem-hierarchy-line-width);
+  border-radius: var(--subitem-hierarchy-line-width);
+  background: var(--work-item-group-accent, rgb(87, 155, 252));
+}
+/* 盖住父行底边线在左侧 32px 冻结区内的部分（父表 .el-table__expanded-cell::after） */
+.subitem-hierarchy-mask {
+  position: absolute;
+  left: 0;
+  bottom: calc(-1 * var(--work-item-hierarchy-gap, 14px) - 1px);
+  width: calc(var(--subitem-menu-column-width) - var(--subitem-hierarchy-indent));
+  height: 1px;
+  background: var(--yp-bg-surface);
+}
 .subitem-hierarchy-bar {
   position: absolute;
   z-index: 7;
@@ -1015,7 +1046,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border-radius: var(--subitem-hierarchy-corner-radius) 0 0 var(--subitem-hierarchy-corner-radius);
   pointer-events: none;
-  transform: translateX(var(--work-item-table-scroll-left, 0px));
 }
 
 .subitem-hierarchy-bar__main {
@@ -1047,7 +1077,6 @@ onBeforeUnmount(() => {
   width: calc(var(--subitem-hierarchy-indent) + (var(--subitem-hierarchy-line-width) / 2));
   flex-direction: column;
   pointer-events: none;
-  transform: translateX(var(--work-item-table-scroll-left, 0px));
 }
 
 .subitem-hierarchy-branch {
@@ -1085,6 +1114,7 @@ onBeforeUnmount(() => {
 }
 
 .monday-subitem-table {
+  grid-area: 1 / 1;
   position: relative;
   width: 100%;
   --subitem-sort-overflow-space: 20px;
@@ -1095,10 +1125,6 @@ onBeforeUnmount(() => {
 :deep(.monday-subitem-table .el-table__inner-wrapper::before),
 :deep(.monday-subitem-table.el-table--border .el-table__inner-wrapper::after) {
   display: none;
-}
-:deep(.monday-subitem-table .el-table-fixed-column--left) {
-  transform: translateX(var(--work-item-table-scroll-left, 0px));
-  will-change: transform;
 }
 :deep(.monday-subitem-table.el-table),
 :deep(.monday-subitem-table .el-table__inner-wrapper),
@@ -1115,8 +1141,12 @@ onBeforeUnmount(() => {
   z-index: 6;
   margin-top: calc(-1 * var(--subitem-sort-overflow-space));
   padding-top: var(--subitem-sort-overflow-space);
-  overflow: hidden !important;
+  overflow: visible !important;
 }
+:deep(.monday-subitem-table .el-table__body-wrapper),
+:deep(.monday-subitem-table .el-table__body-wrapper > .el-scrollbar),
+:deep(.monday-subitem-table .el-table__body-wrapper .el-scrollbar__wrap) { overflow: visible !important; }
+:deep(.monday-subitem-table .el-scrollbar__bar) { display: none; }
 :deep(.monday-subitem-table th.monday-sortable-column-header) {
   position: relative;
 }
@@ -1302,7 +1332,7 @@ onBeforeUnmount(() => {
 }
 .subitem-add,
 .subitem-quick-row {
-  --subitem-quick-start: calc(var(--subitem-menu-column-width) + var(--subitem-quick-scroll-left));
+  --subitem-quick-start: var(--subitem-menu-column-width);
   position: relative;
 }
 .subitem-quick-row:focus-within {
@@ -1319,11 +1349,19 @@ onBeforeUnmount(() => {
   content: '';
   pointer-events: none;
 }
-.subitem-add__field,
-.subitem-quick-controls {
-  transform: translateX(var(--subitem-quick-scroll-left));
+.subitem-quick-lead {
+  position: sticky;
+  z-index: 2;
+  left: 0;
+  grid-column: 1;
+  grid-row: 1;
+  align-self: stretch;
+  margin: -1px calc(-1 * var(--subitem-hierarchy-bar-width)) -1px 0;
+  background: var(--yp-bg-surface);
+  pointer-events: none;
 }
-.subitem-quick-controls { grid-column: 4; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+.subitem-add__field { position: sticky; left: calc(var(--subitem-menu-column-width) + 48px); }
+.subitem-quick-controls { position: sticky; left: calc(var(--subitem-menu-column-width) + 48px + var(--subitem-title-column-width, 320px)); justify-self: start; grid-column: 4; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
 .subitem-quick-title.subitem-add__field { width: 100%; min-width: 0; margin: 0; outline: none; border-color: var(--yp-input-border-focus); background: var(--yp-bg-surface); color: var(--yp-text-primary); }
 .subitem-quick-title :deep(.el-input__wrapper) {
   height: 100%;
@@ -1338,6 +1376,8 @@ onBeforeUnmount(() => {
 .subitem-quick-title :deep(.el-input__inner)::placeholder { color: var(--yp-text-secondary); opacity: 1; }
 .subitem-quick-hint { color: var(--yp-text-muted); font-size: 12px; white-space: nowrap; }
 .subitem-quick-checkbox {
+  position: sticky;
+  left: calc(var(--subitem-menu-column-width) + 16px);
   grid-column: 2;
   width: 16px;
   height: 16px;
@@ -1347,7 +1387,7 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--yp-border-strong) 50%, transparent);
   border-radius: 2px;
   background: var(--yp-bg-surface);
-  transform: translateX(calc(var(--subitem-quick-scroll-left) + 2px));
+  transform: translateX(2px);
   pointer-events: none;
 }
 .subitem-quick-row .subitem-quick-submit {

@@ -48,11 +48,10 @@ for (const fragment of ['workitem.work_item_relation_created', 'relationType',
   'leftWorkItemId', 'rightWorkItemId']) assert(eventSchema.includes(fragment), `关系事件缺少 ${fragment}`)
 for (const fragment of ['expandedSubitemIds', 'loadSubitems', 'onTableExpandChange',
   'project-work-item-subitems-table', '--work-item-hierarchy-gap: 14px',
-  '--work-item-table-scroll-left', 'syncSubitemFixedColumnScrollPosition',
   'subitemMovableColumnOrder', 'visibleSubitemColumns', 'moveSubitemColumn',
   '<connect-column-add-button', '#column-add',
   'monday-quick-add__field', 'placeholder="添加工作项"', 'contentId: defaultContentId.value',
-  'monday-quick-checkbox', 'translateX(var(--work-item-table-scroll-left, 0px))',
+  'monday-quick-checkbox',
   '--work-item-quick-control-height: 26px', '.monday-quick-row:focus-within',
   'background: linear-gradient(to right, transparent var(--work-item-quick-start), var(--yp-bg-selected) var(--work-item-quick-start))',
   '.quick-title-field :deep(.el-input__wrapper)',
@@ -68,7 +67,7 @@ for (const fragment of ['aria-label', '--work-item-hierarchy-indent, 40px',
   '--subitem-hierarchy-corner-radius', 'border-bottom-left-radius: var(--subitem-hierarchy-corner-radius)',
   '.subitem-table-frame::after', 'background-position: var(--subitem-hierarchy-bar-width) top',
   'background: var(--yp-monday-grid-border, var(--yp-border-subtle))',
-  'left: calc(var(--subitem-menu-column-width) + var(--subitem-hierarchy-bar-width) + var(--work-item-table-scroll-left, 0px))',
+  'left: calc(var(--subitem-menu-column-width) + var(--subitem-hierarchy-bar-width))',
   'bottom: var(--subitem-hierarchy-line-width)',
   'monday-subitem-table--empty', 'subitem-hierarchy-bar__trailing',
   '--subitem-add-row-accent: color-mix(in srgb, var(--work-item-group-accent, rgb(87, 155, 252)) 50%, transparent)',
@@ -85,8 +84,13 @@ for (const fragment of ['aria-label', '--work-item-hierarchy-indent, 40px',
   'subitem-quick-checkbox', 'color-mix(in srgb, var(--yp-border-strong) 50%, transparent)',
   '--subitem-quick-control-height: 26px', '.subitem-quick-row:focus-within',
   '.monday-subitem-table.el-table--border::after',
-  'translateX(var(--work-item-table-scroll-left, 0px))',
   'createWorkItemSubitem', 'moveWorkItemSubitemOrder']) assert(subtable.includes(fragment), `子表格缺少 ${fragment}`)
+for (const selector of ['.subitem-hierarchy-rail', '.subitem-quick-lead', '.subitem-add__field', '.subitem-quick-controls', '.subitem-quick-checkbox']) {
+  const rule = new RegExp(`(?:^|\\n)\\s*${selector.replaceAll('.', '\\.')}\\s*\\{[^}]*\\bposition:\\s*sticky\\s*;`, 'u')
+  assert(rule.test(subtable), `${selector} 必须使用原生 sticky 定位`)
+}
+assert(/\.subitem-hierarchy-spine\s*\{[^}]*position:\s*absolute;/u.test(subtable),
+  '层级连接线必须随 sticky 轨道定位')
 assert(!subtable.includes('subitem-hierarchy-branch--header'), '子表头不应渲染层级连接锚点')
 for (const fragment of ['connect-column-add-button', 'aria-label="添加列"', 'viewBox="0 0 20 20"',
   'width="18"', 'height="18"', 'fill="currentColor"', 'M10 2.25C10.4142 2.25']) {
