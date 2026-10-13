@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarDayType, readCsrfToken, type WorkCalendarYear } from '@yumpoo/api-client'
+import { CalendarDayType, readCsrfToken, type WorkCalendarYear, type WorkHoursAlertSetting } from '@yumpoo/api-client'
 import { ElAlert, ElButton, ElDialog, ElInput, ElInputNumber, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { administrationApi } from '../../api/client'
@@ -20,6 +20,7 @@ const timezone = computed(() => session.authentication.value?.company.timezone ?
 const today = computed(() => todayIn(timezone.value))
 const year = ref(Number(today.value.slice(0, 4)))
 const data = ref<WorkCalendarYear>()
+const alert = ref<WorkHoursAlertSetting>(), alertHours = ref(12), alertSaving = ref(false)
 const draft = ref(new Map<string, CalendarOverride>())
 const serialize = () => JSON.stringify([...draft.value.values()].sort((a, b) => a.date.localeCompare(b.date)))
 const saved = ref('[]'), dirty = computed(() => serialize() !== saved.value)
@@ -46,7 +47,10 @@ function accept(next: WorkCalendarYear): void {
 
 async function load(): Promise<void> {
   loading.value = true; error.value = undefined
-  try { accept(await administrationApi.getWorkCalendarYear({ year: year.value })) }
+  try {
+    const [calendar, setting] = await Promise.all([administrationApi.getWorkCalendarYear({ year: year.value }), administrationApi.getWorkHoursAlert()])
+    accept(calendar); alert.value = setting; alertHours.value = setting.dailyThresholdMinutes / 60
+  }
   catch (reason) { error.value = await toApiProblem(reason) }
   finally { loading.value = false }
 }
@@ -112,6 +116,18 @@ async function importFile(event: Event): Promise<void> {
 async function download(): Promise<void> {
   try { await saveExportFile(await buildCalendarTemplate([...draft.value.values()]), exportFileName(`${year.value}年工作日历`, 'xlsx'), XLSX_TYPE) }
   catch (reason) { error.value = await toApiProblem(reason) }
+}
+async function saveAlert(): Promise<void> {
+  const csrf = readCsrfToken()
+  if (!csrf) { error.value = localProblem('缺少 CSRF 凭据，请刷新页面后重试。'); return }
+  alertSaving.value = true; error.value = undefined
+  try {
+    alert.value = await administrationApi.updateWorkHoursAlert({ xXSRFTOKEN: csrf, ifMatch: alert.value!.etag,
+      workHoursAlertUpdateRequest: { dailyThresholdMinutes: Math.round(alertHours.value * 60) } })
+    alertHours.value = alert.value.dailyThresholdMinutes / 60
+    ElMessage.success('工时异常阈值已保存')
+  } catch (reason) { error.value = await toApiProblem(reason) }
+  finally { alertSaving.value = false }
 }
 onMounted(load)
 </script>
@@ -234,6 +250,15 @@ onMounted(load)
         </div>
       </article>
     </div>
+    <article v-if="alert" class="calendar-alert">
+      <h3>工时异常提醒</h3>
+      <div class="calendar-actions">
+        <label for="work-hours-threshold">阈值（小时）</label>
+        <el-input-number id="work-hours-threshold" v-model="alertHours" :min="1" :max="24" :step="0.5" :disabled="!canWrite || alertSaving" />
+        <el-button type="primary" :disabled="!canWrite" :loading="alertSaving" @click="saveAlert">保存</el-button>
+      </div>
+      <p>每天检查前一自然日每位成员的总工时（与团队视图同一口径），超过阈值时向全体公司管理员发送站内提醒「该成员工时数据异常请关注」。执行时间与启用在 <router-link :to="{ name: 'company-scheduled-jobs' }">定时任务</router-link> 中设置，默认停用。</p>
+    </article>
     <el-dialog
       v-model="dialogOpen"
       :title="dialogTitle"
@@ -303,6 +328,9 @@ onMounted(load)
 .calendar-editor,.calendar-editor label { display: grid; gap: var(--yp-space-2); }
 .calendar-editor { gap: var(--yp-space-4); }
 .calendar-editor .el-input-number { width: 100%; }
+.calendar-alert { padding: var(--yp-space-4); border: 1px solid var(--yp-border-subtle); border-radius: var(--yp-radius-md); background: var(--yp-bg-surface); }
+.calendar-alert h3 { margin: 0 0 var(--yp-space-3); color: var(--yp-text-primary); }
+.calendar-alert p { margin-bottom: 0; color: var(--yp-text-secondary); line-height: 1.6; }
 @media (max-width: 1280px) { .calendar-months { grid-template-columns: repeat(3,minmax(0,1fr)); } }
 @media (max-width: 760px) { .calendar-months { grid-template-columns: minmax(0,1fr); } .calendar-state { flex-basis: 100%; } .calendar-toolbar { align-items: flex-start; } }
 </style>

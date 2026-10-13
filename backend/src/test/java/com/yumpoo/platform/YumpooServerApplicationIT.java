@@ -407,6 +407,8 @@ class YumpooServerApplicationIT {
                 "user_notification",
                 "user_onboarding_tour",
                 "wecom_oauth_attempt",
+                "work_hours_alert",
+                "work_hours_alert_setting",
                 "work_item",
                 "work_item_assignee",
                 "work_item_cell_activity",

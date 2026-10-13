@@ -32,5 +32,6 @@ public class MemberProjectService {
         if (actor == null || !actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)) throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
         return repository.listCompany(actor.companyId());
     }
+    public List<MemberProjectRepository.Project> listCompanyForScheduler(UUID companyId) { return repository.listCompany(companyId); }
     public record Page(List<MemberProjectRepository.Project> items, long totalElements) {}
 }

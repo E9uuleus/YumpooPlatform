@@ -238,6 +238,8 @@ export * from './WorkCalendarDay';
 export * from './WorkCalendarDayInput';
 export * from './WorkCalendarUpdateRequest';
 export * from './WorkCalendarYear';
+export * from './WorkHoursAlertSetting';
+export * from './WorkHoursAlertUpdateRequest';
 export * from './WorkItemAssignee';
 export * from './WorkItemAssigneePatchRequest';
 export * from './WorkItemAssigneesPatchRequest';

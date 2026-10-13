@@ -3096,6 +3096,48 @@ paths:
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /admin/work-hours-alert:
+    get:
+      tags: [Administration]
+      operationId: getWorkHoursAlert
+      summary: 查询公司工时异常提醒阈值
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）；尚未保存时每日阈值为 720 分钟，etag 为 "0"。
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 当前阈值与版本。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkHoursAlertSetting' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Administration]
+      operationId: updateWorkHoursAlert
+      summary: 修改公司工时异常提醒阈值
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）；要求会话、XSRF 和最近读取的 If-Match；阈值为每天每位成员的全部计时工时，检查前一自然日，任务默认停用。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkHoursAlertUpdateRequest' } } }
+      responses:
+        '200':
+          description: 保存后的阈值与版本。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkHoursAlertSetting' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /admin/governance-overrides:
     post:
       tags: [Administration]
@@ -8610,6 +8652,20 @@ components:
       required: [days]
       properties:
         days: { type: array, maxItems: 366, items: { $ref: '#/components/schemas/WorkCalendarDayInput' } }
+
+    WorkHoursAlertSetting:
+      type: object
+      additionalProperties: false
+      required: [dailyThresholdMinutes, etag]
+      properties:
+        dailyThresholdMinutes: { type: integer, minimum: 60, maximum: 1440 }
+        etag: { type: string, pattern: '^"[0-9]+"$' }
+    WorkHoursAlertUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [dailyThresholdMinutes]
+      properties:
+        dailyThresholdMinutes: { type: integer, minimum: 60, maximum: 1440 }
 
     ScheduledJobUpdateRequest:
       type: object

@@ -18,6 +18,9 @@ public class TeamWorkAdapter implements TeamWorkQuery {
     public List<TimeEntry> timeEntries(CurrentActor actor, List<UUID> projectIds, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
         return entries(service.timeEntries(actor, projectIds, userIds, from, to, zone, asOf));
     }
+    public List<TimeEntry> timeEntriesForScheduler(UUID companyId, List<UUID> projectIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
+        return entries(service.timeEntriesForScheduler(companyId, projectIds, from, to, zone, asOf));
+    }
     public List<Load> currentLoad(CurrentActor actor, List<UUID> projectIds, LocalDate today) {
         return service.currentLoad(actor, projectIds, today).stream().map(l -> new Load(l.userId(), l.todo(), l.inProgress(), l.overdue())).toList();
     }
