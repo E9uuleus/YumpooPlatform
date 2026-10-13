@@ -77,6 +77,13 @@
       "newSha256": "6dd97e43694c5d31cced5cefce730a184bb0e605291a82e190231fac6319e312",
       "reason": "项目删除计划、提醒与撤销新增三个 NotificationReason 响应枚举。仅移除这三个新增原因的临时规范已通过完整 openapi-diff，确认新增 API、可选状态/能力与截止时间，以及永久清除后连接列响应 targets 下限放宽的其余变更兼容；精确哈希只覆盖该响应枚举扩展。",
       "agentNote": ".agents/notes/implemented/product/2026-10-09-project-archive-and-deletion.md"
+    },
+    {
+      "id": "2026-10-12-work-hours-anomaly-notification",
+      "oldSha256": "125562c4f5b19111baa2e57a28f851428e13a81a50160e508688cdcb62bfccd6",
+      "newSha256": "159578909df6b50acb2d0e3e027e574e9bed3d42f42f65be3b3250f742874fff",
+      "reason": "新增 WORK_HOURS_ANOMALY 原因与 MEMBER_DAY 目标，仅移除这两个值的临时规范已通过完整 openapi-diff，不归入任何分组，Web 收件箱展示，桌面壳按原因能力过滤。",
+      "agentNote": ".agents/notes/implemented/product/2026-10-12-work-calendar-and-overtime.md"
     }
   ]
 }

@@ -3050,6 +3050,94 @@ paths:
         '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /admin/work-calendar/{year}:
+    get:
+      tags: [Administration]
+      operationId: getWorkCalendarYear
+      summary: 查询公司年度工作日历
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）；返回全年逐日解析结果；未显式设置的日期按周一至周五工作、周末休息；从未保存过的年份 etag 为 "0"。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: year, in: path, required: true, schema: { type: integer, format: int32, minimum: 2000, maximum: 2100 } }
+      responses:
+        '200':
+          description: 全年工作日历与年度版本。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkCalendarYear' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    put:
+      tags: [Administration]
+      operationId: updateWorkCalendarYear
+      summary: 整体替换公司年度工作日历
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）；请求中的 days 即该年全部显式设置，未列出的日期恢复默认规则；要求会话、XSRF 和最近读取的 If-Match；写入安全审计。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: year, in: path, required: true, schema: { type: integer, format: int32, minimum: 2000, maximum: 2100 } }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkCalendarUpdateRequest' } } }
+      responses:
+        '200':
+          description: 保存后的全年工作日历。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkCalendarYear' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /admin/work-hours-alert:
+    get:
+      tags: [Administration]
+      operationId: getWorkHoursAlert
+      summary: 查询公司工时异常提醒阈值
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）；尚未保存时每日阈值为 720 分钟，etag 为 "0"。
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 当前阈值与版本。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkHoursAlertSetting' } } }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Administration]
+      operationId: updateWorkHoursAlert
+      summary: 修改公司工时异常提醒阈值
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）；要求会话、XSRF 和最近读取的 If-Match；阈值为每天每位成员的全部计时工时，检查前一自然日，任务默认停用。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WorkHoursAlertUpdateRequest' } } }
+      responses:
+        '200':
+          description: 保存后的阈值与版本。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/WorkHoursAlertSetting' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /admin/governance-overrides:
     post:
       tags: [Administration]
@@ -7177,7 +7265,7 @@ components:
         changedAt: { type: string, format: date-time }
     NotificationReason:
       type: string
-      enum: [MENTION, REPLY, COMMENT, ASSIGNED, PROJECT_MEMBER_ADDED, PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED, CONNECTION_CREATED, PROJECT_DELETION_SCHEDULED, PROJECT_DELETION_REMINDER, PROJECT_DELETION_CANCELLED]
+      enum: [MENTION, REPLY, COMMENT, ASSIGNED, PROJECT_MEMBER_ADDED, PROJECT_MEMBER_REMOVED, PROJECT_OWNER_ASSIGNED, PROJECT_OWNER_TRANSFERRED, CONNECTION_CREATED, PROJECT_DELETION_SCHEDULED, PROJECT_DELETION_REMINDER, PROJECT_DELETION_CANCELLED, WORK_HOURS_ANOMALY]
     NotificationState:
       type: string
       enum: [UNREAD, READ, ARCHIVED]
@@ -7190,7 +7278,7 @@ components:
       enum: [MENTION, COMMENT, ASSIGNED, PROJECT]
     NotificationTargetKind:
       type: string
-      enum: [PROJECT, WORK_ITEM, WORK_ITEM_UPDATE]
+      enum: [PROJECT, WORK_ITEM, WORK_ITEM_UPDATE, MEMBER_DAY]
     NotificationPerson:
       type: object
       nullable: true
@@ -7211,6 +7299,9 @@ components:
         title: { type: string, nullable: true }
         updateId: { type: string, format: uuid, nullable: true }
         excerpt: { type: string, nullable: true }
+        workDate: { type: string, format: date, nullable: true }
+        durationMs: { type: integer, format: int64, nullable: true }
+        thresholdMinutes: { type: integer, nullable: true }
     NotificationItem:
       type: object
       required: [id, reason, state, createdAt, readAt, actor, subject, target]
@@ -8217,7 +8308,7 @@ components:
     TeamTimesheet:
       type: object
       additionalProperties: false
-      required: [from, to, timezone, asOf, members, workItems, entries]
+      required: [from, to, timezone, asOf, members, workItems, entries, days]
       properties:
         from: { type: string, format: date }
         to: { type: string, format: date }
@@ -8233,6 +8324,15 @@ components:
           type: array
           description: 每个成员、工作项、自然日一条，只包含大于 0 的耗时。
           items: { $ref: '#/components/schemas/TeamTimesheetEntry' }
+        days: { type: array, items: { $ref: '#/components/schemas/TeamTimesheetDay' } }
+    TeamTimesheetDay:
+      type: object
+      additionalProperties: false
+      required: [date, dayType, note]
+      properties:
+        date: { type: string, format: date }
+        dayType: { $ref: '#/components/schemas/CalendarDayType' }
+        note: { type: string, nullable: true }
     TeamWorkloadQuery:
       type: object
       additionalProperties: false
@@ -8516,6 +8616,67 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/ScheduledJob' } }
+
+    CalendarDayType:
+      type: string
+      enum: [WORKDAY, NON_WORKDAY, HOLIDAY]
+      description: WORKDAY 工作日；NON_WORKDAY 休息日；HOLIDAY 法定节假日。
+    CalendarDaySource:
+      type: string
+      enum: [MANUAL, IMPORT]
+      nullable: true
+      description: 显式日期的最近编辑来源；未设置日期为空，写入省略时默认 MANUAL。
+    WorkCalendarDay:
+      type: object
+      additionalProperties: false
+      required: [date, dayType, standardMinutes, note, explicit, configuredStandardMinutes, source]
+      properties:
+        date: { type: string, format: date }
+        dayType: { $ref: '#/components/schemas/CalendarDayType' }
+        standardMinutes: { type: integer, minimum: 0, maximum: 720 }
+        configuredStandardMinutes: { type: integer, minimum: 1, maximum: 720, nullable: true, description: 工作日原始标准工时设置；为空表示继承公司默认值，非工作日及未设置日期也为空。 }
+        source: { $ref: '#/components/schemas/CalendarDaySource' }
+        note: { type: string, nullable: true, maxLength: 30 }
+        explicit: { type: boolean, description: 是否为管理员显式设置；否则按默认周末规则。 }
+    WorkCalendarYear:
+      type: object
+      additionalProperties: false
+      required: [year, defaultWorkdayMinutes, etag, days]
+      properties:
+        year: { type: integer, minimum: 2000, maximum: 2100 }
+        defaultWorkdayMinutes: { type: integer, minimum: 1, maximum: 720 }
+        etag: { type: string, pattern: '^"[0-9]+"$' }
+        days: { type: array, items: { $ref: '#/components/schemas/WorkCalendarDay' } }
+    WorkCalendarDayInput:
+      type: object
+      additionalProperties: false
+      required: [date, dayType]
+      properties:
+        date: { type: string, format: date }
+        dayType: { $ref: '#/components/schemas/CalendarDayType' }
+        standardMinutes: { type: integer, minimum: 1, maximum: 720, nullable: true, description: 仅工作日可填，为空沿用公司默认标准工时。 }
+        source: { $ref: '#/components/schemas/CalendarDaySource' }
+        note: { type: string, nullable: true, maxLength: 30 }
+    WorkCalendarUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [days]
+      properties:
+        days: { type: array, maxItems: 366, items: { $ref: '#/components/schemas/WorkCalendarDayInput' } }
+
+    WorkHoursAlertSetting:
+      type: object
+      additionalProperties: false
+      required: [dailyThresholdMinutes, etag]
+      properties:
+        dailyThresholdMinutes: { type: integer, minimum: 60, maximum: 1440 }
+        etag: { type: string, pattern: '^"[0-9]+"$' }
+    WorkHoursAlertUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [dailyThresholdMinutes]
+      properties:
+        dailyThresholdMinutes: { type: integer, minimum: 60, maximum: 1440 }
 
     ScheduledJobUpdateRequest:
       type: object

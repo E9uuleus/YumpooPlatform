@@ -10,7 +10,10 @@ public record ResolvedCalendarDay(
         int standardMinutes,
         boolean explicitOverride,
         long companyRowVersion,
-        OptionalLong calendarDayRowVersion
+        OptionalLong calendarDayRowVersion,
+        String note,
+        Integer configuredStandardMinutes,
+        CalendarDayOverride.Source source
 ) {
 
     public ResolvedCalendarDay {

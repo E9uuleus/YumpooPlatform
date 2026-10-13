@@ -1,0 +1,21 @@
+{
+  "eventId": "49000000-0000-4000-8000-000000000021",
+  "eventType": "reporting.work_hours_anomaly_detected",
+  "eventVersion": 1,
+  "occurredAt": "2026-10-11T16:30:00Z",
+  "aggregateType": "WorkHoursAlert",
+  "aggregateId": "49000000-0000-4000-8000-000000000022",
+  "aggregateVersion": 1,
+  "companyId": "00000000-0000-4000-8000-000000000001",
+  "actor": { "type": "SYSTEM", "systemCode": "WORK_HOURS_MONITOR" },
+  "requestId": "wc4-work-hours-anomaly",
+  "correlationId": "wc4-work-hours-anomaly",
+  "causationId": null,
+  "payload": {
+    "userId": "49000000-0000-4000-8000-000000000023",
+    "workDate": "2026-10-11",
+    "totalDurationMs": 39600000,
+    "thresholdMinutes": 600,
+    "displayName": "成员"
+  }
+}

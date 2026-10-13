@@ -2,20 +2,28 @@ package com.yumpoo.platform.notification.application;
 
 import com.yumpoo.platform.notification.application.NotificationModels.*;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface NotificationRepository {
+    record WorkHours(LocalDate workDate, long durationMs, int thresholdMinutes) {}
     record Event(UUID id, UUID companyId, UUID sourceEventId, String eventType, int version,
             TargetKind kind, UUID projectId, UUID workItemId, UUID updateId, UUID subjectUserId,
-            UUID actorUserId, Instant occurredAt, Instant deletionPurgeAfter) {
+            UUID actorUserId, Instant occurredAt, Instant deletionPurgeAfter, WorkHours workHours) {
+        public Event(UUID id, UUID companyId, UUID sourceEventId, String eventType, int version,
+                TargetKind kind, UUID projectId, UUID workItemId, UUID updateId, UUID subjectUserId,
+                UUID actorUserId, Instant occurredAt, Instant deletionPurgeAfter) {
+            this(id, companyId, sourceEventId, eventType, version, kind, projectId, workItemId, updateId,
+                    subjectUserId, actorUserId, occurredAt, deletionPurgeAfter, null);
+        }
         public Event(UUID id, UUID companyId, UUID sourceEventId, String eventType, int version,
                 TargetKind kind, UUID projectId, UUID workItemId, UUID updateId, UUID subjectUserId,
                 UUID actorUserId, Instant occurredAt) {
             this(id, companyId, sourceEventId, eventType, version, kind, projectId, workItemId, updateId,
-                    subjectUserId, actorUserId, occurredAt, null);
+                    subjectUserId, actorUserId, occurredAt, null, null);
         }
     }
     record Row(UUID id, Reason reason, State state, Instant createdAt, Instant readAt, Event event) {}

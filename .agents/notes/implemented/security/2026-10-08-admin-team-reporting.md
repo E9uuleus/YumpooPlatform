@@ -22,6 +22,8 @@ Status: implemented
 
 桌面端新增固定通道 `yumpoo:files:save-export`。只有主窗口的 main frame 且 origin 精确匹配的发送方可以调用。主进程只接受 PDF 和 XLSX 两种 MIME、非空且不超过 50MB 的 `Uint8Array`。文件名会去掉路径与 Windows 非法字符，并按类型补全扩展名；目录只能由用户在原生保存对话框中选择，取消时返回 false。全局下载拦截保持不变。网页端仍通过 Blob 链接下载；桥接不存在的旧客户端会提示升级。
 
+[工时异常检查](../product/2026-10-12-work-calendar-and-overtime.md)新增系统作用域端口 listForScheduler 与 timeEntriesForScheduler，只由定时任务调用，不检查 actor，结果不经 HTTP 返回；HTTP 团队报表仍调用已有管理员端口。提醒受众仅为有效公司管理员（含 APP_MANAGER），接收前校验 ACTIVE/ENABLED，读取 MEMBER_DAY 数值时仍要求 COMPANY_ADMIN。
+
 ## Alternatives considered
 
 - 复用 ProjectAccessSnapshotQuery 的管理员只读可见性逐个查询：会把公司范围列表拆成大量单项调用，也无法在一条 SQL 中按项目统计。

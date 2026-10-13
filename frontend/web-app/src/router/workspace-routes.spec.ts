@@ -47,6 +47,13 @@ describe('个人工作台规范路由守卫', () => {
       params: { workspaceSlug: 'hanzhoujiangshangyu' },
       replace: true,
     })
+    expect(destination('/dashboards/team?date=2026-10-12')).toEqual({
+      name: 'dashboards',
+      params: { workspaceSlug: 'hanzhoujiangshangyu', dashboardId: 'team' },
+      query: { date: '2026-10-12' },
+      hash: '',
+      replace: true,
+    })
   })
 
   it('错误或其他用户别名不查询身份，直接替换为当前用户地址', () => {

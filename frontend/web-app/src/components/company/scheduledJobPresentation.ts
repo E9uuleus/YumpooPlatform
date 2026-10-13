@@ -32,6 +32,11 @@ export function describeCron(cron: string): string {
 export interface ScheduledJobMeta { label: string; description: string; owner: string; history?: RouteLocationRaw }
 
 const JOBS: Record<string, ScheduledJobMeta> = {
+  WORK_HOURS_ANOMALY: {
+    label: '工时异常检查',
+    description: '每天检查前一自然日成员总工时，超过阈值时向公司管理员发送站内提醒。',
+    owner: '报表',
+  },
   DIRECTORY_SYNC: {
     label: '定时同步企微通讯录',
     description: '全量同步企微成员与在职状态，离职成员自动停用账号。',

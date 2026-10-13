@@ -3,6 +3,7 @@ package com.yumpoo.platform.notification.application;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import com.yumpoo.platform.foundation.application.error.StandardErrorCode;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
+import com.yumpoo.platform.identityaccess.api.PlatformRoleCode;
 
 import com.yumpoo.platform.notification.application.NotificationModels.*;
 import org.springframework.stereotype.Service;
@@ -34,11 +35,17 @@ public class NotificationInboxQueryService {
             var e=row.event();
             if(e.actorUserId()!=null) people.add(e.actorUserId());
             if(e.subjectUserId()!=null) people.add(e.subjectUserId());
-            references.add(new NotificationContext.Reference(row.id(),e.kind(),e.projectId(),e.workItemId(),e.updateId()));
+            if (e.kind()!=TargetKind.MEMBER_DAY) references.add(new NotificationContext.Reference(row.id(),e.kind(),e.projectId(),e.workItemId(),e.updateId()));
         }
         var rendered=context.render(actor,new NotificationContext.RenderRequest(references,people));
         var items=rows.stream().map(row->{
             var target=rendered.targets().getOrDefault(row.id(),Target.inaccessible(row.event().kind()));
+            if (row.event().kind()==TargetKind.MEMBER_DAY) {
+                var w=row.event().workHours();
+                target=actor.hasRole(PlatformRoleCode.COMPANY_ADMIN)
+                        ? new Target(TargetKind.MEMBER_DAY,true,null,null,null,null,null,null,null,w.workDate(),w.durationMs(),w.thresholdMinutes())
+                        : Target.inaccessible(TargetKind.MEMBER_DAY);
+            }
             return new Item(row.id(),row.reason(),row.state(),row.createdAt(),row.readAt(),
                 row.event().actorUserId()==null?null:rendered.people().get(row.event().actorUserId()),
                 row.event().subjectUserId()==null?null:rendered.people().get(row.event().subjectUserId()),

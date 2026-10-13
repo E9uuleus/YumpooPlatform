@@ -20,6 +20,7 @@ export enum NotificationTargetKind {
     Project = 'PROJECT',
     WorkItem = 'WORK_ITEM',
     WorkItemUpdate = 'WORK_ITEM_UPDATE',
+    MemberDay = 'MEMBER_DAY',
     UnknownDefaultOpenApi = '11184809'
 }
 

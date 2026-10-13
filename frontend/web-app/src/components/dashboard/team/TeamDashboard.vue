@@ -34,13 +34,14 @@ defineExpose({ refresh: team.refresh, loading, ready })
       </el-button>
     </el-alert>
     <TeamTimesheet
-      v-show="view === 'TIMESHEET'"
+      v-show="view !== 'WORKLOAD'"
       ref="timesheetView"
       v-model:period="period"
       :sheet="timesheet"
       :loading="timesheetLoading"
       :error="timesheetError"
       :timezone="timezone"
+      :overtime="view === 'OVERTIME'"
       @retry="team.loadTimesheet()"
     >
       <template #switch>

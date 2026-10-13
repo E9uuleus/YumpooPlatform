@@ -9,19 +9,21 @@ import YpSegmented from '../../yp/YpSegmented.vue'
 import '../../projects/workItemAccentBar.css'
 import { formatTimestamp } from '../../../design-system/dates'
 import { exportFileName, saveExportFile, XLSX_TYPE } from '../exportFile'
-import { buildTimesheet, dayBreakdown, hoursMinutes, isWeekend, periodFor, periodLabel, periodOptions, projectColors, rangeDays, shiftPeriod, shortHours, todayIn, weekday,
+import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, periodOptions, projectColors, restrictTimesheet, shiftPeriod, shortHours, timesheetColumns, todayIn, weekday,
   type Period, type PeriodKind, type TimesheetRow } from './teamDashboardModel'
 import { staggerIn, useTweenedNumber, type StaggerFrom } from './teamMotion'
 
-const props = defineProps<{ sheet?: TeamTimesheet | undefined; loading: boolean; error: string; timezone: string }>()
+const props = defineProps<{ sheet?: TeamTimesheet | undefined; loading: boolean; error: string; timezone: string; overtime?: boolean }>()
 const period = defineModel<Period>('period', { required: true })
 const emit = defineEmits<{ retry: [] }>()
 const hideEmpty = ref(false), exporting = ref(false), calendarOpen = ref(false)
 const grid = ref<HTMLTableElement>(), sheetBox = ref<HTMLElement>(), selected = ref(new Set<string>()), sortTotal = ref<'desc' | 'asc'>()
 const active = ref<{ row: TimesheetRow; day: string; anchor: HTMLElement }>()
-const model = computed(() => props.sheet ? buildTimesheet(props.sheet) : { rows: [], dayTotals: {}, totalMs: 0 })
-const days = computed(() => props.sheet ? rangeDays(props.sheet.from.toISOString().slice(0, 10), props.sheet.to.toISOString().slice(0, 10)) : [])
-const columns = computed(() => days.value.map(day => ({ day, label: day.slice(5), weekday: `周${weekday(day)}`, weekend: isWeekend(day) })))
+const columns = computed(() => props.sheet ? timesheetColumns(props.sheet, props.overtime) : [])
+const days = computed(() => columns.value.map(column => column.day))
+const fullModel = computed(() => props.sheet ? buildTimesheet(props.sheet) : { rows: [], dayTotals: {}, totalMs: 0 })
+const model = computed(() => props.overtime ? restrictTimesheet(fullModel.value, days.value) : fullModel.value)
+const holidayMs = computed(() => columns.value.filter(column => column.holiday).reduce((sum, column) => sum + (model.value.dayTotals[column.day] ?? 0), 0))
 const today = computed(() => todayIn(props.timezone))
 const colors = computed(() => projectColors(props.sheet?.workItems.map(item => item.projectId) ?? []))
 const rows = computed(() => {
@@ -104,9 +106,10 @@ async function exportExcel() {
   exporting.value = true
   try {
     const { buildTimesheetWorkbook } = await import('./teamTimesheetExcel')
-    const blob = await buildTimesheetWorkbook({ rows: exported, days: days.value, timezone: props.sheet.timezone, scopeLabel: '全部项目',
-      memberScopeLabel: picked.length ? picked.map(row => row.name).join('、') : hideEmpty.value ? '有工时成员' : '全部成员', exportedAt: formatTimestamp(new Date(), props.timezone) })
-    if (await saveExportFile(blob, exportFileName(`成员工时 ${days.value[0]}至${days.value[days.value.length - 1]}`, 'xlsx'), XLSX_TYPE)) ElMessage.success('已导出 Excel')
+    const title = props.overtime ? '成员加班' : '成员工时'
+    const blob = await buildTimesheetWorkbook({ rows: exported, days: days.value, timezone: props.sheet.timezone, scopeLabel: '全部项目', title, nonWorkdays: new Set(columns.value.filter(column => column.rest).map(column => column.day)),
+      memberScopeLabel: picked.length ? picked.map(row => row.name).join('、') : hideEmpty.value ? props.overtime ? '有加班成员' : '有工时成员' : '全部成员', exportedAt: formatTimestamp(new Date(), props.timezone) })
+    if (await saveExportFile(blob, exportFileName(`${title} ${days.value[0]}至${days.value[days.value.length - 1]}`, 'xlsx'), XLSX_TYPE)) ElMessage.success('已导出 Excel')
   } catch (reason) { ElMessage.error(reason instanceof Error && reason.message ? reason.message : '导出失败，请重试') }
   finally { exporting.value = false }
 }
@@ -115,7 +118,7 @@ async function exportExcel() {
 <template>
   <section
     class="team-view team-view--timesheet"
-    aria-label="成员工时"
+    :aria-label="overtime ? '加班统计' : '成员工时'"
   >
     <div class="dashboard-toolbar team-toolbar">
       <slot name="switch" />
@@ -175,12 +178,12 @@ async function exportExcel() {
       </div>
       <div class="team-toolbar__end">
         <el-checkbox v-model="hideEmpty">
-          隐藏无工时成员
+          {{ overtime ? '隐藏无加班成员' : '隐藏无工时成员' }}
         </el-checkbox>
         <el-button
           :icon="Download"
           :loading="exporting"
-          :disabled="!sheet || loading"
+          :disabled="!sheet || loading || !days.length"
           @click="exportExcel"
         >
           {{ checkedRows.length ? `导出所选（${checkedRows.length}）` : '导出 Excel' }}
@@ -205,7 +208,7 @@ async function exportExcel() {
         </el-button>
       </el-alert>
       <p class="team-summary">
-        合计 <strong>{{ shortHours(shownTotalMs) }}</strong> 小时 · 有工时成员 <strong>{{ Math.round(shownMembers) }}</strong> / {{ model.rows.length }}<template v-if="sheet">
+        {{ overtime ? '加班合计' : '合计' }} <strong>{{ shortHours(shownTotalMs) }}</strong> 小时<template v-if="overtime">（休息日 {{ shortHours(model.totalMs - holidayMs) }} · 节假日 {{ shortHours(holidayMs) }}）</template> · {{ overtime ? '有加班成员' : '有工时成员' }} <strong>{{ Math.round(shownMembers) }}</strong> / {{ model.rows.length }}<template v-if="sheet">
           · 统计至 {{ formatTimestamp(sheet.asOf, timezone) }}
         </template>
       </p>
@@ -257,7 +260,7 @@ async function exportExcel() {
                 :key="column.day"
                 :data-day="column.day"
                 class="team-day-head"
-                :class="{ 'is-weekend': column.weekend, 'is-today': column.day === today }"
+                :class="{ 'is-weekend': column.rest, 'is-today': column.day === today, 'is-holiday': column.holiday }"
               >
                 <b>{{ column.label }}</b><small>{{ column.weekday }}</small>
               </th>
@@ -265,7 +268,7 @@ async function exportExcel() {
           </thead>
           <tbody>
             <tr
-              v-for="row in rows"
+              v-for="row in overtime && !days.length ? [] : rows"
               :key="row.key"
               :class="{ 'is-selected': selected.has(row.userId) }"
             >
@@ -291,7 +294,7 @@ async function exportExcel() {
                 v-for="column in columns"
                 :key="column.day"
                 :data-day="column.day"
-                :class="{ 'is-weekend': column.weekend }"
+                :class="{ 'is-weekend': column.rest }"
               >
                 <button
                   v-if="row.days[column.day]"
@@ -310,16 +313,16 @@ async function exportExcel() {
                 >0</span>
               </td>
             </tr>
-            <tr v-if="!rows.length && !loading">
+            <tr v-if="(!rows.length || (overtime && !days.length)) && !loading">
               <td
                 :colspan="columns.length + 3"
                 class="team-empty"
               >
-                {{ model.rows.length ? '当前周期没有成员记录工时' : '当前没有成员' }}
+                {{ overtime ? days.length ? '当前周期没有成员加班' : '当前周期没有休息日或节假日' : model.rows.length ? '当前周期没有成员记录工时' : '当前没有成员' }}
               </td>
             </tr>
           </tbody>
-          <tfoot v-if="rows.length">
+          <tfoot v-if="rows.length && (!overtime || days.length)">
             <tr>
               <td class="team-sticky team-sticky--check" />
               <td class="team-sticky team-sticky--name">
@@ -340,7 +343,8 @@ async function exportExcel() {
         </table>
       </div>
       <p class="team-note">
-        按公司时区（{{ timezone }}）切分自然日，跨日计时按实际时长拆分；运行中的计时统计到刷新时刻。点击工时数字查看当日工作项。
+        <template v-if="overtime">仅统计公司工作日历中休息日与法定节假日的工时，日历在「公司管理 → 工作日历」维护。点击工时数字查看当日工作项。</template>
+        <template v-else>按公司时区（{{ timezone }}）切分自然日，跨日计时按实际时长拆分；运行中的计时统计到刷新时刻。点击工时数字查看当日工作项。</template>
       </p>
     </div>
     <el-popover

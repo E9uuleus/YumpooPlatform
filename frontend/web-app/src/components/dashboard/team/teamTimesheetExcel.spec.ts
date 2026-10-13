@@ -7,7 +7,7 @@ describe('timesheet workbook scope', () => {
     { scopeLabel: '产品项目', memberScopeLabel: '张三、李四' },
     { scopeLabel: '全部项目', memberScopeLabel: '全部成员' },
   ])('records project and member filters in the exported workbook: $memberScopeLabel', async scope => {
-    const blob = await buildTimesheetWorkbook({ rows: [], days: ['2026-10-08'], timezone: 'Asia/Shanghai',
+    const blob = await buildTimesheetWorkbook({ rows: [], days: ['2026-10-08'], timezone: 'Asia/Shanghai', title: '成员工时', nonWorkdays: new Set(),
       ...scope, exportedAt: '2026/10/08 15:00' })
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(await blob.arrayBuffer())

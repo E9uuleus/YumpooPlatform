@@ -122,6 +122,8 @@ class DashboardHttpIT {
         assertThat(get(base + "/options", member).statusCode()).isEqualTo(403);
         var sheet = ok(mutate("POST", base + "/timesheet/query", admin, sheetBody, null, null));
         assertThat(sheet.path("timezone").asText()).isEqualTo(zone.getId());
+        assertThat(sheet.path("days").size()).isEqualTo(7);
+        assertThat(sheet.path("days").get(2).path("dayType").asText()).isEqualTo("NON_WORKDAY");
         assertThat(sheet.path("entries").toString()).contains("\"date\":\"2026-01-01\",\"durationMs\":3600000")
                 .contains("\"date\":\"2026-01-02\",\"durationMs\":7200000");
         assertThat(sheet.path("workItems").get(0).path("projectName").asText()).isEqualTo("Category Work");

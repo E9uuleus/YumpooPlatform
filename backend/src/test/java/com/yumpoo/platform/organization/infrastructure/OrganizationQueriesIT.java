@@ -1,6 +1,8 @@
 package com.yumpoo.platform.organization.infrastructure;
 
 import com.yumpoo.platform.organization.api.CalendarDayType;
+import com.yumpoo.platform.organization.api.CalendarDaySource;
+import com.yumpoo.platform.organization.api.CompanyCalendarCommand;
 import com.yumpoo.platform.organization.api.CompanyCalendarDaySnapshot;
 import com.yumpoo.platform.organization.api.CompanyCalendarQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
@@ -48,6 +50,9 @@ class OrganizationQueriesIT {
     private CompanyCalendarQuery companyCalendarQuery;
 
     @Autowired
+    private CompanyCalendarCommand companyCalendarCommand;
+
+    @Autowired
     private JdbcClient jdbcClient;
 
     @BeforeEach
@@ -70,6 +75,45 @@ class OrganizationQueriesIT {
     @AfterEach
     void restoreCompanyFixture() {
         resetCompanyAndCalendar();
+    }
+
+    @Test
+    void replacesYearWithVersionCheck() {
+        LocalDate date = LocalDate.parse("2026-10-01");
+        UUID actor = UUID.randomUUID();
+        assertThat(companyCalendarCommand.replaceYear(2026, 0,
+                List.of(new CompanyCalendarCommand.Day(date, CalendarDayType.HOLIDAY, null, "国庆节", CalendarDaySource.MANUAL)), actor, NOW)).isTrue();
+        assertThat(companyCalendarCommand.yearVersion(2026)).isEqualTo(1);
+        assertThat(companyCalendarQuery.day(date).dayType()).isEqualTo(CalendarDayType.HOLIDAY);
+        assertThat(companyCalendarQuery.day(date).note()).isEqualTo("国庆节");
+        assertThat(companyCalendarCommand.replaceYear(2026, 0, List.of(), actor, NOW)).isFalse();
+        assertThat(companyCalendarCommand.replaceYear(2026, 1, List.of(), actor, NOW)).isTrue();
+        assertThat(companyCalendarQuery.day(date).dayType()).isEqualTo(CalendarDayType.WORKDAY);
+        assertThat(companyCalendarQuery.day(date).explicitOverride()).isFalse();
+    }
+
+    @Test
+    void roundTripsALeapYearWithoutFreezingInheritedMinutesOrLosingImportSources() {
+        UUID actor = UUID.randomUUID();
+        LocalDate first = LocalDate.of(2028, 1, 1), fixed = first.plusDays(1);
+        var inputs = first.datesUntil(first.plusYears(1)).map(date -> new CompanyCalendarCommand.Day(
+                date, CalendarDayType.WORKDAY, date.equals(fixed) ? 480 : null, "补班", CalendarDaySource.IMPORT)).toList();
+        assertThat(companyCalendarCommand.replaceYear(2028, 0, inputs, actor, NOW)).isTrue();
+        var read = companyCalendarQuery.days(first, first.plusYears(1).minusDays(1));
+        assertThat(read).hasSize(366);
+        assertThat(read).allSatisfy(day -> {
+            assertThat(day.standardMinutes()).isEqualTo(480);
+            assertThat(day.source()).isEqualTo(CalendarDaySource.IMPORT);
+        });
+        var saved = read.stream().map(day -> new CompanyCalendarCommand.Day(day.date(), day.dayType(),
+                day.configuredStandardMinutes(), day.note(), day.source())).toList();
+        assertThat(companyCalendarCommand.replaceYear(2028, 1, saved, actor, NOW)).isTrue();
+        jdbcClient.sql("UPDATE yumpoo.company SET default_workday_minutes = 420, row_version = row_version + 1").update();
+        assertThat(companyCalendarQuery.day(first).standardMinutes()).isEqualTo(420);
+        assertThat(companyCalendarQuery.day(first).configuredStandardMinutes()).isNull();
+        assertThat(companyCalendarQuery.day(first).source()).isEqualTo(CalendarDaySource.IMPORT);
+        assertThat(companyCalendarQuery.day(fixed).standardMinutes()).isEqualTo(480);
+        assertThat(companyCalendarQuery.day(fixed).configuredStandardMinutes()).isEqualTo(480);
     }
 
     @Test

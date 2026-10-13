@@ -25,6 +25,10 @@ public class TeamWorkService {
         requireAdministrator(actor);
         return projectIds.isEmpty() ? List.of() : repository.timeEntries(actor.companyId(), projectIds, userIds, from, to, zone, asOf);
     }
+    public List<TeamWorkRepository.TimeEntry> timeEntriesForScheduler(UUID companyId, List<UUID> projectIds,
+            LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
+        return projectIds.isEmpty() ? List.of() : repository.timeEntries(companyId, projectIds, List.of(), from, to, zone, asOf);
+    }
     public List<TeamWorkRepository.Load> currentLoad(CurrentActor actor, List<UUID> projectIds, LocalDate today) {
         requireAdministrator(actor);
         return projectIds.isEmpty() ? List.of() : repository.currentLoad(actor.companyId(), projectIds, today);

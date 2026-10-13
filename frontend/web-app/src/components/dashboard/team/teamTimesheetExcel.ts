@@ -1,8 +1,8 @@
 import type { Workbook as WorkbookType } from 'exceljs'
 import { XLSX_TYPE } from '../exportFile'
-import { hours, isWeekend, weekday, type TimesheetRow } from './teamDashboardModel'
+import { hours, weekday, type TimesheetRow } from './teamDashboardModel'
 
-export interface TimesheetWorkbookInput { rows: TimesheetRow[]; days: string[]; timezone: string; scopeLabel: string; memberScopeLabel: string; exportedAt: string }
+export interface TimesheetWorkbookInput { rows: TimesheetRow[]; days: string[]; timezone: string; scopeLabel: string; memberScopeLabel: string; exportedAt: string; title: string; nonWorkdays: Set<string> }
 
 // ExcelJS takes ARGB strings; these mirror the light-theme brand and table tokens.
 const BRAND = 'FF0073EA', WHITE = 'FFFFFFFF', WEEKEND = 'FFE6E9EF', TOTAL = 'FFF6F7FB', BORDER = 'FFD0D4E4'
@@ -19,7 +19,7 @@ export async function buildTimesheetWorkbook(input: TimesheetWorkbookInput): Pro
   const summary = workbook.addWorksheet('工时汇总', { views: [{ state: 'frozen', xSplit: 3, ySplit: 3 }] })
   const lastColumn = 3 + input.days.length
   summary.mergeCells(1, 1, 1, lastColumn)
-  summary.getCell(1, 1).value = `成员工时统计（小时） ${range}`
+  summary.getCell(1, 1).value = `${input.title}统计（小时） ${range}`
   summary.getCell(1, 1).font = { bold: true, size: 14 }
   summary.mergeCells(2, 1, 2, lastColumn)
   summary.getCell(2, 1).value = `时区 ${input.timezone} · 项目范围：${input.scopeLabel} · 成员范围：${input.memberScopeLabel} · 导出时间 ${input.exportedAt}`
@@ -27,7 +27,7 @@ export async function buildTimesheetWorkbook(input: TimesheetWorkbookInput): Pro
   const header = summary.getRow(3)
   header.values = ['成员', '状态', '合计', ...input.days.map(day => `${day.slice(5)} ${weekday(day)}`)]
   header.eachCell((cell, column) => {
-    const weekend = column > 3 && isWeekend(input.days[column - 4]!)
+    const weekend = column > 3 && input.nonWorkdays.has(input.days[column - 4]!)
     cell.font = { bold: true, color: { argb: weekend ? 'FF25272C' : WHITE } }
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: weekend ? WEEKEND : BRAND } }
     cell.alignment = { horizontal: column > 2 ? 'center' : 'left', vertical: 'middle' }
@@ -39,7 +39,7 @@ export async function buildTimesheetWorkbook(input: TimesheetWorkbookInput): Pro
     const added = summary.addRow([row.name, row.active ? '在职' : '非在职', row.totalMs ? hours(row.totalMs) : 0, ...values])
     added.eachCell({ includeEmpty: true }, (cell, column) => {
       if (column > 2) cell.numFmt = HOURS_FORMAT
-      if (column > 3 && isWeekend(input.days[column - 4]!)) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL } }
+      if (column > 3 && input.nonWorkdays.has(input.days[column - 4]!)) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL } }
       cell.border = { bottom: { style: 'thin', color: { argb: BORDER } } }
     })
   }

@@ -14,6 +14,8 @@ import java.util.UUID;
  */
 public interface TeamWorkQuery {
     List<TimeEntry> timeEntries(CurrentActor actor, List<UUID> projectIds, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);
+    /** Scheduler only: no actor check, results must never reach an HTTP caller. */
+    List<TimeEntry> timeEntriesForScheduler(UUID companyId, List<UUID> projectIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);
     List<Load> currentLoad(CurrentActor actor, List<UUID> projectIds, LocalDate today);
     TaskPage currentTasks(CurrentActor actor, List<UUID> projectIds, UUID userId, LocalDate today, int offset, int limit);
     List<TimeEntry> ownTimeEntries(CurrentActor actor, List<UUID> projectIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf);

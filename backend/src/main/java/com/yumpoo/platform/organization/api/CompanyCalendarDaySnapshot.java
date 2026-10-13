@@ -10,7 +10,10 @@ public record CompanyCalendarDaySnapshot(
         int standardMinutes,
         boolean explicitOverride,
         long companyRowVersion,
-        OptionalLong calendarDayRowVersion
+        OptionalLong calendarDayRowVersion,
+        String note,
+        Integer configuredStandardMinutes,
+        CalendarDaySource source
 ) {
 
     public CompanyCalendarDaySnapshot {
@@ -20,8 +23,8 @@ public record CompanyCalendarDaySnapshot(
         if (standardMinutes < 0 || standardMinutes > 720) {
             throw new IllegalArgumentException("standardMinutes must be between 0 and 720");
         }
-        if (dayType == CalendarDayType.NON_WORKDAY && standardMinutes != 0) {
-            throw new IllegalArgumentException("NON_WORKDAY standardMinutes must be zero");
+        if (dayType != CalendarDayType.WORKDAY && standardMinutes != 0) {
+            throw new IllegalArgumentException("Non-workday standardMinutes must be zero");
         }
         if (dayType == CalendarDayType.WORKDAY && standardMinutes == 0) {
             throw new IllegalArgumentException("WORKDAY standardMinutes must be positive");

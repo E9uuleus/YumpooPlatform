@@ -79,7 +79,10 @@ public class OrganizationQueryAdapter implements CompanyConfigurationQuery, Comp
                 day.standardMinutes(),
                 day.explicitOverride(),
                 day.companyRowVersion(),
-                day.calendarDayRowVersion()
+                day.calendarDayRowVersion(),
+                day.note(),
+                day.configuredStandardMinutes(),
+                day.source() == null ? null : CalendarDaySource.valueOf(day.source())
         );
     }
 }

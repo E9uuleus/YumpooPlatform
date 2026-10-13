@@ -6,6 +6,24 @@ const item: NotificationItem = { id: 'notification', reason: NotificationReason.
   actor: { id: 'author', displayName: '张三' }, subject: { id: 'reader', displayName: '李四' },
   target: { kind: NotificationTargetKind.WorkItemUpdate, accessible: true, projectId: 'project', workItemId: 'item', itemNo: 'YP-12', title: '整理验收', projectName: '平台', excerpt: '你好' } }
 describe('notification presentation', () => {
+  it.each([false, true])('does not invent anomaly numbers when details are absent (accessible=%s)', accessible => {
+    const anomaly: NotificationItem = { ...item, reason: NotificationReason.WorkHoursAnomaly, actor: null,
+      target: { kind: NotificationTargetKind.MemberDay, accessible } }
+    expect(notificationText(anomaly)).toBe('相关内容已不可访问')
+    expect(notificationLink(anomaly)).toBeUndefined()
+  })
+  it('hides even stale anomaly details after administrator access is revoked', () => {
+    const anomaly: NotificationItem = { ...item, reason: NotificationReason.WorkHoursAnomaly,
+      target: { kind: NotificationTargetKind.MemberDay, accessible: false, workDate: new Date('2026-10-11'), durationMs: 39_600_000, thresholdMinutes: 600 } }
+    expect(notificationText(anomaly)).toBe('相关内容已不可访问')
+    expect(notificationLink(anomaly)).toBeUndefined()
+  })
+  it('shows work-hours anomaly details and links to the affected team week', () => {
+    const anomaly: NotificationItem = { ...item, reason: NotificationReason.WorkHoursAnomaly, actor: null,
+      target: { kind: NotificationTargetKind.MemberDay, accessible: true, workDate: new Date('2026-10-11T00:00:00Z'), durationMs: 39_600_000, thresholdMinutes: 600 } }
+    expect(notificationText(anomaly)).toBe('提醒：李四 2026-10-11 工时 11 小时，超过 10 小时，该成员工时数据异常请关注')
+    expect(notificationLink(anomaly)).toEqual({ path: '/dashboards/team', query: { date: '2026-10-11' } })
+  })
   it('纯图片讨论以图片摘要展示，不可访问的摘要仍隐藏', () => {
     expect(notificationExcerpt({ ...item, target: { ...item.target, excerpt: ' ' } })).toBe('[图片]')
     expect(notificationExcerpt(item)).toBe('你好')

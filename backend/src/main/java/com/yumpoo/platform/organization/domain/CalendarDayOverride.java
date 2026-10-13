@@ -21,8 +21,8 @@ public record CalendarDayOverride(
                 && (standardMinutes < 1 || standardMinutes > 720)) {
             throw new IllegalArgumentException("WORKDAY standardMinutes must be null or between 1 and 720");
         }
-        if (dayType == DayType.NON_WORKDAY && !Integer.valueOf(0).equals(standardMinutes)) {
-            throw new IllegalArgumentException("NON_WORKDAY standardMinutes must be zero");
+        if (dayType != DayType.WORKDAY && !Integer.valueOf(0).equals(standardMinutes)) {
+            throw new IllegalArgumentException("Non-workday standardMinutes must be zero");
         }
         if (note != null && note.isBlank()) {
             throw new IllegalArgumentException("note must be null or non-blank");
@@ -34,7 +34,8 @@ public record CalendarDayOverride(
 
     public enum DayType {
         WORKDAY,
-        NON_WORKDAY
+        NON_WORKDAY,
+        HOLIDAY
     }
 
     public enum Source {

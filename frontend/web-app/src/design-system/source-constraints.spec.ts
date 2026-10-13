@@ -11,8 +11,9 @@ const pageSources = import.meta.glob([
 }) as Record<string, string>
 
 describe('页面视觉语言源码约束', () => {
-  it.each(Object.entries(pageSources))('%s 不引入原生表单控件', (_path, source) => {
-    expect(source).not.toMatch(/<(?:input|select|textarea)(?:\s|>)/u)
+  it.each(Object.entries(pageSources))('%s 不引入原生可见表单控件', (_path, source) => {
+    const visibleControls = source.replace(/<input\b(?=[^>]*\btype="file")(?=[^>]*\bhidden\b)[^>]*>/gu, '')
+    expect(visibleControls).not.toMatch(/<(?:input|select|textarea)(?:\s|>)/u)
   })
 
   it.each(Object.entries(pageSources))('%s 不包含页面级十六进制颜色', (_path, source) => {
