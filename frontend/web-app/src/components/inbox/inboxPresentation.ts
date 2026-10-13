@@ -17,9 +17,11 @@ export function notificationText(item: NotificationItem, readerId?: string, time
     : undefined
   switch (item.reason) {
     case 'WORK_HOURS_ANOMALY': {
-      const date = item.target.workDate?.toISOString().slice(0, 10) ?? ''
-      const hours = Math.round((item.target.durationMs ?? 0) / 360_000) / 10
-      return `提醒：${item.subject?.displayName || '成员'} ${date} 工时 ${hours} 小时，超过 ${(item.target.thresholdMinutes ?? 0) / 60} 小时，该成员工时数据异常请关注`
+      const { workDate, durationMs, thresholdMinutes } = item.target
+      if (!workDate || durationMs == null || thresholdMinutes == null) return '相关内容已不可访问'
+      const date = workDate.toISOString().slice(0, 10)
+      const hours = Math.round(durationMs / 360_000) / 10
+      return `提醒：${item.subject?.displayName || '成员'} ${date} 工时 ${hours} 小时，超过 ${thresholdMinutes / 60} 小时，该成员工时数据异常请关注`
     }
     case 'MENTION': return `在 ${target} 中提到了你`
     case 'REPLY': return `回复了你在 ${target} 的评论`

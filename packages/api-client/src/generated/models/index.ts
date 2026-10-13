@@ -20,6 +20,7 @@ export * from './AttachmentRescanResult';
 export * from './AttachmentStatus';
 export * from './AuthenticationClientType';
 export * from './AuthenticationRole';
+export * from './CalendarDaySource';
 export * from './CalendarDayType';
 export * from './ClientCompatibility';
 export * from './Company';

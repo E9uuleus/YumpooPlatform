@@ -1,9 +1,15 @@
-import { CalendarDayType } from '@yumpoo/api-client'
+import { CalendarDaySource, CalendarDayType, type WorkCalendarDay } from '@yumpoo/api-client'
+import type { CellValue } from 'exceljs'
 import { XLSX_TYPE } from '../dashboard/exportFile'
-import { addDays, toApiDate } from '../dashboard/team/teamDashboardModel'
+import { addDays, fromApiDate, toApiDate } from '../dashboard/team/teamDashboardModel'
 
 export const DAY_TYPE_LABELS: Record<string, string> = { WORKDAY: '工作日', NON_WORKDAY: '休息日', HOLIDAY: '法定节假日' }
-export interface CalendarOverride { date: string; dayType: CalendarDayType; standardMinutes: number | null; note: string | null }
+export interface CalendarOverride { date: string; dayType: CalendarDayType; standardMinutes: number | null; note: string | null; source: CalendarDaySource }
+
+export function calendarOverrides(days: WorkCalendarDay[]): CalendarOverride[] {
+  return days.filter(day => day.explicit).map(day => ({ date: fromApiDate(day.date), dayType: day.dayType,
+    standardMinutes: day.configuredStandardMinutes, note: day.note, source: day.source ?? CalendarDaySource.Manual }))
+}
 
 export const isWeekendDate = (date: string) => [0, 6].includes(toApiDate(date).getUTCDay())
 export const defaultDayType = (date: string): CalendarDayType => isWeekendDate(date) ? CalendarDayType.NonWorkday : CalendarDayType.Workday
@@ -24,6 +30,19 @@ async function workbookClass() {
 const TYPE_BY_LABEL = new Map(Object.entries(DAY_TYPE_LABELS).map(([type, label]) => [label, type as CalendarDayType]))
 const validDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && toApiDate(value).toISOString().startsWith(value)
 
+function cellValue(value: CellValue): string | number | Date | null | undefined {
+  if (value == null || typeof value === 'string' || typeof value === 'number' || value instanceof Date) return value
+  if (typeof value === 'object') {
+    if ('richText' in value) return value.richText.map(part => part.text).join('')
+    if ('formula' in value || 'sharedFormula' in value) {
+      if (value.result == null) throw new Error('公式缺少缓存结果，请在 Excel 中重新计算并保存')
+      return cellValue(value.result)
+    }
+    if ('error' in value) throw new Error(`单元格包含 Excel 错误 ${value.error}`)
+  }
+  throw new Error('单元格须为文本、数字或日期')
+}
+
 /** Sheet 1, from row 2: 日期 | 类型 | 名称 | 标准工时（小时）. */
 export async function parseCalendarWorkbook(data: ArrayBuffer, year: number): Promise<{ overrides: CalendarOverride[]; errors: string[] }> {
   const Workbook = await workbookClass()
@@ -32,19 +51,28 @@ export async function parseCalendarWorkbook(data: ArrayBuffer, year: number): Pr
   const overrides: CalendarOverride[] = [], errors: string[] = [], seen = new Set<string>()
   workbook.worksheets[0]?.eachRow((row, index) => {
     if (index === 1) return
-    const [rawDate, rawType, rawNote, rawHours] = [1, 2, 3, 4].map(column => row.getCell(column).value)
+    let values: ReturnType<typeof cellValue>[]
+    try {
+      values = ['日期', '类型', '名称', '标准工时'].map((label, column) => {
+        try { return cellValue(row.getCell(column + 1).value) }
+        catch (error) { throw new Error(`${label}：${(error as Error).message}`) }
+      })
+    } catch (error) { errors.push(`第 ${index} 行：${(error as Error).message}`); return }
+    const [rawDate, rawType, rawNote, rawHours] = values
     const date = rawDate instanceof Date ? rawDate.toISOString().slice(0, 10) : String(rawDate ?? '').trim()
     const dayType = TYPE_BY_LABEL.get(String(rawType ?? '').trim())
     const note = String(rawNote ?? '').trim() || null
-    const hours = rawHours === null || rawHours === undefined || rawHours === '' ? null : Number(rawHours)
+    const hours = rawHours == null || (typeof rawHours === 'string' && !rawHours.trim()) ? null : Number(rawHours)
+    const minutes = hours === null ? null : Math.round(hours * 60)
     if (!validDate(date) || !date.startsWith(`${year}-`)) errors.push(`第 ${index} 行：日期须为 ${year} 年的 YYYY-MM-DD`)
     else if (seen.has(date)) errors.push(`第 ${index} 行：日期 ${date} 重复`)
     else if (!dayType) errors.push(`第 ${index} 行：类型须为 工作日 / 休息日 / 法定节假日`)
     else if (note && note.length > 30) errors.push(`第 ${index} 行：名称不超过 30 字`)
-    else if (hours !== null && (dayType !== 'WORKDAY' || !(hours > 0 && hours <= 12))) errors.push(`第 ${index} 行：仅工作日可填写 0–12 小时的标准工时`)
+    else if (hours !== null && (dayType !== 'WORKDAY' || !Number.isFinite(hours) || hours > 12 || minutes! < 1 || minutes! > 720))
+      errors.push(`第 ${index} 行：仅工作日可填写标准工时，换算后须为 1–720 分钟（最多 12 小时）`)
     else {
       seen.add(date)
-      overrides.push({ date, dayType, standardMinutes: hours === null ? null : Math.round(hours * 60), note })
+      overrides.push({ date, dayType, standardMinutes: minutes, note, source: CalendarDaySource.Import })
     }
   })
   return { overrides: overrides.filter(o => !isRedundant(o)), errors }

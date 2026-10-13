@@ -19,6 +19,13 @@ import {
     CalendarDayTypeToJSON,
     CalendarDayTypeToJSONTyped,
 } from './CalendarDayType';
+import type { CalendarDaySource } from './CalendarDaySource';
+import {
+    CalendarDaySourceFromJSON,
+    CalendarDaySourceFromJSONTyped,
+    CalendarDaySourceToJSON,
+    CalendarDaySourceToJSONTyped,
+} from './CalendarDaySource';
 
 /**
  *
@@ -45,6 +52,18 @@ export interface WorkCalendarDay {
      */
     standardMinutes: number;
     /**
+     * 工作日原始标准工时设置；为空表示继承公司默认值，非工作日及未设置日期也为空。
+     * @type {number}
+     * @memberof WorkCalendarDay
+     */
+    configuredStandardMinutes: number | null;
+    /**
+     *
+     * @type {CalendarDaySource}
+     * @memberof WorkCalendarDay
+     */
+    source: CalendarDaySource | null;
+    /**
      *
      * @type {string}
      * @memberof WorkCalendarDay
@@ -67,6 +86,8 @@ export function instanceOfWorkCalendarDay(value: object): value is WorkCalendarD
     if (!('date' in value) || value['date'] === undefined) return false;
     if (!('dayType' in value) || value['dayType'] === undefined) return false;
     if (!('standardMinutes' in value) || value['standardMinutes'] === undefined) return false;
+    if (!('configuredStandardMinutes' in value) || value['configuredStandardMinutes'] === undefined) return false;
+    if (!('source' in value) || value['source'] === undefined) return false;
     if (!('note' in value) || value['note'] === undefined) return false;
     if (!('explicit' in value) || value['explicit'] === undefined) return false;
     return true;
@@ -85,6 +106,8 @@ export function WorkCalendarDayFromJSONTyped(json: any, ignoreDiscriminator: boo
         'date': (new Date(json['date'])),
         'dayType': CalendarDayTypeFromJSON(json['dayType']),
         'standardMinutes': json['standardMinutes'],
+        'configuredStandardMinutes': json['configuredStandardMinutes'],
+        'source': CalendarDaySourceFromJSON(json['source']),
         'note': json['note'],
         'explicit': json['explicit'],
     };
@@ -104,6 +127,8 @@ export function WorkCalendarDayToJSONTyped(value?: WorkCalendarDay | null, ignor
         'date': value['date'].toISOString().substring(0,10),
         'dayType': CalendarDayTypeToJSON(value['dayType']),
         'standardMinutes': value['standardMinutes'],
+        'configuredStandardMinutes': value['configuredStandardMinutes'],
+        'source': CalendarDaySourceToJSON(value['source']),
         'note': value['note'],
         'explicit': value['explicit'],
     };

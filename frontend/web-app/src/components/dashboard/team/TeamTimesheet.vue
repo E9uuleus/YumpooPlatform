@@ -9,7 +9,7 @@ import YpSegmented from '../../yp/YpSegmented.vue'
 import '../../projects/workItemAccentBar.css'
 import { formatTimestamp } from '../../../design-system/dates'
 import { exportFileName, saveExportFile, XLSX_TYPE } from '../exportFile'
-import { buildTimesheet, dayBreakdown, fromApiDate, hoursMinutes, periodFor, periodLabel, periodOptions, projectColors, rangeDays, restrictTimesheet, shiftPeriod, shortHours, todayIn, weekday,
+import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, periodOptions, projectColors, restrictTimesheet, shiftPeriod, shortHours, timesheetColumns, todayIn, weekday,
   type Period, type PeriodKind, type TimesheetRow } from './teamDashboardModel'
 import { staggerIn, useTweenedNumber, type StaggerFrom } from './teamMotion'
 
@@ -19,17 +19,11 @@ const emit = defineEmits<{ retry: [] }>()
 const hideEmpty = ref(false), exporting = ref(false), calendarOpen = ref(false)
 const grid = ref<HTMLTableElement>(), sheetBox = ref<HTMLElement>(), selected = ref(new Set<string>()), sortTotal = ref<'desc' | 'asc'>()
 const active = ref<{ row: TimesheetRow; day: string; anchor: HTMLElement }>()
-const calendar = computed(() => new Map((props.sheet?.days ?? []).map(day => [fromApiDate(day.date), day])))
-const allDays = computed(() => props.sheet ? rangeDays(props.sheet.from.toISOString().slice(0, 10), props.sheet.to.toISOString().slice(0, 10)) : [])
-const nonWorkdays = computed(() => allDays.value.filter(day => calendar.value.get(day)?.dayType !== 'WORKDAY'))
-const days = computed(() => props.overtime ? nonWorkdays.value : allDays.value)
+const columns = computed(() => props.sheet ? timesheetColumns(props.sheet, props.overtime) : [])
+const days = computed(() => columns.value.map(column => column.day))
 const fullModel = computed(() => props.sheet ? buildTimesheet(props.sheet) : { rows: [], dayTotals: {}, totalMs: 0 })
 const model = computed(() => props.overtime ? restrictTimesheet(fullModel.value, days.value) : fullModel.value)
-const holidayMs = computed(() => days.value.filter(day => calendar.value.get(day)?.dayType === 'HOLIDAY').reduce((sum, day) => sum + (model.value.dayTotals[day] ?? 0), 0))
-const columns = computed(() => days.value.map(day => {
-  const info = calendar.value.get(day)
-  return { day, label: day.slice(5), weekday: info?.note || `周${weekday(day)}`, rest: Boolean(info && info.dayType !== 'WORKDAY'), holiday: info?.dayType === 'HOLIDAY' }
-}))
+const holidayMs = computed(() => columns.value.filter(column => column.holiday).reduce((sum, column) => sum + (model.value.dayTotals[column.day] ?? 0), 0))
 const today = computed(() => todayIn(props.timezone))
 const colors = computed(() => projectColors(props.sheet?.workItems.map(item => item.projectId) ?? []))
 const rows = computed(() => {
@@ -113,7 +107,7 @@ async function exportExcel() {
   try {
     const { buildTimesheetWorkbook } = await import('./teamTimesheetExcel')
     const title = props.overtime ? '成员加班' : '成员工时'
-    const blob = await buildTimesheetWorkbook({ rows: exported, days: days.value, timezone: props.sheet.timezone, scopeLabel: '全部项目', title, nonWorkdays: new Set(nonWorkdays.value),
+    const blob = await buildTimesheetWorkbook({ rows: exported, days: days.value, timezone: props.sheet.timezone, scopeLabel: '全部项目', title, nonWorkdays: new Set(columns.value.filter(column => column.rest).map(column => column.day)),
       memberScopeLabel: picked.length ? picked.map(row => row.name).join('、') : hideEmpty.value ? props.overtime ? '有加班成员' : '有工时成员' : '全部成员', exportedAt: formatTimestamp(new Date(), props.timezone) })
     if (await saveExportFile(blob, exportFileName(`${title} ${days.value[0]}至${days.value[days.value.length - 1]}`, 'xlsx'), XLSX_TYPE)) ElMessage.success('已导出 Excel')
   } catch (reason) { ElMessage.error(reason instanceof Error && reason.message ? reason.message : '导出失败，请重试') }

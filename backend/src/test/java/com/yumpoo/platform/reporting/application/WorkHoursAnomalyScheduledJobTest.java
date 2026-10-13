@@ -19,6 +19,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,6 +35,38 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class WorkHoursAnomalyScheduledJobTest {
+    @Test
+    void catchesUpEveryMissedCompanyDayAcrossDstWithoutDuplicateEvents() {
+        var repository = mock(WorkHoursAlertRepository.class);
+        var projects = mock(CompanyProjectQuery.class);
+        var work = mock(TeamWorkQuery.class);
+        var company = mock(CompanyConfigurationQuery.class);
+        var events = mock(TransactionalEventPort.class);
+        UUID companyId = UUID.randomUUID(), projectId = UUID.randomUUID(), userId = UUID.randomUUID();
+        ZoneId zone = ZoneId.of("America/New_York");
+        Instant planned = OffsetDateTime.parse("2026-03-07T23:30:00-05:00").toInstant();
+        Instant now = OffsetDateTime.parse("2026-03-10T00:15:00-04:00").toInstant();
+        when(company.current()).thenReturn(new CompanyConfigurationSnapshot(companyId, "Yumpoo", zone, DayOfWeek.MONDAY, 480, 0));
+        when(projects.listForScheduler(companyId)).thenReturn(List.of(new MemberProjectQuery.Project(projectId, "交付", "P001", "ACTIVE")));
+        var recorded = new HashSet<LocalDate>();
+        when(work.timeEntriesForScheduler(eq(companyId), eq(List.of(projectId)), any(), any(), eq(zone), eq(now)))
+                .thenAnswer(call -> List.of(new TeamWorkQuery.TimeEntry(userId, UUID.randomUUID(), projectId, "P001-1", "任务", call.getArgument(2), 13 * 3_600_000L)));
+        when(repository.recordAlert(eq(companyId), eq(userId), any(), anyLong(), eq(720), eq(now)))
+                .thenAnswer(call -> recorded.add(call.getArgument(2)) ? Optional.of(UUID.randomUUID()) : Optional.empty());
+        var job = new WorkHoursAnomalyScheduledJob(repository, projects, work, company, events, new ObjectMapper(), Clock.fixed(now, zone));
+        String key = "scheduled:WORK_HOURS_ANOMALY:" + planned.getEpochSecond();
+        job.run(companyId, key, "catch-up");
+        job.run(companyId, key, "retry");
+        for (LocalDate day = LocalDate.parse("2026-03-06"); day.isBefore(LocalDate.parse("2026-03-10")); day = day.plusDays(1)) {
+            verify(work, times(2)).timeEntriesForScheduler(companyId, List.of(projectId), day, day, zone, now);
+        }
+        ArgumentCaptor<EventDraft> event = ArgumentCaptor.forClass(EventDraft.class);
+        verify(events, times(4)).append(event.capture());
+        assertThat(event.getAllValues()).extracting(e -> e.payload().path("workDate").asText())
+                .containsExactly("2026-03-06", "2026-03-07", "2026-03-08", "2026-03-09");
+        verify(work, never()).timeEntriesForScheduler(eq(companyId), any(), eq(LocalDate.parse("2026-03-10")), any(), any(), any());
+    }
+
     @Test
     void checksTheDayBeforeThePlannedTimeAndPublishesOnlyANewOverThresholdAlert() {
         var repository = mock(WorkHoursAlertRepository.class);

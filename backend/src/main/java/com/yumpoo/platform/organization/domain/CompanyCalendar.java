@@ -52,7 +52,9 @@ public final class CompanyCalendar {
                     true,
                     company.rowVersion(),
                     OptionalLong.of(override.rowVersion()),
-                    override.note()
+                    override.note(),
+                    override.dayType() == CalendarDayOverride.DayType.WORKDAY ? override.standardMinutes() : null,
+                    override.source()
             );
         }
 
@@ -64,6 +66,8 @@ public final class CompanyCalendar {
                 false,
                 company.rowVersion(),
                 OptionalLong.empty(),
+                null,
+                null,
                 null
         );
     }

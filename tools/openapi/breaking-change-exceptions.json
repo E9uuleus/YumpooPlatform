@@ -81,7 +81,7 @@
     {
       "id": "2026-10-12-work-hours-anomaly-notification",
       "oldSha256": "125562c4f5b19111baa2e57a28f851428e13a81a50160e508688cdcb62bfccd6",
-      "newSha256": "5f53bc5fc0ba268f2d7f0b911c1dc1bced4446d32d1d53b0fcee7b73c7aa1483",
+      "newSha256": "159578909df6b50acb2d0e3e027e574e9bed3d42f42f65be3b3250f742874fff",
       "reason": "新增 WORK_HOURS_ANOMALY 原因与 MEMBER_DAY 目标，仅移除这两个值的临时规范已通过完整 openapi-diff，不归入任何分组，Web 收件箱展示，桌面壳按原因能力过滤。",
       "agentNote": ".agents/notes/implemented/product/2026-10-12-work-calendar-and-overtime.md"
     }

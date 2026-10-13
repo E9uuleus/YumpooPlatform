@@ -19,6 +19,13 @@ import {
     CalendarDayTypeToJSON,
     CalendarDayTypeToJSONTyped,
 } from './CalendarDayType';
+import type { CalendarDaySource } from './CalendarDaySource';
+import {
+    CalendarDaySourceFromJSON,
+    CalendarDaySourceFromJSONTyped,
+    CalendarDaySourceToJSON,
+    CalendarDaySourceToJSONTyped,
+} from './CalendarDaySource';
 
 /**
  *
@@ -44,6 +51,12 @@ export interface WorkCalendarDayInput {
      * @memberof WorkCalendarDayInput
      */
     standardMinutes?: number | null;
+    /**
+     *
+     * @type {CalendarDaySource}
+     * @memberof WorkCalendarDayInput
+     */
+    source?: CalendarDaySource | null;
     /**
      *
      * @type {string}
@@ -75,8 +88,9 @@ export function WorkCalendarDayInputFromJSONTyped(json: any, ignoreDiscriminator
 
         'date': (new Date(json['date'])),
         'dayType': CalendarDayTypeFromJSON(json['dayType']),
-        'standardMinutes': json['standardMinutes'] == null ? undefined : json['standardMinutes'],
-        'note': json['note'] == null ? undefined : json['note'],
+        ...(json['standardMinutes'] === undefined ? {} : { 'standardMinutes': json['standardMinutes'] === null ? null : json['standardMinutes'] }),
+        ...(json['source'] === undefined ? {} : { 'source': json['source'] === null ? null : CalendarDaySourceFromJSON(json['source']) }),
+        ...(json['note'] === undefined ? {} : { 'note': json['note'] === null ? null : json['note'] }),
     };
 }
 
@@ -94,6 +108,7 @@ export function WorkCalendarDayInputToJSONTyped(value?: WorkCalendarDayInput | n
         'date': value['date'].toISOString().substring(0,10),
         'dayType': CalendarDayTypeToJSON(value['dayType']),
         'standardMinutes': value['standardMinutes'],
+        'source': CalendarDaySourceToJSON(value['source']),
         'note': value['note'],
     };
 }

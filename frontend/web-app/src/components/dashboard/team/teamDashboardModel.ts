@@ -25,6 +25,15 @@ export function rangeDays(from: string, to: string): string[] {
   return days
 }
 
+export function timesheetColumns(sheet: TeamTimesheet, overtime = false) {
+  const calendar = new Map(sheet.days.map(day => [fromApiDate(day.date), day]))
+  return rangeDays(fromApiDate(sheet.from), fromApiDate(sheet.to)).map(day => {
+    const info = calendar.get(day)
+    const dayType = info?.dayType ?? ([0, 6].includes(toApiDate(day).getUTCDay()) ? 'NON_WORKDAY' : 'WORKDAY')
+    return { day, label: day.slice(5), weekday: info?.note || `周${weekday(day)}`, rest: dayType !== 'WORKDAY', holiday: dayType === 'HOLIDAY' }
+  }).filter(column => !overtime || column.rest)
+}
+
 export function periodFor(kind: PeriodKind, anchor: string): Period {
   const date = toApiDate(anchor), year = date.getUTCFullYear(), month = date.getUTCMonth()
   if (kind === 'WEEK') {

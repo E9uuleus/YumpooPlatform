@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { CalendarDayType, readCsrfToken, type WorkCalendarYear, type WorkHoursAlertSetting } from '@yumpoo/api-client'
+import { CalendarDaySource, CalendarDayType, readCsrfToken, type WorkCalendarYear, type WorkHoursAlertSetting } from '@yumpoo/api-client'
 import { ElAlert, ElButton, ElDialog, ElInput, ElInputNumber, ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { administrationApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import {
-  DAY_TYPE_LABELS, buildCalendarTemplate, defaultDayType, isRedundant, isWeekendDate,
+  DAY_TYPE_LABELS, buildCalendarTemplate, calendarOverrides, defaultDayType, isRedundant, isWeekendDate,
   parseCalendarWorkbook, yearDates, type CalendarOverride,
 } from '../../components/company/workCalendarModel'
 import { exportFileName, saveExportFile, XLSX_TYPE } from '../../components/dashboard/exportFile'
-import { fromApiDate, todayIn, toApiDate, weekday } from '../../components/dashboard/team/teamDashboardModel'
+import { todayIn, toApiDate, weekday } from '../../components/dashboard/team/teamDashboardModel'
 import YpSegmented from '../../components/yp/YpSegmented.vue'
 import { useIdentityAdmin } from '../../composables/useIdentityAdmin'
 import { useSession } from '../../composables/useSession'
@@ -38,9 +38,7 @@ const dialogTitle = computed(() => editing.value ? `${Number(editing.value.slice
 
 function accept(next: WorkCalendarYear): void {
   data.value = next
-  draft.value = new Map(next.days.filter(day => day.explicit).map(day => [fromApiDate(day.date), {
-    date: fromApiDate(day.date), dayType: day.dayType, standardMinutes: day.dayType === 'WORKDAY' ? day.standardMinutes : null, note: day.note,
-  }]))
+  draft.value = new Map(calendarOverrides(next.days).map(day => [day.date, day]))
   saved.value = serialize()
   importErrors.value = []
 }
@@ -83,7 +81,7 @@ function apply(): void {
   const date = editing.value!
   const override: CalendarOverride = { date, dayType: editType.value,
     standardMinutes: editType.value === 'WORKDAY' && editHours.value != null ? Math.round(editHours.value * 60) : null,
-    note: editNote.value.trim() || null }
+    note: editNote.value.trim() || null, source: CalendarDaySource.Manual }
   if (isRedundant(override)) draft.value.delete(date)
   else draft.value.set(date, override)
   dialogOpen.value = false
@@ -96,7 +94,7 @@ async function save(): Promise<void> {
   saving.value = true; error.value = undefined
   try {
     accept(await administrationApi.updateWorkCalendarYear({ year: year.value, xXSRFTOKEN: csrf, ifMatch: data.value!.etag,
-      workCalendarUpdateRequest: { days: [...draft.value.values()].map(o => ({ date: toApiDate(o.date), dayType: o.dayType, standardMinutes: o.standardMinutes, note: o.note })) } }))
+      workCalendarUpdateRequest: { days: [...draft.value.values()].map(o => ({ date: toApiDate(o.date), dayType: o.dayType, standardMinutes: o.standardMinutes, note: o.note, source: o.source })) } }))
     ElMessage.success('工作日历已保存')
   } catch (reason) { error.value = await toApiProblem(reason) }
   finally { saving.value = false }

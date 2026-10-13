@@ -7,6 +7,7 @@ import com.yumpoo.platform.foundation.application.concurrency.StrongEtag;
 import com.yumpoo.platform.identityaccess.api.CurrentActor;
 import com.yumpoo.platform.identityaccess.api.CurrentActorProvider;
 import com.yumpoo.platform.organization.api.CalendarDayType;
+import com.yumpoo.platform.organization.api.CalendarDaySource;
 import com.yumpoo.platform.organization.api.CompanyCalendarCommand;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -43,18 +44,22 @@ public final class WorkCalendarController {
         CurrentActor actor = actors.requiredActive();
         long expected = ifMatchParser.parseForVisibleResource(true, ifMatch);
         return respond(service.replace(actor, year, expected, request.days().stream().map(d -> new CompanyCalendarCommand.Day(
-                d.date(), d.dayType(), d.standardMinutes(), d.note() == null || d.note().isBlank() ? null : d.note().strip())).toList()));
+                d.date(), d.dayType(), d.standardMinutes(), d.note() == null || d.note().isBlank() ? null : d.note().strip(),
+                d.source() == null ? CalendarDaySource.MANUAL : d.source())).toList()));
     }
 
     private static ResponseEntity<YearResponse> respond(WorkCalendarAdministrationService.Year view) {
         String etag = StrongEtag.format(view.version());
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).eTag(etag).body(new YearResponse(view.year(),
                 view.defaultWorkdayMinutes(), etag, view.days().stream()
-                        .map(d -> new Day(d.date(), d.dayType(), d.standardMinutes(), d.note(), d.explicitOverride())).toList()));
+                        .map(d -> new Day(d.date(), d.dayType(), d.standardMinutes(), d.note(), d.explicitOverride(),
+                                d.configuredStandardMinutes(), d.source())).toList()));
     }
 
     record YearResponse(int year, int defaultWorkdayMinutes, String etag, List<Day> days) {}
-    record Day(LocalDate date, CalendarDayType dayType, int standardMinutes, String note, boolean explicit) {}
+    record Day(LocalDate date, CalendarDayType dayType, int standardMinutes, String note, boolean explicit,
+            Integer configuredStandardMinutes, CalendarDaySource source) {}
     record UpdateRequest(@NotNull @Size(max = 366) List<@NotNull @Valid DayInput> days) {}
-    record DayInput(@NotNull LocalDate date, @NotNull CalendarDayType dayType, @Min(1) @Max(720) Integer standardMinutes, @Size(max = 30) String note) {}
+    record DayInput(@NotNull LocalDate date, @NotNull CalendarDayType dayType, @Min(1) @Max(720) Integer standardMinutes,
+            @Size(max = 30) String note, CalendarDaySource source) {}
 }

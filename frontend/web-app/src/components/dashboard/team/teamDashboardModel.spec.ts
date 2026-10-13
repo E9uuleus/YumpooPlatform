@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { TeamTimesheet } from '@yumpoo/api-client'
-import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, projectColors, rangeDays, restrictTimesheet, shiftPeriod, shortHours, toApiDate } from './teamDashboardModel'
+import { CalendarDayType, type TeamTimesheet } from '@yumpoo/api-client'
+import { buildTimesheet, dayBreakdown, hoursMinutes, periodFor, periodLabel, projectColors, rangeDays, restrictTimesheet, shiftPeriod, shortHours, timesheetColumns, toApiDate } from './teamDashboardModel'
 
 describe('team dashboard periods', () => {
   it('restricts member, item and daily totals to Saturday and Sunday', () => {
@@ -15,12 +15,20 @@ describe('team dashboard periods', () => {
         { userId: 'u2', workItemId: 'w2', date: toApiDate('2026-10-11'), durationMs: 7_200_000 },
       ],
     }
-    const model = restrictTimesheet(buildTimesheet(sheet), ['2026-10-10', '2026-10-11'])
+    const columns = timesheetColumns(sheet, true)
+    expect(columns.map(column => column.day)).toEqual(['2026-10-10', '2026-10-11'])
+    expect(columns.every(column => column.rest)).toBe(true)
+    expect(timesheetColumns(sheet).filter(column => column.rest)).toEqual(columns)
+    const model = restrictTimesheet(buildTimesheet(sheet), columns.map(column => column.day))
     expect(model.rows.map(row => row.totalMs)).toEqual([3_600_000, 7_200_000])
     expect(model.rows[0]!.children.map(child => child.workItemId)).toEqual(['w2'])
     expect(model.rows[0]!.children[0]!.totalMs).toBe(3_600_000)
     expect(model.dayTotals).toEqual({ '2026-10-10': 3_600_000, '2026-10-11': 7_200_000 })
     expect(model.totalMs).toBe(10_800_000)
+    sheet.days = [{ date: toApiDate('2026-10-10'), dayType: CalendarDayType.Workday, note: '补班' },
+      { date: toApiDate('2026-10-06'), dayType: CalendarDayType.Holiday, note: '国庆节' }]
+    expect(timesheetColumns(sheet, true).map(column => [column.day, column.holiday]))
+      .toEqual([['2026-10-06', true], ['2026-10-11', false]])
   })
   it('builds Monday weeks, calendar months and quarters and steps between them', () => {
     expect(periodFor('WEEK', '2026-10-08')).toEqual({ kind: 'WEEK', from: '2026-10-05', to: '2026-10-11' })

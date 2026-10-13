@@ -11,7 +11,9 @@ public record ResolvedCalendarDay(
         boolean explicitOverride,
         long companyRowVersion,
         OptionalLong calendarDayRowVersion,
-        String note
+        String note,
+        Integer configuredStandardMinutes,
+        CalendarDayOverride.Source source
 ) {
 
     public ResolvedCalendarDay {

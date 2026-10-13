@@ -10,6 +10,8 @@ public record CalendarDayView(
         boolean explicitOverride,
         long companyRowVersion,
         OptionalLong calendarDayRowVersion,
-        String note
+        String note,
+        Integer configuredStandardMinutes,
+        String source
 ) {
 }

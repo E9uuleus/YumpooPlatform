@@ -43,14 +43,22 @@ public class WorkHoursAnomalyScheduledJob implements ScheduledJob {
     @Transactional
     public ScheduledJobResult run(UUID companyId, String triggerKey, String requestId) {
         ZoneId zone = company.current().timezone();
-        // triggerKey = "scheduled:<code>:<计划时刻 epochSecond>"（ScheduledJobService），检查计划时刻所在自然日的前一天
+        // 调度器恢复后会把下次执行推进到未来，因此本次需补齐计划日期到昨天。
         Instant planned = Instant.ofEpochSecond(Long.parseLong(triggerKey.substring(triggerKey.lastIndexOf(':') + 1)));
-        LocalDate day = LocalDate.ofInstant(planned, zone).minusDays(1);
+        LocalDate firstDay = LocalDate.ofInstant(planned, zone).minusDays(1);
         int threshold = repository.setting(companyId).map(WorkHoursAlertRepository.Setting::dailyThresholdMinutes)
                 .orElse(WorkHoursAlertService.DEFAULT_THRESHOLD_MINUTES);
         List<UUID> projectIds = projects.listForScheduler(companyId).stream()
                 .filter(project -> "ACTIVE".equals(project.lifecycle())).map(MemberProjectQuery.Project::id).toList();
         Instant now = clock.instant();
+        LocalDate yesterday = LocalDate.ofInstant(now, zone).minusDays(1);
+        for (LocalDate day = firstDay; !day.isAfter(yesterday); day = day.plusDays(1)) {
+            checkDay(companyId, projectIds, day, zone, now, threshold);
+        }
+        return ScheduledJobResult.succeeded();
+    }
+
+    private void checkDay(UUID companyId, List<UUID> projectIds, LocalDate day, ZoneId zone, Instant now, int threshold) {
         Map<UUID, Long> totals = new LinkedHashMap<>();
         work.timeEntriesForScheduler(companyId, projectIds, day, day, zone, now).forEach(e -> totals.merge(e.userId(), e.durationMs(), Long::sum));
         totals.forEach((userId, total) -> {
@@ -59,6 +67,5 @@ public class WorkHoursAnomalyScheduledJob implements ScheduledJob {
                     "reporting.work_hours_anomaly_detected", 1, "WorkHoursAlert", alertId, 1, companyId, EventActor.system("WORK_HOURS_MONITOR"),
                     json.valueToTree(Map.of("userId", userId, "workDate", day, "totalDurationMs", total, "thresholdMinutes", threshold)))));
         });
-        return ScheduledJobResult.succeeded();
     }
 }

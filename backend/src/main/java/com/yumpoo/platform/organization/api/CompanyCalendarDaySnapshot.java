@@ -11,7 +11,9 @@ public record CompanyCalendarDaySnapshot(
         boolean explicitOverride,
         long companyRowVersion,
         OptionalLong calendarDayRowVersion,
-        String note
+        String note,
+        Integer configuredStandardMinutes,
+        CalendarDaySource source
 ) {
 
     public CompanyCalendarDaySnapshot {

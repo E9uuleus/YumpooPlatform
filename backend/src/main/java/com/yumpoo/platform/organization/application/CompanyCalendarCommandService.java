@@ -25,9 +25,9 @@ public class CompanyCalendarCommandService {
         repository.replaceCalendarDays(companyId, year, days.stream().map(day -> new CalendarDayOverride(
                 day.date(), CalendarDayOverride.DayType.valueOf(day.dayType()),
                 "WORKDAY".equals(day.dayType()) ? day.standardMinutes() : Integer.valueOf(0),
-                CalendarDayOverride.Source.MANUAL, day.note(), 0)).toList(), now);
+                CalendarDayOverride.Source.valueOf(day.source()), day.note(), 0)).toList(), now);
         return true;
     }
 
-    public record Day(LocalDate date, String dayType, Integer standardMinutes, String note) {}
+    public record Day(LocalDate date, String dayType, Integer standardMinutes, String note, String source) {}
 }

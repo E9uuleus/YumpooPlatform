@@ -8621,14 +8621,21 @@ components:
       type: string
       enum: [WORKDAY, NON_WORKDAY, HOLIDAY]
       description: WORKDAY 工作日；NON_WORKDAY 休息日；HOLIDAY 法定节假日。
+    CalendarDaySource:
+      type: string
+      enum: [MANUAL, IMPORT]
+      nullable: true
+      description: 显式日期的最近编辑来源；未设置日期为空，写入省略时默认 MANUAL。
     WorkCalendarDay:
       type: object
       additionalProperties: false
-      required: [date, dayType, standardMinutes, note, explicit]
+      required: [date, dayType, standardMinutes, note, explicit, configuredStandardMinutes, source]
       properties:
         date: { type: string, format: date }
         dayType: { $ref: '#/components/schemas/CalendarDayType' }
         standardMinutes: { type: integer, minimum: 0, maximum: 720 }
+        configuredStandardMinutes: { type: integer, minimum: 1, maximum: 720, nullable: true, description: 工作日原始标准工时设置；为空表示继承公司默认值，非工作日及未设置日期也为空。 }
+        source: { $ref: '#/components/schemas/CalendarDaySource' }
         note: { type: string, nullable: true, maxLength: 30 }
         explicit: { type: boolean, description: 是否为管理员显式设置；否则按默认周末规则。 }
     WorkCalendarYear:
@@ -8648,6 +8655,7 @@ components:
         date: { type: string, format: date }
         dayType: { $ref: '#/components/schemas/CalendarDayType' }
         standardMinutes: { type: integer, minimum: 1, maximum: 720, nullable: true, description: 仅工作日可填，为空沿用公司默认标准工时。 }
+        source: { $ref: '#/components/schemas/CalendarDaySource' }
         note: { type: string, nullable: true, maxLength: 30 }
     WorkCalendarUpdateRequest:
       type: object

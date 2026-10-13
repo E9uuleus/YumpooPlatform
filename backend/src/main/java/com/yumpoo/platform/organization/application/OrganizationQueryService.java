@@ -121,7 +121,9 @@ public class OrganizationQueryService {
                 day.explicitOverride(),
                 day.companyRowVersion(),
                 day.calendarDayRowVersion(),
-                day.note()
+                day.note(),
+                day.configuredStandardMinutes(),
+                day.source() == null ? null : day.source().name()
         );
     }
 
