@@ -77,7 +77,7 @@ export const TOURS: Record<TourId, TourDefinition> = {
     version: 2,
     steps: [
       { target: at('context-nav'), placement: 'right-start', title: '公司管理', description: '概览、项目、成员与角色、活动日志、同步运行和定时任务都在这里切换。' },
-      { target: at('company-profile'), placement: 'bottom', title: '公司信息', description: '公司名称、时区等基础信息。' },
+      { target: at('company-profile'), placement: 'bottom', title: '公司信息', description: '公司名称与企微 Corp ID，可在此修改公司名称。' },
       { target: at('company-entries'), placement: 'bottom', title: '管理入口', description: '从这里直达各管理页面，卡片上显示关键状态。' },
       { target: at('company-integrations'), placement: 'top', title: '企业微信集成', description: '查看企微登录与通讯录同步的配置和最近运行状态。' },
     ],
