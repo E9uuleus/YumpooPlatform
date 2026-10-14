@@ -5,16 +5,29 @@ import { Search } from '@element-plus/icons-vue'
 import { ProjectMembershipStatusFilter, type ProjectMember, type WorkItemAssignee } from '@yumpoo/api-client'
 import { projectsApi } from '../../api/client'
 import YpAssignee from '../yp/YpAssignee.vue'
+import YpSegmented from '../yp/YpSegmented.vue'
 import { MAX_WORK_ITEM_ASSIGNEES } from './workItemAssignees'
+import type { WorkItemBatchAssigneeMode } from './workItemBatchEdit'
 
-/** 每次增删立即通过 change 提交完整处理人列表；列表顺序决定主处理人。选择后保持打开，done 表示结束选择。 */
-const props = defineProps<{ projectId: string; selected: readonly WorkItemAssignee[]; busy?: boolean | undefined }>()
-const emit = defineEmits<{ change: [userIds: string[]]; done: [] }>()
+/**
+ * 每次增删立即通过 change 提交完整处理人列表；列表顺序决定主处理人。选择后保持打开，done 表示结束选择。
+ * batchCount 不少于 2 时改为草稿：成员只加入草稿，由「应用」一次性追加或替换到全部勾选项。
+ */
+const props = defineProps<{ projectId: string; selected: readonly WorkItemAssignee[]; busy?: boolean | undefined; batchCount?: number | undefined }>()
+const emit = defineEmits<{ change: [userIds: string[]]; done: []; batchApply: [mode: WorkItemBatchAssigneeMode, userIds: string[]] }>()
 const query = ref(''), members = ref<ProjectMember[]>([]), loading = ref(false), failed = ref(false)
 const input = ref<InstanceType<typeof ElInput>>()
-const selectedIds = computed(() => props.selected.map(item => item.userId))
-const candidates = computed(() => members.value.filter(member => !selectedIds.value.includes(member.userId)))
-const full = computed(() => selectedIds.value.length >= MAX_WORK_ITEM_ASSIGNEES)
+const batch = computed(() => (props.batchCount ?? 0) > 1)
+const mode = ref<WorkItemBatchAssigneeMode>('add')
+const modeOptions = [{ value: 'add', label: '添加' }, { value: 'replace', label: '替换' }] as const
+const draft = ref<WorkItemAssignee[]>([])
+const chosen = computed(() => batch.value ? draft.value : props.selected)
+const chosenIds = computed(() => chosen.value.map(item => item.userId))
+const candidates = computed(() => members.value.filter(member => !chosenIds.value.includes(member.userId)))
+const full = computed(() => chosenIds.value.length >= MAX_WORK_ITEM_ASSIGNEES)
+const canApply = computed(() => mode.value === 'replace' || draft.value.length > 0)
+const applyLabel = computed(() => mode.value === 'replace' && !draft.value.length
+  ? `清空 ${props.batchCount} 项的处理人` : `应用到 ${props.batchCount} 项`)
 let timer: ReturnType<typeof setTimeout> | undefined, controller: AbortController | undefined
 async function load() {
   controller?.abort(); controller = new AbortController()
@@ -28,16 +41,23 @@ async function load() {
     if (!(reason instanceof DOMException && reason.name === 'AbortError')) failed.value = true
   } finally { if (!signal.aborted) loading.value = false }
 }
-function add(userId: string) {
+function add(member: WorkItemAssignee) {
   if (props.busy || full.value) return
-  emit('change', [...selectedIds.value, userId])
+  if (batch.value) draft.value = [...draft.value, { userId: member.userId, displayName: member.displayName }]
+  else emit('change', [...chosenIds.value, member.userId])
   query.value = ''
   input.value?.focus()
 }
-function remove(userId: string) { if (!props.busy) emit('change', selectedIds.value.filter(id => id !== userId)) }
+function remove(userId: string) {
+  if (props.busy) return
+  if (batch.value) draft.value = draft.value.filter(item => item.userId !== userId)
+  else emit('change', chosenIds.value.filter(id => id !== userId))
+}
+function apply() { if (!props.busy && canApply.value) emit('batchApply', mode.value, [...chosenIds.value]) }
 function onEnter() {
-  if (!query.value.trim()) emit('done')
-  else if (!loading.value && candidates.value[0]) add(candidates.value[0].userId)
+  if (query.value.trim()) { if (!loading.value && candidates.value[0]) add(candidates.value[0]) }
+  else if (batch.value) apply()
+  else emit('done')
 }
 watch(query, () => { clearTimeout(timer); timer = setTimeout(() => { void load() }, 250) })
 watch(() => props.projectId, () => { void load() })
@@ -47,8 +67,12 @@ onBeforeUnmount(() => { clearTimeout(timer); controller?.abort() })
 
 <template>
   <div class="assignee-picker" @keydown.esc.stop="emit('done')">
-    <div v-if="selected.length" class="assignee-picker__selected" aria-label="已选处理人">
-      <span v-for="assignee in selected" :key="assignee.userId" class="assignee-picker__chip">
+    <div v-if="batch" class="assignee-picker__batch">
+      <yp-segmented v-model="mode" :options="modeOptions" label="批量修改处理人的方式" />
+      <p class="assignee-picker__caption">{{ mode === 'add' ? '将所选成员追加到每一项' : '每一项的处理人替换为所选成员，不选则清空' }}</p>
+    </div>
+    <div v-if="chosen.length" class="assignee-picker__selected" :aria-label="batch ? '待应用的处理人' : '已选处理人'">
+      <span v-for="assignee in chosen" :key="assignee.userId" class="assignee-picker__chip">
         <yp-assignee :user-id="assignee.userId" :display-name="assignee.displayName" size="table" tooltip-disabled />
         <button type="button" class="assignee-picker__remove" :disabled="busy" :aria-label="`移除处理人${assignee.displayName}`" @click="remove(assignee.userId)">×</button>
       </span>
@@ -56,16 +80,20 @@ onBeforeUnmount(() => { clearTimeout(timer); controller?.abort() })
     <el-input ref="input" v-model="query" :prefix-icon="Search" clearable placeholder="搜索项目成员" aria-label="搜索项目成员" @keydown.enter.prevent="onEnter" />
     <div class="assignee-picker__list" :aria-busy="loading">
       <p class="assignee-picker__caption">{{ full ? `最多 ${MAX_WORK_ITEM_ASSIGNEES} 位处理人` : '建议成员' }}</p>
-      <button v-for="member in candidates" :key="member.userId" type="button" class="assignee-picker__option" :disabled="busy || full" @click="add(member.userId)">
-        <yp-assignee :user-id="member.userId" :display-name="member.displayName" />
+      <button v-for="member in candidates" :key="member.userId" type="button" class="assignee-picker__option" :disabled="busy || full" @click="add(member)">
+        <yp-assignee :user-id="member.userId" :display-name="member.displayName" tooltip-disabled />
       </button>
-      <button v-if="selected.length" type="button" class="assignee-picker__option" :disabled="busy" @click="emit('change', [])">
+      <button v-if="!batch && selected.length" type="button" class="assignee-picker__option" :disabled="busy" @click="emit('change', [])">
         <span class="assignee-picker__empty">—</span><span>清空处理人</span>
       </button>
       <p v-if="failed" class="assignee-picker__hint" role="alert">成员加载失败，请重试</p>
       <p v-else-if="!loading && !candidates.length" class="assignee-picker__hint" role="status">没有匹配的成员</p>
     </div>
-    <div class="assignee-picker__footer">
+    <div v-if="batch" class="assignee-picker__footer">
+      <button type="button" @click="emit('done')">取消</button>
+      <button type="button" class="assignee-picker__primary" :disabled="busy || !canApply" @click="apply">{{ applyLabel }}</button>
+    </div>
+    <div v-else class="assignee-picker__footer">
       <button type="button" class="assignee-picker__primary" @click="emit('done')">完成</button>
     </div>
   </div>
@@ -73,6 +101,8 @@ onBeforeUnmount(() => { clearTimeout(timer); controller?.abort() })
 
 <style scoped>
 .assignee-picker { display: grid; gap: 8px; }
+.assignee-picker__batch { display: grid; gap: 4px; }
+.assignee-picker__batch .assignee-picker__caption { margin: 0 2px; }
 .assignee-picker__selected { display: flex; flex-wrap: wrap; gap: 6px; }
 .assignee-picker__chip { display: inline-flex; max-width: 100%; align-items: center; gap: 2px; padding: 2px 4px 2px 2px; border-radius: var(--yp-radius-pill); background: var(--yp-bg-sunken); }
 .assignee-picker__remove { display: inline-grid; width: 18px; height: 18px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--yp-text-secondary); cursor: pointer; }

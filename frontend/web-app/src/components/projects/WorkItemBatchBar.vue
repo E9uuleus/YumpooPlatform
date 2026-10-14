@@ -31,7 +31,7 @@ const emit = defineEmits<{
     <div class="work-item-batch-bar" role="toolbar" aria-label="勾选工作项批量操作" :aria-busy="busy">
       <div class="work-item-batch-count" aria-live="polite" aria-atomic="true">
         <strong>{{ busy ? progressLabel || '正在准备操作…' : `已选择 ${count} 项` }}</strong>
-        <span>含 {{ subitemCount }} 个子工作项</span>
+        <span>含 {{ subitemCount }} 个子工作项<template v-if="count > 1"> · 编辑已选行可同步修改</template></span>
       </div>
       <div class="work-item-batch-actions">
         <button type="button" :disabled="busy || !canCreate" @click="emit('action', 'duplicate')"><work-item-action-icon name="duplicate" />复制</button>

@@ -8,7 +8,7 @@ describe('勾选批量工作台', () => {
       progressLabel: '', canCreate: true, canDelete: true, canConvert: true, moveDisabled: false, choosingParent: false, embedded: false, left: 260 } })
     expect(wrapper.get('[role="toolbar"]').attributes('aria-label')).toBe('勾选工作项批量操作')
     expect(wrapper.get('[aria-live="polite"]').text()).toContain('已选择 10 项')
-    expect(wrapper.text()).toContain('含 3 个子工作项')
+    expect(wrapper.text()).toContain('含 3 个子工作项 · 编辑已选行可同步修改')
     expect(wrapper.attributes('style')).toContain('left: 260px')
     await wrapper.get('[aria-label="清空勾选"]').trigger('click')
     expect(wrapper.emitted('clear')).toHaveLength(1)

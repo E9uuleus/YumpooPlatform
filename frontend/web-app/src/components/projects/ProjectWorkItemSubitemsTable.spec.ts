@@ -6,11 +6,14 @@ import {
   type WorkItemDetail,
 } from '@yumpoo/api-client'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { nextTick, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { localProblem } from '../../api/problems'
 import ProjectWorkItemSubitemsTable from './ProjectWorkItemSubitemsTable.vue'
+import WorkItemAssigneePicker from './WorkItemAssigneePicker.vue'
+import WorkItemContentPopoverContent from './WorkItemContentPopoverContent.vue'
 import WorkItemDueDateCell from './WorkItemDueDateCell.vue'
+import { workItemBatchEditScopeKey } from './workItemBatchEdit'
 import ConnectCell from './connect/ConnectCell.vue'
 import { connectionTestContext } from './connect/connectTestSupport'
 import { connectColumn, connection } from './connect/connectTestFixtures'
@@ -51,7 +54,7 @@ function item(id: string, contentId = 'content-1'): ProjectWorkItemListItem {
   }
 }
 
-function mountTable(items = [item('child-1'), item('child-2')]) {
+function mountTable(items = [item('child-1'), item('child-2')], provide: Record<symbol, unknown> = {}) {
   return mount(ProjectWorkItemSubitemsTable, {
     props: {
       projectId: 'project-1',
@@ -74,7 +77,7 @@ function mountTable(items = [item('child-1'), item('child-2')]) {
       members: [], workflowStatuses: [], priorityOptions: [], canCreate: true, editingCell: false,
     },
     global: {
-      provide: connectionTestContext().global.provide,
+      provide: { ...connectionTestContext().global.provide, ...provide },
       stubs: {
         InlineProblem: true,
         WorkItemLabelPopoverContent: true,
@@ -185,6 +188,31 @@ describe('项目工作项子表格', () => {
     expect(wrapper.props('columnWidths').dueDate).toBe(140)
     expect(wrapper.getComponent(WorkItemDueDateCell).attributes('style')).toContain('--deadline-cell-height: 34px')
     wrapper.unmount()
+  })
+
+  it('选择类别后收起弹层；勾选同步时处理人选择器进入批量模式并把应用结果交给主表', async () => {
+    const child = item('child-1')
+    const wrapper = mountTable([child], { [workItemBatchEditScopeKey]: { count: () => 3, sync: ref(true) } })
+    await wrapper.setProps({ columns: [{ key: 'title', label: '工作项名称' }, { key: 'assignee', label: '处理人' }, { key: 'content', label: '工作项类别' }] })
+    await flushPromises()
+    const view = wrapper.vm as unknown as { openCell: string | undefined }
+    // Element Plus 通过 0ms 定时器打开弹层。
+    const open = async (selector: string) => { await wrapper.get(selector).trigger('click'); await new Promise(resolve => setTimeout(resolve, 0)); await flushPromises() }
+
+    await open('.subitem-content-pill')
+    expect(view.openCell).toBe('child-1:content')
+    wrapper.getComponent(WorkItemContentPopoverContent).vm.$emit('select', 'content-2')
+    await flushPromises()
+    expect(wrapper.emitted('patch')).toEqual([[child, 'content', 'content-2']])
+    expect(view.openCell).toBeUndefined()
+
+    await open('.subitem-cell-button')
+    const picker = wrapper.getComponent(WorkItemAssigneePicker)
+    expect(picker.props('batchCount')).toBe(3)
+    picker.vm.$emit('batchApply', 'add', ['u1'])
+    await flushPromises()
+    expect(wrapper.emitted('batchAssignees')).toEqual([[child, 'add', ['u1']]])
+    expect(view.openCell).toBeUndefined()
   })
 
   it('子表换列后只隐藏当前拖动列并同步移动表头与单元格', async () => {

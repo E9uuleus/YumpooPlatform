@@ -34,6 +34,28 @@ describe('处理人选择器', () => {
     expect(wrapper.emitted('done')).toHaveLength(3)
   })
 
+  it('批量模式只修改草稿，按所选方式一次应用；替换为空时清空', async () => {
+    const wrapper = mount(WorkItemAssigneePicker, { props: { projectId: 'p', selected: [{ userId: 'u1', displayName: '张三' }], batchCount: 3 },
+      attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.text()).toContain('将所选成员追加到每一项')
+    const apply = () => wrapper.get('.assignee-picker__primary')
+    expect(apply().text()).toBe('应用到 3 项')
+    expect(apply().attributes('disabled')).toBeDefined()
+
+    await wrapper.findAll('.assignee-picker__option')[1]!.trigger('click')
+    expect(wrapper.emitted('change')).toBeUndefined()
+    await apply().trigger('click')
+    expect(wrapper.emitted('batchApply')).toEqual([['add', ['u2']]])
+
+    await wrapper.get('[aria-label="移除处理人李四"]').trigger('click')
+    await wrapper.findAll('[role="radio"]')[1]!.trigger('click')
+    expect(apply().text()).toBe('清空 3 项的处理人')
+    await wrapper.get('input').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.emitted('batchApply')?.[1]).toEqual(['replace', []])
+    expect(wrapper.emitted('done')).toBeUndefined()
+  })
+
   it('有搜索词时 Enter 添加第一个候选人', async () => {
     const wrapper = mountPicker()
     await flushPromises()

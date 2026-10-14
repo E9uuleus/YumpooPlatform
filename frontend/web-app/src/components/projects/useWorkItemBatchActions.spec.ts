@@ -3,7 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { ProjectWorkItemListItem, WorkItemRelationCounterpart } from '@yumpoo/api-client'
 import { useWorkItemBatchActions, type WorkItemSelection } from './useWorkItemBatchActions'
 const api = vi.hoisted(() => ({ archiveWorkItem: vi.fn(), deleteWorkItem: vi.fn(), createWorkItemRelation: vi.fn(),
-  moveProjectWorkItemOrder: vi.fn(), moveWorkItemSubitemOrder: vi.fn() }))
+  moveProjectWorkItemOrder: vi.fn(), moveWorkItemSubitemOrder: vi.fn(), patchWorkItemPriority: vi.fn(), transitionWorkItem: vi.fn() }))
 const duplicate = vi.hoisted(() => vi.fn())
 vi.mock('../../api/client', () => ({ workItemsApi: api }))
 vi.mock('./workItemDuplicate', () => ({ duplicateWorkItem: duplicate }))
@@ -15,20 +15,21 @@ function row(id: string): ProjectWorkItemListItem {
 function setup(ids = ['a', 'b', 'c']) {
   const items = new Map(ids.map(id => [id, row(id)]))
   const selections: WorkItemSelection[] = ids.map(id => ({ id }))
-  const refresh = vi.fn().mockResolvedValue(undefined), deselect = vi.fn(), orderItems = vi.fn().mockResolvedValue([...items.values()])
+  const refresh = vi.fn().mockResolvedValue(undefined), deselect = vi.fn(), orderItems = vi.fn().mockResolvedValue([...items.values()]), updated = vi.fn()
   let sorted = false, context = 'p'
   const batch = useWorkItemBatchActions({ contextId: () => context, selection: () => selections,
     resolve: id => items.get(id), canCreate: () => true, sorted: () => sorted,
     duplicateOptions: () => ({ catalog: { items: [] }, labels: { priorities: [] }, members: [] }) as never,
     scopeKey: (selection, item) => selection.parentId ?? item.contentId,
-    orderItems, deselect, refresh, beforeRemove: async () => true })
-  return { batch, items, selections, refresh, deselect, orderItems, sort: () => { sorted = true }, switchContext: () => { context = 'other' } }
+    orderItems, deselect, refresh, updated, beforeRemove: async () => true })
+  return { batch, items, selections, refresh, deselect, orderItems, updated, sort: () => { sorted = true }, switchContext: () => { context = 'other' } }
 }
 beforeEach(() => {
   vi.restoreAllMocks()
   Object.values(api).forEach(mock => mock.mockReset().mockResolvedValue({}))
   duplicate.mockReset().mockResolvedValue({ status: 'created', item: { id: 'copy' } })
   vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never)
+  vi.spyOn(ElMessageBox, 'prompt').mockResolvedValue({ value: ' 验收通过 ' } as never)
   for (const level of ['success', 'warning', 'error'] as const) vi.spyOn(ElMessage, level).mockImplementation(() => ({ close() {} }))
 })
 describe('批量工作项执行', () => {
@@ -130,5 +131,40 @@ describe('批量工作项执行', () => {
     const calls = f.refresh.mock.calls.length
     expect(await f.batch.run('archive')).toMatchObject({ succeeded: ['a'], remaining: 2 })
     expect(f.refresh).toHaveBeenCalledTimes(calls)
+  })
+  it('修改串行使用最新 ETag；无变化项不发请求但计为成功，逐项合并、保留勾选且只刷新一次', async () => {
+    const f = setup()
+    f.items.set('c', { ...row('c'), priority: 'HIGH' })
+    let finish!: (value: unknown) => void
+    api.patchWorkItemPriority.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      .mockImplementation(async ({ workItemId }: { workItemId: string }) => ({ id: workItemId, etag: '"2"' }))
+    const task = f.batch.edit({ field: 'priority', priority: 'HIGH' })
+    await vi.waitFor(() => expect(api.patchWorkItemPriority).toHaveBeenCalledOnce())
+    expect(f.batch.progressLabel.value).toBe('修改优先级中 1/3')
+    f.items.set('b', { ...row('b'), etag: '"9"' })
+    finish({ id: 'a', etag: '"2"' })
+    expect(await task).toMatchObject({ succeeded: ['a', 'b', 'c'], failed: [], skipped: [] })
+    expect(api.patchWorkItemPriority.mock.calls.map(([request]) => [request.workItemId, request.ifMatch])).toEqual([['a', '"1"'], ['b', '"9"']])
+    expect(new Set(api.patchWorkItemPriority.mock.calls.map(([request]) => request.idempotencyKey)).size).toBe(2)
+    expect(f.updated.mock.calls.map(([id]) => id)).toEqual(['a', 'b'])
+    expect(f.deselect).not.toHaveBeenCalled()
+    expect(f.refresh).toHaveBeenCalledExactlyOnceWith(['a', 'b'])
+    expect(ElMessage.success).toHaveBeenCalledWith('修改优先级完成：成功 3 项，失败 0 项，跳过 0 项')
+  })
+  it('批量迁移跳过不可迁移项，需要说明时只询问一次并只发给需要说明的迁移', async () => {
+    const f = setup()
+    const transitions = (requiresResolution?: boolean) => requiresResolution === undefined ? []
+      : [{ toStatus: 'DONE', displayName: '已完成', requiresResolution }]
+    for (const [id, requiresResolution] of [['a', true], ['b', false], ['c', undefined]] as const)
+      f.items.set(id, { ...row(id), statusCode: 'TODO', capabilities: { ...row(id).capabilities, canMoveInKanban: true,
+        availableTransitions: transitions(requiresResolution) } } as ProjectWorkItemListItem)
+    const result = await f.batch.edit({ field: 'status', statusCode: 'DONE', resolution: null })
+    expect(ElMessageBox.prompt).toHaveBeenCalledOnce()
+    expect(api.transitionWorkItem.mock.calls.map(([request]) => [request.workItemId, request.workItemTransitionRequest.resolution]))
+      .toEqual([['a', '验收通过'], ['b', null]])
+    expect(result).toMatchObject({ succeeded: ['a', 'b'], skipped: [{ id: 'c', reason: '不能迁移到目标状态' }] })
+    vi.mocked(ElMessageBox.prompt).mockRejectedValueOnce('cancel')
+    await f.batch.edit({ field: 'status', statusCode: 'DONE', resolution: null })
+    expect(api.transitionWorkItem).toHaveBeenCalledTimes(2)
   })
 })
