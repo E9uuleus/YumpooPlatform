@@ -1600,6 +1600,29 @@ describe('项目级工作项首页', () => {
     expect(view.tableItems[0]?.etag).toBe('"3"')
   })
 
+  it('单元格弹层同一时间只打开一个，选择优先级后立即收起', async () => {
+    state.listProjectWorkItems.mockResolvedValue(page([item('item-1'), item('item-2')]))
+    state.patchWorkItemPriority.mockResolvedValue({ ...item(), etag: '"2"', rowVersion: 2 } as unknown as WorkItemDetail)
+    const wrapper = mountView()
+    await flushPromises()
+    const view = wrapper.vm as unknown as { openCell: string | undefined }
+
+    const cells = wrapper.findAll('.el-table__body .monday-priority-cell')
+    await cells[0]!.trigger('click')
+    await flushPromises()
+    expect(view.openCell).toBe('item-1:priority')
+    await cells[1]!.trigger('click')
+    await flushPromises()
+    expect(view.openCell).toBe('item-2:priority')
+
+    const clear = [...document.body.querySelectorAll<HTMLButtonElement>('.priority-option-pill--empty')].at(-1)!
+    clear.click()
+    await flushPromises()
+    expect(view.openCell).toBeUndefined()
+    expect(state.patchWorkItemPriority).toHaveBeenCalledOnce()
+    expect(state.patchWorkItemPriority).toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'item-2' }))
+  })
+
   it('切换路由中的项目后重新聚合，并忽略晚返回的旧项目', async () => {
     let resolveFirst: ((value: ProjectDetail) => void) | undefined
     state.getProject

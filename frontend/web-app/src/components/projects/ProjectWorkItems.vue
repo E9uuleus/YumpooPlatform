@@ -13,6 +13,7 @@ import WorkItemRowActions from './WorkItemRowActions.vue'
 import WorkItemBatchBar from './WorkItemBatchBar.vue'
 import WorkItemParentPicker from './WorkItemParentPicker.vue'
 import { useWorkItemBatchActions } from './useWorkItemBatchActions'
+import { useWorkItemCellPopover } from './useWorkItemCellPopover'
 import { workItemOrderSiblings } from './workItemOrder'
 import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
@@ -278,6 +279,7 @@ const incomingFilterOptionsState = ref<'idle' | 'loading' | 'ready' | 'error'>('
 const filterOptionsLoading = ref(false)
 let filterOptionsRequestId = 0
 const cellPopoverBusy = reactive<Record<string, boolean>>({})
+const { openCell, setCellOpen, closeCell } = useWorkItemCellPopover()
 const labelPopoverContentRefs = new Map<string, LabelPopoverContentHandle>()
 const searchExpanded = ref(Boolean(route.query.q))
 const searchInput = ref(String(route.query.q ?? ''))
@@ -3497,11 +3499,12 @@ onBeforeUnmount(() => {
                     :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
                   />
                   <template v-else-if="column.key === 'assignee'">
-                    <el-popover :persistent="false" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover">
+                    <el-popover :persistent="false" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover"
+                      :visible="openCell === scope.row.id + ':assignee'" @update:visible="setCellOpen(scope.row.id + ':assignee', $event)">
                       <template #reference>
                         <button
                           class="cell-editor-trigger monday-cell-centered"
-                          :disabled="Boolean(editingCell)"
+                          :disabled="Boolean(editingCell) || batchBusy"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'assignee')"
                         >
                           <yp-assignee-stack :assignees="workItemAssignees(scope.row as ProjectWorkItemListItem)" />
@@ -3512,6 +3515,7 @@ onBeforeUnmount(() => {
                         :selected="workItemAssignees(scope.row as ProjectWorkItemListItem)"
                         :busy="editingCell === `${scope.row.id}:assignees`"
                         @change="patchCell(scope.row as ProjectWorkItemListItem, 'assignees', $event)"
+                        @done="closeCell"
                       />
                     </el-popover>
                   </template>
@@ -3522,6 +3526,8 @@ onBeforeUnmount(() => {
                       width="auto"
                       trigger="click"
                       :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])"
+                      :visible="openCell === scope.row.id + ':status'"
+                      @update:visible="setCellOpen(scope.row.id + ':status', $event)"
                       popper-class="work-items-label-popover status-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'status')"
                     >
@@ -3530,7 +3536,7 @@ onBeforeUnmount(() => {
                           class="monday-status-cell status-chip cell-editor-trigger"
                           :class="`monday-status-cell--${getStatusTone((scope.row as ProjectWorkItemListItem).statusCode)}`"
                           :style="getStatusCellStyle((scope.row as ProjectWorkItemListItem).statusCode)"
-                          :disabled="Boolean(editingCell)"
+                          :disabled="Boolean(editingCell) || batchBusy"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'status')"
                         >
                           <span>{{ statusLabel((scope.row as ProjectWorkItemListItem).statusCode) }}</span>
@@ -3546,7 +3552,7 @@ onBeforeUnmount(() => {
                         :current-value="(scope.row as ProjectWorkItemListItem).statusCode"
                         :can-manage="Boolean(labelCatalog?.canManage)"
                         :available-transitions="(scope.row as ProjectWorkItemListItem).capabilities.availableTransitions"
-                        @select-status="transitionItem(scope.row as ProjectWorkItemListItem, $event)"
+                        @select-status="closeCell(); transitionItem(scope.row as ProjectWorkItemListItem, $event)"
                         @updated="onLabelsUpdated"
                       />
                     </el-popover>
@@ -3558,6 +3564,8 @@ onBeforeUnmount(() => {
                       width="auto"
                       trigger="click"
                       :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])"
+                      :visible="openCell === scope.row.id + ':priority'"
+                      @update:visible="setCellOpen(scope.row.id + ':priority', $event)"
                       popper-class="work-items-label-popover priority-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'priority')"
                     >
@@ -3566,7 +3574,7 @@ onBeforeUnmount(() => {
                           class="monday-priority-cell cell-editor-trigger"
                           :class="`monday-priority-cell--${getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).tone}`"
                           :style="getPriorityCellStyle((scope.row as ProjectWorkItemListItem).priority)"
-                          :disabled="Boolean(editingCell)"
+                          :disabled="Boolean(editingCell) || batchBusy"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'priority')"
                         >
                           <span>{{ getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).label }}</span>
@@ -3581,7 +3589,7 @@ onBeforeUnmount(() => {
                         :priority-options="priorityOptions.filter(item => item.active)"
                         :current-value="(scope.row as ProjectWorkItemListItem).priority"
                         :can-manage="Boolean(labelCatalog?.canManage)"
-                        @select-priority="patchCell(scope.row as ProjectWorkItemListItem, 'priority', $event)"
+                        @select-priority="closeCell(); patchCell(scope.row as ProjectWorkItemListItem, 'priority', $event)"
                         @updated="onLabelsUpdated"
                       />
                     </el-popover>
@@ -3593,6 +3601,8 @@ onBeforeUnmount(() => {
                       width="auto"
                       trigger="click"
                       :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])"
+                      :visible="openCell === scope.row.id + ':content'"
+                      @update:visible="setCellOpen(scope.row.id + ':content', $event)"
                       popper-class="work-items-label-popover content-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'content')"
                     >
@@ -3600,7 +3610,7 @@ onBeforeUnmount(() => {
                         <button
                           class="monday-content-label cell-editor-trigger"
                           :style="labelCellStyle(contentLabel(scope.row as ProjectWorkItemListItem).colorToken)"
-                          :disabled="Boolean(editingCell)"
+                          :disabled="Boolean(editingCell) || batchBusy"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'content')"
                         >
                           <span>{{ contentLabel(scope.row as ProjectWorkItemListItem).name || '—' }}</span>
@@ -3613,7 +3623,7 @@ onBeforeUnmount(() => {
                         :catalog="catalog"
                         :current-value="(scope.row as ProjectWorkItemListItem).contentId"
                         :can-manage="Boolean(catalog?.canManage)"
-                        @select="patchCell(scope.row as ProjectWorkItemListItem, 'content', $event)"
+                        @select="closeCell(); patchCell(scope.row as ProjectWorkItemListItem, 'content', $event)"
                         @updated="onContentsUpdated"
                       />
                     </el-popover>

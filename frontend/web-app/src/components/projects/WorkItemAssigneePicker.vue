@@ -7,9 +7,9 @@ import { projectsApi } from '../../api/client'
 import YpAssignee from '../yp/YpAssignee.vue'
 import { MAX_WORK_ITEM_ASSIGNEES } from './workItemAssignees'
 
-/** 每次增删立即通过 change 提交完整处理人列表；列表顺序决定主处理人。 */
+/** 每次增删立即通过 change 提交完整处理人列表；列表顺序决定主处理人。选择后保持打开，done 表示结束选择。 */
 const props = defineProps<{ projectId: string; selected: readonly WorkItemAssignee[]; busy?: boolean | undefined }>()
-const emit = defineEmits<{ change: [userIds: string[]] }>()
+const emit = defineEmits<{ change: [userIds: string[]]; done: [] }>()
 const query = ref(''), members = ref<ProjectMember[]>([]), loading = ref(false), failed = ref(false)
 const input = ref<InstanceType<typeof ElInput>>()
 const selectedIds = computed(() => props.selected.map(item => item.userId))
@@ -28,8 +28,17 @@ async function load() {
     if (!(reason instanceof DOMException && reason.name === 'AbortError')) failed.value = true
   } finally { if (!signal.aborted) loading.value = false }
 }
-function add(userId: string) { if (!props.busy && !full.value) emit('change', [...selectedIds.value, userId]) }
+function add(userId: string) {
+  if (props.busy || full.value) return
+  emit('change', [...selectedIds.value, userId])
+  query.value = ''
+  input.value?.focus()
+}
 function remove(userId: string) { if (!props.busy) emit('change', selectedIds.value.filter(id => id !== userId)) }
+function onEnter() {
+  if (!query.value.trim()) emit('done')
+  else if (!loading.value && candidates.value[0]) add(candidates.value[0].userId)
+}
 watch(query, () => { clearTimeout(timer); timer = setTimeout(() => { void load() }, 250) })
 watch(() => props.projectId, () => { void load() })
 onMounted(() => { void load(); input.value?.focus() })
@@ -37,14 +46,14 @@ onBeforeUnmount(() => { clearTimeout(timer); controller?.abort() })
 </script>
 
 <template>
-  <div class="assignee-picker">
+  <div class="assignee-picker" @keydown.esc.stop="emit('done')">
     <div v-if="selected.length" class="assignee-picker__selected" aria-label="已选处理人">
       <span v-for="assignee in selected" :key="assignee.userId" class="assignee-picker__chip">
         <yp-assignee :user-id="assignee.userId" :display-name="assignee.displayName" size="table" tooltip-disabled />
         <button type="button" class="assignee-picker__remove" :disabled="busy" :aria-label="`移除处理人${assignee.displayName}`" @click="remove(assignee.userId)">×</button>
       </span>
     </div>
-    <el-input ref="input" v-model="query" :prefix-icon="Search" clearable placeholder="搜索项目成员" aria-label="搜索项目成员" />
+    <el-input ref="input" v-model="query" :prefix-icon="Search" clearable placeholder="搜索项目成员" aria-label="搜索项目成员" @keydown.enter.prevent="onEnter" />
     <div class="assignee-picker__list" :aria-busy="loading">
       <p class="assignee-picker__caption">{{ full ? `最多 ${MAX_WORK_ITEM_ASSIGNEES} 位处理人` : '建议成员' }}</p>
       <button v-for="member in candidates" :key="member.userId" type="button" class="assignee-picker__option" :disabled="busy || full" @click="add(member.userId)">
@@ -55,6 +64,9 @@ onBeforeUnmount(() => { clearTimeout(timer); controller?.abort() })
       </button>
       <p v-if="failed" class="assignee-picker__hint" role="alert">成员加载失败，请重试</p>
       <p v-else-if="!loading && !candidates.length" class="assignee-picker__hint" role="status">没有匹配的成员</p>
+    </div>
+    <div class="assignee-picker__footer">
+      <button type="button" class="assignee-picker__primary" @click="emit('done')">完成</button>
     </div>
   </div>
 </template>
@@ -71,5 +83,12 @@ onBeforeUnmount(() => { clearTimeout(timer); controller?.abort() })
 .assignee-picker__option:hover:not(:disabled) { background: var(--yp-bg-hover); }
 .assignee-picker__option:disabled { cursor: not-allowed; opacity: .55; }
 .assignee-picker__empty { display: inline-grid; width: 24px; height: 24px; place-items: center; border: 1px dashed var(--yp-border-strong); border-radius: 50%; color: var(--yp-text-muted); }
+.assignee-picker__footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; border-top: 1px solid var(--yp-border-default); }
+.assignee-picker__footer button { min-height: 30px; padding: 0 14px; border: 0; border-radius: var(--yp-radius-sm); background: transparent; color: var(--yp-text-primary); font: inherit; font-size: 13px; cursor: pointer; }
+.assignee-picker__footer button:hover:not(:disabled) { background: var(--yp-bg-hover); }
+.assignee-picker__footer .assignee-picker__primary { background: var(--yp-action-primary); color: var(--yp-status-blue-foreground); }
+.assignee-picker__footer .assignee-picker__primary:hover:not(:disabled) { background: var(--yp-action-primary-hover); }
+.assignee-picker__footer button:focus-visible { outline: 2px solid var(--yp-focus-ring); outline-offset: 2px; }
+.assignee-picker__footer button:disabled { cursor: not-allowed; opacity: .55; }
 .assignee-picker__hint { margin: 8px; color: var(--yp-text-muted); font-size: 12px; text-align: center; }
 </style>

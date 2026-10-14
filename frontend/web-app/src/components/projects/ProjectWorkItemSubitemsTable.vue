@@ -32,6 +32,7 @@ import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 import YpAssigneeStack from '../yp/YpAssigneeStack.vue'
 import WorkItemAssigneePicker from './WorkItemAssigneePicker.vue'
+import { useWorkItemCellPopover } from './useWorkItemCellPopover'
 import { workItemAssignees } from './workItemAssignees'
 import type { WorkItemPatchField, WorkItemPatchValue } from './useWorkItemEdits'
 import MondayColumnQuickSort from './MondayColumnQuickSort.vue'
@@ -125,6 +126,7 @@ const emit = defineEmits<{
 }>()
 
 const cellPopoverBusy = reactive<Record<string, boolean>>({})
+const { openCell, setCellOpen, closeCell } = useWorkItemCellPopover()
 const quickOpen = ref(false)
 const quickTitle = ref('')
 const defaultContentId = computed(() => props.activeContents.find(content => content.id === props.parent.contentId)?.id
@@ -815,17 +817,19 @@ onBeforeUnmount(() => {
               :status-label="statusLabel(scope.row.statusCode) || '—'"
               :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
             />
-            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click">
+            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click"
+              :visible="openCell === scope.row.id + ':assignee'" @update:visible="setCellOpen(scope.row.id + ':assignee', $event)">
               <template #reference>
                 <button class="subitem-cell-button" :disabled="editingCell">
                   <yp-assignee-stack :assignees="workItemAssignees(row(scope.row))" />
                 </button>
               </template>
               <work-item-assignee-picker :project-id="projectId" :selected="workItemAssignees(row(scope.row))" :busy="editingCell"
-                @change="patchItem(scope.row, 'assignees', $event)" />
+                @change="patchItem(scope.row, 'assignees', $event)" @done="closeCell" />
             </el-popover>
 
-            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])" v-else-if="column.key === 'status'" placement="bottom" width="auto" trigger="click">
+            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])" v-else-if="column.key === 'status'" placement="bottom" width="auto" trigger="click"
+              :visible="openCell === scope.row.id + ':status'" @update:visible="setCellOpen(scope.row.id + ':status', $event)">
               <template #reference>
                 <button class="subitem-block-cell" :style="statusStyle(scope.row.statusCode)" :disabled="editingCell">{{ statusLabel(scope.row.statusCode) }}</button>
               </template>
@@ -838,12 +842,13 @@ onBeforeUnmount(() => {
                 :current-value="scope.row.statusCode"
                 :can-manage="Boolean(labelCatalog?.canManage)"
                 :available-transitions="scope.row.capabilities.availableTransitions"
-                @select-status="transitionItem(scope.row, $event)"
+                @select-status="closeCell(); transitionItem(scope.row, $event)"
                 @updated="emit('labelsUpdated', $event)"
               />
             </el-popover>
 
-            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])" v-else-if="column.key === 'priority'" placement="bottom" width="auto" trigger="click">
+            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])" v-else-if="column.key === 'priority'" placement="bottom" width="auto" trigger="click"
+              :visible="openCell === scope.row.id + ':priority'" @update:visible="setCellOpen(scope.row.id + ':priority', $event)">
               <template #reference>
                 <button class="subitem-block-cell" :class="`subitem-priority--${priorityPresentation(scope.row.priority).tone}`" :style="priorityStyle(scope.row.priority)" :disabled="editingCell">
                   {{ priorityPresentation(scope.row.priority).label }}
@@ -857,12 +862,13 @@ onBeforeUnmount(() => {
                 :priority-options="priorityOptions.filter(item => item.active)"
                 :current-value="scope.row.priority"
                 :can-manage="Boolean(labelCatalog?.canManage)"
-                @select-priority="patchItem(scope.row, 'priority', $event)"
+                @select-priority="closeCell(); patchItem(scope.row, 'priority', $event)"
                 @updated="emit('labelsUpdated', $event)"
               />
             </el-popover>
 
-            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])" v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click">
+            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])" v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click"
+              :visible="openCell === scope.row.id + ':content'" @update:visible="setCellOpen(scope.row.id + ':content', $event)">
               <template #reference>
                 <button class="subitem-content-pill" :style="labelCellStyle(contentLabel(scope.row as ProjectWorkItemListItem).colorToken)" :disabled="editingCell">
                   {{ contentLabel(scope.row as ProjectWorkItemListItem).name || '—' }}
@@ -874,7 +880,7 @@ onBeforeUnmount(() => {
                 :catalog="contentCatalog"
                 :current-value="scope.row.contentId"
                 :can-manage="Boolean(contentCatalog?.canManage)"
-                @select="patchItem(scope.row, 'content', $event)"
+                @select="closeCell(); patchItem(scope.row, 'content', $event)"
                 @updated="emit('contentsUpdated', $event)"
               />
             </el-popover>
