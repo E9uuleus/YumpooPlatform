@@ -12,7 +12,10 @@ import { createWorkItemColumnFlip, measureWorkItemColumns, visibleWorkItemColumn
 import WorkItemRowActions from './WorkItemRowActions.vue'
 import WorkItemBatchBar from './WorkItemBatchBar.vue'
 import WorkItemParentPicker from './WorkItemParentPicker.vue'
-import { useWorkItemBatchActions } from './useWorkItemBatchActions'
+import { useWorkItemBatchActions, type WorkItemSelection } from './useWorkItemBatchActions'
+import { useWorkItemCellPopover } from './useWorkItemCellPopover'
+import WorkItemBatchEditScope from './WorkItemBatchEditScope.vue'
+import { dueDateBatchEdit, workItemBatchEditScopeKey, type WorkItemBatchAssigneeMode, type WorkItemBatchEdit } from './workItemBatchEdit'
 import { workItemOrderSiblings } from './workItemOrder'
 import WorkItemNameCell from './WorkItemNameCell.vue'
 import WorkItemDraftCell from './WorkItemDraftCell.vue'
@@ -51,7 +54,7 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type CSSProperties, type DefineComponent } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref, watch, type CSSProperties, type DefineComponent } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter, type LocationQuery } from 'vue-router'
 import type { WorkItemTableSource } from './workItemTableSource'
 import { contentsApi, projectsApi, workItemsApi } from '../../api/client'
@@ -87,7 +90,7 @@ import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from './workItemGrou
 import { useWorkItemGroupCreate } from './useWorkItemGroupCreate'
 import { useSession } from '../../composables/useSession'
 import { useWorkItemDueClock } from './useWorkItemDueClock'
-import { companyDate } from './workItemDueDate'
+import { apiDate, companyDate, dueDateKey } from './workItemDueDate'
 import ConnectColumnAddButton from './connect/ConnectColumnAddButton.vue'
 import ConnectTableColumnHeader from './connect/ConnectTableColumnHeader.vue'
 import ConnectColumnDeleteDialog from './connect/ConnectColumnDeleteDialog.vue'
@@ -278,6 +281,7 @@ const incomingFilterOptionsState = ref<'idle' | 'loading' | 'ready' | 'error'>('
 const filterOptionsLoading = ref(false)
 let filterOptionsRequestId = 0
 const cellPopoverBusy = reactive<Record<string, boolean>>({})
+const { openCell, setCellOpen, closeCell } = useWorkItemCellPopover()
 const labelPopoverContentRefs = new Map<string, LabelPopoverContentHandle>()
 const searchExpanded = ref(Boolean(route.query.q))
 const searchInput = ref(String(route.query.q ?? ''))
@@ -894,13 +898,15 @@ function clearSelection(): void {
   selectedWorkItemIds.value = new Set()
   Object.keys(subitemSelections).forEach(id => delete subitemSelections[id])
 }
+const batchSelections = computed<WorkItemSelection[]>(() => [
+  ...tableItems.value.filter(item => selectedWorkItemIds.value.has(item.id)).map(item => ({ id: item.id })),
+  ...Object.entries(subitemSelections).flatMap(([parentId, ids]) => (subitems[parentId]?.items ?? [])
+    .filter(item => ids.has(item.id)).map(item => ({ id: item.id, parentId }))),
+])
+const batchSelectedIds = computed(() => new Set(batchSelections.value.map(selection => selection.id)))
 const batch = useWorkItemBatchActions({
   contextId: () => projectId.value,
-  selection: () => [
-    ...tableItems.value.filter(item => selectedWorkItemIds.value.has(item.id)).map(item => ({ id: item.id })),
-    ...Object.entries(subitemSelections).flatMap(([parentId, ids]) => (subitems[parentId]?.items ?? [])
-      .filter(item => ids.has(item.id)).map(item => ({ id: item.id, parentId }))),
-  ],
+  selection: () => batchSelections.value,
   resolve: currentBatchItem,
   canCreate: () => canCreate.value,
   sorted: parentId => parentId ? Boolean(subitems[parentId]?.sortRules.length) : hasExplicitSort.value,
@@ -931,10 +937,37 @@ const batch = useWorkItemBatchActions({
     if (action === 'archive' || action === 'delete') await onRowRemoved(item, true)
   },
   refresh: onRelationsChanged,
+  updated: (id, detail) => replaceLightItem(id, detail, false),
 })
 const { busy: batchBusy, stopping: batchStopping, progressLabel: batchProgressLabel, count: selectedCount,
   subitemCount: selectedSubitemCount, selected: selectedBatchRows, convertibleItems: batchConvertibleItems,
   canDelete: batchCanDelete, moveDisabled: batchMoveDisabled, choosingParent: batchChoosingParent } = batch
+/** 编辑已勾选的行时同步修改全部勾选项；弹层顶部的复选框可改为只修改当前行。 */
+const batchEditSync = ref(true)
+function batchEditCount(id: string): number {
+  return batchSelectedIds.value.size > 1 && batchSelectedIds.value.has(id) ? batchSelectedIds.value.size : 0
+}
+function batchEditTargets(id: string): WorkItemSelection[] | undefined {
+  return batchEditSync.value && batchEditCount(id) ? batchSelections.value : undefined
+}
+function batchClearDueDateLabel(id: string): string | undefined {
+  const count = batchEditCount(id)
+  return count ? `清空已选 ${count} 项的截止日期` : undefined
+}
+provide(workItemBatchEditScopeKey, { count: batchEditCount, sync: batchEditSync })
+async function runBatchEdit(edit: WorkItemBatchEdit, targets: WorkItemSelection[]): Promise<boolean> {
+  closeCell()
+  const result = await batch.edit(edit, targets)
+  try {
+    if (edit.field === 'content' && result?.succeeded.length) catalog.value = await contentsApi.listProjectContents({ projectId: projectId.value })
+  } catch (reason) { error.value = await toApiProblem(reason) }
+  return Boolean(result && !result.failed.length && !result.skipped.length && !result.remaining)
+}
+function applyBatchAssignees(item: ProjectWorkItemListItem, mode: WorkItemBatchAssigneeMode, userIds: string[]): void {
+  const targets = batchEditTargets(item.id)
+  if (targets) void runBatchEdit({ field: 'assignees', mode, userIds }, targets)
+  else closeCell()
+}
 function duplicateRow(item: ProjectWorkItemListItem, parentId?: string): void {
   void batch.run('duplicate', [{ id: item.id, parentId }])
 }
@@ -1794,11 +1827,13 @@ async function dropInto(statusCode: string): Promise<void> {
 }
 
 async function transitionItem(item: ProjectWorkItemListItem, statusCode: string): Promise<void> {
+  const targets = batchEditTargets(item.id)
+  if (targets) { await runBatchEdit({ field: 'status', statusCode, resolution: null }, targets); return }
   dragging.value = item
   await dropInto(statusCode)
 }
 
-function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
+function replaceLightItem(id: string, updatedDetail: WorkItemDetail, regroup = true): void {
   notifyChanged()
   const apply = (item: ProjectWorkItemListItem): ProjectWorkItemListItem => {
     if (item.id !== id) return item
@@ -1825,11 +1860,17 @@ function replaceLightItem(id: string, updatedDetail: WorkItemDetail): void {
   Object.values(lanes).forEach(state => { state.items = state.items.map(apply) })
   Object.values(subitems).forEach(state => { state.items = state.items.map(apply) })
   if (detail.value?.id === id) detail.value = { ...detail.value, ...updatedDetail }
-  if (grouped.value && tableItems.value.some(item => item.id === id)) void grouping.changed()
+  if (regroup && grouped.value && tableItems.value.some(item => item.id === id)) void grouping.changed()
 }
 
 const cellEdits = useWorkItemEdits({ updated: replaceLightItem, failed: async problem => { error.value = problem; notifyChanged(); await loadTable(null, false) } })
 async function patchCell(item: ProjectWorkItemListItem, field: WorkItemPatchField, value: WorkItemPatchValue, dueTime?: string | null): Promise<boolean> {
+  const targets = batchEditTargets(item.id)
+  if (targets) return runBatchEdit(field === 'priority' ? { field, priority: value as string | null }
+    : field === 'content' ? { field, contentId: value as string }
+      : field === 'assignees' ? { field, mode: 'replace', userIds: value as readonly string[] }
+        : dueDateBatchEdit(item, { dueDate: dueDateKey(value as Date | null),
+          dueTime: dueTime === undefined ? item.dueTime ?? null : dueTime }), targets)
   if (editingCell.value) return false
   editingCell.value = item.id + ':' + field
   try {
@@ -2740,10 +2781,6 @@ function resetCurrentData(): void {
   if (selectedView.value === 'kanban') void loadKanban(revision); else void loadTable(null, false, revision)
 }
 
-function apiDate(value: string | null): Date | null {
-  return value ? new Date(`${value}T00:00:00.000Z`) : null
-}
-
 function onDueDateChange(item: ProjectWorkItemListItem, value: string | null, dueTime?: string | null): void {
   void patchCell(item, 'dueDate', apiDate(value), dueTime)
 }
@@ -3255,6 +3292,7 @@ onBeforeUnmount(() => {
                     @contents-updated="onContentsUpdated"
                     @labels-updated="onLabelsUpdated"
                     @transition="transitionItem"
+                    @batch-assignees="applyBatchAssignees"
                     @selection-change="onSubitemSelectionChange"
                     @header-resize="onHeaderDragEnd"
                     @move-column="moveSubitemColumn"
@@ -3497,21 +3535,27 @@ onBeforeUnmount(() => {
                     :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
                   />
                   <template v-else-if="column.key === 'assignee'">
-                    <el-popover :persistent="false" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover">
+                    <el-popover :persistent="false" placement="bottom" :width="360" trigger="click" popper-class="work-items-popover"
+                      :visible="openCell === scope.row.id + ':assignee'" @update:visible="setCellOpen(scope.row.id + ':assignee', $event)">
                       <template #reference>
                         <button
                           class="cell-editor-trigger monday-cell-centered"
-                          :disabled="Boolean(editingCell)"
+                          :disabled="Boolean(editingCell) || batchBusy"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'assignee')"
                         >
-                          <yp-assignee-stack :assignees="workItemAssignees(scope.row as ProjectWorkItemListItem)" />
+                          <yp-assignee-stack :assignees="workItemAssignees(scope.row as ProjectWorkItemListItem)" tooltip-placement="right"
+                            :tooltip-disabled="openCell === scope.row.id + ':assignee'" />
                         </button>
                       </template>
+                      <work-item-batch-edit-scope :item-id="scope.row.id" class="work-item-batch-edit-scope--inset" />
                       <work-item-assignee-picker
                         :project-id="projectId"
                         :selected="workItemAssignees(scope.row as ProjectWorkItemListItem)"
                         :busy="editingCell === `${scope.row.id}:assignees`"
+                        :batch-count="batchEditSync ? batchEditCount(scope.row.id) : 0"
                         @change="patchCell(scope.row as ProjectWorkItemListItem, 'assignees', $event)"
+                        @batch-apply="(mode, ids) => applyBatchAssignees(scope.row as ProjectWorkItemListItem, mode, ids)"
+                        @done="closeCell"
                       />
                     </el-popover>
                   </template>
@@ -3522,6 +3566,8 @@ onBeforeUnmount(() => {
                       width="auto"
                       trigger="click"
                       :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])"
+                      :visible="openCell === scope.row.id + ':status'"
+                      @update:visible="setCellOpen(scope.row.id + ':status', $event)"
                       popper-class="work-items-label-popover status-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'status')"
                     >
@@ -3530,12 +3576,13 @@ onBeforeUnmount(() => {
                           class="monday-status-cell status-chip cell-editor-trigger"
                           :class="`monday-status-cell--${getStatusTone((scope.row as ProjectWorkItemListItem).statusCode)}`"
                           :style="getStatusCellStyle((scope.row as ProjectWorkItemListItem).statusCode)"
-                          :disabled="Boolean(editingCell)"
+                          :disabled="Boolean(editingCell) || batchBusy"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'status')"
                         >
                           <span>{{ statusLabel((scope.row as ProjectWorkItemListItem).statusCode) }}</span>
                         </button>
                       </template>
+                      <work-item-batch-edit-scope :item-id="scope.row.id" />
                       <work-item-label-popover-content
                         :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'status'), element)"
                         @busy-change="cellPopoverBusy[scope.row.id + ':status'] = $event"
@@ -3546,7 +3593,7 @@ onBeforeUnmount(() => {
                         :current-value="(scope.row as ProjectWorkItemListItem).statusCode"
                         :can-manage="Boolean(labelCatalog?.canManage)"
                         :available-transitions="(scope.row as ProjectWorkItemListItem).capabilities.availableTransitions"
-                        @select-status="transitionItem(scope.row as ProjectWorkItemListItem, $event)"
+                        @select-status="closeCell(); transitionItem(scope.row as ProjectWorkItemListItem, $event)"
                         @updated="onLabelsUpdated"
                       />
                     </el-popover>
@@ -3558,6 +3605,8 @@ onBeforeUnmount(() => {
                       width="auto"
                       trigger="click"
                       :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])"
+                      :visible="openCell === scope.row.id + ':priority'"
+                      @update:visible="setCellOpen(scope.row.id + ':priority', $event)"
                       popper-class="work-items-label-popover priority-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'priority')"
                     >
@@ -3566,12 +3615,13 @@ onBeforeUnmount(() => {
                           class="monday-priority-cell cell-editor-trigger"
                           :class="`monday-priority-cell--${getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).tone}`"
                           :style="getPriorityCellStyle((scope.row as ProjectWorkItemListItem).priority)"
-                          :disabled="Boolean(editingCell)"
+                          :disabled="Boolean(editingCell) || batchBusy"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'priority')"
                         >
                           <span>{{ getPriorityPresentation((scope.row as ProjectWorkItemListItem).priority).label }}</span>
                         </button>
                       </template>
+                      <work-item-batch-edit-scope :item-id="scope.row.id" />
                       <work-item-label-popover-content
                         :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'priority'), element)"
                         @busy-change="cellPopoverBusy[scope.row.id + ':priority'] = $event"
@@ -3581,7 +3631,7 @@ onBeforeUnmount(() => {
                         :priority-options="priorityOptions.filter(item => item.active)"
                         :current-value="(scope.row as ProjectWorkItemListItem).priority"
                         :can-manage="Boolean(labelCatalog?.canManage)"
-                        @select-priority="patchCell(scope.row as ProjectWorkItemListItem, 'priority', $event)"
+                        @select-priority="closeCell(); patchCell(scope.row as ProjectWorkItemListItem, 'priority', $event)"
                         @updated="onLabelsUpdated"
                       />
                     </el-popover>
@@ -3593,6 +3643,8 @@ onBeforeUnmount(() => {
                       width="auto"
                       trigger="click"
                       :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])"
+                      :visible="openCell === scope.row.id + ':content'"
+                      @update:visible="setCellOpen(scope.row.id + ':content', $event)"
                       popper-class="work-items-label-popover content-popover"
                       @hide="resetLabelPopoverContent((scope.row as ProjectWorkItemListItem).id, 'content')"
                     >
@@ -3600,12 +3652,13 @@ onBeforeUnmount(() => {
                         <button
                           class="monday-content-label cell-editor-trigger"
                           :style="labelCellStyle(contentLabel(scope.row as ProjectWorkItemListItem).colorToken)"
-                          :disabled="Boolean(editingCell)"
+                          :disabled="Boolean(editingCell) || batchBusy"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'content')"
                         >
                           <span>{{ contentLabel(scope.row as ProjectWorkItemListItem).name || '—' }}</span>
                         </button>
                       </template>
+                      <work-item-batch-edit-scope :item-id="scope.row.id" />
                       <work-item-content-popover-content
                         :ref="element => setLabelPopoverContentRef(labelPopoverKey((scope.row as ProjectWorkItemListItem).id, 'content'), element)"
                         @busy-change="cellPopoverBusy[scope.row.id + ':content'] = $event"
@@ -3613,7 +3666,7 @@ onBeforeUnmount(() => {
                         :catalog="catalog"
                         :current-value="(scope.row as ProjectWorkItemListItem).contentId"
                         :can-manage="Boolean(catalog?.canManage)"
-                        @select="patchCell(scope.row as ProjectWorkItemListItem, 'content', $event)"
+                        @select="closeCell(); patchCell(scope.row as ProjectWorkItemListItem, 'content', $event)"
                         @updated="onContentsUpdated"
                       />
                     </el-popover>
@@ -3623,10 +3676,13 @@ onBeforeUnmount(() => {
                     <work-item-due-date-cell
                       :item="scope.row as ProjectWorkItemListItem"
                       :can-edit="(scope.row as ProjectWorkItemListItem).capabilities.canEditFields"
-                      :busy="Boolean(editingCell)"
+                      :busy="Boolean(editingCell) || batchBusy"
+                      :clear-label="batchClearDueDateLabel(scope.row.id)"
                       @select="selectCell((scope.row as ProjectWorkItemListItem).id, 'dueDate')"
                       @change="onDeadlineChange(scope.row as ProjectWorkItemListItem, $event)"
-                    />
+                    >
+                      <template #header><work-item-batch-edit-scope :item-id="scope.row.id" class="work-item-batch-edit-scope--inset" /></template>
+                    </work-item-due-date-cell>
                   </template>
 
                   <WorkItemTimerCell v-else-if="column.key === 'timeTracking'" :item="scope.row as ProjectWorkItemListItem" :project-id="projectId" @changed="notifyChanged" />

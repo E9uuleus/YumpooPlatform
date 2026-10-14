@@ -10,6 +10,7 @@ const props = withDefaults(defineProps<{
   employmentStatus?: string | null | undefined
   size?: 'table' | 'default' | 'detail'
   tooltipDisabled?: boolean
+  tooltipPlacement?: 'top' | 'right' | 'bottom' | 'left'
   showName?: boolean
 }>(), {
   userId: null,
@@ -18,6 +19,7 @@ const props = withDefaults(defineProps<{
   accountStatus: null,
   employmentStatus: null,
   size: 'default',
+  tooltipPlacement: 'top',
   showName: true,
 })
 
@@ -55,7 +57,7 @@ const tooltipLabel = computed(() => stateLabel.value ? `${name.value}（${stateL
   <el-tooltip
     :content="tooltipLabel"
     :disabled="tooltipDisabled"
-    placement="top"
+    :placement="tooltipPlacement"
   >
     <span
       class="yp-assignee"

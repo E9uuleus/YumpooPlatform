@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { inject, reactive } from 'vue'
 import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
@@ -32,6 +32,9 @@ import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
 import YpAssigneeStack from '../yp/YpAssigneeStack.vue'
 import WorkItemAssigneePicker from './WorkItemAssigneePicker.vue'
+import { useWorkItemCellPopover } from './useWorkItemCellPopover'
+import WorkItemBatchEditScope from './WorkItemBatchEditScope.vue'
+import { workItemBatchEditScopeKey, type WorkItemBatchAssigneeMode } from './workItemBatchEdit'
 import { workItemAssignees } from './workItemAssignees'
 import type { WorkItemPatchField, WorkItemPatchValue } from './useWorkItemEdits'
 import MondayColumnQuickSort from './MondayColumnQuickSort.vue'
@@ -119,12 +122,24 @@ const emit = defineEmits<{
   contentsUpdated: [catalog: ProjectContentCatalog]
   labelsUpdated: [catalog: WorkItemLabelCatalog]
   transition: [item: ProjectWorkItemListItem, statusCode: string]
+  batchAssignees: [item: ProjectWorkItemListItem, mode: WorkItemBatchAssigneeMode, userIds: string[]]
   selectionChange: [parentId: string, rows: ProjectWorkItemListItem[]]
   headerResize: [newWidth: number, oldWidth: number, column: { property?: string; columnKey?: string }]
   moveColumn: [source: string, target: string, placement?: 'before' | 'after']
 }>()
 
 const cellPopoverBusy = reactive<Record<string, boolean>>({})
+const { openCell, setCellOpen, closeCell } = useWorkItemCellPopover()
+const batchScope = inject(workItemBatchEditScopeKey, undefined)
+function batchAssigneeCount(id: string): number { return batchScope?.sync.value ? batchScope.count(id) : 0 }
+function batchClearDueDateLabel(id: string): string | undefined {
+  const count = batchScope?.count(id) ?? 0
+  return count ? `清空已选 ${count} 项的截止日期` : undefined
+}
+function applyBatchAssignees(raw: unknown, mode: WorkItemBatchAssigneeMode, userIds: string[]): void {
+  closeCell()
+  emit('batchAssignees', row(raw), mode, userIds)
+}
 const quickOpen = ref(false)
 const quickTitle = ref('')
 const defaultContentId = computed(() => props.activeContents.find(content => content.id === props.parent.contentId)?.id
@@ -815,20 +830,25 @@ onBeforeUnmount(() => {
               :status-label="statusLabel(scope.row.statusCode) || '—'"
               :status-color="workflowStatuses.find(status => status.statusCode === scope.row.statusCode)?.colorToken"
             />
-            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click">
+            <el-popover :persistent="false" v-else-if="column.key === 'assignee'" placement="bottom" :width="360" trigger="click"
+              :visible="openCell === scope.row.id + ':assignee'" @update:visible="setCellOpen(scope.row.id + ':assignee', $event)">
               <template #reference>
                 <button class="subitem-cell-button" :disabled="editingCell">
-                  <yp-assignee-stack :assignees="workItemAssignees(row(scope.row))" />
+                  <yp-assignee-stack :assignees="workItemAssignees(row(scope.row))" tooltip-placement="right" :tooltip-disabled="openCell === scope.row.id + ':assignee'" />
                 </button>
               </template>
+              <work-item-batch-edit-scope :item-id="scope.row.id" class="work-item-batch-edit-scope--inset" />
               <work-item-assignee-picker :project-id="projectId" :selected="workItemAssignees(row(scope.row))" :busy="editingCell"
-                @change="patchItem(scope.row, 'assignees', $event)" />
+                :batch-count="batchAssigneeCount(scope.row.id)" @change="patchItem(scope.row, 'assignees', $event)"
+                @batch-apply="(mode, ids) => applyBatchAssignees(scope.row, mode, ids)" @done="closeCell" />
             </el-popover>
 
-            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])" v-else-if="column.key === 'status'" placement="bottom" width="auto" trigger="click">
+            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':status'])" v-else-if="column.key === 'status'" placement="bottom" width="auto" trigger="click"
+              :visible="openCell === scope.row.id + ':status'" @update:visible="setCellOpen(scope.row.id + ':status', $event)">
               <template #reference>
                 <button class="subitem-block-cell" :style="statusStyle(scope.row.statusCode)" :disabled="editingCell">{{ statusLabel(scope.row.statusCode) }}</button>
               </template>
+              <work-item-batch-edit-scope :item-id="scope.row.id" />
               <work-item-label-popover-content
                 @busy-change="cellPopoverBusy[scope.row.id + ':' + column.key] = $event"
                 kind="status"
@@ -838,17 +858,19 @@ onBeforeUnmount(() => {
                 :current-value="scope.row.statusCode"
                 :can-manage="Boolean(labelCatalog?.canManage)"
                 :available-transitions="scope.row.capabilities.availableTransitions"
-                @select-status="transitionItem(scope.row, $event)"
+                @select-status="closeCell(); transitionItem(scope.row, $event)"
                 @updated="emit('labelsUpdated', $event)"
               />
             </el-popover>
 
-            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])" v-else-if="column.key === 'priority'" placement="bottom" width="auto" trigger="click">
+            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':priority'])" v-else-if="column.key === 'priority'" placement="bottom" width="auto" trigger="click"
+              :visible="openCell === scope.row.id + ':priority'" @update:visible="setCellOpen(scope.row.id + ':priority', $event)">
               <template #reference>
                 <button class="subitem-block-cell" :class="`subitem-priority--${priorityPresentation(scope.row.priority).tone}`" :style="priorityStyle(scope.row.priority)" :disabled="editingCell">
                   {{ priorityPresentation(scope.row.priority).label }}
                 </button>
               </template>
+              <work-item-batch-edit-scope :item-id="scope.row.id" />
               <work-item-label-popover-content
                 @busy-change="cellPopoverBusy[scope.row.id + ':' + column.key] = $event"
                 kind="priority"
@@ -857,24 +879,26 @@ onBeforeUnmount(() => {
                 :priority-options="priorityOptions.filter(item => item.active)"
                 :current-value="scope.row.priority"
                 :can-manage="Boolean(labelCatalog?.canManage)"
-                @select-priority="patchItem(scope.row, 'priority', $event)"
+                @select-priority="closeCell(); patchItem(scope.row, 'priority', $event)"
                 @updated="emit('labelsUpdated', $event)"
               />
             </el-popover>
 
-            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])" v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click">
+            <el-popover :persistent="Boolean(cellPopoverBusy[scope.row.id + ':content'])" v-else-if="column.key === 'content'" placement="bottom" width="auto" trigger="click"
+              :visible="openCell === scope.row.id + ':content'" @update:visible="setCellOpen(scope.row.id + ':content', $event)">
               <template #reference>
                 <button class="subitem-content-pill" :style="labelCellStyle(contentLabel(scope.row as ProjectWorkItemListItem).colorToken)" :disabled="editingCell">
                   {{ contentLabel(scope.row as ProjectWorkItemListItem).name || '—' }}
                 </button>
               </template>
+              <work-item-batch-edit-scope :item-id="scope.row.id" />
               <work-item-content-popover-content
                 @busy-change="cellPopoverBusy[scope.row.id + ':content'] = $event"
                 :project-id="projectId"
                 :catalog="contentCatalog"
                 :current-value="scope.row.contentId"
                 :can-manage="Boolean(contentCatalog?.canManage)"
-                @select="patchItem(scope.row, 'content', $event)"
+                @select="closeCell(); patchItem(scope.row, 'content', $event)"
                 @updated="emit('contentsUpdated', $event)"
               />
             </el-popover>
@@ -883,8 +907,11 @@ onBeforeUnmount(() => {
               v-else-if="column.key === 'dueDate'" :item="row(scope.row)"
               style="--deadline-cell-height: 34px"
               :can-edit="row(scope.row).capabilities.canEditFields" :busy="editingCell"
+              :clear-label="batchClearDueDateLabel(scope.row.id)"
               @change="emit('dueDateChange', row(scope.row), $event)"
-            />
+            >
+              <template #header><work-item-batch-edit-scope :item-id="scope.row.id" class="work-item-batch-edit-scope--inset" /></template>
+            </work-item-due-date-cell>
 
             <WorkItemTimerCell v-else-if="column.key === 'timeTracking'" :item="scope.row as ProjectWorkItemListItem" :project-id="projectId" @changed="emit('timerChanged')" />
             <WorkItemUpdatedCell

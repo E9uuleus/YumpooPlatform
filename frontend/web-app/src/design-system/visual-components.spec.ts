@@ -3,6 +3,7 @@ import { ElTooltip } from 'element-plus'
 import { h } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import YpAssignee from '../components/yp/YpAssignee.vue'
+import YpAssigneeStack from '../components/yp/YpAssigneeStack.vue'
 import YpDateBadge from '../components/yp/YpDateBadge.vue'
 import YpEmptyState from '../components/yp/YpEmptyState.vue'
 import YpFilterBar from '../components/yp/YpFilterBar.vue'
@@ -42,6 +43,18 @@ describe('视觉语义组件', () => {
     expect(wrapper.find('.yp-assignee__name').exists()).toBe(false)
     expect(wrapper.get('.yp-assignee').attributes('aria-label')).toBe('张三')
     expect(wrapper.getComponent(ElTooltip).props('content')).toBe('张三')
+  })
+
+  it('处理人头像组可指定提示方向并禁用提示，提示不可进入且离开即隐藏', () => {
+    const stack = mount(YpAssigneeStack, {
+      props: { assignees: [{ userId: 'u1', displayName: '张三' }, { userId: 'u2', displayName: '李四' }],
+        tooltipPlacement: 'right', tooltipDisabled: true },
+    })
+    expect(stack.getComponent(ElTooltip).props()).toMatchObject({
+      content: '张三、李四', placement: 'right', disabled: true, enterable: false, hideAfter: 0,
+    })
+    const empty = mount(YpAssigneeStack, { props: { assignees: [], tooltipPlacement: 'right' } })
+    expect(empty.getComponent(ElTooltip).props()).toMatchObject({ content: '未分配', placement: 'right', disabled: false })
   })
 
   it('优先级保留中文语义并灰显未知值', () => {

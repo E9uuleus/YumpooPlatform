@@ -346,6 +346,7 @@ const updatedText = (value: WorkItemDetail) => formatRelativeTime(value.updatedA
               :selected="assignees"
               :busy="Boolean(item.busy.value)"
               @change="value => void item.patch('assignees', value)"
+              @done="field = undefined"
             />
           </el-popover>
           <span

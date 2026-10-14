@@ -5,7 +5,7 @@ import { useSession } from '../../composables/useSession'
 import { companyDate, dueDateKey, presentDueDate, type DueDateValue, type WorkItemDueDateFacts } from './workItemDueDate'
 import { useWorkItemDueClock } from './useWorkItemDueClock'
 
-const props = defineProps<{ item: WorkItemDueDateFacts; canEdit: boolean; busy?: boolean }>()
+const props = defineProps<{ item: WorkItemDueDateFacts; canEdit: boolean; busy?: boolean; clearLabel?: string | undefined }>()
 const emit = defineEmits<{ select: []; change: [value: DueDateValue] }>()
 const session = useSession()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
@@ -64,6 +64,7 @@ function clearDate(): void {
         </button>
       </template>
       <div class="deadline-editor" @pointerdown.stop @click.stop @keydown.stop>
+        <slot name="header" />
         <div class="deadline-editor__toolbar">
           <el-button :disabled="disabled" @click="commitDate(companyDate(now, timezone))">Today</el-button>
           <button type="button" class="deadline-clock" :class="{ 'is-active': timeOpen }" :disabled="disabled || !date" :aria-expanded="timeOpen" aria-label="设置截止时间" :title="date ? '设置截止时间' : '请先选择截止日期'" @click="timeOpen = !timeOpen">
@@ -78,7 +79,7 @@ function clearDate(): void {
         </div>
       </div>
     </el-popover>
-    <button v-if="date && canEdit" type="button" class="deadline-clear" :disabled="busy" aria-label="清空截止日期" title="清空截止日期" @click.stop="clearDate">
+    <button v-if="date && canEdit" type="button" class="deadline-clear" :disabled="busy" :aria-label="clearLabel ?? '清空截止日期'" :title="clearLabel ?? '清空截止日期'" @click.stop="clearDate">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
     </button>
   </span>

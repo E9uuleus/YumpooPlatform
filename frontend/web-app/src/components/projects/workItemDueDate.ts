@@ -48,6 +48,11 @@ export function dueDateKey(value: Date | string | null): string | null {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date ? date : null
 }
 
+/** 截止日期是自然日字段，以 UTC 零点提交，避免浏览器时区改变日期。 */
+export function apiDate(value: string | null): Date | null {
+  return value ? new Date(`${value}T00:00:00.000Z`) : null
+}
+
 function wallMillis(instant: number, timezone: string): number {
   const parts = wallParts(new Date(instant), timezone)
   return Date.parse(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}Z`)
