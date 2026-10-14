@@ -170,14 +170,14 @@ function spotlight(event: PointerEvent): void {
   align-items: center;
   column-gap: var(--yp-space-3);
   row-gap: 2px;
-  padding: var(--yp-space-3) var(--yp-space-4);
+  padding: var(--yp-space-3);
   border-radius: var(--yp-radius-lg);
 }
 
 .yp-jump-card--row .yp-jump-card__icon {
   grid-area: icon;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   background: color-mix(in srgb, var(--from) 14%, var(--yp-bg-surface));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--from) 18%, transparent);
   color: var(--from);
