@@ -72,6 +72,16 @@ public class JdbcCompanyRepository implements CompanyRepository {
     }
 
     @Override
+    public boolean rename(UUID companyId, String displayName, long expectedVersion, Instant now) {
+        return jdbcClient.sql("""
+                        UPDATE yumpoo.company SET display_name = :displayName, row_version = row_version + 1, updated_at = :now
+                        WHERE id = :companyId AND row_version = :expected
+                        """)
+                .param("companyId", companyId).param("displayName", displayName).param("expected", expectedVersion)
+                .param("now", OffsetDateTime.ofInstant(now, ZoneOffset.UTC)).update() == 1;
+    }
+
+    @Override
     public List<CalendarDayOverride> calendarDays(
             UUID companyId,
             LocalDate startInclusive,

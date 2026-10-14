@@ -136,6 +136,31 @@ class M113PermissionMatrixIT {
     }
 
     @Test
+    void onlyCompanyAdminRenamesCompanyWithCurrentVersion() throws Exception {
+        var original = companyQuery.current();
+        String current = get("/api/v1/company", companyAdmin).headers().firstValue("etag").orElseThrow();
+        try {
+            assertDenied(patch("/api/v1/company", member, "{\"displayName\":\"Renamed\"}", current));
+            assertThat(patch("/api/v1/company", companyAdmin, "{\"displayName\":\"   \"}", current).statusCode())
+                    .isEqualTo(422);
+
+            HttpResponse<String> renamed = patch("/api/v1/company", companyAdmin,
+                    "{\"displayName\":\"  Renamed Co  \"}", current);
+            assertThat(renamed.statusCode()).as("body=%s", renamed.body()).isEqualTo(200);
+            assertThat(renamed.body()).contains("\"displayName\":\"Renamed Co\"");
+            assertThat(renamed.headers().firstValue("etag")).hasValue("\"" + (original.rowVersion() + 1) + "\"");
+            assertThat(patch("/api/v1/company", companyAdmin, "{\"displayName\":\"Stale\"}", current).statusCode())
+                    .isEqualTo(412);
+            assertThat(jdbcClient.sql("SELECT count(*) FROM yumpoo.security_audit_event WHERE action = 'COMPANY_RENAMED'")
+                    .query(Long.class).single()).isOne();
+        } finally {
+            jdbcClient.sql("UPDATE yumpoo.company SET display_name = :name, row_version = :version WHERE id = :id")
+                    .param("name", original.displayName()).param("version", original.rowVersion())
+                    .param("id", original.companyId()).update();
+        }
+    }
+
+    @Test
     void appManagerCanReadGovernRolesAndWriteIdentity() throws Exception {
         assertThat(get("/api/v1/admin/members", appManager).statusCode()).isEqualTo(200);
         HttpResponse<String> granted = post(
@@ -317,6 +342,17 @@ class M113PermissionMatrixIT {
                         : HttpRequest.BodyPublishers.ofString(json)).build(),
                 HttpResponse.BodyHandlers.ofString()
         );
+    }
+
+    private HttpResponse<String> patch(String path, ActorFixture actor, String json, String ifMatch) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(uri(path))
+                .header("Cookie", cookies(actor))
+                .header(SessionBoundCsrfTokenRepository.HEADER_NAME, actor.session().csrfCredential().value())
+                .header("If-Match", ifMatch)
+                .header("Content-Type", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
+                .build();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private String etag(UUID userId) throws Exception {

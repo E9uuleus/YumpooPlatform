@@ -12,6 +12,8 @@ public interface CompanyRepository {
 
     Company current();
 
+    boolean rename(UUID companyId, String displayName, long expectedVersion, Instant now);
+
     long calendarYearVersion(UUID companyId, int year);
 
     boolean advanceCalendarYear(UUID companyId, int year, long expectedVersion, UUID actorUserId, Instant now);

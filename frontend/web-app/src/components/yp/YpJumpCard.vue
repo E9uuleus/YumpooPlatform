@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { TopRight } from '@element-plus/icons-vue'
+import { ArrowRight, TopRight } from '@element-plus/icons-vue'
 import { ElIcon } from 'element-plus'
 import type { Component } from 'vue'
 
@@ -11,7 +11,8 @@ withDefaults(defineProps<{
   icon: Component
   tone?: JumpTone
   index?: number
-}>(), { tone: 'blue', index: 0 })
+  variant?: 'tile' | 'row'
+}>(), { tone: 'blue', index: 0, variant: 'tile' })
 
 defineEmits<{ open: [] }>()
 
@@ -26,7 +27,7 @@ function spotlight(event: PointerEvent): void {
   <button
     type="button"
     class="yp-jump-card"
-    :class="`yp-jump-card--${tone}`"
+    :class="[`yp-jump-card--${tone}`, `yp-jump-card--${variant}`]"
     :style="{ '--i': index }"
     @pointermove="spotlight"
     @click="$emit('open')"
@@ -36,7 +37,8 @@ function spotlight(event: PointerEvent): void {
       class="yp-jump-card__arrow"
       aria-hidden="true"
     >
-      <top-right />
+      <arrow-right v-if="variant === 'row'" />
+      <top-right v-else />
     </el-icon>
     <strong>{{ label }}</strong>
     <span class="yp-jump-card__meta">{{ meta }}</span>
@@ -159,6 +161,52 @@ function spotlight(event: PointerEvent): void {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+
+.yp-jump-card--row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon label arrow"
+    "icon meta arrow";
+  align-items: center;
+  column-gap: var(--yp-space-3);
+  row-gap: 2px;
+  padding: var(--yp-space-3);
+  border-radius: var(--yp-radius-lg);
+}
+
+.yp-jump-card--row .yp-jump-card__icon {
+  grid-area: icon;
+  width: 34px;
+  height: 34px;
+  background: color-mix(in srgb, var(--from) 14%, var(--yp-bg-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--from) 18%, transparent);
+  color: var(--from);
+}
+
+.yp-jump-card--row strong {
+  grid-area: label;
+}
+
+.yp-jump-card--row .yp-jump-card__meta {
+  grid-area: meta;
+}
+
+.yp-jump-card--row .yp-jump-card__arrow {
+  position: static;
+  grid-area: arrow;
+  opacity: 1;
+  translate: none;
+  transition:
+    color var(--yp-motion-overlay) var(--yp-ease-standard),
+    translate var(--yp-motion-overlay) var(--yp-ease-standard);
+}
+
+.yp-jump-card--row:hover .yp-jump-card__arrow,
+.yp-jump-card--row:focus-visible .yp-jump-card__arrow {
+  color: var(--from);
+  translate: 2px 0;
+}
+
 @keyframes yp-jump-rise {
   from { opacity: 0; transform: translateY(10px); }
 }
@@ -167,5 +215,6 @@ function spotlight(event: PointerEvent): void {
   .yp-jump-card { animation: none; }
   .yp-jump-card:hover,
   .yp-jump-card:active { transform: none; }
+  .yp-jump-card--row:hover .yp-jump-card__arrow { translate: none; }
 }
 </style>

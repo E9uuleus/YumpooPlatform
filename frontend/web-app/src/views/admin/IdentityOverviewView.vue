@@ -1,23 +1,24 @@
 <script setup lang="ts">
-import { AlarmClock, FolderOpened, OfficeBuilding, Refresh, Tickets, User } from '@element-plus/icons-vue'
+import { AlarmClock, EditPen, FolderOpened, Refresh, Tickets, User, WarningFilled } from '@element-plus/icons-vue'
 import {
   EmploymentStatus,
   ProjectLifecycleFilter,
+  readCsrfToken,
   type Company,
   type ScheduledJob,
   type WeComIntegrationStatus,
 } from '@yumpoo/api-client'
-import { ElAlert, ElIcon, ElSkeleton } from 'element-plus'
+import { ElAlert, ElButton, ElIcon, ElMessage, ElMessageBox, ElSkeleton } from 'element-plus'
 import { computed, onMounted, ref, watch, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { administrationApi, identityAdministrationApi, projectsApi } from '../../api/client'
-import { toApiProblem, type ApiProblem } from '../../api/problems'
+import { localProblem, problemMessage, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../../components/InlineProblem.vue'
 import YpDefinitionList, { type DefinitionItem } from '../../components/yp/YpDefinitionList.vue'
 import YpJumpCard, { type JumpTone } from '../../components/yp/YpJumpCard.vue'
 import YpStatusTag from '../../components/yp/YpStatusTag.vue'
 import YpSurface from '../../components/yp/YpSurface.vue'
-import { useSession } from '../../composables/useSession'
+import { ensureAuthentication, useSession } from '../../composables/useSession'
 import { formatRelativeTime, formatTimestamp } from '../../design-system/dates'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 
@@ -40,13 +41,7 @@ function formatTime(value?: Date | null): string {
   return value ? formatTimestamp(value, timezone.value) : '暂无'
 }
 
-const companyItems = computed<DefinitionItem[]>(() => company.value
-  ? [
-      { key: 'timezone', label: '时区', value: company.value.timezone },
-      { key: 'weekStart', label: '周起始日', value: '星期一' },
-      { key: 'workday', label: '标准工时', value: `${company.value.defaultWorkdayMinutes} 分钟/日` },
-    ]
-  : [])
+const corpId = computed(() => status.value?.oauth.corpIdMasked ?? status.value?.directory.corpIdMasked)
 
 const oauthItems = computed<DefinitionItem[]>(() => status.value
   ? [
@@ -87,6 +82,30 @@ const entries = computed<EntryCard[]>(() => [
 ])
 
 const quiet = () => undefined
+
+async function renameCompany(): Promise<void> {
+  const current = company.value
+  if (!current) return
+  try {
+    const { value } = await ElMessageBox.prompt('公司名称', '编辑公司名称', {
+      inputValue: current.displayName,
+      inputValidator: input => (input?.trim().length ?? 0) >= 1 && input.trim().length <= 200 || '请输入 1–200 个字符',
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+    })
+    const displayName = value.trim()
+    if (displayName === current.displayName) return
+    const csrf = readCsrfToken()
+    if (!csrf) throw localProblem('缺少 CSRF 凭据，请刷新页面后重试。')
+    company.value = await identityAdministrationApi.updateCompany({
+      xXSRFTOKEN: csrf, ifMatch: `"${current.rowVersion}"`, companyUpdateRequest: { displayName },
+    })
+    ElMessage.success('公司名称已更新')
+    void ensureAuthentication(true)
+  } catch (reason) {
+    if (reason !== 'cancel' && reason !== 'close') ElMessage.error(problemMessage(await toApiProblem(reason)))
+  }
+}
 
 async function load(): Promise<void> {
   loading.value = true
@@ -136,28 +155,37 @@ onMounted(() => {
     v-else
     class="company-overview"
   >
-    <yp-surface
+    <header
       v-if="company"
-      class="company-overview__profile"
+      class="company-identity"
       data-tour="company-profile"
     >
-      <div class="company-identity">
-        <span
-          class="company-identity__icon"
-          aria-hidden="true"
-        >
-          <el-icon><office-building /></el-icon>
-        </span>
-        <div>
-          <p>公司</p>
-          <h2>{{ company.displayName }}</h2>
-        </div>
+      <div class="company-identity__name">
+        <h2>{{ company.displayName }}</h2>
+        <el-button
+          v-if="session.isCompanyAdmin.value"
+          class="company-identity__edit"
+          text
+          circle
+          size="small"
+          :icon="EditPen"
+          aria-label="编辑公司名称"
+          @click="renameCompany"
+        />
       </div>
-      <yp-definition-list
-        :columns="3"
-        :items="companyItems"
-      />
-    </yp-surface>
+      <p class="company-identity__corp">
+        <span>企微 Corp ID</span>
+        <code v-if="corpId">{{ corpId }}</code>
+        <span v-else>未配置</span>
+        <span
+          v-if="status && !status.corpIdConsistent"
+          class="company-identity__warning"
+        >
+          <el-icon aria-hidden="true"><warning-filled /></el-icon>
+          OAuth 与通讯录 Corp ID 不一致
+        </span>
+      </p>
+    </header>
 
     <nav
       class="company-overview__entries"
@@ -172,6 +200,7 @@ onMounted(() => {
         :icon="entry.icon"
         :tone="entry.tone"
         :index="index"
+        variant="row"
         @open="router.push({ name: entry.routeName })"
       />
     </nav>
@@ -183,31 +212,35 @@ onMounted(() => {
     >
       <yp-surface title="企微 Web OAuth">
         <template #actions>
-          <yp-status-tag
-            domain="integration"
-            :status="status.oauth.enabled ? 'ENABLED' : 'DISABLED'"
-            effect="soft"
-          />
-          <yp-status-tag
-            domain="integration"
-            :status="status.oauth.configured ? 'CONFIGURED' : 'INCOMPLETE'"
-            effect="soft"
-          />
+          <span class="integration-status">
+            <yp-status-tag
+              domain="integration"
+              :status="status.oauth.enabled ? 'ENABLED' : 'DISABLED'"
+              effect="dot"
+            />
+            <yp-status-tag
+              domain="integration"
+              :status="status.oauth.configured ? 'CONFIGURED' : 'INCOMPLETE'"
+              effect="dot"
+            />
+          </span>
         </template>
         <yp-definition-list :items="oauthItems" />
       </yp-surface>
       <yp-surface title="企微通讯录">
         <template #actions>
-          <yp-status-tag
-            domain="integration"
-            :status="status.directory.enabled ? 'ENABLED' : 'DISABLED'"
-            effect="soft"
-          />
-          <yp-status-tag
-            domain="integration"
-            :status="status.directory.configured ? 'CONFIGURED' : 'INCOMPLETE'"
-            effect="soft"
-          />
+          <span class="integration-status">
+            <yp-status-tag
+              domain="integration"
+              :status="status.directory.enabled ? 'ENABLED' : 'DISABLED'"
+              effect="dot"
+            />
+            <yp-status-tag
+              domain="integration"
+              :status="status.directory.configured ? 'CONFIGURED' : 'INCOMPLETE'"
+              effect="dot"
+            />
+          </span>
         </template>
         <yp-definition-list :items="directoryItems" />
       </yp-surface>
@@ -232,40 +265,71 @@ onMounted(() => {
 
 .company-overview__entries {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--yp-space-3);
 }
 
 .company-identity {
+  display: grid;
+  gap: var(--yp-space-1);
+  margin-bottom: var(--yp-space-2);
+}
+
+.company-identity__name {
   display: flex;
   align-items: center;
-  gap: var(--yp-space-3);
-  margin-bottom: var(--yp-space-5);
+  gap: var(--yp-space-2);
+  min-width: 0;
 }
 
-.company-identity__icon {
-  display: grid;
-  width: 40px;
-  height: 40px;
+.company-identity h2 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--yp-text-primary);
+  font: 600 var(--yp-type-section-title-size) / var(--yp-type-section-title-line) var(--yp-font-heading);
+}
+
+.company-identity__edit {
   flex: none;
-  place-items: center;
-  border-radius: var(--yp-radius-md);
-  color: var(--yp-link);
-  background: var(--yp-bg-selected);
-  font-size: 20px;
+  color: var(--yp-text-muted);
 }
 
-.company-identity p {
+.company-identity__edit:hover {
+  color: var(--yp-link);
+}
+
+.company-identity__corp {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yp-space-2);
   margin: 0;
   color: var(--yp-text-secondary);
   font-size: var(--yp-type-caption-size);
   line-height: var(--yp-type-caption-line);
 }
 
-.company-identity h2 {
-  margin: 0;
+.company-identity__corp code {
   color: var(--yp-text-primary);
-  font: 500 var(--yp-type-section-title-size) / var(--yp-type-section-title-line) var(--yp-font-heading);
+  font-family: var(--yp-font-mono);
+}
+
+.company-identity__warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--yp-text-primary);
+}
+
+.company-identity__warning .el-icon {
+  color: var(--yp-status-yellow);
+}
+
+.integration-status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--yp-space-3);
 }
 
 .company-overview__integrations {

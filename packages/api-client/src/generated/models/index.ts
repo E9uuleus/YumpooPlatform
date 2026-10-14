@@ -26,6 +26,7 @@ export * from './ClientCompatibility';
 export * from './Company';
 export * from './CompanyActivityItem';
 export * from './CompanyActivityPage';
+export * from './CompanyUpdateRequest';
 export * from './ConnectCandidate';
 export * from './ConnectCandidateField';
 export * from './ConnectCandidatePage';

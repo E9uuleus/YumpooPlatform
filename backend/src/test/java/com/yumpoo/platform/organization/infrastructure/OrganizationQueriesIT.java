@@ -5,6 +5,7 @@ import com.yumpoo.platform.organization.api.CalendarDaySource;
 import com.yumpoo.platform.organization.api.CompanyCalendarCommand;
 import com.yumpoo.platform.organization.api.CompanyCalendarDaySnapshot;
 import com.yumpoo.platform.organization.api.CompanyCalendarQuery;
+import com.yumpoo.platform.organization.api.CompanyConfigurationCommand;
 import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.organization.api.CompanyConfigurationSnapshot;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
@@ -53,6 +54,9 @@ class OrganizationQueriesIT {
     private CompanyCalendarCommand companyCalendarCommand;
 
     @Autowired
+    private CompanyConfigurationCommand companyConfigurationCommand;
+
+    @Autowired
     private JdbcClient jdbcClient;
 
     @BeforeEach
@@ -90,6 +94,15 @@ class OrganizationQueriesIT {
         assertThat(companyCalendarCommand.replaceYear(2026, 1, List.of(), actor, NOW)).isTrue();
         assertThat(companyCalendarQuery.day(date).dayType()).isEqualTo(CalendarDayType.WORKDAY);
         assertThat(companyCalendarQuery.day(date).explicitOverride()).isFalse();
+    }
+
+    @Test
+    void renamesCompanyWithVersionCheck() {
+        assertThat(companyConfigurationCommand.rename("Yumpoo 新名称", 0, NOW)).isTrue();
+        assertThat(companyConfigurationQuery.current().displayName()).isEqualTo("Yumpoo 新名称");
+        assertThat(companyConfigurationQuery.current().rowVersion()).isEqualTo(1);
+        assertThat(companyConfigurationCommand.rename("Stale", 0, NOW)).isFalse();
+        assertThat(companyConfigurationQuery.current().displayName()).isEqualTo("Yumpoo 新名称");
     }
 
     @Test
