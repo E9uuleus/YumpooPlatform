@@ -821,7 +821,7 @@ onBeforeUnmount(() => {
               :visible="openCell === scope.row.id + ':assignee'" @update:visible="setCellOpen(scope.row.id + ':assignee', $event)">
               <template #reference>
                 <button class="subitem-cell-button" :disabled="editingCell">
-                  <yp-assignee-stack :assignees="workItemAssignees(row(scope.row))" />
+                  <yp-assignee-stack :assignees="workItemAssignees(row(scope.row))" tooltip-placement="right" :tooltip-disabled="openCell === scope.row.id + ':assignee'" />
                 </button>
               </template>
               <work-item-assignee-picker :project-id="projectId" :selected="workItemAssignees(row(scope.row))" :busy="editingCell"

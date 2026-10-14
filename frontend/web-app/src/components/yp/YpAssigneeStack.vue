@@ -6,15 +6,32 @@ import YpAssignee from './YpAssignee.vue'
 const props = withDefaults(defineProps<{
   assignees: ReadonlyArray<{ userId: string; displayName: string }>
   max?: number
-}>(), { max: 2 })
+  tooltipPlacement?: 'top' | 'right' | 'bottom' | 'left'
+  tooltipDisabled?: boolean
+}>(), { max: 2, tooltipPlacement: 'top', tooltipDisabled: false })
 const visible = computed(() => props.assignees.length > props.max ? props.assignees.slice(0, props.max - 1) : props.assignees)
 const overflow = computed(() => props.assignees.length - visible.value.length)
 const names = computed(() => props.assignees.map(item => item.displayName).join('、'))
 </script>
 
 <template>
-  <yp-assignee v-if="!assignees.length" :show-name="false" size="table" />
-  <el-tooltip v-else :content="names" placement="top">
+  <yp-assignee
+    v-if="!assignees.length"
+    :show-name="false"
+    size="table"
+    :tooltip-placement="tooltipPlacement"
+    :tooltip-disabled="tooltipDisabled"
+  />
+  <!-- 密集列表中提示不可进入并在离开时立即消失，避免遮住相邻行。 -->
+  <el-tooltip
+    v-else
+    :content="names"
+    :placement="tooltipPlacement"
+    :disabled="tooltipDisabled"
+    :enterable="false"
+    :show-after="300"
+    :hide-after="0"
+  >
     <span class="yp-assignee-stack" :aria-label="names">
       <yp-assignee
         v-for="assignee in visible"

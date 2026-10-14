@@ -3507,7 +3507,8 @@ onBeforeUnmount(() => {
                           :disabled="Boolean(editingCell) || batchBusy"
                           @click.stop="selectCell((scope.row as ProjectWorkItemListItem).id, 'assignee')"
                         >
-                          <yp-assignee-stack :assignees="workItemAssignees(scope.row as ProjectWorkItemListItem)" />
+                          <yp-assignee-stack :assignees="workItemAssignees(scope.row as ProjectWorkItemListItem)" tooltip-placement="right"
+                            :tooltip-disabled="openCell === scope.row.id + ':assignee'" />
                         </button>
                       </template>
                       <work-item-assignee-picker
