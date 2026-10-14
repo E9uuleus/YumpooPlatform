@@ -2158,6 +2158,31 @@ paths:
               schema: { $ref: '#/components/schemas/Company' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
+    patch:
+      tags: [IdentityAdministration]
+      operationId: updateCompany
+      summary: 修改公司名称
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）；要求会话、XSRF 和最近读取的 If-Match；名称去除首尾空白后保存；写入安全审计。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CompanyUpdateRequest' } } }
+      responses:
+        '200':
+          description: 保存后的公司配置。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/Company' } } }
+        '400': { $ref: '#/components/responses/MalformedRequest' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
 
   /admin/integrations/wecom/status:
     get:
@@ -10217,6 +10242,13 @@ components:
         weekStartDay: { type: string, enum: [MONDAY] }
         defaultWorkdayMinutes: { type: integer, format: int32, minimum: 1, maximum: 720 }
         rowVersion: { type: integer, format: int64, minimum: 0 }
+
+    CompanyUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [displayName]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 200 }
 
     WeComOAuthStatus:
       type: object

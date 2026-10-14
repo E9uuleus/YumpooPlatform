@@ -16,6 +16,7 @@ import * as runtime from '../runtime';
 import type {
   AccountStatus,
   Company,
+  CompanyUpdateRequest,
   DirectorySyncFailurePage,
   DirectorySyncRun,
   DirectorySyncRunPage,
@@ -33,6 +34,8 @@ import {
     AccountStatusToJSON,
     CompanyFromJSON,
     CompanyToJSON,
+    CompanyUpdateRequestFromJSON,
+    CompanyUpdateRequestToJSON,
     DirectorySyncFailurePageFromJSON,
     DirectorySyncFailurePageToJSON,
     DirectorySyncRunFromJSON,
@@ -91,6 +94,12 @@ export interface ListMembersRequest {
 export interface TriggerDirectorySyncRequest {
     xXSRFTOKEN: string;
     idempotencyKey: string;
+}
+
+export interface UpdateCompanyRequest {
+    xXSRFTOKEN: string;
+    ifMatch: string;
+    companyUpdateRequest: CompanyUpdateRequest;
 }
 
 /**
@@ -427,6 +436,69 @@ export class IdentityAdministrationApi extends runtime.BaseAPI {
      */
     async triggerDirectorySync(requestParameters: TriggerDirectorySyncRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<DirectorySyncRun> {
         const response = await this.triggerDirectorySyncRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 仅 COMPANY_ADMIN（含 APP_MANAGER）；要求会话、XSRF 和最近读取的 If-Match；名称去除首尾空白后保存；写入安全审计。
+     * 修改公司名称
+     */
+    async updateCompanyRaw(requestParameters: UpdateCompanyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Company>> {
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateCompany().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateCompany().'
+            );
+        }
+
+        if (requestParameters['companyUpdateRequest'] == null) {
+            throw new runtime.RequiredError(
+                'companyUpdateRequest',
+                'Required parameter "companyUpdateRequest" was null or undefined when calling updateCompany().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/company`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PATCH',
+            headers: headerParameters,
+            query: queryParameters,
+            body: CompanyUpdateRequestToJSON(requestParameters['companyUpdateRequest']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => CompanyFromJSON(jsonValue));
+    }
+
+    /**
+     * 仅 COMPANY_ADMIN（含 APP_MANAGER）；要求会话、XSRF 和最近读取的 If-Match；名称去除首尾空白后保存；写入安全审计。
+     * 修改公司名称
+     */
+    async updateCompany(requestParameters: UpdateCompanyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Company> {
+        const response = await this.updateCompanyRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

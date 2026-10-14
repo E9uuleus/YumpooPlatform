@@ -8,6 +8,7 @@ import com.yumpoo.platform.foundation.api.pagination.OffsetPageRequest;
 import com.yumpoo.platform.foundation.application.error.ApplicationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 
 import java.lang.reflect.RecordComponent;
@@ -40,8 +41,13 @@ class M111IdentityAdministrationContractTest {
                 "/admin/members/{userId}");
         assertThat(posts).containsExactly("/admin/directory-sync-runs");
         assertThat(CompanyController.class.getDeclaredMethods())
-                .anySatisfy(method -> assertThat(method.getAnnotation(GetMapping.class).value())
-                        .containsExactly("/company"));
+                .filteredOn(method -> method.isAnnotationPresent(GetMapping.class))
+                .singleElement()
+                .satisfies(method -> assertThat(method.getAnnotation(GetMapping.class).value()).containsExactly("/company"));
+        assertThat(CompanyController.class.getDeclaredMethods())
+                .filteredOn(method -> method.isAnnotationPresent(PatchMapping.class))
+                .singleElement()
+                .satisfies(method -> assertThat(method.getAnnotation(PatchMapping.class).value()).containsExactly("/company"));
     }
 
     @Test
