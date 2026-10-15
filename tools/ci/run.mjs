@@ -18,6 +18,7 @@ const environment = {
   AGENT_NOTE_ARCHIVE_BASE_REF: baseRef,
   YUMPOO_M018_HEAD_COMMIT: process.env.YUMPOO_M018_HEAD_COMMIT || git(['rev-parse', 'HEAD']).trim(),
   YUMPOO_M018_TESTED_COMMIT: git(['rev-parse', 'HEAD']).trim(),
+  YUMPOO_BUILD_COMMIT: git(['rev-parse', 'HEAD']).trim(),
   YUMPOO_M018_HANDOFF_ROOT: path.join(root, 'out/m0-18/portable-handoff'),
   YUMPOO_M017_OUTPUT_ROOT: path.join(root, 'out/m0-17'),
   YUMPOO_M018_VALIDATION_MODE: 'WINDOWS_X64_CI_STAGE',
@@ -77,7 +78,7 @@ function runStage(stage) {
         const options = { cwd: root, env: environment, windowsHide: true }
         if (step.tool === 'pnpm') runPnpmSync(step.args, options)
         else if (step.tool === 'maven') {
-          const args = step.args
+          const args = [...step.args, `-Dyumpoo.build.commit=${environment.YUMPOO_BUILD_COMMIT}`]
           if (process.platform === 'win32') runSync('cmd.exe', ['/d', '/s', '/c', `mvnw.cmd ${args.join(' ')}`], { ...options, cwd: path.join(root, 'backend') })
           else runSync('./mvnw', args, { ...options, cwd: path.join(root, 'backend') })
         } else runSync(process.execPath, step.args, options)
