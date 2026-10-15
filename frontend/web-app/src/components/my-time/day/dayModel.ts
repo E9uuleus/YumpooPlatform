@@ -7,8 +7,12 @@ export const HOUR = 60 * MINUTE
 /** Drag and click snap; Alt switches to the fine step. */
 export const SNAP_MS = 15 * MINUTE
 export const FINE_SNAP_MS = 5 * MINUTE
-/** Shortest record the timeline creates by click, drop or resize. */
+/** Timeline scale: 15 minutes are 24px, the snap grid the canvas dots mark. */
+export const PX_PER_MINUTE = 1.6
+/** Shortest record the timeline creates by click, drop, drag or resize, and the shortest manual entry anywhere. */
 export const MIN_BLOCK_MS = 15 * MINUTE
+/** Shortest height a record is drawn at; layout counts short records at this length so they never cover a neighbour. */
+export const MIN_VISUAL_MS = 15 * MINUTE
 export const MAX_FILL_ENTRIES = 20
 export const MAX_PARALLEL_ITEMS = 10
 
@@ -101,10 +105,11 @@ function spans(blocks: DayBlock[], now: number, window?: Range): (Range & { bloc
     .filter(span => span.end > span.start)
 }
 
-/** Lanes per overlap cluster, so only blocks that actually overlap share the width. */
+/** Lanes per overlap cluster, so only blocks that actually overlap share the width; short blocks count at their drawn height. */
 export function layout(blocks: DayBlock[], now: number): Map<string, BlockLayout> {
   const result = new Map<string, BlockLayout>()
-  const sorted = spans(blocks, now).sort((a, b) => a.start - b.start || b.end - a.end)
+  const sorted = spans(blocks, now).map(span => ({ ...span, end: Math.max(span.end, span.start + MIN_VISUAL_MS) }))
+    .sort((a, b) => a.start - b.start || b.end - a.end)
   let cluster: { id: string; lane: number }[] = [], laneEnds: number[] = [], clusterEnd = -Infinity
   const close = () => {
     cluster.forEach(entry => result.set(entry.id, { lane: entry.lane, lanes: laneEnds.length }))

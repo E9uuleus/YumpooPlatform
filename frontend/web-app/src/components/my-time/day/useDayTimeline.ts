@@ -20,7 +20,7 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
   let known: Set<string> | undefined
 
   const dayRange = computed(() => dayWindow(date.value, timezone.value))
-  /** Geometry follows the minute: at 1px per minute nothing visible changes in between. */
+  /** Geometry follows the minute: at 1.6px per minute nothing visible changes in between. */
   const now = computed(() => Math.floor(tracker.now.value / MINUTE) * MINUTE)
   const limit = computed(() => Math.min(dayRange.value.end, now.value))
   const preferences = tracker.preferences
