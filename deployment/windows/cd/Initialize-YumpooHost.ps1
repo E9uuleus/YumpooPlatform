@@ -132,7 +132,7 @@ foreach ($relative in @('config', 'secrets')) { Set-YumpooAcl (Join-Path $Root $
 foreach ($relative in @('logs', 'data/attachments', 'temp/uploads')) { Set-YumpooAcl (Join-Path $Root $relative) -WriterSid 'S-1-5-19' }
 Set-YumpooAcl $ReleaseRoot -ReaderSid 'S-1-5-19'
 
-$sshDirectory = Resolve-YumpooHostPath 'C:/Users/yumpoo-deploy/.ssh' -AllowMissing
+$sshDirectory = Resolve-YumpooHostPath (Join-Path $deployment 'ssh') -AllowMissing
 New-Item -ItemType Directory -Path $sshDirectory -Force | Out-Null
 Set-YumpooAcl $sshDirectory -ReaderSid $deploySid
 $publicKey = [IO.File]::ReadAllText($PublicKeyPath).Trim()
@@ -142,7 +142,8 @@ $sshd = Resolve-YumpooHostPath 'C:/ProgramData/ssh/sshd_config' 'Leaf'
 $sshdText = [IO.File]::ReadAllText($sshd)
 if ($sshdText -notmatch '(?m)^Match User yumpoo-deploy\s*$') {
     Copy-Item -LiteralPath $sshd -Destination (Join-Path $deployment 'engine/sshd_config.before')
-    Add-Content -LiteralPath $sshd -Encoding ASCII -Value "`nMatch User yumpoo-deploy`n    PasswordAuthentication no`n    AllowTcpForwarding no`n    PermitTTY no`n"
+    $keyLocation = (Join-Path $sshDirectory 'authorized_keys').Replace('\','/')
+    Add-Content -LiteralPath $sshd -Encoding ASCII -Value "`nMatch User yumpoo-deploy`n    AuthorizedKeysFile `"$keyLocation`"`n    PasswordAuthentication no`n    AllowTcpForwarding no`n    PermitTTY no`n"
     & 'C:/Windows/System32/OpenSSH/sshd.exe' -t
     if ($LASTEXITCODE -ne 0) { Copy-Item -LiteralPath (Join-Path $deployment 'engine/sshd_config.before') -Destination $sshd -Force; throw 'SSHD configuration rejected.' }
     Restart-Service sshd
@@ -163,10 +164,16 @@ $sitePath = Resolve-YumpooHostPath (Join-Path $NginxRoot 'conf/conf.d/yumpoo-wec
 $null = Resolve-YumpooHostPath $settings.webRootInclude 'Leaf' -AllowMissing
 $siteBefore = [IO.File]::ReadAllText($sitePath)
 $expectedRoot = 'root "' + $ReleaseRoot.Replace('\', '/') + '/web";'
+$managedInclude = 'include "' + $settings.webRootInclude.Replace('\','/') + '";'
+$alreadyManaged = $siteBefore.Contains($managedInclude) -and $siteBefore.Contains('$yumpoo_maintenance')
+if ($alreadyManaged) {
+    if ([IO.File]::ReadAllText($settings.webRootInclude).Trim() -cne $expectedRoot) { throw 'The managed site root does not match the current release.' }
+    Invoke-YumpooNginx $settings
+} else {
 if (-not $siteBefore.Contains($expectedRoot)) { throw 'The site root does not match the current release; explicit reconciliation is required.' }
 Copy-Item -LiteralPath $sitePath -Destination (Join-Path $deployment 'engine/nginx-site.before.conf')
 [IO.File]::WriteAllText($settings.webRootInclude, $expectedRoot + "`n", (New-Object Text.UTF8Encoding($false)))
-$siteAfter = $siteBefore.Replace($expectedRoot, ('include "' + $settings.webRootInclude.Replace('\','/') + '";'))
+$siteAfter = $siteBefore.Replace($expectedRoot, $managedInclude)
 $maintenance = @'
     set $yumpoo_maintenance 0;
     if (-f "C:/ProgramData/Yumpoo/deployment/maintenance.flag") { set $yumpoo_maintenance 1; }
@@ -181,6 +188,7 @@ try {
     [IO.File]::WriteAllText($sitePath, $siteAfter, (New-Object Text.UTF8Encoding($false)))
     Invoke-YumpooNginx $settings -Reload
 } catch { [IO.File]::WriteAllText($sitePath, $siteBefore, (New-Object Text.UTF8Encoding($false))); throw }
+}
 
 $wrapper = Join-Path $serviceRoot 'yumpoo-service.exe'
 if (-not (Test-Path -LiteralPath $wrapper)) {
@@ -191,7 +199,7 @@ if ((Get-FileHash -LiteralPath $wrapper).Hash -ine '05b82d46ad331cc16bdc00de5c63
 $xml.service.executable = $JavaPath
 $xml.service.arguments = '-Dfile.encoding=UTF-8 -jar "' + $jar + '"'
 $xml.service.workingdirectory = $ReleaseRoot
-$xml.service.logpath = Join-Path $Root 'logs'
+$xml.SelectSingleNode('/service/logpath').InnerText = [string](Join-Path $Root 'logs')
 $releaseEnvironment = $xml.CreateElement('env'); $releaseEnvironment.SetAttribute('name', 'YUMPOO_DEPLOYMENT_RELEASE_ROOT'); $releaseEnvironment.SetAttribute('value', $ReleaseRoot)
 $null = $xml.DocumentElement.AppendChild($releaseEnvironment)
 $xml.SelectSingleNode('/service/env[@name="SPRING_CONFIG_ADDITIONAL_LOCATION"]').SetAttribute('value', ('file:' + $Root.Replace('\','/') + '/config/,file:' + $Root.Replace('\','/') + '/secrets/application-secrets.yml'))
@@ -217,8 +225,14 @@ $bootstrapOpened = $false
 try {
     # Only the PID whose executable, command line and listening port were verified above is stopped.
     Stop-Process -Id $LegacyProcessId -ErrorAction Stop
-    Wait-Process -Id $LegacyProcessId -Timeout 60 -ErrorAction SilentlyContinue
-    if ((Get-Process -Id $LegacyProcessId -ErrorAction SilentlyContinue) -or (Get-NetTCPConnection -LocalPort 8100 -State Listen -ErrorAction SilentlyContinue)) { throw 'Legacy Yumpoo process did not stop.' }
+    $stopDeadline = (Get-Date).AddSeconds(60)
+    do {
+        $legacyAlive = Get-Process -Id $LegacyProcessId -ErrorAction SilentlyContinue
+        $portBusy = Get-NetTCPConnection -LocalPort 8100 -State Listen -ErrorAction SilentlyContinue
+        if (-not $legacyAlive -and -not $portBusy) { break }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $stopDeadline)
+    if ($legacyAlive -or $portBusy) { throw 'Legacy Yumpoo process did not stop.' }
     Backup-YumpooDatabase $settings $database (Join-Path $snapshot 'database.dump')
     foreach ($relative in @('config', 'secrets', 'data/attachments', 'temp/uploads')) { Copy-YumpooTree (Join-Path $Root $relative) (Join-Path $snapshot $relative) }
     $bootstrapSnapshotReady = $true

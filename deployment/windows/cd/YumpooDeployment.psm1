@@ -317,7 +317,13 @@ function Stop-YumpooServer {
         Stop-Service -Name YumpooServer
         $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(90))
     }
-    if (Get-NetTCPConnection -LocalPort 8100 -State Listen -ErrorAction SilentlyContinue) { throw 'Yumpoo port remains occupied after stopping the service.' }
+    $deadline = (Get-Date).AddSeconds(30)
+    do {
+        $listener = Get-NetTCPConnection -LocalPort 8100 -State Listen -ErrorAction SilentlyContinue
+        if (-not $listener) { return }
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    throw 'Yumpoo port remains occupied after stopping the service.'
 }
 
 function Start-YumpooServer {
