@@ -2,6 +2,7 @@
 import { ref, shallowRef } from 'vue'
 import { ElDropdown, ElDropdownItem, ElDropdownMenu, ElPopover } from 'element-plus'
 import WorkItemActionIcon from './WorkItemActionIcon.vue'
+import TimerEnabledSwitch from '../timer/TimerEnabledSwitch.vue'
 import type { ColumnMenuAction, ColumnMenuState } from './workItemColumnMenu'
 
 const props = defineProps<{ state: ColumnMenuState }>()
@@ -60,7 +61,7 @@ function run(action: ColumnMenuAction): void {
             class="work-item-column-menu__submenu"
             :class="{ 'is-open': submenu === 'settings' }"
             :disabled="state.settings === 'unavailable'"
-            :title="state.settings === 'unavailable' ? '暂仅支持状态、优先级和工作项类别列' : undefined"
+            :title="state.settings === 'unavailable' ? '暂仅支持状态、优先级、工作项类别和时长追踪列' : undefined"
             @pointermove="showSubmenu('settings', $event)"
             @click="showSubmenu('settings', $event)"
             @keydown.right.stop.prevent="showSubmenu('settings', $event)"
@@ -100,14 +101,19 @@ function run(action: ColumnMenuAction): void {
             :virtual-ref="submenuAnchor"
             placement="right-start"
             :fallback-placements="['left-start']"
-            :width="200"
+            :width="submenu === 'settings' && state.settings === 'timer' ? 260 : 200"
             :offset="6"
             :show-arrow="false"
             :teleported="false"
             popper-class="work-item-column-submenu"
           >
             <div v-if="submenu === 'settings'" class="work-item-column-submenu__list" role="menu">
+              <div v-if="state.settings === 'timer'" class="work-item-column-submenu__switch">
+                <span><strong>使用计时器</strong><small>关闭后隐藏所有计时入口，只按时段手动填写。</small></span>
+                <timer-enabled-switch />
+              </div>
               <button
+                v-else
                 type="button"
                 role="menuitem"
                 :disabled="state.settings !== 'editable'"
@@ -144,4 +150,8 @@ function run(action: ColumnMenuAction): void {
 .work-item-column-submenu__list button.active { background: var(--yp-bg-hover); }
 .work-item-column-submenu__list button.active { color: var(--yp-action-primary); }
 .work-item-column-submenu__list button:disabled { color: var(--yp-text-disabled); cursor: not-allowed; }
+.work-item-column-submenu__switch { display: flex; align-items: center; gap: 12px; padding: 6px 10px; }
+.work-item-column-submenu__switch > span { display: grid; flex: 1; gap: 2px; }
+.work-item-column-submenu__switch strong { color: var(--yp-text-primary); font-size: 14px; font-weight: 500; }
+.work-item-column-submenu__switch small { color: var(--yp-text-muted); font-size: 12px; line-height: 18px; }
 </style>

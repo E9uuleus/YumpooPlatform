@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { TimeSessionFillMode, type MyTimeSession } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../../api/client'
 import OverlapModeControl from '../my-time/day/OverlapModeControl.vue'
-import { defaultMode, overlapEffect, type DayBlock, type Range } from '../my-time/day/dayModel'
+import { defaultMode, MIN_BLOCK_MS, overlapEffect, type DayBlock, type Range } from '../my-time/day/dayModel'
 import TimeCalendar from './TimeCalendar.vue'
 import { companyDateTime, parseCompanyDateTime } from './timeFormat'
 
@@ -161,7 +161,8 @@ function setOffset(event: Event) {
       <output aria-label="累计时长">{{ preview }}</output><button
         class="save-session"
         type="submit"
-        :disabled="busy || duration <= 0"
+        :disabled="busy || duration <= 0 || (!editing && duration < MIN_BLOCK_MS)"
+        :title="!editing && duration > 0 && duration < MIN_BLOCK_MS ? '至少记录 15 分钟' : undefined"
       >
         {{ busy ? '正在保存…' : editing ? '保存记录' : '添加记录' }}
       </button>

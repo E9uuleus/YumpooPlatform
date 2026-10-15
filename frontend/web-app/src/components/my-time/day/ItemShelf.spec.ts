@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const api = vi.hoisted(() => ({ listTimerCandidates: vi.fn() }))
 vi.mock('../../../api/client', () => ({ timeTrackingApi: api }))
 import ItemShelf from './ItemShelf.vue'
@@ -8,7 +8,10 @@ import { HOUR } from './dayModel'
 const settle = async () => { await new Promise(resolve => setTimeout(resolve)); await flushPromises() }
 const candidate = (id: string, title: string) => ({ workItemId: id, projectId: 'p', projectName: '项目', itemNo: id.toUpperCase(), title,
   contentName: '任务', contentCode: 'TASKS', statusCategory: 'TODO', assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 })
-api.listTimerCandidates.mockResolvedValue({ items: [candidate('a', '写周报'), candidate('b', '评审')], nextOffset: null })
+beforeEach(() => {
+  api.listTimerCandidates.mockReset().mockResolvedValue({ items: [candidate('a', '写周报'), candidate('b', '评审')], nextOffset: null })
+})
+afterEach(() => vi.useRealTimers())
 const totals = [{ workItemId: 'a', title: '写周报', itemNo: 'A', projectName: '项目', colorToken: null, ms: 1.5 * HOUR }]
 
 describe('工作项侧栏', () => {
@@ -41,6 +44,56 @@ describe('工作项侧栏', () => {
     input.dispatchEvent(new Event('input'))
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
     expect(wrapper.emitted('place')![1]).toEqual([expect.objectContaining({ workItemId: 'b' }), 1.5 * HOUR])
+    wrapper.unmount()
+  })
+
+  it('搜索期间显示全部范围并禁用切换，清空后恢复原范围', async () => {
+    const wrapper = mount(ItemShelf, { props: { totals: [], busy: false }, attachTo: document.body })
+    await settle()
+    vi.useFakeTimers()
+    await wrapper.get('input[aria-label="搜索工作项"]').setValue('周报')
+    await vi.advanceTimersByTimeAsync(200)
+    const scopes = wrapper.findAll('[role="radio"]')
+    expect(scopes[1]!.attributes('aria-checked')).toBe('true')
+    expect(scopes.every(option => option.attributes('disabled') !== undefined)).toBe(true)
+    expect(api.listTimerCandidates.mock.calls.at(-1)![0]).toMatchObject({ q: '周报', scope: 'ALL' })
+    const calls = api.listTimerCandidates.mock.calls.length
+    await scopes[0]!.trigger('click')
+    await vi.advanceTimersByTimeAsync(200)
+    expect(api.listTimerCandidates).toHaveBeenCalledTimes(calls)
+    await wrapper.get('input[aria-label="搜索工作项"]').setValue('')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(scopes[0]!.attributes('aria-checked')).toBe('true')
+    expect(scopes.every(option => option.attributes('disabled') === undefined)).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('候选重载后保留已选项目和复选框，能单独取消零结果项目', async () => {
+    const a = { ...candidate('a', '写周报'), projectId: 'pa', projectName: '项目 A' }
+    const b = { ...candidate('b', '评审'), projectId: 'pb', projectName: '项目 B' }
+    api.listTimerCandidates.mockImplementation(async ({ scope }) => ({ items: scope === 'ALL' ? [a, b] : [a], nextOffset: null }))
+    const wrapper = mount(ItemShelf, { props: { totals: [], busy: false }, attachTo: document.body })
+    await settle()
+    await wrapper.findAll('[role="radio"]')[1]!.trigger('click')
+    await settle()
+    const projectTrigger = wrapper.findAll('.item-shelf__filter')[1]!
+    await projectTrigger.trigger('click')
+    await flushPromises()
+    const projectB = () => [...document.querySelectorAll<HTMLElement>('.item-shelf-projects__option')].find(option => option.textContent?.includes('项目 B'))!
+    projectB().querySelector<HTMLInputElement>('input[type="checkbox"]')!.click()
+    await flushPromises()
+    expect(wrapper.get('.item-shelf__section h3').text()).toContain('筛选结果1')
+    await projectTrigger.trigger('click')
+    await wrapper.findAll('[role="radio"]')[0]!.trigger('click')
+    await settle()
+    await projectTrigger.trigger('click')
+    await flushPromises()
+    expect(projectB().textContent).toContain('0')
+    expect(projectB().querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true)
+    expect(wrapper.text()).toContain('没有匹配的工作项')
+    projectB().querySelector<HTMLInputElement>('input[type="checkbox"]')!.click()
+    await flushPromises()
+    expect(wrapper.findAll('.item-shelf__row').map(row => row.text())).toEqual([expect.stringContaining('写周报')])
     wrapper.unmount()
   })
 })

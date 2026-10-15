@@ -10,8 +10,8 @@ export type ColumnMenuAction =
 
 export interface ColumnMenuState {
   label: string
-  /** 暂只开放状态、优先级、工作项类别；readonly 表示当前角色不能编辑标签。 */
-  settings: 'editable' | 'readonly' | 'unavailable'
+  /** 状态、优先级、工作项类别编辑标签，时长追踪提供计时器开关；readonly 表示当前角色不能编辑标签。 */
+  settings: 'editable' | 'readonly' | 'timer' | 'unavailable'
   sortDirection: ColumnSortDirection | undefined
   sortDisabled: boolean
   collapsible: boolean
