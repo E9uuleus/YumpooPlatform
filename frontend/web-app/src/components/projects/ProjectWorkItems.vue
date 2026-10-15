@@ -3287,6 +3287,7 @@ onBeforeUnmount(() => {
                     @timer-changed="notifyChanged"
                     @created="onSubitemCreated"
                     @updated="replaceLightItem"
+                    @reorder="subitemState((scope.row.parent as ProjectWorkItemListItem).id).items = $event"
                     @open-detail="openDetail"
                     @patch="patchCell"
                     @due-date-change="onDeadlineChange"
@@ -4478,7 +4479,7 @@ onBeforeUnmount(() => {
 
 :deep(.monday-table th.monday-sortable-column-header) {
   position: relative;
-  z-index: 4;
+  z-index: auto;
 }
 
 :deep(.monday-table .el-table__header th.el-table-fixed-column--left) {
@@ -4500,13 +4501,30 @@ onBeforeUnmount(() => {
 :deep(.monday-table th.monday-sortable-column-header:hover),
 :deep(.monday-table th.monday-sortable-column-header:focus-within),
 :deep(.monday-table th.monday-sortable-column-header:has(.sort-by-column--active)) {
-  z-index: 8;
+  z-index: auto;
 }
 
 :deep(.monday-table .el-table__header th.el-table-fixed-column--left:hover),
 :deep(.monday-table .el-table__header th.el-table-fixed-column--left:focus-within),
 :deep(.monday-table .el-table__header th.el-table-fixed-column--left:has(.sort-by-column--active)) {
-  z-index: 12;
+  z-index: 14;
+}
+
+:deep(.monday-table--grouped tr.work-item-group-columns > td:has(.sort-by-column--active)),
+:deep(.monday-table--grouped tr.work-item-group-columns > td:has(.sort-by-column):hover),
+:deep(.monday-table--grouped tr.work-item-group-columns > td:has(.sort-by-column):focus-within) {
+  z-index: auto;
+}
+
+:deep(.monday-table--grouped tr.work-item-group-columns > td.el-table-fixed-column--left:has(.sort-by-column--active)),
+:deep(.monday-table--grouped tr.work-item-group-columns > td.el-table-fixed-column--left:has(.sort-by-column):hover),
+:deep(.monday-table--grouped tr.work-item-group-columns > td.el-table-fixed-column--left:has(.sort-by-column):focus-within) {
+  z-index: 14;
+}
+
+:deep(.monday-table :is(th, td).monday-sortable-column-header:not(.el-table-fixed-column--left) > .monday-column-resize-handle),
+:deep(.monday-table :is(th, td).monday-sortable-column-header:not(.el-table-fixed-column--left) .work-item-column-header__menu) {
+  z-index: 1;
 }
 
 :deep(.monday-table .monday-expand-column) {
