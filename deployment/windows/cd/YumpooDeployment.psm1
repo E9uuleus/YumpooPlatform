@@ -302,7 +302,7 @@ function Invoke-YumpooNginx($Settings, [switch]$Reload) {
 function Set-YumpooRelease($Settings, $ReleaseRoot) {
     [xml]$xml = [IO.File]::ReadAllText((Join-Path $Settings.runtimeRoot 'service/yumpoo-service.xml'))
     $xml.service.arguments = '-Dfile.encoding=UTF-8 -jar "' + (Join-Path $ReleaseRoot 'server/yumpoo-server.jar') + '"'
-    $xml.service.workingdirectory = $ReleaseRoot
+    $xml.SelectSingleNode('/service/workingdirectory').InnerText = [string]$ReleaseRoot
     $releaseEnvironment = $xml.SelectSingleNode('/service/env[@name="YUMPOO_DEPLOYMENT_RELEASE_ROOT"]')
     if (-not $releaseEnvironment) { $releaseEnvironment = $xml.CreateElement('env'); $releaseEnvironment.SetAttribute('name', 'YUMPOO_DEPLOYMENT_RELEASE_ROOT'); $null = $xml.DocumentElement.AppendChild($releaseEnvironment) }
     $releaseEnvironment.SetAttribute('value', $ReleaseRoot)
