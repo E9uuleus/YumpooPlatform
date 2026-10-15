@@ -4,7 +4,7 @@ import { ElMessage, ElTooltip } from 'element-plus'
 import type { ErrorResponse, TimeTrackingSession, TimeTrackingSessionPage } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../../api/client'
 import { useSession } from '../../composables/useSession'
-import { formatDuration, timerMutation } from '../../composables/useTimeTracker'
+import { formatDuration, formatTrackingDuration, timerMutation } from '../../composables/useTimeTracker'
 import TimeSessionForm from './TimeSessionForm.vue'
 import { companyDateTime, parseCompanyDateTime } from './timeFormat'
 
@@ -193,6 +193,7 @@ onMounted(() => load())
             @click="edit(record)"
           >
             {{ clockLabel(record.startedAt) }} - {{ record.stoppedAt ? clockLabel(record.stoppedAt) : '计时中' }}
+            <small v-if="record.parallelItemCount > 0">与 {{ record.parallelItemCount }} 项并行 · 计入 {{ formatTrackingDuration(record.allocatedDurationMs) }}</small>
           </button>
           <button
             class="plain-button record-duration"
@@ -261,6 +262,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:18p
 .log-body{overflow-y:auto;overscroll-behavior:contain;flex:1;min-height:50px;padding:0 12px 10px;scrollbar-gutter:stable}
 .log-row{display:grid;grid-template-columns:26px 48px minmax(105px,1fr) 76px 26px;gap:6px;align-items:center;min-height:50px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .member-badge{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;background:var(--yp-status-teal);color:var(--yp-status-teal-foreground);font-size:14px;font-weight:600}.time-range{text-align:center}.record-duration{padding:6px 0;font-variant-numeric:tabular-nums}.record-duration:disabled{opacity:1}
+.time-range small{display:block;color:var(--el-text-color-secondary);font-size:11px;white-space:normal}
 .delete-button{padding:5px;display:grid;place-items:center}.delete-button svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .log-status{text-align:center;color:var(--el-text-color-secondary);padding:16px 0}.load-more{display:block;margin:8px auto}
 .time-log--adding{height:460px}.time-log--full-calendar{height:580px}

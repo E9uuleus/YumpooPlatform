@@ -165,6 +165,7 @@ defineExpose({ refresh: load, loading, ready })
           />计时中</template></small><strong>{{ hoursMinutes(shownToday) }}</strong>
         </div>
       </div>
+      <p class="my-time__note">并行计时按项数平均计入，每日合计为实际时长。</p>
       <div class="my-time__board">
         <div
           class="my-time__weekdays"

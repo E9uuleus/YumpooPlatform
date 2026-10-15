@@ -213,7 +213,7 @@ public class WorkItemService {
                 ? projectCursors.encode(new ProjectWorkItemCursorCodec.Cursor(
                         fingerprint, effectiveView,
                         WorkItemRepository.ProjectCursorAnchor.from(rows.getLast()),query.usesTimeTracking() ? timeAsOf : null,
-                        timeRevision,items.getLast().timeTracking().totalDurationMs())) : null;
+                        timeRevision,items.getLast().timeTracking().rollupDurationMs())) : null;
         return new ProjectWorkItemCursorPage(items, nextCursor);
     }
 

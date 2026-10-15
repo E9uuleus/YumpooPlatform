@@ -109,7 +109,8 @@ public class TimeTrackingService {
         boolean writable=canWrite(project) && items.find(actor.companyId(),locator.projectId(),locator.contentId(),itemId)
                 .filter(item -> !item.archived()).isPresent(); Instant now=now();
         var names=users.findByUserIds(actor.companyId(),rows.stream().map(Session::userId).collect(java.util.stream.Collectors.toSet()));
-        return new SessionPage(rows.stream().map(s -> view(s,actor,writable,now,true,names)).toList(),next,
+        var allocated=timers.sessionShares(actor.companyId(),rows.stream().map(Session::id).toList(),now);
+        return new SessionPage(rows.stream().map(s -> view(s,actor,writable,now,true,names,allocated)).toList(),next,
                 timers.summaries(actor.companyId(),locator.projectId(),actor.userId(),List.of(itemId),now).getFirst(),now,writable);
     }
 
@@ -247,13 +248,15 @@ public class TimeTrackingService {
     }
 
     private TimeTrackingSession view(Session s, CurrentActor actor, boolean writable, Instant now, boolean disclose) {
-        return view(s,actor,writable,now,disclose,users.findByUserIds(actor.companyId(),Set.of(s.userId())));
+        return view(s,actor,writable,now,disclose,users.findByUserIds(actor.companyId(),Set.of(s.userId())),
+                timers.sessionShares(actor.companyId(),List.of(s.id()),now));
     }
-    private TimeTrackingSession view(Session s, CurrentActor actor, boolean writable, Instant now, boolean disclose, Map<UUID,MinimalUserSnapshot> names) {
+    private TimeTrackingSession view(Session s, CurrentActor actor, boolean writable, Instant now, boolean disclose, Map<UUID,MinimalUserSnapshot> names, Map<UUID,long[]> allocated) {
         String displayName=Optional.ofNullable(names.get(s.userId())).map(MinimalUserSnapshot::displayName).orElse("历史成员");
+        long[] share=allocated.getOrDefault(s.id(),new long[2]);
         return new TimeTrackingSession(s.id(),disclose ? s.projectId() : null,disclose ? s.workItemId() : null,
                 s.userId(),displayName,s.startedAt(),s.stoppedAt(),s.source(),Math.max(0,Duration.between(s.startedAt(),s.stoppedAt()==null ? now : s.stoppedAt()).toMillis()),
-                s.rowVersion(),StrongEtag.format(s.rowVersion()),writable && s.userId().equals(actor.userId()) && s.stoppedAt()!=null && s.deletedAt()==null,s.deletedAt()!=null,s.changeReason());
+                s.rowVersion(),StrongEtag.format(s.rowVersion()),writable && s.userId().equals(actor.userId()) && s.stoppedAt()!=null && s.deletedAt()==null,s.deletedAt()!=null,s.changeReason(),share[0],(int)share[1]);
     }
     private WorkItemModels.WorkItemLocator locator(CurrentActor actor, UUID id) {
         if(id==null) throw validation("workItemId","REQUIRED","请选择工作项");

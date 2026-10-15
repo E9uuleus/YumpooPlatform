@@ -58,7 +58,7 @@ const running = computed(() => tracker.current.value?.session?.workItemId === pr
 const unavailable = computed(() => (props.disabled || !props.item.capabilities.canEditFields) && !running.value)
 const total = computed(() => {
   const entry = summary.value
-  return entry ? entry.value.totalDurationMs + Math.max(0, tracker.now.value - entry.at) * entry.value.runningSessions.length : props.item.timeTracking?.totalDurationMs ?? 0
+  return entry ? entry.value.rollupDurationMs + (tracker.now.value - entry.at) * entry.value.rollupRunningRate : props.item.timeTracking?.rollupDurationMs ?? 0
 })
 </script>
 

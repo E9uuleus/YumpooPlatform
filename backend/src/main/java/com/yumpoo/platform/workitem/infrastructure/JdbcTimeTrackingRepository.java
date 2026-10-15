@@ -20,12 +20,17 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         if(projectIds.isEmpty()) return List.of();
         String projectMatch=matchingProjectIds.isEmpty() ? "" : " OR w.project_id IN (:matchingProjects)";
         var statement=jdbc.sql("""
-            WITH own AS (
-              SELECT work_item_id, MAX(started_at) FILTER (WHERE source='TIMER') AS last_tracked_at,
-                SUM(GREATEST(0, EXTRACT(EPOCH FROM (COALESCE(stopped_at,:now)-started_at))*1000))::bigint AS duration
+            WITH last_tracked AS (
+              SELECT work_item_id, MAX(started_at) FILTER (WHERE source='TIMER') AS last_tracked_at
               FROM yumpoo.work_item_time_session
               WHERE company_id=:company AND user_id=:user AND deleted_at IS NULL AND project_id IN (:projects)
-              GROUP BY work_item_id)
+              GROUP BY work_item_id), allocated AS (
+              SELECT sh.work_item_id, FLOOR(COALESCE(SUM(%s),0))::bigint AS duration
+              FROM yumpoo.work_item_time_share sh
+              WHERE sh.company_id=:company AND sh.user_id=:user AND sh.project_id IN (:projects)
+              GROUP BY sh.work_item_id), own AS (
+              SELECT t.work_item_id,t.last_tracked_at,COALESCE(a.duration,0) AS duration
+              FROM last_tracked t LEFT JOIN allocated a ON a.work_item_id=t.work_item_id)
             SELECT w.id, w.project_id, w.item_no, w.title, c.name AS content_name, c.code AS content_code,
               c.color_token AS content_color_token, w.status_category,
               EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration
@@ -34,7 +39,7 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
             WHERE w.company_id=:company AND w.project_id IN (:projects) AND w.deleted_at IS NULL AND NOT w.archived
               AND (:personal=false OR EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) OR own.last_tracked_at IS NOT NULL)
               AND (:empty OR lower(w.title) LIKE :query ESCAPE '\\' OR lower(w.item_no) LIKE :query ESCAPE '\\'
-            """ + projectMatch + """
+            """.formatted(TimeShareSql.allocated("sh",":now")) + projectMatch + """
               )
             ORDER BY own.last_tracked_at DESC NULLS LAST, assigned DESC, w.updated_at DESC, w.id
             LIMIT :limit OFFSET :offset
@@ -136,10 +141,35 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
             FROM yumpoo.work_item_time_session WHERE company_id=:c AND project_id=:p AND work_item_id IN (:ids) AND deleted_at IS NULL GROUP BY work_item_id
             """).param("c", companyId).param("p", projectId).param("ids", ids).param("u", userId).param("now", Timestamp.from(now))
                 .query((rs, n) -> { totals.put(rs.getObject("work_item_id", UUID.class), new long[]{rs.getLong("completed"),rs.getLong("total"),rs.getLong("own"),rs.getLong("count")}); return 0; }).list();
+        Map<UUID,Long> allocated=new HashMap<>();
+        Map<UUID,Double> rates=new HashMap<>();
+        jdbc.sql("""
+            SELECT sh.work_item_id,FLOOR(COALESCE(SUM(%s),0))::bigint AS allocated,
+              COALESCE(SUM(1.0/sh.concurrency) FILTER (WHERE sh.stopped_at IS NULL),0) AS rate
+            FROM yumpoo.work_item_time_share sh WHERE sh.company_id=:c AND sh.work_item_id IN (:ids)
+            GROUP BY sh.work_item_id
+            """.formatted(TimeShareSql.allocated("sh",":now"))).param("c",companyId).param("ids",ids).param("now",Timestamp.from(now))
+                .query((rs,n) -> { UUID id=rs.getObject("work_item_id",UUID.class); allocated.put(id,rs.getLong("allocated")); rates.put(id,rs.getDouble("rate")); return 0; }).list();
         return ids.stream().distinct().map(id -> {
             long[] t = totals.getOrDefault(id, new long[4]);
-            return new TimeTrackingSummary(id,t[0],t[1],t[2],t[3],running.stream().filter(s -> s.workItemId().equals(id)).map(s -> new RunningSession(s.userId(),s.startedAt())).toList());
+            return new TimeTrackingSummary(id,t[0],t[1],t[2],t[3],running.stream().filter(s -> s.workItemId().equals(id)).map(s -> new RunningSession(s.userId(),s.startedAt())).toList(),
+                    allocated.getOrDefault(id,0L),allocated.getOrDefault(id,0L),rates.getOrDefault(id,0D));
         }).toList();
+    }
+    public Map<UUID,long[]> sessionShares(UUID companyId,Collection<UUID> ids,Instant now) {
+        var shares=new HashMap<UUID,long[]>();
+        if(ids.isEmpty()) return shares;
+        jdbc.sql("SELECT a.session_id,FLOOR(SUM("+TimeShareSql.allocated("a",":now")+"))::bigint AS allocated FROM yumpoo.work_item_time_share a WHERE a.company_id=:c AND a.session_id IN (:ids) GROUP BY a.session_id")
+                .param("c",companyId).param("ids",ids).param("now",Timestamp.from(now))
+                .query((rs,n) -> { shares.put(rs.getObject("session_id",UUID.class),new long[]{rs.getLong("allocated"),0}); return 0; }).list();
+        jdbc.sql("""
+            SELECT a.session_id,COUNT(DISTINCT b.work_item_id) AS parallel
+            FROM yumpoo.work_item_time_share a JOIN yumpoo.work_item_time_share b
+              ON b.company_id=a.company_id AND b.user_id=a.user_id AND b.started_at=a.started_at AND b.work_item_id<>a.work_item_id
+            WHERE a.company_id=:c AND a.session_id IN (:ids) GROUP BY a.session_id
+            """).param("c",companyId).param("ids",ids)
+                .query((rs,n) -> { shares.computeIfAbsent(rs.getObject("session_id",UUID.class),id -> new long[2])[1]=rs.getLong("parallel"); return 0; }).list();
+        return shares;
     }
     private static Timestamp timestamp(Instant value) { return value == null ? null : Timestamp.from(value); }
     private static Instant instant(ResultSet rs, String key) throws SQLException { Timestamp t=rs.getTimestamp(key); return t==null ? null : t.toInstant(); }

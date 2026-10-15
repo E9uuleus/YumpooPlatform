@@ -3,6 +3,7 @@ package com.yumpoo.platform.workitem.application;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import static com.yumpoo.platform.workitem.application.TimeTrackingModels.*;
@@ -25,4 +26,5 @@ public interface TimeTrackingRepository {
     long revision(UUID companyId, UUID projectId);
     List<TimeTrackingSummary> summaries(UUID companyId, UUID projectId,
             UUID userId, Collection<UUID> workItemIds, Instant now);
+    Map<UUID, long[]> sessionShares(UUID companyId, Collection<UUID> sessionIds, Instant now);
 }

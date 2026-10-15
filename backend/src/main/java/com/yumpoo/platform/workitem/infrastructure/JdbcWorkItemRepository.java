@@ -877,7 +877,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             end=":timeAsOf";
             parameters.put("timeAsOf",OffsetDateTime.ofInstant(query.timeTracking().asOf(),ZoneOffset.UTC));
         }
-        return "(SELECT COALESCE(SUM(GREATEST(0,EXTRACT(EPOCH FROM (COALESCE(ts.stopped_at,"+end+")-ts.started_at))*1000)),0)::bigint FROM yumpoo.work_item_time_session ts WHERE ts.company_id=:companyId AND ts.work_item_id=yumpoo.work_item.id AND ts.deleted_at IS NULL)";
+        return "(SELECT FLOOR(COALESCE(SUM("+TimeShareSql.allocated("sh",end)+"),0))::bigint FROM yumpoo.work_item_time_share sh WHERE sh.company_id=:companyId AND sh.work_item_id=yumpoo.work_item.id)";
     }
 
     private record SeekTerm(String expression, String direction, Object anchorValue) {}

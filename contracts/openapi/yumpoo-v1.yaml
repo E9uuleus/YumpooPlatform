@@ -1613,8 +1613,8 @@ paths:
     post:
       tags: [TeamDashboard]
       operationId: queryTeamTimesheet
-      summary: 按成员、自然日与工作项统计原始计时
-      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。
+      summary: 按成员、自然日与工作项统计计入时长
+      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/XsrfToken'
@@ -1746,7 +1746,7 @@ paths:
       tags: [ProjectStatistics]
       operationId: getProjectWorklog
       summary: 按成员与工作项汇总项目区间计时
-      description: 按公司时区切分自然日并合计到区间；跨日记录按重叠时长拆分，运行中计时统计到 asOf。区间最多 93 天。
+      description: 按公司时区切分自然日并合计到区间；跨日记录按重叠时长拆分，运行中计时统计到 asOf，时长为按并行均摊后的计入时长。区间最多 93 天。
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1766,8 +1766,8 @@ paths:
     get:
       tags: [MyWork]
       operationId: getMyTimesheet
-      summary: 按自然日与工作项统计本人原始计时
-      description: 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf。区间最多 93 天。
+      summary: 按自然日与工作项统计本人计入时长
+      description: 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf，时长为按并行均摊后的计入时长。区间最多 93 天。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: from
@@ -8591,7 +8591,7 @@ components:
     TimeTrackingSession:
       type: object
       additionalProperties: false
-      required: [id, projectId, workItemId, userId, displayName, startedAt, stoppedAt, source, durationMs, rowVersion, etag, canEdit, deleted, changeReason]
+      required: [id, projectId, workItemId, userId, displayName, startedAt, stoppedAt, source, durationMs, rowVersion, etag, canEdit, deleted, changeReason, allocatedDurationMs, parallelItemCount]
       properties:
         id: { type: string, format: uuid }
         projectId: { type: string, format: uuid, nullable: true }
@@ -8607,6 +8607,8 @@ components:
         canEdit: { type: boolean }
         deleted: { type: boolean }
         changeReason: { type: string, nullable: true }
+        allocatedDurationMs: { type: integer, format: int64, minimum: 0, description: 按并行均摊后的计入时长 }
+        parallelItemCount: { type: integer, format: int32, minimum: 0, description: 该记录期间本人同时计时的其他工作项数 }
     TimeTrackingRunningSession:
       type: object
       additionalProperties: false
@@ -8617,13 +8619,16 @@ components:
     TimeTrackingSummary:
       type: object
       additionalProperties: false
-      required: [workItemId, completedDurationMs, totalDurationMs, ownDurationMs, sessionCount, runningSessions]
+      required: [workItemId, completedDurationMs, totalDurationMs, ownDurationMs, sessionCount, runningSessions, allocatedDurationMs, rollupDurationMs, rollupRunningRate]
       properties:
         workItemId: { type: string, format: uuid }
         completedDurationMs: { type: integer, format: int64, minimum: 0 }
         totalDurationMs: { type: integer, format: int64, minimum: 0 }
         ownDurationMs: { type: integer, format: int64, minimum: 0 }
         sessionCount: { type: integer, format: int64, minimum: 0 }
+        allocatedDurationMs: { type: integer, format: int64, minimum: 0 }
+        rollupDurationMs: { type: integer, format: int64, minimum: 0, description: 本项加直接子项的计入时长 }
+        rollupRunningRate: { type: number, format: double, minimum: 0, description: 每经过 1 毫秒，rollupDurationMs 增加的毫秒数 }
         runningSessions:
           type: array
           items: { $ref: '#/components/schemas/TimeTrackingRunningSession' }

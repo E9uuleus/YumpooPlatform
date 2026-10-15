@@ -58,6 +58,24 @@ export interface TimeTrackingSummary {
     sessionCount: number;
     /**
      *
+     * @type {number}
+     * @memberof TimeTrackingSummary
+     */
+    allocatedDurationMs: number;
+    /**
+     * 本项加直接子项的计入时长
+     * @type {number}
+     * @memberof TimeTrackingSummary
+     */
+    rollupDurationMs: number;
+    /**
+     * 每经过 1 毫秒，rollupDurationMs 增加的毫秒数
+     * @type {number}
+     * @memberof TimeTrackingSummary
+     */
+    rollupRunningRate: number;
+    /**
+     *
      * @type {Array<TimeTrackingRunningSession>}
      * @memberof TimeTrackingSummary
      */
@@ -73,6 +91,9 @@ export function instanceOfTimeTrackingSummary(value: object): value is TimeTrack
     if (!('totalDurationMs' in value) || value['totalDurationMs'] === undefined) return false;
     if (!('ownDurationMs' in value) || value['ownDurationMs'] === undefined) return false;
     if (!('sessionCount' in value) || value['sessionCount'] === undefined) return false;
+    if (!('allocatedDurationMs' in value) || value['allocatedDurationMs'] === undefined) return false;
+    if (!('rollupDurationMs' in value) || value['rollupDurationMs'] === undefined) return false;
+    if (!('rollupRunningRate' in value) || value['rollupRunningRate'] === undefined) return false;
     if (!('runningSessions' in value) || value['runningSessions'] === undefined) return false;
     return true;
 }
@@ -92,6 +113,9 @@ export function TimeTrackingSummaryFromJSONTyped(json: any, ignoreDiscriminator:
         'totalDurationMs': json['totalDurationMs'],
         'ownDurationMs': json['ownDurationMs'],
         'sessionCount': json['sessionCount'],
+        'allocatedDurationMs': json['allocatedDurationMs'],
+        'rollupDurationMs': json['rollupDurationMs'],
+        'rollupRunningRate': json['rollupRunningRate'],
         'runningSessions': ((json['runningSessions'] as Array<any>).map(TimeTrackingRunningSessionFromJSON)),
     };
 }
@@ -112,6 +136,9 @@ export function TimeTrackingSummaryToJSONTyped(value?: TimeTrackingSummary | nul
         'totalDurationMs': value['totalDurationMs'],
         'ownDurationMs': value['ownDurationMs'],
         'sessionCount': value['sessionCount'],
+        'allocatedDurationMs': value['allocatedDurationMs'],
+        'rollupDurationMs': value['rollupDurationMs'],
+        'rollupRunningRate': value['rollupRunningRate'],
         'runningSessions': ((value['runningSessions'] as Array<any>).map(TimeTrackingRunningSessionToJSON)),
     };
 }

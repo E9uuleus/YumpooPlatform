@@ -15,13 +15,13 @@ public final class TimeTrackingModels {
     public record TimeTrackingSession(UUID id, UUID projectId, UUID workItemId,
             UUID userId, String displayName, Instant startedAt, Instant stoppedAt,
             String source, long durationMs, long rowVersion, String etag,
-            boolean canEdit, boolean deleted, String changeReason) {}
+            boolean canEdit, boolean deleted, String changeReason, long allocatedDurationMs, int parallelItemCount) {}
 
     public record RunningSession(UUID userId, Instant startedAt) {}
 
     public record TimeTrackingSummary(UUID workItemId, long completedDurationMs,
             long totalDurationMs, long ownDurationMs, long sessionCount,
-            List<RunningSession> runningSessions) {}
+            List<RunningSession> runningSessions, long allocatedDurationMs, long rollupDurationMs, double rollupRunningRate) {}
 
     public record SummaryPage(List<TimeTrackingSummary> items, Instant serverNow, long revision) {}
 
