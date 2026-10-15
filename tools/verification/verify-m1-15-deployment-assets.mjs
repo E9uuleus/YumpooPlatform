@@ -49,6 +49,7 @@ for (const required of ['Initialize-YumpooHost.ps1', 'Invoke-YumpooDeploy.ps1', 
   assert(fs.statSync(path.join(deployment, 'cd', required)).isFile(), `发布包缺少固定部署程序：${required}`)
 }
 assert(application.management?.endpoints?.web?.exposure?.include === 'health,info', 'Actuator 只允许公开 health 与 info')
+assert(application.spring?.flyway?.['ignore-migration-patterns'] === '*:future', '快速回退要求旧 JAR 忽略更高版本的已应用迁移')
 assert(application.info?.release?.tag === '${yumpoo.deployment.release-tag:unreleased}', '发布标签必须由部署引擎注入')
 const deny = nginx.indexOf('location ~ ^/(actuator|_m0)(/|$)', nginx.indexOf('listen 443 ssl;'))
 for (const [probe, target] of [['/healthz', '/actuator/health/readiness'], ['/version.json', '/actuator/info']]) {

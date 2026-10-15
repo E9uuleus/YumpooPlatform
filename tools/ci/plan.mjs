@@ -15,6 +15,7 @@ export function contractSteps(baseRef) {
     node('event-baseline', 'tools/events/extract-event-contract-baseline.mjs', baseRef, 'out/ci/event-baseline.json'),
     node('event-compatibility', 'tools/events/check-event-contract-compat.mjs', 'out/ci/event-baseline.json'),
     pnpm('event-inventory', 'run', 'audit:workitem-event-inventory'),
+    node('migration-rollback-safety', 'tools/ci/migration-policy.mjs', baseRef),
   ]
 }
 
