@@ -73,10 +73,14 @@ function goThisMonth() {
   month.value = thisMonth.value
 }
 
+let switchTimer: ReturnType<typeof setTimeout> | undefined
 function previewDay(cell: CalendarCell, event: MouseEvent | FocusEvent) {
-  if (!days.value[cell.date]) { active.value = undefined; return }
+  clearTimeout(switchTimer)
   const anchor = event.currentTarget as HTMLElement
-  active.value = { date: cell.date, anchor }
+  const show = () => { active.value = days.value[cell.date] ? { date: cell.date, anchor } : undefined }
+  if (event.type !== 'mouseenter' || !active.value || active.value.date === cell.date) { show(); return }
+  // 移向已打开的明细时会擦过其他日期格：停留片刻才切换，指针已进入明细则保持当前日期。
+  switchTimer = setTimeout(() => { if (!document.querySelector('.my-time-day-popover:hover')) show() }, 160)
 }
 function openDay(date: string) {
   active.value = undefined
@@ -99,7 +103,7 @@ watch(() => Boolean(active.value), open => {
 })
 watch(month, () => { active.value = undefined; void load() })
 const stopTracking = onTimeTrackingChanged(() => void load())
-onBeforeUnmount(() => { ++token; stopListening(); stopTracking() })
+onBeforeUnmount(() => { ++token; clearTimeout(switchTimer); stopListening(); stopTracking() })
 void load()
 const ready = computed(() => Boolean(sheet.value) && sheetMonth.value === month.value && !loading.value && !error.value)
 defineExpose({ refresh: load, loading, ready })
@@ -271,6 +275,8 @@ defineExpose({ refresh: load, loading, ready })
       virtual-triggering
       :virtual-ref="active.anchor"
       placement="bottom"
+      :offset="4"
+      :show-arrow="false"
       :width="340"
       :persistent="false"
       popper-class="my-time-day-popover"
