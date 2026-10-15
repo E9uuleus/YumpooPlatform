@@ -62,26 +62,33 @@ public class TimeTrackingController {
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
         return command("stop",body,match,key);
     }
+    @PostMapping("/me/time-tracker/stop-all")
+    ResponseEntity<String> stopAll(@RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,
+            @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
+        return command("stopAll",new Input(null,null,null,null,null,null),match,key);
+    }
     @PostMapping("/work-items/{workItemId}/time-sessions")
     ResponseEntity<String> create(@PathVariable UUID workItemId,@RequestBody Input body,
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
-        return command("create",new Input(workItemId,null,body.startedAt(),body.stoppedAt(),body.reason()),null,key);
+        return command("create",new Input(workItemId,null,body.startedAt(),body.stoppedAt(),body.reason(),null),null,key);
     }
     @PatchMapping("/work-items/{workItemId}/time-sessions/{sessionId}")
     ResponseEntity<String> edit(@PathVariable UUID workItemId,@PathVariable UUID sessionId,@RequestBody Input body,
             @RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
-        return command("edit",new Input(workItemId,sessionId,body.startedAt(),body.stoppedAt(),body.reason()),match,key);
+        return command("edit",new Input(workItemId,sessionId,body.startedAt(),body.stoppedAt(),body.reason(),null),match,key);
     }
     @DeleteMapping("/work-items/{workItemId}/time-sessions/{sessionId}")
     ResponseEntity<String> delete(@PathVariable UUID workItemId,@PathVariable UUID sessionId,@RequestBody Input body,
             @RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
-        return command("delete",new Input(workItemId,sessionId,null,null,body.reason()),match,key);
+        return command("delete",new Input(workItemId,sessionId,null,null,body.reason(),null),match,key);
     }
     private ResponseEntity<String> command(String action,Input input,String match,String key) {
         var actor=actors.requiredActive();
         if(!action.equals("stop") && input.workItemId()!=null) service.history(actor,input.workItemId(),null,false);
+        if(action.equals("start") && input.workItemIds()!=null)
+            for(UUID itemId:input.workItemIds()) service.history(actor,itemId,null,false);
         long expected=action.equals("create") ? 0 : matches.parseForVisibleResource(true,match);
         var result=service.command(actor,action,input,expected,keys.parseRequired(key),
                 hasher.hash("timeTracking:"+action,Map.of("ifMatch",match==null ? "" : match),json.valueToTree(input)));

@@ -42,11 +42,16 @@ public final class TimeTrackingModels {
 
     public record TimerCandidatePage(List<TimerCandidate> items, Integer nextOffset) {}
 
+    public record CurrentRunningTimer(TimeTrackingSession session, String workItemTitle) {}
+
     public record CurrentTimeTracker(TimeTrackingSession session, String workItemTitle,
-            long rowVersion, String etag, Instant serverNow, List<RecentTimeTrackingItem> recentItems) {
-        public static CurrentTimeTracker of(TimeTrackingSession session, String title,
-                long version, Instant now, List<RecentTimeTrackingItem> recentItems) {
-            return new CurrentTimeTracker(session, title, version, StrongEtag.format(version), now, recentItems);
+            long rowVersion, String etag, Instant serverNow, List<RecentTimeTrackingItem> recentItems,
+            List<CurrentRunningTimer> runningSessions, List<RecentTimeTrackingItem> resumeItems) {
+        public static CurrentTimeTracker of(List<CurrentRunningTimer> running,
+                long version, Instant now, List<RecentTimeTrackingItem> recentItems, List<RecentTimeTrackingItem> resumeItems) {
+            var first=running.isEmpty() ? null : running.getFirst();
+            return new CurrentTimeTracker(first==null ? null : first.session(),first==null ? null : first.workItemTitle(),
+                    version,StrongEtag.format(version),now,recentItems,running,resumeItems);
         }
     }
 }

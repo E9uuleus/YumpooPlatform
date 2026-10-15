@@ -53,7 +53,7 @@ class TimeTrackingServiceTest {
         });
         var service = new TimeTrackingService(timers, mock(TimeShareMaintainer.class), items, access, guard, deletionQuery, users, executor, events, audits, json,
                 Clock.fixed(Instant.parse("2026-09-07T00:00:00Z"), ZoneOffset.UTC));
-        var input = new TimeTrackingService.Input(item, sessionId, before.startedAt(), before.stoppedAt().plusSeconds(1800), null);
+        var input = new TimeTrackingService.Input(item, sessionId, before.startedAt(), before.stoppedAt().plusSeconds(1800), null, null);
         var result = service.command(actor, "edit", input, 0, UUID.randomUUID(), new RequestHash("a".repeat(64)));
         assertThat(json.readTree(result.responseJson()).path("durationMs").asLong()).isEqualTo(5400000);
         var captured = ArgumentCaptor.forClass(EventDraft.class);
@@ -64,7 +64,7 @@ class TimeTrackingServiceTest {
         verify(audits).append(any());
         assertThatThrownBy(() -> service.command(actor, "delete", input, 1, UUID.randomUUID(), new RequestHash("c".repeat(64))))
                 .isInstanceOf(ApplicationException.class);
-        var deleteInput = new TimeTrackingService.Input(item, sessionId, null, null, reason);
+        var deleteInput = new TimeTrackingService.Input(item, sessionId, null, null, reason, null);
         var deleted = service.command(actor, "delete", deleteInput, 0, UUID.randomUUID(), new RequestHash("b".repeat(64)));
         assertThat(json.readTree(deleted.responseJson()).path("deleted").asBoolean()).isTrue();
         verify(events, times(2)).append(captured.capture());
@@ -93,7 +93,7 @@ class TimeTrackingServiceTest {
         verify(fixture.timers).save(saved.capture());
         assertThat(saved.getValue().projectId()).isEqualTo(fixture.oldProject);
         assertThat(saved.getValue().stoppedAt()).isEqualTo(TimerFixture.NOW);
-        verify(fixture.timers).advanceProjects(fixture.company, Set.of(fixture.oldProject));
+        verify(fixture.timers).advanceProjects(fixture.company, List.of(fixture.oldProject));
         verify(fixture.events).append(any());
         verify(fixture.access, never()).findVisible(fixture.actor, fixture.oldProject);
         verifyNoInteractions(fixture.guard, fixture.items);
@@ -104,7 +104,7 @@ class TimeTrackingServiceTest {
     void missingOrPurgingProjectRejectsTimerWrites(String action, boolean purging) {
         var fixture = new TimerFixture(false);
         UUID rejectedProject = action.equals("start") ? fixture.targetProject : fixture.oldProject;
-        if (action.equals("start")) when(fixture.timers.running(fixture.company, fixture.user)).thenReturn(Optional.empty());
+        if (action.equals("start")) when(fixture.timers.running(fixture.company, fixture.user)).thenReturn(List.of());
         when(fixture.deletion.lockForProjection(fixture.company, rejectedProject)).thenReturn(purging
                 ? Optional.of(fixture.project(rejectedProject, "ARCHIVED", TimerFixture.NOW)) : Optional.empty());
 
@@ -126,7 +126,7 @@ class TimeTrackingServiceTest {
         ordered.verify(fixture.timers).stateVersion(fixture.company, fixture.user, true);
         ordered.verify(fixture.items).lockProjectItem(fixture.company, fixture.targetProject, fixture.targetItem);
         verify(fixture.timers, times(2)).save(any());
-        verify(fixture.timers).advanceProjects(fixture.company, Set.of(fixture.oldProject, fixture.targetProject));
+        for(UUID project:projectIds) ordered.verify(fixture.timers).advanceProjects(fixture.company,List.of(project));
         verify(fixture.events, times(2)).append(any());
     }
 
@@ -136,8 +136,8 @@ class TimeTrackingServiceTest {
         UUID thirdProject = UUID.randomUUID();
         var changed = new TimeTrackingModels.Session(UUID.randomUUID(), fixture.company, thirdProject,
                 UUID.randomUUID(), fixture.user, fixture.session.startedAt(), null, "TIMER", 0, null, null);
-        when(fixture.timers.running(fixture.company, fixture.user)).thenReturn(Optional.of(fixture.session), Optional.of(changed));
-        var changedInput = new TimeTrackingService.Input(fixture.targetItem, changed.id(), null, null, null);
+        when(fixture.timers.running(fixture.company, fixture.user)).thenReturn(List.of(fixture.session), List.of(changed));
+        var changedInput = new TimeTrackingService.Input(fixture.targetItem, changed.id(), null, null, null, null);
         assertThatThrownBy(() -> fixture.service.command(fixture.actor, "switch", changedInput, 1,
                 UUID.randomUUID(), new RequestHash("b".repeat(64)))).isInstanceOfSatisfying(ApplicationException.class,
                 failure -> assertThat(failure.errorCode()).isEqualTo(StandardErrorCode.INVALID_STATE_TRANSITION));
@@ -148,7 +148,7 @@ class TimeTrackingServiceTest {
     @Test
     void startRechecksArchiveStateAfterItsInitialTargetRead() {
         var fixture = new TimerFixture(false);
-        when(fixture.timers.running(fixture.company, fixture.user)).thenReturn(Optional.empty());
+        when(fixture.timers.running(fixture.company, fixture.user)).thenReturn(List.of());
         when(fixture.guard.lockForFactWrite(fixture.actor, fixture.targetProject)).thenReturn(new ProjectFactWriteSnapshot(
                 fixture.targetProject, fixture.company, "TEST", ProjectFactWriteSnapshot.ProjectLifecycle.ARCHIVED,
                 ProjectFactWriteSnapshot.ActorProjectAccess.MEMBER));
@@ -180,7 +180,8 @@ class TimeTrackingServiceTest {
             targetProject = reverseProjects ? first : second;
             session = new TimeTrackingModels.Session(UUID.randomUUID(), company, oldProject, UUID.randomUUID(), user,
                     NOW.minusSeconds(3600), null, "TIMER", 0, null, null);
-            when(timers.running(company, user)).thenReturn(Optional.of(session), Optional.of(session), Optional.empty());
+            when(timers.running(company, user)).thenReturn(List.of(session), List.of(session), List.of());
+            when(timers.find(company, session.id())).thenReturn(Optional.of(session));
             when(timers.stateVersion(company, user, true)).thenReturn(1L);
             when(timers.recentItems(company, user)).thenReturn(List.of());
             when(items.findLocator(company, targetItem)).thenReturn(Optional.of(new WorkItemModels.WorkItemLocator(
@@ -204,7 +205,7 @@ class TimeTrackingServiceTest {
 
         void command(String action) {
             service.command(actor, action, new TimeTrackingService.Input(action.equals("stop") ? null : targetItem,
-                    session.id(), null, null, null), 1, UUID.randomUUID(), new RequestHash("a".repeat(64)));
+                    session.id(), null, null, null, null), 1, UUID.randomUUID(), new RequestHash("a".repeat(64)));
         }
 
         void verifyNoWrites() {

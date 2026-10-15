@@ -20,7 +20,7 @@ import static com.yumpoo.platform.workitem.application.TimeTrackingModels.*;
 
 @Service
 public class TimeTrackingService {
-    public record Input(UUID workItemId, UUID sessionId, Instant startedAt, Instant stoppedAt, String reason) {}
+    public record Input(UUID workItemId, UUID sessionId, Instant startedAt, Instant stoppedAt, String reason, List<UUID> workItemIds) {}
     private final TimeTrackingRepository timers;
     private final TimeShareMaintainer shares;
     private final WorkItemRepository items;
@@ -69,15 +69,27 @@ public class TimeTrackingService {
     private CurrentTimeTracker currentView(CurrentActor actor) {
         long version=timers.stateVersion(actor.companyId(),actor.userId(),false);
         Instant now=now();
-        Session running=timers.running(actor.companyId(),actor.userId()).orElse(null);
+        var running=timers.running(actor.companyId(),actor.userId());
         var recent=timers.recentItems(actor.companyId(),actor.userId());
-        var visibleProjects=access.findVisible(actor,recent.stream().map(RecentTimeTrackingItem::projectId).distinct().toList());
-        var recentItems=recent.stream().filter(item -> visibleProjects.containsKey(item.projectId())).limit(5).toList();
-        if(running==null) return CurrentTimeTracker.of(null,null,version,now,recentItems);
-        var project=access.findVisible(actor,running.projectId());
-        var locator=project.isPresent() ? items.findLocator(actor.companyId(),running.workItemId()) : Optional.<WorkItemModels.WorkItemLocator>empty();
-        String title=locator.flatMap(l -> items.find(actor.companyId(),l.projectId(),l.contentId(),l.workItemId())).map(i -> i.title()).orElse(null);
-        return CurrentTimeTracker.of(view(running,actor,false,now,title!=null),title,version,now,recentItems);
+        var resume=timers.resumeItems(actor.companyId(),actor.userId());
+        Set<UUID> projectIds=new HashSet<>();
+        running.forEach(s -> projectIds.add(s.projectId()));
+        recent.forEach(item -> projectIds.add(item.projectId()));
+        resume.forEach(item -> projectIds.add(item.projectId()));
+        var visibleProjects=access.findVisible(actor,projectIds);
+        var recentItems=recent.stream().filter(item -> visibleProjects.containsKey(item.projectId())
+                && visibleProjects.get(item.projectId()).lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ACTIVE).limit(5).toList();
+        var resumeItems=resume.stream().filter(item -> visibleProjects.containsKey(item.projectId())
+                && visibleProjects.get(item.projectId()).lifecycle()==ProjectAccessSnapshot.ProjectLifecycle.ACTIVE).toList();
+        var titles=new HashMap<UUID,String>();
+        running.stream().filter(s -> visibleProjects.containsKey(s.projectId())).collect(java.util.stream.Collectors.groupingBy(Session::projectId))
+                .forEach((projectId,rows) -> items.findByIds(actor.companyId(),projectId,rows.stream().map(Session::workItemId).toList())
+                        .forEach(item -> titles.put(item.id(),item.title())));
+        var names=users.findByUserIds(actor.companyId(),Set.of(actor.userId()));
+        var allocated=timers.sessionShares(actor.companyId(),running.stream().map(Session::id).toList(),now);
+        var views=running.stream().map(s -> new CurrentRunningTimer(
+                view(s,actor,false,now,titles.containsKey(s.workItemId()),names,allocated,null,null),titles.get(s.workItemId()))).toList();
+        return CurrentTimeTracker.of(views,version,now,recentItems,resumeItems);
     }
 
     @Transactional(readOnly=true, isolation=Isolation.REPEATABLE_READ)
@@ -128,49 +140,68 @@ public class TimeTrackingService {
     }
 
     private StoredCommandResult mutate(CurrentActor actor, String action, Input input, long expectedVersion) {
-        boolean timerCommand=Set.of("start","switch","stop").contains(action);
-        WorkItemModels.WorkItemLocator target=action.equals("stop") ? null : locator(actor,input.workItemId());
-        Session observedRunning=timerCommand ? timers.running(actor.companyId(),actor.userId()).orElse(null) : null;
+        boolean timerCommand=Set.of("start","switch","stop","stopAll").contains(action);
+        List<UUID> targetIds=Set.of("stop","stopAll").contains(action) ? List.of() : Collections.singletonList(input.workItemId());
+        if(action.equals("start") && input.workItemIds()!=null) {
+            if(input.workItemIds().isEmpty() || input.workItemIds().size()>10)
+                throw validation("workItemIds","INVALID_SIZE","一次最多选择 10 个工作项");
+            targetIds=input.workItemIds();
+        }
+        var targets=targetIds.stream().distinct().map(id -> locator(actor,id)).toList();
+        var observedRunning=timerCommand ? timers.running(actor.companyId(),actor.userId()) : List.<Session>of();
+        Set<UUID> projects=new TreeSet<>();
+        targets.forEach(target -> projects.add(target.projectId()));
         if(timerCommand) {
-            Set<UUID> projects=new TreeSet<>();
-            if(target!=null) projects.add(target.projectId());
-            if(observedRunning!=null) projects.add(observedRunning.projectId());
+            if(action.equals("stop")) timers.find(actor.companyId(),input.sessionId()).ifPresent(s -> projects.add(s.projectId()));
+            if(action.equals("switch") || action.equals("stopAll")) observedRunning.forEach(s -> projects.add(s.projectId()));
             for(UUID projectId:projects) {
                 deletion.lockForProjection(actor.companyId(),projectId).filter(project -> project.purgeStartedAt()==null)
                         .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
             }
         }
-        if(target!=null) {
-            var project=guard.lockForFactWrite(actor,target.projectId());
+        for(UUID projectId:targets.stream().map(WorkItemModels.WorkItemLocator::projectId).distinct().sorted().toList()) {
+            var project=guard.lockForFactWrite(actor,projectId);
             if(project.actorAccess()==ProjectFactWriteSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
                 throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
             if(project.lifecycle()==ProjectFactWriteSnapshot.ProjectLifecycle.ARCHIVED) throw invalid("PROJECT_ARCHIVED");
         }
         long stateVersion=timers.stateVersion(actor.companyId(),actor.userId(),true);
-        if(target!=null) items.lockProjectItem(actor.companyId(),target.projectId(),target.workItemId())
-                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
-        Instant now=now(); Set<UUID> changedProjects=new HashSet<>();
+        Instant now; Set<UUID> changedProjects=new HashSet<>();
         Object result; String etag; UUID resourceId;
         if(timerCommand) {
             requireVersion(stateVersion,expectedVersion);
-            Session running=timers.running(actor.companyId(),actor.userId()).orElse(null);
-            if(action.equals("start") && running!=null) throw invalid("TIMER_ALREADY_RUNNING");
-            if(!action.equals("start") && (running==null || !running.id().equals(input.sessionId()))) throw invalid("TIMER_CHANGED");
-            // A changed session would require taking another project lock after timer_state.
-            if(running!=null && (observedRunning==null || !running.id().equals(observedRunning.id()))) throw invalid("TIMER_CHANGED");
-            if(running!=null) {
-                Session stopped=new Session(running.id(),running.companyId(),running.projectId(),running.workItemId(),running.userId(),
-                        running.startedAt(),now.isBefore(running.startedAt()) ? running.startedAt() : now,running.source(),running.rowVersion()+1,null,null);
-                timers.save(stopped); publish(actor,"stopped",running,stopped,null,now); changedProjects.add(stopped.projectId());
+            var running=timers.running(actor.companyId(),actor.userId());
+            var stopping=switch(action) {
+                case "switch" -> running.stream().filter(s -> !s.workItemId().equals(input.workItemId())).toList();
+                case "stop" -> running.stream().filter(s -> s.id().equals(input.sessionId())).toList();
+                case "stopAll" -> running;
+                default -> List.<Session>of();
+            };
+            if(action.equals("stop") && stopping.isEmpty()) throw invalid("TIMER_CHANGED");
+            if(stopping.stream().anyMatch(s -> !projects.contains(s.projectId()))) throw invalid("TIMER_CHANGED");
+            for(var target:targets.stream().sorted(Comparator.comparing(WorkItemModels.WorkItemLocator::workItemId)).toList())
+                items.lockProjectItem(actor.companyId(),target.projectId(),target.workItemId())
+                        .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            now=now();
+            for(Session before:stopping) {
+                Session stopped=new Session(before.id(),before.companyId(),before.projectId(),before.workItemId(),before.userId(),
+                        before.startedAt(),now.isBefore(before.startedAt()) ? before.startedAt() : now,before.source(),before.rowVersion()+1,null,null);
+                timers.save(stopped); publish(actor,"stopped",before,stopped,null,now); changedProjects.add(stopped.projectId());
             }
-            if(!action.equals("stop")) {
+            for(var target:targets) if(running.stream().noneMatch(s -> s.workItemId().equals(target.workItemId()))) {
                 Session created=new Session(UUID.randomUUID(),actor.companyId(),target.projectId(),target.workItemId(),actor.userId(),now,null,"TIMER",0,null,null);
                 timers.save(created); publish(actor,"started",null,created,null,now); changedProjects.add(created.projectId());
             }
-            rebuild(actor.companyId(),actor.userId(),now,null,changedProjects);
-            timers.advanceState(actor.companyId(),actor.userId());
+            if(!changedProjects.isEmpty()) {
+                rebuild(actor.companyId(),actor.userId(),now,null,changedProjects);
+                timers.advanceState(actor.companyId(),actor.userId());
+            }
             CurrentTimeTracker current=currentView(actor); result=current; etag=current.etag(); resourceId=actor.userId();
         } else {
+            var target=targets.getFirst();
+            items.lockProjectItem(actor.companyId(),target.projectId(),target.workItemId())
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            now=now();
             boolean create=action.equals("create"); boolean delete=action.equals("delete");
             Session before=create ? null : timers.find(actor.companyId(),input.sessionId())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
@@ -190,8 +221,8 @@ public class TimeTrackingService {
             if(!delete && (start==null || stop==null || !stop.isAfter(start) || stop.isAfter(now)))
                 throw validation("stoppedAt","INVALID_RANGE","结束时间须晚于开始时间且不能在未来");
             UUID id=create ? UUID.randomUUID() : before.id();
-            if(!delete && timers.overlaps(actor.companyId(),actor.userId(),start,stop,id))
-                throw validation("startedAt","TIME_OVERLAP","与本人的其他计时记录重叠");
+            if(!delete && timers.sameItemOverlaps(actor.companyId(),actor.userId(),target.workItemId(),start,stop,id))
+                throw validation("startedAt","TIME_OVERLAP","与该工作项的其他计时记录重叠");
             Session after=new Session(id,actor.companyId(),target.projectId(),target.workItemId(),actor.userId(),
                     start.truncatedTo(ChronoUnit.MILLIS),stop.truncatedTo(ChronoUnit.MILLIS),create ? "MANUAL" : before.source(),
                     create ? 0 : before.rowVersion()+1,delete ? now : null,reason);
@@ -208,29 +239,36 @@ public class TimeTrackingService {
     /** Runs inside the archive transaction after the project row lock, matching the project-then-timer_state order of timer commands. */
     @Transactional(propagation=Propagation.MANDATORY)
     public int stopRunningInArchivedProject(CurrentActor actor, UUID projectId) {
-        Instant now=now(); int stoppedCount=0;
+        Instant now=now(); int stoppedCount=0; Set<UUID> affected=new TreeSet<>();
         for(UUID userId:timers.runningUserIds(actor.companyId(),projectId)) {
             timers.stateVersion(actor.companyId(),userId,true);
-            Session running=timers.running(actor.companyId(),userId).filter(s -> s.projectId().equals(projectId)).orElse(null);
-            if(running==null) continue;
-            Session stopped=new Session(running.id(),running.companyId(),running.projectId(),running.workItemId(),running.userId(),
-                    running.startedAt(),now.isBefore(running.startedAt()) ? running.startedAt() : now,running.source(),running.rowVersion()+1,null,null);
-            timers.save(stopped); publish(actor,"stopped",running,stopped,null,now);
-            var affected=shares.rebuild(actor.companyId(),userId,now,null);
-            affected.remove(projectId);
-            timers.touchProjects(actor.companyId(),affected);
+            var running=timers.running(actor.companyId(),userId).stream().filter(s -> s.projectId().equals(projectId)).toList();
+            if(running.isEmpty()) continue;
+            for(Session before:running) {
+                Session stopped=new Session(before.id(),before.companyId(),before.projectId(),before.workItemId(),before.userId(),
+                        before.startedAt(),now.isBefore(before.startedAt()) ? before.startedAt() : now,before.source(),before.rowVersion()+1,null,null);
+                timers.save(stopped); publish(actor,"stopped",before,stopped,null,now); stoppedCount++;
+            }
+            affected.addAll(shares.rebuild(actor.companyId(),userId,now,null));
             timers.advanceState(actor.companyId(),userId);
-            stoppedCount++;
         }
-        if(stoppedCount>0) timers.advanceProjects(actor.companyId(),List.of(projectId));
+        if(stoppedCount>0) {
+            affected.add(projectId);
+            for(UUID id:affected) {
+                if(id.equals(projectId)) timers.advanceProjects(actor.companyId(),List.of(id));
+                else timers.touchProjects(actor.companyId(),List.of(id));
+            }
+        }
         return stoppedCount;
     }
 
     private void rebuild(UUID companyId,UUID userId,Instant from,Instant to,Set<UUID> written) {
-        var affected=shares.rebuild(companyId,userId,from,to);
-        timers.advanceProjects(companyId,written);
-        affected.removeAll(written);
-        timers.touchProjects(companyId,affected);
+        var affected=new TreeSet<>(shares.rebuild(companyId,userId,from,to));
+        affected.addAll(written);
+        for(UUID id:affected) {
+            if(written.contains(id)) timers.advanceProjects(companyId,List.of(id));
+            else timers.touchProjects(companyId,List.of(id));
+        }
     }
 
     private void publish(CurrentActor actor, String action, Session before, Session after, String reason, Instant now) {

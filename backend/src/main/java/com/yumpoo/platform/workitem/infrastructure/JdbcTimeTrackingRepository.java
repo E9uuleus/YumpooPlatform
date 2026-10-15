@@ -71,6 +71,18 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         return jdbc.sql("SELECT id FROM yumpoo.work_item WHERE company_id=:c AND project_id=:p AND deleted_at IS NULL AND id IN (:ids)")
                 .param("c",companyId).param("p",projectId).param("ids",ids).query(UUID.class).list();
     }
+    public List<RecentTimeTrackingItem> resumeItems(UUID companyId, UUID userId) {
+        return jdbc.sql("""
+            SELECT s.work_item_id,s.project_id,w.title
+            FROM yumpoo.work_item_time_session s JOIN yumpoo.work_item w
+              ON w.id=s.work_item_id AND w.company_id=s.company_id AND w.deleted_at IS NULL AND NOT w.archived
+            WHERE s.company_id=:c AND s.user_id=:u AND s.deleted_at IS NULL AND s.source='TIMER'
+              AND s.stopped_at=(SELECT MAX(stopped_at) FROM yumpoo.work_item_time_session
+                WHERE company_id=:c AND user_id=:u AND deleted_at IS NULL AND source='TIMER')
+            GROUP BY s.work_item_id,s.project_id,w.title ORDER BY MAX(s.started_at) DESC,s.work_item_id
+            """).param("c",companyId).param("u",userId)
+                .query((rs,n) -> new RecentTimeTrackingItem(rs.getObject("work_item_id",UUID.class),rs.getObject("project_id",UUID.class),rs.getString("title"))).list();
+    }
     public long stateVersion(UUID companyId, UUID userId, boolean lock) {
         if (lock) jdbc.sql("INSERT INTO yumpoo.work_item_timer_state(company_id,user_id) VALUES (:c,:u) ON CONFLICT DO NOTHING")
                 .param("c", companyId).param("u", userId).update();
@@ -81,9 +93,9 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         jdbc.sql("UPDATE yumpoo.work_item_timer_state SET row_version=row_version+1 WHERE company_id=:c AND user_id=:u")
                 .param("c", companyId).param("u", userId).update();
     }
-    public Optional<Session> running(UUID companyId, UUID userId) {
-        return jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND stopped_at IS NULL AND deleted_at IS NULL")
-                .param("c", companyId).param("u", userId).query(JdbcTimeTrackingRepository::map).optional();
+    public List<Session> running(UUID companyId, UUID userId) {
+        return jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND stopped_at IS NULL AND deleted_at IS NULL ORDER BY started_at DESC,id DESC")
+                .param("c", companyId).param("u", userId).query(JdbcTimeTrackingRepository::map).list();
     }
     public List<UUID> runningUserIds(UUID companyId, UUID projectId) {
         return jdbc.sql("SELECT DISTINCT user_id FROM yumpoo.work_item_time_session WHERE company_id=:c AND project_id=:p AND stopped_at IS NULL AND deleted_at IS NULL ORDER BY user_id")
@@ -101,9 +113,9 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         if (before != null) query.param("before", Timestamp.from(before)).param("beforeId", beforeId);
         return query.query(JdbcTimeTrackingRepository::map).list();
     }
-    public boolean overlaps(UUID companyId, UUID userId, Instant start, Instant stop, UUID excludedId) {
-        return jdbc.sql("SELECT EXISTS(SELECT 1 FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND deleted_at IS NULL AND id<>:excluded AND started_at<:stop AND (stopped_at IS NULL OR stopped_at>:start))")
-                .param("c", companyId).param("u", userId).param("excluded", excludedId)
+    public boolean sameItemOverlaps(UUID companyId, UUID userId, UUID workItemId, Instant start, Instant stop, UUID excludedId) {
+        return jdbc.sql("SELECT EXISTS(SELECT 1 FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND work_item_id=:w AND deleted_at IS NULL AND id<>:excluded AND started_at<:stop AND (stopped_at IS NULL OR stopped_at>:start))")
+                .param("c", companyId).param("u", userId).param("w",workItemId).param("excluded", excludedId)
                 .param("start", Timestamp.from(start)).param("stop", Timestamp.from(stop)).query(Boolean.class).single();
     }
     public void save(Session s) {

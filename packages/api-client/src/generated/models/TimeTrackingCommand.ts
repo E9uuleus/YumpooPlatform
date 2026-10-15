@@ -25,6 +25,12 @@ export interface TimeTrackingCommand {
      */
     workItemId?: string;
     /**
+     * 仅 start 使用，批量并行开始的工作项。
+     * @type {Array<string>}
+     * @memberof TimeTrackingCommand
+     */
+    workItemIds?: Array<string>;
+    /**
      *
      * @type {string}
      * @memberof TimeTrackingCommand
@@ -68,6 +74,7 @@ export function TimeTrackingCommandFromJSONTyped(json: any, ignoreDiscriminator:
     return {
 
         'workItemId': json['workItemId'] == null ? undefined : json['workItemId'],
+        'workItemIds': json['workItemIds'] == null ? undefined : json['workItemIds'],
         'sessionId': json['sessionId'] == null ? undefined : json['sessionId'],
         ...(json['startedAt'] == null ? {} : { 'startedAt': new Date(json['startedAt']) }),
         ...(json['stoppedAt'] == null ? {} : { 'stoppedAt': new Date(json['stoppedAt']) }),
@@ -87,6 +94,7 @@ export function TimeTrackingCommandToJSONTyped(value?: TimeTrackingCommand | nul
     return {
 
         'workItemId': value['workItemId'],
+        'workItemIds': value['workItemIds'],
         'sessionId': value['sessionId'],
         'startedAt': value['startedAt'] == null ? value['startedAt'] : value['startedAt'].toISOString(),
         'stoppedAt': value['stoppedAt'] == null ? value['stoppedAt'] : value['stoppedAt'].toISOString(),

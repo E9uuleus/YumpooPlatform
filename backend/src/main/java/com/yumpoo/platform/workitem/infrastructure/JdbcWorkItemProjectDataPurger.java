@@ -17,11 +17,6 @@ public class JdbcWorkItemProjectDataPurger implements ProjectDataPurger {
     private record Table(String name, String predicate) {}
     private static final String SCOPE = "company_id=:company AND project_id=:project";
     private static final List<Table> TABLES = List.of(
-            new Table("work_item_timer_state", "company_id=:company AND user_id IN "
-                    + "(SELECT user_id FROM yumpoo.work_item_time_session WHERE company_id=:company AND project_id=:project) "
-                    + "AND NOT EXISTS (SELECT 1 FROM yumpoo.work_item_time_session s WHERE s.company_id=:company "
-                    + "AND s.user_id=work_item_timer_state.user_id AND s.project_id<>:project)"),
-            new Table("work_item_time_session", SCOPE),
             new Table("work_item_time_revision", SCOPE),
             new Table("work_item_update_mention", "company_id=:company AND update_id IN "
                     + "(SELECT id FROM yumpoo.work_item_update WHERE company_id=:company AND project_id=:project)"),
@@ -61,8 +56,8 @@ public class JdbcWorkItemProjectDataPurger implements ProjectDataPurger {
         if (limit < 1 || limit > 500) throw new IllegalArgumentException("purge limit must be between 1 and 500");
         int remaining = limit;
         for (Table table : TABLES) {
-            if (table.name().equals("work_item_time_session")) {
-                remaining -= redistributeSharedSessions(companyId, projectId, remaining);
+            if (table.name().equals("work_item_time_revision")) {
+                remaining -= purgeTimeSessions(companyId, projectId, remaining);
                 if (remaining == 0) return true;
             }
             if(table.name().equals("work_item_connect_column_target")) {
@@ -78,15 +73,14 @@ public class JdbcWorkItemProjectDataPurger implements ProjectDataPurger {
         return false;
     }
 
-    private int redistributeSharedSessions(UUID companyId, UUID projectId, int limit) {
+    private int purgeTimeSessions(UUID companyId, UUID projectId, int limit) {
         var users = jdbc.sql("""
                 SELECT DISTINCT s.user_id FROM yumpoo.work_item_time_session s
                 WHERE s.company_id=:company AND s.project_id=:project
-                  AND EXISTS (SELECT 1 FROM yumpoo.work_item_time_session o
-                              WHERE o.company_id=:company AND o.user_id=s.user_id AND o.project_id<>:project)
                 ORDER BY s.user_id
                 """).param("company", companyId).param("project", projectId).query(UUID.class).list();
         int deleted = 0;
+        var changedProjects = new HashSet<UUID>();
         for (UUID userId : users) {
             timers.stateVersion(companyId, userId, true);
             var intervals = jdbc.sql("""
@@ -102,12 +96,12 @@ public class JdbcWorkItemProjectDataPurger implements ProjectDataPurger {
             Instant from = intervals.stream().map(interval -> interval[0]).min(Instant::compareTo).orElseThrow();
             Instant to = intervals.stream().anyMatch(interval -> interval[1] == null) ? null
                     : intervals.stream().map(interval -> interval[1]).max(Instant::compareTo).orElseThrow();
-            var changed = new HashSet<>(shares.rebuild(companyId, userId, from, to));
-            changed.remove(projectId);
-            timers.touchProjects(companyId, changed);
+            changedProjects.addAll(shares.rebuild(companyId, userId, from, to));
             deleted += intervals.size();
             if (deleted == limit) break;
         }
+        changedProjects.remove(projectId);
+        timers.touchProjects(companyId, changedProjects);
         return deleted;
     }
 

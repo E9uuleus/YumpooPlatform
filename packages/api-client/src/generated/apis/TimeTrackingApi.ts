@@ -89,6 +89,12 @@ export interface StartTimeTrackerRequest {
     timeTrackingCommand: TimeTrackingCommand;
 }
 
+export interface StopAllTimeTrackersRequest {
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+}
+
 export interface StopTimeTrackerRequest {
     xXSRFTOKEN: string;
     idempotencyKey: string;
@@ -523,6 +529,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。
      * startTimeTracker
      */
     async startTimeTrackerRaw(requestParameters: StartTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
@@ -587,10 +594,73 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。
      * startTimeTracker
      */
     async startTimeTracker(requestParameters: StartTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CurrentTimeTracker> {
         const response = await this.startTimeTrackerRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 停止本人全部运行计时
+     */
+    async stopAllTimeTrackersRaw(requestParameters: StopAllTimeTrackersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling stopAllTimeTrackers().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling stopAllTimeTrackers().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling stopAllTimeTrackers().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/me/time-tracker/stop-all`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => CurrentTimeTrackerFromJSON(jsonValue));
+    }
+
+    /**
+     * 停止本人全部运行计时
+     */
+    async stopAllTimeTrackers(requestParameters: StopAllTimeTrackersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CurrentTimeTracker> {
+        const response = await this.stopAllTimeTrackersRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -667,6 +737,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。
      * switchTimeTracker
      */
     async switchTimeTrackerRaw(requestParameters: SwitchTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
@@ -731,6 +802,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。
      * switchTimeTracker
      */
     async switchTimeTracker(requestParameters: SwitchTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CurrentTimeTracker> {

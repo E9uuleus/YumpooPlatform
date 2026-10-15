@@ -1870,6 +1870,7 @@ paths:
       tags: [TimeTracking]
       operationId: startTimeTracker
       summary: startTimeTracker
+      description: 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/XsrfToken'
@@ -1902,6 +1903,7 @@ paths:
       tags: [TimeTracking]
       operationId: switchTimeTracker
       summary: switchTimeTracker
+      description: 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/XsrfToken'
@@ -1944,6 +1946,33 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/TimeTrackingCommand' }
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentTimeTracker' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /me/time-tracker/stop-all:
+    post:
+      tags: [TimeTracking]
+      operationId: stopAllTimeTrackers
+      summary: 停止本人全部运行计时
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
       responses:
         '200':
           description: 计时事实快照。
@@ -8588,6 +8617,12 @@ components:
       additionalProperties: false
       properties:
         workItemId: { type: string, format: uuid }
+        workItemIds:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: 仅 start 使用，批量并行开始的工作项。
+          items: { type: string, format: uuid }
         sessionId: { type: string, format: uuid }
         startedAt: { type: string, format: date-time }
         stoppedAt: { type: string, format: date-time }
@@ -8671,11 +8706,25 @@ components:
         workItemId: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
         title: { type: string }
+    CurrentRunningTimer:
+      type: object
+      additionalProperties: false
+      required: [session, workItemTitle]
+      properties:
+        session: { $ref: '#/components/schemas/TimeTrackingSession' }
+        workItemTitle: { type: string, nullable: true }
     CurrentTimeTracker:
       type: object
       additionalProperties: false
-      required: [session, workItemTitle, rowVersion, etag, serverNow, recentItems]
+      required: [session, workItemTitle, rowVersion, etag, serverNow, recentItems, runningSessions, resumeItems]
       properties:
+        runningSessions:
+          type: array
+          description: 按 startedAt 降序排列的本人运行计时。
+          items: { $ref: '#/components/schemas/CurrentRunningTimer' }
+        resumeItems:
+          type: array
+          items: { $ref: '#/components/schemas/RecentTimeTrackingItem' }
         recentItems:
           type: array
           items: { $ref: '#/components/schemas/RecentTimeTrackingItem' }

@@ -213,7 +213,7 @@ class ProjectPurgeIT {
         assertThat(jdbc.sql("SELECT reserved_bytes FROM yumpoo.attachment_quota_usage WHERE scope_type='COMPANY' AND company_id=:company")
                 .param("company", COMPANY).query(Long.class).single()).isZero();
         assertThat(count("SELECT count(*) FROM yumpoo.work_item_timer_state WHERE user_id=:user", firstAdmin.userId())).isOne();
-        assertThat(count("SELECT count(*) FROM yumpoo.work_item_timer_state WHERE user_id=:user", secondAdmin.userId())).isZero();
+        assertThat(count("SELECT count(*) FROM yumpoo.work_item_timer_state WHERE user_id=:user", secondAdmin.userId())).isOne();
         assertThat(jdbc.sql("SELECT row_version FROM yumpoo.work_item_timer_state WHERE user_id=:user")
                 .param("user", firstAdmin.userId()).query(Long.class).single()).isEqualTo(7);
         assertThat(scopeCount("SELECT count(*) FROM yumpoo.work_item_time_session WHERE project_id=:project", peer)).isOne();
@@ -724,7 +724,6 @@ class ProjectPurgeIT {
         rows += scopeCount("SELECT count(*) FROM yumpoo.work_item_connect_column_target WHERE target_project_id=:project OR column_id IN (SELECT id FROM yumpoo.work_item_connect_column WHERE project_id=:project)", target);
         rows += scopeCount("SELECT count(*) FROM yumpoo.project_work_item_status_label WHERE project_id=:project", target);
         rows += scopeCount("SELECT count(*) FROM yumpoo.project_work_item_priority_label WHERE project_id=:project", target);
-        rows += count("SELECT count(*) FROM yumpoo.work_item_timer_state WHERE user_id=:user", secondAdmin.userId());
         return rows;
     }
 

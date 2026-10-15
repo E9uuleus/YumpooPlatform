@@ -58,6 +58,7 @@ export * from './CurrentAuthentication';
 export * from './CurrentAuthenticationClient';
 export * from './CurrentAuthenticationCompany';
 export * from './CurrentAuthenticationUser';
+export * from './CurrentRunningTimer';
 export * from './CurrentTimeTracker';
 export * from './CursorPageMetadata';
 export * from './CursorPageResponse';

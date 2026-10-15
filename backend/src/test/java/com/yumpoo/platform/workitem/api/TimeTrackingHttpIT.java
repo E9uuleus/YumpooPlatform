@@ -7,6 +7,7 @@ import com.yumpoo.platform.foundation.application.request.RequestCorrelationCont
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
+import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -55,6 +57,7 @@ class TimeTrackingHttpIT {
     @Autowired private JdbcClient jdbc;
     @Autowired private ObjectMapper json;
     @Autowired private PlatformTransactionManager transactions;
+    @Autowired private CompanyConfigurationQuery company;
     private Actor owner, member;
     private Project source, target;
 
@@ -220,6 +223,33 @@ class TimeTrackingHttpIT {
         assertThat(history.get(0).path("workItemId").asText()).isEqualTo(childId);
         assertThat(history.get(0).path("workItemNo").asText()).isEqualTo(child.path("itemNo").asText());
         assertThat(history.get(0).path("workItemTitle").asText()).isEqualTo("子项计时");
+    }
+
+    @Test
+    void parallelTimersShareTheirDurationAndStopTogetherWithoutInflatingTheTimesheet() throws Exception {
+        JsonNode running=ok(timer("start",Map.of("workItemIds",List.of(source.itemId(),target.itemId())),"\"0\""));
+        assertThat(running.path("runningSessions")).hasSize(2);
+        for(Project project:List.of(source,target)) {
+            JsonNode summary=ok(get("/api/v1/projects/"+project.id()+"/time-tracking-summaries?workItemId="+project.itemId(),member)).path("items").get(0);
+            assertThat(summary.path("rollupRunningRate").asDouble()).isEqualTo(0.5);
+        }
+        JsonNode stopped=ok(mutate("POST","/api/v1/me/time-tracker/stop-all",member,"",running.path("etag").asText()));
+        assertThat(stopped.path("runningSessions")).isEmpty();
+        assertThat(stopped.path("resumeItems")).hasSize(2);
+        long actualDuration=0;
+        Instant startedAt=null,stoppedAt=null;
+        for(Project project:List.of(source,target)) {
+            JsonNode record=ok(get("/api/v1/work-items/"+project.itemId()+"/time-sessions",member)).path("items").get(0);
+            actualDuration=record.path("durationMs").asLong();
+            assertThat(record.path("allocatedDurationMs").asLong()).isEqualTo(actualDuration/2);
+            assertThat(record.path("parallelItemCount").asInt()).isOne();
+            startedAt=Instant.parse(record.path("startedAt").asText()); stoppedAt=Instant.parse(record.path("stoppedAt").asText());
+        }
+        var zone=company.current().timezone();
+        JsonNode sheet=ok(get("/api/v1/me/timesheet?from="+startedAt.atZone(zone).toLocalDate()+"&to="+stoppedAt.atZone(zone).toLocalDate(),member));
+        long total=0;
+        for(JsonNode entry:sheet.path("entries")) total+=entry.path("durationMs").asLong();
+        assertThat(total).isBetween(actualDuration-1,actualDuration);
     }
 
     private Actor actor(String name) {

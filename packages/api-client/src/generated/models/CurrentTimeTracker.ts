@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { CurrentRunningTimer } from './CurrentRunningTimer';
+import {
+    CurrentRunningTimerFromJSON,
+    CurrentRunningTimerFromJSONTyped,
+    CurrentRunningTimerToJSON,
+    CurrentRunningTimerToJSONTyped,
+} from './CurrentRunningTimer';
 import type { TimeTrackingSession } from './TimeTrackingSession';
 import {
     TimeTrackingSessionFromJSON,
@@ -33,6 +40,18 @@ import {
  * @interface CurrentTimeTracker
  */
 export interface CurrentTimeTracker {
+    /**
+     * 按 startedAt 降序排列的本人运行计时。
+     * @type {Array<CurrentRunningTimer>}
+     * @memberof CurrentTimeTracker
+     */
+    runningSessions: Array<CurrentRunningTimer>;
+    /**
+     *
+     * @type {Array<RecentTimeTrackingItem>}
+     * @memberof CurrentTimeTracker
+     */
+    resumeItems: Array<RecentTimeTrackingItem>;
     /**
      *
      * @type {Array<RecentTimeTrackingItem>}
@@ -75,6 +94,8 @@ export interface CurrentTimeTracker {
  * Check if a given object implements the CurrentTimeTracker interface.
  */
 export function instanceOfCurrentTimeTracker(value: object): value is CurrentTimeTracker {
+    if (!('runningSessions' in value) || value['runningSessions'] === undefined) return false;
+    if (!('resumeItems' in value) || value['resumeItems'] === undefined) return false;
     if (!('recentItems' in value) || value['recentItems'] === undefined) return false;
     if (!('session' in value) || value['session'] === undefined) return false;
     if (!('workItemTitle' in value) || value['workItemTitle'] === undefined) return false;
@@ -94,6 +115,8 @@ export function CurrentTimeTrackerFromJSONTyped(json: any, ignoreDiscriminator: 
     }
     return {
 
+        'runningSessions': ((json['runningSessions'] as Array<any>).map(CurrentRunningTimerFromJSON)),
+        'resumeItems': ((json['resumeItems'] as Array<any>).map(RecentTimeTrackingItemFromJSON)),
         'recentItems': ((json['recentItems'] as Array<any>).map(RecentTimeTrackingItemFromJSON)),
         'session': TimeTrackingSessionFromJSON(json['session']),
         'workItemTitle': json['workItemTitle'],
@@ -114,6 +137,8 @@ export function CurrentTimeTrackerToJSONTyped(value?: CurrentTimeTracker | null,
 
     return {
 
+        'runningSessions': ((value['runningSessions'] as Array<any>).map(CurrentRunningTimerToJSON)),
+        'resumeItems': ((value['resumeItems'] as Array<any>).map(RecentTimeTrackingItemToJSON)),
         'recentItems': ((value['recentItems'] as Array<any>).map(RecentTimeTrackingItemToJSON)),
         'session': TimeTrackingSessionToJSON(value['session']),
         'workItemTitle': value['workItemTitle'],
