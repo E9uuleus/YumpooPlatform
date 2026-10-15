@@ -236,6 +236,7 @@ export * from './TimeSessionFillEntry';
 export * from './TimeSessionFillMode';
 export * from './TimeSessionFillResult';
 export * from './TimeTrackingCommand';
+export * from './TimeTrackingPreferences';
 export * from './TimeTrackingRunningSession';
 export * from './TimeTrackingSession';
 export * from './TimeTrackingSessionPage';

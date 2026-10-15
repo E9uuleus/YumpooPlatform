@@ -93,6 +93,17 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         jdbc.sql("UPDATE yumpoo.work_item_timer_state SET row_version=row_version+1 WHERE company_id=:c AND user_id=:u")
                 .param("c", companyId).param("u", userId).update();
     }
+    public Optional<TimeTrackingPreferences> preferences(UUID companyId, UUID userId) {
+        return jdbc.sql("SELECT timer_enabled,workday_start_minute,workday_end_minute FROM yumpoo.work_item_timer_state WHERE company_id=:c AND user_id=:u")
+                .param("c", companyId).param("u", userId)
+                .query((rs,n) -> new TimeTrackingPreferences(rs.getBoolean("timer_enabled"),rs.getInt("workday_start_minute"),rs.getInt("workday_end_minute")))
+                .optional();
+    }
+    public void savePreferences(UUID companyId, UUID userId, TimeTrackingPreferences p) {
+        jdbc.sql("UPDATE yumpoo.work_item_timer_state SET timer_enabled=:enabled,workday_start_minute=:start,workday_end_minute=:end WHERE company_id=:c AND user_id=:u")
+                .param("c", companyId).param("u", userId).param("enabled", p.timerEnabled())
+                .param("start", p.workdayStartMinute()).param("end", p.workdayEndMinute()).update();
+    }
     public List<Session> running(UUID companyId, UUID userId) {
         return jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND stopped_at IS NULL AND deleted_at IS NULL ORDER BY started_at DESC,id DESC")
                 .param("c", companyId).param("u", userId).query(JdbcTimeTrackingRepository::map).list();

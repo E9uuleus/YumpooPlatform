@@ -158,6 +158,68 @@ class TimeTrackingServiceTest {
         fixture.verifyNoWrites();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"start", "switch"})
+    void disabledTimerRejectsStartAndSwitchWithoutWrites(String action) {
+        var fixture = new TimerFixture(false);
+        if (action.equals("start")) when(fixture.timers.running(fixture.company, fixture.user)).thenReturn(List.of());
+        when(fixture.timers.preferences(fixture.company, fixture.user))
+                .thenReturn(Optional.of(new TimeTrackingModels.TimeTrackingPreferences(false, 540, 1080)));
+        assertThatThrownBy(() -> fixture.command(action)).isInstanceOfSatisfying(ApplicationException.class, failure -> {
+            assertThat(failure.errorCode()).isEqualTo(StandardErrorCode.INVALID_STATE_TRANSITION);
+            assertThat(failure.reason()).isEqualTo("TIMER_DISABLED");
+        });
+        fixture.verifyNoWrites();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void disablingTimerStopsAllRunningSessionsAfterProjectAndStateLocks(boolean reverseProjects) {
+        var fixture = new TimerFixture(reverseProjects);
+        var second = new TimeTrackingModels.Session(UUID.randomUUID(), fixture.company, fixture.targetProject, fixture.targetItem,
+                fixture.user, TimerFixture.NOW.minusSeconds(600), null, "TIMER", 0, null, null);
+        when(fixture.timers.running(fixture.company, fixture.user))
+                .thenReturn(List.of(fixture.session, second), List.of(fixture.session, second), List.of());
+        var disabled = new TimeTrackingModels.TimeTrackingPreferences(false, 480, 1020);
+        fixture.service.updatePreferences(fixture.actor, new TimeTrackingModels.TimeTrackingPreferencesCommand(false, 480, 1020),
+                1, UUID.randomUUID(), new RequestHash("d".repeat(64)));
+
+        var ordered = inOrder(fixture.deletion, fixture.timers);
+        for (UUID project : java.util.stream.Stream.of(fixture.oldProject, fixture.targetProject).sorted().toList())
+            ordered.verify(fixture.deletion).lockForProjection(fixture.company, project);
+        ordered.verify(fixture.timers).stateVersion(fixture.company, fixture.user, true);
+        ordered.verify(fixture.timers).savePreferences(fixture.company, fixture.user, disabled);
+        ordered.verify(fixture.timers).advanceState(fixture.company, fixture.user);
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(fixture.timers, times(2)).save(saved.capture());
+        assertThat(saved.getAllValues()).allSatisfy(session -> assertThat(session.stoppedAt()).isEqualTo(TimerFixture.NOW));
+        verify(fixture.timers, times(1)).advanceState(fixture.company, fixture.user);
+        verify(fixture.events, times(2)).append(any());
+        verifyNoInteractions(fixture.guard, fixture.items);
+    }
+
+    @Test
+    void unchangedPreferencesKeepTheTimerStateVersion() {
+        var fixture = new TimerFixture(false);
+        fixture.service.updatePreferences(fixture.actor, new TimeTrackingModels.TimeTrackingPreferencesCommand(true, 540, 1080),
+                1, UUID.randomUUID(), new RequestHash("e".repeat(64)));
+        verify(fixture.deletion, never()).lockForProjection(any(), any());
+        verify(fixture.timers, never()).savePreferences(any(), any(), any());
+        fixture.verifyNoWrites();
+    }
+
+    @ParameterizedTest
+    @CsvSource({",540,1080", "true,,1080", "true,540,", "true,600,540", "true,-1,1080", "true,540,1441", "true,1440,1440"})
+    void invalidPreferencesAreRejectedBeforeLocking(Boolean enabled, Integer start, Integer end) {
+        var fixture = new TimerFixture(false);
+        assertThatThrownBy(() -> fixture.service.updatePreferences(fixture.actor,
+                new TimeTrackingModels.TimeTrackingPreferencesCommand(enabled, start, end), 1, UUID.randomUUID(),
+                new RequestHash("f".repeat(64)))).isInstanceOfSatisfying(ApplicationException.class,
+                failure -> assertThat(failure.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED));
+        verify(fixture.timers, never()).stateVersion(fixture.company, fixture.user, true);
+        fixture.verifyNoWrites();
+    }
+
     private static final class TimerFixture {
         static final Instant NOW = Instant.parse("2026-09-07T00:00:00Z");
         final UUID company = UUID.randomUUID(), user = UUID.randomUUID(), targetItem = UUID.randomUUID();

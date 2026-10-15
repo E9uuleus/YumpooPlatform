@@ -20,6 +20,7 @@ import type {
   TimeSessionFillCommand,
   TimeSessionFillResult,
   TimeTrackingCommand,
+  TimeTrackingPreferences,
   TimeTrackingSession,
   TimeTrackingSessionPage,
   TimeTrackingSummaryPage,
@@ -38,6 +39,8 @@ import {
     TimeSessionFillResultToJSON,
     TimeTrackingCommandFromJSON,
     TimeTrackingCommandToJSON,
+    TimeTrackingPreferencesFromJSON,
+    TimeTrackingPreferencesToJSON,
     TimeTrackingSessionFromJSON,
     TimeTrackingSessionToJSON,
     TimeTrackingSessionPageFromJSON,
@@ -127,6 +130,13 @@ export interface SwitchTimeTrackerRequest {
     idempotencyKey: string;
     ifMatch: string;
     timeTrackingCommand: TimeTrackingCommand;
+}
+
+export interface UpdateTimeTrackingPreferencesRequest {
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+    timeTrackingPreferences: TimeTrackingPreferences;
 }
 
 /**
@@ -665,7 +675,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。
+     * 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
      * startTimeTracker
      */
     async startTimeTrackerRaw(requestParameters: StartTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
@@ -730,7 +740,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。
+     * 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
      * startTimeTracker
      */
     async startTimeTracker(requestParameters: StartTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CurrentTimeTracker> {
@@ -873,7 +883,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。
+     * 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
      * switchTimeTracker
      */
     async switchTimeTrackerRaw(requestParameters: SwitchTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
@@ -938,11 +948,85 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。
+     * 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
      * switchTimeTracker
      */
     async switchTimeTracker(requestParameters: SwitchTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CurrentTimeTracker> {
         const response = await this.switchTimeTrackerRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 要求会话、XSRF 与 /me/time-tracker 最近读取的 If-Match，并推进计时状态版本。关闭计时器时在同一事务内停止本人全部运行计时，已计时长保留；关闭后开始或切换计时返回 409（TIMER_DISABLED）。上班时间按公司时区的当天分钟数表示，只用于本人填报提示与按时长排入的起点。
+     * 保存本人计时器开关与上班时间
+     */
+    async updateTimeTrackingPreferencesRaw(requestParameters: UpdateTimeTrackingPreferencesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateTimeTrackingPreferences().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling updateTimeTrackingPreferences().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateTimeTrackingPreferences().'
+            );
+        }
+
+        if (requestParameters['timeTrackingPreferences'] == null) {
+            throw new runtime.RequiredError(
+                'timeTrackingPreferences',
+                'Required parameter "timeTrackingPreferences" was null or undefined when calling updateTimeTrackingPreferences().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/me/time-tracker/preferences`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PUT',
+            headers: headerParameters,
+            query: queryParameters,
+            body: TimeTrackingPreferencesToJSON(requestParameters['timeTrackingPreferences']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => CurrentTimeTrackerFromJSON(jsonValue));
+    }
+
+    /**
+     * 要求会话、XSRF 与 /me/time-tracker 最近读取的 If-Match，并推进计时状态版本。关闭计时器时在同一事务内停止本人全部运行计时，已计时长保留；关闭后开始或切换计时返回 409（TIMER_DISABLED）。上班时间按公司时区的当天分钟数表示，只用于本人填报提示与按时长排入的起点。
+     * 保存本人计时器开关与上班时间
+     */
+    async updateTimeTrackingPreferences(requestParameters: UpdateTimeTrackingPreferencesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CurrentTimeTracker> {
+        const response = await this.updateTimeTrackingPreferencesRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

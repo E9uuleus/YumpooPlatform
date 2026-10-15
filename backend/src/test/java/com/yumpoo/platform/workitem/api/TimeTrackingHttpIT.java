@@ -283,6 +283,36 @@ class TimeTrackingHttpIT {
         assertThat(stateVersion()).isZero();
     }
 
+    @Test
+    void disablingTheTimerStopsRunningSessionsAndRejectsStartsUntilReEnabled() throws Exception {
+        JsonNode initial=ok(get("/api/v1/me/time-tracker",member)).path("preferences");
+        assertThat(initial.path("timerEnabled").asBoolean()).isTrue();
+        assertThat(initial.path("workdayStartMinute").asInt()).isEqualTo(540);
+        assertThat(initial.path("workdayEndMinute").asInt()).isEqualTo(1080);
+        JsonNode running=start(source);
+        String off=json.writeValueAsString(Map.of("timerEnabled",false,"workdayStartMinute",510,"workdayEndMinute",1050));
+        String path="/api/v1/me/time-tracker/preferences";
+        assertThat(mutate("PUT",path,member,off,null).statusCode()).isEqualTo(428);
+        assertThat(mutate("PUT",path,member,off,"\"0\"").statusCode()).isEqualTo(412);
+        UUID key=UUID.randomUUID();
+        var response=mutate("PUT",path,member,off,running.path("etag").asText(),key);
+        JsonNode disabled=ok(response);
+        assertThat(disabled.path("runningSessions")).isEmpty();
+        assertThat(disabled.path("preferences").path("timerEnabled").asBoolean()).isFalse();
+        assertThat(disabled.path("preferences").path("workdayStartMinute").asInt()).isEqualTo(510);
+        assertThat(disabled.path("rowVersion").asLong()).isEqualTo(running.path("rowVersion").asLong()+1);
+        assertThat(mutate("PUT",path,member,off,running.path("etag").asText(),key).body()).isEqualTo(response.body());
+        JsonNode record=ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items").get(0);
+        assertThat(record.path("stoppedAt").isNull()).isFalse();
+        var rejected=timer("start",Map.of("workItemId",target.itemId()),disabled.path("etag").asText());
+        assertThat(rejected.statusCode()).as(rejected.body()).isEqualTo(409);
+        assertThat(json.readTree(rejected.body()).path("details").path("reason").asText()).isEqualTo("TIMER_DISABLED");
+        String on=json.writeValueAsString(Map.of("timerEnabled",true,"workdayStartMinute",510,"workdayEndMinute",1050));
+        JsonNode enabled=ok(mutate("PUT",path,member,on,disabled.path("etag").asText()));
+        assertThat(enabled.path("preferences").path("timerEnabled").asBoolean()).isTrue();
+        assertThat(ok(timer("start",Map.of("workItemId",target.itemId()),enabled.path("etag").asText())).path("runningSessions")).hasSize(1);
+    }
+
     private String fillBody(String mode,UUID item,String start,String stop) {
         return json.writeValueAsString(Map.of("mode",mode,"entries",List.of(Map.of("workItemId",item,
                 "startedAt","2026-09-01T"+start+":00Z","stoppedAt","2026-09-01T"+stop+":00Z"))));

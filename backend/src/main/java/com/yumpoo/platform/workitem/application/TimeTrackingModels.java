@@ -60,14 +60,21 @@ public final class TimeTrackingModels {
 
     public record CurrentRunningTimer(TimeTrackingSession session, String workItemTitle) {}
 
+    public record TimeTrackingPreferences(boolean timerEnabled, int workdayStartMinute, int workdayEndMinute) {
+        public static final TimeTrackingPreferences DEFAULT=new TimeTrackingPreferences(true,540,1080);
+    }
+
+    public record TimeTrackingPreferencesCommand(Boolean timerEnabled, Integer workdayStartMinute, Integer workdayEndMinute) {}
+
     public record CurrentTimeTracker(TimeTrackingSession session, String workItemTitle,
             long rowVersion, String etag, Instant serverNow, List<RecentTimeTrackingItem> recentItems,
-            List<CurrentRunningTimer> runningSessions, List<RecentTimeTrackingItem> resumeItems) {
-        public static CurrentTimeTracker of(List<CurrentRunningTimer> running,
-                long version, Instant now, List<RecentTimeTrackingItem> recentItems, List<RecentTimeTrackingItem> resumeItems) {
+            List<CurrentRunningTimer> runningSessions, List<RecentTimeTrackingItem> resumeItems,
+            TimeTrackingPreferences preferences) {
+        public static CurrentTimeTracker of(List<CurrentRunningTimer> running, long version, Instant now,
+                List<RecentTimeTrackingItem> recentItems, List<RecentTimeTrackingItem> resumeItems, TimeTrackingPreferences preferences) {
             var first=running.isEmpty() ? null : running.getFirst();
             return new CurrentTimeTracker(first==null ? null : first.session(),first==null ? null : first.workItemTitle(),
-                    version,StrongEtag.format(version),now,recentItems,running,resumeItems);
+                    version,StrongEtag.format(version),now,recentItems,running,resumeItems,preferences);
         }
     }
 }

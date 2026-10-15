@@ -80,6 +80,17 @@ public class TimeTrackingController {
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
         return command("stopAll",new Input(null,null,null,null,null,null),match,key);
     }
+    @PutMapping("/me/time-tracker/preferences")
+    ResponseEntity<String> preferences(@RequestBody TimeTrackingPreferencesCommand body,
+            @RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,
+            @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
+        var actor=actors.requiredActive();
+        long expected=matches.parseForVisibleResource(true,match);
+        var result=service.updatePreferences(actor,body,expected,keys.parseRequired(key),
+                hasher.hash("timeTracking:preferences",Map.of("ifMatch",match==null ? "" : match),json.valueToTree(body)));
+        return ResponseEntity.status(result.httpStatus()).contentType(MediaType.APPLICATION_JSON)
+                .cacheControl(CacheControl.noStore()).eTag(result.etag()).body(result.responseJson());
+    }
     @PostMapping("/work-items/{workItemId}/time-sessions")
     ResponseEntity<String> create(@PathVariable UUID workItemId,@RequestBody Input body,
             @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {

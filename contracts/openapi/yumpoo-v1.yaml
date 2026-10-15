@@ -1916,7 +1916,7 @@ paths:
       tags: [TimeTracking]
       operationId: startTimeTracker
       summary: startTimeTracker
-      description: 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。
+      description: 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/XsrfToken'
@@ -1949,7 +1949,7 @@ paths:
       tags: [TimeTracking]
       operationId: switchTimeTracker
       summary: switchTimeTracker
-      description: 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。
+      description: 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/XsrfToken'
@@ -2034,6 +2034,40 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /me/time-tracker/preferences:
+    put:
+      tags: [TimeTracking]
+      operationId: updateTimeTrackingPreferences
+      summary: 保存本人计时器开关与上班时间
+      description: 要求会话、XSRF 与 /me/time-tracker 最近读取的 If-Match，并推进计时状态版本。关闭计时器时在同一事务内停止本人全部运行计时，已计时长保留；关闭后开始或切换计时返回 409（TIMER_DISABLED）。上班时间按公司时区的当天分钟数表示，只用于本人填报提示与按时长排入的起点。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeTrackingPreferences' }
+      responses:
+        '200':
+          description: 保存后的计时事实快照。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentTimeTracker' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
   /projects/{projectId}/time-tracking-summaries:
@@ -8807,11 +8841,20 @@ components:
       properties:
         session: { $ref: '#/components/schemas/TimeTrackingSession' }
         workItemTitle: { type: string, nullable: true }
+    TimeTrackingPreferences:
+      type: object
+      additionalProperties: false
+      required: [timerEnabled, workdayStartMinute, workdayEndMinute]
+      properties:
+        timerEnabled: { type: boolean, description: 是否使用计时器；默认 true。 }
+        workdayStartMinute: { type: integer, format: int32, minimum: 0, maximum: 1439, description: 上班时间，公司时区当天第几分钟；默认 540（09:00）。 }
+        workdayEndMinute: { type: integer, format: int32, minimum: 1, maximum: 1440, description: 下班时间，须晚于上班时间；默认 1080（18:00）。 }
     CurrentTimeTracker:
       type: object
       additionalProperties: false
-      required: [session, workItemTitle, rowVersion, etag, serverNow, recentItems, runningSessions, resumeItems]
+      required: [session, workItemTitle, rowVersion, etag, serverNow, recentItems, runningSessions, resumeItems, preferences]
       properties:
+        preferences: { $ref: '#/components/schemas/TimeTrackingPreferences' }
         runningSessions:
           type: array
           description: 按 startedAt 降序排列的本人运行计时。

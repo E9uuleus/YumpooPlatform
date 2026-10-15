@@ -16,6 +16,8 @@ public interface TimeTrackingRepository {
     List<UUID> visibleItemIds(UUID companyId, UUID projectId, Collection<UUID> ids);
     long stateVersion(UUID companyId, UUID userId, boolean lock);
     void advanceState(UUID companyId, UUID userId);
+    Optional<TimeTrackingPreferences> preferences(UUID companyId, UUID userId);
+    void savePreferences(UUID companyId, UUID userId, TimeTrackingPreferences preferences);
     List<Session> running(UUID companyId, UUID userId);
     List<UUID> runningUserIds(UUID companyId, UUID projectId);
     Optional<Session> find(UUID companyId, UUID sessionId);

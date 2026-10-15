@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { TimeTrackingPreferences } from './TimeTrackingPreferences';
+import {
+    TimeTrackingPreferencesFromJSON,
+    TimeTrackingPreferencesFromJSONTyped,
+    TimeTrackingPreferencesToJSON,
+    TimeTrackingPreferencesToJSONTyped,
+} from './TimeTrackingPreferences';
 import type { CurrentRunningTimer } from './CurrentRunningTimer';
 import {
     CurrentRunningTimerFromJSON,
@@ -40,6 +47,12 @@ import {
  * @interface CurrentTimeTracker
  */
 export interface CurrentTimeTracker {
+    /**
+     *
+     * @type {TimeTrackingPreferences}
+     * @memberof CurrentTimeTracker
+     */
+    preferences: TimeTrackingPreferences;
     /**
      * 按 startedAt 降序排列的本人运行计时。
      * @type {Array<CurrentRunningTimer>}
@@ -94,6 +107,7 @@ export interface CurrentTimeTracker {
  * Check if a given object implements the CurrentTimeTracker interface.
  */
 export function instanceOfCurrentTimeTracker(value: object): value is CurrentTimeTracker {
+    if (!('preferences' in value) || value['preferences'] === undefined) return false;
     if (!('runningSessions' in value) || value['runningSessions'] === undefined) return false;
     if (!('resumeItems' in value) || value['resumeItems'] === undefined) return false;
     if (!('recentItems' in value) || value['recentItems'] === undefined) return false;
@@ -115,6 +129,7 @@ export function CurrentTimeTrackerFromJSONTyped(json: any, ignoreDiscriminator: 
     }
     return {
 
+        'preferences': TimeTrackingPreferencesFromJSON(json['preferences']),
         'runningSessions': ((json['runningSessions'] as Array<any>).map(CurrentRunningTimerFromJSON)),
         'resumeItems': ((json['resumeItems'] as Array<any>).map(RecentTimeTrackingItemFromJSON)),
         'recentItems': ((json['recentItems'] as Array<any>).map(RecentTimeTrackingItemFromJSON)),
@@ -137,6 +152,7 @@ export function CurrentTimeTrackerToJSONTyped(value?: CurrentTimeTracker | null,
 
     return {
 
+        'preferences': TimeTrackingPreferencesToJSON(value['preferences']),
         'runningSessions': ((value['runningSessions'] as Array<any>).map(CurrentRunningTimerToJSON)),
         'resumeItems': ((value['resumeItems'] as Array<any>).map(RecentTimeTrackingItemToJSON)),
         'recentItems': ((value['recentItems'] as Array<any>).map(RecentTimeTrackingItemToJSON)),
