@@ -2,10 +2,13 @@
 import { computed, ref, watch } from 'vue'
 import { TimeSessionFillMode, type MyTimeSession } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../../api/client'
+import OverlapModeControl from '../my-time/day/OverlapModeControl.vue'
+import { defaultMode, overlapEffect, type DayBlock, type Range } from '../my-time/day/dayModel'
 import TimeCalendar from './TimeCalendar.vue'
 import { companyDateTime, parseCompanyDateTime } from './timeFormat'
 
-const props = withDefaults(defineProps<{ start: string; end: string; timezone: string; editing: boolean; busy: boolean; problem?: string; mode?: TimeSessionFillMode }>(), { mode: TimeSessionFillMode.Parallel, problem: '' })
+const props = withDefaults(defineProps<{ start: string; end: string; timezone: string; editing: boolean; busy: boolean; problem?: string
+  mode?: TimeSessionFillMode; workItemId?: string }>(), { mode: TimeSessionFillMode.Gaps, problem: '', workItemId: '' })
 const emit = defineEmits<{ 'update:start': [value: string]; 'update:end': [value: string]; 'update:mode': [value: TimeSessionFillMode]; expand: [value: boolean]; save: [] }>()
 const selectedDay = computed(() => props.start.slice(0, 10))
 const dayMs = 86400000
@@ -37,6 +40,24 @@ watch([() => props.start, () => props.end, () => props.timezone], async ([start,
   } catch { if (active) existingProblem.value = '无法加载该时段记录。' }
   finally { if (active) existingLoading.value = false }
 }, { immediate: true })
+const range = computed<Range | undefined>(() => {
+  try {
+    const value = { start: parseCompanyDateTime(props.start, props.timezone).getTime(), end: parseCompanyDateTime(props.end, props.timezone).getTime() }
+    return value.end > value.start ? value : undefined
+  } catch { return undefined }
+})
+const blocks = computed<DayBlock[]>(() => existing.value.map(item => ({
+  id: item.session.id, workItemId: item.session.workItemId, projectId: item.session.projectId, title: item.title ?? '不可见工作项',
+  itemNo: item.itemNo, projectName: item.projectName, colorToken: item.contentColorToken, start: item.session.startedAt.getTime(),
+  end: item.session.stoppedAt?.getTime() ?? null, canEdit: item.session.canEdit, etag: item.session.etag })))
+/** The overlap choice only appears when the new range overlaps something, with the same defaults as the day timeline. */
+const effect = computed(() => range.value && !props.editing
+  ? overlapEffect(range.value, props.workItemId ? [props.workItemId] : [], blocks.value, Date.now()) : undefined)
+const touched = ref(false)
+watch(() => [effect.value?.overlapping.length ?? 0, effect.value?.fullyCovered], () => {
+  if (!touched.value && effect.value && defaultMode(effect.value) !== props.mode) emit('update:mode', defaultMode(effect.value))
+})
+function setMode(value: TimeSessionFillMode) { touched.value = true; emit('update:mode', value) }
 function selectDay(day: string) {
   const offset = endOffset.value
   emit('update:start', `${day}T${props.start.slice(11)}`)
@@ -104,31 +125,14 @@ function setOffset(event: Event) {
         </option>
       </select>
     </div>
-    <div
-      v-if="!editing"
-      class="fill-modes"
-      role="radiogroup"
-      aria-label="补录方式"
-    >
-      <label><input
-        type="radio"
-        :checked="mode === TimeSessionFillMode.Parallel"
-        :disabled="busy"
-        @change="emit('update:mode', TimeSessionFillMode.Parallel)"
-      >并行记录</label>
-      <label><input
-        type="radio"
-        :checked="mode === TimeSessionFillMode.Replace"
-        :disabled="busy"
-        @change="emit('update:mode', TimeSessionFillMode.Replace)"
-      >替换该时段其他记录</label>
-      <label><input
-        type="radio"
-        :checked="mode === TimeSessionFillMode.Gaps"
-        :disabled="busy"
-        @change="emit('update:mode', TimeSessionFillMode.Gaps)"
-      >仅补空白</label>
-    </div>
+    <OverlapModeControl
+      v-if="effect && range && effect.overlapping.length"
+      :model-value="mode"
+      :effect="effect"
+      :range="range"
+      :item-count="1"
+      @update:model-value="setMode"
+    />
     <div class="existing-sessions">
       <strong>该时段已有记录</strong>
       <span v-if="existingLoading">正在加载…</span>
@@ -167,7 +171,7 @@ function setOffset(event: Event) {
 
 <style scoped>
 .save-error{margin:0;color:var(--el-color-danger);font-size:13px}
-.fill-modes{display:flex;flex-wrap:wrap;gap:8px 12px}.fill-modes label{display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer}.fill-modes input{margin:0;accent-color:var(--el-color-primary)}.existing-sessions{display:grid;gap:5px;font-size:11px;color:var(--el-text-color-secondary)}.existing-sessions strong{font-weight:500}.existing-sessions ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}.existing-sessions li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.existing-sessions{display:grid;gap:5px;font-size:11px;color:var(--el-text-color-secondary)}.existing-sessions strong{font-weight:500}.existing-sessions ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}.existing-sessions li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .manual-session{display:flex;flex-direction:column;gap:12px;padding:4px 12px 8px}
 button,select,input{font:inherit;color:inherit}button{border:0;background:transparent;cursor:pointer;border-radius:5px}button:hover:not(:disabled){background:#f0f1f3;color:var(--el-text-color-primary)}button:disabled{opacity:.4;cursor:default}button:focus-visible,select:focus-visible{outline:2px solid var(--el-color-primary);outline-offset:2px}
 .end-day select{border:0;background:var(--el-bg-color);padding:5px 2px;cursor:pointer}

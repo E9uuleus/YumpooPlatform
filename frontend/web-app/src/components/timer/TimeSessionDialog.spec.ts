@@ -88,7 +88,7 @@ describe('计时日志分页与写入', () => {
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(api.fillMyTimeSessions).toHaveBeenCalledOnce()
-    expect(api.fillMyTimeSessions.mock.calls[0]?.[0].timeSessionFillCommand).toMatchObject({ mode: 'PARALLEL', entries: [{ workItemId: 'item' }] })
+    expect(api.fillMyTimeSessions.mock.calls[0]?.[0].timeSessionFillCommand).toMatchObject({ mode: 'GAPS', entries: [{ workItemId: 'item' }] })
     expect(api.listTimeSessions).toHaveBeenCalledTimes(2)
     expect(wrapper.find('form').exists()).toBe(false)
     wrapper.unmount()

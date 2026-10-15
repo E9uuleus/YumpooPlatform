@@ -23,7 +23,7 @@ const fullCalendar = ref(false)
 watch([form, fullCalendar], ([adding, full]) => emit('resize', adding ? full ? 580 : 460 : 400))
 const start = ref('')
 const end = ref('')
-const mode = ref<TimeSessionFillMode>(TimeSessionFillMode.Parallel)
+const mode = ref<TimeSessionFillMode>(TimeSessionFillMode.Gaps)
 const saveProblem = ref('')
 async function load(cursor?: string) {
   if (loading.value) return
@@ -37,7 +37,7 @@ function edit(record?: TimeTrackingSession) {
   editing.value = record
   start.value = companyDateTime(record?.startedAt ?? new Date(Date.now() - 3600000), timezone.value).slice(0, 16)
   end.value = companyDateTime(record?.stoppedAt ?? new Date(), timezone.value).slice(0, 16)
-  mode.value = TimeSessionFillMode.Parallel; saveProblem.value = ''; fullCalendar.value = false; form.value = true
+  mode.value = TimeSessionFillMode.Gaps; saveProblem.value = ''; fullCalendar.value = false; form.value = true
 }
 async function save() {
   if (loading.value) return
@@ -161,6 +161,7 @@ onMounted(() => load())
         v-model:start="start"
         v-model:end="end"
         v-model:mode="mode"
+        :work-item-id="workItemId"
         :timezone="timezone"
         :editing="!!editing"
         :busy="loading"
