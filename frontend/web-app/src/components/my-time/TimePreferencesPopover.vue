@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { ElButton, ElMessageBox, ElPopover, ElSwitch, ElTimeSelect, ElTooltip } from 'element-plus'
+import { computed } from 'vue'
+import { ElButton, ElPopover, ElTimeSelect, ElTooltip } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 import { useTimeTracker } from '../../composables/useTimeTracker'
+import TimerEnabledSwitch from '../timer/TimerEnabledSwitch.vue'
 
 const tracker = useTimeTracker()
 const preferences = tracker.preferences
-const saving = ref(false)
+const saving = tracker.busy
 const clock = (minute: number) => minute >= 1440 ? '24:00' : `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`
 const minute = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5))
 const start = computed(() => clock(preferences.value.workdayStartMinute))
@@ -15,19 +16,7 @@ const end = computed(() => clock(preferences.value.workdayEndMinute))
 async function save(patch: Partial<typeof preferences.value>) {
   const next = { ...preferences.value, ...patch }
   if (next.workdayEndMinute <= next.workdayStartMinute) return
-  saving.value = true
-  try { await tracker.setPreferences(next) } finally { saving.value = false }
-}
-
-async function setTimer(enabled: string | number | boolean) {
-  const running = tracker.running.value.length
-  if (!enabled && running) {
-    try {
-      await ElMessageBox.confirm(`正在计时的 ${running} 项会立即停止，已计时长保留。之后只需在“我的一天”里按时段填写工时。`, '关闭计时器', {
-        confirmButtonText: '停止并关闭', cancelButtonText: '取消', type: 'warning' })
-    } catch { return }
-  }
-  await save({ timerEnabled: !!enabled })
+  await tracker.setPreferences(next)
 }
 </script>
 
@@ -55,12 +44,7 @@ async function setTimer(enabled: string | number | boolean) {
           <strong>使用计时器</strong>
           <small>关闭后隐藏所有计时入口，只按时段手动填写。</small>
         </span>
-        <el-switch
-          :model-value="preferences.timerEnabled"
-          :loading="saving"
-          aria-label="使用计时器"
-          @change="setTimer"
-        />
+        <TimerEnabledSwitch />
       </div>
       <div class="time-preferences__row is-stacked">
         <span>

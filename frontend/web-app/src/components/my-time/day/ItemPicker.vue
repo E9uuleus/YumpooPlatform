@@ -113,7 +113,7 @@ defineExpose({ focus: () => input.value?.focus() })
         />
         <span class="item-picker__text">
           <strong>{{ item.title }}</strong>
-          <small>#{{ item.itemNo }} · {{ item.projectName }}</small>
+          <small>{{ item.projectName }}</small>
         </span>
       </li>
     </ul>

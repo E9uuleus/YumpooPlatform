@@ -6,7 +6,7 @@ import { TimeSessionFillMode, type TimerCandidate } from '@yumpoo/api-client'
 import ItemPicker from './ItemPicker.vue'
 import OverlapModeControl from './OverlapModeControl.vue'
 import TimeField from './TimeField.vue'
-import { defaultMode, durationLabel, overlapEffect, type DayBlock, type Range } from './dayModel'
+import { defaultMode, durationLabel, MIN_BLOCK_MS, overlapEffect, type DayBlock, type Range } from './dayModel'
 
 const props = defineProps<{ range: Range; blocks: DayBlock[]; bounds: Range; limit: number; date: string; timezone: string; busy: boolean }>()
 const emit = defineEmits<{
@@ -22,6 +22,7 @@ const mode = ref(defaultMode(effect.value))
 watch(() => effect.value.fullyCovered, () => { if (!touched.value) mode.value = defaultMode(effect.value) })
 const problem = computed(() => {
   if (props.range.end <= props.range.start) return '结束时间要晚于开始时间'
+  if (props.range.end - props.range.start < MIN_BLOCK_MS) return '至少记录 15 分钟'
   if (props.range.end > props.limit) return '不能记录未来的时间'
   if (props.range.start < props.bounds.start) return '开始时间不能早于当天'
   return ''

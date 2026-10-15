@@ -19,7 +19,7 @@ const props = defineProps<{ date: string; today: string; timezone: string }>()
 const route = useRoute()
 const router = useRouter()
 const tracker = useTimeTracker()
-const { page, day: calendarDay, blocks, layoutMap, shareMap, totals, recordedMs, targetMs, dayRange, workday, now, limit, loading, busy,
+const { page, day: calendarDay, blocks, layoutMap, shareMap, totals, recordedMs, dayRange, workday, now, limit, loading, busy,
   problem, fresh, preferences, load, hold, create, edit, remove, reassign, exclusive } = useDayTimeline(toRef(props, 'date'), toRef(props, 'timezone'))
 const timeline = ref<InstanceType<typeof DayTimeline>>()
 
@@ -134,7 +134,6 @@ onBeforeUnmount(() => {
       :today="today"
       :day="calendarDay"
       :recorded-ms="recordedMs"
-      :target-ms="targetMs"
       @navigate="navigate"
       @back="back"
     >
@@ -245,7 +244,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .my-day{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--yp-bg-sunken);animation:my-day-in 240ms var(--yp-ease-standard) backwards}
 .my-day__alert{margin:12px 16px 0;width:auto}
-.my-day__body{display:grid;grid-template-columns:280px minmax(0,1fr);gap:12px;flex:1;min-height:0;padding:12px 16px 16px}
+.my-day__body{display:grid;grid-template-columns:clamp(340px,30%,420px) minmax(0,1fr);gap:16px;flex:1;min-height:0;padding:12px 16px 16px}
 @keyframes my-day-in{from{opacity:0;transform:translateY(6px)}}
 @media (max-width:900px){.my-day__body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(420px,1fr);overflow:auto}}
 @media (prefers-reduced-motion:reduce){.my-day{animation:none}}
