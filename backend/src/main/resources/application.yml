@@ -166,7 +166,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,info
+  info:
+    env:
+      enabled: true
   endpoint:
     health:
       probes:
@@ -181,3 +184,8 @@ management:
             - db
       show-details: never
       show-components: never
+
+# 部署引擎上线时通过 YUMPOO_DEPLOYMENT_RELEASE_TAG 注入；构建产物本身只携带 commit。
+info:
+  release:
+    tag: ${yumpoo.deployment.release-tag:unreleased}

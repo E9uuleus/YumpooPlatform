@@ -7,6 +7,11 @@ const apiProxy = {
     target: 'http://127.0.0.1:8100',
     changeOrigin: false,
   },
+  '/version.json': {
+    target: 'http://127.0.0.1:8100',
+    changeOrigin: false,
+    rewrite: () => '/actuator/info',
+  },
 }
 
 // 部署验收用该 meta 核对线上前端字节来自被发布的提交。

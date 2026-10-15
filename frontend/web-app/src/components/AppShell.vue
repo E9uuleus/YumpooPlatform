@@ -16,6 +16,7 @@ import { operationsApi, projectsApi } from '../api/client'
 import { beginAuthentication } from '../auth/navigation'
 import { useAppearance } from '../composables/useAppearance'
 import { useProjectRecents } from '../composables/useProjectRecents'
+import { useReleaseVersion } from '../composables/useReleaseVersion'
 import { PROJECT_LIFECYCLE_CHANGED } from '../composables/projectLifecycleEvents'
 import { PROJECT_SETTINGS_CHANGED } from '../composables/projectSettingsEvents'
 import { useSession } from '../composables/useSession'
@@ -74,6 +75,10 @@ const contextNavigationOpen = ref(typeof window === 'undefined'
 const clientLabel = computed(() => window.yumpooDesktop?.client === 'electron' || session.authentication.value?.client.type === AuthenticationClientType.Electron
   ? 'Electron 在线壳'
   : 'Web 浏览器')
+const releaseVersion = useReleaseVersion()
+const releaseLabel = computed(() => releaseVersion.value
+  ? `版本 ${releaseVersion.value.release} · ${releaseVersion.value.commit.slice(0, 8)}`
+  : '')
 const activeSection = computed<ShellSection>(() => route.meta.shellSection ?? 'work')
 const myTimeActive = computed(() => route.name === 'my-time' || route.name === 'my-time-day')
 const dashboardFrame = computed(() => route.name === 'dashboards' || route.name === 'my-time' || route.name === 'my-time-day' || route.name === 'team')
@@ -414,6 +419,12 @@ onBeforeUnmount(() => {
             <el-dropdown-menu>
               <el-dropdown-item disabled>
                 {{ clientLabel }}
+              </el-dropdown-item>
+              <el-dropdown-item
+                v-if="releaseLabel"
+                disabled
+              >
+                {{ releaseLabel }}
               </el-dropdown-item>
               <el-dropdown-item
                 divided
