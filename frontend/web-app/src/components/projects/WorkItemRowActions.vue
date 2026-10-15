@@ -331,8 +331,8 @@ async function makeIndependent(): Promise<void> {
 <style>
 .work-item-row-actions { display: flex; align-items: center; justify-content: center; }
 .work-item-row-menu-trigger { display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--yp-text-secondary); cursor: pointer; opacity: 0; }
-tr.el-table__row:hover > td .work-item-row-menu-trigger,
-tr.el-table__row.hover-row > td .work-item-row-menu-trigger,
+tr.el-table__row:hover > td > .cell > .work-item-row-actions .work-item-row-menu-trigger,
+tr.el-table__row.hover-row > td > .cell > .work-item-row-actions .work-item-row-menu-trigger,
 .work-item-row-actions:focus-within .work-item-row-menu-trigger,
 .work-item-row-actions--open .work-item-row-menu-trigger { opacity: 1; }
 .work-item-row-menu-trigger:hover,

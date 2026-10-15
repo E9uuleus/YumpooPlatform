@@ -26,7 +26,7 @@ import {
   ElTable,
   ElTableColumn,
 } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, type CSSProperties } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
 import InlineProblem from '../InlineProblem.vue'
@@ -116,6 +116,7 @@ const emit = defineEmits<{
   sortChange: [rules: ProjectWorkItemSubitemSortRule[]]
   created: [parent: ProjectWorkItemListItem]
   updated: [id: string, detail: WorkItemDetail]
+  reorder: [items: ProjectWorkItemListItem[]]
   openDetail: [item: ProjectWorkItemListItem, tab: 'details' | 'discussion' | 'activity']
   patch: [item: ProjectWorkItemListItem, field: WorkItemPatchField, value: WorkItemPatchValue]
   dueDateChange: [item: ProjectWorkItemListItem, value: DueDateValue]
@@ -149,6 +150,9 @@ const quickError = ref<ApiProblem>()
 const quickRow = ref<HTMLElement>()
 const quickTitleInput = ref<InstanceType<typeof ElInput>>()
 const draggingItem = ref<ProjectWorkItemListItem>()
+const rowDraggingIndex = ref(-1)
+const rowDropIndex = ref<number>()
+const movingRow = ref(false)
 const columnDraggingKey = ref<string>()
 const columnDraggingIndex = ref(-1)
 const columnDropIndex = ref<number>()
@@ -159,13 +163,27 @@ const nameEditingId = ref('')
 const { draft: inlineDraft, rows: displayItems, isDraft, start: createBelow, save: saveInlineDraft, cancel: cancelInlineDraft } = useWorkItemInlineCreate({
   contextId: () => props.parent.id,
   items: () => props.items,
-  canCreate: () => props.canCreate && !props.sortRules.length && !props.editingCell && !props.loading,
+  canCreate: () => props.canCreate && !props.sortRules.length && !props.editingCell && !props.loading && !movingRow.value && !draggingItem.value,
   content: () => props.activeContents.find(content => content.id === defaultContentId.value),
   status: () => props.workflowStatuses.find(status => status.active && status.statusCode === 'NOT_STARTED'),
   parentId: () => props.parent.id,
   created: () => emit('created', props.parent),
 })
 let columnDragPreview: HTMLElement | undefined
+let rowDragPreview: HTMLElement | undefined
+let rowDragPointerOffset = { x: 0, y: 0 }
+let rowDragHeight = 36
+let suppressRowClick = false
+let suppressRowClickTimer: number | undefined
+let rowPointerCandidate: {
+  pointerId: number
+  parentId: string
+  row: HTMLTableRowElement
+  item: ProjectWorkItemListItem
+  index: number
+  startX: number
+  startY: number
+} | undefined
 let columnDragPointerOffset = { x: 0, y: 0 }
 let columnDragSourceElements: HTMLElement[] = []
 let columnPointerCandidate: {
@@ -180,6 +198,7 @@ let columnPointerCandidate: {
 
 const COLUMN_DRAG_POINTER_THRESHOLD = 5
 const COLUMN_DRAG_TILT_DEGREES = 1
+const ROW_DRAG_POINTER_THRESHOLD = 5
 const COLUMN_RESIZE_HANDLE_WIDTH = 8
 // 子表菜单列 72px 比父表菜单+展开列宽 39px，添加列让出同等宽度，子表不会宽于父行单元格。
 const SUBITEM_ADD_COLUMN_MIN_WIDTH = 57
@@ -222,7 +241,7 @@ function sortDirection(key: ProjectWorkItemSubitemColumn['key']): 'ASC' | 'DESC'
 }
 
 function applySort(key: ProjectWorkItemSubitemColumn['key']): void {
-  if (savingSortOrder.value) return
+  if (savingSortOrder.value || movingRow.value || draggingItem.value) return
   const field = sortFieldByColumn[key]
   const next = props.sortRules.map(rule => ({ ...rule }))
   const index = next.findIndex(rule => rule.field === field)
@@ -237,7 +256,7 @@ function clearSort(key: ProjectWorkItemSubitemColumn['key']): void {
 }
 
 async function saveSortedOrder(): Promise<void> {
-  if (!props.sortRules.length || savingSortOrder.value || props.items.length < 2) return
+  if (!props.sortRules.length || savingSortOrder.value || movingRow.value || props.items.length < 2) return
   const csrf = readCsrfToken()
   if (!csrf) { quickError.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
   savingSortOrder.value = true
@@ -311,7 +330,7 @@ function openQuick(): void {
 }
 
 defineExpose({ clearSelection: () => subitemTableRef.value?.clearSelection(),
-  deselect: (item: ProjectWorkItemListItem) => subitemTableRef.value?.toggleRowSelection(item, false), openQuick, canClose: () => !quickCreating.value && !quickTitle.value.trim() && !inlineDraft.value && !nameEditingId.value && !props.editingCell && !savingSortOrder.value })
+  deselect: (item: ProjectWorkItemListItem) => subitemTableRef.value?.toggleRowSelection(item, false), openQuick, canClose: () => !quickCreating.value && !quickTitle.value.trim() && !inlineDraft.value && !nameEditingId.value && !props.editingCell && !savingSortOrder.value && !movingRow.value && !draggingItem.value })
 
 function closeQuick(): void {
   quickOpen.value = false
@@ -354,43 +373,228 @@ function transitionItem(raw: unknown, statusCode: string): void {
   emit('transition', row(raw), statusCode)
 }
 
-function onRowDragStart(raw: unknown): void {
-  const item = row(raw)
-  if (!props.sortRules.length && item.capabilities.canMoveInProjectOrder) draggingItem.value = item
+function subitemRowElements(): HTMLTableRowElement[] {
+  return [...(subitemTableRef.value?.$el.querySelectorAll<HTMLTableRowElement>(
+    '.el-table__body-wrapper tbody tr.subitem-table-row',
+  ) ?? [])]
 }
 
-async function dropBefore(raw: unknown): Promise<void> {
-  const target = row(raw)
-  const moving = draggingItem.value
+function subitemRowClassName({ row: item }: { row: ProjectWorkItemListItem }): string {
+  return ['subitem-table-row', isDraft(item) ? 'work-item-draft-row' : '',
+    draggingItem.value?.id === item.id ? 'subitem-table-row--dragging' : ''].filter(Boolean).join(' ')
+}
+
+function subitemRowStyle({ rowIndex }: { rowIndex: number }): CSSProperties {
+  if (!draggingItem.value || rowDropIndex.value === undefined) return {}
+  const from = rowDraggingIndex.value
+  const to = rowDropIndex.value
+  if (rowIndex === from) return { opacity: 0, pointerEvents: 'none' }
+  const offset = from < to && rowIndex > from && rowIndex < to ? -rowDragHeight
+    : from > to && rowIndex >= to && rowIndex < from ? rowDragHeight : 0
+  return { transform: `translateY(${offset}px)` }
+}
+
+function resetRowDrag(): void {
+  rowDragPreview?.remove()
+  rowDragPreview = undefined
   draggingItem.value = undefined
-  if (!moving || moving.id === target.id) return
-  const targetIndex = props.items.findIndex(item => item.id === target.id)
-  const remaining = props.items.filter(item => item.id !== moving.id)
-  const insertIndex = Math.max(0, remaining.findIndex(item => item.id === target.id))
-  remaining.splice(insertIndex, 0, moving)
-  const nextIndex = remaining.findIndex(item => item.id === moving.id)
+  rowDraggingIndex.value = -1
+  rowDropIndex.value = undefined
+}
+
+function moveRowDragPreview(clientX: number, clientY: number): void {
+  if (!rowDragPreview) return
+  rowDragPreview.style.left = `${Math.round(clientX - rowDragPointerOffset.x)}px`
+  rowDragPreview.style.top = `${Math.round(clientY - rowDragPointerOffset.y)}px`
+}
+
+function createRowDragPreview(source: HTMLTableRowElement, clientX: number, clientY: number): void {
+  const rect = source.getBoundingClientRect()
+  const width = Math.max(rect.width, source.offsetWidth, 1)
+  rowDragHeight = Math.max(rect.height, source.offsetHeight, 36)
+  rowDragPointerOffset = { x: clientX - rect.left, y: clientY - rect.top }
+  const preview = document.createElement('div')
+  preview.className = 'work-item-drag-preview subitem-row-drag-preview'
+  preview.setAttribute('aria-hidden', 'true')
+  preview.style.width = `${width}px`
+  preview.style.height = `${rowDragHeight}px`
+  preview.style.transform = 'rotate(1deg)'
+  preview.style.transformOrigin = `${rowDragPointerOffset.x}px ${rowDragPointerOffset.y}px`
+  const table = document.createElement('table')
+  table.className = 'work-item-drag-preview__table'
+  table.style.width = `${width}px`
+  const body = document.createElement('tbody')
+  const clone = source.cloneNode(true) as HTMLTableRowElement
+  sanitizeColumnDragPreview(clone)
+  clone.classList.add('work-item-drag-preview__row')
+  ;[...source.cells].forEach((cell, index) => {
+    const cloneCell = clone.cells[index]!
+    const cellWidth = cell.getBoundingClientRect().width
+    cloneCell.style.position = 'static'
+    cloneCell.style.width = `${cellWidth}px`
+    cloneCell.style.minWidth = `${cellWidth}px`
+    cloneCell.style.maxWidth = `${cellWidth}px`
+    cloneCell.style.boxSizing = 'border-box'
+  })
+  body.appendChild(clone)
+  table.appendChild(body)
+  preview.appendChild(table)
+  document.body.appendChild(preview)
+  rowDragPreview = preview
+  moveRowDragPreview(clientX, clientY)
+}
+
+function clearRowPointerTracking(): void {
+  rowPointerCandidate = undefined
+  window.removeEventListener('pointermove', onRowPointerMove, true)
+  window.removeEventListener('pointerup', onRowPointerUp, true)
+  window.removeEventListener('pointercancel', onRowPointerCancel, true)
+  window.removeEventListener('blur', cancelRowDrag)
+}
+
+function cancelRowDrag(): void {
+  clearRowPointerTracking()
+  resetRowDrag()
+}
+
+function suppressClickAfterRowDrag(): void {
+  suppressRowClick = true
+  if (suppressRowClickTimer) window.clearTimeout(suppressRowClickTimer)
+  suppressRowClickTimer = window.setTimeout(() => {
+    suppressRowClick = false
+    suppressRowClickTimer = undefined
+  }, 50)
+}
+
+function onRowClickCapture(event: MouseEvent): void {
+  if (!suppressRowClick) return
+  event.preventDefault()
+  event.stopPropagation()
+  suppressRowClick = false
+}
+
+function onRowPointerDown(event: PointerEvent): void {
+  if (!event.isPrimary || event.button !== 0 || draggingItem.value || columnPointerCandidate
+    || inlineDraft.value || nameEditingId.value || props.editingCell || props.loading
+    || props.sortRules.length || savingSortOrder.value || movingRow.value) return
+  const target = event.target as HTMLElement | null
+  if (target?.closest('.work-item-name-cell--editing, .work-item-detail-button, .subitem-discussion')) return
+  if (!target?.closest('.subitem-title-cell, .subitem-selection-column')) return
+  const source = target.closest<HTMLTableRowElement>('tr.subitem-table-row')
+  const index = source ? subitemRowElements().indexOf(source) : -1
+  const item = props.items[index]
+  if (!source || !item?.capabilities.canMoveInProjectOrder || isDraft(item)) return
+  clearRowPointerTracking()
+  rowPointerCandidate = { pointerId: event.pointerId, parentId: props.parent.id,
+    row: source, item, index, startX: event.clientX, startY: event.clientY }
+  window.addEventListener('pointermove', onRowPointerMove, { capture: true, passive: false })
+  window.addEventListener('pointerup', onRowPointerUp, true)
+  window.addEventListener('pointercancel', onRowPointerCancel, true)
+  window.addEventListener('blur', cancelRowDrag)
+}
+
+function updateRowDropTarget(clientX: number, clientY: number): void {
+  const body = subitemTableRef.value?.$el.querySelector('.el-table__body')
+  const rect = body?.getBoundingClientRect()
+  if (!rect || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+    rowDropIndex.value = undefined
+    return
+  }
+  rowDropIndex.value = Math.max(0, Math.min(props.items.length,
+    Math.round((clientY - rect.top) / rowDragHeight)))
+}
+
+function onRowPointerMove(event: PointerEvent): void {
+  const candidate = rowPointerCandidate
+  if (!candidate || candidate.pointerId !== event.pointerId) return
+  if (candidate.parentId !== props.parent.id) { cancelRowDrag(); return }
+  if (!draggingItem.value) {
+    if (Math.hypot(event.clientX - candidate.startX, event.clientY - candidate.startY) < ROW_DRAG_POINTER_THRESHOLD) return
+    createRowDragPreview(candidate.row, candidate.startX, candidate.startY)
+    draggingItem.value = candidate.item
+    rowDraggingIndex.value = candidate.index
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  moveRowDragPreview(event.clientX, event.clientY)
+  updateRowDropTarget(event.clientX, event.clientY)
+}
+
+function onRowPointerUp(event: PointerEvent): void {
+  const candidate = rowPointerCandidate
+  if (!candidate || candidate.pointerId !== event.pointerId) return
+  clearRowPointerTracking()
+  if (!draggingItem.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  suppressClickAfterRowDrag()
+  updateRowDropTarget(event.clientX, event.clientY)
+  void commitRowDrop(candidate.parentId)
+}
+
+function onRowPointerCancel(event: PointerEvent): void {
+  if (rowPointerCandidate?.pointerId !== event.pointerId) return
+  if (draggingItem.value) suppressClickAfterRowDrag()
+  cancelRowDrag()
+}
+
+async function commitRowDrop(parentId: string): Promise<void> {
+  const moving = draggingItem.value
+  let target = rowDropIndex.value
+  const previousPositions = new Map(subitemRowElements().map(element => [element,
+    element.getBoundingClientRect().top]))
+  resetRowDrag()
+  if (!moving || target === undefined || parentId !== props.parent.id || props.sortRules.length) return
+  const original = [...props.items]
+  const from = original.findIndex(item => item.id === moving.id)
+  if (from < 0 || !original[from]!.capabilities.canMoveInProjectOrder) return
+  const reordered = original.filter(item => item.id !== moving.id)
+  if (from < target) target -= 1
+  target = Math.max(0, Math.min(target, reordered.length))
+  if (target === from) return
+  reordered.splice(target, 0, moving)
   const csrf = readCsrfToken()
   if (!csrf) { quickError.value = localProblem('缺少 CSRF 凭据，请刷新后重试。'); return }
+  movingRow.value = true
+  quickError.value = undefined
+  emit('reorder', reordered)
   try {
+    await nextTick()
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      previousPositions.forEach((top, element) => {
+        const delta = top - element.getBoundingClientRect().top
+        if (element.isConnected && Math.abs(delta) >= 1) element.animate([
+          { transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' },
+        ], { duration: 140, easing: 'cubic-bezier(.2, 0, 0, 1)' })
+      })
+    }
     const updated = await workItemsApi.moveWorkItemSubitemOrder({
-      parentWorkItemId: props.parent.id,
+      parentWorkItemId: parentId,
       subitemId: moving.id,
       xXSRFTOKEN: csrf,
       ifMatch: moving.etag,
       idempotencyKey: globalThis.crypto.randomUUID(),
       projectWorkItemOrderMoveRequest: {
-        previousVisibleWorkItemId: remaining[nextIndex - 1]?.id ?? null,
-        nextVisibleWorkItemId: remaining[nextIndex + 1]?.id ?? null,
+        previousVisibleWorkItemId: reordered[target - 1]?.id ?? null,
+        nextVisibleWorkItemId: reordered[target + 1]?.id ?? null,
       },
     })
-    emit('updated', moving.id, updated)
-    emit('retry')
-    if (targetIndex >= 0) ElMessage.success('子项顺序已更新')
+    if (props.parent.id === parentId) {
+      emit('updated', moving.id, updated)
+      ElMessage.success('子项顺序已更新')
+    }
   } catch (reason) {
-    quickError.value = await toApiProblem(reason)
-    emit('retry')
+    if (props.parent.id === parentId) {
+      emit('reorder', original)
+      quickError.value = await toApiProblem(reason)
+      emit('retry')
+    }
+  } finally {
+    movingRow.value = false
   }
 }
+
+watch(() => [props.parent.id, props.items, props.sortRules, props.loading, props.editingCell], cancelRowDrag)
 
 function columnBodyClass(column: ProjectWorkItemSubitemColumn): string {
   const classes = column.key === 'title'
@@ -568,7 +772,7 @@ function clearColumnPointerTracking(): void {
 }
 
 function onColumnPointerDown(event: PointerEvent): void {
-  if (event.isPrimary === false || event.button !== 0 || columnDraggingKey.value) return
+  if (event.isPrimary === false || event.button !== 0 || columnDraggingKey.value || rowPointerCandidate || movingRow.value) return
   const target = event.target as HTMLElement | null
   if (target?.closest('.monday-column-resize-handle, .sort-by-column')) return
   const header = target?.closest<HTMLTableCellElement>('th.subitem-movable-column-header')
@@ -661,6 +865,8 @@ function onColumnPointerCancel(event: PointerEvent): void {
 onMounted(() => document.addEventListener('pointerdown', onDocumentPointerDown))
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onDocumentPointerDown)
+  cancelRowDrag()
+  if (suppressRowClickTimer) window.clearTimeout(suppressRowClickTimer)
   clearColumnPointerTracking()
   removeColumnDragPreview()
 })
@@ -674,7 +880,8 @@ onBeforeUnmount(() => {
       '--subitem-menu-column-width': `${SUBITEM_MENU_COLUMN_WIDTH}px`,
     }"
     :aria-label="`${parent.title} 的子项`"
-    @pointerdown="onColumnPointerDown"
+    @pointerdown="onColumnPointerDown($event); onRowPointerDown($event)"
+    @click.capture="onRowClickCapture"
   >
     <inline-problem v-if="error" :problem="error" @retry="$emit('retry')" />
     <inline-problem v-if="quickError" :problem="quickError" />
@@ -709,7 +916,8 @@ onBeforeUnmount(() => {
         ref="subitemTableRef"
         v-loading="loading"
         :data="displayItems"
-        :row-class-name="({ row: item }: { row: ProjectWorkItemListItem }) => isDraft(item) ? 'work-item-draft-row' : ''"
+        :row-class-name="subitemRowClassName"
+        :row-style="subitemRowStyle"
         row-key="id"
         class="monday-subitem-table"
         :class="{
@@ -737,7 +945,7 @@ onBeforeUnmount(() => {
               :can-create="canCreate"
               :sorted="Boolean(sortRules.length)"
               :order-items="async () => items"
-              :disabled="editingCell || loading || savingSortOrder"
+              :disabled="editingCell || loading || savingSortOrder || movingRow || Boolean(draggingItem)"
               :before-remove="beforeRemove ? () => beforeRemove!(row(scope.row)) : undefined"
               @open="openItem($event, 'details')"
               @create-below="createBelow"
@@ -780,7 +988,7 @@ onBeforeUnmount(() => {
               <monday-column-quick-sort
                 :label="column.label"
                 :direction="sortDirection(column.key)"
-                :saving="savingSortOrder"
+                :saving="savingSortOrder || movingRow"
                 @sort="applySort(column.key)"
                 @clear="clearSort(column.key)"
                 @save="saveSortedOrder"
@@ -796,11 +1004,8 @@ onBeforeUnmount(() => {
             <div
               v-if="column.key === 'title'"
               class="subitem-title-cell"
-              :draggable="scope.row.capabilities.canMoveInProjectOrder && !sortRules.length && !inlineDraft && nameEditingId !== scope.row.id"
-              @dragstart="onRowDragStart(scope.row)"
-              @dragend="draggingItem = undefined"
-              @dragover.prevent
-              @drop.prevent="dropBefore(scope.row)"
+              draggable="false"
+              @dragstart.prevent
             >
               <work-item-name-cell
                 :item="row(scope.row)"
@@ -1176,11 +1381,31 @@ onBeforeUnmount(() => {
 :deep(.monday-subitem-table .el-scrollbar__bar) { display: none; }
 :deep(.monday-subitem-table th.monday-sortable-column-header) {
   position: relative;
+  z-index: auto;
 }
-:deep(.monday-subitem-table th.monday-sortable-column-header:hover),
-:deep(.monday-subitem-table th.monday-sortable-column-header:focus-within),
-:deep(.monday-subitem-table th.monday-sortable-column-header:has(.sort-by-column--active)) {
-  z-index: 12;
+:deep(.monday-subitem-table .el-table__header th.el-table-fixed-column--left) {
+  z-index: 10;
+}
+:deep(.monday-subitem-table .el-table__header th.el-table-fixed-column--left:has(.sort-by-column--active)),
+:deep(.monday-subitem-table .el-table__header th.el-table-fixed-column--left:hover),
+:deep(.monday-subitem-table .el-table__header th.el-table-fixed-column--left:focus-within) {
+  z-index: 14;
+}
+:deep(.monday-subitem-table th.monday-sortable-column-header:not(.el-table-fixed-column--left) > .monday-column-resize-handle) {
+  z-index: 1;
+}
+:deep(.monday-subitem-table .el-table__body tr.subitem-table-row) {
+  position: relative;
+  transition: transform 180ms cubic-bezier(0.2, 0, 0, 1);
+  will-change: transform;
+}
+:deep(.monday-subitem-table .el-table__body tr.subitem-table-row--dragging) {
+  opacity: 0 !important;
+  pointer-events: none;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :deep(.monday-subitem-table .el-table__body tr.subitem-table-row) { transition: none; }
 }
 :deep(.monday-subitem-table .el-table__header tr),
 :deep(.monday-subitem-table .el-table__body tr) { height: var(--subitem-table-row-height); }
@@ -1336,7 +1561,7 @@ onBeforeUnmount(() => {
   cursor: col-resize;
 }
 .monday-title-column-resize-handle { overflow: visible; }
-.subitem-title-cell { width: 100%; height: 100%; display: flex; align-items: center; min-width: 0; }
+.subitem-title-cell { width: 100%; height: 100%; display: flex; align-items: center; min-width: 0; cursor: grab; user-select: none; touch-action: none; }
 .subitem-discussion { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 100%; box-sizing: border-box; padding: 0; border: 0; border-left: 1px solid var(--yp-monday-grid-border, var(--yp-border-subtle)); border-radius: 0; background: transparent; color: var(--yp-text-secondary); cursor: pointer; }
 .subitem-cell-button, .subitem-block-cell { width: 100%; height: 100%; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .subitem-block-cell { display: flex; align-items: center; justify-content: center; box-sizing: border-box; padding: 0 var(--yp-space-2); color: var(--yp-text-inverse); }

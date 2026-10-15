@@ -933,6 +933,36 @@ describe('项目级工作项首页', () => {
     expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(1)
   })
 
+  it('子表拖动结果写回当前父项缓存，更新版本和折叠重开后仍保留顺序', async () => {
+    const first = item('child-1')
+    const second = item('child-2')
+    const other = item('other-child')
+    state.listProjectWorkItems.mockResolvedValue(page([
+      { ...item('parent-1'), subitemCount: 2 }, { ...item('parent-2'), subitemCount: 1 },
+    ]))
+    state.listWorkItemSubitems.mockImplementation(({ parentWorkItemId }: { parentWorkItemId: string }) =>
+      Promise.resolve({ items: parentWorkItemId === 'parent-1' ? [first, second] : [other] }))
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('button[aria-label="展开子项"]')[0]!.trigger('click')
+    await flushPromises()
+    await wrapper.get('button[aria-label="展开子项"]').trigger('click')
+    await flushPromises()
+    const tables = wrapper.findAllComponents({ name: 'ProjectWorkItemSubitemsTable' })
+    tables[0]!.vm.$emit('reorder', [second, first])
+    tables[0]!.vm.$emit('updated', first.id, { ...first, rowVersion: 2, etag: '"2"' })
+    await nextTick()
+    expect(tables[0]!.props('items')).toEqual([second, expect.objectContaining({ id: first.id, etag: '"2"' })])
+    expect(tables[1]!.props('items')).toEqual([other])
+    await wrapper.findAll('button[aria-label="收起子项"]')[0]!.trigger('click')
+    await nextTick()
+    await wrapper.get('button[aria-label="展开子项"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAllComponents({ name: 'ProjectWorkItemSubitemsTable' })[0]!.props('items'))
+      .toEqual([second, expect.objectContaining({ id: first.id, etag: '"2"' })])
+    expect(state.listWorkItemSubitems).toHaveBeenCalledTimes(2)
+  })
+
   it('连续创建子项时保留旧行并补查刷新期间的新建结果', async () => {
     const wrapper = mountView()
     await flushPromises()

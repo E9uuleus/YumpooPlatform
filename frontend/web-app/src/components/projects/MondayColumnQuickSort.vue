@@ -154,6 +154,11 @@ const tooltipText = computed(() => props.direction === 'ASC'
   transform: translate(-50%, -50%);
 }
 
+.monday-column-quick-sort:hover .sort-by-column,
+.monday-column-quick-sort:focus-within .sort-by-column {
+  z-index: 16;
+}
+
 .sort-trigger {
   position: absolute;
   z-index: 3;
