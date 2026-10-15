@@ -10,7 +10,7 @@ Status: implemented
 
 - `operations` 是独立模块。前端使用 `/admin/operations/{overview,host,sessions,logs,alerts}`，保留 `/operations` 别名；REST 位于 `/api/v1/admin/operations/**`。入口、路由和每项 API 都限定当前有效 `APP_MANAGER`，包括错误响应在内使用 `Cache-Control: no-store`；写操作复用 CSRF、`If-Match` 和安全审计。
 - `foundation.application` 提供日志、部署诊断、Outbox 查询端口，`identityaccess.api` 提供有效会话端口。运维模块不依赖其他模块的 infrastructure；模块白名单及四层 marker 同步纳入架构检查。
-- 控制台输出人读文本，文件输出 `yumpoo-log/1` JSON Lines；formatter 和内存缓冲共用脱敏映射。具体身份关联、受控堆栈、脱敏及读取留痕边界由[安全 Note](../security/2026-09-26-operations-diagnostics-access.md)维护；异常指纹不依赖异常消息。
+- 开发控制台输出人读文本，文件输出 `yumpoo-log/1` JSON Lines；formatter 和内存缓冲共用脱敏映射。生产关闭常规控制台日志并由 WinSW 接收剩余 stdout/stderr，理由与保留边界见[Windows Release 决策](../process/2026-10-14-windows-release-deployment.md)，该决策部分替代原生产控制台默认行为。具体身份关联、受控堆栈、脱敏及读取留痕边界由[安全 Note](../security/2026-09-26-operations-diagnostics-access.md)维护；异常指纹不依赖异常消息。
 - 日志文件按 UTC 日期和 50 MB 滚动压缩，保留上限为 90 天及 10 GB。生产 `logging.file.name` 必须为部署日志根内的绝对文件路径。实时缓冲分别限制为最近 10,000 条/16 MiB 与问题 2,000 条/8 MiB；过长记录计入 droppedCount。客户端最多显示 500 条，bootId 和十进制字符串 seq 表达重启、水位及缺口。
 - 文件查询只访问配置文件及规定命名的归档，使用 NIO、文件身份和大小快照；无 fileKey 时校验创建时间、大小不回退及前缀内容，翻页和扫描期间的文件替换显式返回 partial，不接受调用者提供路径。单次扫描并发 1、3 秒/256 MiB，后到查询公平排队至多 4 秒后才返回 429；扫描先按时间、级别和标识字段过滤，仅对关键字匹配所需文本和最终返回的记录执行读取侧脱敏。范围最多 24 小时；游标是绑定筛选的进程内句柄，最多 64 个、5 分钟过期。文件变化、损坏、预算耗尽以 partial 明示。直方图在一次扫描中汇总，避免逐页反复解压。
 - 硬件信息来自 JDK/JMX、Micrometer 和 NIO，不新增 OSHI/JNA 或外部监控栈。15 秒本地采样器与现有业务调度隔离；单个 I/O worker 无排队，前次探针未完成时继续本机采样。I/O 结果超过 45 秒标记 UNKNOWN/null，磁盘每 60 秒采集。独立采集器失败不抹掉其他指标。连接池忙直接标记 DEGRADED；采样线程持续保留本机告警观测，运行中的数据库探针以已等待时长作为延迟下界。最多保留 240 份待评估观测，恢复后按采样时间顺序每轮评估至多 40 份，丢弃数通过指标和页面明示。持续窗口依据采样连续性，与 I/O 完成频率解耦。

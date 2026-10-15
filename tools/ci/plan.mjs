@@ -55,6 +55,7 @@ export function plan(stage, baseRef = 'origin/dev') {
       pnpm('ci-policy-tests', 'run', 'test:ci'),
       pnpm('event-policy-tests', 'run', 'test:event-contract-compat'),
       pnpm('delivery-policy-tests', 'run', 'test:m0-18'),
+      node('release-policy-tests', '--test', 'tools/release/github.test.mjs', 'tools/release/policy.test.mjs', 'tools/release/promote-release.test.mjs', 'tools/release/ssh-deploy.test.mjs'),
       ...contractSteps(baseRef), ...nodeSteps, ...assetSteps,
     ]
     case 'backend': return [
@@ -69,6 +70,7 @@ export function plan(stage, baseRef = 'origin/dev') {
       node('verify-handoff', 'tools/verification/verify-m0-18-handoff.mjs'),
     ]
     case 'windows': return [
+      node('windows-release-restore', 'tools/release/verify-windows.mjs'),
       node('windows-evidence', 'tools/verification/verify-m0-18-windows.mjs'),
       node('powershell-behavior', 'tools/verification/verify-m1-15-powershell.mjs'),
       node('server-package', 'tools/verification/package-m1-15-win.mjs'),

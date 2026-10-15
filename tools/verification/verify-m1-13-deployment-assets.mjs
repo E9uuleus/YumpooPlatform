@@ -13,7 +13,7 @@ const secrets = YAML.parse(secretsRaw)
 const checklist = JSON.parse(read('deployment-checklist-m1-13.json'))
 const nginx = read('nginx/yumpoo-wecom.conf')
 const database = read('database/initialize-database.sql')
-const runbook = read('RUNBOOK.md')
+const runbook = read('RUNBOOK-M1-13.md')
 
 assert(ordinary.server?.address === '127.0.0.1' && ordinary.server?.port === 8100, '后端必须固定监听 127.0.0.1:8100')
 const deployment = ordinary.yumpoo?.deployment ?? {}

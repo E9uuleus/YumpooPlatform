@@ -12,6 +12,8 @@ const manifest = readJson(path.join(out, 'artifact-manifest.json'))
 const report = readJson(path.join(out, 'verification-report.json'))
 
 assert(manifest.schemaVersion === 1 && manifest.milestone === 'M1-15', 'artifact manifest 里程碑错误')
+assert(manifest.server?.platform === 'windows' && manifest.server.architecture === 'x64'
+  && manifest.server.runtimeMode === 'WINDOWS_SERVICE_WINSW', '服务器包必须使用 Windows x64 WinSW 服务模式')
 assert(report.milestone === 'M1-15' && report.liveEnvironment === 'ENV_PENDING', '验证报告必须保留 ENV_PENDING')
 assert(report.databaseMigrationAdded === false && report.publicApiChanged === false, 'M1-15 边界报告错误')
 assert(manifest.desktopReuse?.milestone === 'M1-14' && manifest.desktopReuse.repackaged === false, '桌面复用声明错误')
@@ -47,6 +49,12 @@ for (const required of [
   'windows/Invoke-AppManagerMaintenance.ps1',
   'windows/Invoke-InitialIdentityBootstrap.ps1',
   'windows/config/application-prod.yml',
+  'windows/service/yumpoo-service.xml',
+  'windows/service/winsw-lock.json',
+  'windows/cd/Initialize-YumpooHost.ps1',
+  'windows/cd/Invoke-YumpooDeploy.ps1',
+  'windows/cd/Start-YumpooNginx.ps1',
+  'windows/cd/YumpooDeployment.psm1',
   'windows/secrets/application-secrets.yml',
   'windows/secrets/initial-identity-bootstrap.example.json',
   'windows/database/migrations/identityaccess/V15__productize_desktop_auth_attempt.sql',
@@ -84,7 +92,7 @@ function readJson(file) {
 }
 
 function isTextAsset(relative) {
-  return /\.(?:md|json|ya?ml|ps1|conf|sql|html|js|css|txt)$/iu.test(relative)
+  return /\.(?:md|json|ya?ml|ps1|psm1|xml|conf|sql|html|js|css|txt)$/iu.test(relative)
 }
 
 function assert(condition, message) {
