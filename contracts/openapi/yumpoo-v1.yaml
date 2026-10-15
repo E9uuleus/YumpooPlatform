@@ -1895,7 +1895,7 @@ paths:
       tags: [TimeTracking]
       operationId: listTimerCandidates
       summary: 跨项目查找本人可计时的工作项
-      description: 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+      description: 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时或手动补录过的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: q
@@ -8864,7 +8864,7 @@ components:
         contentColorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
         statusCategory: { type: string }
         assignedToMe: { type: boolean }
-        lastTrackedAt: { type: string, format: date-time, nullable: true }
+        lastTrackedAt: { type: string, format: date-time, nullable: true, description: 本人在该项最近一条计时或补录记录的开始时间。 }
         ownDurationMs: { type: integer, format: int64, minimum: 0 }
     RecentTimeTrackingItem:
       type: object

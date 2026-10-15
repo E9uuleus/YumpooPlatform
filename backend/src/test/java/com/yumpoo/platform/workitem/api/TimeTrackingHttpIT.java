@@ -347,6 +347,17 @@ class TimeTrackingHttpIT {
         assertThat(unchanged.statusCode()).as(unchanged.body()).isEqualTo(422);
     }
 
+    @Test
+    void personalCandidatesIncludeItemsTrackedOnlyByManualRecords() throws Exception {
+        UUID manualOnly=UUID.fromString(createItem(source.id(),"只手动补录").path("id").asText());
+        String candidates="/api/v1/me/time-tracker/candidates?scope=PERSONAL";
+        assertThat(ok(get(candidates,member)).path("items").toString()).doesNotContain(manualOnly.toString());
+        ok(mutate("POST","/api/v1/me/time-sessions/fill",member,fillBody("GAPS",manualOnly,"09:00","10:00"),null));
+        JsonNode first=ok(get(candidates,member)).path("items").get(0);
+        assertThat(first.path("workItemId").asText()).isEqualTo(manualOnly.toString());
+        assertThat(first.path("lastTrackedAt").asText()).isEqualTo("2026-09-01T09:00:00Z");
+    }
+
     private String fillBody(String mode,UUID item,String start,String stop) {
         return json.writeValueAsString(Map.of("mode",mode,"entries",List.of(Map.of("workItemId",item,
                 "startedAt","2026-09-01T"+start+":00Z","stoppedAt","2026-09-01T"+stop+":00Z"))));

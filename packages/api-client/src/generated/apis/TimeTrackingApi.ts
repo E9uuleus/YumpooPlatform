@@ -639,7 +639,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时或手动补录过的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
      * 跨项目查找本人可计时的工作项
      */
     async listTimerCandidatesRaw(requestParameters: ListTimerCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimerCandidatePage>> {
@@ -677,7 +677,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时或手动补录过的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
      * 跨项目查找本人可计时的工作项
      */
     async listTimerCandidates(requestParameters: ListTimerCandidatesRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimerCandidatePage> {

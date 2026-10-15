@@ -21,7 +21,7 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         String projectMatch=matchingProjectIds.isEmpty() ? "" : " OR w.project_id IN (:matchingProjects)";
         var statement=jdbc.sql("""
             WITH last_tracked AS (
-              SELECT work_item_id, MAX(started_at) FILTER (WHERE source='TIMER') AS last_tracked_at
+              SELECT work_item_id, MAX(started_at) AS last_tracked_at
               FROM yumpoo.work_item_time_session
               WHERE company_id=:company AND user_id=:user AND deleted_at IS NULL AND project_id IN (:projects)
               GROUP BY work_item_id), allocated AS (
