@@ -48,6 +48,7 @@ const desktopState = computed(() => {
       startedAt: new Date(Math.min(...tracker.running.value.map(timer => timer.session.startedAt.getTime()))).toISOString() } : null,
     recent: recent ? { workItemId: recent.workItemId, title: `${recent.title}${resumeCount > 1 ? ` 等 ${resumeCount} 项` : ''}` } : null,
     clockOffsetMs: Math.round(timerClockOffset()),
+    timerEnabled: tracker.timerEnabled.value,
   } satisfies DesktopTimerState
 })
 watch([surface, desktopState], ([owner, state]) => {
