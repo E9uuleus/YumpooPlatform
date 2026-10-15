@@ -2012,6 +2012,10 @@ paths:
         - name: cursor
           in: query
           schema: { type: string, maxLength: 256 }
+        - name: includeChildren
+          in: query
+          description: 包含有效直接子项的计时记录。
+          schema: { type: boolean, default: false }
       responses:
         '200':
           description: 计时事实快照。
@@ -8591,7 +8595,7 @@ components:
     TimeTrackingSession:
       type: object
       additionalProperties: false
-      required: [id, projectId, workItemId, userId, displayName, startedAt, stoppedAt, source, durationMs, rowVersion, etag, canEdit, deleted, changeReason, allocatedDurationMs, parallelItemCount]
+      required: [id, projectId, workItemId, userId, displayName, startedAt, stoppedAt, source, durationMs, rowVersion, etag, canEdit, deleted, changeReason, allocatedDurationMs, parallelItemCount, workItemNo, workItemTitle]
       properties:
         id: { type: string, format: uuid }
         projectId: { type: string, format: uuid, nullable: true }
@@ -8609,6 +8613,8 @@ components:
         changeReason: { type: string, nullable: true }
         allocatedDurationMs: { type: integer, format: int64, minimum: 0, description: 按并行均摊后的计入时长 }
         parallelItemCount: { type: integer, format: int32, minimum: 0, description: 该记录期间本人同时计时的其他工作项数 }
+        workItemNo: { type: string, nullable: true, description: 记录属于子项时的工作项编号。 }
+        workItemTitle: { type: string, nullable: true, description: 记录属于子项时的工作项标题。 }
     TimeTrackingRunningSession:
       type: object
       additionalProperties: false

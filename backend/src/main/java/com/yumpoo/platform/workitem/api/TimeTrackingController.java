@@ -40,8 +40,9 @@ public class TimeTrackingController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.summaries(actors.requiredActive(),projectId,workItemId));
     }
     @GetMapping("/work-items/{workItemId}/time-sessions")
-    ResponseEntity<SessionPage> history(@PathVariable UUID workItemId,@RequestParam(required=false) String cursor) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.history(actors.requiredActive(),workItemId,cursor));
+    ResponseEntity<SessionPage> history(@PathVariable UUID workItemId,@RequestParam(required=false) String cursor,
+            @RequestParam(defaultValue="false") boolean includeChildren) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.history(actors.requiredActive(),workItemId,cursor,includeChildren));
     }
     @PostMapping("/me/time-tracker/start")
     ResponseEntity<String> start(@RequestBody Input body,
@@ -80,7 +81,7 @@ public class TimeTrackingController {
     }
     private ResponseEntity<String> command(String action,Input input,String match,String key) {
         var actor=actors.requiredActive();
-        if(!action.equals("stop") && input.workItemId()!=null) service.history(actor,input.workItemId(),null);
+        if(!action.equals("stop") && input.workItemId()!=null) service.history(actor,input.workItemId(),null,false);
         long expected=action.equals("create") ? 0 : matches.parseForVisibleResource(true,match);
         var result=service.command(actor,action,input,expected,keys.parseRequired(key),
                 hasher.hash("timeTracking:"+action,Map.of("ifMatch",match==null ? "" : match),json.valueToTree(input)));

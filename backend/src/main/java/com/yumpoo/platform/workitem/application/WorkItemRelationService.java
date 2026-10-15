@@ -66,11 +66,13 @@ public class WorkItemRelationService {
     private final TransactionalEventPort events;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final TimeTrackingRepository timeTracking;
 
     public WorkItemRelationService(WorkItemRelationRepository relations,
             WorkItemRepository workItems, ProjectAccessSnapshotQuery access,
             ProjectFactWriteGuard writeGuard, IdempotentCommandExecutor idempotency,
-            TransactionalEventPort events, ObjectMapper objectMapper, Clock clock) {
+            TransactionalEventPort events, ObjectMapper objectMapper, Clock clock,
+            TimeTrackingRepository timeTracking) {
         this.relations = relations;
         this.workItems = workItems;
         this.access = access;
@@ -79,6 +81,7 @@ public class WorkItemRelationService {
         this.events = events;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.timeTracking = timeTracking;
     }
 
     @Transactional(readOnly = true)
@@ -197,6 +200,8 @@ public class WorkItemRelationService {
                         ? "PARENT_CHILD_CONSTRAINT_VIOLATION" : "RELATION_ALREADY_ACTIVE");
             }
             appendCreated(relation, command.actor());
+            if (relation.relationType() == WorkItemRelationType.PARENT_CHILD)
+                timeTracking.advanceProjects(command.actor().companyId(), List.of(relation.leftProjectId()));
             return stored(201, requiredView(command.actor().companyId(), relation.id(),
                     command.currentWorkItemId(), true));
         });
@@ -250,6 +255,7 @@ public class WorkItemRelationService {
                 throw conflict("PARENT_CHILD_CONSTRAINT_VIOLATION");
             }
             appendParentChanged(deleted, after, command.actor());
+            timeTracking.advanceProjects(project.companyId(), List.of(project.projectId()));
             return stored(200, requiredView(project.companyId(), after.id(),
                     after.rightWorkItemId(), true));
         });
@@ -276,6 +282,8 @@ public class WorkItemRelationService {
                             command.reason(), clock.instant()), command.expectedVersion())
                     .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
             appendDeleted(after, command.actor());
+            if (after.relationType() == WorkItemRelationType.PARENT_CHILD)
+                timeTracking.advanceProjects(command.actor().companyId(), List.of(after.leftProjectId()));
             return stored(200, requiredView(command.actor().companyId(), after.id(),
                     after.leftWorkItemId(), false));
         });

@@ -60,6 +60,11 @@ const total = computed(() => {
   const entry = summary.value
   return entry ? entry.value.rollupDurationMs + (tracker.now.value - entry.at) * entry.value.rollupRunningRate : props.item.timeTracking?.rollupDurationMs ?? 0
 })
+const durationTitle = computed(() => {
+  const value = summary.value?.value ?? props.item.timeTracking
+  const rollup = value?.rollupDurationMs ?? 0, allocated = value?.allocatedDurationMs ?? 0
+  return `合计 ${formatTrackingDuration(rollup)} · 本项 ${formatTrackingDuration(allocated)} · 子项 ${formatTrackingDuration(rollup - allocated)}`
+})
 </script>
 
 <template>
@@ -111,12 +116,13 @@ const total = computed(() => {
             aria-hidden="true"
           ><path d="M5 2.8v10.4L13 8z" /></svg>
         </button>
-        <span class="duration">{{ formatTrackingDuration(total) }}</span>
+        <span class="duration" :title="durationTitle">{{ formatTrackingDuration(total) }}</span>
       </div>
     </template>
     <TimeSessionDialog
       :work-item-id="item.id"
       :title="item.title"
+      :include-children="item.subitemCount > 0"
       @close="open = false"
       @resize="panelHeight = $event"
       @changed="emit('changed')"

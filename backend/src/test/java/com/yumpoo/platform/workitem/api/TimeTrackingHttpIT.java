@@ -200,6 +200,28 @@ class TimeTrackingHttpIT {
                 .param("user", member.userId()).query(Long.class).single()).isZero();
     }
 
+    @Test
+    void parentSummaryIncludesDirectChildTimeAndHistoryDisclosesItsSource() throws Exception {
+        JsonNode child=createItem(source.id(),"子项计时");
+        String childId=child.path("id").asText();
+        var relation=mutate("POST","/api/v1/work-items/"+source.itemId()+"/relations",member,
+                json.writeValueAsString(Map.of("relationType","PARENT_CHILD","currentRole","PARENT",
+                        "targetProjectId",source.id(),"targetWorkItemId",childId)),null);
+        assertThat(relation.statusCode()).as(relation.body()).isEqualTo(201);
+        ok(mutate("POST","/api/v1/work-items/"+childId+"/time-sessions",member,
+                json.writeValueAsString(Map.of("startedAt","2026-09-01T09:00:00Z","stoppedAt","2026-09-01T10:00:00Z")),null));
+
+        JsonNode summary=ok(get("/api/v1/projects/"+source.id()+"/time-tracking-summaries?workItemId="+source.itemId(),member)).path("items").get(0);
+        assertThat(summary.path("allocatedDurationMs").asLong()).isZero();
+        assertThat(summary.path("rollupDurationMs").asLong()).isEqualTo(3600000);
+        assertThat(ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items")).isEmpty();
+        JsonNode history=ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions?includeChildren=true",member)).path("items");
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).path("workItemId").asText()).isEqualTo(childId);
+        assertThat(history.get(0).path("workItemNo").asText()).isEqualTo(child.path("itemNo").asText());
+        assertThat(history.get(0).path("workItemTitle").asText()).isEqualTo("子项计时");
+    }
+
     private Actor actor(String name) {
         UUID user = users.provision("timer-purge-" + name + "-" + UUID.randomUUID(), "计时清除 " + name).userId();
         return new Actor(user, sessions.issueWebSession(user, "timer-purge-http"));
@@ -215,14 +237,18 @@ class TimeTrackingHttpIT {
                 VALUES (:id,:company,:project,:user,'ACTIVE',transaction_timestamp(),:owner)
                 """).param("id", UUID.randomUUID()).param("company", COMPANY).param("project", id)
                 .param("user", member.userId()).param("owner", owner.userId()).update();
+        return new Project(id, created.path("code").asText(), UUID.fromString(createItem(id,name+"工作项").path("id").asText()));
+    }
+
+    private JsonNode createItem(UUID projectId,String title) throws Exception {
         UUID content = jdbc.sql("SELECT id FROM yumpoo.content WHERE project_id=:project AND code='TASKS'")
-                .param("project", id).query(UUID.class).single();
-        var itemBody = json.createObjectNode().put("contentId", content.toString()).put("title", name + "工作项");
+                .param("project", projectId).query(UUID.class).single();
+        var itemBody = json.createObjectNode().put("contentId", content.toString()).put("title", title);
         itemBody.putNull("priority").putNull("description").putNull("notes");
-        var item = mutate("POST", "/api/v1/projects/" + id + "/work-items", member,
+        var item = mutate("POST", "/api/v1/projects/" + projectId + "/work-items", member,
                 json.writeValueAsString(itemBody), null);
         assertThat(item.statusCode()).as(item.body()).isEqualTo(201);
-        return new Project(id, created.path("code").asText(), UUID.fromString(json.readTree(item.body()).path("id").asText()));
+        return json.readTree(item.body());
     }
 
     private JsonNode start(Project project) throws Exception { return ok(startResponse(project)); }

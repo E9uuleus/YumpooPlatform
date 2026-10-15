@@ -826,7 +826,7 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
         if (query.timeTracking()!=null) {
             var time=query.timeTracking();
             String duration=timeDuration(query,parameters);
-            String sessions="SELECT 1 FROM yumpoo.work_item_time_session ts WHERE ts.company_id=:companyId AND ts.work_item_id=yumpoo.work_item.id AND ts.deleted_at IS NULL";
+            String sessions="SELECT 1 FROM yumpoo.work_item_time_session ts WHERE ts.company_id=:companyId AND "+timeScope("ts")+" AND ts.deleted_at IS NULL";
             if ("RUNNING".equals(time.state())) sql.append(" AND EXISTS (").append(sessions).append(" AND ts.stopped_at IS NULL)");
             if ("EMPTY".equals(time.state())) sql.append(" AND NOT EXISTS (").append(sessions).append(")");
             if ("STOPPED".equals(time.state())) sql.append(" AND EXISTS (").append(sessions).append(") AND NOT EXISTS (").append(sessions).append(" AND ts.stopped_at IS NULL)");
@@ -877,7 +877,14 @@ public class JdbcWorkItemRepository implements WorkItemRepository {
             end=":timeAsOf";
             parameters.put("timeAsOf",OffsetDateTime.ofInstant(query.timeTracking().asOf(),ZoneOffset.UTC));
         }
-        return "(SELECT FLOOR(COALESCE(SUM("+TimeShareSql.allocated("sh",end)+"),0))::bigint FROM yumpoo.work_item_time_share sh WHERE sh.company_id=:companyId AND sh.work_item_id=yumpoo.work_item.id)";
+        return "(SELECT FLOOR(COALESCE(SUM("+TimeShareSql.allocated("sh",end)+"),0))::bigint FROM yumpoo.work_item_time_share sh WHERE sh.company_id=:companyId AND "+timeScope("sh")+")";
+    }
+
+    private static String timeScope(String alias) {
+        return "("+alias+".work_item_id=yumpoo.work_item.id OR "+alias+".work_item_id IN ("
+                + "SELECT r.right_work_item_id FROM yumpoo.work_item_relation r "
+                + "JOIN yumpoo.work_item child ON child.company_id=r.company_id AND child.id=r.right_work_item_id AND child.deleted_at IS NULL "
+                + "WHERE r.company_id=:companyId AND r.relation_type='PARENT_CHILD' AND r.deleted_at IS NULL AND r.left_work_item_id=yumpoo.work_item.id))";
     }
 
     private record SeekTerm(String expression, String direction, Object anchorValue) {}

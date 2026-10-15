@@ -15,7 +15,8 @@ public final class TimeTrackingModels {
     public record TimeTrackingSession(UUID id, UUID projectId, UUID workItemId,
             UUID userId, String displayName, Instant startedAt, Instant stoppedAt,
             String source, long durationMs, long rowVersion, String etag,
-            boolean canEdit, boolean deleted, String changeReason, long allocatedDurationMs, int parallelItemCount) {}
+            boolean canEdit, boolean deleted, String changeReason, long allocatedDurationMs, int parallelItemCount,
+            String workItemNo, String workItemTitle) {}
 
     public record RunningSession(UUID userId, Instant startedAt) {}
 

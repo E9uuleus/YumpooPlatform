@@ -8,7 +8,7 @@ import { formatDuration, formatTrackingDuration, timerMutation } from '../../com
 import TimeSessionForm from './TimeSessionForm.vue'
 import { companyDateTime, parseCompanyDateTime } from './timeFormat'
 
-const props = defineProps<{ workItemId: string; title: string }>()
+const props = withDefaults(defineProps<{ workItemId: string; title: string; includeChildren?: boolean }>(), { includeChildren: false })
 const emit = defineEmits<{ close: []; changed: []; resize: [height: number] }>()
 const session = useSession()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'UTC')
@@ -28,7 +28,7 @@ async function load(cursor?: string) {
   if (loading.value) return
   loading.value = true; problem.value = ''
   try {
-    page.value = await timeTrackingApi.listTimeSessions({ workItemId: props.workItemId, ...(cursor ? { cursor } : {}) })
+    page.value = await timeTrackingApi.listTimeSessions({ workItemId: props.workItemId, includeChildren: props.includeChildren, ...(cursor ? { cursor } : {}) })
     records.value = cursor ? [...records.value, ...page.value.items] : page.value.items
   } catch { problem.value = '无法加载计时记录，请重试。' } finally { loading.value = false }
 }
@@ -49,7 +49,7 @@ async function save() {
     const body = { startedAt, stoppedAt }
     const record = editing.value
     await timerMutation(JSON.stringify(['history', props.workItemId, record?.etag, body]), (idempotencyKey, xXSRFTOKEN) => {
-      const args = { workItemId: props.workItemId, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: body }
+      const args = { workItemId: record ? record.workItemId! : props.workItemId, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: body }
       return record ? timeTrackingApi.editTimeSession({ ...args, sessionId: record.id, ifMatch: record.etag }) : timeTrackingApi.createTimeSession(args)
     })
     emit('changed'); form.value = false; loading.value = false; await load()
@@ -75,13 +75,13 @@ async function remove(target: TimeTrackingSession | 'all') {
       targets = []
       let cursor: string | undefined
       do {
-        const result = await timeTrackingApi.listTimeSessions({ workItemId: props.workItemId, ...(cursor ? { cursor } : {}) })
-        targets.push(...result.items.filter(record => record.canEdit && record.stoppedAt))
+        const result = await timeTrackingApi.listTimeSessions({ workItemId: props.workItemId, includeChildren: props.includeChildren, ...(cursor ? { cursor } : {}) })
+        targets.push(...result.items.filter(record => record.workItemId === props.workItemId && record.canEdit && record.stoppedAt))
         cursor = result.nextCursor ?? undefined
       } while (cursor)
     } else targets = [target]
     for (const record of targets) {
-      await timerMutation(JSON.stringify(['delete', record.id, record.etag]), (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.deleteTimeSession({ workItemId: props.workItemId, sessionId: record.id, ifMatch: record.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: {} }))
+      await timerMutation(JSON.stringify(['delete', record.id, record.etag]), (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.deleteTimeSession({ workItemId: record.workItemId!, sessionId: record.id, ifMatch: record.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: {} }))
       removed++
     }
     ElMessage.success(removed ? `已清除 ${removed} 条计时记录` : '没有可清除的已停止记录')
@@ -167,6 +167,7 @@ onMounted(() => load())
           :key="record.id"
           class="log-row"
         >
+          <span v-if="record.workItemNo" class="child-source">来自子项 #{{ record.workItemNo }} {{ record.workItemTitle }}</span>
           <el-tooltip
             :content="record.displayName"
             placement="top"
@@ -263,6 +264,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:18p
 .log-row{display:grid;grid-template-columns:26px 48px minmax(105px,1fr) 76px 26px;gap:6px;align-items:center;min-height:50px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .member-badge{display:grid;place-items:center;width:24px;height:24px;border-radius:6px;background:var(--yp-status-teal);color:var(--yp-status-teal-foreground);font-size:14px;font-weight:600}.time-range{text-align:center}.record-duration{padding:6px 0;font-variant-numeric:tabular-nums}.record-duration:disabled{opacity:1}
 .time-range small{display:block;color:var(--el-text-color-secondary);font-size:11px;white-space:normal}
+.child-source{grid-column:1/-1;justify-self:start;max-width:100%;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;padding:3px 6px;border-radius:4px;background:var(--yp-bg-hover);color:var(--el-text-color-secondary);font-size:11px}
 .delete-button{padding:5px;display:grid;place-items:center}.delete-button svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .log-status{text-align:center;color:var(--el-text-color-secondary);padding:16px 0}.load-more{display:block;margin:8px auto}
 .time-log--adding{height:460px}.time-log--full-calendar{height:580px}

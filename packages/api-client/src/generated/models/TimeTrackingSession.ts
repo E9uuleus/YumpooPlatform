@@ -114,6 +114,18 @@ export interface TimeTrackingSession {
      * @memberof TimeTrackingSession
      */
     parallelItemCount: number;
+    /**
+     * 记录属于子项时的工作项编号。
+     * @type {string}
+     * @memberof TimeTrackingSession
+     */
+    workItemNo: string | null;
+    /**
+     * 记录属于子项时的工作项标题。
+     * @type {string}
+     * @memberof TimeTrackingSession
+     */
+    workItemTitle: string | null;
 }
 
 /**
@@ -147,6 +159,8 @@ export function instanceOfTimeTrackingSession(value: object): value is TimeTrack
     if (!('changeReason' in value) || value['changeReason'] === undefined) return false;
     if (!('allocatedDurationMs' in value) || value['allocatedDurationMs'] === undefined) return false;
     if (!('parallelItemCount' in value) || value['parallelItemCount'] === undefined) return false;
+    if (!('workItemNo' in value) || value['workItemNo'] === undefined) return false;
+    if (!('workItemTitle' in value) || value['workItemTitle'] === undefined) return false;
     return true;
 }
 
@@ -176,6 +190,8 @@ export function TimeTrackingSessionFromJSONTyped(json: any, ignoreDiscriminator:
         'changeReason': json['changeReason'],
         'allocatedDurationMs': json['allocatedDurationMs'],
         'parallelItemCount': json['parallelItemCount'],
+        'workItemNo': json['workItemNo'],
+        'workItemTitle': json['workItemTitle'],
     };
 }
 
@@ -206,5 +222,7 @@ export function TimeTrackingSessionToJSONTyped(value?: TimeTrackingSession | nul
         'changeReason': value['changeReason'],
         'allocatedDurationMs': value['allocatedDurationMs'],
         'parallelItemCount': value['parallelItemCount'],
+        'workItemNo': value['workItemNo'],
+        'workItemTitle': value['workItemTitle'],
     };
 }

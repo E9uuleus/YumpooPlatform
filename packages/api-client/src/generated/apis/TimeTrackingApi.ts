@@ -72,6 +72,7 @@ export interface GetTimeTrackingSummariesRequest {
 export interface ListTimeSessionsRequest {
     workItemId: string;
     cursor?: string;
+    includeChildren?: boolean;
 }
 
 export interface ListTimerCandidatesRequest {
@@ -444,6 +445,10 @@ export class TimeTrackingApi extends runtime.BaseAPI {
 
         if (requestParameters['cursor'] != null) {
             queryParameters['cursor'] = requestParameters['cursor'];
+        }
+
+        if (requestParameters['includeChildren'] != null) {
+            queryParameters['includeChildren'] = requestParameters['includeChildren'];
         }
 
         const headerParameters: runtime.HTTPHeaders = {};

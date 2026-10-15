@@ -93,8 +93,9 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         return jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND id=:id")
                 .param("c", companyId).param("id", id).query(JdbcTimeTrackingRepository::map).optional();
     }
-    public List<Session> history(UUID companyId, UUID itemId, Instant before, UUID beforeId, int limit) {
-        var query = jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND work_item_id=:w AND deleted_at IS NULL"
+    public List<Session> history(UUID companyId, UUID itemId, boolean includeChildren, Instant before, UUID beforeId, int limit) {
+        String scope=includeChildren ? "(work_item_id=:w OR work_item_id IN (SELECT r.right_work_item_id FROM yumpoo.work_item_relation r JOIN yumpoo.work_item child ON child.company_id=r.company_id AND child.id=r.right_work_item_id AND child.deleted_at IS NULL WHERE r.company_id=:c AND r.left_work_item_id=:w AND r.relation_type='PARENT_CHILD' AND r.deleted_at IS NULL))" : "work_item_id=:w";
+        var query = jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND "+scope+" AND deleted_at IS NULL"
                 + (before == null ? "" : " AND (started_at,id)<(:before,:beforeId)") + " ORDER BY started_at DESC,id DESC LIMIT :limit")
                 .param("c", companyId).param("w", itemId).param("limit", limit);
         if (before != null) query.param("before", Timestamp.from(before)).param("beforeId", beforeId);
@@ -142,18 +143,26 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
             """).param("c", companyId).param("p", projectId).param("ids", ids).param("u", userId).param("now", Timestamp.from(now))
                 .query((rs, n) -> { totals.put(rs.getObject("work_item_id", UUID.class), new long[]{rs.getLong("completed"),rs.getLong("total"),rs.getLong("own"),rs.getLong("count")}); return 0; }).list();
         Map<UUID,Long> allocated=new HashMap<>();
+        Map<UUID,Long> rollup=new HashMap<>();
         Map<UUID,Double> rates=new HashMap<>();
         jdbc.sql("""
-            SELECT sh.work_item_id,FLOOR(COALESCE(SUM(%s),0))::bigint AS allocated,
+            WITH scope AS (
+              SELECT w.id AS root_id,w.id AS item_id FROM yumpoo.work_item w WHERE w.company_id=:c AND w.id IN (:ids)
+              UNION ALL
+              SELECT r.left_work_item_id,r.right_work_item_id FROM yumpoo.work_item_relation r
+              JOIN yumpoo.work_item child ON child.company_id=r.company_id AND child.id=r.right_work_item_id AND child.deleted_at IS NULL
+              WHERE r.company_id=:c AND r.relation_type='PARENT_CHILD' AND r.deleted_at IS NULL AND r.left_work_item_id IN (:ids))
+            SELECT s.root_id,FLOOR(COALESCE(SUM(%s) FILTER (WHERE sh.work_item_id=s.root_id),0))::bigint AS allocated,
+              FLOOR(COALESCE(SUM(%s),0))::bigint AS rollup,
               COALESCE(SUM(1.0/sh.concurrency) FILTER (WHERE sh.stopped_at IS NULL),0) AS rate
-            FROM yumpoo.work_item_time_share sh WHERE sh.company_id=:c AND sh.work_item_id IN (:ids)
-            GROUP BY sh.work_item_id
-            """.formatted(TimeShareSql.allocated("sh",":now"))).param("c",companyId).param("ids",ids).param("now",Timestamp.from(now))
-                .query((rs,n) -> { UUID id=rs.getObject("work_item_id",UUID.class); allocated.put(id,rs.getLong("allocated")); rates.put(id,rs.getDouble("rate")); return 0; }).list();
+            FROM scope s JOIN yumpoo.work_item_time_share sh ON sh.company_id=:c AND sh.work_item_id=s.item_id
+            GROUP BY s.root_id
+            """.formatted(TimeShareSql.allocated("sh",":now"),TimeShareSql.allocated("sh",":now"))).param("c",companyId).param("ids",ids).param("now",Timestamp.from(now))
+                .query((rs,n) -> { UUID id=rs.getObject("root_id",UUID.class); allocated.put(id,rs.getLong("allocated")); rollup.put(id,rs.getLong("rollup")); rates.put(id,rs.getDouble("rate")); return 0; }).list();
         return ids.stream().distinct().map(id -> {
             long[] t = totals.getOrDefault(id, new long[4]);
             return new TimeTrackingSummary(id,t[0],t[1],t[2],t[3],running.stream().filter(s -> s.workItemId().equals(id)).map(s -> new RunningSession(s.userId(),s.startedAt())).toList(),
-                    allocated.getOrDefault(id,0L),allocated.getOrDefault(id,0L),rates.getOrDefault(id,0D));
+                    allocated.getOrDefault(id,0L),rollup.getOrDefault(id,0L),rates.getOrDefault(id,0D));
         }).toList();
     }
     public Map<UUID,long[]> sessionShares(UUID companyId,Collection<UUID> ids,Instant now) {
