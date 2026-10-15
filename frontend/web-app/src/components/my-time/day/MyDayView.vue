@@ -9,6 +9,7 @@ import BlockPopover from './BlockPopover.vue'
 import DayHeader from './DayHeader.vue'
 import DayTimeline from './DayTimeline.vue'
 import EntryComposer from './EntryComposer.vue'
+import TimePreferencesPopover from '../TimePreferencesPopover.vue'
 import ItemShelf from './ItemShelf.vue'
 import type { ShelfItem } from './shelfDrag'
 import { durationLabel, gaps, placeSequential, type DayBlock, type Range } from './dayModel'
@@ -136,7 +137,11 @@ onBeforeUnmount(() => {
       :target-ms="targetMs"
       @navigate="navigate"
       @back="back"
-    />
+    >
+      <template #actions>
+        <TimePreferencesPopover />
+      </template>
+    </DayHeader>
     <el-alert
       v-if="problem"
       class="my-day__alert"

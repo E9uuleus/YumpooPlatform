@@ -96,6 +96,7 @@ const durationTitle = computed(() => {
         @keydown.esc="open = false"
       >
         <button
+          v-if="tracker.timerEnabled.value || running"
           type="button"
           class="timer-toggle"
           :class="{ 'is-unavailable': unavailable }"

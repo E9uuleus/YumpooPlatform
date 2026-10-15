@@ -7,8 +7,6 @@ import { onTimeTrackingChanged, timerMutation, useTimeTracker } from '../../../c
 import { toApiDate } from '../../team/teamDashboardModel'
 import { atMinute, coveredMs, dayWindow, durationLabel, HOUR, itemTotals, layout, MINUTE, shares, type DayBlock, type Range } from './dayModel'
 
-export const DEFAULT_TIME_PREFERENCES = { timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080 }
-
 export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
   const tracker = useTimeTracker()
   const page = ref<MyTimeSessionPage>()
@@ -25,7 +23,7 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
   /** Geometry follows the minute: at 1px per minute nothing visible changes in between. */
   const now = computed(() => Math.floor(tracker.now.value / MINUTE) * MINUTE)
   const limit = computed(() => Math.min(dayRange.value.end, now.value))
-  const preferences = computed(() => tracker.current.value?.preferences ?? DEFAULT_TIME_PREFERENCES)
+  const preferences = tracker.preferences
   const workday = computed(() => ({
     start: atMinute(date.value, preferences.value.workdayStartMinute, timezone.value),
     end: atMinute(date.value, preferences.value.workdayEndMinute, timezone.value),

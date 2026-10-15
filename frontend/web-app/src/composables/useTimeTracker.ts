@@ -1,7 +1,8 @@
 import { computed, ref, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
-import { readCsrfToken, type CurrentTimeTracker, type TimeTrackingSummary, type TimeTrackingCommand } from '@yumpoo/api-client'
+import { readCsrfToken, type CurrentTimeTracker, type TimeTrackingPreferences, type TimeTrackingSummary, type TimeTrackingCommand } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../api/client'
+import { timeProblemMessage } from './timeTrackingProblems'
 
 const current = shallowRef<CurrentTimeTracker>()
 const running = computed(() => current.value?.runningSessions ?? [])
@@ -20,6 +21,26 @@ let channel: BroadcastChannel | undefined
 let cleanup: (() => void) | undefined
 const retries = new Map<string, string>()
 const listeners = new Set<() => void>()
+export const DEFAULT_TIME_PREFERENCES: TimeTrackingPreferences = { timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080 }
+const PREFERENCES_KEY = 'yumpoo.time-tracking.preferences.v1'
+/** Last known preferences, so timer controls do not flash in before the first poll for someone who switched the timer off. */
+const cachedPreferences = shallowRef<TimeTrackingPreferences | undefined>(readCachedPreferences())
+const preferences = computed(() => current.value?.preferences ?? cachedPreferences.value ?? DEFAULT_TIME_PREFERENCES)
+const timerEnabled = computed(() => preferences.value.timerEnabled)
+
+function readCachedPreferences(): TimeTrackingPreferences | undefined {
+  try {
+    const value = JSON.parse(localStorage.getItem(PREFERENCES_KEY) ?? 'null') as TimeTrackingPreferences | null
+    return value && typeof value.timerEnabled === 'boolean' ? value : undefined
+  } catch { return undefined }
+}
+function cachePreferences(value: TimeTrackingPreferences | undefined): void {
+  cachedPreferences.value = value
+  try {
+    if (value) localStorage.setItem(PREFERENCES_KEY, JSON.stringify(value))
+    else localStorage.removeItem(PREFERENCES_KEY)
+  } catch { /* Storage may be unavailable; the server value still applies after the first poll. */ }
+}
 
 export function formatTrackingDuration(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000))
@@ -37,6 +58,7 @@ export function timerClockOffset(): number { return offset }
 
 export function useTimeTracker() {
   return { current, running, isRunning, runningFor, now, busy, problem, connected, savedAt, refresh, toggle, start, startMany, switchTo, stop, stopAll, notify, summaries,
+    preferences, timerEnabled, setPreferences,
     wallDuration: computed(() => running.value.length ? Math.max(0, now.value - Math.min(...running.value.map(timer => timer.session.startedAt.getTime()))) : 0) }
 }
 
@@ -73,6 +95,7 @@ export function activateTimeTracker(active: boolean): void {
   savedAt.value = 0
   offset = 0
   if (!active) {
+    cachePreferences(undefined)
     return
   }
   channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('yumpoo-time-tracker')
@@ -131,6 +154,7 @@ function acceptCurrent(result: CurrentTimeTracker): void {
   if (result.runningSessions.length) savedAt.value = 0
   else if (previous?.runningSessions.length && result.rowVersion > previous.rowVersion) savedAt.value = Date.now()
   current.value = result
+  if (result.preferences) cachePreferences(result.preferences)
 }
 
 function notify(): void {
@@ -193,7 +217,9 @@ async function run(action: () => Promise<void>): Promise<boolean> {
   } catch (error) {
     if (epoch === generation) {
       const status = (error as { response?: Response }).response?.status
-      problem.value = status === 409 || status === 412 || (error as Error).message === 'TIMER_CHANGED'
+      const message = status === 409 ? await timeProblemMessage(error) : ''
+      problem.value = message.startsWith('计时器已关闭') ? message
+        : status === 409 || status === 412 || (error as Error).message === 'TIMER_CHANGED'
         ? '计时已在其他窗口变化，已刷新，请重新选择。'
         : '操作尚未确认，请检查连接后重试。已有计时会继续保留。'
       ElMessage.error(problem.value)
@@ -204,6 +230,7 @@ async function run(action: () => Promise<void>): Promise<boolean> {
 
 async function start(workItemId: string): Promise<boolean> {
   if (isRunning(workItemId)) return true
+  if (!timerEnabled.value) return false
   const success = await run(async () => {
     if (!isRunning(workItemId)) await command('start', { workItemId })
   })
@@ -212,6 +239,7 @@ async function start(workItemId: string): Promise<boolean> {
 }
 
 async function startMany(workItemIds: string[]): Promise<boolean> {
+  if (!timerEnabled.value) return false
   const success = await run(async () => {
     for (let index = 0; index < workItemIds.length; index += 10) {
       await command('start', { workItemIds: workItemIds.slice(index, index + 10) })
@@ -222,6 +250,7 @@ async function startMany(workItemIds: string[]): Promise<boolean> {
 }
 
 async function switchTo(workItemId: string): Promise<boolean> {
+  if (!timerEnabled.value) return false
   const success = await run(() => command('switch', { workItemId }))
   if (success) window.dispatchEvent(new Event('yumpoo:timer-started'))
   return success
@@ -240,6 +269,17 @@ function stop(sessionId: string): Promise<boolean> {
 }
 
 function stopAll(): Promise<boolean> { return run(() => command('stop-all')) }
+
+/** Saving with the timer off also stops every running timer on the server, in the same transaction. */
+function setPreferences(next: TimeTrackingPreferences): Promise<boolean> {
+  return run(async () => {
+    const snapshot = current.value
+    if (!snapshot) throw new Error('计时状态未加载，请重试')
+    const result = await timerMutation(JSON.stringify(['preferences', snapshot.etag, next]), (idempotencyKey, xXSRFTOKEN) =>
+      timeTrackingApi.updateTimeTrackingPreferences({ ifMatch: snapshot.etag, idempotencyKey, xXSRFTOKEN, timeTrackingPreferences: next }))
+    acceptCurrent(result)
+  })
+}
 
 export const timerExitPrompt = ref(false)
 let resolveExit: ((choice: 'stop' | 'continue' | 'cancel') => void) | undefined

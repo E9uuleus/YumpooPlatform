@@ -71,8 +71,10 @@ const jumps = computed<JumpCard[]>(() => [
     : { key: 'dashboards', label: '仪表板', meta: '个人看板与统计', icon: DataAnalysis, tone: 'purple', open: () => openWorkspace('dashboards') },
   { key: 'inbox', label: '收件箱', meta: inbox.unread.value ? `${inbox.unread.value} 条未读` : '没有未读消息', icon: Message, tone: 'red',
     open: () => void router.push({ name: 'inbox' }) },
-  { key: 'timer', label: running.value ? '计时中' : '开始计时', meta: running.value ? formatDuration(tracker.wallDuration.value) : '选择工作项开始计时',
-    icon: Timer, tone: 'green', open: () => window.dispatchEvent(new Event('yumpoo:open-timer')) },
+  tracker.timerEnabled.value || running.value
+    ? { key: 'timer', label: running.value ? '计时中' : '开始计时', meta: running.value ? formatDuration(tracker.wallDuration.value) : '选择工作项开始计时',
+      icon: Timer, tone: 'green', open: () => window.dispatchEvent(new Event('yumpoo:open-timer')) }
+    : { key: 'timer', label: '记录工时', meta: '在今天的时间线上按时段填写', icon: Timer, tone: 'green', open: openToday },
   ...(session.isCompanyAdmin.value
     ? [{ key: 'company', label: '公司管理', meta: '项目、成员与组织', icon: OfficeBuilding, tone: 'amber' as const, open: () => void router.push({ name: 'company-overview' }) }]
     : []),
@@ -84,6 +86,10 @@ const jumps = computed<JumpCard[]>(() => [
 function openWorkspace(name: 'workspace' | 'dashboards' | 'my-time'): void {
   const workspaceSlug = session.authentication.value?.user.workspaceSlug
   if (workspaceSlug) void router.push({ name, params: { workspaceSlug } })
+}
+function openToday(): void {
+  const workspaceSlug = session.authentication.value?.user.workspaceSlug
+  if (workspaceSlug) void router.push({ name: 'my-time-day', params: { workspaceSlug, date: today.value } })
 }
 function openTask(task: TeamMemberTask): void {
   void router.push({ name: 'project-overview', params: { projectId: task.projectId }, query: { workItemId: task.id } })

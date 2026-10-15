@@ -1,7 +1,7 @@
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const api = vi.hoisted(() => ({ getCurrentTimeTracker: vi.fn(), getTimeTrackingSummaries: vi.fn(), startTimeTracker: vi.fn(), switchTimeTracker: vi.fn(), stopTimeTracker: vi.fn(), stopAllTimeTrackers: vi.fn() }))
+const api = vi.hoisted(() => ({ getCurrentTimeTracker: vi.fn(), getTimeTrackingSummaries: vi.fn(), startTimeTracker: vi.fn(), switchTimeTracker: vi.fn(), stopTimeTracker: vi.fn(), stopAllTimeTrackers: vi.fn(), updateTimeTrackingPreferences: vi.fn() }))
 vi.mock('../api/client', () => ({ timeTrackingApi: api }))
 vi.mock('@yumpoo/api-client', () => ({ readCsrfToken: () => 'csrf' }))
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn(), warning: vi.fn() }, ElMessageBox: { confirm: vi.fn(async () => undefined) } }))
@@ -164,5 +164,24 @@ describe('application timer facts', () => {
     expect(savedAt).toBeGreaterThan(0)
     await useTimeTracker().refresh()
     expect(useTimeTracker().savedAt.value).toBe(savedAt)
+  })
+  it('does not start timers while the timer is switched off', async () => {
+    api.getCurrentTimeTracker.mockResolvedValue({ ...state(1), preferences: { timerEnabled: false, workdayStartMinute: 540, workdayEndMinute: 1080 } })
+    await useTimeTracker().refresh()
+    expect(useTimeTracker().timerEnabled.value).toBe(false)
+    expect(await useTimeTracker().start('item')).toBe(false)
+    expect(await useTimeTracker().startMany(['item'])).toBe(false)
+    expect(await useTimeTracker().switchTo('item')).toBe(false)
+    expect(api.startTimeTracker).not.toHaveBeenCalled()
+    expect(api.switchTimeTracker).not.toHaveBeenCalled()
+  })
+  it('saves preferences against the latest timer version and adopts the response', async () => {
+    api.getCurrentTimeTracker.mockResolvedValue(state(3, true))
+    const off = { timerEnabled: false, workdayStartMinute: 510, workdayEndMinute: 1050 }
+    api.updateTimeTrackingPreferences.mockResolvedValue({ ...state(4), preferences: off })
+    expect(await useTimeTracker().setPreferences(off)).toBe(true)
+    expect(api.updateTimeTrackingPreferences).toHaveBeenCalledWith(expect.objectContaining({ ifMatch: '"3"', timeTrackingPreferences: off }))
+    expect(useTimeTracker().timerEnabled.value).toBe(false)
+    expect(useTimeTracker().running.value).toHaveLength(0)
   })
 })

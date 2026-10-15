@@ -8,7 +8,7 @@ vi.mock('../../composables/useSession', async () => {
 })
 vi.mock('../../composables/useTimeTracker', async () => {
   const { ref } = await import('vue')
-  const tracker = { current: ref({ session: null, recentItems: [], runningSessions: [], resumeItems: [] }), running: ref([]), wallDuration: ref(0), savedAt: ref(0), connected: ref(true), busy: ref(false), refresh: vi.fn(async () => undefined) }
+  const tracker = { current: ref({ session: null, recentItems: [], runningSessions: [], resumeItems: [] }), running: ref([]), wallDuration: ref(0), savedAt: ref(0), connected: ref(true), busy: ref(false), timerEnabled: ref(true), refresh: vi.fn(async () => undefined) }
   return { activateTimeTracker: vi.fn(), confirmTimerExit: vi.fn(), formatDuration: () => '0:00:00', timerClockOffset: () => 1234.4,
     timerExitPrompt: ref(false), chooseTimerExit: vi.fn(),
     useTimeTracker: () => tracker }
@@ -17,6 +17,8 @@ import { useTimeTracker } from '../../composables/useTimeTracker'
 import TimerHost from './TimerHost.vue'
 
 const mounted: Array<ReturnType<typeof mount>> = []
+// The mock exposes a writable ref where the real composable exposes a computed.
+const setTimerEnabled = (value: boolean) => { (useTimeTracker().timerEnabled as unknown as { value: boolean }).value = value }
 async function host() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/projects/:projectId/overview', component: { template: '<div />' } }] })
   await router.push('/projects/example/overview'); await router.isReady()
@@ -27,7 +29,7 @@ async function host() {
   mounted.push(wrapper)
   return wrapper
 }
-beforeEach(() => { useTimeTracker().savedAt.value = 0; vi.stubGlobal('open', vi.fn()); vi.stubGlobal('documentPictureInPicture', undefined); vi.stubGlobal('isSecureContext', true); vi.stubGlobal('yumpooDesktop', undefined) })
+beforeEach(() => { useTimeTracker().savedAt.value = 0; setTimerEnabled(true); vi.stubGlobal('open', vi.fn()); vi.stubGlobal('documentPictureInPicture', undefined); vi.stubGlobal('isSecureContext', true); vi.stubGlobal('yumpooDesktop', undefined) })
 afterEach(() => { mounted.splice(0).forEach(wrapper => wrapper.unmount()); vi.unstubAllGlobals() })
 
 describe('shared timer surfaces', () => {
@@ -111,6 +113,16 @@ describe('shared timer surfaces', () => {
     panel.vm.$emit('orb', { size: 80, side: 'left', detailWidth: 200 }); await flushPromises()
     expect(floating.attributes('style')).toContain('width: 244px')
     expect(floating.attributes('style')).toContain('left: 8px')
+  })
+  it('hides the entry and ignores open requests when the timer is switched off', async () => {
+    const wrapper = await host()
+    await wrapper.get('.global-timer-entry').trigger('click'); await flushPromises()
+    expect(wrapper.find('.timer-floating').exists()).toBe(true)
+    setTimerEnabled(false); await flushPromises()
+    expect(wrapper.find('.timer-floating').exists()).toBe(false)
+    expect(wrapper.find('.global-timer-entry').exists()).toBe(false)
+    window.dispatchEvent(new Event('yumpoo:open-timer')); await flushPromises()
+    expect(wrapper.find('.timer-floating').exists()).toBe(false)
   })
   it('uses native window capabilities before any browser fallback', async () => {
     const timer = { show: vi.fn(async () => undefined), getWindowState: vi.fn(async () => ({ surface: 'main', mode: 'picker', pinned: true })), publishState: vi.fn(async () => undefined), onExitRequest: vi.fn(), onCommand: vi.fn() }

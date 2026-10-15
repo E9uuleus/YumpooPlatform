@@ -71,7 +71,13 @@ const offCommand = desktop?.onCommand(async command => {
     : resume.some(item => item.workItemId === command.workItemId) ? await tracker.startMany(resume.map(item => item.workItemId)) : await tracker.start(command.workItemId))
   await desktop.completeCommand(command.requestId, success).catch(() => undefined)
 })
-const openFromToolbar = () => { void open() }
+const openFromToolbar = () => { if (tracker.timerEnabled.value) void open() }
+// Switching the timer off closes every timer surface; older desktop shells do not know the setting, so their window is hidden too.
+watch(() => tracker.timerEnabled.value, enabled => {
+  if (enabled || tracker.running.value.length) return
+  hide()
+  if (desktop) void desktop.hide().catch(() => undefined)
+})
 const started = () => {
   if (standalone.value) return
   resizePip(false)
@@ -208,7 +214,7 @@ function drag(event: PointerEvent) {
 
 <template>
   <button
-    v-if="authenticated && !standalone && !inline && !pipTarget"
+    v-if="authenticated && !standalone && !inline && !pipTarget && (tracker.timerEnabled.value || tracker.running.value.length)"
     class="global-timer-entry"
     :class="{ 'is-running': tracker.running.value.length }"
     aria-label="查找工作与计时"
