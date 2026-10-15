@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { ProjectWorkItemListItem } from '@yumpoo/api-client'
+import { useTimeTracker } from '../../composables/useTimeTracker'
 import YpAssignee from '../yp/YpAssignee.vue'
 import { workItemLabelColorValue } from './workItemLabelColors'
 import './workItemTimer.css'
 
 defineProps<{ item: ProjectWorkItemListItem; column: string; statusLabel: string; statusColor?: string | undefined }>()
+const timerEnabled = useTimeTracker().timerEnabled
 </script>
 
 <template>
@@ -36,6 +38,7 @@ defineProps<{ item: ProjectWorkItemListItem; column: string; statusLabel: string
       class="timer-cell"
     >
       <span
+        v-if="timerEnabled"
         class="timer-toggle"
         aria-hidden="true"
       >

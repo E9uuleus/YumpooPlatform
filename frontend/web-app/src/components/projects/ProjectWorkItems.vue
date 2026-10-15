@@ -583,7 +583,7 @@ function columnMenuState(column: { key: BuiltInColumnKey; label: string }): Colu
   const groupField = groupFieldByColumn[column.key]
   return {
     label: column.label,
-    settings: !labels ? 'unavailable' : labels.canManage ? 'editable' : 'readonly',
+    settings: column.key === 'timeTracking' ? 'timer' : !labels ? 'unavailable' : labels.canManage ? 'editable' : 'readonly',
     sortDirection: sortDirectionForColumn(column.key),
     sortDisabled: savingSortOrder.value,
     collapsible: column.key !== 'title',
