@@ -55,7 +55,8 @@ export function plan(stage, baseRef = 'origin/dev') {
       pnpm('ci-policy-tests', 'run', 'test:ci'),
       pnpm('event-policy-tests', 'run', 'test:event-contract-compat'),
       pnpm('delivery-policy-tests', 'run', 'test:m0-18'),
-      node('release-policy-tests', '--test', 'tools/release/github.test.mjs', 'tools/release/policy.test.mjs', 'tools/release/promote-release.test.mjs', 'tools/release/ssh-deploy.test.mjs'),
+      node('release-policy-tests', '--test', 'tools/release/github.test.mjs', 'tools/release/policy.test.mjs', 'tools/release/promote-release.test.mjs', 'tools/release/ssh-deploy.test.mjs', 'tools/release/version-placeholders.test.mjs'),
+      node('version-placeholders', 'tools/release/version-placeholders.mjs'),
       ...contractSteps(baseRef), ...nodeSteps, ...assetSteps,
     ]
     case 'backend': return [
