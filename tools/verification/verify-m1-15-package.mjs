@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { migrationDigest } from '../ci/migration-policy.mjs'
 import { collectRegularFiles, quotePowerShellLiteral, sha256 } from './m0-16-utils.mjs'
 import { verifyM018Handoff } from './verify-m0-18-handoff.mjs'
 import { gitHead } from './m0-18-utils.mjs'
@@ -58,7 +59,19 @@ for (const required of [
   'windows/secrets/application-secrets.yml',
   'windows/secrets/initial-identity-bootstrap.example.json',
   'windows/database/migrations/identityaccess/V15__productize_desktop_auth_attempt.sql',
+  'windows/release-metadata.json',
 ]) assert(fs.existsSync(path.join(serverRoot, ...required.split('/'))), `服务器包缺少：${required}`)
+
+const metadata = readJson(path.join(serverRoot, 'windows', 'release-metadata.json'))
+assert(metadata.schemaVersion === 1 && metadata.sourceCommit === manifest.sourceCommit, '发布元数据未绑定服务器包 commit')
+const migrationsRoot = path.join(serverRoot, 'windows', 'database', 'migrations')
+const packagedMigrations = (await collectRegularFiles(migrationsRoot))
+  .map(file => path.relative(migrationsRoot, file).replaceAll('\\', '/')).filter(file => file.endsWith('.sql')).sort()
+assert(JSON.stringify(metadata.migrations.map(item => item.file).sort()) === JSON.stringify(packagedMigrations), '发布元数据与包内迁移集合不符')
+for (const item of metadata.migrations) {
+  assert(['expand', 'breaking'].includes(item.classification), `迁移回退分类无效：${item.file}`)
+  assert(migrationDigest(fs.readFileSync(path.join(migrationsRoot, ...item.file.split('/')), 'utf8')) === item.sha256, `发布元数据迁移摘要不符：${item.file}`)
+}
 
 for (const packagedFile of await collectRegularFiles(serverRoot)) {
   const relative = path.relative(serverRoot, packagedFile).replaceAll('\\', '/')

@@ -7,7 +7,7 @@ import { resolveGitCommit } from '../verification/m0-18-utils.mjs'
 
 export const migrationRoot = 'backend/src/main/resources/db/migration'
 export const exceptionsPath = 'contracts/migrations/rollback-safety-exceptions.json'
-const migrationFile = /^[a-z][a-z0-9]*\/V(\d+)__[a-z0-9_]+\.sql$/u
+const migrationFile = /^(?:[a-z][a-z0-9]*\/)?V(\d+)__[a-z0-9_]+\.sql$/u
 const identifier = String.raw`(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\s*\.\s*(?:"[^"]+"|[A-Za-z_][\w$]*))?`
 
 const tableName = raw => raw.split('.').pop().replaceAll('"', '').trim().toLowerCase()

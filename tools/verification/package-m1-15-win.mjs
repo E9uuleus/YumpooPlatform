@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { migrationInventory } from '../ci/migration-policy.mjs'
 import { quotePowerShellLiteral, sha256 } from './m0-16-utils.mjs'
 import { gitHead } from './m0-18-utils.mjs'
 import { verifyM018Handoff } from './verify-m0-18-handoff.mjs'
@@ -78,6 +79,15 @@ function assembleServer() {
     path.join(root, 'backend', 'src', 'main', 'resources', 'db', 'migration'),
     path.join(stage, 'windows', 'database', 'migrations'),
   )
+  // 部署引擎据此判断两版之间的迁移是否只扩展，从而决定能否快速回退。
+  fs.writeFileSync(path.join(stage, 'windows', 'release-metadata.json'), `${JSON.stringify({
+    schemaVersion: 1,
+    sourceCommit: gitHead(root),
+    generatedAt: new Date().toISOString(),
+    ciRunId: Number(process.env.GITHUB_RUN_ID) || null,
+    ciRunAttempt: Number(process.env.GITHUB_RUN_ATTEMPT) || null,
+    migrations: migrationInventory(root).map(({ version, file, sha256: digest, classification }) => ({ version, file, sha256: digest, classification })),
+  }, null, 2)}\n`, 'utf8')
 }
 
 function compressContents(directory, destination) {

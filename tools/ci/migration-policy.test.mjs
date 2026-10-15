@@ -80,8 +80,12 @@ function repository(t) {
 test('only migrations added after the baseline are gated', t => {
   const { root, write, base } = repository(t)
   write(`${migrationRoot}/project/V2__add_note.sql`, 'ALTER TABLE yumpoo.project ADD COLUMN note text;\n')
+  write(`${migrationRoot}/V3__root_level_index.sql`, 'CREATE INDEX ix_project_note ON yumpoo.project (note);\n')
   const result = evaluateNewMigrations(root, base)
-  assert.deepEqual(result.added.map(item => [item.file, item.classification]), [['project/V2__add_note.sql', 'expand']])
+  assert.deepEqual(result.added.map(item => [item.version, item.file, item.classification]), [
+    [2, 'project/V2__add_note.sql', 'expand'],
+    [3, 'V3__root_level_index.sql', 'expand'],
+  ])
   assert.deepEqual(result.violations, [])
 })
 
