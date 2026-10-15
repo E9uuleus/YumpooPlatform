@@ -87,6 +87,23 @@ function mountTable(items = [item('child-1'), item('child-2')], provide: Record<
   })
 }
 
+function measureRows(wrapper: ReturnType<typeof mountTable>, top = 100) {
+  const rect = (rowTop: number, height: number) => ({ x: 0, y: rowTop, left: 0, top: rowTop,
+    right: 800, bottom: rowTop + height, width: 800, height, toJSON: () => ({}) }) as DOMRect
+  const rows = wrapper.findAll<HTMLTableRowElement>('tr.subitem-table-row')
+  vi.spyOn(wrapper.get('.el-table__body').element, 'getBoundingClientRect')
+    .mockReturnValue(rect(top, rows.length * 36))
+  rows.forEach((row, index) => {
+    vi.spyOn(row.element, 'getBoundingClientRect').mockReturnValue(rect(top + index * 36, 36))
+  })
+  return rows
+}
+
+function pointer(type: string, clientY: number, clientX = 200, pointerId = 11) {
+  return new PointerEvent(type, { bubbles: true, cancelable: true, isPrimary: true,
+    button: 0, pointerId, clientX, clientY })
+}
+
 describe('项目工作项子表格', () => {
   it('复用父表连接列宽度和只读态，固定在内置列后并转发卡片事件', async () => {
     const wrapper = mountTable([item('child-1')])
@@ -170,11 +187,18 @@ describe('项目工作项子表格', () => {
     const row = wrapper.get('.subitem-title-cell')
     await row.get('.work-item-title-text').trigger('click')
     expect(row.attributes('draggable')).toBe('false')
+    row.element.dispatchEvent(pointer('pointerdown', 118))
+    window.dispatchEvent(pointer('pointermove', 160))
+    expect(document.querySelector('.subitem-row-drag-preview')).toBeNull()
     await row.get('.work-item-name-input input').setValue('修改子项名称')
     await row.get('.work-item-name-input input').trigger('blur')
     await flushPromises()
     expect(wrapper.emitted('updated')?.[0]).toEqual(['child-1', expect.objectContaining({ title: '修改子项名称' })])
-    expect(row.attributes('draggable')).toBe('true')
+    measureRows(wrapper)
+    row.element.dispatchEvent(pointer('pointerdown', 118))
+    window.dispatchEvent(pointer('pointermove', 160))
+    expect(document.querySelector('.subitem-row-drag-preview')).not.toBeNull()
+    window.dispatchEvent(pointer('pointercancel', 160))
     expect(wrapper.emitted('openDetail')).toBeUndefined()
   })
 
@@ -337,21 +361,22 @@ describe('项目工作项子表格', () => {
     expect(api.createWorkItemSubitem).not.toHaveBeenCalled()
   })
 
-  it('按父项独立提交排序规则，并使用直接兄弟锚点移动子项', async () => {
+  it('按父项独立提交排序规则，拖拽使用同一父项的直接兄弟锚点', async () => {
     const first = item('child-1')
     const second = item('child-2')
     const wrapper = mountTable([first, second])
     const view = wrapper.vm as unknown as {
       applySort: (key: 'title') => void
-      onRowDragStart: (row: ProjectWorkItemListItem) => void
-      dropBefore: (row: ProjectWorkItemListItem) => Promise<void>
     }
 
     view.applySort('title')
     expect(wrapper.emitted('sortChange')?.[0]).toEqual([[{ field: 'TITLE', direction: 'ASC' }]])
 
-    view.onRowDragStart(second)
-    await view.dropBefore(first)
+    await flushPromises()
+    const rows = measureRows(wrapper)
+    rows[1]!.get('.subitem-title-cell').element.dispatchEvent(pointer('pointerdown', 154))
+    window.dispatchEvent(pointer('pointermove', 101))
+    window.dispatchEvent(pointer('pointerup', 101))
     await flushPromises()
     expect(api.moveWorkItemSubitemOrder).toHaveBeenCalledWith(expect.objectContaining({
       parentWorkItemId: 'parent-1', subitemId: 'child-2', ifMatch: '"1"',
@@ -360,6 +385,128 @@ describe('项目工作项子表格', () => {
         nextVisibleWorkItemId: 'child-1',
       },
     }))
+    expect(wrapper.emitted('reorder')?.[0]).toEqual([[second, first]])
+  })
+
+  it('超过阈值后显示整行预览并让兄弟行平移，松手后拦截名称编辑点击', async () => {
+    const wrapper = mountTable([item('child-1'), item('child-2'), item('child-3')])
+    await flushPromises()
+    const rows = measureRows(wrapper)
+    const title = rows[0]!.get('.work-item-title-text').element
+    title.dispatchEvent(pointer('pointerdown', 118))
+    window.dispatchEvent(pointer('pointermove', 120))
+    expect(document.querySelector('.subitem-row-drag-preview')).toBeNull()
+    window.dispatchEvent(pointer('pointermove', 206, 230))
+    await nextTick()
+    const preview = document.querySelector<HTMLElement>('.subitem-row-drag-preview')!
+    expect(preview.style.transform).toBe('rotate(1deg)')
+    expect(preview.style.left).toBe('30px')
+    expect(preview.style.top).toBe('188px')
+    expect(preview.querySelectorAll('td')).toHaveLength(rows[0]!.findAll('td').length)
+    expect(preview.querySelector('[id]')).toBeNull()
+    expect(preview.getAttribute('aria-hidden')).toBe('true')
+    expect(rows[0]!.classes()).toContain('subitem-table-row--dragging')
+    expect(rows[1]!.element.style.transform).toBe('translateY(-36px)')
+    expect(rows[2]!.element.style.transform).toBe('translateY(-36px)')
+    window.dispatchEvent(pointer('pointerup', 206, 230))
+    title.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    await flushPromises()
+    expect(document.querySelector('.subitem-row-drag-preview')).toBeNull()
+    expect(wrapper.find('.work-item-name-input').exists()).toBe(false)
+    expect(wrapper.emitted('reorder')?.[0])
+      .toEqual([[item('child-2'), item('child-3'), item('child-1')]])
+    expect(api.moveWorkItemSubitemOrder).toHaveBeenCalledWith(expect.objectContaining({
+      parentWorkItemId: 'parent-1', subitemId: 'child-1',
+      projectWorkItemOrderMoveRequest: { previousVisibleWorkItemId: 'child-3', nextVisibleWorkItemId: null },
+    }))
+  })
+
+  it('拖出当前子表或拖入其他父项的子表时不提交排序，也不改变父项', async () => {
+    const source = mountTable()
+    const other = mountTable([item('other-child')])
+    await other.setProps({ parent: item('parent-2') })
+    await flushPromises()
+    const rows = measureRows(source)
+    measureRows(other, 300)
+    for (const [x, y] of [[850, 154], [200, 318]]) {
+      rows[0]!.get('.subitem-title-cell').element.dispatchEvent(pointer('pointerdown', 118))
+      window.dispatchEvent(pointer('pointermove', y!, x!))
+      window.dispatchEvent(pointer('pointerup', y!, x!))
+      await flushPromises()
+    }
+    expect(api.moveWorkItemSubitemOrder).not.toHaveBeenCalled()
+    expect(source.emitted('reorder')).toBeUndefined()
+    expect(other.emitted('reorder')).toBeUndefined()
+    expect(source.emitted('rowMoved')).toBeUndefined()
+    expect(other.emitted('rowMoved')).toBeUndefined()
+    expect(document.querySelector('.subitem-row-drag-preview')).toBeNull()
+  })
+
+  it('取消、失焦或卸载时清理拖拽浮层和监听，不提交顺序', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    const rows = measureRows(wrapper)
+    for (const cancel of [() => window.dispatchEvent(pointer('pointercancel', 160)),
+      () => window.dispatchEvent(new Event('blur')), () => wrapper.unmount()]) {
+      rows[0]!.get('.subitem-title-cell').element.dispatchEvent(pointer('pointerdown', 118))
+      window.dispatchEvent(pointer('pointermove', 160))
+      expect(document.querySelector('.subitem-row-drag-preview')).not.toBeNull()
+      cancel()
+      expect(document.querySelector('.subitem-row-drag-preview')).toBeNull()
+      window.dispatchEvent(pointer('pointerup', 160))
+    }
+    expect(api.moveWorkItemSubitemOrder).not.toHaveBeenCalled()
+  })
+
+  it('排序中、无权限和详情/讨论按钮均不启动行拖拽，复选框区域可以拖动', async () => {
+    const wrapper = mountTable()
+    await flushPromises()
+    let rows = measureRows(wrapper)
+    for (const selector of ['.work-item-detail-button', '.subitem-discussion']) {
+      rows[0]!.get(selector).element.dispatchEvent(pointer('pointerdown', 118))
+      window.dispatchEvent(pointer('pointermove', 160))
+      expect(document.querySelector('.subitem-row-drag-preview')).toBeNull()
+      window.dispatchEvent(pointer('pointerup', 160))
+    }
+    await wrapper.setProps({ sortRules: [{ field: 'TITLE', direction: 'ASC' }] })
+    rows[0]!.get('.subitem-title-cell').element.dispatchEvent(pointer('pointerdown', 118))
+    window.dispatchEvent(pointer('pointermove', 160))
+    expect(document.querySelector('.subitem-row-drag-preview')).toBeNull()
+    const editable = item('child-1')
+    const locked = { ...editable, capabilities: { ...editable.capabilities, canMoveInProjectOrder: false } }
+    await wrapper.setProps({ sortRules: [], items: [locked, item('child-2')] })
+    rows = measureRows(wrapper)
+    rows[0]!.get('.subitem-title-cell').element.dispatchEvent(pointer('pointerdown', 118))
+    window.dispatchEvent(pointer('pointermove', 160))
+    expect(document.querySelector('.subitem-row-drag-preview')).toBeNull()
+    rows[1]!.get('.subitem-selection-column .el-checkbox__inner').element.dispatchEvent(pointer('pointerdown', 154))
+    window.dispatchEvent(pointer('pointermove', 102))
+    expect(document.querySelector('.subitem-row-drag-preview')).not.toBeNull()
+    window.dispatchEvent(pointer('pointercancel', 102))
+    expect(api.moveWorkItemSubitemOrder).not.toHaveBeenCalled()
+  })
+
+  it('移动失败回滚原顺序并刷新，切换父项会取消未完成的拖动', async () => {
+    api.moveWorkItemSubitemOrder.mockRejectedValue(localProblem('顺序保存失败'))
+    const first = item('child-1')
+    const second = item('child-2')
+    const wrapper = mountTable([first, second])
+    await flushPromises()
+    const rows = measureRows(wrapper)
+    rows[1]!.get('.subitem-title-cell').element.dispatchEvent(pointer('pointerdown', 154))
+    window.dispatchEvent(pointer('pointermove', 101))
+    window.dispatchEvent(pointer('pointerup', 101))
+    await flushPromises()
+    expect(wrapper.emitted('reorder')).toEqual([[[second, first]], [[first, second]]])
+    expect(wrapper.emitted('retry')).toHaveLength(1)
+    api.moveWorkItemSubitemOrder.mockClear()
+    rows[1]!.get('.subitem-title-cell').element.dispatchEvent(pointer('pointerdown', 154))
+    window.dispatchEvent(pointer('pointermove', 101))
+    await wrapper.setProps({ parent: item('parent-2') })
+    window.dispatchEvent(pointer('pointerup', 101))
+    await flushPromises()
+    expect(api.moveWorkItemSubitemOrder).not.toHaveBeenCalled()
+    expect(document.querySelector('.subitem-row-drag-preview')).toBeNull()
   })
 
   it('保持单层子表，不渲染下一级展开入口', () => {
