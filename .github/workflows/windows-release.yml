@@ -1,0 +1,73 @@
+name: Windows Server Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published server-v* tag; select this same tag as the workflow ref
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-server-release-wecom-dev
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Verify CI and retain Release package
+    if: ${{ github.repository == 'E9uuleus/YumpooPlatform' && (github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'server-v')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Checkout release workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Verify deployment client regression tests
+        run: node --test tools/release/*.test.mjs
+      - name: Verify exact push CI attempt and retain immutable package bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: node tools/release/promote-release.mjs
+
+  deploy:
+    name: Deploy retained package to Windows
+    needs: [promote]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    environment:
+      name: wecom-dev
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout verified release workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Submit request and reconnect until the server task finishes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          WINDOWS_DEPLOY_HOST: ${{ secrets.WINDOWS_DEPLOY_HOST }}
+          WINDOWS_DEPLOY_SSH_KEY: ${{ secrets.WINDOWS_DEPLOY_SSH_KEY }}
+          WINDOWS_DEPLOY_KNOWN_HOSTS: ${{ secrets.WINDOWS_DEPLOY_KNOWN_HOSTS }}
+          WINDOWS_DEPLOY_PORT: ${{ vars.WINDOWS_DEPLOY_PORT || '22' }}
+        run: node tools/release/ssh-deploy.mjs

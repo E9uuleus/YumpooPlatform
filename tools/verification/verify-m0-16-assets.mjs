@@ -170,7 +170,9 @@ function validateWinSw() {
   const xml = readText('service/yumpoo-service.xml')
   parseXml(path.join(deploymentRoot, 'service', 'yumpoo-service.xml'), 'WinSW XML')
   const requiredFragments = [
-    '<delayedAutoStart />',
+    '<delayedAutoStart>true</delayedAutoStart>',
+    '<domain>NT AUTHORITY</domain>',
+    '<user>LocalService</user>',
     '<depend>postgresql-x64-17</depend>',
     '-Dfile.encoding=UTF-8',
     'file:C:/ProgramData/Yumpoo/config/,file:C:/ProgramData/Yumpoo/secrets/application-secrets.yml',
@@ -181,9 +183,12 @@ function validateWinSw() {
     '<onfailure action="none" />',
     '<resetfailure>1 hour</resetfailure>',
     '<log mode="roll-by-size">',
+    '<sizeThreshold>10240</sizeThreshold>',
+    '<keepFiles>8</keepFiles>',
   ]
   assertM016(requiredFragments.every((fragment) => xml.includes(fragment)), 'WinSW 服务策略不完整')
-  assertM016(!/(password|localsystem|serviceaccount|interactive)/iu.test(xml), 'WinSW XML 不得保存账号、密码或桌面交互配置')
+  assertM016(/<serviceaccount>\s*<domain>NT AUTHORITY<\/domain>\s*<user>LocalService<\/user>\s*<\/serviceaccount>/u.test(xml), 'WinSW 必须使用内置 LocalService 身份')
+  assertM016(!/(password|localsystem|interactive)/iu.test(xml), 'WinSW XML 不得保存密码、LocalSystem 或桌面交互配置')
 }
 
 function validateChecklistAndRunbook() {

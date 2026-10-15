@@ -9,8 +9,12 @@
   <env name="SPRING_PROFILES_ACTIVE" value="prod" />
   <env name="SPRING_CONFIG_ADDITIONAL_LOCATION" value="file:C:/ProgramData/Yumpoo/config/,file:C:/ProgramData/Yumpoo/secrets/application-secrets.yml" />
   <env name="YUMPOO_SERVER_PORT" value="8100" />
+  <serviceaccount>
+    <domain>NT AUTHORITY</domain>
+    <user>LocalService</user>
+  </serviceaccount>
   <startmode>Automatic</startmode>
-  <delayedAutoStart />
+  <delayedAutoStart>true</delayedAutoStart>
   <depend>postgresql-x64-17</depend>
   <stoptimeout>60 sec</stoptimeout>
   <onfailure action="restart" delay="10 sec" />
