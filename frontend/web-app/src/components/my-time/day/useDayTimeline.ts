@@ -34,7 +34,7 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
     start: item.session.startedAt.getTime(), end: item.session.stoppedAt?.getTime() ?? null,
     canEdit: item.session.canEdit, etag: item.session.etag,
   })) ?? [])
-  const layoutMap = computed(() => layout(blocks.value, now.value))
+  const layoutMap = computed(() => layout(blocks.value, now.value, dayRange.value))
   const shareMap = computed(() => shares(blocks.value, now.value, dayRange.value))
   const totals = computed(() => itemTotals(blocks.value, now.value, dayRange.value))
   const recordedMs = computed(() => coveredMs(blocks.value, now.value, dayRange.value))

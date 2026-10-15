@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { ElMessageBox, ElSwitch } from 'element-plus'
 import { useTimeTracker } from '../../composables/useTimeTracker'
 
 const tracker = useTimeTracker()
-const saving = ref(false)
+const saving = tracker.busy
 
 async function setTimer(enabled: string | number | boolean) {
   const running = tracker.running.value.length
@@ -14,8 +13,7 @@ async function setTimer(enabled: string | number | boolean) {
         confirmButtonText: '停止并关闭', cancelButtonText: '取消', type: 'warning' })
     } catch { return }
   }
-  saving.value = true
-  try { await tracker.setPreferences({ ...tracker.preferences.value, timerEnabled: !!enabled }) } finally { saving.value = false }
+  await tracker.setPreferences({ ...tracker.preferences.value, timerEnabled: !!enabled })
 }
 </script>
 

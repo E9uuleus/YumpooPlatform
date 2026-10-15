@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import '../../projects/workItemAccentBar.css'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import { blockEnd, clampMove, clampResize, durationLabel, FINE_SNAP_MS, formatClock, freeInterval, gaps, HOUR, MIN_BLOCK_MS, MIN_VISUAL_MS, MINUTE,
@@ -74,7 +75,7 @@ const views = computed<BlockView[]>(() => props.blocks.map(original => {
   return {
     block: original, range, duration, split, splitTitle,
     movable: editable && startInDay && endInDay, startHandle: editable && startInDay, endHandle: editable && endInDay,
-    tier: height >= 64 ? 'full' : height >= 42 ? 'medium' : 'compact',
+    tier: height >= 64 ? 'full' : height >= 45 ? 'medium' : 'compact',
     continuesBefore: block.start < props.bounds.start, continuesAfter: end > props.bounds.end,
     label: [`${clock(block.start)}–${block.end === null ? '计时中' : clock(end)}`, block.title, block.projectName ?? '', duration, splitTitle]
       .filter(Boolean).join('，'),
@@ -153,17 +154,28 @@ const free = computed(() => gaps(props.blocks, props.now, { start: props.bounds.
 /** Empty stretches inside working hours worth a one-click shortcut. */
 const workGaps = computed(() => gaps(props.blocks, props.now,
   { start: Math.max(props.workday.start, props.bounds.start), end: Math.min(props.workday.end, props.limit) })
-  .filter(gap => gap.end - gap.start >= MIN_BLOCK_MS))
+  .filter(gap => gap.end - gap.start >= MIN_BLOCK_MS)
+  .map(gap => {
+    const visualStart = Math.min(gap.end, Math.max(gap.start, ...views.value
+      .filter(view => view.range.start < gap.start && view.range.end <= gap.start)
+      .map(view => Math.max(view.range.end, Math.max(view.range.start, props.bounds.start) + MIN_VISUAL_MS))))
+    // A small shortcut is 16px tall; keep it inside the real gap even if the visible part is shorter.
+    const buttonAt = Math.min((visualStart + gap.end) / 2, gap.end - 8 / PX_PER_MINUTE * MINUTE)
+    return { ...gap, visualStart, buttonAt }
+  }))
 
 interface Selection { pointerId: number; anchor: number; point: number; raw: number; startY: number; moved: boolean; touch: boolean }
 const selection = ref<Selection>()
 const hover = ref<number | null>(null)
-/** Manual entries last at least 15 minutes, so a shorter drag already shows the 15 minutes it will open. */
+/** Extend short drags inside their gap, shifting back from a neighbour or now when needed. */
 const selected = computed(() => {
   const current = selection.value
   if (!current?.moved || current.touch) return undefined
   const start = Math.min(current.anchor, current.point)
-  return { start, end: Math.min(Math.max(current.anchor, current.point, start + MIN_BLOCK_MS), props.limit) }
+  const end = Math.max(current.anchor, current.point)
+  if (end - start >= MIN_BLOCK_MS) return { start, end }
+  const gap = free.value.find(range => range.start <= current.raw && current.raw < range.end)
+  return gap ? rangeInGap(Math.max(gap.start, Math.min(start, gap.end - 1)), MIN_BLOCK_MS, [gap]) ?? undefined : undefined
 })
 const timeAt = (event: MouseEvent) => props.bounds.start + (event.clientY - canvas.value!.getBoundingClientRect().top) / PX_PER_MINUTE * MINUTE
 const clampTime = (ms: number) => Math.min(Math.max(ms, props.bounds.start), props.limit)
@@ -201,6 +213,7 @@ function pointerup(event: PointerEvent) {
     return
   }
   if (range && range.end - range.start >= MIN_BLOCK_MS) emit('create', range)
+  else ElMessage.warning('至少记录 15 分钟，当前空白不足 15 分钟。')
 }
 
 interface AxisMark extends Range { key: string; color: string; endLabel?: string | undefined }
@@ -304,7 +317,7 @@ defineExpose({ scrollToWorkday, pendingEl })
             v-for="gap in workGaps"
             :key="`zone-${gap.start}`"
             class="day-gap-zone"
-            :style="{ top: px(offset(gap.start)), height: px(offset(gap.end) - offset(gap.start)) }"
+            :style="{ top: px(offset(gap.visualStart)), height: px(offset(gap.end) - offset(gap.visualStart)) }"
             aria-hidden="true"
           />
           <button
@@ -313,9 +326,9 @@ defineExpose({ scrollToWorkday, pendingEl })
             type="button"
             class="day-gap"
             :class="{ 'is-small': gap.end - gap.start < 40 * MINUTE }"
-            :style="{ top: px(offset(gap.start) + (gap.end - gap.start) / 2) }"
+            :style="{ top: px(offset(gap.buttonAt)) }"
             :aria-label="`补录 ${clock(gap.start)} 到 ${clock(gap.end)} 的空白`"
-            @click="emit('create', gap)"
+            @click="emit('create', { start: gap.start, end: gap.end })"
           >
             {{ gap.end - gap.start >= 40 * MINUTE ? `空白 ${durationLabel(gap.end - gap.start)} · 补录` : `+ ${durationLabel(gap.end - gap.start)}` }}
           </button>
@@ -455,7 +468,7 @@ defineExpose({ scrollToWorkday, pendingEl })
 .day-timeline__canvas.is-receiving{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--yp-action-primary) 40%,transparent)}
 .day-gap-zone{position:absolute;left:4px;right:4px;border:1px dashed color-mix(in srgb,var(--yp-action-primary) 30%,var(--yp-border-subtle));border-radius:var(--yp-radius-sm);background:color-mix(in srgb,var(--yp-action-primary) 3%,transparent);pointer-events:none;transition:border-color var(--yp-motion-fast) ease-out,background var(--yp-motion-fast) ease-out}
 .day-timeline__canvas.is-receiving .day-gap-zone{border-color:color-mix(in srgb,var(--yp-action-primary) 65%,var(--yp-border-subtle));background:color-mix(in srgb,var(--yp-action-primary) 8%,transparent)}
-.day-gap{position:absolute;left:50%;z-index:1;transform:translate(-50%,-50%);padding:3px 10px;border:1px solid color-mix(in srgb,var(--yp-action-primary) 35%,var(--yp-border-subtle));border-radius:999px;background:var(--yp-bg-surface);color:var(--yp-action-primary);font:500 12px/16px var(--yp-font-family);white-space:nowrap;cursor:pointer;opacity:.8;transition:opacity var(--yp-motion-fast) ease-out,box-shadow var(--yp-motion-fast) ease-out}
+.day-gap{position:absolute;left:50%;z-index:3;transform:translate(-50%,-50%);padding:3px 10px;border:1px solid color-mix(in srgb,var(--yp-action-primary) 35%,var(--yp-border-subtle));border-radius:999px;background:var(--yp-bg-surface);color:var(--yp-action-primary);font:500 12px/16px var(--yp-font-family);white-space:nowrap;cursor:pointer;opacity:.8;transition:opacity var(--yp-motion-fast) ease-out,box-shadow var(--yp-motion-fast) ease-out}
 .day-gap.is-small{padding:0 8px;font-size:11px;line-height:14px}
 .day-gap:hover,.day-gap:focus-visible{opacity:1;box-shadow:var(--yp-shadow-hover)}
 .day-gap:focus-visible{outline:2px solid var(--yp-focus-ring);outline-offset:1px}

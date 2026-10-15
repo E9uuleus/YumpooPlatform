@@ -17,7 +17,7 @@ function block(start: string, end: string | null, item = `item-${++sequence}`, e
 describe('dayModel', () => {
   it('splits width only inside clusters of overlapping blocks', () => {
     const a = block('09:00', '10:00'), b = block('09:30', '10:30'), c = block('11:00', '12:00'), d = block('10:00', '10:15')
-    const result = layout([a, b, c, d], at('16:00'))
+    const result = layout([a, b, c, d], at('16:00'), day)
     expect(result.get(a.id)).toEqual({ lane: 0, lanes: 2 })
     expect(result.get(b.id)).toEqual({ lane: 1, lanes: 2 })
     expect(result.get(d.id)).toEqual({ lane: 0, lanes: 2 })
@@ -34,6 +34,25 @@ describe('dayModel', () => {
     const total = [...result.values()].reduce((sum, share) => sum + share.allocatedMs, 0)
     expect(total).toBe(coveredMs([a, b, running], now, day))
     expect(itemTotals([a, b, running], now, day).map(item => item.ms)).toEqual([1.5 * HOUR, 1.25 * HOUR, 0.75 * HOUR])
+  })
+
+  it('gives a short record its own lane without changing real overlap shares', () => {
+    const short = block('10:00', '10:03'), next = block('10:03', '11:00')
+    const blocks = [short, next], now = at('18:00')
+    const result = layout(blocks, now, day)
+    expect(result.get(short.id)).toEqual({ lane: 0, lanes: 2 })
+    expect(result.get(next.id)).toEqual({ lane: 1, lanes: 2 })
+    expect(shares(blocks, now, day).get(short.id)).toEqual({ allocatedMs: 3 * MINUTE, maxParallel: 1 })
+    expect(coveredMs(blocks, now, day)).toBe(HOUR)
+  })
+
+  it('extends a cross-midnight short tail from the clipped day start', () => {
+    const overnight = block('00:00', '00:05', 'overnight', { start: day.start - 2 * HOUR })
+    const next = block('00:05', '01:00'), outside = block('00:00', '00:00', 'outside', { start: day.start - HOUR })
+    const result = layout([overnight, next, outside], at('18:00'), day)
+    expect(result.get(overnight.id)).toEqual({ lane: 0, lanes: 2 })
+    expect(result.get(next.id)).toEqual({ lane: 1, lanes: 2 })
+    expect(shares([overnight, next], at('18:00'), day).get(overnight.id)).toEqual({ allocatedMs: 5 * MINUTE, maxParallel: 1 })
   })
 
   it('clips sessions crossing midnight to the day', () => {
@@ -104,5 +123,28 @@ describe('dayModel', () => {
       entries: [{ start: at('09:00'), end: at('10:00') }, { start: at('11:00'), end: at('12:00') }], leftoverMs: 0, truncated: false })
     expect(placeSequential(4 * HOUR, free, at('09:00')).leftoverMs).toBe(1.5 * HOUR)
     expect(placeSequential(4 * HOUR, free, at('09:00'), 1)).toEqual({ entries: [{ start: at('09:00'), end: at('10:00') }], leftoverMs: 3 * HOUR, truncated: true })
+  })
+
+  it('skips short gaps and reports a short unplaceable remainder', () => {
+    const free = [{ start: at('09:00'), end: at('09:10') }, { start: at('10:00'), end: at('10:20') }]
+    expect(placeSequential(25 * MINUTE, free, at('09:00'))).toEqual({
+      entries: [{ start: at('10:00'), end: at('10:20') }], leftoverMs: 5 * MINUTE, truncated: false })
+    expect(placeSequential(10 * MINUTE, free, at('09:00'))).toEqual({ entries: [], leftoverMs: 10 * MINUTE, truncated: false })
+  })
+
+  it('reserves at least fifteen minutes for the next gap instead of stranding a short tail', () => {
+    const free = [{ start: at('09:00'), end: at('09:50') }, { start: at('10:00'), end: at('12:00') }]
+    expect(placeSequential(HOUR, free, at('09:00'))).toEqual({
+      entries: [{ start: at('09:00'), end: at('09:45') }, { start: at('10:00'), end: at('10:15') }], leftoverMs: 0, truncated: false })
+    expect(placeSequential(HOUR, free, at('09:00'), 1)).toEqual({
+      entries: [{ start: at('10:00'), end: at('11:00') }], leftoverMs: 0, truncated: false })
+  })
+
+  it('keeps a duration under two minimum slices whole when a later gap fits it', () => {
+    const free = [{ start: at('09:00'), end: at('09:18') }, { start: at('10:00'), end: at('12:00') }]
+    expect(placeSequential(20 * MINUTE, free, at('09:00'))).toEqual({
+      entries: [{ start: at('10:00'), end: at('10:20') }], leftoverMs: 0, truncated: false })
+    expect(placeSequential(20 * MINUTE, free.slice(0, 1), at('09:00'))).toEqual({
+      entries: [{ start: at('09:00'), end: at('09:18') }], leftoverMs: 2 * MINUTE, truncated: false })
   })
 })

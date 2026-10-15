@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { ElButton, ElPopover, ElTimeSelect, ElTooltip } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 import { useTimeTracker } from '../../composables/useTimeTracker'
@@ -7,7 +7,7 @@ import TimerEnabledSwitch from '../timer/TimerEnabledSwitch.vue'
 
 const tracker = useTimeTracker()
 const preferences = tracker.preferences
-const saving = ref(false)
+const saving = tracker.busy
 const clock = (minute: number) => minute >= 1440 ? '24:00' : `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`
 const minute = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5))
 const start = computed(() => clock(preferences.value.workdayStartMinute))
@@ -16,10 +16,8 @@ const end = computed(() => clock(preferences.value.workdayEndMinute))
 async function save(patch: Partial<typeof preferences.value>) {
   const next = { ...preferences.value, ...patch }
   if (next.workdayEndMinute <= next.workdayStartMinute) return
-  saving.value = true
-  try { await tracker.setPreferences(next) } finally { saving.value = false }
+  await tracker.setPreferences(next)
 }
-
 </script>
 
 <template>

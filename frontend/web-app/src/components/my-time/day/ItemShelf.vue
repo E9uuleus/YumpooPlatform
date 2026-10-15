@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ElButton, ElIcon, ElInput, ElPopover } from 'element-plus'
+import { ElButton, ElCheckbox, ElIcon, ElInput, ElPopover } from 'element-plus'
 import { FolderOpened, Plus, Search, User } from '@element-plus/icons-vue'
 import { ListTimerCandidatesScopeEnum } from '@yumpoo/api-client'
 import { useTimerCandidates } from '../../../composables/useTimerCandidates'
@@ -14,36 +14,45 @@ const props = defineProps<{ totals: ItemTotal[]; busy: boolean }>()
 const emit = defineEmits<{ place: [item: ShelfItem, durationMs: number]; preview: [item: ShelfItem | null, durationMs: number] }>()
 
 const presets = [30 * MINUTE, HOUR, 2 * HOUR, 4 * HOUR]
-const scopes = [{ value: ListTimerCandidatesScopeEnum.Personal, label: '最近与我的' }, { value: ListTimerCandidatesScopeEnum.All, label: '全部' }]
 const { query, scope, items, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true))
+const scopes = computed(() => [
+  { value: ListTimerCandidatesScopeEnum.Personal, label: '最近与我的', disabled: searching.value },
+  { value: ListTimerCandidatesScopeEnum.All, label: '全部', disabled: searching.value },
+])
 const mine = ref(false)
-const projects = ref(new Set<string>())
-const projectOptions = computed(() => [...items.value.reduce((options, item) => {
-  const option = options.get(item.projectId) ?? { id: item.projectId, name: item.projectName, count: 0 }
-  option.count++
-  return options.set(item.projectId, option)
-}, new Map<string, { id: string; name: string; count: number }>()).values()].sort((a, b) => b.count - a.count))
+const projects = ref(new Map<string, string>())
+const projectOptions = computed(() => {
+  const options = new Map<string, { id: string; name: string; count: number }>()
+  for (const [id, name] of projects.value) options.set(id, { id, name, count: 0 })
+  for (const item of items.value) {
+    const option = options.get(item.projectId) ?? { id: item.projectId, name: item.projectName, count: 0 }
+    option.name = item.projectName
+    option.count++
+    options.set(item.projectId, option)
+  }
+  return [...options.values()].sort((a, b) => b.count - a.count)
+})
 const filtering = computed(() => searching.value || scope.value !== ListTimerCandidatesScopeEnum.Personal || mine.value || projects.value.size > 0)
 const recorded = computed(() => new Set(props.totals.map(item => item.workItemId)))
 const candidates = computed<ShelfItem[]>(() => items.value
   .filter(item => (filtering.value || !recorded.value.has(item.workItemId)) && (!mine.value || item.assignedToMe)
     && (!projects.value.size || projects.value.has(item.projectId)))
   .map(item => ({ workItemId: item.workItemId, title: item.title, itemNo: item.itemNo, projectName: item.projectName,
-    colorToken: item.contentColorToken ?? null, contentName: item.contentName })))
+    colorToken: item.contentColorToken ?? null })))
 interface ShelfSection { key: string; title: string; list: (ShelfItem & { ms?: number | undefined })[] }
 const sections = computed<ShelfSection[]>(() => filtering.value
   ? [{ key: 'result', title: searching.value ? '搜索结果' : '筛选结果', list: candidates.value }]
   : [{ key: 'today', title: '今天已记录', list: props.totals }, { key: 'recent', title: '最近与我的', list: candidates.value }])
-function toggleProject(id: string) {
-  const next = new Set(projects.value)
-  if (!next.delete(id)) next.add(id)
+function toggleProject(id: string, name: string) {
+  const next = new Map(projects.value)
+  if (!next.delete(id)) next.set(id, name)
   projects.value = next
 }
 function clearFilters() {
   query.value = ''
   scope.value = ListTimerCandidatesScopeEnum.Personal
   mine.value = false
-  projects.value = new Set()
+  projects.value = new Map()
 }
 
 const openFor = ref<string>()
@@ -106,9 +115,10 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
         aria-label="筛选工作项"
       >
         <YpSegmented
-          v-model="scope"
+          :model-value="searching ? ListTimerCandidatesScopeEnum.All : scope"
           :options="scopes"
           label="范围"
+          @update:model-value="scope = $event"
         />
         <button
           type="button"
@@ -145,27 +155,21 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
                 v-if="projects.size"
                 type="button"
                 class="item-shelf__clear"
-                @click="projects = new Set()"
+                @click="projects = new Map()"
               >
                 清除
               </button>
             </header>
-            <button
+            <el-checkbox
               v-for="project in projectOptions"
               :key="project.id"
-              type="button"
               class="item-shelf-projects__option"
-              :aria-pressed="projects.has(project.id)"
-              @click="toggleProject(project.id)"
+              :model-value="projects.has(project.id)"
+              @change="toggleProject(project.id, project.name)"
             >
-              <span
-                class="item-shelf-projects__check"
-                :class="{ checked: projects.has(project.id) }"
-                aria-hidden="true"
-              />
               <span class="item-shelf-projects__name">{{ project.name }}</span>
               <small>{{ project.count }}</small>
-            </button>
+            </el-checkbox>
             <p
               v-if="!projectOptions.length"
               class="item-shelf__empty"
@@ -218,10 +222,6 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
               <strong>{{ item.title }}</strong>
               <small v-if="item.projectName">{{ item.projectName }}</small>
             </span>
-            <span
-              v-if="item.contentName"
-              class="item-shelf__category"
-            >{{ item.contentName }}</span>
             <span
               v-if="item.ms !== undefined"
               class="item-shelf__ms"
@@ -342,7 +342,6 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
 .item-shelf__text{display:grid;flex:1;min-width:0;gap:2px}
 .item-shelf__text strong{overflow:hidden;color:var(--yp-text-primary);font-size:14px;font-weight:500;line-height:20px;white-space:nowrap;text-overflow:ellipsis}
 .item-shelf__text small{overflow:hidden;color:var(--yp-text-secondary);font-size:13px;line-height:18px;white-space:nowrap;text-overflow:ellipsis}
-.item-shelf__category{flex:none;max-width:88px;overflow:hidden;padding:2px 8px;border-radius:var(--yp-radius-pill);background:color-mix(in srgb,var(--work-item-accent) 14%,var(--yp-bg-surface));color:var(--yp-text-secondary);font-size:12px;line-height:16px;white-space:nowrap;text-overflow:ellipsis}
 .item-shelf__ms{flex:none;color:var(--yp-text-primary);font:600 13px var(--yp-font-mono);font-variant-numeric:tabular-nums}
 .item-shelf__add{flex:none;opacity:.55}
 .item-shelf__row:hover .item-shelf__add,.item-shelf__row.is-open .item-shelf__add,.item-shelf__add:focus-visible{opacity:1}
@@ -350,13 +349,11 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
 .item-shelf-projects header{display:flex;align-items:center;justify-content:space-between;min-height:26px;margin-bottom:6px}
 .item-shelf-projects header strong{color:var(--yp-text-primary);font-size:13px;font-weight:600}
 .item-shelf-projects .item-shelf__clear{margin-left:0}
-.item-shelf-projects__option{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border:0;border-radius:var(--yp-radius-sm);background:transparent;color:var(--yp-text-primary);font:13px var(--yp-font-family);text-align:left;cursor:pointer}
+.item-shelf-projects__option{display:flex;align-items:center;gap:8px;width:100%;height:auto;min-height:32px;margin:0;padding:7px 8px;box-sizing:border-box;border-radius:var(--yp-radius-sm);color:var(--yp-text-primary);font:13px var(--yp-font-family)}
+.item-shelf-projects__option :deep(.el-checkbox__label){display:flex;align-items:center;gap:8px;flex:1;min-width:0;padding-left:0;color:inherit;font:inherit}
 .item-shelf-projects__option:hover{background:var(--yp-bg-hover)}
 .item-shelf-projects__name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .item-shelf-projects__option small{color:var(--yp-text-muted)}
-.item-shelf-projects__check{display:inline-grid;flex:none;place-items:center;width:14px;height:14px;box-sizing:border-box;border:1px solid var(--yp-border-default);border-radius:3px}
-.item-shelf-projects__check.checked{border-color:var(--yp-action-primary);background:var(--yp-action-primary);color:var(--yp-text-inverse)}
-.item-shelf-projects__check.checked::after{content:'✓';font-size:11px;line-height:1}
 .shelf-duration{display:grid;gap:8px}
 .shelf-duration p{margin:0;color:var(--yp-text-muted);font-size:12px}
 .shelf-duration__chips{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}

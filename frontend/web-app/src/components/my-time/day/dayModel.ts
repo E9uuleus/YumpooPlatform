@@ -9,7 +9,7 @@ export const SNAP_MS = 15 * MINUTE
 export const FINE_SNAP_MS = 5 * MINUTE
 /** Timeline scale: 15 minutes are 24px, the snap grid the canvas dots mark. */
 export const PX_PER_MINUTE = 1.6
-/** Shortest record the timeline creates by click, drop, drag or resize, and the shortest manual entry anywhere. */
+/** Minimum new duration accepted by the Web inputs; server-side clipping and edits may still produce shorter records. */
 export const MIN_BLOCK_MS = 15 * MINUTE
 /** Shortest height a record is drawn at; layout counts short records at this length so they never cover a neighbour. */
 export const MIN_VISUAL_MS = 15 * MINUTE
@@ -106,9 +106,9 @@ function spans(blocks: DayBlock[], now: number, window?: Range): (Range & { bloc
 }
 
 /** Lanes per overlap cluster, so only blocks that actually overlap share the width; short blocks count at their drawn height. */
-export function layout(blocks: DayBlock[], now: number): Map<string, BlockLayout> {
+export function layout(blocks: DayBlock[], now: number, window: Range): Map<string, BlockLayout> {
   const result = new Map<string, BlockLayout>()
-  const sorted = spans(blocks, now).map(span => ({ ...span, end: Math.max(span.end, span.start + MIN_VISUAL_MS) }))
+  const sorted = spans(blocks, now, window).map(span => ({ ...span, end: Math.max(span.end, span.start + MIN_VISUAL_MS) }))
     .sort((a, b) => a.start - b.start || b.end - a.end)
   let cluster: { id: string; lane: number }[] = [], laneEnds: number[] = [], clusterEnd = -Infinity
   const close = () => {
@@ -260,17 +260,28 @@ export function rangeInGap(at: number, duration: number, free: Range[]): Range |
   return end - start >= MIN_BLOCK_MS ? { start, end } : null
 }
 
-/** Lays `durationMs` into the free ranges from `startAt`, splitting across gaps; skips gaps under `minimum` and leaves a shorter tail over; capped at `maxSlices` pieces. */
+/** Lays `durationMs` into the free ranges from `startAt`; skips short gaps and reserves a valid tail for later gaps when possible. */
 export function placeSequential(durationMs: number, free: Range[], startAt: number, maxSlices = MAX_FILL_ENTRIES, minimum = MIN_BLOCK_MS)
   : { entries: Range[]; leftoverMs: number; truncated: boolean } {
   const entries: Range[] = []
   let remaining = durationMs
-  for (const gap of free) {
+  for (let index = 0; index < free.length; index++) {
     if (remaining < minimum) break
+    const gap = free[index]!
     const start = Math.max(gap.start, startAt)
     if (gap.end - start < minimum) continue
     if (entries.length === maxSlices) return { entries, leftoverMs: remaining, truncated: true }
-    const end = Math.min(gap.end, start + remaining)
+    let duration = Math.min(gap.end - start, remaining)
+    const tail = remaining - duration
+    if (tail > 0 && tail < minimum) {
+      const canSplit = remaining >= 2 * minimum && entries.length + 1 < maxSlices
+      const nextMinimum = canSplit ? minimum : remaining
+      if (free.slice(index + 1).some(next => next.end - Math.max(next.start, startAt) >= nextMinimum)) {
+        if (!canSplit) continue
+        duration = remaining - minimum
+      }
+    }
+    const end = start + duration
     entries.push({ start, end })
     remaining -= end - start
   }

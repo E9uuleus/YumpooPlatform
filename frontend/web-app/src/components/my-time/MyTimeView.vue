@@ -97,7 +97,7 @@ function stopListening() {
   document.removeEventListener('keydown', closeDayOnEscape)
 }
 watch(() => Boolean(active.value), open => {
-  if (!open) { stopListening(); return }
+  if (!open) { clearTimeout(switchTimer); stopListening(); return }
   document.addEventListener('pointerdown', closeDayOnOutside, true)
   document.addEventListener('keydown', closeDayOnEscape)
 })
