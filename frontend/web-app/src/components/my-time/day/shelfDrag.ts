@@ -1,6 +1,7 @@
 import { shallowRef } from 'vue'
 
-export interface ShelfItem { workItemId: string; title: string; itemNo: string | null; projectName: string | null; colorToken: string | null }
+export interface ShelfItem { workItemId: string; title: string; itemNo: string | null; projectName: string | null; colorToken: string | null
+  contentName?: string | undefined }
 
 export const SHELF_DRAG_TYPE = 'application/x-yumpoo-work-item'
 
