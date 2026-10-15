@@ -92,14 +92,20 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
     } finally { busy.value = false }
   }
 
-  async function create(mode: TimeSessionFillMode, workItemIds: string[], ranges: Range[]): Promise<boolean> {
+  function fill(mode: TimeSessionFillMode, workItemIds: string[], ranges: Range[]) {
     const body = { mode, entries: workItemIds.flatMap(workItemId => ranges.map(range =>
       ({ workItemId, startedAt: new Date(range.start), stoppedAt: new Date(range.end) }))) }
-    const result = await mutate(['fill', body], (idempotencyKey, xXSRFTOKEN) =>
+    return mutate(['fill', body], (idempotencyKey, xXSRFTOKEN) =>
       timeTrackingApi.fillMyTimeSessions({ idempotencyKey, xXSRFTOKEN, timeSessionFillCommand: body }))
+  }
+
+  async function create(mode: TimeSessionFillMode, workItemIds: string[], ranges: Range[]): Promise<boolean> {
+    const result = await fill(mode, workItemIds, ranges)
     if (!result) return false
-    if (!result.createdCount && !result.changedCount) ElMessage.warning('这段时间已全部有记录，没有新增。')
-    else if (result.skippedDurationMs > 0) ElMessage.info(`已补录；其中 ${durationLabel(result.skippedDurationMs)} 已有记录，已跳过。`)
+    if (!result.createdCount && !result.changedCount && !result.deletedCount) ElMessage.warning('这段时间已全部有记录，没有新增。')
+    else if (result.skippedDurationMs > 0) ElMessage.info(mode === TimeSessionFillMode.Replace
+      ? `已更新记录；所选工作项已有的 ${durationLabel(result.skippedDurationMs)} 记录已保留。`
+      : `已补录；其中 ${durationLabel(result.skippedDurationMs)} 已有记录，已跳过。`)
     return true
   }
 
@@ -123,8 +129,12 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
   }
 
   /** Keeps only this item over its own range by trimming the other editable records there. */
-  function exclusive(block: DayBlock): Promise<boolean> {
-    return create(TimeSessionFillMode.Replace, [block.workItemId!], [{ start: block.start, end: block.end! }])
+  async function exclusive(block: DayBlock): Promise<boolean> {
+    const result = await fill(TimeSessionFillMode.Replace, [block.workItemId!], [{ start: block.start, end: block.end! }])
+    if (!result) return false
+    if (result.createdCount || result.changedCount || result.deletedCount) ElMessage.success('已调整可编辑的重叠记录。')
+    else ElMessage.info('没有可调整的重叠记录。')
+    return true
   }
 
   const reloadVisible = () => { if (document.visibilityState === 'visible') void load() }

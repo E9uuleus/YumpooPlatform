@@ -284,12 +284,32 @@ class TimeTrackingHttpIT {
     }
 
     @Test
+    void exclusiveExistingRecordDeletesOtherRecordsWithoutCreatingOrChangingTheTarget() throws Exception {
+        String path="/api/v1/me/time-sessions/fill";
+        ok(mutate("POST",path,member,fillBody("PARALLEL",source.itemId(),"09:00","10:00"),null));
+        ok(mutate("POST",path,member,fillBody("PARALLEL",target.itemId(),"09:00","10:00"),null));
+        JsonNode result=ok(mutate("POST",path,member,fillBody("REPLACE",target.itemId(),"09:00","10:00"),null));
+        assertThat(result.path("createdCount").asInt()).isZero();
+        assertThat(result.path("changedCount").asInt()).isZero();
+        assertThat(result.path("deletedCount").asInt()).isOne();
+        assertThat(result.path("skippedDurationMs").asLong()).isEqualTo(3600000);
+        assertThat(ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items")).isEmpty();
+        JsonNode kept=ok(get("/api/v1/work-items/"+target.itemId()+"/time-sessions",member)).path("items");
+        assertThat(kept).hasSize(1);
+        assertThat(kept.get(0).path("allocatedDurationMs").asLong()).isEqualTo(3600000);
+        JsonNode unchanged=ok(mutate("POST",path,member,fillBody("REPLACE",target.itemId(),"09:00","10:00"),null));
+        assertThat(unchanged.path("createdCount").asInt()+unchanged.path("changedCount").asInt()
+                +unchanged.path("deletedCount").asInt()).isZero();
+    }
+
+    @Test
     void disablingTheTimerStopsRunningSessionsAndRejectsStartsUntilReEnabled() throws Exception {
         JsonNode initial=ok(get("/api/v1/me/time-tracker",member)).path("preferences");
         assertThat(initial.path("timerEnabled").asBoolean()).isTrue();
         assertThat(initial.path("workdayStartMinute").asInt()).isEqualTo(540);
         assertThat(initial.path("workdayEndMinute").asInt()).isEqualTo(1080);
-        JsonNode running=start(source);
+        JsonNode running=ok(timer("start",Map.of("workItemIds",List.of(source.itemId(),target.itemId())),"\"0\""));
+        assertThat(running.path("runningSessions")).hasSize(2);
         String off=json.writeValueAsString(Map.of("timerEnabled",false,"workdayStartMinute",510,"workdayEndMinute",1050));
         String path="/api/v1/me/time-tracker/preferences";
         assertThat(mutate("PUT",path,member,off,null).statusCode()).isEqualTo(428);
@@ -302,14 +322,20 @@ class TimeTrackingHttpIT {
         assertThat(disabled.path("preferences").path("workdayStartMinute").asInt()).isEqualTo(510);
         assertThat(disabled.path("rowVersion").asLong()).isEqualTo(running.path("rowVersion").asLong()+1);
         assertThat(mutate("PUT",path,member,off,running.path("etag").asText(),key).body()).isEqualTo(response.body());
-        JsonNode record=ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items").get(0);
-        assertThat(record.path("stoppedAt").isNull()).isFalse();
-        var rejected=timer("start",Map.of("workItemId",target.itemId()),disabled.path("etag").asText());
-        assertThat(rejected.statusCode()).as(rejected.body()).isEqualTo(409);
-        assertThat(json.readTree(rejected.body()).path("details").path("reason").asText()).isEqualTo("TIMER_DISABLED");
+        for(Project project:List.of(source,target)) {
+            JsonNode record=ok(get("/api/v1/work-items/"+project.itemId()+"/time-sessions",member)).path("items").get(0);
+            assertThat(record.path("stoppedAt").isNull()).isFalse();
+        }
+        for(String action:List.of("start","switch")) {
+            var rejected=timer(action,Map.of("workItemId",target.itemId()),disabled.path("etag").asText());
+            assertThat(rejected.statusCode()).as(rejected.body()).isEqualTo(409);
+            assertThat(json.readTree(rejected.body()).path("details").path("reason").asText()).isEqualTo("TIMER_DISABLED");
+        }
         String on=json.writeValueAsString(Map.of("timerEnabled",true,"workdayStartMinute",510,"workdayEndMinute",1050));
         JsonNode enabled=ok(mutate("PUT",path,member,on,disabled.path("etag").asText()));
         assertThat(enabled.path("preferences").path("timerEnabled").asBoolean()).isTrue();
+        assertThat(enabled.path("runningSessions")).isEmpty();
+        assertThat(ok(get("/api/v1/me/time-tracker",member)).path("runningSessions")).isEmpty();
         assertThat(ok(timer("start",Map.of("workItemId",target.itemId()),enabled.path("etag").asText())).path("runningSessions")).hasSize(1);
     }
 

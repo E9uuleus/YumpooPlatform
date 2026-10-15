@@ -491,6 +491,21 @@ describe('desktop timer and tray', () => {
     invoke('state', event, { ...state(), rowVersion: 2, timerEnabled: true })
     expect(menu('查找工作项…')).toBeDefined()
   })
+  it('hides an existing running orb on opt-out and does not resume on re-enable', async () => {
+    const { event, main } = setup()
+    const active = state(true)
+    invoke('state', event, active)
+    await vi.advanceTimersByTimeAsync(0)
+    mini().events.get('ready-to-show')?.()
+    const stopped = { ...active, rowVersion: 2, running: null, timerEnabled: false, savedAt: Date.now() }
+    invoke('state', event, stopped)
+    expect(mini().hide).toHaveBeenCalled()
+    expect(mocks.menu.some(item => item.label?.startsWith('继续'))).toBe(false)
+    expect(mocks.menu.map(item => item.label)).not.toContain('暂停并保存计时')
+    invoke('state', event, { ...stopped, rowVersion: 3, timerEnabled: true })
+    expect(menu('继续 · 最近工作')).toBeDefined()
+    expect(main.webContents.send).not.toHaveBeenCalledWith('yumpoo:timer:command', expect.anything())
+  })
   it('never replays an unacknowledged tray command after a timeout', async () => {
     const { event, main } = setup()
     invoke('state', event, state(true))
