@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
-import { blockEnd, durationLabel, FINE_SNAP_MS, formatClock, gaps, HOUR, MIN_BLOCK_MS, MINUTE, rangeInGap, snap, snapDown, SNAP_MS,
-  type BlockLayout, type BlockShare, type DayBlock, type Range } from './dayModel'
+import { blockEnd, clampMove, clampResize, durationLabel, FINE_SNAP_MS, formatClock, freeInterval, gaps, HOUR, MIN_BLOCK_MS, MINUTE,
+  rangeInGap, snap, snapDown, SNAP_MS, type BlockLayout, type BlockShare, type DayBlock, type Range } from './dayModel'
+import { draggedItem, type ShelfItem } from './shelfDrag'
 
 const PX_PER_MINUTE = 1
 
@@ -22,7 +23,13 @@ const props = defineProps<{
   /** Dashed ghosts of what a quick add would create. */
   preview?: (Range & { title: string; colorToken: string | null })[]
 }>()
-const emit = defineEmits<{ open: [block: DayBlock, anchor: HTMLElement]; create: [range: Range] }>()
+const emit = defineEmits<{
+  open: [block: DayBlock, anchor: HTMLElement]
+  create: [range: Range]
+  change: [block: DayBlock, range: Range]
+  drop: [item: ShelfItem, range: Range]
+  dragging: [active: boolean]
+}>()
 
 const scroller = ref<HTMLElement>()
 const canvas = ref<HTMLElement>()
@@ -37,10 +44,19 @@ const hours = computed(() => {
   return [...ticks, { at: props.bounds.end, label: '24:00' }]
 })
 
+/** Ranges shown while a move or resize is dragged and then saved; cleared when fresh data arrives. */
+const drafts = ref(new Map<string, Range>())
+watch(() => props.blocks, () => { if (!drag.value) drafts.value = new Map() })
+
 interface BlockView { block: DayBlock; style: Record<string, string>; tier: 'full' | 'medium' | 'compact'; label: string
-  range: string; duration: string; split: number; splitTitle: string; continuesBefore: boolean; continuesAfter: boolean }
-const views = computed<BlockView[]>(() => props.blocks.map(block => {
+  range: string; duration: string; split: number; splitTitle: string; continuesBefore: boolean; continuesAfter: boolean
+  movable: boolean; startHandle: boolean; endHandle: boolean }
+const views = computed<BlockView[]>(() => props.blocks.map(original => {
+  const draft = drafts.value.get(original.id)
+  const block = draft ? { ...original, start: draft.start, end: draft.end } : original
   const end = blockEnd(block, props.now), top = offset(block.start), height = offset(end) - top
+  const editable = block.canEdit && block.end !== null
+  const startInDay = block.start >= props.bounds.start, endInDay = end <= props.bounds.end
   const place = props.layout.get(block.id) ?? { lane: 0, lanes: 1 }
   const share = props.shares.get(block.id) ?? { allocatedMs: 0, maxParallel: 1 }
   const minutes = height / MINUTE * PX_PER_MINUTE
@@ -49,7 +65,8 @@ const views = computed<BlockView[]>(() => props.blocks.map(block => {
   const split = share.maxParallel
   const splitTitle = split > 1 ? `与其他 ${split - 1} 项并行，当天计入 ${durationLabel(share.allocatedMs)}（实际 ${duration}）` : ''
   return {
-    block, range, duration, split, splitTitle,
+    block: original, range, duration, split, splitTitle,
+    movable: editable && startInDay && endInDay, startHandle: editable && startInDay, endHandle: editable && endInDay,
     tier: minutes >= 46 ? 'full' : minutes >= 28 ? 'medium' : 'compact',
     continuesBefore: block.start < props.bounds.start, continuesAfter: end > props.bounds.end,
     label: [range, block.itemNo ? `#${block.itemNo}` : '', block.title, block.projectName ?? '', splitTitle,
@@ -62,8 +79,69 @@ const views = computed<BlockView[]>(() => props.blocks.map(block => {
   }
 }))
 
+let suppressClick = false
 function open(view: BlockView, event: MouseEvent) {
+  if (suppressClick) { suppressClick = false; return }
   emit('open', view.block, event.currentTarget as HTMLElement)
+}
+
+interface Drag { block: DayBlock; edge: 'move' | 'start' | 'end'; pointerId: number; startY: number; bounds: Range; moved: boolean; range: Range
+  target: HTMLElement }
+const drag = ref<Drag>()
+function dragStart(view: BlockView, edge: Drag['edge'], event: PointerEvent) {
+  const allowed = edge === 'move' ? view.movable : edge === 'start' ? view.startHandle : view.endHandle
+  suppressClick = false
+  if (event.button !== 0 || event.pointerType === 'touch' || !allowed) return
+  event.stopPropagation()
+  const target = event.currentTarget as HTMLElement
+  target.setPointerCapture(event.pointerId)
+  const block = view.block
+  drag.value = { block, edge, pointerId: event.pointerId, startY: event.clientY, moved: false, target,
+    bounds: freeInterval(block, props.blocks, props.limit, { start: props.bounds.start, end: props.limit }),
+    range: { start: block.start, end: blockEnd(block, props.limit) } }
+}
+function dragMove(event: PointerEvent) {
+  const current = drag.value
+  if (!current || current.pointerId !== event.pointerId) return
+  const dy = event.clientY - current.startY
+  if (!current.moved && Math.abs(dy) < 4) return
+  if (!current.moved) { current.moved = true; emit('dragging', true) }
+  const delta = dy / PX_PER_MINUTE * MINUTE, step = event.altKey ? FINE_SNAP_MS : SNAP_MS, block = current.block
+  current.range = current.edge === 'move'
+    ? clampMove(block, snap(block.start + delta, props.bounds.start, step) - block.start, current.bounds)
+    : clampResize(block, current.edge, snap((current.edge === 'start' ? block.start : block.end!) + delta, props.bounds.start, step), current.bounds)
+  drafts.value = new Map(drafts.value).set(block.id, current.range)
+}
+function dragEnd(event: PointerEvent, cancelled = false) {
+  const current = drag.value
+  if (!current || current.pointerId !== event.pointerId) return
+  drag.value = undefined
+  if (current.target.hasPointerCapture(event.pointerId)) current.target.releasePointerCapture(event.pointerId)
+  if (!current.moved) return
+  suppressClick = true
+  emit('dragging', false)
+  const { range, block } = current
+  if (cancelled || (range.start === block.start && range.end === block.end)) {
+    const next = new Map(drafts.value); next.delete(block.id); drafts.value = next
+  } else emit('change', block, range)
+}
+
+const dropGhost = ref<Range | null>(null)
+function dragOver(event: DragEvent) {
+  if (!draggedItem.value) return
+  const range = rangeInGap(snapDown(timeAt(event), props.bounds.start), HOUR, free.value)
+  dropGhost.value = range
+  if (!range) { if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; return }
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+}
+function drop(event: DragEvent) {
+  const item = draggedItem.value, range = dropGhost.value
+  dropGhost.value = null
+  draggedItem.value = null
+  if (!item || !range) return
+  event.preventDefault()
+  emit('drop', item, range)
 }
 
 const free = computed(() => gaps(props.blocks, props.now, { start: props.bounds.start, end: props.limit }))
@@ -77,7 +155,7 @@ const selection = ref<Selection>()
 const hover = ref<number | null>(null)
 const selected = computed(() => selection.value?.moved && !selection.value.touch
   ? { start: Math.min(selection.value.anchor, selection.value.point), end: Math.max(selection.value.anchor, selection.value.point) } : undefined)
-const timeAt = (event: PointerEvent) => props.bounds.start + (event.clientY - canvas.value!.getBoundingClientRect().top) / PX_PER_MINUTE * MINUTE
+const timeAt = (event: MouseEvent) => props.bounds.start + (event.clientY - canvas.value!.getBoundingClientRect().top) / PX_PER_MINUTE * MINUTE
 const clampTime = (ms: number) => Math.min(Math.max(ms, props.bounds.start), props.limit)
 const snapped = (event: PointerEvent) => clampTime(snap(timeAt(event), props.bounds.start, event.altKey ? FINE_SNAP_MS : SNAP_MS))
 const onEmpty = (event: Event) => !(event.target as HTMLElement).closest('.day-block, .day-gap')
@@ -156,6 +234,9 @@ defineExpose({ scrollToWorkday, pendingEl })
         @pointerup="pointerup"
         @pointercancel="selection = undefined"
         @pointerleave="hover = null"
+        @dragover="dragOver"
+        @dragleave="dropGhost = null"
+        @drop="drop"
       >
         <div
           class="day-timeline__offhours"
@@ -210,6 +291,7 @@ defineExpose({ scrollToWorkday, pendingEl })
             'is-running': view.block.end === null,
             'is-locked': !view.block.canEdit,
             'is-selected': view.block.id === selectedId,
+            'is-dragging': drag?.moved && drag.block.id === view.block.id,
             'is-fresh': fresh?.has(view.block.id),
             'continues-before': view.continuesBefore,
             'continues-after': view.continuesAfter,
@@ -218,7 +300,23 @@ defineExpose({ scrollToWorkday, pendingEl })
           :aria-label="view.label"
           :title="view.label"
           @click="open(view, $event)"
+          @pointerdown="dragStart(view, 'move', $event)"
+          @pointermove="dragMove"
+          @pointerup="dragEnd($event)"
+          @pointercancel="dragEnd($event, true)"
         >
+          <span
+            v-if="view.startHandle"
+            class="day-block__handle is-start"
+            aria-hidden="true"
+            @pointerdown="dragStart(view, 'start', $event)"
+          />
+          <span
+            v-if="view.endHandle"
+            class="day-block__handle is-end"
+            aria-hidden="true"
+            @pointerdown="dragStart(view, 'end', $event)"
+          />
           <span class="day-block__title">
             <strong>{{ view.block.title }}</strong>
             <span
@@ -252,7 +350,15 @@ defineExpose({ scrollToWorkday, pendingEl })
           <span class="day-block__meta">{{ clock(ghost.start) }}–{{ clock(ghost.end) }} · {{ durationLabel(ghost.end - ghost.start) }}</span>
         </div>
         <div
-          v-if="hover !== null && !pending"
+          v-if="dropGhost"
+          class="day-selection is-drop"
+          :style="{ top: px(offset(dropGhost.start)), height: px(dropGhost.end - dropGhost.start) }"
+          aria-hidden="true"
+        >
+          {{ draggedItem?.title }} · {{ clock(dropGhost.start) }}–{{ clock(dropGhost.end) }}
+        </div>
+        <div
+          v-if="hover !== null && !pending && !drag"
           class="day-hover"
           :style="{ top: px(offset(hover)) }"
           aria-hidden="true"
@@ -319,6 +425,13 @@ defineExpose({ scrollToWorkday, pendingEl })
 .day-block.is-locked{cursor:default;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--day-block-color) 10%,var(--yp-bg-surface)) 0 6px,color-mix(in srgb,var(--day-block-color) 16%,var(--yp-bg-surface)) 6px 12px)}
 .day-block.continues-before{border-top-style:dashed;border-top-left-radius:0;border-top-right-radius:0}
 .day-block.continues-after{border-bottom-style:dashed;border-bottom-left-radius:0;border-bottom-right-radius:0}
+.day-block__handle{position:absolute;left:0;right:0;z-index:1;height:6px;cursor:ns-resize}
+.day-block__handle.is-start{top:-1px}
+.day-block__handle.is-end{bottom:-1px}
+.day-block:has(.day-block__handle){cursor:grab}
+.day-block:active:has(.day-block__handle){cursor:grabbing}
+.day-selection.is-drop{border-style:dashed}
+.day-block.is-dragging{z-index:5;box-shadow:var(--yp-shadow-popover);transition:none}
 .day-block.is-preview{z-index:3;border:1.5px dashed var(--day-block-color);background:color-mix(in srgb,var(--day-block-color) 10%,var(--yp-bg-surface));opacity:.9;pointer-events:none}
 .day-block.is-fresh{animation:day-block-fresh 1.4s var(--yp-ease-standard)}
 .day-block__title{display:flex;align-items:baseline;gap:6px;min-width:0}

@@ -5,8 +5,7 @@ import { Plus, Search } from '@element-plus/icons-vue'
 import { useTimerCandidates } from '../../../composables/useTimerCandidates'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import { durationLabel, HOUR, MINUTE, parseDuration, type ItemTotal } from './dayModel'
-
-export interface ShelfItem { workItemId: string; title: string; itemNo: string | null; projectName: string | null; colorToken: string | null }
+import { draggedItem, SHELF_DRAG_TYPE, type ShelfItem } from './shelfDrag'
 
 const props = defineProps<{ totals: ItemTotal[]; busy: boolean }>()
 const emit = defineEmits<{ place: [item: ShelfItem, durationMs: number]; preview: [item: ShelfItem | null, durationMs: number] }>()
@@ -37,6 +36,15 @@ function place(item: ShelfItem, durationMs: number | null) {
   emit('preview', null, 0)
   emit('place', item, durationMs)
 }
+/** Touch screens scroll the shelf instead; they use the + button. */
+const canDrag = typeof window !== 'undefined' && !window.matchMedia?.('(pointer: coarse)').matches
+function dragStart(item: ShelfItem, event: DragEvent) {
+  draggedItem.value = item
+  event.dataTransfer?.setData(SHELF_DRAG_TYPE, item.workItemId)
+  event.dataTransfer?.setData('text/plain', item.title)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy'
+}
+function dragEnd() { draggedItem.value = null }
 const color = (item: ShelfItem) => ({ '--shelf-item-color': workItemLabelColorValue(item.colorToken ?? undefined) })
 </script>
 
@@ -72,8 +80,12 @@ const color = (item: ShelfItem) => ({ '--shelf-item-color': workItemLabelColorVa
           v-for="item in section.list"
           :key="item.workItemId"
           class="item-shelf__row"
-          :class="{ 'is-open': openFor === item.workItemId }"
+          :class="{ 'is-open': openFor === item.workItemId, 'is-draggable': canDrag }"
           :style="color(item)"
+          :draggable="canDrag"
+          :title="canDrag ? '拖到右侧时间线即可添加 1 小时' : undefined"
+          @dragstart="dragStart(item, $event)"
+          @dragend="dragEnd"
         >
           <span class="item-shelf__text">
             <strong>{{ item.title }}</strong>
@@ -86,6 +98,7 @@ const color = (item: ShelfItem) => ({ '--shelf-item-color': workItemLabelColorVa
           <el-popover
             :ref="popover => register(item.workItemId, popover)"
             trigger="click"
+            :persistent="false"
             placement="right-start"
             :width="232"
             popper-class="day-popover"
@@ -175,6 +188,8 @@ const color = (item: ShelfItem) => ({ '--shelf-item-color': workItemLabelColorVa
 .item-shelf__section ul{display:grid;gap:1px;margin:0;padding:0;list-style:none}
 .item-shelf__empty{margin:0;color:var(--yp-text-muted);font-size:12px;line-height:18px}
 .item-shelf__row{position:relative;display:flex;align-items:center;gap:6px;min-height:40px;padding:3px 4px 3px 12px;border-radius:var(--yp-radius-sm);transition:background var(--yp-motion-fast) ease-out}
+.item-shelf__row.is-draggable{cursor:grab}
+.item-shelf__row.is-draggable:active{cursor:grabbing}
 .item-shelf__row:hover,.item-shelf__row.is-open{background:var(--yp-bg-selected)}
 .item-shelf__row::before{content:'';position:absolute;top:8px;bottom:8px;left:3px;width:3px;border-radius:2px;background:var(--shelf-item-color)}
 .item-shelf__text{display:grid;flex:1;min-width:0;gap:1px}

@@ -9,7 +9,8 @@ import BlockPopover from './BlockPopover.vue'
 import DayHeader from './DayHeader.vue'
 import DayTimeline from './DayTimeline.vue'
 import EntryComposer from './EntryComposer.vue'
-import ItemShelf, { type ShelfItem } from './ItemShelf.vue'
+import ItemShelf from './ItemShelf.vue'
+import type { ShelfItem } from './shelfDrag'
 import { durationLabel, gaps, placeSequential, type DayBlock, type Range } from './dayModel'
 import { useDayTimeline } from './useDayTimeline'
 
@@ -18,7 +19,7 @@ const route = useRoute()
 const router = useRouter()
 const tracker = useTimeTracker()
 const { page, day: calendarDay, blocks, layoutMap, shareMap, totals, recordedMs, targetMs, dayRange, workday, now, limit, loading, busy,
-  problem, fresh, preferences, load, create, edit, remove, reassign, exclusive } = useDayTimeline(toRef(props, 'date'), toRef(props, 'timezone'))
+  problem, fresh, preferences, load, hold, create, edit, remove, reassign, exclusive } = useDayTimeline(toRef(props, 'date'), toRef(props, 'timezone'))
 const timeline = ref<InstanceType<typeof DayTimeline>>()
 
 type PopoverInstance = InstanceType<typeof ElPopover> & { popperRef?: { popperInstanceRef?: { update?: () => void } } }
@@ -57,6 +58,14 @@ const preview = ref<(Range & { title: string; colorToken: string | null })[]>([]
 function showPreview(item: ShelfItem | null, durationMs: number) {
   preview.value = item ? plan(durationMs).entries.map(range => ({ ...range, title: item.title, colorToken: item.colorToken })) : []
 }
+let release: (() => void) | undefined
+function dragging(active: boolean) {
+  if (active) { closeComposer(); closeBlock(); release ??= hold() }
+  else { release?.(); release = undefined }
+}
+function adjust(block: DayBlock, range: Range) { void edit(block, range) }
+function dropItem(item: ShelfItem, range: Range) { void create(TimeSessionFillMode.Gaps, [item.workItemId], [range]) }
+
 async function place(item: ShelfItem, durationMs: number) {
   const { entries, leftoverMs } = plan(durationMs)
   if (!entries.length) { ElMessage.warning('上班时间之后已经没有空白可以排入。'); return }
@@ -108,6 +117,7 @@ onMounted(() => {
   document.addEventListener('pointerdown', closeOnOutside, true)
 })
 onBeforeUnmount(() => {
+  release?.()
   document.removeEventListener('keydown', shortcuts)
   document.removeEventListener('pointerdown', closeOnOutside, true)
 })
@@ -167,6 +177,9 @@ onBeforeUnmount(() => {
         :selected-id="openId"
         @create="compose"
         @open="openBlockPopover"
+        @change="adjust"
+        @drop="dropItem"
+        @dragging="dragging"
       />
     </div>
     <el-popover
