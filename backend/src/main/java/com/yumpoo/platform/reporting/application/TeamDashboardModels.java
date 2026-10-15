@@ -16,9 +16,9 @@ public final class TeamDashboardModels {
     public record TimesheetQuery(LocalDate from, LocalDate to, List<UUID> projectIds, List<UUID> userIds) {}
     public record TimesheetWorkItem(UUID id, UUID projectId, String projectName, String itemNo, String title) {}
     public record TimesheetEntry(UUID userId, UUID workItemId, LocalDate date, long durationMs) {}
-    public record CalendarDay(LocalDate date, CalendarDayType dayType, String note) {
+    public record CalendarDay(LocalDate date, CalendarDayType dayType, String note, int standardMinutes) {
         public static List<CalendarDay> of(List<CompanyCalendarDaySnapshot> days) {
-            return days.stream().map(d -> new CalendarDay(d.date(), d.dayType(), d.note())).toList();
+            return days.stream().map(d -> new CalendarDay(d.date(), d.dayType(), d.note(), d.standardMinutes())).toList();
         }
     }
     public record Timesheet(LocalDate from, LocalDate to, String timezone, Instant asOf, List<Member> members,

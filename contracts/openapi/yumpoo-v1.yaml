@@ -8633,11 +8633,12 @@ components:
     TeamTimesheetDay:
       type: object
       additionalProperties: false
-      required: [date, dayType, note]
+      required: [date, dayType, note, standardMinutes]
       properties:
         date: { type: string, format: date }
         dayType: { $ref: '#/components/schemas/CalendarDayType' }
         note: { type: string, nullable: true }
+        standardMinutes: { type: integer, format: int32, minimum: 0, maximum: 720, description: 公司日历当天标准工时分钟数，非工作日为 0。 }
     TeamWorkloadQuery:
       type: object
       additionalProperties: false

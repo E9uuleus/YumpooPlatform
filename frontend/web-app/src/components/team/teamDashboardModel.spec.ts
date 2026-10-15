@@ -25,8 +25,8 @@ describe('team dashboard periods', () => {
     expect(model.rows[0]!.children[0]!.totalMs).toBe(3_600_000)
     expect(model.dayTotals).toEqual({ '2026-10-10': 3_600_000, '2026-10-11': 7_200_000 })
     expect(model.totalMs).toBe(10_800_000)
-    sheet.days = [{ date: toApiDate('2026-10-10'), dayType: CalendarDayType.Workday, note: '补班' },
-      { date: toApiDate('2026-10-06'), dayType: CalendarDayType.Holiday, note: '国庆节' }]
+    sheet.days = [{ date: toApiDate('2026-10-10'), dayType: CalendarDayType.Workday, note: '补班', standardMinutes: 480 },
+      { date: toApiDate('2026-10-06'), dayType: CalendarDayType.Holiday, note: '国庆节', standardMinutes: 0 }]
     expect(timesheetColumns(sheet, true).map(column => [column.day, column.holiday]))
       .toEqual([['2026-10-06', true], ['2026-10-11', false]])
   })
