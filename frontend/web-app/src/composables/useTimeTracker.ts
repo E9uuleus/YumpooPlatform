@@ -142,7 +142,8 @@ function notify(): void {
   else void refresh().catch(() => undefined)
 }
 
-export async function timerMutation<T>(identity: string, call: (key: string, csrf: string) => Promise<T>): Promise<T> {
+/** `quiet` leaves conflict messages to the caller, which can explain them in context. */
+export async function timerMutation<T>(identity: string, call: (key: string, csrf: string) => Promise<T>, options: { quiet?: boolean } = {}): Promise<T> {
   const key = retries.get(identity) ?? crypto.randomUUID()
   retries.set(identity, key)
   const csrf = readCsrfToken()
@@ -157,7 +158,7 @@ export async function timerMutation<T>(identity: string, call: (key: string, csr
     if (status && status < 500) retries.delete(identity)
     if (status === 409 || status === 412) {
       await refresh().catch(() => undefined)
-      ElMessage.warning('计时状态或记录已变化，请核对后重新操作。')
+      if (!options.quiet) ElMessage.warning('计时状态或记录已变化，请核对后重新操作。')
     }
     throw error
   }

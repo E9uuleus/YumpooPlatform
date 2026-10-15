@@ -5,7 +5,7 @@ import { ElTooltip } from 'element-plus'
 import { computed, inject, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { dashboardsApi, myWorkApi, projectsApi } from '../../api/client'
-import { monthGrid, monthStats, runningExtraMs, shiftMonth, STANDARD_DAY_MS, weekdayLabels } from '../../components/my-time/myTimeModel'
+import { dayTargetMs, monthGrid, monthStats, runningExtraMs, shiftMonth, weekdayLabels } from '../../components/my-time/myTimeModel'
 import { addDays, buildTimesheet, fromApiDate, projectColors, shortHours, todayIn, toApiDate } from '../../components/team/teamDashboardModel'
 import AuroraShapes from '../../components/motion/AuroraShapes.vue'
 import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
@@ -304,7 +304,7 @@ onMounted(() => { void onboarding.ready() })
                 class="home-calendar__day"
                 :class="{
                   'is-recorded': cell.inMonth && (monthDays[cell.date] ?? 0) > 0,
-                  'is-full': cell.inMonth && (monthDays[cell.date] ?? 0) >= STANDARD_DAY_MS,
+                  'is-full': cell.inMonth && (monthDays[cell.date] ?? 0) >= dayTargetMs(monthSheet?.days, cell.date),
                   'is-today': cell.today,
                 }"
                 :style="{ '--d': cell.row + cell.column }"

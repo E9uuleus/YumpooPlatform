@@ -1,6 +1,7 @@
-import { addDays, toApiDate, type TimesheetRow } from '../team/teamDashboardModel'
+import type { TeamTimesheetDay } from '@yumpoo/api-client'
+import { addDays, fromApiDate, toApiDate, type TimesheetRow } from '../team/teamDashboardModel'
 
-/** Reference workday for the cell fill level; longer days fill the cell completely. */
+/** Reference workday for days without a company standard (rest days, or before the sheet loads). */
 export const STANDARD_DAY_MS = 8 * 3_600_000
 export const weekdayLabels = ['一', '二', '三', '四', '五', '六', '日'] as const
 
@@ -18,6 +19,12 @@ export interface CalendarCell {
 export interface DaySegment { projectId: string; ms: number }
 export interface MonthStats { totalMs: number; recordedDays: number; averageMs: number }
 export interface ProjectShare { projectId: string; projectName: string; ms: number }
+
+/** The company calendar's standard time for `date`; a full cell means this much was recorded. */
+export function dayTargetMs(days: TeamTimesheetDay[] | undefined, date: string): number {
+  const minutes = days?.find(day => fromApiDate(day.date) === date)?.standardMinutes ?? 0
+  return minutes > 0 ? minutes * 60_000 : STANDARD_DAY_MS
+}
 
 /** Monday-first 6×7 grid around `month` (`YYYY-MM`); the company calendar only has Monday week starts. */
 export function monthGrid(month: string, today: string): CalendarCell[] {
