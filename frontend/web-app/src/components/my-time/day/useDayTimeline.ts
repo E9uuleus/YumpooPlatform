@@ -1,10 +1,11 @@
 import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
-import type { MyTimeSessionPage, TeamTimesheetDay } from '@yumpoo/api-client'
+import { ElMessage } from 'element-plus'
+import { TimeSessionFillMode, type MyTimeSessionPage, type TeamTimesheetDay } from '@yumpoo/api-client'
 import { myWorkApi, timeTrackingApi } from '../../../api/client'
 import { timeProblemMessage } from '../../../composables/timeTrackingProblems'
-import { onTimeTrackingChanged, useTimeTracker } from '../../../composables/useTimeTracker'
+import { onTimeTrackingChanged, timerMutation, useTimeTracker } from '../../../composables/useTimeTracker'
 import { toApiDate } from '../../team/teamDashboardModel'
-import { atMinute, coveredMs, dayWindow, HOUR, itemTotals, layout, MINUTE, shares, type DayBlock } from './dayModel'
+import { atMinute, coveredMs, dayWindow, durationLabel, HOUR, itemTotals, layout, MINUTE, shares, type DayBlock, type Range } from './dayModel'
 
 export const DEFAULT_TIME_PREFERENCES = { timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080 }
 
@@ -13,6 +14,7 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
   const page = ref<MyTimeSessionPage>()
   const day = ref<TeamTimesheetDay>()
   const loading = ref(false)
+  const busy = ref(false)
   const problem = ref('')
   /** Sessions that appeared after one of our own saves, flashed briefly so the result is easy to spot. */
   const fresh = ref<ReadonlySet<string>>(new Set())
@@ -79,6 +81,54 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
     }
   }
 
+  /** Runs one write; conflicts and failures are explained here and the day reloads, so callers only learn success or not. */
+  async function mutate<T>(identity: unknown[], call: (idempotencyKey: string, xXSRFTOKEN: string) => Promise<T>): Promise<T | undefined> {
+    if (busy.value) return undefined
+    busy.value = true
+    try {
+      return await timerMutation(JSON.stringify(identity), call, { quiet: true })
+    } catch (error) {
+      ElMessage.error(await timeProblemMessage(error))
+      void load()
+      return undefined
+    } finally { busy.value = false }
+  }
+
+  async function create(mode: TimeSessionFillMode, workItemIds: string[], ranges: Range[]): Promise<boolean> {
+    const body = { mode, entries: workItemIds.flatMap(workItemId => ranges.map(range =>
+      ({ workItemId, startedAt: new Date(range.start), stoppedAt: new Date(range.end) }))) }
+    const result = await mutate(['fill', body], (idempotencyKey, xXSRFTOKEN) =>
+      timeTrackingApi.fillMyTimeSessions({ idempotencyKey, xXSRFTOKEN, timeSessionFillCommand: body }))
+    if (!result) return false
+    if (!result.createdCount && !result.changedCount) ElMessage.warning('这段时间已全部有记录，没有新增。')
+    else if (result.skippedDurationMs > 0) ElMessage.info(`已补录；其中 ${durationLabel(result.skippedDurationMs)} 已有记录，已跳过。`)
+    return true
+  }
+
+  async function edit(block: DayBlock, range: Range): Promise<boolean> {
+    const timeTrackingCommand = { startedAt: new Date(range.start), stoppedAt: new Date(range.end) }
+    return !!await mutate(['edit', block.id, block.etag, timeTrackingCommand], (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.editTimeSession({
+      workItemId: block.workItemId!, sessionId: block.id, ifMatch: block.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand }))
+  }
+
+  async function remove(block: DayBlock): Promise<boolean> {
+    return !!await mutate(['delete', block.id, block.etag], (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.deleteTimeSession({
+      workItemId: block.workItemId!, sessionId: block.id, ifMatch: block.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: {} }))
+  }
+
+  async function reassign(block: DayBlock, workItemId: string): Promise<boolean> {
+    const result = await mutate(['reassign', block.id, block.etag, workItemId], (idempotencyKey, xXSRFTOKEN) =>
+      timeTrackingApi.reassignMyTimeSession({ sessionId: block.id, ifMatch: block.etag, idempotencyKey, xXSRFTOKEN,
+        timeSessionReassignCommand: { workItemId } }))
+    if (result?.skippedDurationMs) ElMessage.info(`目标工作项在其中 ${durationLabel(result.skippedDurationMs)} 已有记录，这部分已合并。`)
+    return !!result
+  }
+
+  /** Keeps only this item over its own range by trimming the other editable records there. */
+  function exclusive(block: DayBlock): Promise<boolean> {
+    return create(TimeSessionFillMode.Replace, [block.workItemId!], [{ start: block.start, end: block.end! }])
+  }
+
   const reloadVisible = () => { if (document.visibilityState === 'visible') void load() }
   watch([date, timezone], () => { page.value = undefined; day.value = undefined; known = undefined; void load() }, { immediate: true })
   const off = onTimeTrackingChanged(() => void load())
@@ -90,6 +140,6 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
     document.removeEventListener('visibilitychange', reloadVisible)
   })
 
-  return { page, day, loading, problem, fresh, dayRange, now, limit, preferences, workday, blocks, layoutMap, shareMap, totals,
-    recordedMs, targetMs, load, hold }
+  return { page, day, loading, busy, problem, fresh, dayRange, now, limit, preferences, workday, blocks, layoutMap, shareMap, totals,
+    recordedMs, targetMs, load, hold, create, edit, remove, reassign, exclusive }
 }
