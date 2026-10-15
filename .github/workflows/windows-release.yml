@@ -47,7 +47,7 @@ jobs:
     name: Deploy retained package to Windows
     needs: [promote]
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    timeout-minutes: 90
     environment:
       name: wecom-dev
     permissions:

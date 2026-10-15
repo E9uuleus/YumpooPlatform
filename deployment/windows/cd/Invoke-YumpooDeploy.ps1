@@ -38,19 +38,19 @@ try {
             }
             $work = Join-Path $deployment "work/$($folder.Name)"
             New-Item -ItemType Directory -Path $work | Out-Null
-            foreach ($name in @('request.json', 'provenance.json', 'package.zip')) {
+            foreach ($name in @('request.json', 'provenance.json')) {
                 $source = Assert-YumpooPath (Join-Path $folder.FullName $name) (Join-Path $deployment 'inbox')
-                $limit = if ($name -eq 'package.zip') { 1GB } else { 1MB }
-                if ((Get-Item -LiteralPath $source).Length -gt $limit) { throw 'Uploaded file exceeds the size limit.' }
+                if ((Get-Item -LiteralPath $source).Length -gt 1MB) { throw 'Uploaded file exceeds the size limit.' }
                 Copy-Item -LiteralPath $source -Destination (Join-Path $work $name)
             }
             $request = Get-Content -LiteralPath (Join-Path $work 'request.json') -Raw | ConvertFrom-Json
             $provenance = Get-Content -LiteralPath (Join-Path $work 'provenance.json') -Raw | ConvertFrom-Json
             if ($request.requestId -cne $folder.Name) { throw 'Request ID does not match the inbox directory.' }
             $status.tag = $request.tag; $status.sourceCommit = $request.sourceCommit
+            $package = Copy-YumpooUpload $folder.FullName $work $request $provenance
             $currentFile = Join-Path $deployment 'engine/current.json'
             $current = Get-Content -LiteralPath $currentFile -Raw | ConvertFrom-Json
-            Assert-YumpooSource $request $provenance (Join-Path $work 'package.zip') $current
+            Assert-YumpooSource $request $provenance $package $current
             if ($current.sourceCommit -ceq $provenance.sourceCommit) {
                 Test-YumpooSite $settings -Public
                 Publish-Status 'succeeded' 'already_current'

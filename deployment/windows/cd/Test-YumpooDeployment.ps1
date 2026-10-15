@@ -66,6 +66,41 @@ try {
     [IO.Directory]::Delete($junction)
     Assert-Test $rejected 'snapshot destination junction must be rejected'
 
+    $upload = Join-Path $testRoot 'upload'; New-Item -ItemType Directory -Path $upload | Out-Null
+    $payload = New-Object byte[] (2MB + 37)
+    $random = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $random.GetBytes($payload) } finally { $random.Dispose() }
+    [IO.File]::WriteAllBytes((Join-Path $upload 'package.zip'), $payload)
+    [IO.File]::WriteAllBytes((Join-Path $upload 'package-0000.part'), $payload[0..(2MB - 1)])
+    [IO.File]::WriteAllBytes((Join-Path $upload 'package-0001.part'), $payload[2MB..($payload.Length - 1)])
+    $receipt = [pscustomobject]@{ packageBytes = $payload.Length }
+    $partsRequest = [pscustomobject]@{ packagePartCount = 2 }
+    foreach ($mode in @('parts', 'legacy')) {
+        $work = Join-Path $testRoot "upload-$mode"; New-Item -ItemType Directory -Path $work | Out-Null
+        $inputRequest = if ($mode -eq 'parts') { $partsRequest } else { [pscustomobject]@{} }
+        $assembled = Copy-YumpooUpload $upload $work $inputRequest $receipt
+        Assert-Test ((Get-FileHash -LiteralPath $assembled).Hash -eq (Get-FileHash -LiteralPath (Join-Path $upload 'package.zip')).Hash) 'upload assembly must preserve the original CI bytes'
+    }
+    foreach ($fault in @('count', 'missing', 'oversized')) {
+        $work = Join-Path $testRoot "upload-$fault"; New-Item -ItemType Directory -Path $work | Out-Null
+        if ($fault -eq 'count') { $partsRequest.packagePartCount = 3 }
+        elseif ($fault -eq 'missing') { Remove-Item -LiteralPath (Join-Path $upload 'package-0001.part') }
+        else { [IO.File]::WriteAllBytes((Join-Path $upload 'package-0001.part'), (New-Object byte[] 38)) }
+        $rejected = $false
+        try { $null = Copy-YumpooUpload $upload $work $partsRequest $receipt } catch { $rejected = $true }
+        Assert-Test $rejected 'invalid upload parts must fail before source verification or service changes'
+        $partsRequest.packagePartCount = 2
+    }
+    $receipt | Add-Member -NotePropertyMembers @{ schemaVersion = 1; repository = 'E9uuleus/YumpooPlatform'; tag = 'server-vmultipart-test'; sourceCommit = ('a' * 40); packageSha256 = (Get-FileHash -LiteralPath (Join-Path $upload 'package.zip')).Hash.ToLowerInvariant() }
+    $partsRequest | Add-Member -NotePropertyMembers @{ schemaVersion = 1; requestId = [guid]::NewGuid().ToString(); tag = $receipt.tag; sourceCommit = $receipt.sourceCommit; packageSha256 = $receipt.packageSha256 }
+    [IO.File]::WriteAllBytes((Join-Path $upload 'package-0001.part'), (New-Object byte[] 37))
+    $work = Join-Path $testRoot 'upload-tampered'; New-Item -ItemType Directory -Path $work | Out-Null
+    $tampered = Copy-YumpooUpload $upload $work $partsRequest $receipt
+    $rejected = $false
+    try { Assert-YumpooSource $partsRequest $receipt $tampered $null } catch { $rejected = $_.Exception.Message -like '*checksum*' }
+    Assert-Test $rejected 'equal-sized modified parts must fail the original package checksum before any network or deployment action'
+    Write-Host 'Multipart and legacy upload assembly, missing/oversized parts and tamper rejection passed.'
+
     if ($PgBin) {
         $pgData = Join-Path $testRoot 'postgres'
         $listener = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)

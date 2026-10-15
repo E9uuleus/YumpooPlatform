@@ -232,6 +232,35 @@ function Expand-YumpooPackage($Archive, $Destination) {
     } finally { $zip.Dispose() }
 }
 
+function Copy-YumpooUpload($SourceDirectory, $WorkDirectory, $Request, $Provenance) {
+    $bytes = $Provenance.packageBytes
+    if (($bytes -isnot [int] -and $bytes -isnot [long]) -or $bytes -lt 1 -or $bytes -gt 1GB) { throw 'Invalid uploaded package size.' }
+    $partProperty = $Request.PSObject.Properties['packagePartCount']
+    $count = 1
+    if ($null -ne $partProperty) {
+        $count = $partProperty.Value
+        if (($count -isnot [int] -and $count -isnot [long]) -or $count -lt 1 -or $count -gt 512 -or $count -ne [Math]::Ceiling($bytes / [double]2MB)) {
+            throw 'Invalid uploaded package part count.'
+        }
+    }
+    $package = Assert-YumpooPath (Join-Path $WorkDirectory 'package.zip') $WorkDirectory
+    $output = [IO.File]::Open($package, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try {
+        for ($index = 0; $index -lt $count; $index++) {
+            $name = if ($null -ne $partProperty) { 'package-{0:D4}.part' -f $index } else { 'package.zip' }
+            $expected = if ($null -ne $partProperty) { [Math]::Min(2MB, $bytes - [long]$index * 2MB) } else { $bytes }
+            $source = Assert-YumpooPath (Join-Path $SourceDirectory $name) $SourceDirectory
+            $inputFile = [IO.File]::Open($source, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+            try {
+                if ($inputFile.Length -ne $expected) { throw 'Uploaded package part is incomplete or oversized.' }
+                $inputFile.CopyTo($output)
+            } finally { $inputFile.Dispose() }
+        }
+        if ($output.Length -ne $bytes) { throw 'Assembled package size does not match provenance.' }
+    } finally { $output.Dispose() }
+    return $package
+}
+
 function Get-YumpooGitHub($Path) {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Invoke-RestMethod -Uri "https://api.github.com/repos/E9uuleus/YumpooPlatform/$Path" -Headers @{ 'User-Agent' = 'YumpooDeploy'; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } -TimeoutSec 30

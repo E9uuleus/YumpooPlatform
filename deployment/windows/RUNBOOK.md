@@ -20,7 +20,9 @@ Release 附件固定为 `yumpoo-windows-server-m1-15.zip`、`yumpoo-windows-serv
 gh workflow run windows-release.yml --ref '<server-v...>' -f tag='<server-v...>'
 ```
 
-上传目录固定为 `C:/ProgramData/Yumpoo/deployment/inbox/<request UUID>/`，包含 `package.zip`、`provenance.json` 和最后原子提交的 `request.json`。只触发 `schtasks.exe /Run /TN YumpooDeploy`，不将 SSH 参数拼成任意高权限命令。查询 `C:/ProgramData/Yumpoo/deployment/status/<request UUID>.json` 可恢复中断后的观察；状态包含 `schemaVersion`、`requestId`、`tag`、`sourceCommit`、`state`、`phase`、`updatedAt` 及可选 `error` 摘要。终态为 `succeeded`、`failed`、`rolled_back` 或 `recovery_required`；后两者不能当作候选版本发布成功。
+上传目录固定为 `C:/ProgramData/Yumpoo/deployment/inbox/<request UUID>/`。客户端将原 ZIP 切为 2 MiB 的 `package-0000.part` 起始分块，以最多四个 SFTP 连接并行上传；最后一块可以较小，包上限为 1 GiB。每块连接上限 5 分钟，整体上传上限 40 分钟；只有所有分块完成后才上传 `provenance.json`，并最后原子提交带 `packagePartCount` 的 `request.json`。服务器检查块数及每块长度，在私有工作目录按顺序组装并核验原包 SHA-256；兼容没有 `packagePartCount` 的旧 `package.zip` 请求。分块上传失败不会提交切换请求；若在最后提交时断线，应先查询该 UUID 的状态，不能仅凭客户端失败断定服务器没有执行。重试产生新的请求 UUID。
+
+只触发 `schtasks.exe /Run /TN YumpooDeploy`，不将 SSH 参数拼成任意高权限命令。查询 `C:/ProgramData/Yumpoo/deployment/status/<request UUID>.json` 可恢复中断后的观察；状态包含 `schemaVersion`、`requestId`、`tag`、`sourceCommit`、`state`、`phase`、`updatedAt` 及可选 `error` 摘要。终态为 `succeeded`、`failed`、`rolled_back` 或 `recovery_required`；后两者不能当作候选版本发布成功。工作流部署 job 上限 90 分钟，包含最多 40 分钟上传与 40 分钟状态观察；观察超时不会终止服务器任务。
 
 部署序列如下：
 
