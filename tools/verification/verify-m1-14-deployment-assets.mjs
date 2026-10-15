@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const runbook = fs.readFileSync(path.join(root, 'deployment', 'windows', 'RUNBOOK.md'), 'utf8')
+const runbook = fs.readFileSync(path.join(root, 'deployment', 'windows', 'RUNBOOK-M1-14.md'), 'utf8')
 const historicalRunbook = fs.readFileSync(path.join(root, 'deployment', 'windows', 'RUNBOOK-M1-13.md'), 'utf8')
 const checklist = JSON.parse(fs.readFileSync(path.join(root, 'deployment', 'windows', 'deployment-checklist-m1-14.json'), 'utf8'))
 const config = fs.readFileSync(path.join(root, 'deployment', 'windows', 'config', 'application-prod.yml'), 'utf8')

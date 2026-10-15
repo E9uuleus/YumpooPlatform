@@ -37,7 +37,7 @@ try {
     milestone: 'M1-15',
     sourceCommit,
     generatedAt,
-    server: { platform: 'windows', architecture: 'x64', runtimeMode: 'MANUAL_JAVA_CONSOLE' },
+    server: { platform: 'windows', architecture: 'x64', runtimeMode: 'WINDOWS_SERVICE_WINSW' },
     desktopReuse: { milestone: 'M1-14', version: '0.1.0', repackaged: false },
     artifacts: [{ name: path.basename(serverZip), bytes: fs.statSync(serverZip).size, sha256: digest }],
   }
@@ -71,7 +71,7 @@ function assembleServer() {
     'Invoke-AppManagerMaintenance.ps1',
     'Invoke-InitialIdentityBootstrap.ps1',
   ]) copyAs(path.join(deployment, file), path.join(stage, 'windows', file))
-  for (const directory of ['config', 'secrets', 'nginx', 'database']) {
+  for (const directory of ['config', 'secrets', 'nginx', 'database', 'service', 'cd']) {
     copyTree(path.join(deployment, directory), path.join(stage, 'windows', directory))
   }
   copyTree(

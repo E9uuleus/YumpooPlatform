@@ -1,61 +1,80 @@
-# M1-15 Windows 生产首次身份引导运行手册
+# Windows Release 发布与生产运维手册
 
-本手册是当前部署入口。M1-13、M1-14 手册保留为版本化历史。M1-15 只发布 Windows x64 服务器包；Electron 继续使用 M1-14 `0.1.0` PILOT 包。真实企微通讯录、双管理员登录和后续同步证据保持 `ENV_PENDING`，由 M6-01 在目标环境清零。
+本手册是当前部署入口。常规发布采用 GitHub Release → SSH → 固定 SYSTEM 部署任务，后端以 `YumpooServer` Windows Service 运行，发布包模式为 `WINDOWS_SERVICE_WINSW`。包文件名沿用 M1-15 以兼容既有 CI 交付链；不代表代码或迁移停留在该里程碑。M1-13、M1-14 手册和历史 checklist 保留各自验收边界。Electron 继续使用 M1-14 `0.1.0` PILOT 包，本链路不提供 Electron 自动更新。
 
-M1-15 不新增 Flyway 迁移或 HTTP/OpenAPI 接口。首次引导只能在服务器终端、停服状态下执行一次，不得通过 SQL、匿名接口或 M1-13 fixture 建立管理员。
+Release 发布即为上线决定。主机初始化、Environment 配置和发布链路必须先就绪；单凭仓库脚本、CI 或 Release 附件不能声称服务器已部署。真实企微通讯录、双管理员登录、后续同步和整机重启证据仍按对应 checklist 保持 `ENV_PENDING`，由目标环境验证清零；本次服务恢复验收不重启整台服务器。
 
-## 1. 生成与核验服务器产物
+第 3～7 节保留首次身份引导维护操作。M1-15 不新增 Flyway 迁移或 HTTP/OpenAPI 接口；后续版本的迁移随当前应用发布。首次引导只能在服务器终端、停服状态下执行一次，不得通过 SQL、匿名接口或 M1-13 fixture 建立管理员。
 
-在 Windows x64 开发机仓库根目录执行：
+## 1. GitHub Release 自动发布
+
+日常顺序为：推送功能分支 → PR 审查与 CI → 合并 `dev` → 合并提交的 CI 通过 → 发布 `server-v*` Release → 自动部署与验收。工作流入口为 [windows-release.yml](../../.github/workflows/windows-release.yml)。发布标签必须解析为已通过完整 CI 的 `dev` 提交，不能指向 PR 的临时 merge commit。仓库默认分支为 `main` 时，发布界面应显式选择 `dev`；该标签中必须包含发布工作流。
+
+发布工作流按同一 source commit、CI run 和 attempt 选择已验证服务器包，核对 required checks、产物清单、文件大小和 SHA-256，再把原包及来源清单保存为 Release 附件。任一绑定不一致、产物过期或缺失、校验失败都在服务器切换前失败；不能改为取“最新成功包”或在发布阶段重新构建。重试复用已记录的同一来源，不能替换同名附件为不同内容。
+
+服务器通过 GitHub API 获取 Release 附件的 `digest` 和大小，核对上传的 `provenance.json` 原始字节及 ZIP；随后独立检查标签、同次 CI 和提交前进关系。来源清单无需再次经过 Release 下载域名，缺失或不一致的附件摘要仍然拒绝。
+
+GitHub 托管 runner 使用 `wecom-dev` Environment，配置 secrets `WINDOWS_DEPLOY_HOST`、`WINDOWS_DEPLOY_SSH_KEY`、`WINDOWS_DEPLOY_KNOWN_HOSTS`；variable `WINDOWS_DEPLOY_PORT` 缺省为 `22`。`known_hosts` 必须预先从可信管理通道确认，不能在工作流中临时接受扫描结果。数据库密码、企微 Secret、证书私钥和恢复凭据继续留在服务器。非管理员账号固定为 `yumpoo-deploy`，只能上传暂存文件、触发固定任务及查询结果。高权限任务执行管理员安装的 `cd` 引擎，不从上传 ZIP 运行 PowerShell 脚本；更新引擎属于管理员维护操作。
+
+Release 附件固定为 `yumpoo-windows-server-m1-15.zip`、`yumpoo-windows-server-m1-15.zip.sha256`、`artifact-manifest.json`、`provenance.json`。已存在附件只允许内容一致地复用，不用覆盖选项替换。首次发布使用 `release.published`；失败后优先重跑同一次 Actions run。手工恢复入口为 `workflow_dispatch`，UI 要求工作流已存在于默认分支；可用的 CLI 入口仍须指定原 tag，工作流自身会核对执行 ref 与请求 tag 一致：
+
+```powershell
+gh workflow run windows-release.yml --ref '<server-v...>' -f tag='<server-v...>'
+```
+
+上传目录固定为 `C:/ProgramData/Yumpoo/deployment/inbox/<request UUID>/`。客户端将原 ZIP 切为 2 MiB 的 `package-0000.part` 起始分块，以最多四个 SFTP 连接并行上传；最后一块可以较小，包上限为 1 GiB。每块连接上限 5 分钟，整体上传上限 40 分钟；只有所有分块完成后才上传 `provenance.json`，并最后原子提交带 `packagePartCount` 的 `request.json`。服务器检查块数及每块长度，在私有工作目录按顺序组装并核验原包 SHA-256；兼容没有 `packagePartCount` 的旧 `package.zip` 请求。分块上传失败不会提交切换请求；若在最后提交时断线，应先查询该 UUID 的状态，不能仅凭客户端失败断定服务器没有执行。重试产生新的请求 UUID。
+
+只触发 `schtasks.exe /Run /TN YumpooDeploy`，不将 SSH 参数拼成任意高权限命令。查询 `C:/ProgramData/Yumpoo/deployment/status/<request UUID>.json` 可恢复中断后的观察；状态包含 `schemaVersion`、`requestId`、`tag`、`sourceCommit`、`state`、`phase`、`updatedAt` 及可选 `error` 摘要。终态为 `succeeded`、`failed`、`rolled_back` 或 `recovery_required`；后两者不能当作候选版本发布成功。工作流部署 job 上限 90 分钟，包含最多 40 分钟上传与 40 分钟状态观察；观察超时不会终止服务器任务。
+
+部署序列如下：
+
+1. 在暂存区校验来源、SHA-256、ZIP 条目和目标路径、磁盘空间及数据库恢复权限，获取串行锁。同一已完成版本幂等返回，默认禁止自动降级。
+2. 只将 `wecom-dev.yumpoo.com` 站点置为维护状态，停止 `YumpooServer`。维护标志由已安装的站点规则读取；修改版本路径配置时先验证 Nginx 配置，再平滑重载。
+3. 在同一停服时点备份数据库、附件、上传临时文件、生产配置、服务配置和版本指向；备份未完整成功时恢复旧服务，不能启动候选版本。
+4. 解压到独立版本目录，更新该站点的 Web 路径及后端 JAR 路径，启动服务并执行 Flyway。
+5. 保持维护状态检查回环健康、HTTPS/SNI、首页及 JS/CSS、正式认证接口 `/api/v1/auth/me`。未认证请求预期 `401`，不能用不存在的 `/api/auth/me` 或仅 Actuator `UP` 代替。
+6. 验收通过后开放访问，执行严格 TLS 公网复核，记录请求 ID、版本、来源和部署结果。SSH 中断不终止 SYSTEM 任务，重新连接后查询同一请求状态。
+
+开放访问前失败时停止候选服务，恢复旧程序、配置、版本指向以及整套数据快照，再验收旧版本。数据库恢复先清除受管 `yumpoo` schema 内候选迁移新增的对象，再完整恢复该 schema；只替换 JAR 或只恢复若干表不构成回退。恢复失败则保持维护状态，保留备份与诊断，停止自动重试。开放访问后失败保留新增业务数据，只记录失败，不自动恢复旧数据库快照。
+
+本地复核现行服务器包仍使用既有入口：
 
 ```powershell
 pnpm verify:m1-15:deployment
 ```
 
-输出位于 `out/m1-15`：
+输出位于 `out/m1-15`，包含 `yumpoo-windows-server-m1-15.zip`、同名 `.sha256`、`artifact-manifest.json` 和 `verification-report.json`。服务器包包含已验证的 JAR/Web、当前全部迁移、Nginx 和配置模板、数据库初始化资产、维护脚本、`service/` 锁定信息、`cd/` 部署资产、本手册及历史 checklist。WinSW 二进制从锁定官方 URL 获取并核验，不提交到仓库。不得把真实 CorpID、企微 UserID、Secret、SSH 私钥或一次性输入文件打入 ZIP。
 
-- `yumpoo-windows-server-m1-15.zip`
-- `yumpoo-windows-server-m1-15.zip.sha256`
-- `artifact-manifest.json`
-- `verification-report.json`
+## 2. 首次主机初始化与运行边界
 
-服务器包包含 JAR、Web、Nginx、配置模板、V1～V15 迁移、数据库初始化资产、两个维护脚本、本手册和 checklist。不得把真实 CorpID、企微 UserID、Secret 或一次性输入文件打入 ZIP。
-
-## 2. 部署 M1-15 与执行前备份
-
-把服务器 ZIP 解压到新的并行版本目录，例如：
-
-```text
-C:\Program Files\Yumpoo\releases\m1-15-<git-short-sha>
-```
-
-不要覆盖 `C:\ProgramData\Yumpoo` 中已有的 config、secrets、data、logs 和 run。确认现有配置仍使用目标机实际 PostgreSQL 端口；已部署环境为 5433 时不得被模板的 5432 覆盖。
-
-先停止 Java 进程，确认 8100 已无监听：
+管理员首次初始化使用 [Initialize-YumpooHost.ps1](cd/Initialize-YumpooHost.ps1)。先确认实际 Java 21 路径、PostgreSQL 17 服务及 `5433` 端口、当前运行 JAR 的完整路径和 PID、已有 Nginx 目录，以及当前已部署 commit。不能因模板默认 PostgreSQL 为 `5432` 而覆盖目标机的 `5433`。
 
 ```powershell
-Get-NetTCPConnection -State Listen -LocalPort 8100 -ErrorAction SilentlyContinue
+$releaseRoot = 'C:\Program Files\Yumpoo\releases\<完整 commit SHA>'
+$currentCommit = '<当前已部署的完整 commit SHA>'
+$legacyProcessId = <已核验的 Yumpoo Java PID>
+
+& "$releaseRoot\windows\cd\Initialize-YumpooHost.ps1" `
+  -ReleaseRoot $releaseRoot `
+  -JavaPath 'C:\jdk-21.0.6\bin\java.exe' `
+  -PublicKeyPath 'C:\ProgramData\Yumpoo\secrets\deploy-key.pub' `
+  -CurrentCommit $currentCommit `
+  -LegacyProcessId $legacyProcessId
 ```
 
-输出必须为空。然后使用目标机既有备份规范备份 PostgreSQL；至少生成一次带时间戳的自定义格式备份并核验文件存在：
+示例中的 SHA 和 PID 必须替换为已核验值。初始化程序只停止匹配目标 JAR 的指定进程，禁止按 `java.exe` 批量结束进程。`-Root` 默认 `C:\ProgramData\Yumpoo`，`-PgBin` 默认 `C:\Program Files\PostgreSQL\17\bin`，`-NginxRoot` 默认 `C:\nginx`；目录不同需显式指定。
 
-```powershell
-$pgDump = 'C:\Program Files\PostgreSQL\17\bin\pg_dump.exe'
-$backup = 'C:\ProgramData\Yumpoo\data\backup\yumpoo-before-m1-15.backup'
+服务名固定为 `YumpooServer`，使用已锁定的 WinSW 2.12.0 和 `NT AUTHORITY\LocalService`，自动延迟启动，依赖 `postgresql-x64-17`。管理员生成实际 Java、JAR、配置绝对路径，服务不依赖登录会话或终端环境变量。LocalService 只读程序、配置与 Secret，对日志、附件、上传临时目录具有必要写权限。初始化逐一重建受管目录及现有文件的 ACL，移除较宽的显式授权，将所有者设为 Administrators；目录继承保护本身不能代替现有文件检查。路径及其祖先、受管树内均不得有重解析点。
 
-& $pgDump `
-  -h 127.0.0.1 `
-  -p 5433 `
-  -U yumpoo_migrator `
-  -d yumpoo `
-  -F c `
-  -f $backup `
-  -W
+若首次接管已经安装服务，随后恢复了健康旧版本或仅任务注册失败，不再次执行进程接管。先修正失败原因、确认维护标志已解除，再用相同的 `ReleaseRoot`、`JavaPath`、`PublicKeyPath`、`CurrentCommit` 和自定义目录参数运行初始化脚本并加 `-CompleteRegistration`，省略 `LegacyProcessId`。该入口核验 WinSW 哈希与 LocalService 身份、服务配置、版本指向、8100 监听所属的 Java 子进程、健康状态、公网站点及已安装引擎字节，再补齐固定任务；它不修改运行配置。若恢复时还原了旧日志配置，管理员应先修正失败原因并确认生产配置已关闭 `logging.console.enabled`。维护仍开启、版本不一致或存在未完成部署时必须先执行管理员恢复，不能通过注册入口跳过恢复。`deployment/engine/bootstrap.json` 记录 `prepared`、`registration_pending`、`registered` 或 `recovery_required` 状态，供管理员判断接管进度。
 
-Get-Item -LiteralPath $backup | Format-List FullName,Length,LastWriteTime
-```
+应用停止超时为 60 秒；异常退出依次在 10 秒、30 秒后重启，后续失败停止，运行稳定 1 小时后重置失败计数。服务模板显式使用 `<delayedAutoStart>true</delayedAutoStart>`；该大小写与 WinSW 2.12.0 实现一致。停止或恢复失败应查看服务状态与诊断，不反复强杀进程。
 
-同时备份当前 ProgramData 配置和 Secret 文件的受控副本；不得把备份提交到仓库或放入 Web 根目录。
+前端继续由现有共享 Nginx 提供。初始化只接入该站点的维护和版本路径 include，保留已有独立证书路径、HTTP-01 路径、企微验证文件、续期任务及其他站点配置，不能直接套用仓库整份 Nginx 模板。SYSTEM 开机任务只在未发现既有实例时启动 Nginx，执行时限为无限，防止任务调度器在一小时后结束其长期运行的子进程；部署任务仍限制为一小时。已有 `YumpooWebsite` 属于其他 Node 网站，不能更改。
+
+生产迁移或维护前必须具备可核验的数据库备份和文件快照。恢复账户需要删除及恢复整个受管 `yumpoo` schema 的权限；其他 schema、数据库和 PostgreSQL 18 实例不在本部署恢复范围。正式启用前应在隔离环境演练候选迁移增加对象后的整套恢复。
+
+`C:\ProgramData\Yumpoo` 的 config、secrets、data、temp、logs、run 和备份随版本保留。备份只允许受控维护身份读取，不得提交到仓库或放入 Web 根目录；成功发布不会自动删除唯一恢复依据。
 
 ## 3. 企微通讯录配置前置
 
@@ -90,7 +109,8 @@ yumpoo:
 从服务器包模板复制文件，不要在命令行中填写企微 UserID：
 
 ```powershell
-$template = 'C:\Program Files\Yumpoo\releases\current\windows\secrets\initial-identity-bootstrap.example.json'
+$releaseRoot = (Get-Content -LiteralPath 'C:\ProgramData\Yumpoo\deployment\engine\current.json' -Raw | ConvertFrom-Json).releaseRoot
+$template = Join-Path $releaseRoot 'windows\secrets\initial-identity-bootstrap.example.json'
 $input = 'C:\ProgramData\Yumpoo\secrets\initial-identity-bootstrap.json'
 
 Copy-Item -LiteralPath $template -Destination $input -Force
@@ -123,12 +143,16 @@ Get-Acl -LiteralPath $input | Format-List Owner,AccessToString
 
 ## 5. 执行一次性生产引导
 
-确认 8100 无监听后，以管理员 PowerShell 执行：
+首次身份引导是独立维护操作。先置站点为维护状态、完成数据库备份，停止服务，并确认 8100 无监听，再以管理员 PowerShell 执行：
 
 ```powershell
+Stop-Service -Name YumpooServer
+Get-NetTCPConnection -State Listen -LocalPort 8100 -ErrorAction SilentlyContinue
+
 $java = 'C:\jdk-21.0.6\bin\java.exe'
-$jar = 'C:\Program Files\Yumpoo\releases\current\server\yumpoo-server.jar'
-$script = 'C:\Program Files\Yumpoo\releases\current\windows\Invoke-InitialIdentityBootstrap.ps1'
+$releaseRoot = (Get-Content -LiteralPath 'C:\ProgramData\Yumpoo\deployment\engine\current.json' -Raw | ConvertFrom-Json).releaseRoot
+$jar = Join-Path $releaseRoot 'server\yumpoo-server.jar'
+$script = Join-Path $releaseRoot 'windows\Invoke-InitialIdentityBootstrap.ps1'
 $input = 'C:\ProgramData\Yumpoo\secrets\initial-identity-bootstrap.json'
 
 & $script `
@@ -152,22 +176,14 @@ Test-Path 'C:\ProgramData\Yumpoo\secrets\initial-identity-bootstrap.json'
 
 ## 6. 重启服务与验收
 
-用正常 prod 配置启动服务：
+确认首次引导开关仍关闭，使用已安装的服务启动正常 prod 进程：
 
 ```powershell
-$env:SPRING_PROFILES_ACTIVE = 'prod'
-$env:SPRING_CONFIG_ADDITIONAL_LOCATION = `
-  'file:C:/ProgramData/Yumpoo/config/,file:C:/ProgramData/Yumpoo/secrets/application-secrets.yml'
-
-$java = 'C:\jdk-21.0.6\bin\java.exe'
-$jar = 'C:\Program Files\Yumpoo\releases\current\server\yumpoo-server.jar'
-$log = 'C:\ProgramData\Yumpoo\logs\server-console.log'
-
-& $java '-Dfile.encoding=UTF-8' -jar $jar 2>&1 |
-  Tee-Object -FilePath $log -Append
+Start-Service -Name YumpooServer
+Get-Service -Name YumpooServer
 ```
 
-在另一 PowerShell 验证：
+在服务器验证，完成后才解除维护状态：
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8100/actuator/health/liveness
@@ -196,13 +212,15 @@ Invoke-RestMethod http://127.0.0.1:8100/actuator/health/readiness
 
 首次身份引导诊断只保留 requestId、目录运行 ID、阶段和稳定错误码，不记录企业微信外部 UserID 或供应商响应。应用运行日志的字段和查询边界见下节。Nginx 不得记录包含 OAuth query 的 `$request_uri`、`$args` 或完整 `$request`。
 
-M1-15 不新增 Flyway。成功前回退时停止 Java、把 `current` 指回 M1-14 并恢复正常配置即可；成功后的用户、身份、角色、审计和 Outbox 与 M1-14 schema 兼容。若必须撤销已成功的首次引导事实，只能停服并恢复执行前数据库备份，不执行逆向 SQL 或手工删除角色。
+首次身份引导本身不新增 Flyway。它的角色与审计写入必须作为完整事务保留；若必须撤销已成功的首次引导事实，只能在独立批准的停服恢复中使用执行前数据库备份，不执行逆向 SQL 或手工删除角色。常规 Release 回退遵循第 1 节的开放访问边界，不能套用早期 M1-15「仅切回 JAR」的历史假设。
 
 ## 8. 运维中心与应用日志
 
 当前版本追加运维迁移 V58/V59。仅 `APP_MANAGER` 可见独立「运维」模块，入口 `/admin/operations/overview`，包含主机指标、有效会话、运行日志和告警。公司管理员没有该权限。规则修改需要 CSRF 和版本条件，产生安全审计；确认告警不会关闭告警，恢复或停用规则才结束事件。
 
-生产模板显式设置 `logging.file.name: C:/ProgramData/Yumpoo/logs/yumpoo-server.log`。启动预检要求它是 `yumpoo.deployment.log-root` 内的绝对路径；移动日志根时同步修改文件路径和目录 ACL。默认开发路径为 `out/logs/yumpoo-server.log`，可用 `YUMPOO_LOG_FILE` 配置。JSON 文件按 UTC 日期及 50 MB 滚动为 `.yyyy-MM-dd.N.gz`，保留至多 90 天且总量不超过 10 GB，达到任一限制都会清理旧归档。WinSW/stdout 或上述 `Tee-Object` 捕获的是便于阅读的控制台日志，不是历史检索数据源；应独立配置其保留策略，避免重复日志无限增长。
+生产模板显式设置 `logging.console.enabled: false` 和 `logging.file.name: C:/ProgramData/Yumpoo/logs/yumpoo-server.log`。常规应用日志写入 JSON 文件，避免请求线程依赖交互式控制台的写入锁；是否曾由 QuickEdit 触发无法仅凭线程阻塞证明。健康检查跳过业务请求结束日志，因此 Actuator 正常不能独立证明该问题消失。验收需连续请求 `/api/v1/auth/me`，确认及时返回且对应 requestId 已写入 JSON 日志。
+
+启动预检要求日志文件是 `yumpoo.deployment.log-root` 内的绝对路径；移动日志根时同步修改文件路径和目录 ACL。默认开发路径为 `out/logs/yumpoo-server.log`，可用 `YUMPOO_LOG_FILE` 配置。JSON 文件按 UTC 日期及 50 MB 滚动为 `.yyyy-MM-dd.N.gz`，保留至多 90 天且总量不超过 10 GB，达到任一限制都会清理旧归档。WinSW 持续接收剩余 stdout/stderr，保留启动失败等诊断，按每文件 10 MB 滚动并保留 8 份归档；它不是运维中心的历史检索数据源。开发环境的人读控制台格式保持不变。
 
 日志由统一映射脱敏，包含稳定 event、requestId、内部用户 UUID、耗时和受控异常堆栈。禁止把日志目录配置为 Web 静态目录或扩大其 ACL。日志 API 不提供文件下载，不接受文件路径；查询最多 24 小时，文件扫描最多 3 秒/256 MiB，繁忙时返回 429。界面出现缺口、文件变化或 partial 时缩小区间重查；游标 5 分钟过期、进程重启后失效。无匹配日志不等于期间没有发生故障。
 

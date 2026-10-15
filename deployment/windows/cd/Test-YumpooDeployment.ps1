@@ -1,0 +1,173 @@
+#Requires -Version 5.1
+[CmdletBinding()]
+param([string]$PgBin = '')
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+Set-StrictMode -Version Latest
+Import-Module (Join-Path $PSScriptRoot 'YumpooDeployment.psm1') -Force
+function Assert-Test($Condition, $Message) { if (-not $Condition) { throw "Deployment test: $Message" } }
+$testRoot = Join-Path ([IO.Path]::GetTempPath()) ('yumpoo-deploy-test-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $testRoot | Out-Null
+try {
+    foreach ($scenario in @('success', 'backup', 'switch', 'start', 'validation', 'restore', 'prepare-open', 'open', 'public')) {
+        $script:events = New-Object Collections.Generic.List[string]
+        $script:startCount = 0
+        $script:scenario = $scenario
+        $steps = @{
+            Preflight = { $script:events.Add('preflight') }
+            MaintenanceOn = { $script:events.Add('maintenance') }
+            Stop = { $script:events.Add('stop') }
+            Backup = { $script:events.Add('backup'); if ($script:scenario -eq 'backup') { throw 'backup fault' } }
+            Switch = { $script:events.Add('switch'); if ($script:scenario -eq 'switch') { throw 'migration fault' } }
+            Start = { $script:startCount++; $script:events.Add('start'); if ($script:scenario -eq 'start' -and $script:startCount -eq 1) { throw 'start fault' } }
+            Validate = { $script:events.Add('validate'); if ($script:scenario -in @('validation','restore')) { throw 'validation fault' } }
+            PrepareOpen = { if ($script:scenario -eq 'prepare-open') { throw 'version metadata write fault' } }
+            Open = { $script:events.Add('open'); if ($script:scenario -eq 'open') { throw 'opening fault' } }
+            PublicValidate = { $script:events.Add('public'); if ($script:scenario -eq 'public') { throw 'public fault' } }
+            Success = { $script:events.Add('success') }
+            Restore = { $script:events.Add('restore'); if ($script:scenario -eq 'restore') { throw 'restore fault' } }
+            ValidateOld = { $script:events.Add('validate-old') }
+            OpenOld = { $script:events.Add('open-old') }
+            PreOpenFailure = { $script:events.Add('preopen-failure') }
+            PostOpenFailure = { $script:events.Add('postopen-failure') }
+            RecoveryFailure = { $script:events.Add('maintenance-retained') }
+        }
+        $result = Invoke-YumpooTransaction $steps
+        if ($scenario -eq 'success') { Assert-Test ($result -eq 'succeeded') 'successful transaction failed' }
+        elseif ($scenario -eq 'backup') {
+            Assert-Test ($result -eq 'failed' -and 'switch' -notin $events -and 'restore' -notin $events -and 'open-old' -in $events) 'backup failure must restart old service without database restore'
+        } elseif ($scenario -eq 'public') {
+            Assert-Test ($result -eq 'failed' -and 'restore' -notin $events -and 'postopen-failure' -in $events) 'post-open failure must preserve new data'
+        } elseif ($scenario -in @('restore', 'open')) {
+            Assert-Test ($result -eq 'recovery_required' -and 'open-old' -notin $events -and 'maintenance-retained' -in $events) 'failed restore must retain maintenance'
+        } else {
+            Assert-Test ($result -eq 'rolled_back' -and 'restore' -in $events -and 'validate-old' -in $events -and 'open-old' -in $events) 'candidate failure must restore and verify the previous version'
+        }
+    }
+    $yaml = Join-Path $testRoot 'config.yml'
+    [IO.File]::WriteAllText($yaml, "spring:`n  flyway:`n    password: 'private''value#1'`n    url: jdbc:postgresql://127.0.0.1:5433/yumpoo`n")
+    Assert-Test ((Read-YumpooYamlScalar $yaml 'spring.flyway.password') -ceq "private'value#1") 'quoted YAML secret parsing'
+    $escaped = $false
+    try { $null = Assert-YumpooPath (Join-Path $testRoot '../outside') $testRoot } catch { $escaped = $true }
+    Assert-Test $escaped 'path traversal must be rejected'
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = Join-Path $testRoot 'bad.zip'
+    $zip = [IO.Compression.ZipFile]::Open($archive, 'Create')
+    $null = $zip.CreateEntry('../escape.txt'); $zip.Dispose()
+    $rejected = $false
+    try { Expand-YumpooPackage $archive (Join-Path $testRoot 'expanded') } catch { $rejected = $true }
+    Assert-Test $rejected 'zip traversal must be rejected'
+    $junctionSource = Join-Path $testRoot 'junction-source'; $junctionDestination = Join-Path $testRoot 'junction-destination'; $junctionOutside = Join-Path $testRoot 'junction-outside'
+    foreach ($directory in @($junctionSource, $junctionDestination, $junctionOutside)) { New-Item -ItemType Directory -Path $directory | Out-Null }
+    $junction = Join-Path $junctionDestination 'unsafe'
+    New-Item -ItemType Junction -Path $junction -Target $junctionOutside | Out-Null
+    $rejected = $false
+    try { Copy-YumpooTree $junctionSource $junctionDestination } catch { $rejected = $true }
+    [IO.Directory]::Delete($junction)
+    Assert-Test $rejected 'snapshot destination junction must be rejected'
+
+    $upload = Join-Path $testRoot 'upload'; New-Item -ItemType Directory -Path $upload | Out-Null
+    $payload = New-Object byte[] (2MB + 37)
+    $random = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $random.GetBytes($payload) } finally { $random.Dispose() }
+    [IO.File]::WriteAllBytes((Join-Path $upload 'package.zip'), $payload)
+    [IO.File]::WriteAllBytes((Join-Path $upload 'package-0000.part'), $payload[0..(2MB - 1)])
+    [IO.File]::WriteAllBytes((Join-Path $upload 'package-0001.part'), $payload[2MB..($payload.Length - 1)])
+    $receipt = [pscustomobject]@{ packageBytes = $payload.Length }
+    $partsRequest = [pscustomobject]@{ packagePartCount = 2 }
+    foreach ($mode in @('parts', 'legacy')) {
+        $work = Join-Path $testRoot "upload-$mode"; New-Item -ItemType Directory -Path $work | Out-Null
+        $inputRequest = if ($mode -eq 'parts') { $partsRequest } else { [pscustomobject]@{} }
+        $assembled = Copy-YumpooUpload $upload $work $inputRequest $receipt
+        Assert-Test ((Get-FileHash -LiteralPath $assembled).Hash -eq (Get-FileHash -LiteralPath (Join-Path $upload 'package.zip')).Hash) 'upload assembly must preserve the original CI bytes'
+    }
+    foreach ($fault in @('count', 'missing', 'oversized')) {
+        $work = Join-Path $testRoot "upload-$fault"; New-Item -ItemType Directory -Path $work | Out-Null
+        if ($fault -eq 'count') { $partsRequest.packagePartCount = 3 }
+        elseif ($fault -eq 'missing') { Remove-Item -LiteralPath (Join-Path $upload 'package-0001.part') }
+        else { [IO.File]::WriteAllBytes((Join-Path $upload 'package-0001.part'), (New-Object byte[] 38)) }
+        $rejected = $false
+        try { $null = Copy-YumpooUpload $upload $work $partsRequest $receipt } catch { $rejected = $true }
+        Assert-Test $rejected 'invalid upload parts must fail before source verification or service changes'
+        $partsRequest.packagePartCount = 2
+    }
+    $receipt | Add-Member -NotePropertyMembers @{ schemaVersion = 1; repository = 'E9uuleus/YumpooPlatform'; tag = 'server-vmultipart-test'; sourceCommit = ('a' * 40); packageSha256 = (Get-FileHash -LiteralPath (Join-Path $upload 'package.zip')).Hash.ToLowerInvariant() }
+    $partsRequest | Add-Member -NotePropertyMembers @{ schemaVersion = 1; requestId = [guid]::NewGuid().ToString(); tag = $receipt.tag; sourceCommit = $receipt.sourceCommit; packageSha256 = $receipt.packageSha256 }
+    [IO.File]::WriteAllBytes((Join-Path $upload 'package-0001.part'), (New-Object byte[] 37))
+    $work = Join-Path $testRoot 'upload-tampered'; New-Item -ItemType Directory -Path $work | Out-Null
+    $tampered = Copy-YumpooUpload $upload $work $partsRequest $receipt
+    $rejected = $false
+    try { Assert-YumpooSource $partsRequest $receipt $tampered $null } catch { $rejected = $_.Exception.Message -like '*checksum*' }
+    Assert-Test $rejected 'equal-sized modified parts must fail the original package checksum before any network or deployment action'
+    Write-Host 'Multipart and legacy upload assembly, missing/oversized parts and tamper rejection passed.'
+
+    $provenanceFile = Join-Path $testRoot 'provenance.json'
+    [IO.File]::WriteAllText($provenanceFile, '{"schemaVersion":1,"tag":"server-v1"}')
+    $asset = [pscustomobject]@{ digest = ('sha256:' + (Get-FileHash -LiteralPath $provenanceFile).Hash.ToLowerInvariant()); size = (Get-Item -LiteralPath $provenanceFile).Length }
+    $trusted = Read-YumpooReleaseProvenance $asset $provenanceFile
+    Assert-Test ($trusted.tag -ceq 'server-v1') 'provenance must match the Release asset digest and preserve its JSON contents'
+    foreach ($invalidAsset in @([pscustomobject]@{ size = $asset.size }, [pscustomobject]@{ digest = ''; size = $asset.size }, [pscustomobject]@{ digest = $asset.digest; size = ($asset.size + 1) })) {
+        $rejected = $false
+        try { $null = Read-YumpooReleaseProvenance $invalidAsset $provenanceFile } catch { $rejected = $true }
+        Assert-Test $rejected 'missing/malformed digest or incorrect asset size must fail closed'
+    }
+    [IO.File]::WriteAllText($provenanceFile, '{"schemaVersion":1,"tag":"server-v2"}')
+    $rejected = $false
+    try { $null = Read-YumpooReleaseProvenance $asset $provenanceFile } catch { $rejected = $true }
+    Assert-Test $rejected 'equal-sized modified provenance must fail the trusted Release asset digest'
+
+    if ($PgBin) {
+        $pgData = Join-Path $testRoot 'postgres'
+        $listener = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)
+        $listener.Start(); $port = $listener.LocalEndpoint.Port; $listener.Stop()
+        & (Join-Path $PgBin 'initdb.exe') -D $pgData -U postgres --auth=trust --locale=C --encoding=UTF8 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot initialize isolated PostgreSQL test cluster.' }
+        $pgStart = Start-Process -FilePath (Join-Path $PgBin 'pg_ctl.exe') -ArgumentList ('-D "' + $pgData + '" -l "' + (Join-Path $testRoot 'pg.log') + '" -o "-h 127.0.0.1 -p ' + $port + '" -w start') -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $testRoot 'pg-start.out') -RedirectStandardError (Join-Path $testRoot 'pg-start.err')
+        $null = $pgStart.Handle
+        if (-not $pgStart.WaitForExit(60000)) { throw 'Isolated PostgreSQL startup timed out.' }
+        $pgStart.Refresh()
+        if ($pgStart.ExitCode -ne 0) { throw ('Cannot start isolated PostgreSQL test cluster: ' + [IO.File]::ReadAllText((Join-Path $testRoot 'pg-start.err'))) }
+        try {
+            $settings = @{ pgBin = $PgBin; diagnostics = (Join-Path $testRoot 'database-error.txt') }
+            $db = @{ Host = '127.0.0.1'; Port = [string]$port; User = 'postgres'; Database = 'postgres'; Password = '' }
+            Invoke-YumpooPg $settings $db 'psql' @('-X','-v','ON_ERROR_STOP=1','-c','CREATE ROLE yumpoo_migrator LOGIN; CREATE ROLE yumpoo_app LOGIN;') | Out-Null
+            Invoke-YumpooPg $settings $db 'psql' @('-X','-v','ON_ERROR_STOP=1','-c','CREATE DATABASE yumpoo OWNER yumpoo_migrator;') | Out-Null
+            $db.Database = 'yumpoo'; $db.User = 'yumpoo_migrator'
+            Invoke-YumpooPg $settings $db 'psql' @('-X','-v','ON_ERROR_STOP=1','-c', "CREATE SCHEMA yumpoo AUTHORIZATION yumpoo_migrator; CREATE TABLE yumpoo.item(id int PRIMARY KEY, body text); INSERT INTO yumpoo.item VALUES(1,'before'); GRANT USAGE ON SCHEMA yumpoo TO yumpoo_app; GRANT SELECT ON yumpoo.item TO yumpoo_app;") | Out-Null
+            Test-YumpooRestorePermissions $settings $db
+            $dump = Join-Path $testRoot 'snapshot.dump'
+            Backup-YumpooDatabase $settings $db $dump
+            $attachments = Join-Path $testRoot 'attachments'; New-Item -ItemType Directory -Path $attachments | Out-Null
+            [IO.File]::WriteAllText((Join-Path $attachments 'before.txt'), 'before')
+            Copy-YumpooTree $attachments (Join-Path $testRoot 'attachment-snapshot')
+            Invoke-YumpooPg $settings $db 'psql' @('-X','-v','ON_ERROR_STOP=1','-c', "UPDATE yumpoo.item SET body='after'; CREATE TABLE yumpoo.candidate_only(id int); ALTER TABLE yumpoo.item ADD COLUMN candidate int;") | Out-Null
+            [IO.File]::WriteAllText((Join-Path $attachments 'before.txt'), 'after')
+            [IO.File]::WriteAllText((Join-Path $attachments 'candidate.txt'), 'candidate')
+            Invoke-YumpooPg $settings $db 'psql' @('-X','-v','ON_ERROR_STOP=1','-c','CREATE VIEW public.external_dependency AS SELECT * FROM yumpoo.item;') | Out-Null
+            $rejected = $false
+            try { Restore-YumpooDatabase $settings $db $dump } catch { $rejected = $true }
+            Assert-Test $rejected 'cross-schema dependencies must block destructive restore'
+            $actual = (Invoke-YumpooPg $settings $db 'psql' @('-X','-At','-c','SELECT body FROM public.external_dependency;') | Out-String).Trim()
+            Assert-Test ($actual -eq 'after') 'rejected restore must leave external objects and application data intact'
+            Invoke-YumpooPg $settings $db 'psql' @('-X','-v','ON_ERROR_STOP=1','-c','DROP VIEW public.external_dependency;') | Out-Null
+            Restore-YumpooDatabase $settings $db $dump
+            Copy-YumpooTree (Join-Path $testRoot 'attachment-snapshot') $attachments
+            $actual = (Invoke-YumpooPg $settings $db 'psql' @('-X','-At','-c',"SELECT body || ':' || (to_regclass('yumpoo.candidate_only') IS NULL)::text FROM yumpoo.item;") | Out-String).Trim()
+            Assert-Test ($actual -eq 'before:true') 'restore must remove candidate objects and restore original rows'
+            Assert-Test (([IO.File]::ReadAllText((Join-Path $attachments 'before.txt'))) -eq 'before' -and -not (Test-Path -LiteralPath (Join-Path $attachments 'candidate.txt'))) 'attachments must restore with the database'
+            $db.User = 'yumpoo_app'
+            $actual = (Invoke-YumpooPg $settings $db 'psql' @('-X','-At','-c','SELECT body FROM yumpoo.item;') | Out-String).Trim()
+            Assert-Test ($actual -eq 'before') 'application grants must survive restore'
+            Write-Output 'Isolated PostgreSQL schema and attachment restore passed.'
+        } finally {
+            & (Join-Path $PgBin 'pg_ctl.exe') -D $pgData -m immediate -w stop | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'Isolated PostgreSQL cluster failed to stop.' }
+        }
+    }
+    Write-Output 'Deployment transaction, failure boundaries, YAML and archive checks passed.'
+} catch { Write-Output ('TEST FAILURE: ' + $_.Exception.Message + "`n" + $_.ScriptStackTrace); if (Test-Path -LiteralPath (Join-Path $testRoot 'database-error.txt')) { Get-Content -LiteralPath (Join-Path $testRoot 'database-error.txt') }; throw } finally {
+    $resolved = [IO.Path]::GetFullPath($testRoot)
+    if ($resolved.StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath()), [StringComparison]::OrdinalIgnoreCase) -and (Split-Path $resolved -Leaf) -like 'yumpoo-deploy-test-*') {
+        Remove-Item -LiteralPath $resolved -Recurse -Force -ErrorAction Continue
+    }
+}

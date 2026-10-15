@@ -1,5 +1,5 @@
-# M1-14 普通生产配置模板。复制到 C:\ProgramData\Yumpoo\config 后按目标机修改。
-# 密码不得写入本文件；secrets 目录必须由专用服务账号以 ACL 保护。
+# Windows Service 普通生产配置模板。复制到 C:\ProgramData\Yumpoo\config 后按目标机修改。
+# 密码不得写入本文件；secrets 目录通过 ACL 仅向服务身份及维护管理员开放。
 server:
   address: 127.0.0.1
   port: 8100
@@ -13,6 +13,8 @@ spring:
     user: yumpoo_migrator
 
 logging:
+  console:
+    enabled: false
   file:
     name: C:/ProgramData/Yumpoo/logs/yumpoo-server.log
 
