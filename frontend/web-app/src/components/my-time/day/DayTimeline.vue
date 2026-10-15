@@ -19,6 +19,8 @@ const props = defineProps<{
   selectedId?: string | undefined
   fresh?: ReadonlySet<string>
   pending?: Range | null | undefined
+  /** Dashed ghosts of what a quick add would create. */
+  preview?: (Range & { title: string; colorToken: string | null })[]
 }>()
 const emit = defineEmits<{ open: [block: DayBlock, anchor: HTMLElement]; create: [range: Range] }>()
 
@@ -239,6 +241,17 @@ defineExpose({ scrollToWorkday, pendingEl })
           >÷{{ view.split }}</span>
         </button>
         <div
+          v-for="ghost in preview ?? []"
+          :key="`preview-${ghost.start}`"
+          class="day-block is-preview"
+          :style="{ top: px(offset(ghost.start)), height: px(offset(ghost.end) - offset(ghost.start)), left: '2px', width: 'calc(100% - 4px)',
+                    '--day-block-color': workItemLabelColorValue(ghost.colorToken ?? undefined) }"
+          aria-hidden="true"
+        >
+          <span class="day-block__title"><strong>{{ ghost.title }}</strong></span>
+          <span class="day-block__meta">{{ clock(ghost.start) }}–{{ clock(ghost.end) }} · {{ durationLabel(ghost.end - ghost.start) }}</span>
+        </div>
+        <div
           v-if="hover !== null && !pending"
           class="day-hover"
           :style="{ top: px(offset(hover)) }"
@@ -306,6 +319,7 @@ defineExpose({ scrollToWorkday, pendingEl })
 .day-block.is-locked{cursor:default;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--day-block-color) 10%,var(--yp-bg-surface)) 0 6px,color-mix(in srgb,var(--day-block-color) 16%,var(--yp-bg-surface)) 6px 12px)}
 .day-block.continues-before{border-top-style:dashed;border-top-left-radius:0;border-top-right-radius:0}
 .day-block.continues-after{border-bottom-style:dashed;border-bottom-left-radius:0;border-bottom-right-radius:0}
+.day-block.is-preview{z-index:3;border:1.5px dashed var(--day-block-color);background:color-mix(in srgb,var(--day-block-color) 10%,var(--yp-bg-surface));opacity:.9;pointer-events:none}
 .day-block.is-fresh{animation:day-block-fresh 1.4s var(--yp-ease-standard)}
 .day-block__title{display:flex;align-items:baseline;gap:6px;min-width:0}
 .day-block__title strong{overflow:hidden;font-weight:600;white-space:nowrap;text-overflow:ellipsis}

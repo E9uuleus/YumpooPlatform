@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElAlert, ElButton, ElPopover } from 'element-plus'
-import type { TimeSessionFillMode, TimerCandidate } from '@yumpoo/api-client'
+import { ElAlert, ElButton, ElMessage, ElPopover } from 'element-plus'
+import { TimeSessionFillMode, type TimerCandidate } from '@yumpoo/api-client'
 import { useTimeTracker } from '../../../composables/useTimeTracker'
 import { addDays } from '../../team/teamDashboardModel'
 import BlockPopover from './BlockPopover.vue'
 import DayHeader from './DayHeader.vue'
 import DayTimeline from './DayTimeline.vue'
 import EntryComposer from './EntryComposer.vue'
-import ItemShelf from './ItemShelf.vue'
-import type { DayBlock, Range } from './dayModel'
+import ItemShelf, { type ShelfItem } from './ItemShelf.vue'
+import { durationLabel, gaps, placeSequential, type DayBlock, type Range } from './dayModel'
 import { useDayTimeline } from './useDayTimeline'
 
 const props = defineProps<{ date: string; today: string; timezone: string }>()
@@ -47,6 +47,22 @@ function openBlockPopover(block: DayBlock, anchor: HTMLElement) {
   blockAnchor.value = anchor
 }
 function closeBlock() { openId.value = undefined; blockAnchor.value = undefined }
+
+/** Quick add lays the duration into the free time from the start of work onwards, splitting across gaps when needed. */
+function plan(durationMs: number) {
+  const start = Math.max(workday.value.start, dayRange.value.start)
+  return placeSequential(durationMs, gaps(blocks.value, now.value, { start, end: limit.value }), start)
+}
+const preview = ref<(Range & { title: string; colorToken: string | null })[]>([])
+function showPreview(item: ShelfItem | null, durationMs: number) {
+  preview.value = item ? plan(durationMs).entries.map(range => ({ ...range, title: item.title, colorToken: item.colorToken })) : []
+}
+async function place(item: ShelfItem, durationMs: number) {
+  const { entries, leftoverMs } = plan(durationMs)
+  if (!entries.length) { ElMessage.warning('上班时间之后已经没有空白可以排入。'); return }
+  if (await create(TimeSessionFillMode.Gaps, [item.workItemId], entries) && leftoverMs > 0)
+    ElMessage.info(`空白不够，还有 ${durationLabel(leftoverMs)} 没有排入。`)
+}
 watch(openBlock, block => { if (openId.value && !block) closeBlock() })
 watch(() => props.date, () => { closeComposer(); closeBlock() })
 
@@ -129,7 +145,12 @@ onBeforeUnmount(() => {
       v-loading="loading && !page"
       class="my-day__body"
     >
-      <ItemShelf :totals="totals" />
+      <ItemShelf
+        :totals="totals"
+        :busy="busy"
+        @preview="showPreview"
+        @place="place"
+      />
       <DayTimeline
         ref="timeline"
         :blocks="blocks"
@@ -142,6 +163,7 @@ onBeforeUnmount(() => {
         :timezone="timezone"
         :fresh="fresh"
         :pending="pending"
+        :preview="preview"
         :selected-id="openId"
         @create="compose"
         @open="openBlockPopover"
