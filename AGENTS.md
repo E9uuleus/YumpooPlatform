@@ -11,6 +11,15 @@
 - 任务明确包含相应交付阶段时持续完成，不把早期阶段当成全部完成。
 - commit message格式必须为：<type>(<scope>): <操作/变更内容> (<步骤编号>)
 
+## 数据库迁移
+
+- 新迁移默认必须「只扩展」：新建表或索引、可空或带默认值的新增列等，保证上一版本可快速回退；`ci:contracts` 的迁移回退安全检查拒绝白名单外的语句。
+- 删除、改名、类型或约束收紧、无默认值的 NOT NULL、修改已有数据等破坏性变更，拆为 expand/contract 两次发布；确需一次完成时在 `contracts/migrations/rollback-safety-exceptions.json` 登记精确例外（`breaking` 例外须链接已实施 Agent Note）。规则见[迁移回退安全](.agents/notes/implemented/data/2026-10-15-rollback-safe-migrations.md)。
+
+## 版本号
+
+- 产品版本以 Release tag 为准，构建产物只携带 commit。工作区 package.json 与服务端 pom 的版本是占位值，不得手工修改（desktop-shell 另有桌面版本线）。规则见[发布版本标识](.agents/notes/implemented/process/2026-10-15-release-version-identity.md)。
+
 ## Repository layout
 
 ```
