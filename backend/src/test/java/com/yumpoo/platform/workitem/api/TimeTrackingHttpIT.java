@@ -313,6 +313,40 @@ class TimeTrackingHttpIT {
         assertThat(ok(timer("start",Map.of("workItemId",target.itemId()),enabled.path("etag").asText())).path("runningSessions")).hasSize(1);
     }
 
+    @Test
+    void reassignMovesAStoppedRecordToAnotherItemWithoutChangingTheDayTotal() throws Exception {
+        JsonNode moved=ok(mutate("POST","/api/v1/work-items/"+source.itemId()+"/time-sessions",member,
+                json.writeValueAsString(Map.of("startedAt","2026-09-02T09:00:00Z","stoppedAt","2026-09-02T10:00:00Z")),null));
+        ok(mutate("POST","/api/v1/work-items/"+target.itemId()+"/time-sessions",member,
+                json.writeValueAsString(Map.of("startedAt","2026-09-02T09:30:00Z","stoppedAt","2026-09-02T10:30:00Z")),null));
+        long sourceEvents=events(source), targetEvents=events(target);
+        String path="/api/v1/me/time-sessions/"+moved.path("id").asText()+"/reassign";
+        String body=json.writeValueAsString(Map.of("workItemId",target.itemId()));
+        assertThat(mutate("POST",path,member,body,null).statusCode()).isEqualTo(428);
+        assertThat(mutate("POST",path,member,body,"\"9\"").statusCode()).isEqualTo(412);
+        UUID key=UUID.randomUUID();
+        var response=mutate("POST",path,member,body,moved.path("etag").asText(),key);
+        JsonNode result=ok(response);
+        assertThat(result.path("deletedCount").asInt()).isOne();
+        assertThat(result.path("createdCount").asInt()).isOne();
+        assertThat(result.path("skippedDurationMs").asLong()).isEqualTo(1800000);
+        assertThat(mutate("POST",path,member,body,moved.path("etag").asText(),key).body()).isEqualTo(response.body());
+        assertThat(events(source)).isEqualTo(sourceEvents+1);
+        assertThat(events(target)).isEqualTo(targetEvents+1);
+        assertThat(ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items")).isEmpty();
+        JsonNode day=ok(get("/api/v1/me/time-sessions?from=2026-09-02T08:00:00Z&to=2026-09-02T12:00:00Z",member)).path("items");
+        assertThat(day).hasSize(2);
+        long total=0;
+        for(JsonNode row:day) {
+            assertThat(row.path("session").path("workItemId").asText()).isEqualTo(target.itemId().toString());
+            total+=row.path("session").path("allocatedDurationMs").asLong();
+        }
+        assertThat(total).isEqualTo(90*60000L);
+        JsonNode kept=day.get(0).path("session");
+        var unchanged=mutate("POST","/api/v1/me/time-sessions/"+kept.path("id").asText()+"/reassign",member,body,kept.path("etag").asText());
+        assertThat(unchanged.statusCode()).as(unchanged.body()).isEqualTo(422);
+    }
+
     private String fillBody(String mode,UUID item,String start,String stop) {
         return json.writeValueAsString(Map.of("mode",mode,"entries",List.of(Map.of("workItemId",item,
                 "startedAt","2026-09-01T"+start+":00Z","stoppedAt","2026-09-01T"+stop+":00Z"))));

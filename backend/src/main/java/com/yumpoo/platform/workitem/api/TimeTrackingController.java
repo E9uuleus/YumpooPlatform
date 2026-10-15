@@ -57,6 +57,18 @@ public class TimeTrackingController {
         return ResponseEntity.status(result.httpStatus()).contentType(MediaType.APPLICATION_JSON)
                 .cacheControl(CacheControl.noStore()).body(result.responseJson());
     }
+    @PostMapping("/me/time-sessions/{sessionId}/reassign")
+    ResponseEntity<String> reassign(@PathVariable UUID sessionId,@RequestBody TimeSessionReassignCommand body,
+            @RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,
+            @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
+        var actor=actors.requiredActive();
+        if(body.workItemId()!=null) service.history(actor,body.workItemId(),null,false);
+        long expected=matches.parseForVisibleResource(true,match);
+        var result=service.reassign(actor,sessionId,body.workItemId(),expected,keys.parseRequired(key),
+                hasher.hash("timeTracking:reassign",Map.of("sessionId",sessionId.toString(),"ifMatch",match==null ? "" : match),json.valueToTree(body)));
+        return ResponseEntity.status(result.httpStatus()).contentType(MediaType.APPLICATION_JSON)
+                .cacheControl(CacheControl.noStore()).body(result.responseJson());
+    }
     @PostMapping("/me/time-tracker/start")
     ResponseEntity<String> start(@RequestBody Input body,
             @RequestHeader(name=IfMatchParser.HEADER_NAME,required=false) String match,

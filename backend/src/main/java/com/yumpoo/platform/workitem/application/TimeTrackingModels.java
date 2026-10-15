@@ -45,6 +45,8 @@ public final class TimeTrackingModels {
 
     public record TimeSessionFillResult(int createdCount, int changedCount, int deletedCount, long skippedDurationMs) {}
 
+    public record TimeSessionReassignCommand(UUID workItemId) {}
+
     public record RecentTimeTrackingItem(UUID workItemId, UUID projectId, String title) {}
 
     public record TimerCandidate(UUID workItemId, UUID projectId, String projectName, String itemNo,

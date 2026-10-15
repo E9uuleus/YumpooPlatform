@@ -19,6 +19,7 @@ import type {
   MyTimeSessionPage,
   TimeSessionFillCommand,
   TimeSessionFillResult,
+  TimeSessionReassignCommand,
   TimeTrackingCommand,
   TimeTrackingPreferences,
   TimeTrackingSession,
@@ -37,6 +38,8 @@ import {
     TimeSessionFillCommandToJSON,
     TimeSessionFillResultFromJSON,
     TimeSessionFillResultToJSON,
+    TimeSessionReassignCommandFromJSON,
+    TimeSessionReassignCommandToJSON,
     TimeTrackingCommandFromJSON,
     TimeTrackingCommandToJSON,
     TimeTrackingPreferencesFromJSON,
@@ -103,6 +106,14 @@ export interface ListTimerCandidatesRequest {
     scope?: ListTimerCandidatesScopeEnum;
     offset?: number;
     limit?: number;
+}
+
+export interface ReassignMyTimeSessionRequest {
+    sessionId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+    timeSessionReassignCommand: TimeSessionReassignCommand;
 }
 
 export interface StartTimeTrackerRequest {
@@ -671,6 +682,88 @@ export class TimeTrackingApi extends runtime.BaseAPI {
      */
     async listTimerCandidates(requestParameters: ListTimerCandidatesRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimerCandidatePage> {
         const response = await this.listTimerCandidatesRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项补同一时段（只跳过目标项自身已有的部分），沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原工作项相同返回 422 UNCHANGED。
+     * 把本人一条已结束的计时记录整体改归属到其他工作项
+     */
+    async reassignMyTimeSessionRaw(requestParameters: ReassignMyTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimeSessionFillResult>> {
+        if (requestParameters['sessionId'] == null) {
+            throw new runtime.RequiredError(
+                'sessionId',
+                'Required parameter "sessionId" was null or undefined when calling reassignMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling reassignMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling reassignMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling reassignMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['timeSessionReassignCommand'] == null) {
+            throw new runtime.RequiredError(
+                'timeSessionReassignCommand',
+                'Required parameter "timeSessionReassignCommand" was null or undefined when calling reassignMyTimeSession().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/me/time-sessions/{sessionId}/reassign`;
+        urlPath = urlPath.replace(`{${"sessionId"}}`, encodeURIComponent(String(requestParameters['sessionId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: TimeSessionReassignCommandToJSON(requestParameters['timeSessionReassignCommand']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TimeSessionFillResultFromJSON(jsonValue));
+    }
+
+    /**
+     * 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项补同一时段（只跳过目标项自身已有的部分），沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原工作项相同返回 422 UNCHANGED。
+     * 把本人一条已结束的计时记录整体改归属到其他工作项
+     */
+    async reassignMyTimeSession(requestParameters: ReassignMyTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimeSessionFillResult> {
+        const response = await this.reassignMyTimeSessionRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

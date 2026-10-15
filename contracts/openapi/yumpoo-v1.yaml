@@ -1856,6 +1856,39 @@ paths:
         '404': { $ref: '#/components/responses/ResourceNotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
+  /me/time-sessions/{sessionId}/reassign:
+    post:
+      tags: [TimeTracking]
+      operationId: reassignMyTimeSession
+      summary: 把本人一条已结束的计时记录整体改归属到其他工作项
+      description: 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项补同一时段（只跳过目标项自身已有的部分），沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原工作项相同返回 422 UNCHANGED。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeSessionReassignCommand' }
+      responses:
+        '200':
+          description: 改归属的创建、删除条数与跳过时长。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TimeSessionFillResult' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
 
   /me/time-tracker/candidates:
     get:
@@ -8737,6 +8770,12 @@ components:
         changedCount: { type: integer, format: int32, minimum: 0 }
         deletedCount: { type: integer, format: int32, minimum: 0 }
         skippedDurationMs: { type: integer, format: int64, minimum: 0 }
+    TimeSessionReassignCommand:
+      type: object
+      additionalProperties: false
+      required: [workItemId]
+      properties:
+        workItemId: { type: string, format: uuid }
     TimeTrackingState:
       type: string
       enum: [RUNNING, STOPPED, EMPTY]

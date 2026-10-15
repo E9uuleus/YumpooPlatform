@@ -235,6 +235,7 @@ export * from './TimeSessionFillCommand';
 export * from './TimeSessionFillEntry';
 export * from './TimeSessionFillMode';
 export * from './TimeSessionFillResult';
+export * from './TimeSessionReassignCommand';
 export * from './TimeTrackingCommand';
 export * from './TimeTrackingPreferences';
 export * from './TimeTrackingRunningSession';

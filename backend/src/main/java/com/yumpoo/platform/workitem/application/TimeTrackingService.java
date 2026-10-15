@@ -209,17 +209,46 @@ public class TimeTrackingService {
                 throw validation("stoppedAt","INVALID_RANGE","结束时间须晚于开始时间且不能在未来");
             entries.add(new TimeSessionFillEntry(entry.workItemId(),start,stop));
         }
+        var result=applyFill(actor,command.mode(),entries,null,0);
+        return new StoredCommandResult(200,json.writeValueAsString(result),actor.userId(),null);
+    }
+
+    public StoredCommandResult reassign(CurrentActor actor,UUID sessionId,UUID workItemId,long expectedVersion,UUID key,RequestHash hash) {
+        return idempotency.execute(new IdempotencyCommand(new IdempotencyScope(actor.userId(),
+                "POST","timeTracking:reassign",key),hash),() -> reassign(actor,sessionId,workItemId,expectedVersion)).result();
+    }
+
+    private StoredCommandResult reassign(CurrentActor actor,UUID sessionId,UUID workItemId,long expectedVersion) {
+        if(workItemId==null) throw validation("workItemId","REQUIRED","请选择工作项");
+        Session session=timers.find(actor.companyId(),sessionId).filter(s -> s.userId().equals(actor.userId()))
+                .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+        requireVersion(session.rowVersion(),expectedVersion);
+        if(session.stoppedAt()==null || session.deletedAt()!=null) throw invalid("SESSION_NOT_EDITABLE");
+        if(session.workItemId().equals(workItemId)) throw validation("workItemId","UNCHANGED","记录已属于该工作项");
+        var result=applyFill(actor,TimeSessionFillMode.PARALLEL,
+                List.of(new TimeSessionFillEntry(workItemId,session.startedAt(),session.stoppedAt())),session,expectedVersion);
+        return new StoredCommandResult(200,json.writeValueAsString(result),actor.userId(),null);
+    }
+
+    /** Fills the entries and, when {@code removing} is given, soft-deletes that session under the same locks first. */
+    private TimeSessionFillResult applyFill(CurrentActor actor,TimeSessionFillMode mode,List<TimeSessionFillEntry> entries,
+            Session removing,long expectedVersion) {
+        Instant now=now();
         var merged=TimeSessionFillPlanner.mergeEntries(entries);
         Instant from=merged.stream().map(TimeSessionFillEntry::startedAt).min(Instant::compareTo).orElseThrow();
         Instant to=merged.stream().map(TimeSessionFillEntry::stoppedAt).max(Instant::compareTo).orElseThrow();
         var targets=merged.stream().map(TimeSessionFillEntry::workItemId).distinct().map(id -> locator(actor,id)).toList();
         var targetProjects=targets.stream().map(WorkItemModels.WorkItemLocator::projectId).collect(java.util.stream.Collectors.toSet());
         var observed=timers.mySessions(actor.companyId(),actor.userId(),from,to);
-        var editable=command.mode()==TimeSessionFillMode.REPLACE ? editableSessionIds(actor,observed) : Set.<UUID>of();
+        var editable=mode==TimeSessionFillMode.REPLACE ? editableSessionIds(actor,observed) : Set.<UUID>of();
         Set<UUID> lockedProjects=new TreeSet<>(targetProjects);
         observed.stream().filter(row -> editable.contains(row.session().id())).forEach(row -> lockedProjects.add(row.session().projectId()));
+        if(removing!=null) lockedProjects.add(removing.projectId());
         for(UUID projectId:lockedProjects) {
             var project=guard.lockForFactWrite(actor,projectId);
+            if(removing!=null && projectId.equals(removing.projectId()) && !targetProjects.contains(projectId)
+                    && (project.actorAccess()==ProjectFactWriteSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY
+                    || project.lifecycle()==ProjectFactWriteSnapshot.ProjectLifecycle.ARCHIVED)) throw invalid("SESSION_NOT_EDITABLE");
             if(targetProjects.contains(projectId)) {
                 if(project.actorAccess()==ProjectFactWriteSnapshot.ActorProjectAccess.COMPANY_ADMIN_READ_ONLY)
                     throw new ApplicationException(StandardErrorCode.ACCESS_DENIED);
@@ -227,24 +256,41 @@ public class TimeTrackingService {
             }
         }
         timers.stateVersion(actor.companyId(),actor.userId(),true);
+        Session removed=null;
+        if(removing!=null) {
+            removed=timers.find(actor.companyId(),removing.id()).filter(s -> s.userId().equals(actor.userId()))
+                    .orElseThrow(() -> new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND));
+            requireVersion(removed.rowVersion(),expectedVersion);
+            if(removed.stoppedAt()==null || removed.deletedAt()!=null) throw invalid("SESSION_NOT_EDITABLE");
+        }
         var rows=timers.mySessions(actor.companyId(),actor.userId(),from,to);
-        var editableIds=command.mode()==TimeSessionFillMode.REPLACE ? editableSessionIds(actor,rows) : new HashSet<UUID>();
+        var editableIds=mode==TimeSessionFillMode.REPLACE ? editableSessionIds(actor,rows) : new HashSet<UUID>();
         if(rows.stream().anyMatch(row -> editableIds.contains(row.session().id()) && !lockedProjects.contains(row.session().projectId())))
             throw invalid("TIMER_CHANGED");
         Map<UUID,UUID> itemProjects=new TreeMap<>();
         targets.forEach(target -> itemProjects.put(target.workItemId(),target.projectId()));
         rows.stream().filter(row -> editableIds.contains(row.session().id()))
                 .forEach(row -> itemProjects.put(row.session().workItemId(),row.session().projectId()));
+        if(removed!=null) itemProjects.put(removed.workItemId(),removed.projectId());
         var targetIds=targets.stream().map(WorkItemModels.WorkItemLocator::workItemId).collect(java.util.stream.Collectors.toSet());
+        UUID removedItem=removed==null ? null : removed.workItemId();
         for(var entry:itemProjects.entrySet()) {
             var locked=items.lockProjectItem(actor.companyId(),entry.getValue(),entry.getKey());
             if(locked.isEmpty()) {
                 if(targetIds.contains(entry.getKey())) throw new ApplicationException(StandardErrorCode.RESOURCE_NOT_FOUND);
+                if(entry.getKey().equals(removedItem)) throw invalid("SESSION_NOT_EDITABLE");
                 rows.stream().filter(row -> row.session().workItemId().equals(entry.getKey())).forEach(row -> editableIds.remove(row.session().id()));
             }
         }
-        var plan=TimeSessionFillPlanner.plan(command.mode(),merged,rows.stream().map(MySessionRow::session).toList(),editableIds);
+        UUID removedId=removed==null ? null : removed.id();
+        var plan=TimeSessionFillPlanner.plan(mode,merged,rows.stream().map(MySessionRow::session)
+                .filter(session -> !session.id().equals(removedId)).toList(),editableIds);
         Set<UUID> written=new HashSet<>();
+        if(removed!=null) {
+            Session after=new Session(removed.id(),removed.companyId(),removed.projectId(),removed.workItemId(),removed.userId(),
+                    removed.startedAt(),removed.stoppedAt(),removed.source(),removed.rowVersion()+1,now,null);
+            timers.save(after); publish(actor,"deleted",removed,after,null,now); written.add(after.projectId());
+        }
         for(var change:plan.changed()) {
             Session before=change.before();
             Session after=new Session(before.id(),before.companyId(),before.projectId(),before.workItemId(),before.userId(),
@@ -268,8 +314,8 @@ public class TimeTrackingService {
             if(created.stoppedAt().isAfter(to)) to=created.stoppedAt();
         }
         if(!written.isEmpty()) rebuild(actor.companyId(),actor.userId(),from,to,written);
-        var result=new TimeSessionFillResult(plan.created().size(),plan.changed().size(),plan.deleted().size(),plan.skippedDurationMs());
-        return new StoredCommandResult(200,json.writeValueAsString(result),actor.userId(),null);
+        return new TimeSessionFillResult(plan.created().size(),plan.changed().size(),
+                plan.deleted().size()+(removed==null ? 0 : 1),plan.skippedDurationMs());
     }
 
     private Set<UUID> editableSessionIds(CurrentActor actor,List<MySessionRow> rows) {

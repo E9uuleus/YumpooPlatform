@@ -220,6 +220,54 @@ class TimeTrackingServiceTest {
         fixture.verifyNoWrites();
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void reassignLocksBothProjectsThenStateThenItemsAndDeletesBeforeAdding(boolean reverseProjects) {
+        var fixture = new TimerFixture(reverseProjects);
+        var stopped = fixture.stoppedSession(3);
+        var result = fixture.service.reassign(fixture.actor, stopped.id(), fixture.targetItem, 3, UUID.randomUUID(),
+                new RequestHash("1".repeat(64)));
+
+        var body = new ObjectMapper().readTree(result.responseJson());
+        assertThat(body.path("deletedCount").asInt()).isOne();
+        assertThat(body.path("createdCount").asInt()).isOne();
+        var ordered = inOrder(fixture.guard, fixture.timers, fixture.items);
+        for (UUID project : java.util.stream.Stream.of(fixture.oldProject, fixture.targetProject).sorted().toList())
+            ordered.verify(fixture.guard).lockForFactWrite(fixture.actor, project);
+        ordered.verify(fixture.timers).stateVersion(fixture.company, fixture.user, true);
+        for (UUID item : java.util.stream.Stream.of(stopped.workItemId(), fixture.targetItem).sorted().toList())
+            ordered.verify(fixture.items).lockProjectItem(eq(fixture.company), any(), eq(item));
+        var saved = ArgumentCaptor.forClass(TimeTrackingModels.Session.class);
+        verify(fixture.timers, times(2)).save(saved.capture());
+        assertThat(saved.getAllValues().get(0).id()).isEqualTo(stopped.id());
+        assertThat(saved.getAllValues().get(0).deletedAt()).isEqualTo(TimerFixture.NOW);
+        assertThat(saved.getAllValues().get(1).workItemId()).isEqualTo(fixture.targetItem);
+        assertThat(saved.getAllValues().get(1).source()).isEqualTo("MANUAL");
+        assertThat(saved.getAllValues().get(1).startedAt()).isEqualTo(stopped.startedAt());
+        assertThat(saved.getAllValues().get(1).stoppedAt()).isEqualTo(stopped.stoppedAt());
+        var events = ArgumentCaptor.forClass(EventDraft.class);
+        verify(fixture.events, times(2)).append(events.capture());
+        assertThat(events.getAllValues()).extracting(EventDraft::eventType)
+                .containsExactly("workitem.time_tracking_deleted", "workitem.time_tracking_added");
+    }
+
+    @Test
+    void reassignRejectsStaleRunningAndUnchangedSessionsWithoutWrites() {
+        var fixture = new TimerFixture(false);
+        var stopped = fixture.stoppedSession(3);
+        assertThatThrownBy(() -> fixture.service.reassign(fixture.actor, stopped.id(), fixture.targetItem, 2, UUID.randomUUID(),
+                new RequestHash("2".repeat(64)))).isInstanceOfSatisfying(ApplicationException.class,
+                failure -> assertThat(failure.errorCode()).isEqualTo(StandardErrorCode.VERSION_CONFLICT));
+        assertThatThrownBy(() -> fixture.service.reassign(fixture.actor, fixture.session.id(), fixture.targetItem, 0, UUID.randomUUID(),
+                new RequestHash("3".repeat(64)))).isInstanceOfSatisfying(ApplicationException.class,
+                failure -> assertThat(failure.reason()).isEqualTo("SESSION_NOT_EDITABLE"));
+        assertThatThrownBy(() -> fixture.service.reassign(fixture.actor, stopped.id(), stopped.workItemId(), 3, UUID.randomUUID(),
+                new RequestHash("4".repeat(64)))).isInstanceOfSatisfying(ApplicationException.class,
+                failure -> assertThat(failure.errorCode()).isEqualTo(StandardErrorCode.VALIDATION_FAILED));
+        verify(fixture.guard, never()).lockForFactWrite(any(), any());
+        fixture.verifyNoWrites();
+    }
+
     private static final class TimerFixture {
         static final Instant NOW = Instant.parse("2026-09-07T00:00:00Z");
         final UUID company = UUID.randomUUID(), user = UUID.randomUUID(), targetItem = UUID.randomUUID();
@@ -263,6 +311,20 @@ class TimeTrackingServiceTest {
 
         ProjectDeletionQuery.State project(UUID id, String lifecycle, Instant purgeStartedAt) {
             return new ProjectDeletionQuery.State(id, company, "TEST", lifecycle, user, 0, null, null, null, purgeStartedAt);
+        }
+
+        TimeTrackingModels.Session stoppedSession(long version) {
+            UUID item = UUID.randomUUID();
+            var stopped = new TimeTrackingModels.Session(UUID.randomUUID(), company, oldProject, item, user,
+                    NOW.minusSeconds(7200), NOW.minusSeconds(3600), "TIMER", version, null, null);
+            when(timers.find(company, stopped.id())).thenReturn(Optional.of(stopped));
+            when(timers.mySessions(eq(company), eq(user), any(), any()))
+                    .thenReturn(List.of(new TimeTrackingModels.MySessionRow(stopped, "1", "原工作项", null, false, false)));
+            when(guard.lockForFactWrite(actor, oldProject)).thenReturn(new ProjectFactWriteSnapshot(oldProject, company,
+                    "TEST", ProjectFactWriteSnapshot.ProjectLifecycle.ACTIVE, ProjectFactWriteSnapshot.ActorProjectAccess.MEMBER));
+            when(items.lockProjectItem(company, oldProject, item)).thenReturn(Optional.of(mock(WorkItem.class)));
+            when(items.findLocator(company, item)).thenReturn(Optional.of(new WorkItemModels.WorkItemLocator(item, oldProject, UUID.randomUUID())));
+            return stopped;
         }
 
         void command(String action) {
