@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { createGithub, run } from './github.mjs'
@@ -12,11 +13,31 @@ import { packageName, validateStatus } from './policy.mjs'
 export const deploymentRoot = '/C:/ProgramData/Yumpoo/deployment'
 export const deploymentUser = 'yumpoo-deploy'
 export const triggerCommand = 'schtasks.exe /Run /TN YumpooDeploy'
+export const packagePartBytes = 2 * 1024 * 1024
+export const maxPackageParts = 512
+export const uploadConcurrency = 4
+export const sftpConnectionTimeoutMs = 5 * 60_000
+export const packageUploadTimeoutMs = 40 * 60_000
+
+export function packagePartCount(bytes) {
+  assert(Number.isSafeInteger(bytes) && bytes > 0 && bytes <= packagePartBytes * maxPackageParts, 'Package must contain 1 byte to 1 GiB')
+  return Math.ceil(bytes / packagePartBytes)
+}
+
+function validateRequestId(requestId) {
+  assert(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(requestId), 'Invalid deployment request ID')
+}
+
+export function packagePartName(index) {
+  assert(Number.isInteger(index) && index >= 0 && index < maxPackageParts, 'Invalid package part index')
+  return `package-${String(index).padStart(4, '0')}.part`
+}
 
 export function makeRequest(provenance, requestId = randomUUID()) {
-  assert(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(requestId), 'Invalid deployment request ID')
+  validateRequestId(requestId)
   return {
     schemaVersion: 1, requestId, tag: provenance.tag, sourceCommit: provenance.sourceCommit, packageSha256: provenance.packageSha256,
+    packagePartCount: packagePartCount(provenance.packageBytes),
   }
 }
 
@@ -25,12 +46,10 @@ export function sftpQuote(value) {
   return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`
 }
 
-export function uploadBatch(directory, request) {
-  makeRequest(request, request.requestId)
+export function commitUploadBatch(directory, request) {
+  validateRequestId(request.requestId)
   const inbox = `${deploymentRoot}/inbox/${request.requestId}`
   return [
-    `mkdir ${sftpQuote(inbox)}`,
-    `put ${sftpQuote(path.join(directory, packageName))} ${sftpQuote(`${inbox}/package.zip`)}`,
     `put ${sftpQuote(path.join(directory, 'provenance.json'))} ${sftpQuote(`${inbox}/provenance.json`)}`,
     `put ${sftpQuote(path.join(directory, 'request.json'))} ${sftpQuote(`${inbox}/request.json.uploading`)}`,
     `rename ${sftpQuote(`${inbox}/request.json.uploading`)} ${sftpQuote(`${inbox}/request.json`)}`,
@@ -38,7 +57,139 @@ export function uploadBatch(directory, request) {
   ].join('\n')
 }
 
-export function createSshTransport(env, directory) {
+export async function splitPackage(file, directory, signal) {
+  assert((await fs.promises.lstat(file)).isFile(), 'Package must be a regular file')
+  const source = await fs.promises.open(file, 'r')
+  try {
+    const bytes = (await source.stat()).size
+    const count = packagePartCount(bytes)
+    const parts = []
+    const buffer = Buffer.allocUnsafe(packagePartBytes)
+    for (let index = 0; index < count; index += 1) {
+      signal?.throwIfAborted()
+      const length = Math.min(packagePartBytes, bytes - index * packagePartBytes)
+      let read = 0
+      while (read < length) {
+        const chunk = await source.read(buffer, read, length - read, index * packagePartBytes + read)
+        assert(chunk.bytesRead > 0, 'Package changed while splitting')
+        read += chunk.bytesRead
+      }
+      const name = packagePartName(index)
+      const destination = path.join(directory, name)
+      await fs.promises.writeFile(destination, buffer.subarray(0, length), { mode: 0o600, flag: 'wx', signal })
+      parts.push({ name, file: destination, bytes: length })
+    }
+    assert.equal((await source.stat()).size, bytes, 'Package changed while splitting')
+    return { parts, bytes }
+  } finally {
+    await source.close()
+  }
+}
+
+export function sshChildEnvironment(env) {
+  const names = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ'])
+  return Object.fromEntries(Object.entries(env).filter(([name]) => names.has(name.toUpperCase())))
+}
+
+export function runSftpProcess(args, { input, env, timeoutMs, signal }, spawnProcess = spawn) {
+  assert(Number.isFinite(timeoutMs) && timeoutMs > 0 && timeoutMs <= sftpConnectionTimeoutMs, 'Invalid SFTP connection timeout')
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new Error('SFTP upload cancelled')); return }
+    let child
+    try {
+      child = spawnProcess('sftp', args, {
+        env: sshChildEnvironment(env), shell: false, windowsHide: true,
+        detached: process.platform !== 'win32', stdio: ['pipe', 'ignore', 'pipe'],
+      })
+    } catch {
+      reject(new Error('Unable to start SFTP connection'))
+      return
+    }
+    let failure
+    let closed = false
+    const stop = message => {
+      if (closed) return
+      failure ||= new Error(message)
+      // SFTP starts an SSH child; the Linux runner must terminate both connections together.
+      if (process.platform !== 'win32' && child.pid) {
+        try { process.kill(-child.pid, 'SIGKILL'); return } catch { }
+      }
+      child.kill('SIGKILL')
+    }
+    const abort = () => stop('SFTP upload cancelled')
+    const timer = setTimeout(() => stop('SFTP connection timed out'), timeoutMs)
+    signal?.addEventListener('abort', abort, { once: true })
+    child.stderr.resume()
+    child.once('error', () => { failure ||= new Error('Unable to start SFTP connection') })
+    child.stdin.on('error', () => stop('SFTP connection closed while sending commands'))
+    child.once('close', code => {
+      closed = true
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
+      if (failure) reject(failure)
+      else if (code !== 0) reject(new Error(`SFTP connection failed (exit ${code ?? 'unknown'})`))
+      else resolve()
+    })
+    if (signal?.aborted) abort()
+    else child.stdin.end(input)
+  })
+}
+
+export async function uploadPackageParts({ directory, request, sftp, log = console.log, timeoutMs = packageUploadTimeoutMs }) {
+  validateRequestId(request.requestId)
+  assert(Number.isInteger(request.packagePartCount) && request.packagePartCount >= 1 && request.packagePartCount <= maxPackageParts, 'Invalid packagePartCount')
+  assert(Number.isFinite(timeoutMs) && timeoutMs > 0 && timeoutMs <= packageUploadTimeoutMs, 'Invalid overall upload timeout')
+  const controller = new AbortController()
+  const deadline = Date.now() + timeoutMs
+  const timer = setTimeout(() => controller.abort(new Error('Package upload exceeded its overall time limit')), timeoutMs)
+  let partsDirectory
+  const connect = batch => {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0 && !controller.signal.aborted) controller.abort(new Error('Package upload exceeded its overall time limit'))
+    controller.signal.throwIfAborted()
+    return sftp(batch, { signal: controller.signal, timeoutMs: Math.min(sftpConnectionTimeoutMs, remaining) })
+  }
+  try {
+    partsDirectory = await fs.promises.mkdtemp(path.join(directory, 'package-parts-'))
+    const { parts, bytes } = await splitPackage(path.join(directory, packageName), partsDirectory, controller.signal)
+    assert.equal(parts.length, request.packagePartCount, 'Request part count does not match the package')
+    const inbox = `${deploymentRoot}/inbox/${request.requestId}`
+    await connect(`mkdir ${sftpQuote(inbox)}\n`)
+    let next = 0
+    let completed = 0
+    let completedBytes = 0
+    let failure
+    const worker = async () => {
+      while (!controller.signal.aborted) {
+        const part = parts[next++]
+        if (!part) return
+        try {
+          await connect(`put ${sftpQuote(part.file)} ${sftpQuote(`${inbox}/${part.name}`)}\n`)
+          completed += 1
+          completedBytes += part.bytes
+          log(`Uploaded ${completed}/${parts.length} package parts (${completedBytes}/${bytes} bytes)`)
+        } catch (error) {
+          failure ||= controller.signal.aborted ? controller.signal.reason : error
+          controller.abort(failure)
+          return
+        }
+      }
+    }
+    await Promise.allSettled(Array.from({ length: Math.min(uploadConcurrency, parts.length) }, worker))
+    if (failure) throw failure
+    controller.signal.throwIfAborted()
+    assert.equal(completed, parts.length, 'Package upload did not complete')
+    await fs.promises.writeFile(path.join(directory, 'request.json'), `${JSON.stringify(request, null, 2)}\n`, { mode: 0o600, flag: 'wx', signal: controller.signal })
+    await connect(commitUploadBatch(directory, request))
+  } catch (error) {
+    throw controller.signal.aborted ? controller.signal.reason : error
+  } finally {
+    clearTimeout(timer)
+    if (partsDirectory) await fs.promises.rm(partsDirectory, { recursive: true, force: true })
+  }
+}
+
+export function createSshTransport(env, directory, { executeSftp = runSftpProcess, log = console.log } = {}) {
   const host = env.WINDOWS_DEPLOY_HOST
   assert(typeof host === 'string' && /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/u.test(host), 'WINDOWS_DEPLOY_HOST must be an IPv4 address or DNS name')
   const port = Number(env.WINDOWS_DEPLOY_PORT || '22')
@@ -56,13 +207,13 @@ export function createSshTransport(env, directory) {
     '-o', 'ConnectTimeout=15', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=2',
   ]
   const target = `${deploymentUser}@${host}`
-  const childEnv = { ...env }
-  for (const name of ['GH_TOKEN', 'WINDOWS_DEPLOY_SSH_KEY', 'WINDOWS_DEPLOY_KNOWN_HOSTS']) delete childEnv[name]
-  const sftp = batch => run('sftp', [...options, '-P', String(port), '-b', '-', target], { input: batch, env: childEnv, timeout: 600_000 })
+  const childEnv = sshChildEnvironment(env)
+  const sftp = (batch, connection = {}) => executeSftp([...options, '-P', String(port), '-b', '-', target], {
+    input: batch, env: childEnv, timeoutMs: 45_000, ...connection,
+  })
   return {
     async upload(sourceDirectory, request) {
-      fs.writeFileSync(path.join(sourceDirectory, 'request.json'), `${JSON.stringify(request, null, 2)}\n`, { mode: 0o600, flag: 'wx' })
-      sftp(uploadBatch(sourceDirectory, request))
+      await uploadPackageParts({ directory: sourceDirectory, request, sftp, log })
     },
     async trigger() {
       run('ssh', [...options, '-p', String(port), target, triggerCommand], { env: childEnv, timeout: 45_000 })
@@ -71,7 +222,7 @@ export function createSshTransport(env, directory) {
       const destination = path.join(directory, 'status-download.json')
       fs.rmSync(destination, { force: true })
       try {
-        sftp(`get ${sftpQuote(`${deploymentRoot}/status/${request.requestId}.json`)} ${sftpQuote(destination)}\n`)
+        await sftp(`get ${sftpQuote(`${deploymentRoot}/status/${request.requestId}.json`)} ${sftpQuote(destination)}\n`)
       } catch {
         return null
       }
