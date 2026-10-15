@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElTooltip } from 'element-plus'
-import type { ErrorResponse, TimeTrackingSession, TimeTrackingSessionPage } from '@yumpoo/api-client'
+import { TimeSessionFillMode, type ErrorResponse, type TimeTrackingSession, type TimeTrackingSessionPage } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../../api/client'
 import { useSession } from '../../composables/useSession'
 import { formatDuration, formatTrackingDuration, timerMutation } from '../../composables/useTimeTracker'
@@ -23,6 +23,7 @@ const fullCalendar = ref(false)
 watch([form, fullCalendar], ([adding, full]) => emit('resize', adding ? full ? 580 : 460 : 400))
 const start = ref('')
 const end = ref('')
+const mode = ref<TimeSessionFillMode>(TimeSessionFillMode.Parallel)
 const saveProblem = ref('')
 async function load(cursor?: string) {
   if (loading.value) return
@@ -36,7 +37,7 @@ function edit(record?: TimeTrackingSession) {
   editing.value = record
   start.value = companyDateTime(record?.startedAt ?? new Date(Date.now() - 3600000), timezone.value).slice(0, 16)
   end.value = companyDateTime(record?.stoppedAt ?? new Date(), timezone.value).slice(0, 16)
-  saveProblem.value = ''; fullCalendar.value = false; form.value = true
+  mode.value = TimeSessionFillMode.Parallel; saveProblem.value = ''; fullCalendar.value = false; form.value = true
 }
 async function save() {
   if (loading.value) return
@@ -48,10 +49,15 @@ async function save() {
     if (stoppedAt <= startedAt || stoppedAt.getTime() > Date.now()) throw new Error('结束时间必须晚于开始时间，且不能在未来')
     const body = { startedAt, stoppedAt }
     const record = editing.value
-    await timerMutation(JSON.stringify(['history', props.workItemId, record?.etag, body]), (idempotencyKey, xXSRFTOKEN) => {
-      const args = { workItemId: record ? record.workItemId! : props.workItemId, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: body }
-      return record ? timeTrackingApi.editTimeSession({ ...args, sessionId: record.id, ifMatch: record.etag }) : timeTrackingApi.createTimeSession(args)
-    })
+    if (record) {
+      await timerMutation(JSON.stringify(['history', record.workItemId, record.etag, body]), (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.editTimeSession({
+        workItemId: record.workItemId!, sessionId: record.id, ifMatch: record.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: body,
+      }))
+    } else {
+      const body = { mode: mode.value, entries: [{ workItemId: props.workItemId, startedAt, stoppedAt }] }
+      const result = await timerMutation(JSON.stringify(body), (idempotencyKey, xXSRFTOKEN) => timeTrackingApi.fillMyTimeSessions({ idempotencyKey, xXSRFTOKEN, timeSessionFillCommand: body }))
+      if (result.skippedDurationMs > 0) ElMessage.info(`已跳过 ${formatTrackingDuration(result.skippedDurationMs)}（该时段已有记录）`)
+    }
     emit('changed'); form.value = false; loading.value = false; await load()
   } catch (error) {
     saveProblem.value = error instanceof Error && !('response' in error) ? error.message : '保存失败，请重试。'
@@ -154,6 +160,7 @@ onMounted(() => load())
         v-if="form"
         v-model:start="start"
         v-model:end="end"
+        v-model:mode="mode"
         :timezone="timezone"
         :editing="!!editing"
         :busy="loading"
@@ -167,7 +174,10 @@ onMounted(() => load())
           :key="record.id"
           class="log-row"
         >
-          <span v-if="record.workItemNo" class="child-source">来自子项 #{{ record.workItemNo }} {{ record.workItemTitle }}</span>
+          <span
+            v-if="record.workItemNo"
+            class="child-source"
+          >来自子项 #{{ record.workItemNo }} {{ record.workItemTitle }}</span>
           <el-tooltip
             :content="record.displayName"
             placement="top"

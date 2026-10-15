@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElAlert, ElButton, ElIcon, ElPopover } from 'element-plus'
 import { ArrowLeft, ArrowRight, Calendar } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
@@ -12,14 +13,16 @@ import { buildTimesheet, dayBreakdown, hoursMinutes, projectColors, shortHours, 
 import { useTweenedNumber } from '../team/teamMotion'
 import { daySegments, monthGrid, monthLabel, monthProjects, monthStats, runningExtraMs, shiftMonth, STANDARD_DAY_MS, weekdayLabels,
   type CalendarCell } from './myTimeModel'
+import MyDayDrawer from './MyDayDrawer.vue'
 
-const session = useSession(), tracker = useTimeTracker()
+const session = useSession(), tracker = useTimeTracker(), route = useRoute()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const today = computed(() => todayIn(timezone.value, new Date(tracker.now.value)))
 const thisMonth = computed(() => today.value.slice(0, 7))
 const month = ref(thisMonth.value), direction = ref<'next' | 'prev'>('next')
 const sheet = ref<TeamTimesheet>(), sheetMonth = ref(''), loading = ref(false), error = ref('')
 const active = ref<{ date: string; anchor: HTMLElement }>()
+const myDay = ref('')
 const cells = computed(() => monthGrid(month.value, today.value))
 // Only the sheet fetched for the visible month is shown, so a new month starts empty and its cells fill in on arrival.
 const row = computed(() => sheet.value && sheetMonth.value === month.value ? buildTimesheet(sheet.value).rows[0] : undefined)
@@ -70,10 +73,13 @@ function goThisMonth() {
   month.value = thisMonth.value
 }
 
-function openDay(cell: CalendarCell, event: MouseEvent) {
+function previewDay(cell: CalendarCell, event: MouseEvent | FocusEvent) {
+  if (!days.value[cell.date]) { active.value = undefined; return }
   const anchor = event.currentTarget as HTMLElement
-  active.value = active.value?.anchor === anchor ? undefined : { date: cell.date, anchor }
+  active.value = { date: cell.date, anchor }
 }
+function openDay(date: string) { active.value = undefined; myDay.value = date }
+watch(() => route.query.day, day => { if (typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day)) openDay(day) }, { immediate: true })
 function closeDayOnOutside(event: PointerEvent) {
   const target = event.target
   if (target instanceof Element && (active.value?.anchor.contains(target) || target.closest('.my-time-day-popover'))) return
@@ -124,6 +130,9 @@ defineExpose({ refresh: load, loading, ready })
           @click="step(1)"
         />
       </div>
+      <el-button @click="openDay(today)">
+        今天
+      </el-button>
       <el-button
         :disabled="month === thisMonth"
         @click="goThisMonth"
@@ -201,12 +210,14 @@ defineExpose({ refresh: load, loading, ready })
                   'is-weekend': cell.weekend,
                   'is-today': cell.today,
                   'is-full': (days[cell.date] ?? 0) >= STANDARD_DAY_MS,
-                  'is-active': active?.date === cell.date,
+                  'is-active': active?.date === cell.date || myDay === cell.date,
                 }"
                 :style="{ '--d': cell.row + cell.column, '--level': level(days[cell.date] ?? 0) }"
-                :disabled="!days[cell.date]"
-                :aria-label="days[cell.date] ? `${dayLabel(cell.date)} ${shortHours(days[cell.date] ?? 0)} 小时，查看明细` : dayLabel(cell.date)"
-                @click="openDay(cell, $event)"
+                :disabled="cell.future"
+                :aria-label="`${dayLabel(cell.date)} ${shortHours(days[cell.date] ?? 0)} 小时，查看时间线`"
+                @mouseenter="previewDay(cell, $event)"
+                @focus="previewDay(cell, $event)"
+                @click="openDay(cell.date)"
               >
                 <span
                   v-if="days[cell.date]"
@@ -266,6 +277,12 @@ defineExpose({ refresh: load, loading, ready })
       <header class="my-time-day__head">
         <strong>{{ dayLabel(active.date) }}</strong>
         <span>{{ hoursMinutes(days[active.date] ?? 0) }}</span>
+        <el-button
+          text
+          @click="openDay(active.date)"
+        >
+          时间线
+        </el-button>
       </header>
       <p
         v-if="!breakdown.length"
@@ -291,6 +308,12 @@ defineExpose({ refresh: load, loading, ready })
         </div>
       </section>
     </el-popover>
+    <MyDayDrawer
+      v-if="myDay"
+      v-model:date="myDay"
+      :timezone="timezone"
+      @close="myDay = ''"
+    />
   </section>
 </template>
 

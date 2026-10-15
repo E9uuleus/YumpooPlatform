@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { TimeSessionFillMode, type MyTimeSession } from '@yumpoo/api-client'
+import { timeTrackingApi } from '../../api/client'
 import TimeCalendar from './TimeCalendar.vue'
-import { parseCompanyDateTime } from './timeFormat'
+import { companyDateTime, parseCompanyDateTime } from './timeFormat'
 
-const props = defineProps<{ start: string; end: string; timezone: string; editing: boolean; busy: boolean; problem?: string }>()
-const emit = defineEmits<{ 'update:start': [value: string]; 'update:end': [value: string]; expand: [value: boolean]; save: [] }>()
+const props = withDefaults(defineProps<{ start: string; end: string; timezone: string; editing: boolean; busy: boolean; problem?: string; mode?: TimeSessionFillMode }>(), { mode: TimeSessionFillMode.Parallel, problem: '' })
+const emit = defineEmits<{ 'update:start': [value: string]; 'update:end': [value: string]; 'update:mode': [value: TimeSessionFillMode]; expand: [value: boolean]; save: [] }>()
 const selectedDay = computed(() => props.start.slice(0, 10))
 const dayMs = 86400000
 const dateNumber = (day: string) => new Date(`${day}T00:00:00Z`).getTime()
@@ -17,6 +19,24 @@ const preview = computed(() => {
   const seconds = Math.max(0, Math.floor(duration.value / 1000))
   return `${String(Math.floor(seconds / 3600)).padStart(2, '0')}h ${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}m`
 })
+const existing = ref<MyTimeSession[]>([])
+const existingLoading = ref(false)
+const existingProblem = ref('')
+const clock = (date: Date) => companyDateTime(date, props.timezone).slice(11, 16)
+watch([() => props.start, () => props.end, () => props.timezone], async ([start, end, timezone], _previous, onCleanup) => {
+  let active = true
+  onCleanup(() => { active = false })
+  existing.value = []; existingProblem.value = ''; existingLoading.value = false
+  let from: Date, to: Date
+  try { from = parseCompanyDateTime(start, timezone); to = parseCompanyDateTime(end, timezone) } catch { return }
+  if (to <= from) return
+  existingLoading.value = true
+  try {
+    const result = await timeTrackingApi.listMyTimeSessions({ from, to })
+    if (active) existing.value = result.items
+  } catch { if (active) existingProblem.value = '无法加载该时段记录。' }
+  finally { if (active) existingLoading.value = false }
+}, { immediate: true })
 function selectDay(day: string) {
   const offset = endOffset.value
   emit('update:start', `${day}T${props.start.slice(11)}`)
@@ -84,6 +104,48 @@ function setOffset(event: Event) {
         </option>
       </select>
     </div>
+    <div
+      v-if="!editing"
+      class="fill-modes"
+      role="radiogroup"
+      aria-label="补录方式"
+    >
+      <label><input
+        type="radio"
+        :checked="mode === TimeSessionFillMode.Parallel"
+        :disabled="busy"
+        @change="emit('update:mode', TimeSessionFillMode.Parallel)"
+      >并行记录</label>
+      <label><input
+        type="radio"
+        :checked="mode === TimeSessionFillMode.Replace"
+        :disabled="busy"
+        @change="emit('update:mode', TimeSessionFillMode.Replace)"
+      >替换该时段其他记录</label>
+      <label><input
+        type="radio"
+        :checked="mode === TimeSessionFillMode.Gaps"
+        :disabled="busy"
+        @change="emit('update:mode', TimeSessionFillMode.Gaps)"
+      >仅补空白</label>
+    </div>
+    <div class="existing-sessions">
+      <strong>该时段已有记录</strong>
+      <span v-if="existingLoading">正在加载…</span>
+      <span v-else-if="existingProblem">{{ existingProblem }}</span>
+      <ul v-else-if="existing.length">
+        <li
+          v-for="item in existing.slice(0, 3)"
+          :key="item.session.id"
+        >
+          {{ clock(item.session.startedAt) }}–{{ item.session.stoppedAt ? clock(item.session.stoppedAt) : '计时中' }} {{ item.itemNo ? `#${item.itemNo} ` : '' }}{{ item.title ?? '不可见工作项' }}
+        </li>
+        <li v-if="existing.length > 3">
+          等 {{ existing.length }} 条
+        </li>
+      </ul>
+      <span v-else>暂无记录</span>
+    </div>
     <p
       v-if="problem"
       class="save-error"
@@ -105,6 +167,7 @@ function setOffset(event: Event) {
 
 <style scoped>
 .save-error{margin:0;color:var(--el-color-danger);font-size:13px}
+.fill-modes{display:flex;flex-wrap:wrap;gap:8px 12px}.fill-modes label{display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer}.fill-modes input{margin:0;accent-color:var(--el-color-primary)}.existing-sessions{display:grid;gap:5px;font-size:11px;color:var(--el-text-color-secondary)}.existing-sessions strong{font-weight:500}.existing-sessions ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}.existing-sessions li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .manual-session{display:flex;flex-direction:column;gap:12px;padding:4px 12px 8px}
 button,select,input{font:inherit;color:inherit}button{border:0;background:transparent;cursor:pointer;border-radius:5px}button:hover:not(:disabled){background:#f0f1f3;color:var(--el-text-color-primary)}button:disabled{opacity:.4;cursor:default}button:focus-visible,select:focus-visible{outline:2px solid var(--el-color-primary);outline-offset:2px}
 .end-day select{border:0;background:var(--el-bg-color);padding:5px 2px;cursor:pointer}

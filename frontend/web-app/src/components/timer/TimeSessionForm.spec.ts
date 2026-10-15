@@ -1,8 +1,10 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+const api = vi.hoisted(() => ({ listMyTimeSessions: vi.fn() }))
+vi.mock('../../api/client', () => ({ timeTrackingApi: api }))
 import TimeSessionForm from './TimeSessionForm.vue'
 const props = { start: '2026-09-07T13:00:00', end: '2026-09-07T14:00:00', timezone: 'Asia/Shanghai', editing: false, busy: false }
-beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-07T08:00:00Z')) })
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-07T08:00:00Z')); api.listMyTimeSessions.mockResolvedValue({ items: [] }) })
 afterEach(() => vi.useRealTimers())
 describe('手动计时日历', () => {
   it('从两周展开完整日历，支持闰年二月并禁用未来日期', async () => {
