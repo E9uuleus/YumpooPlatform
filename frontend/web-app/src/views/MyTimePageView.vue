@@ -3,6 +3,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import { ElButton, ElTooltip } from 'element-plus'
 import { ref } from 'vue'
 import MyTimeView from '../components/my-time/MyTimeView.vue'
+import TimePreferencesPopover from '../components/my-time/TimePreferencesPopover.vue'
 
 const myTime = ref<InstanceType<typeof MyTimeView>>()
 </script>
@@ -14,6 +15,7 @@ const myTime = ref<InstanceType<typeof MyTimeView>>()
         我的工时
       </h1>
       <div class="dashboard-header-actions">
+        <TimePreferencesPopover />
         <el-tooltip content="刷新数据">
           <el-button
             :icon="Refresh"

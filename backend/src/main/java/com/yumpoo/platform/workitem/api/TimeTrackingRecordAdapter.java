@@ -11,7 +11,7 @@ public class TimeTrackingRecordAdapter implements TimeTrackingRecordQuery {
     public TimeTrackingRecordAdapter(TimeTrackingService service) { this.service = service; }
 
     public Page findVisible(CurrentActor actor, UUID workItemId, String cursor) {
-        var page = service.history(actor, workItemId, cursor);
+        var page = service.history(actor, workItemId, cursor, false);
         return new Page(page.items().stream().map(s -> new Record(s.id(), s.projectId(), s.workItemId(),
                 s.userId(), s.startedAt(), s.stoppedAt(), s.source(), s.durationMs(), s.rowVersion())).toList(),
                 page.nextCursor(), page.serverNow());

@@ -54,11 +54,16 @@ watch(() => [props.item.id, props.projectId] as const, ([id, project]) => {
 }, { immediate: true })
 onBeforeUnmount(() => release?.())
 const summary = computed(() => tracker.summaries.value[props.item.id])
-const running = computed(() => tracker.current.value?.session?.workItemId === props.item.id)
+const running = computed(() => tracker.isRunning(props.item.id))
 const unavailable = computed(() => (props.disabled || !props.item.capabilities.canEditFields) && !running.value)
 const total = computed(() => {
   const entry = summary.value
-  return entry ? entry.value.totalDurationMs + Math.max(0, tracker.now.value - entry.at) * entry.value.runningSessions.length : props.item.timeTracking?.totalDurationMs ?? 0
+  return entry ? entry.value.rollupDurationMs + (tracker.now.value - entry.at) * entry.value.rollupRunningRate : props.item.timeTracking?.rollupDurationMs ?? 0
+})
+const durationTitle = computed(() => {
+  const value = summary.value?.value ?? props.item.timeTracking
+  const rollup = value?.rollupDurationMs ?? 0, allocated = value?.allocatedDurationMs ?? 0
+  return `合计 ${formatTrackingDuration(rollup)} · 本项 ${formatTrackingDuration(allocated)} · 子项 ${formatTrackingDuration(rollup - allocated)}`
 })
 </script>
 
@@ -91,6 +96,7 @@ const total = computed(() => {
         @keydown.esc="open = false"
       >
         <button
+          v-if="tracker.timerEnabled.value || running"
           type="button"
           class="timer-toggle"
           :class="{ 'is-unavailable': unavailable }"
@@ -111,12 +117,16 @@ const total = computed(() => {
             aria-hidden="true"
           ><path d="M5 2.8v10.4L13 8z" /></svg>
         </button>
-        <span class="duration">{{ formatTrackingDuration(total) }}</span>
+        <span
+          class="duration"
+          :title="durationTitle"
+        >{{ formatTrackingDuration(total) }}</span>
       </div>
     </template>
     <TimeSessionDialog
       :work-item-id="item.id"
       :title="item.title"
+      :include-children="item.subitemCount > 0"
       @close="open = false"
       @resize="panelHeight = $event"
       @changed="emit('changed')"

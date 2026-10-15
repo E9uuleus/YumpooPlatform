@@ -213,7 +213,7 @@ public class WorkItemService {
                 ? projectCursors.encode(new ProjectWorkItemCursorCodec.Cursor(
                         fingerprint, effectiveView,
                         WorkItemRepository.ProjectCursorAnchor.from(rows.getLast()),query.usesTimeTracking() ? timeAsOf : null,
-                        timeRevision,items.getLast().timeTracking().totalDurationMs())) : null;
+                        timeRevision,items.getLast().timeTracking().rollupDurationMs())) : null;
         return new ProjectWorkItemCursorPage(items, nextCursor);
     }
 
@@ -807,6 +807,7 @@ public class WorkItemService {
         WorkItem after = workItems.softDelete(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         appendDeleted(after, command.actor());
+        timeTracking.advanceProjects(project.companyId(), List.of(project.projectId()));
         return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
                 labels.statuses(project.companyId(), project.projectId())));
     }
@@ -865,6 +866,7 @@ public class WorkItemService {
         WorkItem after = workItems.restore(candidate, command.expectedVersion())
                 .orElseThrow(() -> new ApplicationException(StandardErrorCode.VERSION_CONFLICT));
         appendRestored(after, command.actor());
+        timeTracking.advanceProjects(project.companyId(), List.of(project.projectId()));
         return stored(200, detail(after, people(project.companyId(), List.of(after)), true,
                 labels.statuses(project.companyId(), project.projectId())));
     }

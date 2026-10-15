@@ -72,7 +72,7 @@ export interface QueryProjectStatisticsTableRequest {
 export class ProjectStatisticsApi extends runtime.BaseAPI {
 
     /**
-     * 按公司时区切分自然日并合计到区间；跨日记录按重叠时长拆分，运行中计时统计到 asOf。区间最多 93 天。
+     * 按公司时区切分自然日并合计到区间；跨日记录按重叠时长拆分，运行中计时统计到 asOf，时长为按并行均摊后的计入时长。区间最多 93 天。
      * 按成员与工作项汇总项目区间计时
      */
     async getProjectWorklogRaw(requestParameters: GetProjectWorklogRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ProjectWorklog>> {
@@ -124,7 +124,7 @@ export class ProjectStatisticsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 按公司时区切分自然日并合计到区间；跨日记录按重叠时长拆分，运行中计时统计到 asOf。区间最多 93 天。
+     * 按公司时区切分自然日并合计到区间；跨日记录按重叠时长拆分，运行中计时统计到 asOf，时长为按并行均摊后的计入时长。区间最多 93 天。
      * 按成员与工作项汇总项目区间计时
      */
     async getProjectWorklog(requestParameters: GetProjectWorklogRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ProjectWorklog> {

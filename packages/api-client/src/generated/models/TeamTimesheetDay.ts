@@ -44,6 +44,12 @@ export interface TeamTimesheetDay {
      * @memberof TeamTimesheetDay
      */
     note: string | null;
+    /**
+     * 公司日历当天标准工时分钟数，非工作日为 0。
+     * @type {number}
+     * @memberof TeamTimesheetDay
+     */
+    standardMinutes: number;
 }
 
 
@@ -55,6 +61,7 @@ export function instanceOfTeamTimesheetDay(value: object): value is TeamTimeshee
     if (!('date' in value) || value['date'] === undefined) return false;
     if (!('dayType' in value) || value['dayType'] === undefined) return false;
     if (!('note' in value) || value['note'] === undefined) return false;
+    if (!('standardMinutes' in value) || value['standardMinutes'] === undefined) return false;
     return true;
 }
 
@@ -71,6 +78,7 @@ export function TeamTimesheetDayFromJSONTyped(json: any, ignoreDiscriminator: bo
         'date': (new Date(json['date'])),
         'dayType': CalendarDayTypeFromJSON(json['dayType']),
         'note': json['note'],
+        'standardMinutes': json['standardMinutes'],
     };
 }
 
@@ -88,5 +96,6 @@ export function TeamTimesheetDayToJSONTyped(value?: TeamTimesheetDay | null, ign
         'date': value['date'].toISOString().substring(0,10),
         'dayType': CalendarDayTypeToJSON(value['dayType']),
         'note': value['note'],
+        'standardMinutes': value['standardMinutes'],
     };
 }

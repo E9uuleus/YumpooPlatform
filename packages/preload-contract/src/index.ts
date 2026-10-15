@@ -157,6 +157,8 @@ export interface TimerMenuState {
   visible: boolean
   display: TimerDisplayStyle
   pinned: boolean
+  /** False once the person switched the timer off; timer entries are then hidden. Absent from older shells. */
+  timerEnabled?: boolean
 }
 
 export interface DesktopTimerState {
@@ -169,6 +171,8 @@ export interface DesktopTimerState {
   recent: { workItemId: string; title: string } | null
   /** Server clock minus local clock, so other surfaces can tick the same duration. */
   clockOffsetMs?: number
+  /** The person's "use the timer" preference; older web builds omit it, which means on. */
+  timerEnabled?: boolean
 }
 
 export type DesktopTimerCommand =

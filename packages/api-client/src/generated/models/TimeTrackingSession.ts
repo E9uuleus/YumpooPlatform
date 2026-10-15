@@ -102,6 +102,30 @@ export interface TimeTrackingSession {
      * @memberof TimeTrackingSession
      */
     changeReason: string | null;
+    /**
+     * 按并行均摊后的计入时长
+     * @type {number}
+     * @memberof TimeTrackingSession
+     */
+    allocatedDurationMs: number;
+    /**
+     * 该记录期间本人同时计时的其他工作项数
+     * @type {number}
+     * @memberof TimeTrackingSession
+     */
+    parallelItemCount: number;
+    /**
+     * 记录属于子项时的工作项编号。
+     * @type {string}
+     * @memberof TimeTrackingSession
+     */
+    workItemNo: string | null;
+    /**
+     * 记录属于子项时的工作项标题。
+     * @type {string}
+     * @memberof TimeTrackingSession
+     */
+    workItemTitle: string | null;
 }
 
 /**
@@ -133,6 +157,10 @@ export function instanceOfTimeTrackingSession(value: object): value is TimeTrack
     if (!('canEdit' in value) || value['canEdit'] === undefined) return false;
     if (!('deleted' in value) || value['deleted'] === undefined) return false;
     if (!('changeReason' in value) || value['changeReason'] === undefined) return false;
+    if (!('allocatedDurationMs' in value) || value['allocatedDurationMs'] === undefined) return false;
+    if (!('parallelItemCount' in value) || value['parallelItemCount'] === undefined) return false;
+    if (!('workItemNo' in value) || value['workItemNo'] === undefined) return false;
+    if (!('workItemTitle' in value) || value['workItemTitle'] === undefined) return false;
     return true;
 }
 
@@ -160,6 +188,10 @@ export function TimeTrackingSessionFromJSONTyped(json: any, ignoreDiscriminator:
         'canEdit': json['canEdit'],
         'deleted': json['deleted'],
         'changeReason': json['changeReason'],
+        'allocatedDurationMs': json['allocatedDurationMs'],
+        'parallelItemCount': json['parallelItemCount'],
+        'workItemNo': json['workItemNo'],
+        'workItemTitle': json['workItemTitle'],
     };
 }
 
@@ -188,5 +220,9 @@ export function TimeTrackingSessionToJSONTyped(value?: TimeTrackingSession | nul
         'canEdit': value['canEdit'],
         'deleted': value['deleted'],
         'changeReason': value['changeReason'],
+        'allocatedDurationMs': value['allocatedDurationMs'],
+        'parallelItemCount': value['parallelItemCount'],
+        'workItemNo': value['workItemNo'],
+        'workItemTitle': value['workItemTitle'],
     };
 }

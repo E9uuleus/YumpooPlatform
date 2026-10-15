@@ -22,28 +22,28 @@ public class JdbcTeamWorkRepository implements TeamWorkRepository {
     private final JdbcClient jdbc;
     public JdbcTeamWorkRepository(JdbcClient jdbc) { this.jdbc = jdbc; }
 
-    /** Each session contributes its overlap with every company-calendar day it touches; running sessions end at asOf. */
+    /** Shares contribute their allocated overlap with each company-calendar day; open shares end at asOf. */
     public List<TimeEntry> timeEntries(UUID companyId, List<UUID> projectIds, List<UUID> userIds, LocalDate from, LocalDate to, ZoneId zone, Instant asOf) {
-        String overlap = "EXTRACT(EPOCH FROM (LEAST(x.ended_at,days.day_end)-GREATEST(x.started_at,days.day_start)))*1000";
+        String overlap = "EXTRACT(EPOCH FROM (LEAST(x.ended_at,days.day_end)-GREATEST(x.started_at,days.day_start)))*1000/x.concurrency";
         var statement = jdbc.sql("""
             WITH days AS (
               SELECT d::date AS day, d AT TIME ZONE CAST(:zone AS text) AS day_start,
                      (d + interval '1 day') AT TIME ZONE CAST(:zone AS text) AS day_end
               FROM generate_series(CAST(:from AS date)::timestamp, CAST(:to AS date)::timestamp, interval '1 day') AS d),
             sessions AS (
-              SELECT s.user_id,s.work_item_id,s.started_at,COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) AS ended_at
-              FROM yumpoo.work_item_time_session s
-              WHERE s.company_id=:company AND s.deleted_at IS NULL AND s.project_id IN (:projects)
+              SELECT s.user_id,s.work_item_id,s.started_at,COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) AS ended_at,s.concurrency
+              FROM yumpoo.work_item_time_share s
+              WHERE s.company_id=:company AND s.project_id IN (:projects)
                 AND s.started_at < CAST(:rangeEnd AS timestamptz)
                 AND COALESCE(s.stopped_at,CAST(:asOf AS timestamptz)) > CAST(:rangeStart AS timestamptz)
             """ + (userIds.isEmpty() ? "" : " AND s.user_id IN (:users)") + """
             )
-            SELECT x.user_id,x.work_item_id,w.project_id,w.item_no,w.title,days.day,SUM(%1$s)::bigint AS duration_ms
+            SELECT x.user_id,x.work_item_id,w.project_id,w.item_no,w.title,days.day,FLOOR(SUM(%1$s))::bigint AS duration_ms
             FROM sessions x
             JOIN days ON x.started_at < days.day_end AND x.ended_at > days.day_start
             JOIN yumpoo.work_item w ON w.id=x.work_item_id AND w.company_id=:company AND w.deleted_at IS NULL
             GROUP BY x.user_id,x.work_item_id,w.project_id,w.item_no,w.title,days.day
-            HAVING SUM(%1$s) >= 1
+            HAVING FLOOR(SUM(%1$s)) >= 1
             ORDER BY days.day,x.user_id,w.item_no
             """.formatted(overlap))
                 .param("company", companyId).param("projects", projectIds).param("zone", zone.getId())

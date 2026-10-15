@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElAlert, ElButton, ElIcon, ElPopover } from 'element-plus'
 import { ArrowLeft, ArrowRight, Calendar } from '@element-plus/icons-vue'
 import type { TeamTimesheet } from '@yumpoo/api-client'
@@ -10,23 +11,25 @@ import { onTimeTrackingChanged, useTimeTracker } from '../../composables/useTime
 import '../projects/workItemAccentBar.css'
 import { buildTimesheet, dayBreakdown, hoursMinutes, projectColors, shortHours, todayIn, toApiDate, weekday } from '../team/teamDashboardModel'
 import { useTweenedNumber } from '../team/teamMotion'
-import { daySegments, monthGrid, monthLabel, monthProjects, monthStats, runningExtraMs, shiftMonth, STANDARD_DAY_MS, weekdayLabels,
+import { dayTargetMs, daySegments, monthGrid, monthLabel, monthProjects, monthStats, runningExtraMs, shiftMonth, weekdayLabels,
   type CalendarCell } from './myTimeModel'
 
-const session = useSession(), tracker = useTimeTracker()
+const session = useSession(), tracker = useTimeTracker(), route = useRoute(), router = useRouter()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const today = computed(() => todayIn(timezone.value, new Date(tracker.now.value)))
 const thisMonth = computed(() => today.value.slice(0, 7))
-const month = ref(thisMonth.value), direction = ref<'next' | 'prev'>('next')
+const requestedMonth = typeof route.query.month === 'string' && /^\d{4}-\d{2}$/.test(route.query.month) ? route.query.month : ''
+const month = ref(requestedMonth && requestedMonth < thisMonth.value ? requestedMonth : thisMonth.value), direction = ref<'next' | 'prev'>('next')
 const sheet = ref<TeamTimesheet>(), sheetMonth = ref(''), loading = ref(false), error = ref('')
 const active = ref<{ date: string; anchor: HTMLElement }>()
 const cells = computed(() => monthGrid(month.value, today.value))
 // Only the sheet fetched for the visible month is shown, so a new month starts empty and its cells fill in on arrival.
 const row = computed(() => sheet.value && sheetMonth.value === month.value ? buildTimesheet(sheet.value).rows[0] : undefined)
-const running = computed(() => tracker.current.value?.session ?? undefined)
+const running = computed(() => tracker.running.value.length > 0)
+const startedAt = computed(() => running.value ? new Date(Math.min(...tracker.running.value.map(timer => timer.session.startedAt.getTime()))) : undefined)
 const days = computed(() => {
   const totals: Record<string, number> = { ...row.value?.days }
-  const extra = row.value ? runningExtraMs(sheet.value?.asOf, running.value?.startedAt, tracker.now.value) : 0
+  const extra = row.value ? runningExtraMs(sheet.value?.asOf, startedAt.value, tracker.now.value) : 0
   if (extra) totals[today.value] = (totals[today.value] ?? 0) + extra
   return totals
 })
@@ -42,8 +45,9 @@ const shownAverage = useTweenedNumber(() => stats.value.averageMs)
 const shownDays = useTweenedNumber(() => stats.value.recordedDays)
 const shownToday = useTweenedNumber(() => days.value[today.value] ?? 0)
 
-const level = (ms: number) => Math.min(1, ms / STANDARD_DAY_MS)
-const segmentWidth = (ms: number, dayMs: number) => `${(ms / Math.max(dayMs, STANDARD_DAY_MS)) * 100}%`
+const target = (date: string) => dayTargetMs(sheet.value?.days, date)
+const level = (date: string) => Math.min(1, (days.value[date] ?? 0) / target(date))
+const segmentWidth = (ms: number, date: string) => `${(ms / Math.max(days.value[date] ?? 0, target(date))) * 100}%`
 const dayLabel = (date: string) => `${Number(date.slice(5, 7))}月${Number(date.slice(8))}日 周${weekday(date)}`
 
 let token = 0
@@ -69,9 +73,14 @@ function goThisMonth() {
   month.value = thisMonth.value
 }
 
-function openDay(cell: CalendarCell, event: MouseEvent) {
+function previewDay(cell: CalendarCell, event: MouseEvent | FocusEvent) {
+  if (!days.value[cell.date]) { active.value = undefined; return }
   const anchor = event.currentTarget as HTMLElement
-  active.value = active.value?.anchor === anchor ? undefined : { date: cell.date, anchor }
+  active.value = { date: cell.date, anchor }
+}
+function openDay(date: string) {
+  active.value = undefined
+  void router.push({ name: 'my-time-day', params: { workspaceSlug: route.params.workspaceSlug, date } })
 }
 function closeDayOnOutside(event: PointerEvent) {
   const target = event.target
@@ -123,6 +132,9 @@ defineExpose({ refresh: load, loading, ready })
           @click="step(1)"
         />
       </div>
+      <el-button @click="openDay(today)">
+        今天
+      </el-button>
       <el-button
         :disabled="month === thisMonth"
         @click="goThisMonth"
@@ -165,6 +177,9 @@ defineExpose({ refresh: load, loading, ready })
           />计时中</template></small><strong>{{ hoursMinutes(shownToday) }}</strong>
         </div>
       </div>
+      <p class="my-time__note">
+        并行计时按项数平均计入，每日合计为实际时长。
+      </p>
       <div class="my-time__board">
         <div
           class="my-time__weekdays"
@@ -196,13 +211,15 @@ defineExpose({ refresh: load, loading, ready })
                   'is-outside': !cell.inMonth,
                   'is-weekend': cell.weekend,
                   'is-today': cell.today,
-                  'is-full': (days[cell.date] ?? 0) >= STANDARD_DAY_MS,
+                  'is-full': (days[cell.date] ?? 0) >= target(cell.date),
                   'is-active': active?.date === cell.date,
                 }"
-                :style="{ '--d': cell.row + cell.column, '--level': level(days[cell.date] ?? 0) }"
-                :disabled="!days[cell.date]"
-                :aria-label="days[cell.date] ? `${dayLabel(cell.date)} ${shortHours(days[cell.date] ?? 0)} 小时，查看明细` : dayLabel(cell.date)"
-                @click="openDay(cell, $event)"
+                :style="{ '--d': cell.row + cell.column, '--level': level(cell.date) }"
+                :disabled="cell.future"
+                :aria-label="`${dayLabel(cell.date)} ${shortHours(days[cell.date] ?? 0)} 小时，查看时间线`"
+                @mouseenter="previewDay(cell, $event)"
+                @focus="previewDay(cell, $event)"
+                @click="openDay(cell.date)"
               >
                 <span
                   v-if="days[cell.date]"
@@ -219,7 +236,7 @@ defineExpose({ refresh: load, loading, ready })
                   <span class="my-time-cell__bar"><i
                     v-for="segment in segments[cell.date] ?? []"
                     :key="segment.projectId"
-                    :style="{ width: segmentWidth(segment.ms, days[cell.date] ?? 0), background: colors.get(segment.projectId) }"
+                    :style="{ width: segmentWidth(segment.ms, cell.date), background: colors.get(segment.projectId) }"
                   /></span>
                 </template>
               </button>
@@ -262,6 +279,12 @@ defineExpose({ refresh: load, loading, ready })
       <header class="my-time-day__head">
         <strong>{{ dayLabel(active.date) }}</strong>
         <span>{{ hoursMinutes(days[active.date] ?? 0) }}</span>
+        <el-button
+          text
+          @click="openDay(active.date)"
+        >
+          时间线
+        </el-button>
       </header>
       <p
         v-if="!breakdown.length"

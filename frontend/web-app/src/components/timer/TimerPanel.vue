@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { TimerOrbChange, TimerOrbLayout, TimerPreferences, TimerPreferencesChange, TimerWindowMode } from '@yumpoo/preload-contract'
 import { ListTimerCandidatesScopeEnum, type TimerCandidate } from '@yumpoo/api-client'
-import { useTimeTracker } from '../../composables/useTimeTracker'
+import { formatTrackingDuration, useTimeTracker } from '../../composables/useTimeTracker'
 import { useTimerCandidates } from '../../composables/useTimerCandidates'
 import TimerIcon from './TimerIcon.vue'
 import TimerDigits from './TimerDigits.vue'
@@ -38,12 +38,16 @@ const notice = ref('')
 const search = ref<HTMLInputElement>()
 const results = ref<HTMLElement>()
 const selected = ref(0)
-const running = computed(() => tracker.current.value?.session)
-const resume = computed(() => tracker.current.value?.recentItems[0])
+const runningSessions = tracker.running
+const running = computed(() => runningSessions.value[0]?.session)
+const resumeItems = computed(() => tracker.current.value?.resumeItems ?? [])
+const resume = computed(() => resumeItems.value.length > 1 ? resumeItems.value[0] : tracker.current.value?.recentItems[0])
 const needsCandidates = computed(() => expanded.value || !!running.value || !!resume.value)
 const { query, scope, items, loading, problem, nextOffset, searching, load } = useTimerCandidates(needsCandidates)
-const title = computed(() => running.value ? tracker.current.value?.workItemTitle ?? '不可见工作项' : resume.value?.title)
-const candidates = computed(() => items.value.filter(item => item.workItemId !== (running.value?.workItemId ?? (saved.value ? resume.value?.workItemId : undefined))))
+const title = computed(() => running.value
+  ? `${runningSessions.value[0]!.workItemTitle ?? '不可见工作项'}${runningSessions.value.length > 1 ? ` 等 ${runningSessions.value.length} 项` : ''}`
+  : resume.value ? `${resume.value.title}${resumeItems.value.length > 1 ? ` 等 ${resumeItems.value.length} 项` : ''}` : undefined)
+const candidates = computed(() => items.value.filter(item => !tracker.isRunning(item.workItemId) && (running.value || !saved.value || item.workItemId !== resume.value?.workItemId)))
 const focusedItem = ref<TimerCandidate>()
 const focusedId = computed(() => running.value ? running.value.workItemId : resume.value?.workItemId)
 const currentItem = computed(() => items.value.find(item => item.workItemId === focusedId.value)
@@ -52,7 +56,7 @@ const error = computed(() => notice.value || tracker.problem.value || (expanded.
 const project = computed(() => currentItem.value?.projectName)
 const saved = ref(false)
 const pausedDuration = ref(0)
-const displayDuration = computed(() => running.value ? tracker.runningDuration.value : pausedDuration.value)
+const displayDuration = computed(() => running.value ? tracker.wallDuration.value : pausedDuration.value)
 const toggleDisabled = computed(() => tracker.busy.value || !tracker.current.value)
 const canConfigure = computed(() => !!desktop?.setPreferences)
 const orbLeft = computed(() => orb.value.canvas?.left ?? (orb.value.side === 'left' ? orb.value.detailWidth : 0))
@@ -176,7 +180,7 @@ watch(currentItem, item => { if (item) focusedItem.value = item })
 watch(() => props.initialExpanded, value => applyMode(value ? 'picker' : 'compact'))
 watch(() => tracker.current.value?.rowVersion, () => { notice.value = '' })
 watch(tracker.savedAt, showSaved, { immediate: true })
-watch(tracker.runningDuration, value => { if (running.value) pausedDuration.value = value }, { immediate: true, flush: 'sync' })
+watch(tracker.wallDuration, value => { if (running.value) pausedDuration.value = value }, { immediate: true, flush: 'sync' })
 watch(focusedId, () => { if (!expanded.value && !currentItem.value) void load() })
 watch(error, value => { if (value && !expanded.value) void changeMode(true) })
 
@@ -187,11 +191,19 @@ async function begin(id: string) {
     focusedItem.value = item ?? focusedItem.value; query.value = ''; await changeMode(false)
   }
 }
-async function pause() { notice.value = ''; await tracker.stop() }
+async function pause() { notice.value = ''; await tracker.stopAll() }
+async function continueWork() {
+  if (resumeItems.value.length > 1) {
+    if (await tracker.startMany(resumeItems.value.map(item => item.workItemId))) await changeMode(false)
+  } else if (resume.value) await begin(resume.value.workItemId)
+}
+function allocatedDuration(ms: number) {
+  return ms + (tracker.now.value - tracker.current.value!.serverNow.getTime()) / runningSessions.value.length
+}
 function toggle() {
   if (suppressToggle) { suppressToggle = false; return }
   if (running.value) void pause()
-  else if (resume.value) void begin(resume.value.workItemId)
+  else if (resume.value) void continueWork()
   else void changeMode(true)
 }
 /**
@@ -421,9 +433,54 @@ function keydown(event: KeyboardEvent) {
       />
       <template v-else>
         <div
-          v-if="running || (saved && resume)"
+          v-if="running"
+          class="focus-card is-timing"
+        >
+          <div class="focus-heading">
+            <strong class="running-heading">{{ runningSessions.length }} 项计时中</strong>
+            <button
+              class="text-button"
+              :disabled="tracker.busy.value"
+              @click="pause"
+            >
+              全部暂停
+            </button>
+          </div>
+          <div class="focus-controls">
+            <span class="focus-time"><span
+              class="focus-ring"
+              aria-hidden="true"
+            /><TimerDigits :duration="tracker.wallDuration.value" /></span>
+          </div>
+          <div class="running-list">
+            <div
+              v-for="timer in runningSessions"
+              :key="timer.session.id"
+              class="running-row"
+            >
+              <span class="running-copy"><strong>{{ timer.workItemTitle ?? '不可见工作项' }}</strong><small>计入 {{ formatTrackingDuration(allocatedDuration(timer.session.allocatedDurationMs)) }}</small></span>
+              <button
+                v-if="runningSessions.length > 1 && timer.session.workItemId"
+                class="text-button"
+                :disabled="tracker.busy.value"
+                @click="tracker.switchTo(timer.session.workItemId)"
+              >
+                只计时此项
+              </button>
+              <button
+                class="icon-button"
+                :disabled="tracker.busy.value"
+                :aria-label="`暂停 ${timer.workItemTitle ?? '不可见工作项'}`"
+                @click="tracker.stop(timer.session.id)"
+              >
+                <TimerIcon name="pause" />
+              </button>
+            </div>
+          </div>
+        </div>
+        <div
+          v-else-if="resume"
           class="focus-card"
-          :class="{ 'is-timing': running }"
         >
           <div class="focus-heading">
             <WorkItemGlyph
@@ -436,7 +493,6 @@ function keydown(event: KeyboardEvent) {
               <strong>{{ title }}</strong><span v-if="project">{{ project }}</span>
             </div>
             <button
-              v-if="running?.workItemId || (!running && resume)"
               class="icon-button"
               aria-label="打开当前工作项"
               title="打开工作项"
@@ -447,28 +503,20 @@ function keydown(event: KeyboardEvent) {
           </div>
           <div class="focus-controls">
             <span
-              v-if="saved && !running"
+              v-if="saved"
               class="saved-feedback"
               role="status"
             ><TimerIcon name="check" />已保存</span>
-            <span
-              v-else-if="running"
-              class="focus-time"
-            ><span
-              class="focus-ring"
-              aria-hidden="true"
-            /><TimerDigits :duration="tracker.runningDuration.value" /></span>
             <button
               class="play-button"
-              :class="{ 'is-pause': running }"
               :disabled="tracker.busy.value || !tracker.current.value"
-              :aria-label="running ? '暂停计时' : '继续计时'"
-              @click="running ? pause() : resume && begin(resume.workItemId)"
+              aria-label="继续计时"
+              @click="continueWork"
             >
               <TimerIcon
-                :name="tracker.busy.value ? 'loader' : running ? 'pause' : 'play'"
+                :name="tracker.busy.value ? 'loader' : 'play'"
                 :class="{ spinning: tracker.busy.value }"
-              /><span>{{ running ? '暂停' : '继续' }}</span>
+              /><span>继续</span>
             </button>
           </div>
         </div>
@@ -538,7 +586,7 @@ function keydown(event: KeyboardEvent) {
               role="option"
               :aria-selected="selected === index"
               :disabled="tracker.busy.value || loading"
-              :aria-label="`${running ? '切换到' : item.lastTrackedAt ? '继续' : '开始'} ${item.title} · ${item.projectName} · ${item.itemNo}`"
+              :aria-label="`${running ? '并行开始' : item.lastTrackedAt ? '继续' : '开始'} ${item.title} · ${item.projectName} · ${item.itemNo}`"
               @mouseenter="selected = index"
               @click="begin(item.workItemId)"
             >
@@ -614,6 +662,7 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px
 .focus-card{margin:2px 12px 12px;padding:12px 12px 12px 14px;border-radius:13px;background:var(--yp-timer-sunken);box-shadow:inset 0 0 0 1px var(--yp-timer-hairline);flex-shrink:0}
 .focus-card.is-timing{background:linear-gradient(135deg,color-mix(in srgb,var(--yp-timer-accent) 10%,var(--yp-bg-raised)),color-mix(in srgb,var(--yp-timer-accent) 3%,var(--yp-bg-raised)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--yp-timer-accent) 18%,transparent)}
 .focus-heading{display:flex;gap:9px;align-items:center}
+.running-heading{flex:1}.running-list{max-height:160px;overflow:auto;margin-top:10px}.running-row{display:flex;align-items:center;gap:5px;padding:7px 0;border-top:1px solid var(--yp-timer-hairline)}.running-copy{display:grid;gap:3px;flex:1;min-width:0}.running-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:500}.running-copy small{font-size:11px;color:var(--yp-text-muted)}.running-row .text-button{font-size:11px;white-space:nowrap}.running-row .icon-button{flex-shrink:0}
 .focus-heading .work-glyph{width:30px;height:32px}
 .work-identity{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
 .work-identity strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:650}

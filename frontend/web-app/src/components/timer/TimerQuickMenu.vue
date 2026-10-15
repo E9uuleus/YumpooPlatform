@@ -30,6 +30,8 @@ const subtitle = computed(() => {
   return state.value?.recent ? '已暂停 · 可继续上次工作' : '从查找工作项开始计时'
 })
 const ringIcon = computed(() => !signedIn.value ? 'window' : saved.value ? 'check' : running.value ? 'clock' : state.value?.recent ? 'pause' : 'clock')
+/** Older shells omit the flag; only an explicit false hides the timer entries. */
+const timerOn = computed(() => state.value?.timerEnabled !== false)
 const canToggle = computed(() => signedIn.value && !!state.value?.enabled && (!!running.value || !!state.value?.recent))
 const display = computed(() => !state.value?.visible ? 'hidden' : state.value.display)
 const displays: Array<{ value: 'orb' | 'dock' | 'hidden'; label: string; icon: 'orb' | 'dock' | 'hidden'; action: TimerMenuAction }> = [
@@ -99,6 +101,7 @@ onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener
           :class="{ 'is-ready': state?.ready, 'is-signed-out': !signedIn }"
         ><span class="connection-dot" />{{ connection }}</span>
         <button
+          v-if="timerOn"
           class="menu-icon"
           role="menuitem"
           data-menu-item
@@ -109,7 +112,10 @@ onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener
           <TimerIcon name="settings" />
         </button>
       </header>
-      <div class="menu-status">
+      <div
+        v-if="timerOn"
+        class="menu-status"
+      >
         <span
           class="status-ring"
           aria-hidden="true"
@@ -135,6 +141,7 @@ onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener
       </div>
       <div class="menu-list">
         <button
+          v-if="timerOn"
           class="menu-item"
           role="menuitem"
           data-menu-item
@@ -180,6 +187,7 @@ onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener
           </button>
         </div>
         <div
+          v-if="timerOn"
           class="menu-display"
           role="group"
           aria-label="计时器显示方式"
@@ -201,6 +209,7 @@ onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener
           </div>
         </div>
         <button
+          v-if="timerOn"
           class="menu-item"
           role="menuitemcheckbox"
           data-menu-item

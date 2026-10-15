@@ -8,13 +8,13 @@ Status: implemented
 
 ## Decision
 
-团队视图只开放给有效角色包含 COMPANY_ADMIN 的主体（APP_MANAGER 也满足）。reporting 只调用公开端口：catalog 的 [CompanyProjectQuery](../../../../backend/src/main/java/com/yumpoo/platform/catalog/api/CompanyProjectQuery.java) 返回本公司全部项目，workitem 的 [TeamWorkQuery](../../../../backend/src/main/java/com/yumpoo/platform/workitem/api/TeamWorkQuery.java) 返回原始计时与当前处理人。两个端口都会自行拒绝非管理员。项目 ID 先与本公司项目求交集，再传给 workitem；未知 ID 静默忽略。[私人仪表板](../product/2026-09-16-personal-dashboards.md)的 MemberProjectQuery 和所有权边界不变。
+团队视图只开放给有效角色包含 COMPANY_ADMIN 的主体（APP_MANAGER 也满足）。reporting 只调用公开端口：catalog 的 [CompanyProjectQuery](../../../../backend/src/main/java/com/yumpoo/platform/catalog/api/CompanyProjectQuery.java) 返回本公司全部项目，workitem 的 [TeamWorkQuery](../../../../backend/src/main/java/com/yumpoo/platform/workitem/api/TeamWorkQuery.java) 返回按并行均摊后的计入时长与当前处理人。两个端口都会自行拒绝非管理员。项目 ID 先与本公司项目求交集，再传给 workitem；未知 ID 静默忽略。[私人仪表板](../product/2026-09-16-personal-dashboards.md)的 MemberProjectQuery 和所有权边界不变。
 
 统计口径：
 
 下述“工时包含归档项目”的范围由[项目归档访问与统计范围](../product/2026-10-09-project-archive-and-deletion.md)部分替代，当前所有团队统计与项目选项均排除归档项目；原历史范围保留用于解释取舍，其余自然日拆分、成员行及管理员公开端口边界继续有效。
 
-- **工时：** 只统计未删除的原始计时，排除已删除工作项，包含已归档项目。跨天记录按与公司时区自然日的重叠时长拆分；运行中的计时统计到 asOf。
+- **工时：** 统计未删除会话按并行均摊后的计入时长，排除已删除工作项，包含已归档项目。跨天记录按与公司时区自然日的重叠时长及对应并行数拆分；运行中的计时统计到 asOf，不汇总父项，见[并行计时口径](../architecture/2026-10-14-parallel-time-tracking.md)。
 - **当前任务：** 只统计未删除、未归档、状态分类为 TODO 或 IN_PROGRESS 的工作项。不筛选项目时排除已归档项目。逾期指截止日期早于公司时区的今天。
 - **成员行：** 默认展示在职启用成员和有数据的成员；没有资料的显示为“历史成员”。
 

@@ -3,7 +3,7 @@ import './workItemCompactTable.css'
 import { useWorkItemEdits, type WorkItemPatchField, type WorkItemPatchValue } from './useWorkItemEdits'
 import { isWorkItemViewControl } from './workItemViewControls'
 import { vBrandLoading as vLoading } from '../../brand/loading'
-import { onTimeTrackingChanged } from '../../composables/useTimeTracker'
+import { onTimeTrackingChanged, useTimeTracker } from '../../composables/useTimeTracker'
 import WorkItemTimerCell from './WorkItemTimerCell.vue'
 import { usePageOnboarding } from '../../onboarding/useOnboarding'
 import WorkItemDiscussionIcon from './WorkItemDiscussionIcon.vue'
@@ -161,6 +161,7 @@ const router = useRouter()
 const ElOption = ElOptionRaw as unknown as DefineComponent
 const ElSelect = ElSelectRaw as unknown as DefineComponent
 const projectId = computed(() => String(route.params.projectId))
+const timerEnabled = useTimeTracker().timerEnabled
 function openSmallTimer() { window.dispatchEvent(new Event('yumpoo:open-timer')) }
 const selectedView = computed<ProjectView>(() => route.query.view === 'kanban' ? 'kanban' : 'table')
 const project = ref<ProjectDetail>()
@@ -3155,7 +3156,7 @@ onBeforeUnmount(() => {
           <work-item-grouping-popover :field="groupingField" :order="groupingOrder" :show-empty="showEmptyGroups"
             :disabled="selectedView === 'kanban' || savingSortOrder"
             @field="changeGrouping" @order="groupingOrder = $event" @show-empty="showEmptyGroups = $event" />
-          <button class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
+          <button v-if="timerEnabled" class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
           <work-item-table-settings-menu
             :settings="tableViewSettings"
             :state="tableSettingsState"

@@ -1613,8 +1613,8 @@ paths:
     post:
       tags: [TeamDashboard]
       operationId: queryTeamTimesheet
-      summary: 按成员、自然日与工作项统计原始计时
-      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。
+      summary: 按成员、自然日与工作项统计计入时长
+      description: 仅公司管理员可用。按公司时区切分自然日，跨日记录按重叠时长拆分；运行中计时统计到 asOf，时长为按并行均摊后的计入时长。projectIds 为空表示全公司项目（含已归档），userIds 为空表示在职成员及区间内有计时的成员。区间最多 93 天，排除已删除工作项。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/XsrfToken'
@@ -1746,7 +1746,7 @@ paths:
       tags: [ProjectStatistics]
       operationId: getProjectWorklog
       summary: 按成员与工作项汇总项目区间计时
-      description: 按公司时区切分自然日并合计到区间；跨日记录按重叠时长拆分，运行中计时统计到 asOf。区间最多 93 天。
+      description: 按公司时区切分自然日并合计到区间；跨日记录按重叠时长拆分，运行中计时统计到 asOf，时长为按并行均摊后的计入时长。区间最多 93 天。
       security: [{ sessionCookie: [] }]
       parameters:
         - { name: projectId, in: path, required: true, schema: { type: string, format: uuid } }
@@ -1766,8 +1766,8 @@ paths:
     get:
       tags: [MyWork]
       operationId: getMyTimesheet
-      summary: 按自然日与工作项统计本人原始计时
-      description: 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf。区间最多 93 天。
+      summary: 按自然日与工作项统计本人计入时长
+      description: 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf，时长为按并行均摊后的计入时长。区间最多 93 天。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: from
@@ -1811,12 +1811,91 @@ paths:
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
+  /me/time-sessions:
+    get:
+      tags: [TimeTracking]
+      operationId: listMyTimeSessions
+      summary: 查询本人时间段内的计时记录
+      description: 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: 本人计时记录与服务端当前时间。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/MyTimeSessionPage' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /me/time-sessions/fill:
+    post:
+      tags: [TimeTracking]
+      operationId: fillMyTimeSessions
+      summary: 按并行、替换或空白模式补录本人工时
+      description: 条目区间必须已结束，同一工作项的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项记录后补本项空白；GAPS 只补本人没有任何记录的时段。补录不推进计时器状态版本。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeSessionFillCommand' }
+      responses:
+        '200':
+          description: 补录创建、修改、删除条数与跳过时长。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TimeSessionFillResult' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /me/time-sessions/{sessionId}/reassign:
+    post:
+      tags: [TimeTracking]
+      operationId: reassignMyTimeSession
+      summary: 把本人一条已结束的计时记录整体改归属到其他工作项
+      description: 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项补同一时段（只跳过目标项自身已有的部分），沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原工作项相同返回 422 UNCHANGED。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeSessionReassignCommand' }
+      responses:
+        '200':
+          description: 改归属的创建、删除条数与跳过时长。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TimeSessionFillResult' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /me/time-tracker/candidates:
     get:
       tags: [TimeTracking]
       operationId: listTimerCandidates
       summary: 跨项目查找本人可计时的工作项
-      description: 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+      description: 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时或手动补录过的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
       security: [{ sessionCookie: [] }]
       parameters:
         - name: q
@@ -1870,6 +1949,7 @@ paths:
       tags: [TimeTracking]
       operationId: startTimeTracker
       summary: startTimeTracker
+      description: 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/XsrfToken'
@@ -1902,6 +1982,7 @@ paths:
       tags: [TimeTracking]
       operationId: switchTimeTracker
       summary: switchTimeTracker
+      description: 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/XsrfToken'
@@ -1961,6 +2042,67 @@ paths:
         '412': { $ref: '#/components/responses/VersionConflict' }
         '428': { $ref: '#/components/responses/PreconditionRequired' }
 
+  /me/time-tracker/stop-all:
+    post:
+      tags: [TimeTracking]
+      operationId: stopAllTimeTrackers
+      summary: 停止本人全部运行计时
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: 计时事实快照。
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentTimeTracker' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
+  /me/time-tracker/preferences:
+    put:
+      tags: [TimeTracking]
+      operationId: updateTimeTrackingPreferences
+      summary: 保存本人计时器开关与上班时间
+      description: 要求会话、XSRF 与 /me/time-tracker 最近读取的 If-Match，并推进计时状态版本。关闭计时器时在同一事务内停止本人全部运行计时，已计时长保留；关闭后开始或切换计时返回 409（TIMER_DISABLED）。上班时间按公司时区的当天分钟数表示，只用于本人填报提示与按时长排入的起点。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeTrackingPreferences' }
+      responses:
+        '200':
+          description: 保存后的计时事实快照。
+          headers:
+            Cache-Control: { schema: { type: string }, description: 固定为 no-store。 }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentTimeTracker' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/VersionConflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+
   /projects/{projectId}/time-tracking-summaries:
     get:
       tags: [TimeTracking]
@@ -2012,6 +2154,10 @@ paths:
         - name: cursor
           in: query
           schema: { type: string, maxLength: 256 }
+        - name: includeChildren
+          in: query
+          description: 包含有效直接子项的计时记录。
+          schema: { type: boolean, default: false }
       responses:
         '200':
           description: 计时事实快照。
@@ -8487,11 +8633,12 @@ components:
     TeamTimesheetDay:
       type: object
       additionalProperties: false
-      required: [date, dayType, note]
+      required: [date, dayType, note, standardMinutes]
       properties:
         date: { type: string, format: date }
         dayType: { $ref: '#/components/schemas/CalendarDayType' }
         note: { type: string, nullable: true }
+        standardMinutes: { type: integer, format: int32, minimum: 0, maximum: 720, description: 公司日历当天标准工时分钟数，非工作日为 0。 }
     TeamWorkloadQuery:
       type: object
       additionalProperties: false
@@ -8576,6 +8723,60 @@ components:
           type: array
           items: { $ref: '#/components/schemas/TeamMemberTask' }
         totalElements: { type: integer, format: int64, minimum: 0 }
+    MyTimeSession:
+      type: object
+      additionalProperties: false
+      required: [session, projectName, itemNo, title, contentColorToken]
+      properties:
+        session: { $ref: '#/components/schemas/TimeTrackingSession' }
+        projectName: { type: string, nullable: true }
+        itemNo: { type: string, nullable: true }
+        title: { type: string, nullable: true }
+        contentColorToken: { type: string, nullable: true, allOf: [{ $ref: '#/components/schemas/WorkItemLabelColorToken' }] }
+    MyTimeSessionPage:
+      type: object
+      additionalProperties: false
+      required: [items, serverNow]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/MyTimeSession' } }
+        serverNow: { type: string, format: date-time }
+    TimeSessionFillMode:
+      type: string
+      enum: [PARALLEL, REPLACE, GAPS]
+    TimeSessionFillEntry:
+      type: object
+      additionalProperties: false
+      required: [workItemId, startedAt, stoppedAt]
+      properties:
+        workItemId: { type: string, format: uuid }
+        startedAt: { type: string, format: date-time }
+        stoppedAt: { type: string, format: date-time }
+    TimeSessionFillCommand:
+      type: object
+      additionalProperties: false
+      required: [mode, entries]
+      properties:
+        mode: { $ref: '#/components/schemas/TimeSessionFillMode' }
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/TimeSessionFillEntry' }
+    TimeSessionFillResult:
+      type: object
+      additionalProperties: false
+      required: [createdCount, changedCount, deletedCount, skippedDurationMs]
+      properties:
+        createdCount: { type: integer, format: int32, minimum: 0 }
+        changedCount: { type: integer, format: int32, minimum: 0 }
+        deletedCount: { type: integer, format: int32, minimum: 0 }
+        skippedDurationMs: { type: integer, format: int64, minimum: 0 }
+    TimeSessionReassignCommand:
+      type: object
+      additionalProperties: false
+      required: [workItemId]
+      properties:
+        workItemId: { type: string, format: uuid }
     TimeTrackingState:
       type: string
       enum: [RUNNING, STOPPED, EMPTY]
@@ -8584,6 +8785,12 @@ components:
       additionalProperties: false
       properties:
         workItemId: { type: string, format: uuid }
+        workItemIds:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: 仅 start 使用，批量并行开始的工作项。
+          items: { type: string, format: uuid }
         sessionId: { type: string, format: uuid }
         startedAt: { type: string, format: date-time }
         stoppedAt: { type: string, format: date-time }
@@ -8591,7 +8798,7 @@ components:
     TimeTrackingSession:
       type: object
       additionalProperties: false
-      required: [id, projectId, workItemId, userId, displayName, startedAt, stoppedAt, source, durationMs, rowVersion, etag, canEdit, deleted, changeReason]
+      required: [id, projectId, workItemId, userId, displayName, startedAt, stoppedAt, source, durationMs, rowVersion, etag, canEdit, deleted, changeReason, allocatedDurationMs, parallelItemCount, workItemNo, workItemTitle]
       properties:
         id: { type: string, format: uuid }
         projectId: { type: string, format: uuid, nullable: true }
@@ -8607,6 +8814,10 @@ components:
         canEdit: { type: boolean }
         deleted: { type: boolean }
         changeReason: { type: string, nullable: true }
+        allocatedDurationMs: { type: integer, format: int64, minimum: 0, description: 按并行均摊后的计入时长 }
+        parallelItemCount: { type: integer, format: int32, minimum: 0, description: 该记录期间本人同时计时的其他工作项数 }
+        workItemNo: { type: string, nullable: true, description: 记录属于子项时的工作项编号。 }
+        workItemTitle: { type: string, nullable: true, description: 记录属于子项时的工作项标题。 }
     TimeTrackingRunningSession:
       type: object
       additionalProperties: false
@@ -8617,13 +8828,16 @@ components:
     TimeTrackingSummary:
       type: object
       additionalProperties: false
-      required: [workItemId, completedDurationMs, totalDurationMs, ownDurationMs, sessionCount, runningSessions]
+      required: [workItemId, completedDurationMs, totalDurationMs, ownDurationMs, sessionCount, runningSessions, allocatedDurationMs, rollupDurationMs, rollupRunningRate]
       properties:
         workItemId: { type: string, format: uuid }
         completedDurationMs: { type: integer, format: int64, minimum: 0 }
         totalDurationMs: { type: integer, format: int64, minimum: 0 }
         ownDurationMs: { type: integer, format: int64, minimum: 0 }
         sessionCount: { type: integer, format: int64, minimum: 0 }
+        allocatedDurationMs: { type: integer, format: int64, minimum: 0 }
+        rollupDurationMs: { type: integer, format: int64, minimum: 0, description: 本项加直接子项的计入时长 }
+        rollupRunningRate: { type: number, format: double, minimum: 0, description: 每经过 1 毫秒，rollupDurationMs 增加的毫秒数 }
         runningSessions:
           type: array
           items: { $ref: '#/components/schemas/TimeTrackingRunningSession' }
@@ -8650,7 +8864,7 @@ components:
         contentColorToken: { $ref: '#/components/schemas/WorkItemLabelColorToken' }
         statusCategory: { type: string }
         assignedToMe: { type: boolean }
-        lastTrackedAt: { type: string, format: date-time, nullable: true }
+        lastTrackedAt: { type: string, format: date-time, nullable: true, description: 本人在该项最近一条计时或补录记录的开始时间。 }
         ownDurationMs: { type: integer, format: int64, minimum: 0 }
     RecentTimeTrackingItem:
       type: object
@@ -8660,11 +8874,34 @@ components:
         workItemId: { $ref: '#/components/schemas/Uuid' }
         projectId: { $ref: '#/components/schemas/Uuid' }
         title: { type: string }
+    CurrentRunningTimer:
+      type: object
+      additionalProperties: false
+      required: [session, workItemTitle]
+      properties:
+        session: { $ref: '#/components/schemas/TimeTrackingSession' }
+        workItemTitle: { type: string, nullable: true }
+    TimeTrackingPreferences:
+      type: object
+      additionalProperties: false
+      required: [timerEnabled, workdayStartMinute, workdayEndMinute]
+      properties:
+        timerEnabled: { type: boolean, description: 是否使用计时器；默认 true。 }
+        workdayStartMinute: { type: integer, format: int32, minimum: 0, maximum: 1439, description: 上班时间，公司时区当天第几分钟；默认 540（09:00）。 }
+        workdayEndMinute: { type: integer, format: int32, minimum: 1, maximum: 1440, description: 下班时间，须晚于上班时间；默认 1080（18:00）。 }
     CurrentTimeTracker:
       type: object
       additionalProperties: false
-      required: [session, workItemTitle, rowVersion, etag, serverNow, recentItems]
+      required: [session, workItemTitle, rowVersion, etag, serverNow, recentItems, runningSessions, resumeItems, preferences]
       properties:
+        preferences: { $ref: '#/components/schemas/TimeTrackingPreferences' }
+        runningSessions:
+          type: array
+          description: 按 startedAt 降序排列的本人运行计时。
+          items: { $ref: '#/components/schemas/CurrentRunningTimer' }
+        resumeItems:
+          type: array
+          items: { $ref: '#/components/schemas/RecentTimeTrackingItem' }
         recentItems:
           type: array
           items: { $ref: '#/components/schemas/RecentTimeTrackingItem' }

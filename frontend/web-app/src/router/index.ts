@@ -104,6 +104,12 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('../views/MyTimePageView.vue'),
         meta: { shellSection: 'work' },
       },
+      {
+        path: 'workspace/:workspaceSlug/my-time/day/:date(\\d{4}-\\d{2}-\\d{2})',
+        name: 'my-time-day',
+        component: () => import('../views/MyTimeDayPageView.vue'),
+        meta: { shellSection: 'work' },
+      },
       { path: 'team', name: 'team-entry', redirect: { name: 'team', params: { view: 'timesheet' } } },
       {
         path: 'team/:view(timesheet|overtime|workload)',
@@ -241,7 +247,11 @@ export function sessionDestination(to: RouteLocationNormalized) {
   if (to.name === 'dashboards' && to.params.dashboardId === 'my-time') {
     return { name: 'my-time', params: { workspaceSlug }, replace: true }
   }
-  if ((to.name === 'workspace' || to.name === 'dashboards' || to.name === 'my-time') && to.params.workspaceSlug !== workspaceSlug) {
+  if (to.name === 'my-time' && typeof to.query.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(to.query.day)) {
+    return { name: 'my-time-day', params: { workspaceSlug, date: to.query.day }, replace: true }
+  }
+  if ((to.name === 'workspace' || to.name === 'dashboards' || to.name === 'my-time' || to.name === 'my-time-day')
+    && to.params.workspaceSlug !== workspaceSlug) {
     return { name: to.name, params: { ...to.params, workspaceSlug }, replace: true }
   }
   return true

@@ -36,14 +36,19 @@ watch([authenticated, () => session.authentication.value?.user.id], ([active]) =
 watch(() => route.fullPath, () => { void tracker.refresh().catch(() => undefined) })
 const desktopState = computed(() => {
   const current = tracker.current.value
-  const running = current?.session
-  const recent = current?.recentItems[0]
+  const running = tracker.running.value[0]
+  const count = tracker.running.value.length
+  const recent = current?.resumeItems[0] ?? current?.recentItems[0]
+  const resumeCount = current?.resumeItems.length ?? 0
   return { accountId: authenticated.value ? session.authentication.value?.user.id ?? null : null,
     rowVersion: current?.rowVersion ?? 0, connected: tracker.connected.value, busy: tracker.busy.value,
     savedAt: tracker.savedAt.value,
-    running: running ? { sessionId: running.id, workItemId: running.workItemId, title: current?.workItemTitle ?? '不可见工作项', startedAt: running.startedAt.toISOString() } : null,
-    recent: recent ? { workItemId: recent.workItemId, title: recent.title } : null,
+    running: running ? { sessionId: running.session.id, workItemId: running.session.workItemId,
+      title: `${running.workItemTitle ?? '不可见工作项'}${count > 1 ? ` 等 ${count} 项` : ''}`,
+      startedAt: new Date(Math.min(...tracker.running.value.map(timer => timer.session.startedAt.getTime()))).toISOString() } : null,
+    recent: recent ? { workItemId: recent.workItemId, title: `${recent.title}${resumeCount > 1 ? ` 等 ${resumeCount} 项` : ''}` } : null,
     clockOffsetMs: Math.round(timerClockOffset()),
+    timerEnabled: tracker.timerEnabled.value,
   } satisfies DesktopTimerState
 })
 watch([surface, desktopState], ([owner, state]) => {
@@ -51,7 +56,7 @@ watch([surface, desktopState], ([owner, state]) => {
 }, { immediate: true })
 
 const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
-watch(() => !!tracker.current.value?.session, running => {
+watch(() => tracker.running.value.length > 0, running => {
   window.removeEventListener('beforeunload', beforeUnload)
   if (running && !desktop) window.addEventListener('beforeunload', beforeUnload)
 }, { immediate: true })
@@ -62,10 +67,18 @@ const offExit = desktop?.onExitRequest(async requestId => {
   await desktop.completeExit(requestId, allow)
 })
 const offCommand = desktop?.onCommand(async command => {
-  const success = authenticated.value && (command.action === 'stop' ? await tracker.stop(command.sessionId) : await tracker.start(command.workItemId))
+  const resume = tracker.current.value?.resumeItems ?? []
+  const success = authenticated.value && (command.action === 'stop' ? await tracker.stopAll()
+    : resume.some(item => item.workItemId === command.workItemId) ? await tracker.startMany(resume.map(item => item.workItemId)) : await tracker.start(command.workItemId))
   await desktop.completeCommand(command.requestId, success).catch(() => undefined)
 })
-const openFromToolbar = () => { void open() }
+const openFromToolbar = () => { if (tracker.timerEnabled.value) void open() }
+// Switching the timer off closes every timer surface; older desktop shells do not know the setting, so their window is hidden too.
+watch(() => tracker.timerEnabled.value, enabled => {
+  if (enabled || tracker.running.value.length) return
+  hide()
+  if (desktop) void desktop.hide().catch(() => undefined)
+})
 const started = () => {
   if (standalone.value) return
   resizePip(false)
@@ -202,13 +215,13 @@ function drag(event: PointerEvent) {
 
 <template>
   <button
-    v-if="authenticated && !standalone && !inline && !pipTarget"
+    v-if="authenticated && !standalone && !inline && !pipTarget && (tracker.timerEnabled.value || tracker.running.value.length)"
     class="global-timer-entry"
-    :class="{ 'is-running': tracker.current.value?.session }"
+    :class="{ 'is-running': tracker.running.value.length }"
     aria-label="查找工作与计时"
     @click="open"
   >
-    <TimerIcon name="clock" /><span>{{ tracker.current.value?.session ? formatDuration(tracker.runningDuration.value) : '开始工作' }}</span>
+    <TimerIcon name="clock" /><span>{{ tracker.running.value.length ? `${tracker.running.value.length > 1 ? `${tracker.running.value.length} 项 · ` : ''}${formatDuration(tracker.wallDuration.value)}` : '开始工作' }}</span>
   </button>
   <el-dialog
     :model-value="timerExitPrompt"
@@ -227,7 +240,7 @@ function drag(event: PointerEvent) {
         type="primary"
         @click="chooseTimerExit('stop')"
       >
-        停止并退出
+        停止全部并退出
       </el-button>
     </template>
   </el-dialog>

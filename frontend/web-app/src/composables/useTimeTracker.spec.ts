@@ -1,15 +1,16 @@
 import { flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const api = vi.hoisted(() => ({ getCurrentTimeTracker: vi.fn(), getTimeTrackingSummaries: vi.fn(), startTimeTracker: vi.fn(), switchTimeTracker: vi.fn(), stopTimeTracker: vi.fn() }))
+const api = vi.hoisted(() => ({ getCurrentTimeTracker: vi.fn(), getTimeTrackingSummaries: vi.fn(), startTimeTracker: vi.fn(), switchTimeTracker: vi.fn(), stopTimeTracker: vi.fn(), stopAllTimeTrackers: vi.fn(), updateTimeTrackingPreferences: vi.fn() }))
 vi.mock('../api/client', () => ({ timeTrackingApi: api }))
 vi.mock('@yumpoo/api-client', () => ({ readCsrfToken: () => 'csrf' }))
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn(), warning: vi.fn() }, ElMessageBox: { confirm: vi.fn(async () => undefined) } }))
 import { activateTimeTracker, chooseTimerExit, confirmTimerExit, timerMutation, useTimeTracker } from './useTimeTracker'
 
 function state(version: number, running = false) {
-  return { rowVersion: version, etag: `"${version}"`, serverNow: new Date(), workItemTitle: running ? '测试事项' : null, recentItems: [],
-    session: running ? { id: 'session', workItemId: 'item', projectId: 'project', startedAt: new Date(), userId: 'user' } : null }
+  const session = running ? { id: 'session', workItemId: 'item', projectId: 'project', startedAt: new Date(), userId: 'user' } : null
+  return { rowVersion: version, etag: `"${version}"`, serverNow: new Date(), workItemTitle: running ? '测试事项' : null, recentItems: [], resumeItems: [],
+    session, runningSessions: session ? [{ session, workItemTitle: '测试事项' }] : [] }
 }
 beforeEach(() => { vi.clearAllMocks(); vi.stubGlobal('BroadcastChannel', undefined); api.getCurrentTimeTracker.mockResolvedValue(state(0)); activateTimeTracker(true) })
 afterEach(() => { activateTimeTracker(false); vi.unstubAllGlobals() })
@@ -31,25 +32,25 @@ describe('application timer facts', () => {
   it('keeps the application open on stop failure and permits an explicit continue choice', async () => {
     await useTimeTracker().refresh()
     api.getCurrentTimeTracker.mockResolvedValue(state(1, true))
-    api.stopTimeTracker.mockRejectedValue(new Error('offline'))
+    api.stopAllTimeTrackers.mockRejectedValue(new Error('offline'))
     const stoppedExit = confirmTimerExit(); await flushPromises(); chooseTimerExit('stop')
     expect(await stoppedExit).toBe(false)
     expect(useTimeTracker().current.value?.session?.id).toBe('session')
     const continuedExit = confirmTimerExit(); await flushPromises(); chooseTimerExit('continue')
     expect(await continuedExit).toBe(true)
-    expect(api.stopTimeTracker).toHaveBeenCalledOnce()
+    expect(api.stopAllTimeTrackers).toHaveBeenCalledOnce()
   })
-  it('switches in one command without stopping separately or confirming', async () => {
+  it('starts another item in parallel without stopping or switching the running item', async () => {
     api.getCurrentTimeTracker.mockResolvedValue(state(1, true))
     const switched = state(2, true)
     switched.session!.workItemId = 'next'
-    api.switchTimeTracker.mockResolvedValue(switched)
+    api.startTimeTracker.mockResolvedValue(switched)
     expect(await useTimeTracker().start('next')).toBe(true)
-    expect(api.switchTimeTracker).toHaveBeenCalledWith(expect.objectContaining({
-      ifMatch: '"1"', timeTrackingCommand: { workItemId: 'next', sessionId: 'session' },
+    expect(api.startTimeTracker).toHaveBeenCalledWith(expect.objectContaining({
+      ifMatch: '"1"', timeTrackingCommand: { workItemId: 'next' },
     }))
     expect(api.stopTimeTracker).not.toHaveBeenCalled()
-    expect(api.startTimeTracker).not.toHaveBeenCalled()
+    expect(api.switchTimeTracker).not.toHaveBeenCalled()
   })
   it('a retry after an acknowledged but lost start response never toggles the timer off', async () => {
     api.startTimeTracker.mockRejectedValueOnce(new Error('response lost'))
@@ -75,10 +76,10 @@ describe('application timer facts', () => {
     await useTimeTracker().refresh()
     let resolve!: (value: ReturnType<typeof state>) => void
     api.stopTimeTracker.mockImplementation(() => new Promise(done => { resolve = done }))
-    const stopping = useTimeTracker().stop()
+    const stopping = useTimeTracker().stop('session')
     await flushPromises()
     expect(await useTimeTracker().toggle('next')).toBe(false)
-    expect(await useTimeTracker().stop()).toBe(false)
+    expect(await useTimeTracker().stop('session')).toBe(false)
     resolve(state(2))
     expect(await stopping).toBe(true)
     expect(api.stopTimeTracker).toHaveBeenCalledOnce()
@@ -119,7 +120,7 @@ describe('application timer facts', () => {
     await useTimeTracker().refresh()
     let resolve!: (value: ReturnType<typeof state>) => void
     api.stopTimeTracker.mockImplementation(() => new Promise(done => { resolve = done }))
-    const stopping = useTimeTracker().stop(); await flushPromises()
+    const stopping = useTimeTracker().stop('session'); await flushPromises()
     expect(useTimeTracker().savedAt.value).toBe(0)
     api.getCurrentTimeTracker.mockRejectedValue(new Error('offline'))
     resolve(state(2))
@@ -133,7 +134,7 @@ describe('application timer facts', () => {
     api.getCurrentTimeTracker.mockResolvedValue(state(4, true))
     await useTimeTracker().refresh()
     api.stopTimeTracker.mockRejectedValue(new Error('offline'))
-    expect(await useTimeTracker().stop()).toBe(false)
+    expect(await useTimeTracker().stop('session')).toBe(false)
     expect(useTimeTracker().savedAt.value).toBe(0)
     api.getCurrentTimeTracker.mockResolvedValue(state(3))
     await useTimeTracker().refresh()
@@ -148,7 +149,7 @@ describe('application timer facts', () => {
       return state(2)
     })
     let completed = false
-    void useTimeTracker().stop().then(success => { completed = success })
+    void useTimeTracker().stop('session').then(success => { completed = success })
     await flushPromises()
     expect(completed).toBe(true)
     expect(useTimeTracker().busy.value).toBe(false)
@@ -163,5 +164,24 @@ describe('application timer facts', () => {
     expect(savedAt).toBeGreaterThan(0)
     await useTimeTracker().refresh()
     expect(useTimeTracker().savedAt.value).toBe(savedAt)
+  })
+  it('does not start timers while the timer is switched off', async () => {
+    api.getCurrentTimeTracker.mockResolvedValue({ ...state(1), preferences: { timerEnabled: false, workdayStartMinute: 540, workdayEndMinute: 1080 } })
+    await useTimeTracker().refresh()
+    expect(useTimeTracker().timerEnabled.value).toBe(false)
+    expect(await useTimeTracker().start('item')).toBe(false)
+    expect(await useTimeTracker().startMany(['item'])).toBe(false)
+    expect(await useTimeTracker().switchTo('item')).toBe(false)
+    expect(api.startTimeTracker).not.toHaveBeenCalled()
+    expect(api.switchTimeTracker).not.toHaveBeenCalled()
+  })
+  it('saves preferences against the latest timer version and adopts the response', async () => {
+    api.getCurrentTimeTracker.mockResolvedValue(state(3, true))
+    const off = { timerEnabled: false, workdayStartMinute: 510, workdayEndMinute: 1050 }
+    api.updateTimeTrackingPreferences.mockResolvedValue({ ...state(4), preferences: off })
+    expect(await useTimeTracker().setPreferences(off)).toBe(true)
+    expect(api.updateTimeTrackingPreferences).toHaveBeenCalledWith(expect.objectContaining({ ifMatch: '"3"', timeTrackingPreferences: off }))
+    expect(useTimeTracker().timerEnabled.value).toBe(false)
+    expect(useTimeTracker().running.value).toHaveLength(0)
   })
 })

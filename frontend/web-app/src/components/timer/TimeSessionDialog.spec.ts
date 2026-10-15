@@ -1,19 +1,19 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const api = vi.hoisted(() => ({ listTimeSessions: vi.fn(), createTimeSession: vi.fn(), editTimeSession: vi.fn(), deleteTimeSession: vi.fn() }))
+const api = vi.hoisted(() => ({ listTimeSessions: vi.fn(), listMyTimeSessions: vi.fn(), fillMyTimeSessions: vi.fn(), editTimeSession: vi.fn(), deleteTimeSession: vi.fn() }))
 vi.mock('../../api/client', () => ({ timeTrackingApi: api }))
 vi.mock('../../composables/useSession', () => ({ useSession: () => ({ authentication: { value: { company: { timezone: 'Asia/Shanghai' } } } }) }))
-vi.mock('../../composables/useTimeTracker', () => ({ formatDuration: () => '0:00:01', timerMutation: (_: string, call: (key: string, csrf: string) => unknown) => call('key', 'csrf') }))
+vi.mock('../../composables/useTimeTracker', () => ({ formatDuration: () => '0:00:01', formatTrackingDuration: () => '0m 1s', timerMutation: (_: string, call: (key: string, csrf: string) => unknown) => call('key', 'csrf') }))
 import TimeSessionDialog from './TimeSessionDialog.vue'
 import { ElMessage } from 'element-plus'
-const record = (id: string, canEdit = true) => ({ id, source: 'MANUAL', rowVersion: 0, displayName: '测试成员', startedAt: new Date('2026-08-01T01:00:00Z'), stoppedAt: new Date('2026-08-01T01:00:01Z'), durationMs: 1000, canEdit, etag: id })
+const record = (id: string, canEdit = true) => ({ id, workItemId: 'item', workItemNo: null, workItemTitle: null, source: 'MANUAL', rowVersion: 0, displayName: '测试成员', startedAt: new Date('2026-08-01T01:00:00Z'), stoppedAt: new Date('2026-08-01T01:00:01Z'), durationMs: 1000, allocatedDurationMs: 1000, parallelItemCount: 0, canEdit, etag: id })
 const page = (items = [record('one')], nextCursor: string | null = null) => ({ items, nextCursor, canCreate: true, summary: { totalDurationMs: 1000 } })
 async function setup() {
   const wrapper = mount(TimeSessionDialog, { props: { workItemId: 'item', title: '测试' } })
   await flushPromises()
   return wrapper
 }
-beforeEach(() => { vi.resetAllMocks(); api.listTimeSessions.mockResolvedValue(page()); api.deleteTimeSession.mockResolvedValue({}) })
+beforeEach(() => { vi.resetAllMocks(); api.listTimeSessions.mockResolvedValue(page()); api.listMyTimeSessions.mockResolvedValue({ items: [] }); api.fillMyTimeSessions.mockResolvedValue({ skippedDurationMs: 0 }); api.deleteTimeSession.mockResolvedValue({}) })
 describe('计时日志分页与写入', () => {
   it('单条直接删除无需原因，请求期间阻止重复点击', async () => {
     const wrapper = await setup()
@@ -49,7 +49,7 @@ describe('计时日志分页与写入', () => {
     await wrapper.get('.log-body').trigger('scroll')
     await wrapper.get('.log-body').trigger('scroll')
     expect(api.listTimeSessions).toHaveBeenCalledTimes(2)
-    expect(api.listTimeSessions).toHaveBeenLastCalledWith({ workItemId: 'item', cursor: 'next' })
+    expect(api.listTimeSessions).toHaveBeenLastCalledWith({ workItemId: 'item', includeChildren: false, cursor: 'next' })
     resolve(page([record('two')]))
     await flushPromises()
     expect(wrapper.findAll('.log-row')).toHaveLength(2)
@@ -87,8 +87,8 @@ describe('计时日志分页与写入', () => {
     await wrapper.get('.add-session button').trigger('click')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
-    expect(api.createTimeSession).toHaveBeenCalledOnce()
-    expect(api.createTimeSession.mock.calls[0]?.[0].timeTrackingCommand).not.toHaveProperty('reason')
+    expect(api.fillMyTimeSessions).toHaveBeenCalledOnce()
+    expect(api.fillMyTimeSessions.mock.calls[0]?.[0].timeSessionFillCommand).toMatchObject({ mode: 'GAPS', entries: [{ workItemId: 'item' }] })
     expect(api.listTimeSessions).toHaveBeenCalledTimes(2)
     expect(wrapper.find('form').exists()).toBe(false)
     wrapper.unmount()

@@ -43,8 +43,8 @@ export interface ListMyCurrentTasksRequest {
 export class MyWorkApi extends runtime.BaseAPI {
 
     /**
-     * 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf。区间最多 93 天。
-     * 按自然日与工作项统计本人原始计时
+     * 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf，时长为按并行均摊后的计入时长。区间最多 93 天。
+     * 按自然日与工作项统计本人计入时长
      */
     async getMyTimesheetRaw(requestParameters: GetMyTimesheetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TeamTimesheet>> {
         if (requestParameters['from'] == null) {
@@ -87,8 +87,8 @@ export class MyWorkApi extends runtime.BaseAPI {
     }
 
     /**
-     * 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf。区间最多 93 天。
-     * 按自然日与工作项统计本人原始计时
+     * 任意有效成员可用，只返回本人计时，members 只包含本人。范围为本人当前有效成员身份的未归档项目，排除已删除计时与已删除工作项；按公司时区切分自然日，跨日记录按重叠时长拆分，运行中计时统计到 asOf，时长为按并行均摊后的计入时长。区间最多 93 天。
+     * 按自然日与工作项统计本人计入时长
      */
     async getMyTimesheet(requestParameters: GetMyTimesheetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TeamTimesheet> {
         const response = await this.getMyTimesheetRaw(requestParameters, initOverrides);

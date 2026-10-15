@@ -10,7 +10,7 @@ Status: implemented
 
 负责人或 CompanyAdmin 均可通过普通归档与恢复入口操作项目。未关闭工作项不再阻止归档，确认框中的数量只作提示；数量读取失败也不重新形成业务 blocker。归档和恢复仍使用强 ETag、幂等键、Project 锁、同事务安全审计与 Outbox；恢复保留负责人启用状态、有效成员关系及 ACTIVE MAIN 工作空间检查。
 
-普通归档与治理覆盖归档都在同一事务中停止该项目全部运行中计时。administration 在持有 Project 写锁后经 workitem 公开端口执行，再按用户 ID 顺序锁定各自 timer_state，与计时命令"先项目、后 timer_state"的锁序一致，避免死锁；停止使用归档时刻作为结束时间，逐条发出 `time_tracking_stopped` 事件和安全审计，主体为归档操作者，并推进用户计时状态版本与项目计时修订，客户端旧 ETag 会收到 412。此前已归档、仍带运行计时的存量项目不做迁移，本人停止能力与清除期间的拒绝规则保持不变。
+普通归档与治理覆盖归档都在同一事务中停止该项目内每个用户的全部运行会话。administration 在持有 Project 写锁后经 workitem 公开端口执行，再按用户 ID 顺序锁定各自 timer_state，与计时命令"先项目、后 timer_state"的锁序一致，避免死锁；停止使用归档时刻作为结束时间，逐条发出 `time_tracking_stopped` 事件和安全审计，主体为归档操作者，并推进用户计时状态版本与项目计时修订，客户端旧 ETag 会收到 412。每个用户停止后重建分摊，全部用户处理完成后按 UUID 统一更新本项目与其他受影响项目的计时修订，其他项目只 UPDATE 既有行；避免持有修订锁后再等待下一用户状态锁，见[并行计时决策](../architecture/2026-10-14-parallel-time-tracking.md)。此前已归档、仍带运行计时的存量项目不做迁移，本人停止能力与清除期间的拒绝规则保持不变。
 
 归档项目只对当前负责人和本公司管理员可见，对普通成员及其资源请求返回 404。catalog 的单项、批量成员访问、成员项目查询与项目列表使用一致的生命周期条件；工作项、讨论、附件下载、动态和收件箱沿公开访问端口重新鉴权。收件箱保留已有通知与计数，目标变为不可访问时清空全部目标引用和摘要。归档期间项目业务内容只读，负责人也不能删除历史讨论；Project 共享锁在删除与归档并发时复核 ACTIVE。恢复或项目生命周期治理命令不属于普通业务内容写入。
 
@@ -36,9 +36,9 @@ V68 使用 `purge_started_at` 和 `project_purge_run` 的 token/lease 领取到�
 
 FILESTORAGE 先独立提交只含 ID/时间的 `attachment_project_purge` fence，以公司配额锁阻止已鉴权的过期写者。附件元数据保留到临时文件及无外部引用 blob 物理清完，摘要可定位尚未记录 storage_key 的发布成果。issues/tasks/metadata/project quota 的 DELETE 共享累计批次预算，公司配额按实际清除回补。共享 blob 用实时引用保护；CLEANUP token/lease 行锁下只执行短 unlink，摘要/内容读取在事务外。该业务清除不受维护 dry-run 开关控制；物理失败保留 checkpoint，重启重试。完成标记与摘要 blob registry 可保留，不含文件名。项目成员在 purge_started_at 后解除 active-owner 约束，以允许小批删除；最终项目行、完成标记、系统安全审计与 ID/时间事件在同一事务提交。V60 已移除 project_product_link，本阶段不再访问不存在的表。
 
-跨项目关系和连接移除两个方向的受影响边，对端项目、工作项、其他边、共享计时状态与文件引用保留。对端连接列的目标在 catalog→column 锁下删除并更新列/目录版本，防止旧 ETag 重插目标。最后一个目标被永久清除时保留用户命名的连接列，响应 targets 可为空（创建/更新请求仍要求 1–20 个）；读取使用不可访问占位和 null-safe 映射，避免清除期间泄漏隐藏项目或产生 500。此存量状态适配部分替代[连接核心](../architecture/2026-09-30-work-item-connections.md)的响应非空假设。个人看板删除相应顶层和 widget 项目 ID，但保留其余配置。
+跨项目关系和连接移除两个方向的受影响边，对端项目、工作项、其他边、全局用户计时状态与文件引用保留。计时清除枚举本项目全部会话的所属用户，按用户顺序锁定 timer_state，依既有剩余批次预算删除会话并重新分摊；本批用户处理完成后统一按 UUID 推进其他受影响项目已有的计时修订行。分摊行随会话级联删除，用户状态版本不推进。没有剩余会话的用户状态行也保留，以免分批删除状态后漏掉用户新发生的跨项目并行补录；此项取代原独占用户状态清理方式，理由见[并行计时的清除规则](../architecture/2026-10-14-parallel-time-tracking.md)。对端连接列的目标在 catalog→column 锁下删除并更新列/目录版本，防止旧 ETag 重插目标。最后一个目标被永久清除时保留用户命名的连接列，响应 targets 可为空（创建/更新请求仍要求 1–20 个）；读取使用不可访问占位和 null-safe 映射，避免清除期间泄漏隐藏项目或产生 500。此存量状态适配部分替代[连接核心](../architecture/2026-09-30-work-item-connections.md)的响应非空假设。个人看板删除相应顶层和 widget 项目 ID，但保留其余配置。
 
-本记录部分替代[生命周期治理](2026-08-21-project-lifecycle-governance-contract.md)的普通归档 blocker 与权限、[团队报表](../security/2026-10-08-admin-team-reporting.md)的归档工时范围、[个人仪表板](2026-09-16-personal-dashboards.md)的归档成员可读和统计范围，以及[两级评论](2026-09-05-work-item-discussion-threads.md)和[独立讨论契约](../architecture/2026-08-24-work-item-update-contract.md)的归档 Owner 删除例外。原记录继续保留事务锁序、最小治理快照、事件隐私、真实 provider、独立聚合和原始计时口径的独特理由。
+本记录部分替代[生命周期治理](2026-08-21-project-lifecycle-governance-contract.md)的普通归档 blocker 与权限、[团队报表](../security/2026-10-08-admin-team-reporting.md)的归档工时范围、[个人仪表板](2026-09-16-personal-dashboards.md)的归档成员可读和统计范围，以及[两级评论](2026-09-05-work-item-discussion-threads.md)和[独立讨论契约](../architecture/2026-08-24-work-item-update-contract.md)的归档 Owner 删除例外。原记录继续保留事务锁序、最小治理快照、事件隐私、真实 provider、独立聚合和原始会话事实的独特理由。
 
 文件创建、临时文件替换、发布 rename 与清除 unlink 均在短事务中复核当前 upload/PUBLISH/CLEANUP token 和项目 fence。内容流读写、摘要、fsync 与 verify 留在事务外；暂停后恢复的旧 worker 不能在已清除项目中重建文件或删除新 worker 的临时文件。独立提交的 marker 与可重入物理步骤允许编排器租约失效后安全重试。
 

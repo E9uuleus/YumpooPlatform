@@ -5,6 +5,9 @@ import { useSlidingIndicator } from './useSlidingIndicator'
 export interface SegmentedItem<V extends string | number = string | number> {
   value: V
   label: string
+  disabled?: boolean
+  /** Shown on hover, e.g. why an option is unavailable. */
+  title?: string
 }
 
 const props = defineProps<{
@@ -23,22 +26,25 @@ const activeIndex = computed(() => props.options.findIndex(option => option.valu
 const { indicatorStyle, animated } = useSlidingIndicator(group, '.yp-segmented__item', () => activeIndex.value)
 
 function select(value: T): void {
-  if (value === props.modelValue) return
+  if (value === props.modelValue || props.options.find(option => option.value === value)?.disabled) return
   emit('update:modelValue', value)
   emit('change', value)
 }
 
 async function move(event: KeyboardEvent, index: number): Promise<void> {
-  const last = props.options.length - 1
-  const target = {
-    ArrowRight: index === last ? 0 : index + 1,
-    ArrowDown: index === last ? 0 : index + 1,
-    ArrowLeft: index === 0 ? last : index - 1,
-    ArrowUp: index === 0 ? last : index - 1,
+  const enabled = props.options.map((option, position) => option.disabled ? -1 : position).filter(position => position >= 0)
+  const at = enabled.indexOf(index), last = enabled.length - 1
+  if (at < 0) return
+  const step = {
+    ArrowRight: at === last ? 0 : at + 1,
+    ArrowDown: at === last ? 0 : at + 1,
+    ArrowLeft: at === 0 ? last : at - 1,
+    ArrowUp: at === 0 ? last : at - 1,
     Home: 0,
     End: last,
   }[event.key]
-  if (target === undefined) return
+  if (step === undefined) return
+  const target = enabled[step]!
   event.preventDefault()
   select(props.options[target]!.value)
   await nextTick()
@@ -67,6 +73,8 @@ async function move(event: KeyboardEvent, index: number): Promise<void> {
       type="button"
       role="radio"
       :aria-checked="option.value === modelValue"
+      :disabled="option.disabled"
+      :title="option.title"
       :tabindex="option.value === modelValue ? 0 : -1"
       @click="select(option.value)"
       @keydown="move($event, index)"
@@ -122,6 +130,11 @@ async function move(event: KeyboardEvent, index: number): Promise<void> {
 .yp-segmented__item:hover,
 .yp-segmented__item.is-on {
   color: var(--yp-text-primary);
+}
+
+.yp-segmented__item:disabled {
+  color: var(--yp-text-disabled);
+  cursor: not-allowed;
 }
 
 .yp-segmented__item:focus-visible {

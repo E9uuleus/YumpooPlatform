@@ -28,6 +28,7 @@ export function validTimerState(value: unknown): value is DesktopTimerState {
     && (s.recent === null || (!!s.recent && validTimerId(s.recent.workItemId) && validTitle(s.recent.title)))
     && (s.accountId !== null || (s.running === null && s.recent === null))
     && validOffset(s.clockOffsetMs)
+    && (s.timerEnabled === undefined || typeof s.timerEnabled === 'boolean')
 }
 
 function validPreferencesChange(value: unknown): value is TimerPreferencesChange {
@@ -146,9 +147,10 @@ export class TimerWindowController {
       this.state = state
       this.stateAt = Date.now()
       if (!this.menuWarmed) { this.menuWarmed = true; this.menu.prewarm() }
-      if (!state.accountId) this.window?.hide()
+      if (!state.accountId || this.timerOff()) this.window?.hide()
       this.updateTray()
-      if (state.accountId && !this.startupShown) {
+      if (this.timerOff()) this.startupShown = true
+      else if (state.accountId && !this.startupShown) {
         this.startupShown = true
         void this.show('compact', false)
       } else if (saved && !this.window?.isVisible()) void this.show('compact', false)
@@ -228,6 +230,11 @@ export class TimerWindowController {
     return !!state?.accountId && state.connected && Date.now() - this.stateAt < 15000
   }
 
+  /** The person switched the timer off and nothing is running: no orb, no timer menu entries. */
+  private timerOff(): boolean {
+    return this.state?.timerEnabled === false && !this.state.running
+  }
+
   private commandsEnabled(): boolean {
     return this.ready() && !this.state?.busy && !this.pendingCommand && !this.exitRequest
   }
@@ -240,7 +247,7 @@ export class TimerWindowController {
       recent: state?.recent ? { title: state.recent.title } : null,
       clockOffsetMs: state?.clockOffsetMs ?? 0, savedAt: state?.savedAt ?? 0,
       visible: !!this.window && !this.window.isDestroyed() && this.window.isVisible(),
-      display: this.prefs.get().display, pinned: this.pinned,
+      display: this.prefs.get().display, pinned: this.pinned, timerEnabled: !this.timerOff(),
       ...(this.inboxCount === undefined ? {} : { inbox: { unreadCount: this.inboxCount } }),
     }
   }
@@ -250,7 +257,8 @@ export class TimerWindowController {
     const signedIn = !!state?.accountId
     const ready = this.ready()
     const enabled = this.commandsEnabled()
-    const title = state?.running ? `计时中 · ${state.running.title}` : '计时已暂停'
+    const off = this.timerOff()
+    const title = state?.running ? `计时中 · ${state.running.title}` : off ? '计时器已关闭' : '计时已暂停'
     this.tray?.setToolTip(`YumpooPlatform${this.inboxCount === undefined ? '' : `\n${this.inboxCount} 条未读`}${state?.running ? `\n${title}` : ''}`.slice(0, 120))
     const running = state?.running
     const recent = state?.recent
@@ -261,16 +269,18 @@ export class TimerWindowController {
       { label: signedIn ? (ready ? title : '等待连接') : '尚未登录', enabled: false },
       { type: 'separator' },
       ...(running ? [{ label: '暂停并保存计时', enabled, click: () => this.toggleTimer() }]
-        : recent ? [{ label: `继续 · ${recent.title.slice(0, 50)}`, enabled, click: () => this.toggleTimer() }] : []),
-      { label: '查找工作项…', click: () => this.menuAction('find') },
+        : recent && !off ? [{ label: `继续 · ${recent.title.slice(0, 50)}`, enabled, click: () => this.toggleTimer() }] : []),
+      ...(off ? [] : [{ label: '查找工作项…', click: () => this.menuAction('find') }]),
       { label: '打开主界面', click: () => this.showMain() },
       ...(this.inboxCount === undefined ? [] : [{ label: `收件箱 · ${this.inboxCount} 条未读`, click: () => this.menuAction('open-inbox') }]),
       { type: 'separator' },
-      { label: '悬浮球', type: 'radio', checked: visible && display === 'orb', enabled: signedIn, click: () => this.menuAction('show-orb') },
-      { label: '侧边栏', type: 'radio', checked: visible && display === 'dock', enabled: signedIn, click: () => this.menuAction('show-dock') },
-      { label: '隐藏', type: 'radio', checked: !visible, enabled: signedIn, click: () => this.menuAction('hide') },
-      { label: '窗口置顶', type: 'checkbox', checked: this.pinned, enabled: signedIn, click: () => this.setPinned(!this.pinned) },
-      { type: 'separator' },
+      ...(off ? [] : [
+        { label: '悬浮球', type: 'radio' as const, checked: visible && display === 'orb', enabled: signedIn, click: () => this.menuAction('show-orb') },
+        { label: '侧边栏', type: 'radio' as const, checked: visible && display === 'dock', enabled: signedIn, click: () => this.menuAction('show-dock') },
+        { label: '隐藏', type: 'radio' as const, checked: !visible, enabled: signedIn, click: () => this.menuAction('hide') },
+        { label: '窗口置顶', type: 'checkbox' as const, checked: this.pinned, enabled: signedIn, click: () => this.setPinned(!this.pinned) },
+        { type: 'separator' as const },
+      ]),
       { label: '退出 YumpooPlatform…', click: () => this.requestExit() },
     ])
     if (process.platform === 'linux') this.tray?.setContextMenu(this.contextMenu)
@@ -507,6 +517,7 @@ export class TimerWindowController {
   }
 
   private async show(mode: TimerWindowMode = 'picker', activate = true): Promise<void> {
+    if (this.timerOff()) { this.showMain(); return }
     const reveal = (window: BrowserWindow) => {
       if (window.isMinimized()) window.restore()
       if (activate) { window.show(); window.focus() }

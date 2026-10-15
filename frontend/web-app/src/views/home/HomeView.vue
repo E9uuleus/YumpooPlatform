@@ -5,7 +5,7 @@ import { ElTooltip } from 'element-plus'
 import { computed, inject, onBeforeUnmount, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { dashboardsApi, myWorkApi, projectsApi } from '../../api/client'
-import { monthGrid, monthStats, runningExtraMs, shiftMonth, STANDARD_DAY_MS, weekdayLabels } from '../../components/my-time/myTimeModel'
+import { dayTargetMs, monthGrid, monthStats, runningExtraMs, shiftMonth, weekdayLabels } from '../../components/my-time/myTimeModel'
 import { addDays, buildTimesheet, fromApiDate, projectColors, shortHours, todayIn, toApiDate } from '../../components/team/teamDashboardModel'
 import AuroraShapes from '../../components/motion/AuroraShapes.vue'
 import { MY_PROJECT_ACCESSES } from '../../components/projects/projectScope'
@@ -33,7 +33,9 @@ const today = computed(() => todayIn(timezone.value, now.value))
 const month = computed(() => today.value.slice(0, 7))
 const tasks = ref<TeamMemberTask[]>([]), projects = ref<DashboardProject[]>([]), monthSheet = ref<TeamTimesheet>(), projectTotal = ref<number>()
 const filter = ref<TaskFilter>('ALL')
-const running = computed(() => tracker.current.value?.session ?? undefined)
+const running = computed(() => tracker.running.value.length > 0)
+const startedAt = computed(() => running.value ? new Date(Math.min(...tracker.running.value.map(timer => timer.session.startedAt.getTime()))) : undefined)
+const runningTitle = computed(() => `${tracker.running.value[0]?.workItemTitle ?? '工作项'}${tracker.running.value.length > 1 ? ` 等 ${tracker.running.value.length} 项` : ''}`)
 
 const counts = computed(() => ({
   inProgress: tasks.value.filter(task => task.statusCategory === TeamMemberTaskStatusCategoryEnum.InProgress).length,
@@ -57,7 +59,7 @@ const calendar = computed(() => {
 })
 const recordedDays = computed(() => monthSheet.value ? buildTimesheet(monthSheet.value).rows[0]?.days ?? {} : {})
 const monthDays = computed<Record<string, number>>(() => {
-  const extra = monthSheet.value ? runningExtraMs(monthSheet.value.asOf, running.value?.startedAt, tracker.now.value) : 0
+  const extra = monthSheet.value ? runningExtraMs(monthSheet.value.asOf, startedAt.value, tracker.now.value) : 0
   return extra ? { ...recordedDays.value, [today.value]: (recordedDays.value[today.value] ?? 0) + extra } : recordedDays.value
 })
 const monthTotal = computed(() => monthStats(monthDays.value, month.value).totalMs)
@@ -69,8 +71,10 @@ const jumps = computed<JumpCard[]>(() => [
     : { key: 'dashboards', label: '仪表板', meta: '个人看板与统计', icon: DataAnalysis, tone: 'purple', open: () => openWorkspace('dashboards') },
   { key: 'inbox', label: '收件箱', meta: inbox.unread.value ? `${inbox.unread.value} 条未读` : '没有未读消息', icon: Message, tone: 'red',
     open: () => void router.push({ name: 'inbox' }) },
-  { key: 'timer', label: running.value ? '计时中' : '开始计时', meta: running.value ? formatDuration(tracker.runningDuration.value) : '选择工作项开始计时',
-    icon: Timer, tone: 'green', open: () => window.dispatchEvent(new Event('yumpoo:open-timer')) },
+  tracker.timerEnabled.value || running.value
+    ? { key: 'timer', label: running.value ? '计时中' : '开始计时', meta: running.value ? formatDuration(tracker.wallDuration.value) : '选择工作项开始计时',
+      icon: Timer, tone: 'green', open: () => window.dispatchEvent(new Event('yumpoo:open-timer')) }
+    : { key: 'timer', label: '记录工时', meta: '在今天的时间线上按时段填写', icon: Timer, tone: 'green', open: openToday },
   ...(session.isCompanyAdmin.value
     ? [{ key: 'company', label: '公司管理', meta: '项目、成员与组织', icon: OfficeBuilding, tone: 'amber' as const, open: () => void router.push({ name: 'company-overview' }) }]
     : []),
@@ -82,6 +86,10 @@ const jumps = computed<JumpCard[]>(() => [
 function openWorkspace(name: 'workspace' | 'dashboards' | 'my-time'): void {
   const workspaceSlug = session.authentication.value?.user.workspaceSlug
   if (workspaceSlug) void router.push({ name, params: { workspaceSlug } })
+}
+function openToday(): void {
+  const workspaceSlug = session.authentication.value?.user.workspaceSlug
+  if (workspaceSlug) void router.push({ name: 'my-time-day', params: { workspaceSlug, date: today.value } })
 }
 function openTask(task: TeamMemberTask): void {
   void router.push({ name: 'project-overview', params: { projectId: task.projectId }, query: { workItemId: task.id } })
@@ -125,7 +133,7 @@ onMounted(() => { void onboarding.ready() })
           ><i
             class="home-chip__live"
             aria-hidden="true"
-          /><span class="home-chip__text">计时中 · {{ tracker.current.value?.workItemTitle ?? '工作项' }}</span></span>
+          /><span class="home-chip__text">计时中 · {{ runningTitle }}</span></span>
           <span class="home-chip">{{ counts.inProgress }} 项进行中</span>
           <span
             v-if="counts.overdue"
@@ -302,7 +310,7 @@ onMounted(() => { void onboarding.ready() })
                 class="home-calendar__day"
                 :class="{
                   'is-recorded': cell.inMonth && (monthDays[cell.date] ?? 0) > 0,
-                  'is-full': cell.inMonth && (monthDays[cell.date] ?? 0) >= STANDARD_DAY_MS,
+                  'is-full': cell.inMonth && (monthDays[cell.date] ?? 0) >= dayTargetMs(monthSheet?.days, cell.date),
                   'is-today': cell.today,
                 }"
                 :style="{ '--d': cell.row + cell.column }"

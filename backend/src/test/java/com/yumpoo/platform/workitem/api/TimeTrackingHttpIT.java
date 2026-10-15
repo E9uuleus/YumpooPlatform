@@ -7,6 +7,7 @@ import com.yumpoo.platform.foundation.application.request.RequestCorrelationCont
 import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.application.verification.IdentityAcceptanceFixtureProvisioner;
+import com.yumpoo.platform.organization.api.CompanyConfigurationQuery;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -55,6 +57,7 @@ class TimeTrackingHttpIT {
     @Autowired private JdbcClient jdbc;
     @Autowired private ObjectMapper json;
     @Autowired private PlatformTransactionManager transactions;
+    @Autowired private CompanyConfigurationQuery company;
     private Actor owner, member;
     private Project source, target;
 
@@ -200,6 +203,192 @@ class TimeTrackingHttpIT {
                 .param("user", member.userId()).query(Long.class).single()).isZero();
     }
 
+    @Test
+    void parentSummaryIncludesDirectChildTimeAndHistoryDisclosesItsSource() throws Exception {
+        JsonNode child=createItem(source.id(),"子项计时");
+        String childId=child.path("id").asText();
+        var relation=mutate("POST","/api/v1/work-items/"+source.itemId()+"/relations",member,
+                json.writeValueAsString(Map.of("relationType","PARENT_CHILD","currentRole","PARENT",
+                        "targetProjectId",source.id(),"targetWorkItemId",childId)),null);
+        assertThat(relation.statusCode()).as(relation.body()).isEqualTo(201);
+        ok(mutate("POST","/api/v1/work-items/"+childId+"/time-sessions",member,
+                json.writeValueAsString(Map.of("startedAt","2026-09-01T09:00:00Z","stoppedAt","2026-09-01T10:00:00Z")),null));
+
+        JsonNode summary=ok(get("/api/v1/projects/"+source.id()+"/time-tracking-summaries?workItemId="+source.itemId(),member)).path("items").get(0);
+        assertThat(summary.path("allocatedDurationMs").asLong()).isZero();
+        assertThat(summary.path("rollupDurationMs").asLong()).isEqualTo(3600000);
+        assertThat(ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items")).isEmpty();
+        JsonNode history=ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions?includeChildren=true",member)).path("items");
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).path("workItemId").asText()).isEqualTo(childId);
+        assertThat(history.get(0).path("workItemNo").asText()).isEqualTo(child.path("itemNo").asText());
+        assertThat(history.get(0).path("workItemTitle").asText()).isEqualTo("子项计时");
+    }
+
+    @Test
+    void parallelTimersShareTheirDurationAndStopTogetherWithoutInflatingTheTimesheet() throws Exception {
+        JsonNode running=ok(timer("start",Map.of("workItemIds",List.of(source.itemId(),target.itemId())),"\"0\""));
+        assertThat(running.path("runningSessions")).hasSize(2);
+        for(Project project:List.of(source,target)) {
+            JsonNode summary=ok(get("/api/v1/projects/"+project.id()+"/time-tracking-summaries?workItemId="+project.itemId(),member)).path("items").get(0);
+            assertThat(summary.path("rollupRunningRate").asDouble()).isEqualTo(0.5);
+        }
+        JsonNode stopped=ok(mutate("POST","/api/v1/me/time-tracker/stop-all",member,"",running.path("etag").asText()));
+        assertThat(stopped.path("runningSessions")).isEmpty();
+        assertThat(stopped.path("resumeItems")).hasSize(2);
+        long actualDuration=0;
+        Instant startedAt=null,stoppedAt=null;
+        for(Project project:List.of(source,target)) {
+            JsonNode record=ok(get("/api/v1/work-items/"+project.itemId()+"/time-sessions",member)).path("items").get(0);
+            actualDuration=record.path("durationMs").asLong();
+            assertThat(record.path("allocatedDurationMs").asLong()).isEqualTo(actualDuration/2);
+            assertThat(record.path("parallelItemCount").asInt()).isOne();
+            startedAt=Instant.parse(record.path("startedAt").asText()); stoppedAt=Instant.parse(record.path("stoppedAt").asText());
+        }
+        var zone=company.current().timezone();
+        JsonNode sheet=ok(get("/api/v1/me/timesheet?from="+startedAt.atZone(zone).toLocalDate()+"&to="+stoppedAt.atZone(zone).toLocalDate(),member));
+        long total=0;
+        for(JsonNode entry:sheet.path("entries")) total+=entry.path("durationMs").asLong();
+        assertThat(total).isBetween(actualDuration-1,actualDuration);
+    }
+
+    @Test
+    void fillSupportsParallelReplacementAndGapsWithIdempotentReplay() throws Exception {
+        ok(mutate("POST","/api/v1/work-items/"+source.itemId()+"/time-sessions",member,
+                json.writeValueAsString(Map.of("startedAt","2026-09-01T08:00:00Z","stoppedAt","2026-09-01T12:00:00Z")),null));
+        UUID key=UUID.randomUUID();
+        String parallel=fillBody("PARALLEL",target.itemId(),"09:00","10:00");
+        var first=mutate("POST","/api/v1/me/time-sessions/fill",member,parallel,null,key);
+        assertThat(ok(first).path("createdCount").asInt()).isOne();
+        assertThat(mutate("POST","/api/v1/me/time-sessions/fill",member,parallel,null,key).body()).isEqualTo(first.body());
+        JsonNode replaced=ok(mutate("POST","/api/v1/me/time-sessions/fill",member,
+                fillBody("REPLACE",target.itemId(),"10:00","11:00"),null));
+        assertThat(replaced.path("createdCount").asInt()).isEqualTo(2);
+        assertThat(replaced.path("changedCount").asInt()).isOne();
+        assertThat(replaced.path("deletedCount").asInt()).isZero();
+        var sourceRows=ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items");
+        assertThat(sourceRows).hasSize(2);
+        long sourceAllocated=0;
+        for(JsonNode row:sourceRows) sourceAllocated+=row.path("allocatedDurationMs").asLong();
+        assertThat(sourceAllocated).isEqualTo(9000000);
+        UUID third=UUID.fromString(createItem(source.id(),"补录空白").path("id").asText());
+        JsonNode gaps=ok(mutate("POST","/api/v1/me/time-sessions/fill",member,fillBody("GAPS",third,"07:00","13:00"),null));
+        assertThat(gaps.path("createdCount").asInt()).isEqualTo(2);
+        assertThat(gaps.path("skippedDurationMs").asLong()).isEqualTo(4*3600000L);
+        JsonNode day=ok(get("/api/v1/me/time-sessions?from=2026-09-01T07:00:00Z&to=2026-09-01T13:00:00Z",member));
+        assertThat(day.path("items")).hasSize(6);
+        long total=0;
+        for(JsonNode row:day.path("items")) total+=row.path("session").path("allocatedDurationMs").asLong();
+        assertThat(total).isEqualTo(6*3600000L);
+        assertThat(stateVersion()).isZero();
+    }
+
+    @Test
+    void exclusiveExistingRecordDeletesOtherRecordsWithoutCreatingOrChangingTheTarget() throws Exception {
+        String path="/api/v1/me/time-sessions/fill";
+        ok(mutate("POST",path,member,fillBody("PARALLEL",source.itemId(),"09:00","10:00"),null));
+        ok(mutate("POST",path,member,fillBody("PARALLEL",target.itemId(),"09:00","10:00"),null));
+        JsonNode result=ok(mutate("POST",path,member,fillBody("REPLACE",target.itemId(),"09:00","10:00"),null));
+        assertThat(result.path("createdCount").asInt()).isZero();
+        assertThat(result.path("changedCount").asInt()).isZero();
+        assertThat(result.path("deletedCount").asInt()).isOne();
+        assertThat(result.path("skippedDurationMs").asLong()).isEqualTo(3600000);
+        assertThat(ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items")).isEmpty();
+        JsonNode kept=ok(get("/api/v1/work-items/"+target.itemId()+"/time-sessions",member)).path("items");
+        assertThat(kept).hasSize(1);
+        assertThat(kept.get(0).path("allocatedDurationMs").asLong()).isEqualTo(3600000);
+        JsonNode unchanged=ok(mutate("POST",path,member,fillBody("REPLACE",target.itemId(),"09:00","10:00"),null));
+        assertThat(unchanged.path("createdCount").asInt()+unchanged.path("changedCount").asInt()
+                +unchanged.path("deletedCount").asInt()).isZero();
+    }
+
+    @Test
+    void disablingTheTimerStopsRunningSessionsAndRejectsStartsUntilReEnabled() throws Exception {
+        JsonNode initial=ok(get("/api/v1/me/time-tracker",member)).path("preferences");
+        assertThat(initial.path("timerEnabled").asBoolean()).isTrue();
+        assertThat(initial.path("workdayStartMinute").asInt()).isEqualTo(540);
+        assertThat(initial.path("workdayEndMinute").asInt()).isEqualTo(1080);
+        JsonNode running=ok(timer("start",Map.of("workItemIds",List.of(source.itemId(),target.itemId())),"\"0\""));
+        assertThat(running.path("runningSessions")).hasSize(2);
+        String off=json.writeValueAsString(Map.of("timerEnabled",false,"workdayStartMinute",510,"workdayEndMinute",1050));
+        String path="/api/v1/me/time-tracker/preferences";
+        assertThat(mutate("PUT",path,member,off,null).statusCode()).isEqualTo(428);
+        assertThat(mutate("PUT",path,member,off,"\"0\"").statusCode()).isEqualTo(412);
+        UUID key=UUID.randomUUID();
+        var response=mutate("PUT",path,member,off,running.path("etag").asText(),key);
+        JsonNode disabled=ok(response);
+        assertThat(disabled.path("runningSessions")).isEmpty();
+        assertThat(disabled.path("preferences").path("timerEnabled").asBoolean()).isFalse();
+        assertThat(disabled.path("preferences").path("workdayStartMinute").asInt()).isEqualTo(510);
+        assertThat(disabled.path("rowVersion").asLong()).isEqualTo(running.path("rowVersion").asLong()+1);
+        assertThat(mutate("PUT",path,member,off,running.path("etag").asText(),key).body()).isEqualTo(response.body());
+        for(Project project:List.of(source,target)) {
+            JsonNode record=ok(get("/api/v1/work-items/"+project.itemId()+"/time-sessions",member)).path("items").get(0);
+            assertThat(record.path("stoppedAt").isNull()).isFalse();
+        }
+        for(String action:List.of("start","switch")) {
+            var rejected=timer(action,Map.of("workItemId",target.itemId()),disabled.path("etag").asText());
+            assertThat(rejected.statusCode()).as(rejected.body()).isEqualTo(409);
+            assertThat(json.readTree(rejected.body()).path("details").path("reason").asText()).isEqualTo("TIMER_DISABLED");
+        }
+        String on=json.writeValueAsString(Map.of("timerEnabled",true,"workdayStartMinute",510,"workdayEndMinute",1050));
+        JsonNode enabled=ok(mutate("PUT",path,member,on,disabled.path("etag").asText()));
+        assertThat(enabled.path("preferences").path("timerEnabled").asBoolean()).isTrue();
+        assertThat(enabled.path("runningSessions")).isEmpty();
+        assertThat(ok(get("/api/v1/me/time-tracker",member)).path("runningSessions")).isEmpty();
+        assertThat(ok(timer("start",Map.of("workItemId",target.itemId()),enabled.path("etag").asText())).path("runningSessions")).hasSize(1);
+    }
+
+    @Test
+    void reassignMovesAStoppedRecordToAnotherItemWithoutChangingTheDayTotal() throws Exception {
+        JsonNode moved=ok(mutate("POST","/api/v1/work-items/"+source.itemId()+"/time-sessions",member,
+                json.writeValueAsString(Map.of("startedAt","2026-09-02T09:00:00Z","stoppedAt","2026-09-02T10:00:00Z")),null));
+        ok(mutate("POST","/api/v1/work-items/"+target.itemId()+"/time-sessions",member,
+                json.writeValueAsString(Map.of("startedAt","2026-09-02T09:30:00Z","stoppedAt","2026-09-02T10:30:00Z")),null));
+        long sourceEvents=events(source), targetEvents=events(target);
+        String path="/api/v1/me/time-sessions/"+moved.path("id").asText()+"/reassign";
+        String body=json.writeValueAsString(Map.of("workItemId",target.itemId()));
+        assertThat(mutate("POST",path,member,body,null).statusCode()).isEqualTo(428);
+        assertThat(mutate("POST",path,member,body,"\"9\"").statusCode()).isEqualTo(412);
+        UUID key=UUID.randomUUID();
+        var response=mutate("POST",path,member,body,moved.path("etag").asText(),key);
+        JsonNode result=ok(response);
+        assertThat(result.path("deletedCount").asInt()).isOne();
+        assertThat(result.path("createdCount").asInt()).isOne();
+        assertThat(result.path("skippedDurationMs").asLong()).isEqualTo(1800000);
+        assertThat(mutate("POST",path,member,body,moved.path("etag").asText(),key).body()).isEqualTo(response.body());
+        assertThat(events(source)).isEqualTo(sourceEvents+1);
+        assertThat(events(target)).isEqualTo(targetEvents+1);
+        assertThat(ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items")).isEmpty();
+        JsonNode day=ok(get("/api/v1/me/time-sessions?from=2026-09-02T08:00:00Z&to=2026-09-02T12:00:00Z",member)).path("items");
+        assertThat(day).hasSize(2);
+        long total=0;
+        for(JsonNode row:day) {
+            assertThat(row.path("session").path("workItemId").asText()).isEqualTo(target.itemId().toString());
+            total+=row.path("session").path("allocatedDurationMs").asLong();
+        }
+        assertThat(total).isEqualTo(90*60000L);
+        JsonNode kept=day.get(0).path("session");
+        var unchanged=mutate("POST","/api/v1/me/time-sessions/"+kept.path("id").asText()+"/reassign",member,body,kept.path("etag").asText());
+        assertThat(unchanged.statusCode()).as(unchanged.body()).isEqualTo(422);
+    }
+
+    @Test
+    void personalCandidatesIncludeItemsTrackedOnlyByManualRecords() throws Exception {
+        UUID manualOnly=UUID.fromString(createItem(source.id(),"只手动补录").path("id").asText());
+        String candidates="/api/v1/me/time-tracker/candidates?scope=PERSONAL";
+        assertThat(ok(get(candidates,member)).path("items").toString()).doesNotContain(manualOnly.toString());
+        ok(mutate("POST","/api/v1/me/time-sessions/fill",member,fillBody("GAPS",manualOnly,"09:00","10:00"),null));
+        JsonNode first=ok(get(candidates,member)).path("items").get(0);
+        assertThat(first.path("workItemId").asText()).isEqualTo(manualOnly.toString());
+        assertThat(first.path("lastTrackedAt").asText()).isEqualTo("2026-09-01T09:00:00Z");
+    }
+
+    private String fillBody(String mode,UUID item,String start,String stop) {
+        return json.writeValueAsString(Map.of("mode",mode,"entries",List.of(Map.of("workItemId",item,
+                "startedAt","2026-09-01T"+start+":00Z","stoppedAt","2026-09-01T"+stop+":00Z"))));
+    }
+
     private Actor actor(String name) {
         UUID user = users.provision("timer-purge-" + name + "-" + UUID.randomUUID(), "计时清除 " + name).userId();
         return new Actor(user, sessions.issueWebSession(user, "timer-purge-http"));
@@ -215,14 +404,18 @@ class TimeTrackingHttpIT {
                 VALUES (:id,:company,:project,:user,'ACTIVE',transaction_timestamp(),:owner)
                 """).param("id", UUID.randomUUID()).param("company", COMPANY).param("project", id)
                 .param("user", member.userId()).param("owner", owner.userId()).update();
+        return new Project(id, created.path("code").asText(), UUID.fromString(createItem(id,name+"工作项").path("id").asText()));
+    }
+
+    private JsonNode createItem(UUID projectId,String title) throws Exception {
         UUID content = jdbc.sql("SELECT id FROM yumpoo.content WHERE project_id=:project AND code='TASKS'")
-                .param("project", id).query(UUID.class).single();
-        var itemBody = json.createObjectNode().put("contentId", content.toString()).put("title", name + "工作项");
+                .param("project", projectId).query(UUID.class).single();
+        var itemBody = json.createObjectNode().put("contentId", content.toString()).put("title", title);
         itemBody.putNull("priority").putNull("description").putNull("notes");
-        var item = mutate("POST", "/api/v1/projects/" + id + "/work-items", member,
+        var item = mutate("POST", "/api/v1/projects/" + projectId + "/work-items", member,
                 json.writeValueAsString(itemBody), null);
         assertThat(item.statusCode()).as(item.body()).isEqualTo(201);
-        return new Project(id, created.path("code").asText(), UUID.fromString(json.readTree(item.body()).path("id").asText()));
+        return json.readTree(item.body());
     }
 
     private JsonNode start(Project project) throws Exception { return ok(startResponse(project)); }
@@ -297,9 +490,12 @@ class TimeTrackingHttpIT {
         return http.send(HttpRequest.newBuilder(uri(path)).timeout(Duration.ofSeconds(30)).header("Cookie", cookies(actor)).GET().build(), HttpResponse.BodyHandlers.ofString());
     }
     private HttpResponse<String> mutate(String method, String path, Actor actor, String body, String etag) throws Exception {
+        return mutate(method,path,actor,body,etag,UUID.randomUUID());
+    }
+    private HttpResponse<String> mutate(String method, String path, Actor actor, String body, String etag,UUID key) throws Exception {
         var request = HttpRequest.newBuilder(uri(path)).timeout(Duration.ofSeconds(30))
                 .header("Cookie", cookies(actor)).header("X-XSRF-TOKEN", actor.session().csrfCredential().value())
-                .header("Idempotency-Key", UUID.randomUUID().toString());
+                .header("Idempotency-Key", key.toString());
         if (etag != null) request.header("If-Match", etag);
         if (!body.isEmpty()) request.header("Content-Type", "application/json");
         return http.send(request.method(method, body.isEmpty() ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());

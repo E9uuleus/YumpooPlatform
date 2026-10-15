@@ -87,7 +87,7 @@ export interface TimerCandidate {
      */
     assignedToMe: boolean;
     /**
-     *
+     * 本人在该项最近一条计时或补录记录的开始时间。
      * @type {Date}
      * @memberof TimerCandidate
      */

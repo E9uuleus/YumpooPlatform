@@ -75,7 +75,8 @@ const clientLabel = computed(() => window.yumpooDesktop?.client === 'electron' |
   ? 'Electron 在线壳'
   : 'Web 浏览器')
 const activeSection = computed<ShellSection>(() => route.meta.shellSection ?? 'work')
-const dashboardFrame = computed(() => route.name === 'dashboards' || route.name === 'my-time' || route.name === 'team')
+const myTimeActive = computed(() => route.name === 'my-time' || route.name === 'my-time-day')
+const dashboardFrame = computed(() => route.name === 'dashboards' || route.name === 'my-time' || route.name === 'my-time-day' || route.name === 'team')
 const isWorkspaceSection = computed(() => activeSection.value === 'work')
 const hasContextNavigation = computed(() => activeSection.value !== 'home')
 const projectRecentScope = computed(() => {
@@ -553,8 +554,8 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            :class="{ active: route.name === 'my-time' }"
-            :aria-current="route.name === 'my-time' ? 'page' : undefined"
+            :class="{ active: myTimeActive }"
+            :aria-current="myTimeActive ? 'page' : undefined"
             @click="navigate('my-time')"
           >
             <el-icon aria-hidden="true">
@@ -874,8 +875,8 @@ onBeforeUnmount(() => {
           </button>
           <button
             type="button"
-            :class="{ active: route.name === 'my-time' }"
-            :aria-current="route.name === 'my-time' ? 'page' : undefined"
+            :class="{ active: myTimeActive }"
+            :aria-current="myTimeActive ? 'page' : undefined"
             @click="navigate('my-time')"
           >
             <el-icon aria-hidden="true">

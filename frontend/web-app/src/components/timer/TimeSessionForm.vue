@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { TimeSessionFillMode, type MyTimeSession } from '@yumpoo/api-client'
+import { timeTrackingApi } from '../../api/client'
+import OverlapModeControl from '../my-time/day/OverlapModeControl.vue'
+import { defaultMode, overlapEffect, type DayBlock, type Range } from '../my-time/day/dayModel'
 import TimeCalendar from './TimeCalendar.vue'
-import { parseCompanyDateTime } from './timeFormat'
+import { companyDateTime, parseCompanyDateTime } from './timeFormat'
 
-const props = defineProps<{ start: string; end: string; timezone: string; editing: boolean; busy: boolean; problem?: string }>()
-const emit = defineEmits<{ 'update:start': [value: string]; 'update:end': [value: string]; expand: [value: boolean]; save: [] }>()
+const props = withDefaults(defineProps<{ start: string; end: string; timezone: string; editing: boolean; busy: boolean; problem?: string
+  mode?: TimeSessionFillMode; workItemId?: string }>(), { mode: TimeSessionFillMode.Gaps, problem: '', workItemId: '' })
+const emit = defineEmits<{ 'update:start': [value: string]; 'update:end': [value: string]; 'update:mode': [value: TimeSessionFillMode]; expand: [value: boolean]; save: [] }>()
 const selectedDay = computed(() => props.start.slice(0, 10))
 const dayMs = 86400000
 const dateNumber = (day: string) => new Date(`${day}T00:00:00Z`).getTime()
@@ -17,6 +22,42 @@ const preview = computed(() => {
   const seconds = Math.max(0, Math.floor(duration.value / 1000))
   return `${String(Math.floor(seconds / 3600)).padStart(2, '0')}h ${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}m`
 })
+const existing = ref<MyTimeSession[]>([])
+const existingLoading = ref(false)
+const existingProblem = ref('')
+const clock = (date: Date) => companyDateTime(date, props.timezone).slice(11, 16)
+watch([() => props.start, () => props.end, () => props.timezone], async ([start, end, timezone], _previous, onCleanup) => {
+  let active = true
+  onCleanup(() => { active = false })
+  existing.value = []; existingProblem.value = ''; existingLoading.value = false
+  let from: Date, to: Date
+  try { from = parseCompanyDateTime(start, timezone); to = parseCompanyDateTime(end, timezone) } catch { return }
+  if (to <= from) return
+  existingLoading.value = true
+  try {
+    const result = await timeTrackingApi.listMyTimeSessions({ from, to })
+    if (active) existing.value = result.items
+  } catch { if (active) existingProblem.value = '无法加载该时段记录。' }
+  finally { if (active) existingLoading.value = false }
+}, { immediate: true })
+const range = computed<Range | undefined>(() => {
+  try {
+    const value = { start: parseCompanyDateTime(props.start, props.timezone).getTime(), end: parseCompanyDateTime(props.end, props.timezone).getTime() }
+    return value.end > value.start ? value : undefined
+  } catch { return undefined }
+})
+const blocks = computed<DayBlock[]>(() => existing.value.map(item => ({
+  id: item.session.id, workItemId: item.session.workItemId, projectId: item.session.projectId, title: item.title ?? '不可见工作项',
+  itemNo: item.itemNo, projectName: item.projectName, colorToken: item.contentColorToken, start: item.session.startedAt.getTime(),
+  end: item.session.stoppedAt?.getTime() ?? null, canEdit: item.session.canEdit, etag: item.session.etag })))
+/** The overlap choice only appears when the new range overlaps something, with the same defaults as the day timeline. */
+const effect = computed(() => range.value && !props.editing
+  ? overlapEffect(range.value, props.workItemId ? [props.workItemId] : [], blocks.value, Date.now()) : undefined)
+const touched = ref(false)
+watch(() => [effect.value?.overlapping.length ?? 0, effect.value?.fullyCovered], () => {
+  if (!touched.value && effect.value && defaultMode(effect.value) !== props.mode) emit('update:mode', defaultMode(effect.value))
+})
+function setMode(value: TimeSessionFillMode) { touched.value = true; emit('update:mode', value) }
 function selectDay(day: string) {
   const offset = endOffset.value
   emit('update:start', `${day}T${props.start.slice(11)}`)
@@ -84,6 +125,31 @@ function setOffset(event: Event) {
         </option>
       </select>
     </div>
+    <OverlapModeControl
+      v-if="effect && range && effect.overlapping.length"
+      :model-value="mode"
+      :effect="effect"
+      :range="range"
+      :item-count="1"
+      @update:model-value="setMode"
+    />
+    <div class="existing-sessions">
+      <strong>该时段已有记录</strong>
+      <span v-if="existingLoading">正在加载…</span>
+      <span v-else-if="existingProblem">{{ existingProblem }}</span>
+      <ul v-else-if="existing.length">
+        <li
+          v-for="item in existing.slice(0, 3)"
+          :key="item.session.id"
+        >
+          {{ clock(item.session.startedAt) }}–{{ item.session.stoppedAt ? clock(item.session.stoppedAt) : '计时中' }} {{ item.itemNo ? `#${item.itemNo} ` : '' }}{{ item.title ?? '不可见工作项' }}
+        </li>
+        <li v-if="existing.length > 3">
+          等 {{ existing.length }} 条
+        </li>
+      </ul>
+      <span v-else>暂无记录</span>
+    </div>
     <p
       v-if="problem"
       class="save-error"
@@ -105,6 +171,7 @@ function setOffset(event: Event) {
 
 <style scoped>
 .save-error{margin:0;color:var(--el-color-danger);font-size:13px}
+.existing-sessions{display:grid;gap:5px;font-size:11px;color:var(--el-text-color-secondary)}.existing-sessions strong{font-weight:500}.existing-sessions ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}.existing-sessions li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .manual-session{display:flex;flex-direction:column;gap:12px;padding:4px 12px 8px}
 button,select,input{font:inherit;color:inherit}button{border:0;background:transparent;cursor:pointer;border-radius:5px}button:hover:not(:disabled){background:#f0f1f3;color:var(--el-text-color-primary)}button:disabled{opacity:.4;cursor:default}button:focus-visible,select:focus-visible{outline:2px solid var(--el-color-primary);outline-offset:2px}
 .end-day select{border:0;background:var(--el-bg-color);padding:5px 2px;cursor:pointer}

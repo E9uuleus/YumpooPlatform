@@ -76,12 +76,12 @@ public class JdbcWorkItemStatisticsRepository implements WorkItemStatisticsRepos
     static String memberRows(String source, boolean withTime, String... filterParams) {
         String timing = withTime ? """
             ,member_timings AS (
-              SELECT work_item_id,user_id,
-                SUM(GREATEST(0,EXTRACT(EPOCH FROM (COALESCE(stopped_at,:asOf)-started_at))*1000))::bigint AS duration_ms
-              FROM yumpoo.work_item_time_session
-              WHERE company_id=:company AND project_id IN (:projects) AND deleted_at IS NULL
-              GROUP BY work_item_id,user_id)
-            """ : "";
+              SELECT sh.work_item_id,sh.user_id,
+                FLOOR(COALESCE(SUM(%s),0))::bigint AS duration_ms
+              FROM yumpoo.work_item_time_share sh
+              WHERE sh.company_id=:company AND sh.project_id IN (:projects)
+              GROUP BY sh.work_item_id,sh.user_id)
+            """.formatted(TimeShareSql.allocated("sh", ":asOf")) : "";
         String duration = withTime ? "COALESCE(mt.duration_ms,0)::bigint" : "0::bigint";
         String join = withTime ? " LEFT JOIN member_timings mt ON mt.work_item_id=f.id AND mt.user_id=m.user_id" : "";
         String filter = filterParams.length == 0 ? "" : " WHERE " + java.util.Arrays.stream(filterParams)
@@ -97,12 +97,16 @@ public class JdbcWorkItemStatisticsRepository implements WorkItemStatisticsRepos
         p.put("company", company); p.put("projects", f.projectIds()); p.put("archived", f.includeArchived());
         p.put("asOf", Timestamp.from(asOf));
         String timing = withTime ? """
-            timings AS (
-              SELECT work_item_id, COUNT(*) AS session_count,
-                SUM(GREATEST(0,EXTRACT(EPOCH FROM (COALESCE(stopped_at,:asOf)-started_at))*1000))::bigint AS duration_ms
+            session_counts AS (
+              SELECT work_item_id, COUNT(*) AS session_count
               FROM yumpoo.work_item_time_session
               WHERE company_id=:company AND project_id IN (:projects) AND deleted_at IS NULL GROUP BY work_item_id),
-            """ : "";
+            timings AS (
+              SELECT c.work_item_id,c.session_count,FLOOR(COALESCE(SUM(%s),0))::bigint AS duration_ms
+              FROM session_counts c LEFT JOIN yumpoo.work_item_time_share sh
+                ON sh.company_id=:company AND sh.work_item_id=c.work_item_id
+              GROUP BY c.work_item_id,c.session_count),
+            """.formatted(TimeShareSql.allocated("sh", ":asOf")) : "";
         String timedColumns = withTime ? "COALESCE(t.duration_ms,0) AS duration_ms,COALESCE(t.session_count,0) AS session_count"
                 : "0::bigint AS duration_ms,0::bigint AS session_count";
         String joinTime = withTime ? "LEFT JOIN timings t ON t.work_item_id=w.id " : "";

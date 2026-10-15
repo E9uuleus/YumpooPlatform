@@ -16,7 +16,12 @@ import * as runtime from '../runtime';
 import type {
   CurrentTimeTracker,
   ErrorResponse,
+  MyTimeSessionPage,
+  TimeSessionFillCommand,
+  TimeSessionFillResult,
+  TimeSessionReassignCommand,
   TimeTrackingCommand,
+  TimeTrackingPreferences,
   TimeTrackingSession,
   TimeTrackingSessionPage,
   TimeTrackingSummaryPage,
@@ -27,8 +32,18 @@ import {
     CurrentTimeTrackerToJSON,
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
+    MyTimeSessionPageFromJSON,
+    MyTimeSessionPageToJSON,
+    TimeSessionFillCommandFromJSON,
+    TimeSessionFillCommandToJSON,
+    TimeSessionFillResultFromJSON,
+    TimeSessionFillResultToJSON,
+    TimeSessionReassignCommandFromJSON,
+    TimeSessionReassignCommandToJSON,
     TimeTrackingCommandFromJSON,
     TimeTrackingCommandToJSON,
+    TimeTrackingPreferencesFromJSON,
+    TimeTrackingPreferencesToJSON,
     TimeTrackingSessionFromJSON,
     TimeTrackingSessionToJSON,
     TimeTrackingSessionPageFromJSON,
@@ -64,14 +79,26 @@ export interface EditTimeSessionRequest {
     timeTrackingCommand: TimeTrackingCommand;
 }
 
+export interface FillMyTimeSessionsRequest {
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    timeSessionFillCommand: TimeSessionFillCommand;
+}
+
 export interface GetTimeTrackingSummariesRequest {
     projectId: string;
     workItemId: Array<string>;
 }
 
+export interface ListMyTimeSessionsRequest {
+    from: Date;
+    to: Date;
+}
+
 export interface ListTimeSessionsRequest {
     workItemId: string;
     cursor?: string;
+    includeChildren?: boolean;
 }
 
 export interface ListTimerCandidatesRequest {
@@ -81,11 +108,25 @@ export interface ListTimerCandidatesRequest {
     limit?: number;
 }
 
+export interface ReassignMyTimeSessionRequest {
+    sessionId: string;
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+    timeSessionReassignCommand: TimeSessionReassignCommand;
+}
+
 export interface StartTimeTrackerRequest {
     xXSRFTOKEN: string;
     idempotencyKey: string;
     ifMatch: string;
     timeTrackingCommand: TimeTrackingCommand;
+}
+
+export interface StopAllTimeTrackersRequest {
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
 }
 
 export interface StopTimeTrackerRequest {
@@ -100,6 +141,13 @@ export interface SwitchTimeTrackerRequest {
     idempotencyKey: string;
     ifMatch: string;
     timeTrackingCommand: TimeTrackingCommand;
+}
+
+export interface UpdateTimeTrackingPreferencesRequest {
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    ifMatch: string;
+    timeTrackingPreferences: TimeTrackingPreferences;
 }
 
 /**
@@ -353,6 +401,69 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 条目区间必须已结束，同一工作项的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项记录后补本项空白；GAPS 只补本人没有任何记录的时段。补录不推进计时器状态版本。
+     * 按并行、替换或空白模式补录本人工时
+     */
+    async fillMyTimeSessionsRaw(requestParameters: FillMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimeSessionFillResult>> {
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling fillMyTimeSessions().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling fillMyTimeSessions().'
+            );
+        }
+
+        if (requestParameters['timeSessionFillCommand'] == null) {
+            throw new runtime.RequiredError(
+                'timeSessionFillCommand',
+                'Required parameter "timeSessionFillCommand" was null or undefined when calling fillMyTimeSessions().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/me/time-sessions/fill`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: TimeSessionFillCommandToJSON(requestParameters['timeSessionFillCommand']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TimeSessionFillResultFromJSON(jsonValue));
+    }
+
+    /**
+     * 条目区间必须已结束，同一工作项的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项记录后补本项空白；GAPS 只补本人没有任何记录的时段。补录不推进计时器状态版本。
+     * 按并行、替换或空白模式补录本人工时
+     */
+    async fillMyTimeSessions(requestParameters: FillMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimeSessionFillResult> {
+        const response = await this.fillMyTimeSessionsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * getCurrentTimeTracker
      */
     async getCurrentTimeTrackerRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
@@ -430,6 +541,59 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。
+     * 查询本人时间段内的计时记录
+     */
+    async listMyTimeSessionsRaw(requestParameters: ListMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MyTimeSessionPage>> {
+        if (requestParameters['from'] == null) {
+            throw new runtime.RequiredError(
+                'from',
+                'Required parameter "from" was null or undefined when calling listMyTimeSessions().'
+            );
+        }
+
+        if (requestParameters['to'] == null) {
+            throw new runtime.RequiredError(
+                'to',
+                'Required parameter "to" was null or undefined when calling listMyTimeSessions().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['from'] != null) {
+            queryParameters['from'] = (requestParameters['from'] as any).toISOString();
+        }
+
+        if (requestParameters['to'] != null) {
+            queryParameters['to'] = (requestParameters['to'] as any).toISOString();
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/me/time-sessions`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => MyTimeSessionPageFromJSON(jsonValue));
+    }
+
+    /**
+     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。
+     * 查询本人时间段内的计时记录
+     */
+    async listMyTimeSessions(requestParameters: ListMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MyTimeSessionPage> {
+        const response = await this.listMyTimeSessionsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * listTimeSessions
      */
     async listTimeSessionsRaw(requestParameters: ListTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimeTrackingSessionPage>> {
@@ -444,6 +608,10 @@ export class TimeTrackingApi extends runtime.BaseAPI {
 
         if (requestParameters['cursor'] != null) {
             queryParameters['cursor'] = requestParameters['cursor'];
+        }
+
+        if (requestParameters['includeChildren'] != null) {
+            queryParameters['includeChildren'] = requestParameters['includeChildren'];
         }
 
         const headerParameters: runtime.HTTPHeaders = {};
@@ -471,7 +639,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时或手动补录过的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
      * 跨项目查找本人可计时的工作项
      */
     async listTimerCandidatesRaw(requestParameters: ListTimerCandidatesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimerCandidatePage>> {
@@ -509,7 +677,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
-     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
+     * 在当前公司有效成员且未归档的项目中查询。PERSONAL 包含分配给本人和本人最近计时或手动补录过的工作项；ALL 包含全部可计时工作项。按最近计时、本人分配、更新时间排序，每项只出现一次，查询名称、编号或项目名。启动时仍重新验证写权限。
      * 跨项目查找本人可计时的工作项
      */
     async listTimerCandidates(requestParameters: ListTimerCandidatesRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimerCandidatePage> {
@@ -518,6 +686,89 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项补同一时段（只跳过目标项自身已有的部分），沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原工作项相同返回 422 UNCHANGED。
+     * 把本人一条已结束的计时记录整体改归属到其他工作项
+     */
+    async reassignMyTimeSessionRaw(requestParameters: ReassignMyTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimeSessionFillResult>> {
+        if (requestParameters['sessionId'] == null) {
+            throw new runtime.RequiredError(
+                'sessionId',
+                'Required parameter "sessionId" was null or undefined when calling reassignMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling reassignMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling reassignMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling reassignMyTimeSession().'
+            );
+        }
+
+        if (requestParameters['timeSessionReassignCommand'] == null) {
+            throw new runtime.RequiredError(
+                'timeSessionReassignCommand',
+                'Required parameter "timeSessionReassignCommand" was null or undefined when calling reassignMyTimeSession().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/me/time-sessions/{sessionId}/reassign`;
+        urlPath = urlPath.replace(`{${"sessionId"}}`, encodeURIComponent(String(requestParameters['sessionId'])));
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: TimeSessionReassignCommandToJSON(requestParameters['timeSessionReassignCommand']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TimeSessionFillResultFromJSON(jsonValue));
+    }
+
+    /**
+     * 要求该记录最近读取的 If-Match。同一事务内软删除原记录，并按 PARALLEL 方式在目标工作项补同一时段（只跳过目标项自身已有的部分），沿用 deleted 与 added 事件。运行中、已删除、所属工作项或项目已归档的记录返回 409 SESSION_NOT_EDITABLE；目标与原工作项相同返回 422 UNCHANGED。
+     * 把本人一条已结束的计时记录整体改归属到其他工作项
+     */
+    async reassignMyTimeSession(requestParameters: ReassignMyTimeSessionRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimeSessionFillResult> {
+        const response = await this.reassignMyTimeSessionRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
      * startTimeTracker
      */
     async startTimeTrackerRaw(requestParameters: StartTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
@@ -582,10 +833,73 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 并行加入计时，已有运行会话继续；目标已运行时直接返回当前状态。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
      * startTimeTracker
      */
     async startTimeTracker(requestParameters: StartTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CurrentTimeTracker> {
         const response = await this.startTimeTrackerRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 停止本人全部运行计时
+     */
+    async stopAllTimeTrackersRaw(requestParameters: StopAllTimeTrackersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling stopAllTimeTrackers().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling stopAllTimeTrackers().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling stopAllTimeTrackers().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/me/time-tracker/stop-all`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => CurrentTimeTrackerFromJSON(jsonValue));
+    }
+
+    /**
+     * 停止本人全部运行计时
+     */
+    async stopAllTimeTrackers(requestParameters: StopAllTimeTrackersRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CurrentTimeTracker> {
+        const response = await this.stopAllTimeTrackersRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -662,6 +976,7 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
      * switchTimeTracker
      */
     async switchTimeTrackerRaw(requestParameters: SwitchTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
@@ -726,10 +1041,85 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 停止目标以外的全部运行会话，再开始目标；目标已运行时保持该会话。本人已关闭计时器时返回 409，reason 为 TIMER_DISABLED。
      * switchTimeTracker
      */
     async switchTimeTracker(requestParameters: SwitchTimeTrackerRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CurrentTimeTracker> {
         const response = await this.switchTimeTrackerRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 要求会话、XSRF 与 /me/time-tracker 最近读取的 If-Match，并推进计时状态版本。关闭计时器时在同一事务内停止本人全部运行计时，已计时长保留；关闭后开始或切换计时返回 409（TIMER_DISABLED）。上班时间按公司时区的当天分钟数表示，只用于本人填报提示与按时长排入的起点。
+     * 保存本人计时器开关与上班时间
+     */
+    async updateTimeTrackingPreferencesRaw(requestParameters: UpdateTimeTrackingPreferencesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling updateTimeTrackingPreferences().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling updateTimeTrackingPreferences().'
+            );
+        }
+
+        if (requestParameters['ifMatch'] == null) {
+            throw new runtime.RequiredError(
+                'ifMatch',
+                'Required parameter "ifMatch" was null or undefined when calling updateTimeTrackingPreferences().'
+            );
+        }
+
+        if (requestParameters['timeTrackingPreferences'] == null) {
+            throw new runtime.RequiredError(
+                'timeTrackingPreferences',
+                'Required parameter "timeTrackingPreferences" was null or undefined when calling updateTimeTrackingPreferences().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+        if (requestParameters['ifMatch'] != null) {
+            headerParameters['If-Match'] = String(requestParameters['ifMatch']);
+        }
+
+
+        let urlPath = `/me/time-tracker/preferences`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'PUT',
+            headers: headerParameters,
+            query: queryParameters,
+            body: TimeTrackingPreferencesToJSON(requestParameters['timeTrackingPreferences']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => CurrentTimeTrackerFromJSON(jsonValue));
+    }
+
+    /**
+     * 要求会话、XSRF 与 /me/time-tracker 最近读取的 If-Match，并推进计时状态版本。关闭计时器时在同一事务内停止本人全部运行计时，已计时长保留；关闭后开始或切换计时返回 409（TIMER_DISABLED）。上班时间按公司时区的当天分钟数表示，只用于本人填报提示与按时长排入的起点。
+     * 保存本人计时器开关与上班时间
+     */
+    async updateTimeTrackingPreferences(requestParameters: UpdateTimeTrackingPreferencesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<CurrentTimeTracker> {
+        const response = await this.updateTimeTrackingPreferencesRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

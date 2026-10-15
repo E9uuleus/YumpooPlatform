@@ -7,15 +7,21 @@ import type { TimerOrbLayout, TimerPreferences } from '@yumpoo/preload-contract'
 const api = vi.hoisted(() => ({ listTimerCandidates: vi.fn() }))
 vi.mock('../../api/client', () => ({ timeTrackingApi: api }))
 vi.mock('../../composables/useTimeTracker', async () => {
-  const { ref } = await import('vue')
-  const tracker = { current: ref({ session: null, recentItems: [], rowVersion: 0 }), now: ref(Date.now()),
-    busy: ref(false), problem: ref(''), connected: ref(true), savedAt: ref(0), runningDuration: ref(120000), start: vi.fn(), stop: vi.fn() }
-  return { useTimeTracker: () => tracker, formatDuration: () => '0:02:00', onTimeTrackingChanged: () => () => undefined }
+  const { computed, ref } = await import('vue')
+  const current = ref<import('@yumpoo/api-client').CurrentTimeTracker>()
+  const running = computed(() => current.value?.runningSessions ?? [])
+  const tracker = { current, running, isRunning: (id: string) => running.value.some(timer => timer.session.workItemId === id), now: ref(Date.now()),
+    busy: ref(false), problem: ref(''), connected: ref(true), savedAt: ref(0), wallDuration: ref(120000), start: vi.fn(), startMany: vi.fn(), switchTo: vi.fn(), stop: vi.fn(), stopAll: vi.fn() }
+  return { useTimeTracker: () => tracker, formatDuration: () => '0:02:00', formatTrackingDuration: () => '2m 0s', onTimeTrackingChanged: () => () => undefined }
 })
 import { useTimeTracker } from '../../composables/useTimeTracker'
 import TimerPanel from './TimerPanel.vue'
 const tracker = useTimeTracker()
 const wrappers: Array<ReturnType<typeof mount>> = []
+function runningState(id = 's', workItemTitle = '工作a') {
+  const session = { id, workItemId: 'a', projectId: 'p', startedAt: new Date(), allocatedDurationMs: 120000 }
+  return { session, workItemTitle, runningSessions: [{ session, workItemTitle }], resumeItems: [], recentItems: [], rowVersion: 1, serverNow: new Date() } as never
+}
 function item(id: string, projectName = '项目甲'): TimerCandidate {
   return { workItemId: id, projectId: `${id}-project`, projectName, itemNo: `TASK-${id}`, title: `工作${id}`,
     contentName: '任务', contentCode: 'TASKS', contentColorToken: WorkItemLabelColorToken.BrightBlue, statusCategory: 'TODO', assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }
@@ -48,7 +54,7 @@ function desktop(state: Record<string, unknown> = {}, extra: Record<string, unkn
 }
 beforeEach(() => {
   vi.useFakeTimers(); vi.clearAllMocks(); vi.stubGlobal('yumpooDesktop', undefined)
-  tracker.current.value = { session: null, recentItems: [], rowVersion: 0 } as never
+  tracker.current.value = { session: null, runningSessions: [], resumeItems: [], recentItems: [], rowVersion: 0 } as never
   tracker.busy.value = false; tracker.problem.value = ''; tracker.connected.value = true
   tracker.savedAt.value = 0
   vi.mocked(tracker.start).mockResolvedValue(true)
@@ -100,7 +106,7 @@ describe('personal cross-project timer picker', () => {
     expect(wrapper.find('.orb-capsule').exists()).toBe(false)
   })
   it('swaps the time for the play/pause control inside the orb while hovered and keeps the capsule for context', async () => {
-    tracker.current.value = { session: { id: 's', workItemId: 'a' }, workItemTitle: '工作a', recentItems: [], rowVersion: 1 } as never
+    tracker.current.value = runningState()
     const wrapper = await panel(false)
     expect(wrapper.get('.orb-shell').classes()).not.toContain('is-control')
     expect(wrapper.get('.orb-disc').text()).toContain('02:00')
@@ -109,7 +115,7 @@ describe('personal cross-project timer picker', () => {
     expect(wrapper.get('.orb-shell').classes()).toContain('is-control')
     expect(wrapper.find('.orb-capsule').exists()).toBe(false)
     await wrapper.get('.orb-disc [aria-label="暂停计时"]').trigger('click')
-    expect(tracker.stop).toHaveBeenCalledOnce()
+    expect(tracker.stopAll).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(360)
     expect(wrapper.get('.capsule-title').text()).toBe('工作a')
     expect(wrapper.get('.capsule-time').text()).toBe('0:02:00')
@@ -148,7 +154,7 @@ describe('personal cross-project timer picker', () => {
     expect(wrapper.find('input[role="combobox"]').exists()).toBe(true)
   })
   it('hands a press that travels on the orb control to the shell as a window drag instead of a click', async () => {
-    tracker.current.value = { session: { id: 's', workItemId: 'a' }, workItemTitle: '工作a', recentItems: [], rowVersion: 1 } as never
+    tracker.current.value = runningState()
     let dragging!: (value: boolean) => void
     const dragWindow = vi.fn(async () => undefined)
     const bridge = desktop({}, { dragWindow, onDragging: (listener: typeof dragging) => { dragging = listener; return vi.fn() } })
@@ -166,17 +172,17 @@ describe('personal cross-project timer picker', () => {
     await control.trigger('pointerup', { pointerId: 7 })
     await control.trigger('click')
     expect(dragWindow).toHaveBeenLastCalledWith(false)
-    expect(tracker.stop).not.toHaveBeenCalled()
+    expect(tracker.stopAll).not.toHaveBeenCalled()
     bridge.hover(true); await vi.advanceTimersByTimeAsync(400)
     expect(bridge.setOrbLayout).not.toHaveBeenCalled()
     dragging(false); await flushPromises()
     await control.trigger('pointerdown', { button: 0, pointerId: 8, screenX: 100, screenY: 100 })
     await control.trigger('pointerup', { pointerId: 8 })
     await control.trigger('click')
-    expect(tracker.stop).toHaveBeenCalledOnce()
+    expect(tracker.stopAll).toHaveBeenCalledOnce()
   })
   it('loads project context when opened directly as an orb and waits for save confirmation', async () => {
-    tracker.current.value = { session: { id: 's', workItemId: 'a', projectId: 'p' }, workItemTitle: '工作a', recentItems: [], rowVersion: 1 } as never
+    tracker.current.value = runningState()
     const wrapper = await panel(false)
     expect(wrapper.find('.capsule-project').exists()).toBe(false)
     await wrapper.get('.orb-layout').trigger('pointerenter'); await vi.advanceTimersByTimeAsync(360)
@@ -185,7 +191,7 @@ describe('personal cross-project timer picker', () => {
     tracker.busy.value = true; await flushPromises()
     expect(wrapper.text()).not.toContain('已保存')
     tracker.busy.value = false
-    tracker.current.value = { session: null, recentItems: [{ workItemId: 'a', projectId: 'p', title: '工作a' }], rowVersion: 2 } as never
+    tracker.current.value = { session: null, runningSessions: [], resumeItems: [], recentItems: [{ workItemId: 'a', projectId: 'p', title: '工作a' }], rowVersion: 2 } as never
     tracker.savedAt.value = Date.now(); await vi.advanceTimersByTimeAsync(50); await flushPromises()
     expect(wrapper.get('.saved-feedback').text()).toBe('已保存')
     await vi.advanceTimersByTimeAsync(2700)
@@ -208,7 +214,7 @@ describe('personal cross-project timer picker', () => {
     expect(tracker.start).not.toHaveBeenCalled()
   })
   it('renders the edge dock and slides its card out from native hover', async () => {
-    tracker.current.value = { session: { id: 's', workItemId: 'a', projectId: 'p' }, workItemTitle: '工作a', recentItems: [], rowVersion: 1 } as never
+    tracker.current.value = runningState()
     const dock = { size: 96, side: null, detailWidth: 0, canvas: { left: 10, top: 10, width: 298, height: 172 }, dock: { side: 'right' as const, expanded: false } }
     const bridge = desktop({ orb: dock }, { setOrbLayout: vi.fn(async (change: { details?: boolean }) => ({ ...dock, dock: { side: 'right', expanded: !!change.details } })) })
     const wrapper = await panel(false)
@@ -219,7 +225,7 @@ describe('personal cross-project timer picker', () => {
     expect(wrapper.get('.dock-title').text()).toBe('工作a')
     expect(wrapper.get('.dock-status').text()).toBe('计时中')
     await wrapper.get('.dock-card [aria-label="暂停计时"]').trigger('click')
-    expect(tracker.stop).toHaveBeenCalledOnce()
+    expect(tracker.stopAll).toHaveBeenCalledOnce()
     bridge.hover(false); await vi.advanceTimersByTimeAsync(300); await flushPromises()
     expect(wrapper.find('.dock-card').exists()).toBe(false)
     expect(bridge.setOrbLayout).toHaveBeenLastCalledWith({ details: false })
@@ -291,7 +297,7 @@ describe('personal cross-project timer picker', () => {
     expect(wrapper.text()).not.toContain('工作old')
   })
   it('deduplicates repeated pages and never repeats the running work item', async () => {
-    tracker.current.value = { session: { id: 'session', workItemId: 'a', projectId: 'p' }, workItemTitle: '正在做', recentItems: [], rowVersion: 1 } as never
+    tracker.current.value = runningState('session', '正在做')
     api.listTimerCandidates.mockResolvedValueOnce({ items: [item('a'), item('b')], nextOffset: 2 })
     const wrapper = await panel()
     expect(wrapper.findAll('[role="option"]')).toHaveLength(1)
@@ -319,7 +325,7 @@ describe('personal cross-project timer picker', () => {
     const wrapper = await panel(false)
     await wrapper.trigger('keydown', { key: 'Escape' })
     expect(wrapper.emitted('hide')).toHaveLength(1)
-    expect(tracker.stop).not.toHaveBeenCalled()
+    expect(tracker.stopAll).not.toHaveBeenCalled()
   })
   it('uses stable category glyphs, keeps project names and removes explanatory row copy', async () => {
     api.listTimerCandidates.mockResolvedValueOnce({ items: [

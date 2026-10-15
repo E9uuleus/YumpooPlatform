@@ -1,8 +1,10 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+const api = vi.hoisted(() => ({ listMyTimeSessions: vi.fn() }))
+vi.mock('../../api/client', () => ({ timeTrackingApi: api }))
 import TimeSessionForm from './TimeSessionForm.vue'
 const props = { start: '2026-09-07T13:00:00', end: '2026-09-07T14:00:00', timezone: 'Asia/Shanghai', editing: false, busy: false }
-beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-07T08:00:00Z')) })
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-07T08:00:00Z')); api.listMyTimeSessions.mockResolvedValue({ items: [] }) })
 afterEach(() => vi.useRealTimers())
 describe('手动计时日历', () => {
   it('从两周展开完整日历，支持闰年二月并禁用未来日期', async () => {
@@ -35,6 +37,18 @@ describe('手动计时日历', () => {
     await wrapper.get('.expand-calendar').trigger('click')
     expect(wrapper.get('h4').text()).toBe('2026年9月')
     expect(wrapper.get('[aria-label="2026-09-07"]').attributes('aria-pressed')).toBe('true')
+    wrapper.unmount()
+  })
+  it('只有与已有记录重叠时才显示处理方式，默认只填空白', async () => {
+    const wrapper = mount(TimeSessionForm, { props: { ...props, workItemId: 'item' } })
+    await flushPromises()
+    expect(wrapper.find('.overlap-mode').exists()).toBe(false)
+    api.listMyTimeSessions.mockResolvedValue({ items: [{ session: { id: 's', workItemId: 'other', projectId: 'p', startedAt: new Date('2026-09-07T05:30:00Z'),
+      stoppedAt: new Date('2026-09-07T06:30:00Z'), canEdit: true, etag: '"0"' }, title: '其他工作', itemNo: 'T-9', projectName: '项目', contentColorToken: null }] })
+    await wrapper.setProps({ end: '2026-09-07T14:30:00' })
+    await flushPromises()
+    expect(wrapper.get('.overlap-mode [aria-checked="true"]').text()).toBe('只填空白')
+    expect(wrapper.get('.overlap-mode__effect').text()).toContain('补录 30m，跳过已有记录的 1h')
     wrapper.unmount()
   })
 })

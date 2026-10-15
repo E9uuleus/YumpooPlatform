@@ -11,8 +11,8 @@ Status: implemented
 - 项目统计使用固定模板，组件定义在前端，任何人都不能编辑模板；服务端强制范围为路径项目。展开视图复用工作项表格，可按原工作项权限修改数据。
 - 可见性走 `ProjectAccessSnapshotQuery`：项目负责人、成员和未加入项目的公司管理员可读，后者只读。归档或不可见项目返回 404。
 - workitem 提供项目作用域入口 `projectCharts`、`projectChartItems`、`projectTable` 和 `projectTimeEntries`；共享表格请求中的 `projectId` 不覆盖路径项目。
-- 全局筛选 `includeArchived=true`；计数类组件在组件级排除已归档工作项；累计耗时包含已归档工作项。逾期为 TODO 或 IN_PROGRESS 且截止日期不晚于公司时区的昨天。
-- 周工作项按成员和工作项汇总，按公司时区切分自然日，运行中计时统计到 `asOf`，区间最多 93 天。`projectMember` 标识成员当前是否仍在项目内，已离开者保留工时并显示标签。
+- 全局筛选 `includeArchived=true`；计数类组件在组件级排除已归档工作项；累计耗时使用按并行均摊后的计入时长，包含已归档工作项，不汇总父项，见[并行计时口径](../architecture/2026-10-14-parallel-time-tracking.md)。逾期为 TODO 或 IN_PROGRESS 且截止日期不晚于公司时区的昨天。
+- 周工作项按成员和工作项汇总按并行均摊后的计入时长，按公司时区切分自然日，运行中计时统计到 `asOf`，区间最多 93 天。`projectMember` 标识成员当前是否仍在项目内，已离开者保留工时并显示标签。
 - [私人仪表板](2026-09-16-personal-dashboards.md)的 `MemberProjectQuery` 成员边界保持不变；项目统计不需要私人仪表板行或共享配置。
 
 ## Alternatives considered
