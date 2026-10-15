@@ -12,6 +12,8 @@ Release 发布即为上线决定。主机初始化、Environment 配置和发布
 
 发布工作流按同一 source commit、CI run 和 attempt 选择已验证服务器包，核对 required checks、产物清单、文件大小和 SHA-256，再把原包及来源清单保存为 Release 附件。任一绑定不一致、产物过期或缺失、校验失败都在服务器切换前失败；不能改为取“最新成功包”或在发布阶段重新构建。重试复用已记录的同一来源，不能替换同名附件为不同内容。
 
+服务器通过 GitHub API 获取 Release 附件的 `digest` 和大小，核对上传的 `provenance.json` 原始字节及 ZIP；随后独立检查标签、同次 CI 和提交前进关系。来源清单无需再次经过 Release 下载域名，缺失或不一致的附件摘要仍然拒绝。
+
 GitHub 托管 runner 使用 `wecom-dev` Environment，配置 secrets `WINDOWS_DEPLOY_HOST`、`WINDOWS_DEPLOY_SSH_KEY`、`WINDOWS_DEPLOY_KNOWN_HOSTS`；variable `WINDOWS_DEPLOY_PORT` 缺省为 `22`。`known_hosts` 必须预先从可信管理通道确认，不能在工作流中临时接受扫描结果。数据库密码、企微 Secret、证书私钥和恢复凭据继续留在服务器。非管理员账号固定为 `yumpoo-deploy`，只能上传暂存文件、触发固定任务及查询结果。高权限任务执行管理员安装的 `cd` 引擎，不从上传 ZIP 运行 PowerShell 脚本；更新引擎属于管理员维护操作。
 
 Release 附件固定为 `yumpoo-windows-server-m1-15.zip`、`yumpoo-windows-server-m1-15.zip.sha256`、`artifact-manifest.json`、`provenance.json`。已存在附件只允许内容一致地复用，不用覆盖选项替换。首次发布使用 `release.published`；失败后优先重跑同一次 Actions run。手工恢复入口为 `workflow_dispatch`，UI 要求工作流已存在于默认分支；可用的 CLI 入口仍须指定原 tag，工作流自身会核对执行 ref 与请求 tag 一致：

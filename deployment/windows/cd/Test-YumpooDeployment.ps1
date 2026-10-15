@@ -101,6 +101,21 @@ try {
     Assert-Test $rejected 'equal-sized modified parts must fail the original package checksum before any network or deployment action'
     Write-Host 'Multipart and legacy upload assembly, missing/oversized parts and tamper rejection passed.'
 
+    $provenanceFile = Join-Path $testRoot 'provenance.json'
+    [IO.File]::WriteAllText($provenanceFile, '{"schemaVersion":1,"tag":"server-v1"}')
+    $asset = [pscustomobject]@{ digest = ('sha256:' + (Get-FileHash -LiteralPath $provenanceFile).Hash.ToLowerInvariant()); size = (Get-Item -LiteralPath $provenanceFile).Length }
+    $trusted = Read-YumpooReleaseProvenance $asset $provenanceFile
+    Assert-Test ($trusted.tag -ceq 'server-v1') 'provenance must match the Release asset digest and preserve its JSON contents'
+    foreach ($invalidAsset in @([pscustomobject]@{ size = $asset.size }, [pscustomobject]@{ digest = ''; size = $asset.size }, [pscustomobject]@{ digest = $asset.digest; size = ($asset.size + 1) })) {
+        $rejected = $false
+        try { $null = Read-YumpooReleaseProvenance $invalidAsset $provenanceFile } catch { $rejected = $true }
+        Assert-Test $rejected 'missing/malformed digest or incorrect asset size must fail closed'
+    }
+    [IO.File]::WriteAllText($provenanceFile, '{"schemaVersion":1,"tag":"server-v2"}')
+    $rejected = $false
+    try { $null = Read-YumpooReleaseProvenance $asset $provenanceFile } catch { $rejected = $true }
+    Assert-Test $rejected 'equal-sized modified provenance must fail the trusted Release asset digest'
+
     if ($PgBin) {
         $pgData = Join-Path $testRoot 'postgres'
         $listener = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)

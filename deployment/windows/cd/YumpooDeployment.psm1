@@ -266,7 +266,14 @@ function Get-YumpooGitHub($Path) {
     Invoke-RestMethod -Uri "https://api.github.com/repos/E9uuleus/YumpooPlatform/$Path" -Headers @{ 'User-Agent' = 'YumpooDeploy'; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } -TimeoutSec 30
 }
 
-function Assert-YumpooSource($Request, $Provenance, $Package, $Current) {
+function Read-YumpooReleaseProvenance($Asset, $Path) {
+    if ($Asset.digest -notmatch '^sha256:[0-9a-f]{64}$' -or
+        $Asset.digest -cne ('sha256:' + (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()) -or
+        $Asset.size -ne (Get-Item -LiteralPath $Path).Length) { throw 'GitHub Release provenance digest or size mismatch.' }
+    return (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json)
+}
+
+function Assert-YumpooSource($Request, $Provenance, $Package, $Current, $ProvenancePath) {
     if ($Request.schemaVersion -ne 1 -or $Request.requestId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') { throw 'Invalid deployment request.' }
     if ($Provenance.schemaVersion -ne 1 -or $Provenance.repository -cne 'E9uuleus/YumpooPlatform' -or
         $Provenance.tag -notmatch '^server-v[A-Za-z0-9][A-Za-z0-9._-]{0,95}$' -or $Provenance.sourceCommit -notmatch '^[0-9a-f]{40}$' -or
@@ -281,15 +288,15 @@ function Assert-YumpooSource($Request, $Provenance, $Package, $Current) {
     $asset = @($release.assets | Where-Object name -eq 'provenance.json')
     $packageAsset = @($release.assets | Where-Object name -eq 'yumpoo-windows-server-m1-15.zip')
     if ($asset.Count -ne 1 -or $packageAsset.Count -ne 1) { throw 'Release source assets are missing or ambiguous.' }
-    $trusted = Invoke-RestMethod -Uri $asset[0].browser_download_url -TimeoutSec 30
-    if ($trusted -is [string]) { $trusted = $trusted | ConvertFrom-Json }
+    $trusted = Read-YumpooReleaseProvenance $asset[0] $ProvenancePath
     foreach ($field in @('schemaVersion', 'repository', 'tag', 'sourceCommit', 'ciRunId', 'ciRunAttempt', 'artifactName', 'packageSha256', 'packageBytes')) {
         if ([string]$Provenance.$field -cne [string]$trusted.$field) { throw "Release provenance mismatch: $field" }
     }
     if ($packageAsset[0].digest -cne "sha256:$($Provenance.packageSha256)") { throw 'GitHub Release package digest mismatch.' }
     $tagCommit = Get-YumpooGitHub "commits/$($Provenance.tag)"
     if ($tagCommit.sha -cne $Provenance.sourceCommit) { throw 'Release tag moved.' }
-    $dev = Get-YumpooGitHub "compare/$($Provenance.sourceCommit)...dev"
+    # Only ancestry status is needed; page 2 omits the potentially large changed-file list.
+    $dev = Get-YumpooGitHub "compare/$($Provenance.sourceCommit)...dev?per_page=1&page=2"
     if ($dev.status -notin @('ahead', 'identical')) { throw 'Release is not a dev ancestor.' }
     $run = Get-YumpooGitHub "actions/runs/$($Provenance.ciRunId)/attempts/$($Provenance.ciRunAttempt)"
     if ($run.head_sha -cne $Provenance.sourceCommit -or $run.head_branch -cne 'dev' -or $run.event -cne 'push' -or
@@ -301,7 +308,7 @@ function Assert-YumpooSource($Request, $Provenance, $Package, $Current) {
     }
     if ($Provenance.artifactName -cne "m1-15-server-$($Provenance.sourceCommit)-$($Provenance.ciRunAttempt)") { throw 'CI artifact name does not match attempt.' }
     if ($Current -and $Current.sourceCommit -cne $Provenance.sourceCommit) {
-        $forward = Get-YumpooGitHub "compare/$($Current.sourceCommit)...$($Provenance.sourceCommit)"
+        $forward = Get-YumpooGitHub "compare/$($Current.sourceCommit)...$($Provenance.sourceCommit)?per_page=1&page=2"
         if ($forward.status -cne 'ahead') { throw 'Automatic downgrade or divergent deployment is forbidden.' }
     }
 }

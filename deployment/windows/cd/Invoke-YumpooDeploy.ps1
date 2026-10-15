@@ -50,7 +50,7 @@ try {
             $package = Copy-YumpooUpload $folder.FullName $work $request $provenance
             $currentFile = Join-Path $deployment 'engine/current.json'
             $current = Get-Content -LiteralPath $currentFile -Raw | ConvertFrom-Json
-            Assert-YumpooSource $request $provenance $package $current
+            Assert-YumpooSource $request $provenance $package $current (Join-Path $work 'provenance.json')
             if ($current.sourceCommit -ceq $provenance.sourceCommit) {
                 Test-YumpooSite $settings -Public
                 Publish-Status 'succeeded' 'already_current'
