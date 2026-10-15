@@ -48,7 +48,7 @@ function fixture(t) {
       if (endpoint === `/git/ref/tags/${tag}`) return { object: { type: 'commit', sha } }
       if (endpoint === `/compare/${sha}...dev?per_page=1`) return { status: 'ahead', merge_base_commit: { sha } }
       if (endpoint === `/releases/tags/${tag}`) return { id: 7, tag_name: tag, draft: false, published_at: '2026-10-15T00:00:00Z' }
-      if (endpoint === '/actions/workflows/m0-18-ci.yml') return { id: 42, name: 'Platform CI', path: ciWorkflowPath }
+      if (endpoint === '/actions/workflows/m0-18-ci.yml') return { id: 42, name: 'M0-18 CI', path: ciWorkflowPath }
       if (endpoint === '/actions/runs/1001/attempts/2') return this.run
       throw new Error(`Unexpected GitHub request: ${endpoint}`)
     },
@@ -93,7 +93,7 @@ function fixture(t) {
   return { github, prepare, root }
 }
 
-test('promotes the original CI bytes and pins provenance before any package upload', async t => {
+test('promotes verified CI bytes despite stale registry display name and pins provenance before upload', async t => {
   const { github, prepare } = fixture(t)
   github.runs.unshift({ ...github.run, id: 2000, event: 'pull_request' })
   const result = await prepare()

@@ -109,7 +109,6 @@ export async function prepareRelease({ github, tag, env, directory, promote = tr
   }
   const workflow = await github.get(`/actions/workflows/${path.posix.basename(ciWorkflowPath)}`)
   assert.equal(workflow.path, ciWorkflowPath, 'Unexpected CI workflow path')
-  assert.equal(workflow.name, 'Platform CI', 'Unexpected CI workflow name')
   assert(Number.isSafeInteger(workflow.id) && workflow.id > 0, 'Invalid CI workflow ID')
   const assets = indexAssets(await github.list(`/releases/${release.id}/assets?per_page=100`))
   const retained = path.join(directory, 'release')
