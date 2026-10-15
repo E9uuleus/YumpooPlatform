@@ -12,7 +12,7 @@ Status: implemented
 
 候选行只显示类别图形、标题和项目名，移除首字符方块、来源标签、累计说明、编号副行与操作教学。类别使用后端稳定 `contentCode` 映射任务、需求与缺陷 SVG，颜色复用内容目录的 `contentColorToken` 和现有标签色令牌；名称改动不改变图标，自定义类别使用独立通用图形。两个新增字段可选，旧响应仍可显示通用图形。数字滚动、按钮按压与保存勾选使用 CSS/Vue 过渡，并尊重系统减少动态效果的偏好。选择器、焦点卡与紧凑界面详情均不为工作项添加额外悬停 Tooltip 或原生 `title` 提示。
 
-`GET /me/time-tracker/candidates` 是 actor-scoped 只读查询，PERSONAL/ALL 范围及分页有明确上限。workitem 通过 catalog 的公开 `ProjectAccessSnapshotQuery.findWritableProjects` 获取当前公司内、活动成员可写且未归档的项目，随后在本模块 SQL 内搜索并分页。最近信息来自本人未删除的 TIMER 会话，累计使用本人按并行均摊后的计入时长，不在客户端逐项目扫描，也不新增推荐事实；分摊持久化由[并行计时决策](../architecture/2026-10-14-parallel-time-tracking.md)负责。公司管理员的只读可见性不因此扩大为计时权限；真正启停仍由既有命令校验授权和版本。
+`GET /me/time-tracker/candidates` 是 actor-scoped 只读查询，PERSONAL/ALL 范围及分页有明确上限。workitem 通过 catalog 的公开 `ProjectAccessSnapshotQuery.findWritableProjects` 获取当前公司内、活动成员可写且未归档的项目，随后在本模块 SQL 内搜索并分页。最近信息来自本人未删除的计时或手动补录会话（[我的一天时间线填报](2026-10-15-my-day-timeline-and-timer-opt-out.md)将手动补录纳入，继续计时的 `resumeItems` 仍只看计时器会话），累计使用本人按并行均摊后的计入时长，不在客户端逐项目扫描，也不新增推荐事实；分摊持久化由[并行计时决策](../architecture/2026-10-14-parallel-time-tracking.md)负责。公司管理员的只读可见性不因此扩大为计时权限；真正启停仍由既有命令校验授权和版本。
 
 Electron 使用一个共享认证 partition 的透明无边框小窗口承载紧凑界面与工作项窗口；尺寸、透明画布、原生裁剪、拖动后的约束与吸附由[桌面计时界面决策](2026-09-24-desktop-timer-surfaces.md)负责。重复进入紧凑模式或显示已经可见的非激活浮窗不会重新设置几何或显示窗口，以免原生旧帧与异步 Vue 布局不同步导致闪烁。紧凑界面背景可原生拖动，启停与其他按钮排除拖动。可切换置顶，隐藏不暂停。工具栏主动打开选择器，表格启动时非激活地显示紧凑界面，进入项目不自动弹出。
 
