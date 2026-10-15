@@ -65,10 +65,12 @@ Status: implemented
 
 ## Verification
 
-Web 模型与组件回归覆盖短空白拒绝、临近现在时向上补足、短记录和跨零点尾段分列、按时长排入预留有效尾段、搜索范围和项目筛选状态、计时器设置保存互斥，以及关闭月历明细后取消延迟切换。均摊测试独立使用真实时段，确保绘制外延不会改变计入时长。
+原计时器开关、改归属与独占决策的验证见 [PR #117](https://github.com/E9uuleus/YumpooPlatform/pull/117)：`pnpm run check:openapi`、对当时 `origin/dev` 基线的 OpenAPI 兼容检查、`pnpm run validate:event-contracts`、`pnpm run test:architecture`、`pnpm lint`（0 error）、`pnpm typecheck`、`pnpm test` 与 `pnpm build` 通过。后端单元测试通过，既有符号链接用例在 Windows 跳过；本机实际通过的集成测试包括 `TimeTrackingHttpIT`、`WorkItemHttpIT`、`DashboardHttpIT`、`ProjectStatisticsHttpIT`、`ProjectPurgeIT`、`ActivityProjectionIT` 和 `YumpooServerApplicationIT`。本机内存不足导致全量集成测试进程崩溃，其余集成测试未在本机复跑，以 CI 结果为准。
 
 既有 HTTP 回归确认独占目标记录可以只删除其他记录，计时器关闭会停止跨项目的全部运行计时，重新开启不会自动恢复。Web 组件回归覆盖仅删除、裁剪或拆分重叠记录、没有实际变化，以及覆盖补录仅删除和只填空白无变化时的反馈。
 
-本机交互验收覆盖拖选和就地补录、移动拉伸、从侧栏拖入、按时长预览、短记录分列、真实重叠标识、时间轴时段、计时器开关同步与关闭确认、月历明细进入路径及浅色和深色主题。桌面回归覆盖计时器控制器、preload 与渲染页面；托盘实点操作不在此验证范围内。
+执行 V78 的隔离 PostgreSQL 与后端联调确认：A 改归属到 C 后当天合计仍为 1 小时；独占后删除 B、保留 C 的完整 1 小时并正确提示；关闭计时器停止两项运行计时、隐藏 Web 入口及真实 Electron 计时器窗口，重新开启后运行数仍为 0。桌面联调使用生产计时器控制器、preload 与渲染页面组成的独立启动器；托盘操作的实点验收不在此验证范围内。
 
-验证命令为 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm run doc-sync` 和 `pnpm run test:agent-notes`。具体执行次数、结果数量和本机环境差异记录在 PR 中。
+时间线刷新的验证见 [PR #121](https://github.com/E9uuleus/YumpooPlatform/pull/121)：Web 模型与组件回归覆盖短空白拒绝、临近现在时向上补足、现在线及未来区域不能发起补录、短记录和跨零点尾段分列、按时长排入预留有效尾段、搜索范围和项目筛选状态、计时器设置保存互斥，以及关闭月历明细后取消延迟切换。均摊测试独立使用真实时段，确保绘制外延不会改变计入时长。
+
+本机交互验收覆盖拖选和就地补录、移动拉伸、从侧栏拖入、按时长预览、短记录分列、真实重叠标识、时间轴时段、计时器开关同步与关闭确认、月历明细进入路径及浅色和深色主题。时间线刷新通过 `pnpm lint`（0 error）、`pnpm typecheck`、`pnpm test`、`pnpm run doc-sync` 和 `pnpm run test:agent-notes`；执行数量和本机运行细节记录在 PR #121 中。

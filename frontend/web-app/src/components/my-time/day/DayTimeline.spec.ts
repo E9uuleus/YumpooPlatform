@@ -76,6 +76,22 @@ describe('当天时间线', () => {
     wrapper.unmount()
   })
 
+  it.each([7, 12])('从现在线或未来区域拖动不发起补录，也不提示空白不足（起点 10:%i）', async minute => {
+    const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({ close: () => undefined }))
+    const wrapper = mountTimeline([], at(10, 7))
+    const canvas = wrapper.get('.day-timeline__canvas').element
+    for (const endMinute of [minute + 5, minute - 20]) {
+      canvas.dispatchEvent(pointer('pointerdown', y(10 * 60 + minute)))
+      canvas.dispatchEvent(pointer('pointermove', y(10 * 60 + endMinute)))
+      await wrapper.vm.$nextTick()
+      expect(wrapper.find('.day-selection').exists()).toBe(false)
+      canvas.dispatchEvent(pointer('pointerup', y(10 * 60 + endMinute)))
+    }
+    expect(wrapper.emitted('create')).toBeUndefined()
+    expect(warning).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it.each([7, 10])('拒绝只有 %i 分钟的空白并说明原因', async minutes => {
     const warning = vi.spyOn(ElMessage, 'warning').mockImplementation(() => ({ close: () => undefined }))
     const wrapper = mountTimeline([block('a', at(9), at(10)), block('b', at(10, minutes), at(11))], at(10, minutes))

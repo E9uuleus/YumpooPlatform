@@ -184,8 +184,10 @@ const onEmpty = (event: Event) => !(event.target as HTMLElement).closest('.day-b
 
 function pointerdown(event: PointerEvent) {
   if (event.button !== 0 || props.limit <= props.bounds.start || !onEmpty(event)) return
+  const raw = timeAt(event)
+  if (raw >= props.limit) return
   const at = snapped(event)
-  selection.value = { pointerId: event.pointerId, anchor: at, point: at, raw: timeAt(event), startY: event.clientY, moved: false,
+  selection.value = { pointerId: event.pointerId, anchor: at, point: at, raw, startY: event.clientY, moved: false,
     touch: event.pointerType === 'touch' }
   // Touch keeps native scrolling; a tap still opens an hour, and the composer's time fields adjust it.
   if (event.pointerType !== 'touch') canvas.value!.setPointerCapture(event.pointerId)
