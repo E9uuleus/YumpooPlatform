@@ -20,6 +20,7 @@ public interface TimeTrackingRepository {
     List<UUID> runningUserIds(UUID companyId, UUID projectId);
     Optional<Session> find(UUID companyId, UUID sessionId);
     List<Session> history(UUID companyId, UUID workItemId, boolean includeChildren, Instant before, UUID beforeId, int limit);
+    List<MySessionRow> mySessions(UUID companyId, UUID userId, Instant from, Instant to);
     boolean sameItemOverlaps(UUID companyId, UUID userId, UUID workItemId, Instant start, Instant stop, UUID excludedId);
     void save(Session session);
     void advanceProjects(UUID companyId, Collection<UUID> projectIds);

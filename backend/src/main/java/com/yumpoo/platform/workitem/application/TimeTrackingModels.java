@@ -29,6 +29,22 @@ public final class TimeTrackingModels {
     public record SessionPage(List<TimeTrackingSession> items, String nextCursor,
             TimeTrackingSummary summary, Instant serverNow, boolean canCreate) {}
 
+    public record MySessionRow(Session session, String itemNo, String title,
+            String contentColorToken, boolean archived, boolean itemDeleted) {}
+
+    public record MyTimeSession(TimeTrackingSession session, String projectName, String itemNo,
+            String title, String contentColorToken) {}
+
+    public record MyTimeSessionPage(List<MyTimeSession> items, Instant serverNow) {}
+
+    public enum TimeSessionFillMode { PARALLEL, REPLACE, GAPS }
+
+    public record TimeSessionFillEntry(UUID workItemId, Instant startedAt, Instant stoppedAt) {}
+
+    public record TimeSessionFillCommand(TimeSessionFillMode mode, List<TimeSessionFillEntry> entries) {}
+
+    public record TimeSessionFillResult(int createdCount, int changedCount, int deletedCount, long skippedDurationMs) {}
+
     public record RecentTimeTrackingItem(UUID workItemId, UUID projectId, String title) {}
 
     public record TimerCandidate(UUID workItemId, UUID projectId, String projectName, String itemNo,

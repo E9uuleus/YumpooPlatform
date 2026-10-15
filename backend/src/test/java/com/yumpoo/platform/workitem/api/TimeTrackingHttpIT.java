@@ -252,6 +252,42 @@ class TimeTrackingHttpIT {
         assertThat(total).isBetween(actualDuration-1,actualDuration);
     }
 
+    @Test
+    void fillSupportsParallelReplacementAndGapsWithIdempotentReplay() throws Exception {
+        ok(mutate("POST","/api/v1/work-items/"+source.itemId()+"/time-sessions",member,
+                json.writeValueAsString(Map.of("startedAt","2026-09-01T08:00:00Z","stoppedAt","2026-09-01T12:00:00Z")),null));
+        UUID key=UUID.randomUUID();
+        String parallel=fillBody("PARALLEL",target.itemId(),"09:00","10:00");
+        var first=mutate("POST","/api/v1/me/time-sessions/fill",member,parallel,null,key);
+        assertThat(ok(first).path("createdCount").asInt()).isOne();
+        assertThat(mutate("POST","/api/v1/me/time-sessions/fill",member,parallel,null,key).body()).isEqualTo(first.body());
+        JsonNode replaced=ok(mutate("POST","/api/v1/me/time-sessions/fill",member,
+                fillBody("REPLACE",target.itemId(),"10:00","11:00"),null));
+        assertThat(replaced.path("createdCount").asInt()).isEqualTo(2);
+        assertThat(replaced.path("changedCount").asInt()).isOne();
+        assertThat(replaced.path("deletedCount").asInt()).isZero();
+        var sourceRows=ok(get("/api/v1/work-items/"+source.itemId()+"/time-sessions",member)).path("items");
+        assertThat(sourceRows).hasSize(2);
+        long sourceAllocated=0;
+        for(JsonNode row:sourceRows) sourceAllocated+=row.path("allocatedDurationMs").asLong();
+        assertThat(sourceAllocated).isEqualTo(9000000);
+        UUID third=UUID.fromString(createItem(source.id(),"补录空白").path("id").asText());
+        JsonNode gaps=ok(mutate("POST","/api/v1/me/time-sessions/fill",member,fillBody("GAPS",third,"07:00","13:00"),null));
+        assertThat(gaps.path("createdCount").asInt()).isEqualTo(2);
+        assertThat(gaps.path("skippedDurationMs").asLong()).isEqualTo(4*3600000L);
+        JsonNode day=ok(get("/api/v1/me/time-sessions?from=2026-09-01T07:00:00Z&to=2026-09-01T13:00:00Z",member));
+        assertThat(day.path("items")).hasSize(6);
+        long total=0;
+        for(JsonNode row:day.path("items")) total+=row.path("session").path("allocatedDurationMs").asLong();
+        assertThat(total).isEqualTo(6*3600000L);
+        assertThat(stateVersion()).isZero();
+    }
+
+    private String fillBody(String mode,UUID item,String start,String stop) {
+        return json.writeValueAsString(Map.of("mode",mode,"entries",List.of(Map.of("workItemId",item,
+                "startedAt","2026-09-01T"+start+":00Z","stoppedAt","2026-09-01T"+stop+":00Z"))));
+    }
+
     private Actor actor(String name) {
         UUID user = users.provision("timer-purge-" + name + "-" + UUID.randomUUID(), "计时清除 " + name).userId();
         return new Actor(user, sessions.issueWebSession(user, "timer-purge-http"));
@@ -353,9 +389,12 @@ class TimeTrackingHttpIT {
         return http.send(HttpRequest.newBuilder(uri(path)).timeout(Duration.ofSeconds(30)).header("Cookie", cookies(actor)).GET().build(), HttpResponse.BodyHandlers.ofString());
     }
     private HttpResponse<String> mutate(String method, String path, Actor actor, String body, String etag) throws Exception {
+        return mutate(method,path,actor,body,etag,UUID.randomUUID());
+    }
+    private HttpResponse<String> mutate(String method, String path, Actor actor, String body, String etag,UUID key) throws Exception {
         var request = HttpRequest.newBuilder(uri(path)).timeout(Duration.ofSeconds(30))
                 .header("Cookie", cookies(actor)).header("X-XSRF-TOKEN", actor.session().csrfCredential().value())
-                .header("Idempotency-Key", UUID.randomUUID().toString());
+                .header("Idempotency-Key", key.toString());
         if (etag != null) request.header("If-Match", etag);
         if (!body.isEmpty()) request.header("Content-Type", "application/json");
         return http.send(request.method(method, body.isEmpty() ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());

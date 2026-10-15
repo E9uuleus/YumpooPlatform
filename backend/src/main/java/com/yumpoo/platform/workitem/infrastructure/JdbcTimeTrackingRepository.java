@@ -118,6 +118,19 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
                 .param("c", companyId).param("u", userId).param("w",workItemId).param("excluded", excludedId)
                 .param("start", Timestamp.from(start)).param("stop", Timestamp.from(stop)).query(Boolean.class).single();
     }
+    public List<MySessionRow> mySessions(UUID companyId,UUID userId,Instant from,Instant to) {
+        return jdbc.sql("""
+            SELECT s.*,w.item_no,w.title,w.archived,w.deleted_at AS item_deleted_at,c.color_token
+            FROM yumpoo.work_item_time_session s
+            JOIN yumpoo.work_item w ON w.company_id=s.company_id AND w.id=s.work_item_id
+            JOIN yumpoo.content c ON c.company_id=w.company_id AND c.id=w.content_id
+            WHERE s.company_id=:c AND s.user_id=:u AND s.deleted_at IS NULL
+              AND s.started_at<:to AND (s.stopped_at IS NULL OR s.stopped_at>:from)
+            ORDER BY s.started_at,s.id
+            """).param("c",companyId).param("u",userId).param("from",Timestamp.from(from)).param("to",Timestamp.from(to))
+                .query((rs,n) -> new MySessionRow(map(rs,n),rs.getString("item_no"),rs.getString("title"),
+                        rs.getString("color_token"),rs.getBoolean("archived"),rs.getTimestamp("item_deleted_at")!=null)).list();
+    }
     public void save(Session s) {
         jdbc.sql("""
             INSERT INTO yumpoo.work_item_time_session(id,company_id,project_id,work_item_id,user_id,started_at,stopped_at,source,row_version,deleted_at,change_reason)

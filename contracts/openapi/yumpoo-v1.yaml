@@ -1811,6 +1811,52 @@ paths:
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
+  /me/time-sessions:
+    get:
+      tags: [TimeTracking]
+      operationId: listMyTimeSessions
+      summary: 查询本人时间段内的计时记录
+      description: 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: 本人计时记录与服务端当前时间。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/MyTimeSessionPage' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /me/time-sessions/fill:
+    post:
+      tags: [TimeTracking]
+      operationId: fillMyTimeSessions
+      summary: 按并行、替换或空白模式补录本人工时
+      description: 条目区间必须已结束，同一工作项的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项记录后补本项空白；GAPS 只补本人没有任何记录的时段。补录不推进计时器状态版本。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/XsrfToken'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TimeSessionFillCommand' }
+      responses:
+        '200':
+          description: 补录创建、修改、删除条数与跳过时长。
+          headers: { Cache-Control: { schema: { type: string }, description: 固定为 no-store。 } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/TimeSessionFillResult' } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/ResourceNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
   /me/time-tracker/candidates:
     get:
       tags: [TimeTracking]
@@ -8609,6 +8655,54 @@ components:
           type: array
           items: { $ref: '#/components/schemas/TeamMemberTask' }
         totalElements: { type: integer, format: int64, minimum: 0 }
+    MyTimeSession:
+      type: object
+      additionalProperties: false
+      required: [session, projectName, itemNo, title, contentColorToken]
+      properties:
+        session: { $ref: '#/components/schemas/TimeTrackingSession' }
+        projectName: { type: string, nullable: true }
+        itemNo: { type: string, nullable: true }
+        title: { type: string, nullable: true }
+        contentColorToken: { type: string, nullable: true, allOf: [{ $ref: '#/components/schemas/WorkItemLabelColorToken' }] }
+    MyTimeSessionPage:
+      type: object
+      additionalProperties: false
+      required: [items, serverNow]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/MyTimeSession' } }
+        serverNow: { type: string, format: date-time }
+    TimeSessionFillMode:
+      type: string
+      enum: [PARALLEL, REPLACE, GAPS]
+    TimeSessionFillEntry:
+      type: object
+      additionalProperties: false
+      required: [workItemId, startedAt, stoppedAt]
+      properties:
+        workItemId: { type: string, format: uuid }
+        startedAt: { type: string, format: date-time }
+        stoppedAt: { type: string, format: date-time }
+    TimeSessionFillCommand:
+      type: object
+      additionalProperties: false
+      required: [mode, entries]
+      properties:
+        mode: { $ref: '#/components/schemas/TimeSessionFillMode' }
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/TimeSessionFillEntry' }
+    TimeSessionFillResult:
+      type: object
+      additionalProperties: false
+      required: [createdCount, changedCount, deletedCount, skippedDurationMs]
+      properties:
+        createdCount: { type: integer, format: int32, minimum: 0 }
+        changedCount: { type: integer, format: int32, minimum: 0 }
+        deletedCount: { type: integer, format: int32, minimum: 0 }
+        skippedDurationMs: { type: integer, format: int64, minimum: 0 }
     TimeTrackingState:
       type: string
       enum: [RUNNING, STOPPED, EMPTY]

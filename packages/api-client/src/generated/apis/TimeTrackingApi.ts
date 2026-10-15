@@ -16,6 +16,9 @@ import * as runtime from '../runtime';
 import type {
   CurrentTimeTracker,
   ErrorResponse,
+  MyTimeSessionPage,
+  TimeSessionFillCommand,
+  TimeSessionFillResult,
   TimeTrackingCommand,
   TimeTrackingSession,
   TimeTrackingSessionPage,
@@ -27,6 +30,12 @@ import {
     CurrentTimeTrackerToJSON,
     ErrorResponseFromJSON,
     ErrorResponseToJSON,
+    MyTimeSessionPageFromJSON,
+    MyTimeSessionPageToJSON,
+    TimeSessionFillCommandFromJSON,
+    TimeSessionFillCommandToJSON,
+    TimeSessionFillResultFromJSON,
+    TimeSessionFillResultToJSON,
     TimeTrackingCommandFromJSON,
     TimeTrackingCommandToJSON,
     TimeTrackingSessionFromJSON,
@@ -64,9 +73,20 @@ export interface EditTimeSessionRequest {
     timeTrackingCommand: TimeTrackingCommand;
 }
 
+export interface FillMyTimeSessionsRequest {
+    xXSRFTOKEN: string;
+    idempotencyKey: string;
+    timeSessionFillCommand: TimeSessionFillCommand;
+}
+
 export interface GetTimeTrackingSummariesRequest {
     projectId: string;
     workItemId: Array<string>;
+}
+
+export interface ListMyTimeSessionsRequest {
+    from: Date;
+    to: Date;
 }
 
 export interface ListTimeSessionsRequest {
@@ -360,6 +380,69 @@ export class TimeTrackingApi extends runtime.BaseAPI {
     }
 
     /**
+     * 条目区间必须已结束，同一工作项的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项记录后补本项空白；GAPS 只补本人没有任何记录的时段。补录不推进计时器状态版本。
+     * 按并行、替换或空白模式补录本人工时
+     */
+    async fillMyTimeSessionsRaw(requestParameters: FillMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TimeSessionFillResult>> {
+        if (requestParameters['xXSRFTOKEN'] == null) {
+            throw new runtime.RequiredError(
+                'xXSRFTOKEN',
+                'Required parameter "xXSRFTOKEN" was null or undefined when calling fillMyTimeSessions().'
+            );
+        }
+
+        if (requestParameters['idempotencyKey'] == null) {
+            throw new runtime.RequiredError(
+                'idempotencyKey',
+                'Required parameter "idempotencyKey" was null or undefined when calling fillMyTimeSessions().'
+            );
+        }
+
+        if (requestParameters['timeSessionFillCommand'] == null) {
+            throw new runtime.RequiredError(
+                'timeSessionFillCommand',
+                'Required parameter "timeSessionFillCommand" was null or undefined when calling fillMyTimeSessions().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+        if (requestParameters['xXSRFTOKEN'] != null) {
+            headerParameters['X-XSRF-TOKEN'] = String(requestParameters['xXSRFTOKEN']);
+        }
+
+        if (requestParameters['idempotencyKey'] != null) {
+            headerParameters['Idempotency-Key'] = String(requestParameters['idempotencyKey']);
+        }
+
+
+        let urlPath = `/me/time-sessions/fill`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: TimeSessionFillCommandToJSON(requestParameters['timeSessionFillCommand']),
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => TimeSessionFillResultFromJSON(jsonValue));
+    }
+
+    /**
+     * 条目区间必须已结束，同一工作项的条目先求并集。PARALLEL 只补本项空白；REPLACE 裁剪本人可编辑的其他工作项记录后补本项空白；GAPS 只补本人没有任何记录的时段。补录不推进计时器状态版本。
+     * 按并行、替换或空白模式补录本人工时
+     */
+    async fillMyTimeSessions(requestParameters: FillMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimeSessionFillResult> {
+        const response = await this.fillMyTimeSessionsRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
      * getCurrentTimeTracker
      */
     async getCurrentTimeTrackerRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CurrentTimeTracker>> {
@@ -433,6 +516,59 @@ export class TimeTrackingApi extends runtime.BaseAPI {
      */
     async getTimeTrackingSummaries(requestParameters: GetTimeTrackingSummariesRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TimeTrackingSummaryPage> {
         const response = await this.getTimeTrackingSummariesRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。
+     * 查询本人时间段内的计时记录
+     */
+    async listMyTimeSessionsRaw(requestParameters: ListMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<MyTimeSessionPage>> {
+        if (requestParameters['from'] == null) {
+            throw new runtime.RequiredError(
+                'from',
+                'Required parameter "from" was null or undefined when calling listMyTimeSessions().'
+            );
+        }
+
+        if (requestParameters['to'] == null) {
+            throw new runtime.RequiredError(
+                'to',
+                'Required parameter "to" was null or undefined when calling listMyTimeSessions().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['from'] != null) {
+            queryParameters['from'] = (requestParameters['from'] as any).toISOString();
+        }
+
+        if (requestParameters['to'] != null) {
+            queryParameters['to'] = (requestParameters['to'] as any).toISOString();
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/me/time-sessions`;
+
+        const response = await this.request({
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        }, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => MyTimeSessionPageFromJSON(jsonValue));
+    }
+
+    /**
+     * 返回与 [from, to) 相交的本人未删除记录，按开始时间排序。to 必须晚于 from，且区间不超过 7 天，否则返回 INVALID_RANGE。不可见项目的标题、编号、名称和颜色不披露。
+     * 查询本人时间段内的计时记录
+     */
+    async listMyTimeSessions(requestParameters: ListMyTimeSessionsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<MyTimeSessionPage> {
+        const response = await this.listMyTimeSessionsRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

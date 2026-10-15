@@ -9,6 +9,7 @@ import com.yumpoo.platform.workitem.application.TimeTrackingModels.*;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import tools.jackson.databind.ObjectMapper;
+import java.time.Instant;
 import java.util.*;
 
 @ApiV1Controller
@@ -43,6 +44,18 @@ public class TimeTrackingController {
     ResponseEntity<SessionPage> history(@PathVariable UUID workItemId,@RequestParam(required=false) String cursor,
             @RequestParam(defaultValue="false") boolean includeChildren) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.history(actors.requiredActive(),workItemId,cursor,includeChildren));
+    }
+    @GetMapping("/me/time-sessions")
+    ResponseEntity<MyTimeSessionPage> mySessions(@RequestParam Instant from,@RequestParam Instant to) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.mySessions(actors.requiredActive(),from,to));
+    }
+    @PostMapping("/me/time-sessions/fill")
+    ResponseEntity<String> fill(@RequestBody TimeSessionFillCommand body,
+            @RequestHeader(name=IdempotencyKeyParser.HEADER_NAME,required=false) String key) {
+        var result=service.fill(actors.requiredActive(),body,keys.parseRequired(key),
+                hasher.hash("timeTracking:fill",Map.of(),json.valueToTree(body)));
+        return ResponseEntity.status(result.httpStatus()).contentType(MediaType.APPLICATION_JSON)
+                .cacheControl(CacheControl.noStore()).body(result.responseJson());
     }
     @PostMapping("/me/time-tracker/start")
     ResponseEntity<String> start(@RequestBody Input body,
@@ -86,9 +99,9 @@ public class TimeTrackingController {
     }
     private ResponseEntity<String> command(String action,Input input,String match,String key) {
         var actor=actors.requiredActive();
-        if(!action.equals("stop") && input.workItemId()!=null) service.history(actor,input.workItemId(),null,false);
         if(action.equals("start") && input.workItemIds()!=null)
             for(UUID itemId:input.workItemIds()) service.history(actor,itemId,null,false);
+        else if(!action.equals("stop") && input.workItemId()!=null) service.history(actor,input.workItemId(),null,false);
         long expected=action.equals("create") ? 0 : matches.parseForVisibleResource(true,match);
         var result=service.command(actor,action,input,expected,keys.parseRequired(key),
                 hasher.hash("timeTracking:"+action,Map.of("ifMatch",match==null ? "" : match),json.valueToTree(input)));
