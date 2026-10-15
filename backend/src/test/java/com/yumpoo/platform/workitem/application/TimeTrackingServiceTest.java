@@ -51,7 +51,7 @@ class TimeTrackingServiceTest {
             Supplier<StoredCommandResult> action = call.getArgument(1);
             return IdempotencyExecutionResult.executed(action.get());
         });
-        var service = new TimeTrackingService(timers, items, access, guard, deletionQuery, users, executor, events, audits, json,
+        var service = new TimeTrackingService(timers, mock(TimeShareMaintainer.class), items, access, guard, deletionQuery, users, executor, events, audits, json,
                 Clock.fixed(Instant.parse("2026-09-07T00:00:00Z"), ZoneOffset.UTC));
         var input = new TimeTrackingService.Input(item, sessionId, before.startedAt(), before.stoppedAt().plusSeconds(1800), null);
         var result = service.command(actor, "edit", input, 0, UUID.randomUUID(), new RequestHash("a".repeat(64)));
@@ -194,7 +194,7 @@ class TimeTrackingServiceTest {
             var executor = mock(IdempotentCommandExecutor.class);
             when(executor.execute(any(), any())).thenAnswer(call -> IdempotencyExecutionResult.executed(
                     call.<Supplier<StoredCommandResult>>getArgument(1).get()));
-            service = new TimeTrackingService(timers, items, access, guard, deletion, mock(MinimalUserSnapshotQuery.class),
+            service = new TimeTrackingService(timers, mock(TimeShareMaintainer.class), items, access, guard, deletion, mock(MinimalUserSnapshotQuery.class),
                     executor, events, audits, new ObjectMapper(), Clock.fixed(NOW, ZoneOffset.UTC));
         }
 

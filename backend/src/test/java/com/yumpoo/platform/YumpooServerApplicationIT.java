@@ -423,6 +423,7 @@ class YumpooServerApplicationIT {
                 "work_item_table_settings",
                 "work_item_time_revision",
                 "work_item_time_session",
+                "work_item_time_share",
                 "work_item_timer_state",
                 "work_item_update",
                 "work_item_update_mention",

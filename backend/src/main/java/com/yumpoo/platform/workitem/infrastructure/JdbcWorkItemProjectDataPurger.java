@@ -1,10 +1,14 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
 import com.yumpoo.platform.foundation.application.purge.ProjectDataPurger;
+import com.yumpoo.platform.workitem.application.TimeShareMaintainer;
+import com.yumpoo.platform.workitem.application.TimeTrackingRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,8 +45,14 @@ public class JdbcWorkItemProjectDataPurger implements ProjectDataPurger {
             new Table("content", SCOPE),
             new Table("content_catalog_version", SCOPE));
     private final JdbcClient jdbc;
+    private final TimeTrackingRepository timers;
+    private final TimeShareMaintainer shares;
 
-    public JdbcWorkItemProjectDataPurger(JdbcClient jdbc) { this.jdbc = jdbc; }
+    public JdbcWorkItemProjectDataPurger(JdbcClient jdbc, TimeTrackingRepository timers, TimeShareMaintainer shares) {
+        this.jdbc = jdbc;
+        this.timers = timers;
+        this.shares = shares;
+    }
     public String stage() { return "WORKITEM"; }
     public int order() { return 50; }
 
@@ -51,6 +61,10 @@ public class JdbcWorkItemProjectDataPurger implements ProjectDataPurger {
         if (limit < 1 || limit > 500) throw new IllegalArgumentException("purge limit must be between 1 and 500");
         int remaining = limit;
         for (Table table : TABLES) {
+            if (table.name().equals("work_item_time_session")) {
+                remaining -= redistributeSharedSessions(companyId, projectId, remaining);
+                if (remaining == 0) return true;
+            }
             if(table.name().equals("work_item_connect_column_target")) {
                 remaining-=detachForeignTargets(companyId,projectId,remaining);
                 if(remaining==0) return true;
@@ -62,6 +76,39 @@ public class JdbcWorkItemProjectDataPurger implements ProjectDataPurger {
             if (remaining == 0) return true;
         }
         return false;
+    }
+
+    private int redistributeSharedSessions(UUID companyId, UUID projectId, int limit) {
+        var users = jdbc.sql("""
+                SELECT DISTINCT s.user_id FROM yumpoo.work_item_time_session s
+                WHERE s.company_id=:company AND s.project_id=:project
+                  AND EXISTS (SELECT 1 FROM yumpoo.work_item_time_session o
+                              WHERE o.company_id=:company AND o.user_id=s.user_id AND o.project_id<>:project)
+                ORDER BY s.user_id
+                """).param("company", companyId).param("project", projectId).query(UUID.class).list();
+        int deleted = 0;
+        for (UUID userId : users) {
+            timers.stateVersion(companyId, userId, true);
+            var intervals = jdbc.sql("""
+                    DELETE FROM yumpoo.work_item_time_session WHERE id IN (
+                      SELECT id FROM yumpoo.work_item_time_session
+                      WHERE company_id=:company AND project_id=:project AND user_id=:user LIMIT :limit)
+                    RETURNING started_at, stopped_at
+                    """).param("company", companyId).param("project", projectId).param("user", userId)
+                    .param("limit", limit - deleted).query((rs, n) -> new Instant[]{
+                            rs.getTimestamp("started_at").toInstant(),
+                            rs.getTimestamp("stopped_at") == null ? null : rs.getTimestamp("stopped_at").toInstant()}).list();
+            if (intervals.isEmpty()) continue;
+            Instant from = intervals.stream().map(interval -> interval[0]).min(Instant::compareTo).orElseThrow();
+            Instant to = intervals.stream().anyMatch(interval -> interval[1] == null) ? null
+                    : intervals.stream().map(interval -> interval[1]).max(Instant::compareTo).orElseThrow();
+            var changed = new HashSet<>(shares.rebuild(companyId, userId, from, to));
+            changed.remove(projectId);
+            timers.touchProjects(companyId, changed);
+            deleted += intervals.size();
+            if (deleted == limit) break;
+        }
+        return deleted;
     }
 
     private int detachForeignTargets(UUID companyId,UUID projectId,int limit) {

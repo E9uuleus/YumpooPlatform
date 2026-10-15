@@ -22,6 +22,7 @@ import static com.yumpoo.platform.workitem.application.TimeTrackingModels.*;
 public class TimeTrackingService {
     public record Input(UUID workItemId, UUID sessionId, Instant startedAt, Instant stoppedAt, String reason) {}
     private final TimeTrackingRepository timers;
+    private final TimeShareMaintainer shares;
     private final WorkItemRepository items;
     private final ProjectAccessSnapshotQuery access;
     private final ProjectFactWriteGuard guard;
@@ -33,11 +34,11 @@ public class TimeTrackingService {
     private final ObjectMapper json;
     private final Clock clock;
 
-    public TimeTrackingService(TimeTrackingRepository timers, WorkItemRepository items,
+    public TimeTrackingService(TimeTrackingRepository timers, TimeShareMaintainer shares, WorkItemRepository items,
             ProjectAccessSnapshotQuery access, ProjectFactWriteGuard guard, ProjectDeletionQuery deletion, MinimalUserSnapshotQuery users,
             IdempotentCommandExecutor idempotency, TransactionalEventPort events, SecurityAuditAppendPort audits,
             ObjectMapper json, Clock clock) {
-        this.timers=timers; this.items=items; this.access=access; this.guard=guard; this.deletion=deletion; this.users=users;
+        this.timers=timers; this.shares=shares; this.items=items; this.access=access; this.guard=guard; this.deletion=deletion; this.users=users;
         this.idempotency=idempotency; this.events=events; this.audits=audits; this.json=json; this.clock=clock;
     }
 
@@ -158,7 +159,7 @@ public class TimeTrackingService {
                 Session created=new Session(UUID.randomUUID(),actor.companyId(),target.projectId(),target.workItemId(),actor.userId(),now,null,"TIMER",0,null,null);
                 timers.save(created); publish(actor,"started",null,created,null,now); changedProjects.add(created.projectId());
             }
-            timers.advanceProjects(actor.companyId(),changedProjects);
+            rebuild(actor.companyId(),actor.userId(),now,null,changedProjects);
             timers.advanceState(actor.companyId(),actor.userId());
             CurrentTimeTracker current=currentView(actor); result=current; etag=current.etag(); resourceId=actor.userId();
         } else {
@@ -186,7 +187,10 @@ public class TimeTrackingService {
             Session after=new Session(id,actor.companyId(),target.projectId(),target.workItemId(),actor.userId(),
                     start.truncatedTo(ChronoUnit.MILLIS),stop.truncatedTo(ChronoUnit.MILLIS),create ? "MANUAL" : before.source(),
                     create ? 0 : before.rowVersion()+1,delete ? now : null,reason);
-            timers.save(after); timers.advanceProjects(actor.companyId(),List.of(after.projectId()));
+            timers.save(after);
+            Instant from=before==null || after.startedAt().isBefore(before.startedAt()) ? after.startedAt() : before.startedAt();
+            Instant to=before==null || after.stoppedAt().isAfter(before.stoppedAt()) ? after.stoppedAt() : before.stoppedAt();
+            rebuild(actor.companyId(),actor.userId(),from,to,Set.of(after.projectId()));
             publish(actor,create ? "added" : delete ? "deleted" : "edited",before,after,reason,now);
             var v=view(after,actor,true,now,true); result=v; etag=v.etag(); resourceId=id;
         }
@@ -204,11 +208,21 @@ public class TimeTrackingService {
             Session stopped=new Session(running.id(),running.companyId(),running.projectId(),running.workItemId(),running.userId(),
                     running.startedAt(),now.isBefore(running.startedAt()) ? running.startedAt() : now,running.source(),running.rowVersion()+1,null,null);
             timers.save(stopped); publish(actor,"stopped",running,stopped,null,now);
+            var affected=shares.rebuild(actor.companyId(),userId,now,null);
+            affected.remove(projectId);
+            timers.touchProjects(actor.companyId(),affected);
             timers.advanceState(actor.companyId(),userId);
             stoppedCount++;
         }
         if(stoppedCount>0) timers.advanceProjects(actor.companyId(),List.of(projectId));
         return stoppedCount;
+    }
+
+    private void rebuild(UUID companyId,UUID userId,Instant from,Instant to,Set<UUID> written) {
+        var affected=shares.rebuild(companyId,userId,from,to);
+        timers.advanceProjects(companyId,written);
+        affected.removeAll(written);
+        timers.touchProjects(companyId,affected);
     }
 
     private void publish(CurrentActor actor, String action, Session before, Session after, String reason, Instant now) {

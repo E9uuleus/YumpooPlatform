@@ -119,6 +119,10 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         return jdbc.sql("SELECT revision FROM yumpoo.work_item_time_revision WHERE company_id=:c AND project_id=:p")
                 .param("c", companyId).param("p", projectId).query(Long.class).optional().orElse(0L);
     }
+    public void touchProjects(UUID companyId, Collection<UUID> ids) {
+        ids.stream().distinct().sorted().forEach(id -> jdbc.sql("UPDATE yumpoo.work_item_time_revision SET revision=revision+1 WHERE company_id=:c AND project_id=:p")
+                .param("c",companyId).param("p",id).update());
+    }
     public List<TimeTrackingSummary> summaries(UUID companyId, UUID projectId, UUID userId, Collection<UUID> ids, Instant now) {
         if (ids.isEmpty()) return List.of();
         List<Session> running = jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND project_id=:p AND work_item_id IN (:ids) AND deleted_at IS NULL AND stopped_at IS NULL")
@@ -139,7 +143,7 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
     }
     private static Timestamp timestamp(Instant value) { return value == null ? null : Timestamp.from(value); }
     private static Instant instant(ResultSet rs, String key) throws SQLException { Timestamp t=rs.getTimestamp(key); return t==null ? null : t.toInstant(); }
-    private static Session map(ResultSet rs, int n) throws SQLException {
+    static Session map(ResultSet rs, int n) throws SQLException {
         return new Session(rs.getObject("id",UUID.class),rs.getObject("company_id",UUID.class),rs.getObject("project_id",UUID.class),rs.getObject("work_item_id",UUID.class),rs.getObject("user_id",UUID.class),instant(rs,"started_at"),instant(rs,"stopped_at"),rs.getString("source"),rs.getLong("row_version"),instant(rs,"deleted_at"),rs.getString("change_reason"));
     }
 }

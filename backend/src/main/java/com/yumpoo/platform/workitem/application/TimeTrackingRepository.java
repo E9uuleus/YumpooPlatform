@@ -21,6 +21,7 @@ public interface TimeTrackingRepository {
     boolean overlaps(UUID companyId, UUID userId, Instant start, Instant stop, UUID excludedId);
     void save(Session session);
     void advanceProjects(UUID companyId, Collection<UUID> projectIds);
+    void touchProjects(UUID companyId, Collection<UUID> projectIds);
     long revision(UUID companyId, UUID projectId);
     List<TimeTrackingSummary> summaries(UUID companyId, UUID projectId,
             UUID userId, Collection<UUID> workItemIds, Instant now);

@@ -77,7 +77,7 @@ class ProjectPurgeIT {
     private static final Instant BASE = Instant.parse("2026-01-01T12:00:00Z");
     private static final int LARGE = 620;
     private static final List<String> STAGES = List.of("NOTIFICATION", "AUDIT", "FILESTORAGE", "OUTBOX", "WORKITEM", "REPORTING", "CATALOG");
-    private static final List<String> ITEM_TABLES = List.of("work_item_time_session", "work_item_time_revision",
+    private static final List<String> ITEM_TABLES = List.of("work_item_time_share", "work_item_time_session", "work_item_time_revision",
             "work_item_update", "work_item_assignee", "work_item_connect_column", "work_item_connect_column_catalog",
             "work_item_table_settings", "work_item", "project_work_item_label_catalog", "work_item_project_order",
             "work_item_rank_lane", "work_item_project_counter", "content", "content_catalog_version");
