@@ -4,6 +4,7 @@ import { readCsrfToken, type CurrentTimeTracker, type TimeTrackingSummary, type 
 import { timeTrackingApi } from '../api/client'
 
 const current = shallowRef<CurrentTimeTracker>()
+const running = computed(() => current.value?.runningSessions ?? [])
 const now = ref(Date.now())
 const busy = ref(false)
 const problem = ref('')
@@ -35,9 +36,12 @@ export function formatDuration(ms: number): string {
 export function timerClockOffset(): number { return offset }
 
 export function useTimeTracker() {
-  return { current, now, busy, problem, connected, savedAt, refresh, toggle, start, stop, notify, summaries,
-    runningDuration: computed(() => current.value?.session ? Math.max(0, now.value - current.value.session.startedAt.getTime()) : 0) }
+  return { current, running, isRunning, runningFor, now, busy, problem, connected, savedAt, refresh, toggle, start, startMany, switchTo, stop, stopAll, notify, summaries,
+    wallDuration: computed(() => running.value.length ? Math.max(0, now.value - Math.min(...running.value.map(timer => timer.session.startedAt.getTime()))) : 0) }
 }
+
+function runningFor(workItemId: string) { return running.value.find(timer => timer.session.workItemId === workItemId) }
+function isRunning(workItemId: string): boolean { return !!runningFor(workItemId) }
 
 export function observeTimer(workItemId: string, projectId: string, initial?: TimeTrackingSummary | null): () => void {
   const entry = observed.get(workItemId)
@@ -124,8 +128,8 @@ async function refresh(): Promise<void> {
 function acceptCurrent(result: CurrentTimeTracker): void {
   const previous = current.value
   if (previous && result.rowVersion < previous.rowVersion) return
-  if (result.session) savedAt.value = 0
-  else if (previous?.session && result.rowVersion > previous.rowVersion) savedAt.value = Date.now()
+  if (result.runningSessions.length) savedAt.value = 0
+  else if (previous?.runningSessions.length && result.rowVersion > previous.rowVersion) savedAt.value = Date.now()
   current.value = result
 }
 
@@ -159,15 +163,16 @@ export async function timerMutation<T>(identity: string, call: (key: string, csr
   }
 }
 
-async function command(action: 'start' | 'switch' | 'stop', body: TimeTrackingCommand): Promise<void> {
+async function command(action: 'start' | 'switch' | 'stop' | 'stop-all', body: TimeTrackingCommand = {}): Promise<void> {
   const epoch = generation
   const snapshot = current.value
   if (!snapshot) throw new Error('计时状态未加载，请重试')
   const identity = JSON.stringify([action, snapshot.etag, body])
   const method = action === 'start' ? 'startTimeTracker' : action === 'switch' ? 'switchTimeTracker' : 'stopTimeTracker'
-  const result = await timerMutation(identity, (idempotencyKey, xXSRFTOKEN) => timeTrackingApi[method]({
-    ifMatch: snapshot.etag, idempotencyKey, xXSRFTOKEN, timeTrackingCommand: body,
-  }))
+  const result = await timerMutation(identity, (idempotencyKey, xXSRFTOKEN) => {
+    const headers = { ifMatch: snapshot.etag, idempotencyKey, xXSRFTOKEN }
+    return action === 'stop-all' ? timeTrackingApi.stopAllTimeTrackers(headers) : timeTrackingApi[method]({ ...headers, timeTrackingCommand: body })
+  })
   if (epoch !== generation) return
   acceptCurrent(result)
   // The command response is authoritative even if the following calibration fails.
@@ -197,28 +202,43 @@ async function run(action: () => Promise<void>): Promise<boolean> {
 }
 
 async function start(workItemId: string): Promise<boolean> {
+  if (isRunning(workItemId)) return true
   const success = await run(async () => {
-    const running = current.value?.session
-    if (running?.workItemId === workItemId) return
-    await command(running ? 'switch' : 'start', { workItemId, ...(running ? { sessionId: running.id } : {}) })
+    if (!isRunning(workItemId)) await command('start', { workItemId })
   })
   if (success) window.dispatchEvent(new Event('yumpoo:timer-started'))
   return success
 }
 
-function toggle(workItemId: string): Promise<boolean> {
-  const running = current.value?.session
-  return running?.workItemId === workItemId ? stop(running.id) : start(workItemId)
+async function startMany(workItemIds: string[]): Promise<boolean> {
+  const success = await run(async () => {
+    for (let index = 0; index < workItemIds.length; index += 10) {
+      await command('start', { workItemIds: workItemIds.slice(index, index + 10) })
+    }
+  })
+  if (success) window.dispatchEvent(new Event('yumpoo:timer-started'))
+  return success
 }
 
-function stop(expectedSessionId = current.value?.session?.id): Promise<boolean> {
+async function switchTo(workItemId: string): Promise<boolean> {
+  const success = await run(() => command('switch', { workItemId }))
+  if (success) window.dispatchEvent(new Event('yumpoo:timer-started'))
+  return success
+}
+
+function toggle(workItemId: string): Promise<boolean> {
+  const timer = runningFor(workItemId)
+  return timer ? stop(timer.session.id) : start(workItemId)
+}
+
+function stop(sessionId: string): Promise<boolean> {
   return run(async () => {
-    const running = current.value?.session
-    if (!running) return
-    if (!expectedSessionId || running.id !== expectedSessionId) throw new Error('TIMER_CHANGED')
-    await command('stop', { sessionId: running.id })
+    if (!running.value.some(timer => timer.session.id === sessionId)) throw new Error('TIMER_CHANGED')
+    await command('stop', { sessionId })
   })
 }
+
+function stopAll(): Promise<boolean> { return run(() => command('stop-all')) }
 
 export const timerExitPrompt = ref(false)
 let resolveExit: ((choice: 'stop' | 'continue' | 'cancel') => void) | undefined
@@ -233,12 +253,12 @@ export function confirmTimerExit(): Promise<boolean> {
   const operation = (async () => {
     let confirmed = false
     try { await refresh(); confirmed = true } catch { /* Keep explicit exit choices available while offline. */ }
-    if (confirmed && !current.value?.session) return true
+    if (confirmed && !running.value.length) return true
     timerExitPrompt.value = true
     const choice = await new Promise<'stop' | 'continue' | 'cancel'>(resolve => { resolveExit = resolve })
     if (choice === 'cancel') return false
     if (choice === 'continue') return true
-    if (await stop()) return true
+    if (await stopAll()) return true
     ElMessage.error('停止失败，尚未退出。请重试或明确选择继续计时并退出。')
     return false
   })()

@@ -54,7 +54,7 @@ watch(() => [props.item.id, props.projectId] as const, ([id, project]) => {
 }, { immediate: true })
 onBeforeUnmount(() => release?.())
 const summary = computed(() => tracker.summaries.value[props.item.id])
-const running = computed(() => tracker.current.value?.session?.workItemId === props.item.id)
+const running = computed(() => tracker.isRunning(props.item.id))
 const unavailable = computed(() => (props.disabled || !props.item.capabilities.canEditFields) && !running.value)
 const total = computed(() => {
   const entry = summary.value
@@ -116,7 +116,10 @@ const durationTitle = computed(() => {
             aria-hidden="true"
           ><path d="M5 2.8v10.4L13 8z" /></svg>
         </button>
-        <span class="duration" :title="durationTitle">{{ formatTrackingDuration(total) }}</span>
+        <span
+          class="duration"
+          :title="durationTitle"
+        >{{ formatTrackingDuration(total) }}</span>
       </div>
     </template>
     <TimeSessionDialog

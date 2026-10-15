@@ -8,7 +8,7 @@ vi.mock('../../composables/useSession', async () => {
 })
 vi.mock('../../composables/useTimeTracker', async () => {
   const { ref } = await import('vue')
-  const tracker = { current: ref({ session: null, recentItems: [] }), runningDuration: ref(0), savedAt: ref(0), connected: ref(true), busy: ref(false), refresh: vi.fn(async () => undefined) }
+  const tracker = { current: ref({ session: null, recentItems: [], runningSessions: [], resumeItems: [] }), running: ref([]), wallDuration: ref(0), savedAt: ref(0), connected: ref(true), busy: ref(false), refresh: vi.fn(async () => undefined) }
   return { activateTimeTracker: vi.fn(), confirmTimerExit: vi.fn(), formatDuration: () => '0:00:00', timerClockOffset: () => 1234.4,
     timerExitPrompt: ref(false), chooseTimerExit: vi.fn(),
     useTimeTracker: () => tracker }

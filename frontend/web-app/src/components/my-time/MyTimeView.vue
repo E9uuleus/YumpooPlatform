@@ -23,10 +23,11 @@ const active = ref<{ date: string; anchor: HTMLElement }>()
 const cells = computed(() => monthGrid(month.value, today.value))
 // Only the sheet fetched for the visible month is shown, so a new month starts empty and its cells fill in on arrival.
 const row = computed(() => sheet.value && sheetMonth.value === month.value ? buildTimesheet(sheet.value).rows[0] : undefined)
-const running = computed(() => tracker.current.value?.session ?? undefined)
+const running = computed(() => tracker.running.value.length > 0)
+const startedAt = computed(() => running.value ? new Date(Math.min(...tracker.running.value.map(timer => timer.session.startedAt.getTime()))) : undefined)
 const days = computed(() => {
   const totals: Record<string, number> = { ...row.value?.days }
-  const extra = row.value ? runningExtraMs(sheet.value?.asOf, running.value?.startedAt, tracker.now.value) : 0
+  const extra = row.value ? runningExtraMs(sheet.value?.asOf, startedAt.value, tracker.now.value) : 0
   if (extra) totals[today.value] = (totals[today.value] ?? 0) + extra
   return totals
 })
@@ -165,7 +166,9 @@ defineExpose({ refresh: load, loading, ready })
           />计时中</template></small><strong>{{ hoursMinutes(shownToday) }}</strong>
         </div>
       </div>
-      <p class="my-time__note">并行计时按项数平均计入，每日合计为实际时长。</p>
+      <p class="my-time__note">
+        并行计时按项数平均计入，每日合计为实际时长。
+      </p>
       <div class="my-time__board">
         <div
           class="my-time__weekdays"
