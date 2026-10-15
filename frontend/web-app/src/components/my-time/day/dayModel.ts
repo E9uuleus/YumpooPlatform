@@ -260,15 +260,15 @@ export function rangeInGap(at: number, duration: number, free: Range[]): Range |
   return end - start >= MIN_BLOCK_MS ? { start, end } : null
 }
 
-/** Lays `durationMs` into the free ranges from `startAt`, splitting across gaps; capped at `maxSlices` pieces. */
-export function placeSequential(durationMs: number, free: Range[], startAt: number, maxSlices = MAX_FILL_ENTRIES)
+/** Lays `durationMs` into the free ranges from `startAt`, splitting across gaps; skips gaps under `minimum` and leaves a shorter tail over; capped at `maxSlices` pieces. */
+export function placeSequential(durationMs: number, free: Range[], startAt: number, maxSlices = MAX_FILL_ENTRIES, minimum = MIN_BLOCK_MS)
   : { entries: Range[]; leftoverMs: number; truncated: boolean } {
   const entries: Range[] = []
   let remaining = durationMs
   for (const gap of free) {
-    if (remaining <= 0) break
+    if (remaining < minimum) break
     const start = Math.max(gap.start, startAt)
-    if (start >= gap.end) continue
+    if (gap.end - start < minimum) continue
     if (entries.length === maxSlices) return { entries, leftoverMs: remaining, truncated: true }
     const end = Math.min(gap.end, start + remaining)
     entries.push({ start, end })

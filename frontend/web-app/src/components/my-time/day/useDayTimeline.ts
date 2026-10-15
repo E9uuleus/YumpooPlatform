@@ -5,7 +5,7 @@ import { myWorkApi, timeTrackingApi } from '../../../api/client'
 import { timeProblemMessage } from '../../../composables/timeTrackingProblems'
 import { onTimeTrackingChanged, timerMutation, useTimeTracker } from '../../../composables/useTimeTracker'
 import { toApiDate } from '../../team/teamDashboardModel'
-import { atMinute, coveredMs, dayWindow, durationLabel, HOUR, itemTotals, layout, MINUTE, shares, type DayBlock, type Range } from './dayModel'
+import { atMinute, coveredMs, dayWindow, durationLabel, itemTotals, layout, MINUTE, shares, type DayBlock, type Range } from './dayModel'
 
 export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
   const tracker = useTimeTracker()
@@ -38,7 +38,6 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
   const shareMap = computed(() => shares(blocks.value, now.value, dayRange.value))
   const totals = computed(() => itemTotals(blocks.value, now.value, dayRange.value))
   const recordedMs = computed(() => coveredMs(blocks.value, now.value, dayRange.value))
-  const targetMs = computed(() => day.value ? day.value.standardMinutes * MINUTE : 8 * HOUR)
 
   async function load(): Promise<void> {
     if (held) { deferred = true; return }
@@ -149,5 +148,5 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
   })
 
   return { page, day, loading, busy, problem, fresh, dayRange, now, limit, preferences, workday, blocks, layoutMap, shareMap, totals,
-    recordedMs, targetMs, load, hold, create, edit, remove, reassign, exclusive }
+    recordedMs, load, hold, create, edit, remove, reassign, exclusive }
 }

@@ -19,7 +19,7 @@ const props = defineProps<{ date: string; today: string; timezone: string }>()
 const route = useRoute()
 const router = useRouter()
 const tracker = useTimeTracker()
-const { page, day: calendarDay, blocks, layoutMap, shareMap, totals, recordedMs, targetMs, dayRange, workday, now, limit, loading, busy,
+const { page, day: calendarDay, blocks, layoutMap, shareMap, totals, recordedMs, dayRange, workday, now, limit, loading, busy,
   problem, fresh, preferences, load, hold, create, edit, remove, reassign, exclusive } = useDayTimeline(toRef(props, 'date'), toRef(props, 'timezone'))
 const timeline = ref<InstanceType<typeof DayTimeline>>()
 
@@ -134,7 +134,6 @@ onBeforeUnmount(() => {
       :today="today"
       :day="calendarDay"
       :recorded-ms="recordedMs"
-      :target-ms="targetMs"
       @navigate="navigate"
       @back="back"
     >

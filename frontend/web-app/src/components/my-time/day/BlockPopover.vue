@@ -53,7 +53,7 @@ function save() { if (!problem.value) emit('save', { start: start.value, end: en
           :to="link"
         >{{ block.title }}</router-link>
         <strong v-else>{{ block.title }}</strong>
-        <small>{{ block.itemNo ? `#${block.itemNo} · ` : '' }}{{ block.projectName ?? '' }}</small>
+        <small>{{ block.projectName ?? '' }}</small>
       </span>
       <el-button
         text
