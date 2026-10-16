@@ -28,14 +28,124 @@ gh workflow run windows-release.yml --ref '<server-v...>' -f tag='<server-v...>'
 
 部署序列如下：
 
-1. 在暂存区校验来源、SHA-256、ZIP 条目和目标路径、磁盘空间及数据库恢复权限，获取串行锁。同一已完成版本幂等返回，默认禁止自动降级。
-2. 只将 `wecom-dev.yumpoo.com` 站点置为维护状态，停止 `YumpooServer`。维护标志由已安装的站点规则读取；修改版本路径配置时先验证 Nginx 配置，再平滑重载。
-3. 在同一停服时点备份数据库、附件、上传临时文件、生产配置、服务配置和版本指向；备份未完整成功时恢复旧服务，不能启动候选版本。
-4. 解压到独立版本目录，更新该站点的 Web 路径及后端 JAR 路径，启动服务并执行 Flyway。
-5. 保持维护状态检查回环健康、HTTPS/SNI、首页及 JS/CSS、正式认证接口 `/api/v1/auth/me`。未认证请求预期 `401`，不能用不存在的 `/api/auth/me` 或仅 Actuator `UP` 代替。
-6. 验收通过后开放访问，执行严格 TLS 公网复核，记录请求 ID、版本、来源和部署结果。SSH 中断不终止 SYSTEM 任务，重新连接后查询同一请求状态。
+1. 在暂存区校验来源、SHA-256、ZIP 条目和目标路径、磁盘空间以及数据库恢复权限，并获取串行锁。
+   - 来源必须是 `host.json` 中 `releaseBranch` 所指分支上的 push 触发的 CI。
+   - `requireImmutable` 为 `true` 时，Release 必须是不可变发布。
+   - 标签格式为 `server-vYYYY.MM.DD.N`。
+   - 同一个已完成的版本再次提交时直接返回成功；默认禁止自动降级。
+2. 只把 `wecom-dev.yumpoo.com` 这一个站点置为维护状态，然后停止 `YumpooServer`。维护标志由已安装的站点规则读取。修改版本路径配置时，先验证 Nginx 配置，再平滑重载。
+3. 在同一个停服时点，备份数据库、附件、上传临时文件、生产配置、服务配置和版本指向。备份没有完整成功时，恢复旧服务，不能启动候选版本。
+   - 附件中按 `sha256/xx/yy/<摘要>` 存放的已发布 blob 从不原地改写，快照用硬链接共享这些字节。
+   - 其余文件仍然整体复制。
+4. 解压到独立的版本目录，更新该站点的 Web 路径和后端 JAR 路径，并通过服务环境变量 `YUMPOO_DEPLOYMENT_RELEASE_TAG` 注入发布标签。然后启动服务，执行 Flyway。
+5. 在维护状态下检查：回环健康、HTTPS/SNI、首页及 JS/CSS、正式认证接口 `/api/v1/auth/me`。
+   - 未认证请求预期返回 `401`；不能用不存在的 `/api/auth/me` 或仅凭 Actuator `UP` 代替。
+   - 包含 `windows/release-metadata.json` 的版本还要求：首页的 `yumpoo-commit` meta 与 `127.0.0.1:8100/actuator/info` 中的 commit 都等于来源提交，发布标签等于 Release tag。
+6. 验收通过后开放访问，执行严格 TLS 的公网复核，记录请求 ID、版本、来源和部署结果。SSH 中断不会终止 SYSTEM 任务，重新连接后查询同一请求的状态即可。
+7. 观察窗口（阶段名 `observe`）：默认 10 分钟，按截止时间计时，开始时、每 30 秒以及窗口结束时各复核一次公网站点和 readiness，并统计开放后新增的应用 `ERROR` 日志。复核本身耗时不会缩短窗口。
+   - 新增 `ERROR` 超过 `observe.maxErrorLines`（默认 20），或任意一次复核失败时，状态记为 `failed/observation_failed`。
+   - 这按开放后失败处理：保留业务数据，不自动恢复，由发布负责人决定是否执行代码回退。
 
-开放访问前失败时停止候选服务，恢复旧程序、配置、版本指向以及整套数据快照，再验收旧版本。数据库恢复先清除受管 `yumpoo` schema 内候选迁移新增的对象，再完整恢复该 schema；只替换 JAR 或只恢复若干表不构成回退。恢复失败则保持维护状态，保留备份与诊断，停止自动重试。开放访问后失败保留新增业务数据，只记录失败，不自动恢复旧数据库快照。
+开放访问前失败时的处理：
+
+- 停止候选服务，恢复旧程序、配置、版本指向以及整套数据快照，再验收旧版本。
+- 附件快照在恢复前，逐个按文件名复核 blob 的 SHA-256。
+- 数据库恢复先清除受管 `yumpoo` schema 内候选迁移新增的对象，再完整恢复该 schema。只替换 JAR 或只恢复部分表都不算回退。
+- 恢复失败时保持维护状态，保留备份与诊断，停止自动重试。
+
+开放访问后失败时，保留新增的业务数据，只记录失败，不自动恢复旧数据库快照。
+
+### 代码回退
+
+请求为 `schemaVersion: 2` 且 `mode: "rollback"` 时，引擎只换回主机上保留的上一版本（即 `current.json` 中的 `previous`），不动数据库。
+
+前提条件（全部满足才执行）：
+
+- 目标版本的 commit 和 tag 与 `previous` 一致；
+- 目标是当前版本的祖先提交，来源校验与正常发布相同；
+- 两个版本目录都还保留，且都含有 `windows/release-metadata.json`；
+- 当前版本比目标版本多出的迁移全部是「只扩展」。分类规则见[迁移回退安全](../../.agents/notes/implemented/data/2026-10-15-rollback-safe-migrations.md)。
+
+执行过程：
+
+- 回退同样依次经过维护、停服、切换、验收、开放和观察。
+- 开放访问前失败时切回原版本，状态记为 `failed/rollback_aborted_current_restored`。
+- 回退成功后 `previous` 被清空，因此不能连续回退。
+- 含破坏性迁移的版本无法代码回退，只能由管理员按第 7 节，用部署快照做整套恢复。
+
+### 主机保留
+
+每个请求进入终态后（`recovery_required` 除外），引擎自动清理：
+
+- **删除**：
+  - 已结束请求的 `inbox/<UUID>` 和 `work/<UUID>`；
+  - 超过 24 小时仍未提交的上传。
+- **保留**：
+  - 当前版本；
+  - 上一版本；
+  - `retention.extraReleases`（默认 2）个最近成功的版本；
+  - 以上各版本对应的部署快照（不论该次部署的最终状态，例如观察未通过但仍在线的版本）。
+
+  其余由引擎创建的 `<commit>-<UUID>` 版本目录和快照都会被删除。
+- **永不删除**：首次初始化时建立的版本目录；状态仍为 `running` 或 `recovery_required` 的请求所对应的候选目录、上传和快照。
+- **拒绝删除**：含重解析点的目录。这类情况记入 `deployment/engine/retention-error.txt`。
+- `failure-*.txt` 保留 90 天。
+
+部署台账在 `deployment/engine/releases.json`；最近一次清理的结果在 `retention-last.json`。
+
+### 通知与公开探测
+
+**通知**：管理员在 `C:\ProgramData\Yumpoo\secrets\deploy-notify.json` 中写入：
+
+```json
+{"wecomWebhook":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=<key>"}
+```
+
+之后每个终态都会向企业微信群推送版本、短 commit、状态、阶段和耗时。
+
+- 收到 `recovery_required` 意味着站点仍在维护，必须立即处理。
+- 只接受 `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...` 这一字面形式，不允许显式端口或其他路径。该文件的权限与其他 Secret 相同。
+- 发送失败只记入 `notify-error.txt`，不影响部署结果。
+
+**公开探测**：`/healthz`（readiness）和 `/version.json`（Actuator info）由引擎写进受管的 `yumpoo-web-root.conf`。
+
+- 只有确认该 include 位于允许写 `location` 的 server 级别时，管理员才能在升级引擎时加上 `-EnableProbeRoutes`。
+- 如果 Nginx 拒绝该配置，切换会失败，并按开放访问前失败恢复。
+- 外部拨测服务探测 `/healthz` 和首页；维护期间两者都返回 503。
+
+### 升级部署引擎
+
+Release 不能升级 SYSTEM 部署引擎，必须由管理员手动操作：
+
+1. 从对应 Release 下载服务器 ZIP。
+2. 从 Release 页面或 `provenance.json` 中抄录这个 ZIP 的 SHA-256。
+3. 解压 ZIP，然后以管理员身份打开 PowerShell，运行同一个包里的升级脚本：
+
+```powershell
+& '<解压目录>\windows\cd\Update-YumpooEngine.ps1' `
+  -PackagePath '<下载目录>\yumpoo-windows-server-m1-15.zip' `
+  -PackageSha256 '<Release 上的 SHA-256>' `
+  -ReleaseBranch main -RequireImmutable
+```
+
+脚本的安全检查：
+
+- 持有部署锁；有部署正在进行或处于 `recovery_required` 时拒绝执行。
+- 校验包的哈希后，只从 ZIP 中取出固定的几个引擎文件。
+- 要求升级脚本所在目录的模块与包内的模块完全一致。
+
+脚本的结果：
+
+- 旧引擎和旧 `host.json` 备份在 `deployment/engine/backup-<UTC 时间>`。
+- `host.json` 迁移为 schema 2，写入以下字段：
+  - `releaseBranch`；
+  - `requireImmutable`；
+  - `probeRoutes`；
+  - `retention.extraReleases`（参数 `-ExtraReleases`）；
+  - `observe`（参数 `-ObserveMinutes`、`-MaxErrorLines`）。
+- `engine/engine.json` 记录引擎的来源 commit 和文件哈希。
+
+未升级的 schema 1 主机保持原有行为：分支为 `dev`，不要求不可变发布，不写探测路由。
 
 本地复核现行服务器包仍使用既有入口：
 

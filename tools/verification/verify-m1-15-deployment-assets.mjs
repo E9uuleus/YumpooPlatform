@@ -45,7 +45,7 @@ assert(production.logging?.file?.name === 'C:/ProgramData/Yumpoo/logs/yumpoo-ser
 assert(application.logging?.structured?.format?.file === 'com.yumpoo.platform.foundation.infrastructure.logging.YumpooJsonLogFormatter', '应用 JSON 日志格式丢失')
 const rolling = application.logging?.logback?.rollingpolicy
 assert(rolling?.['max-file-size'] === '50MB' && rolling['max-history'] === 90 && rolling['total-size-cap'] === '10GB', '应用文件日志轮转边界改变')
-for (const required of ['Initialize-YumpooHost.ps1', 'Invoke-YumpooDeploy.ps1', 'Start-YumpooNginx.ps1', 'YumpooDeployment.psm1']) {
+for (const required of ['Initialize-YumpooHost.ps1', 'Invoke-YumpooDeploy.ps1', 'Start-YumpooNginx.ps1', 'YumpooDeployment.psm1', 'Update-YumpooEngine.ps1']) {
   assert(fs.statSync(path.join(deployment, 'cd', required)).isFile(), `发布包缺少固定部署程序：${required}`)
 }
 assert(application.management?.endpoints?.web?.exposure?.include === 'health,info', 'Actuator 只允许公开 health 与 info')

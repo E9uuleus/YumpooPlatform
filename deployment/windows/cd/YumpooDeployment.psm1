@@ -1,6 +1,29 @@
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$script:ReleaseTagPattern = '^server-v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[1-9][0-9]{0,2}$'
+$script:BlobPattern = '^sha256\\[0-9a-f]{2}\\[0-9a-f]{2}\\([0-9a-f]{64})$'
+if (-not ('Yumpoo.NativeLink' -as [type])) {
+    Add-Type -Namespace Yumpoo -Name NativeLink -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern bool CreateHardLink(string lpFileName, string lpExistingFileName, System.IntPtr lpSecurityAttributes);'
+}
+
+# host.json schema 1 has none of the newer keys; every reader supplies the backward-compatible default.
+function Get-YumpooSetting($Settings, [string]$Name, $Default) {
+    $value = $Settings
+    foreach ($segment in $Name.Split('.')) {
+        if ($null -eq $value) { return $Default }
+        if ($value -is [Collections.IDictionary]) {
+            if (-not $value.Contains($segment)) { return $Default }
+            $value = $value[$segment]
+        } else {
+            $property = $value.PSObject.Properties[$segment]
+            if ($null -eq $property) { return $Default }
+            $value = $property.Value
+        }
+    }
+    if ($null -eq $value) { return $Default }
+    return $value
+}
 
 function Write-YumpooJson($Path, $Value) {
     $temporary = "$Path.$([guid]::NewGuid().ToString('N')).tmp"
@@ -273,18 +296,54 @@ function Read-YumpooReleaseProvenance($Asset, $Path) {
     return (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json)
 }
 
-function Assert-YumpooSource($Request, $Provenance, $Package, $Current, $ProvenancePath) {
-    if ($Request.schemaVersion -ne 1 -or $Request.requestId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') { throw 'Invalid deployment request.' }
+function Get-YumpooRequestMode($Request) {
+    if ($Request.schemaVersion -notin @(1, 2) -or $Request.requestId -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') { throw 'Invalid deployment request.' }
+    # schemaVersion 1 predates rollback and is always a forward deployment.
+    if ($Request.schemaVersion -eq 1) { return 'deploy' }
+    $mode = $Request.PSObject.Properties['mode']
+    if ($null -eq $mode -or $mode.Value -cnotin @('deploy', 'rollback')) { throw 'Invalid deployment request.' }
+    return $mode.Value
+}
+
+function Assert-YumpooProvenanceFields($Request, $Provenance) {
+    $null = Get-YumpooRequestMode $Request
     if ($Provenance.schemaVersion -ne 1 -or $Provenance.repository -cne 'E9uuleus/YumpooPlatform' -or
-        $Provenance.tag -notmatch '^server-v[A-Za-z0-9][A-Za-z0-9._-]{0,95}$' -or $Provenance.sourceCommit -notmatch '^[0-9a-f]{40}$' -or
+        $Provenance.tag -cnotmatch $script:ReleaseTagPattern -or $Provenance.sourceCommit -notmatch '^[0-9a-f]{40}$' -or
         $Provenance.packageSha256 -notmatch '^[0-9a-f]{64}$') { throw 'Invalid provenance.' }
-    foreach ($field in @('tag', 'sourceCommit', 'packageSha256')) {
+    foreach ($field in @('tag', 'sourceCommit')) {
         if ($Request.$field -cne $Provenance.$field) { throw "Request provenance mismatch: $field" }
     }
+}
+
+function Assert-YumpooSource($Settings, $Request, $Provenance, $Package, $Current, $ProvenancePath) {
+    Assert-YumpooProvenanceFields $Request $Provenance
+    if ($Request.packageSha256 -cne $Provenance.packageSha256) { throw 'Request provenance mismatch: packageSha256' }
     if ((Get-FileHash -LiteralPath $Package -Algorithm SHA256).Hash -ine $Provenance.packageSha256 -or
         (Get-Item -LiteralPath $Package).Length -ne $Provenance.packageBytes) { throw 'Package checksum or size mismatch.' }
+    Assert-YumpooTrustedRelease $Settings $Provenance $ProvenancePath
+    if ($Current -and $Current.sourceCommit -cne $Provenance.sourceCommit) {
+        $forward = Get-YumpooGitHub "compare/$($Current.sourceCommit)...$($Provenance.sourceCommit)?per_page=1&page=2"
+        if ($forward.status -cne 'ahead') { throw 'Automatic downgrade or divergent deployment is forbidden.' }
+    }
+}
+
+function Assert-YumpooRollbackSource($Settings, $Request, $Provenance, $Current, $ProvenancePath) {
+    Assert-YumpooProvenanceFields $Request $Provenance
+    $previous = $Current.PSObject.Properties['previous']
+    if ($null -eq $previous -or $null -eq $previous.Value) { throw 'No retained previous release is available for rollback.' }
+    if ($previous.Value.sourceCommit -cne $Provenance.sourceCommit -or $previous.Value.tag -cne $Provenance.tag) { throw 'Rollback is limited to the immediately previous release.' }
+    Assert-YumpooTrustedRelease $Settings $Provenance $ProvenancePath
+    $behind = Get-YumpooGitHub "compare/$($Provenance.sourceCommit)...$($Current.sourceCommit)?per_page=1&page=2"
+    if ($behind.status -cne 'ahead') { throw 'The rollback target is not an ancestor of the current release.' }
+}
+
+function Assert-YumpooTrustedRelease($Settings, $Provenance, $ProvenancePath) {
+    $branch = [string](Get-YumpooSetting $Settings 'releaseBranch' 'dev')
+    if ($branch -cnotmatch '^[a-z][a-z0-9/_-]{0,63}$') { throw 'Invalid release branch setting.' }
     $release = Get-YumpooGitHub "releases/tags/$($Provenance.tag)"
     if ($release.draft -or -not $release.published_at) { throw 'Release is not published.' }
+    $immutable = $release.PSObject.Properties['immutable']
+    if ((Get-YumpooSetting $Settings 'requireImmutable' $false) -eq $true -and ($null -eq $immutable -or $immutable.Value -ne $true)) { throw 'Release is not immutable.' }
     $asset = @($release.assets | Where-Object name -eq 'provenance.json')
     $packageAsset = @($release.assets | Where-Object name -eq 'yumpoo-windows-server-m1-15.zip')
     if ($asset.Count -ne 1 -or $packageAsset.Count -ne 1) { throw 'Release source assets are missing or ambiguous.' }
@@ -296,21 +355,17 @@ function Assert-YumpooSource($Request, $Provenance, $Package, $Current, $Provena
     $tagCommit = Get-YumpooGitHub "commits/$($Provenance.tag)"
     if ($tagCommit.sha -cne $Provenance.sourceCommit) { throw 'Release tag moved.' }
     # Only ancestry status is needed; page 2 omits the potentially large changed-file list.
-    $dev = Get-YumpooGitHub "compare/$($Provenance.sourceCommit)...dev?per_page=1&page=2"
-    if ($dev.status -notin @('ahead', 'identical')) { throw 'Release is not a dev ancestor.' }
+    $line = Get-YumpooGitHub "compare/$($Provenance.sourceCommit)...$($branch)?per_page=1&page=2"
+    if ($line.status -notin @('ahead', 'identical')) { throw "Release is not a $branch ancestor." }
     $run = Get-YumpooGitHub "actions/runs/$($Provenance.ciRunId)/attempts/$($Provenance.ciRunAttempt)"
-    if ($run.head_sha -cne $Provenance.sourceCommit -or $run.head_branch -cne 'dev' -or $run.event -cne 'push' -or
-        $run.conclusion -cne 'success' -or $run.path -cne '.github/workflows/m0-18-ci.yml') { throw 'CI provenance is not a successful dev push.' }
+    if ($run.head_sha -cne $Provenance.sourceCommit -or $run.head_branch -cne $branch -or $run.event -cne 'push' -or
+        $run.conclusion -cne 'success' -or $run.path -cne '.github/workflows/m0-18-ci.yml') { throw "CI provenance is not a successful $branch push." }
     $jobs = Get-YumpooGitHub "actions/runs/$($Provenance.ciRunId)/attempts/$($Provenance.ciRunAttempt)/jobs?per_page=100"
     foreach ($name in @('M0 Portable Gate', 'Windows Delivery', 'M0 Windows x64 Gate')) {
         $matched = @($jobs.jobs | Where-Object name -eq $name)
         if ($matched.Count -ne 1 -or $matched[0].conclusion -ne 'success') { throw "Required CI job failed: $name" }
     }
     if ($Provenance.artifactName -cne "m1-15-server-$($Provenance.sourceCommit)-$($Provenance.ciRunAttempt)") { throw 'CI artifact name does not match attempt.' }
-    if ($Current -and $Current.sourceCommit -cne $Provenance.sourceCommit) {
-        $forward = Get-YumpooGitHub "compare/$($Current.sourceCommit)...$($Provenance.sourceCommit)?per_page=1&page=2"
-        if ($forward.status -cne 'ahead') { throw 'Automatic downgrade or divergent deployment is forbidden.' }
-    }
 }
 
 function Set-YumpooMaintenance($Settings, [bool]$Enabled) {
@@ -335,15 +390,33 @@ function Invoke-YumpooNginx($Settings, [switch]$Reload) {
     } finally { Pop-Location }
 }
 
-function Set-YumpooRelease($Settings, $ReleaseRoot) {
-    [xml]$xml = [IO.File]::ReadAllText((Join-Path $Settings.runtimeRoot 'service/yumpoo-service.xml'))
+function Set-YumpooServiceRelease($ServiceXml, $ReleaseRoot, [string]$Tag) {
+    [xml]$xml = [IO.File]::ReadAllText($ServiceXml)
     $xml.service.arguments = '-Dfile.encoding=UTF-8 -jar "' + (Join-Path $ReleaseRoot 'server/yumpoo-server.jar') + '"'
     $xml.SelectSingleNode('/service/workingdirectory').InnerText = [string]$ReleaseRoot
-    $releaseEnvironment = $xml.SelectSingleNode('/service/env[@name="YUMPOO_DEPLOYMENT_RELEASE_ROOT"]')
-    if (-not $releaseEnvironment) { $releaseEnvironment = $xml.CreateElement('env'); $releaseEnvironment.SetAttribute('name', 'YUMPOO_DEPLOYMENT_RELEASE_ROOT'); $null = $xml.DocumentElement.AppendChild($releaseEnvironment) }
-    $releaseEnvironment.SetAttribute('value', $ReleaseRoot)
-    $xml.Save((Join-Path $Settings.runtimeRoot 'service/yumpoo-service.xml'))
-    [IO.File]::WriteAllText($Settings.webRootInclude, ('root "' + $ReleaseRoot.Replace('\', '/') + '/web";' + "`n"), (New-Object Text.UTF8Encoding($false)))
+    foreach ($entry in @(@('YUMPOO_DEPLOYMENT_RELEASE_ROOT', [string]$ReleaseRoot), @('YUMPOO_DEPLOYMENT_RELEASE_TAG', $Tag))) {
+        $environment = $xml.SelectSingleNode("/service/env[@name=`"$($entry[0])`"]")
+        if (-not $environment) { $environment = $xml.CreateElement('env'); $environment.SetAttribute('name', $entry[0]); $null = $xml.DocumentElement.AppendChild($environment) }
+        $environment.SetAttribute('value', $entry[1])
+    }
+    $xml.Save($ServiceXml)
+}
+
+function Get-YumpooWebRootInclude($ReleaseRoot, [switch]$ProbeRoutes) {
+    $lines = @('root "' + ([string]$ReleaseRoot).Replace('\', '/') + '/web";')
+    # Probe routes are written only after an administrator confirms the include sits where location blocks are valid.
+    if ($ProbeRoutes) {
+        foreach ($probe in @(@('/healthz', '/actuator/health/readiness'), @('/version.json', '/actuator/info'))) {
+            $lines += 'location = ' + $probe[0] + ' { proxy_pass http://127.0.0.1:8100' + $probe[1] + '; proxy_http_version 1.1; proxy_set_header Connection ""; proxy_set_header Host $host; proxy_connect_timeout 5s; proxy_read_timeout 10s; }'
+        }
+    }
+    return ($lines -join "`n") + "`n"
+}
+
+function Set-YumpooRelease($Settings, $ReleaseRoot, [string]$Tag) {
+    Set-YumpooServiceRelease (Join-Path $Settings.runtimeRoot 'service/yumpoo-service.xml') $ReleaseRoot $Tag
+    $include = Get-YumpooWebRootInclude $ReleaseRoot -ProbeRoutes:((Get-YumpooSetting $Settings 'probeRoutes' $false) -eq $true)
+    [IO.File]::WriteAllText($Settings.webRootInclude, $include, (New-Object Text.UTF8Encoding($false)))
     Invoke-YumpooNginx $Settings -Reload
 }
 
@@ -375,12 +448,29 @@ function Start-YumpooServer {
     throw 'Yumpoo readiness timed out.'
 }
 
-function Test-YumpooSite($Settings, [switch]$Public) {
+function Assert-YumpooReleaseIdentity([string]$IndexHtml, $Info, [string]$Commit, [string]$Tag) {
+    $meta = [regex]::Matches($IndexHtml, '<meta name="yumpoo-commit" content="([^"]*)"')
+    if ($meta.Count -ne 1 -or $meta[0].Groups[1].Value -cne $Commit) { throw 'Served web assets do not belong to the released commit.' }
+    $release = $Info.PSObject.Properties['release']; $build = $Info.PSObject.Properties['build']
+    if ($null -eq $release -or $null -eq $build -or [string]$build.Value.commit -cne $Commit) { throw 'Running server does not report the released commit.' }
+    if ([string]$release.Value.tag -cne $Tag) { throw 'Running server does not report the released tag.' }
+}
+
+function Test-YumpooSite($Settings, [switch]$Public, [string]$ExpectedCommit = '', [string]$ExpectedTag = '') {
     $resolve = @()
     if (-not $Public) { $resolve = @('--resolve', "$($Settings.hostname):443:127.0.0.1") }
     $base = "https://$($Settings.hostname)"
     $index = & curl.exe --silent --show-error --fail --max-time 15 @resolve "$base/"
     if ($LASTEXITCODE -ne 0 -or ($index -join '') -notmatch '<div id="app"') { throw 'HTTPS SPA verification failed.' }
+    if ($ExpectedCommit) {
+        $info = Invoke-RestMethod -Uri 'http://127.0.0.1:8100/actuator/info' -TimeoutSec 5
+        Assert-YumpooReleaseIdentity ($index -join "`n") $info $ExpectedCommit $ExpectedTag
+        if ((Get-YumpooSetting $Settings 'probeRoutes' $false) -eq $true) {
+            $published = (& curl.exe --silent --show-error --fail --max-time 10 @resolve "$base/version.json") -join ''
+            if ($LASTEXITCODE -ne 0) { throw 'Public version probe failed.' }
+            Assert-YumpooReleaseIdentity ($index -join "`n") ($published | ConvertFrom-Json) $ExpectedCommit $ExpectedTag
+        }
+    }
     $assets = [regex]::Matches(($index -join "`n"), '(?:src|href)="(/assets/[^"?]+\.(?:js|css))"')
     if ($assets.Count -lt 2) { throw 'SPA assets are missing.' }
     foreach ($asset in $assets) {
@@ -408,6 +498,7 @@ function Invoke-YumpooTransaction([hashtable]$Steps) {
         $transactionOpened = $true; & $Steps.Open
         $transactionOpenConfirmed = $true
         & $Steps.PublicValidate
+        if ($Steps.ContainsKey('Observe')) { & $Steps.Observe }
         & $Steps.Success
         return 'succeeded'
     } catch {
@@ -424,6 +515,331 @@ function Invoke-YumpooTransaction([hashtable]$Steps) {
             if ($transactionCandidate) { return 'rolled_back' }
             return 'failed'
         } catch { & $Steps.RecoveryFailure $_; return 'recovery_required' }
+    }
+}
+
+function Read-YumpooLedger($Deployment) {
+    $file = Join-Path $Deployment 'engine/releases.json'
+    if (-not (Test-Path -LiteralPath $file)) { return @() }
+    return @((Get-Content -LiteralPath $file -Raw | ConvertFrom-Json).entries)
+}
+
+function Add-YumpooLedgerEntry($Deployment, $Entry) {
+    $entries = @(Read-YumpooLedger $Deployment) + @([pscustomobject]$Entry)
+    if ($entries.Count -gt 200) { $entries = $entries[($entries.Count - 200)..($entries.Count - 1)] }
+    Write-YumpooJson (Join-Path $Deployment 'engine/releases.json') ([ordered]@{ schemaVersion = 1; entries = $entries })
+}
+
+function Remove-YumpooManagedTree($Path, $Parent) {
+    $full = Assert-YumpooPath $Path $Parent
+    if (-not (Test-Path -LiteralPath $full)) { return }
+    if ((Get-Item -LiteralPath $full -Force) -is [IO.DirectoryInfo]) {
+        # Windows PowerShell 5.1 Remove-Item can follow junctions; refuse any tree that contains one.
+        if (@(Get-ChildItem -LiteralPath $full -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) {
+            throw "Retention refuses to delete a tree containing reparse points: $full"
+        }
+        Remove-Item -LiteralPath $full -Recurse -Force
+    } else { Remove-Item -LiteralPath $full -Force }
+}
+
+function Get-YumpooProtectedReleases($Settings, $Deployment, $Current) {
+    $releases = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $snapshots = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $normalize = { param($path) [IO.Path]::GetFullPath([string]$path).TrimEnd('\', '/') }
+    $null = $releases.Add((& $normalize $Current.releaseRoot))
+    $requestId = $Current.PSObject.Properties['requestId']
+    if ($null -ne $requestId -and $requestId.Value) { $null = $snapshots.Add([string]$requestId.Value) }
+    $previous = $Current.PSObject.Properties['previous']
+    if ($null -ne $previous -and $null -ne $previous.Value -and $previous.Value.releaseRoot) {
+        $null = $releases.Add((& $normalize $previous.Value.releaseRoot))
+        $previousRequest = $previous.Value.PSObject.Properties['requestId']
+        if ($null -ne $previousRequest -and $previousRequest.Value) { $null = $snapshots.Add([string]$previousRequest.Value) }
+    }
+    $extra = [int](Get-YumpooSetting $Settings 'retention.extraReleases' 2)
+    $ledger = @(Read-YumpooLedger $Deployment | Where-Object { $_.releaseRoot })
+    $succeeded = @($ledger | Where-Object { $_.state -eq 'succeeded' } | Sort-Object completedAt -Descending)
+    $added = 0
+    foreach ($entry in $succeeded) {
+        if ($added -ge $extra) { break }
+        if ($releases.Add((& $normalize $entry.releaseRoot))) { $added++ }
+    }
+    # A snapshot is kept exactly as long as the release its deployment produced, whatever that deployment's
+    # final state was: an observation_failed release stays online and can be current or previous.
+    foreach ($entry in $ledger) {
+        if ($entry.mode -eq 'deploy' -and $releases.Contains((& $normalize $entry.releaseRoot))) { $null = $snapshots.Add([string]$entry.requestId) }
+    }
+    return @{ releases = $releases; snapshots = $snapshots }
+}
+
+# Keeps the current release, the immediate rollback target and N more successful releases with their snapshots.
+function Invoke-YumpooRetention($Settings, $Deployment) {
+    $activeFile = Join-Path $Deployment 'engine/active.json'
+    if ((Test-Path -LiteralPath $activeFile) -and (Get-Content -LiteralPath $activeFile -Raw | ConvertFrom-Json).state -in @('running', 'recovery_required')) { return @() }
+    $uuid = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    $cutoff = (Get-Date).ToUniversalTime().AddHours(-24)
+    $removed = New-Object Collections.Generic.List[string]
+    $failures = New-Object Collections.Generic.List[string]
+    # One undeletable item must not stop the rest of the cleanup.
+    $remove = {
+        param($Path, $Parent, $Label)
+        try { Remove-YumpooManagedTree $Path $Parent; $removed.Add($Label) }
+        catch { $failures.Add("${Label}: $($_.Exception.Message)") }
+    }
+    $stateOf = {
+        param($id)
+        $file = Join-Path $Deployment "status/$id.json"
+        if (Test-Path -LiteralPath $file) { return [string](Get-Content -LiteralPath $file -Raw | ConvertFrom-Json).state }
+        return ''
+    }
+    foreach ($area in @('inbox', 'work')) {
+        $areaRoot = Join-Path $Deployment $area
+        if (-not (Test-Path -LiteralPath $areaRoot)) { continue }
+        foreach ($folder in @(Get-ChildItem -LiteralPath $areaRoot -Directory -Force | Where-Object Name -Match $uuid)) {
+            $state = & $stateOf $folder.Name
+            if ($state -in @('running', 'recovery_required')) { continue }
+            if (-not $state) {
+                # Committed requests wait for the task; uncommitted uploads may still be in flight.
+                if ($area -eq 'inbox' -and (Test-Path -LiteralPath (Join-Path $folder.FullName 'request.json'))) { continue }
+                $latest = @(@(Get-ChildItem -LiteralPath $folder.FullName -Recurse -Force -File | ForEach-Object { $_.LastWriteTimeUtc }) + $folder.LastWriteTimeUtc | Sort-Object -Descending)[0]
+                if ($latest -gt $cutoff) { continue }
+            }
+            & $remove $folder.FullName $areaRoot "$area/$($folder.Name)"
+        }
+    }
+    $current = Get-Content -LiteralPath (Join-Path $Deployment 'engine/current.json') -Raw | ConvertFrom-Json
+    $protected = Get-YumpooProtectedReleases $Settings $Deployment $current
+    if ($Settings.releasesRoot -and (Test-Path -LiteralPath $Settings.releasesRoot)) {
+        # Only engine-created candidate directories are eligible; the bootstrap release is never touched.
+        foreach ($release in @(Get-ChildItem -LiteralPath $Settings.releasesRoot -Directory -Force | Where-Object Name -Match '^[0-9a-f]{40}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')) {
+            # The directory name ends with its request UUID; an unresolved request keeps its candidate for diagnosis.
+            if ($protected.releases.Contains($release.FullName.TrimEnd('\', '/')) -or (& $stateOf $release.Name.Substring(41)) -in @('running', 'recovery_required')) { continue }
+            & $remove $release.FullName $Settings.releasesRoot "releases/$($release.Name)"
+        }
+    }
+    $backupsRoot = Join-Path $Deployment 'backups'
+    if (Test-Path -LiteralPath $backupsRoot) {
+        foreach ($backup in @(Get-ChildItem -LiteralPath $backupsRoot -Directory -Force | Where-Object Name -Match $uuid)) {
+            if ($protected.snapshots.Contains($backup.Name) -or (& $stateOf $backup.Name) -in @('running', 'recovery_required')) { continue }
+            & $remove $backup.FullName $backupsRoot "backups/$($backup.Name)"
+        }
+    }
+    foreach ($failure in @(Get-ChildItem -LiteralPath (Join-Path $Deployment 'engine') -File -Filter 'failure-*.txt' -Force | Where-Object { $_.LastWriteTimeUtc -lt (Get-Date).ToUniversalTime().AddDays(-90) })) {
+        & $remove $failure.FullName (Join-Path $Deployment 'engine') "engine/$($failure.Name)"
+    }
+    Write-YumpooJson (Join-Path $Deployment 'engine/retention-last.json') ([ordered]@{ completedAt = (Get-Date).ToUniversalTime().ToString('o'); removed = @($removed); failures = @($failures) })
+    if ($failures.Count) { throw ('Retention could not remove: ' + ($failures -join '; ')) }
+    return @($removed)
+}
+
+function Assert-YumpooSnapshotTrees($Source, $Destination) {
+    foreach ($tree in @($Source, $Destination)) {
+        $full = [IO.Path]::GetFullPath($tree)
+        if ($full -eq [IO.Path]::GetPathRoot($full)) { throw 'A drive root cannot be a snapshot directory.' }
+        $null = Assert-YumpooPath $full ([IO.Path]::GetDirectoryName($full))
+        if ((Test-Path -LiteralPath $full) -and @(Get-ChildItem -LiteralPath $full -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw 'Snapshot trees cannot contain reparse points.' }
+    }
+}
+
+# Published attachment blobs are content-addressed and never rewritten, so a snapshot can share their bytes.
+# Hard links share one ACL with the live file; Test-YumpooBlobSnapshot re-hashes them before any restore.
+function New-YumpooLinkedSnapshot($Source, $Destination) {
+    Assert-YumpooSnapshotTrees $Source $Destination
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    if (-not (Test-Path -LiteralPath $Source)) { return }
+    $root = [IO.Path]::GetFullPath($Source).TrimEnd('\', '/')
+    foreach ($item in @(Get-ChildItem -LiteralPath $root -Recurse -Force)) {
+        $relative = $item.FullName.Substring($root.Length + 1)
+        $target = Join-Path $Destination $relative
+        if ($item -is [IO.DirectoryInfo]) { New-Item -ItemType Directory -Path $target -Force | Out-Null; continue }
+        New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($target)) -Force | Out-Null
+        if ($relative -match $script:BlobPattern) {
+            if (-not [Yumpoo.NativeLink]::CreateHardLink($target, $item.FullName, [IntPtr]::Zero)) {
+                throw "Cannot link attachment blob into the snapshot (Win32 $([Runtime.InteropServices.Marshal]::GetLastWin32Error()))."
+            }
+        } else { Copy-Item -LiteralPath $item.FullName -Destination $target }
+    }
+}
+
+function Test-YumpooBlobSnapshot($Snapshot) {
+    if (-not (Test-Path -LiteralPath $Snapshot)) { return }
+    $root = [IO.Path]::GetFullPath($Snapshot).TrimEnd('\', '/')
+    foreach ($file in @(Get-ChildItem -LiteralPath $root -Recurse -Force -File)) {
+        $relative = $file.FullName.Substring($root.Length + 1)
+        if ($relative -match $script:BlobPattern -and (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -ine $Matches[1]) {
+            throw "Attachment snapshot blob no longer matches its content address: $relative"
+        }
+    }
+}
+
+# Best effort: a notification failure never changes the deployment outcome.
+function Send-YumpooNotification($Root, $Status, [TimeSpan]$Elapsed, [scriptblock]$Sender = {
+    param($Uri, [byte[]]$Body)
+    Invoke-RestMethod -Method Post -Uri $Uri -ContentType 'application/json; charset=utf-8' -Body $Body -TimeoutSec 10 | Out-Null
+}) {
+    try {
+        $config = Join-Path $Root 'secrets/deploy-notify.json'
+        if (-not (Test-Path -LiteralPath $config -PathType Leaf)) { return $false }
+        $raw = [string](Get-Content -LiteralPath $config -Raw | ConvertFrom-Json).wecomWebhook
+        # Validate the literal text: [Uri] normalises an explicit :443 away, so only the exact robot URL form is accepted.
+        if ($raw -cnotmatch '^https://qyapi\.weixin\.qq\.com/cgi-bin/webhook/send\?key=[A-Za-z0-9-]+$') {
+            throw 'The notification webhook must be a WeCom group robot URL.'
+        }
+        $labels = @{
+            succeeded = [regex]::Unescape('\u6210\u529f')
+            failed = [regex]::Unescape('\u5931\u8d25')
+            rolled_back = [regex]::Unescape('\u5931\u8d25\uff0c\u5df2\u6062\u590d\u4e3a\u539f\u7248\u672c')
+            recovery_required = [regex]::Unescape('\u9700\u8981\u4eba\u5de5\u6062\u590d\uff0c\u7ad9\u70b9\u4fdd\u6301\u7ef4\u62a4\u72b6\u6001')
+        }
+        $label = $labels[[string]$Status.state]
+        if (-not $label) { $label = [string]$Status.state }
+        $commit = [string]$Status.sourceCommit
+        if ($commit.Length -gt 8) { $commit = $commit.Substring(0, 8) }
+        $lines = @(
+            ([regex]::Unescape('**Yumpoo \u670d\u52a1\u7aef\u53d1\u5e03\uff1a') + $label + '**'),
+            ([regex]::Unescape('> \u7248\u672c\uff1a') + $Status.tag),
+            ([regex]::Unescape('> \u63d0\u4ea4\uff1a') + $commit),
+            ([regex]::Unescape('> \u9636\u6bb5\uff1a') + $Status.phase),
+            ([regex]::Unescape('> \u8bf7\u6c42\uff1a') + $Status.requestId),
+            ([regex]::Unescape('> \u8017\u65f6\uff1a') + [int]$Elapsed.TotalSeconds + [regex]::Unescape(' \u79d2'))
+        )
+        if ($Status.phase -eq 'observation_failed') {
+            $lines += [regex]::Unescape('> \u4e0a\u7ebf\u540e\u89c2\u5bdf\u672a\u901a\u8fc7\uff0c\u4e1a\u52a1\u6570\u636e\u5df2\u4fdd\u7559\u3002\u5982\u9700\u56de\u5230\u4e0a\u4e00\u7248\u672c\uff0c\u8bf7\u8fd0\u884c Server Rollback \u5de5\u4f5c\u6d41\u3002')
+        }
+        $body = [Text.Encoding]::UTF8.GetBytes((@{ msgtype = 'markdown'; markdown = @{ content = ($lines -join "`n") } } | ConvertTo-Json -Depth 4 -Compress))
+        & $Sender $raw $body
+        return $true
+    } catch {
+        try { [IO.File]::WriteAllText((Join-Path $Root 'deployment/engine/notify-error.txt'), $_.Exception.Message) } catch { }
+        return $false
+    }
+}
+
+function New-YumpooLogErrorCounter([string]$LogPath) {
+    $state = @{ path = $LogPath; offset = [long]0; errors = 0 }
+    if ($LogPath -and (Test-Path -LiteralPath $LogPath -PathType Leaf)) { $state.offset = (Get-Item -LiteralPath $LogPath).Length }
+    return {
+        if (-not $state.path -or -not (Test-Path -LiteralPath $state.path -PathType Leaf)) { return $state.errors }
+        $stream = [IO.File]::Open($state.path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]'ReadWrite, Delete')
+        try {
+            # A shorter file means it rotated; count the new file from the beginning.
+            if ($stream.Length -lt $state.offset) { $state.offset = 0 }
+            $null = $stream.Seek($state.offset, [IO.SeekOrigin]::Begin)
+            $text = (New-Object IO.StreamReader($stream, (New-Object Text.UTF8Encoding($false)))).ReadToEnd()
+            # Only complete lines are consumed; a line still being written is counted next round.
+            $complete = $text.LastIndexOf("`n")
+            if ($complete -ge 0) {
+                $chunk = $text.Substring(0, $complete + 1)
+                $state.errors += [regex]::Matches($chunk, '"level"\s*:\s*"ERROR"').Count
+                $state.offset += [Text.Encoding]::UTF8.GetByteCount($chunk)
+            }
+        } finally { $stream.Dispose() }
+        return $state.errors
+    }.GetNewClosure()
+}
+
+# The window is bounded by a deadline, so slow probes cannot shorten it and the last check lands at its end.
+function Watch-YumpooRelease($Settings, [scriptblock]$Probe, [scriptblock]$CountErrors,
+    [scriptblock]$Wait = { param($Seconds) Start-Sleep -Seconds $Seconds }, [scriptblock]$Clock = { [DateTime]::UtcNow }) {
+    $minutes = [int](Get-YumpooSetting $Settings 'observe.minutes' 10)
+    $interval = [Math]::Max(5, [int](Get-YumpooSetting $Settings 'observe.intervalSeconds' 30))
+    $maxErrors = [int](Get-YumpooSetting $Settings 'observe.maxErrorLines' 20)
+    $deadline = ([DateTime](& $Clock)).AddMinutes([Math]::Max(0, $minutes))
+    $rounds = 0
+    for (;;) {
+        & $Probe
+        $errors = [int](& $CountErrors)
+        $rounds++
+        if ($errors -gt $maxErrors) { throw "Observation found $errors application error log lines after opening traffic (limit $maxErrors)." }
+        $remaining = ($deadline - [DateTime](& $Clock)).TotalSeconds
+        if ($remaining -le 0) { return $rounds }
+        & $Wait ([int][Math]::Ceiling([Math]::Min($interval, $remaining)))
+    }
+}
+
+function Read-YumpooReleaseMetadata($ReleaseRoot) {
+    if (-not $ReleaseRoot) { return $null }
+    $file = Join-Path $ReleaseRoot 'windows/release-metadata.json'
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { return $null }
+    return Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+}
+
+# The previous JAR may only run against the current schema when every migration added since it is expand-only.
+function Assert-YumpooRollbackMigrations($Current, $Target) {
+    if ($null -eq $Current -or $null -eq $Target) { throw 'Rollback requires release metadata for both versions.' }
+    $remaining = @{}
+    foreach ($migration in @($Current.migrations)) { $remaining[[string]$migration.file] = $migration }
+    foreach ($migration in @($Target.migrations)) {
+        $file = [string]$migration.file
+        if (-not $remaining.ContainsKey($file) -or $remaining[$file].sha256 -cne $migration.sha256) { throw "Rollback target migration history diverges at $file." }
+        $remaining.Remove($file)
+    }
+    $breaking = @($remaining.Values | Where-Object { $_.classification -cne 'expand' } | ForEach-Object { [string]$_.file } | Sort-Object)
+    if ($breaking.Count) { throw ('Rollback is blocked by non-expand migrations: ' + ($breaking -join ', ')) }
+}
+
+function Install-YumpooEngine([string]$PackagePath, [string]$PackageSha256, [string]$Root, [hashtable]$Options, [string]$ExpectedModule = '') {
+    if ($PackageSha256 -notmatch '^[0-9A-Fa-f]{64}$' -or (Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash -ine $PackageSha256) {
+        throw 'The package SHA-256 does not match the verified Release value.'
+    }
+    $engine = Join-Path $Root 'deployment/engine'
+    $files = @('YumpooDeployment.psm1', 'Invoke-YumpooDeploy.ps1', 'Start-YumpooNginx.ps1')
+    $lock = $null; $staging = $null
+    try {
+        try { $lock = [IO.File]::Open((Join-Path $engine 'deploy.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
+        catch [IO.IOException] { throw 'A deployment is running; retry after it finishes.' }
+        $activeFile = Join-Path $engine 'active.json'
+        if ((Test-Path -LiteralPath $activeFile) -and (Get-Content -LiteralPath $activeFile -Raw | ConvertFrom-Json).state -in @('running', 'recovery_required')) {
+            throw 'Recover the interrupted deployment before updating the engine.'
+        }
+        $staging = Join-Path $engine ('update-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $staging | Out-Null
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $zip = [IO.Compression.ZipFile]::OpenRead($PackagePath)
+        try {
+            foreach ($name in @($files | ForEach-Object { "windows/cd/$_" }) + 'windows/release-metadata.json') {
+                $entries = @($zip.Entries | Where-Object { $_.FullName.Replace('\', '/') -ceq $name })
+                if ($entries.Count -ne 1) { throw "The package does not contain exactly one $name." }
+                [IO.Compression.ZipFileExtensions]::ExtractToFile($entries[0], (Join-Path $staging ([IO.Path]::GetFileName($name))), $false)
+            }
+        } finally { $zip.Dispose() }
+        if ($ExpectedModule -and (Get-FileHash -LiteralPath $ExpectedModule).Hash -cne (Get-FileHash -LiteralPath (Join-Path $staging 'YumpooDeployment.psm1')).Hash) {
+            throw 'Run the updater from the same verified package.'
+        }
+        $metadata = Get-Content -LiteralPath (Join-Path $staging 'release-metadata.json') -Raw | ConvertFrom-Json
+        if ($metadata.sourceCommit -notmatch '^[0-9a-f]{40}$') { throw 'The package release metadata is invalid.' }
+        $settings = [ordered]@{}
+        foreach ($property in (Get-Content -LiteralPath (Join-Path $engine 'host.json') -Raw | ConvertFrom-Json).PSObject.Properties) { $settings[$property.Name] = $property.Value }
+        $settings.schemaVersion = 2
+        $settings.releaseBranch = [string]$Options.releaseBranch
+        $settings.requireImmutable = [bool]$Options.requireImmutable
+        $settings.probeRoutes = [bool]$Options.probeRoutes
+        $settings.retention = [ordered]@{ extraReleases = [int]$Options.extraReleases }
+        $settings.observe = [ordered]@{ minutes = [int]$Options.observeMinutes; intervalSeconds = 30; maxErrorLines = [int]$Options.maxErrorLines }
+        if ($settings.releaseBranch -cnotin @('dev', 'main')) { throw 'The release branch must be dev or main.' }
+        $backup = Join-Path $engine ('backup-' + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssfffZ'))
+        New-Item -ItemType Directory -Path $backup | Out-Null
+        foreach ($file in $files + 'host.json' + 'engine.json') {
+            if (Test-Path -LiteralPath (Join-Path $engine $file)) { Copy-Item -LiteralPath (Join-Path $engine $file) -Destination (Join-Path $backup $file) }
+        }
+        try {
+            foreach ($file in $files) { Copy-Item -LiteralPath (Join-Path $staging $file) -Destination (Join-Path $engine $file) -Force }
+            Write-YumpooJson (Join-Path $engine 'host.json') $settings
+            $hashes = [ordered]@{}
+            foreach ($file in $files) { $hashes[$file] = (Get-FileHash -LiteralPath (Join-Path $engine $file)).Hash.ToLowerInvariant() }
+            Write-YumpooJson (Join-Path $engine 'engine.json') ([ordered]@{
+                schemaVersion = 1; sourceCommit = $metadata.sourceCommit; packageSha256 = $PackageSha256.ToLowerInvariant()
+                installedAt = (Get-Date).ToUniversalTime().ToString('o'); files = $hashes
+            })
+        } catch {
+            foreach ($file in $files + 'host.json' + 'engine.json') {
+                if (Test-Path -LiteralPath (Join-Path $backup $file)) { Copy-Item -LiteralPath (Join-Path $backup $file) -Destination (Join-Path $engine $file) -Force }
+            }
+            throw
+        }
+        return [pscustomobject]@{ sourceCommit = $metadata.sourceCommit; backup = $backup }
+    } finally {
+        if ($null -ne $lock) { $lock.Dispose() }
+        if ($staging -and (Test-Path -LiteralPath $staging)) { Remove-Item -LiteralPath $staging -Recurse -Force }
     }
 }
 

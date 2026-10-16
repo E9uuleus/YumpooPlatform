@@ -167,12 +167,13 @@ $expectedRoot = 'root "' + $ReleaseRoot.Replace('\', '/') + '/web";'
 $managedInclude = 'include "' + $settings.webRootInclude.Replace('\','/') + '";'
 $alreadyManaged = $siteBefore.Contains($managedInclude) -and $siteBefore.Contains('$yumpoo_maintenance')
 if ($alreadyManaged) {
-    if ([IO.File]::ReadAllText($settings.webRootInclude).Trim() -cne $expectedRoot) { throw 'The managed site root does not match the current release.' }
+    # The engine may append probe routes after the root line; only the root identifies the current release.
+    if (([IO.File]::ReadAllLines($settings.webRootInclude) | Select-Object -First 1).Trim() -cne $expectedRoot) { throw 'The managed site root does not match the current release.' }
     Invoke-YumpooNginx $settings
 } else {
 if (-not $siteBefore.Contains($expectedRoot)) { throw 'The site root does not match the current release; explicit reconciliation is required.' }
 Copy-Item -LiteralPath $sitePath -Destination (Join-Path $deployment 'engine/nginx-site.before.conf')
-[IO.File]::WriteAllText($settings.webRootInclude, $expectedRoot + "`n", (New-Object Text.UTF8Encoding($false)))
+[IO.File]::WriteAllText($settings.webRootInclude, (Get-YumpooWebRootInclude $ReleaseRoot), (New-Object Text.UTF8Encoding($false)))
 $siteAfter = $siteBefore.Replace($expectedRoot, $managedInclude)
 $maintenance = @'
     set $yumpoo_maintenance 0;

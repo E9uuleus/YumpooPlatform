@@ -56,6 +56,7 @@ for (const required of [
   'windows/cd/Invoke-YumpooDeploy.ps1',
   'windows/cd/Start-YumpooNginx.ps1',
   'windows/cd/YumpooDeployment.psm1',
+  'windows/cd/Update-YumpooEngine.ps1',
   'windows/secrets/application-secrets.yml',
   'windows/secrets/initial-identity-bootstrap.example.json',
   'windows/database/migrations/identityaccess/V15__productize_desktop_auth_attempt.sql',
