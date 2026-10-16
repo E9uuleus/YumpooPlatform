@@ -57,6 +57,25 @@ test('changes that can break the previous release are classified as breaking', (
   }
 })
 
+test('new-table exemptions require proof the table was created by this migration (REL-P1 F1–F3)', () => {
+  for (const sql of [
+    // F1：IF NOT EXISTS 可能命中已有表
+    'CREATE TABLE IF NOT EXISTS yumpoo.work_item (id integer, title text); ALTER TABLE yumpoo.work_item DROP COLUMN title;',
+    // F2：其他 schema 的同名新表不能豁免业务表
+    'CREATE TABLE scratch.work_item (id integer); ALTER TABLE yumpoo.work_item DROP COLUMN title;',
+    'CREATE TABLE work_item (id integer); DELETE FROM yumpoo.work_item;',
+    'CREATE TABLE "Work_Item" (id integer); UPDATE work_item SET title = NULL;',
+    // F3：新增列的内联约束可以收紧已有列
+    "ALTER TABLE yumpoo.work_item ADD COLUMN codex_probe text CHECK (title <> 'blocked');",
+    'ALTER TABLE yumpoo.work_item ADD COLUMN codex_probe text CONSTRAINT ck_probe CHECK (codex_probe <> \'\');',
+  ]) {
+    assert.equal(classifyMigration(sql).classification, 'breaking', sql)
+  }
+  assert.deepEqual(classifyMigration('CREATE TABLE IF NOT EXISTS yumpoo.audit_probe (id integer);'), { classification: 'expand', reasons: [] })
+  assert.deepEqual(classifyMigration('CREATE TABLE Yumpoo.Feature (id integer); ALTER TABLE yumpoo.feature DROP COLUMN id;'), { classification: 'expand', reasons: [] })
+  assert.deepEqual(classifyMigration('CREATE TABLE "yumpoo"."feature" (id integer); INSERT INTO yumpoo.feature VALUES (1);'), { classification: 'expand', reasons: [] })
+})
+
 function repository(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-migration-policy-'))
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
