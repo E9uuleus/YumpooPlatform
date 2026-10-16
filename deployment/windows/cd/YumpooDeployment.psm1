@@ -550,16 +550,22 @@ function Get-YumpooProtectedReleases($Settings, $Deployment, $Current) {
     $requestId = $Current.PSObject.Properties['requestId']
     if ($null -ne $requestId -and $requestId.Value) { $null = $snapshots.Add([string]$requestId.Value) }
     $previous = $Current.PSObject.Properties['previous']
-    if ($null -ne $previous -and $null -ne $previous.Value -and $previous.Value.releaseRoot) { $null = $releases.Add((& $normalize $previous.Value.releaseRoot)) }
+    if ($null -ne $previous -and $null -ne $previous.Value -and $previous.Value.releaseRoot) {
+        $null = $releases.Add((& $normalize $previous.Value.releaseRoot))
+        $previousRequest = $previous.Value.PSObject.Properties['requestId']
+        if ($null -ne $previousRequest -and $previousRequest.Value) { $null = $snapshots.Add([string]$previousRequest.Value) }
+    }
     $extra = [int](Get-YumpooSetting $Settings 'retention.extraReleases' 2)
-    $succeeded = @(Read-YumpooLedger $Deployment | Where-Object { $_.state -eq 'succeeded' -and $_.releaseRoot } | Sort-Object completedAt -Descending)
+    $ledger = @(Read-YumpooLedger $Deployment | Where-Object { $_.releaseRoot })
+    $succeeded = @($ledger | Where-Object { $_.state -eq 'succeeded' } | Sort-Object completedAt -Descending)
     $added = 0
     foreach ($entry in $succeeded) {
         if ($added -ge $extra) { break }
         if ($releases.Add((& $normalize $entry.releaseRoot))) { $added++ }
     }
-    # A snapshot is kept exactly as long as the release its deployment produced.
-    foreach ($entry in $succeeded) {
+    # A snapshot is kept exactly as long as the release its deployment produced, whatever that deployment's
+    # final state was: an observation_failed release stays online and can be current or previous.
+    foreach ($entry in $ledger) {
         if ($entry.mode -eq 'deploy' -and $releases.Contains((& $normalize $entry.releaseRoot))) { $null = $snapshots.Add([string]$entry.requestId) }
     }
     return @{ releases = $releases; snapshots = $snapshots }
@@ -605,7 +611,8 @@ function Invoke-YumpooRetention($Settings, $Deployment) {
     if ($Settings.releasesRoot -and (Test-Path -LiteralPath $Settings.releasesRoot)) {
         # Only engine-created candidate directories are eligible; the bootstrap release is never touched.
         foreach ($release in @(Get-ChildItem -LiteralPath $Settings.releasesRoot -Directory -Force | Where-Object Name -Match '^[0-9a-f]{40}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')) {
-            if ($protected.releases.Contains($release.FullName.TrimEnd('\', '/'))) { continue }
+            # The directory name ends with its request UUID; an unresolved request keeps its candidate for diagnosis.
+            if ($protected.releases.Contains($release.FullName.TrimEnd('\', '/')) -or (& $stateOf $release.Name.Substring(41)) -in @('running', 'recovery_required')) { continue }
             & $remove $release.FullName $Settings.releasesRoot "releases/$($release.Name)"
         }
     }
@@ -672,8 +679,9 @@ function Send-YumpooNotification($Root, $Status, [TimeSpan]$Elapsed, [scriptbloc
     try {
         $config = Join-Path $Root 'secrets/deploy-notify.json'
         if (-not (Test-Path -LiteralPath $config -PathType Leaf)) { return $false }
-        $uri = [Uri][string](Get-Content -LiteralPath $config -Raw | ConvertFrom-Json).wecomWebhook
-        if ($uri.Scheme -cne 'https' -or $uri.Host -cne 'qyapi.weixin.qq.com' -or $uri.AbsolutePath -cne '/cgi-bin/webhook/send' -or -not $uri.IsDefaultPort) {
+        $raw = [string](Get-Content -LiteralPath $config -Raw | ConvertFrom-Json).wecomWebhook
+        # Validate the literal text: [Uri] normalises an explicit :443 away, so only the exact robot URL form is accepted.
+        if ($raw -cnotmatch '^https://qyapi\.weixin\.qq\.com/cgi-bin/webhook/send\?key=[A-Za-z0-9-]+$') {
             throw 'The notification webhook must be a WeCom group robot URL.'
         }
         $labels = @{
@@ -698,7 +706,7 @@ function Send-YumpooNotification($Root, $Status, [TimeSpan]$Elapsed, [scriptbloc
             $lines += [regex]::Unescape('> \u4e0a\u7ebf\u540e\u89c2\u5bdf\u672a\u901a\u8fc7\uff0c\u4e1a\u52a1\u6570\u636e\u5df2\u4fdd\u7559\u3002\u5982\u9700\u56de\u5230\u4e0a\u4e00\u7248\u672c\uff0c\u8bf7\u8fd0\u884c Server Rollback \u5de5\u4f5c\u6d41\u3002')
         }
         $body = [Text.Encoding]::UTF8.GetBytes((@{ msgtype = 'markdown'; markdown = @{ content = ($lines -join "`n") } } | ConvertTo-Json -Depth 4 -Compress))
-        & $Sender $uri.AbsoluteUri $body
+        & $Sender $raw $body
         return $true
     } catch {
         try { [IO.File]::WriteAllText((Join-Path $Root 'deployment/engine/notify-error.txt'), $_.Exception.Message) } catch { }
@@ -729,18 +737,23 @@ function New-YumpooLogErrorCounter([string]$LogPath) {
     }.GetNewClosure()
 }
 
-function Watch-YumpooRelease($Settings, [scriptblock]$Probe, [scriptblock]$CountErrors, [scriptblock]$Wait = { param($Seconds) Start-Sleep -Seconds $Seconds }) {
+# The window is bounded by a deadline, so slow probes cannot shorten it and the last check lands at its end.
+function Watch-YumpooRelease($Settings, [scriptblock]$Probe, [scriptblock]$CountErrors,
+    [scriptblock]$Wait = { param($Seconds) Start-Sleep -Seconds $Seconds }, [scriptblock]$Clock = { [DateTime]::UtcNow }) {
     $minutes = [int](Get-YumpooSetting $Settings 'observe.minutes' 10)
     $interval = [Math]::Max(5, [int](Get-YumpooSetting $Settings 'observe.intervalSeconds' 30))
     $maxErrors = [int](Get-YumpooSetting $Settings 'observe.maxErrorLines' 20)
-    $rounds = [Math]::Max(1, [int][Math]::Ceiling($minutes * 60 / $interval))
-    for ($round = 1; $round -le $rounds; $round++) {
+    $deadline = ([DateTime](& $Clock)).AddMinutes([Math]::Max(0, $minutes))
+    $rounds = 0
+    for (;;) {
         & $Probe
         $errors = [int](& $CountErrors)
+        $rounds++
         if ($errors -gt $maxErrors) { throw "Observation found $errors application error log lines after opening traffic (limit $maxErrors)." }
-        if ($round -lt $rounds) { & $Wait $interval }
+        $remaining = ($deadline - [DateTime](& $Clock)).TotalSeconds
+        if ($remaining -le 0) { return $rounds }
+        & $Wait ([int][Math]::Ceiling([Math]::Min($interval, $remaining)))
     }
-    return $rounds
 }
 
 function Read-YumpooReleaseMetadata($ReleaseRoot) {

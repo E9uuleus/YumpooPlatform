@@ -163,14 +163,25 @@ try {
     Write-Output 'Settings defaults, request modes, service switch and release identity checks passed.'
 
     # ---- Observation window and error log counting ----
+    $script:now = [DateTime]'2026-10-20T00:00:00Z'
+    $clock = { $script:now }
+    $virtualWait = { param($seconds) $script:waits.Add($seconds); $script:now = $script:now.AddSeconds($seconds) }
     $script:probes = 0; $script:waits = New-Object Collections.Generic.List[int]
-    $rounds = Watch-YumpooRelease @{ observe = @{ minutes = 1; intervalSeconds = 20; maxErrorLines = 2 } } { $script:probes++ } { 1 } { param($seconds) $script:waits.Add($seconds) }
-    Assert-Test ($rounds -eq 3 -and $script:probes -eq 3 -and ($script:waits -join ',') -eq '20,20') 'observation runs every interval for the configured window'
-    Assert-Test ((Watch-YumpooRelease @{ observe = @{ minutes = 0 } } { } { 0 } { throw 'must not wait' }) -eq 1) 'a zero-minute window still verifies once'
+    $rounds = Watch-YumpooRelease @{ observe = @{ minutes = 1; intervalSeconds = 20; maxErrorLines = 2 } } { $script:probes++ } { 1 } $virtualWait $clock
+    Assert-Test ($rounds -eq 4 -and $script:probes -eq 4 -and ($script:waits -join ',') -eq '20,20,20') 'observation checks at the start, every interval and at the end of the window'
+    $script:waits.Clear()
+    $rounds = Watch-YumpooRelease @{ observe = @{ minutes = 1; intervalSeconds = 25; maxErrorLines = 2 } } { } { 0 } $virtualWait $clock
+    Assert-Test ($rounds -eq 4 -and ($script:waits -join ',') -eq '25,25,10') 'the final wait is shortened to land exactly on the deadline'
+    Assert-Test ((Watch-YumpooRelease @{ observe = @{ minutes = 0 } } { } { 0 } { throw 'must not wait' } $clock) -eq 1) 'a zero-minute window still verifies once'
+    # REL-P2 F8: errors that appear late in the window must still be caught by the final check.
+    $script:waits.Clear(); $observeStart = $script:now
+    $rejected = $false
+    try { $null = Watch-YumpooRelease @{ observe = @{ minutes = 1; intervalSeconds = 30; maxErrorLines = 20 } } { } { if (($script:now - $observeStart).TotalSeconds -ge 45) { 21 } else { 0 } } $virtualWait $clock } catch { $rejected = $true }
+    Assert-Test ($rejected -and ($script:waits -join ',') -eq '30,30') 'errors near the end of the window fail the observation'
     foreach ($case in @(@{ probe = { $script:probes++; if ($script:probes -eq 2) { throw 'probe fault' } }; errors = { 0 } }, @{ probe = { }; errors = { 3 } })) {
         $script:probes = 0
         $rejected = $false
-        try { $null = Watch-YumpooRelease @{ observe = @{ minutes = 1; intervalSeconds = 20; maxErrorLines = 2 } } $case.probe $case.errors { } } catch { $rejected = $true }
+        try { $null = Watch-YumpooRelease @{ observe = @{ minutes = 1; intervalSeconds = 20; maxErrorLines = 2 } } $case.probe $case.errors $virtualWait $clock } catch { $rejected = $true }
         Assert-Test $rejected 'a failed probe or too many error log lines fails the observation'
     }
     $log = Join-Path $testRoot 'yumpoo-server.log'
@@ -194,9 +205,14 @@ try {
     $capture = { param($Uri, [byte[]]$Body) $script:sent = @{ uri = $Uri; body = [Text.Encoding]::UTF8.GetString($Body) } }
     Assert-Test (-not (Send-YumpooNotification $notifyRoot $notifyStatus ([TimeSpan]::FromSeconds(65)) $capture) -and $null -eq $script:sent) 'notification is skipped without a webhook configuration'
     $notifyConfig = Join-Path $notifyRoot 'secrets/deploy-notify.json'
-    [IO.File]::WriteAllText($notifyConfig, '{"wecomWebhook":"https://hooks.example.invalid/cgi-bin/webhook/send?key=test-key"}')
-    Assert-Test (-not (Send-YumpooNotification $notifyRoot $notifyStatus ([TimeSpan]::FromSeconds(65)) $capture) -and $null -eq $script:sent -and
-        (Test-Path -LiteralPath (Join-Path $notifyRoot 'deployment/engine/notify-error.txt'))) 'only WeCom robot webhooks may receive deployment status'
+    foreach ($webhook in @(
+        'https://hooks.example.invalid/cgi-bin/webhook/send?key=test-key', 'http://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test-key',
+        'https://qyapi.weixin.qq.com:443/cgi-bin/webhook/send?key=test-key', 'https://qyapi.weixin.qq.com:8443/cgi-bin/webhook/send?key=test-key',
+        'https://qyapi.weixin.qq.com/cgi-bin/other?key=test-key', 'https://qyapi.weixin.qq.com.evil.invalid/cgi-bin/webhook/send?key=test-key')) {
+        [IO.File]::WriteAllText($notifyConfig, ('{"wecomWebhook":"' + $webhook + '"}'))
+        Assert-Test (-not (Send-YumpooNotification $notifyRoot $notifyStatus ([TimeSpan]::FromSeconds(65)) $capture) -and $null -eq $script:sent -and
+            (Test-Path -LiteralPath (Join-Path $notifyRoot 'deployment/engine/notify-error.txt'))) "only the exact WeCom robot URL form may receive deployment status: $webhook"
+    }
     [IO.File]::WriteAllText($notifyConfig, '{"wecomWebhook":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test-key"}')
     Assert-Test (Send-YumpooNotification $notifyRoot $notifyStatus ([TimeSpan]::FromSeconds(65)) $capture) 'a valid webhook receives the status'
     $message = ($script:sent.body | ConvertFrom-Json)
@@ -288,6 +304,29 @@ try {
     Assert-Test (($keptBackups -join ',') -ceq ((@(2..5 | ForEach-Object { $requests[$_] }) | Sort-Object) -join ',')) 'snapshots are kept exactly as long as their releases'
     $keptInbox = @(Get-ChildItem -LiteralPath (Join-Path $retentionDeployment 'inbox') -Directory | ForEach-Object Name | Sort-Object)
     Assert-Test (($keptInbox -join ',') -ceq ((@($pending, $fresh) | Sort-Object) -join ',') -and -not (Test-Path -LiteralPath (Join-Path $retentionDeployment "work/$finished"))) 'finished and abandoned uploads are removed while pending and in-flight ones stay'
+    # REL-P2 F6/F7: an observation_failed previous release keeps its snapshot, and an unresolved
+    # recovery_required request keeps its candidate even after active.json moved on.
+    $edge = Join-Path $testRoot 'retention-edge'
+    $edgeDeployment = Join-Path $edge 'deployment'; $edgeReleases = Join-Path $edge 'releases'
+    foreach ($directory in @('engine', 'status', 'backups')) { New-Item -ItemType Directory -Path (Join-Path $edgeDeployment $directory) -Force | Out-Null }
+    $edgeRequests = @{ observed = [guid]::NewGuid().ToString(); current = [guid]::NewGuid().ToString(); recovering = [guid]::NewGuid().ToString() }
+    $edgeRelease = @{}
+    $index = 0
+    foreach ($name in @('observed', 'current', 'recovering')) {
+        $id = $edgeRequests[$name]; $index++
+        $edgeRelease[$name] = Join-Path $edgeReleases (([string]$index * 40) + "-$id")
+        New-Item -ItemType Directory -Path $edgeRelease[$name], (Join-Path $edgeDeployment "backups/$id") -Force | Out-Null
+        $state = @{ observed = 'failed'; current = 'succeeded'; recovering = 'recovery_required' }[$name]
+        $phase = @{ observed = 'observation_failed'; current = 'complete'; recovering = 'restore_failed_maintenance_retained' }[$name]
+        Add-YumpooLedgerEntry $edgeDeployment @{ requestId = $id; mode = 'deploy'; tag = ''; sourceCommit = ''; releaseRoot = $edgeRelease[$name]; snapshot = ''; state = $state; phase = $phase; completedAt = ('2026-10-21T00:0{0}:00Z' -f $index) }
+        Write-YumpooJson (Join-Path $edgeDeployment "status/$id.json") @{ state = $state; phase = $phase }
+    }
+    Write-YumpooJson (Join-Path $edgeDeployment 'engine/current.json') ([ordered]@{ sourceCommit = ''; tag = ''; releaseRoot = $edgeRelease.current; requestId = $edgeRequests.current; previous = [ordered]@{ releaseRoot = $edgeRelease.observed; requestId = $edgeRequests.observed } })
+    Write-YumpooJson (Join-Path $edgeDeployment 'engine/active.json') @{ state = 'succeeded' }
+    $null = Invoke-YumpooRetention @{ releasesRoot = $edgeReleases; retention = @{ extraReleases = 0 } } $edgeDeployment
+    foreach ($name in @('observed', 'current', 'recovering')) {
+        Assert-Test ((Test-Path -LiteralPath $edgeRelease[$name]) -and (Test-Path -LiteralPath (Join-Path $edgeDeployment "backups/$($edgeRequests[$name])"))) "retention must keep the $name release and its snapshot"
+    }
     Write-Output 'Retention selection, recovery guard and junction safety passed.'
 
     # ---- Engine installation ----

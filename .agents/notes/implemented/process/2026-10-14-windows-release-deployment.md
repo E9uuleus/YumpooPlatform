@@ -32,11 +32,11 @@ SSH 使用固定主机密钥，私钥仅存于 `wecom-dev` Environment。`yumpoo
 
 - **配置兼容**：`host.json` schema 2 增加 `releaseBranch`、`requireImmutable`、`probeRoutes`、`retention` 和 `observe` 五个字段。所有读取都带默认值：缺字段时分支为 `dev`，不要求不可变发布，不写探测路由，未升级的主机行为保持不变。
 - **版本注入与核对**：切换时向服务注入 `YUMPOO_DEPLOYMENT_RELEASE_TAG`。对带发布元数据的版本，验收要求首页 `yumpoo-commit` meta 和本机 Actuator `info` 的 commit 等于来源提交，标签等于 Release tag。这一规则依据[发布版本标识](2026-10-15-release-version-identity.md)。
-- **观察窗口**：开放访问后进入 `observe` 阶段，按设定周期复核公网站点和 readiness，并统计开放后新增的 `ERROR` 日志。超限时按开放后失败处理，状态为 `observation_failed`，不自动回退。
+- **观察窗口**：开放访问后进入 `observe` 阶段，按截止时间覆盖完整窗口、窗口末端必复核一次，按设定周期复核公网站点和 readiness，并统计开放后新增的 `ERROR` 日志。超限时按开放后失败处理，状态为 `observation_failed`，不自动回退。
 - **代码回退**：请求 schema 2 以 `mode: rollback` 只回到 `current.previous` 保留的上一版本，前提是目标为当前版本的祖先，且两版之间新增迁移全部只扩展（依据[迁移回退安全](../data/2026-10-15-rollback-safe-migrations.md)）。回退只替换版本指针、不动数据库；开放前失败时切回原版本。成功后清空 `previous`。
-- **主机保留**：每个终态后清理已结束和超过 24 小时未提交的上传，保留当前版本、上一版本和若干最近成功版本及其快照，只删除引擎创建的 `<commit>-<UUID>` 目录。含重解析点的树拒绝删除；单项失败不中断其余清理。部署台账记录在 `engine/releases.json`。
+- **主机保留**：每个终态后清理已结束和超过 24 小时未提交的上传，保留当前版本、上一版本和若干最近成功版本，以及这些版本各自部署时的快照（不论该次部署最终状态），只删除引擎创建的 `<commit>-<UUID>` 目录；状态未解决的请求所对应的目录一律保留。含重解析点的树拒绝删除；单项失败不中断其余清理。部署台账记录在 `engine/releases.json`。
 - **附件快照**：附件中内容寻址的已发布 blob 用硬链接进入快照，恢复前按文件名复核 SHA-256；其余文件照旧复制。
-- **通知**：终态向管理员配置的企业微信群机器人推送版本、短 commit、状态和阶段，只接受 `qyapi.weixin.qq.com`。发送失败不改变部署结果。
+- **通知**：终态向管理员配置的企业微信群机器人推送版本、短 commit、状态和阶段，只接受不带显式端口的 `https://qyapi.weixin.qq.com/cgi-bin/webhook/send` 字面地址。发送失败不改变部署结果。
 - **引擎升级**：只能由管理员运行 [`Update-YumpooEngine.ps1`](../../../../deployment/windows/cd/Update-YumpooEngine.ps1)。脚本持有部署锁，校验服务器包 SHA-256，只从 ZIP 提取固定引擎文件，并保留旧引擎与 `host.json` 备份。
 
 实现依据：[Release workflow](../../../../.github/workflows/windows-release.yml)、[来源校验](../../../../tools/release/policy.mjs)、[主机初始化](../../../../deployment/windows/cd/Initialize-YumpooHost.ps1)、[固定部署入口](../../../../deployment/windows/cd/Invoke-YumpooDeploy.ps1)、[部署引擎](../../../../deployment/windows/cd/YumpooDeployment.psm1)、[运行手册](../../../../deployment/windows/RUNBOOK.md)。[CI 决策](2026-09-08-ci-pr-reliability.md)继续拥有构建验证、handoff 同字节及 required checks 的既有约束，本 Note 不替代它。WinSW 字段以 [2.12.0 配置文档](https://github.com/winsw/winsw/blob/v2.12.0/doc/xmlConfigFile.md)及[同版本解析器](https://github.com/winsw/winsw/blob/v2.12.0/src/WinSW.Core/Configuration/XmlServiceConfig.cs)为依据；延迟启动使用大小写精确的 `delayedAutoStart` 节点。

@@ -42,7 +42,7 @@ gh workflow run windows-release.yml --ref '<server-v...>' -f tag='<server-v...>'
    - 未认证请求预期返回 `401`；不能用不存在的 `/api/auth/me` 或仅凭 Actuator `UP` 代替。
    - 包含 `windows/release-metadata.json` 的版本还要求：首页的 `yumpoo-commit` meta 与 `127.0.0.1:8100/actuator/info` 中的 commit 都等于来源提交，发布标签等于 Release tag。
 6. 验收通过后开放访问，执行严格 TLS 的公网复核，记录请求 ID、版本、来源和部署结果。SSH 中断不会终止 SYSTEM 任务，重新连接后查询同一请求的状态即可。
-7. 观察窗口（阶段名 `observe`）：默认 10 分钟，每 30 秒复核一次公网站点和 readiness，并统计开放后新增的应用 `ERROR` 日志。
+7. 观察窗口（阶段名 `observe`）：默认 10 分钟，按截止时间计时，开始时、每 30 秒以及窗口结束时各复核一次公网站点和 readiness，并统计开放后新增的应用 `ERROR` 日志。复核本身耗时不会缩短窗口。
    - 新增 `ERROR` 超过 `observe.maxErrorLines`（默认 20），或任意一次复核失败时，状态记为 `failed/observation_failed`。
    - 这按开放后失败处理：保留业务数据，不自动恢复，由发布负责人决定是否执行代码回退。
 
@@ -84,10 +84,10 @@ gh workflow run windows-release.yml --ref '<server-v...>' -f tag='<server-v...>'
   - 当前版本；
   - 上一版本；
   - `retention.extraReleases`（默认 2）个最近成功的版本；
-  - 以上各版本对应的部署快照。
+  - 以上各版本对应的部署快照（不论该次部署的最终状态，例如观察未通过但仍在线的版本）。
 
   其余由引擎创建的 `<commit>-<UUID>` 版本目录和快照都会被删除。
-- **永不删除**：首次初始化时建立的版本目录。
+- **永不删除**：首次初始化时建立的版本目录；状态仍为 `running` 或 `recovery_required` 的请求所对应的候选目录、上传和快照。
 - **拒绝删除**：含重解析点的目录。这类情况记入 `deployment/engine/retention-error.txt`。
 - `failure-*.txt` 保留 90 天。
 
@@ -104,7 +104,7 @@ gh workflow run windows-release.yml --ref '<server-v...>' -f tag='<server-v...>'
 之后每个终态都会向企业微信群推送版本、短 commit、状态、阶段和耗时。
 
 - 收到 `recovery_required` 意味着站点仍在维护，必须立即处理。
-- 只接受 `qyapi.weixin.qq.com` 的群机器人地址。该文件的权限与其他 Secret 相同。
+- 只接受 `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...` 这一字面形式，不允许显式端口或其他路径。该文件的权限与其他 Secret 相同。
 - 发送失败只记入 `notify-error.txt`，不影响部署结果。
 
 **公开探测**：`/healthz`（readiness）和 `/version.json`（Actuator info）由引擎写进受管的 `yumpoo-web-root.conf`。
