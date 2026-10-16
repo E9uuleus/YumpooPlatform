@@ -37,13 +37,13 @@ Status: implemented
 
 - 按北京时间日期自动编号 `server-vYYYY.MM.DD.N`。已有标签都占号，避免与不可变发布留下的标签冲突。
 - 根据上一个已发布版本到本提交的非合并提交，生成分组发布说明，并列出新增迁移和契约变化。
-- 创建**草稿** Release，在草稿阶段上传并核验来源清单和 CI 原包。来源清单最先上传，用来钉住 CI attempt；中断重跑不会换到另一次构建。
+- 创建**草稿** Release，在草稿阶段上传并核验来源清单、CI 原包和 SBOM，并核验构建证明（见[供应链基线](2026-10-16-supply-chain-baseline.md)）。来源清单最先上传，用来钉住 CI attempt；中断重跑不会换到另一次构建。
 - 永不自动删除草稿。源码是新草稿祖先的旧草稿在说明、工作流摘要和通知中标记为已被取代，源码不早于它的其他草稿另行提示核对来源 SHA（生成时间新不代表源码新），都由发布负责人手动删除；已发布更新版本时，拒绝为更旧提交生成草稿。发布工具的 GitHub 客户端不提供 DELETE。
 
 **发布与回退**
 
 - 人工点击 Publish 即为上线决定。仓库开启 Immutable Releases 后，标签和附件在发布后锁定。
-- [Windows Release](../../../../.github/workflows/windows-release.yml) 只校验「已发布、不可变、附件齐全、来自 `main` 推送 CI」，然后部署，不再写附件。
+- [Windows Release](../../../../.github/workflows/windows-release.yml) 只校验「已发布、不可变、附件齐全、来自 `main` 推送 CI、构建证明有效」，然后部署，不再写附件。
 - [Server Rollback](../../../../.github/workflows/server-rollback.yml) 必须在上一版本的 tag 上手动触发，与发布共用串行通道，只提交代码回退请求；服务器端的前提由[发布部署决策](2026-10-14-windows-release-deployment.md)负责。
 - 草稿生成、校验失败、部署或回退作业失败时，通过仓库 secret `WECOM_RELEASE_WEBHOOK` 推送企业微信通知；只接受群机器人 URL 的字面形式，失败不影响工作流结果。
 

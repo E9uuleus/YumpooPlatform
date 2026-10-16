@@ -47,12 +47,16 @@ Release 发布即为上线决定。主机初始化、Environment 配置和发布
 
 **企业微信通知**：仓库 secret `WECOM_RELEASE_WEBHOOK` 配置后，草稿就绪、草稿生成失败、发布校验失败和部署作业失败都会推送到群里；服务器任务的最终状态由主机通知负责（见下文）。
 
-**附件**：固定为以下四个：
+**附件**：固定为以下六个：
 
 - `yumpoo-windows-server-m1-15.zip`
 - `yumpoo-windows-server-m1-15.zip.sha256`
-- `artifact-manifest.json`
+- `artifact-manifest.json`：列出 ZIP 与两份 SBOM 的大小和 SHA-256
+- `yumpoo-server.cdx.json`：后端 CycloneDX SBOM，与 ZIP 内 JAR 的内嵌清单相同
+- `yumpoo-web.cdx.json`：Web 前端生产依赖的 CycloneDX SBOM
 - `provenance.json`
+
+**构建证明**：`main` 推送 CI 用 Sigstore 为 ZIP 和两份 SBOM 签署 SLSA 构建证明。草稿生成、发布部署、代码回退和每周发布演练都会用 `gh attestation verify` 核对：签名工作流必须是 Platform CI、源 ref 必须是 `refs/heads/main`、源提交和 CI attempt 必须与 `provenance.json` 一致。缺少或不符即拒绝，不会提交部署。
 
 **重试**：部署失败后，优先重跑同一次 Actions run。手工入口必须在原 tag 上触发，工作流会核对执行 ref 与请求的 tag 一致：
 
@@ -179,7 +183,13 @@ gh workflow run server-rollback.yml --ref '<上一版本 server-v...>' -f target
 Release 不能升级 SYSTEM 部署引擎，必须由管理员手动操作：
 
 1. 从对应 Release 下载服务器 ZIP。
-2. 从 Release 页面或 `provenance.json` 中抄录这个 ZIP 的 SHA-256。
+2. 从 Release 页面或 `provenance.json` 中抄录这个 ZIP 的 SHA-256。可以再用 GitHub CLI 独立核对构建证明（只读，不需要仓库写权限）：
+
+   ```powershell
+   gh attestation verify '<下载目录>\yumpoo-windows-server-m1-15.zip' -R E9uuleus/YumpooPlatform `
+     --signer-workflow E9uuleus/YumpooPlatform/.github/workflows/m0-18-ci.yml --source-ref refs/heads/main
+   ```
+
 3. 解压 ZIP，然后以管理员身份打开 PowerShell，运行同一个包里的升级脚本：
 
 ```powershell
@@ -214,7 +224,7 @@ Release 不能升级 SYSTEM 部署引擎，必须由管理员手动操作：
 pnpm verify:m1-15:deployment
 ```
 
-输出位于 `out/m1-15`，包含 `yumpoo-windows-server-m1-15.zip`、同名 `.sha256`、`artifact-manifest.json` 和 `verification-report.json`。服务器包包含已验证的 JAR/Web、当前全部迁移、Nginx 和配置模板、数据库初始化资产、维护脚本、`service/` 锁定信息、`cd/` 部署资产、本手册及历史 checklist。WinSW 二进制从锁定官方 URL 获取并核验，不提交到仓库。不得把真实 CorpID、企微 UserID、Secret、SSH 私钥或一次性输入文件打入 ZIP。
+输出位于 `out/m1-15`，包含 `yumpoo-windows-server-m1-15.zip`、同名 `.sha256`、`artifact-manifest.json`、两份 SBOM（`yumpoo-server.cdx.json`、`yumpoo-web.cdx.json`）和 `verification-report.json`。服务器包包含已验证的 JAR/Web、当前全部迁移、Nginx 和配置模板、数据库初始化资产、维护脚本、`service/` 锁定信息、`cd/` 部署资产、本手册及历史 checklist。WinSW 二进制从锁定官方 URL 获取并核验，不提交到仓库。不得把真实 CorpID、企微 UserID、Secret、SSH 私钥或一次性输入文件打入 ZIP。
 
 ## 2. 首次主机初始化与运行边界
 

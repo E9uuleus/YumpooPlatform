@@ -12,12 +12,13 @@ import {
 } from './promote-release.mjs'
 import { releaseNotes } from './release-notes.mjs'
 import { notifyWeCom } from './notify.mjs'
+import { verifyBuildAttestations } from './attestation.mjs'
 
 const serverRelease = release => typeof release.tag_name === 'string' && release.tag_name.startsWith('server-v')
 
 // Builds the draft that a person publishes: tag, notes and every verified asset are fixed before publishing,
 // because an immutable Release can no longer change its assets afterwards.
-export async function prepareDraft({ github, sourceCommit, env, directory, now = new Date(), unpack = unpackArtifact, log = console.log }) {
+export async function prepareDraft({ github, sourceCommit, env, directory, now = new Date(), unpack = unpackArtifact, attest = verifyBuildAttestations, log = console.log }) {
   assert(/^[0-9a-f]{40}$/u.test(sourceCommit), 'Invalid source commit')
   assert.equal(env.GITHUB_REPOSITORY, repository, 'Unexpected repository')
   assert(['workflow_run', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME), 'Unsupported draft trigger')
@@ -82,6 +83,8 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
   if (!releaseAssetNames.every(name => assets.has(name))) {
     const downloaded = await downloadCiPackage(github, run, directory, unpack)
     const { digest, bytes } = await inspectPackage(downloaded, sourceCommit, provenance)
+    // Unattested bytes never reach the draft, so nothing publishable exists before the signature checks out.
+    await attest(downloaded, run, { env })
     provenance ??= validateProvenance({
       schemaVersion: 1, repository, tag, sourceCommit, ciRunId: run.id, ciRunAttempt: run.run_attempt,
       artifactName: expectedArtifactName(sourceCommit, run.run_attempt), packageSha256: digest, packageBytes: bytes,
@@ -106,6 +109,7 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
   provenance = validateProvenance(readJson(await downloadAsset(github, final.get('provenance.json'), verified)), { tag, sourceCommit })
   for (const name of releaseAssetNames.filter(name => name !== 'provenance.json')) await downloadAsset(github, final.get(name), verified)
   await inspectPackage(verified, sourceCommit, provenance)
+  await attest(verified, run, { env })
   return { tag, releaseId: draft.id, url: draft.html_url, created, published: false, provenance, supersededDrafts, otherDrafts }
 }
 

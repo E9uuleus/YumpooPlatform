@@ -7,8 +7,16 @@ export const rollbackWorkflowPath = '.github/workflows/server-rollback.yml'
 // main 是已发布线：可部署的 CI 产物只来自 main 的推送 CI。
 export const releaseBranch = 'main'
 export const packageName = 'yumpoo-windows-server-m1-15.zip'
-export const releaseAssetNames = [packageName, `${packageName}.sha256`, 'artifact-manifest.json', 'provenance.json']
-export const artifactFileNames = [packageName, `${packageName}.sha256`, 'artifact-manifest.json', 'verification-report.json']
+// CycloneDX SBOM：后端取自 JAR 内 Spring Boot 生成的清单，Web 取自锁文件的生产依赖。
+export const sboms = [
+  { name: 'yumpoo-server.cdx.json', component: { group: 'com.yumpoo.platform', name: 'yumpoo-server' }, jarEntry: 'META-INF/sbom/application.cdx.json' },
+  { name: 'yumpoo-web.cdx.json', component: { group: '@yumpoo', name: 'web-app' } },
+]
+export const sbomNames = sboms.map(sbom => sbom.name)
+// CI 用 Sigstore 构建证明签署这些文件；发布前逐个核验。
+export const attestedFileNames = [packageName, ...sbomNames]
+export const releaseAssetNames = [packageName, `${packageName}.sha256`, 'artifact-manifest.json', ...sbomNames, 'provenance.json']
+export const artifactFileNames = [packageName, `${packageName}.sha256`, 'artifact-manifest.json', ...sbomNames, 'verification-report.json']
 export const requiredJobs = ['M0 Portable Gate', 'Windows Delivery', 'M0 Windows x64 Gate']
 const commitPattern = /^[0-9a-f]{40}$/u
 const digestPattern = /^[0-9a-f]{64}$/u
@@ -125,8 +133,8 @@ export function validateProvenance(value, { tag, sourceCommit }) {
   return value
 }
 
-export function validatePackageMetadata({ manifest, checksum, digest, bytes, sourceCommit, provenance }) {
-  assert.equal(manifest.schemaVersion, 1, 'Unsupported package manifest')
+export function validatePackageMetadata({ manifest, checksum, digest, bytes, sourceCommit, provenance, sbomFiles }) {
+  assert.equal(manifest.schemaVersion, 2, 'Unsupported package manifest')
   assert.equal(manifest.milestone, 'M1-15', 'Wrong package milestone')
   assert.equal(manifest.sourceCommit, sourceCommit, 'Package manifest commit mismatch')
   assert.equal(manifest.server?.platform, 'windows', 'Wrong package platform')
@@ -137,10 +145,48 @@ export function validatePackageMetadata({ manifest, checksum, digest, bytes, sou
   assert.equal(manifest.artifacts[0].sha256, digest, 'Package manifest digest mismatch')
   assert.equal(manifest.artifacts[0].bytes, bytes, 'Package manifest size mismatch')
   assert.equal(checksum.trim(), `${digest}  ${packageName}`, 'Package checksum file mismatch')
+  assert.deepEqual(manifest.sboms?.map(sbom => sbom.name), sbomNames, 'Package manifest must list exactly the expected SBOMs')
+  for (const entry of manifest.sboms) {
+    const file = sbomFiles.get(entry.name)
+    assert(file, `Missing SBOM: ${entry.name}`)
+    assert.equal(entry.format, 'CycloneDX', `Unexpected SBOM format: ${entry.name}`)
+    assert.equal(entry.sha256, file.digest, `SBOM digest mismatch: ${entry.name}`)
+    assert.equal(entry.bytes, file.bytes, `SBOM size mismatch: ${entry.name}`)
+    validateSbom(file.document, sboms.find(sbom => sbom.name === entry.name))
+  }
   if (provenance) {
     assert.equal(provenance.packageSha256, digest, 'Package provenance digest mismatch')
     assert.equal(provenance.packageBytes, bytes, 'Package provenance size mismatch')
   }
+}
+
+export function validateSbom(document, { name, component }) {
+  assert.equal(document?.bomFormat, 'CycloneDX', `${name}: not a CycloneDX SBOM`)
+  assert(/^1\.[5-9]$/u.test(document.specVersion), `${name}: unsupported CycloneDX version`)
+  assert.equal(document.metadata?.component?.type, 'application', `${name}: root component must be the application`)
+  assert.equal(document.metadata.component.group, component.group, `${name}: wrong root component group`)
+  assert.equal(document.metadata.component.name, component.name, `${name}: wrong root component`)
+  assert(Array.isArray(document.components) && document.components.length > 0, `${name}: SBOM lists no components`)
+  assert(document.components.every(item => typeof item.purl === 'string' && item.purl.startsWith('pkg:')), `${name}: every component needs a package URL`)
+  return document
+}
+
+// gh attestation verify 已核对签名、签名工作流、源 ref 和源提交；这里再把证明钉到来源清单记录的同一次 CI attempt。
+export function validateAttestations(results, { file, digest, run }) {
+  const invocation = `https://github.com/${repository}/actions/runs/${run.id}/attempts/${run.run_attempt}`
+  assert(Array.isArray(results) && results.length > 0, `No verified attestation for ${file}`)
+  const match = results.some(({ verificationResult: { statement } = {} }) => {
+    const predicate = statement?.predicate
+    return statement?.predicateType === 'https://slsa.dev/provenance/v1'
+      && statement.subject?.some(subject => subject.name === file && subject.digest?.sha256 === digest)
+      && predicate?.runDetails?.metadata?.invocationId === invocation
+      && predicate.buildDefinition?.externalParameters?.workflow?.repository === `https://github.com/${repository}`
+      && predicate.buildDefinition.externalParameters.workflow.path === ciWorkflowPath
+      && predicate.buildDefinition.externalParameters.workflow.ref === `refs/heads/${releaseBranch}`
+      && predicate.buildDefinition.internalParameters?.github?.event_name === 'push'
+      && predicate.buildDefinition.resolvedDependencies?.some(item => item.digest?.gitCommit === run.head_sha)
+  })
+  assert(match, `${file} has no build attestation from ${releaseBranch} push CI run ${run.id} attempt ${run.run_attempt}`)
 }
 
 export function validateAssetDigest(asset, digest, bytes) {

@@ -104,6 +104,11 @@ jobs:
     needs: [linux]
     runs-on: windows-2022
     timeout-minutes: 45
+    # 只有本任务签署构建证明；OIDC 与证明写权限不授予其他任务。
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     outputs:
       completed: ${{ steps.completed.outputs.completed }}
     steps:
@@ -139,6 +144,15 @@ jobs:
           YUMPOO_M018_HANDOFF_ARTIFACT_NAME: m0-18-portable-${{ github.run_id }}-${{ github.run_attempt }}
           YUMPOO_M018_HANDOFF_ARTIFACT_DIGEST: ${{ needs.linux.outputs.handoff-digest }}
         run: pnpm ci:windows
+      # 只有推送 CI 的产物可能被发布；PR 运行（含 fork 与 Dependabot）没有 OIDC 令牌。
+      - name: Attest server package and SBOM build provenance
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            out/m1-15/yumpoo-windows-server-m1-15.zip
+            out/m1-15/yumpoo-server.cdx.json
+            out/m1-15/yumpoo-web.cdx.json
       - name: Upload Windows server package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -147,6 +161,8 @@ jobs:
             out/m1-15/yumpoo-windows-server-m1-15.zip
             out/m1-15/yumpoo-windows-server-m1-15.zip.sha256
             out/m1-15/artifact-manifest.json
+            out/m1-15/yumpoo-server.cdx.json
+            out/m1-15/yumpoo-web.cdx.json
             out/m1-15/verification-report.json
           if-no-files-found: error
           retention-days: 30

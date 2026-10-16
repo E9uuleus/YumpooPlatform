@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       actions: read
+      attestations: read
       contents: read
     steps:
       - name: Checkout release workflow commit
@@ -35,6 +36,7 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
+          package-manager-cache: false
       - name: Verify deployment client regression tests
         run: node --test tools/release/*.test.mjs
       - name: Verify exact main CI attempt and the immutable package bytes
@@ -58,6 +60,7 @@ jobs:
       name: wecom-dev
     permissions:
       actions: read
+      attestations: read
       contents: read
     steps:
       - name: Checkout verified release workflow commit
@@ -68,6 +71,7 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
+          package-manager-cache: false
       - name: Submit request and reconnect until the server task finishes
         env:
           GH_TOKEN: ${{ github.token }}

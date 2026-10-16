@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { requiredJobs } from './gate.mjs'
+import { attestedFileNames, artifactFileNames } from '../release/policy.mjs'
 
 export function assertWorkflowSafety(workflow) {
   assert.deepEqual(workflow.permissions, { contents: 'read' })
@@ -51,4 +52,24 @@ export function assertWorkflowSafety(workflow) {
   assert.equal(upload.with['if-no-files-found'], 'error')
   assert.equal(workflow.jobs.windows_delivery.steps.find(step => step.run === 'pnpm ci:windows')
     .env.YUMPOO_M018_HANDOFF_ARTIFACT_DIGEST, '${{ needs.linux.outputs.handoff-digest }}')
+  assertBuildAttestation(workflow)
+}
+
+// 构建证明只由打包任务签署：OIDC 与证明写权限不外溢，签署对象正是随后上传、发布的同一批文件。
+function assertBuildAttestation(workflow) {
+  const delivery = workflow.jobs.windows_delivery
+  assert.deepEqual(delivery.permissions, { contents: 'read', 'id-token': 'write', attestations: 'write' })
+  for (const [id, job] of Object.entries(workflow.jobs)) {
+    if (id !== 'windows_delivery') assert(!job.permissions, `${id} 不得扩大 token 权限`)
+  }
+  const steps = delivery.steps
+  const attest = steps.findIndex(step => step.uses?.startsWith('actions/attest-build-provenance@'))
+  const packaging = steps.findIndex(step => step.run === 'pnpm ci:windows')
+  const upload = steps.findIndex(step => step.uses?.startsWith('actions/upload-artifact@') && step.with?.name?.startsWith('m1-15-server-'))
+  assert(packaging < attest && attest < upload, '构建证明必须签署打包结果，并在上传前完成')
+  assert.equal(steps[attest].if, "${{ github.event_name == 'push' }}", '只有推送 CI 签署构建证明')
+  const subjects = steps[attest].with['subject-path'].trim().split('\n').map(line => line.trim())
+  assert.deepEqual(subjects, attestedFileNames.map(name => `out/m1-15/${name}`))
+  const uploaded = steps[upload].with.path.trim().split('\n').map(line => line.trim())
+  assert.deepEqual(uploaded.map(file => file.replace(/^out\/m1-15\//u, '')).sort(), [...artifactFileNames].sort())
 }
