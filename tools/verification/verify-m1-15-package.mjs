@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -76,8 +77,8 @@ for (const required of [
   'windows/release-metadata.json',
 ]) assert(fs.existsSync(path.join(serverRoot, ...required.split('/'))), `服务器包缺少：${required}`)
 
-const embeddedSbom = extractJarEntry(path.join(serverRoot, 'server', 'yumpoo-server.jar'), sboms[0].jarEntry)
-assert(await sha256(embeddedSbom) === manifest.sboms.find(sbom => sbom.name === sboms[0].name).sha256, '后端 SBOM 与包内 JAR 的内嵌清单不符')
+const embeddedSbomDigest = await jarEntryDigest(path.join(serverRoot, 'server', 'yumpoo-server.jar'), sboms[0].jarEntry)
+assert(embeddedSbomDigest === manifest.sboms.find(sbom => sbom.name === sboms[0].name).sha256, '后端 SBOM 与包内 JAR 的内嵌清单不符')
 
 const metadata = readJson(path.join(serverRoot, 'windows', 'release-metadata.json'))
 assert(metadata.schemaVersion === 1 && metadata.sourceCommit === manifest.sourceCommit, '发布元数据未绑定服务器包 commit')
@@ -116,9 +117,10 @@ function expand(name, directoryName) {
   return destination
 }
 
-function extractJarEntry(jarFile, entryName) {
-  const destination = path.join(out, 'verified-jar-sbom.json')
-  fs.rmSync(destination, { force: true })
+// 取出的条目只用于比对摘要，放在独立临时目录并随即删除，out/m1-15 只保留交付文件。
+async function jarEntryDigest(jarFile, entryName) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-m115-jar-'))
+  const destination = path.join(directory, path.basename(entryName))
   const command = [
     'Add-Type -AssemblyName System.IO.Compression.FileSystem',
     `$m115Jar = [IO.Compression.ZipFile]::OpenRead(${quotePowerShellLiteral(jarFile)})`,
@@ -129,8 +131,12 @@ function extractJarEntry(jarFile, entryName) {
     '} finally { $m115Jar.Dispose() }',
   ].join('\n')
   const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { stdio: 'inherit' })
-  assert(result.status === 0, `无法读取 JAR 内嵌条目：${entryName}`)
-  return destination
+  try {
+    assert(result.status === 0, `无法读取 JAR 内嵌条目：${entryName}`)
+    return await sha256(destination)
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
 }
 
 function readJson(file) {

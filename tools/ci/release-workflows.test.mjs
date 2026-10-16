@@ -131,5 +131,9 @@ test('Dependabot updates actions, npm and Maven into dev on a weekly, grouped, c
     assert.equal(update.schedule.interval, 'weekly')
     assert(update.cooldown['default-days'] >= 7, 'fresh releases wait out the cooldown')
     assert(Object.keys(update.groups ?? {}).length > 0, 'updates are grouped')
+    // Without update-types a group also takes majors (REL-P5 F14); majors must stay separate PRs.
+    for (const [name, group] of Object.entries(update.groups)) {
+      assert.deepEqual(group['update-types'], ['minor', 'patch'], `${update['package-ecosystem']}/${name}: majors are reviewed one by one`)
+    }
   }
 })
