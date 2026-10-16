@@ -25,10 +25,25 @@ function Get-YumpooSetting($Settings, [string]$Name, $Default) {
     return $value
 }
 
-function Write-YumpooJson($Path, $Value) {
+# Status files are read over SFTP while the task runs; a reader's handle can briefly block replacement.
+# Replace atomically and retry within a bound instead of failing the deployment on a transient lock.
+function Write-YumpooJson($Path, $Value, [int]$Attempts = 60, [int]$DelayMilliseconds = 500) {
     $temporary = "$Path.$([guid]::NewGuid().ToString('N')).tmp"
     [IO.File]::WriteAllText($temporary, ($Value | ConvertTo-Json -Depth 12), (New-Object Text.UTF8Encoding($false)))
-    Move-Item -LiteralPath $temporary -Destination $Path -Force
+    try {
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                if ([IO.File]::Exists($Path)) { [IO.File]::Replace($temporary, $Path, [NullString]::Value, $true) }
+                else { [IO.File]::Move($temporary, $Path) }
+                return
+            } catch [IO.IOException], [UnauthorizedAccessException] {
+                if ($attempt -ge $Attempts) { throw "Cannot replace $([IO.Path]::GetFileName($Path)) after $Attempts attempts: $($_.Exception.Message)" }
+                Start-Sleep -Milliseconds $DelayMilliseconds
+            }
+        }
+    } finally {
+        if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) }
+    }
 }
 
 function Assert-YumpooPath($Path, $Parent) {
