@@ -79,7 +79,7 @@ try {
             $identity = @{}
             $logPath = ''
             try { $logPath = Read-YumpooYamlScalar (Join-Path $Root 'config/application-prod.yml') 'logging.file.name' } catch { }
-            $observation = @{ counter = { 0 }; observing = $false }
+            $observation = @{ counter = { 0 }; observing = $false; passed = $false }
             $previousRelease = [ordered]@{ sourceCommit = $current.sourceCommit; tag = $current.tag; releaseRoot = $current.releaseRoot; requestId = $null }
             if ($null -ne $current.PSObject.Properties['requestId']) { $previousRelease.requestId = $current.requestId }
             # Shared post-switch steps: identical for forward deployment and code-only rollback.
@@ -95,13 +95,15 @@ try {
                         Test-YumpooSite $settings -Public
                         if ((Invoke-RestMethod -Uri 'http://127.0.0.1:8100/actuator/health/readiness' -TimeoutSec 5).status -ne 'UP') { throw 'Readiness dropped during observation.' }
                     } $observation.counter
+                    $observation.passed = $true
                 }
                 Success = { Publish-Status 'succeeded' 'complete' }
                 ValidateOld = { Test-YumpooSite $settings }
                 OpenOld = { Set-YumpooMaintenance $settings $false }
                 PostOpenFailure = {
                     param($failure)
-                    $phase = if ($observation.observing) { 'observation_failed' } else { 'public_verification_failed_no_data_restore' }
+                    # A failure after a passed observation is a bookkeeping failure, not a release problem.
+                    $phase = if ($observation.passed) { 'completion_record_failed' } elseif ($observation.observing) { 'observation_failed' } else { 'public_verification_failed_no_data_restore' }
                     Publish-Status 'failed' $phase $failure.Exception.Message
                 }
                 RecoveryFailure = { param($failure) Set-YumpooMaintenance $settings $true; Publish-Status 'recovery_required' 'restore_failed_maintenance_retained' $failure.Exception.Message }

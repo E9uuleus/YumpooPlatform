@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import fs from 'node:fs'
+import { createHash } from 'node:crypto'
 import {
   repository, ciWorkflowPath, releaseWorkflowPath, rollbackWorkflowPath, packageName, artifactFileNames, requiredJobs,
   validateTag, validateWorkflowContext, validateBranchAncestry, validateRun, validateJobs, validateArtifact,
   validatePublishedRelease, nextReleaseTag, releaseDate,
   validateProvenance, validatePackageMetadata, validateAssetDigest, validateArtifactEntries,
+  sboms, sbomNames, releaseAssetNames, attestedFileNames, validateSbom, validateAttestations,
 } from './policy.mjs'
+import { attestationResult, packageManifest, sbomBytes } from './test-fixtures.mjs'
 
 const sourceCommit = 'a'.repeat(40)
 const otherCommit = 'b'.repeat(40)
@@ -109,22 +112,73 @@ test('provenance has a fixed schema and cannot redirect source or CI attempt', (
   ]) assert.throws(() => validateProvenance({ ...provenance, ...change }, { tag, sourceCommit }))
 })
 
-test('package bytes must agree with manifest, checksum and provenance', () => {
-  const manifest = {
-    schemaVersion: 1, milestone: 'M1-15', sourceCommit,
-    server: { platform: 'windows', architecture: 'x64', runtimeMode: 'WINDOWS_SERVICE_WINSW' },
-    artifacts: [{ name: packageName, bytes: 42, sha256: digest }],
+function sbomFileMap(files = sbomBytes()) {
+  const result = new Map()
+  for (const [name, bytes] of files) {
+    result.set(name, { document: JSON.parse(bytes), digest: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length })
   }
-  const input = { manifest, checksum: `${digest}  ${packageName}\n`, digest, bytes: 42, sourceCommit, provenance }
+  return result
+}
+
+test('package bytes must agree with manifest, checksum, SBOMs and provenance', () => {
+  const packageBytes = Buffer.alloc(42)
+  const packageDigest = createHash('sha256').update(packageBytes).digest('hex')
+  const files = sbomBytes()
+  const manifest = packageManifest(sourceCommit, packageBytes, files)
+  const sbomFiles = sbomFileMap(files)
+  const pinned = { ...provenance, packageSha256: packageDigest }
+  const input = { manifest, checksum: `${packageDigest}  ${packageName}\n`, digest: packageDigest, bytes: 42, sourceCommit, provenance: pinned, sbomFiles }
   validatePackageMetadata(input)
+  const [serverSbom] = sbomNames
+  const tampered = new Map(sbomFiles)
+  tampered.set(serverSbom, { ...sbomFiles.get(serverSbom), digest: 'e'.repeat(64) })
   for (const changes of [
-    { digest: 'e'.repeat(64) }, { bytes: 43 }, { checksum: `${digest}  other.zip` },
+    { digest: 'e'.repeat(64) }, { bytes: 43 }, { checksum: `${packageDigest}  other.zip` },
+    { manifest: { ...manifest, schemaVersion: 1 } },
     { manifest: { ...manifest, sourceCommit: otherCommit } },
     { manifest: { ...manifest, server: { ...manifest.server, runtimeMode: 'MANUAL_JAVA_CONSOLE' } } },
-    { provenance: { ...provenance, packageBytes: 43 } },
+    { manifest: { ...manifest, sboms: manifest.sboms.slice(1) } },
+    { manifest: { ...manifest, sboms: [...manifest.sboms].reverse() } },
+    { manifest: { ...manifest, sboms: undefined } },
+    { sbomFiles: tampered },
+    { sbomFiles: new Map([...sbomFiles].slice(1)) },
+    { provenance: { ...pinned, packageBytes: 43 } },
   ]) assert.throws(() => validatePackageMetadata({ ...input, ...changes }))
   validateAssetDigest({ state: 'uploaded', size: 42, digest: `sha256:${digest}` }, digest, 42)
   assert.throws(() => validateAssetDigest({ state: 'uploaded', size: 42, digest: `sha256:${'e'.repeat(64)}` }, digest, 42))
+})
+
+test('SBOMs must be CycloneDX documents for the expected application with package URLs', () => {
+  const [server, web] = sboms
+  const document = JSON.parse(sbomBytes().get(server.name))
+  validateSbom(document, server)
+  assert.throws(() => validateSbom(document, web), /wrong root component/u)
+  for (const broken of [
+    { ...document, bomFormat: 'SPDX' }, { ...document, specVersion: '1.4' }, { ...document, components: [] },
+    { ...document, components: [{ name: 'no-purl' }] },
+    { ...document, metadata: { component: { ...document.metadata.component, type: 'library' } } },
+  ]) assert.throws(() => validateSbom(broken, server))
+})
+
+test('a build attestation must come from the pinned main push CI attempt for the exact bytes', () => {
+  const file = packageName
+  const sha256 = 'f'.repeat(64)
+  const valid = attestationResult({ name: file, sha256, run: ci })
+  validateAttestations([valid], { file, digest: sha256, run: ci })
+  // Any one matching statement suffices, e.g. when a rerun attempt produced identical bytes.
+  validateAttestations([attestationResult({ name: file, sha256, run: { ...ci, run_attempt: 1 } }), valid], { file, digest: sha256, run: ci })
+  for (const results of [
+    [], undefined,
+    [attestationResult({ name: file, sha256, run: { ...ci, run_attempt: 1 } })],
+    [attestationResult({ name: file, sha256, run: { ...ci, id: 124 } })],
+    [attestationResult({ name: file, sha256, run: ci, ref: 'refs/heads/dev' })],
+    [attestationResult({ name: file, sha256, run: ci, event: 'pull_request' })],
+    [attestationResult({ name: file, sha256: 'e'.repeat(64), run: ci })],
+    [attestationResult({ name: 'other.zip', sha256, run: ci })],
+    [attestationResult({ name: file, sha256, run: { ...ci, head_sha: otherCommit } })],
+  ]) assert.throws(() => validateAttestations(results, { file, digest: sha256, run: ci }))
+  assert.deepEqual(attestedFileNames, [packageName, ...sbomNames])
+  assert(sbomNames.every(name => releaseAssetNames.includes(name) && artifactFileNames.includes(name)))
 })
 
 test('CI archive allows only expected files, with no duplicate or traversal entry', () => {

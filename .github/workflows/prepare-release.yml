@@ -1,7 +1,8 @@
 name: Prepare Release
 
 on:
-  workflow_run:
+  # 任务条件只放行本仓库 main 推送且成功的 CI，检出的是已评审代码，不处理 PR 或 fork 产物。
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [Platform CI]
     types: [completed]
     branches: [main]
@@ -27,6 +28,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       actions: read
+      attestations: read
       contents: write
     steps:
       # Only push runs on main of this repository reach here, so checking out their commit runs reviewed code.
@@ -39,6 +41,7 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
+          package-manager-cache: false
       - name: Verify release tooling regression tests
         run: node --test tools/release/*.test.mjs
       - name: Create or complete the draft with verified CI assets

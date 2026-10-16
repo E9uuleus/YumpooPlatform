@@ -5,7 +5,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { prepareRelease, resolveSource } from './promote-release.mjs'
-import { repository, ciWorkflowPath, releaseWorkflowPath, rollbackWorkflowPath, packageName, requiredJobs } from './policy.mjs'
+import { repository, ciWorkflowPath, releaseWorkflowPath, rollbackWorkflowPath, packageName, requiredJobs, attestedFileNames, sbomNames } from './policy.mjs'
+import { packageManifest, sbomBytes } from './test-fixtures.mjs'
 
 const sha = 'a'.repeat(40)
 const tag = 'server-v2026.10.20.1'
@@ -62,13 +63,17 @@ function fixture(t) {
   })))
   github.addAsset(packageName, packageBytes)
   github.addAsset(`${packageName}.sha256`, Buffer.from(`${digest(packageBytes)}  ${packageName}\n`))
-  github.addAsset('artifact-manifest.json', Buffer.from(JSON.stringify({
-    schemaVersion: 1, milestone: 'M1-15', sourceCommit: sha,
-    server: { platform: 'windows', architecture: 'x64', runtimeMode: 'WINDOWS_SERVICE_WINSW' },
-    artifacts: [{ name: packageName, bytes: packageBytes.length, sha256: digest(packageBytes) }],
-  })))
-  const prepare = (options = {}) => prepareRelease({ github, tag, env, directory: fs.mkdtempSync(path.join(root, 'attempt-')), ...options })
-  return { github, prepare, packageBytes }
+  const sboms = sbomBytes()
+  github.addAsset('artifact-manifest.json', Buffer.from(JSON.stringify(packageManifest(sha, packageBytes, sboms))))
+  for (const [name, bytes] of sboms) github.addAsset(name, bytes)
+  const attestations = []
+  const attest = async (directory, ciRun) => {
+    for (const name of attestedFileNames) assert(fs.statSync(path.join(directory, name)).isFile(), `attested file missing: ${name}`)
+    attestations.push({ directory, runId: ciRun.id, attempt: ciRun.run_attempt })
+    if (github.attestationError) throw new Error(github.attestationError)
+  }
+  const prepare = (options = {}) => prepareRelease({ github, tag, env, directory: fs.mkdtempSync(path.join(root, 'attempt-')), attest, ...options })
+  return { github, prepare, packageBytes, attestations }
 }
 
 test('a complete immutable Release is verified against its pinned main CI attempt', async t => {
@@ -78,6 +83,23 @@ test('a complete immutable Release is verified against its pinned main CI attemp
   assert.equal(result.provenance.ciRunId, 1001)
   assert(github.calls.includes('/actions/runs/1001/attempts/2/jobs?per_page=100'))
   assert(!('upload' in github) && !('uploadAsset' in github), 'deployment must never write Release assets')
+})
+
+test('SBOMs travel with the Release and the pinned CI attempt must have signed the bytes', async t => {
+  const { github, prepare, attestations } = fixture(t)
+  const result = await prepare()
+  for (const name of sbomNames) assert(fs.statSync(path.join(result.directory, name)).isFile())
+  assert.deepEqual(attestations.map(({ runId, attempt }) => [runId, attempt]), [[1001, 2]])
+  assert.equal(attestations[0].directory, result.directory)
+  github.attestationError = 'no attestation from main push CI run 1001 attempt 2'
+  await assert.rejects(prepare(), /no attestation/u)
+  github.attestationError = null
+  const [serverSbom] = sbomNames
+  const original = github.assets.get(serverSbom)
+  github.addAsset(serverSbom, Buffer.from(JSON.stringify({ ...JSON.parse(original.bytes), components: [{ name: 'x', purl: 'pkg:npm/x@1' }] })))
+  await assert.rejects(prepare(), /SBOM digest mismatch/u)
+  github.assets.delete(serverSbom)
+  await assert.rejects(prepare(), /assets are incomplete/u)
 })
 
 test('drafts, mutable Releases and incomplete assets never reach deployment', async t => {

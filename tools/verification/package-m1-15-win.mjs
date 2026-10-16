@@ -3,14 +3,17 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { migrationInventory } from '../ci/migration-policy.mjs'
+import { sboms } from '../release/policy.mjs'
 import { quotePowerShellLiteral, sha256 } from './m0-16-utils.mjs'
 import { gitHead } from './m0-18-utils.mjs'
+import { runPnpmSync } from './process-utils.mjs'
 import { verifyM018Handoff } from './verify-m0-18-handoff.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const out = path.join(root, 'out', 'm1-15')
 const stage = path.join(out, 'server-staging')
 const serverZip = path.join(out, 'yumpoo-windows-server-m1-15.zip')
+const [serverSbom, webSbom] = sboms.map(sbom => path.join(out, sbom.name))
 const deployment = path.join(root, 'deployment', 'windows')
 const handoff = process.env.YUMPOO_M018_HANDOFF_ROOT
 if (handoff) verifyM018Handoff(root, path.resolve(handoff))
@@ -22,7 +25,7 @@ requireFile(jar, '已验证后端 JAR')
 requireDirectory(web, '已验证 Web dist')
 
 fs.mkdirSync(out, { recursive: true })
-for (const target of [stage, serverZip, `${serverZip}.sha256`]) {
+for (const target of [stage, serverZip, `${serverZip}.sha256`, serverSbom, webSbom]) {
   fs.rmSync(target, { recursive: true, force: true })
 }
 
@@ -32,15 +35,19 @@ try {
   const sourceCommit = gitHead(root)
   const digest = await sha256(serverZip)
   fs.writeFileSync(`${serverZip}.sha256`, `${digest}  ${path.basename(serverZip)}\n`, 'utf8')
+  writeSboms()
   const generatedAt = new Date().toISOString()
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     milestone: 'M1-15',
     sourceCommit,
     generatedAt,
     server: { platform: 'windows', architecture: 'x64', runtimeMode: 'WINDOWS_SERVICE_WINSW' },
     desktopReuse: { milestone: 'M1-14', version: '0.1.0', repackaged: false },
     artifacts: [{ name: path.basename(serverZip), bytes: fs.statSync(serverZip).size, sha256: digest }],
+    sboms: await Promise.all([serverSbom, webSbom].map(async file => ({
+      name: path.basename(file), format: 'CycloneDX', bytes: fs.statSync(file).size, sha256: await sha256(file),
+    }))),
   }
   fs.writeFileSync(path.join(out, 'artifact-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
   fs.writeFileSync(path.join(out, 'verification-report.json'), `${JSON.stringify({
@@ -88,6 +95,24 @@ function assembleServer() {
     ciRunAttempt: Number(process.env.GITHUB_RUN_ATTEMPT) || null,
     migrations: migrationInventory(root).map(({ version, file, sha256: digest, classification }) => ({ version, file, sha256: digest, classification })),
   }, null, 2)}\n`, 'utf8')
+}
+
+// 后端 SBOM 取自已验证 JAR 内 Spring Boot 生成的清单，与包内字节同源；Web 由锁文件列出打包进 dist 的生产依赖。
+function writeSboms() {
+  const command = [
+    'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+    `$m115Jar = [IO.Compression.ZipFile]::OpenRead(${quotePowerShellLiteral(jar)})`,
+    'try {',
+    `$m115Entry = $m115Jar.GetEntry(${quotePowerShellLiteral(sboms[0].jarEntry)})`,
+    "if ($null -eq $m115Entry) { throw 'JAR 不含 Spring Boot SBOM' }",
+    `[IO.Compression.ZipFileExtensions]::ExtractToFile($m115Entry, ${quotePowerShellLiteral(serverSbom)})`,
+    '} finally { $m115Jar.Dispose() }',
+  ].join('\n')
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { stdio: 'inherit' })
+  assert(result.status === 0, '无法从已验证 JAR 提取后端 SBOM')
+  runPnpmSync(['sbom', '--sbom-format', 'cyclonedx', '--sbom-type', 'application', '--prod', '--lockfile-only',
+    '--filter', '@yumpoo/web-app', '--out', webSbom], { cwd: root })
+  for (const file of [serverSbom, webSbom]) requireFile(file, path.basename(file))
 }
 
 function compressContents(directory, destination) {

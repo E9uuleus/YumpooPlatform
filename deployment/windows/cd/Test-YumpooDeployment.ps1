@@ -117,6 +117,32 @@ try {
     try { $null = Read-YumpooReleaseProvenance $asset $provenanceFile } catch { $rejected = $true }
     Assert-Test $rejected 'equal-sized modified provenance must fail the trusted Release asset digest'
 
+    # ---- Status replacement while an SFTP-like reader holds the file (REL-P4 F13) ----
+    $statusFile = Join-Path $testRoot 'status.json'
+    Write-YumpooJson $statusFile @{ state = 'running'; phase = 'observe' }
+    $readerReady = Join-Path $testRoot 'reader-ready'
+    $reader = Start-Job -ScriptBlock {
+        param($file, $ready, $holdMilliseconds)
+        $handle = [IO.File]::Open($file, 'Open', 'Read', 'Read')
+        try { [IO.File]::WriteAllText($ready, 'open'); Start-Sleep -Milliseconds $holdMilliseconds } finally { $handle.Dispose() }
+    } -ArgumentList $statusFile, $readerReady, 4000
+    try {
+        $deadline = (Get-Date).AddSeconds(60)
+        while (-not (Test-Path -LiteralPath $readerReady) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 100 }
+        Assert-Test (Test-Path -LiteralPath $readerReady) 'the reader job must hold the status file before replacement'
+        $rejected = $false
+        try { Write-YumpooJson $statusFile @{ state = 'failed'; phase = 'observation_failed' } 2 50 } catch { $rejected = $true }
+        Assert-Test ($rejected -and (Get-Content -LiteralPath $statusFile -Raw | ConvertFrom-Json).state -eq 'running' -and
+            @(Get-ChildItem -LiteralPath $testRoot -Filter 'status.json.*.tmp').Count -eq 0) 'exhausted retries keep the previous record and leave no temporary file'
+        Write-YumpooJson $statusFile @{ state = 'succeeded'; phase = 'complete' } 60 250
+        $final = Get-Content -LiteralPath $statusFile -Raw | ConvertFrom-Json
+        Assert-Test ($final.state -eq 'succeeded' -and $final.phase -eq 'complete' -and @(Get-ChildItem -LiteralPath $testRoot -Filter 'status.json.*.tmp').Count -eq 0) 'the terminal record is written once the reader releases the file'
+    } finally {
+        $null = $reader | Wait-Job -Timeout 30
+        $reader | Remove-Job -Force
+    }
+    Write-Output 'Status replacement under a concurrent reader lock passed.'
+
     # ---- Engine v2: settings, request modes, release identity ----
     $hostV1 = [pscustomobject]@{ retention = [pscustomobject]@{ extraReleases = 5 } }
     Assert-Test ((Get-YumpooSetting $hostV1 'retention.extraReleases' 2) -eq 5 -and (Get-YumpooSetting $hostV1 'observe.minutes' 10) -eq 10 -and
