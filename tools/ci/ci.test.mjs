@@ -59,6 +59,18 @@ test('workflow preserves mandatory gates, immutable actions and exact artifact h
     value => { value.jobs.extra = { steps: [] } },
     value => { value.on.pull_request.paths = ['frontend/**'] },
     value => { value.jobs.windows.steps[0].uses = 'actions/checkout@main' },
+    value => { value.jobs.linux.permissions = { contents: 'read', 'id-token': 'write' } },
+    value => { value.jobs.windows_delivery.permissions.contents = 'write' },
+    value => { delete value.jobs.windows_delivery.steps.find(step => step.uses?.startsWith('actions/attest-build-provenance@')).if },
+    value => { value.jobs.windows_delivery.steps = value.jobs.windows_delivery.steps.filter(step => !step.uses?.startsWith('actions/attest-build-provenance@')) },
+    value => {
+      const attest = value.jobs.windows_delivery.steps.find(step => step.uses?.startsWith('actions/attest-build-provenance@'))
+      attest.with['subject-path'] = 'out/m1-15/yumpoo-windows-server-m1-15.zip'
+    },
+    value => {
+      const upload = value.jobs.windows_delivery.steps.find(step => step.with?.name?.startsWith('m1-15-server-'))
+      upload.with.path = upload.with.path.replace('out/m1-15/yumpoo-web.cdx.json\n', '')
+    },
   ]
   for (const mutate of brokenVariants) {
     const value = workflow()

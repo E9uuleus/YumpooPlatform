@@ -3,6 +3,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { migrationDigest } from '../ci/migration-policy.mjs'
+import { sboms, validateSbom } from '../release/policy.mjs'
 import { collectRegularFiles, quotePowerShellLiteral, sha256 } from './m0-16-utils.mjs'
 import { verifyM018Handoff } from './verify-m0-18-handoff.mjs'
 import { gitHead } from './m0-18-utils.mjs'
@@ -12,7 +13,7 @@ const out = path.join(root, 'out', 'm1-15')
 const manifest = readJson(path.join(out, 'artifact-manifest.json'))
 const report = readJson(path.join(out, 'verification-report.json'))
 
-assert(manifest.schemaVersion === 1 && manifest.milestone === 'M1-15', 'artifact manifest 里程碑错误')
+assert(manifest.schemaVersion === 2 && manifest.milestone === 'M1-15', 'artifact manifest 版本或里程碑错误')
 assert(manifest.server?.platform === 'windows' && manifest.server.architecture === 'x64'
   && manifest.server.runtimeMode === 'WINDOWS_SERVICE_WINSW', '服务器包必须使用 Windows x64 WinSW 服务模式')
 assert(report.milestone === 'M1-15' && report.liveEnvironment === 'ENV_PENDING', '验证报告必须保留 ENV_PENDING')
@@ -29,6 +30,18 @@ assert(fs.existsSync(file) && fs.statSync(file).size === artifact.bytes, '服务
 const digest = await sha256(file)
 assert(digest === artifact.sha256, '服务器产物 SHA-256 不符')
 assert(fs.readFileSync(`${file}.sha256`, 'utf8').trim() === `${digest}  ${artifact.name}`, 'SHA 文件不符')
+
+assert(JSON.stringify(manifest.sboms?.map(sbom => sbom.name)) === JSON.stringify(sboms.map(sbom => sbom.name)), 'artifact manifest 未列出预期 SBOM')
+for (const entry of manifest.sboms) {
+  const sbomFile = path.join(out, entry.name)
+  assert(entry.format === 'CycloneDX' && fs.existsSync(sbomFile) && fs.statSync(sbomFile).size === entry.bytes, `SBOM 缺失或字节数不符：${entry.name}`)
+  assert(await sha256(sbomFile) === entry.sha256, `SBOM SHA-256 不符：${entry.name}`)
+  try {
+    validateSbom(readJson(sbomFile), sboms.find(sbom => sbom.name === entry.name))
+  } catch (error) {
+    assert(false, error.message)
+  }
+}
 
 const serverRoot = expand(artifact.name, 'verified-server')
 if (process.env.YUMPOO_M018_HANDOFF_ROOT) {
@@ -62,6 +75,9 @@ for (const required of [
   'windows/database/migrations/identityaccess/V15__productize_desktop_auth_attempt.sql',
   'windows/release-metadata.json',
 ]) assert(fs.existsSync(path.join(serverRoot, ...required.split('/'))), `服务器包缺少：${required}`)
+
+const embeddedSbom = extractJarEntry(path.join(serverRoot, 'server', 'yumpoo-server.jar'), sboms[0].jarEntry)
+assert(await sha256(embeddedSbom) === manifest.sboms.find(sbom => sbom.name === sboms[0].name).sha256, '后端 SBOM 与包内 JAR 的内嵌清单不符')
 
 const metadata = readJson(path.join(serverRoot, 'windows', 'release-metadata.json'))
 assert(metadata.schemaVersion === 1 && metadata.sourceCommit === manifest.sourceCommit, '发布元数据未绑定服务器包 commit')
@@ -97,6 +113,23 @@ function expand(name, directoryName) {
   const command = `Expand-Archive -LiteralPath ${quotePowerShellLiteral(path.join(out, name))} -DestinationPath ${quotePowerShellLiteral(destination)} -Force`
   const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { stdio: 'inherit' })
   assert(result.status === 0, `无法解包 ${name}`)
+  return destination
+}
+
+function extractJarEntry(jarFile, entryName) {
+  const destination = path.join(out, 'verified-jar-sbom.json')
+  fs.rmSync(destination, { force: true })
+  const command = [
+    'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+    `$m115Jar = [IO.Compression.ZipFile]::OpenRead(${quotePowerShellLiteral(jarFile)})`,
+    'try {',
+    `$m115Entry = $m115Jar.GetEntry(${quotePowerShellLiteral(entryName)})`,
+    "if ($null -eq $m115Entry) { throw 'JAR 缺少内嵌 SBOM' }",
+    `[IO.Compression.ZipFileExtensions]::ExtractToFile($m115Entry, ${quotePowerShellLiteral(destination)})`,
+    '} finally { $m115Jar.Dispose() }',
+  ].join('\n')
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { stdio: 'inherit' })
+  assert(result.status === 0, `无法读取 JAR 内嵌条目：${entryName}`)
   return destination
 }
 

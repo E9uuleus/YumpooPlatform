@@ -4,11 +4,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
-  releaseBranch, ciWorkflowPath, packageName, releaseAssetNames, releaseWorkflowPath, expectedArtifactName,
+  releaseBranch, ciWorkflowPath, packageName, releaseAssetNames, releaseWorkflowPath, expectedArtifactName, sbomNames,
   validateTag, validateWorkflowContext, validateBranchAncestry, validateRun, validateJobs,
   validateArtifact, validateProvenance, validatePackageMetadata, validateAssetDigest, validatePublishedRelease,
 } from './policy.mjs'
 import { createGithub, fileDigest, readJson, unpackArtifact } from './github.mjs'
+import { verifyBuildAttestations } from './attestation.mjs'
 
 export async function resolveTagCommit(github, tag) {
   validateTag(tag)
@@ -103,16 +104,38 @@ export async function inspectPackage(directory, sourceCommit, provenance) {
   assert(fs.lstatSync(file).isFile(), 'Server package must be a regular file')
   const digest = await fileDigest(file)
   const bytes = fs.statSync(file).size
+  const sbomFiles = new Map()
+  for (const name of sbomNames) {
+    const sbom = path.join(directory, name)
+    sbomFiles.set(name, { document: readJson(sbom), digest: await fileDigest(sbom), bytes: fs.statSync(sbom).size })
+  }
   validatePackageMetadata({
     manifest: readJson(path.join(directory, 'artifact-manifest.json')),
     checksum: fs.readFileSync(path.join(directory, `${packageName}.sha256`), 'utf8'),
-    digest, bytes, sourceCommit, provenance,
+    digest, bytes, sourceCommit, provenance, sbomFiles,
   })
   return { digest, bytes }
 }
 
+// Every check a published Release must pass, shared by deployment and the read-only weekly rehearsal.
+export async function verifyReleaseAssets({ github, release, tag, sourceCommit, env, directory, attest = verifyBuildAttestations }) {
+  const workflowId = await ciWorkflowId(github)
+  const assets = indexAssets(await github.list(`/releases/${release.id}/assets?per_page=100`))
+  assert(releaseAssetNames.every(name => assets.has(name)), 'Release assets are incomplete; publish only drafts prepared by the Prepare Release workflow')
+  const retained = path.join(directory, 'release')
+  fs.mkdirSync(retained, { recursive: true })
+  const provenance = validateProvenance(readJson(await downloadAsset(github, assets.get('provenance.json'), retained)), { tag, sourceCommit })
+  const run = await verifyCiAttempt(github, workflowId, sourceCommit, provenance.ciRunId, provenance.ciRunAttempt)
+  for (const name of releaseAssetNames.filter(name => name !== 'provenance.json')) {
+    await downloadAsset(github, assets.get(name), retained)
+  }
+  await inspectPackage(retained, sourceCommit, provenance)
+  await attest(retained, run, { env })
+  return { directory: retained, provenance }
+}
+
 // Deployment never uploads: the immutable published Release must already carry every asset attached to its draft.
-export async function prepareRelease({ github, tag, env, directory, workflowPath = releaseWorkflowPath }) {
+export async function prepareRelease({ github, tag, env, directory, workflowPath = releaseWorkflowPath, attest = verifyBuildAttestations }) {
   const sourceCommit = await resolveSource(github, tag, env, workflowPath)
   const release = validatePublishedRelease(await github.get(`/releases/tags/${encodeURIComponent(tag)}`), tag)
   if (env.GITHUB_EVENT_NAME === 'release') {
@@ -120,21 +143,11 @@ export async function prepareRelease({ github, tag, env, directory, workflowPath
     assert.equal(event.action, 'published', 'Only release.published may deploy')
     assert.equal(event.release?.id, release.id, 'Release event refers to another Release')
   }
-  const workflowId = await ciWorkflowId(github)
-  const assets = indexAssets(await github.list(`/releases/${release.id}/assets?per_page=100`))
-  assert(releaseAssetNames.every(name => assets.has(name)), 'Release assets are incomplete; publish only drafts prepared by the Prepare Release workflow')
-  const retained = path.join(directory, 'release')
-  fs.mkdirSync(retained, { recursive: true })
-  const provenance = validateProvenance(readJson(await downloadAsset(github, assets.get('provenance.json'), retained)), { tag, sourceCommit })
-  await verifyCiAttempt(github, workflowId, sourceCommit, provenance.ciRunId, provenance.ciRunAttempt)
-  for (const name of releaseAssetNames.filter(name => name !== 'provenance.json')) {
-    await downloadAsset(github, assets.get(name), retained)
-  }
-  await inspectPackage(retained, sourceCommit, provenance)
+  const verified = await verifyReleaseAssets({ github, release, tag, sourceCommit, env, directory, attest })
   // Fail before SSH if the tag or Release changed during the downloads.
   assert.equal(await resolveTagCommit(github, tag), sourceCommit, 'Release tag changed during verification')
   assert.equal((await github.get(`/releases/tags/${encodeURIComponent(tag)}`)).id, release.id, 'Release was replaced during verification')
-  return { directory: retained, provenance }
+  return verified
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

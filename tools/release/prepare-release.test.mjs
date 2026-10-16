@@ -5,7 +5,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { prepareDraft } from './prepare-release.mjs'
-import { repository, ciWorkflowPath, packageName, releaseAssetNames, requiredJobs } from './policy.mjs'
+import { repository, ciWorkflowPath, packageName, releaseAssetNames, requiredJobs, attestedFileNames } from './policy.mjs'
+import { packageManifest, sbomBytes } from './test-fixtures.mjs'
 
 const sha = 'a'.repeat(40)
 const digest = value => createHash('sha256').update(value).digest('hex')
@@ -18,6 +19,7 @@ function fixture(t) {
   let assetId = 0
   let releaseId = 100
   const packageBytes = Buffer.from('main CI package bytes')
+  const sboms = sbomBytes()
   const run = {
     id: 3001, run_attempt: 1, workflow_id: 42, name: 'Platform CI', path: ciWorkflowPath,
     repository: { full_name: repository }, head_repository: { full_name: repository },
@@ -30,11 +32,8 @@ function fixture(t) {
     files: {
       [packageName]: packageBytes,
       [`${packageName}.sha256`]: Buffer.from(`${digest(packageBytes)}  ${packageName}\n`),
-      'artifact-manifest.json': Buffer.from(JSON.stringify({
-        schemaVersion: 1, milestone: 'M1-15', sourceCommit: sha,
-        server: { platform: 'windows', architecture: 'x64', runtimeMode: 'WINDOWS_SERVICE_WINSW' },
-        artifacts: [{ name: packageName, bytes: packageBytes.length, sha256: digest(packageBytes) }],
-      })),
+      'artifact-manifest.json': Buffer.from(JSON.stringify(packageManifest(sha, packageBytes, sboms))),
+      ...Object.fromEntries(sboms),
       'verification-report.json': Buffer.from(JSON.stringify({ schemaVersion: 1, sourceCommit: sha, packageGate: 'PASS', localGate: 'PASS' })),
     },
     archive: Buffer.from('main CI artifact archive'),
@@ -109,7 +108,13 @@ function fixture(t) {
     fs.mkdirSync(directory)
     for (const [name, bytes] of Object.entries(github.files)) fs.writeFileSync(path.join(directory, name), bytes)
   }
-  const draft = (options = {}) => prepareDraft({ github, sourceCommit: sha, env, directory: fs.mkdtempSync(path.join(root, 'run-')), now, unpack, log: () => {}, ...options })
+  github.attestations = []
+  const attest = async (directory, ciRun) => {
+    for (const name of attestedFileNames) assert(fs.statSync(path.join(directory, name)).isFile(), `attested file missing: ${name}`)
+    github.attestations.push({ runId: ciRun.id, attempt: ciRun.run_attempt, uploadsSoFar: github.uploads.length })
+    if (github.attestationError) throw new Error(github.attestationError)
+  }
+  const draft = (options = {}) => prepareDraft({ github, sourceCommit: sha, env, directory: fs.mkdtempSync(path.join(root, 'run-')), now, unpack, attest, log: () => {}, ...options })
   return { github, draft, packageBytes }
 }
 
@@ -128,6 +133,20 @@ test('a main commit gets a numbered draft with notes and every verified asset, p
   assert.deepEqual(github.uploads, ['provenance.json', ...releaseAssetNames.filter(name => name !== 'provenance.json')])
   assert.equal(result.provenance.ciRunId, 3001)
   assert.equal(result.provenance.tag, result.tag)
+})
+
+test('CI bytes are attested before any upload and the persisted assets are attested again', async t => {
+  const { github, draft } = fixture(t)
+  github.attestationError = 'no attestation from main push CI run 3001 attempt 1'
+  await assert.rejects(draft(), /no attestation/u)
+  assert.deepEqual(github.uploads, [], 'unattested bytes never reach the draft')
+  github.attestationError = null
+  github.attestations = []
+  await draft()
+  assert.deepEqual(github.attestations, [
+    { runId: 3001, attempt: 1, uploadsSoFar: 0 },
+    { runId: 3001, attempt: 1, uploadsSoFar: releaseAssetNames.length },
+  ])
 })
 
 test('an interrupted draft resumes on its pinned attempt without a new Release or re-upload', async t => {
