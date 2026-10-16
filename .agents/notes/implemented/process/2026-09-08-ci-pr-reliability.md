@@ -22,7 +22,7 @@ Status: implemented
 
 验证子进程清除继承的应用配置、认证 fixture 和 JVM/Maven/Node 注入选项，再显式注入当前验证参数。阶段报告记录源码指纹、基线提交及逐步完成状态；后续交付拒绝旧源码、旧基线和缺失步骤。Windows 在校验 handoff 后对同一 JAR/Web 字节执行 smoke 和组包，服务器包再次逐文件对照 handoff。
 
-保留远端 required check 名称 `M0 Portable Gate` 与 `M0 Windows x64 Gate`。实际 Windows 工作任务为 `Windows Delivery`；最终门禁使用 `always()`，要求每个工作任务为 success 且有完成凭据。失败、取消、意外 skipped、未知或缺失结果都不能成功；没有路径过滤。PR/ref 新轮次取消旧轮次，保留合入 dev 后对实际集成提交的验证。无论成功与否都尝试上传阶段记录和 Maven 诊断；必要交付物缺失仍失败。
+保留远端 required check 名称 `M0 Portable Gate` 与 `M0 Windows x64 Gate`。实际 Windows 工作任务为 `Windows Delivery`；最终门禁使用 `always()`，要求每个工作任务为 success 且有完成凭据。失败、取消、意外 skipped、未知或缺失结果都不能成功；没有路径过滤。PR/ref 新轮次取消旧轮次，保留合入 `dev` 或晋升到 `main` 后对实际提交的验证；指向 `dev`、`main` 的 PR 与两者的推送运行同一套门禁（发布线见 [main 发布线决策](2026-10-15-main-release-line.md)）。无论成功与否都尝试上传阶段记录和 Maven 诊断；必要交付物缺失仍失败。
 
 ## Alternatives considered
 

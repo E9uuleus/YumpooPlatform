@@ -8,7 +8,7 @@ Status: implemented
 
 ## Decision
 
-版本号就是 Release tag，在发布时确定，格式为 `server-vYYYY.MM.DD.N`。构建产物只携带 commit，以保持「只构建一次」：
+版本号就是 Release tag，在发布时确定，格式为 `server-vYYYY.MM.DD.N`，由 Prepare Release 按北京时间日期自动编号（见 [main 发布线决策](2026-10-15-main-release-line.md)）。构建产物只携带 commit，以保持「只构建一次」：
 
 - [CI 编排](../../../../tools/ci/run.mjs)给 Maven 步骤传入 `-Dyumpoo.build.commit=<tested commit>`，build-info 的 `commit` 来自被测提交。
 - [Web 构建](../../../../frontend/web-app/vite.config.ts)在 `index.html` 写入 `<meta name="yumpoo-commit">`。没有有效 commit 时写 `unknown`。

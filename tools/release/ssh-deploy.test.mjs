@@ -6,7 +6,7 @@ import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import {
-  deploy, waitForDeployment, makeRequest, commitUploadBatch, sftpQuote, deploymentRoot, deploymentUser, triggerCommand,
+  deploy, waitForDeployment, makeRequest, makeRollbackRequest, submitRollbackRequest, commitUploadBatch, sftpQuote, deploymentRoot, deploymentUser, triggerCommand,
   packagePartBytes, maxPackageParts, packagePartCount, packagePartName, splitPackage, uploadPackageParts,
   runSftpProcess, createSshTransport, sshChildEnvironment, sftpConnectionTimeoutMs, packageUploadTimeoutMs,
 } from './ssh-deploy.mjs'
@@ -15,7 +15,32 @@ import { packageName, validateStatus } from './policy.mjs'
 const requestId = '7169f9c0-745b-442f-a927-55271a906f3a'
 const provenance = { tag: 'server-v1.0.0', sourceCommit: 'a'.repeat(40), packageSha256: 'b'.repeat(64), packageBytes: 1 }
 const request = makeRequest(provenance, requestId)
-const status = (state, phase = 'verify') => ({ ...request, state, phase, updatedAt: '2026-10-15T00:00:00Z' })
+// The server status keeps its own schema version, independent of the request schema.
+const status = (state, phase = 'verify') => ({
+  schemaVersion: 1, requestId: request.requestId, tag: request.tag, sourceCommit: request.sourceCommit, state, phase, updatedAt: '2026-10-15T00:00:00Z',
+})
+
+test('deploy requests use schema 2 deploy mode; rollback requests carry no package fields', () => {
+  assert.deepEqual({ schemaVersion: request.schemaVersion, mode: request.mode }, { schemaVersion: 2, mode: 'deploy' })
+  assert.deepEqual(makeRollbackRequest(provenance, requestId), { schemaVersion: 2, mode: 'rollback', requestId, tag: provenance.tag, sourceCommit: provenance.sourceCommit })
+  assert.throws(() => makeRollbackRequest(provenance, 'not-a-uuid'))
+})
+
+test('rollback submission uploads only provenance and an atomically committed request', async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-rollback-test-'))
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  fs.writeFileSync(path.join(directory, 'provenance.json'), JSON.stringify(provenance))
+  const batches = []
+  const rollbackRequest = makeRollbackRequest(provenance, requestId)
+  await submitRollbackRequest({ directory, request: rollbackRequest, sftp: async batch => { batches.push(batch) } })
+  assert.equal(batches.length, 1)
+  const lines = batches[0].trimEnd().split('\n')
+  assert(lines[0].startsWith('mkdir ') && lines[0].endsWith(`/inbox/${requestId}"`))
+  assert.deepEqual(lines.slice(1), commitUploadBatch(directory, rollbackRequest).trimEnd().split('\n'))
+  assert(!batches[0].includes('.part') && !batches[0].includes(packageName))
+  assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'request.json'), 'utf8')).mode, 'rollback')
+  await assert.rejects(submitRollbackRequest({ directory, request, sftp: async () => {} }), /Only rollback/u)
+})
 
 function clock() {
   let elapsed = 0

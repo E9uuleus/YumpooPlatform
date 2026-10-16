@@ -25,15 +25,20 @@ test('GitHub downloads use endpoint-specific Accept headers and keep the token o
   assert.equal(fs.readFileSync(path.join(directory, 'artifact.zip'), 'utf8'), 'binary bytes')
 })
 
-test('paginated APIs flatten every page and uploads never use clobber', () => {
+test('paginated APIs flatten every page; writes send JSON on stdin and draft assets go to the upload host by ID', () => {
   const calls = []
-  const github = createGithub({ GH_TOKEN: 'test-token' }, (_command, args) => {
-    calls.push(args)
-    return JSON.stringify([{ jobs: [{ id: 1 }] }, { jobs: [{ id: 2 }] }])
+  const github = createGithub({ GH_TOKEN: 'test-token' }, (_command, args, options) => {
+    calls.push({ args, options })
+    return calls.length === 1 ? JSON.stringify([{ jobs: [{ id: 1 }] }, { jobs: [{ id: 2 }] }]) : '{"id":7}'
   })
   assert.deepEqual(github.list('/actions/runs/1/attempts/2/jobs?per_page=100', 'jobs'), [{ id: 1 }, { id: 2 }])
-  github.upload('server-v1', '/tmp/package.zip')
-  assert(calls[0].includes('--paginate') && calls[0].includes('--slurp'))
-  assert(!calls[1].includes('--clobber'))
+  assert.deepEqual(github.send('POST', '/releases', { tag_name: 'server-v2026.10.20.1', draft: true }), { id: 7 })
+  github.uploadAsset(7, '/tmp/provenance.json')
+  assert(calls[0].args.includes('--paginate') && calls[0].args.includes('--slurp'))
+  assert(calls[1].args.includes('POST') && calls[1].args.includes('--input') && JSON.parse(calls[1].options.input).draft === true)
+  assert(calls[2].args[1].startsWith('https://uploads.github.com/repos/E9uuleus/YumpooPlatform/releases/7/assets?name=provenance.json'))
+  assert(!calls.some(call => call.args.includes('--clobber')))
+  assert.throws(() => github.send('PUT', '/releases/7', {}), /Unsupported/u)
+  assert.throws(() => github.send('DELETE', '/releases/7'), /Unsupported/u)
   assert.throws(() => createGithub({ GITHUB_TOKEN: 'not-an-accepted-credential' }), /GH_TOKEN/u)
 })

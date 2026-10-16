@@ -36,8 +36,20 @@ export function createGithub(env = process.env, execute = run) {
         fs.closeSync(output)
       }
     },
-    upload(tag, file) {
-      execute('gh', ['release', 'upload', tag, file, '--repo', repository], { env, timeout: 300_000 })
+    send(method, endpoint, body) {
+      // No DELETE: release tooling must never be able to remove a Release, tag or branch.
+      assert(['POST', 'PATCH'].includes(method), 'Unsupported GitHub write method')
+      const args = ['api', '--hostname', 'github.com', `${base}${endpoint}`, '--method', method, '-H', 'X-GitHub-Api-Version: 2022-11-28']
+      const output = execute('gh', body === undefined ? args : [...args, '--input', '-'],
+        { env, input: body === undefined ? undefined : JSON.stringify(body) })
+      return output.trim() ? JSON.parse(output) : null
+    },
+    // Draft Releases have no tag yet, so assets go to the upload endpoint by Release ID.
+    uploadAsset(releaseId, file) {
+      assert(Number.isSafeInteger(releaseId) && releaseId > 0, 'Invalid Release ID')
+      const url = `https://uploads.github.com${base}/releases/${releaseId}/assets?name=${encodeURIComponent(path.basename(file))}`
+      return JSON.parse(execute('gh', ['api', url, '--method', 'POST', '-H', 'Content-Type: application/octet-stream',
+        '-H', 'X-GitHub-Api-Version: 2022-11-28', '--input', file], { env, timeout: 300_000 }))
     },
   }
 }

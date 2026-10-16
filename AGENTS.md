@@ -6,15 +6,17 @@
 - 目录约定：`docs/` 文档和版本化原型导出物；`docs/`目录永远不被跟踪，也不加入提交、推送。
 ## Git 分支与交付
 
-- 子功能开发必须基于最新的 `dev` 分支创建独立分支，例如 `feature/<功能名>`或`fix/<功能名>`。已有对应任务分支时继续使用，不为阶段切换重复建分支。
-- 变更集成必须通过目标为 `dev` 的 PR；禁止直接推送 `dev`，合并前必须通过代码审查和 CI。
+- 分支模型：`dev` 是集成分支（默认分支），`main` 是已发布线。子功能开发必须基于最新的 `dev` 创建独立分支，例如 `feature/<功能名>` 或 `fix/<功能名>`；已有对应任务分支时继续使用，不为阶段切换重复建分支。线上紧急修复从 `main` 创建 `hotfix/<名称>`。
+- 变更集成必须通过 PR：功能与修复 PR 指向 `dev` 并用 squash 合并；`dev` 晋升到 `main` 与 `hotfix/*` 合入 `main` 用合并提交。禁止直接推送 `dev` 或 `main`；合并前必须通过代码审查和 CI，指向 `main` 的 PR 还须通过 `Main Promotion Policy`。
+- 发布：`server-vYYYY.MM.DD.N` 标签只由 Prepare Release 在 `main` 推送 CI 成功后随草稿生成，在草稿上点击 Publish 即为上线决定。禁止手工创建或移动 `server-v*` 标签、手工新建 Release 或替换附件；热修复发布后必须用合并提交合并自动生成的 `backmerge/*` PR。规则见 [main 发布线](.agents/notes/implemented/process/2026-10-15-main-release-line.md)。
+- 部署引擎（`deployment/windows/cd`）的改动需管理员在主机运行 `Update-YumpooEngine.ps1` 才生效；`host.json` 新增字段必须有向后兼容的默认值，引擎永不执行发布包内的脚本。发布流程变化时同步更新 `deployment/windows/RUNBOOK.md`、`.github/CI.md` 与发布帮助文档。
 - 任务明确包含相应交付阶段时持续完成，不把早期阶段当成全部完成。
 - commit message格式必须为：<type>(<scope>): <操作/变更内容> (<步骤编号>)
 
 ## 数据库迁移
 
 - 新迁移默认必须「只扩展」：新建表或索引、可空或带默认值的新增列等，保证上一版本可快速回退；`ci:contracts` 的迁移回退安全检查拒绝白名单外的语句。
-- 删除、改名、类型或约束收紧、无默认值的 NOT NULL、修改已有数据等破坏性变更，拆为 expand/contract 两次发布；确需一次完成时在 `contracts/migrations/rollback-safety-exceptions.json` 登记精确例外（`breaking` 例外须链接已实施 Agent Note）。规则见[迁移回退安全](.agents/notes/implemented/data/2026-10-15-rollback-safe-migrations.md)。
+- 删除、改名、类型或约束收紧、无默认值的 NOT NULL、修改已有数据等破坏性变更，拆为 expand/contract 两次发布；确需一次完成时在 `contracts/migrations/rollback-safety-exceptions.json` 登记精确例外（`breaking` 例外须链接已实施 Agent Note），并在晋升到 `main` 的 PR 上加 `release:breaking-migration` 标签。规则见[迁移回退安全](.agents/notes/implemented/data/2026-10-15-rollback-safe-migrations.md)。
 
 ## 版本号
 
@@ -23,6 +25,7 @@
 ## Repository layout
 
 ```
+.agents/notes/                   Agent Notes: long-lived decisions and their rationale
 .github/                         GitHub Actions workflows and CI gates
 backend/                         Spring Boot modular monolith backend
 backend/src/main/java/           Backend modules and application code
@@ -54,6 +57,8 @@ evidence/                        Milestone acceptance evidence and verification 
 
 tools/                           Workspace validation and automation utilities
 tools/architecture/              Workspace boundary and architecture checks
+tools/ci/                        Unified CI stages, merge gate and workflow/migration policies
+tools/release/                   Release drafts, provenance verification, promotion and SSH deployment client
 tools/events/                    Event contract validation tools
 tools/openapi/                   OpenAPI linting and API client generation
 tools/verification/              Milestone verification, packaging, and smoke tests

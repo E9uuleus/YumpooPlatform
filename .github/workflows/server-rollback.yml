@@ -1,0 +1,66 @@
+name: Server Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_tag:
+        description: The immediately previous published server-v* tag; run this workflow on that same tag
+        type: string
+        required: true
+      reason:
+        description: Why the current release is being rolled back
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+# Shares the deployment lane, so a rollback never overlaps a release deployment.
+concurrency:
+  group: windows-server-release-wecom-dev
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Roll back code to the retained previous release
+    if: ${{ github.repository == 'E9uuleus/YumpooPlatform' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment:
+      name: wecom-dev
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout the rollback target tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Verify deployment client regression tests
+        run: node --test tools/release/*.test.mjs
+      - name: Record rollback reason
+        env:
+          ROLLBACK_REASON: ${{ inputs.reason }}
+          ROLLBACK_TARGET: ${{ inputs.target_tag }}
+        run: |
+          node -e "const fs = require('node:fs'); const line = 'Rollback to ' + process.env.ROLLBACK_TARGET + ' because: ' + process.env.ROLLBACK_REASON.replace(/[\r\n]+/g, ' ').slice(0, 500); console.log(line); if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, line + '\n')"
+      - name: Verify the target Release and submit a code-only rollback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.target_tag }}
+          DEPLOY_MODE: rollback
+          WINDOWS_DEPLOY_HOST: ${{ secrets.WINDOWS_DEPLOY_HOST }}
+          WINDOWS_DEPLOY_SSH_KEY: ${{ secrets.WINDOWS_DEPLOY_SSH_KEY }}
+          WINDOWS_DEPLOY_KNOWN_HOSTS: ${{ secrets.WINDOWS_DEPLOY_KNOWN_HOSTS }}
+          WINDOWS_DEPLOY_PORT: ${{ vars.WINDOWS_DEPLOY_PORT || '22' }}
+        run: node tools/release/ssh-deploy.mjs
+      - name: Notify rollback job failure
+        if: ${{ failure() }}
+        env:
+          WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          NOTIFY_TEXT: "**Yumpoo 代码回退作业失败：目标 ${{ inputs.target_tag }}**\n> 服务器任务的最终状态以主机通知为准。\n> 日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: node tools/release/notify.mjs

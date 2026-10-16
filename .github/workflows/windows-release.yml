@@ -18,14 +18,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  promote:
-    name: Verify CI and retain Release package
+  verify:
+    name: Verify immutable Release assets
     if: ${{ github.repository == 'E9uuleus/YumpooPlatform' && (github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'server-v')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       actions: read
-      contents: write
+      contents: read
     steps:
       - name: Checkout release workflow commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,15 +37,21 @@ jobs:
           node-version-file: .node-version
       - name: Verify deployment client regression tests
         run: node --test tools/release/*.test.mjs
-      - name: Verify exact push CI attempt and retain immutable package bytes
+      - name: Verify exact main CI attempt and the immutable package bytes
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: node tools/release/promote-release.mjs
+      - name: Notify release verification failure
+        if: ${{ failure() }}
+        env:
+          WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          NOTIFY_TEXT: "**Yumpoo 发布校验失败：${{ github.event.release.tag_name || inputs.tag }}**\n> 未提交部署，站点未变动。\n> 日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: node tools/release/notify.mjs
 
   deploy:
     name: Deploy retained package to Windows
-    needs: [promote]
+    needs: [verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     environment:
@@ -66,8 +72,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          DEPLOY_MODE: deploy
           WINDOWS_DEPLOY_HOST: ${{ secrets.WINDOWS_DEPLOY_HOST }}
           WINDOWS_DEPLOY_SSH_KEY: ${{ secrets.WINDOWS_DEPLOY_SSH_KEY }}
           WINDOWS_DEPLOY_KNOWN_HOSTS: ${{ secrets.WINDOWS_DEPLOY_KNOWN_HOSTS }}
           WINDOWS_DEPLOY_PORT: ${{ vars.WINDOWS_DEPLOY_PORT || '22' }}
         run: node tools/release/ssh-deploy.mjs
+      - name: Notify deployment job failure
+        if: ${{ failure() }}
+        env:
+          WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          NOTIFY_TEXT: "**Yumpoo 部署作业失败：${{ github.event.release.tag_name || inputs.tag }}**\n> 服务器任务的最终状态以主机通知为准。\n> 日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: node tools/release/notify.mjs

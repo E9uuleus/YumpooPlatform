@@ -10,7 +10,7 @@ CI 已验证并打包 Windows 服务端，但上线仍依赖管理员交互式 P
 
 ## Decision
 
-发布入口为 `release.published` 的 `server-v*` 标签，Release 发布本身就是上线决定。标签必须指向已通过完整 CI 的 `dev` 提交，来源绑定 source commit、CI run、attempt 和服务器 artifact，拒绝 PR 临时产物与“最新成功包”选择。发布阶段不重新构建；经清单、大小和 SHA-256 验证的原包及 `provenance.json` 保存在 Release 附件，已有附件只能一致复用，不能覆盖为不同字节。手工重试仍核验原标签和执行 ref。
+发布入口为 `release.published` 的 `server-v*` 标签，Release 发布本身就是上线决定。标签必须指向发布线 `main` 上已通过完整推送 CI 的提交（分支模型、草稿与晋升准则见 [main 发布线决策](2026-10-15-main-release-line.md)），来源绑定 source commit、CI run、attempt 和服务器 artifact，拒绝 PR 临时产物与“最新成功包”选择。发布阶段不重新构建；经清单、大小和 SHA-256 验证的原包及 `provenance.json` 在草稿阶段就保存为 Release 附件，发布后由不可变发布锁定，部署只校验不写入。手工重试仍核验原标签和执行 ref。
 
 SSH 使用固定主机密钥，私钥仅存于 `wecom-dev` Environment。`yumpoo-deploy` 是非管理员账号，权限限于暂存上传、触发固定 `YumpooDeploy` 任务及查询脱敏状态。SYSTEM 任务执行管理员安装的部署引擎，不执行 ZIP 中的脚本；上传中的 `request.json` 最后原子提交。任务不依赖 SSH 会话，串行处理，使用请求 UUID 查询结果；同一已完成版本幂等返回，默认禁止自动降级；唯一例外是下文受限的代码回退请求。数据库恢复凭据、企微 Secret 和证书私钥保留在主机受控目录。
 
