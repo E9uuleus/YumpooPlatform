@@ -1,8 +1,9 @@
 name: Back-merge Main
 
+# dev pushes re-check too: merging an older back-merge PR may still leave later hotfixes missing.
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
 
 permissions:
   contents: read
@@ -21,7 +22,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - name: Checkout main with dev history
+      - name: Checkout with main and dev history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -33,5 +34,4 @@ jobs:
       - name: Open a back-merge PR if main has changes dev lacks
         env:
           GH_TOKEN: ${{ github.token }}
-          MAIN_SHA: ${{ github.sha }}
         run: node tools/release/back-merge.mjs

@@ -59,10 +59,10 @@ Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必
 | 工作流 | 触发 | 职责 |
 | --- | --- | --- |
 | [Main Promotion Policy](workflows/main-promotion-policy.yml) | 指向 `main` 的 PR | 只允许 `dev`/`hotfix/*`；汇总提交、迁移分类与契约变化；破坏性迁移要求 `release:breaking-migration` 标签 |
-| [Prepare Release](workflows/prepare-release.yml) | `main` 推送 CI 成功 | 自动编号并创建草稿 Release，草稿阶段上传并核验来源清单与原包 |
+| [Prepare Release](workflows/prepare-release.yml) | `main` 推送 CI 成功 | 自动编号并创建草稿 Release，草稿阶段上传并核验来源清单与原包；不删除任何草稿 |
 | [Windows Release](workflows/windows-release.yml) | Release 发布 | 只校验不可变 Release 并部署，不写附件 |
 | [Server Rollback](workflows/server-rollback.yml) | 手动，在上一版本 tag 上 | 提交只换代码、不动数据库的回退请求 |
-| [Back-merge Main](workflows/back-merge.yml) | `main` 推送 | `main` 含 `dev` 缺少的改动（热修复）时开回合并 PR |
+| [Back-merge Main](workflows/back-merge.yml) | `main` 或 `dev` 推送 | `main` 含 `dev` 缺少的改动（热修复）时开回合并 PR，或把已有回合并分支快进到最新 `main` |
 
 这些工作流的结构与权限由 [release-workflows.test.mjs](../tools/ci/release-workflows.test.mjs) 解析 YAML 校验，发布脚本自身的回归由 `tools/release/*.test.mjs` 覆盖，二者都在 `ci:static` 中执行。
 

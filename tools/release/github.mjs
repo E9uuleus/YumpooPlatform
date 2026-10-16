@@ -37,7 +37,8 @@ export function createGithub(env = process.env, execute = run) {
       }
     },
     send(method, endpoint, body) {
-      assert(['POST', 'PATCH', 'DELETE'].includes(method), 'Unsupported GitHub write method')
+      // No DELETE: release tooling must never be able to remove a Release, tag or branch.
+      assert(['POST', 'PATCH'].includes(method), 'Unsupported GitHub write method')
       const args = ['api', '--hostname', 'github.com', `${base}${endpoint}`, '--method', method, '-H', 'X-GitHub-Api-Version: 2022-11-28']
       const output = execute('gh', body === undefined ? args : [...args, '--input', '-'],
         { env, input: body === undefined ? undefined : JSON.stringify(body) })

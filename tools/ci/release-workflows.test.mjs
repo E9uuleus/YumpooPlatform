@@ -74,6 +74,6 @@ test('PRs into main get the promotion check and hotfixes on main are merged back
   assert.equal(promotion.jobs.promotion.name, 'Main Promotion Policy')
   assert.deepEqual(promotion.jobs.promotion.permissions, { contents: 'read', 'pull-requests': 'write' })
   assert.equal(steps(promotion.jobs.promotion).find(step => step.uses?.startsWith('actions/checkout@')).with['fetch-depth'], 0)
-  assert.deepEqual(backMerge.on, { push: { branches: ['main'] } })
+  assert.deepEqual(backMerge.on, { push: { branches: ['main', 'dev'] } })
   assert.deepEqual(backMerge.jobs['back-merge'].permissions, { contents: 'write', 'pull-requests': 'write' })
 })

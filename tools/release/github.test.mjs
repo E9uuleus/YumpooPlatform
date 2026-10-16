@@ -39,5 +39,6 @@ test('paginated APIs flatten every page; writes send JSON on stdin and draft ass
   assert(calls[2].args[1].startsWith('https://uploads.github.com/repos/E9uuleus/YumpooPlatform/releases/7/assets?name=provenance.json'))
   assert(!calls.some(call => call.args.includes('--clobber')))
   assert.throws(() => github.send('PUT', '/releases/7', {}), /Unsupported/u)
+  assert.throws(() => github.send('DELETE', '/releases/7'), /Unsupported/u)
   assert.throws(() => createGithub({ GITHUB_TOKEN: 'not-an-accepted-credential' }), /GH_TOKEN/u)
 })

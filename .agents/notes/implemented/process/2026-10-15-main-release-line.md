@@ -16,7 +16,7 @@ Status: implemented
 
 - `dev` 是集成分支（也是默认分支）。功能、修复 PR 用 squash 合入 `dev`。
 - `main` 是已发布线，只接收两类 PR：本仓库 `dev` 的晋升 PR，以及 `hotfix/<名称>`。二者都用合并提交合并，`main` 的推送 CI 产物是唯一可发布的服务器包。
-- 热修复合入 `main` 后，[Back-merge Main](../../../../.github/workflows/back-merge.yml) 在 `main` 含有 `dev` 缺少的改动时，从 `backmerge/<commit>` 分支向 `dev` 开 PR，必须用合并提交合并。判定依据是 `dev...main` 的差异：普通晋升的合并提交不引入树变化，因此不会触发。
+- 热修复合入 `main` 后，[Back-merge Main](../../../../.github/workflows/back-merge.yml) 在 `main` 含有 `dev` 缺少的改动时，从 `backmerge/<commit>` 分支向 `dev` 开 PR，必须用合并提交合并。判定依据是 `dev...main` 的差异：普通晋升的合并提交不引入树变化，因此不会触发。已有回合并 PR 时，只有它已包含当前 `main` 才复用；否则把仍是 `main` 祖先的回合并分支快进到 `main`，无法快进（已被 Update branch 更新）时另开 PR。工作流在 `main` 与 `dev` 的每次推送后都重新核对，合并旧回合并 PR 后遗漏的后续热修复会再次被处理。
 
 **晋升准则**
 
@@ -38,7 +38,7 @@ Status: implemented
 - 按北京时间日期自动编号 `server-vYYYY.MM.DD.N`。已有标签都占号，避免与不可变发布留下的标签冲突。
 - 根据上一个已发布版本到本提交的非合并提交，生成分组发布说明，并列出新增迁移和契约变化。
 - 创建**草稿** Release，在草稿阶段上传并核验来源清单和 CI 原包。来源清单最先上传，用来钉住 CI attempt；中断重跑不会换到另一次构建。
-- 删除较早的未发布草稿，避免误发旧版本。
+- 永不自动删除草稿。其他未发布草稿只在新草稿的说明、工作流摘要和通知中标记为已被取代，由发布负责人手动删除；已发布更新版本时，拒绝为更旧提交生成草稿。发布工具的 GitHub 客户端不提供 DELETE。
 
 **发布与回退**
 
@@ -55,6 +55,7 @@ Status: implemented
 - **仓库内单一版本源，每次发布前提交版本号**：每次发布多一个 PR，并与「发布时决定版本」冲突；改为草稿生成时自动编号（见[发布版本标识](2026-10-15-release-version-identity.md)）。
 - **保留发布后上传附件**：与 Immutable Releases 不兼容，也让已发布的附件可在发布后补写；改为草稿阶段完成全部附件。
 - **默认分支设为 `main`**：发布界面不再需要手选分支，但日常 PR、Dependabot 和定时任务会默认指向发布线；草稿已经自动生成，因此默认分支设为 `dev`。
+- **自动删除被取代的草稿**：GitHub 按 Release ID 无条件删除，即使删除前重新读取状态，人工 Publish 仍可能落在读取与删除之间，导致刚发布的不可变 Release 被删；误发旧草稿的后果只是部署一个较旧但仍前进的 `main` 版本，远小于丢失已发布版本，因此改为只标记、人工删除。
 - **直接从 `main` 开 back-merge PR**：在 `dev` 要求分支最新时，「Update branch」会把 `dev` 合进 `main`；改为从 `main` 提交建立专用分支。
 
 ## Consequences

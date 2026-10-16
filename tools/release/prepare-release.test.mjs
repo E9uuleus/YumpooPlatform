@@ -24,7 +24,7 @@ function fixture(t) {
     event: 'push', head_branch: 'main', head_sha: sha, status: 'completed', conclusion: 'success',
   }
   const github = {
-    calls: [], uploads: [], deleted: [], runs: [run], assets: new Map(), comparison: 'ahead',
+    calls: [], uploads: [], deleted: [], runs: [run], assets: new Map(), comparison: 'ahead', latestOrder: 'behind',
     releases: [{ id: 50, tag_name: 'server-v2026.10.19.1', draft: false, published_at: '2026-10-19T08:00:00Z', target_commitish: 'b'.repeat(40) }],
     tags: [{ ref: 'refs/tags/server-v2026.10.19.1' }, { ref: 'refs/tags/server-v2026.10.20.2' }],
     files: {
@@ -42,6 +42,8 @@ function fixture(t) {
     get(endpoint) {
       this.calls.push(endpoint)
       if (endpoint === `/compare/${sha}...main?per_page=1`) return { status: this.comparison, merge_base_commit: { sha } }
+      if (endpoint === '/git/ref/tags/server-v2026.10.19.1') return { object: { type: 'commit', sha: 'b'.repeat(40) } }
+      if (endpoint === `/compare/${sha}...${'b'.repeat(40)}?per_page=1`) return { status: this.latestOrder }
       if (endpoint === '/actions/workflows/m0-18-ci.yml') return { id: 42, path: ciWorkflowPath }
       if (endpoint === '/actions/runs/3001/attempts/1') return run
       if (endpoint === `/compare/server-v2026.10.19.1...${sha}`) {
@@ -141,16 +143,34 @@ test('an interrupted draft resumes on its pinned attempt without a new Release o
   assert.equal(result.provenance.ciRunId, 3001)
 })
 
-test('a published commit needs no draft and superseded drafts are removed', async t => {
+// REL-P3 F10/F11: GitHub deletes Releases by ID unconditionally, so a draft published between listing and
+// deleting would lose its immutable Release. Drafts are therefore never deleted, only reported.
+test('other drafts are never deleted, only reported as superseded, and a published commit needs no draft', async t => {
   const { github, draft } = fixture(t)
   github.releases.push({ id: 60, tag_name: 'server-v2026.10.20.1', draft: true, target_commitish: 'f'.repeat(40) })
-  await draft()
-  assert.deepEqual(github.deleted, [60])
+  const result = await draft()
+  assert.deepEqual(github.deleted, [])
+  assert(!github.calls.some(call => call.startsWith('DELETE ')))
+  assert.deepEqual(result.otherDrafts, ['server-v2026.10.20.1'])
+  assert.match(github.releases.find(release => release.id === result.releaseId).body, /旧草稿 `server-v2026\.10\.20\.1` 已被本草稿取代/u)
   github.releases.find(release => release.target_commitish === sha).draft = false
   github.uploads = []
-  const result = await draft()
-  assert.equal(result.published, true)
+  const again = await draft()
+  assert.equal(again.published, true)
   assert.deepEqual(github.uploads, [])
+})
+
+test('a re-run for a commit older than the live release creates nothing and deletes nothing', async t => {
+  const { github, draft } = fixture(t)
+  github.releases.push({ id: 60, tag_name: 'server-v2026.10.20.4', draft: true, target_commitish: 'f'.repeat(40) })
+  github.latestOrder = 'ahead'
+  await assert.rejects(draft(), /already published a newer commit/u)
+  assert(!github.calls.some(call => /^(POST|DELETE) /u.test(call)))
+  assert.deepEqual(github.releases.map(release => release.id), [50, 60])
+  github.latestOrder = 'behind'
+  github.runs = []
+  await assert.rejects(draft(), /No successful push\/main Platform CI/u)
+  assert.deepEqual(github.releases.map(release => release.id), [50, 60], 'a commit without eligible CI never removes the newer draft')
 })
 
 test('commits outside main and foreign existing assets fail closed', async t => {

@@ -28,7 +28,8 @@ Release 发布即为上线决定。主机初始化、Environment 配置和发布
 - 标签按北京时间日期自动编号，格式为 `server-vYYYY.MM.DD.N`。已有标签都占号，包括草稿和已删除的 Release 留下的标签。
 - 发布说明按提交类型分组。
 - 来源清单与 CI 原包在**草稿阶段**就校验并上传；中断后重跑会沿用已钉住的 CI attempt，不会换到另一次构建。
-- 较早的未发布草稿会被删除，避免误发旧版本。
+- 草稿永不自动删除：GitHub 按 ID 无条件删除 Release，清理与人工 Publish 交错时可能删掉刚发布的版本。新草稿生成时，其他未发布草稿会在发布说明、工作流摘要和通知中标为「已被取代，请勿发布」，由发布负责人手动删除。
+- 已发布更新版本时，拒绝为更旧的提交生成草稿。
 - 仓库启用了 Immutable Releases：发布后标签和附件都不可更改。Windows Release 要求 Release 是不可变发布且附件齐全，只做校验和部署，不再写入附件。
 - 不要手工新建 Release、手工打 `server-v*` 标签或替换附件。
 
@@ -77,7 +78,7 @@ gh workflow run server-rollback.yml --ref '<上一版本 server-v...>' -f target
 
 1. 从 `main` 拉 `hotfix/<名称>`，开 PR 到 `main`；
 2. 合并后同样经过「草稿 → Publish → 部署」；
-3. [Back-merge Main](../../.github/workflows/back-merge.yml) 会自动开 `backmerge/<commit>` 到 `dev` 的 PR，必须用合并提交合并。
+3. [Back-merge Main](../../.github/workflows/back-merge.yml) 会自动开 `backmerge/<commit>` 到 `dev` 的 PR，必须用合并提交合并。已有回合并 PR 时，后续热修复会把该分支快进到最新 `main`；分支已被更新而无法快进时另开一个 PR。工作流在 `main` 和 `dev` 的每次推送后都会重新核对，合并旧回合并 PR 后仍有遗漏会再次处理。
 
 **切换期限制**：切换前从 `dev` 发布的历史版本不满足 `main` 来源和元数据要求，所以不能作为回退目标。快速回退要从切换后的第二个 `main` 版本起才可用。
 

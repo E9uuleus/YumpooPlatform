@@ -8,7 +8,7 @@ import {
 } from './policy.mjs'
 import { createGithub, fileDigest, readJson, unpackArtifact } from './github.mjs'
 import {
-  assertOnReleaseBranch, ciWorkflowId, downloadAsset, downloadCiPackage, indexAssets, inspectPackage, selectCiAttempt, verifyCiAttempt,
+  assertOnReleaseBranch, ciWorkflowId, downloadAsset, downloadCiPackage, indexAssets, inspectPackage, resolveTagCommit, selectCiAttempt, verifyCiAttempt,
 } from './promote-release.mjs'
 import { releaseNotes } from './release-notes.mjs'
 import { notifyWeCom } from './notify.mjs'
@@ -29,12 +29,18 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
     log(`${sourceCommit} is already published as ${published.tag_name}; no draft is needed`)
     return { tag: published.tag_name, releaseId: published.id, url: published.html_url, created: false, published: true }
   }
-  let draft = releases.find(release => release.draft && release.target_commitish === sourceCommit)
-  // main is linear, so an unpublished draft for an older commit is superseded and must not be published by mistake.
-  for (const stale of releases.filter(release => release.draft && release !== draft)) {
-    await github.send('DELETE', `/releases/${stale.id}`)
-    log(`Deleted superseded draft ${stale.tag_name} for ${stale.target_commitish}`)
+  const previous = releases.filter(release => !release.draft && release.published_at)
+    .sort((left, right) => Date.parse(right.published_at) - Date.parse(left.published_at))[0]
+  if (previous) {
+    // A draft for a commit older than what is already live could only ever be a downgrade candidate.
+    const latest = await resolveTagCommit(github, previous.tag_name)
+    const order = await github.get(`/compare/${sourceCommit}...${latest}?per_page=1`)
+    assert(order.status !== 'ahead', `${previous.tag_name} already published a newer commit; refusing a draft for older ${sourceCommit}`)
   }
+  let draft = releases.find(release => release.draft && release.target_commitish === sourceCommit)
+  // Drafts are never deleted automatically: GitHub deletes by ID unconditionally, so a draft published between
+  // listing and deleting would lose its immutable Release. Other drafts are only reported for manual cleanup.
+  const otherDrafts = releases.filter(release => release.draft && release !== draft)
   let pinned
   const created = !draft
   if (draft) {
@@ -51,12 +57,10 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
   if (!draft) {
     const tags = (await github.list('/git/matching-refs/tags/server-v')).map(ref => String(ref.ref).replace(/^refs\/tags\//u, ''))
     const tag = nextReleaseTag([...tags, ...releases.map(release => release.tag_name)], now)
-    const previous = releases.filter(release => !release.draft && release.published_at)
-      .sort((left, right) => Date.parse(right.published_at) - Date.parse(left.published_at))[0]
     const comparison = previous ? await github.get(`/compare/${encodeURIComponent(previous.tag_name)}...${sourceCommit}`) : null
     draft = await github.send('POST', '/releases', {
       tag_name: tag, target_commitish: sourceCommit, name: tag, draft: true,
-      body: releaseNotes({ tag, sourceCommit, run, previousTag: previous?.tag_name, comparison }),
+      body: releaseNotes({ tag, sourceCommit, run, previousTag: previous?.tag_name, comparison, otherDrafts: otherDrafts.map(item => item.tag_name) }),
     })
   }
   assert.equal(draft.draft, true, 'Prepared Release must stay a draft')
@@ -94,7 +98,7 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
   provenance = validateProvenance(readJson(await downloadAsset(github, final.get('provenance.json'), verified)), { tag, sourceCommit })
   for (const name of releaseAssetNames.filter(name => name !== 'provenance.json')) await downloadAsset(github, final.get(name), verified)
   await inspectPackage(verified, sourceCommit, provenance)
-  return { tag, releaseId: draft.id, url: draft.html_url, created, published: false, provenance }
+  return { tag, releaseId: draft.id, url: draft.html_url, created, published: false, provenance, otherDrafts: otherDrafts.map(item => item.tag_name) }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
@@ -102,7 +106,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   try {
     const result = await prepareDraft({ github: createGithub(), sourceCommit: process.env.SOURCE_COMMIT, env: process.env, directory })
     if (!result.published) {
-      const summary = `Draft **${result.tag}** is ready for ${process.env.SOURCE_COMMIT}: ${result.url}`
+      const stale = result.otherDrafts.length ? ` Older drafts ${result.otherDrafts.join(', ')} are superseded: do not publish them; delete them manually.` : ''
+      const summary = `Draft **${result.tag}** is ready for ${process.env.SOURCE_COMMIT}: ${result.url}.${stale}`
       console.log(summary)
       if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`)
       await notifyWeCom(process.env, [
@@ -110,6 +115,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
         `> 提交：${process.env.SOURCE_COMMIT.slice(0, 8)}`,
         `> 草稿：[查看并发布](${result.url})`,
         '> 点击 Publish 即为上线决定。',
+        ...(result.otherDrafts.length ? [`> 旧草稿 ${result.otherDrafts.join('、')} 已被取代，请勿发布，可手动删除。`] : []),
       ].join('\n'))
     }
   } catch (error) {
