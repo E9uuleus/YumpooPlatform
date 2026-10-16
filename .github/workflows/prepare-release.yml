@@ -1,0 +1,49 @@
+name: Prepare Release
+
+on:
+  workflow_run:
+    workflows: [Platform CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full main commit SHA whose push Platform CI already succeeded
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-server-release
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    name: Prepare draft Release
+    if: ${{ github.repository == 'E9uuleus/YumpooPlatform' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository)) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      # Only push runs on main of this repository reach here, so checking out their commit runs reviewed code.
+      - name: Checkout the main commit being released
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || inputs.commit }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Verify release tooling regression tests
+        run: node --test tools/release/*.test.mjs
+      - name: Create or complete the draft with verified CI assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha || inputs.commit }}
+          WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+        run: node tools/release/prepare-release.mjs

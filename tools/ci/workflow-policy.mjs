@@ -3,7 +3,10 @@ import { requiredJobs } from './gate.mjs'
 
 export function assertWorkflowSafety(workflow) {
   assert.deepEqual(workflow.permissions, { contents: 'read' })
-  assert.deepEqual(workflow.on.pull_request.branches, ['dev'])
+  // dev 是集成分支，main 是已发布线：两者的 PR 与推送都跑同一套完整门禁。
+  assert.deepEqual(workflow.on.pull_request.branches, ['dev', 'main'])
+  assert.deepEqual(workflow.on.push.branches, ['dev', 'main'])
+  assert(!workflow.on.push.paths && !workflow.on.push['paths-ignore'], '推送工作流不能被路径过滤漏跑')
   assert(!workflow.on.pull_request.paths && !workflow.on.pull_request['paths-ignore'], 'PR 工作流不能被路径过滤漏跑')
   assert(!workflow.on.pull_request_target, 'PR 代码不得使用特权触发器')
   const gate = workflow.jobs.windows

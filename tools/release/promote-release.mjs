@@ -4,13 +4,13 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
-  repository, ciWorkflowPath, packageName, releaseAssetNames, expectedArtifactName,
-  validateTag, validateWorkflowContext, validateDevAncestry, validateRun, validateJobs,
-  validateArtifact, validateProvenance, validatePackageMetadata, validateAssetDigest,
+  releaseBranch, ciWorkflowPath, packageName, releaseAssetNames, releaseWorkflowPath, expectedArtifactName,
+  validateTag, validateWorkflowContext, validateBranchAncestry, validateRun, validateJobs,
+  validateArtifact, validateProvenance, validatePackageMetadata, validateAssetDigest, validatePublishedRelease,
 } from './policy.mjs'
 import { createGithub, fileDigest, readJson, unpackArtifact } from './github.mjs'
 
-export async function resolveSource(github, tag, env) {
+export async function resolveTagCommit(github, tag) {
   validateTag(tag)
   let object = (await github.get(`/git/ref/tags/${encodeURIComponent(tag)}`)).object
   for (let depth = 0; object?.type === 'tag' && depth < 8; depth += 1) {
@@ -18,10 +18,25 @@ export async function resolveSource(github, tag, env) {
     object = (await github.get(`/git/tags/${object.sha}`)).object
   }
   assert.equal(object?.type, 'commit', 'Release tag must resolve to a commit')
-  const sourceCommit = object.sha
-  validateWorkflowContext(env, tag, sourceCommit)
-  validateDevAncestry(await github.get(`/compare/${sourceCommit}...dev?per_page=1`), sourceCommit)
+  return object.sha
+}
+
+export async function assertOnReleaseBranch(github, sourceCommit) {
+  validateBranchAncestry(await github.get(`/compare/${sourceCommit}...${releaseBranch}?per_page=1`), sourceCommit)
+}
+
+export async function resolveSource(github, tag, env, workflowPath = releaseWorkflowPath) {
+  const sourceCommit = await resolveTagCommit(github, tag)
+  validateWorkflowContext(env, tag, sourceCommit, workflowPath)
+  await assertOnReleaseBranch(github, sourceCommit)
   return sourceCommit
+}
+
+export async function ciWorkflowId(github) {
+  const workflow = await github.get(`/actions/workflows/${path.posix.basename(ciWorkflowPath)}`)
+  assert.equal(workflow.path, ciWorkflowPath, 'Unexpected CI workflow path')
+  assert(Number.isSafeInteger(workflow.id) && workflow.id > 0, 'Invalid CI workflow ID')
+  return workflow.id
 }
 
 export async function verifyCiAttempt(github, workflowId, sourceCommit, runId, attempt) {
@@ -34,7 +49,7 @@ export async function verifyCiAttempt(github, workflowId, sourceCommit, runId, a
 }
 
 export async function selectCiAttempt(github, workflowId, sourceCommit) {
-  const runs = await github.list(`/actions/workflows/${workflowId}/runs?event=push&branch=dev&head_sha=${sourceCommit}&status=success&per_page=100`, 'workflow_runs')
+  const runs = await github.list(`/actions/workflows/${workflowId}/runs?event=push&branch=${releaseBranch}&head_sha=${sourceCommit}&status=success&per_page=100`, 'workflow_runs')
   const candidates = runs.filter(run => {
     try { validateRun(run, { workflowId, sourceCommit }); return true } catch { return false }
   }).sort((left, right) => right.id - left.id || right.run_attempt - left.run_attempt)
@@ -45,10 +60,10 @@ export async function selectCiAttempt(github, workflowId, sourceCommit) {
       console.warn(`CI run ${candidate.id} attempt ${candidate.run_attempt} is not eligible: ${error.message}`)
     }
   }
-  throw new Error('No successful push/dev Platform CI attempt with all mandatory jobs for this exact release commit; rerun the full Platform CI first')
+  throw new Error(`No successful push/${releaseBranch} Platform CI attempt with all mandatory jobs for this exact commit; rerun the full Platform CI first`)
 }
 
-function indexAssets(assets) {
+export function indexAssets(assets) {
   const result = new Map()
   for (const asset of assets.filter(asset => releaseAssetNames.includes(asset.name))) {
     assert(!result.has(asset.name), `Duplicate Release asset: ${asset.name}`)
@@ -58,14 +73,14 @@ function indexAssets(assets) {
   return result
 }
 
-async function downloadAsset(github, asset, directory) {
+export async function downloadAsset(github, asset, directory) {
   const destination = path.join(directory, asset.name)
   await github.download(`/releases/assets/${asset.id}`, destination)
   validateAssetDigest(asset, await fileDigest(destination), fs.statSync(destination).size)
   return destination
 }
 
-async function downloadCiPackage(github, run, directory, unpack) {
+export async function downloadCiPackage(github, run, directory, unpack = unpackArtifact) {
   const name = expectedArtifactName(run.head_sha, run.run_attempt)
   const artifacts = (await github.list(`/actions/runs/${run.id}/artifacts?per_page=100`, 'artifacts')).filter(item => item.name === name)
   assert.equal(artifacts.length, 1, 'Expected exactly one package artifact for the selected CI attempt')
@@ -83,7 +98,7 @@ async function downloadCiPackage(github, run, directory, unpack) {
   return packageDirectory
 }
 
-async function inspectPackage(directory, sourceCommit, provenance) {
+export async function inspectPackage(directory, sourceCommit, provenance) {
   const file = path.join(directory, packageName)
   assert(fs.lstatSync(file).isFile(), 'Server package must be a regular file')
   const digest = await fileDigest(file)
@@ -96,75 +111,29 @@ async function inspectPackage(directory, sourceCommit, provenance) {
   return { digest, bytes }
 }
 
-export async function prepareRelease({ github, tag, env, directory, promote = true, unpack = unpackArtifact }) {
-  const sourceCommit = await resolveSource(github, tag, env)
-  const release = await github.get(`/releases/tags/${encodeURIComponent(tag)}`)
-  assert.equal(release.tag_name, tag, 'Unexpected Release tag')
-  assert.equal(release.draft, false, 'Only published releases are deployable')
-  assert(release.published_at, 'Release has not been published')
+// Deployment never uploads: the immutable published Release must already carry every asset attached to its draft.
+export async function prepareRelease({ github, tag, env, directory, workflowPath = releaseWorkflowPath }) {
+  const sourceCommit = await resolveSource(github, tag, env, workflowPath)
+  const release = validatePublishedRelease(await github.get(`/releases/tags/${encodeURIComponent(tag)}`), tag)
   if (env.GITHUB_EVENT_NAME === 'release') {
     const event = readJson(env.GITHUB_EVENT_PATH)
     assert.equal(event.action, 'published', 'Only release.published may deploy')
     assert.equal(event.release?.id, release.id, 'Release event refers to another Release')
   }
-  const workflow = await github.get(`/actions/workflows/${path.posix.basename(ciWorkflowPath)}`)
-  assert.equal(workflow.path, ciWorkflowPath, 'Unexpected CI workflow path')
-  assert(Number.isSafeInteger(workflow.id) && workflow.id > 0, 'Invalid CI workflow ID')
+  const workflowId = await ciWorkflowId(github)
   const assets = indexAssets(await github.list(`/releases/${release.id}/assets?per_page=100`))
+  assert(releaseAssetNames.every(name => assets.has(name)), 'Release assets are incomplete; publish only drafts prepared by the Prepare Release workflow')
   const retained = path.join(directory, 'release')
   fs.mkdirSync(retained, { recursive: true })
-  let provenance
-  let run
-  if (assets.has('provenance.json')) {
-    const file = await downloadAsset(github, assets.get('provenance.json'), retained)
-    provenance = validateProvenance(readJson(file), { tag, sourceCommit })
-    run = await verifyCiAttempt(github, workflow.id, sourceCommit, provenance.ciRunId, provenance.ciRunAttempt)
-  } else {
-    assert(promote, 'Release provenance is missing; complete the promotion job first')
-    run = await selectCiAttempt(github, workflow.id, sourceCommit)
+  const provenance = validateProvenance(readJson(await downloadAsset(github, assets.get('provenance.json'), retained)), { tag, sourceCommit })
+  await verifyCiAttempt(github, workflowId, sourceCommit, provenance.ciRunId, provenance.ciRunAttempt)
+  for (const name of releaseAssetNames.filter(name => name !== 'provenance.json')) {
+    await downloadAsset(github, assets.get(name), retained)
   }
-
-  const complete = releaseAssetNames.every(name => assets.has(name))
-  if (complete) {
-    for (const name of releaseAssetNames.filter(name => name !== 'provenance.json')) {
-      await downloadAsset(github, assets.get(name), retained)
-    }
-    await inspectPackage(retained, sourceCommit, provenance)
-  } else {
-    assert(promote, 'Release assets are incomplete; retry the promotion job first')
-    const downloaded = await downloadCiPackage(github, run, directory, unpack)
-    const { digest, bytes } = await inspectPackage(downloaded, sourceCommit, provenance)
-    if (!provenance) {
-      provenance = {
-        schemaVersion: 1, repository, tag, sourceCommit, ciRunId: run.id, ciRunAttempt: run.run_attempt,
-        artifactName: expectedArtifactName(sourceCommit, run.run_attempt), packageSha256: digest, packageBytes: bytes,
-      }
-      validateProvenance(provenance, { tag, sourceCommit })
-      fs.writeFileSync(path.join(retained, 'provenance.json'), `${JSON.stringify(provenance, null, 2)}\n`, { mode: 0o600 })
-    }
-    for (const name of releaseAssetNames.filter(name => name !== 'provenance.json')) {
-      fs.copyFileSync(path.join(downloaded, name), path.join(retained, name))
-    }
-    // Validate every existing asset before publishing anything; existing bytes are never replaced.
-    for (const [name, asset] of assets) {
-      const file = path.join(retained, name)
-      validateAssetDigest(asset, await fileDigest(file), fs.statSync(file).size)
-    }
-    // This receipt pins the chosen attempt if upload is interrupted midway.
-    for (const name of ['provenance.json', ...releaseAssetNames.filter(name => name !== 'provenance.json')]) {
-      if (!assets.has(name)) await github.upload(tag, path.join(retained, name))
-    }
-    const published = indexAssets(await github.list(`/releases/${release.id}/assets?per_page=100`))
-    for (const name of releaseAssetNames) {
-      assert(published.has(name), `Release upload did not persist: ${name}`)
-      const file = path.join(retained, name)
-      validateAssetDigest(published.get(name), await fileDigest(file), fs.statSync(file).size)
-    }
-  }
-  // Fail before SSH if a tag was moved during the downloads/uploads.
-  assert.equal(await resolveSource(github, tag, env), sourceCommit, 'Release tag changed during promotion')
-  const currentRelease = await github.get(`/releases/tags/${encodeURIComponent(tag)}`)
-  assert.equal(currentRelease.id, release.id, 'Release was replaced during promotion')
+  await inspectPackage(retained, sourceCommit, provenance)
+  // Fail before SSH if the tag or Release changed during the downloads.
+  assert.equal(await resolveTagCommit(github, tag), sourceCommit, 'Release tag changed during verification')
+  assert.equal((await github.get(`/releases/tags/${encodeURIComponent(tag)}`)).id, release.id, 'Release was replaced during verification')
   return { directory: retained, provenance }
 }
 
@@ -172,7 +141,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-release-'))
   try {
     const { provenance } = await prepareRelease({ github: createGithub(), tag: process.env.RELEASE_TAG, env: process.env, directory })
-    console.log(`Retained ${provenance.tag}: ${provenance.sourceCommit}, CI ${provenance.ciRunId}/${provenance.ciRunAttempt}, SHA-256 ${provenance.packageSha256}`)
+    console.log(`Verified ${provenance.tag}: ${provenance.sourceCommit}, CI ${provenance.ciRunId}/${provenance.ciRunAttempt}, SHA-256 ${provenance.packageSha256}`)
   } catch (error) {
     console.error(error.message)
     process.exitCode = 1

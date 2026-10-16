@@ -3,6 +3,9 @@ import assert from 'node:assert/strict'
 export const repository = 'E9uuleus/YumpooPlatform'
 export const ciWorkflowPath = '.github/workflows/m0-18-ci.yml'
 export const releaseWorkflowPath = '.github/workflows/windows-release.yml'
+export const rollbackWorkflowPath = '.github/workflows/server-rollback.yml'
+// main 是已发布线：可部署的 CI 产物只来自 main 的推送 CI。
+export const releaseBranch = 'main'
 export const packageName = 'yumpoo-windows-server-m1-15.zip'
 export const releaseAssetNames = [packageName, `${packageName}.sha256`, 'artifact-manifest.json', 'provenance.json']
 export const artifactFileNames = [packageName, `${packageName}.sha256`, 'artifact-manifest.json', 'verification-report.json']
@@ -10,25 +13,54 @@ export const requiredJobs = ['M0 Portable Gate', 'Windows Delivery', 'M0 Windows
 const commitPattern = /^[0-9a-f]{40}$/u
 const digestPattern = /^[0-9a-f]{64}$/u
 
+const tagPattern = /^server-v(\d{4})\.(\d{2})\.(\d{2})\.([1-9]\d{0,2})$/u
+
 export function validateTag(tag) {
-  assert(typeof tag === 'string' && /^server-v[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/u.test(tag), 'Invalid server release tag')
+  const match = typeof tag === 'string' && tag.match(tagPattern)
+  assert(match, 'Invalid server release tag; expected server-vYYYY.MM.DD.N')
+  const [year, month, day] = match.slice(1, 4).map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  assert(date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day, 'Invalid server release tag date')
   return tag
 }
 
-export function validateWorkflowContext(env, tag, sourceCommit) {
+// 版本号按北京时间的发布日期编号，同一天内从 1 递增；已存在的标签（含草稿与已删除 Release 留下的标签）都占号。
+export function releaseDate(now) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(now).replaceAll('-', '.')
+}
+
+export function nextReleaseTag(existingTags, now) {
+  const prefix = `server-v${releaseDate(now)}.`
+  const used = existingTags.filter(tag => typeof tag === 'string' && tag.startsWith(prefix) && tagPattern.test(tag))
+    .map(tag => Number(tag.slice(prefix.length)))
+  const tag = `${prefix}${Math.max(0, ...used) + 1}`
+  return validateTag(tag)
+}
+
+export function validateWorkflowContext(env, tag, sourceCommit, workflowPath = releaseWorkflowPath) {
   validateTag(tag)
   assert(commitPattern.test(sourceCommit), 'Invalid source commit')
   assert.equal(env.GITHUB_REPOSITORY, repository, 'Unexpected repository')
   assert(['release', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME), 'Unsupported deployment trigger')
   assert.equal(env.GITHUB_REF, `refs/tags/${tag}`, 'Run this workflow on the target release tag')
-  assert.equal(env.GITHUB_WORKFLOW_REF, `${repository}/${releaseWorkflowPath}@refs/tags/${tag}`, 'Workflow ref must be the target tag')
+  assert([releaseWorkflowPath, rollbackWorkflowPath].includes(workflowPath), 'Unexpected deployment workflow')
+  assert.equal(env.GITHUB_WORKFLOW_REF, `${repository}/${workflowPath}@refs/tags/${tag}`, 'Workflow ref must be the target tag')
   assert.equal(env.GITHUB_SHA, sourceCommit, 'The release tag moved or does not match the workflow commit')
   assert.equal(env.GITHUB_WORKFLOW_SHA, sourceCommit, 'Workflow code must come from the target commit')
 }
 
-export function validateDevAncestry(comparison, sourceCommit) {
-  assert(['ahead', 'identical'].includes(comparison.status), 'Release commit is not an ancestor of dev')
-  assert.equal(comparison.merge_base_commit?.sha, sourceCommit, 'Release commit is outside dev history')
+export function validateBranchAncestry(comparison, sourceCommit) {
+  assert(['ahead', 'identical'].includes(comparison.status), `Release commit is not an ancestor of ${releaseBranch}`)
+  assert.equal(comparison.merge_base_commit?.sha, sourceCommit, `Release commit is outside ${releaseBranch} history`)
+}
+
+export function validatePublishedRelease(release, tag) {
+  assert.equal(release.tag_name, tag, 'Unexpected Release tag')
+  assert.equal(release.draft, false, 'Only published releases are deployable')
+  assert(release.published_at, 'Release has not been published')
+  assert.equal(release.immutable, true, 'Release is not immutable; enable release immutability before publishing')
+  return release
 }
 
 export function validateRun(run, { workflowId, sourceCommit, runId = run.id, attempt = run.run_attempt }) {
@@ -42,7 +74,7 @@ export function validateRun(run, { workflowId, sourceCommit, runId = run.id, att
   assert.equal(run.repository?.full_name, repository, 'Wrong CI repository')
   assert.equal(run.head_repository?.full_name, repository, 'Fork CI artifacts are not deployable')
   assert.equal(run.event, 'push', 'Only push CI artifacts are deployable')
-  assert.equal(run.head_branch, 'dev', 'Only dev CI artifacts are deployable')
+  assert.equal(run.head_branch, releaseBranch, `Only ${releaseBranch} CI artifacts are deployable`)
   assert.equal(run.head_sha, sourceCommit, 'CI commit differs from release tag')
   assert.equal(run.status, 'completed', 'CI attempt is incomplete')
   assert.equal(run.conclusion, 'success', 'CI attempt did not succeed')
@@ -71,7 +103,7 @@ export function validateArtifact(artifact, run) {
   assert.equal(artifact.name, expectedArtifactName(run.head_sha, run.run_attempt), 'Wrong CI artifact name/attempt')
   assert.equal(artifact.expired, false, 'CI artifact expired; use a previously retained Release or rerun the full CI')
   assert.equal(artifact.workflow_run?.id, run.id, 'Artifact belongs to another run')
-  assert.equal(artifact.workflow_run?.head_branch, 'dev', 'Artifact is not from dev')
+  assert.equal(artifact.workflow_run?.head_branch, releaseBranch, `Artifact is not from ${releaseBranch}`)
   assert.equal(artifact.workflow_run?.head_sha, run.head_sha, 'Artifact commit mismatch')
   assert(/^sha256:[0-9a-f]{64}$/u.test(artifact.digest), 'Missing GitHub artifact digest')
   return artifact

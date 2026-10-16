@@ -3,7 +3,6 @@ import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { resolveGitCommit } from '../verification/m0-18-utils.mjs'
 
 export const migrationRoot = 'backend/src/main/resources/db/migration'
 export const exceptionsPath = 'contracts/migrations/rollback-safety-exceptions.json'
@@ -212,7 +211,11 @@ export function evaluateNewMigrations(root, baseCommit) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
   try {
-    const { added, violations } = evaluateNewMigrations(root, resolveGitCommit(root, process.argv[2] || 'origin/dev'))
+    // Dependency-free on purpose: release workflows run this module without installing workspace packages.
+    const reference = process.argv[2] || 'origin/dev'
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/@~^-]{0,199}$/u.test(reference)) throw new Error(`无效的 Git 基线：${reference}`)
+    const baseCommit = git(root, ['rev-parse', '--verify', '--end-of-options', `${reference}^{commit}`]).trim()
+    const { added, violations } = evaluateNewMigrations(root, baseCommit)
     for (const item of added) console.log(`${item.file}: ${item.classification}`)
     if (violations.length) {
       throw new Error(`新增迁移必须只扩展，以保证上一版本可快速回退。拆分为 expand/contract 两次发布，或登记到 ${exceptionsPath}：\n${violations.join('\n')}`)

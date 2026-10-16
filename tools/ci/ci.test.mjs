@@ -45,6 +45,9 @@ test('workflow preserves mandatory gates, immutable actions and exact artifact h
   renamedStep.jobs.linux.steps.find(step => step.run === 'pnpm ci:backend').name = 'Backend verification'
   assert.doesNotThrow(() => assertWorkflowSafety(renamedStep))
   const brokenVariants = [
+    value => { value.on.pull_request.branches = ['dev'] },
+    value => { value.on.push.branches = ['dev'] },
+    value => { value.on.push.paths = ['backend/**'] },
     value => { value.jobs.windows.needs = ['linux'] },
     value => { delete value.jobs.windows.if },
     value => { value.jobs.windows.steps = value.jobs.windows.steps.filter(step => step.if !== '${{ cancelled() }}') },

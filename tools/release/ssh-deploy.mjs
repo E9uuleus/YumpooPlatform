@@ -8,7 +8,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { createGithub, run } from './github.mjs'
 import { prepareRelease } from './promote-release.mjs'
-import { packageName, validateStatus } from './policy.mjs'
+import { packageName, releaseWorkflowPath, rollbackWorkflowPath, validateStatus } from './policy.mjs'
 
 export const deploymentRoot = '/C:/ProgramData/Yumpoo/deployment'
 export const deploymentUser = 'yumpoo-deploy'
@@ -36,9 +36,15 @@ export function packagePartName(index) {
 export function makeRequest(provenance, requestId = randomUUID()) {
   validateRequestId(requestId)
   return {
-    schemaVersion: 1, requestId, tag: provenance.tag, sourceCommit: provenance.sourceCommit, packageSha256: provenance.packageSha256,
+    schemaVersion: 2, mode: 'deploy', requestId, tag: provenance.tag, sourceCommit: provenance.sourceCommit, packageSha256: provenance.packageSha256,
     packagePartCount: packagePartCount(provenance.packageBytes),
   }
+}
+
+// Code-only rollback carries no package: the server switches back to the retained previous release directory.
+export function makeRollbackRequest(provenance, requestId = randomUUID()) {
+  validateRequestId(requestId)
+  return { schemaVersion: 2, mode: 'rollback', requestId, tag: provenance.tag, sourceCommit: provenance.sourceCommit }
 }
 
 export function sftpQuote(value) {
@@ -189,6 +195,13 @@ export async function uploadPackageParts({ directory, request, sftp, log = conso
   }
 }
 
+export async function submitRollbackRequest({ directory, request, sftp }) {
+  validateRequestId(request.requestId)
+  assert.equal(request.mode, 'rollback', 'Only rollback requests skip the package upload')
+  await fs.promises.writeFile(path.join(directory, 'request.json'), `${JSON.stringify(request, null, 2)}\n`, { mode: 0o600, flag: 'wx' })
+  await sftp(`mkdir ${sftpQuote(`${deploymentRoot}/inbox/${request.requestId}`)}\n${commitUploadBatch(directory, request)}`)
+}
+
 export function createSshTransport(env, directory, { executeSftp = runSftpProcess, log = console.log } = {}) {
   const host = env.WINDOWS_DEPLOY_HOST
   assert(typeof host === 'string' && /^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/u.test(host), 'WINDOWS_DEPLOY_HOST must be an IPv4 address or DNS name')
@@ -214,6 +227,9 @@ export function createSshTransport(env, directory, { executeSftp = runSftpProces
   return {
     async upload(sourceDirectory, request) {
       await uploadPackageParts({ directory: sourceDirectory, request, sftp, log })
+    },
+    async submitRollback(sourceDirectory, request) {
+      await submitRollbackRequest({ directory: sourceDirectory, request, sftp })
     },
     async trigger() {
       run('ssh', [...options, '-p', String(port), target, triggerCommand], { env: childEnv, timeout: 45_000 })
@@ -274,16 +290,26 @@ export async function deploy({ transport, directory, provenance, requestId, ...p
   return waitForDeployment({ transport, request, ...pollOptions })
 }
 
+export async function rollback({ transport, directory, provenance, requestId, ...pollOptions }) {
+  const request = makeRollbackRequest(provenance, requestId)
+  console.log(`Submitting rollback request ${request.requestId} to ${request.tag} (${request.sourceCommit})`)
+  await transport.submitRollback(directory, request)
+  return waitForDeployment({ transport, request, ...pollOptions })
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-deploy-'))
   try {
+    const mode = process.env.DEPLOY_MODE || 'deploy'
+    assert(['deploy', 'rollback'].includes(mode), 'Invalid DEPLOY_MODE')
     const release = await prepareRelease({
-      github: createGithub(), tag: process.env.RELEASE_TAG, env: process.env, directory, promote: false,
+      github: createGithub(), tag: process.env.RELEASE_TAG, env: process.env, directory,
+      workflowPath: mode === 'rollback' ? rollbackWorkflowPath : releaseWorkflowPath,
     })
     const transport = createSshTransport(process.env, directory)
-    const result = await deploy({ transport, directory: release.directory, provenance: release.provenance })
+    const result = await (mode === 'rollback' ? rollback : deploy)({ transport, directory: release.directory, provenance: release.provenance })
     if (process.env.GITHUB_STEP_SUMMARY) {
-      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Deployed **${result.tag}** (${result.sourceCommit}). Request: ${result.requestId}. Phase: ${result.phase}.\n`)
+      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${mode === 'rollback' ? 'Rolled back to' : 'Deployed'} **${result.tag}** (${result.sourceCommit}). Request: ${result.requestId}. Phase: ${result.phase}.\n`)
     }
   } catch (error) {
     console.error(error.message)
