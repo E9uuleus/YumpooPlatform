@@ -8,19 +8,78 @@ Release 发布即为上线决定。主机初始化、Environment 配置和发布
 
 ## 1. GitHub Release 自动发布
 
-日常顺序为：推送功能分支 → PR 审查与 CI → 合并 `dev` → 合并提交的 CI 通过 → 发布 `server-v*` Release → 自动部署与验收。工作流入口为 [windows-release.yml](../../.github/workflows/windows-release.yml)。发布标签必须解析为已通过完整 CI 的 `dev` 提交，不能指向 PR 的临时 merge commit。仓库默认分支为 `main` 时，发布界面应显式选择 `dev`；该标签中必须包含发布工作流。
+日常顺序：
 
-发布工作流按同一 source commit、CI run 和 attempt 选择已验证服务器包，核对 required checks、产物清单、文件大小和 SHA-256，再把原包及来源清单保存为 Release 附件。任一绑定不一致、产物过期或缺失、校验失败都在服务器切换前失败；不能改为取“最新成功包”或在发布阶段重新构建。重试复用已记录的同一来源，不能替换同名附件为不同内容。
+1. 功能分支开 PR 合入 `dev`；
+2. `dev` 开 PR 晋升到 `main`，用「Create a merge commit」合并；
+3. `main` 的推送 CI 通过后，[Prepare Release](../../.github/workflows/prepare-release.yml) 自动生成草稿 Release；
+4. 发布负责人核对草稿后点击 **Publish**，这一步就是上线决定；
+5. [Windows Release](../../.github/workflows/windows-release.yml) 自动校验并部署，然后进入观察窗口。
 
-服务器通过 GitHub API 获取 Release 附件的 `digest` 和大小，核对上传的 `provenance.json` 原始字节及 ZIP；随后独立检查标签、同次 CI 和提交前进关系。来源清单无需再次经过 Release 下载域名，缺失或不一致的附件摘要仍然拒绝。
+**晋升门禁**
 
-GitHub 托管 runner 使用 `wecom-dev` Environment，配置 secrets `WINDOWS_DEPLOY_HOST`、`WINDOWS_DEPLOY_SSH_KEY`、`WINDOWS_DEPLOY_KNOWN_HOSTS`；variable `WINDOWS_DEPLOY_PORT` 缺省为 `22`。`known_hosts` 必须预先从可信管理通道确认，不能在工作流中临时接受扫描结果。数据库密码、企微 Secret、证书私钥和恢复凭据继续留在服务器。非管理员账号固定为 `yumpoo-deploy`，只能上传暂存文件、触发固定任务及查询结果。高权限任务执行管理员安装的 `cd` 引擎，不从上传 ZIP 运行 PowerShell 脚本；更新引擎属于管理员维护操作。
+- 晋升 PR 只能来自本仓库的 `dev` 或 `hotfix/<名称>`，由 [Main Promotion Policy](../../.github/workflows/main-promotion-policy.yml) 强制检查，并在 PR 中汇总提交、迁移分类、契约变化和人工确认清单。
+- 含非只扩展迁移的发布必须加 `release:breaking-migration` 标签，该版本不能快速回退。
+- 契约兼容以 `main` 为基线：相对线上版本有破坏性 API 变更时，先在 `dev` 上登记检查结果给出的精确例外。
 
-Release 附件固定为 `yumpoo-windows-server-m1-15.zip`、`yumpoo-windows-server-m1-15.zip.sha256`、`artifact-manifest.json`、`provenance.json`。已存在附件只允许内容一致地复用，不用覆盖选项替换。首次发布使用 `release.published`；失败后优先重跑同一次 Actions run。手工恢复入口为 `workflow_dispatch`，UI 要求工作流已存在于默认分支；可用的 CLI 入口仍须指定原 tag，工作流自身会核对执行 ref 与请求 tag 一致：
+**草稿 Release**
+
+- 草稿只来自 `main` 推送且全部 required jobs 成功的 Platform CI。
+- 标签按北京时间日期自动编号，格式为 `server-vYYYY.MM.DD.N`。已有标签都占号，包括草稿和已删除的 Release 留下的标签。
+- 发布说明按提交类型分组。
+- 来源清单与 CI 原包在**草稿阶段**就校验并上传；中断后重跑会沿用已钉住的 CI attempt，不会换到另一次构建。
+- 较早的未发布草稿会被删除，避免误发旧版本。
+- 仓库启用了 Immutable Releases：发布后标签和附件都不可更改。Windows Release 要求 Release 是不可变发布且附件齐全，只做校验和部署，不再写入附件。
+- 不要手工新建 Release、手工打 `server-v*` 标签或替换附件。
+
+**来源核验**：服务器通过 GitHub API 取得 Release 附件的 `digest` 和大小，核对上传的 `provenance.json` 原始字节和 ZIP，然后独立检查标签、同次 CI 和提交的前进关系。来源清单不需要再走 Release 下载域名；附件摘要缺失或不一致仍然拒绝。
+
+**部署凭据与权限**：
+
+- GitHub 托管 runner 使用 `wecom-dev` Environment。
+  - secrets：`WINDOWS_DEPLOY_HOST`、`WINDOWS_DEPLOY_SSH_KEY`、`WINDOWS_DEPLOY_KNOWN_HOSTS`；
+  - variable：`WINDOWS_DEPLOY_PORT`，缺省为 `22`。
+- `known_hosts` 必须事先从可信管理通道确认，不能在工作流里临时接受扫描结果。
+- 数据库密码、企微 Secret、证书私钥和恢复凭据都只留在服务器上。
+- 非管理员账号固定为 `yumpoo-deploy`，只能上传暂存文件、触发固定任务、查询结果。
+- 高权限任务执行管理员安装的 `cd` 引擎，不运行上传 ZIP 里的 PowerShell 脚本；更新引擎属于管理员维护操作。
+
+**企业微信通知**：仓库 secret `WECOM_RELEASE_WEBHOOK` 配置后，草稿就绪、草稿生成失败、发布校验失败和部署作业失败都会推送到群里；服务器任务的最终状态由主机通知负责（见下文）。
+
+**附件**：固定为以下四个：
+
+- `yumpoo-windows-server-m1-15.zip`
+- `yumpoo-windows-server-m1-15.zip.sha256`
+- `artifact-manifest.json`
+- `provenance.json`
+
+**重试**：部署失败后，优先重跑同一次 Actions run。手工入口必须在原 tag 上触发，工作流会核对执行 ref 与请求的 tag 一致：
 
 ```powershell
 gh workflow run windows-release.yml --ref '<server-v...>' -f tag='<server-v...>'
 ```
+
+**草稿补生成**：草稿没有自动生成，或 CI 产物过期之前需要补生成时，手工触发：
+
+```powershell
+gh workflow run prepare-release.yml --ref dev -f commit='<main 上的完整 commit SHA>'
+```
+
+**快速代码回退**：[Server Rollback](../../.github/workflows/server-rollback.yml) 只回到主机保留的上一版本，必须在**目标（上一版本）tag** 上触发，并填写原因：
+
+```powershell
+gh workflow run server-rollback.yml --ref '<上一版本 server-v...>' -f target_tag='<上一版本 server-v...>' -f reason='<原因>'
+```
+
+回退与发布共用同一条串行通道。服务器端的前提和行为见下文「代码回退」。
+
+**热修复**：
+
+1. 从 `main` 拉 `hotfix/<名称>`，开 PR 到 `main`；
+2. 合并后同样经过「草稿 → Publish → 部署」；
+3. [Back-merge Main](../../.github/workflows/back-merge.yml) 会自动开 `backmerge/<commit>` 到 `dev` 的 PR，必须用合并提交合并。
+
+**切换期限制**：切换前从 `dev` 发布的历史版本不满足 `main` 来源和元数据要求，所以不能作为回退目标。快速回退要从切换后的第二个 `main` 版本起才可用。
 
 上传目录固定为 `C:/ProgramData/Yumpoo/deployment/inbox/<request UUID>/`。客户端将原 ZIP 切为 2 MiB 的 `package-0000.part` 起始分块，以最多四个 SFTP 连接并行上传；最后一块可以较小，包上限为 1 GiB。每块连接上限 5 分钟，整体上传上限 40 分钟；只有所有分块完成后才上传 `provenance.json`，并最后原子提交带 `packagePartCount` 的 `request.json`。服务器检查块数及每块长度，在私有工作目录按顺序组装并核验原包 SHA-256；兼容没有 `packagePartCount` 的旧 `package.zip` 请求。分块上传失败不会提交切换请求；若在最后提交时断线，应先查询该 UUID 的状态，不能仅凭客户端失败断定服务器没有执行。重试产生新的请求 UUID。
 
@@ -145,7 +204,7 @@ Release 不能升级 SYSTEM 部署引擎，必须由管理员手动操作：
   - `observe`（参数 `-ObserveMinutes`、`-MaxErrorLines`）。
 - `engine/engine.json` 记录引擎的来源 commit 和文件哈希。
 
-未升级的 schema 1 主机保持原有行为：分支为 `dev`，不要求不可变发布，不写探测路由。
+未升级的 schema 1 主机保持原有行为：分支为 `dev`，不要求不可变发布，不写探测路由。切换到 `main` 发布线时，必须先用 `-ReleaseBranch main -RequireImmutable` 升级引擎，再发布第一个 `main` 草稿。
 
 本地复核现行服务器包仍使用既有入口：
 

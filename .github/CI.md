@@ -1,6 +1,6 @@
 # CI 与 PR
 
-从最新 `dev` 建独立分支，提交后向 `dev` 开 PR；不直接推送或合并 `dev/main`。现有未提交改动需要单独保留。
+从最新 `dev` 建独立分支，提交后向 `dev` 开 PR；热修复从 `main` 拉 `hotfix/<名称>` 向 `main` 开 PR。不直接推送或合并 `dev/main`。现有未提交改动需要单独保留。发布线规则见[运行手册第 1 节](../deployment/windows/RUNBOOK.md#1-github-release-自动发布)。
 
 ```powershell
 git fetch origin dev
@@ -30,14 +30,14 @@ pnpm run ci
 
 - **冻结历史**：归档 Agent Note 的 manifest、已在目标分支存在的 SQL 迁移、M2-23 冻结清单与既有 OpenAPI 精确例外不可改写。换行按仓库 LF 约定比较；迁移追加更高且唯一的版本，不能删除、移动或回填旧版本。
 - **当前规范**：`contracts/openapi/yumpoo-v1.yaml`、事件目录与 Schema、生产代码和行为测试。历史验收的 Flyway 版本、旧 UI 尺寸、源码片段及 Note 措辞不定义当前行为。
-- **兼容性基线**：PR 取 `pull_request.base.sha`，`dev` push 取 `before`，本地默认取 `origin/dev`，手动 Actions 使用 `base_ref`。开始时解析为完整 commit，缺失、全零或无效引用失败；不复制永久规范基线。用 `YUMPOO_CI_BASE_REF` 可以显式指定本地比较基线。
+- **兼容性基线**：PR 取 `pull_request.base.sha`（晋升 PR 即线上 `main`），`dev`/`main` push 取 `before`，本地默认取 `origin/dev`，手动 Actions 使用 `base_ref`。开始时解析为完整 commit，缺失、全零或无效引用失败；不复制永久规范基线。用 `YUMPOO_CI_BASE_REF` 可以显式指定本地比较基线。
 - **例外**：已有条目只授权其原始 `oldSha256/newSha256` 对；原因、唯一 ID、活动决策链接必须完整。后续兼容演进不需要把当前规范连到旧例外。额外不兼容变更仍失败；真正破坏变更须先作明确产品/迁移决定，不能为过 CI 自动批准或刷新哈希。请求枚举缩减和响应枚举扩展恢复严格检测。
 
 迁移测试从实际资源和 Flyway pending 清单推导数量、版本与执行集合，继续逐项核验表、索引、约束、已有数据、checksum 和重跑幂等性。事件只允许同版本增加可选字段（含嵌套对象）或修改 Schema 注释；既有约束、必需字段、引用、事件名与聚合语义保持兼容，旧合法样例必须可读。新版本不能使旧版本漏检。显式退役仅豁免只追加清单登记的精确版本；决策 Note 按原路径或同分类同名归档路径解析，当前目录、Schema、样例和后端 Java 源码均不得保留退役事件，冻结事件不可退役。
 
 ## Actions 与最终门禁
 
-工作流在 PR、`dev` 合并后和显式手动运行时执行。合并后的执行保留，用于验证实际集成提交；分支 push 不另起重复工作流。新一轮运行取消同一 PR/ref 的旧轮次。没有按路径跳过必需任务。
+工作流在指向 `dev` 或 `main` 的 PR、`dev`/`main` 合并后和显式手动运行时执行；`main` 的推送 CI 产物是唯一可发布的服务器包。合并后的执行保留，用于验证实际集成提交；分支 push 不另起重复工作流。新一轮运行取消同一 PR/ref 的旧轮次。没有按路径跳过必需任务。
 
 `M0 Portable Gate` 保持已有必需状态名。`Windows Delivery` 只在 portable 成功后运行。最终 `M0 Windows x64 Gate` 使用 `always()` 检查所有工作任务，逐项要求 `success` 和完成凭据；失败、取消、跳过、未知结果、缺失依赖/凭据均不能通过。工作流结构测试会拒绝新增任务未进入最终门禁、条件性跳过必需命令或 `continue-on-error`。
 
@@ -54,8 +54,31 @@ Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必
 | [PR #63 资产失败](https://github.com/E9uuleus/YumpooPlatform/actions/runs/33961259083)，修复 `4fe6b58` | 源码包含断言要求 `54px`；当前契约改用 YAML 结构，视觉/交互仍由现有前端回归负责 |
 | [PR #63 数据残留](https://github.com/E9uuleus/YumpooPlatform/actions/runs/33960883440)，修复 `fb12a0c` | 类别版本外键残留污染后续测试；该已有修复保留，全量后端回归继续执行，新编排另隔离进程环境 |
 
+## 发布线工作流
+
+| 工作流 | 触发 | 职责 |
+| --- | --- | --- |
+| [Main Promotion Policy](workflows/main-promotion-policy.yml) | 指向 `main` 的 PR | 只允许 `dev`/`hotfix/*`；汇总提交、迁移分类与契约变化；破坏性迁移要求 `release:breaking-migration` 标签 |
+| [Prepare Release](workflows/prepare-release.yml) | `main` 推送 CI 成功 | 自动编号并创建草稿 Release，草稿阶段上传并核验来源清单与原包 |
+| [Windows Release](workflows/windows-release.yml) | Release 发布 | 只校验不可变 Release 并部署，不写附件 |
+| [Server Rollback](workflows/server-rollback.yml) | 手动，在上一版本 tag 上 | 提交只换代码、不动数据库的回退请求 |
+| [Back-merge Main](workflows/back-merge.yml) | `main` 推送 | `main` 含 `dev` 缺少的改动（热修复）时开回合并 PR |
+
+这些工作流的结构与权限由 [release-workflows.test.mjs](../tools/ci/release-workflows.test.mjs) 解析 YAML 校验，发布脚本自身的回归由 `tools/release/*.test.mjs` 覆盖，二者都在 `ci:static` 中执行。
+
 ## 远端规则
 
 2026-09-08 已读取规则集 `Protect dev`（ID `20779725`）：required checks 为 `M0 Portable Gate`、`M0 Windows x64 Gate`，要求分支最新、PR 对话解决，允许 PR 路径的维护者 bypass。两个状态名保留，因此启用本变更不需要切换远端 required checks。
 
 远端设置没有在本变更中修改。当前 `required_approving_review_count=0`，无法强制至少一位其他评审者批准；如需技术上强制该要求，维护者应在上述规则集设为 `1`，并核对角色 `5` 的 PR bypass 是否符合团队约定。不能把文档中的“须审阅”当作已启用的远端限制。
+
+`main` 发布线依赖以下远端设置，由维护者在切换时配置。仓库代码不会、也不能自行修改这些设置：
+
+- **默认分支**：设为 `dev`。日常 PR、Dependabot 和定时任务都落在 `dev`；`workflow_run` 与 `workflow_dispatch` 使用 `dev` 上的工作流定义。
+- **规则集 `Protect main`**：
+  - 禁止删除和强推；
+  - 必须经过 PR，只允许合并提交；
+  - required checks 为 `M0 Portable Gate`、`M0 Windows x64 Gate`、`Main Promotion Policy`；
+  - 不要求分支最新，原因是晋升 PR 的 head 是持续前进的 `dev`。
+- **规则集 `Release tags`**：`refs/tags/server-v*` 禁止更新和删除，只有管理员可以创建。
+- **Immutable Releases 与 secret**：开启 Immutable Releases；添加仓库 secret `WECOM_RELEASE_WEBHOOK`。
