@@ -24,7 +24,7 @@ function fixture(t) {
     event: 'push', head_branch: 'main', head_sha: sha, status: 'completed', conclusion: 'success',
   }
   const github = {
-    calls: [], uploads: [], deleted: [], runs: [run], assets: new Map(), comparison: 'ahead', latestOrder: 'behind',
+    calls: [], uploads: [], deleted: [], runs: [run], assets: new Map(), comparison: 'ahead', latestOrder: 'behind', draftOrder: {},
     releases: [{ id: 50, tag_name: 'server-v2026.10.19.1', draft: false, published_at: '2026-10-19T08:00:00Z', target_commitish: 'b'.repeat(40) }],
     tags: [{ ref: 'refs/tags/server-v2026.10.19.1' }, { ref: 'refs/tags/server-v2026.10.20.2' }],
     files: {
@@ -44,6 +44,8 @@ function fixture(t) {
       if (endpoint === `/compare/${sha}...main?per_page=1`) return { status: this.comparison, merge_base_commit: { sha } }
       if (endpoint === '/git/ref/tags/server-v2026.10.19.1') return { object: { type: 'commit', sha: 'b'.repeat(40) } }
       if (endpoint === `/compare/${sha}...${'b'.repeat(40)}?per_page=1`) return { status: this.latestOrder }
+      const draftOrder = endpoint.match(/^\/compare\/([0-9a-f]{40})\.\.\.([0-9a-f]{40})\?per_page=1$/u)
+      if (draftOrder && draftOrder[2] === sha) return { status: this.draftOrder[draftOrder[1]] ?? 'diverged' }
       if (endpoint === '/actions/workflows/m0-18-ci.yml') return { id: 42, path: ciWorkflowPath }
       if (endpoint === '/actions/runs/3001/attempts/1') return run
       if (endpoint === `/compare/server-v2026.10.19.1...${sha}`) {
@@ -148,11 +150,18 @@ test('an interrupted draft resumes on its pinned attempt without a new Release o
 test('other drafts are never deleted, only reported as superseded, and a published commit needs no draft', async t => {
   const { github, draft } = fixture(t)
   github.releases.push({ id: 60, tag_name: 'server-v2026.10.20.1', draft: true, target_commitish: 'f'.repeat(40) })
+  // REL-P3 N1: a draft whose source is not older than this commit is not called superseded.
+  github.releases.push({ id: 61, tag_name: 'server-v2026.10.20.2', draft: true, target_commitish: 'e'.repeat(40) })
+  github.draftOrder = { ['f'.repeat(40)]: 'ahead', ['e'.repeat(40)]: 'behind' }
   const result = await draft()
   assert.deepEqual(github.deleted, [])
   assert(!github.calls.some(call => call.startsWith('DELETE ')))
-  assert.deepEqual(result.otherDrafts, ['server-v2026.10.20.1'])
-  assert.match(github.releases.find(release => release.id === result.releaseId).body, /旧草稿 `server-v2026\.10\.20\.1` 已被本草稿取代/u)
+  assert.deepEqual(result.supersededDrafts, ['server-v2026.10.20.1'])
+  assert.deepEqual(result.otherDrafts, ['server-v2026.10.20.2'])
+  const body = github.releases.find(release => release.id === result.releaseId).body
+  assert.match(body, /旧草稿 `server-v2026\.10\.20\.1` 已被本草稿取代/u)
+  assert.match(body, /另有草稿 `server-v2026\.10\.20\.2` 的源码不早于本草稿/u)
+  assert.doesNotMatch(body, /旧草稿 `server-v2026\.10\.20\.2`/u)
   github.releases.find(release => release.target_commitish === sha).draft = false
   github.uploads = []
   const again = await draft()

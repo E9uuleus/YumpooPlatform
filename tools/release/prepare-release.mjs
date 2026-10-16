@@ -40,7 +40,15 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
   let draft = releases.find(release => release.draft && release.target_commitish === sourceCommit)
   // Drafts are never deleted automatically: GitHub deletes by ID unconditionally, so a draft published between
   // listing and deleting would lose its immutable Release. Other drafts are only reported for manual cleanup.
-  const otherDrafts = releases.filter(release => release.draft && release !== draft)
+  // Only a draft whose source is an ancestor of this commit is superseded; any other draft is reported separately
+  // because the most recently generated draft is not necessarily the newest source.
+  const supersededDrafts = []
+  const otherDrafts = []
+  for (const other of releases.filter(release => release.draft && release !== draft)) {
+    const ancestor = /^[0-9a-f]{40}$/u.test(other.target_commitish)
+      && (await github.get(`/compare/${other.target_commitish}...${sourceCommit}?per_page=1`)).status === 'ahead'
+    ;(ancestor ? supersededDrafts : otherDrafts).push(other.tag_name)
+  }
   let pinned
   const created = !draft
   if (draft) {
@@ -60,7 +68,7 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
     const comparison = previous ? await github.get(`/compare/${encodeURIComponent(previous.tag_name)}...${sourceCommit}`) : null
     draft = await github.send('POST', '/releases', {
       tag_name: tag, target_commitish: sourceCommit, name: tag, draft: true,
-      body: releaseNotes({ tag, sourceCommit, run, previousTag: previous?.tag_name, comparison, otherDrafts: otherDrafts.map(item => item.tag_name) }),
+      body: releaseNotes({ tag, sourceCommit, run, previousTag: previous?.tag_name, comparison, supersededDrafts, otherDrafts }),
     })
   }
   assert.equal(draft.draft, true, 'Prepared Release must stay a draft')
@@ -98,7 +106,7 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
   provenance = validateProvenance(readJson(await downloadAsset(github, final.get('provenance.json'), verified)), { tag, sourceCommit })
   for (const name of releaseAssetNames.filter(name => name !== 'provenance.json')) await downloadAsset(github, final.get(name), verified)
   await inspectPackage(verified, sourceCommit, provenance)
-  return { tag, releaseId: draft.id, url: draft.html_url, created, published: false, provenance, otherDrafts: otherDrafts.map(item => item.tag_name) }
+  return { tag, releaseId: draft.id, url: draft.html_url, created, published: false, provenance, supersededDrafts, otherDrafts }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
@@ -106,8 +114,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   try {
     const result = await prepareDraft({ github: createGithub(), sourceCommit: process.env.SOURCE_COMMIT, env: process.env, directory })
     if (!result.published) {
-      const stale = result.otherDrafts.length ? ` Older drafts ${result.otherDrafts.join(', ')} are superseded: do not publish them; delete them manually.` : ''
-      const summary = `Draft **${result.tag}** is ready for ${process.env.SOURCE_COMMIT}: ${result.url}.${stale}`
+      const stale = result.supersededDrafts.length ? ` Older drafts ${result.supersededDrafts.join(', ')} are superseded: do not publish them; delete them manually.` : ''
+      const other = result.otherDrafts.length ? ` Drafts ${result.otherDrafts.join(', ')} are not older than this commit: compare source SHAs before publishing.` : ''
+      const summary = `Draft **${result.tag}** is ready for ${process.env.SOURCE_COMMIT}: ${result.url}.${stale}${other}`
       console.log(summary)
       if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`)
       await notifyWeCom(process.env, [
@@ -115,7 +124,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
         `> 提交：${process.env.SOURCE_COMMIT.slice(0, 8)}`,
         `> 草稿：[查看并发布](${result.url})`,
         '> 点击 Publish 即为上线决定。',
-        ...(result.otherDrafts.length ? [`> 旧草稿 ${result.otherDrafts.join('、')} 已被取代，请勿发布，可手动删除。`] : []),
+        ...(result.supersededDrafts.length ? [`> 旧草稿 ${result.supersededDrafts.join('、')} 已被取代，请勿发布，可手动删除。`] : []),
+        ...(result.otherDrafts.length ? [`> 另有草稿 ${result.otherDrafts.join('、')} 的源码不早于本草稿，发布前请核对来源 SHA。`] : []),
       ].join('\n'))
     }
   } catch (error) {

@@ -14,7 +14,7 @@ export function commitSection(subject) {
   return sections.find(([key]) => key === type)?.[1] ?? '其他'
 }
 
-export function releaseNotes({ tag, sourceCommit, run, previousTag, comparison, otherDrafts = [] }) {
+export function releaseNotes({ tag, sourceCommit, run, previousTag, comparison, supersededDrafts = [], otherDrafts = [] }) {
   const lines = [
     `## ${tag}`,
     '',
@@ -43,7 +43,8 @@ export function releaseNotes({ tag, sourceCommit, run, previousTag, comparison, 
   lines.push(migrations.length ? `- 新增迁移：${migrations.map(name => `\`${name}\``).join('、')}。是否只扩展以发布包内 \`windows/release-metadata.json\` 为准。` : '- 没有新增数据库迁移。')
   lines.push(contracts.length ? `- 契约变更：${contracts.map(name => `\`${name}\``).join('、')}。` : '- 没有 API 或事件契约变更。')
   if (commits.length >= compareCommitLimit || files.length >= compareFileLimit) lines.push('- 变更较多，GitHub 对比结果已截断；完整内容见对比链接。')
-  if (otherDrafts.length) lines.push('', `> 旧草稿 ${otherDrafts.map(name => `\`${name}\``).join('、')} 已被本草稿取代：请勿发布，确认后可手动删除。`)
+  if (supersededDrafts.length) lines.push('', `> 旧草稿 ${supersededDrafts.map(name => `\`${name}\``).join('、')} 已被本草稿取代：请勿发布，确认后可手动删除。`)
+  if (otherDrafts.length) lines.push('', `> 另有草稿 ${otherDrafts.map(name => `\`${name}\``).join('、')} 的源码不早于本草稿：发布前请核对来源 SHA，只发布需要上线的那一个。`)
   lines.push('', '> 本草稿由 Prepare Release 工作流根据 main 的 CI 产物生成。点击 Publish 即为上线决定，部署会自动开始；不要修改或替换附件。')
   return `${lines.join('\n')}\n`
 }
