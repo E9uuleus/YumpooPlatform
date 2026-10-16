@@ -105,6 +105,7 @@ gh workflow run server-rollback.yml --ref '<上一版本 server-v...>' -f target
 7. 观察窗口（阶段名 `observe`）：默认 10 分钟，按截止时间计时，开始时、每 30 秒以及窗口结束时各复核一次公网站点和 readiness，并统计开放后新增的应用 `ERROR` 日志。复核本身耗时不会缩短窗口。
    - 新增 `ERROR` 超过 `observe.maxErrorLines`（默认 20），或任意一次复核失败时，状态记为 `failed/observation_failed`。
    - 这按开放后失败处理：保留业务数据，不自动恢复，由发布负责人决定是否执行代码回退。
+   - 观察已经通过、只是写入完成记录失败时，状态为 `failed/completion_record_failed`：新版本已在线，由管理员核对公网身份与 readiness 后补写成功记录，不需要回退。状态文件可能正被 SFTP 读取，引擎以原子替换写入，遇到短暂占用会在约 30 秒内重试。
 
 开放访问前失败时的处理：
 
