@@ -71,6 +71,23 @@ test('new-table exemptions require proof the table was created by this migration
   ]) {
     assert.equal(classifyMigration(sql).classification, 'breaking', sql)
   }
+  for (const sql of [
+    // F4：带引号的单段名、转义引号都不能与业务表共享豁免键
+    'CREATE TABLE "yumpoo.work_item" (id integer); ALTER TABLE yumpoo.work_item DROP COLUMN title;',
+    'CREATE TABLE yumpoo."work_item""probe" (id integer); ALTER TABLE yumpoo.work_item DROP COLUMN title;',
+    'CREATE TABLE yumpoo.work_item_probe (id integer); ALTER TABLE yumpoo.work_item DROP COLUMN title;',
+  ]) {
+    assert.equal(classifyMigration(sql).classification, 'breaking', sql)
+  }
+  assert.deepEqual(classifyMigration('CREATE TABLE yumpoo."work_item""probe" (id integer); ALTER TABLE yumpoo."work_item""probe" ADD CONSTRAINT ck CHECK (id > 0);'), { classification: 'expand', reasons: [] })
+  // F5：字符串常量或带引号列名中的关键字不是约束语法
+  for (const sql of [
+    "ALTER TABLE yumpoo.work_item ADD COLUMN codex_probe text DEFAULT 'check';",
+    "ALTER TABLE yumpoo.work_item ADD COLUMN codex_probe text DEFAULT 'constraint primary key';",
+    'ALTER TABLE yumpoo.work_item ADD COLUMN "check" text;',
+  ]) {
+    assert.deepEqual(classifyMigration(sql), { classification: 'expand', reasons: [] }, sql)
+  }
   assert.deepEqual(classifyMigration('CREATE TABLE IF NOT EXISTS yumpoo.audit_probe (id integer);'), { classification: 'expand', reasons: [] })
   assert.deepEqual(classifyMigration('CREATE TABLE Yumpoo.Feature (id integer); ALTER TABLE yumpoo.feature DROP COLUMN id;'), { classification: 'expand', reasons: [] })
   assert.deepEqual(classifyMigration('CREATE TABLE "yumpoo"."feature" (id integer); INSERT INTO yumpoo.feature VALUES (1);'), { classification: 'expand', reasons: [] })

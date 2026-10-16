@@ -8,13 +8,14 @@ import { resolveGitCommit } from '../verification/m0-18-utils.mjs'
 export const migrationRoot = 'backend/src/main/resources/db/migration'
 export const exceptionsPath = 'contracts/migrations/rollback-safety-exceptions.json'
 const migrationFile = /^(?:[a-z][a-z0-9]*\/)?V(\d+)__[a-z0-9_]+\.sql$/u
-const identifier = String.raw`(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\s*\.\s*(?:"[^"]+"|[A-Za-z_][\w$]*))?`
+const identifierPart = String.raw`(?:"(?:[^"]|"")+"|[A-Za-z_][\w$]*)`
+// 结尾断言保证匹配到完整标识符，不会停在转义引号或更长名字的前缀上。
+const identifier = String.raw`${identifierPart}(?:\s*\.\s*${identifierPart})?(?=[\s(]|$)`
 
-// PostgreSQL 语义：未加引号的标识符折叠为小写，带引号的保持原样；schema 一并比较。
-// 未限定与限定写法不互认，无法消除 search_path 歧义时按已有表处理。
-const tableKey = raw => raw.match(/"[^"]+"|[^."\s]+/gu)
-  .map(part => part.startsWith('"') ? part.slice(1, -1) : part.toLowerCase())
-  .join('.')
+// PostgreSQL 语义：未加引号的标识符折叠为小写，带引号的去掉外层引号并还原 ""；
+// 以分段数组作为键，"a.b" 与 a.b 互不相同。未限定与限定写法不互认，有歧义时按已有表处理。
+const tableKey = raw => JSON.stringify(raw.match(new RegExp(identifierPart, 'gu'))
+  .map(part => part.startsWith('"') ? part.slice(1, -1).replaceAll('""', '"') : part.toLowerCase()))
 const normalize = text => text.replaceAll('\r\n', '\n')
 export const migrationDigest = text => createHash('sha256').update(normalize(text)).digest('hex')
 
@@ -79,7 +80,9 @@ function splitTopLevel(text) {
   return parts.map(part => part.trim()).filter(Boolean)
 }
 
-function safeAddColumn(action) {
+function safeAddColumn(raw) {
+  // 关键字只在语法 token 中识别，字符串常量与带引号标识符里的同名文字不算。
+  const action = raw.replace(/'(?:[^']|'')*'/gu, "''").replace(/"(?:[^"]|"")+"/gu, '"_"')
   if (!/^ADD (?:COLUMN )?(?:IF NOT EXISTS )?/iu.test(action)) return false
   if (/^ADD (?:CONSTRAINT|PRIMARY KEY|UNIQUE|FOREIGN KEY|CHECK|EXCLUDE)\b/iu.test(action)) return false
   // 内联 CHECK 或具名约束可能引用已有列，收紧旧版本的写入。
