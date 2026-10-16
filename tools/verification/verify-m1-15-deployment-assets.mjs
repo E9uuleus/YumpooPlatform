@@ -13,6 +13,7 @@ const config = fs.readFileSync(path.join(deployment, 'config', 'application-prod
 const production = YAML.parse(config)
 const application = YAML.parse(fs.readFileSync(path.join(root, 'backend', 'src', 'main', 'resources', 'application.yml'), 'utf8'))
 const script = fs.readFileSync(path.join(deployment, 'Invoke-InitialIdentityBootstrap.ps1'), 'utf8')
+const nginx = fs.readFileSync(path.join(deployment, 'nginx', 'yumpoo-wecom.conf'), 'utf8')
 
 assert(historicalM113.startsWith('# M1-13 '), 'M1-13 RUNBOOK 历史快照缺失')
 assert(historicalM114.startsWith('# M1-14 '), 'M1-14 RUNBOOK 历史快照缺失')
@@ -46,6 +47,15 @@ const rolling = application.logging?.logback?.rollingpolicy
 assert(rolling?.['max-file-size'] === '50MB' && rolling['max-history'] === 90 && rolling['total-size-cap'] === '10GB', '应用文件日志轮转边界改变')
 for (const required of ['Initialize-YumpooHost.ps1', 'Invoke-YumpooDeploy.ps1', 'Start-YumpooNginx.ps1', 'YumpooDeployment.psm1']) {
   assert(fs.statSync(path.join(deployment, 'cd', required)).isFile(), `发布包缺少固定部署程序：${required}`)
+}
+assert(application.management?.endpoints?.web?.exposure?.include === 'health,info', 'Actuator 只允许公开 health 与 info')
+assert(application.spring?.flyway?.['ignore-migration-patterns'] === '*:future', '快速回退要求旧 JAR 忽略更高版本的已应用迁移')
+assert(application.info?.release?.tag === '${yumpoo.deployment.release-tag:unreleased}', '发布标签必须由部署引擎注入')
+const deny = nginx.indexOf('location ~ ^/(actuator|_m0)(/|$)', nginx.indexOf('listen 443 ssl;'))
+for (const [probe, target] of [['/healthz', '/actuator/health/readiness'], ['/version.json', '/actuator/info']]) {
+  const location = nginx.indexOf(`location = ${probe} {`)
+  assert(location > 0 && location < deny, `Nginx 公开探测 ${probe} 必须是先于 actuator 拒绝规则的精确匹配`)
+  assert(nginx.includes(`proxy_pass http://127.0.0.1:8100${target};`), `Nginx 探测 ${probe} 目标错误`)
 }
 assert(script.includes('YUMPOO_INITIAL_IDENTITY_BOOTSTRAP_ENABLED'), '维护脚本未显式启用 Runner')
 assert(script.includes('Remove-Item -LiteralPath $resolvedInput -Force'), '维护脚本未在成功后删除输入')

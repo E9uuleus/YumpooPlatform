@@ -15,6 +15,7 @@ export function contractSteps(baseRef) {
     node('event-baseline', 'tools/events/extract-event-contract-baseline.mjs', baseRef, 'out/ci/event-baseline.json'),
     node('event-compatibility', 'tools/events/check-event-contract-compat.mjs', 'out/ci/event-baseline.json'),
     pnpm('event-inventory', 'run', 'audit:workitem-event-inventory'),
+    node('migration-rollback-safety', 'tools/ci/migration-policy.mjs', baseRef),
   ]
 }
 
@@ -55,7 +56,8 @@ export function plan(stage, baseRef = 'origin/dev') {
       pnpm('ci-policy-tests', 'run', 'test:ci'),
       pnpm('event-policy-tests', 'run', 'test:event-contract-compat'),
       pnpm('delivery-policy-tests', 'run', 'test:m0-18'),
-      node('release-policy-tests', '--test', 'tools/release/github.test.mjs', 'tools/release/policy.test.mjs', 'tools/release/promote-release.test.mjs', 'tools/release/ssh-deploy.test.mjs'),
+      node('release-policy-tests', '--test', 'tools/release/github.test.mjs', 'tools/release/policy.test.mjs', 'tools/release/promote-release.test.mjs', 'tools/release/ssh-deploy.test.mjs', 'tools/release/version-placeholders.test.mjs'),
+      node('version-placeholders', 'tools/release/version-placeholders.mjs'),
       ...contractSteps(baseRef), ...nodeSteps, ...assetSteps,
     ]
     case 'backend': return [

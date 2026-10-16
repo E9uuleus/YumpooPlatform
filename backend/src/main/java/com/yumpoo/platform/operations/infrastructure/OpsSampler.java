@@ -562,7 +562,7 @@ public class OpsSampler implements OperationsRuntime, SmartLifecycle {
             startedAt,
             runtime.getUptime(),
             ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax(),
-            properties == null ? "unknown" : properties.getVersion(),
+            environment.getProperty("info.release.tag", "unreleased"),
             properties == null ? "unknown" : Objects.toString(properties.get("commit"), "unknown"),
             properties == null ? null : properties.getTime(),
             schema,
