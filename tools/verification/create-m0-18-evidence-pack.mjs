@@ -387,8 +387,8 @@ function toolVersions(repositoryRoot) {
   assertM018(nodeVersion === '24.14.0', `Node 版本必须为 24.14.0，实际为 ${nodeVersion}`)
   assertM018(pnpmVersion === '11.16.0', `pnpm 版本必须为 11.16.0，实际为 ${pnpmVersion}`)
   assertM018(javaMatch?.[1] === '21', 'Java 版本必须为 21')
-  assertM018(mavenMatch?.[1] === '3.9.9', 'Maven Wrapper 版本必须为 3.9.9')
-  return { nodeVersion, pnpmVersion, javaMajor: 21, mavenVersion: '3.9.9' }
+  assertM018(mavenMatch?.[1] === '3.10.0', 'Maven Wrapper 版本必须为 3.10.0')
+  return { nodeVersion, pnpmVersion, javaMajor: 21, mavenVersion: '3.10.0' }
 }
 
 function run(command, args, cwd) {
