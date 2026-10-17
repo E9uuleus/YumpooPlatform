@@ -27,7 +27,7 @@
         "javaMajor": { "const": 21 },
         "nodeVersion": { "const": "24.14.0" },
         "pnpmVersion": { "const": "11.16.0" },
-        "mavenVersion": { "const": "3.9.9" },
+        "mavenVersion": { "const": "3.10.0" },
         "postgresImage": { "const": "postgres:17.10-alpine" },
         "companyTimeZone": { "const": "Asia/Shanghai" }
       }
