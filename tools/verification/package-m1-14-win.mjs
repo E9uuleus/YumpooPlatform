@@ -32,7 +32,7 @@ try {
     env: { ...process.env, YUMPOO_M015_OUTPUT_ROOT: desktopTemp },
   })
   const desktopDirectories = fs.readdirSync(desktopTemp, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name.endsWith('-win32-x64'))
+    .filter((entry) => entry.isDirectory() && entry.name === 'win-unpacked')
   assert(desktopDirectories.length === 1, '桌面打包目录数量不为 1')
   compressContents(path.join(desktopTemp, desktopDirectories[0].name), desktopZip)
 
