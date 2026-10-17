@@ -7,10 +7,12 @@ import com.yumpoo.platform.filestorage.application.DetectedAttachmentContent;
 import com.yumpoo.platform.filestorage.application.UploadRejectedException;
 import com.yumpoo.platform.filestorage.domain.AttachmentFileType;
 import com.yumpoo.platform.filestorage.domain.AttachmentRejectedCode;
+import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.TikaCoreProperties;
 import org.apache.tika.mime.MediaType;
 import org.apache.tika.mime.MimeTypes;
+import org.apache.tika.parser.ParseContext;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -60,8 +62,8 @@ public final class TikaAttachmentContentDetector implements AttachmentContentDet
                         LinkOption.NOFOLLOW_LINKS
                 ),
                 AttachmentUploadPolicy.BUFFER_BYTES
-        )) {
-            detected = mimeTypes.detect(input, metadata);
+        ); TikaInputStream tikaInput = TikaInputStream.get(input)) {
+            detected = mimeTypes.detect(tikaInput, metadata, new ParseContext());
         }
         String mime = detected.toString().toLowerCase(Locale.ROOT);
         AttachmentFileType type = switch (mime) {
