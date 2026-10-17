@@ -18,7 +18,7 @@ Release 发布即为上线决定。主机初始化、Environment 配置和发布
 
 **晋升门禁**
 
-- 晋升 PR 只能来自本仓库的 `dev` 或 `hotfix/<名称>`，由 [Main Promotion Policy](../../.github/workflows/main-promotion-policy.yml) 强制检查，并在 PR 中汇总提交、迁移分类、契约变化和人工确认清单。
+- 晋升 PR 只能来自本仓库的 `dev` 或 `hotfix/<名称>`，由 [Main Promotion Policy](../../.github/workflows/main-promotion-policy.yml) 强制检查，并在 PR 中汇总提交、迁移分类、契约变化和人工确认清单。若增量涉及 `deployment/windows/cd/`，汇总会列出变更文件，并提醒管理员在发布前用本次草稿的 ZIP [升级部署引擎](#升级部署引擎)；这项人工确认不代替主机上的升级结果核对。
 - 含非只扩展迁移的发布必须加 `release:breaking-migration` 标签，该版本不能快速回退。
 - 契约兼容以 `main` 为基线：相对线上版本有破坏性 API 变更时，先在 `dev` 上登记检查结果给出的精确例外。
 
@@ -136,7 +136,7 @@ gh workflow run server-rollback.yml --ref '<上一版本 server-v...>' -f target
 - 回退同样依次经过维护、停服、切换、验收、开放和观察。
 - 开放访问前失败时切回原版本，状态记为 `failed/rollback_aborted_current_restored`。
 - 回退成功后 `previous` 被清空，因此不能连续回退。
-- 含破坏性迁移的版本无法代码回退，只能由管理员按第 7 节，用部署快照做整套恢复。
+- 含破坏性迁移的版本无法代码回退；需要恢复旧版数据与程序时，只能由管理员用部署快照做整套恢复。本节「开放访问前失败时的处理」说明了恢复范围；手工恢复步骤与验收见本地运维文档 `docs/30-operations/backup-restore-and-disaster-recovery.md` 第 4 节（`docs/` 不随仓库分发）。
 
 ### 主机保留
 
