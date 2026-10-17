@@ -130,7 +130,7 @@ export async function verifyReleaseAssets({ github, release, tag, sourceCommit, 
     await downloadAsset(github, assets.get(name), retained)
   }
   await inspectPackage(retained, sourceCommit, provenance)
-  await attest(retained, run, { env })
+  await attest(retained, run, { env, label: 'published Release assets' })
   return { directory: retained, provenance }
 }
 

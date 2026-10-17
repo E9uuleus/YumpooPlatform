@@ -84,7 +84,7 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
     const downloaded = await downloadCiPackage(github, run, directory, unpack)
     const { digest, bytes } = await inspectPackage(downloaded, sourceCommit, provenance)
     // Unattested bytes never reach the draft, so nothing publishable exists before the signature checks out.
-    await attest(downloaded, run, { env })
+    await attest(downloaded, run, { env, log, label: 'CI bytes before upload' })
     provenance ??= validateProvenance({
       schemaVersion: 1, repository, tag, sourceCommit, ciRunId: run.id, ciRunAttempt: run.run_attempt,
       artifactName: expectedArtifactName(sourceCommit, run.run_attempt), packageSha256: digest, packageBytes: bytes,
@@ -109,7 +109,7 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
   provenance = validateProvenance(readJson(await downloadAsset(github, final.get('provenance.json'), verified)), { tag, sourceCommit })
   for (const name of releaseAssetNames.filter(name => name !== 'provenance.json')) await downloadAsset(github, final.get(name), verified)
   await inspectPackage(verified, sourceCommit, provenance)
-  await attest(verified, run, { env })
+  await attest(verified, run, { env, log, label: 'persisted draft assets' })
   return { tag, releaseId: draft.id, url: draft.html_url, created, published: false, provenance, supersededDrafts, otherDrafts }
 }
 
@@ -120,7 +120,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     if (!result.published) {
       const stale = result.supersededDrafts.length ? ` Older drafts ${result.supersededDrafts.join(', ')} are superseded: do not publish them; delete them manually.` : ''
       const other = result.otherDrafts.length ? ` Drafts ${result.otherDrafts.join(', ')} are not older than this commit: compare source SHAs before publishing.` : ''
-      const summary = `Draft **${result.tag}** is ready for ${process.env.SOURCE_COMMIT}: ${result.url}.${stale}${other}`
+      const summary = `Draft **${result.tag}** is ready for ${process.env.SOURCE_COMMIT}: ${result.url}. Build attestations of the package and SBOMs verified against CI run ${result.provenance.ciRunId} attempt ${result.provenance.ciRunAttempt}.${stale}${other}`
       console.log(summary)
       if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`)
       await notifyWeCom(process.env, [

@@ -109,9 +109,9 @@ function fixture(t) {
     for (const [name, bytes] of Object.entries(github.files)) fs.writeFileSync(path.join(directory, name), bytes)
   }
   github.attestations = []
-  const attest = async (directory, ciRun) => {
+  const attest = async (directory, ciRun, options) => {
     for (const name of attestedFileNames) assert(fs.statSync(path.join(directory, name)).isFile(), `attested file missing: ${name}`)
-    github.attestations.push({ runId: ciRun.id, attempt: ciRun.run_attempt, uploadsSoFar: github.uploads.length })
+    github.attestations.push({ runId: ciRun.id, attempt: ciRun.run_attempt, uploadsSoFar: github.uploads.length, label: options.label })
     if (github.attestationError) throw new Error(github.attestationError)
   }
   const draft = (options = {}) => prepareDraft({ github, sourceCommit: sha, env, directory: fs.mkdtempSync(path.join(root, 'run-')), now, unpack, attest, log: () => {}, ...options })
@@ -144,8 +144,8 @@ test('CI bytes are attested before any upload and the persisted assets are attes
   github.attestations = []
   await draft()
   assert.deepEqual(github.attestations, [
-    { runId: 3001, attempt: 1, uploadsSoFar: 0 },
-    { runId: 3001, attempt: 1, uploadsSoFar: releaseAssetNames.length },
+    { runId: 3001, attempt: 1, uploadsSoFar: 0, label: 'CI bytes before upload' },
+    { runId: 3001, attempt: 1, uploadsSoFar: releaseAssetNames.length, label: 'persisted draft assets' },
   ])
 })
 

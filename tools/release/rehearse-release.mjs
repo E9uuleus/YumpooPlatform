@@ -30,7 +30,7 @@ export async function rehearseRelease({ github, env, directory, now = new Date()
   const run = await selectCiAttempt(github, await ciWorkflowId(github), sourceCommit)
   const downloaded = await downloadCiPackage(github, run, directory, unpack)
   await inspectPackage(downloaded, sourceCommit)
-  await attest(downloaded, run, { env })
+  await attest(downloaded, run, { env, label: 'rehearsal of CI bytes' })
   const tags = (await github.list('/git/matching-refs/tags/server-v')).map(ref => String(ref.ref).replace(/^refs\/tags\//u, ''))
   const tag = nextReleaseTag([...tags, ...releases.map(release => release.tag_name)], now)
   return { mode: 'draft', sourceCommit, tag, ciRunId: run.id, ciRunAttempt: run.run_attempt }
