@@ -54,7 +54,7 @@ Status: implemented
 **诊断项**：[采集逻辑](../../../../desktop/desktop-shell/src/main/diagnostics.ts)与 Electron 实现分开，可以注入替身测试。
 
 - 网络：DNS、TLS 证书主体/签发者/剩余天数、`/healthz`、`/version.json`（服务版本取 `release.tag`，时钟偏差取响应 `Date` 头与请求中点之差）、系统代理；
-- HTTP 探测走 Chromium 网络栈，`credentials: 'omit'`，不跟随重定向；TLS 详情由 Node 获取，信任 Windows 证书库加内置根证书；
+- HTTP 探测走 Chromium 网络栈，`credentials: 'omit'`，不跟随重定向；TLS 详情由 Node 获取，按常规校验 Windows 证书库加内置根证书；证书不受信任或已过期时握手失败，只记录错误码（如 `CERT_HAS_EXPIRED`），不为读取证书而关闭校验；
 - 每项 8 秒超时。报告里只保留规范化的错误码，不带响应正文或主机返回的文本；
 - 本机：safeStorage、userData 可写、GPU 特性状态、各进程内存（`app.getAppMetrics`，也是以后内存治理的基线）。
 

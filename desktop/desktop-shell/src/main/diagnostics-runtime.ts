@@ -50,8 +50,9 @@ async function probeFetch(url: string, readJson: boolean): Promise<ProbeResponse
 }
 
 /**
- * Node's own TLS client reports the certificate chain Chromium does not expose; it trusts the Windows
- * store plus the bundled roots so a corporate root CA does not show up as a false failure.
+ * Node's own TLS client reports the certificate Chromium does not expose. It validates normally against
+ * the Windows store plus the bundled roots, so a corporate root CA is not a false failure; an untrusted or
+ * expired certificate fails the handshake and its error code becomes the probe result.
  */
 function inspectTls(hostname: string, port: number): Promise<TlsInspection> {
   return new Promise((resolve, reject) => {
@@ -60,7 +61,6 @@ function inspectTls(hostname: string, port: number): Promise<TlsInspection> {
       port,
       servername: hostname,
       ca: [...tls.getCACertificates('system'), ...tls.getCACertificates('bundled')],
-      rejectUnauthorized: false,
     })
     socket.once('secureConnect', () => {
       const certificate = socket.getPeerCertificate()
@@ -68,8 +68,6 @@ function inspectTls(hostname: string, port: number): Promise<TlsInspection> {
       const subject = name(certificate.subject?.CN)
       const issuer = name(certificate.issuer?.O ?? certificate.issuer?.CN)
       resolve({
-        authorized: socket.authorized,
-        ...(socket.authorizationError ? { authorizationError: String(socket.authorizationError) } : {}),
         ...(subject ? { subject } : {}),
         ...(issuer ? { issuer } : {}),
         ...(certificate.valid_to ? { validTo: certificate.valid_to } : {}),
