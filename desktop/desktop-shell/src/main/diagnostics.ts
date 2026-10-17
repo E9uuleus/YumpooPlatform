@@ -1,8 +1,7 @@
 import type { DiagnosticsProbe, DiagnosticsReport, DiagnosticsStartupFailure } from '@yumpoo/preload-contract'
 
+/** Resolves only for a trusted certificate; validation failures reject with the TLS error code. */
 export interface TlsInspection {
-  readonly authorized: boolean
-  readonly authorizationError?: string
   readonly subject?: string
   readonly issuer?: string
   readonly validTo?: string
@@ -83,15 +82,13 @@ async function probeNetwork(dependencies: DiagnosticsDependencies, origin: URL, 
     probe(timeout, async () => {
       const inspection = await dependencies.inspectTls(origin.hostname, port)
       const validTo = inspection.validTo ? new Date(inspection.validTo) : undefined
-      const details = {
+      return {
         ...(inspection.subject ? { subject: inspection.subject.slice(0, 200) } : {}),
         ...(inspection.issuer ? { issuer: inspection.issuer.slice(0, 200) } : {}),
         ...(validTo && Number.isFinite(validTo.getTime())
           ? { validTo: validTo.toISOString(), daysRemaining: Math.floor((validTo.getTime() - dependencies.now().getTime()) / DAY_MS) }
           : {}),
       }
-      if (!inspection.authorized) throw Object.assign(new Error('TLS'), { code: errorCode(inspection.authorizationError ?? 'UNTRUSTED'), details })
-      return details
     }) as Promise<Network['tls']>,
     probe(timeout, async () => {
       const response = await dependencies.fetch(new URL('/healthz', origin).href, false)
@@ -117,7 +114,7 @@ async function probeNetwork(dependencies: DiagnosticsDependencies, origin: URL, 
   return { skipped: false, proxy, dns, tls, health, version }
 }
 
-/** Failures keep whatever details the probe gathered before failing, such as the certificate it rejected. */
+/** Failures keep whatever details the probe gathered before failing, such as the HTTP status. */
 async function probe(timeout: number, run: () => Promise<object>): Promise<DiagnosticsProbe> {
   const started = Date.now()
   try {

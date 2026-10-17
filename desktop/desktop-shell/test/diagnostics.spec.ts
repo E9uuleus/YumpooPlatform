@@ -15,7 +15,7 @@ function dependencies(overrides: Partial<DiagnosticsDependencies> = {}): Diagnos
     offline: false,
     lookup: async () => 2,
     resolveProxy: async () => 'DIRECT',
-    inspectTls: async () => ({ authorized: true, subject: 'yumpoo.example.com', issuer: 'Example CA', validTo: 'Dec 31 00:00:00 2026 GMT' }),
+    inspectTls: async () => ({ subject: 'yumpoo.example.com', issuer: 'Example CA', validTo: 'Dec 31 00:00:00 2026 GMT' }),
     fetch: async url => url.endsWith('/version.json')
       ? { status: 200, date: 'Sat, 17 Oct 2026 06:00:30 GMT', json: { release: { tag: 'server-v2026.10.16.1' }, build: { commit: 'a'.repeat(40) } } }
       : { status: 200, date: null },
@@ -57,14 +57,15 @@ describe('诊断报告', () => {
     expect(lookup).not.toHaveBeenCalled()
   })
 
-  it('失败只留下规范化的错误码，并保留已取得的证书信息', async () => {
+  it('失败只留下规范化的错误码', async () => {
     const report = await collectDiagnostics(dependencies({
       lookup: async () => { throw Object.assign(new Error('getaddrinfo ENOTFOUND yumpoo.example.com'), { code: 'ENOTFOUND' }) },
-      inspectTls: async () => ({ authorized: false, authorizationError: 'CERT_HAS_EXPIRED', subject: 'old.example.com', validTo: 'Jan 1 00:00:00 2026 GMT' }),
+      inspectTls: async () => { throw Object.assign(new Error('certificate has expired'), { code: 'CERT_HAS_EXPIRED' }) },
       fetch: async url => (url.endsWith('/healthz') ? { status: 503, date: null } : { status: 200, date: null, json: { release: { tag: '<script>' } } }),
     }))
     expect(report.network.dns).toMatchObject({ ok: false, error: 'ENOTFOUND' })
-    expect(report.network.tls).toMatchObject({ ok: false, error: 'CERT_HAS_EXPIRED', subject: 'old.example.com', daysRemaining: -290 })
+    expect(report.network.tls).toMatchObject({ ok: false, error: 'CERT_HAS_EXPIRED' })
+    expect(report.network.tls.subject).toBeUndefined()
     expect(report.network.health).toMatchObject({ ok: false, error: 'HTTP_503', status: 503 })
     expect(report.network.version.serverVersion).toBeUndefined()
     expect(JSON.stringify(report)).not.toContain('getaddrinfo')
