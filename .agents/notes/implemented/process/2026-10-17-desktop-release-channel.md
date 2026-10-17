@@ -76,5 +76,6 @@ Status: implemented
 - 安装包仍未签名，首次安装会出现 SmartScreen「未知发布者」提示；开启了 Smart App Control 的机器无法运行。补 Authenticode 签名是独立的后续工作。
 - 本期还没有发布渠道和应用内更新：安装包只在 CI 中构建和冒烟，不上传为发布附件。现有便携版用户仍按 RUNBOOK 手工分发，直到桌面发布渠道上线。
 - electron-builder 构建时会从 GitHub 下载 NSIS 工具链，校验和由 electron-builder 内置；CI runner 直接下载，本地可以配置镜像。
+- `pnpm-workspace.yaml` 用 override 去掉了 electron-builder 内 `@electron/get@3` 的可选依赖 `global-agent`。原因是它经 `roarr` 引入 `sprintf-js`（GHSA-hp3w-g68c-fv3c，没有修复版本）。`@electron/get` 只在设置 `ELECTRON_GET_USE_PROXY` 时才加载它，加载失败会降级为不走代理；打包使用 `electronDist`，本来就不经 `@electron/get` 下载。上游换掉这条依赖后应删除这个 override。
 - 开启 cookie 加密是单向的：以后关闭这个 fuse 会让已有 cookie 库失效，用户需要重新登录。
 - 安装冒烟让 Windows 门禁多出一次安装和卸载，时间要计入 `Windows Delivery` 的超时预算。
