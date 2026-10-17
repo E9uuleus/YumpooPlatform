@@ -5,6 +5,7 @@ packages:
 allowBuilds:
   '@openapitools/openapi-generator-cli': true
   core-js: false
+  electron-winstaller: false
   esbuild: true
 minimumReleaseAgeExclude:
   - '@tiptap/core@3.30.3'
