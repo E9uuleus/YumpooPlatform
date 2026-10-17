@@ -44,7 +44,7 @@
     "@yumpoo/preload-contract": "workspace:*",
     "happy-dom": "20.14.6",
     "vite": "8.3.4",
-    "vitest": "4.1.10",
+    "vitest": "5.0.3",
     "vue-tsc": "3.3.12"
   }
 }
