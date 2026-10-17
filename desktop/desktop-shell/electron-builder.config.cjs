@@ -29,6 +29,7 @@ module.exports = {
   files: [
     'dist/main/**/*',
     'dist/preload/**/*',
+    'dist/diagnostics/**/*',
     'assets/application.png',
     'package.json',
     '!**/*.map',

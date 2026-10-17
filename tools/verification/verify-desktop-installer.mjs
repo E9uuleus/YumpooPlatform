@@ -33,6 +33,7 @@ const shortcuts = [
   path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${PRODUCT_NAME}.lnk`),
   path.join(powershell("[Environment]::GetFolderPath('Desktop')"), `${PRODUCT_NAME}.lnk`),
 ]
+const safeModeShortcut = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${PRODUCT_NAME} (Safe Mode).lnk`)
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-installer-smoke-'))
 
 try {
@@ -43,6 +44,7 @@ try {
     assert.equal(report.version, descriptor.version, '自检报告版本与安装包不一致')
     assert.equal(report.electronVersion, descriptor.electronVersion, '自检报告 Electron 版本不一致')
     assert.equal(report.distributionOrigin, expectedOrigin, '安装版未使用生产分发配置')
+    assert.equal(report.diagnosticsPage, true, '安装版诊断页未能离线渲染')
 
     seedUserData()
     await runInstaller(installer)
@@ -53,7 +55,7 @@ try {
 
     await uninstall(installed)
     assert(!fs.existsSync(installed.location), '卸载后安装目录仍存在')
-    for (const shortcut of shortcuts) assert(!fs.existsSync(shortcut), `卸载后快捷方式仍存在：${path.basename(shortcut)}`)
+    for (const shortcut of [...shortcuts, safeModeShortcut]) assert(!fs.existsSync(shortcut), `卸载后快捷方式仍存在：${path.basename(shortcut)}`)
     assert(!registryKeyExists(PROTOCOL_KEY), '卸载后 yumpoo 协议键仍存在')
     for (const relative of SESSION_FIXTURES) {
       assert(!fs.existsSync(path.join(userData, ...relative)), `卸载后会话数据仍存在：${relative.join('/')}`)
@@ -75,6 +77,9 @@ function assertInstalled() {
     path.join(requiredEnvironment('LOCALAPPDATA'), 'Programs', INSTALL_DIRECTORY).toLowerCase(), '按用户安装目录不正确')
   assert(fs.statSync(executable).isFile(), '安装目录缺少 YumpooDesktop.exe')
   for (const shortcut of shortcuts) assert(fs.existsSync(shortcut), `缺少快捷方式：${shortcut}`)
+  const safeMode = JSON.parse(powershell(`$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${safeModeShortcut.replaceAll("'", "''")}'); @{ target = $s.TargetPath; arguments = $s.Arguments } | ConvertTo-Json -Compress`))
+  assert.equal(String(safeMode.target).toLowerCase(), executable.toLowerCase(), '安全模式快捷方式未指向安装后的 EXE')
+  assert.equal(safeMode.arguments, '--safe-mode', '安全模式快捷方式参数不正确')
   const command = powershell(`(Get-ItemProperty -LiteralPath 'Registry::${PROTOCOL_KEY}\\shell\\open\\command').'(default)'`)
   assert.equal(command.toLowerCase(), `"${executable}" "%1"`.toLowerCase(), 'yumpoo 协议未指向安装后的 EXE')
   return { location, executable, quietUninstall }
