@@ -1,5 +1,8 @@
 import type { BrowserWindowConstructorOptions } from 'electron'
 
+/** In-memory session: credentials persist only in the safeStorage-encrypted store and are re-injected at launch. */
+export const AUTHENTICATED_PARTITION = 'yumpoo-authenticated'
+
 export function createWindowOptions(
   preloadPath: string,
   isPackaged = false,
@@ -22,7 +25,7 @@ export function createWindowOptions(
       webviewTag: false,
       allowRunningInsecureContent: false,
       devTools: !isPackaged,
-      partition: 'yumpoo-authenticated',
+      partition: AUTHENTICATED_PARTITION,
     },
   }
 }

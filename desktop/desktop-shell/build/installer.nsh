@@ -5,6 +5,8 @@
   WriteRegStr HKCU "Software\Classes\yumpoo" "" "URL:yumpoo"
   WriteRegStr HKCU "Software\Classes\yumpoo" "URL Protocol" ""
   WriteRegStr HKCU "Software\Classes\yumpoo\shell\open\command" "" '"$INSTDIR\${APP_EXECUTABLE_FILENAME}" "%1"'
+  ; Kept ASCII so the shortcut name does not depend on how NSIS decodes this include.
+  CreateShortCut "$SMPROGRAMS\Yumpoo Desktop (Safe Mode).lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" "--safe-mode" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" 0
 !macroend
 
 ; Updates run the old uninstaller with --updated and keep everything. A real uninstall signs the
@@ -13,6 +15,7 @@
 !macro customUnInstall
   ${ifNot} ${isUpdated}
     DeleteRegKey HKCU "Software\Classes\yumpoo"
+    Delete "$SMPROGRAMS\Yumpoo Desktop (Safe Mode).lnk"
     StrCpy $R9 "$APPDATA\Yumpoo Desktop"
     ${if} ${FileExists} "$R9\*.*"
       FindFirst $R0 $R1 "$R9\*"

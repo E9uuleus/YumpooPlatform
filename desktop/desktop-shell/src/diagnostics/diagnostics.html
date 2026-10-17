@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN" data-state="loading">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yumpoo Desktop 诊断与修复</title>
+  <link rel="stylesheet" href="diagnostics.css">
+</head>
+<body>
+  <header>
+    <h1>诊断与修复</h1>
+    <p id="summary" class="summary">正在检测…</p>
+    <p id="mode" class="mode" hidden></p>
+  </header>
+  <main>
+    <section aria-labelledby="actions-title">
+      <h2 id="actions-title">修复</h2>
+      <div id="actions" class="actions"></div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+    <section aria-labelledby="network-title">
+      <div class="section-head">
+        <h2 id="network-title">网络连接</h2>
+        <button id="refresh" type="button" class="link">重新检测</button>
+      </div>
+      <dl id="network" class="checks"></dl>
+    </section>
+    <section aria-labelledby="local-title">
+      <h2 id="local-title">本机</h2>
+      <dl id="local" class="checks"></dl>
+    </section>
+    <section aria-labelledby="versions-title">
+      <h2 id="versions-title">版本</h2>
+      <dl id="versions" class="checks"></dl>
+    </section>
+  </main>
+  <script src="page.js"></script>
+</body>
+</html>

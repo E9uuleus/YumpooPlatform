@@ -75,7 +75,7 @@ export class TimerWindowController {
   private exitTimeout: ReturnType<typeof setTimeout> | undefined
 
   constructor(private readonly main: () => BrowserWindow | null, private readonly origin: string, private readonly preload: string,
-    private readonly prefs = new TimerPreferenceStore()) {
+    private readonly prefs = new TimerPreferenceStore(), private readonly openDiagnostics?: () => void) {
     this.pinned = prefs.get().pinned
     this.orb = { size: ORB_SIZES[prefs.get().orbSize], side: null, detailWidth: 0 }
     this.menu = new TimerQuickMenu(origin, preload, action => this.menuAction(action))
@@ -281,6 +281,8 @@ export class TimerWindowController {
         { label: '窗口置顶', type: 'checkbox' as const, checked: this.pinned, enabled: signedIn, click: () => this.setPinned(!this.pinned) },
         { type: 'separator' as const },
       ]),
+      // The native menu is what appears when the web quick panel cannot load, which is when diagnostics matter.
+      ...(this.openDiagnostics ? [{ label: '诊断与修复…', click: () => this.openDiagnostics?.() }] : []),
       { label: '退出 YumpooPlatform…', click: () => this.requestExit() },
     ])
     if (process.platform === 'linux') this.tray?.setContextMenu(this.contextMenu)

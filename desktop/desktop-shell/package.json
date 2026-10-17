@@ -13,9 +13,9 @@
   "scripts": {
     "start": "pnpm run build && electron .",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.diagnostics.json",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.json && node scripts/write-distribution.cjs",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.diagnostics.json && node scripts/write-distribution.cjs && node scripts/copy-diagnostics.cjs",
     "package:win": "pnpm run build && electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish never"
   },
   "devDependencies": {
