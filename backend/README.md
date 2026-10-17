@@ -185,7 +185,7 @@ Flyway V16 在 `templateworkflow` owner 目录创建模板版本、Content bluep
 ## 环境
 
 - JDK 21，且 `JAVA_HOME` 指向 JDK 21。
-- 构建统一使用仓库内 Maven Wrapper 3.9.9，不依赖全局 Maven。
+- 构建统一使用仓库内 Maven Wrapper 3.10.0，不依赖全局 Maven。
 - Docker 可用；`verify` 会启动固定的 `postgres:17.10-alpine`，不可用时直接失败。
 
 ## 构建与运行

@@ -156,6 +156,20 @@ test('deferred acceptance rejects omissions, listed PASS evidence and incomplete
   assert.throws(() => validateDeferredAcceptance({ deferred: incomplete, liveEvidence, repositoryRoot }), /M0-18/u)
 })
 
+test('evidence schema accepts the configured Maven wrapper version and rejects other versions', () => {
+  const wrapper = fs.readFileSync(path.join(repositoryRoot, 'backend', '.mvn', 'wrapper', 'maven-wrapper.properties'), 'utf8')
+  const distributionUrl = wrapper.match(/^distributionUrl=(.+)$/mu)?.[1]?.trim()
+  assert.ok(distributionUrl, 'Maven distribution URL is required')
+  const version = new URL(distributionUrl).pathname.match(/\/apache-maven-(\d+\.\d+\.\d+)-bin\.zip$/u)?.[1]
+  assert.ok(version, 'Maven wrapper must pin a release version')
+  const schema = path.join(repositoryRoot, 'evidence', 'm0-18', 'verification-report.schema.json')
+  const report = readJson(path.join(repositoryRoot, 'evidence', 'm0-18', 'verification-report.example.json'))
+  assert.equal(report.environment.mavenVersion, version)
+  assert.doesNotThrow(() => assertSchema(schema, report, 'configured Maven'))
+  report.environment.mavenVersion = '0.0.0'
+  assert.throws(() => assertSchema(schema, report, 'unsupported Maven'), /M0-18/u)
+})
+
 test('strict schemas reject extra fields and malformed hashes', () => {
   const schema = path.join(repositoryRoot, 'evidence', 'm0-18', 'verification-report.schema.json')
   const example = readJson(path.join(repositoryRoot, 'evidence', 'm0-18', 'verification-report.example.json'))
