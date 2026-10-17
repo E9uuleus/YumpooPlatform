@@ -235,6 +235,21 @@ test('计时快捷面板与偏好只开放固定通道和参数个数', async ()
     + "void ipcRenderer.invoke('yumpoo:timer:drag')\n")).length, 4)
 })
 
+test('更新桥接只开放固定通道与参数个数', async () => {
+  const file = 'desktop/desktop-shell/src/preload/index.ts'
+  const prefix = "import { contextBridge, ipcRenderer } from 'electron'\nvoid contextBridge\n"
+  assert.equal((await boundaryMessages(file, prefix
+    + "void ipcRenderer.invoke('yumpoo:update:get-state')\n"
+    + "void ipcRenderer.invoke('yumpoo:update:check')\n"
+    + "void ipcRenderer.invoke('yumpoo:update:restart')\n"
+    + "void ipcRenderer.on('yumpoo:update:state', () => {})\n"
+    + "void ipcRenderer.removeListener('yumpoo:update:state', () => {})\n")).length, 0)
+  assert.equal((await boundaryMessages(file, prefix
+    + "void ipcRenderer.invoke('yumpoo:update:restart', 'now')\n"
+    + "void ipcRenderer.invoke('yumpoo:update:install')\n"
+    + "void ipcRenderer.on('yumpoo:update:progress', () => {})\n")).length, 3)
+})
+
 test('诊断窗 preload 只开放诊断通道，两个入口的通道互不相通', async () => {
   const prefix = "import { contextBridge, ipcRenderer } from 'electron'\nvoid contextBridge\n"
   const diagnostics = 'desktop/desktop-shell/src/preload/diagnostics.ts'

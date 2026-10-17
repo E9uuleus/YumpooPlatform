@@ -16,6 +16,8 @@
   ${ifNot} ${isUpdated}
     DeleteRegKey HKCU "Software\Classes\yumpoo"
     Delete "$SMPROGRAMS\Yumpoo Desktop (Safe Mode).lnk"
+    ; The installer keeps a copy of itself here as the base for differential updates (about 100 MB).
+    RMDir /r "$LOCALAPPDATA\yumpoo-desktop-updater"
     StrCpy $R9 "$APPDATA\Yumpoo Desktop"
     ${if} ${FileExists} "$R9\*.*"
       FindFirst $R0 $R1 "$R9\*"

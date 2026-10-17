@@ -3,10 +3,12 @@ import { TimerPreferenceStore } from './timer-preferences'
 import { InboxNotifier, InboxPreferenceStore } from './inbox-notifier'
 import { applicationIcon } from './application-icon'
 import path from 'node:path'
-import { app, BrowserWindow, crashReporter, dialog, ipcMain, protocol, safeStorage, session, shell } from 'electron'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { writeFile } from 'node:fs/promises'
-import type { DesktopAuthStatus, DiagnosticsStartupFailure } from '@yumpoo/preload-contract'
+import { app, BrowserWindow, crashReporter, dialog, ipcMain, net, powerMonitor, protocol, safeStorage, session, shell } from 'electron'
+import { autoUpdater } from 'electron-updater'
+import { createHash } from 'node:crypto'
+import { createReadStream, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { rm, writeFile } from 'node:fs/promises'
+import type { DesktopAuthStatus, DesktopUpdateState, DiagnosticsStartupFailure } from '@yumpoo/preload-contract'
 import { AUTH_STATUS_CHANNEL, installAuthIpc } from './auth-ipc'
 import { installExportFileIpc } from './export-files'
 import {
@@ -34,9 +36,11 @@ import { runtimeDiagnostics } from './diagnostics-runtime'
 import { DiagnosticsWindow, registerDiagnosticsScheme } from './diagnostics-window'
 import { loadDistribution } from './distribution'
 import { DesktopLogger } from './logger'
-import { runSelfCheck, selfCheckReportPath } from './self-check'
+import { runSelfCheck, selfCheckReportPath, UPDATE_CHECK_ARGUMENT } from './self-check'
 import { handleStartupFailure } from './startup-failure'
 import { CRASH_LOOP_THRESHOLD, HEALTHY_AFTER_MS, StartupStateStore } from './startup-state'
+import { UpdateController, type FileDigest, type UpdaterLike } from './update-controller'
+import { installClientHeaders, installUpdateIpc, UPDATE_STATE_CHANNEL } from './update-ipc'
 import { resolveWebAppUrl } from './url-policy'
 import { AUTHENTICATED_PARTITION, createWindowOptions } from './window-policy'
 
@@ -49,6 +53,8 @@ const APP_USER_MODEL_ID = 'com.yumpoo.desktop'
 const PREFERENCE_FILES = ['timer-preferences.json', 'inbox-preferences.json']
 const smokeTest = process.argv.includes(SMOKE_TEST_ARGUMENT)
 const selfCheckPath = app.isPackaged ? selfCheckReportPath(process.argv) : undefined
+const updateCheckPath = app.isPackaged && !selfCheckPath ? selfCheckReportPath(process.argv, UPDATE_CHECK_ARGUMENT) : undefined
+const UPDATE_CHECK_TIMEOUT_MS = 180_000
 const userDataPath = app.getPath('userData')
 const logger = new DesktopLogger(path.join(userDataPath, 'logs'))
 const startupState = new StartupStateStore(userDataPath)
@@ -74,6 +80,8 @@ let consecutiveFailures = 0
 let crashLoop = false
 let safeMode = false
 let startupFailureShown = false
+let updateController: UpdateController | undefined
+let restartAfterUpdate = false
 
 function failStartup(reason: DiagnosticsStartupFailure, error?: unknown): void {
   logger.error('startup-failed', { reason, error: error instanceof Error ? error.message : undefined })
@@ -114,7 +122,110 @@ function diagnosticsOrigin(): string | null {
 function collectReport(offline: boolean) {
   return collectDiagnostics(runtimeDiagnostics({
     origin: diagnosticsOrigin(), safeMode, crashLoop, consecutiveFailures, startupFailure, offline,
+    updateState: () => {
+      const state = updateState()
+      return {
+        state: state.phase === 'disabled' ? 'unavailable' : state.phase,
+        ...(state.version ? { version: state.version } : {}),
+        ...(state.error ? { error: state.error } : {}),
+      }
+    },
   }))
+}
+
+function updateState(): DesktopUpdateState {
+  return updateController?.getState() ?? { phase: 'disabled', currentVersion: app.getVersion(), channel: null }
+}
+
+function publishUpdateState(state: DesktopUpdateState): void {
+  const window = mainWindow
+  if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send(UPDATE_STATE_CHANNEL, state)
+  timerController?.setUpdateReady(state.phase === 'ready' && state.version ? { version: state.version, restart: restartForUpdate } : undefined)
+}
+
+/** Goes through the normal quit, including the timer's exit confirmation; the verified installer runs in will-quit. */
+function restartForUpdate(): void {
+  restartAfterUpdate = true
+  logger.info('update-restart-requested', { version: updateController?.readyVersion })
+  app.quit()
+}
+
+function digestSync(file: string): FileDigest {
+  const data = readFileSync(file)
+  return { sha512: createHash('sha512').update(data).digest('base64'), size: data.byteLength }
+}
+
+function digestFile(file: string): Promise<FileDigest> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha512')
+    let size = 0
+    createReadStream(file)
+      .on('data', chunk => { hash.update(chunk); size += chunk.length })
+      .on('error', reject)
+      .on('end', () => resolve({ sha512: hash.digest('base64'), size }))
+  })
+}
+
+async function fetchAuthorization(url: string): Promise<unknown> {
+  const response = await net.fetch(url, { credentials: 'omit', cache: 'no-store', redirect: 'error' })
+  if (!response.ok) throw new Error(`HTTP_${response.status}`)
+  const body = await response.arrayBuffer()
+  if (body.byteLength > 64 * 1024) throw new Error('AUTHORIZATION_TOO_LARGE')
+  return JSON.parse(Buffer.from(body).toString('utf8'))
+}
+
+/** Only packaged builds whose distribution names a feed and keys ever check; safe mode keeps updating so a bad version can be replaced. */
+function startUpdates(schedule = true): void {
+  if (!app.isPackaged || smokeTest || selfCheckPath || updateController) return
+  const update = loadDistribution().update
+  if (!update) return
+  autoUpdater.logger = {
+    info: (message?: unknown) => logger.info('updater', { detail: String(message) }),
+    warn: (message?: unknown) => logger.warn('updater', { detail: String(message) }),
+    error: (message?: unknown) => logger.error('updater', { detail: String(message) }),
+    debug: () => undefined,
+  }
+  updateController = new UpdateController({
+    updater: autoUpdater as unknown as UpdaterLike,
+    update,
+    currentVersion: app.getVersion(),
+    fetchJson: fetchAuthorization,
+    digest: digestFile,
+    digestSync,
+    removeFile: file => rm(file, { force: true }),
+    log: (level, event, fields) => logger[level](event, fields),
+    publish: publishUpdateState,
+    now: () => Date.now(),
+    random: () => Math.random(),
+    schedule: (callback, delayMs) => { setTimeout(callback, delayMs).unref() },
+  })
+  if (!schedule) return
+  powerMonitor.on('resume', () => updateController?.onResume())
+  updateController.start()
+}
+
+/**
+ * Headless single check for the update end-to-end test: the same download, authorization check and
+ * quit-time install as a normal launch, without windows, scheduling or the web app.
+ */
+async function runUpdateCheckNow(reportPath: string): Promise<void> {
+  startUpdates(false)
+  const controller = updateController
+  const deadline = Date.now() + UPDATE_CHECK_TIMEOUT_MS
+  let state = updateState()
+  if (controller) {
+    controller.check()
+    let checked = false
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      state = controller.getState()
+      checked ||= state.phase !== 'idle'
+      if (state.phase === 'ready' || state.phase === 'error' || (checked && state.phase === 'idle')) break
+    }
+  }
+  const installStarted = state.phase === 'ready' && !!controller?.installOnQuit(false)
+  writeFileSync(reportPath, `${JSON.stringify({ ...state, installStarted }, null, 2)}\n`, 'utf8')
+  app.exit(installStarted ? 0 : 1)
 }
 
 function relaunch(args: string[]): void {
@@ -265,6 +376,7 @@ async function createMainWindow(): Promise<void> {
     timerController.attachMain(mainWindow)
     inboxNotifier ??= new InboxNotifier(() => mainWindow, webAppUrl.origin, timerController, new InboxPreferenceStore(userDataPath))
     inboxNotifier.install()
+    publishUpdateState(updateState())
   }
   const restored = await credentialStore?.load(webAppUrl.origin)
   if (restored) {
@@ -359,6 +471,7 @@ async function startApplication(): Promise<void> {
     logger.warn('certificate-rejected', { url, error })
   })
   installAppSecurityGuards(app)
+  installClientHeaders(session.fromPartition(AUTHENTICATED_PARTITION), webAppUrl.origin, app.getVersion())
   credentialStore = new DesktopCredentialStore(userDataPath, safeStorage)
   const controller = new DesktopAuthController({
     enabled: electronAuthEnabled(),
@@ -399,6 +512,15 @@ async function startApplication(): Promise<void> {
     downloadsPath: () => app.getPath('downloads'),
     writeFile: (filePath, data) => writeFile(filePath, data),
   })
+  installUpdateIpc({
+    ipcMain,
+    getMainWindow: () => mainWindow,
+    allowedOrigin: webAppUrl.origin,
+    getState: updateState,
+    check: () => updateController?.check(),
+    restart: restartForUpdate,
+  })
+  startUpdates()
   if (safeMode) openDiagnostics()
   await createMainWindow()
 }
@@ -411,7 +533,10 @@ if (app.isPackaged) {
   app.setAppUserModelId(APP_USER_MODEL_ID)
 }
 
-if (selfCheckPath) {
+if (updateCheckPath) {
+  app.disableHardwareAcceleration()
+  void app.whenReady().then(() => runUpdateCheckNow(updateCheckPath)).catch(() => app.exit(1))
+} else if (selfCheckPath) {
   app.disableHardwareAcceleration()
   void app.whenReady().then(async () => {
     const report = await runSelfCheck({
@@ -466,6 +591,10 @@ if (selfCheckPath) {
   app.on('before-quit', () => {
     // A normal quit after a successful load ends the failure streak even within the first minute.
     if (mainLoaded) startupState.markHealthy()
+  })
+  app.on('will-quit', () => {
+    // Every orderly quit installs a verified update silently; "restart to update" also relaunches afterwards.
+    if (updateController?.readyVersion) updateController.installOnQuit(restartAfterUpdate)
   })
 
   void app.whenReady().then(startApplication).catch(error => {
