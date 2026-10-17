@@ -58,7 +58,7 @@ Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必
 
 | 工作流 | 触发 | 职责 |
 | --- | --- | --- |
-| [Main Promotion Policy](workflows/main-promotion-policy.yml) | 指向 `main` 的 PR | 只允许 `dev`/`hotfix/*`；汇总提交、迁移分类与契约变化；破坏性迁移要求 `release:breaking-migration` 标签 |
+| [Main Promotion Policy](workflows/main-promotion-policy.yml) | 指向 `main` 的 PR | 只允许 `dev`/`hotfix/*`；汇总提交、迁移分类与契约变化；`deployment/windows/cd/` 有改动时列出文件并提醒发布前升级主机引擎；破坏性迁移要求 `release:breaking-migration` 标签 |
 | [Prepare Release](workflows/prepare-release.yml) | `main` 推送 CI 成功 | 自动编号并创建草稿 Release，草稿阶段上传并核验来源清单、原包与 SBOM，上传前后各核验一次构建证明；不删除任何草稿 |
 | [Windows Release](workflows/windows-release.yml) | Release 发布 | 只校验不可变 Release（含 SBOM 与构建证明）并部署，不写附件 |
 | [Server Rollback](workflows/server-rollback.yml) | 手动，在上一版本 tag 上 | 提交只换代码、不动数据库的回退请求 |

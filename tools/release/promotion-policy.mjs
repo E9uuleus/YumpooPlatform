@@ -49,6 +49,7 @@ export function evaluatePromotion({ pullRequest, root }) {
   const openapiChanged = oldSha256 !== newSha256
   const openapiException = openapiChanged ? exactBreakingChangeException(readBreakingChangeExceptions(root), oldSha256, newSha256) : null
   const eventFiles = git(root, ['diff', '--name-only', `${base}...${head}`, '--', 'contracts/events']).split('\n').filter(Boolean)
+  const engineFiles = git(root, ['diff', '--name-only', '--no-renames', `${base}...${head}`, '--', 'deployment/windows/cd/']).split('\n').filter(Boolean)
 
   const grouped = new Map()
   for (const commit of commits) {
@@ -76,8 +77,18 @@ export function evaluatePromotion({ pullRequest, root }) {
   else if (openapiException) lines.push(`- OpenAPI 有变化，已有精确例外 \`${openapiException.id}\` 覆盖这一对版本。`)
   else lines.push(`- OpenAPI 有变化。若 CI 契约兼容检查失败，说明相对线上版本存在破坏性变更：请先在 dev 上登记发布级例外 \`{"oldSha256":"${oldSha256}","newSha256":"${newSha256}"}\`，并确认桌面端兼容。`)
   lines.push(eventFiles.length ? `- 事件契约变更：${eventFiles.map(file => `\`${file}\``).join('、')}` : '- 事件契约没有变化。')
+  lines.push('', '### 部署引擎', '')
+  if (engineFiles.length) {
+    lines.push(
+      '**本次包含部署引擎改动，发布前需要管理员升级主机引擎。**',
+      ...engineFiles.map(file => `- \`${file}\``),
+      '',
+      '普通发布不会更新主机引擎。草稿就绪后，用该草稿的服务器 ZIP 在主机运行 `Update-YumpooEngine.ps1`，核对来源 commit 后再点击 Publish。',
+    )
+  } else lines.push('- 本次没有部署引擎改动。')
   lines.push(
     '', '### 发布前人工确认', '',
+    ...(engineFiles.length ? ['- [ ] 主机管理员已用本次草稿的安装包升级部署引擎，并核对来源 commit'] : []),
     '- [ ] 未完成的功能已隐藏，或尚未合入 dev',
     '- [ ] 发布后 10 分钟观察窗口及其后 30 分钟有人值守',
     '- [ ] 避开业务高峰、周五晚间和节假日前',

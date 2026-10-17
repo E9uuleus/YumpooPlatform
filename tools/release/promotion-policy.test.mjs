@@ -25,6 +25,7 @@ function repositoryFixture(t) {
   write('contracts/migrations/rollback-safety-exceptions.json', '{"schemaVersion":1,"exceptions":[]}\n')
   write('tools/openapi/breaking-change-exceptions.json', '{"schemaVersion":1,"exceptions":[]}\n')
   write('contracts/openapi/yumpoo-v1.yaml', 'openapi: 3.0.3\n')
+  write('deployment/windows/cd/Invoke-YumpooDeploy.ps1', '# engine baseline\n')
   git('add', '.')
   git('commit', '-q', '-m', 'chore: base')
   const base = git('rev-parse', 'HEAD')
@@ -37,7 +38,7 @@ function repositoryFixture(t) {
   const pullRequest = (head, overrides = {}) => ({
     number: 5, base: { ref: 'main', sha: base }, head: { ref: 'dev', sha: head, repo: { full_name: repository } }, labels: [], ...overrides,
   })
-  return { root, commit, pullRequest, base }
+  return { root, commit, pullRequest, base, git }
 }
 
 test('only dev or hotfix branches from this repository may enter main', () => {
@@ -57,6 +58,43 @@ test('an expand-only promotion passes and reports grouped commits and contract s
   assert.match(report, /project\/V2__add_note\.sql`：只扩展/u)
   assert.match(report, /OpenAPI 没有变化/u)
   assert.match(report, /Create a merge commit/u)
+  assert.match(report, /本次没有部署引擎改动/u)
+  assert.doesNotMatch(report, /- \[ \] 主机管理员/u)
+})
+
+test('engine changes add an upgrade warning and manual check regardless of commit scope', t => {
+  const { root, commit, pullRequest } = repositoryFixture(t)
+  const head = commit('fix: 修复状态文件', {
+    'deployment/windows/cd/Invoke-YumpooDeploy.ps1': '# updated engine\n',
+    'deployment/windows/cd/Update-YumpooEngine.ps1': '# new upgrade entry\n',
+  })
+  const { report, violations } = evaluatePromotion({ pullRequest: pullRequest(head), root })
+  assert.deepEqual(violations, [], 'the upgrade is a manual release prerequisite, not a promotion gate')
+  assert.match(report, /发布前需要管理员升级主机引擎/u)
+  assert.match(report, /`deployment\/windows\/cd\/Invoke-YumpooDeploy\.ps1`/u)
+  assert.match(report, /`deployment\/windows\/cd\/Update-YumpooEngine\.ps1`/u)
+  assert.match(report, /- \[ \] 主机管理员已用本次草稿的安装包升级部署引擎/u)
+})
+
+test('moving an engine file out of cd still requires an upgrade', t => {
+  const { root, commit, pullRequest, git } = repositoryFixture(t)
+  git('mv', 'deployment/windows/cd/Invoke-YumpooDeploy.ps1', 'deployment/windows/legacy-deploy.ps1')
+  const head = commit('refactor: 移动引擎入口', {})
+  const { report, violations } = evaluatePromotion({ pullRequest: pullRequest(head), root })
+  assert.deepEqual(violations, [])
+  assert.match(report, /`deployment\/windows\/cd\/Invoke-YumpooDeploy\.ps1`/u)
+  assert.match(report, /发布前需要管理员升级主机引擎/u)
+})
+
+test('deployment docs and similarly prefixed paths do not trigger an engine warning', t => {
+  const { root, commit, pullRequest } = repositoryFixture(t)
+  const head = commit('docs(cd): 更新运行手册', {
+    'deployment/windows/RUNBOOK.md': '# Runbook\n',
+    'deployment/windows/cd-notes.md': '# Notes\n',
+  })
+  const { report } = evaluatePromotion({ pullRequest: pullRequest(head), root })
+  assert.match(report, /本次没有部署引擎改动/u)
+  assert.doesNotMatch(report, /- \[ \] 主机管理员/u)
 })
 
 test('wrong head, fork origin or wrong base are hard violations', t => {
