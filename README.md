@@ -17,7 +17,7 @@
 | Web | Vue 3.5、TypeScript 5.9、Vite 8.2、Element Plus 2.14、Tiptap 3 |
 | 桌面端 | Electron 43.3、TypeScript，独立 main / preload 与受限 IPC 桥 |
 | 数据库 | PostgreSQL 17.10，业务数据位于 `yumpoo` schema |
-| 工具与契约 | pnpm workspace、Maven Wrapper 3.9.9、OpenAPI 3.0.3、生成式 TypeScript Fetch 客户端 |
+| 工具与契约 | pnpm workspace、Maven Wrapper 3.10.0、OpenAPI 3.0.3、生成式 TypeScript Fetch 客户端 |
 | 测试 | Vitest、Node test runner、JUnit、ArchUnit、Testcontainers |
 
 依赖精确版本以各目录的 `package.json`、根目录 `pnpm-lock.yaml` 和 [backend/pom.xml](backend/pom.xml) 为准。
