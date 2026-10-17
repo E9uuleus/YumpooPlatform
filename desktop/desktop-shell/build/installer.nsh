@@ -8,8 +8,8 @@
 !macroend
 
 ; Updates run the old uninstaller with --updated and keep everything. A real uninstall signs the
-; user out: the encrypted credential store and Chromium's persistent cookie store both hold the session,
-; so everything in userData goes except the two preference files.
+; user out (auth\ holds the only persisted session) and clears Chromium runtime data, keeping only
+; the two preference files.
 !macro customUnInstall
   ${ifNot} ${isUpdated}
     DeleteRegKey HKCU "Software\Classes\yumpoo"

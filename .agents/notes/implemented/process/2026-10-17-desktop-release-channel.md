@@ -28,7 +28,7 @@ Status: implemented
 
 - 关闭：`RunAsNode`、`EnableNodeOptionsEnvironmentVariable`、`EnableNodeCliInspectArguments`、`GrantFileProtocolExtraPrivileges`；
 - 开启：`EnableEmbeddedAsarIntegrityValidation`、`OnlyLoadAppFromAsar`，篡改过的 asar 无法启动；
-- 开启 `EnableCookieEncryption`。会话 cookie 带过期时间，会落盘到 Chromium 的 cookie 库；开启后与 safeStorage 加密的凭据存储处于同一保护级别。
+- 开启 `EnableCookieEncryption`，作为纵深防御。业务窗口使用不带 `persist:` 前缀的内存分区，会话 cookie 不落盘，每次启动时从 safeStorage 加密的凭据存储重新注入；如果以后改用持久分区，cookie 也不会以明文写入磁盘。
 
 **分发配置**：
 
@@ -51,7 +51,7 @@ Status: implemented
 **卸载边界**：
 
 - 更新（NSIS 以 `--updated` 运行旧卸载器）保留全部数据；
-- 真正卸载时删除 `yumpoo:` 协议键，并删除 userData 中除 `timer-preferences.json` 和 `inbox-preferences.json` 以外的全部内容。只删 `auth\` 不够，因为 Chromium cookie 库同样保存着会话。
+- 真正卸载时删除 `yumpoo:` 协议键，并删除 userData 中除 `timer-preferences.json` 和 `inbox-preferences.json` 以外的全部内容：`auth\` 中的加密凭据存储（唯一落盘的会话）以及 Chromium 的缓存、本地存储等运行数据。
 
 **安装自检与门禁**：
 
@@ -67,7 +67,7 @@ Status: implemented
 - **按机器安装**：每次安装和更新都要管理员权限并弹 UAC，30 人规模的自动更新会被打断。
 - **MSIX / Squirrel.Windows**：MSIX 必须签名才能安装，当前没有 Authenticode 证书；Squirrel 已不再积极维护，electron-updater 也不支持它。
 - **用环境变量或首次启动向导配置 origin**：每台机器都要手工配置，且可以被改成任意站点；把配置打进 asar 后受 asar 完整性校验保护。
-- **只删除 `auth\` 目录**：Chromium cookie 库里仍留着有效会话，卸载达不到「退出登录」的效果。
+- **只删除 `auth\` 目录**：已经足以退出登录，但会留下缓存、本地存储和崩溃转储等数据；卸载应当清理到只剩偏好文件。
 - **卸载时删除整个 userData**：会丢掉计时器和提醒偏好；重新安装后这些偏好应当保留。
 - **任何时候都设置 AUMID**：开发运行没有带同一 AUMID 的快捷方式，Windows 可能不显示 balloon 和 toast。
 
@@ -77,5 +77,5 @@ Status: implemented
 - 本期还没有发布渠道和应用内更新：安装包只在 CI 中构建和冒烟，不上传为发布附件。现有便携版用户仍按 RUNBOOK 手工分发，直到桌面发布渠道上线。
 - electron-builder 构建时会从 GitHub 下载 NSIS 工具链，校验和由 electron-builder 内置；CI runner 直接下载，本地可以配置镜像。
 - `pnpm-workspace.yaml` 用 override 去掉了 electron-builder 内 `@electron/get@3` 的可选依赖 `global-agent`。原因是它经 `roarr` 引入 `sprintf-js`（GHSA-hp3w-g68c-fv3c，没有修复版本）。`@electron/get` 只在设置 `ELECTRON_GET_USE_PROXY` 时才加载它，加载失败会降级为不走代理；打包使用 `electronDist`，本来就不经 `@electron/get` 下载。上游换掉这条依赖后应删除这个 override。
-- 开启 cookie 加密是单向的：以后关闭这个 fuse 会让已有 cookie 库失效，用户需要重新登录。
+- 开启 cookie 加密是单向的：以后关闭这个 fuse，已有的持久 cookie 库会失效。当前业务会话不依赖持久 cookie，因此不受影响。
 - 安装冒烟让 Windows 门禁多出一次安装和卸载，时间要计入 `Windows Delivery` 的超时预算。
