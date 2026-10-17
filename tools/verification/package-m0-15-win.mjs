@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { lstat, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { lstat, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gitHead } from './m0-18-utils.mjs'
 import { runPnpmSync } from './process-utils.mjs'
-import { verifyExecutableIcons } from '../../desktop/desktop-shell/icon-resources.cjs'
+import { readFuseWire, readVersionStrings, verifyExecutableIcons } from './desktop-executable.mjs'
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -24,30 +24,37 @@ const packageJsonPath = path.join(desktopRoot, 'package.json')
 const asarModuleUrl = pathToFileURL(
   path.join(desktopRoot, 'node_modules', '@electron', 'asar', 'lib', 'asar.js'),
 ).href
+const PACKAGE_DIRECTORY = 'win-unpacked'
+const INSTALLER_DESCRIPTOR = 'desktop-installer.json'
+// The main process is one esbuild bundle; its inlined dependencies' notices ship as THIRD_PARTY_LICENSES.txt.
 const EXPECTED_ASAR_ENTRIES = new Set([
   'assets',
   'assets/application.png',
   'dist',
+  'dist/diagnostics',
+  'dist/diagnostics/diagnostics.css',
+  'dist/diagnostics/diagnostics.html',
+  'dist/diagnostics/page.js',
   'dist/main',
-  'dist/main/application-icon.js',
-  'dist/main/auth-ipc.js',
-  'dist/main/credential-store.js',
-  'dist/main/desktop-auth.js',
-  'dist/main/export-files.js',
+  'dist/main/THIRD_PARTY_LICENSES.txt',
+  'dist/main/distribution.json',
   'dist/main/index.js',
-  'dist/main/protocol-client.js',
-  'dist/main/security-guards.js',
-  'dist/main/timer-geometry.js',
-  'dist/main/timer-menu.js',
-  'dist/main/timer-preferences.js',
-  'dist/main/timer-window.js',
-  'dist/main/inbox-notifier.js',
-  'dist/main/url-policy.js',
-  'dist/main/window-policy.js',
   'dist/preload',
+  'dist/preload/diagnostics.js',
   'dist/preload/index.js',
   'package.json',
 ])
+const EXPECTED_RESOURCES = ['app.asar']
+// Hardening fuses; the others keep Electron defaults.
+const EXPECTED_FUSES = {
+  RunAsNode: false,
+  EnableCookieEncryption: true,
+  EnableNodeOptionsEnvironmentVariable: false,
+  EnableNodeCliInspectArguments: false,
+  EnableEmbeddedAsarIntegrityValidation: true,
+  OnlyLoadAppFromAsar: true,
+  GrantFileProtocolExtraPrivileges: false,
+}
 
 if (process.platform !== 'win32') {
   throw new Error('M0-15 Windows 产物只能在 Windows 上打包和扫描')
@@ -59,8 +66,16 @@ if (
   throw new Error('M0-15 打包输出路径必须位于 desktop out 目录内')
 }
 
-const electronVersion = await readElectronVersion()
+const { electronVersion, desktopVersion } = await readDesktopVersions()
 const { listPackage, extractFile } = await import(asarModuleUrl)
+
+// A reused output root (the Windows gate uses a fixed one) must not leave an older installer to be picked up.
+for (const entry of await readdir(outputRoot).catch(() => [])) {
+  if (entry === PACKAGE_DIRECTORY || /^YumpooDesktop-Setup-.+\.exe(?:\.blockmap)?$/u.test(entry)
+    || ['m0-15-artifact-manifest.json', INSTALLER_DESCRIPTOR].includes(entry) || /^builder-.+\.ya?ml$/u.test(entry)) {
+    await rm(path.join(outputRoot, entry), { recursive: true, force: true })
+  }
+}
 
 runPnpmSync(['--filter', '@yumpoo/desktop-shell', 'run', 'package:win'], {
   cwd: repositoryRoot,
@@ -70,20 +85,31 @@ runPnpmSync(['--filter', '@yumpoo/desktop-shell', 'run', 'package:win'], {
   },
 })
 
-const packageDirectories = (await readdir(outputRoot, { withFileTypes: true }))
-  .filter((entry) => entry.isDirectory() && entry.name.endsWith('-win32-x64'))
-  .map((entry) => path.join(outputRoot, entry.name))
-
-if (packageDirectories.length !== 1) {
-  throw new Error(`预期一个 Windows x64 打包目录，实际为 ${packageDirectories.length}`)
+const packageDirectory = path.join(outputRoot, PACKAGE_DIRECTORY)
+const installerName = `YumpooDesktop-Setup-${desktopVersion}-x64.exe`
+const installers = (await readdir(outputRoot, { withFileTypes: true }))
+  .filter((entry) => entry.isFile() && /^YumpooDesktop-Setup-.+\.exe$/u.test(entry.name))
+  .map((entry) => entry.name)
+if (installers.length !== 1 || installers[0] !== installerName) {
+  throw new Error(`预期唯一安装包 ${installerName}，实际为 ${installers.join(', ') || '无'}`)
 }
-
-const packageDirectory = packageDirectories[0]
+const installer = path.join(outputRoot, installerName)
 const executable = path.join(packageDirectory, 'YumpooDesktop.exe')
 const asarArchive = path.join(packageDirectory, 'resources', 'app.asar')
 await requireFile(executable)
 await requireFile(asarArchive)
+await requireFile(installer)
+await requireFile(`${installer}.blockmap`)
 await verifyExecutableIcons(executable, path.join(desktopRoot, 'assets', 'application.ico'))
+await verifyVersionStrings(executable)
+await verifyFuses(executable)
+const trackedDistribution = JSON.parse(await readFile(path.join(desktopRoot, 'distribution', 'production.json'), 'utf8'))
+// app-update.yml exists only once the production distribution names an update feed.
+const expectedResources = trackedDistribution.update ? [...EXPECTED_RESOURCES, 'app-update.yml'].sort() : EXPECTED_RESOURCES
+const resources = (await readdir(path.join(packageDirectory, 'resources'))).sort()
+if (resources.join() !== expectedResources.join()) {
+  throw new Error(`Windows x64 resources 目录白名单不匹配：${resources.join(', ')}`)
+}
 if (!extractFile(asarArchive, 'assets/application.png').equals(await readFile(path.join(desktopRoot, 'assets', 'application.png')))) {
   throw new Error('Electron app.asar 中的窗口和托盘图标与品牌母版不一致')
 }
@@ -104,7 +130,16 @@ if (missingEntries.length > 0 || unexpectedEntries.length > 0) {
     `Electron app.asar 白名单不匹配；缺少：${missingEntries.join(', ') || '无'}；多出：${unexpectedEntries.join(', ') || '无'}`,
   )
 }
+const packagedDistribution = JSON.parse(extractFile(asarArchive, path.join('dist', 'main', 'distribution.json')).toString('utf8'))
+if (JSON.stringify(packagedDistribution) !== JSON.stringify(trackedDistribution)) {
+  throw new Error('app.asar 中的分发配置与 distribution/production.json 不一致')
+}
+const packagedManifest = JSON.parse(extractFile(asarArchive, 'package.json').toString('utf8'))
+if (packagedManifest.dependencies || packagedManifest.devDependencies || packagedManifest.scripts) {
+  throw new Error('app.asar 中的 package.json 不得携带依赖或脚本声明')
+}
 
+const sourceCommit = gitHead(repositoryRoot)
 const packagedFiles = await collectPackagedFiles(packageDirectory)
 const artifactFiles = await Promise.all(
   packagedFiles.map(async (file) => ({
@@ -117,19 +152,58 @@ const manifest = {
   schemaVersion: 1,
   milestone: 'M0-15',
   generatedAt: new Date().toISOString(),
-  sourceCommit: gitHead(repositoryRoot),
+  sourceCommit,
   platform: 'win32',
   arch: 'x64',
   electronVersion,
-  packageDirectory: path.basename(packageDirectory),
+  packageDirectory: PACKAGE_DIRECTORY,
   files: artifactFiles,
 }
 const manifestPath = path.join(outputRoot, 'm0-15-artifact-manifest.json')
 await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+const descriptor = {
+  schemaVersion: 1,
+  sourceCommit,
+  version: desktopVersion,
+  electronVersion,
+  installer: { name: installerName, bytes: (await stat(installer)).size, sha256: await sha256(installer) },
+}
+await writeFile(path.join(outputRoot, INSTALLER_DESCRIPTOR), `${JSON.stringify(descriptor, null, 2)}\n`, 'utf8')
 
 console.log(
-  `M0-15 Windows x64 产物已通过白名单扫描：${path.relative(repositoryRoot, manifestPath)}`,
+  `M0-15 Windows x64 产物已通过白名单扫描：${path.relative(repositoryRoot, manifestPath)}；安装包 ${installerName} sha256=${descriptor.installer.sha256}`,
 )
+
+async function verifyVersionStrings(file) {
+  const strings = await readVersionStrings(file)
+  const expected = {
+    CompanyName: 'Yumpoo',
+    FileDescription: 'Yumpoo Desktop',
+    ProductName: 'Yumpoo Desktop',
+    InternalName: 'YumpooDesktop',
+    FileVersion: desktopVersion,
+  }
+  for (const [name, value] of Object.entries(expected)) {
+    if (strings[name] !== value) {
+      throw new Error(`Windows EXE 版本资源 ${name}=${strings[name] ?? '缺失'}，应为 ${value}`)
+    }
+  }
+  if (!String(strings.ProductVersion).startsWith(desktopVersion)) {
+    throw new Error(`Windows EXE 版本资源 ProductVersion=${strings.ProductVersion}，应以 ${desktopVersion} 开头`)
+  }
+  if (Object.values(strings).some((value) => /electron|github/iu.test(String(value)))) {
+    throw new Error('Windows EXE 版本资源仍含 Electron 或 GitHub 默认值')
+  }
+}
+
+async function verifyFuses(file) {
+  const fuses = await readFuseWire(file)
+  for (const [name, value] of Object.entries(EXPECTED_FUSES)) {
+    if (fuses[name] !== value) {
+      throw new Error(`Electron fuse ${name}=${fuses[name]}，应为 ${value}`)
+    }
+  }
+}
 
 async function requireFile(file) {
   const metadata = await stat(file).catch(() => undefined)
@@ -138,7 +212,7 @@ async function requireFile(file) {
   }
 }
 
-async function readElectronVersion() {
+async function readDesktopVersions() {
   let packageJson
   try {
     packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'))
@@ -152,7 +226,10 @@ async function readElectronVersion() {
   ) {
     throw new Error('Electron 版本必须在 desktop package.json 中精确锁定')
   }
-  return version
+  if (typeof packageJson.version !== 'string' || !/^\d+\.\d+\.\d+$/u.test(packageJson.version)) {
+    throw new Error('desktop package.json version 必须是 X.Y.Z')
+  }
+  return { electronVersion: version, desktopVersion: packageJson.version }
 }
 
 async function collectPackagedFiles(root) {

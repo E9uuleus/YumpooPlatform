@@ -7,7 +7,8 @@
     "types": ["node", "electron"],
     "rootDir": "src",
     "outDir": "dist",
-    "noEmitOnError": true
+    "noEmit": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/diagnostics/**"]
 }

@@ -363,7 +363,7 @@ function validateBuildManifest(manifestPath, electronVersion) {
   )
   assert(
     typeof manifest.packageDirectory === 'string' &&
-      manifest.packageDirectory === 'Yumpoo Desktop-win32-x64',
+      manifest.packageDirectory === 'win-unpacked',
     'M0-15 构建 manifest packageDirectory 不正确',
   )
   assert(

@@ -36,6 +36,29 @@ export interface DesktopBridge {
   readonly inbox?: DesktopInboxBridge
   /** Optional because the remotely deployed web app can be newer than the installed shell. */
   readonly files?: DesktopFilesBridge
+  /** Present only on shells with in-app updates; the web app shows update prompts only when it exists. */
+  readonly update?: DesktopUpdateBridge
+}
+
+export type DesktopUpdatePhase = 'disabled' | 'idle' | 'checking' | 'downloading' | 'verifying' | 'ready' | 'error'
+
+export interface DesktopUpdateState {
+  phase: DesktopUpdatePhase
+  currentVersion: string
+  channel: string | null
+  /** The version being downloaded, verified or ready to install. */
+  version?: string
+  percent?: number
+  /** Machine-readable reason when phase is error. */
+  error?: string
+}
+
+export interface DesktopUpdateBridge {
+  getState(): Promise<DesktopUpdateState>
+  check(): Promise<void>
+  /** Quits through the normal exit confirmation, installs the verified update and relaunches. */
+  restart(): Promise<void>
+  onState(listener: (state: DesktopUpdateState) => void): () => void
 }
 
 export interface DesktopExportFile {
@@ -178,3 +201,57 @@ export interface DesktopTimerState {
 export type DesktopTimerCommand =
   | { requestId: string; action: 'stop'; sessionId: string }
   | { requestId: string; action: 'start'; workItemId: string }
+
+/** Packaged diagnostics window only; the remotely loaded web app never receives this bridge. */
+export interface DesktopDiagnosticsBridge {
+  getReport(): Promise<DiagnosticsReport>
+  runAction(action: DiagnosticsAction): Promise<DiagnosticsActionResult>
+}
+
+export type DiagnosticsAction =
+  | 'retry'
+  | 'restart-normal'
+  | 'open-web'
+  | 'reset-preferences'
+  | 'sign-out'
+  | 'register-protocol'
+  | 'open-logs'
+  | 'export'
+
+export interface DiagnosticsActionResult {
+  /** False when the person cancelled a confirmation or save dialog. */
+  completed: boolean
+  message?: string
+}
+
+export type DiagnosticsStartupFailure = 'DISTRIBUTION_INVALID' | 'LOAD_FAILED' | 'CERTIFICATE_ERROR' | 'STARTUP_ERROR' | 'RENDERER_GONE'
+
+export interface DiagnosticsProbe {
+  ok: boolean
+  /** Short machine-readable failure reason; never contains response bodies or credentials. */
+  error?: string
+  durationMs?: number
+}
+
+export interface DiagnosticsReport {
+  schemaVersion: 1
+  generatedAt: string
+  versions: { shell: string; electron: string; chrome: string; os: string; arch: string }
+  mode: { packaged: boolean; safeMode: boolean; crashLoop: boolean; consecutiveFailures: number; startupFailure: DiagnosticsStartupFailure | null }
+  origin: string | null
+  network: {
+    skipped: boolean
+    proxy: string | null
+    dns: DiagnosticsProbe & { addresses?: number }
+    tls: DiagnosticsProbe & { subject?: string; issuer?: string; validTo?: string; daysRemaining?: number }
+    health: DiagnosticsProbe & { status?: number }
+    version: DiagnosticsProbe & { status?: number; serverVersion?: string; clockSkewMs?: number }
+  }
+  local: {
+    safeStorageAvailable: boolean
+    userDataWritable: boolean
+    gpu: Record<string, string>
+    processes: Array<{ type: string; workingSetKb: number; privateKb?: number }>
+  }
+  update: { state: DesktopUpdatePhase | 'unavailable'; version?: string; error?: string }
+}

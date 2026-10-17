@@ -11,6 +11,9 @@ import type {
   DesktopTimerBridge,
   DesktopTimerState,
   DesktopTimerCommand,
+  DesktopUpdateBridge,
+  DesktopUpdatePhase,
+  DesktopUpdateState,
   TimerMenuAction,
   TimerMenuState,
   TimerWindowMode,
@@ -187,12 +190,50 @@ const desktopFiles: DesktopFilesBridge = Object.freeze({
   },
 })
 
+const UPDATE_PHASES = new Set<DesktopUpdatePhase>(['disabled', 'idle', 'checking', 'downloading', 'verifying', 'ready', 'error'])
+const shortText = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 64
+
+function sanitizeUpdateState(value: unknown): DesktopUpdateState | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const state = value as Record<string, unknown>
+  if (typeof state.phase !== 'string' || !UPDATE_PHASES.has(state.phase as DesktopUpdatePhase) || !shortText(state.currentVersion)
+    || (state.channel !== null && !shortText(state.channel))) return undefined
+  return Object.freeze({
+    phase: state.phase as DesktopUpdatePhase,
+    currentVersion: state.currentVersion as string,
+    channel: state.channel as string | null,
+    ...(shortText(state.version) ? { version: state.version as string } : {}),
+    ...(typeof state.percent === 'number' && state.percent >= 0 && state.percent <= 100 ? { percent: state.percent } : {}),
+    ...(shortText(state.error) ? { error: state.error as string } : {}),
+  })
+}
+
+const desktopUpdate: DesktopUpdateBridge = Object.freeze({
+  getState: async () => {
+    const state = sanitizeUpdateState(await ipcRenderer.invoke('yumpoo:update:get-state'))
+    if (!state) throw new TypeError('Update state is invalid')
+    return state
+  },
+  check: async () => { await ipcRenderer.invoke('yumpoo:update:check') },
+  restart: async () => { await ipcRenderer.invoke('yumpoo:update:restart') },
+  onState: (listener: (state: DesktopUpdateState) => void) => {
+    if (typeof listener !== 'function') throw new TypeError('Update listener must be a function')
+    const wrapped = (_event: unknown, value: unknown) => {
+      const state = sanitizeUpdateState(value)
+      if (state) listener(state)
+    }
+    ipcRenderer.on('yumpoo:update:state', wrapped)
+    return () => ipcRenderer.removeListener('yumpoo:update:state', wrapped)
+  },
+})
+
 const desktopBridge: DesktopBridge = Object.freeze({
   client: 'electron',
   auth: desktopAuth,
   timer: desktopTimer,
   inbox: desktopInbox,
   files: desktopFiles,
+  update: desktopUpdate,
 })
 
 contextBridge.exposeInMainWorld('yumpooDesktop', desktopBridge)
