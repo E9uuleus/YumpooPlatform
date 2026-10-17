@@ -6,8 +6,8 @@ import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
 // Checks that install the real NSIS package for the current Windows user change the user profile, so they run
-// only on CI runners or when explicitly allowed, and they move the person's own userData and yumpoo: protocol
-// registration aside first and restore them afterwards.
+// only on CI runners or when explicitly allowed, and they move the person's own userData, updater cache and
+// yumpoo: protocol registration aside first and restore them afterwards.
 export const PRODUCT_NAME = 'Yumpoo Desktop'
 export const INSTALL_DIRECTORY = 'yumpoo-desktop'
 export const PROTOCOL_KEY = 'HKCU\\Software\\Classes\\yumpoo'
@@ -24,6 +24,11 @@ export function requiredEnvironment(name) {
 
 export function userDataPath() {
   return path.join(requiredEnvironment('APPDATA'), PRODUCT_NAME)
+}
+
+/** Where the installer keeps a copy of itself and electron-updater keeps blockmaps and pending downloads. */
+export function updaterCachePath() {
+  return path.join(requiredEnvironment('LOCALAPPDATA'), `${INSTALL_DIRECTORY}-updater`)
 }
 
 export function powershell(script) {
@@ -101,10 +106,15 @@ export async function uninstall({ location, quietUninstall }) {
   }
 }
 
-/** Runs `body` against a clean profile and always restores the person's own userData and protocol key. */
+/** Runs `body` against a clean profile and always restores the person's own userData, updater cache and protocol key. */
 export function withIsolatedProfile(body) {
   assert.equal(installation(), undefined, `${PRODUCT_NAME} 已安装；拒绝覆盖现有安装`)
-  return isolateProfile([directoryPiece(userDataPath(), 'userData'), registryPiece(PROTOCOL_KEY, 'protocol.reg')], body, {
+  const pieces = [
+    directoryPiece(userDataPath(), 'userData'),
+    directoryPiece(updaterCachePath(), 'updaterCache'),
+    registryPiece(PROTOCOL_KEY, 'protocol.reg'),
+  ]
+  return isolateProfile(pieces, body, {
     async cleanUp() {
       const leftover = installation()
       if (leftover) await uninstall(installedFrom(leftover))

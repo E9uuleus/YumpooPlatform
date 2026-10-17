@@ -73,6 +73,7 @@ export class TimerWindowController {
   private approvedExit = false
   private exitRequest: string | undefined
   private exitTimeout: ReturnType<typeof setTimeout> | undefined
+  private readyUpdate: { version: string; restart: () => void } | undefined
 
   constructor(private readonly main: () => BrowserWindow | null, private readonly origin: string, private readonly preload: string,
     private readonly prefs = new TimerPreferenceStore(), private readonly openDiagnostics?: () => void) {
@@ -259,7 +260,8 @@ export class TimerWindowController {
     const enabled = this.commandsEnabled()
     const off = this.timerOff()
     const title = state?.running ? `计时中 · ${state.running.title}` : off ? '计时器已关闭' : '计时已暂停'
-    this.tray?.setToolTip(`YumpooPlatform${this.inboxCount === undefined ? '' : `\n${this.inboxCount} 条未读`}${state?.running ? `\n${title}` : ''}`.slice(0, 120))
+    // The update line comes last so the unread count and timer title are never cut off by the 120-character limit.
+    this.tray?.setToolTip(`YumpooPlatform${this.inboxCount === undefined ? '' : `\n${this.inboxCount} 条未读`}${state?.running ? `\n${title}` : ''}${this.readyUpdate ? `\n新版本 ${this.readyUpdate.version} 已就绪` : ''}`.slice(0, 120))
     const running = state?.running
     const recent = state?.recent
     const visible = !!this.window?.isVisible()
@@ -282,11 +284,18 @@ export class TimerWindowController {
         { type: 'separator' as const },
       ]),
       // The native menu is what appears when the web quick panel cannot load, which is when diagnostics matter.
+      ...(this.readyUpdate ? [{ label: `重启以更新到 ${this.readyUpdate.version}`, click: () => this.readyUpdate?.restart() }] : []),
       ...(this.openDiagnostics ? [{ label: '诊断与修复…', click: () => this.openDiagnostics?.() }] : []),
       { label: '退出 YumpooPlatform…', click: () => this.requestExit() },
     ])
     if (process.platform === 'linux') this.tray?.setContextMenu(this.contextMenu)
     this.menu.update(this.menuState())
+  }
+
+  /** Shows a verified update in the tray; `undefined` clears it. */
+  setUpdateReady(update: { version: string; restart: () => void } | undefined): void {
+    this.readyUpdate = update
+    this.updateTray()
   }
 
   private menuAction(action: TimerMenuAction): void {

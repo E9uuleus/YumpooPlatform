@@ -29,6 +29,7 @@ import InboxBell from './inbox/InboxBell.vue'
 import OperationsBadge from './operations/OperationsBadge.vue'
 import { operationsAlertSummaryContext } from './operations/operationsContext'
 import type { ShellSection } from '../router/shell-navigation'
+import DesktopUpdateBanner from './desktop/DesktopUpdateBanner.vue'
 import InlineProblem from './InlineProblem.vue'
 import { MY_PROJECT_ACCESSES } from './projects/projectScope'
 import YpAssignee from './yp/YpAssignee.vue'
@@ -745,6 +746,7 @@ onBeforeUnmount(() => {
       class="app-main"
       :class="{ 'app-main--dashboard': dashboardFrame }"
     >
+      <desktop-update-banner />
       <inline-problem
         v-if="session.actionProblem.value"
         :problem="session.actionProblem.value"

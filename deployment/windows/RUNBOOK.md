@@ -446,3 +446,14 @@ Invoke-RestMethod http://127.0.0.1:8100/actuator/health/readiness
 2. 日志写入时已经脱敏：URL 只保留协议、主机和路径；cookie、凭据、授权码、通知正文、工作项标题等字段不会写入。即便如此，诊断包仍应只在内部渠道传递。
 3. 先看 `diagnostics.json` 的 `versions.shell`，核对用户安装的是哪个版本，再按网络项定位问题：`dns` 失败多为网络或 DNS 配置；`tls` 失败要看 `error` 和证书剩余天数；`health` 返回 `HTTP_503` 对应维护窗口或服务未就绪；`clockSkewMs` 超过 2 分钟时请用户校准系统时间。
 4. 程序文件损坏时，重新运行安装包覆盖安装即可修复，登录状态和偏好会保留。也可以让用户离线执行 `YumpooDesktop.exe --self-check=<绝对路径>`：报告写成 JSON 文件，退出码 0 表示安装完整。
+
+**应用内更新**（安装包的分发配置启用更新源之后才生效）
+
+- 客户端在启动后 30 秒、之后每 4 小时、以及系统唤醒时检查更新，并在后台下载。
+- 下载完成后，客户端会用内置公钥核对更新源上的 `.sig.json` 授权签名。核对通过后，托盘、主窗横幅和诊断窗才会显示「新版本已就绪」；用户正常退出或点「重启以更新」时静默安装。
+- 诊断窗「应用内更新」一行和日志中的 `update-verified` / `update-rejected` 事件记录了结果。`update-rejected` 带原因码，例如：
+  - `UNKNOWN_KEY`、`SIGNATURE_INVALID`：签名钥匙或签名不对；
+  - `DIGEST_MISMATCH`、`SIZE_MISMATCH`：下载的文件与授权不符；
+  - `VERSION_NOT_NEWER`：版本没有递增。
+  被拒绝的安装包会被删除，永不安装。出现拒绝时，先核对更新源上的安装包、`latest.yml` 与 `.sig.json` 是否来自同一个已发布 Release。
+- 客户端只接受比当前更高的版本。出问题时用更高版本号的修复版前滚，不要把旧安装包放回更新源。

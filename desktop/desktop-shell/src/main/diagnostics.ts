@@ -23,6 +23,7 @@ export interface DiagnosticsDependencies {
   readonly startupFailure: DiagnosticsStartupFailure | null
   /** Self-check renders the page without touching the network. */
   readonly offline: boolean
+  readonly updateState: () => DiagnosticsReport['update']
   readonly timeoutMs?: number
   lookup(hostname: string): Promise<number>
   resolveProxy(url: string): Promise<string>
@@ -69,7 +70,7 @@ export async function collectDiagnostics(dependencies: DiagnosticsDependencies):
         ...(typeof metric.memory.privateBytes === 'number' ? { privateKb: Math.round(metric.memory.privateBytes) } : {}),
       })), []),
     },
-    update: { state: 'unavailable' },
+    update: safely(() => dependencies.updateState(), { state: 'unavailable' as const }),
   }
 }
 

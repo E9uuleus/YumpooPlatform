@@ -2,6 +2,7 @@ import path from 'node:path'
 import type { DesktopDistribution } from './distribution'
 
 export const SELF_CHECK_ARGUMENT = '--self-check='
+export const UPDATE_CHECK_ARGUMENT = '--update-check-now='
 
 export interface SelfCheckReport {
   readonly schemaVersion: 1
@@ -28,9 +29,9 @@ export interface SelfCheckDependencies {
 }
 
 /** The report path is the argument's own value; a relative or missing path disables the check. */
-export function selfCheckReportPath(processArguments: readonly string[]): string | undefined {
-  const argument = processArguments.find(candidate => candidate.startsWith(SELF_CHECK_ARGUMENT))
-  const reportPath = argument?.slice(SELF_CHECK_ARGUMENT.length)
+export function selfCheckReportPath(processArguments: readonly string[], prefix = SELF_CHECK_ARGUMENT): string | undefined {
+  const argument = processArguments.find(candidate => candidate.startsWith(prefix))
+  const reportPath = argument?.slice(prefix.length)
   return reportPath && path.isAbsolute(reportPath) ? path.normalize(reportPath) : undefined
 }
 

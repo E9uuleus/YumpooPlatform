@@ -8,6 +8,13 @@ const desktopPackage = require('./package.json')
 if (desktopPackage.devDependencies.electron !== electronVersion) {
   throw new Error('Electron 安装版本与 desktop package.json 精确锁定值不一致')
 }
+// Packaging follows the distribution the build step validated and baked into the app.
+const distribution = JSON.parse(fs.readFileSync(path.join(__dirname, 'dist', 'main', 'distribution.json'), 'utf8'))
+// Only update end-to-end test builds (generated distribution file) may stamp another version; releases use package.json.
+const versionOverride = process.env.YUMPOO_DESKTOP_TEST_VERSION
+if (versionOverride && !process.env.YUMPOO_DISTRIBUTION_FILE) {
+  throw new Error('YUMPOO_DESKTOP_TEST_VERSION 只能与测试分发配置一起使用')
+}
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
@@ -19,7 +26,7 @@ module.exports = {
   electronDist,
   electronVersion,
   // NSIS derives the per-user install directory from the package name; the scoped workspace name is not a folder name.
-  extraMetadata: { name: 'yumpoo-desktop' },
+  extraMetadata: { name: 'yumpoo-desktop', ...(versionOverride ? { version: versionOverride } : {}) },
   directories: {
     output: process.env.YUMPOO_M015_OUTPUT_ROOT
       ? path.resolve(process.env.YUMPOO_M015_OUTPUT_ROOT)
@@ -71,5 +78,7 @@ module.exports = {
     include: 'build/installer.nsh',
     artifactName: 'YumpooDesktop-Setup-${version}-x64.${ext}',
   },
-  publish: null,
+  // A generic feed makes electron-builder emit latest.yml and resources/app-update.yml (updater cache directory,
+  // differential download base); nothing is uploaded because packaging always runs with --publish never.
+  publish: distribution.update ? [{ provider: 'generic', url: distribution.update.feed }] : null,
 }

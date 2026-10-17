@@ -6,7 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   INSTALL_DIRECTORY, PRODUCT_NAME, PROTOCOL_KEY, installation, installedFrom, powershell, profileChangesAllowed, registryKeyExists,
-  requiredEnvironment, runInstaller, spawnAndWait, uninstall, userDataPath, withIsolatedProfile,
+  requiredEnvironment, runInstaller, spawnAndWait, uninstall, updaterCachePath, userDataPath, withIsolatedProfile,
 } from './desktop-profile.mjs'
 
 // Installs, re-installs and uninstalls the real NSIS package and checks the install and uninstall boundaries.
@@ -40,6 +40,7 @@ try {
   await withIsolatedProfile(async () => {
     await runInstaller(installer)
     let installed = assertInstalled()
+    assert(fs.existsSync(path.join(updaterCachePath(), 'installer.exe')), '安装器未保存差分更新基准副本')
     const report = await selfCheck(installed.executable)
     assert.equal(report.version, descriptor.version, '自检报告版本与安装包不一致')
     assert.equal(report.electronVersion, descriptor.electronVersion, '自检报告 Electron 版本不一致')
@@ -57,6 +58,7 @@ try {
     assert(!fs.existsSync(installed.location), '卸载后安装目录仍存在')
     for (const shortcut of [...shortcuts, safeModeShortcut]) assert(!fs.existsSync(shortcut), `卸载后快捷方式仍存在：${path.basename(shortcut)}`)
     assert(!registryKeyExists(PROTOCOL_KEY), '卸载后 yumpoo 协议键仍存在')
+    assert(!fs.existsSync(updaterCachePath()), '卸载后更新缓存目录仍存在')
     for (const relative of SESSION_FIXTURES) {
       assert(!fs.existsSync(path.join(userData, ...relative)), `卸载后会话数据仍存在：${relative.join('/')}`)
     }

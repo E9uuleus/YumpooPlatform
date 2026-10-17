@@ -26,6 +26,7 @@ const asarModuleUrl = pathToFileURL(
 ).href
 const PACKAGE_DIRECTORY = 'win-unpacked'
 const INSTALLER_DESCRIPTOR = 'desktop-installer.json'
+// The main process is one esbuild bundle; its inlined dependencies' notices ship as THIRD_PARTY_LICENSES.txt.
 const EXPECTED_ASAR_ENTRIES = new Set([
   'assets',
   'assets/application.png',
@@ -35,32 +36,9 @@ const EXPECTED_ASAR_ENTRIES = new Set([
   'dist/diagnostics/diagnostics.html',
   'dist/diagnostics/page.js',
   'dist/main',
-  'dist/main/application-icon.js',
-  'dist/main/auth-ipc.js',
-  'dist/main/credential-store.js',
-  'dist/main/desktop-auth.js',
-  'dist/main/diagnostic-bundle.js',
-  'dist/main/diagnostics-actions.js',
-  'dist/main/diagnostics-runtime.js',
-  'dist/main/diagnostics-window.js',
-  'dist/main/diagnostics.js',
-  'dist/main/distribution.js',
+  'dist/main/THIRD_PARTY_LICENSES.txt',
   'dist/main/distribution.json',
-  'dist/main/export-files.js',
   'dist/main/index.js',
-  'dist/main/logger.js',
-  'dist/main/protocol-client.js',
-  'dist/main/security-guards.js',
-  'dist/main/self-check.js',
-  'dist/main/startup-failure.js',
-  'dist/main/startup-state.js',
-  'dist/main/timer-geometry.js',
-  'dist/main/timer-menu.js',
-  'dist/main/timer-preferences.js',
-  'dist/main/timer-window.js',
-  'dist/main/inbox-notifier.js',
-  'dist/main/url-policy.js',
-  'dist/main/window-policy.js',
   'dist/preload',
   'dist/preload/diagnostics.js',
   'dist/preload/index.js',
@@ -125,8 +103,11 @@ await requireFile(`${installer}.blockmap`)
 await verifyExecutableIcons(executable, path.join(desktopRoot, 'assets', 'application.ico'))
 await verifyVersionStrings(executable)
 await verifyFuses(executable)
+const trackedDistribution = JSON.parse(await readFile(path.join(desktopRoot, 'distribution', 'production.json'), 'utf8'))
+// app-update.yml exists only once the production distribution names an update feed.
+const expectedResources = trackedDistribution.update ? [...EXPECTED_RESOURCES, 'app-update.yml'].sort() : EXPECTED_RESOURCES
 const resources = (await readdir(path.join(packageDirectory, 'resources'))).sort()
-if (resources.join() !== EXPECTED_RESOURCES.join()) {
+if (resources.join() !== expectedResources.join()) {
   throw new Error(`Windows x64 resources 目录白名单不匹配：${resources.join(', ')}`)
 }
 if (!extractFile(asarArchive, 'assets/application.png').equals(await readFile(path.join(desktopRoot, 'assets', 'application.png')))) {
@@ -148,6 +129,10 @@ if (missingEntries.length > 0 || unexpectedEntries.length > 0) {
   throw new Error(
     `Electron app.asar 白名单不匹配；缺少：${missingEntries.join(', ') || '无'}；多出：${unexpectedEntries.join(', ') || '无'}`,
   )
+}
+const packagedDistribution = JSON.parse(extractFile(asarArchive, path.join('dist', 'main', 'distribution.json')).toString('utf8'))
+if (JSON.stringify(packagedDistribution) !== JSON.stringify(trackedDistribution)) {
+  throw new Error('app.asar 中的分发配置与 distribution/production.json 不一致')
 }
 const packagedManifest = JSON.parse(extractFile(asarArchive, 'package.json').toString('utf8'))
 if (packagedManifest.dependencies || packagedManifest.devDependencies || packagedManifest.scripts) {
