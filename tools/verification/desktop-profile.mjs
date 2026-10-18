@@ -41,9 +41,10 @@ export function registryKeyExists(key) {
   return spawnSync('reg.exe', ['query', key], { stdio: 'ignore' }).status === 0
 }
 
-export function spawnAndWait(command, args, timeoutMs) {
+export function spawnAndWait(command, args, timeoutMs, onSpawn = () => {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: 'ignore', windowsHide: true })
+    onSpawn(child)
     const timer = setTimeout(() => {
       child.kill()
       reject(new Error(`${path.basename(command)} 未在 ${timeoutMs}ms 内退出`))
@@ -73,17 +74,49 @@ export function installedFrom(entry) {
   return { location, executable: path.join(location, 'YumpooDesktop.exe'), quietUninstall: entry.QuietUninstallString }
 }
 
-// NSIS uninstallers re-launch themselves from %TEMP%, so completion is observed instead of the process exit.
+// NSIS uninstallers re-launch themselves from %TEMP%: the process started here exits at once while the copy
+// keeps deleting files, so the uninstall is over only when that whole process tree has exited.
 export async function uninstall({ location, quietUninstall }) {
   const match = quietUninstall.match(/^"([^"]+)"\s*(.*)$/u)
   assert(match, 'QuietUninstallString 格式不受支持')
   const args = match[2].split(/\s+/u).filter(Boolean)
   assert(args.includes('/S'), 'QuietUninstallString 必须是静默卸载')
-  await spawnAndWait(match[1], args, 120_000)
+  let root
+  await spawnAndWait(match[1], args, 120_000, child => { root = child.pid })
+  await waitForProcessTree(root, { timeoutMs: 120_000 })
   const deadline = Date.now() + 120_000
   while (installation() || fs.existsSync(location)) {
     assert(Date.now() < deadline, '静默卸载未在 120 秒内完成')
     await delay(1_000)
+  }
+}
+
+function processTable() {
+  const json = powershell('@(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId) | ConvertTo-Json -Compress')
+  return (json ? [JSON.parse(json)].flat() : []).map(entry => ({ pid: entry.ProcessId, parentPid: entry.ParentProcessId }))
+}
+
+/**
+ * Waits until every descendant of `rootPid` has exited. Descendants are remembered once seen, so a child keeps
+ * its place in the tree after its parent exits. The root itself is not waited on: it has already exited and its
+ * PID may be reused by an unrelated process.
+ */
+export async function waitForProcessTree(rootPid, { timeoutMs, intervalMs = 1_000, list = processTable } = {}) {
+  assert(Number.isSafeInteger(rootPid), '无法取得卸载进程 PID')
+  const tree = new Set([rootPid])
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const processes = list()
+    for (let grew = true; grew;) {
+      grew = false
+      for (const { pid, parentPid } of processes) {
+        if (tree.has(parentPid) && !tree.has(pid)) { tree.add(pid); grew = true }
+      }
+    }
+    const running = processes.filter(({ pid }) => pid !== rootPid && tree.has(pid))
+    if (running.length === 0) return
+    assert(Date.now() < deadline, `卸载进程未在 ${timeoutMs}ms 内全部退出：${running.map(({ pid }) => pid).join(', ')}`)
+    await delay(intervalMs)
   }
 }
 
@@ -101,8 +134,9 @@ export function withIsolatedProfile(body) {
 /**
  * Moves every piece of the profile into a fresh backup directory, runs `body`, then removes whatever the run
  * left and moves each piece back. Backing up is inside the same try as the run, so a failure halfway through
- * still restores the pieces already moved. When a piece cannot be restored the backup directory stays on disk
- * and the error names it; it is deleted only after every piece is back.
+ * still restores the pieces already moved. When cleanup fails, nothing is restored: an uninstaller that may
+ * still be running could delete what was just put back. That, or a piece that cannot be restored, keeps the
+ * backup directory on disk and fails with its path; it is deleted only after every piece is back.
  */
 export async function isolateProfile(pieces, body, { backupRoot = os.tmpdir(), cleanUp = async () => {} } = {}) {
   const backup = fs.mkdtempSync(path.join(backupRoot, 'yumpoo-profile-backup-'))
@@ -115,7 +149,16 @@ export async function isolateProfile(pieces, body, { backupRoot = os.tmpdir(), c
     failure = error
     throw error
   } finally {
-    await cleanUp().catch(error => console.error(`清理安装失败：${error.message}`))
+    let cleanupError
+    try {
+      await cleanUp()
+    } catch (error) {
+      cleanupError = error
+    }
+    if (cleanupError) {
+      if (failure) console.error(failure)
+      throw new Error(`清理安装失败，未恢复本机配置；确认卸载程序已退出后，从 ${backup} 手动恢复：${cleanupError.message}`, { cause: cleanupError })
+    }
     const errors = []
     for (const piece of [...held].reverse()) {
       try {
@@ -124,12 +167,11 @@ export async function isolateProfile(pieces, body, { backupRoot = os.tmpdir(), c
         errors.push(error)
       }
     }
-    if (errors.length === 0) {
-      fs.rmSync(backup, { recursive: true, force: true })
-    } else {
+    if (errors.length > 0) {
       if (failure) console.error(failure)
       throw new AggregateError(errors, `恢复本机配置失败，备份保留在 ${backup}：${errors.map(error => error.message).join('；')}`)
     }
+    fs.rmSync(backup, { recursive: true, force: true })
   }
 }
 
