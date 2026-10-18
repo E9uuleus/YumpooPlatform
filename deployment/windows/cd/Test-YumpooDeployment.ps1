@@ -404,7 +404,147 @@ try {
     $rejected = $false
     try { $null = Install-YumpooEngine $newPackage (Get-FileHash -LiteralPath $newPackage).Hash $engineRoot $installOptions } catch { $rejected = $true }
     Assert-Test $rejected 'a package without release metadata cannot install an engine'
+    Assert-Test ($installedHost.desktopFeed.enabled -eq $false -and $installedHost.desktopFeed.root -ceq 'C:/ProgramData/Yumpoo/public') 'callers without feed options keep the desktop feed disabled'
+    & $writeZip $newPackage ($engineEntries + @{ 'windows/release-metadata.json' = ('{"schemaVersion":1,"sourceCommit":"' + ('e' * 40) + '","migrations":[]}') })
+    $null = Install-YumpooEngine $newPackage (Get-FileHash -LiteralPath $newPackage).Hash $engineRoot ($installOptions + @{ desktopFeedEnabled = $true; desktopFeedRoot = 'D:/Feed'; desktopRetainVersions = 5 })
+    $installedHost = Get-Content -LiteralPath (Join-Path $engineDirectory 'host.json') -Raw | ConvertFrom-Json
+    Assert-Test ($installedHost.desktopFeed.enabled -eq $true -and $installedHost.desktopFeed.root -ceq 'D:/Feed' -and $installedHost.desktopFeed.retainVersions -eq 5) 'the updater enables the desktop feed explicitly'
+    $rejected = $false
+    try { $null = Install-YumpooEngine $newPackage (Get-FileHash -LiteralPath $newPackage).Hash $engineRoot ($installOptions + @{ desktopFeedRoot = 'relative/feed' }) } catch { $rejected = $true }
+    Assert-Test $rejected 'a relative desktop feed root is rejected before any engine file changes'
     Write-Output 'Engine installation verification, settings migration and backup passed.'
+
+    # ---- Desktop update feed (desktop-publish) ----
+    $desktopRoot = Join-Path $testRoot 'desktop'
+    $feedRoot = Join-Path $desktopRoot 'public'
+    New-Item -ItemType Directory -Path $feedRoot -Force | Out-Null
+    $feedDirectory = Join-Path $feedRoot 'desktop/stable'
+    $desktopCommit = 'c' * 40
+    $desktopSettings = [pscustomobject]@{ releaseBranch = 'main'; requireImmutable = $true; desktopFeed = [pscustomobject]@{ enabled = $true; root = $feedRoot; channel = 'stable'; retainVersions = 3 } }
+    # Builds the uploaded parts, request and provenance exactly as ssh-deploy.mjs and the engine exchange them (JSON round trip).
+    $newDesktopUpload = {
+        param([string]$Version, [string]$Commit = $desktopCommit)
+        $source = Join-Path $desktopRoot ("inbox-$Version-" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $source | Out-Null
+        $names = Get-YumpooDesktopFileNames $Version
+        $entries = @()
+        for ($fileIndex = 0; $fileIndex -lt $names.Count; $fileIndex++) {
+            $bytes = [Text.Encoding]::UTF8.GetBytes("$($names[$fileIndex]) of $Version")
+            if ($fileIndex -eq 0) { $bytes = [byte[]]($bytes + (New-Object byte[] (2MB))) }
+            if ($names[$fileIndex] -ceq 'release.json') { $bytes = [Text.Encoding]::UTF8.GetBytes((@{ schemaVersion = 1; version = $Version; sourceCommit = $Commit } | ConvertTo-Json)) }
+            for ($index = 0; $index * 2MB -lt $bytes.Length; $index++) {
+                $length = [Math]::Min(2MB, $bytes.Length - $index * 2MB)
+                $part = New-Object byte[] $length
+                [Array]::Copy($bytes, $index * 2MB, $part, 0, $length)
+                [IO.File]::WriteAllBytes((Join-Path $source ('desktop-{0}-{1:D4}.part' -f $fileIndex, $index)), $part)
+            }
+            $hash = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+            $entries += [ordered]@{ name = $names[$fileIndex]; bytes = $bytes.Length; sha256 = $hash; partCount = [int][Math]::Ceiling($bytes.Length / [double]2MB) }
+        }
+        $request = [ordered]@{ schemaVersion = 2; mode = 'desktop-publish'; requestId = [guid]::NewGuid().ToString(); tag = "desktop-v$Version"; sourceCommit = $Commit; files = $entries }
+        $provenance = [ordered]@{ schemaVersion = 1; repository = 'E9uuleus/YumpooPlatform'; tag = "desktop-v$Version"; version = $Version; sourceCommit = $Commit
+            ciRunId = 3001; ciRunAttempt = 1; artifactName = "desktop-$Commit-1"; installerSha256 = $entries[0].sha256; installerBytes = $entries[0].bytes }
+        $work = Join-Path $desktopRoot ("work-$Version-" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $work | Out-Null
+        $provenancePath = Join-Path $work 'provenance.json'
+        [IO.File]::WriteAllText($provenancePath, ($provenance | ConvertTo-Json -Depth 5))
+        return @{ source = $source; work = $work; provenancePath = $provenancePath
+            request = ($request | ConvertTo-Json -Depth 6 | ConvertFrom-Json); provenance = (Get-Content -LiteralPath $provenancePath -Raw | ConvertFrom-Json) }
+    }
+    $releaseFor = {
+        param($Upload)
+        $assets = @([pscustomobject]@{ name = 'provenance.json'; size = (Get-Item -LiteralPath $Upload.provenancePath).Length
+            digest = ('sha256:' + (Get-FileHash -LiteralPath $Upload.provenancePath).Hash.ToLowerInvariant()) })
+        $assets += @($Upload.request.files | ForEach-Object { [pscustomobject]@{ name = $_.name; size = $_.bytes; digest = "sha256:$($_.sha256)" } })
+        return [pscustomobject]@{ draft = $false; published_at = '2026-10-18T00:00:00Z'; immutable = $true; assets = $assets }
+    }
+    $script:desktopTagCommit = $desktopCommit
+    $fakeGitHub = {
+        param($Path)
+        if ($Path -like 'releases/tags/*') { return $script:desktopRelease }
+        if ($Path -like 'commits/*') { return [pscustomobject]@{ sha = $script:desktopTagCommit } }
+        if ($Path -like 'compare/*') { return [pscustomobject]@{ status = 'ahead' } }
+        if ($Path -like '*/jobs?per_page=100') { return [pscustomobject]@{ jobs = @(@('M0 Portable Gate', 'Windows Delivery', 'M0 Windows x64 Gate') | ForEach-Object { [pscustomobject]@{ name = $_; conclusion = 'success' } }) } }
+        if ($Path -ceq 'actions/runs/3001/attempts/1') { return [pscustomobject]@{ head_sha = $desktopCommit; head_branch = 'main'; event = 'push'; conclusion = 'success'; path = '.github/workflows/m0-18-ci.yml' } }
+        throw "Unexpected GitHub request: $Path"
+    }
+
+    $first = & $newDesktopUpload '1.1.0'
+    Assert-Test ((Get-YumpooRequestMode $first.request) -ceq 'desktop-publish' -and (Assert-YumpooDesktopRequest $first.request $first.provenance) -ceq '1.1.0') 'desktop requests validate against their provenance'
+    foreach ($mutate in @(
+        { param($r, $p) $r.files[3].name = '../latest.yml' },
+        { param($r, $p) $r.files = @($r.files[1], $r.files[0], $r.files[2], $r.files[3], $r.files[4]) },
+        { param($r, $p) $r.files[0].partCount = 1 },
+        { param($r, $p) $p.installerSha256 = ('0' * 64) },
+        { param($r, $p) $r.tag = 'server-v2026.10.18.1' },
+        { param($r, $p) $p.artifactName = "m1-15-server-$desktopCommit-1" }
+    )) {
+        $request = $first.request | ConvertTo-Json -Depth 6 | ConvertFrom-Json
+        $provenance = $first.provenance | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+        & $mutate $request $provenance
+        $rejected = $false
+        try { $null = Assert-YumpooDesktopRequest $request $provenance } catch { $rejected = $true }
+        Assert-Test $rejected 'malformed desktop requests are rejected before reading any upload'
+    }
+    $firstFiles = Copy-YumpooDesktopUpload $first.source $first.work $first.request
+    Assert-Test ((Get-FileHash -LiteralPath $firstFiles['latest.yml']).Hash -ieq $first.request.files[3].sha256 -and (Get-Item -LiteralPath $firstFiles[$first.request.files[0].name]).Length -eq (2MB + $first.request.files[0].bytes - 2MB)) 'desktop parts reassemble each file'
+    $tampered = & $newDesktopUpload '1.1.0'
+    $partPath = Join-Path $tampered.source 'desktop-3-0000.part'
+    $partBytes = [IO.File]::ReadAllBytes($partPath); $partBytes[0] = $partBytes[0] -bxor 1; [IO.File]::WriteAllBytes($partPath, $partBytes)
+    $rejected = $false
+    try { $null = Copy-YumpooDesktopUpload $tampered.source $tampered.work $tampered.request } catch { $rejected = $_.Exception.Message -like '*checksum*' }
+    Assert-Test $rejected 'an equal-sized modified desktop part fails the request digest'
+
+    $script:desktopRelease = & $releaseFor $first
+    Assert-YumpooDesktopRelease $desktopSettings $first.request $first.provenance $first.provenancePath $fakeGitHub
+    foreach ($fault in @('digest', 'draft', 'mutable', 'moved')) {
+        $script:desktopRelease = & $releaseFor $first
+        if ($fault -eq 'digest') { $script:desktopRelease.assets[2].digest = 'sha256:' + ('0' * 64) }
+        elseif ($fault -eq 'draft') { $script:desktopRelease.draft = $true }
+        elseif ($fault -eq 'mutable') { $script:desktopRelease.immutable = $false }
+        else { $script:desktopTagCommit = 'd' * 40 }
+        $rejected = $false
+        try { Assert-YumpooDesktopRelease $desktopSettings $first.request $first.provenance $first.provenancePath $fakeGitHub } catch { $rejected = $true }
+        Assert-Test $rejected "desktop files must match the published immutable Release ($fault)"
+        $script:desktopTagCommit = $desktopCommit
+    }
+
+    $disabled = [pscustomobject]@{ desktopFeed = [pscustomobject]@{ enabled = $false; root = $feedRoot } }
+    $rejected = $false
+    try { $null = Publish-YumpooDesktopFeed $disabled $first.request $firstFiles '1.1.0' } catch { $rejected = $_.Exception.Message -like '*disabled*' }
+    Assert-Test ($rejected -and -not (Test-Path -LiteralPath $feedDirectory)) 'a disabled feed writes nothing'
+    Assert-Test ((Publish-YumpooDesktopFeed $desktopSettings $first.request $firstFiles '1.1.0') -ceq 'complete') 'the first version is published'
+    Assert-Test ((Get-ChildItem -LiteralPath $feedDirectory -File).Count -eq 5 -and (Get-Content -LiteralPath (Join-Path $feedDirectory 'release.json') -Raw | ConvertFrom-Json).version -ceq '1.1.0') 'every feed file of the version is in place'
+    Assert-Test ((Publish-YumpooDesktopFeed $desktopSettings $first.request $firstFiles '1.1.0') -ceq 'already_current') 'republishing the live version is a no-op'
+    $older = & $newDesktopUpload '1.0.9'
+    $olderFiles = Copy-YumpooDesktopUpload $older.source $older.work $older.request
+    $rejected = $false
+    try { $null = Publish-YumpooDesktopFeed $desktopSettings $older.request $olderFiles '1.0.9' } catch { $rejected = $_.Exception.Message -like '*downgrade*' }
+    Assert-Test $rejected 'a lower version never replaces the feed'
+    $next = & $newDesktopUpload '1.2.0'
+    $nextFiles = Copy-YumpooDesktopUpload $next.source $next.work $next.request
+    $conflict = Join-Path $feedDirectory $next.request.files[1].name
+    [IO.File]::WriteAllText($conflict, 'stale blockmap from another build')
+    $rejected = $false
+    try { $null = Publish-YumpooDesktopFeed $desktopSettings $next.request $nextFiles '1.2.0' } catch { $rejected = $_.Exception.Message -like '*other content*' }
+    Assert-Test ($rejected -and (Get-Content -LiteralPath (Join-Path $feedDirectory 'latest.yml') -Raw) -ceq 'latest.yml of 1.1.0') 'latest.yml is replaced only after every versioned file is in place'
+    Remove-Item -LiteralPath $conflict
+    Assert-Test ((Publish-YumpooDesktopFeed $desktopSettings $next.request $nextFiles '1.2.0') -ceq 'complete' -and (Get-Content -LiteralPath (Join-Path $feedDirectory 'latest.yml') -Raw) -ceq 'latest.yml of 1.2.0') 'the next version replaces latest.yml last'
+    foreach ($version in @('1.3.0', '1.10.0')) {
+        $upload = & $newDesktopUpload $version
+        $null = Publish-YumpooDesktopFeed $desktopSettings $upload.request (Copy-YumpooDesktopUpload $upload.source $upload.work $upload.request) $version
+    }
+    $remaining = @(Get-ChildItem -LiteralPath $feedDirectory -File | Select-Object -ExpandProperty Name)
+    Assert-Test (@($remaining | Where-Object { $_ -like '*.exe' }).Count -eq 3 -and 'YumpooDesktop-Setup-1.1.0-x64.exe' -notin $remaining -and
+        'YumpooDesktop-Setup-1.1.0-x64.exe.blockmap' -in $remaining -and 'YumpooDesktop-Setup-1.10.0-x64.exe' -in $remaining -and
+        @($remaining | Where-Object { $_ -like '*.sig.json' }).Count -eq 3) 'retention keeps three installers by version order and older blockmaps for differential updates'
+    $junctionTarget = Join-Path $desktopRoot 'outside'; New-Item -ItemType Directory -Path $junctionTarget | Out-Null
+    $junctionFeed = Join-Path $desktopRoot 'junction-feed'; New-Item -ItemType Junction -Path $junctionFeed -Target $junctionTarget | Out-Null
+    $rejected = $false
+    try { $null = Publish-YumpooDesktopFeed ([pscustomobject]@{ desktopFeed = [pscustomobject]@{ enabled = $true; root = $junctionFeed } }) $first.request $firstFiles '1.1.0' } catch { $rejected = $_.Exception.Message -like '*Reparse*' }
+    [IO.Directory]::Delete($junctionFeed)
+    Assert-Test ($rejected -and @(Get-ChildItem -LiteralPath $junctionTarget -Force).Count -eq 0) 'a junction anywhere above the feed is refused'
+    Write-Output 'Desktop feed request validation, Release digests, write order, downgrade, retention and junction safety passed.'
 
     if ($PgBin) {
         $pgData = Join-Path $testRoot 'postgres'
