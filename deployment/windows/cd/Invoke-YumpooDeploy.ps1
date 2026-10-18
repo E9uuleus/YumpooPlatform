@@ -61,6 +61,24 @@ try {
             if ($request.requestId -cne $folder.Name) { throw 'Request ID does not match the inbox directory.' }
             $record.mode = Get-YumpooRequestMode $request
             $status.tag = $request.tag; $status.sourceCommit = $request.sourceCommit
+            if ($record.mode -eq 'desktop-publish') {
+                # The feed is outside the server transaction: no maintenance, no active.json or current.json, and a
+                # ledger entry without releaseRoot, so server retention and rollback never see it.
+                function Publish-DesktopStatus([string]$State, [string]$Phase) {
+                    $status.state = $State; $status.phase = $Phase; $status.updatedAt = (Get-Date).ToUniversalTime().ToString('o')
+                    Write-YumpooJson $statusPath $status
+                }
+                if (-not (Get-YumpooDesktopFeedSettings $settings).enabled) { throw 'The desktop feed is disabled on this host.' }
+                $version = Assert-YumpooDesktopRequest $request $provenance
+                Publish-DesktopStatus 'running' 'desktop_verify'
+                $files = Copy-YumpooDesktopUpload $folder.FullName $work $request
+                Assert-YumpooDesktopRelease $settings $request $provenance (Join-Path $work 'provenance.json')
+                Publish-DesktopStatus 'running' 'desktop_publish'
+                $outcome = Publish-YumpooDesktopFeed $settings $request $files $version
+                Publish-DesktopStatus 'succeeded' $outcome
+                Complete-Request
+                continue
+            }
             $currentFile = Join-Path $deployment 'engine/current.json'
             $current = Get-Content -LiteralPath $currentFile -Raw | ConvertFrom-Json
             if ($record.mode -eq 'deploy') {

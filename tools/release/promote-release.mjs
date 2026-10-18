@@ -11,8 +11,8 @@ import {
 import { createGithub, fileDigest, readJson, unpackArtifact } from './github.mjs'
 import { verifyBuildAttestations } from './attestation.mjs'
 
-export async function resolveTagCommit(github, tag) {
-  validateTag(tag)
+export async function resolveTagCommit(github, tag, validate = validateTag) {
+  validate(tag)
   let object = (await github.get(`/git/ref/tags/${encodeURIComponent(tag)}`)).object
   for (let depth = 0; object?.type === 'tag' && depth < 8; depth += 1) {
     assert(/^[0-9a-f]{40}$/u.test(object.sha), 'Invalid annotated tag object')
@@ -64,9 +64,9 @@ export async function selectCiAttempt(github, workflowId, sourceCommit) {
   throw new Error(`No successful push/${releaseBranch} Platform CI attempt with all mandatory jobs for this exact commit; rerun the full Platform CI first`)
 }
 
-export function indexAssets(assets) {
+export function indexAssets(assets, names = releaseAssetNames) {
   const result = new Map()
-  for (const asset of assets.filter(asset => releaseAssetNames.includes(asset.name))) {
+  for (const asset of assets.filter(asset => names.includes(asset.name))) {
     assert(!result.has(asset.name), `Duplicate Release asset: ${asset.name}`)
     assert(Number.isSafeInteger(asset.id) && asset.id > 0, 'Invalid Release asset ID')
     result.set(asset.name, asset)
@@ -130,7 +130,7 @@ export async function verifyReleaseAssets({ github, release, tag, sourceCommit, 
     await downloadAsset(github, assets.get(name), retained)
   }
   await inspectPackage(retained, sourceCommit, provenance)
-  await attest(retained, run, { env })
+  await attest(retained, run, { env, label: 'published Release assets' })
   return { directory: retained, provenance }
 }
 

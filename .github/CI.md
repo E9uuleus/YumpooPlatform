@@ -20,7 +20,7 @@ pnpm run ci
 | `pnpm ci:static` | 上述契约检查各一次，加文档/归档完整性、校验器故障测试、前端/桌面 lint、架构、类型、构建与全部现有测试、历史证据结构和当前资产 |
 | `pnpm ci:backend` | 一次 `clean verify`：单元/集成、安全、架构、PostgreSQL/Flyway、备份恢复；随后单独执行 96 MiB JVM 的附件流式探针 |
 | `pnpm ci:portable` | 校验当前源码的 static/backend 成功记录与新鲜备份恢复报告；运行 packaged JAR + SPA HTTP；生成和验证 JAR/Web handoff |
-| `pnpm ci:windows` | 复核 handoff，真实 Electron smoke、Windows 桌面/ASAR、ZIP、PowerShell 行为及服务器包验证；服务器包逐文件对照同一 handoff；生成并核对后端与 Web 的 CycloneDX SBOM |
+| `pnpm ci:windows` | 复核 handoff，真实 Electron smoke、Windows 桌面安装包（EXE 图标/版本资源/fuse/ASAR 白名单，静默安装、自检、覆盖安装与卸载边界）、ZIP、PowerShell 行为及服务器包验证；服务器包逐文件对照同一 handoff；生成并核对后端与 Web 的 CycloneDX SBOM；把经过冒烟的安装包、blockmap、`latest.yml`、桌面 SBOM 与 manifest 收集到 `out/desktop` |
 
 [plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。M2-23 的 `:assets` 检查当前切片资产，完整契约检查归 `ci:contracts`；类别资产只执行一次，M2-03、M2-07、M2-24 等旧切片由 [historical-assets.mjs](../tools/ci/historical-assets.mjs) 校验历史报告与验收矩阵。类型检查由各包实际构建或专用类型测试承担，不再重复运行同一整套 Node 入口。Windows smoke 使用 handoff 的 Web 字节；服务器不重复编译。
 
@@ -58,11 +58,13 @@ Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必
 
 | 工作流 | 触发 | 职责 |
 | --- | --- | --- |
-| [Main Promotion Policy](workflows/main-promotion-policy.yml) | 指向 `main` 的 PR | 只允许 `dev`/`hotfix/*`；汇总提交、迁移分类与契约变化；破坏性迁移要求 `release:breaking-migration` 标签 |
+| [Main Promotion Policy](workflows/main-promotion-policy.yml) | 指向 `main` 的 PR | 只允许 `dev`/`hotfix/*`；汇总提交、迁移分类与契约变化；`deployment/windows/cd/` 有改动时列出文件并提醒发布前升级主机引擎；破坏性迁移要求 `release:breaking-migration` 标签 |
 | [Prepare Release](workflows/prepare-release.yml) | `main` 推送 CI 成功 | 自动编号并创建草稿 Release，草稿阶段上传并核验来源清单、原包与 SBOM，上传前后各核验一次构建证明；不删除任何草稿 |
 | [Windows Release](workflows/windows-release.yml) | Release 发布 | 只校验不可变 Release（含 SBOM 与构建证明）并部署，不写附件 |
 | [Server Rollback](workflows/server-rollback.yml) | 手动，在上一版本 tag 上 | 提交只换代码、不动数据库的回退请求 |
 | [Back-merge Main](workflows/back-merge.yml) | `main` 或 `dev` 推送 | `main` 含 `dev` 缺少的改动（热修复）时开回合并 PR，或把已有回合并分支快进到最新 `main` |
+| [Prepare Desktop Release](workflows/prepare-desktop-release.yml) | `main` 推送 CI 成功，或在 `dev` 上手动运行 | 两个任务均执行受保护工作流提交中的发布工具，目标提交的版本与公钥只按精确 SHA 读取为 JSON；草稿任务上传并核验桌面产物、来源清单与 `release.json`；签名任务重新核对 CI attempt 和安装包构建证明后，在 `desktop-signing` 中签发 Ed25519 更新授权 |
+| [Desktop Release](workflows/desktop-release.yml) | `desktop-v*` Release 发布 | 只读校验不可变 Release、构建证明与授权签名后，以 `desktop-publish` 请求写入主机更新源；独立并发组 |
 
 这些工作流的结构与权限由 [release-workflows.test.mjs](../tools/ci/release-workflows.test.mjs) 解析 YAML 校验，发布脚本自身的回归由 `tools/release/*.test.mjs` 覆盖，二者都在 `ci:static` 中执行。
 
@@ -76,8 +78,8 @@ Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必
 | [Supply Chain](workflows/supply-chain.yml) `Dependency Review` | 指向 `dev`/`main` 的 PR | 拒绝新引入的 moderate 及以上已知漏洞（runtime、development、unknown） |
 | `Workflow Audit` | PR 与每周一 | 固定版本 zizmor 审计工作流与 Dependabot 配置；有发现即失败 |
 | `OSV Scan` | 每周一 | 分别扫描 `dev` 与 `main` 的锁文件和 Maven 依赖 |
-| `Release Rehearsal` | 每周一 | 运行 `main` 自身的发布工具做只读演练：已发布的头部按部署规则重新核验，未发布的头部执行全部草稿校验但不创建草稿 |
-| 构建证明 | `dev`/`main` 推送 CI | `Windows Delivery` 为 ZIP 与两份 SBOM 签署 SLSA provenance；只有该任务有 `id-token`/`attestations` 写权限，PR 运行不签署 |
+| `Release Rehearsal` | 每周一 | 运行 `main` 自身的发布工具做只读演练：已发布的头部按部署规则重新核验，未发布的头部执行全部草稿校验但不创建草稿；桌面更新源上的 `latest.yml`、`release.json` 必须与最新已发布桌面 Release 一致 |
+| 构建证明 | `dev`/`main` 推送 CI | `Windows Delivery` 分两组签署 SLSA provenance：服务器 ZIP 与两份 SBOM；`out/desktop` 下的安装包、blockmap、`latest.yml`、桌面 SBOM 与 manifest。只有该任务有 `id-token`/`attestations` 写权限，PR 运行不签署 |
 | Maven enforcer | `ci:backend` | `requireJavaVersion [21,)`、`requireReleaseDeps` |
 
 本地复现：`uvx zizmor@1.30.1 .` 审计工作流；`pnpm sbom --sbom-format cyclonedx --filter @yumpoo/web-app --prod --lockfile-only` 查看 Web SBOM；`./mvnw generate-resources` 后在 `backend/target/classes/META-INF/sbom/` 查看后端 SBOM。
@@ -98,6 +100,7 @@ Dependabot 生成的 PR 标题不带步骤编号，squash 合并时按提交规�
   - 必须经过 PR，只允许合并提交；
   - required checks 为 `M0 Portable Gate`、`M0 Windows x64 Gate`、`Main Promotion Policy`；
   - 不要求分支最新，原因是晋升 PR 的 head 是持续前进的 `dev`。
-- **规则集 `Release tags`**：`refs/tags/server-v*` 禁止更新和删除，只有管理员可以创建。
+- **规则集 `Release tags`**：`refs/tags/server-v*` 与 `refs/tags/desktop-v*` 禁止更新和删除，只有管理员可以创建。
+- **桌面发布渠道**：新建 Environment `desktop-signing`，部署分支只允许 `dev`（`workflow_run` 运行在默认分支），添加 secret `DESKTOP_UPDATE_SIGNING_KEY`；`wecom-dev` 的部署 tag 规则加入 `desktop-v*`。Environment 在被工作流首次引用时会自动创建且不带保护规则，所以要在第一次桌面版本递增之前配置好。
 - **Immutable Releases 与 secret**：开启 Immutable Releases；添加仓库 secret `WECOM_RELEASE_WEBHOOK`。
 - **供应链**：`Protect dev` 的 required checks 增加 `Dependency Review`、`Workflow Audit`；开启 Dependabot alerts 与 security updates；开启 CodeQL default setup（java-kotlin、javascript-typescript、actions）。

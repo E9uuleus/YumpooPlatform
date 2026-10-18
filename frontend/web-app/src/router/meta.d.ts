@@ -6,6 +6,8 @@ import type { ShellSection } from './shell-navigation'
 declare module 'vue-router' {
   interface RouteMeta {
     onboardingTour?: TourId
+    /** Reachable without a session; the guard and session redirects leave it alone. */
+    public?: boolean
     requiredRoles?: AuthenticationRole[]
     shellSection?: ShellSection
     sessionStatus?: Extract<

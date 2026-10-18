@@ -5,7 +5,12 @@ packages:
 allowBuilds:
   '@openapitools/openapi-generator-cli': true
   core-js: false
+  electron-winstaller: false
   esbuild: true
+# electron-builder's @electron/get@3 only uses this optional proxy helper on request; it pulls sprintf-js
+# (GHSA-hp3w-g68c-fv3c, no fixed release) and desktop packaging never downloads through it.
+overrides:
+  '@electron/get@3>global-agent': '-'
 minimumReleaseAgeExclude:
   - '@tiptap/core@3.30.3'
   - '@tiptap/extension-blockquote@3.30.3'

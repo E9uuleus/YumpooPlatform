@@ -23,9 +23,20 @@ const DESKTOP_AREAS = {
 
 const PRELOAD_ENTRY = path.join(DESKTOP_AREAS.preload, 'index.ts')
 const PRELOAD_IPC_CHANNELS = new Map([
-  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start', 'yumpoo:auth:clear', 'yumpoo:timer:show', 'yumpoo:timer:hide', 'yumpoo:timer:mode', 'yumpoo:timer:window-state', 'yumpoo:timer:orb-layout', 'yumpoo:timer:state', 'yumpoo:timer:command-complete', 'yumpoo:timer:pin', 'yumpoo:timer:refresh', 'yumpoo:timer:exit-received', 'yumpoo:timer:exit-complete', 'yumpoo:timer:open-item', 'yumpoo:timer:preferences', 'yumpoo:timer:menu-action', 'yumpoo:timer:drag', 'yumpoo:inbox:state', 'yumpoo:inbox:preferences', 'yumpoo:inbox:get-preferences', 'yumpoo:files:save-export'])],
-  ['on', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-request', 'yumpoo:timer:menu-state', 'yumpoo:timer:dragging', 'yumpoo:inbox:open'])],
-  ['removeListener', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-request', 'yumpoo:timer:menu-state', 'yumpoo:timer:dragging', 'yumpoo:inbox:open'])],
+  ['invoke', new Set(['yumpoo:auth:is-enabled', 'yumpoo:auth:start', 'yumpoo:auth:clear', 'yumpoo:timer:show', 'yumpoo:timer:hide', 'yumpoo:timer:mode', 'yumpoo:timer:window-state', 'yumpoo:timer:orb-layout', 'yumpoo:timer:state', 'yumpoo:timer:command-complete', 'yumpoo:timer:pin', 'yumpoo:timer:refresh', 'yumpoo:timer:exit-received', 'yumpoo:timer:exit-complete', 'yumpoo:timer:open-item', 'yumpoo:timer:preferences', 'yumpoo:timer:menu-action', 'yumpoo:timer:drag', 'yumpoo:inbox:state', 'yumpoo:inbox:preferences', 'yumpoo:inbox:get-preferences', 'yumpoo:files:save-export', 'yumpoo:update:get-state', 'yumpoo:update:check', 'yumpoo:update:restart'])],
+  ['on', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-request', 'yumpoo:timer:menu-state', 'yumpoo:timer:dragging', 'yumpoo:inbox:open', 'yumpoo:update:state'])],
+  ['removeListener', new Set(['yumpoo:auth:status', 'yumpoo:timer:changed', 'yumpoo:timer:mode-changed', 'yumpoo:timer:orb-hover', 'yumpoo:timer:command', 'yumpoo:timer:command-failed', 'yumpoo:timer:exit-request', 'yumpoo:timer:menu-state', 'yumpoo:timer:dragging', 'yumpoo:inbox:open', 'yumpoo:update:state'])],
+])
+
+// The diagnostics window has its own preload: it reaches only the diagnostics channels, never the web app's.
+const DIAGNOSTICS_PRELOAD_ENTRY = path.join(DESKTOP_AREAS.preload, 'diagnostics.ts')
+const PRELOAD_ENTRY_CHANNELS = new Map([
+  [PRELOAD_ENTRY, PRELOAD_IPC_CHANNELS],
+  [DIAGNOSTICS_PRELOAD_ENTRY, new Map([
+    ['invoke', new Set(['yumpoo:diagnostics:report', 'yumpoo:diagnostics:action'])],
+    ['on', new Set()],
+    ['removeListener', new Set()],
+  ])],
 ])
 
 const NODE_MODULES = new Set(
@@ -118,7 +129,7 @@ function isTypeOnlyImport(node) {
 
 function isAllowedPreloadElectronImport(node, filename) {
   return (
-    filename === PRELOAD_ENTRY &&
+    PRELOAD_ENTRY_CHANNELS.has(filename) &&
     node.type === 'ImportDeclaration' &&
     node.specifiers.length > 0 &&
     node.specifiers.every(
@@ -290,13 +301,13 @@ function createRule() {
           !callee.computed && callee.property?.type === 'Identifier'
             ? callee.property.name
             : undefined
-        const allowedChannels = method ? PRELOAD_IPC_CHANNELS.get(method) : undefined
+        const allowedChannels = method ? (PRELOAD_ENTRY_CHANNELS.get(filename) ?? PRELOAD_IPC_CHANNELS).get(method) : undefined
         const channel = node.arguments?.[0]
         const channelName =
           channel?.type === 'Literal' && typeof channel.value === 'string'
             ? channel.value
             : undefined
-        const timerArguments = { 'yumpoo:timer:show': 3, 'yumpoo:timer:mode': 2, 'yumpoo:timer:orb-layout': 2, 'yumpoo:timer:state': 2, 'yumpoo:timer:command-complete': 3, 'yumpoo:timer:exit-received': 2, 'yumpoo:timer:pin': 2, 'yumpoo:timer:exit-complete': 3, 'yumpoo:timer:open-item': 3, 'yumpoo:timer:preferences': 2, 'yumpoo:timer:menu-action': 2, 'yumpoo:timer:drag': 2, 'yumpoo:inbox:state': 2, 'yumpoo:inbox:preferences': 2, 'yumpoo:files:save-export': 2 }
+        const timerArguments = { 'yumpoo:timer:show': 3, 'yumpoo:timer:mode': 2, 'yumpoo:timer:orb-layout': 2, 'yumpoo:timer:state': 2, 'yumpoo:timer:command-complete': 3, 'yumpoo:timer:exit-received': 2, 'yumpoo:timer:pin': 2, 'yumpoo:timer:exit-complete': 3, 'yumpoo:timer:open-item': 3, 'yumpoo:timer:preferences': 2, 'yumpoo:timer:menu-action': 2, 'yumpoo:timer:drag': 2, 'yumpoo:inbox:state': 2, 'yumpoo:inbox:preferences': 2, 'yumpoo:files:save-export': 2, 'yumpoo:diagnostics:action': 2 }
         const expectedArguments = method === 'invoke' ? (timerArguments[channelName] ?? 1) : 2
         if (
           !allowedChannels?.has(channelName) ||
@@ -345,7 +356,7 @@ function createRule() {
           if (
             owner !== 'desktop' ||
             area !== 'preload' ||
-            filename !== PRELOAD_ENTRY ||
+            !PRELOAD_ENTRY_CHANNELS.has(filename) ||
             node.name !== 'ipcRenderer'
           ) {
             return

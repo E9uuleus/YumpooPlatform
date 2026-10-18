@@ -1,6 +1,6 @@
 # Windows Release 发布与生产运维手册
 
-本手册是当前部署入口。常规发布采用 GitHub Release → SSH → 固定 SYSTEM 部署任务，后端以 `YumpooServer` Windows Service 运行，发布包模式为 `WINDOWS_SERVICE_WINSW`。包文件名沿用 M1-15 以兼容既有 CI 交付链；不代表代码或迁移停留在该里程碑。M1-13、M1-14 手册和历史 checklist 保留各自验收边界。Electron 继续使用 M1-14 `0.1.0` PILOT 包，本链路不提供 Electron 自动更新。
+本手册是当前部署入口。常规发布采用 GitHub Release → SSH → 固定 SYSTEM 部署任务，后端以 `YumpooServer` Windows Service 运行，发布包模式为 `WINDOWS_SERVICE_WINSW`。包文件名沿用 M1-15 以兼容既有 CI 交付链；不代表代码或迁移停留在该里程碑。M1-13、M1-14 手册和历史 checklist 保留各自验收边界。Electron 桌面端已改为 NSIS 按用户安装包（见[桌面安装包与发布渠道](../../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)），有独立的 `desktop-v*` 发布渠道和 HTTPS 更新源，见[第 11 节](#11-桌面发布渠道)。渠道切换完成前继续手工分发 M1-14 `0.1.0` PILOT 包；服务器发布链路本身不更新桌面端。
 
 Release 发布即为上线决定。主机初始化、Environment 配置和发布链路必须先就绪；单凭仓库脚本、CI 或 Release 附件不能声称服务器已部署。真实企微通讯录、双管理员登录、后续同步和整机重启证据仍按对应 checklist 保持 `ENV_PENDING`，由目标环境验证清零；本次服务恢复验收不重启整台服务器。
 
@@ -18,7 +18,7 @@ Release 发布即为上线决定。主机初始化、Environment 配置和发布
 
 **晋升门禁**
 
-- 晋升 PR 只能来自本仓库的 `dev` 或 `hotfix/<名称>`，由 [Main Promotion Policy](../../.github/workflows/main-promotion-policy.yml) 强制检查，并在 PR 中汇总提交、迁移分类、契约变化和人工确认清单。
+- 晋升 PR 只能来自本仓库的 `dev` 或 `hotfix/<名称>`，由 [Main Promotion Policy](../../.github/workflows/main-promotion-policy.yml) 强制检查，并在 PR 中汇总提交、迁移分类、契约变化和人工确认清单。若增量涉及 `deployment/windows/cd/`，汇总会列出变更文件，并提醒管理员在发布前用本次草稿的 ZIP [升级部署引擎](#升级部署引擎)；这项人工确认不代替主机上的升级结果核对。
 - 含非只扩展迁移的发布必须加 `release:breaking-migration` 标签，该版本不能快速回退。
 - 契约兼容以 `main` 为基线：相对线上版本有破坏性 API 变更时，先在 `dev` 上登记检查结果给出的精确例外。
 
@@ -136,7 +136,7 @@ gh workflow run server-rollback.yml --ref '<上一版本 server-v...>' -f target
 - 回退同样依次经过维护、停服、切换、验收、开放和观察。
 - 开放访问前失败时切回原版本，状态记为 `failed/rollback_aborted_current_restored`。
 - 回退成功后 `previous` 被清空，因此不能连续回退。
-- 含破坏性迁移的版本无法代码回退，只能由管理员按第 7 节，用部署快照做整套恢复。
+- 含破坏性迁移的版本无法代码回退；需要恢复旧版数据与程序时，只能由管理员用部署快照做整套恢复。本节「开放访问前失败时的处理」说明了恢复范围；手工恢复步骤与验收见本地运维文档 `docs/30-operations/backup-restore-and-disaster-recovery.md` 第 4 节（`docs/` 不随仓库分发）。
 
 ### 主机保留
 
@@ -213,7 +213,8 @@ Release 不能升级 SYSTEM 部署引擎，必须由管理员手动操作：
   - `requireImmutable`；
   - `probeRoutes`；
   - `retention.extraReleases`（参数 `-ExtraReleases`）；
-  - `observe`（参数 `-ObserveMinutes`、`-MaxErrorLines`）。
+  - `observe`（参数 `-ObserveMinutes`、`-MaxErrorLines`）；
+  - `desktopFeed`（参数 `-EnableDesktopFeed`、`-DesktopFeedRoot`、`-DesktopRetainVersions`，见[第 11 节](#11-桌面发布渠道)）。与其他开关一样，每次升级都按本次参数重写：不带 `-EnableDesktopFeed` 重新运行会关闭桌面更新源。
 - `engine/engine.json` 记录引擎的来源 commit 和文件哈希。
 
 未升级的 schema 1 主机保持原有行为：分支为 `dev`，不要求不可变发布，不写探测路由。切换到 `main` 发布线时，必须先用 `-ReleaseBranch main -RequireImmutable` 升级引擎，再发布第一个 `main` 草稿。
@@ -418,3 +419,110 @@ Invoke-RestMethod http://127.0.0.1:8100/actuator/health/readiness
 服务每分钟领取到期项目，按通知、动态、附件、Outbox、工作项、看板引用、项目目录七阶段清除，每批最多删除 500 行。领取后项目对所有人不可见，不能撤销；安全审计和治理记录保留。附件物理清除属于该业务操作，不受附件维护 dry-run 配置控制，共享 blob 保留到最后一个引用消失。
 
 进程中断或物理文件删除失败时保留阶段 checkpoint，租约到期后自动续跑。诊断沿 requestId、内部项目 UUID 和阶段查询应用日志，检查数据库可用性、附件目录 ACL 与文件占用；修复后等待正常轮询。不要手动跳过阶段、删除 checkpoint 或删附件 metadata 来模拟成功。完成记录 `project_purge_run.completed_at`、系统安全审计 `PROJECT_PURGED` 与 ID/时间完成事件在最后一个事务同时提交。
+
+## 10. 桌面客户端故障排查
+
+适用于 NSIS 安装版 Yumpoo Desktop。旧版 `0.1.0` 便携包没有下面这些入口。
+
+**用户侧入口**
+
+- 启动时加载失败（包括证书错误）、分发配置缺失或页面进程崩溃，客户端都会自动打开「诊断与修复」窗口。这个窗口只加载安装包内的页面，断网时也能使用。
+- 运行中出问题，可以右键托盘图标选择「诊断与修复…」（Web 快捷面板加载不出来时，右键弹出的就是这个菜单），或从开始菜单启动「Yumpoo Desktop (Safe Mode)」。
+- 连续 3 次启动都没有正常运行满 1 分钟时，下一次启动会自动进入安全模式：关闭硬件加速，不启动计时窗和收件箱提醒，并先打开诊断窗。在诊断窗点「以正常模式重启」会清零计数。
+
+**诊断项**：
+
+- 网络：域名解析、TLS 证书主体与剩余天数、`/healthz`、`/version.json` 中的服务版本与时钟偏差、系统代理；
+- 本机：安全存储（safeStorage）是否可用、userData 是否可写、图形加速状态、各进程内存；
+- 版本：壳、Electron、Chromium 和操作系统版本。
+
+**修复动作**：重试、用浏览器打开 Web 版、导出诊断包、打开日志文件夹、重新注册登录回调（`yumpoo:` 协议）、退出登录并清除本机凭据、重置本机偏好。后两项会先弹窗确认。
+
+**管理员核对**
+
+1. 请用户在诊断窗点「导出诊断包…」，把生成的 ZIP 发过来。包里有：
+   - `diagnostics.json`：上述诊断结果；
+   - `logs/desktop*.log`：主进程日志，单个文件最大 5 MB，保留 3 个；
+   - `crashes/*.dmp`：最近 5 个本地崩溃转储。崩溃转储不会上传到任何服务器。
+2. 日志写入时已经脱敏：URL 只保留协议、主机和路径；cookie、凭据、授权码、通知正文、工作项标题等字段不会写入。即便如此，诊断包仍应只在内部渠道传递。
+3. 先看 `diagnostics.json` 的 `versions.shell`，核对用户安装的是哪个版本，再按网络项定位问题：`dns` 失败多为网络或 DNS 配置；`tls` 失败要看 `error` 和证书剩余天数；`health` 返回 `HTTP_503` 对应维护窗口或服务未就绪；`clockSkewMs` 超过 2 分钟时请用户校准系统时间。
+4. 程序文件损坏时，重新运行安装包覆盖安装即可修复，登录状态和偏好会保留。也可以让用户离线执行 `YumpooDesktop.exe --self-check=<绝对路径>`：报告写成 JSON 文件，退出码 0 表示安装完整。
+
+**应用内更新**（安装包的分发配置启用更新源之后才生效）
+
+- 客户端在启动后 30 秒、之后每 4 小时、以及系统唤醒时检查更新，并在后台下载。
+- 下载完成后，客户端会用内置公钥核对更新源上的 `.sig.json` 授权签名。核对通过后，托盘、主窗横幅和诊断窗才会显示「新版本已就绪」；用户正常退出或点「重启以更新」时静默安装。
+- 诊断窗「应用内更新」一行和日志中的 `update-verified` / `update-rejected` 事件记录了结果。`update-rejected` 带原因码，例如：
+  - `UNKNOWN_KEY`、`SIGNATURE_INVALID`：签名钥匙或签名不对；
+  - `DIGEST_MISMATCH`、`SIZE_MISMATCH`：下载的文件与授权不符；
+  - `VERSION_NOT_NEWER`：版本没有递增。
+  被拒绝的安装包会被删除，永不安装。出现拒绝时，先核对更新源上的安装包、`latest.yml` 与 `.sig.json` 是否来自同一个已发布 Release。
+- 客户端只接受比当前更高的版本。出问题时用更高版本号的修复版前滚，不要把旧安装包放回更新源。
+
+## 11. 桌面发布渠道
+
+桌面端有自己的版本线、草稿和发布决定，与服务器发布互不牵连。版本号由 `desktop/desktop-shell/package.json` 的 `version` 决定（X.Y.Z），标签为 `desktop-vX.Y.Z`。决策与取舍见[桌面安装包与发布渠道](../../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)。
+
+**日常顺序**
+
+1. 需要发布桌面端时，在功能 PR 或单独的 PR 里递增 `desktop/desktop-shell/package.json` 的 `version`，照常合入 `dev` 并晋升到 `main`。
+2. `main` 推送 CI 成功后，[Prepare Desktop Release](../../.github/workflows/prepare-desktop-release.yml) 生成草稿 `desktop-vX.Y.Z`，然后由只在 `desktop-signing` Environment 中运行的签名任务为安装包签授权。以下情况不生成草稿，只在工作流摘要中说明：
+   - 版本仍是 `0.x`（旧便携版线）；
+   - 该版本已发布，或不高于最新已发布的桌面版本；
+   - 同一版本已有指向其他提交的草稿（发布或删除它，或继续递增版本）。
+3. 发布负责人从草稿下载安装包，在 2–3 台机器上试装，核对版本与「诊断与修复」中的信息。
+4. 点击 **Publish** 即为桌面上线决定。[Desktop Release](../../.github/workflows/desktop-release.yml) 只读校验后，把文件写入更新源。客户端在 4 小时内或下次启动后自动下载、核对授权并在退出时安装。
+5. 桌面端不能回退：只接受更高版本，坏版本用更高版本号的修复版前滚。紧急时可先让同事改用浏览器。
+
+**草稿附件**（固定八个，Publish 后不可更改）：
+
+- `YumpooDesktop-Setup-X.Y.Z-x64.exe`、同名 `.blockmap`、`latest.yml`：`main` 推送 CI 构建，经安装冒烟和差分更新端到端验证；
+- `yumpoo-desktop.cdx.json`：桌面 CycloneDX SBOM，列出 Electron 运行时和打进主进程的全部依赖；
+- `desktop-manifest.json`：上述文件的大小与摘要；
+- `provenance.json`：钉住的 CI 运行与 attempt；
+- `release.json`：下载页读取的版本、大小、SHA-256 与改动摘要；
+- `YumpooDesktop-Setup-X.Y.Z-x64.exe.sig.json`：Ed25519 更新授权。
+
+CI 为前五个文件签署构建证明；草稿上传前后、发布前都会核验证明。不要手工新建 `desktop-v*` 草稿、打标签或替换附件。可以离线复核安装包：
+
+```powershell
+gh attestation verify '<下载目录>\YumpooDesktop-Setup-X.Y.Z-x64.exe' -R E9uuleus/YumpooPlatform `
+  --signer-workflow E9uuleus/YumpooPlatform/.github/workflows/m0-18-ci.yml --source-ref refs/heads/main
+```
+
+**更新授权签名**
+
+- 主私钥只在 Environment `desktop-signing`（部署分支只允许 `dev`）的 secret `DESKTOP_UPDATE_SIGNING_KEY` 中；只有 Prepare Desktop Release 的签名步骤能读取它。草稿任务不进入这个 Environment。
+- Prepare Desktop Release 手动运行时必须选择 `dev`，`commit` 填待发布的完整 `main` 提交 SHA。两个任务固定检出 `github.workflow_sha` 对应的受保护发布工具；候选提交的 `package.json` 与 `distribution/production.json` 经祖先检查后通过 API 读取，不执行候选提交的代码。
+- 签名任务重新核对 provenance 钉住的成功 `main` CI attempt 和本次下载的安装包构建证明，再要求钥匙属于目标提交 `distribution/production.json` 中的公钥；签名后按客户端规则复核。不能仅凭草稿安装包与可修改的 provenance 一致就签名。
+- 离线备用钥匙只用于主钥匙丢失或泄露：用备用钥匙签一个过渡版本，在其中换掉公钥，然后轮换 secret。生成钥匙：`node tools/release/desktop-update-signature.mjs keygen --private-key-out <仓库外的路径>`，只把输出的 `keyId` 与 `publicKey` 写入 `production.json`。
+
+**主机与更新源**
+
+- 部署引擎的 `desktop-publish` 请求与服务器部署共用部署锁，但不进入维护、不写 `active.json`、`current.json`；服务器处于 `running` 或 `recovery_required` 时同样拒绝桌面请求。
+- 引擎逐个核对上传文件与已发布不可变 Release 附件的 digest、标签提交、`main` 祖先关系和 CI 推送运行，然后写入 `<desktopFeed.root>/desktop/stable/`：先写安装包、blockmap 和授权签名，最后分别原子替换 `latest.yml` 与 `release.json`。以两个指针中的最高版本防止降级，拒绝同版本不同提交或更新元数据以及任何重解析点。
+- 两个指针的替换不是事务。若第二次替换失败，自动更新可能已发现新版本，而下载页仍显示旧版本；发布报告失败不代表新版本尚未公开。重跑同一 tag 的 Desktop Release 可以补齐指针与缺失文件；只有全部内容已一致才返回 `already_current`。不要手工降低指针或改发较低版本。
+- 保留最近 3 个版本的安装包与签名、最近 20 个版本的 blockmap（旧版本客户端做差分下载要用自己版本的 blockmap）。
+- 状态与通知沿用服务器的 `status/<requestId>.json` 与企业微信通知，阶段为 `desktop_verify`、`desktop_publish`、`complete` 或 `already_current`。
+- 维护窗口内整站 503，更新源同样不可用；客户端稍后自动重试。
+
+**首次切换**（维护者与管理员）
+
+1. GitHub 设置：
+   - 规则集 `Release tags` 加入 `refs/tags/desktop-v*`；
+   - 新建 Environment `desktop-signing`，部署分支只允许 `dev`，添加 secret `DESKTOP_UPDATE_SIGNING_KEY`；
+   - `wecom-dev` 的部署 tag 规则加入 `desktop-v*`。
+2. 管理员用包含本渠道的服务器 Release 升级引擎，并启用更新源：
+
+   ```powershell
+   & '<解压目录>\windows\cd\Update-YumpooEngine.ps1' `
+     -PackagePath '<下载目录>\yumpoo-windows-server-m1-15.zip' `
+     -PackageSha256 '<Release 上的 SHA-256>' `
+     -ReleaseBranch main -RequireImmutable -EnableDesktopFeed
+   ```
+
+3. 管理员按 `windows/nginx/yumpoo-wecom.conf` 在 443 server 的 `location /` 之前加入 `location ^~ /desktop/`，`root` 与 `desktopFeed.root`（默认 `C:/ProgramData/Yumpoo/public`）一致，然后 `nginx -t` 并 reload。
+4. 递增桌面版本到 `1.0.0` 并晋升，等待草稿与签名完成，试装后 Publish。
+5. 打开 `https://wecom-dev.yumpoo.com/download`，核对版本与 SHA-256 后通知同事安装；旧便携版直接覆盖安装，登录状态与偏好保留。此后全部自动更新。
+
+**每周核对**：供应链工作流的发布演练会读取更新源上的 `latest.yml` 与 `release.json`，要求与最新已发布桌面 Release 的附件逐字节一致；不一致时检查最近一次 Desktop Release 运行和主机上的 `desktop/stable` 目录。

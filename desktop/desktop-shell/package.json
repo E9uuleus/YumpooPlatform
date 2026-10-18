@@ -2,6 +2,8 @@
   "name": "@yumpoo/desktop-shell",
   "productName": "Yumpoo Desktop",
   "version": "0.1.0",
+  "description": "Yumpoo Desktop",
+  "author": "Yumpoo",
   "private": true,
   "type": "commonjs",
   "main": "dist/main/index.js",
@@ -11,18 +13,22 @@
   "scripts": {
     "start": "pnpm run build && electron .",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.diagnostics.json",
     "test": "vitest run",
-    "build": "tsc -p tsconfig.json",
-    "package:win": "pnpm run build && node package-m0-15.cjs"
+    "build": "pnpm run typecheck && node scripts/build.cjs",
+    "package:win": "pnpm run build && electron-builder --config electron-builder.config.cjs --win nsis --x64 --publish never"
   },
   "devDependencies": {
-    "@electron/asar": "4.2.1",
-    "@types/node": "24.13.3",
+    "@electron/asar": "4.3.1",
+    "@electron/fuses": "2.1.3",
+    "@types/node": "24.19.2",
     "@yumpoo/preload-contract": "workspace:*",
-    "electron": "43.3.0",
+    "electron": "43.7.9",
+    "electron-builder": "26.15.3",
+    "electron-updater": "6.8.9",
+    "esbuild": "0.28.2",
     "resedit": "3.1.0",
     "typescript": "5.9.3",
-    "vitest": "4.1.10"
+    "vitest": "5.0.3"
   }
 }

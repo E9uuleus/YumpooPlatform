@@ -29,6 +29,7 @@ import InboxBell from './inbox/InboxBell.vue'
 import OperationsBadge from './operations/OperationsBadge.vue'
 import { operationsAlertSummaryContext } from './operations/operationsContext'
 import type { ShellSection } from '../router/shell-navigation'
+import DesktopUpdateBanner from './desktop/DesktopUpdateBanner.vue'
 import InlineProblem from './InlineProblem.vue'
 import { MY_PROJECT_ACCESSES } from './projects/projectScope'
 import YpAssignee from './yp/YpAssignee.vue'
@@ -72,9 +73,8 @@ const contextNavigationOpen = ref(typeof window === 'undefined'
   ? true
   : (window.matchMedia?.('(min-width: 1280px)').matches ?? true))
 
-const clientLabel = computed(() => window.yumpooDesktop?.client === 'electron' || session.authentication.value?.client.type === AuthenticationClientType.Electron
-  ? 'Electron 在线壳'
-  : 'Web 浏览器')
+const inDesktopShell = computed(() => window.yumpooDesktop?.client === 'electron' || session.authentication.value?.client.type === AuthenticationClientType.Electron)
+const clientLabel = computed(() => inDesktopShell.value ? 'Electron 在线壳' : 'Web 浏览器')
 const releaseVersion = useReleaseVersion()
 const releaseLabel = computed(() => releaseVersion.value
   ? `版本 ${releaseVersion.value.release} · ${releaseVersion.value.commit.slice(0, 8)}`
@@ -434,6 +434,12 @@ onBeforeUnmount(() => {
                 查看本页引导
               </el-dropdown-item>
               <el-dropdown-item
+                v-if="!inDesktopShell"
+                @click="router.push({ name: 'desktop-download' })"
+              >
+                下载桌面客户端
+              </el-dropdown-item>
+              <el-dropdown-item
                 divided
                 :disabled="session.logoutLoading.value"
                 @click="signOut"
@@ -745,6 +751,7 @@ onBeforeUnmount(() => {
       class="app-main"
       :class="{ 'app-main--dashboard': dashboardFrame }"
     >
+      <desktop-update-banner />
       <inline-problem
         v-if="session.actionProblem.value"
         :problem="session.actionProblem.value"
