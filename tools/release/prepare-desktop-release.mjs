@@ -103,7 +103,7 @@ export async function prepareDesktopDraft({ github, sourceCommit, env, directory
     for (const name of desktopArtifactFileNames(version)) fs.copyFileSync(path.join(downloaded, name), path.join(retained, name))
     if (!assets.has('release.json')) {
       changes ??= await desktopChanges(github, { sourceCommit, previous: latest })
-      const releaseJson = desktopReleaseJson({ version, channel: distribution.update.channel, sourceCommit, installer, notes: desktopNoteTitles(changes) })
+      const releaseJson = desktopReleaseJson({ version, channel: distribution.update.channel, sourceCommit, installer, notes: desktopNoteTitles(changes, latest) })
       fs.writeFileSync(path.join(retained, 'release.json'), `${JSON.stringify(releaseJson, null, 2)}\n`, 'utf8')
     }
     // Existing assets are verified and never replaced; provenance goes up first to pin the CI attempt.

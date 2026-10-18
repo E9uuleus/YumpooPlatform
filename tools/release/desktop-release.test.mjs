@@ -242,6 +242,14 @@ test('a draft carries the attested CI bytes, provenance first, notes limited to 
   assert.equal(github.uploads.length, 7)
 })
 
+test('the first channel release says so instead of claiming a maintenance update', async t => {
+  const { github, options } = fixture(t, { version: '1.0.0', published: [] })
+  assert.equal((await prepareDesktopDraft(options())).tag, 'desktop-v1.0.0')
+  const draft = draftOf(github)
+  assert.match(draft.body, /上一版本：无（首个经发布渠道分发的版本）/u)
+  assert.deepEqual(JSON.parse(github.assets.get(`${draft.id}/release.json`).bytes).notes, ['首个安装版：按用户安装，支持自动更新、诊断与修复和安全模式'])
+})
+
 test('only a key the released build trusts may sign, and the signature covers the draft installer', async t => {
   const { github, options, version } = fixture(t)
   await prepareDesktopDraft(options())

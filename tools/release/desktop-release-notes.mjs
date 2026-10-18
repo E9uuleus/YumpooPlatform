@@ -23,8 +23,9 @@ export async function desktopChanges(github, { sourceCommit, previous }) {
     .map(commit => ({ sha: commit.sha, title: String(commit.commit?.message ?? '').split('\n')[0].trim() }))
 }
 
-export function desktopNoteTitles(changes) {
-  return changes.length ? changes.slice(0, maxNotes).map(change => change.title) : ['桌面客户端维护更新']
+export function desktopNoteTitles(changes, previous) {
+  if (changes.length) return changes.slice(0, maxNotes).map(change => change.title)
+  return [previous ? '桌面客户端维护更新' : '首个安装版：按用户安装，支持自动更新、诊断与修复和安全模式']
 }
 
 export function desktopReleaseBody({ tag, version, sourceCommit, run, previous, changes }) {
