@@ -1,0 +1,91 @@
+name: Desktop Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published desktop-v* tag; select this same tag as the workflow ref
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+# 与服务端发布分开排队：同一并发组只保留一个待运行项，共用会互相吞掉；主机上的 deploy.lock 负责串行。
+concurrency:
+  group: windows-desktop-release-wecom-dev
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify immutable desktop Release assets
+    if: ${{ github.repository == 'E9uuleus/YumpooPlatform' && (github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'desktop-v')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    steps:
+      - name: Checkout release workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Verify deployment client regression tests
+        run: node --test tools/release/*.test.mjs
+      - name: Verify exact main CI attempt, attestations and the update authorization
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: node tools/release/desktop-release.mjs
+      - name: Notify desktop release verification failure
+        if: ${{ failure() }}
+        env:
+          WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          NOTIFY_TEXT: "**Yumpoo 桌面发布校验失败：${{ github.event.release.tag_name || inputs.tag }}**\n> 未提交到更新源，客户端不受影响。\n> 日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: node tools/release/notify.mjs
+
+  publish:
+    name: Publish verified files to the desktop feed
+    needs: [verify]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment:
+      name: wecom-dev
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    steps:
+      - name: Checkout verified release workflow commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Submit the feed request and reconnect until the server task finishes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          DEPLOY_MODE: desktop-publish
+          WINDOWS_DEPLOY_HOST: ${{ secrets.WINDOWS_DEPLOY_HOST }}
+          WINDOWS_DEPLOY_SSH_KEY: ${{ secrets.WINDOWS_DEPLOY_SSH_KEY }}
+          WINDOWS_DEPLOY_KNOWN_HOSTS: ${{ secrets.WINDOWS_DEPLOY_KNOWN_HOSTS }}
+          WINDOWS_DEPLOY_PORT: ${{ vars.WINDOWS_DEPLOY_PORT || '22' }}
+        run: node tools/release/ssh-deploy.mjs
+      - name: Notify desktop feed job failure
+        if: ${{ failure() }}
+        env:
+          WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+          NOTIFY_TEXT: "**Yumpoo 桌面更新源写入作业失败：${{ github.event.release.tag_name || inputs.tag }}**\n> 主机任务的最终状态以主机通知为准；latest.yml 只在全部文件就位后替换。\n> 日志：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: node tools/release/notify.mjs

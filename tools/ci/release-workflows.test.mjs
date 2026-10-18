@@ -11,8 +11,12 @@ const rollback = read('server-rollback.yml')
 const promotion = read('main-promotion-policy.yml')
 const backMerge = read('back-merge.yml')
 const supplyChain = read('supply-chain.yml')
+const desktopPrepare = read('prepare-desktop-release.yml')
+const desktopRelease = read('desktop-release.yml')
 const dependabot = parse(fs.readFileSync(new URL('../../.github/dependabot.yml', import.meta.url), 'utf8'))
-const releaseWorkflows = { release, prepare, rollback, promotion, backMerge, supplyChain }
+const releaseWorkflows = { release, prepare, rollback, promotion, backMerge, supplyChain, desktopPrepare, desktopRelease }
+const allWorkflows = { ci, ...releaseWorkflows }
+const signingSecret = 'DESKTOP_UPDATE_SIGNING_KEY'
 const steps = job => job.steps ?? []
 const deploySecrets = ['WINDOWS_DEPLOY_HOST', 'WINDOWS_DEPLOY_SSH_KEY', 'WINDOWS_DEPLOY_KNOWN_HOSTS']
 
@@ -58,6 +62,58 @@ test('drafts are prepared only from successful main push CI and never touch depl
   assert.equal(job.environment, undefined)
   assert(!steps(job).some(step => deploySecrets.some(secret => secret in (step.env ?? {}))))
   assert(steps(job).some(step => step.run === 'node tools/release/prepare-release.mjs'))
+})
+
+test('desktop drafts come from the same main push CI; only the sign job enters the signing Environment', () => {
+  assert.deepEqual(desktopPrepare.on.workflow_run, prepare.on.workflow_run)
+  assert.notDeepEqual(desktopPrepare.concurrency.group, prepare.concurrency.group, 'desktop drafts never queue behind or replace server drafts')
+  const { draft, sign } = desktopPrepare.jobs
+  assert.equal(draft.if, prepare.jobs.draft.if, 'the same trigger guard as server drafts')
+  assert.equal(draft.environment, undefined)
+  assert.deepEqual(draft.permissions, { actions: 'read', attestations: 'read', contents: 'write' })
+  assert(steps(draft).some(step => step.run === 'node tools/release/prepare-desktop-release.mjs draft' && step.id === 'draft'))
+  assert.equal(draft.outputs.tag, '${{ steps.draft.outputs.tag }}')
+  assert.deepEqual(sign.needs, ['draft'])
+  assert.equal(sign.if, "${{ needs.draft.outputs.tag != '' }}")
+  assert.equal(sign.environment.name, 'desktop-signing')
+  assert.deepEqual(sign.permissions, { contents: 'write' })
+  const signing = steps(sign).filter(step => signingSecret in (step.env ?? {}))
+  assert.equal(signing.length, 1)
+  assert.equal(signing[0].run, 'node tools/release/prepare-desktop-release.mjs sign')
+  assert.equal(signing[0].env[signingSecret], `\${{ secrets.${signingSecret} }}`)
+  for (const job of [draft, sign]) assert(!steps(job).some(step => deploySecrets.some(secret => secret in (step.env ?? {}))))
+  for (const ref of [draft, sign].map(job => steps(job).find(step => step.uses?.startsWith('actions/checkout@')).with.ref)) {
+    assert.equal(ref, '${{ github.event.workflow_run.head_sha || inputs.commit }}', 'both jobs act on the CI commit')
+  }
+})
+
+test('the update signing key reaches no other workflow, job or step', () => {
+  for (const [name, workflow] of Object.entries(allWorkflows)) {
+    for (const [id, job] of Object.entries(workflow.jobs)) {
+      for (const step of steps(job)) {
+        if (!JSON.stringify(step).includes(signingSecret)) continue
+        assert(name === 'desktopPrepare' && id === 'sign', `${name}/${id} must not see ${signingSecret}`)
+      }
+    }
+  }
+})
+
+test('desktop publication verifies read-only, then writes the feed through wecom-dev on its own queue', () => {
+  assert.deepEqual(desktopRelease.on.release.types, ['published'])
+  assert.deepEqual(Object.keys(desktopRelease.on.workflow_dispatch.inputs), ['tag'])
+  assert.deepEqual(desktopRelease.concurrency, { group: 'windows-desktop-release-wecom-dev', 'cancel-in-progress': false })
+  assert.notEqual(desktopRelease.concurrency.group, release.concurrency.group, 'one pending run per group: sharing would cancel queued releases')
+  const { verify, publish } = desktopRelease.jobs
+  assert(verify.if.includes("startsWith(github.event.release.tag_name, 'desktop-v')"))
+  assert(release.jobs.verify.if.includes("startsWith(github.event.release.tag_name, 'server-v')"), 'server releases never pick up desktop tags')
+  assert.deepEqual(verify.permissions, { actions: 'read', attestations: 'read', contents: 'read' })
+  assert.deepEqual(publish.permissions, { actions: 'read', attestations: 'read', contents: 'read' })
+  assert.deepEqual(publish.needs, ['verify'])
+  assert.equal(publish.environment.name, 'wecom-dev')
+  assert(steps(verify).some(step => step.run === 'node tools/release/desktop-release.mjs'))
+  assert(!steps(verify).some(step => deploySecrets.some(secret => secret in (step.env ?? {}))), 'verification never sees deployment secrets')
+  const submit = steps(publish).find(step => step.run === 'node tools/release/ssh-deploy.mjs')
+  assert.equal(submit.env.DEPLOY_MODE, 'desktop-publish')
 })
 
 test('rollback is a manual, serialized, code-only deployment through the same environment', () => {

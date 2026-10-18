@@ -1,0 +1,86 @@
+name: Prepare Desktop Release
+
+on:
+  # 任务条件只放行本仓库 main 推送且成功的 CI，检出的是已评审代码，不处理 PR 或 fork 产物。
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [Platform CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full main commit SHA whose push Platform CI already succeeded
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-desktop-release
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    name: Prepare desktop draft
+    if: ${{ github.repository == 'E9uuleus/YumpooPlatform' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository)) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      attestations: read
+      contents: write
+    outputs:
+      tag: ${{ steps.draft.outputs.tag }}
+    steps:
+      # Only push runs on main of this repository reach here, so checking out their commit runs reviewed code.
+      - name: Checkout the main commit being released
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || inputs.commit }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Verify release tooling regression tests
+        run: node --test tools/release/*.test.mjs
+      # No signing key here: the draft only receives attested CI bytes, provenance and release.json.
+      - name: Create or complete the desktop draft with attested CI assets
+        id: draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha || inputs.commit }}
+          WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+        run: node tools/release/prepare-desktop-release.mjs draft
+
+  sign:
+    name: Authorize desktop draft
+    needs: [draft]
+    if: ${{ needs.draft.outputs.tag != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # 更新签名私钥只在这个只允许 dev 的受保护 Environment 中，且只交给签名步骤。
+    environment:
+      name: desktop-signing
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the main commit being released
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || inputs.commit }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Sign the exact installer attached to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha || inputs.commit }}
+          DESKTOP_UPDATE_SIGNING_KEY: ${{ secrets.DESKTOP_UPDATE_SIGNING_KEY }}
+          WECOM_RELEASE_WEBHOOK: ${{ secrets.WECOM_RELEASE_WEBHOOK }}
+        run: node tools/release/prepare-desktop-release.mjs sign

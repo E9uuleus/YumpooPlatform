@@ -186,6 +186,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     if (step === 'draft') {
       const result = await prepareDesktopDraft(options)
       summary(result.skipped ? `No desktop draft: ${result.skipped}.` : `Desktop draft **${result.tag}** holds the attested CI bytes from run ${result.provenance.ciRunId} attempt ${result.provenance.ciRunAttempt}: ${result.url}`)
+      // The signing job, and with it the signing Environment, runs only when a draft is waiting for authorization.
+      if (!result.skipped && process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${result.tag}\n`)
     } else {
       const result = await signDesktopDraft({ ...options, privateKeyPem: process.env[desktopSigningSecret] })
       if (result.skipped) {
