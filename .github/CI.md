@@ -63,7 +63,7 @@ Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必
 | [Windows Release](workflows/windows-release.yml) | Release 发布 | 只校验不可变 Release（含 SBOM 与构建证明）并部署，不写附件 |
 | [Server Rollback](workflows/server-rollback.yml) | 手动，在上一版本 tag 上 | 提交只换代码、不动数据库的回退请求 |
 | [Back-merge Main](workflows/back-merge.yml) | `main` 或 `dev` 推送 | `main` 含 `dev` 缺少的改动（热修复）时开回合并 PR，或把已有回合并分支快进到最新 `main` |
-| [Prepare Desktop Release](workflows/prepare-desktop-release.yml) | `main` 推送 CI 成功 | 桌面版本递增时生成草稿 `desktop-vX.Y.Z`：草稿任务上传并核验桌面产物、来源清单与 `release.json`；之后只在 `desktop-signing` Environment 中运行的签名任务签发 Ed25519 更新授权 |
+| [Prepare Desktop Release](workflows/prepare-desktop-release.yml) | `main` 推送 CI 成功，或在 `dev` 上手动运行 | 两个任务均执行受保护工作流提交中的发布工具，目标提交的版本与公钥只按精确 SHA 读取为 JSON；草稿任务上传并核验桌面产物、来源清单与 `release.json`；签名任务重新核对 CI attempt 和安装包构建证明后，在 `desktop-signing` 中签发 Ed25519 更新授权 |
 | [Desktop Release](workflows/desktop-release.yml) | `desktop-v*` Release 发布 | 只读校验不可变 Release、构建证明与授权签名后，以 `desktop-publish` 请求写入主机更新源；独立并发组 |
 
 这些工作流的结构与权限由 [release-workflows.test.mjs](../tools/ci/release-workflows.test.mjs) 解析 YAML 校验，发布脚本自身的回归由 `tools/release/*.test.mjs` 覆盖，二者都在 `ci:static` 中执行。

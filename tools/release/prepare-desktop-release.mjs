@@ -8,11 +8,11 @@ import { repository } from './policy.mjs'
 import {
   compareVersions, desktopArtifactFileNames, desktopReleaseAssetNames, desktopReleaseJson, desktopSigningSecret, desktopTag,
   requireUpdateDistribution, signatureName, validateDesktopProvenance, validateDesktopReleaseJson, validateDesktopSignature,
-  validateDesktopTag, expectedDesktopArtifactName, installerName,
+  validateDesktopTag, validateDesktopPrepareContext, expectedDesktopArtifactName, installerName,
 } from './desktop-policy.mjs'
 import { createStatement, signStatement } from './desktop-update-signature.mjs'
 import {
-  describeFile, desktopReleases, downloadDesktopCiPackage, inspectDesktopPackage, latestPublished, readDesktopCheckout,
+  describeFile, desktopReleases, downloadDesktopCiPackage, inspectDesktopPackage, latestPublished, readDesktopSource,
 } from './desktop-release.mjs'
 import { desktopChanges, desktopNoteTitles, desktopReleaseBody } from './desktop-release-notes.mjs'
 import { createGithub, readJson, unpackArtifact } from './github.mjs'
@@ -27,8 +27,7 @@ import { notifyWeCom } from './notify.mjs'
  */
 export async function planDesktopRelease({ github, sourceCommit, env, checkout }) {
   assert(/^[0-9a-f]{40}$/u.test(sourceCommit), 'Invalid source commit')
-  assert.equal(env.GITHUB_REPOSITORY, repository, 'Unexpected repository')
-  assert(['workflow_run', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME), 'Unsupported draft trigger')
+  validateDesktopPrepareContext(env)
   await assertOnReleaseBranch(github, sourceCommit)
   const { version, distribution } = checkout
   if (version.startsWith('0.')) return { skip: `Desktop version ${version} is the retired 0.x portable line; the desktop channel starts at 1.0.0` }
@@ -136,7 +135,7 @@ async function verifyDraftAssets({ github, draft, tag, version, sourceCommit, di
 }
 
 // Step 2, the only code that sees the private key: authorize the exact installer already on the draft.
-export async function signDesktopDraft({ github, sourceCommit, env, directory, checkout, privateKeyPem, log = console.log }) {
+export async function signDesktopDraft({ github, sourceCommit, env, directory, checkout, privateKeyPem, attest = verifyBuildAttestations, log = console.log }) {
   const planned = await planDesktopRelease({ github, sourceCommit, env, checkout })
   if (planned.skip) return { skipped: planned.skip }
   const { tag, version, distribution, draft } = planned
@@ -149,6 +148,10 @@ export async function signDesktopDraft({ github, sourceCommit, env, directory, c
   const installer = { name: installerName(version), ...await describeFile(await downloadAsset(github, assets.get(installerName(version)), retained)) }
   assert.equal(installer.sha256, provenance.installerSha256, 'Draft installer differs from provenance')
   assert.equal(installer.bytes, provenance.installerBytes, 'Draft installer size differs from provenance')
+  // Draft assets (including provenance) remain mutable between jobs. Re-authorize the downloaded bytes against
+  // the pinned main CI attempt before creating any signature that a client would trust independently of GitHub.
+  const run = await verifyCiAttempt(github, await ciWorkflowId(github), sourceCommit, provenance.ciRunId, provenance.ciRunAttempt)
+  await attest(retained, run, { env, log, label: 'desktop draft installer before signing', files: [installer.name] })
   const expectation = { distribution, version, sourceCommit, installer }
   if (assets.has(sigName)) {
     const existing = validateDesktopSignature(readJson(await downloadAsset(github, assets.get(sigName), retained)), expectation)
@@ -182,14 +185,20 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   }
   try {
     assert(['draft', 'sign'].includes(step), 'Usage: prepare-desktop-release.mjs draft|sign')
-    const options = { github: createGithub(), sourceCommit: process.env.SOURCE_COMMIT, env: process.env, directory, checkout: readDesktopCheckout() }
+    validateDesktopPrepareContext(process.env)
+    const env = { ...process.env }
+    const privateKeyPem = env[desktopSigningSecret]
+    delete env[desktopSigningSecret]
+    const github = createGithub(env)
+    const sourceCommit = env.SOURCE_COMMIT
+    const options = { github, sourceCommit, env, directory, checkout: await readDesktopSource(github, sourceCommit) }
     if (step === 'draft') {
       const result = await prepareDesktopDraft(options)
       summary(result.skipped ? `No desktop draft: ${result.skipped}.` : `Desktop draft **${result.tag}** holds the attested CI bytes from run ${result.provenance.ciRunId} attempt ${result.provenance.ciRunAttempt}: ${result.url}`)
       // The signing job, and with it the signing Environment, runs only when a draft is waiting for authorization.
       if (!result.skipped && process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${result.tag}\n`)
     } else {
-      const result = await signDesktopDraft({ ...options, privateKeyPem: process.env[desktopSigningSecret] })
+      const result = await signDesktopDraft({ ...options, privateKeyPem })
       if (result.skipped) {
         summary(`No desktop draft to sign: ${result.skipped}.`)
       } else {

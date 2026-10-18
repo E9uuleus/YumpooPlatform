@@ -1,7 +1,7 @@
 name: Prepare Desktop Release
 
 on:
-  # 任务条件只放行本仓库 main 推送且成功的 CI，检出的是已评审代码，不处理 PR 或 fork 产物。
+  # main CI 只提供候选提交；执行的发布工具固定来自受保护 dev 上的工作流提交。
   workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [Platform CI]
     types: [completed]
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       commit:
-        description: Full main commit SHA whose push Platform CI already succeeded
+        description: Full main commit SHA whose push Platform CI already succeeded; run this workflow on dev
         type: string
         required: true
 
@@ -23,7 +23,7 @@ concurrency:
 jobs:
   draft:
     name: Prepare desktop draft
-    if: ${{ github.repository == 'E9uuleus/YumpooPlatform' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository)) }}
+    if: ${{ github.repository == 'E9uuleus/YumpooPlatform' && github.ref == 'refs/heads/dev' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -33,11 +33,11 @@ jobs:
     outputs:
       tag: ${{ steps.draft.outputs.tag }}
     steps:
-      # Only push runs on main of this repository reach here, so checking out their commit runs reviewed code.
-      - name: Checkout the main commit being released
+      # inputs.commit is data, never executable code. Both jobs use the same protected workflow revision.
+      - name: Checkout trusted release tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || inputs.commit }}
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -65,12 +65,14 @@ jobs:
     environment:
       name: desktop-signing
     permissions:
+      actions: read
+      attestations: read
       contents: write
     steps:
-      - name: Checkout the main commit being released
+      - name: Checkout trusted release tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || inputs.commit }}
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

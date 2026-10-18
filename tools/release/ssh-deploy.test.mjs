@@ -225,7 +225,7 @@ test('desktop upload sends every file in distinct parts that reassemble exactly,
   await uploadDesktopFiles({
     directory, request: desktop, log: () => {},
     async sftp(batch) {
-      const part = /^put "((?:\\.|[^"])*)" "[^"\n]*\/(desktop-(\d)-(\d{4})\.part)"\n$/u.exec(batch)
+      const part = /^put "((?:\\.|[^"\\])*)" "[^"\n]*\/(desktop-(\d)-(\d{4})\.part)"\n$/u.exec(batch)
       if (part) {
         assert(!committed)
         received.set(part[2], fs.readFileSync(part[1].replace(/\\(.)/gu, '$1')))

@@ -67,6 +67,14 @@ export function validateDesktopProvenance(value, { tag, sourceCommit }) {
   return value
 }
 
+export function validateDesktopPrepareContext(env) {
+  assert.equal(env.GITHUB_REPOSITORY, repository, 'Unexpected repository')
+  assert(['workflow_run', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME), 'Unsupported draft trigger')
+  assert.equal(env.GITHUB_REF, 'refs/heads/dev', 'Run desktop preparation from the protected dev branch')
+  assert.equal(env.GITHUB_WORKFLOW_REF, `${repository}/${desktopPrepareWorkflowPath}@refs/heads/dev`, 'Desktop preparation must use the protected workflow')
+  assert(commitPattern.test(env.GITHUB_WORKFLOW_SHA), 'Invalid preparation workflow commit')
+}
+
 export function validateDesktopWorkflowContext(env, tag, sourceCommit) {
   validateDesktopTag(tag)
   assert(commitPattern.test(sourceCommit), 'Invalid source commit')

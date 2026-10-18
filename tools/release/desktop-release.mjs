@@ -26,6 +26,20 @@ export function readDesktopCheckout(root = repositoryRoot) {
   }
 }
 
+/** Preparation executes trusted workflow code; candidate version and keys are read only as JSON at the exact main commit. */
+export async function readDesktopSource(github, sourceCommit) {
+  assert(/^[0-9a-f]{40}$/u.test(sourceCommit), 'Invalid source commit')
+  await assertOnReleaseBranch(github, sourceCommit)
+  const read = async name => {
+    const file = await github.get(`/contents/desktop/desktop-shell/${name}?ref=${sourceCommit}`)
+    assert(file?.type === 'file' && file.encoding === 'base64' && typeof file.content === 'string', `Expected source JSON file: ${name}`)
+    return JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'))
+  }
+  const manifest = await read('package.json')
+  const distribution = await read('distribution/production.json')
+  return { version: validateDesktopVersion(manifest.version), distribution }
+}
+
 export async function desktopReleases(github) {
   return (await github.list('/releases?per_page=100')).filter(release => {
     try { validateDesktopTag(release.tag_name); return true } catch { return false }

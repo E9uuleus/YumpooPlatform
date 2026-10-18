@@ -431,6 +431,7 @@ try {
         for ($fileIndex = 0; $fileIndex -lt $names.Count; $fileIndex++) {
             $bytes = [Text.Encoding]::UTF8.GetBytes("$($names[$fileIndex]) of $Version")
             if ($fileIndex -eq 0) { $bytes = [byte[]]($bytes + (New-Object byte[] (2MB))) }
+            if ($names[$fileIndex] -ceq 'latest.yml') { $bytes = [Text.Encoding]::UTF8.GetBytes("version: $Version`n") }
             if ($names[$fileIndex] -ceq 'release.json') { $bytes = [Text.Encoding]::UTF8.GetBytes((@{ schemaVersion = 1; version = $Version; sourceCommit = $Commit } | ConvertTo-Json)) }
             for ($index = 0; $index * 2MB -lt $bytes.Length; $index++) {
                 $length = [Math]::Min(2MB, $bytes.Length - $index * 2MB)
@@ -527,9 +528,37 @@ try {
     [IO.File]::WriteAllText($conflict, 'stale blockmap from another build')
     $rejected = $false
     try { $null = Publish-YumpooDesktopFeed $desktopSettings $next.request $nextFiles '1.2.0' } catch { $rejected = $_.Exception.Message -like '*other content*' }
-    Assert-Test ($rejected -and (Get-Content -LiteralPath (Join-Path $feedDirectory 'latest.yml') -Raw) -ceq 'latest.yml of 1.1.0') 'latest.yml is replaced only after every versioned file is in place'
+    Assert-Test ($rejected -and (Get-Content -LiteralPath (Join-Path $feedDirectory 'latest.yml') -Raw) -ceq "version: 1.1.0`n") 'latest.yml is replaced only after every versioned file is in place'
     Remove-Item -LiteralPath $conflict
-    Assert-Test ((Publish-YumpooDesktopFeed $desktopSettings $next.request $nextFiles '1.2.0') -ceq 'complete' -and (Get-Content -LiteralPath (Join-Path $feedDirectory 'latest.yml') -Raw) -ceq 'latest.yml of 1.2.0') 'the next version replaces latest.yml last'
+    Assert-Test ((Publish-YumpooDesktopFeed $desktopSettings $next.request $nextFiles '1.2.0') -ceq 'complete' -and (Get-Content -LiteralPath (Join-Path $feedDirectory 'latest.yml') -Raw) -ceq "version: 1.2.0`n") 'the next version replaces latest.yml last'
+
+    # Simulate a crash immediately after latest.yml is replaced, before release.json can record the new version.
+    $interruptedRoot = Join-Path $desktopRoot 'interrupted'; New-Item -ItemType Directory -Path $interruptedRoot | Out-Null
+    $interruptedSettings = [pscustomobject]@{ desktopFeed = [pscustomobject]@{ enabled = $true; root = $interruptedRoot } }
+    $interruptedDirectory = (Get-YumpooDesktopFeedSettings $interruptedSettings).directory
+    $null = Publish-YumpooDesktopFeed $interruptedSettings $first.request $firstFiles '1.1.0'
+    foreach ($name in (Get-YumpooDesktopFileNames '1.2.0')[0..3]) { Set-YumpooFeedFile $nextFiles[$name] (Join-Path $interruptedDirectory $name) }
+    $between = & $newDesktopUpload '1.1.1'
+    $betweenFiles = Copy-YumpooDesktopUpload $between.source $between.work $between.request
+    foreach ($candidate in @(@{ upload = $between; files = $betweenFiles; version = '1.1.1' }, @{ upload = $first; files = $firstFiles; version = '1.1.0' })) {
+        $rejected = $false
+        try { $null = Publish-YumpooDesktopFeed $interruptedSettings $candidate.upload.request $candidate.files $candidate.version } catch { $rejected = $_.Exception.Message -like '*downgrade*' }
+        Assert-Test $rejected 'neither an intermediate version nor the old release.json version may replace an already exposed latest.yml'
+    }
+    Assert-Test ((Publish-YumpooDesktopFeed $interruptedSettings $next.request $nextFiles '1.2.0') -ceq 'complete') 'retrying the exposed version repairs a stale release.json'
+    Assert-Test ((Get-Content -LiteralPath (Join-Path $interruptedDirectory 'release.json') -Raw | ConvertFrom-Json).version -ceq '1.2.0') 'the download-page pointer catches up to the exposed update'
+    Remove-Item -LiteralPath (Join-Path $interruptedDirectory 'release.json')
+    $rejected = $false
+    try { $null = Publish-YumpooDesktopFeed $interruptedSettings $between.request $betweenFiles '1.1.1' } catch { $rejected = $_.Exception.Message -like '*downgrade*' }
+    Assert-Test $rejected 'the first publication is protected even if release.json has never been written'
+    Assert-Test ((Publish-YumpooDesktopFeed $interruptedSettings $next.request $nextFiles '1.2.0') -ceq 'complete') 'retrying the same verified version completes an interrupted publication'
+    Assert-Test ((Get-Content -LiteralPath (Join-Path $interruptedDirectory 'release.json') -Raw | ConvertFrom-Json).version -ceq '1.2.0') 'the retry repairs the download-page pointer'
+    Assert-Test ((Publish-YumpooDesktopFeed $interruptedSettings $next.request $nextFiles '1.2.0') -ceq 'already_current') 'a completed retry is idempotent'
+    # An existing release.json is not sufficient for a no-op: missing feed files must be restored as well.
+    Remove-Item -LiteralPath (Join-Path $interruptedDirectory 'latest.yml')
+    Remove-Item -LiteralPath (Join-Path $interruptedDirectory $next.request.files[0].name)
+    Assert-Test ((Publish-YumpooDesktopFeed $interruptedSettings $next.request $nextFiles '1.2.0') -ceq 'complete') 'an incomplete current version is repaired instead of being skipped'
+    Write-Output 'Desktop feed interrupted publication, downgrade rejection and idempotent repair passed.'
     foreach ($version in @('1.3.0', '1.10.0')) {
         $upload = & $newDesktopUpload $version
         $null = Publish-YumpooDesktopFeed $desktopSettings $upload.request (Copy-YumpooDesktopUpload $upload.source $upload.work $upload.request) $version

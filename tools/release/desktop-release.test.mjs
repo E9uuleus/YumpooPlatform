@@ -10,7 +10,7 @@ import {
   signatureName, validateDesktopSignature, validateDesktopTag,
 } from './desktop-policy.mjs'
 import { createStatement, fixtureKey, generateSigningKey, signStatement } from './desktop-update-signature.mjs'
-import { prepareDesktopRelease, readDesktopCheckout } from './desktop-release.mjs'
+import { prepareDesktopRelease, readDesktopCheckout, readDesktopSource } from './desktop-release.mjs'
 import { planDesktopRelease, prepareDesktopDraft, signDesktopDraft } from './prepare-desktop-release.mjs'
 import { rehearseDesktopFeed } from './rehearse-release.mjs'
 import { collectDesktopRelease } from '../verification/collect-desktop-release.mjs'
@@ -18,7 +18,11 @@ import { collectDesktopRelease } from '../verification/collect-desktop-release.m
 const sha = 'a'.repeat(40)
 const previousSha = 'b'.repeat(40)
 const digest = value => createHash('sha256').update(value).digest('hex')
-const draftEnv = { GITHUB_REPOSITORY: repository, GITHUB_EVENT_NAME: 'workflow_run' }
+const draftEnv = {
+  GITHUB_REPOSITORY: repository, GITHUB_EVENT_NAME: 'workflow_run', GITHUB_REF: 'refs/heads/dev',
+  GITHUB_WORKFLOW_REF: `${repository}/.github/workflows/prepare-desktop-release.yml@refs/heads/dev`,
+  GITHUB_WORKFLOW_SHA: 'f'.repeat(40),
+}
 const trusted = fixtureKey()
 const backup = fixtureKey('yumpoo-desktop-update-backup-fixture')
 const distribution = {
@@ -68,6 +72,11 @@ function fixture(t, { version = '1.1.0', published = [{ tag: 'desktop-v1.0.0', s
     get(endpoint) {
       this.calls.push(endpoint)
       if (endpoint === `/compare/${sha}...main?per_page=1`) return { status: 'ahead', merge_base_commit: { sha } }
+      for (const [name, value] of [['package.json', { version }], ['distribution/production.json', distribution]]) {
+        if (endpoint === `/contents/desktop/desktop-shell/${name}?ref=${sha}`) {
+          return { type: 'file', encoding: 'base64', content: Buffer.from(JSON.stringify(value)).toString('base64') }
+        }
+      }
       if (endpoint === '/actions/workflows/m0-18-ci.yml') return { id: 42, path: ciWorkflowPath }
       if (endpoint === '/actions/runs/3001/attempts/1') return run
       const tagRef = endpoint.match(/^\/git\/ref\/tags\/(desktop-v[\d.]+)$/u)
@@ -131,13 +140,13 @@ function fixture(t, { version = '1.1.0', published = [{ tag: 'desktop-v1.0.0', s
     for (const [name, bytes] of Object.entries(files)) fs.writeFileSync(path.join(directory, name), bytes)
   }
   const attest = async (directory, ciRun, options) => {
-    assert.deepEqual(options.files, desktopArtifactFileNames(version))
-    for (const name of options.files) assert(fs.statSync(path.join(directory, name)).isFile(), `attested file missing: ${name}`)
-    github.attestations.push({ label: options.label, uploadsSoFar: github.uploads.length, run: ciRun.id })
+    assert(options.files.length > 0 && options.files.every(name => Object.hasOwn(files, name)))
+    for (const name of options.files) assert.deepEqual(fs.readFileSync(path.join(directory, name)), files[name], `Unattested desktop bytes: ${name}`)
+    github.attestations.push({ label: options.label, uploadsSoFar: github.uploads.length, run: ciRun.id, files: options.files })
   }
   const checkout = { version, distribution }
   const options = extra => ({ github, sourceCommit: sha, env: draftEnv, directory: fs.mkdtempSync(path.join(root, 'run-')), checkout, unpack, attest, log: () => {}, ...extra })
-  return { github, files, root, version, options, attest }
+  return { github, files, root, version, options, attest, run }
 }
 
 const draftOf = github => github.releases.find(release => release.draft)
@@ -190,6 +199,30 @@ test('old, unchanged and already drafted versions get no new draft', async t => 
   assert.deepEqual(github.uploads, [])
 })
 
+test('preparation reads candidate JSON at an exact main commit while executing the protected workflow revision', async t => {
+  const { github, options, version } = fixture(t)
+  assert.deepEqual(await readDesktopSource(github, sha), { version, distribution })
+  assert.deepEqual(github.calls, [
+    `/compare/${sha}...main?per_page=1`,
+    `/contents/desktop/desktop-shell/package.json?ref=${sha}`,
+    `/contents/desktop/desktop-shell/distribution/production.json?ref=${sha}`,
+  ])
+  for (const fields of [
+    { GITHUB_REF: 'refs/heads/feature/unreviewed' },
+    { GITHUB_WORKFLOW_REF: `${repository}/.github/workflows/prepare-desktop-release.yml@refs/heads/feature/unreviewed` },
+    { GITHUB_WORKFLOW_SHA: '' },
+  ]) await assert.rejects(planDesktopRelease(options({ env: { ...draftEnv, GITHUB_EVENT_NAME: 'workflow_dispatch', ...fields } })))
+  await assert.rejects(readDesktopSource(github, 'feature/unreviewed'), /Invalid source commit/u)
+  github.calls.length = 0
+  github.get = endpoint => {
+    github.calls.push(endpoint)
+    return { status: 'diverged', merge_base_commit: { sha: previousSha } }
+  }
+  await assert.rejects(readDesktopSource(github, sha), /ancestor/u)
+  assert.deepEqual(github.calls, [`/compare/${sha}...main?per_page=1`], 'unreviewed candidates are rejected before reading their configuration')
+  assert.deepEqual(github.uploads, [])
+})
+
 test('a draft carries the attested CI bytes, provenance first, notes limited to desktop commits in range', async t => {
   const { github, options, version } = fixture(t)
   const result = await prepareDesktopDraft(options())
@@ -216,9 +249,38 @@ test('only a key the released build trusts may sign, and the signature covers th
   await assert.rejects(signDesktopDraft(options({ privateKeyPem: generateSigningKey().privatePem })), /not trusted/u)
   const signed = await signDesktopDraft(options({ privateKeyPem: pem(trusted) }))
   assert.equal(signed.keyId, trusted.keyId)
+  assert.deepEqual(github.attestations.at(-1).files, [installerName(version)])
+  assert.equal(github.attestations.at(-1).uploadsSoFar, 7, 'attestation precedes the signature upload')
   assert.equal(github.uploads.at(-1), signatureName(version))
   const again = await signDesktopDraft(options({ privateKeyPem: undefined }))
   assert.equal(again.created, false, 'an attached authorization is verified, not replaced')
+})
+
+test('signing rejects a replaced installer even when its mutable provenance and GitHub digest were replaced too', async t => {
+  const { github, options, version } = fixture(t)
+  await prepareDesktopDraft(options())
+  const draft = draftOf(github)
+  const replace = (name, bytes) => {
+    const item = github.assets.get(`${draft.id}/${name}`)
+    item.bytes = bytes
+    Object.assign(item.asset, { digest: `sha256:${digest(bytes)}`, size: bytes.length })
+  }
+  const payload = Buffer.from('replacement that was never attested by CI')
+  const provenance = JSON.parse(github.assets.get(`${draft.id}/provenance.json`).bytes)
+  Object.assign(provenance, { installerSha256: digest(payload), installerBytes: payload.length })
+  replace(installerName(version), payload)
+  replace('provenance.json', Buffer.from(JSON.stringify(provenance)))
+  await assert.rejects(signDesktopDraft(options({ privateKeyPem: pem(trusted) })), /Unattested desktop bytes/u)
+  assert(!github.uploads.includes(signatureName(version)), 'no client-trusted authorization is produced for replaced draft bytes')
+})
+
+test('signing independently checks the pinned main CI attempt before authorizing the draft', async t => {
+  const { github, options, version, run } = fixture(t)
+  await prepareDesktopDraft(options())
+  run.conclusion = 'failure'
+  await assert.rejects(signDesktopDraft(options({ privateKeyPem: pem(trusted) })), /CI attempt did not succeed/u)
+  assert(!github.uploads.includes(signatureName(version)))
+  assert.equal(github.attestations.length, 2, 'failed CI is rejected before the signing attestation')
 })
 
 test('publishing verifies the immutable Release, its CI attempt, attestations and the authorization', async t => {

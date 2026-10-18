@@ -798,7 +798,7 @@ function Assert-YumpooRollbackMigrations($Current, $Target) {
 
 # ---- Desktop update feed (desktop-publish requests) ----
 # The feed is plain static files served by Nginx. Every file is checked against the digest GitHub recorded for the
-# published Release asset; latest.yml and release.json are replaced last, so clients only ever see a complete version.
+# published Release asset; each pointer is replaced only after that version's files are complete.
 
 function Get-YumpooDesktopFeedSettings($Settings) {
     $feed = @{
@@ -937,15 +937,28 @@ function Publish-YumpooDesktopFeed($Settings, $Request, $Files, [string]$Version
     if (-not (Test-Path -LiteralPath $feed.root)) { New-Item -ItemType Directory -Path $feed.root | Out-Null; Set-YumpooAcl $feed.root }
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     $directory = Assert-YumpooFeedPath $directory
-    $currentFile = Join-Path $directory 'release.json'
+    $currentFile = Assert-YumpooPath (Join-Path $directory 'release.json') $directory
+    $latestFile = Assert-YumpooPath (Join-Path $directory 'latest.yml') $directory
+    $pointerVersions = @{}
     if (Test-Path -LiteralPath $currentFile) {
         $current = Get-Content -LiteralPath $currentFile -Raw | ConvertFrom-Json
         if ([string]$current.version -cnotmatch ('^' + $script:DesktopVersionPattern + '$')) { throw 'The live feed release.json is invalid; reconcile it as an administrator.' }
-        $order = ([version]$Version).CompareTo([version][string]$current.version)
-        if ($order -eq 0 -and [string]$current.sourceCommit -ceq $Request.sourceCommit) { return 'already_current' }
-        if ($order -le 0) { throw "Desktop downgrade or version reuse is forbidden (feed has $($current.version))." }
+        $pointerVersions['release.json'] = [string]$current.version
+        if ($Version -ceq [string]$current.version -and [string]$current.sourceCommit -cne $Request.sourceCommit) { throw 'Desktop version reuse is forbidden.' }
+    }
+    if (Test-Path -LiteralPath $latestFile) {
+        $latestVersion = Read-YumpooYamlScalar $latestFile 'version'
+        if ($latestVersion -cnotmatch ('^' + $script:DesktopVersionPattern + '$')) { throw 'The live feed latest.yml is invalid; reconcile it as an administrator.' }
+        $pointerVersions['latest.yml'] = $latestVersion
+        if ($Version -ceq $latestVersion -and (Get-FileHash -LiteralPath $latestFile -Algorithm SHA256).Hash -ine (Get-FileHash -LiteralPath $Files['latest.yml'] -Algorithm SHA256).Hash) { throw 'Desktop version reuse is forbidden: latest.yml already exposes other content.' }
+    }
+    # The two pointer replacements are not a transaction. Either may be the highest version already exposed to
+    # users after an interruption, including a first publication with no release.json yet. Never move it back.
+    foreach ($name in $pointerVersions.Keys) {
+        if (([version]$Version).CompareTo([version]$pointerVersions[$name]) -lt 0) { throw "Desktop downgrade is forbidden ($name has $($pointerVersions[$name]))." }
     }
     $names = Get-YumpooDesktopFileNames $Version
+    $changed = $false
     # Versioned files first: an identical file from an interrupted attempt is kept, a different one is never overwritten.
     foreach ($name in $names[0..2]) {
         $target = Assert-YumpooPath (Join-Path $directory $name) $directory
@@ -954,9 +967,16 @@ function Publish-YumpooDesktopFeed($Settings, $Request, $Files, [string]$Version
             continue
         }
         Set-YumpooFeedFile $Files[$name] $target
+        $changed = $true
     }
-    foreach ($name in $names[3..4]) { Set-YumpooFeedFile $Files[$name] (Assert-YumpooPath (Join-Path $directory $name) $directory) }
+    foreach ($name in $names[3..4]) {
+        $target = Assert-YumpooPath (Join-Path $directory $name) $directory
+        if ((Test-Path -LiteralPath $target) -and (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ieq (Get-FileHash -LiteralPath $Files[$name] -Algorithm SHA256).Hash) { continue }
+        Set-YumpooFeedFile $Files[$name] $target
+        $changed = $true
+    }
     $null = Invoke-YumpooDesktopFeedRetention $directory $feed.retainVersions
+    if (-not $changed) { return 'already_current' }
     return 'complete'
 }
 

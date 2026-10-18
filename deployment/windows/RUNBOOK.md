@@ -493,13 +493,15 @@ gh attestation verify '<下载目录>\YumpooDesktop-Setup-X.Y.Z-x64.exe' -R E9uu
 **更新授权签名**
 
 - 主私钥只在 Environment `desktop-signing`（部署分支只允许 `dev`）的 secret `DESKTOP_UPDATE_SIGNING_KEY` 中；只有 Prepare Desktop Release 的签名步骤能读取它。草稿任务不进入这个 Environment。
-- 签名前要求钥匙属于该提交 `distribution/production.json` 中的公钥；签名后再按客户端规则复核。
+- Prepare Desktop Release 手动运行时必须选择 `dev`，`commit` 填待发布的完整 `main` 提交 SHA。两个任务固定检出 `github.workflow_sha` 对应的受保护发布工具；候选提交的 `package.json` 与 `distribution/production.json` 经祖先检查后通过 API 读取，不执行候选提交的代码。
+- 签名任务重新核对 provenance 钉住的成功 `main` CI attempt 和本次下载的安装包构建证明，再要求钥匙属于目标提交 `distribution/production.json` 中的公钥；签名后按客户端规则复核。不能仅凭草稿安装包与可修改的 provenance 一致就签名。
 - 离线备用钥匙只用于主钥匙丢失或泄露：用备用钥匙签一个过渡版本，在其中换掉公钥，然后轮换 secret。生成钥匙：`node tools/release/desktop-update-signature.mjs keygen --private-key-out <仓库外的路径>`，只把输出的 `keyId` 与 `publicKey` 写入 `production.json`。
 
 **主机与更新源**
 
 - 部署引擎的 `desktop-publish` 请求与服务器部署共用部署锁，但不进入维护、不写 `active.json`、`current.json`；服务器处于 `running` 或 `recovery_required` 时同样拒绝桌面请求。
-- 引擎逐个核对上传文件与已发布不可变 Release 附件的 digest、标签提交、`main` 祖先关系和 CI 推送运行，然后写入 `<desktopFeed.root>/desktop/stable/`：先写安装包、blockmap 和授权签名，最后原子替换 `latest.yml` 与 `release.json`。拒绝降级、同版本不同提交和任何重解析点。
+- 引擎逐个核对上传文件与已发布不可变 Release 附件的 digest、标签提交、`main` 祖先关系和 CI 推送运行，然后写入 `<desktopFeed.root>/desktop/stable/`：先写安装包、blockmap 和授权签名，最后分别原子替换 `latest.yml` 与 `release.json`。以两个指针中的最高版本防止降级，拒绝同版本不同提交或更新元数据以及任何重解析点。
+- 两个指针的替换不是事务。若第二次替换失败，自动更新可能已发现新版本，而下载页仍显示旧版本；发布报告失败不代表新版本尚未公开。重跑同一 tag 的 Desktop Release 可以补齐指针与缺失文件；只有全部内容已一致才返回 `already_current`。不要手工降低指针或改发较低版本。
 - 保留最近 3 个版本的安装包与签名、最近 20 个版本的 blockmap（旧版本客户端做差分下载要用自己版本的 blockmap）。
 - 状态与通知沿用服务器的 `status/<requestId>.json` 与企业微信通知，阶段为 `desktop_verify`、`desktop_publish`、`complete` 或 `already_current`。
 - 维护窗口内整站 503，更新源同样不可用；客户端稍后自动重试。

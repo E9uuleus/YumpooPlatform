@@ -136,15 +136,16 @@ Status: implemented
 - 桌面端有独立的标签线 `desktop-vX.Y.Z`、草稿和 Publish 决定，与服务器发布互不牵连；两者共用 `main` 推送 CI、构建证明和部署引擎，但不共用标签、附件、并发组和部署状态。操作见 RUNBOOK 第 11 节；
 - 产物只构建一次：Windows Delivery 把经过安装冒烟的那份安装包，连同 blockmap、`latest.yml`、[桌面 SBOM](../../../../tools/verification/collect-desktop-release.mjs) 与 manifest 收集到 `out/desktop`，签署构建证明后上传为 `desktop-<sha>-<attempt>`。SBOM 由构建写出的内联包清单（`dist/bundled-packages.json`，不进 asar）加上 Electron 运行时生成：工作区把它们都列为 devDependencies，`pnpm sbom --prod` 会漏掉真正随安装包分发的内容；
 - [Prepare Desktop Release](../../../../tools/release/prepare-desktop-release.mjs) 只在桌面版本递增时生成草稿。`0.x` 是退役的便携版线，不进入渠道；已发布、不高于最新已发布版本、或已有指向其他提交的同名草稿时都不生成。草稿永不自动删除或改指向，正在试装的草稿字节不会被替换；
-- 草稿任务不接触私钥，只上传核验过构建证明的 CI 文件、来源清单和 `release.json`。签名是独立任务，只有它进入 `desktop-signing` Environment，且只在草稿任务确有待签草稿时运行；签名前要求钥匙属于该提交 `production.json` 的公钥，签名后按客户端规则复核；
+- Prepare Desktop Release 只从受保护的 `dev` ref 运行，草稿和签名任务都检出 `github.workflow_sha`，不执行手动输入或 CI 事件提供的候选提交中的脚本。候选提交须为 `main` 祖先，版本与公钥只通过 GitHub API 按完整 SHA 读取为 JSON；
+- 草稿任务不接触私钥，只上传核验过构建证明的 CI 文件、来源清单和 `release.json`。签名是独立任务，只有它进入 `desktop-signing` Environment，且只在草稿任务确有待签草稿时运行；签名前重新核对来源清单钉住的成功 `main` CI attempt 和本次下载的安装包构建证明，防止两个任务之间草稿安装包与来源清单一起被替换。钥匙必须属于目标提交 `production.json` 的公钥，签名后按客户端规则复核；
 - 生产分发配置写入 `update`：更新源 `https://wecom-dev.yumpoo.com/desktop/stable/`、渠道 `stable`、主钥匙与离线备用钥匙的公钥；
 - [Desktop Release](../../../../tools/release/desktop-release.mjs) 在发布后只读复核不可变 Release、钉住的 CI attempt、构建证明和授权签名（公钥取自被发布的提交），然后以 `desktop-publish` 请求分块上传五个更新源文件。
 
 **更新源与部署引擎**（DESK-4）：
 
 - 引擎核对每个上传文件与同名已发布不可变 Release 附件的 digest 和大小，再独立检查标签提交、`main` 祖先关系和 CI 推送运行。引擎在 Windows PowerShell 5.1 上运行，没有 Ed25519，所以不复核签名：授权由客户端在安装前核对，引擎保证更新源上的字节就是 Release 附件；
-- 写入顺序固定：先写带版本号的安装包、blockmap、签名（已有同名文件内容相同则保留，不同则拒绝），最后原子替换 `latest.yml` 与 `release.json`。任何一步失败，客户端看到的仍是上一个完整版本；
-- 版本只能递增；同版本同提交为 `already_current`；
+- 写入顺序固定：先写带版本号的安装包、blockmap、签名（已有同名文件内容相同则保留，不同则拒绝），最后分别原子替换 `latest.yml` 与 `release.json`。两个替换不是事务，中断时指针可以暂时不同，但每个指针引用的版本文件都已就位；
+- 版本不能低于任一已公开指针的版本，第一次发布尚无 `release.json` 时也受 `latest.yml` 约束。重试同一已核验版本会补齐缺失文件和未完成的指针，只有全部内容一致才返回 `already_current`；
 - 保留最近 3 个版本的安装包与签名、20 个版本的 blockmap，旧版本客户端靠自己版本的 blockmap 做差分下载；
 - 桌面请求与服务器部署共用部署锁，不进入维护、不写 `active.json` 和 `current.json`；账本条目没有 `releaseRoot`，服务器保留策略与回退看不到它。服务器处于 `running` 或 `recovery_required` 时桌面请求同样被拒绝，宁可延后桌面发布也不在待恢复的主机上写文件；
 - `host.json` 的 `desktopFeed` 默认关闭，由管理员用 `Update-YumpooEngine.ps1 -EnableDesktopFeed` 启用；Nginx 用 `root` 把 `/desktop/` 映射到 `desktopFeed.root`，`latest.yml`、`release.json` 不缓存，带版本号的文件长期缓存；
@@ -174,6 +175,8 @@ Status: implemented
 - **引入 ZIP 库导出诊断包**：会让主进程多出第一个运行时依赖；仅存储格式的 ZIP 写出只需几十行代码。
 - **桌面与服务器共用发布并发组**：GitHub 每个并发组只保留一个待运行项，新的待运行项会取消旧的，两条发布线会互相吞掉排队的运行；串行由主机的部署锁和 inbox 顺序保证。
 - **在草稿任务里直接签名**：草稿任务要读 Actions 产物、写 Release，每次 `main` 推送都会运行；让它进入签名 Environment，私钥就暴露给更多代码，Environment 也会记下大量无关的部署。拆出只在有待签草稿时运行的签名任务。
+- **执行候选提交里的发布脚本后再检查其来源**：未审查提交可以替换检查本身。Environment 规则约束工作流的 ref，不约束 checkout 的目标；因此执行代码固定来自受保护工作流版本，候选版本只提供数据。
+- **签名任务信任草稿阶段的核验结果**：草稿附件仍可修改，安装包和来源清单可以同时被替换。签名任务必须针对本次下载的字节再次验证构建证明，不能把发布后的验证当作撤销已签授权的手段。
 - **客户端从 GitHub Releases 下载更新**：主机所在网络访问 GitHub 下载域名会超时，同事的网络也一样；更新源放在已有的 Nginx 主机上。
 - **把更新源文件打成一个 ZIP 上传**：发布工具只用 Node 内置模块，没有 ZIP 写入；按文件分块沿用服务器包的 2 MiB 分块和逐块校验，引擎逐个文件对照 Release 附件。
 - **Nginx 用 `alias` 映射 `/desktop/`**：`alias` 与嵌套正则 location 组合有已知问题；`root` 让目录结构与 URL 一一对应。

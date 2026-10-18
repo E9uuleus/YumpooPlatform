@@ -68,7 +68,9 @@ test('desktop drafts come from the same main push CI; only the sign job enters t
   assert.deepEqual(desktopPrepare.on.workflow_run, prepare.on.workflow_run)
   assert.notDeepEqual(desktopPrepare.concurrency.group, prepare.concurrency.group, 'desktop drafts never queue behind or replace server drafts')
   const { draft, sign } = desktopPrepare.jobs
-  assert.equal(draft.if, prepare.jobs.draft.if, 'the same trigger guard as server drafts')
+  for (const fragment of ["github.ref == 'refs/heads/dev'", "github.event_name == 'workflow_dispatch'", "github.event.workflow_run.conclusion == 'success'", "github.event.workflow_run.event == 'push'", 'github.event.workflow_run.head_repository.full_name == github.repository']) {
+    assert(draft.if.includes(fragment), `desktop preparation guard missing: ${fragment}`)
+  }
   assert.equal(draft.environment, undefined)
   assert.deepEqual(draft.permissions, { actions: 'read', attestations: 'read', contents: 'write' })
   assert(steps(draft).some(step => step.run === 'node tools/release/prepare-desktop-release.mjs draft' && step.id === 'draft'))
@@ -76,14 +78,18 @@ test('desktop drafts come from the same main push CI; only the sign job enters t
   assert.deepEqual(sign.needs, ['draft'])
   assert.equal(sign.if, "${{ needs.draft.outputs.tag != '' }}")
   assert.equal(sign.environment.name, 'desktop-signing')
-  assert.deepEqual(sign.permissions, { contents: 'write' })
+  assert.deepEqual(sign.permissions, { actions: 'read', attestations: 'read', contents: 'write' })
   const signing = steps(sign).filter(step => signingSecret in (step.env ?? {}))
   assert.equal(signing.length, 1)
   assert.equal(signing[0].run, 'node tools/release/prepare-desktop-release.mjs sign')
   assert.equal(signing[0].env[signingSecret], `\${{ secrets.${signingSecret} }}`)
   for (const job of [draft, sign]) assert(!steps(job).some(step => deploySecrets.some(secret => secret in (step.env ?? {}))))
-  for (const ref of [draft, sign].map(job => steps(job).find(step => step.uses?.startsWith('actions/checkout@')).with.ref)) {
-    assert.equal(ref, '${{ github.event.workflow_run.head_sha || inputs.commit }}', 'both jobs act on the CI commit')
+  for (const job of [draft, sign]) {
+    const checkouts = steps(job).filter(step => step.uses?.startsWith('actions/checkout@'))
+    assert.equal(checkouts.length, 1)
+    assert.equal(checkouts[0].with.ref, '${{ github.workflow_sha }}', 'candidate commits must never supply executable release tooling')
+    const prepareStep = steps(job).find(step => step.run?.startsWith('node tools/release/prepare-desktop-release.mjs '))
+    assert.equal(prepareStep.env.SOURCE_COMMIT, '${{ github.event.workflow_run.head_sha || inputs.commit }}', 'the candidate is passed only as data')
   }
 })
 
