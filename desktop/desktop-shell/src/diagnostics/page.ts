@@ -92,7 +92,12 @@ interface DiagnosticsActionButton {
     row(versions, 'Yumpoo Desktop', report.versions.shell)
     row(versions, 'Electron / Chromium', `${report.versions.electron} / ${report.versions.chrome}`)
     row(versions, '操作系统', `${report.versions.os} ${report.versions.arch}`)
-    row(versions, '应用内更新', '尚未启用')
+    const update = report.update
+    const updateText: Record<string, string> = {
+      unavailable: '未启用', disabled: '未启用', idle: '已是最新版本', checking: '正在检查…', downloading: `正在下载 ${update.version ?? ''}`,
+      verifying: `正在校验 ${update.version ?? ''}`, ready: `${update.version ?? '新版本'} 已就绪，重启后安装`, error: `失败：${update.error ?? '未知错误'}`,
+    }
+    row(versions, '应用内更新', updateText[update.state] ?? update.state, update.state === 'error' ? 'fail' : update.state === 'ready' ? 'ok' : undefined)
 
     const actions = byId('actions')
     actions.replaceChildren(...ACTIONS.filter(item => item.visible?.(report) ?? true).map(item => {

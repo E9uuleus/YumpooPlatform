@@ -36,5 +36,10 @@ runSync(
   [path.join(repositoryRoot, 'tools', 'verification', 'verify-desktop-installer.mjs')],
   { cwd: repositoryRoot, env: { ...process.env, YUMPOO_M015_OUTPUT_ROOT: outputRoot } },
 )
+runSync(
+  process.execPath,
+  [path.join(repositoryRoot, 'tools', 'verification', 'verify-desktop-update.mjs')],
+  { cwd: repositoryRoot },
+)
 
 console.log(`M0-15 Windows 叶子门禁已通过：${path.relative(repositoryRoot, outputRoot)}`)

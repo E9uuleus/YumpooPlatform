@@ -9,7 +9,7 @@ import type { DiagnosticsDependencies, ProbeResponse, TlsInspection } from './di
 const MAX_JSON_BYTES = 64 * 1024
 
 export type RuntimeDiagnosticsOptions = Pick<DiagnosticsDependencies,
-  'origin' | 'safeMode' | 'crashLoop' | 'consecutiveFailures' | 'startupFailure' | 'offline'>
+  'origin' | 'safeMode' | 'crashLoop' | 'consecutiveFailures' | 'startupFailure' | 'offline' | 'updateState'>
 
 /** Probes use Chromium's network stack (system proxy, Windows certificate store) and never send cookies. */
 export function runtimeDiagnostics(options: RuntimeDiagnosticsOptions): DiagnosticsDependencies {

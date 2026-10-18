@@ -1,0 +1,18 @@
+{
+  "publicKey": "VavagnvZ0TIK+np/dfoIqcNsiZr01NKdDKAhbGg7pwU=",
+  "installer": "yumpoo desktop update fixture installer",
+  "signed": {
+    "keyId": "ed25519-3caa78577db11ee2",
+    "statement": {
+      "schema": "yumpoo-desktop-update/1",
+      "channel": "stable",
+      "version": "1.0.1",
+      "file": "YumpooDesktop-Setup-1.0.1-x64.exe",
+      "sha512": "WJmT1SBN6zyfY+A+VymCQKy7FE06qnol8FdCUuFqhH0cNIQ4KNqKEmegPX0ZDbIXlwwJz+BSYQrf9THyo8jLDQ==",
+      "size": 39,
+      "tag": "desktop-v1.0.1",
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "signature": "l9DcL0mrmMO9Dm9mGOnO7JE+xZ5iFu3UpnWWKKSekkUXQoF/ma+yoLizv5B53isfsKWmTDZbf/xQX7B57aSlBQ=="
+  }
+}

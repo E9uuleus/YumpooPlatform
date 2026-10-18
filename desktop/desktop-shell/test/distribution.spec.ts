@@ -26,6 +26,30 @@ describe('桌面分发配置', () => {
     expect(() => parseDistribution(value)).toThrow()
   })
 
+  const fixture = JSON.parse(readFileSync(path.join(__dirname, 'fixtures', 'signed-update.json'), 'utf8')) as { publicKey: string; signed: { keyId: string } }
+  const update = { feed: 'https://yumpoo.example.com/desktop/stable/', channel: 'stable', publicKeys: [{ keyId: fixture.signed.keyId, publicKey: fixture.publicKey }] }
+
+  it('接受带更新源和派生 keyId 的更新配置', () => {
+    expect(parseDistribution({ schemaVersion: 1, origin: 'https://yumpoo.example.com', update }).update).toEqual(update)
+    expect(parseDistribution({ schemaVersion: 1, origin: 'https://yumpoo.example.com', update: { ...update, feed: 'http://127.0.0.1:18200/feed/' } }).update?.feed)
+      .toBe('http://127.0.0.1:18200/feed/')
+  })
+
+  it.each([
+    { ...update, feed: 'http://yumpoo.example.com/desktop/stable/' },
+    { ...update, feed: 'https://yumpoo.example.com/desktop/stable' },
+    { ...update, feed: 'https://yumpoo.example.com/desktop/?x=1' },
+    { ...update, feed: 'https://user:pw@yumpoo.example.com/desktop/' },
+    { ...update, channel: 'Stable' },
+    { ...update, publicKeys: [] },
+    { ...update, publicKeys: [{ keyId: 'ed25519-0000000000000000', publicKey: fixture.publicKey }] },
+    { ...update, publicKeys: [{ keyId: fixture.signed.keyId, publicKey: 'AAAA' }] },
+    { ...update, publicKeys: [update.publicKeys[0], update.publicKeys[0]] },
+    { ...update, extra: true },
+  ])('拒绝无效更新配置：%j', (value) => {
+    expect(() => parseDistribution({ schemaVersion: 1, origin: 'https://yumpoo.example.com', update: value })).toThrow()
+  })
+
   it('读取构建目录中的配置，缺失时给出明确错误', () => {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'yumpoo-distribution-'))
     try {

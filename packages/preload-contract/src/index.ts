@@ -36,6 +36,29 @@ export interface DesktopBridge {
   readonly inbox?: DesktopInboxBridge
   /** Optional because the remotely deployed web app can be newer than the installed shell. */
   readonly files?: DesktopFilesBridge
+  /** Present only on shells with in-app updates; the web app shows update prompts only when it exists. */
+  readonly update?: DesktopUpdateBridge
+}
+
+export type DesktopUpdatePhase = 'disabled' | 'idle' | 'checking' | 'downloading' | 'verifying' | 'ready' | 'error'
+
+export interface DesktopUpdateState {
+  phase: DesktopUpdatePhase
+  currentVersion: string
+  channel: string | null
+  /** The version being downloaded, verified or ready to install. */
+  version?: string
+  percent?: number
+  /** Machine-readable reason when phase is error. */
+  error?: string
+}
+
+export interface DesktopUpdateBridge {
+  getState(): Promise<DesktopUpdateState>
+  check(): Promise<void>
+  /** Quits through the normal exit confirmation, installs the verified update and relaunches. */
+  restart(): Promise<void>
+  onState(listener: (state: DesktopUpdateState) => void): () => void
 }
 
 export interface DesktopExportFile {
@@ -230,5 +253,5 @@ export interface DiagnosticsReport {
     gpu: Record<string, string>
     processes: Array<{ type: string; workingSetKb: number; privateKb?: number }>
   }
-  update: { state: 'unavailable' }
+  update: { state: DesktopUpdatePhase | 'unavailable'; version?: string; error?: string }
 }

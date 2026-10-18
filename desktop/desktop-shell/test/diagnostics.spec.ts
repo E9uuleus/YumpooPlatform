@@ -13,6 +13,7 @@ function dependencies(overrides: Partial<DiagnosticsDependencies> = {}): Diagnos
     consecutiveFailures: 0,
     startupFailure: null,
     offline: false,
+    updateState: () => ({ state: 'ready', version: '1.0.1' }),
     lookup: async () => 2,
     resolveProxy: async () => 'DIRECT',
     inspectTls: async () => ({ subject: 'yumpoo.example.com', issuer: 'Example CA', validTo: 'Dec 31 00:00:00 2026 GMT' }),
@@ -43,7 +44,7 @@ describe('诊断报告', () => {
       gpu: { gpu_compositing: 'enabled' },
       processes: [{ type: 'Browser', workingSetKb: 81_000, privateKb: 60_000 }, { type: 'Tab', workingSetKb: 120_000 }],
     })
-    expect(report.update).toEqual({ state: 'unavailable' })
+    expect(report.update).toEqual({ state: 'ready', version: '1.0.1' })
   })
 
   it('离线自检和缺少分发配置时不访问网络', async () => {

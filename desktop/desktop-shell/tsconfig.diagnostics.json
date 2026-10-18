@@ -7,7 +7,7 @@
     "types": [],
     "rootDir": "src/diagnostics",
     "outDir": "dist/diagnostics",
-    "noEmitOnError": true
+    "noEmit": true
   },
   "include": ["src/diagnostics/**/*.ts"]
 }
