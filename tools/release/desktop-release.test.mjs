@@ -12,6 +12,7 @@ import {
 import { createStatement, fixtureKey, generateSigningKey, signStatement } from './desktop-update-signature.mjs'
 import { prepareDesktopRelease } from './desktop-release.mjs'
 import { planDesktopRelease, prepareDesktopDraft, signDesktopDraft } from './prepare-desktop-release.mjs'
+import { rehearseDesktopFeed } from './rehearse-release.mjs'
 import { collectDesktopRelease } from '../verification/collect-desktop-release.mjs'
 
 const sha = 'a'.repeat(40)
@@ -227,6 +228,33 @@ test('publishing verifies the immutable Release, its CI attempt, attestations an
   await assert.rejects(verify({ checkout: { version, distribution: rotated } }), /not trusted/u)
   Object.assign(draft, { immutable: false })
   await assert.rejects(verify(), /immutable/u)
+})
+
+test('the weekly rehearsal requires the feed to serve the newest published latest.yml and release.json', async () => {
+  const bytes = { 'latest.yml': Buffer.from('version: 1.1.0\n'), 'release.json': Buffer.from('{"version":"1.1.0"}') }
+  const asset = (id, name) => ({ id, name, state: 'uploaded', size: bytes[name].length, digest: `sha256:${digest(bytes[name])}` })
+  const github = {
+    list(endpoint) {
+      if (endpoint === '/releases?per_page=100') {
+        return [
+          { id: 1, tag_name: 'desktop-v1.0.0', draft: false, published_at: '2026-10-01T00:00:00Z' },
+          { id: 2, tag_name: 'desktop-v1.1.0', draft: false, published_at: '2026-10-02T00:00:00Z' },
+          { id: 3, tag_name: 'server-v2026.10.18.1', draft: false, published_at: '2026-10-18T00:00:00Z' },
+        ]
+      }
+      if (endpoint === '/releases/2/assets?per_page=100') return [asset(20, 'latest.yml'), asset(21, 'release.json')]
+      throw new Error(`Unexpected list ${endpoint}`)
+    },
+  }
+  const requested = []
+  const served = { ...bytes }
+  const fetchFile = async url => { requested.push(url); return served[url.split('/').at(-1)] }
+  assert.deepEqual(await rehearseDesktopFeed({ github, distribution, fetchFile }), { mode: 'feed', tag: 'desktop-v1.1.0', feed: distribution.update.feed })
+  assert.deepEqual(requested, ['https://wecom-dev.yumpoo.com/desktop/stable/latest.yml', 'https://wecom-dev.yumpoo.com/desktop/stable/release.json'])
+  served['release.json'] = Buffer.from('{"version":"1.0.0"}')
+  await assert.rejects(rehearseDesktopFeed({ github, distribution, fetchFile }), /differs from desktop-v1\.1\.0/u)
+  assert.equal((await rehearseDesktopFeed({ github, distribution: { origin: distribution.origin }, fetchFile })).mode, 'skipped')
+  assert.equal((await rehearseDesktopFeed({ github: { list: () => [] }, distribution, fetchFile })).mode, 'skipped')
 })
 
 test('a signature for other bytes or another version is rejected', () => {
