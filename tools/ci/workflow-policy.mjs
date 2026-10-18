@@ -63,13 +63,25 @@ function assertBuildAttestation(workflow) {
     if (id !== 'windows_delivery') assert(!job.permissions, `${id} 不得扩大 token 权限`)
   }
   const steps = delivery.steps
-  const attest = steps.findIndex(step => step.uses?.startsWith('actions/attest-build-provenance@'))
   const packaging = steps.findIndex(step => step.run === 'pnpm ci:windows')
-  const upload = steps.findIndex(step => step.uses?.startsWith('actions/upload-artifact@') && step.with?.name?.startsWith('m1-15-server-'))
-  assert(packaging < attest && attest < upload, '构建证明必须签署打包结果，并在上传前完成')
-  assert.equal(steps[attest].if, "${{ github.event_name == 'push' }}", '只有推送 CI 签署构建证明')
-  const subjects = steps[attest].with['subject-path'].trim().split('\n').map(line => line.trim())
-  assert.deepEqual(subjects, attestedFileNames.map(name => `out/m1-15/${name}`))
-  const uploaded = steps[upload].with.path.trim().split('\n').map(line => line.trim())
+  const attestations = steps.flatMap((step, index) => step.uses?.startsWith('actions/attest-build-provenance@') ? [index] : [])
+  const lines = value => String(value ?? '').trim().split('\n').map(line => line.trim())
+  // Two subject groups, each signed after packaging and before its own upload: the server package line and the desktop channel.
+  const server = attestations.filter(index => lines(steps[index].with?.['subject-path']).every(line => line.startsWith('out/m1-15/')))
+  const desktop = attestations.filter(index => steps[index].with?.['subject-path'] === 'out/desktop/*')
+  assert(server.length === 1 && desktop.length === 1 && attestations.length === 2, '构建证明只能分服务端、桌面两组签署')
+  const serverUpload = steps.findIndex(step => step.uses?.startsWith('actions/upload-artifact@') && step.with?.name?.startsWith('m1-15-server-'))
+  const desktopUpload = steps.findIndex(step => step.uses?.startsWith('actions/upload-artifact@') && step.with?.name?.startsWith('desktop-'))
+  for (const [attest, upload] of [[server[0], serverUpload], [desktop[0], desktopUpload]]) {
+    assert(packaging < attest && attest < upload, '构建证明必须签署打包结果，并在上传前完成')
+    assert.equal(steps[attest].if, "${{ github.event_name == 'push' }}", '只有推送 CI 签署构建证明')
+  }
+  assert.deepEqual(lines(steps[server[0]].with['subject-path']), attestedFileNames.map(name => `out/m1-15/${name}`))
+  const uploaded = lines(steps[serverUpload].with.path)
   assert.deepEqual(uploaded.map(file => file.replace(/^out\/m1-15\//u, '')).sort(), [...artifactFileNames].sort())
+  // The desktop upload is exactly the attested directory; collect-desktop-release.mjs fixes its file set.
+  const desktopArtifact = steps[desktopUpload].with
+  assert.equal(desktopArtifact.name, 'desktop-${{ github.sha }}-${{ github.run_attempt }}', '桌面产物名必须绑定提交与 attempt')
+  assert.equal(desktopArtifact.path, 'out/desktop/*', '桌面上传必须正是被签署的目录')
+  assert.equal(desktopArtifact['if-no-files-found'], 'error')
 }

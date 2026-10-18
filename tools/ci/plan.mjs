@@ -56,7 +56,7 @@ export function plan(stage, baseRef = 'origin/dev') {
       pnpm('ci-policy-tests', 'run', 'test:ci'),
       pnpm('event-policy-tests', 'run', 'test:event-contract-compat'),
       pnpm('delivery-policy-tests', 'run', 'test:m0-18'),
-      node('release-policy-tests', '--test', 'tools/release/github.test.mjs', 'tools/release/policy.test.mjs', 'tools/release/promote-release.test.mjs', 'tools/release/prepare-release.test.mjs', 'tools/release/release-notes.test.mjs', 'tools/release/promotion-policy.test.mjs', 'tools/release/back-merge.test.mjs', 'tools/release/ssh-deploy.test.mjs', 'tools/release/version-placeholders.test.mjs', 'tools/release/attestation.test.mjs', 'tools/release/rehearse-release.test.mjs', 'tools/release/desktop-update-signature.test.mjs'),
+      node('release-policy-tests', '--test', 'tools/release/github.test.mjs', 'tools/release/policy.test.mjs', 'tools/release/promote-release.test.mjs', 'tools/release/prepare-release.test.mjs', 'tools/release/release-notes.test.mjs', 'tools/release/promotion-policy.test.mjs', 'tools/release/back-merge.test.mjs', 'tools/release/ssh-deploy.test.mjs', 'tools/release/version-placeholders.test.mjs', 'tools/release/attestation.test.mjs', 'tools/release/rehearse-release.test.mjs', 'tools/release/desktop-update-signature.test.mjs', 'tools/release/desktop-release.test.mjs'),
       node('version-placeholders', 'tools/release/version-placeholders.mjs'),
       ...contractSteps(baseRef), ...nodeSteps, ...assetSteps,
     ]
@@ -75,6 +75,7 @@ export function plan(stage, baseRef = 'origin/dev') {
       node('desktop-profile-tests', '--test', 'tools/verification/desktop-profile.test.mjs'),
       node('windows-release-restore', 'tools/release/verify-windows.mjs'),
       node('windows-evidence', 'tools/verification/verify-m0-18-windows.mjs'),
+      node('desktop-release-artifact', 'tools/verification/collect-desktop-release.mjs'),
       node('powershell-behavior', 'tools/verification/verify-m1-15-powershell.mjs'),
       node('server-package', 'tools/verification/package-m1-15-win.mjs'),
       node('server-package-integrity', 'tools/verification/verify-m1-15-package.mjs'),

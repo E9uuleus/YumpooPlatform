@@ -1,6 +1,6 @@
 # Windows Release 发布与生产运维手册
 
-本手册是当前部署入口。常规发布采用 GitHub Release → SSH → 固定 SYSTEM 部署任务，后端以 `YumpooServer` Windows Service 运行，发布包模式为 `WINDOWS_SERVICE_WINSW`。包文件名沿用 M1-15 以兼容既有 CI 交付链；不代表代码或迁移停留在该里程碑。M1-13、M1-14 手册和历史 checklist 保留各自验收边界。Electron 桌面端已改为 NSIS 按用户安装包（见[桌面安装包与发布渠道](../../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)），但桌面发布渠道尚未上线：安装包只在 CI 中构建和冒烟，不作为 Release 附件。在此之前继续手工分发 M1-14 `0.1.0` PILOT 包，本链路不提供 Electron 自动更新。
+本手册是当前部署入口。常规发布采用 GitHub Release → SSH → 固定 SYSTEM 部署任务，后端以 `YumpooServer` Windows Service 运行，发布包模式为 `WINDOWS_SERVICE_WINSW`。包文件名沿用 M1-15 以兼容既有 CI 交付链；不代表代码或迁移停留在该里程碑。M1-13、M1-14 手册和历史 checklist 保留各自验收边界。Electron 桌面端已改为 NSIS 按用户安装包（见[桌面安装包与发布渠道](../../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)），有独立的 `desktop-v*` 发布渠道和 HTTPS 更新源，见[第 11 节](#11-桌面发布渠道)。渠道切换完成前继续手工分发 M1-14 `0.1.0` PILOT 包；服务器发布链路本身不更新桌面端。
 
 Release 发布即为上线决定。主机初始化、Environment 配置和发布链路必须先就绪；单凭仓库脚本、CI 或 Release 附件不能声称服务器已部署。真实企微通讯录、双管理员登录、后续同步和整机重启证据仍按对应 checklist 保持 `ENV_PENDING`，由目标环境验证清零；本次服务恢复验收不重启整台服务器。
 
@@ -213,7 +213,8 @@ Release 不能升级 SYSTEM 部署引擎，必须由管理员手动操作：
   - `requireImmutable`；
   - `probeRoutes`；
   - `retention.extraReleases`（参数 `-ExtraReleases`）；
-  - `observe`（参数 `-ObserveMinutes`、`-MaxErrorLines`）。
+  - `observe`（参数 `-ObserveMinutes`、`-MaxErrorLines`）；
+  - `desktopFeed`（参数 `-EnableDesktopFeed`、`-DesktopFeedRoot`、`-DesktopRetainVersions`，见[第 11 节](#11-桌面发布渠道)）。与其他开关一样，每次升级都按本次参数重写：不带 `-EnableDesktopFeed` 重新运行会关闭桌面更新源。
 - `engine/engine.json` 记录引擎的来源 commit 和文件哈希。
 
 未升级的 schema 1 主机保持原有行为：分支为 `dev`，不要求不可变发布，不写探测路由。切换到 `main` 发布线时，必须先用 `-ReleaseBranch main -RequireImmutable` 升级引擎，再发布第一个 `main` 草稿。
@@ -457,3 +458,71 @@ Invoke-RestMethod http://127.0.0.1:8100/actuator/health/readiness
   - `VERSION_NOT_NEWER`：版本没有递增。
   被拒绝的安装包会被删除，永不安装。出现拒绝时，先核对更新源上的安装包、`latest.yml` 与 `.sig.json` 是否来自同一个已发布 Release。
 - 客户端只接受比当前更高的版本。出问题时用更高版本号的修复版前滚，不要把旧安装包放回更新源。
+
+## 11. 桌面发布渠道
+
+桌面端有自己的版本线、草稿和发布决定，与服务器发布互不牵连。版本号由 `desktop/desktop-shell/package.json` 的 `version` 决定（X.Y.Z），标签为 `desktop-vX.Y.Z`。决策与取舍见[桌面安装包与发布渠道](../../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)。
+
+**日常顺序**
+
+1. 需要发布桌面端时，在功能 PR 或单独的 PR 里递增 `desktop/desktop-shell/package.json` 的 `version`，照常合入 `dev` 并晋升到 `main`。
+2. `main` 推送 CI 成功后，[Prepare Desktop Release](../../.github/workflows/prepare-desktop-release.yml) 生成草稿 `desktop-vX.Y.Z`，然后由只在 `desktop-signing` Environment 中运行的签名任务为安装包签授权。以下情况不生成草稿，只在工作流摘要中说明：
+   - 版本仍是 `0.x`（旧便携版线）；
+   - 该版本已发布，或不高于最新已发布的桌面版本；
+   - 同一版本已有指向其他提交的草稿（发布或删除它，或继续递增版本）。
+3. 发布负责人从草稿下载安装包，在 2–3 台机器上试装，核对版本与「诊断与修复」中的信息。
+4. 点击 **Publish** 即为桌面上线决定。[Desktop Release](../../.github/workflows/desktop-release.yml) 只读校验后，把文件写入更新源。客户端在 4 小时内或下次启动后自动下载、核对授权并在退出时安装。
+5. 桌面端不能回退：只接受更高版本，坏版本用更高版本号的修复版前滚。紧急时可先让同事改用浏览器。
+
+**草稿附件**（固定八个，Publish 后不可更改）：
+
+- `YumpooDesktop-Setup-X.Y.Z-x64.exe`、同名 `.blockmap`、`latest.yml`：`main` 推送 CI 构建，经安装冒烟和差分更新端到端验证；
+- `yumpoo-desktop.cdx.json`：桌面 CycloneDX SBOM，列出 Electron 运行时和打进主进程的全部依赖；
+- `desktop-manifest.json`：上述文件的大小与摘要；
+- `provenance.json`：钉住的 CI 运行与 attempt；
+- `release.json`：下载页读取的版本、大小、SHA-256 与改动摘要；
+- `YumpooDesktop-Setup-X.Y.Z-x64.exe.sig.json`：Ed25519 更新授权。
+
+CI 为前五个文件签署构建证明；草稿上传前后、发布前都会核验证明。不要手工新建 `desktop-v*` 草稿、打标签或替换附件。可以离线复核安装包：
+
+```powershell
+gh attestation verify '<下载目录>\YumpooDesktop-Setup-X.Y.Z-x64.exe' -R E9uuleus/YumpooPlatform `
+  --signer-workflow E9uuleus/YumpooPlatform/.github/workflows/m0-18-ci.yml --source-ref refs/heads/main
+```
+
+**更新授权签名**
+
+- 主私钥只在 Environment `desktop-signing`（部署分支只允许 `dev`）的 secret `DESKTOP_UPDATE_SIGNING_KEY` 中；只有 Prepare Desktop Release 的签名步骤能读取它。草稿任务不进入这个 Environment。
+- Prepare Desktop Release 手动运行时必须选择 `dev`，`commit` 填待发布的完整 `main` 提交 SHA。两个任务固定检出 `github.workflow_sha` 对应的受保护发布工具；候选提交的 `package.json` 与 `distribution/production.json` 经祖先检查后通过 API 读取，不执行候选提交的代码。
+- 签名任务重新核对 provenance 钉住的成功 `main` CI attempt 和本次下载的安装包构建证明，再要求钥匙属于目标提交 `distribution/production.json` 中的公钥；签名后按客户端规则复核。不能仅凭草稿安装包与可修改的 provenance 一致就签名。
+- 离线备用钥匙只用于主钥匙丢失或泄露：用备用钥匙签一个过渡版本，在其中换掉公钥，然后轮换 secret。生成钥匙：`node tools/release/desktop-update-signature.mjs keygen --private-key-out <仓库外的路径>`，只把输出的 `keyId` 与 `publicKey` 写入 `production.json`。
+
+**主机与更新源**
+
+- 部署引擎的 `desktop-publish` 请求与服务器部署共用部署锁，但不进入维护、不写 `active.json`、`current.json`；服务器处于 `running` 或 `recovery_required` 时同样拒绝桌面请求。
+- 引擎逐个核对上传文件与已发布不可变 Release 附件的 digest、标签提交、`main` 祖先关系和 CI 推送运行，然后写入 `<desktopFeed.root>/desktop/stable/`：先写安装包、blockmap 和授权签名，最后分别原子替换 `latest.yml` 与 `release.json`。以两个指针中的最高版本防止降级，拒绝同版本不同提交或更新元数据以及任何重解析点。
+- 两个指针的替换不是事务。若第二次替换失败，自动更新可能已发现新版本，而下载页仍显示旧版本；发布报告失败不代表新版本尚未公开。重跑同一 tag 的 Desktop Release 可以补齐指针与缺失文件；只有全部内容已一致才返回 `already_current`。不要手工降低指针或改发较低版本。
+- 保留最近 3 个版本的安装包与签名、最近 20 个版本的 blockmap（旧版本客户端做差分下载要用自己版本的 blockmap）。
+- 状态与通知沿用服务器的 `status/<requestId>.json` 与企业微信通知，阶段为 `desktop_verify`、`desktop_publish`、`complete` 或 `already_current`。
+- 维护窗口内整站 503，更新源同样不可用；客户端稍后自动重试。
+
+**首次切换**（维护者与管理员）
+
+1. GitHub 设置：
+   - 规则集 `Release tags` 加入 `refs/tags/desktop-v*`；
+   - 新建 Environment `desktop-signing`，部署分支只允许 `dev`，添加 secret `DESKTOP_UPDATE_SIGNING_KEY`；
+   - `wecom-dev` 的部署 tag 规则加入 `desktop-v*`。
+2. 管理员用包含本渠道的服务器 Release 升级引擎，并启用更新源：
+
+   ```powershell
+   & '<解压目录>\windows\cd\Update-YumpooEngine.ps1' `
+     -PackagePath '<下载目录>\yumpoo-windows-server-m1-15.zip' `
+     -PackageSha256 '<Release 上的 SHA-256>' `
+     -ReleaseBranch main -RequireImmutable -EnableDesktopFeed
+   ```
+
+3. 管理员按 `windows/nginx/yumpoo-wecom.conf` 在 443 server 的 `location /` 之前加入 `location ^~ /desktop/`，`root` 与 `desktopFeed.root`（默认 `C:/ProgramData/Yumpoo/public`）一致，然后 `nginx -t` 并 reload。
+4. 递增桌面版本到 `1.0.0` 并晋升，等待草稿与签名完成，试装后 Publish。
+5. 打开 `https://wecom-dev.yumpoo.com/download`，核对版本与 SHA-256 后通知同事安装；旧便携版直接覆盖安装，登录状态与偏好保留。此后全部自动更新。
+
+**每周核对**：供应链工作流的发布演练会读取更新源上的 `latest.yml` 与 `release.json`，要求与最新已发布桌面 Release 的附件逐字节一致；不一致时检查最近一次 Desktop Release 运行和主机上的 `desktop/stable` 目录。

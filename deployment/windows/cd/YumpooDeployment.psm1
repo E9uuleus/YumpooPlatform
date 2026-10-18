@@ -2,6 +2,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $script:ReleaseTagPattern = '^server-v[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[1-9][0-9]{0,2}$'
+$script:DesktopVersionPattern = '(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})\.(?:0|[1-9][0-9]{0,5})'
+$script:DesktopTagPattern = '^desktop-v(' + $script:DesktopVersionPattern + ')$'
 $script:BlobPattern = '^sha256\\[0-9a-f]{2}\\[0-9a-f]{2}\\([0-9a-f]{64})$'
 if (-not ('Yumpoo.NativeLink' -as [type])) {
     Add-Type -Namespace Yumpoo -Name NativeLink -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern bool CreateHardLink(string lpFileName, string lpExistingFileName, System.IntPtr lpSecurityAttributes);'
@@ -316,7 +318,7 @@ function Get-YumpooRequestMode($Request) {
     # schemaVersion 1 predates rollback and is always a forward deployment.
     if ($Request.schemaVersion -eq 1) { return 'deploy' }
     $mode = $Request.PSObject.Properties['mode']
-    if ($null -eq $mode -or $mode.Value -cnotin @('deploy', 'rollback')) { throw 'Invalid deployment request.' }
+    if ($null -eq $mode -or $mode.Value -cnotin @('deploy', 'rollback', 'desktop-publish')) { throw 'Invalid deployment request.' }
     return $mode.Value
 }
 
@@ -709,8 +711,10 @@ function Send-YumpooNotification($Root, $Status, [TimeSpan]$Elapsed, [scriptbloc
         if (-not $label) { $label = [string]$Status.state }
         $commit = [string]$Status.sourceCommit
         if ($commit.Length -gt 8) { $commit = $commit.Substring(0, 8) }
+        # Desktop feed requests share the engine and its notifications, not the server wording.
+        $kind = if ([string]$Status.tag -clike 'desktop-v*') { [regex]::Unescape('\u684c\u9762\u5ba2\u6237\u7aef\u53d1\u5e03') } else { [regex]::Unescape('\u670d\u52a1\u7aef\u53d1\u5e03') }
         $lines = @(
-            ([regex]::Unescape('**Yumpoo \u670d\u52a1\u7aef\u53d1\u5e03\uff1a') + $label + '**'),
+            ('**Yumpoo ' + $kind + [regex]::Unescape('\uff1a') + $label + '**'),
             ([regex]::Unescape('> \u7248\u672c\uff1a') + $Status.tag),
             ([regex]::Unescape('> \u63d0\u4ea4\uff1a') + $commit),
             ([regex]::Unescape('> \u9636\u6bb5\uff1a') + $Status.phase),
@@ -792,6 +796,206 @@ function Assert-YumpooRollbackMigrations($Current, $Target) {
     if ($breaking.Count) { throw ('Rollback is blocked by non-expand migrations: ' + ($breaking -join ', ')) }
 }
 
+# ---- Desktop update feed (desktop-publish requests) ----
+# The feed is plain static files served by Nginx. Every file is checked against the digest GitHub recorded for the
+# published Release asset; each pointer is replaced only after that version's files are complete.
+
+function Get-YumpooDesktopFeedSettings($Settings) {
+    $feed = @{
+        enabled = (Get-YumpooSetting $Settings 'desktopFeed.enabled' $false) -eq $true
+        root = [string](Get-YumpooSetting $Settings 'desktopFeed.root' 'C:/ProgramData/Yumpoo/public')
+        channel = [string](Get-YumpooSetting $Settings 'desktopFeed.channel' 'stable')
+        retainVersions = [int](Get-YumpooSetting $Settings 'desktopFeed.retainVersions' 3)
+    }
+    if ($feed.channel -cnotmatch '^[a-z][a-z0-9-]{0,15}$') { throw 'Invalid desktop feed channel.' }
+    if ($feed.root -notmatch '^[A-Za-z]:[\\/]' -or $feed.root.Substring(2).Contains(':')) { throw 'The desktop feed root must be an absolute local path.' }
+    if ($feed.retainVersions -lt 2 -or $feed.retainVersions -gt 20) { throw 'desktopFeed.retainVersions must be between 2 and 20.' }
+    $feed.root = [IO.Path]::GetFullPath($feed.root).TrimEnd('\', '/')
+    # Validating settings must not depend on the drive being present (Join-Path resolves PowerShell drives).
+    $feed.directory = [IO.Path]::Combine($feed.root, 'desktop', $feed.channel)
+    return $feed
+}
+
+function Get-YumpooDesktopFileNames([string]$Version) {
+    $installer = "YumpooDesktop-Setup-$Version-x64.exe"
+    return @($installer, "$installer.blockmap", "$installer.sig.json", 'latest.yml', 'release.json')
+}
+
+function Assert-YumpooDesktopRequest($Request, $Provenance) {
+    if ($Request.schemaVersion -ne 2 -or (Get-YumpooRequestMode $Request) -cne 'desktop-publish') { throw 'Invalid desktop request.' }
+    if ([string]$Request.tag -cnotmatch $script:DesktopTagPattern) { throw 'Invalid desktop release tag.' }
+    $version = $Matches[1]
+    if ([string]$Request.sourceCommit -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid desktop source commit.' }
+    if ($Provenance.schemaVersion -ne 1 -or $Provenance.repository -cne 'E9uuleus/YumpooPlatform' -or $Provenance.tag -cne $Request.tag -or
+        $Provenance.version -cne $version -or $Provenance.sourceCommit -cne $Request.sourceCommit -or
+        ($Provenance.ciRunId -isnot [int] -and $Provenance.ciRunId -isnot [long]) -or $Provenance.ciRunId -lt 1 -or
+        ($Provenance.ciRunAttempt -isnot [int] -and $Provenance.ciRunAttempt -isnot [long]) -or $Provenance.ciRunAttempt -lt 1 -or
+        $Provenance.artifactName -cne "desktop-$($Provenance.sourceCommit)-$($Provenance.ciRunAttempt)" -or
+        [string]$Provenance.installerSha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid desktop provenance.' }
+    $expected = Get-YumpooDesktopFileNames $version
+    $files = @($Request.files)
+    if ($files.Count -ne $expected.Count) { throw 'The desktop request must carry exactly the feed files of its version.' }
+    for ($index = 0; $index -lt $files.Count; $index++) {
+        $entry = $files[$index]
+        if ([string]$entry.name -cne $expected[$index] -or [string]$entry.sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+            ($entry.bytes -isnot [int] -and $entry.bytes -isnot [long]) -or $entry.bytes -lt 1 -or $entry.bytes -gt 1GB -or
+            $entry.partCount -ne [Math]::Ceiling($entry.bytes / [double]2MB)) { throw "Invalid desktop file entry: $($entry.name)" }
+    }
+    if ($files[0].sha256 -cne $Provenance.installerSha256 -or $files[0].bytes -ne $Provenance.installerBytes) { throw 'The desktop installer does not match its provenance.' }
+    return $version
+}
+
+function Copy-YumpooDesktopUpload($SourceDirectory, $WorkDirectory, $Request) {
+    $assembled = [ordered]@{}
+    $files = @($Request.files)
+    for ($fileIndex = 0; $fileIndex -lt $files.Count; $fileIndex++) {
+        $entry = $files[$fileIndex]
+        $target = Assert-YumpooPath (Join-Path $WorkDirectory $entry.name) $WorkDirectory
+        $output = [IO.File]::Open($target, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try {
+            for ($index = 0; $index -lt $entry.partCount; $index++) {
+                $source = Assert-YumpooPath (Join-Path $SourceDirectory ('desktop-{0}-{1:D4}.part' -f $fileIndex, $index)) $SourceDirectory
+                $expected = [Math]::Min(2MB, [long]$entry.bytes - [long]$index * 2MB)
+                $inputFile = [IO.File]::Open($source, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+                try {
+                    if ($inputFile.Length -ne $expected) { throw 'Uploaded desktop part is incomplete or oversized.' }
+                    $inputFile.CopyTo($output)
+                } finally { $inputFile.Dispose() }
+            }
+            if ($output.Length -ne $entry.bytes) { throw 'Assembled desktop file size does not match the request.' }
+        } finally { $output.Dispose() }
+        if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ine $entry.sha256) { throw "Uploaded desktop file checksum mismatch: $($entry.name)" }
+        $assembled[[string]$entry.name] = $target
+    }
+    return $assembled
+}
+
+function Assert-YumpooDesktopRelease($Settings, $Request, $Provenance, $ProvenancePath, [scriptblock]$GitHub = { param($Path) Get-YumpooGitHub $Path }) {
+    $branch = [string](Get-YumpooSetting $Settings 'releaseBranch' 'dev')
+    if ($branch -cnotmatch '^[a-z][a-z0-9/_-]{0,63}$') { throw 'Invalid release branch setting.' }
+    $release = & $GitHub "releases/tags/$($Request.tag)"
+    if ($release.draft -or -not $release.published_at) { throw 'Desktop Release is not published.' }
+    $immutable = $release.PSObject.Properties['immutable']
+    if ((Get-YumpooSetting $Settings 'requireImmutable' $false) -eq $true -and ($null -eq $immutable -or $immutable.Value -ne $true)) { throw 'Desktop Release is not immutable.' }
+    $asset = @($release.assets | Where-Object name -ceq 'provenance.json')
+    if ($asset.Count -ne 1) { throw 'Desktop Release provenance is missing or ambiguous.' }
+    $trusted = Read-YumpooReleaseProvenance $asset[0] $ProvenancePath
+    foreach ($field in @('schemaVersion', 'repository', 'tag', 'version', 'sourceCommit', 'ciRunId', 'ciRunAttempt', 'artifactName', 'installerSha256', 'installerBytes')) {
+        if ([string]$Provenance.$field -cne [string]$trusted.$field) { throw "Desktop Release provenance mismatch: $field" }
+    }
+    foreach ($entry in @($Request.files)) {
+        $matched = @($release.assets | Where-Object name -ceq $entry.name)
+        if ($matched.Count -ne 1 -or $matched[0].digest -cne "sha256:$($entry.sha256)" -or $matched[0].size -ne $entry.bytes) { throw "Desktop file differs from its Release asset: $($entry.name)" }
+    }
+    if ((& $GitHub "commits/$($Request.tag)").sha -cne $Request.sourceCommit) { throw 'Desktop release tag moved.' }
+    $line = & $GitHub "compare/$($Request.sourceCommit)...$($branch)?per_page=1&page=2"
+    if ($line.status -notin @('ahead', 'identical')) { throw "Desktop release is not a $branch ancestor." }
+    $run = & $GitHub "actions/runs/$($Provenance.ciRunId)/attempts/$($Provenance.ciRunAttempt)"
+    if ($run.head_sha -cne $Request.sourceCommit -or $run.head_branch -cne $branch -or $run.event -cne 'push' -or
+        $run.conclusion -cne 'success' -or $run.path -cne '.github/workflows/m0-18-ci.yml') { throw "CI provenance is not a successful $branch push." }
+    $jobs = & $GitHub "actions/runs/$($Provenance.ciRunId)/attempts/$($Provenance.ciRunAttempt)/jobs?per_page=100"
+    foreach ($name in @('M0 Portable Gate', 'Windows Delivery', 'M0 Windows x64 Gate')) {
+        $jobMatches = @($jobs.jobs | Where-Object name -eq $name)
+        if ($jobMatches.Count -ne 1 -or $jobMatches[0].conclusion -ne 'success') { throw "Required CI job failed: $name" }
+    }
+}
+
+# Replaces a feed file atomically within its directory; Nginx may hold it open while serving a download.
+function Set-YumpooFeedFile($Source, $Target, [int]$Attempts = 60, [int]$DelayMilliseconds = 500) {
+    $temporary = "$Target.$([guid]::NewGuid().ToString('N')).tmp"
+    [IO.File]::Copy($Source, $temporary)
+    try {
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                if ([IO.File]::Exists($Target)) { [IO.File]::Replace($temporary, $Target, [NullString]::Value, $true) }
+                else { [IO.File]::Move($temporary, $Target) }
+                return
+            } catch [IO.IOException], [UnauthorizedAccessException] {
+                if ($attempt -ge $Attempts) { throw "Cannot replace $([IO.Path]::GetFileName($Target)) after $Attempts attempts: $($_.Exception.Message)" }
+                Start-Sleep -Milliseconds $DelayMilliseconds
+            }
+        }
+    } finally {
+        if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) }
+    }
+}
+
+# Checked up to the drive root: neither the feed directory nor any ancestor may be a junction or symbolic link.
+function Assert-YumpooFeedPath($Path) {
+    $full = [IO.Path]::GetFullPath($Path)
+    for ($ancestor = $full; $ancestor; $ancestor = [IO.Path]::GetDirectoryName($ancestor)) {
+        $item = Get-Item -LiteralPath $ancestor -Force -ErrorAction SilentlyContinue
+        if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Reparse points are forbidden in deployment paths.' }
+    }
+    return $full
+}
+
+function Publish-YumpooDesktopFeed($Settings, $Request, $Files, [string]$Version) {
+    $feed = Get-YumpooDesktopFeedSettings $Settings
+    if (-not $feed.enabled) { throw 'The desktop feed is disabled on this host; enable it with Update-YumpooEngine.ps1 -EnableDesktopFeed.' }
+    $directory = Assert-YumpooFeedPath $feed.directory
+    if (-not (Test-Path -LiteralPath $feed.root)) { New-Item -ItemType Directory -Path $feed.root | Out-Null; Set-YumpooAcl $feed.root }
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    $directory = Assert-YumpooFeedPath $directory
+    $currentFile = Assert-YumpooPath (Join-Path $directory 'release.json') $directory
+    $latestFile = Assert-YumpooPath (Join-Path $directory 'latest.yml') $directory
+    $pointerVersions = @{}
+    if (Test-Path -LiteralPath $currentFile) {
+        $current = Get-Content -LiteralPath $currentFile -Raw | ConvertFrom-Json
+        if ([string]$current.version -cnotmatch ('^' + $script:DesktopVersionPattern + '$')) { throw 'The live feed release.json is invalid; reconcile it as an administrator.' }
+        $pointerVersions['release.json'] = [string]$current.version
+        if ($Version -ceq [string]$current.version -and [string]$current.sourceCommit -cne $Request.sourceCommit) { throw 'Desktop version reuse is forbidden.' }
+    }
+    if (Test-Path -LiteralPath $latestFile) {
+        $latestVersion = Read-YumpooYamlScalar $latestFile 'version'
+        if ($latestVersion -cnotmatch ('^' + $script:DesktopVersionPattern + '$')) { throw 'The live feed latest.yml is invalid; reconcile it as an administrator.' }
+        $pointerVersions['latest.yml'] = $latestVersion
+        if ($Version -ceq $latestVersion -and (Get-FileHash -LiteralPath $latestFile -Algorithm SHA256).Hash -ine (Get-FileHash -LiteralPath $Files['latest.yml'] -Algorithm SHA256).Hash) { throw 'Desktop version reuse is forbidden: latest.yml already exposes other content.' }
+    }
+    # The two pointer replacements are not a transaction. Either may be the highest version already exposed to
+    # users after an interruption, including a first publication with no release.json yet. Never move it back.
+    foreach ($name in $pointerVersions.Keys) {
+        if (([version]$Version).CompareTo([version]$pointerVersions[$name]) -lt 0) { throw "Desktop downgrade is forbidden ($name has $($pointerVersions[$name]))." }
+    }
+    $names = Get-YumpooDesktopFileNames $Version
+    $changed = $false
+    # Versioned files first: an identical file from an interrupted attempt is kept, a different one is never overwritten.
+    foreach ($name in $names[0..2]) {
+        $target = Assert-YumpooPath (Join-Path $directory $name) $directory
+        if (Test-Path -LiteralPath $target) {
+            if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ine (Get-FileHash -LiteralPath $Files[$name] -Algorithm SHA256).Hash) { throw "Feed file $name already exists with other content." }
+            continue
+        }
+        Set-YumpooFeedFile $Files[$name] $target
+        $changed = $true
+    }
+    foreach ($name in $names[3..4]) {
+        $target = Assert-YumpooPath (Join-Path $directory $name) $directory
+        if ((Test-Path -LiteralPath $target) -and (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ieq (Get-FileHash -LiteralPath $Files[$name] -Algorithm SHA256).Hash) { continue }
+        Set-YumpooFeedFile $Files[$name] $target
+        $changed = $true
+    }
+    $null = Invoke-YumpooDesktopFeedRetention $directory $feed.retainVersions
+    if (-not $changed) { return 'already_current' }
+    return 'complete'
+}
+
+# Keeps installers and authorizations of the newest N versions; blockmaps stay longer because clients on older
+# versions download their own version's blockmap for a differential update.
+function Invoke-YumpooDesktopFeedRetention([string]$Directory, [int]$Keep, [int]$KeepBlockmaps = 20) {
+    $pattern = '^YumpooDesktop-Setup-(' + $script:DesktopVersionPattern + ')-x64\.exe(\.blockmap|\.sig\.json)?$'
+    $files = @(Get-ChildItem -LiteralPath $Directory -File -Force | Where-Object { $_.Name -cmatch $pattern })
+    $versions = @($files | ForEach-Object { if ($_.Name -cmatch $pattern) { $Matches[1] } } | Sort-Object -Unique { [version]$_ } -Descending)
+    $removed = New-Object Collections.Generic.List[string]
+    foreach ($file in $files) {
+        $null = $file.Name -cmatch $pattern
+        $rank = [array]::IndexOf($versions, $Matches[1])
+        $limit = if ($Matches[2] -ceq '.blockmap') { $KeepBlockmaps } else { $Keep }
+        if ($rank -ge $limit) { Remove-YumpooManagedTree $file.FullName $Directory; $removed.Add($file.Name) }
+    }
+    return @($removed)
+}
+
 function Install-YumpooEngine([string]$PackagePath, [string]$PackageSha256, [string]$Root, [hashtable]$Options, [string]$ExpectedModule = '') {
     if ($PackageSha256 -notmatch '^[0-9A-Fa-f]{64}$' -or (Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash -ine $PackageSha256) {
         throw 'The package SHA-256 does not match the verified Release value.'
@@ -830,6 +1034,12 @@ function Install-YumpooEngine([string]$PackagePath, [string]$PackageSha256, [str
         $settings.probeRoutes = [bool]$Options.probeRoutes
         $settings.retention = [ordered]@{ extraReleases = [int]$Options.extraReleases }
         $settings.observe = [ordered]@{ minutes = [int]$Options.observeMinutes; intervalSeconds = 30; maxErrorLines = [int]$Options.maxErrorLines }
+        # Absent options (older callers) keep the feed disabled; Get-YumpooDesktopFeedSettings validates the values.
+        $feedRoot = if ($Options.ContainsKey('desktopFeedRoot') -and $Options.desktopFeedRoot) { [string]$Options.desktopFeedRoot } else { 'C:/ProgramData/Yumpoo/public' }
+        $feedRetain = if ($Options.ContainsKey('desktopRetainVersions')) { [int]$Options.desktopRetainVersions } else { 3 }
+        $feedEnabled = $Options.ContainsKey('desktopFeedEnabled') -and [bool]$Options['desktopFeedEnabled']
+        $settings.desktopFeed = [ordered]@{ enabled = $feedEnabled; root = $feedRoot; channel = 'stable'; retainVersions = $feedRetain }
+        $null = Get-YumpooDesktopFeedSettings ([pscustomobject]$settings)
         if ($settings.releaseBranch -cnotin @('dev', 'main')) { throw 'The release branch must be dev or main.' }
         $backup = Join-Path $engine ('backup-' + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssfffZ'))
         New-Item -ItemType Directory -Path $backup | Out-Null

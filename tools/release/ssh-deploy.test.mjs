@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process'
 import {
   deploy, waitForDeployment, makeRequest, makeRollbackRequest, submitRollbackRequest, commitUploadBatch, sftpQuote, deploymentRoot, deploymentUser, triggerCommand,
   packagePartBytes, maxPackageParts, packagePartCount, packagePartName, splitPackage, uploadPackageParts,
+  makeDesktopRequest, desktopPartName, uploadDesktopFiles,
   runSftpProcess, createSshTransport, sshChildEnvironment, sftpConnectionTimeoutMs, packageUploadTimeoutMs,
 } from './ssh-deploy.mjs'
 import { packageName, validateStatus } from './policy.mjs'
@@ -194,6 +195,57 @@ test('the overall upload deadline cancels outstanding connections without publis
   }), /overall time limit/u)
   assert.equal(aborted, true)
   assert(!batches.some(batch => batch.includes('provenance.json') || batch.includes('request.json')))
+})
+
+test('desktop requests list each feed file with its digest and part count; parts are named per file', () => {
+  const files = [{ name: 'YumpooDesktop-Setup-1.1.0-x64.exe', bytes: 2 * packagePartBytes + 1, sha256: 'c'.repeat(64) }, { name: 'latest.yml', bytes: 10, sha256: 'd'.repeat(64) }]
+  const desktop = makeDesktopRequest({ tag: 'desktop-v1.1.0', sourceCommit: 'a'.repeat(40) }, files, requestId)
+  assert.deepEqual(desktop, {
+    schemaVersion: 2, mode: 'desktop-publish', requestId, tag: 'desktop-v1.1.0', sourceCommit: 'a'.repeat(40),
+    files: [{ ...files[0], partCount: 3 }, { ...files[1], partCount: 1 }],
+  })
+  assert.equal(desktopPartName(0, 0), 'desktop-0-0000.part')
+  assert.equal(desktopPartName(7, 511), 'desktop-7-0511.part')
+  for (const [file, index] of [[8, 0], [-1, 0], [0, 512]]) assert.throws(() => desktopPartName(file, index))
+  for (const name of ['../latest.yml', 'a b.exe', '']) {
+    assert.throws(() => makeDesktopRequest({ tag: 'desktop-v1.1.0', sourceCommit: 'a'.repeat(40) }, [{ ...files[1], name }], requestId))
+  }
+})
+
+test('desktop upload sends every file in distinct parts that reassemble exactly, then commits the request last', async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-desktop-parts-test-'))
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }))
+  const contents = { 'YumpooDesktop-Setup-1.1.0-x64.exe': Buffer.alloc(packagePartBytes + 5, 7), 'latest.yml': Buffer.from('version: 1.1.0\n') }
+  for (const [name, bytes] of Object.entries(contents)) fs.writeFileSync(path.join(directory, name), bytes)
+  fs.writeFileSync(path.join(directory, 'provenance.json'), '{}')
+  const desktop = makeDesktopRequest({ tag: 'desktop-v1.1.0', sourceCommit: 'a'.repeat(40) },
+    Object.entries(contents).map(([name, bytes]) => ({ name, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') })), requestId)
+  const received = new Map()
+  let committed = false
+  await uploadDesktopFiles({
+    directory, request: desktop, log: () => {},
+    async sftp(batch) {
+      const part = /^put "((?:\\.|[^"\\])*)" "[^"\n]*\/(desktop-(\d)-(\d{4})\.part)"\n$/u.exec(batch)
+      if (part) {
+        assert(!committed)
+        received.set(part[2], fs.readFileSync(part[1].replace(/\\(.)/gu, '$1')))
+      } else if (batch.includes('provenance.json')) {
+        assert.equal(batch, commitUploadBatch(directory, desktop))
+        committed = true
+      }
+    },
+  })
+  assert(committed)
+  assert.deepEqual([...received.keys()].sort(), ['desktop-0-0000.part', 'desktop-0-0001.part', 'desktop-1-0000.part'])
+  assert.deepEqual(Buffer.concat([received.get('desktop-0-0000.part'), received.get('desktop-0-0001.part')]), contents['YumpooDesktop-Setup-1.1.0-x64.exe'])
+  assert.deepEqual(received.get('desktop-1-0000.part'), contents['latest.yml'])
+  await assert.rejects(uploadDesktopFiles({ directory, request, sftp: async () => {} }), /Only desktop requests/u)
+  let connected = false
+  await assert.rejects(uploadDesktopFiles({
+    directory, request: { ...desktop, requestId: 'f'.repeat(8) + '-745b-442f-a927-55271a906f3a', files: [{ ...desktop.files[0], partCount: 1 }] },
+    async sftp() { connected = true },
+  }), /part count/u)
+  assert.equal(connected, false)
 })
 
 test('a mismatched packagePartCount fails before opening any SFTP connection', async t => {

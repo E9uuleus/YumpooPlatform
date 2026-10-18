@@ -65,9 +65,9 @@ export function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/u, ''))
 }
 
-export function unpackArtifact(archive, destination) {
+export function unpackArtifact(archive, destination, validateEntries = validateArtifactEntries) {
   const entries = run('unzip', ['-Z1', archive]).trimEnd().split(/\r?\n/u)
-  validateArtifactEntries(entries)
+  validateEntries(entries)
   fs.mkdirSync(destination, { recursive: true })
   for (const name of entries) {
     const output = fs.openSync(path.join(destination, name), 'wx', 0o600)

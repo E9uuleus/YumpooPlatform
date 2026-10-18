@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ElButton } from 'element-plus'
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import InlineProblem from '../../components/InlineProblem.vue'
 import StatusScene from '../../components/motion/StatusScene.vue'
 import YpResultPage from '../../components/yp/YpResultPage.vue'
@@ -8,22 +9,25 @@ import { useSession } from '../../composables/useSession'
 import type { StatusSceneVariant } from '../../motion/scenes/statusScenes'
 
 const session = useSession()
+const router = useRouter()
 
-const content = computed<{ scene: StatusSceneVariant, title: string, description: string, retry: boolean }>(() => {
+const content = computed<{ scene: StatusSceneVariant, title: string, description: string, retry: boolean, download: boolean }>(() => {
   if (session.phase.value === 'accountDisabled') {
     return {
       scene: 'forbidden',
       title: '账号当前不可用',
       description: '账号已停用或成员已离职，请联系公司管理员处理。',
       retry: false,
+      download: false,
     }
   }
   if (session.phase.value === 'upgradeRequired') {
     return {
       scene: 'upgrade',
       title: '客户端需要升级',
-      description: '当前客户端版本不再受支持，请联系管理员获取升级安排。',
+      description: '当前客户端版本不再受支持，请下载并安装最新版桌面客户端，登录状态会保留。',
       retry: false,
+      download: true,
     }
   }
   return {
@@ -31,6 +35,7 @@ const content = computed<{ scene: StatusSceneVariant, title: string, description
     title: '暂时无法进入 Yumpoo',
     description: '服务或网络暂时不可用，可以稍后重新检查。',
     retry: true,
+    download: false,
   }
 })
 </script>
@@ -57,14 +62,22 @@ const content = computed<{ scene: StatusSceneVariant, title: string, description
         />
       </template>
       <template
-        v-if="content.retry"
+        v-if="content.retry || content.download"
         #actions
       >
         <el-button
+          v-if="content.retry"
           type="primary"
           @click="session.ensureAuthentication(true)"
         >
           重新检查
+        </el-button>
+        <el-button
+          v-if="content.download"
+          type="primary"
+          @click="router.push({ name: 'desktop-download' })"
+        >
+          下载最新版
         </el-button>
       </template>
     </yp-result-page>

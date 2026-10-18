@@ -8,6 +8,8 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { createGithub, run } from './github.mjs'
 import { prepareRelease } from './promote-release.mjs'
+import { describeFile, prepareDesktopRelease } from './desktop-release.mjs'
+import { desktopFeedFileNames } from './desktop-policy.mjs'
 import { packageName, releaseWorkflowPath, rollbackWorkflowPath, validateStatus } from './policy.mjs'
 
 export const deploymentRoot = '/C:/ProgramData/Yumpoo/deployment'
@@ -33,6 +35,14 @@ export function packagePartName(index) {
   return `package-${String(index).padStart(4, '0')}.part`
 }
 
+export const maxDesktopFiles = 8
+
+/** Desktop feed files are uploaded in the same 2 MiB pieces; the file index keeps the pieces of each file apart. */
+export function desktopPartName(fileIndex, index) {
+  assert(Number.isInteger(fileIndex) && fileIndex >= 0 && fileIndex < maxDesktopFiles, 'Invalid desktop file index')
+  return `desktop-${fileIndex}-${packagePartName(index).slice('package-'.length)}`
+}
+
 export function makeRequest(provenance, requestId = randomUUID()) {
   validateRequestId(requestId)
   return {
@@ -45,6 +55,20 @@ export function makeRequest(provenance, requestId = randomUUID()) {
 export function makeRollbackRequest(provenance, requestId = randomUUID()) {
   validateRequestId(requestId)
   return { schemaVersion: 2, mode: 'rollback', requestId, tag: provenance.tag, sourceCommit: provenance.sourceCommit }
+}
+
+// A desktop publication carries the verified feed files; the engine checks each one against its Release asset digest.
+export function makeDesktopRequest(provenance, files, requestId = randomUUID()) {
+  validateRequestId(requestId)
+  assert(Array.isArray(files) && files.length >= 1 && files.length <= maxDesktopFiles, 'Invalid desktop file list')
+  return {
+    schemaVersion: 2, mode: 'desktop-publish', requestId, tag: provenance.tag, sourceCommit: provenance.sourceCommit,
+    files: files.map(({ name, bytes, sha256 }) => {
+      assert(/^[A-Za-z0-9][A-Za-z0-9.-]{0,127}$/u.test(name), 'Invalid desktop file name')
+      assert(/^[0-9a-f]{64}$/u.test(sha256), 'Invalid desktop file digest')
+      return { name, bytes, sha256, partCount: packagePartCount(bytes) }
+    }),
+  }
 }
 
 export function sftpQuote(value) {
@@ -63,7 +87,7 @@ export function commitUploadBatch(directory, request) {
   ].join('\n')
 }
 
-export async function splitPackage(file, directory, signal) {
+export async function splitPackage(file, directory, signal, partName = packagePartName) {
   assert((await fs.promises.lstat(file)).isFile(), 'Package must be a regular file')
   const source = await fs.promises.open(file, 'r')
   try {
@@ -80,7 +104,7 @@ export async function splitPackage(file, directory, signal) {
         assert(chunk.bytesRead > 0, 'Package changed while splitting')
         read += chunk.bytesRead
       }
-      const name = packagePartName(index)
+      const name = partName(index)
       const destination = path.join(directory, name)
       await fs.promises.writeFile(destination, buffer.subarray(0, length), { mode: 0o600, flag: 'wx', signal })
       parts.push({ name, file: destination, bytes: length })
@@ -142,13 +166,32 @@ export function runSftpProcess(args, { input, env, timeoutMs, signal }, spawnPro
 }
 
 export async function uploadPackageParts({ directory, request, sftp, log = console.log, timeoutMs = packageUploadTimeoutMs }) {
-  validateRequestId(request.requestId)
   assert(Number.isInteger(request.packagePartCount) && request.packagePartCount >= 1 && request.packagePartCount <= maxPackageParts, 'Invalid packagePartCount')
+  await uploadParts({
+    directory, request, sftp, log, timeoutMs,
+    sources: [{ file: path.join(directory, packageName), partName: packagePartName, expectedCount: request.packagePartCount }],
+  })
+}
+
+export async function uploadDesktopFiles({ directory, request, sftp, log = console.log, timeoutMs = packageUploadTimeoutMs }) {
+  assert.equal(request.mode, 'desktop-publish', 'Only desktop requests upload feed files')
+  assert(Array.isArray(request.files) && request.files.length >= 1 && request.files.length <= maxDesktopFiles, 'Invalid desktop file list')
+  await uploadParts({
+    directory, request, sftp, log, timeoutMs,
+    sources: request.files.map((entry, fileIndex) => ({
+      file: path.join(directory, entry.name), partName: index => desktopPartName(fileIndex, index), expectedCount: entry.partCount,
+    })),
+  })
+}
+
+// Splits every source into 2 MiB parts, uploads them over at most four connections and commits the request last.
+async function uploadParts({ directory, request, sftp, log, timeoutMs, sources }) {
+  validateRequestId(request.requestId)
   assert(Number.isFinite(timeoutMs) && timeoutMs > 0 && timeoutMs <= packageUploadTimeoutMs, 'Invalid overall upload timeout')
   const controller = new AbortController()
   const deadline = Date.now() + timeoutMs
   const timer = setTimeout(() => controller.abort(new Error('Package upload exceeded its overall time limit')), timeoutMs)
-  let partsDirectory
+  const partsDirectories = []
   const connect = batch => {
     const remaining = deadline - Date.now()
     if (remaining <= 0 && !controller.signal.aborted) controller.abort(new Error('Package upload exceeded its overall time limit'))
@@ -156,9 +199,16 @@ export async function uploadPackageParts({ directory, request, sftp, log = conso
     return sftp(batch, { signal: controller.signal, timeoutMs: Math.min(sftpConnectionTimeoutMs, remaining) })
   }
   try {
-    partsDirectory = await fs.promises.mkdtemp(path.join(directory, 'package-parts-'))
-    const { parts, bytes } = await splitPackage(path.join(directory, packageName), partsDirectory, controller.signal)
-    assert.equal(parts.length, request.packagePartCount, 'Request part count does not match the package')
+    const parts = []
+    let bytes = 0
+    for (const source of sources) {
+      const partsDirectory = await fs.promises.mkdtemp(path.join(directory, 'package-parts-'))
+      partsDirectories.push(partsDirectory)
+      const split = await splitPackage(source.file, partsDirectory, controller.signal, source.partName)
+      assert.equal(split.parts.length, source.expectedCount, `Request part count does not match ${path.basename(source.file)}`)
+      parts.push(...split.parts)
+      bytes += split.bytes
+    }
     const inbox = `${deploymentRoot}/inbox/${request.requestId}`
     await connect(`mkdir ${sftpQuote(inbox)}\n`)
     let next = 0
@@ -191,7 +241,7 @@ export async function uploadPackageParts({ directory, request, sftp, log = conso
     throw controller.signal.aborted ? controller.signal.reason : error
   } finally {
     clearTimeout(timer)
-    if (partsDirectory) await fs.promises.rm(partsDirectory, { recursive: true, force: true })
+    for (const partsDirectory of partsDirectories) await fs.promises.rm(partsDirectory, { recursive: true, force: true })
   }
 }
 
@@ -227,6 +277,9 @@ export function createSshTransport(env, directory, { executeSftp = runSftpProces
   return {
     async upload(sourceDirectory, request) {
       await uploadPackageParts({ directory: sourceDirectory, request, sftp, log })
+    },
+    async uploadDesktop(sourceDirectory, request) {
+      await uploadDesktopFiles({ directory: sourceDirectory, request, sftp, log })
     },
     async submitRollback(sourceDirectory, request) {
       await submitRollbackRequest({ directory: sourceDirectory, request, sftp })
@@ -297,19 +350,40 @@ export async function rollback({ transport, directory, provenance, requestId, ..
   return waitForDeployment({ transport, request, ...pollOptions })
 }
 
+export async function publishDesktop({ transport, directory, provenance, files, requestId, ...pollOptions }) {
+  const request = makeDesktopRequest(provenance, files, requestId)
+  console.log(`Submitting desktop feed request ${request.requestId} for ${request.tag} (${request.sourceCommit})`)
+  await transport.uploadDesktop(directory, request)
+  return waitForDeployment({ transport, request, ...pollOptions })
+}
+
+async function runDesktopPublish(directory) {
+  const release = await prepareDesktopRelease({ github: createGithub(), tag: process.env.RELEASE_TAG, env: process.env, directory })
+  const files = []
+  for (const name of desktopFeedFileNames(release.version)) files.push({ name, ...await describeFile(path.join(release.directory, name)) })
+  const transport = createSshTransport(process.env, directory)
+  return publishDesktop({ transport, directory: release.directory, provenance: release.provenance, files })
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-deploy-'))
   try {
     const mode = process.env.DEPLOY_MODE || 'deploy'
-    assert(['deploy', 'rollback'].includes(mode), 'Invalid DEPLOY_MODE')
-    const release = await prepareRelease({
-      github: createGithub(), tag: process.env.RELEASE_TAG, env: process.env, directory,
-      workflowPath: mode === 'rollback' ? rollbackWorkflowPath : releaseWorkflowPath,
-    })
-    const transport = createSshTransport(process.env, directory)
-    const result = await (mode === 'rollback' ? rollback : deploy)({ transport, directory: release.directory, provenance: release.provenance })
+    assert(['deploy', 'rollback', 'desktop-publish'].includes(mode), 'Invalid DEPLOY_MODE')
+    let result
+    if (mode === 'desktop-publish') {
+      result = await runDesktopPublish(directory)
+    } else {
+      const release = await prepareRelease({
+        github: createGithub(), tag: process.env.RELEASE_TAG, env: process.env, directory,
+        workflowPath: mode === 'rollback' ? rollbackWorkflowPath : releaseWorkflowPath,
+      })
+      const transport = createSshTransport(process.env, directory)
+      result = await (mode === 'rollback' ? rollback : deploy)({ transport, directory: release.directory, provenance: release.provenance })
+    }
     if (process.env.GITHUB_STEP_SUMMARY) {
-      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${mode === 'rollback' ? 'Rolled back to' : 'Deployed'} **${result.tag}** (${result.sourceCommit}). Request: ${result.requestId}. Phase: ${result.phase}.\n`)
+      const action = { deploy: 'Deployed', rollback: 'Rolled back to', 'desktop-publish': 'Published to the desktop feed' }[mode]
+      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${action} **${result.tag}** (${result.sourceCommit}). Request: ${result.requestId}. Phase: ${result.phase}.\n`)
     }
   } catch (error) {
     console.error(error.message)

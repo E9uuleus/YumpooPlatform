@@ -10,6 +10,23 @@ describe('桌面分发配置', () => {
     expect(parseDistribution(production).origin).toMatch(/^https:\/\/[^/]+$/u)
   })
 
+  it('生产配置在同一 origin 的 stable 更新源上信任主钥匙与离线备用钥匙两把公钥', () => {
+    const raw = readFileSync(path.join(__dirname, '..', 'distribution', 'production.json'), 'utf8')
+    // Only public halves belong here; a private key in this file would ship inside every installer.
+    expect(raw).not.toMatch(/PRIVATE|privateKey|-----BEGIN/u)
+    const production = parseDistribution(JSON.parse(raw))
+    expect(production.update).toBeDefined()
+    expect(production.update?.feed).toBe(`${production.origin}/desktop/stable/`)
+    expect(production.update?.channel).toBe('stable')
+    const keys = production.update?.publicKeys ?? []
+    expect(keys).toHaveLength(2)
+    expect(new Set(keys.map(key => key.publicKey)).size).toBe(2)
+    for (const key of keys) {
+      expect(Object.keys(key).sort()).toEqual(['keyId', 'publicKey'])
+      expect(Buffer.from(key.publicKey, 'base64')).toHaveLength(32)
+    }
+  })
+
   it.each([
     null,
     [],

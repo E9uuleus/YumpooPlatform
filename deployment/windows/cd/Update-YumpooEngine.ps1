@@ -12,7 +12,11 @@ param(
     [switch]$EnableProbeRoutes,
     [ValidateRange(0, 20)][int]$ExtraReleases = 2,
     [ValidateRange(0, 60)][int]$ObserveMinutes = 10,
-    [ValidateRange(0, 10000)][int]$MaxErrorLines = 20
+    [ValidateRange(0, 10000)][int]$MaxErrorLines = 20,
+    # The desktop update feed stays off until Nginx serves DesktopFeedRoot at /desktop/ (RUNBOOK: desktop release channel).
+    [switch]$EnableDesktopFeed,
+    [string]$DesktopFeedRoot = 'C:/ProgramData/Yumpoo/public',
+    [ValidateRange(2, 20)][int]$DesktopRetainVersions = 3
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -22,5 +26,6 @@ Import-Module $module -Force
 $result = Install-YumpooEngine -PackagePath $PackagePath -PackageSha256 $PackageSha256 -Root $Root -ExpectedModule $module -Options @{
     releaseBranch = $ReleaseBranch; requireImmutable = [bool]$RequireImmutable; probeRoutes = [bool]$EnableProbeRoutes
     extraReleases = $ExtraReleases; observeMinutes = $ObserveMinutes; maxErrorLines = $MaxErrorLines
+    desktopFeedEnabled = [bool]$EnableDesktopFeed; desktopFeedRoot = $DesktopFeedRoot; desktopRetainVersions = $DesktopRetainVersions
 }
 Write-Output "Deployment engine installed from $($result.sourceCommit); previous engine saved in $($result.backup)."

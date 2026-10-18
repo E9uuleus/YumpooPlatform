@@ -23,7 +23,9 @@ const main = esbuild.buildSync({
   absWorkingDir: root,
   logLevel: 'warning',
 })
-writeThirdPartyLicenses(main.metafile, path.join(dist, 'main', 'THIRD_PARTY_LICENSES.txt'))
+const bundled = writeThirdPartyLicenses(main.metafile, path.join(dist, 'main', 'THIRD_PARTY_LICENSES.txt'))
+// The release SBOM lists exactly these inlined packages plus the Electron runtime; the file sits outside the asar.
+fs.writeFileSync(path.join(dist, 'bundled-packages.json'), `${JSON.stringify(bundled, null, 2)}\n`, 'utf8')
 // Sandboxed preloads cannot require relative modules; each entry is already a single file plus type-only imports.
 esbuild.buildSync({
   entryPoints: ['index', 'diagnostics'].map(name => path.join(root, 'src', 'preload', `${name}.ts`)),
@@ -77,6 +79,8 @@ function writeThirdPartyLicenses(metafile, target) {
     if (!licenseFile && !PERMISSIVE_LICENSES.has(manifest.license)) throw new Error(`${id} 既没有许可证文件，也不是已知的宽松许可证，不能打包`)
     const author = typeof manifest.author === 'string' ? manifest.author : manifest.author?.name
     packages.set(id, {
+      name: manifest.name,
+      version: manifest.version,
       license: manifest.license,
       text: licenseFile
         ? fs.readFileSync(path.join(directory, licenseFile), 'utf8').trim()
@@ -87,4 +91,6 @@ function writeThirdPartyLicenses(metafile, target) {
     .map(([id, entry]) => `${id} (${entry.license})\n\n${entry.text}`)
   const separator = `\n\n${'-'.repeat(40)}\n\n`
   fs.writeFileSync(target, `Third-party software bundled into the Yumpoo Desktop main process.\n\n${sections.join(separator)}\n`, 'utf8')
+  return [...packages.values()].map(({ name, version, license }) => ({ name, version, license }))
+    .sort((left, right) => left.name.localeCompare(right.name) || left.version.localeCompare(right.version))
 }
