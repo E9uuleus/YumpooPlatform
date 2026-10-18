@@ -99,9 +99,9 @@ Status: implemented
 
 - [UpdateController](../../../../desktop/desktop-shell/src/main/update-controller.ts) 驱动 electron-updater 的 NSIS 更新：`autoDownload=true`、`autoInstallOnAppQuit=false`、`allowDowngrade=false`、关闭 web installer；
 - 检查时机：启动后 30 秒首次检查，之后每 4 小时一次，加最多 30 分钟抖动；系统唤醒时，若距上次检查超过 15 分钟，再检查一次；
-- `update-downloaded` 之后从更新源取 `.sig.json`，按上面的规则核验。通过才进入 `ready`；不通过就删除已下载的文件并记录原因码，永不安装。同时删除 electron-updater 写入缓存根目录的 `current.blockmap`：它描述的是刚下载、却没有安装的版本，留着会让之后的每次差分下载都校验失败；
+- `update-downloaded` 之后从更新源取 `.sig.json`（30 秒超时，超时即取消请求，按取不到授权处理并回到可重试状态，避免一直卡在 `verifying` 拦住之后的检查），按上面的规则核验。通过才进入 `ready`；不通过就删除已下载的文件并记录原因码，永不安装。同时删除 electron-updater 写入缓存根目录的 `current.blockmap`：它描述的是刚下载、却没有安装的版本，留着会让之后的每次差分下载都校验失败；
 - electron-updater 的代码签名钩子在没有 `publisherName` 时会被跳过（已读源码确认），所以本期不依赖它；
-- 安装时机：任何正常退出（含托盘退出）都会静默安装已就绪的更新；「重启以更新」走同一次退出，包括计时确认握手，安装后自动重新启动。安装前同步重算一次 SHA-512，校验之后被替换的文件不会被执行；
+- 安装时机：任何正常退出（含托盘退出）都会静默安装已就绪的更新；「重启以更新」走同一次退出，包括计时确认握手，安装后自动重新启动；这个「重启」意图只属于这一次退出，用户在确认握手中取消即清除，之后的普通退出只安装不重启。诊断窗的「重试」「以正常模式重启」和启动失败对话框的「重试」走 `app.exit`，不会触发 `will-quit`，所以在那里直接安装已就绪的更新并交给安装器启动新版本（原启动参数如安全模式不保留）；没有就绪更新时照常带参数重启。安装前同步重算一次 SHA-512，校验之后被替换的文件不会被执行；
 - 只有打包版、且分发配置里有 `update` 时才检查更新。安全模式照常更新，让坏版本也能被新版本替换；
 - 带 `update` 的构建声明 generic `publish`，electron-builder 由此生成 `latest.yml` 与 `resources/app-update.yml`（更新缓存目录、差分下载基准）；打包始终带 `--publish never`，不会上传任何东西。
 
@@ -120,7 +120,7 @@ Status: implemented
 
 - 打包版支持 `--self-check=<绝对路径>`：不联网，检查是否打包、分发配置、协议注册，并在隐藏窗口中离线渲染诊断页（等到页面状态变为 `ready`）；报告 safeStorage 可用性，把 JSON 报告写到指定文件后退出。报告写文件而不走 stdout，因为 GUI 子系统 exe 的标准输出不可靠；
 - [打包校验](../../../../tools/verification/package-m0-15-win.mjs)在 `win-unpacked` 上检查图标、版本资源、fuse 状态、`resources` 白名单和 asar 白名单，生成原有 schema 的 M0-15 manifest，另写一份 `desktop-installer.json`，记录安装包名称、大小和 SHA-256；
-- [安装冒烟](../../../../tools/verification/verify-desktop-installer.mjs)在 Windows 门禁中依次执行：静默安装、核对快捷方式（含安全模式快捷方式的目标和参数）和协议键、自检（含诊断页离线渲染）、预置会话与偏好数据、同版本覆盖安装、静默卸载，并断言上面的卸载边界。它会改动当前用户的配置，所以只在 `CI=true` 或 `YUMPOO_DESKTOP_INSTALLER_SMOKE=1` 时运行，并先把已有的 userData 和协议键移到临时备份目录，结束后恢复。备份与运行处于同一个 try 内，中途失败也会恢复已移开的部分；任何一项恢复失败时保留备份目录并让冒烟失败，报错中给出目录位置。NSIS 卸载程序会从 %TEMP% 重新启动自身，所以通过 Windows PowerShell 的 `Start-Process -Wait` 等待完整进程树退出，并校验启动进程退出码；收尾卸载失败或超时时一律不恢复（仍在运行的卸载程序可能删掉刚恢复的数据），保留备份并报出路径，由人确认卸载结束后手动恢复。Windows 门禁覆盖真实分离子孙进程、参数传递及超时行为。
+- [安装冒烟](../../../../tools/verification/verify-desktop-installer.mjs)在 Windows 门禁中依次执行：静默安装、核对快捷方式（含安全模式快捷方式的目标和参数）和协议键、自检（含诊断页离线渲染）、预置会话与偏好数据、同版本覆盖安装、静默卸载，并断言上面的卸载边界。它会改动当前用户的配置，所以只在 `CI=true` 或 `YUMPOO_DESKTOP_INSTALLER_SMOKE=1` 时运行，并先把已有的 userData、更新缓存目录和协议键移到临时备份目录（更新端到端验证同样如此），结束后恢复。备份与运行处于同一个 try 内，中途失败也会恢复已移开的部分；任何一项恢复失败时保留备份目录并让冒烟失败，报错中给出目录位置。NSIS 卸载程序会从 %TEMP% 重新启动自身，所以通过 Windows PowerShell 的 `Start-Process -Wait` 等待完整进程树退出，并校验启动进程退出码；收尾卸载失败或超时时一律不恢复（仍在运行的卸载程序可能删掉刚恢复的数据），保留备份并报出路径，由人确认卸载结束后手动恢复。Windows 门禁覆盖真实分离子孙进程、参数传递及超时行为。
 
 **更新端到端验证**（DESK-3）：
 

@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { CHECK_INTERVAL_MS, CHECK_JITTER_MS, FIRST_CHECK_DELAY_MS, UpdateController, type UpdaterLike } from '../src/main/update-controller'
+import { AUTHORIZATION_TIMEOUT_MS, CHECK_INTERVAL_MS, CHECK_JITTER_MS, FIRST_CHECK_DELAY_MS, UpdateController, type UpdaterLike } from '../src/main/update-controller'
 
 const fixture = JSON.parse(readFileSync(path.join(__dirname, 'fixtures', 'signed-update.json'), 'utf8')) as {
   publicKey: string
@@ -73,7 +73,7 @@ describe('应用内更新', () => {
   it('下载完成后从更新源取授权签名，校验通过才进入就绪', async () => {
     const { updater, controller, states, fetchJson } = setup()
     await download(updater)
-    expect(fetchJson).toHaveBeenCalledWith('https://yumpoo.example.com/desktop/stable/YumpooDesktop-Setup-1.0.1-x64.exe.sig.json')
+    expect(fetchJson).toHaveBeenCalledWith('https://yumpoo.example.com/desktop/stable/YumpooDesktop-Setup-1.0.1-x64.exe.sig.json', expect.any(AbortSignal))
     expect(states.map(state => state.phase)).toEqual(['checking', 'downloading', 'downloading', 'verifying', 'ready'])
     expect(states[2]).toMatchObject({ phase: 'downloading', percent: 42, version: '1.0.1' })
     expect(controller.getState()).toEqual({ phase: 'ready', currentVersion: '1.0.0', channel: 'stable', version: '1.0.1' })
@@ -98,6 +98,27 @@ describe('应用内更新', () => {
     expect(removeFile).toHaveBeenCalledWith(downloadedFile)
     expect(controller.installOnQuit(false)).toBe(false)
     expect(updater.installs).toEqual([])
+  })
+
+  it('授权签名请求挂起时超时取消、拒绝并恢复到可重试状态', async () => {
+    const { updater, controller, fetchJson, removeFile, scheduled } = setup()
+    let signal: AbortSignal | undefined
+    fetchJson.mockImplementationOnce((_url: string, abortSignal: AbortSignal) => {
+      signal = abortSignal
+      return new Promise(() => undefined)
+    })
+    await download(updater)
+    expect(controller.getState().phase).toBe('verifying')
+    controller.check()
+    expect(updater.checks).toBe(0)
+    scheduled.find(entry => entry.delayMs === AUTHORIZATION_TIMEOUT_MS)?.callback()
+    await new Promise(resolve => setImmediate(resolve))
+    expect(signal?.aborted).toBe(true)
+    expect(controller.getState()).toMatchObject({ phase: 'error', error: 'UPDATE_REJECTED_AUTHORIZATION_UNAVAILABLE' })
+    expect(removeFile).toHaveBeenCalledWith(downloadedFile)
+    expect(controller.installOnQuit(true)).toBe(false)
+    controller.check()
+    expect(updater.checks).toBe(1)
   })
 
   it('退出时重新核对文件摘要后静默安装；重启以更新时安装后重新启动', async () => {

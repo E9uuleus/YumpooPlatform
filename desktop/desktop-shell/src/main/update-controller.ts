@@ -6,6 +6,7 @@ import { parseSignedUpdate, UpdateAuthorizationError, verifyUpdateAuthorization 
 export const FIRST_CHECK_DELAY_MS = 30_000
 export const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 export const CHECK_JITTER_MS = 30 * 60 * 1000
+export const AUTHORIZATION_TIMEOUT_MS = 30_000
 const RESUME_MIN_GAP_MS = 15 * 60 * 1000
 
 /** The slice of electron-updater's NsisUpdater this controller drives; tests substitute a fake. */
@@ -29,7 +30,8 @@ export interface UpdateControllerOptions {
   readonly updater: UpdaterLike
   readonly update: DesktopUpdateDistribution
   readonly currentVersion: string
-  fetchJson(url: string): Promise<unknown>
+  /** Should give up when `signal` aborts; the controller stops waiting for it either way. */
+  fetchJson(url: string, signal: AbortSignal): Promise<unknown>
   digest(file: string): Promise<FileDigest>
   /** Install runs inside the synchronous quit path, so the final re-check cannot await. */
   digestSync(file: string): FileDigest
@@ -160,7 +162,7 @@ export class UpdateController {
     this.set('verifying')
     const name = path.basename(file)
     try {
-      const signed = parseSignedUpdate(await this.options.fetchJson(new URL(`${encodeURIComponent(name)}.sig.json`, this.options.update.feed).href))
+      const signed = parseSignedUpdate(await this.fetchAuthorization(new URL(`${encodeURIComponent(name)}.sig.json`, this.options.update.feed).href))
       const digest = await this.options.digest(file)
       verifyUpdateAuthorization({
         signed,
@@ -182,6 +184,19 @@ export class UpdateController {
       await this.options.removeFile(path.join(path.dirname(path.dirname(file)), 'current.blockmap')).catch(() => undefined)
       this.set('error', `UPDATE_REJECTED_${code}`)
     }
+  }
+
+  /**
+   * A response that never finishes would hold the controller in "verifying", where every later check is
+   * refused; after the timeout the request is aborted and the update is rejected like a missing authorization.
+   */
+  private fetchAuthorization(url: string): Promise<unknown> {
+    const abort = new AbortController()
+    this.options.schedule(() => abort.abort(new Error('AUTHORIZATION_TIMEOUT')), AUTHORIZATION_TIMEOUT_MS)
+    const timedOut = new Promise<never>((_resolve, reject) => {
+      abort.signal.addEventListener('abort', () => reject(abort.signal.reason), { once: true })
+    })
+    return Promise.race([this.options.fetchJson(url, abort.signal), timedOut])
   }
 
   private set(phase: DesktopUpdatePhase, error?: string): void {

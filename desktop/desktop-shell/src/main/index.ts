@@ -105,7 +105,7 @@ function openDiagnostics(reason?: DiagnosticsStartupFailure): void {
     void handleStartupFailure({
       showMessageBox: options => dialog.showMessageBox(options),
       openExternal: url => shell.openExternal(url, { activate: true }),
-      relaunch: () => app.relaunch(),
+      relaunch: () => relaunchOrInstall(),
       exit: code => app.exit(code),
     }, webAppUrl?.origin).catch(() => app.exit(1))
   })
@@ -167,8 +167,8 @@ function digestFile(file: string): Promise<FileDigest> {
   })
 }
 
-async function fetchAuthorization(url: string): Promise<unknown> {
-  const response = await net.fetch(url, { credentials: 'omit', cache: 'no-store', redirect: 'error' })
+async function fetchAuthorization(url: string, signal: AbortSignal): Promise<unknown> {
+  const response = await net.fetch(url, { credentials: 'omit', cache: 'no-store', redirect: 'error', signal })
   if (!response.ok) throw new Error(`HTTP_${response.status}`)
   const body = await response.arrayBuffer()
   if (body.byteLength > 64 * 1024) throw new Error('AUTHORIZATION_TOO_LARGE')
@@ -231,8 +231,17 @@ async function runUpdateCheckNow(reportPath: string): Promise<void> {
 
 function relaunch(args: string[]): void {
   logger.info('relaunch', { safeMode: args.includes(SAFE_MODE_ARGUMENT) })
-  app.relaunch({ args })
+  relaunchOrInstall({ args })
   app.exit(0)
+}
+
+/**
+ * app.exit skips will-quit, where a ready update normally installs, so restarts from diagnostics install it
+ * here instead and leave starting the new version to the installer; the old version's arguments are dropped.
+ */
+function relaunchOrInstall(options?: Electron.RelaunchOptions): void {
+  if (updateController?.installOnQuit(true)) return
+  app.relaunch(options)
 }
 
 async function signOut(): Promise<void> {
@@ -373,6 +382,7 @@ async function createMainWindow(): Promise<void> {
   if (!smokeTest && !safeMode) {
     timerController ??= new TimerWindowController(() => mainWindow, webAppUrl.origin, preloadPath,
       new TimerPreferenceStore(userDataPath), () => openDiagnostics())
+    timerController.onExitCancelled(() => { restartAfterUpdate = false })
     timerController.install()
     timerController.attachMain(mainWindow)
     inboxNotifier ??= new InboxNotifier(() => mainWindow, webAppUrl.origin, timerController, new InboxPreferenceStore(userDataPath))

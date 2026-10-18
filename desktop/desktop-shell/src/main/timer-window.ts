@@ -74,6 +74,7 @@ export class TimerWindowController {
   private exitRequest: string | undefined
   private exitTimeout: ReturnType<typeof setTimeout> | undefined
   private readyUpdate: { version: string; restart: () => void } | undefined
+  private exitCancelled: (() => void) | undefined
 
   constructor(private readonly main: () => BrowserWindow | null, private readonly origin: string, private readonly preload: string,
     private readonly prefs = new TimerPreferenceStore(), private readonly openDiagnostics?: () => void) {
@@ -186,9 +187,8 @@ export class TimerWindowController {
     ipcMain.handle('yumpoo:timer:exit-complete', (event, requestId: unknown, allow: unknown) => {
       this.trusted(event, true)
       if (!validTimerId(requestId) || typeof allow !== 'boolean' || requestId !== this.exitRequest) throw new Error('INVALID_TIMER_EXIT')
-      clearTimeout(this.exitTimeout); this.exitRequest = undefined
-      if (allow) { this.approvedExit = true; app.quit() }
-      else this.updateTray()
+      clearTimeout(this.exitTimeout)
+      this.settleExit(allow)
     })
     app.on('before-quit', event => {
       if (!this.approvedExit && this.main()) { event.preventDefault(); this.requestExit() }
@@ -290,6 +290,11 @@ export class TimerWindowController {
     ])
     if (process.platform === 'linux') this.tray?.setContextMenu(this.contextMenu)
     this.menu.update(this.menuState())
+  }
+
+  /** Called when the person cancels a quit, so anything that quit was going to do afterwards is dropped with it. */
+  onExitCancelled(listener: () => void): void {
+    this.exitCancelled = listener
   }
 
   /** Shows a verified update in the tray; `undefined` clears it. */
@@ -403,11 +408,15 @@ export class TimerWindowController {
       if (this.exitRequest !== requestId) return
       void dialog.showMessageBox(main, { type: 'warning', message: '应用未能确认计时状态', detail: '可取消退出后重试，或明确选择继续计时并退出。计时不会自动停止。', buttons: ['取消退出', '继续计时并退出'], defaultId: 0, cancelId: 0 }).then(result => {
         if (this.exitRequest !== requestId) return
-        this.exitRequest = undefined
-        if (result.response === 1) { this.approvedExit = true; app.quit() }
-        else this.updateTray()
+        this.settleExit(result.response === 1)
       })
     }, 30000)
+  }
+
+  private settleExit(allow: boolean): void {
+    this.exitRequest = undefined
+    if (allow) { this.approvedExit = true; app.quit() }
+    else { this.updateTray(); this.exitCancelled?.() }
   }
 
   /** Lays out the compact surface for the saved display style; an orb keeps its circle's bottom-left near `anchor`. */
