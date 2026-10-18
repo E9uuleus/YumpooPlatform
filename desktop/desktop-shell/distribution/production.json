@@ -1,4 +1,18 @@
 {
   "schemaVersion": 1,
-  "origin": "https://wecom-dev.yumpoo.com"
+  "origin": "https://wecom-dev.yumpoo.com",
+  "update": {
+    "feed": "https://wecom-dev.yumpoo.com/desktop/stable/",
+    "channel": "stable",
+    "publicKeys": [
+      {
+        "keyId": "ed25519-4e821e83241d7403",
+        "publicKey": "pUZRE3RXoVG2AWYoB9audI/QA8OZ2RQiS8wv+I0+qf0="
+      },
+      {
+        "keyId": "ed25519-edf5f6dd1fe98a5f",
+        "publicKey": "MU1OvR45+bWCJV1PZ0AlhmEfUzoIGvCFp0de6QEARBQ="
+      }
+    ]
+  }
 }

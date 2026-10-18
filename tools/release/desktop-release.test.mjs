@@ -10,7 +10,7 @@ import {
   signatureName, validateDesktopSignature, validateDesktopTag,
 } from './desktop-policy.mjs'
 import { createStatement, fixtureKey, generateSigningKey, signStatement } from './desktop-update-signature.mjs'
-import { prepareDesktopRelease } from './desktop-release.mjs'
+import { prepareDesktopRelease, readDesktopCheckout } from './desktop-release.mjs'
 import { planDesktopRelease, prepareDesktopDraft, signDesktopDraft } from './prepare-desktop-release.mjs'
 import { rehearseDesktopFeed } from './rehearse-release.mjs'
 import { collectDesktopRelease } from '../verification/collect-desktop-release.mjs'
@@ -158,6 +158,20 @@ test('the production distribution must name the channel feed and keys derived fr
   assert.throws(() => requireUpdateDistribution({ ...distribution, update: { ...distribution.update, feed: 'https://wecom-dev.yumpoo.com/updates/' } }))
   const wrongId = { ...distribution, update: { ...distribution.update, publicKeys: [{ keyId: backup.keyId, publicKey: trusted.publicKey }] } }
   assert.throws(() => requireUpdateDistribution(wrongId), /derived/u)
+})
+
+test('the tracked production distribution trusts exactly the primary and offline backup keys, never a test key', () => {
+  const file = new URL('../../desktop/desktop-shell/distribution/production.json', import.meta.url)
+  const raw = fs.readFileSync(file, 'utf8')
+  assert.doesNotMatch(raw, /PRIVATE|privateKey|-----BEGIN/u, 'only public keys may be committed')
+  const { distribution: production, version } = readDesktopCheckout()
+  assert.match(version, /^\d+\.\d+\.\d+$/u)
+  requireUpdateDistribution(production)
+  assert.equal(production.update.feed, `${production.origin}/desktop/stable/`)
+  // Pinned on purpose: changing a trusted key is a key rotation and must show up in review as a test change.
+  assert.deepEqual(production.update.publicKeys.map(key => key.keyId), ['ed25519-4e821e83241d7403', 'ed25519-edf5f6dd1fe98a5f'])
+  const testKeys = [fixtureKey(), fixtureKey('yumpoo-desktop-update-backup-fixture')].map(key => key.keyId)
+  assert(!production.update.publicKeys.some(key => testKeys.includes(key.keyId)), 'fixture keys are public and must never be trusted by a shipped build')
 })
 
 test('old, unchanged and already drafted versions get no new draft', async t => {
