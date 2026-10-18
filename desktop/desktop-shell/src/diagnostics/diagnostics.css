@@ -1,0 +1,83 @@
+:root {
+  --surface: #ffffff;
+  --background: #f4f6f8;
+  --text: #1f2933;
+  --muted: #5f6b7a;
+  --border: #d9dee5;
+  --accent: #2563eb;
+  --on-accent: #ffffff;
+  --ok: #15803d;
+  --fail: #b91c1c;
+  --warn: #b45309;
+  color-scheme: light dark;
+  font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1d232b;
+    --background: #12161b;
+    --text: #e5e9ef;
+    --muted: #9aa5b4;
+    --border: #323b47;
+    --accent: #7aa7ff;
+    --on-accent: #0b1220;
+    --ok: #4ade80;
+    --fail: #f87171;
+    --warn: #fbbf24;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+header, main { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+header { padding-top: 24px; }
+h1 { margin: 0 0 4px; font-size: 20px; }
+h2 { margin: 0; font-size: 15px; }
+.summary { margin: 0; color: var(--muted); }
+.summary.fail { color: var(--fail); }
+.mode { margin: 8px 0 0; padding: 8px 12px; border-radius: 6px; background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--text); }
+
+section {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.section-head { display: flex; align-items: center; justify-content: space-between; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+button {
+  font: inherit;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+button.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+button.danger { color: var(--fail); }
+button.link { border: none; padding: 0; background: none; color: var(--accent); }
+button:disabled { opacity: 0.55; cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.status { min-height: 1.5em; margin: 10px 0 0; color: var(--muted); }
+
+.checks { display: grid; grid-template-columns: minmax(120px, 180px) 1fr; gap: 6px 16px; margin: 12px 0 0; }
+.checks dt { color: var(--muted); }
+.checks dd { margin: 0; overflow-wrap: anywhere; }
+.checks dd.ok::before { content: "● "; color: var(--ok); }
+.checks dd.fail::before { content: "● "; color: var(--fail); }
+.checks dd.skipped::before { content: "○ "; color: var(--muted); }
