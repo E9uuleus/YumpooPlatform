@@ -57,7 +57,7 @@ Status: implemented
 
 - 打包版支持 `--self-check=<绝对路径>`：不建窗口、不联网，检查是否打包、分发配置、协议注册，并报告 safeStorage 可用性，把 JSON 报告写到指定文件后退出。报告写文件而不走 stdout，因为 GUI 子系统 exe 的标准输出不可靠；
 - [打包校验](../../../../tools/verification/package-m0-15-win.mjs)在 `win-unpacked` 上检查图标、版本资源、fuse 状态、`resources` 白名单和 asar 白名单，生成原有 schema 的 M0-15 manifest，另写一份 `desktop-installer.json`，记录安装包名称、大小和 SHA-256；
-- [安装冒烟](../../../../tools/verification/verify-desktop-installer.mjs)在 Windows 门禁中依次执行：静默安装、核对快捷方式和协议键、自检、预置会话与偏好数据、同版本覆盖安装、静默卸载，并断言上面的卸载边界。它会改动当前用户的配置，所以只在 `CI=true` 或 `YUMPOO_DESKTOP_INSTALLER_SMOKE=1` 时运行，并先把已有的 userData 和协议键移开，结束后恢复。
+- [安装冒烟](../../../../tools/verification/verify-desktop-installer.mjs)在 Windows 门禁中依次执行：静默安装、核对快捷方式和协议键、自检、预置会话与偏好数据、同版本覆盖安装、静默卸载，并断言上面的卸载边界。它会改动当前用户的配置，所以只在 `CI=true` 或 `YUMPOO_DESKTOP_INSTALLER_SMOKE=1` 时运行，并先把已有的 userData 和协议键移到临时备份目录，结束后恢复。备份与运行处于同一个 try 内，中途失败也会恢复已移开的部分；任何一项恢复失败时保留备份目录并让冒烟失败，报错中给出目录位置。
 
 **版本**：桌面版本线由 `desktop/desktop-shell/package.json` 的 `version` 决定，不受仓库版本占位规则约束。安装包文件名为 `YumpooDesktop-Setup-<version>-x64.exe`。
 
