@@ -36,7 +36,7 @@ import { loadDistribution } from './distribution'
 import { DesktopLogger } from './logger'
 import { runSelfCheck, selfCheckReportPath } from './self-check'
 import { handleStartupFailure } from './startup-failure'
-import { CRASH_LOOP_THRESHOLD, HEALTHY_AFTER_MS, StartupStateStore } from './startup-state'
+import { CRASH_LOOP_THRESHOLD, LaunchHealth, StartupStateStore } from './startup-state'
 import { resolveWebAppUrl } from './url-policy'
 import { AUTHENTICATED_PARTITION, createWindowOptions } from './window-policy'
 
@@ -52,6 +52,7 @@ const selfCheckPath = app.isPackaged ? selfCheckReportPath(process.argv) : undef
 const userDataPath = app.getPath('userData')
 const logger = new DesktopLogger(path.join(userDataPath, 'logs'))
 const startupState = new StartupStateStore(userDataPath)
+const launchHealth = new LaunchHealth(startupState)
 const protocolDispatcher = new ProtocolLaunchDispatcher()
 
 class StartupError extends Error {
@@ -303,7 +304,7 @@ async function createMainWindow(): Promise<void> {
     mainLoaded = true
     logger.info('main-loaded', { safeMode })
     // A launch only counts as healthy after surviving a while; crashes right after load still count.
-    setTimeout(() => { if (!window.isDestroyed()) startupState.markHealthy() }, HEALTHY_AFTER_MS).unref()
+    launchHealth.loaded()
   })
   window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
     if (!isMainFrame || errorCode === ERR_ABORTED) return
@@ -318,7 +319,9 @@ async function createMainWindow(): Promise<void> {
   window.webContents.on('render-process-gone', (_event, details) => {
     inboxNotifier?.reset()
     logger.error('renderer-gone', { reason: details.reason, exitCode: details.exitCode })
-    if (details.reason !== 'clean-exit') openDiagnostics('RENDERER_GONE')
+    if (details.reason === 'clean-exit') return
+    launchHealth.failed()
+    openDiagnostics('RENDERER_GONE')
   })
 
   try {
@@ -434,7 +437,7 @@ if (selfCheckPath) {
   }
 } else {
   if (!smokeTest) {
-    consecutiveFailures = startupState.begin()
+    consecutiveFailures = launchHealth.begin()
     crashLoop = consecutiveFailures >= CRASH_LOOP_THRESHOLD
     safeMode = crashLoop || process.argv.includes(SAFE_MODE_ARGUMENT)
   }
@@ -463,10 +466,7 @@ if (selfCheckPath) {
   app.on('child-process-gone', (_event, details) => {
     logger.warn('child-process-gone', { type: details.type, reason: details.reason, exitCode: details.exitCode })
   })
-  app.on('before-quit', () => {
-    // A normal quit after a successful load ends the failure streak even within the first minute.
-    if (mainLoaded) startupState.markHealthy()
-  })
+  app.on('before-quit', () => launchHealth.quitting())
 
   void app.whenReady().then(startApplication).catch(error => {
     failStartup(error instanceof StartupError ? error.reason : 'STARTUP_ERROR', error)

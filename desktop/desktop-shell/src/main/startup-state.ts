@@ -29,6 +29,11 @@ export class StartupStateStore {
     this.write(0)
   }
 
+  /** Starts a new streak at this launch, for a launch that failed after an earlier healthy stretch. */
+  markFailed(): void {
+    this.write(1)
+  }
+
   private read(): number {
     try {
       const raw = readFileSync(this.file)
@@ -50,5 +55,60 @@ export class StartupStateStore {
     } catch {
       // An unwritable profile is reported by diagnostics; it must not block startup.
     }
+  }
+}
+
+interface HealthTimers {
+  set(callback: () => void, ms: number): unknown
+  clear(handle: unknown): void
+}
+
+const systemTimers: HealthTimers = {
+  set: (callback, ms) => setTimeout(callback, ms).unref(),
+  clear: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
+}
+
+/**
+ * Tracks whether this launch became healthy. Loading the main window starts the one-minute timer; a renderer
+ * crash cancels it, and from then on neither the timer nor a normal quit clears the failure streak. A crash
+ * after the launch already became healthy starts a new streak at one.
+ */
+export class LaunchHealth {
+  private state: 'starting' | 'loaded' | 'healthy' | 'failed' = 'starting'
+  private timer: unknown
+
+  constructor(
+    private readonly store: Pick<StartupStateStore, 'begin' | 'markHealthy' | 'markFailed'>,
+    private readonly timers: HealthTimers = systemTimers,
+  ) {}
+
+  begin(): number {
+    return this.store.begin()
+  }
+
+  loaded(): void {
+    if (this.state !== 'starting') return
+    this.state = 'loaded'
+    this.timer = this.timers.set(() => this.becomeHealthy(), HEALTHY_AFTER_MS)
+  }
+
+  failed(): void {
+    if (this.state === 'failed') return
+    if (this.state === 'loaded') this.timers.clear(this.timer)
+    if (this.state === 'healthy') this.store.markFailed()
+    this.state = 'failed'
+  }
+
+  /** A normal quit after a successful load ends the streak even within the first minute. */
+  quitting(): void {
+    if (this.state !== 'loaded') return
+    this.timers.clear(this.timer)
+    this.becomeHealthy()
+  }
+
+  private becomeHealthy(): void {
+    if (this.state !== 'loaded') return
+    this.state = 'healthy'
+    this.store.markHealthy()
   }
 }
