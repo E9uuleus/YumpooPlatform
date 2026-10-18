@@ -72,6 +72,7 @@ export function plan(stage, baseRef = 'origin/dev') {
       node('verify-handoff', 'tools/verification/verify-m0-18-handoff.mjs'),
     ]
     case 'windows': return [
+      node('desktop-profile-tests', '--test', 'tools/verification/desktop-profile.test.mjs'),
       node('windows-release-restore', 'tools/release/verify-windows.mjs'),
       node('windows-evidence', 'tools/verification/verify-m0-18-windows.mjs'),
       node('powershell-behavior', 'tools/verification/verify-m1-15-powershell.mjs'),

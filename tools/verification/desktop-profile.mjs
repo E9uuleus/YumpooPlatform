@@ -41,10 +41,9 @@ export function registryKeyExists(key) {
   return spawnSync('reg.exe', ['query', key], { stdio: 'ignore' }).status === 0
 }
 
-export function spawnAndWait(command, args, timeoutMs, onSpawn = () => {}) {
+export function spawnAndWait(command, args, timeoutMs) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: 'ignore', windowsHide: true })
-    onSpawn(child)
     const timer = setTimeout(() => {
       child.kill()
       reject(new Error(`${path.basename(command)} 未在 ${timeoutMs}ms 内退出`))
@@ -52,6 +51,18 @@ export function spawnAndWait(command, args, timeoutMs, onSpawn = () => {}) {
     child.once('error', error => { clearTimeout(timer); reject(error) })
     child.once('exit', code => { clearTimeout(timer); resolve(code) })
   })
+}
+
+/**
+ * Start-Process -Wait follows the Windows process tree even after the launcher exits. It avoids reconstructing
+ * ancestry from reusable PIDs. argumentLine is a native Windows command line, passed as a PowerShell literal.
+ */
+export function spawnAndWaitForTree(command, argumentLine, timeoutMs) {
+  const literal = value => `'${value.replaceAll("'", "''")}'`
+  const script = `$ErrorActionPreference = 'Stop'
+$child = Start-Process -FilePath ${literal(command)} -ArgumentList ${literal(argumentLine)} -WindowStyle Hidden -PassThru -Wait
+exit $child.ExitCode`
+  return spawnAndWait('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], timeoutMs)
 }
 
 export async function runInstaller(installer) {
@@ -81,42 +92,12 @@ export async function uninstall({ location, quietUninstall }) {
   assert(match, 'QuietUninstallString 格式不受支持')
   const args = match[2].split(/\s+/u).filter(Boolean)
   assert(args.includes('/S'), 'QuietUninstallString 必须是静默卸载')
-  let root
-  await spawnAndWait(match[1], args, 120_000, child => { root = child.pid })
-  await waitForProcessTree(root, { timeoutMs: 120_000 })
+  const code = await spawnAndWaitForTree(match[1], match[2], 120_000)
+  assert.equal(code, 0, `静默卸载失败，退出码 ${code}`)
   const deadline = Date.now() + 120_000
   while (installation() || fs.existsSync(location)) {
     assert(Date.now() < deadline, '静默卸载未在 120 秒内完成')
     await delay(1_000)
-  }
-}
-
-function processTable() {
-  const json = powershell('@(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId) | ConvertTo-Json -Compress')
-  return (json ? [JSON.parse(json)].flat() : []).map(entry => ({ pid: entry.ProcessId, parentPid: entry.ParentProcessId }))
-}
-
-/**
- * Waits until every descendant of `rootPid` has exited. Descendants are remembered once seen, so a child keeps
- * its place in the tree after its parent exits. The root itself is not waited on: it has already exited and its
- * PID may be reused by an unrelated process.
- */
-export async function waitForProcessTree(rootPid, { timeoutMs, intervalMs = 1_000, list = processTable } = {}) {
-  assert(Number.isSafeInteger(rootPid), '无法取得卸载进程 PID')
-  const tree = new Set([rootPid])
-  const deadline = Date.now() + timeoutMs
-  for (;;) {
-    const processes = list()
-    for (let grew = true; grew;) {
-      grew = false
-      for (const { pid, parentPid } of processes) {
-        if (tree.has(parentPid) && !tree.has(pid)) { tree.add(pid); grew = true }
-      }
-    }
-    const running = processes.filter(({ pid }) => pid !== rootPid && tree.has(pid))
-    if (running.length === 0) return
-    assert(Date.now() < deadline, `卸载进程未在 ${timeoutMs}ms 内全部退出：${running.map(({ pid }) => pid).join(', ')}`)
-    await delay(intervalMs)
   }
 }
 
