@@ -71,6 +71,23 @@ test('workflow preserves mandatory gates, immutable actions and exact artifact h
       const upload = value.jobs.windows_delivery.steps.find(step => step.with?.name?.startsWith('m1-15-server-'))
       upload.with.path = upload.with.path.replace('out/m1-15/yumpoo-web.cdx.json\n', '')
     },
+    value => {
+      const steps = value.jobs.windows_delivery.steps
+      delete steps.find(step => step.with?.['subject-path'] === 'out/desktop/*').if
+    },
+    value => {
+      const steps = value.jobs.windows_delivery.steps
+      value.jobs.windows_delivery.steps = steps.filter(step => step.with?.['subject-path'] !== 'out/desktop/*')
+    },
+    value => { value.jobs.windows_delivery.steps.find(step => step.with?.name?.startsWith('desktop-')).with.path = 'out/desktop/latest.yml' },
+    value => { value.jobs.windows_delivery.steps.find(step => step.with?.name?.startsWith('desktop-')).with.name = 'desktop-${{ github.sha }}' },
+    value => {
+      // Uploading before signing would publish unattested bytes.
+      const steps = value.jobs.windows_delivery.steps
+      const upload = steps.findIndex(step => step.with?.name?.startsWith('desktop-'))
+      const [moved] = steps.splice(upload, 1)
+      steps.splice(steps.findIndex(step => step.run === 'pnpm ci:windows') + 1, 0, moved)
+    },
   ]
   for (const mutate of brokenVariants) {
     const value = workflow()

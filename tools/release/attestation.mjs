@@ -10,8 +10,8 @@ export function attestationArgs(file, sourceCommit) {
 
 // The Sigstore signature is checked independently of the Actions artifact API that supplied the bytes.
 // Each verified file is logged, so the run log alone shows which bytes were checked against which CI attempt.
-export async function verifyBuildAttestations(directory, ciRun, { env = process.env, execute = run, log = console.log, label = 'release assets' } = {}) {
-  for (const name of attestedFileNames) {
+export async function verifyBuildAttestations(directory, ciRun, { env = process.env, execute = run, log = console.log, label = 'release assets', files = attestedFileNames } = {}) {
+  for (const name of files) {
     const file = path.join(directory, name)
     const output = execute('gh', attestationArgs(file, ciRun.head_sha), { env, timeout: 300_000 })
     const digest = await fileDigest(file)

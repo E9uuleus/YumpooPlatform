@@ -153,6 +153,11 @@ jobs:
             out/m1-15/yumpoo-windows-server-m1-15.zip
             out/m1-15/yumpoo-server.cdx.json
             out/m1-15/yumpoo-web.cdx.json
+      - name: Attest desktop installer, update metadata and SBOM build provenance
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: out/desktop/*
       - name: Upload Windows server package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -164,6 +169,13 @@ jobs:
             out/m1-15/yumpoo-server.cdx.json
             out/m1-15/yumpoo-web.cdx.json
             out/m1-15/verification-report.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload desktop release artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-${{ github.sha }}-${{ github.run_attempt }}
+          path: out/desktop/*
           if-no-files-found: error
           retention-days: 30
       - name: Upload final evidence pack
