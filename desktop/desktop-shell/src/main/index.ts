@@ -4,6 +4,7 @@ import { InboxNotifier, InboxPreferenceStore } from './inbox-notifier'
 import { applicationIcon } from './application-icon'
 import path from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
+import { writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import type { DesktopAuthStatus } from '@yumpoo/preload-contract'
 import { AUTH_STATUS_CHANNEL, installAuthIpc } from './auth-ipc'
@@ -26,11 +27,18 @@ import {
   installAppSecurityGuards,
   installSecurityGuards,
 } from './security-guards'
+import { loadDistribution } from './distribution'
+import { runSelfCheck, selfCheckReportPath } from './self-check'
+import { handleStartupFailure } from './startup-failure'
 import { resolveWebAppUrl } from './url-policy'
 import { createWindowOptions } from './window-policy'
 
 const SMOKE_TEST_ARGUMENT = '--smoke-test'
 const SMOKE_TEST_TIMEOUT_MS = 20_000
+// Must equal electron-builder appId: the installer stamps it on the shortcuts that Windows notifications resolve.
+const APP_USER_MODEL_ID = 'com.yumpoo.desktop'
+const smokeTest = process.argv.includes(SMOKE_TEST_ARGUMENT)
+const selfCheckPath = app.isPackaged ? selfCheckReportPath(process.argv) : undefined
 const protocolDispatcher = new ProtocolLaunchDispatcher()
 
 let timerController: TimerWindowController | undefined
@@ -38,11 +46,22 @@ let inboxNotifier: InboxNotifier | undefined
 let mainWindow: BrowserWindow | null = null
 let webAppUrl: URL | undefined
 let credentialStore: DesktopCredentialStore | undefined
+let startupFailureShown = false
 
-function failStartup(): never {
-  console.error('[YUMPOO_DESKTOP_STARTUP_FAILED]')
-  app.exit(1)
-  throw new Error('Electron startup failed')
+function failStartup(error?: unknown): void {
+  console.error('[YUMPOO_DESKTOP_STARTUP_FAILED]', error instanceof Error ? error.message : '')
+  if (smokeTest || !app.isReady()) {
+    app.exit(1)
+    return
+  }
+  if (startupFailureShown) return
+  startupFailureShown = true
+  void handleStartupFailure({
+    showMessageBox: options => dialog.showMessageBox(options),
+    openExternal: url => shell.openExternal(url, { activate: true }),
+    relaunch: () => app.relaunch(),
+    exit: code => app.exit(code),
+  }, webAppUrl?.origin).catch(() => app.exit(1))
 }
 
 function electronAuthEnabled(): boolean {
@@ -95,7 +114,6 @@ async function createMainWindow(): Promise<void> {
   if (!webAppUrl) {
     throw new Error('Web application URL is not initialized')
   }
-  const smokeTest = process.argv.includes(SMOKE_TEST_ARGUMENT)
   const preloadPath = path.join(__dirname, '..', 'preload', 'index.js')
 
   mainWindow = new BrowserWindow({
@@ -154,17 +172,19 @@ async function startApplication(): Promise<void> {
   webAppUrl = resolveWebAppUrl({
     configuredUrl: process.env.YUMPOO_WEB_URL,
     isPackaged: app.isPackaged,
+    distributionOrigin: app.isPackaged ? loadDistribution().origin : undefined,
   })
 
+  // The installer already registered the protocol; refreshing it here only helps unpacked development runs.
   if (
-    !process.argv.includes(SMOKE_TEST_ARGUMENT) &&
+    !smokeTest &&
     !registerYumpooProtocolClient(app, {
       isPackaged: app.isPackaged,
       executablePath: process.execPath,
       processArguments: process.argv,
     })
   ) {
-    throw new Error('Unable to register yumpoo protocol')
+    console.warn('[YUMPOO_DESKTOP_PROTOCOL_REGISTRATION_FAILED]')
   }
 
   installAppSecurityGuards(app)
@@ -211,13 +231,29 @@ async function startApplication(): Promise<void> {
   await createMainWindow()
 }
 
-if (process.argv.includes(SMOKE_TEST_ARGUMENT)) {
+if (app.isPackaged) {
+  app.setAppUserModelId(APP_USER_MODEL_ID)
+}
+
+if (smokeTest || selfCheckPath) {
   app.disableHardwareAcceleration()
 }
 
-const ownsSingleInstance = app.requestSingleInstanceLock()
-if (!ownsSingleInstance) {
-  if (process.argv.includes(SMOKE_TEST_ARGUMENT)) {
+if (selfCheckPath) {
+  void app.whenReady().then(() => {
+    const report = runSelfCheck({
+      isPackaged: app.isPackaged,
+      version: app.getVersion(),
+      electronVersion: process.versions.electron,
+      loadDistribution: () => loadDistribution(),
+      isDefaultProtocolClient: protocol => app.isDefaultProtocolClient(protocol),
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+    })
+    writeFileSync(selfCheckPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+    app.exit(report.status === 'PASS' ? 0 : 1)
+  }).catch(() => app.exit(1))
+} else if (!app.requestSingleInstanceLock()) {
+  if (smokeTest) {
     app.exit(1)
   } else {
     app.quit()

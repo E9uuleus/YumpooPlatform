@@ -1,6 +1,6 @@
 # Windows Release 发布与生产运维手册
 
-本手册是当前部署入口。常规发布采用 GitHub Release → SSH → 固定 SYSTEM 部署任务，后端以 `YumpooServer` Windows Service 运行，发布包模式为 `WINDOWS_SERVICE_WINSW`。包文件名沿用 M1-15 以兼容既有 CI 交付链；不代表代码或迁移停留在该里程碑。M1-13、M1-14 手册和历史 checklist 保留各自验收边界。Electron 继续使用 M1-14 `0.1.0` PILOT 包，本链路不提供 Electron 自动更新。
+本手册是当前部署入口。常规发布采用 GitHub Release → SSH → 固定 SYSTEM 部署任务，后端以 `YumpooServer` Windows Service 运行，发布包模式为 `WINDOWS_SERVICE_WINSW`。包文件名沿用 M1-15 以兼容既有 CI 交付链；不代表代码或迁移停留在该里程碑。M1-13、M1-14 手册和历史 checklist 保留各自验收边界。Electron 桌面端已改为 NSIS 按用户安装包（见[桌面安装包与发布渠道](../../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)），但桌面发布渠道尚未上线：安装包只在 CI 中构建和冒烟，不作为 Release 附件。在此之前继续手工分发 M1-14 `0.1.0` PILOT 包，本链路不提供 Electron 自动更新。
 
 Release 发布即为上线决定。主机初始化、Environment 配置和发布链路必须先就绪；单凭仓库脚本、CI 或 Release 附件不能声称服务器已部署。真实企微通讯录、双管理员登录、后续同步和整机重启证据仍按对应 checklist 保持 `ENV_PENDING`，由目标环境验证清零；本次服务恢复验收不重启整台服务器。
 
