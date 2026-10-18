@@ -120,7 +120,7 @@ Status: implemented
 
 - 打包版支持 `--self-check=<绝对路径>`：不联网，检查是否打包、分发配置、协议注册，并在隐藏窗口中离线渲染诊断页（等到页面状态变为 `ready`）；报告 safeStorage 可用性，把 JSON 报告写到指定文件后退出。报告写文件而不走 stdout，因为 GUI 子系统 exe 的标准输出不可靠；
 - [打包校验](../../../../tools/verification/package-m0-15-win.mjs)在 `win-unpacked` 上检查图标、版本资源、fuse 状态、`resources` 白名单和 asar 白名单，生成原有 schema 的 M0-15 manifest，另写一份 `desktop-installer.json`，记录安装包名称、大小和 SHA-256；
-- [安装冒烟](../../../../tools/verification/verify-desktop-installer.mjs)在 Windows 门禁中依次执行：静默安装、核对快捷方式（含安全模式快捷方式的目标和参数）和协议键、自检（含诊断页离线渲染）、预置会话与偏好数据、同版本覆盖安装、静默卸载，并断言上面的卸载边界。它会改动当前用户的配置，所以只在 `CI=true` 或 `YUMPOO_DESKTOP_INSTALLER_SMOKE=1` 时运行，并先把已有的 userData、更新缓存目录和协议键移到临时备份目录（更新端到端验证同样如此），结束后恢复。备份与运行处于同一个 try 内，中途失败也会恢复已移开的部分；任何一项恢复失败时保留备份目录并让冒烟失败，报错中给出目录位置。NSIS 卸载程序会从 %TEMP% 重新启动自身，所以通过 Windows PowerShell 的 `Start-Process -Wait` 等待完整进程树退出，并校验启动进程退出码；收尾卸载失败或超时时一律不恢复（仍在运行的卸载程序可能删掉刚恢复的数据），保留备份并报出路径，由人确认卸载结束后手动恢复。Windows 门禁覆盖真实分离子孙进程、参数传递及超时行为。
+- [安装冒烟](../../../../tools/verification/verify-desktop-installer.mjs)在 Windows 门禁中依次执行：静默安装、核对快捷方式（含安全模式快捷方式的目标和参数）和协议键、自检（含诊断页离线渲染）、预置会话与偏好数据、同版本覆盖安装、静默卸载，并断言上面的卸载边界。它会改动当前用户的配置，所以只在 `CI=true` 或 `YUMPOO_DESKTOP_INSTALLER_SMOKE=1` 时运行，并先把已有的 userData、更新缓存目录和协议键移到临时备份目录（更新端到端验证同样如此），结束后恢复。备份与运行处于同一个 try 内，中途失败也会恢复已移开的部分；任何一项恢复失败时保留备份目录并让冒烟失败，报错中给出目录位置。NSIS 卸载程序会从 %TEMP% 重新启动自身，所以由 Windows PowerShell 临时编译[进程树助手](../../../../tools/verification/windows-process-tree.cs)：挂起创建根进程、加入 Job Object 后才恢复执行，直到内核报告该 Job 没有活动进程，再返回根进程退出码。Job 禁止子进程脱离，且关闭最后一个句柄会终止全部成员，因此外层超时结束助手时也会结束分离的子孙进程。收尾卸载失败或超时时仍不恢复配置，保留备份并报出路径，由人确认卸载结束后手动恢复。Windows 门禁覆盖快速原生启动器、真实分离子孙进程、参数传递、退出码及超时终止行为。
 
 **更新端到端验证**（DESK-3）：
 
@@ -162,7 +162,8 @@ Status: implemented
 - **只删除 `auth\` 目录**：已经足以退出登录，但会留下缓存、本地存储和崩溃转储等数据；卸载应当清理到只剩偏好文件。
 - **卸载时删除整个 userData**：会丢掉计时器和提醒偏好；重新安装后这些偏好应当保留。
 - **任何时候都设置 AUMID**：开发运行没有带同一 AUMID 的快捷方式，Windows 可能不显示 balloon 和 toast。
-- **根据 PID 快照追踪卸载进程树**：根 PID 和已观察的子 PID 都可能被无关进程复用；创建时间也无法补回两次快照之间已退出的中间进程。采用 Windows PowerShell [Start-Process -Wait](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process?view=powershell-5.1#-wait) 的完整进程树等待，避免自行推断进程身份与亲缘关系。
+- **根据 PID 快照追踪卸载进程树**：根 PID 和已观察的子 PID 都可能被无关进程复用；创建时间也无法补回两次快照之间已退出的中间进程。采用 Windows [Job Object](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects) 的内核成员计数，避免自行推断进程身份与亲缘关系。
+- **直接使用 Windows PowerShell 5.1 的 `Start-Process -Wait`**：它先启动根进程，再检查 `HasExited` 并登记 Job，快速启动器可能已退出或创建了不在 Job 中的后代；PR #146 的 Windows 门禁出现等待提前结束。挂起创建、先登记再恢复关闭了这个竞态窗口；仅增加测试延时或轮询卸载目录不能证明用户配置已可安全恢复。
 - **用 `file:` 加载诊断页**：`GrantFileProtocolExtraPrivileges` 关闭后，`file:` 无法读取 app.asar 内的页面（实测 `ERR_FILE_NOT_FOUND`）。为此重新打开这个 fuse 会削弱加固；自定义协议正是 Electron 推荐的替代做法，还能给页面一个确定的来源。
 - **把诊断页放在远程 Web 应用里**：最需要诊断的正是 Web 加载不出来的时候；本地页面断网也能使用，也不会把诊断通道暴露给远程内容。
 - **诊断入口加进 Web 快捷面板**：需要同时改契约、Web 与壳的能力协商；托盘原生菜单、安全模式快捷方式和自动弹出已经覆盖故障场景，所以暂缓。

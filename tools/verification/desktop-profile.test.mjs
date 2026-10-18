@@ -132,7 +132,7 @@ function processFixture(t, source) {
 
 const windowsOnly = { skip: process.platform !== 'win32' && '需要 Windows PowerShell 的进程树等待语义' }
 
-test('waits for detached descendants after both parents exit, without waiting on unrelated processes', windowsOnly, async t => {
+for (const launcher of ['node', 'cmd']) test(`waits for detached descendants after the ${launcher} launcher and both parents exit, without waiting on unrelated processes`, windowsOnly, async t => {
   const { root, argumentLine } = processFixture(t, `
     const { spawn } = require('node:child_process')
     const fs = require('node:fs')
@@ -154,7 +154,12 @@ test('waits for detached descendants after both parents exit, without waiting on
     }
   })
   await once(unrelated, 'spawn')
-  assert.equal(await spawnAndWaitForTree(process.execPath, argumentLine, 15_000), 0)
+  // Exercise a shorter registration window with a native launcher that exits immediately after start.
+  const command = launcher === 'cmd' ? process.env.ComSpec : process.execPath
+  const argumentsToPass = launcher === 'cmd'
+    ? `/d /s /c "start "" /b "${process.execPath}" ${argumentLine} & exit /b 0"`
+    : argumentLine
+  assert.equal(await spawnAndWaitForTree(command, argumentsToPass, 15_000), 0)
   assert.equal(fs.readFileSync(path.join(root, 'finished'), 'utf8'), 'grandchild')
   assert.equal(unrelated.exitCode, null, 'only descendants belong to the wait')
 })
@@ -170,11 +175,24 @@ test('preserves native arguments and a failing process exit code', windowsOnly, 
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, 'arguments.json'), 'utf8')), args)
 })
 
-test('rejects when the process-tree wait exceeds its deadline', windowsOnly, async () => {
-  try {
-    await assert.rejects(spawnAndWaitForTree(process.execPath, '-e "setTimeout(() => {}, 3000)"', 1000), /1000ms/u)
-  } finally {
-    // A timed-out launcher may leave its child running; this harmless fixture exits on its own.
-    await delay(3500)
-  }
+test('rejects at the deadline and terminates detached descendants', windowsOnly, async t => {
+  const { root, argumentLine } = processFixture(t, `
+    const { spawn } = require('node:child_process')
+    const fs = require('node:fs')
+    const path = require('node:path')
+    if (!process.argv[2]) {
+      spawn(process.execPath, [__filename, 'child'], { detached: true, windowsHide: true, stdio: 'ignore' }).unref()
+    } else {
+      const heartbeat = path.join(__dirname, 'heartbeat')
+      fs.writeFileSync(heartbeat, 'started')
+      setInterval(() => fs.appendFileSync(heartbeat, '.'), 100)
+      setTimeout(() => process.exit(0), 60_000)
+    }
+  `)
+  await assert.rejects(spawnAndWaitForTree(process.execPath, argumentLine, 15_000), /15000ms/u)
+  const heartbeat = path.join(root, 'heartbeat')
+  const stopped = fs.readFileSync(heartbeat, 'utf8')
+  assert(stopped.startsWith('started'), 'the descendant must actually have started before the timeout')
+  await delay(500)
+  assert.equal(fs.readFileSync(heartbeat, 'utf8'), stopped, 'a descendant must not outlive its timed-out launcher')
 })
