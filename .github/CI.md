@@ -24,6 +24,8 @@ pnpm run ci
 
 [plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。M2-23 的 `:assets` 检查当前切片资产，完整契约检查归 `ci:contracts`；类别资产只执行一次，M2-03、M2-07、M2-24 等旧切片由 [historical-assets.mjs](../tools/ci/historical-assets.mjs) 校验历史报告与验收矩阵。类型检查由各包实际构建或专用类型测试承担，不再重复运行同一整套 Node 入口。Windows smoke 使用 handoff 的 Web 字节；服务器不重复编译。
 
+Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.test.mjs)验证卸载等待不会漏掉已分离的子孙进程，也不等待无关进程，并覆盖参数、退出码和超时终止。卸载助手先将挂起的根进程加入 Job Object，再恢复执行；完整进程树退出后才能恢复本机配置。失败与超时继续保留备份，具体边界见[桌面交付决策](../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)。
+
 `out/ci/<stage>.json` 记录步骤、起止时间、状态、解析后的基线提交及源码指纹。中途失败立即非零退出；重跑会覆盖本阶段结果，不缓存跳过步骤。后续阶段拒绝旧源码、旧基线、不完整或失败报告。输出、构建目录和测试夹具不写入 Git。子进程清除继承的 `SPRING_*`、`YUMPOO_*` 和 JVM/Maven/Node 注入选项，再显式设置本次验证需要的值；不连接开发或生产数据库，也不继承受控身份 fixture。
 
 ## 四种事实来源
