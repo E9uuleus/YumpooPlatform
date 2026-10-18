@@ -33,6 +33,12 @@ export const routes: RouteRecordRaw[] = [
     component: LoginView,
   },
   {
+    path: '/download',
+    name: 'desktop-download',
+    component: () => import('../views/download/DesktopDownloadView.vue'),
+    meta: { public: true },
+  },
+  {
     path: '/status/account-disabled',
     name: 'account-disabled',
     component: SessionStatusView,
@@ -189,6 +195,8 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  // First installs and upgrade-required clients reach the download page without signing in.
+  if (to.meta.public) return true
   const session = useSession()
   await session.ensureAuthentication()
   return sessionDestination(to)
@@ -196,6 +204,7 @@ router.beforeEach(async (to) => {
 
 watch(useSession().phase, (next) => {
   const current = router.currentRoute.value
+  if (current.meta.public) return
   if (next === 'anonymous') {
     if (current.name !== 'login') {
       rememberReturnPath(current.fullPath)
