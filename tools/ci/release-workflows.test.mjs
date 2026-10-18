@@ -20,6 +20,28 @@ const signingSecret = 'DESKTOP_UPDATE_SIGNING_KEY'
 const steps = job => job.steps ?? []
 const deploySecrets = ['WINDOWS_DEPLOY_HOST', 'WINDOWS_DEPLOY_SSH_KEY', 'WINDOWS_DEPLOY_KNOWN_HOSTS']
 
+// Release jobs run `node --test tools/release/*.test.mjs` and the release tools without installing dependencies,
+// so everything they load, including relative imports outside tools/release, must use Node built-ins only.
+test('release tooling and its tests load only Node built-in modules', () => {
+  const releaseDirectory = new URL('../release/', import.meta.url)
+  const pending = fs.readdirSync(releaseDirectory).filter(name => name.endsWith('.mjs')).map(name => new URL(name, releaseDirectory))
+  const seen = new Set()
+  const offenders = []
+  while (pending.length) {
+    const file = pending.pop()
+    if (seen.has(file.href)) continue
+    seen.add(file.href)
+    const source = fs.readFileSync(file, 'utf8')
+    for (const [, specifier] of source.matchAll(/(?:^|\n)\s*(?:import|export)\b[^'"`;]*?\bfrom\s+['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/gu)) {
+      if (!specifier) continue
+      if (specifier.startsWith('.')) pending.push(new URL(specifier, file))
+      else if (!specifier.startsWith('node:')) offenders.push(`${file.pathname.split('/tools/')[1]} imports ${specifier}`)
+    }
+  }
+  assert(seen.size > 20, 'the import walk must reach the release tools')
+  assert.deepEqual(offenders, [], 'release jobs install no packages')
+})
+
 test('every release workflow keeps the shared supply-chain and injection guards', () => {
   for (const [name, workflow] of Object.entries(releaseWorkflows)) {
     assert.deepEqual(workflow.permissions, { contents: 'read' }, `${name}: default token must be read-only`)
