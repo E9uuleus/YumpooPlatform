@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -7,7 +8,13 @@ import {
   blockmapName, desktopArtifactFileNames, desktopManifestName, desktopSbomComponent, desktopSbomName, installerName,
   requireUpdateDistribution, validateDesktopManifest, validateDesktopSbom, validateLatestYml,
 } from '../release/desktop-policy.mjs'
-import { gitHead } from './m0-18-utils.mjs'
+
+// Release tests import this module, and release jobs install no packages: Node built-ins only.
+function gitHead(root) {
+  const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
+  assert(/^[0-9a-f]{40}$/u.test(commit), 'Invalid Git HEAD')
+  return commit
+}
 
 // Collects the desktop release artifact from the tested M0-15 output into out/desktop: the exact installer the
 // installer smoke ran, its blockmap and latest.yml, plus an SBOM and a manifest. CI attests and uploads this directory;

@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
+import { fileURLToPath } from 'node:url'
 
 // Checks that install the real NSIS package for the current Windows user change the user profile, so they run
 // only on CI runners or when explicitly allowed, and they move the person's own userData, updater cache and
@@ -59,14 +60,15 @@ export function spawnAndWait(command, args, timeoutMs) {
 }
 
 /**
- * Start-Process -Wait follows the Windows process tree even after the launcher exits. It avoids reconstructing
- * ancestry from reusable PIDs. argumentLine is a native Windows command line, passed as a PowerShell literal.
+ * Registers a suspended root in a Windows Job Object before it can spawn descendants, then waits until the
+ * job is empty. argumentLine is a native Windows command line, passed as a PowerShell literal.
  */
 export function spawnAndWaitForTree(command, argumentLine, timeoutMs) {
   const literal = value => `'${value.replaceAll("'", "''")}'`
+  const helper = fileURLToPath(new URL('./windows-process-tree.cs', import.meta.url))
   const script = `$ErrorActionPreference = 'Stop'
-$child = Start-Process -FilePath ${literal(command)} -ArgumentList ${literal(argumentLine)} -WindowStyle Hidden -PassThru -Wait
-exit $child.ExitCode`
+Add-Type -Path ${literal(helper)}
+exit ([YumpooProcessTree]::Run(${literal(command)}, ${literal(argumentLine)}))`
   return spawnAndWait('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], timeoutMs)
 }
 
