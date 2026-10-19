@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createDesktopPkceAttempt,
   DesktopAuthController,
+  DesktopAuthHttpError,
+  desktopAuthFailureReason,
   exchangeDesktopAuthCode,
   requestDesktopAuthorization,
 } from '../src/main/desktop-auth'
@@ -42,7 +44,7 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     })
     expect(result.authorizationUrl).toContain('https://open.work.weixin.qq.com/wwopen/sso/qrConnect')
     const [url, request] = fetchImplementation.mock.calls[0] ?? []
-    expect((url as URL).pathname).toBe('/api/v1/electron/auth/attempts')
+    expect(new URL(url as string).pathname).toBe('/api/v1/electron/auth/attempts')
     expect(JSON.parse(String(request?.body))).toEqual({
       state: STATE, codeChallenge: CHALLENGE, codeChallengeMethod: 'S256',
     })
@@ -165,13 +167,11 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     )).toEqual(bundle)
 
     const [url, request] = fetchImplementation.mock.calls[0] ?? []
-    expect(url).toBeInstanceOf(URL)
-    expect((url as URL).href).toBe(
-      'https://yumpoo.example.com/api/v1/electron/auth/exchange',
-    )
+    expect(url).toBe('https://yumpoo.example.com/api/v1/electron/auth/exchange')
     expect(request).toMatchObject({
       method: 'POST',
       redirect: 'error',
+      credentials: 'omit',
       headers: {
         'Content-Type': 'application/json',
         'X-Client-Type': 'ELECTRON',
@@ -184,5 +184,92 @@ describe('Electron PKCE 与浏览器登录交接', () => {
       state: STATE,
       codeVerifier: VERIFIER,
     })
+  })
+
+  it('授权服务拒绝时报 AUTH_SERVICE_FAILED 并记录 HTTP 状态，不尝试打开浏览器', async () => {
+    const openExternal = vi.fn(async () => undefined)
+    const statuses: unknown[] = []
+    const failures: unknown[] = []
+    const fetchImplementation = vi.fn(async () => new Response('{}', { status: 401 }))
+    const controller = new DesktopAuthController({
+      enabled: true,
+      authorize: (attempt) => requestDesktopAuthorization(attempt, {
+        webOrigin: 'https://yumpoo.example.com', clientVersion: '1.0.0', fetchImplementation,
+      }),
+      createAttempt: fixedAttempt,
+      openExternal,
+      exchange: async () => undefined,
+      publishStatus: (value) => statuses.push(value),
+      logFailure: (stage, reason) => failures.push({ stage, reason }),
+    })
+
+    await controller.start()
+    expect(openExternal).not.toHaveBeenCalled()
+    expect(statuses.at(-1)).toEqual({ phase: 'FAILED', errorCode: 'AUTH_SERVICE_FAILED' })
+    expect(failures).toEqual([{ stage: 'authorize', reason: 'HTTP_401' }])
+
+    // The failed attempt is released, so the next click starts a fresh one instead of AUTH_IN_PROGRESS.
+    fetchImplementation.mockResolvedValueOnce(new Response(JSON.stringify(authorization()), { status: 201 }))
+    await controller.start()
+    expect(openExternal).toHaveBeenCalledOnce()
+    expect(statuses.at(-1)).toEqual({ phase: 'WAITING_FOR_CALLBACK' })
+  })
+
+  it('非企微地址同样按授权服务失败处理', async () => {
+    const statuses: unknown[] = []
+    const fetchImplementation = vi.fn(async () => new Response(JSON.stringify({
+      ...authorization(), authorizationUrl: 'https://evil.example.com/login',
+    }), { status: 201 }))
+    const controller = new DesktopAuthController({
+      enabled: true,
+      authorize: (attempt) => requestDesktopAuthorization(attempt, {
+        webOrigin: 'https://yumpoo.example.com', clientVersion: '1.0.0', fetchImplementation,
+      }),
+      createAttempt: fixedAttempt,
+      openExternal: async () => undefined,
+      exchange: async () => undefined,
+      publishStatus: (value) => statuses.push(value),
+    })
+
+    await controller.start()
+    expect(statuses.at(-1)).toEqual({ phase: 'FAILED', errorCode: 'AUTH_SERVICE_FAILED' })
+  })
+
+  it('只有 openExternal 失败才报 BROWSER_OPEN_FAILED，兑换失败记录原因', async () => {
+    const statuses: unknown[] = []
+    const failures: unknown[] = []
+    const options = {
+      enabled: true,
+      authorize: async () => authorization(),
+      createAttempt: fixedAttempt,
+      publishStatus: (value: unknown) => statuses.push(value),
+      logFailure: (stage: string, reason: string) => failures.push({ stage, reason }),
+    }
+    const browserless = new DesktopAuthController({
+      ...options,
+      openExternal: async () => { throw new Error('no handler') },
+      exchange: async () => undefined,
+    })
+    await browserless.start()
+    expect(statuses.at(-1)).toEqual({ phase: 'FAILED', errorCode: 'BROWSER_OPEN_FAILED' })
+
+    const exchangeFails = new DesktopAuthController({
+      ...options,
+      openExternal: async () => undefined,
+      exchange: async () => { throw new Error('net::ERR_CONNECTION_RESET') },
+    })
+    await exchangeFails.start()
+    await exchangeFails.handleCallback({ code: CODE, state: STATE })
+    expect(statuses.at(-1)).toEqual({ phase: 'FAILED', errorCode: 'EXCHANGE_FAILED' })
+    expect(failures).toEqual([
+      { stage: 'open-browser', reason: 'Error' },
+      { stage: 'exchange', reason: 'ERR_CONNECTION_RESET' },
+    ])
+  })
+
+  it('失败原因只保留状态码、网络错误码或错误类名', () => {
+    expect(desktopAuthFailureReason(new DesktopAuthHttpError(503))).toBe('HTTP_503')
+    expect(desktopAuthFailureReason(new TypeError('fetch failed https://x/?state=secret'))).toBe('TypeError')
+    expect(desktopAuthFailureReason('boom')).toBe('UNKNOWN')
   })
 })

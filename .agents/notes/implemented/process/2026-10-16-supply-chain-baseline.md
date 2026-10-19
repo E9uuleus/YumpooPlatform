@@ -13,11 +13,7 @@ Status: implemented
 
 ## Decision
 
-**依赖更新**：[Dependabot](../../../../.github/dependabot.yml) 覆盖 github-actions、npm（根 workspace）和 Maven（`/backend`）。
-
-- 目标分支为 `dev`，每周一次，小版本与补丁按生态分组，大版本单独开 PR；
-- 冷却期 7 天，避开刚发布就被撤回或投毒的版本。安全更新不受冷却期限制；
-- 依赖 PR 和普通 PR 走同一套门禁，随下一次晋升发布。
+**依赖更新**：[Dependabot](../../../../.github/dependabot.yml) 覆盖 github-actions、npm（根 workspace）和 Maven（`/backend`）。自动 PR 的触发范围、分组与人工升级条件由[仅自动提出安全更新](2026-10-18-dependabot-security-only.md)部分取代并接管；本基线继续拥有下述漏洞门禁、扫描、SBOM 和构建证明决策。依赖 PR 和普通 PR 走同一套门禁，随下一次晋升发布。
 
 **PR 检查**：[Supply Chain](../../../../.github/workflows/supply-chain.yml) 中有两个任务是 `dev` 的 required checks：
 
@@ -49,7 +45,7 @@ Status: implemented
 
 ## Alternatives considered
 
-- **Renovate 代替 Dependabot**：规则更灵活，但需要安装第三方 App 并授予写权限；Dependabot 是仓库内建能力，分组和冷却期已经够用。
+- **Renovate 代替 Dependabot**：规则更灵活，但需要安装第三方 App 并授予写权限；Dependabot 的内建安全更新和分组已满足当前维护策略。
 - **只在 `main` 上签署构建证明**：PR 与 `dev` 合并永远不会执行签署步骤，第一次真正执行要等到晋升之后，签署失败会直接卡住发布。改为所有推送 CI 都签署，`dev` 合并就能验证签署链；验证侧只接受 `main`。
 - **通过 Advanced Security 上传 zizmor 与 OSV 的 SARIF**：结果进入安全面板，但需要 `security-events: write`，且发现不会让 PR 检查失败。改为直接失败，并在日志中给出注解。
 - **在发布草稿阶段重新生成 SBOM**：不必改动 CI 产物，但 SBOM 不再出自被测试的同一次构建，违背「只构建一次」。

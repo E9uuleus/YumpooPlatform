@@ -525,18 +525,19 @@ async function startApplication(): Promise<void> {
   installAppSecurityGuards(app)
   installClientHeaders(session.fromPartition(AUTHENTICATED_PARTITION), webAppUrl.origin, app.getVersion())
   credentialStore = new DesktopCredentialStore(userDataPath, safeStorage)
+  // Chromium's stack, like the main window: same system proxy, Windows certificate store and no cookies.
+  const authRequest = {
+    webOrigin: webAppUrl.origin,
+    clientVersion: app.getVersion(),
+    fetchImplementation: (url: string, init: RequestInit) => net.fetch(url, init),
+  }
   const controller = new DesktopAuthController({
     enabled: electronAuthEnabled(),
-    authorize: (attempt) => requestDesktopAuthorization(attempt, {
-      webOrigin: webAppUrl?.origin ?? '',
-      clientVersion: app.getVersion(),
-    }),
+    authorize: (attempt) => requestDesktopAuthorization(attempt, authRequest),
     openExternal: (url) => shell.openExternal(url, { activate: true }),
+    logFailure: (stage, reason) => logger.warn('desktop-auth-failed', { stage, reason }),
     exchange: async (input) => {
-      const bundle = await exchangeDesktopAuthCode(input, {
-        webOrigin: webAppUrl?.origin ?? '',
-        clientVersion: app.getVersion(),
-      })
+      const bundle = await exchangeDesktopAuthCode(input, authRequest)
       await credentialStore?.save(bundle, webAppUrl?.origin ?? '')
       if (!mainWindow || mainWindow.isDestroyed() || !webAppUrl) {
         throw new Error('Main window is unavailable')

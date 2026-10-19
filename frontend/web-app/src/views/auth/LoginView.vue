@@ -33,6 +33,7 @@ const callbackMessage = computed(() => {
 const errorLabels: Record<DesktopAuthErrorCode, string> = {
   AUTH_DISABLED: '当前桌面登录未启用。',
   AUTH_IN_PROGRESS: '登录正在进行，请在浏览器完成扫码。',
+  AUTH_SERVICE_FAILED: '无法连接登录服务，请稍后重试；如持续失败，可在托盘菜单中选择「诊断与修复」。',
   BROWSER_OPEN_FAILED: '无法打开系统浏览器。',
   INVALID_CALLBACK: '登录回调格式无效。',
   NO_PENDING_ATTEMPT: '登录请求不存在，请重新开始。',
@@ -41,8 +42,10 @@ const errorLabels: Record<DesktopAuthErrorCode, string> = {
   EXCHANGE_FAILED: '桌面会话兑换失败。',
   IPC_REJECTED: '桌面安全桥不可用。',
 }
+// A newer shell may report a code this build does not know yet.
+const UNKNOWN_ERROR_LABEL = '桌面登录未完成，请重试；如持续失败，可在托盘菜单中选择「诊断与修复」。'
 const desktopMessage = computed(() => status.value.errorCode
-  ? errorLabels[status.value.errorCode]
+  ? (errorLabels[status.value.errorCode] as string | undefined) ?? UNKNOWN_ERROR_LABEL
   : status.value.phase === 'WAITING_FOR_CALLBACK'
     ? '请在系统浏览器中使用企业微信扫码。'
     : undefined)
