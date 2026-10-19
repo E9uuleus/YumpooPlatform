@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { TimeSessionFillMode } from '@yumpoo/api-client'
 import '../../projects/workItemAccentBar.css'
 import { workItemLabelColorValue } from '../../projects/workItemLabelColors'
 import { blockEnd, clampMove, clampResize, durationLabel, FINE_SNAP_MS, formatClock, freeInterval, gaps, HOUR, MIN_BLOCK_MS, MIN_VISUAL_MS, MINUTE,
@@ -9,6 +10,7 @@ import { draggedItem, type ShelfItem } from './shelfDrag'
 
 /** Space kept around every card, so stacked and side-by-side records read as separate cards. */
 const GAP_Y = 2, GAP_X = 4
+const DRAG_THRESHOLD = 6, EDGE_HIT_SIZE = 8
 const PRIMARY = 'var(--yp-action-primary)'
 
 const props = defineProps<{
@@ -21,6 +23,7 @@ const props = defineProps<{
   /** Latest instant a record may end at: the day's end or now. */
   limit: number
   timezone: string
+  busy?: boolean
   selectedId?: string | undefined
   fresh?: ReadonlySet<string>
   pending?: Range | null | undefined
@@ -31,7 +34,7 @@ const emit = defineEmits<{
   open: [block: DayBlock, anchor: HTMLElement]
   create: [range: Range]
   change: [block: DayBlock, range: Range]
-  drop: [item: ShelfItem, range: Range]
+  drop: [item: ShelfItem, range: Range, mode: TimeSessionFillMode.Gaps | TimeSessionFillMode.Parallel]
   dragging: [active: boolean]
 }>()
 
@@ -84,22 +87,49 @@ const views = computed<BlockView[]>(() => props.blocks.map(original => {
   }
 }))
 const hoveredId = ref<string>()
+const hoveredEdge = ref<'start' | 'end'>()
+const blockElements = new Map<string, HTMLElement>()
+function registerBlock(id: string, element: unknown) {
+  if (element instanceof HTMLElement) blockElements.set(id, element)
+  else blockElements.delete(id)
+}
+
+interface BlockHit { view: BlockView; edge: 'move' | 'start' | 'end'; element: HTMLElement }
+/** Include the card's vertical inset in its hit area; it is spacing, not an empty time slot. */
+function hitBlock(event: MouseEvent): BlockHit | undefined {
+  const direct = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-session-id]') : null
+  let closest: (BlockHit & { distance: number }) | undefined
+  for (const view of views.value) {
+    const element = blockElements.get(view.block.id)
+    if (!element) continue
+    const rect = element.getBoundingClientRect()
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top - GAP_Y || event.clientY > rect.bottom + GAP_Y) continue
+    const band = Math.min(EDGE_HIT_SIZE, rect.height / 3) - GAP_Y
+    const edge = event.clientY <= rect.top + band ? 'start' : event.clientY >= rect.bottom - band ? 'end' : 'move'
+    const hit = { view, edge, element } as BlockHit
+    if (element === direct) return hit
+    const distance = Math.min(Math.abs(event.clientY - rect.top), Math.abs(event.clientY - rect.bottom))
+    if (!closest || distance < closest.distance) closest = { ...hit, distance }
+  }
+  return closest
+}
+const canDrag = (hit: BlockHit) => hit.edge === 'move' ? hit.view.movable : hit.edge === 'start' ? hit.view.startHandle : hit.view.endHandle
+function clearHover() { hoveredId.value = undefined; hoveredEdge.value = undefined; hover.value = null }
 
 let suppressClick = false
 function open(view: BlockView, event: MouseEvent) {
-  if (suppressClick) { suppressClick = false; return }
+  if (suppressClick && event.detail !== 0) { suppressClick = false; return }
+  suppressClick = false
+  if (props.busy) return
   emit('open', view.block, event.currentTarget as HTMLElement)
 }
 
 interface Drag { block: DayBlock; edge: 'move' | 'start' | 'end'; pointerId: number; startY: number; bounds: Range; moved: boolean; range: Range
   target: HTMLElement }
 const drag = ref<Drag>()
-function dragStart(view: BlockView, edge: Drag['edge'], event: PointerEvent) {
-  const allowed = edge === 'move' ? view.movable : edge === 'start' ? view.startHandle : view.endHandle
-  suppressClick = false
-  if (event.button !== 0 || event.pointerType === 'touch' || !allowed) return
-  event.stopPropagation()
-  const target = event.currentTarget as HTMLElement
+function dragStart(hit: BlockHit, event: PointerEvent) {
+  if (event.pointerType === 'touch' || !canDrag(hit)) return
+  const { view, edge, element: target } = hit
   target.setPointerCapture(event.pointerId)
   const block = view.block
   drag.value = { block, edge, pointerId: event.pointerId, startY: event.clientY, moved: false, target,
@@ -110,12 +140,13 @@ function dragMove(event: PointerEvent) {
   const current = drag.value
   if (!current || current.pointerId !== event.pointerId) return
   const dy = event.clientY - current.startY
-  if (!current.moved && Math.abs(dy) < 4) return
+  if (!current.moved && Math.abs(dy) < DRAG_THRESHOLD) return
   if (!current.moved) { current.moved = true; emit('dragging', true) }
-  const delta = dy / PX_PER_MINUTE * MINUTE, step = event.altKey ? FINE_SNAP_MS : SNAP_MS, block = current.block
-  current.range = current.edge === 'move'
-    ? clampMove(block, snap(block.start + delta, props.bounds.start, step) - block.start, current.bounds)
-    : clampResize(block, current.edge, snap((current.edge === 'start' ? block.start : block.end!) + delta, props.bounds.start, step), current.bounds)
+  const step = event.altKey ? FINE_SNAP_MS : SNAP_MS, block = current.block
+  const delta = snap(dy / PX_PER_MINUTE * MINUTE, 0, step)
+  current.range = delta === 0 ? { start: block.start, end: block.end! }
+    : current.edge === 'move' ? clampMove(block, delta, current.bounds)
+      : clampResize(block, current.edge, (current.edge === 'start' ? block.start : block.end!) + delta, current.bounds)
   drafts.value = new Map(drafts.value).set(block.id, current.range)
 }
 function dragEnd(event: PointerEvent, cancelled = false) {
@@ -125,29 +156,62 @@ function dragEnd(event: PointerEvent, cancelled = false) {
   if (current.target.hasPointerCapture(event.pointerId)) current.target.releasePointerCapture(event.pointerId)
   if (!current.moved) return
   suppressClick = true
-  emit('dragging', false)
   const { range, block } = current
   if (cancelled || (range.start === block.start && range.end === block.end)) {
-    const next = new Map(drafts.value); next.delete(block.id); drafts.value = next
+    discardDraft(block.id)
   } else emit('change', block, range)
+  emit('dragging', false)
+}
+function discardDraft(id: string) {
+  const next = new Map(drafts.value); next.delete(id); drafts.value = next
 }
 
-const dropGhost = ref<Range | null>(null)
+interface DropProposal { range: Range; mode: TimeSessionFillMode.Gaps | TimeSessionFillMode.Parallel; targetId?: string; problem?: string }
+const dropGhost = ref<DropProposal | null>(null)
+function dropProposal(event: DragEvent): DropProposal | null {
+  if (props.busy || !draggedItem.value) return null
+  const hit = hitBlock(event)
+  if (hit) {
+    // Freeze a running record's preview until the pointer chooses a different target.
+    if (dropGhost.value?.targetId === hit.view.block.id) return dropGhost.value
+    const range = { start: Math.max(hit.view.range.start, props.bounds.start), end: Math.min(hit.view.range.end, props.limit, props.bounds.end) }
+    return { range, mode: TimeSessionFillMode.Parallel, targetId: hit.view.block.id,
+      ...(range.end - range.start < MIN_BLOCK_MS ? { problem: '至少记录 15 分钟，目标时段不足 15 分钟。' } : {}) }
+  }
+  const range = emptyRange(event)
+  return range ? { range, mode: TimeSessionFillMode.Gaps } : null
+}
+const dropStyle = computed(() => {
+  const proposal = dropGhost.value
+  if (!proposal) return {}
+  const target = views.value.find(view => view.block.id === proposal.targetId)
+  return target ? { ...target.style, ...box(proposal.range), '--day-block-color': color(draggedItem.value?.colorToken ?? null) }
+    : ghostStyle(proposal.range, draggedItem.value?.colorToken ?? null)
+})
 function dragOver(event: DragEvent) {
   if (!draggedItem.value) return
-  const range = rangeInGap(snapDown(timeAt(event), props.bounds.start), HOUR, free.value)
-  dropGhost.value = range
-  if (!range) { if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; return }
+  clearHover()
+  const proposal = dropProposal(event)
+  dropGhost.value = proposal
+  if (!proposal || proposal.problem) { if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; return }
   event.preventDefault()
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
 }
-function drop(event: DragEvent) {
-  const item = draggedItem.value, range = dropGhost.value
+function dragLeave(event: DragEvent) {
+  if (event.relatedTarget instanceof Node && canvas.value?.contains(event.relatedTarget)) return
+  const rect = canvas.value!.getBoundingClientRect()
+  if (event.clientX > rect.left && event.clientX < rect.right && event.clientY > rect.top && event.clientY < rect.bottom) return
   dropGhost.value = null
+}
+function drop(event: DragEvent) {
+  const item = draggedItem.value, proposal = dropProposal(event)
+  dropGhost.value = null
+  if (item && proposal) {
+    event.preventDefault()
+    if (proposal.problem) ElMessage.warning(proposal.problem)
+    else emit('drop', item, proposal.range, proposal.mode)
+  }
   draggedItem.value = null
-  if (!item || !range) return
-  event.preventDefault()
-  emit('drop', item, range)
 }
 
 const free = computed(() => gaps(props.blocks, props.now, { start: props.bounds.start, end: props.limit }))
@@ -164,9 +228,9 @@ const workGaps = computed(() => gaps(props.blocks, props.now,
     return { ...gap, visualStart, buttonAt }
   }))
 
-interface Selection { pointerId: number; anchor: number; point: number; raw: number; startY: number; moved: boolean; touch: boolean }
+interface Selection { pointerId: number; anchor: number; point: number; raw: number; startY: number; moved: boolean; touch: boolean; clickRange: Range | null }
 const selection = ref<Selection>()
-const hover = ref<number | null>(null)
+const hover = ref<Range | null>(null)
 /** Extend short drags inside their gap, shifting back from a neighbour or now when needed. */
 const selected = computed(() => {
   const current = selection.value
@@ -180,43 +244,91 @@ const selected = computed(() => {
 const timeAt = (event: MouseEvent) => props.bounds.start + (event.clientY - canvas.value!.getBoundingClientRect().top) / PX_PER_MINUTE * MINUTE
 const clampTime = (ms: number) => Math.min(Math.max(ms, props.bounds.start), props.limit)
 const snapped = (event: PointerEvent) => clampTime(snap(timeAt(event), props.bounds.start, event.altKey ? FINE_SNAP_MS : SNAP_MS))
-const onEmpty = (event: Event) => !(event.target as HTMLElement).closest('.day-block, .day-gap')
+const gapAt = (raw: number) => free.value.find(range => range.start <= raw && raw < range.end)
+function emptyRange(event: MouseEvent): Range | null {
+  const raw = timeAt(event), gap = gapAt(raw)
+  if (!gap) return null
+  const at = Math.max(gap.start, snapDown(raw, props.bounds.start, event.altKey ? FINE_SNAP_MS : SNAP_MS))
+  return rangeInGap(at, HOUR, [gap])
+}
+const onGapButton = (event: Event) => event.target instanceof Element && !!event.target.closest('.day-gap')
 
 function pointerdown(event: PointerEvent) {
-  if (event.button !== 0 || props.limit <= props.bounds.start || !onEmpty(event)) return
-  const raw = timeAt(event)
-  if (raw >= props.limit) return
-  const at = snapped(event)
+  if (event.button !== 0 || props.busy || drag.value || selection.value || draggedItem.value || onGapButton(event)) return
+  suppressClick = false
+  const hit = hitBlock(event)
+  if (hit) { hover.value = null; dragStart(hit, event); return }
+  const raw = timeAt(event), gap = gapAt(raw)
+  if (!gap) return
+  const at = Math.max(gap.start, snapDown(raw, props.bounds.start, event.altKey ? FINE_SNAP_MS : SNAP_MS))
   selection.value = { pointerId: event.pointerId, anchor: at, point: at, raw, startY: event.clientY, moved: false,
-    touch: event.pointerType === 'touch' }
+    touch: event.pointerType === 'touch', clickRange: emptyRange(event) }
   // Touch keeps native scrolling; a tap still opens an hour, and the composer's time fields adjust it.
   if (event.pointerType !== 'touch') canvas.value!.setPointerCapture(event.pointerId)
 }
 function pointermove(event: PointerEvent) {
+  if (drag.value) { hover.value = null; dragMove(event); return }
+  if (props.busy || draggedItem.value) { clearHover(); return }
   const current = selection.value
   if (!current) {
-    hover.value = event.pointerType === 'mouse' && onEmpty(event) && timeAt(event) < props.limit
-      ? snapDown(timeAt(event), props.bounds.start, event.altKey ? FINE_SNAP_MS : SNAP_MS) : null
+    clearHover()
+    if (event.pointerType !== 'mouse' || onGapButton(event)) return
+    const hit = hitBlock(event)
+    if (hit) {
+      hoveredId.value = hit.view.block.id
+      if (hit.edge !== 'move' && canDrag(hit)) hoveredEdge.value = hit.edge
+    } else hover.value = emptyRange(event)
     return
   }
-  if (Math.abs(event.clientY - current.startY) > 4) current.moved = true
-  if (current.touch) { if (current.moved) selection.value = undefined; return }
+  if (current.pointerId !== event.pointerId) return
+  if (!current.moved) {
+    if (Math.abs(event.clientY - current.startY) < DRAG_THRESHOLD) return
+    if (current.touch) { selection.value = undefined; return }
+    current.moved = true
+    emit('dragging', true)
+  }
   current.point = snapped(event)
   hover.value = null
 }
 function pointerup(event: PointerEvent) {
+  if (drag.value) { dragEnd(event); return }
   const current = selection.value, range = selected.value
-  selection.value = undefined
   if (!current || current.pointerId !== event.pointerId) return
+  selection.value = undefined
+  hover.value = null
   if (canvas.value?.hasPointerCapture(event.pointerId)) canvas.value.releasePointerCapture(event.pointerId)
   if (!current.moved) {
-    const hour = rangeInGap(snapDown(current.raw, props.bounds.start), HOUR, free.value)
-    if (hour) emit('create', hour)
+    if (current.clickRange) emit('create', current.clickRange)
+    else ElMessage.warning('至少记录 15 分钟，当前空白不足 15 分钟。')
     return
   }
   if (range && range.end - range.start >= MIN_BLOCK_MS) emit('create', range)
   else ElMessage.warning('至少记录 15 分钟，当前空白不足 15 分钟。')
+  emit('dragging', false)
 }
+
+function cancelInteraction(event?: PointerEvent) {
+  if (drag.value && (!event || event.pointerId === drag.value.pointerId)) dragEnd({ pointerId: drag.value.pointerId } as PointerEvent, true)
+  const current = selection.value
+  if (current && (!event || event.pointerId === current.pointerId)) {
+    selection.value = undefined
+    if (canvas.value?.hasPointerCapture(current.pointerId)) canvas.value.releasePointerCapture(current.pointerId)
+    if (current.moved) emit('dragging', false)
+  }
+  clearHover()
+  dropGhost.value = null
+}
+function cancelOnEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') { cancelInteraction(); draggedItem.value = null }
+}
+function cancelOnBlur() { cancelInteraction(); draggedItem.value = null }
+watch(() => props.bounds.start, () => { cancelInteraction(); draggedItem.value = null; drafts.value = new Map() })
+watch(() => props.busy, busy => { if (busy) cancelInteraction() })
+watch(draggedItem, item => {
+  clearHover()
+  if (!item) dropGhost.value = null
+  emit('dragging', !!item)
+}, { flush: 'sync' })
 
 interface AxisMark extends Range { key: string; color: string; endLabel?: string | undefined }
 /** Times shown on the axis: what is being dragged or selected first, then the hovered card, the open composer, or the hover line. */
@@ -224,21 +336,31 @@ const axisMarks = computed<AxisMark[]>(() => {
   const moving = drag.value?.moved ? drag.value : undefined
   if (moving) return [{ key: 'drag', ...moving.range, color: color(moving.block.colorToken) }]
   if (selected.value) return [{ key: 'select', ...selected.value, color: PRIMARY }]
-  if (dropGhost.value) return [{ key: 'drop', ...dropGhost.value, color: color(draggedItem.value?.colorToken ?? null) }]
+  if (dropGhost.value) return [{ key: 'drop', ...dropGhost.value.range, color: color(draggedItem.value?.colorToken ?? null) }]
   if (props.preview?.length) return props.preview.map(ghost => ({ key: `preview-${ghost.start}`, start: ghost.start, end: ghost.end, color: color(ghost.colorToken) }))
   const hovered = views.value.find(view => view.block.id === hoveredId.value)
   if (hovered) return [{ key: 'block', ...hovered.range, color: color(hovered.block.colorToken), endLabel: hovered.block.end === null ? '计时中' : undefined }]
   if (props.pending) return [{ key: 'pending', ...props.pending, color: PRIMARY }]
-  if (hover.value !== null) return [{ key: 'hover', start: hover.value, end: hover.value, color: PRIMARY }]
+  if (hover.value) return [{ key: 'hover', ...hover.value, color: PRIMARY }]
   return []
 })
 
 function scrollToWorkday() {
   if (scroller.value) scroller.value.scrollTop = Math.max(0, toPx(offset(props.workday.start - 30 * MINUTE)))
 }
-onMounted(scrollToWorkday)
+onMounted(() => {
+  scrollToWorkday()
+  window.addEventListener('keydown', cancelOnEscape)
+  window.addEventListener('blur', cancelOnBlur)
+})
+onBeforeUnmount(() => {
+  cancelInteraction()
+  draggedItem.value = null
+  window.removeEventListener('keydown', cancelOnEscape)
+  window.removeEventListener('blur', cancelOnBlur)
+})
 watch(() => props.bounds.start, scrollToWorkday, { flush: 'post' })
-defineExpose({ scrollToWorkday, pendingEl })
+defineExpose({ scrollToWorkday, pendingEl, discardDraft })
 </script>
 
 <template>
@@ -281,14 +403,15 @@ defineExpose({ scrollToWorkday, pendingEl })
       <div
         ref="canvas"
         class="day-timeline__canvas"
-        :class="{ 'is-selecting': selected, 'is-receiving': draggedItem }"
+        :class="{ 'is-selecting': selected, 'is-receiving': draggedItem && !busy, 'is-edge-hover': hoveredEdge }"
         @pointerdown="pointerdown"
         @pointermove="pointermove"
         @pointerup="pointerup"
-        @pointercancel="selection = undefined"
-        @pointerleave="hover = null"
+        @pointercancel="cancelInteraction"
+        @lostpointercapture="cancelInteraction"
+        @pointerleave="clearHover"
         @dragover="dragOver"
-        @dragleave="dropGhost = null"
+        @dragleave="dragLeave"
         @drop="drop"
       >
         <div
@@ -330,6 +453,7 @@ defineExpose({ scrollToWorkday, pendingEl })
             :class="{ 'is-small': gap.end - gap.start < 40 * MINUTE }"
             :style="{ top: px(offset(gap.buttonAt)) }"
             :aria-label="`补录 ${clock(gap.start)} 到 ${clock(gap.end)} 的空白`"
+            :disabled="busy"
             @click="emit('create', { start: gap.start, end: gap.end })"
           >
             {{ gap.end - gap.start >= 40 * MINUTE ? `空白 ${durationLabel(gap.end - gap.start)} · 补录` : `+ ${durationLabel(gap.end - gap.start)}` }}
@@ -338,6 +462,7 @@ defineExpose({ scrollToWorkday, pendingEl })
         <button
           v-for="view in views"
           :key="view.block.id"
+          :ref="element => registerBlock(view.block.id, element)"
           type="button"
           class="day-block work-item-accent-bar"
           :class="[`is-${view.tier}`, {
@@ -348,31 +473,28 @@ defineExpose({ scrollToWorkday, pendingEl })
             'is-fresh': fresh?.has(view.block.id),
             'continues-before': view.continuesBefore,
             'continues-after': view.continuesAfter,
+            'is-edge-start': (hoveredId === view.block.id && hoveredEdge === 'start') || (drag?.block.id === view.block.id && drag.edge === 'start'),
+            'is-edge-end': (hoveredId === view.block.id && hoveredEdge === 'end') || (drag?.block.id === view.block.id && drag.edge === 'end'),
+            'is-drop-target': dropGhost?.targetId === view.block.id,
           }]"
           :style="view.style"
           :aria-label="view.label"
           :title="view.label"
+          :data-session-id="view.block.id"
+          :aria-disabled="busy || undefined"
           @click="open(view, $event)"
-          @pointerdown="dragStart(view, 'move', $event)"
-          @pointermove="dragMove"
-          @pointerup="dragEnd($event)"
-          @pointercancel="dragEnd($event, true)"
-          @pointerenter="hoveredId = view.block.id"
-          @pointerleave="hoveredId = undefined"
-          @focus="hoveredId = view.block.id"
-          @blur="hoveredId = undefined"
+          @focus="clearHover(); hoveredId = view.block.id"
+          @blur="clearHover"
         >
           <span
             v-if="view.startHandle"
             class="day-block__handle is-start"
             aria-hidden="true"
-            @pointerdown="dragStart(view, 'start', $event)"
           />
           <span
             v-if="view.endHandle"
             class="day-block__handle is-end"
             aria-hidden="true"
-            @pointerdown="dragStart(view, 'end', $event)"
           />
           <span class="day-block__head">
             <strong class="day-block__title">{{ view.block.title }}</strong>
@@ -409,21 +531,21 @@ defineExpose({ scrollToWorkday, pendingEl })
         <div
           v-if="dropGhost && draggedItem"
           class="day-block work-item-accent-bar is-preview is-drop"
-          :style="ghostStyle(dropGhost, draggedItem.colorToken)"
+          :style="dropStyle"
           aria-hidden="true"
         >
           <span class="day-block__head">
-            <strong class="day-block__title">{{ draggedItem.title }}</strong>
-            <span class="day-block__duration">{{ durationLabel(dropGhost.end - dropGhost.start) }}</span>
+            <strong class="day-block__title">{{ dropGhost.problem || `${dropGhost.mode === TimeSessionFillMode.Parallel ? '添加并行工作项：' : ''}${draggedItem.title}` }}</strong>
+            <span class="day-block__duration">{{ durationLabel(dropGhost.range.end - dropGhost.range.start) }}</span>
           </span>
         </div>
         <div
-          v-if="hover !== null && !pending && !drag"
+          v-if="hover && !pending && !drag && !busy && !draggedItem"
           class="day-hover"
-          :style="{ top: px(offset(hover)) }"
+          :style="{ top: px(offset(hover.start)) }"
           aria-hidden="true"
         >
-          <span>点击补录 1 小时，或拖选时段</span>
+          <span>点击补录 {{ clock(hover.start) }}–{{ clock(hover.end) }}（{{ durationLabel(hover.end - hover.start) }}），或拖选时段</span>
         </div>
         <div
           v-if="selected"
@@ -467,6 +589,7 @@ defineExpose({ scrollToWorkday, pendingEl })
 .day-axis-mark__time.is-end{bottom:0;transform:translateY(50%)}
 .day-timeline__canvas{position:absolute;inset:0;border-radius:var(--yp-radius-sm);background:radial-gradient(circle,color-mix(in srgb,var(--yp-border-strong) 45%,transparent) 1px,transparent 1.5px) 0 calc(var(--day-quarter) / -2) / var(--day-quarter) var(--day-quarter);user-select:none;cursor:crosshair;touch-action:pan-y;transition:box-shadow var(--yp-motion-fast) ease-out}
 .day-timeline__canvas.is-selecting{cursor:ns-resize}
+.day-timeline__canvas.is-edge-hover{cursor:ns-resize}
 .day-timeline__canvas.is-receiving{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--yp-action-primary) 40%,transparent)}
 .day-gap-zone{position:absolute;left:4px;right:4px;border:1px dashed color-mix(in srgb,var(--yp-action-primary) 30%,var(--yp-border-subtle));border-radius:var(--yp-radius-sm);background:color-mix(in srgb,var(--yp-action-primary) 3%,transparent);pointer-events:none;transition:border-color var(--yp-motion-fast) ease-out,background var(--yp-motion-fast) ease-out}
 .day-timeline__canvas.is-receiving .day-gap-zone{border-color:color-mix(in srgb,var(--yp-action-primary) 65%,var(--yp-border-subtle));background:color-mix(in srgb,var(--yp-action-primary) 8%,transparent)}
@@ -494,11 +617,15 @@ defineExpose({ scrollToWorkday, pendingEl })
 .day-block.is-locked{cursor:default;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--day-block-color) 10%,var(--yp-bg-surface)) 0 6px,color-mix(in srgb,var(--day-block-color) 16%,var(--yp-bg-surface)) 6px 12px)}
 .day-block.continues-before{border-top-style:dashed;border-top-left-radius:0;border-top-right-radius:0}
 .day-block.continues-after{border-bottom-style:dashed;border-bottom-left-radius:0;border-bottom-right-radius:0}
-.day-block__handle{position:absolute;left:0;right:0;z-index:1;height:6px;cursor:ns-resize}
-.day-block__handle.is-start{top:-1px}
-.day-block__handle.is-end{bottom:-1px}
+.day-block__handle{position:absolute;left:0;right:0;z-index:1;height:min(8px,33.333%);pointer-events:none}
+.day-block__handle.is-start{top:0}
+.day-block__handle.is-end{bottom:0}
 .day-block:has(.day-block__handle){cursor:grab}
-.day-block:active:has(.day-block__handle){cursor:grabbing}
+.day-block:active:has(.day-block__handle):not(.is-edge-start,.is-edge-end){cursor:grabbing}
+.day-block.is-edge-start{cursor:ns-resize;border-color:var(--day-block-color);box-shadow:inset 0 3px 0 var(--day-block-color),var(--yp-shadow-hover)}
+.day-block.is-edge-end{cursor:ns-resize;border-color:var(--day-block-color);box-shadow:inset 0 -3px 0 var(--day-block-color),var(--yp-shadow-hover)}
+.day-block.is-drop-target{border-color:var(--yp-action-primary)}
+.day-block[aria-disabled="true"]{cursor:default}
 .day-block.is-dragging{z-index:5;box-shadow:var(--yp-shadow-popover);transition:none}
 .day-block.is-preview{z-index:3;justify-content:center;border:1.5px dashed var(--day-block-color);background:color-mix(in srgb,var(--day-block-color) 12%,var(--yp-bg-surface));box-shadow:var(--yp-shadow-hover);opacity:.92;pointer-events:none}
 .day-block.is-preview.is-drop{box-shadow:var(--yp-shadow-popover)}
