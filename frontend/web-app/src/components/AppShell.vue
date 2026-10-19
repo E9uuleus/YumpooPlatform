@@ -332,7 +332,7 @@ onBeforeUnmount(() => {
           v-if="hasContextNavigation"
           class="module-rail__expand"
           type="button"
-          aria-label="展开工作台菜单"
+          :aria-label="`展开${contextTitle}菜单`"
           aria-controls="desktop-context-navigation"
           :aria-expanded="contextNavigationOpen"
           :aria-hidden="contextNavigationOpen"
@@ -548,10 +548,43 @@ onBeforeUnmount(() => {
       </div>
       <div
         v-else
-        class="context-navigation__header"
+        class="context-navigation__header context-navigation__header--section"
       >
-        <span>当前区域</span>
-        <strong>{{ contextTitle }}</strong>
+        <div>
+          <span>当前区域</span>
+          <strong>{{ contextTitle }}</strong>
+        </div>
+        <button
+          type="button"
+          class="context-navigation__collapse"
+          :aria-label="`收起${contextTitle}菜单`"
+          aria-controls="desktop-context-navigation"
+          :aria-expanded="contextNavigationOpen"
+          @click="collapseContextNavigation"
+        >
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            aria-hidden="true"
+          >
+            <rect
+              x="2.75"
+              y="3.25"
+              width="14.5"
+              height="13.5"
+              rx="1.75"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <path
+              d="M7 3.5v13M13 7l-3 3 3 3"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
       </div>
       <nav
         class="global-navigation"

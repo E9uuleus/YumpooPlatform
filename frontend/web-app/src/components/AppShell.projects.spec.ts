@@ -31,6 +31,7 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
 }))
 vi.mock('../api/client', () => ({ projectsApi: { listProjects: api.listProjects } }))
+vi.mock('../composables/useReleaseVersion', () => ({ useReleaseVersion: () => ({ value: null }) }))
 
 const capabilities = {
   canUpdateSettings: true,
@@ -78,6 +79,8 @@ const authentication: CurrentAuthentication = {
 
 describe('项目侧栏导航', () => {
   beforeEach(() => {
+    route.name = 'workspace'
+    route.meta.shellSection = 'work'
     window.localStorage.clear()
     push.mockReset()
     api.listProjects.mockReset()
@@ -87,6 +90,30 @@ describe('项目侧栏导航', () => {
   })
 
   afterEach(() => vi.useRealTimers())
+
+  it.each([
+    ['work', '工作台'], ['company', '公司管理'], ['team', '团队视图'], ['operations', '运维中心'],
+  ])('%s 模块提供名称匹配的收起、展开按钮并恢复原导航', async (section, title) => {
+    route.meta.shellSection = section
+    const wrapper = mount(AppShell, { global: { stubs: { RouterView: true } } })
+    await flushPromises()
+    const expand = wrapper.get(`button[aria-label="展开${title}菜单"]`)
+    await expand.trigger('click')
+    const navigation = wrapper.get('#desktop-context-navigation')
+    const contents = navigation.text()
+    const collapse = wrapper.get(`button[aria-label="收起${title}菜单"]`)
+    expect(collapse.attributes('aria-expanded')).toBe('true')
+    await collapse.trigger('click')
+    expect(wrapper.classes()).not.toContain('app-shell--context-open')
+    expect(navigation.attributes('aria-hidden')).toBe('true')
+    expect(navigation.attributes('inert')).toBeDefined()
+    expect(expand.attributes('tabindex')).toBe('0')
+    await expand.trigger('click')
+    expect(wrapper.classes()).toContain('app-shell--context-open')
+    expect(navigation.attributes('aria-hidden')).toBe('false')
+    expect(navigation.text()).toBe(contents)
+    wrapper.unmount()
+  })
 
   it('箭头紧跟标题并在管理入口后展示最多十个项目与省略号', async () => {
     const wrapper = mount(AppShell, { global: { stubs: { RouterView: true } } })

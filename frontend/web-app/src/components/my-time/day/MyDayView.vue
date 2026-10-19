@@ -64,8 +64,12 @@ function dragging(active: boolean) {
   if (active) { closeComposer(); closeBlock(); release ??= hold() }
   else { release?.(); release = undefined }
 }
-function adjust(block: DayBlock, range: Range) { void edit(block, range) }
-function dropItem(item: ShelfItem, range: Range) { void create(TimeSessionFillMode.Gaps, [item.workItemId], [range]) }
+async function adjust(block: DayBlock, range: Range) {
+  if (!await edit(block, range)) timeline.value?.discardDraft(block.id)
+}
+function dropItem(item: ShelfItem, range: Range, mode: TimeSessionFillMode.Gaps | TimeSessionFillMode.Parallel) {
+  void create(mode, [item.workItemId], [range])
+}
 
 async function place(item: ShelfItem, durationMs: number) {
   const { entries, leftoverMs } = plan(durationMs)
@@ -179,6 +183,7 @@ onBeforeUnmount(() => {
         :pending="pending"
         :preview="preview"
         :selected-id="openId"
+        :busy="busy"
         @create="compose"
         @open="openBlockPopover"
         @change="adjust"
