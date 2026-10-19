@@ -248,8 +248,13 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
                 .update() == 1;
     }
 
+    /**
+     * Joins the caller's transaction, which already holds FOR UPDATE on the user row. A new transaction would
+     * wait on that lock for the authenticated_user_id foreign-key check while the caller waits on it: a
+     * deadlock across two connections of one thread that PostgreSQL cannot detect.
+     */
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public boolean issueProductHandoff(
             DesktopAuthTokenHash stateHash,
             DesktopAuthTokenHash handoffCodeHash,
