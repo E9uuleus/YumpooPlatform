@@ -21,6 +21,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
@@ -55,6 +56,8 @@ class DesktopAuthenticationIT {
             "60000000-0000-4000-8000-000000000207"
     );
     private static final String CLIENT_VERSION = "0.0.0-desktop-it";
+    // A blocked request must fail this test, not hang the whole gate.
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
     private static final String STALE_SESSION = SessionHttpCookies.SESSION_COOKIE + "=" + "z".repeat(43);
 
     private final HttpClient client = HttpClient.newBuilder()
@@ -164,6 +167,7 @@ class DesktopAuthenticationIT {
 
     private HttpResponse<String> post(String path, String cookies, Map<String, String> body) throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(uri(path))
+                .timeout(REQUEST_TIMEOUT)
                 .header("Content-Type", "application/json")
                 .header("X-Client-Type", "ELECTRON")
                 .header("X-Client-Version", CLIENT_VERSION)
@@ -176,7 +180,7 @@ class DesktopAuthenticationIT {
     }
 
     private HttpResponse<String> get(String path, String cookies) throws Exception {
-        HttpRequest.Builder request = HttpRequest.newBuilder(uri(path)).GET();
+        HttpRequest.Builder request = HttpRequest.newBuilder(uri(path)).timeout(REQUEST_TIMEOUT).GET();
         if (cookies != null) {
             request.header("Cookie", cookies);
         }
