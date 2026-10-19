@@ -1,7 +1,7 @@
 {
   "name": "@yumpoo/desktop-shell",
   "productName": "Yumpoo Desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Yumpoo Desktop",
   "author": "Yumpoo",
   "private": true,
