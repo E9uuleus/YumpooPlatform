@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url'
 // only on CI runners or when explicitly allowed, and they move the person's own userData, updater cache and
 // yumpoo: protocol registration aside first and restore them afterwards.
 export const PRODUCT_NAME = 'Yumpoo Desktop'
-export const INSTALL_DIRECTORY = 'yumpoo-desktop'
+// The assisted installer names the per-user install folder after executableName, the updater cache after the package name.
+export const INSTALL_DIRECTORY = 'YumpooDesktop'
+const UPDATER_CACHE_DIRECTORY = 'yumpoo-desktop-updater'
 export const PROTOCOL_KEY = 'HKCU\\Software\\Classes\\yumpoo'
 
 export function profileChangesAllowed() {
@@ -29,7 +31,7 @@ export function userDataPath() {
 
 /** Where the installer keeps a copy of itself and electron-updater keeps blockmaps and pending downloads. */
 export function updaterCachePath() {
-  return path.join(requiredEnvironment('LOCALAPPDATA'), `${INSTALL_DIRECTORY}-updater`)
+  return path.join(requiredEnvironment('LOCALAPPDATA'), UPDATER_CACHE_DIRECTORY)
 }
 
 export function powershell(script) {
@@ -72,19 +74,30 @@ exit ([YumpooProcessTree]::Run(${literal(command)}, ${literal(argumentLine)}))`
   return spawnAndWait('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], timeoutMs)
 }
 
-export async function runInstaller(installer) {
-  const code = await spawnAndWait(installer, ['/S'], 300_000)
+/** NSIS takes /D= verbatim to the end of the command line, so a quoted path would not parse: no whitespace allowed. */
+export async function runInstaller(installer, { directory } = {}) {
+  const args = ['/S']
+  if (directory) {
+    assert(!/\s/u.test(directory), `自定义安装目录不能包含空白：${directory}`)
+    args.push(`/D=${directory}`)
+  }
+  const code = await spawnAndWait(installer, args, 300_000)
   assert.equal(code, 0, `静默安装失败，退出码 ${code}`)
 }
 
 export function installation() {
-  const json = powershell(`@(Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq '${PRODUCT_NAME}' } | Select-Object DisplayVersion, Publisher, QuietUninstallString) | ConvertTo-Json -Compress`)
+  const json = powershell(`@(Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq '${PRODUCT_NAME}' } | Select-Object PSChildName, DisplayVersion, Publisher, QuietUninstallString) | ConvertTo-Json -Compress`)
   const entries = json ? [JSON.parse(json)].flat() : []
   assert(entries.length <= 1, `${PRODUCT_NAME} 存在多个卸载登记项`)
   return entries[0]
 }
 
-// electron-builder records no InstallLocation; the uninstaller always sits in the installation directory.
+/** electron-builder keeps InstallLocation in HKCU\Software\<uninstall key name>, not in the uninstall entry itself. */
+export function installLocation(entry) {
+  return powershell(`(Get-ItemProperty -LiteralPath 'HKCU:\\Software\\${entry.PSChildName}' -ErrorAction SilentlyContinue).InstallLocation`)
+}
+
+// The uninstaller always sits in the installation directory.
 export function installedFrom(entry) {
   const match = String(entry.QuietUninstallString ?? '').match(/^"([^"]+)"\s*(.*)$/u)
   assert(match, 'QuietUninstallString 格式不受支持')

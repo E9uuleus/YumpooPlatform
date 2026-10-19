@@ -25,7 +25,8 @@ module.exports = {
   copyright: 'Copyright © Yumpoo',
   electronDist,
   electronVersion,
-  // NSIS derives the per-user install directory from the package name; the scoped workspace name is not a folder name.
+  // The updater cache directory derives from the package name, and the scoped workspace name is not a folder name.
+  // The assisted installer's default folder comes from executableName (Programs\YumpooDesktop).
   extraMetadata: { name: 'yumpoo-desktop', ...(versionOverride ? { version: versionOverride } : {}) },
   directories: {
     output: process.env.YUMPOO_M015_OUTPUT_ROOT
@@ -65,9 +66,14 @@ module.exports = {
     signAndEditExecutable: true,
     verifyUpdateCodeSignature: false,
   },
+  // Assisted installer locked to per-user mode (installer.nsh skips the install-mode page), so no step needs
+  // administrator rights and updates stay silent; the notice page must be accepted before installing.
   nsis: {
-    oneClick: true,
+    oneClick: false,
     perMachine: false,
+    allowToChangeInstallationDirectory: true,
+    license: 'build/install-notice_zh_CN.txt',
+    installerLanguages: ['zh_CN'],
     packElevateHelper: false,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
