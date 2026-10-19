@@ -263,6 +263,42 @@ code {
   font-size: var(--yp-type-card-title-size);
 }
 
+.context-navigation__header--section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yp-space-2);
+}
+
+.context-navigation__header--section > div {
+  display: grid;
+  min-width: 0;
+}
+
+.context-navigation__collapse {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--yp-radius-sm);
+  color: var(--yp-text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.context-navigation__collapse:hover {
+  color: var(--yp-text-primary);
+  background: var(--yp-bg-hover);
+}
+
+.context-navigation__collapse svg {
+  width: 18px;
+  height: 18px;
+}
+
 .global-navigation,
 .mobile-module-navigation {
   display: grid;

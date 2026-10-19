@@ -241,6 +241,7 @@ onMounted(load)
             :class="dayClass(date)"
             :disabled="!canWrite || saving"
             :aria-label="`${date} ${DAY_TYPE_LABELS[dayType(date)]} ${badge(date)}`"
+            :title="badge(date) || undefined"
             @click="edit(date)"
           >
             <span>{{ Number(date.slice(8)) }}</span><small>{{ badge(date) }}</small>
@@ -313,8 +314,8 @@ onMounted(load)
 .calendar-month h3 { margin: 0 0 12px; font-size: 15px; color: var(--yp-text-primary); }
 .month-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 3px; }
 .month-weekday { padding-bottom: 5px; text-align: center; font-size: 12px; color: var(--yp-text-muted); }
-.calendar-day { display: grid; align-content: center; gap: 2px; min-width: 0; height: 42px; padding: 2px; border: 1px solid transparent; border-radius: var(--yp-radius-sm); color: var(--yp-text-primary); font: inherit; font-size: 13px; cursor: pointer; }
-.calendar-day small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
+.calendar-day { display: grid; grid-template-rows: 18px 14px; align-content: center; gap: 2px; min-width: 0; height: 42px; padding: 2px; border: 1px solid transparent; border-radius: var(--yp-radius-sm); color: var(--yp-text-primary); font: inherit; font-size: 13px; line-height: 18px; cursor: pointer; }
+.calendar-day small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 14px; }
 .is-workday { background: var(--yp-bg-surface); }
 .is-rest { background: var(--yp-bg-sunken); color: var(--yp-text-muted); }
 .is-holiday { background: color-mix(in srgb,var(--yp-status-red) 12%,var(--yp-bg-surface)); color: var(--yp-status-red); }

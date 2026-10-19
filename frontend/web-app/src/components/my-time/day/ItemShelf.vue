@@ -81,6 +81,7 @@ function place(item: ShelfItem, durationMs: number | null) {
 const canDrag = typeof window !== 'undefined' && !window.matchMedia?.('(pointer: coarse)').matches
 const dragging = ref<string>()
 function dragStart(item: ShelfItem, event: DragEvent) {
+  if (props.busy) { event.preventDefault(); return }
   draggedItem.value = item
   dragging.value = item.workItemId
   event.dataTransfer?.setData(SHELF_DRAG_TYPE, item.workItemId)
@@ -206,10 +207,10 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
             v-for="item in section.list"
             :key="item.workItemId"
             class="item-shelf__row work-item-accent-bar"
-            :class="{ 'is-open': openFor === item.workItemId, 'is-draggable': canDrag, 'is-dragging': dragging === item.workItemId }"
+            :class="{ 'is-open': openFor === item.workItemId, 'is-draggable': canDrag && !busy, 'is-dragging': dragging === item.workItemId }"
             :style="color(item)"
-            :draggable="canDrag"
-            :title="canDrag ? '拖到右侧时间线即可添加 1 小时' : undefined"
+            :draggable="canDrag && !busy"
+            :title="canDrag ? '拖到空白处补录，拖到已有卡片按其时段添加并行工作项' : undefined"
             @dragstart="dragStart(item, $event)"
             @dragend="dragEnd"
           >
