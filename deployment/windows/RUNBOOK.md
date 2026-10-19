@@ -470,7 +470,7 @@ Invoke-RestMethod http://127.0.0.1:8100/actuator/health/readiness
    - 版本仍是 `0.x`（旧便携版线）；
    - 该版本已发布，或不高于最新已发布的桌面版本；
    - 同一版本已有指向其他提交的草稿（发布或删除它，或继续递增版本）。
-3. 发布负责人从草稿下载安装包，在 2–3 台机器上试装，核对版本与「诊断与修复」中的信息。
+3. 发布负责人从草稿下载安装包，在 2–3 台机器上试装：安装器应依次显示安装须知与隐私说明、安装位置、附加选项（写入权限检查与桌面快捷方式）和完成页，全程不弹 UAC；装好后核对版本与「诊断与修复」中的信息。
 4. 点击 **Publish** 即为桌面上线决定。[Desktop Release](../../.github/workflows/desktop-release.yml) 只读校验后，把文件写入更新源。客户端在 4 小时内或下次启动后自动下载、核对授权并在退出时安装。
 5. 桌面端不能回退：只接受更高版本，坏版本用更高版本号的修复版前滚。紧急时可先让同事改用浏览器。
 
@@ -523,6 +523,6 @@ gh attestation verify '<下载目录>\YumpooDesktop-Setup-X.Y.Z-x64.exe' -R E9uu
 
 3. 管理员按 `windows/nginx/yumpoo-wecom.conf` 在 443 server 的 `location /` 之前加入 `location ^~ /desktop/`，`root` 与 `desktopFeed.root`（默认 `C:/ProgramData/Yumpoo/public`）一致，然后 `nginx -t` 并 reload。
 4. 递增桌面版本到 `1.0.0` 并晋升，等待草稿与签名完成，试装后 Publish。
-5. 打开 `https://wecom-dev.yumpoo.com/download`，核对版本与 SHA-256 后通知同事安装；旧便携版直接覆盖安装，登录状态与偏好保留。此后全部自动更新。
+5. 打开 `https://wecom-dev.yumpoo.com/download`，核对版本与 SHA-256 后通知同事安装，同时把[安装机制与隐私说明](desktop-client-install-and-privacy.md)发给管理层和同事；旧便携版直接覆盖安装，登录状态与偏好保留。此后全部自动更新。
 
 **每周核对**：供应链工作流的发布演练会读取更新源上的 `latest.yml` 与 `release.json`，要求与最新已发布桌面 Release 的附件逐字节一致；不一致时检查最近一次 Desktop Release 运行和主机上的 `desktop/stable` 目录。

@@ -5,11 +5,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  INSTALL_DIRECTORY, PRODUCT_NAME, PROTOCOL_KEY, installation, installedFrom, powershell, profileChangesAllowed, registryKeyExists,
-  requiredEnvironment, runInstaller, spawnAndWait, uninstall, updaterCachePath, userDataPath, withIsolatedProfile,
+  INSTALL_DIRECTORY, PRODUCT_NAME, PROTOCOL_KEY, installLocation, installation, installedFrom, powershell, profileChangesAllowed,
+  registryKeyExists, requiredEnvironment, runInstaller, spawnAndWait, uninstall, updaterCachePath, userDataPath, withIsolatedProfile,
 } from './desktop-profile.mjs'
 
-// Installs, re-installs and uninstalls the real NSIS package and checks the install and uninstall boundaries.
+// Installs, re-installs and uninstalls the real NSIS package, in the default per-user directory and in a custom
+// one, and checks the install and uninstall boundaries.
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const desktopRoot = path.join(repositoryRoot, 'desktop', 'desktop-shell')
 const outputRoot = path.resolve(process.env.YUMPOO_M015_OUTPUT_ROOT ?? '')
@@ -35,11 +36,14 @@ const shortcuts = [
 ]
 const safeModeShortcut = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${PRODUCT_NAME} (Safe Mode).lnk`)
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-installer-smoke-'))
+const defaultLocation = path.join(requiredEnvironment('LOCALAPPDATA'), 'Programs', INSTALL_DIRECTORY)
+// Stands in for the directory page's choice; a silent install takes /D= as is.
+const customLocation = path.join(work, 'YumpooCustom')
 
 try {
   await withIsolatedProfile(async () => {
     await runInstaller(installer)
-    let installed = assertInstalled()
+    let installed = assertInstalled(defaultLocation)
     assert(fs.existsSync(path.join(updaterCachePath(), 'installer.exe')), '安装器未保存差分更新基准副本')
     const report = await selfCheck(installed.executable)
     assert.equal(report.version, descriptor.version, '自检报告版本与安装包不一致')
@@ -49,42 +53,69 @@ try {
 
     seedUserData()
     await runInstaller(installer)
-    installed = assertInstalled()
+    installed = assertInstalled(defaultLocation)
     for (const relative of [...PREFERENCE_FILES.map(name => [name]), ...SESSION_FIXTURES]) {
       assert(fs.existsSync(path.join(userData, ...relative)), `同版本覆盖安装不应删除 ${relative.join('/')}`)
     }
 
     await uninstall(installed)
-    assert(!fs.existsSync(installed.location), '卸载后安装目录仍存在')
-    for (const shortcut of [...shortcuts, safeModeShortcut]) assert(!fs.existsSync(shortcut), `卸载后快捷方式仍存在：${path.basename(shortcut)}`)
-    assert(!registryKeyExists(PROTOCOL_KEY), '卸载后 yumpoo 协议键仍存在')
-    assert(!fs.existsSync(updaterCachePath()), '卸载后更新缓存目录仍存在')
-    for (const relative of SESSION_FIXTURES) {
-      assert(!fs.existsSync(path.join(userData, ...relative)), `卸载后会话数据仍存在：${relative.join('/')}`)
-    }
-    assert.deepEqual(fs.readdirSync(userData).sort(), [...PREFERENCE_FILES].sort(), '卸载后 userData 只应保留偏好文件')
+    assertUninstalled(installed)
+
+    // The reinstall without /D= has to find the custom directory through InstallLocation, as updates do.
+    await runInstaller(installer, { directory: customLocation })
+    installed = assertInstalled(customLocation)
+    await runInstaller(installer)
+    installed = assertInstalled(customLocation)
+    await uninstall(installed)
+    assertUninstalled(installed)
   })
-  console.log(`桌面安装冒烟通过：${descriptor.installer.name} 安装、自检、覆盖安装与卸载边界均符合预期。`)
+  console.log(`桌面安装冒烟通过：${descriptor.installer.name} 默认目录与自定义目录的安装、自检、覆盖安装与卸载边界均符合预期。`)
 } finally {
   fs.rmSync(work, { recursive: true, force: true })
 }
 
-function assertInstalled() {
+function assertInstalled(expectedLocation) {
   const entry = installation()
   assert(entry, '安装后找不到卸载登记项')
   assert.equal(entry.DisplayVersion, descriptor.version, '卸载登记项版本不正确')
   assert.equal(entry.Publisher, 'Yumpoo', '卸载登记项发布者不正确')
+  assert.match(String(entry.QuietUninstallString), /\s\/S$/u, 'QuietUninstallString 必须带 /S')
   const { location, executable, quietUninstall } = installedFrom(entry)
-  assert.equal(path.resolve(location).toLowerCase(),
-    path.join(requiredEnvironment('LOCALAPPDATA'), 'Programs', INSTALL_DIRECTORY).toLowerCase(), '按用户安装目录不正确')
+  assert(samePath(location, expectedLocation), `安装目录不正确：${location}，应为 ${expectedLocation}`)
+  assert(samePath(installLocation(entry), expectedLocation), 'InstallLocation 与安装目录不一致')
   assert(fs.statSync(executable).isFile(), '安装目录缺少 YumpooDesktop.exe')
   for (const shortcut of shortcuts) assert(fs.existsSync(shortcut), `缺少快捷方式：${shortcut}`)
   const safeMode = JSON.parse(powershell(`$s = (New-Object -ComObject WScript.Shell).CreateShortcut('${safeModeShortcut.replaceAll("'", "''")}'); @{ target = $s.TargetPath; arguments = $s.Arguments } | ConvertTo-Json -Compress`))
-  assert.equal(String(safeMode.target).toLowerCase(), executable.toLowerCase(), '安全模式快捷方式未指向安装后的 EXE')
+  assert(samePath(String(safeMode.target), executable), '安全模式快捷方式未指向安装后的 EXE')
   assert.equal(safeMode.arguments, '--safe-mode', '安全模式快捷方式参数不正确')
   const command = powershell(`(Get-ItemProperty -LiteralPath 'Registry::${PROTOCOL_KEY}\\shell\\open\\command').'(default)'`)
-  assert.equal(command.toLowerCase(), `"${executable}" "%1"`.toLowerCase(), 'yumpoo 协议未指向安装后的 EXE')
+  const target = command.match(/^"([^"]+)" "%1"$/u)
+  assert(target && samePath(target[1], executable), `yumpoo 协议未指向安装后的 EXE：${command}`)
   return { location, executable, quietUninstall }
+}
+
+function assertUninstalled(installed) {
+  assert(!fs.existsSync(installed.location), '卸载后安装目录仍存在')
+  for (const shortcut of [...shortcuts, safeModeShortcut]) assert(!fs.existsSync(shortcut), `卸载后快捷方式仍存在：${path.basename(shortcut)}`)
+  assert(!registryKeyExists(PROTOCOL_KEY), '卸载后 yumpoo 协议键仍存在')
+  assert(!fs.existsSync(updaterCachePath()), '卸载后更新缓存目录仍存在')
+  for (const relative of SESSION_FIXTURES) {
+    assert(!fs.existsSync(path.join(userData, ...relative)), `卸载后会话数据仍存在：${relative.join('/')}`)
+  }
+  assert.deepEqual(fs.readdirSync(userData).sort(), [...PREFERENCE_FILES].sort(), '卸载后 userData 只应保留偏好文件')
+}
+
+/** %TEMP% may be an 8.3 short path while the installer, shortcuts and protocol key record the long one. */
+function samePath(left, right) {
+  const canonical = value => {
+    const resolved = path.resolve(value)
+    try {
+      return fs.realpathSync.native(resolved).toLowerCase()
+    } catch {
+      return resolved.toLowerCase()
+    }
+  }
+  return canonical(left) === canonical(right)
 }
 
 async function selfCheck(executable) {
