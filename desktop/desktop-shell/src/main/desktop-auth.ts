@@ -35,26 +35,49 @@ export interface DesktopSessionBundle {
   readonly absoluteExpiresAt: string
 }
 
+export type DesktopAuthStage = 'authorize' | 'open-browser' | 'exchange'
+
 export interface DesktopAuthControllerOptions {
   readonly enabled: boolean
   readonly authorize: (attempt: DesktopPkceAttempt) => Promise<DesktopAuthorizationResponse>
   readonly openExternal: (url: string) => Promise<unknown>
   readonly exchange: (input: DesktopAuthExchangeInput) => Promise<void>
   readonly publishStatus: (status: DesktopAuthStatus) => void
+  /** Receives only the stage and a non-secret reason; state, codes and verifiers never reach it. */
+  readonly logFailure?: (stage: DesktopAuthStage, reason: string) => void
   readonly now?: () => number
   readonly createAttempt?: () => DesktopPkceAttempt
 }
 
+export type DesktopAuthFetch = (url: string, init: RequestInit) => Promise<Response>
+
 export interface DesktopAuthExchangeOptions {
   readonly webOrigin: string
   readonly clientVersion: string
-  readonly fetchImplementation?: typeof fetch
+  readonly fetchImplementation?: DesktopAuthFetch
 }
 
 export type DesktopAuthAuthorizationOptions = DesktopAuthExchangeOptions
 
 interface PendingDesktopAuthAttempt extends DesktopPkceAttempt {
   readonly expiresAt: number
+}
+
+export class DesktopAuthHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP_${status}`)
+    this.name = 'DesktopAuthHttpError'
+  }
+}
+
+/** HTTP status, a Chromium net error code or the error class: enough to tell a server refusal from a network failure. */
+export function desktopAuthFailureReason(error: unknown): string {
+  if (error instanceof DesktopAuthHttpError) return error.message
+  if (error instanceof Error) {
+    const netError = /\bnet::(ERR_[A-Z0-9_]+)/u.exec(error.message)
+    return netError?.[1] ?? error.name
+  }
+  return 'UNKNOWN'
 }
 
 function base64Url(bytes: Uint8Array): string {
@@ -118,29 +141,32 @@ export class DesktopAuthController {
     this.pending = localPending
     this.options.publishStatus(status('OPENING_BROWSER'))
 
+    let authorization: DesktopAuthorizationResponse
     try {
-      const authorization = await this.options.authorize(attempt)
-      const serverExpiry = Date.parse(authorization.expiresAt)
-      const pendingAttempt = Object.freeze({
-        ...attempt,
-        expiresAt: Number.isFinite(serverExpiry)
-          ? Math.min(serverExpiry, this.now() + ATTEMPT_TTL_MS)
-          : this.now() + ATTEMPT_TTL_MS,
-      })
-      if (this.pending !== localPending) {
-        return
-      }
-      this.pending = pendingAttempt
-      await this.options.openExternal(authorization.authorizationUrl)
-      if (this.pending === pendingAttempt) {
-        this.options.publishStatus(status('WAITING_FOR_CALLBACK'))
-      }
-    } catch {
-      if (this.pending === localPending || this.pending?.state === attempt.state) {
-        this.pending = undefined
-      }
-      this.fail('BROWSER_OPEN_FAILED')
+      authorization = await this.options.authorize(attempt)
+    } catch (error) {
+      this.abandon(localPending, attempt, 'authorize', error, 'AUTH_SERVICE_FAILED')
       return
+    }
+    const serverExpiry = Date.parse(authorization.expiresAt)
+    const pendingAttempt = Object.freeze({
+      ...attempt,
+      expiresAt: Number.isFinite(serverExpiry)
+        ? Math.min(serverExpiry, this.now() + ATTEMPT_TTL_MS)
+        : this.now() + ATTEMPT_TTL_MS,
+    })
+    if (this.pending !== localPending) {
+      return
+    }
+    this.pending = pendingAttempt
+    try {
+      await this.options.openExternal(authorization.authorizationUrl)
+    } catch (error) {
+      this.abandon(localPending, attempt, 'open-browser', error, 'BROWSER_OPEN_FAILED')
+      return
+    }
+    if (this.pending === pendingAttempt) {
+      this.options.publishStatus(status('WAITING_FOR_CALLBACK'))
     }
   }
 
@@ -176,9 +202,24 @@ export class DesktopAuthController {
         codeVerifier: attempt.verifier,
       })
       this.options.publishStatus(status('SUCCEEDED'))
-    } catch {
+    } catch (error) {
+      this.options.logFailure?.('exchange', desktopAuthFailureReason(error))
       this.fail('EXCHANGE_FAILED')
     }
+  }
+
+  private abandon(
+    localPending: PendingDesktopAuthAttempt,
+    attempt: DesktopPkceAttempt,
+    stage: DesktopAuthStage,
+    error: unknown,
+    errorCode: DesktopAuthErrorCode,
+  ): void {
+    if (this.pending === localPending || this.pending?.state === attempt.state) {
+      this.pending = undefined
+    }
+    this.options.logFailure?.(stage, desktopAuthFailureReason(error))
+    this.fail(errorCode)
   }
 
   private discardExpiredAttempt(): void {
@@ -242,9 +283,10 @@ async function desktopAuthFetch(
 ): Promise<Response> {
   const fetchImplementation = options.fetchImplementation ?? fetch
   const url = new URL(path, `${new URL(options.webOrigin).origin}/`)
-  const response = await fetchImplementation(url, {
+  const response = await fetchImplementation(url.href, {
     method: 'POST',
     redirect: 'error',
+    credentials: 'omit',
     headers: {
       'Content-Type': 'application/json',
       'X-Client-Type': 'ELECTRON',
@@ -257,7 +299,7 @@ async function desktopAuthFetch(
 
   if (!response.ok) {
     await response.body?.cancel().catch(() => undefined)
-    throw new Error('Desktop auth exchange failed')
+    throw new DesktopAuthHttpError(response.status)
   }
   return response
 }

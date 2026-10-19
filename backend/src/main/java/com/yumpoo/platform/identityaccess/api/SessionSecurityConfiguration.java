@@ -71,13 +71,8 @@ public class SessionSecurityConfiguration {
                         .authenticationEntryPoint(authenticationRequired())
                         .accessDeniedHandler(csrfDenied(errorWriter)))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers(
-                                WebAuthenticationPaths.AUTHORIZE,
-                                WebAuthenticationPaths.CALLBACK,
-                                DesktopAuthenticationPaths.ATTEMPTS,
-                                DesktopAuthenticationPaths.CALLBACK,
-                                DesktopAuthenticationPaths.EXCHANGE
-                        ).permitAll()
+                        .requestMatchers(AnonymousAuthenticationPaths.ALL.toArray(String[]::new))
+                        .permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(
                         new SessionAuthenticationFilter(

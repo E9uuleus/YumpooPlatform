@@ -33,6 +33,7 @@ const AUTH_PHASES = new Set<DesktopAuthPhase>([
 const AUTH_ERROR_CODES = new Set<DesktopAuthErrorCode>([
   'AUTH_DISABLED',
   'AUTH_IN_PROGRESS',
+  'AUTH_SERVICE_FAILED',
   'BROWSER_OPEN_FAILED',
   'INVALID_CALLBACK',
   'NO_PENDING_ATTEMPT',

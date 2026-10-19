@@ -1,0 +1,59 @@
+:root {
+  color-scheme: light dark;
+  --canvas: #ffffff;
+  --text: #25272c;
+  --muted: #5b6070;
+  --track: #e6e8ee;
+  --accent: #0073ea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #202128;
+    --text: #f3f4f6;
+    --muted: #c2c6d0;
+    --track: #33353f;
+    --accent: #66afff;
+  }
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--canvas);
+  color: var(--text);
+  font: 14px/1.6 "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  user-select: none;
+  cursor: default;
+}
+
+.launch {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.mark { animation: enter .45s cubic-bezier(.34, 1.56, .64, 1) both, breathe 2.4s .45s ease-in-out infinite; }
+.title { margin: 8px 0 0; font-size: 15px; }
+
+.progress { position: relative; width: 160px; height: 3px; overflow: hidden; border-radius: 3px; background: var(--track); }
+.progress span { position: absolute; inset: 0 auto 0 0; width: 40%; border-radius: 3px; background: var(--accent); animation: sweep 1.6s ease-in-out infinite; }
+
+/* Only a slow start ever shows this; no script runs on the page, so the delay lives in CSS. */
+.slow { margin: 12px 24px 0; max-width: 420px; color: var(--muted); font-size: 12px; opacity: 0; animation: reveal .4s 8s ease-out forwards; }
+
+@keyframes enter { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@keyframes reveal { to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mark, .progress span { animation: none; }
+  .progress span { width: 100%; opacity: .5; }
+  .slow { animation-duration: .01s; }
+}

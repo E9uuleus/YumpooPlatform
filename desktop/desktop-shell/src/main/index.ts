@@ -3,7 +3,7 @@ import { TimerPreferenceStore } from './timer-preferences'
 import { InboxNotifier, InboxPreferenceStore } from './inbox-notifier'
 import { applicationIcon } from './application-icon'
 import path from 'node:path'
-import { app, BrowserWindow, crashReporter, dialog, ipcMain, net, powerMonitor, protocol, safeStorage, session, shell } from 'electron'
+import { app, BrowserWindow, crashReporter, dialog, ipcMain, nativeTheme, net, powerMonitor, protocol, safeStorage, session, shell, WebContentsView } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { createHash } from 'node:crypto'
 import { createReadStream, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -33,8 +33,15 @@ import { collectBundleEntries, createZip } from './diagnostic-bundle'
 import { collectDiagnostics } from './diagnostics'
 import { createDiagnosticsActions, DIAGNOSTICS_ARGUMENT, SAFE_MODE_ARGUMENT } from './diagnostics-actions'
 import { runtimeDiagnostics } from './diagnostics-runtime'
-import { DiagnosticsWindow, registerDiagnosticsScheme } from './diagnostics-window'
+import {
+  DiagnosticsWindow,
+  LAUNCH_PAGE_URL,
+  LOCAL_PAGES_PARTITION,
+  prepareLocalPagesSession,
+  registerDiagnosticsScheme,
+} from './diagnostics-window'
 import { loadDistribution } from './distribution'
+import { attachLaunchOverlay, type LaunchOverlay } from './launch-overlay'
 import { DesktopLogger } from './logger'
 import { runSelfCheck, selfCheckReportPath, UPDATE_CHECK_ARGUMENT } from './self-check'
 import { handleStartupFailure } from './startup-failure'
@@ -51,6 +58,8 @@ const ERR_ABORTED = -3
 // Must equal electron-builder appId: the installer stamps it on the shortcuts that Windows notifications resolve.
 const APP_USER_MODEL_ID = 'com.yumpoo.desktop'
 const PREFERENCE_FILES = ['timer-preferences.json', 'inbox-preferences.json']
+const LOCAL_PAGE_DIRECTORY = path.join(__dirname, '..', 'diagnostics')
+const launchStartedAt = Date.now()
 const smokeTest = process.argv.includes(SMOKE_TEST_ARGUMENT)
 const selfCheckPath = app.isPackaged ? selfCheckReportPath(process.argv) : undefined
 const updateCheckPath = app.isPackaged && !selfCheckPath ? selfCheckReportPath(process.argv, UPDATE_CHECK_ARGUMENT) : undefined
@@ -83,6 +92,7 @@ let safeMode = false
 let startupFailureShown = false
 let updateController: UpdateController | undefined
 let restartAfterUpdate = false
+let launchOverlay: LaunchOverlay | undefined
 
 function failStartup(reason: DiagnosticsStartupFailure, error?: unknown): void {
   logger.error('startup-failed', { reason, error: error instanceof Error ? error.message : undefined })
@@ -92,6 +102,7 @@ function failStartup(reason: DiagnosticsStartupFailure, error?: unknown): void {
     return
   }
   if (!mainLoaded && mainWindow && !mainWindow.isDestroyed()) mainWindow.hide()
+  launchOverlay?.dismiss()
   openDiagnostics(reason)
 }
 
@@ -255,7 +266,7 @@ async function signOut(): Promise<void> {
 function diagnostics(offline = false): DiagnosticsWindow {
   if (diagnosticsWindow) return diagnosticsWindow
   diagnosticsWindow = new DiagnosticsWindow({
-    pageDirectory: path.join(__dirname, '..', 'diagnostics'),
+    pageDirectory: LOCAL_PAGE_DIRECTORY,
     preloadPath: path.join(__dirname, '..', 'preload', 'diagnostics.js'),
     icon: applicationIcon,
     isPackaged: app.isPackaged,
@@ -367,6 +378,34 @@ async function verifySmokeRendererIsolation(window: BrowserWindow): Promise<void
   }
 }
 
+/** Shows the window at once with the packaged launch screen on top, instead of a blank window until the web app paints. */
+function showWithLaunchOverlay(window: BrowserWindow): void {
+  if (!mainLoaded) {
+    prepareLocalPagesSession(LOCAL_PAGE_DIRECTORY)
+    launchOverlay = attachLaunchOverlay(window, {
+      pageUrl: LAUNCH_PAGE_URL,
+      createView: () => {
+        const view = new WebContentsView({
+          webPreferences: {
+            contextIsolation: true,
+            sandbox: true,
+            nodeIntegration: false,
+            webSecurity: true,
+            webviewTag: false,
+            allowRunningInsecureContent: false,
+            devTools: !app.isPackaged,
+            partition: LOCAL_PAGES_PARTITION,
+            spellcheck: false,
+          },
+        })
+        view.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#202128' : '#ffffff')
+        return view
+      },
+    })
+  }
+  window.show()
+}
+
 async function createMainWindow(): Promise<void> {
   if (!webAppUrl) {
     throw new Error('Web application URL is not initialized')
@@ -417,14 +456,14 @@ async function createMainWindow(): Promise<void> {
       },
     )
   } else {
-    mainWindow.once('ready-to-show', () => mainWindow?.show())
+    showWithLaunchOverlay(mainWindow)
   }
 
   const window = mainWindow
   window.webContents.on('did-finish-load', () => {
     if (mainLoaded) return
     mainLoaded = true
-    logger.info('main-loaded', { safeMode })
+    logger.info('main-loaded', { safeMode, elapsedMs: Date.now() - launchStartedAt })
     // A launch only counts as healthy after surviving a while; crashes right after load still count.
     launchHealth.loaded()
   })
@@ -486,18 +525,19 @@ async function startApplication(): Promise<void> {
   installAppSecurityGuards(app)
   installClientHeaders(session.fromPartition(AUTHENTICATED_PARTITION), webAppUrl.origin, app.getVersion())
   credentialStore = new DesktopCredentialStore(userDataPath, safeStorage)
+  // Chromium's stack, like the main window: same system proxy, Windows certificate store and no cookies.
+  const authRequest = {
+    webOrigin: webAppUrl.origin,
+    clientVersion: app.getVersion(),
+    fetchImplementation: (url: string, init: RequestInit) => net.fetch(url, init),
+  }
   const controller = new DesktopAuthController({
     enabled: electronAuthEnabled(),
-    authorize: (attempt) => requestDesktopAuthorization(attempt, {
-      webOrigin: webAppUrl?.origin ?? '',
-      clientVersion: app.getVersion(),
-    }),
+    authorize: (attempt) => requestDesktopAuthorization(attempt, authRequest),
     openExternal: (url) => shell.openExternal(url, { activate: true }),
+    logFailure: (stage, reason) => logger.warn('desktop-auth-failed', { stage, reason }),
     exchange: async (input) => {
-      const bundle = await exchangeDesktopAuthCode(input, {
-        webOrigin: webAppUrl?.origin ?? '',
-        clientVersion: app.getVersion(),
-      })
+      const bundle = await exchangeDesktopAuthCode(input, authRequest)
       await credentialStore?.save(bundle, webAppUrl?.origin ?? '')
       if (!mainWindow || mainWindow.isDestroyed() || !webAppUrl) {
         throw new Error('Main window is unavailable')

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('electron', () => ({ BrowserWindow: class {}, session: { fromPartition: () => ({}) } }))
 
 const {
-  DIAGNOSTICS_PAGE_URL, isDiagnosticsAction, isTrustedDiagnosticsSender, registerDiagnosticsScheme, resolveDiagnosticsAsset,
+  DIAGNOSTICS_PAGE_URL, LAUNCH_PAGE_URL, isDiagnosticsAction, isTrustedDiagnosticsSender, registerDiagnosticsScheme, resolveDiagnosticsAsset,
 } = await import('../src/main/diagnostics-window')
 
 function fixture(frameUrl = DIAGNOSTICS_PAGE_URL) {
@@ -23,8 +23,11 @@ describe('诊断窗', () => {
     expect(DIAGNOSTICS_PAGE_URL).toBe('yumpoo-diagnostics://app/diagnostics.html')
   })
 
-  it('协议只提供三个打包文件', () => {
+  it('协议只提供诊断页与启动页的打包文件', () => {
     expect(resolveDiagnosticsAsset('yumpoo-diagnostics://app/diagnostics.html')).toEqual({ file: 'diagnostics.html', contentType: 'text/html; charset=utf-8' })
+    expect(resolveDiagnosticsAsset(LAUNCH_PAGE_URL)).toEqual({ file: 'launch.html', contentType: 'text/html; charset=utf-8' })
+    expect(resolveDiagnosticsAsset('yumpoo-diagnostics://app/launch.css')?.contentType).toBe('text/css; charset=utf-8')
+    expect(resolveDiagnosticsAsset('yumpoo-diagnostics://app/mark.png')).toEqual({ file: 'mark.png', contentType: 'image/png' })
     expect(resolveDiagnosticsAsset('yumpoo-diagnostics://app/page.js?x=1')?.file).toBe('page.js')
     expect(resolveDiagnosticsAsset('yumpoo-diagnostics://app/diagnostics.css')?.contentType).toBe('text/css; charset=utf-8')
     for (const url of [
