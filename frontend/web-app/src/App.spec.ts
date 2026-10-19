@@ -161,4 +161,34 @@ describe('M1-12 Web 全局壳', () => {
     await wrapper.get('.login-action').trigger('click')
     expect(start).toHaveBeenCalledOnce()
   })
+
+  it('Electron 登录失败时区分登录服务与浏览器，并为未知错误码兜底', async () => {
+    let publish: ((status: unknown) => void) | undefined
+    Object.defineProperty(window, 'yumpooDesktop', {
+      configurable: true,
+      value: Object.freeze({
+        client: 'electron',
+        auth: Object.freeze({
+          isEnabled: vi.fn(async () => true),
+          start: vi.fn(async () => undefined),
+          clear: vi.fn(async () => undefined),
+          onStatus: vi.fn((listener: (status: unknown) => void) => {
+            publish = listener
+            return vi.fn()
+          }),
+        }),
+      }),
+    })
+    const wrapper = await mountApplication('/login')
+    await flushPromises()
+
+    publish?.({ phase: 'FAILED', errorCode: 'AUTH_SERVICE_FAILED' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('无法连接登录服务')
+    expect(wrapper.text()).not.toContain('无法打开系统浏览器')
+
+    publish?.({ phase: 'FAILED', errorCode: 'SOMETHING_NEW' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('桌面登录未完成，请重试')
+  })
 })
