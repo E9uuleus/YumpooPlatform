@@ -46,9 +46,11 @@ esbuild.buildSync({
   format: 'iife',
   logLevel: 'warning',
 })
-for (const name of ['diagnostics.html', 'diagnostics.css']) {
+for (const name of ['diagnostics.html', 'diagnostics.css', 'launch.html', 'launch.css']) {
   fs.copyFileSync(path.join(root, 'src', 'diagnostics', name), path.join(dist, 'diagnostics', name))
 }
+// The launch screen shows the same exported brand mark as the window and tray icon.
+fs.copyFileSync(path.join(root, 'assets', 'application.png'), path.join(dist, 'diagnostics', 'mark.png'))
 
 // The baked-in distribution is validated with the same parser the packaged runtime uses.
 const parserFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-distribution-')), 'distribution.js')

@@ -56,6 +56,20 @@ describe('desktop download page', () => {
     }
   })
 
+  it('keeps the collapsed install and privacy notes available whether or not the feed answers', async () => {
+    for (const ok of [true, false]) {
+      respond(release, ok)
+      const wrapper = await render()
+      const details = wrapper.find('details.desktop-download__privacy')
+      expect(details.exists()).toBe(true)
+      expect(details.attributes('open')).toBeUndefined()
+      expect(details.find('summary').text()).toBe('安装说明与隐私')
+      for (const fact of ['不需要管理员权限', '%LOCALAPPDATA%\\Programs\\YumpooDesktop', '不设置开机自启', 'redirector.gvt1.com', 'DPAPI', '不能关闭', '只保留计时器与提醒偏好']) {
+        expect(details.text()).toContain(fact)
+      }
+    }
+  })
+
   it('inside the desktop shell points to the browser, because the shell refuses downloads', async () => {
     respond(release)
     vi.stubGlobal('yumpooDesktop', { client: 'electron' })

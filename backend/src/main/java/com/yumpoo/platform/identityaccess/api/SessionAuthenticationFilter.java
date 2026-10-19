@@ -49,9 +49,7 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        return WebAuthenticationPaths.AUTHORIZE.equals(path)
-                || WebAuthenticationPaths.CALLBACK.equals(path);
+        return AnonymousAuthenticationPaths.ALL.contains(request.getRequestURI());
     }
 
     @Override

@@ -20,7 +20,11 @@ Status: implemented
 - `appId` 为 `com.yumpoo.desktop`，同时作为 AppUserModelID 和 NSIS 安装身份，以后不得修改，否则已有安装会成为孤儿；
 - `productName` 保持 `Yumpoo Desktop`，所以 userData 仍是 `%APPDATA%\Yumpoo Desktop`，便携版的加密会话和偏好可以直接沿用；exe 名保持 `YumpooDesktop.exe`；
 - `electronDist` 指向锁文件安装的 Electron 运行时，不再下载第二份，打进包里的正是测试过的那份二进制；`afterPack` 删除不会被加载的 `default_app.asar`；
-- 安装器选按用户 oneClick：不需要管理员权限，以后更新也不弹 UAC，因此不打包 `elevate.exe`；
+- 安装器是强制按用户的辅助安装器：`oneClick: false`、`perMachine: false`，[安装器钩子](../../../../desktop/desktop-shell/build/installer.nsh)的 `customInstallMode` 隐藏「为所有用户」页。不需要管理员权限，以后更新也不弹 UAC，因此不打包 `elevate.exe`。DESK-1 至 DESK-4 用的是 oneClick；首个发布草稿试装时发现运行 exe 即直接安装，员工看不到安装位置、须知和隐私说明，不适合作为公司内部软件分发，所以在首次 Publish 前改掉；
+- 页面依次为：必须点「我同意」的安装须知与隐私说明（`build/install-notice_zh_CN.txt`，是[安装机制与隐私说明](../../../../deployment/windows/desktop-client-install-and-privacy.md)的精简版）、安装目录、附加选项、完成。附加选项页先检查当前用户能否写入所选目录，不能写入时（如 Program Files）禁用「下一步」，让用户返回目录页，而不是申请提权；
+- 辅助安装器的默认目录由 electron-builder 取自 `executableName`，为 `%LOCALAPPDATA%\Programs\YumpooDesktop`；oneClick 时取包名，是 `yumpoo-desktop`。所选路径不含 `YumpooDesktop` 时自动补上这一级子目录。不强行沿用旧名：electron-builder 的安装进度页会给任何不含 `YumpooDesktop` 的路径追加该子目录，改名需要替换模板。`desktop-v1.0.0` 草稿的试装机器经 `InstallLocation` 留在原目录；更新缓存目录仍由包名决定，为 `yumpoo-desktop-updater`；
+- 附加选项页的「创建桌面快捷方式」默认勾选。取消时由 `customInstall` 删除 electron-builder 刚建的快捷方式；以后的更新带 `--updated`，electron-builder 不会重建用户删掉的快捷方式。静默安装不经过页面，照常创建。开始菜单快捷方式承载 AUMID，始终创建；
+- 安装器只提供中文（`installerLanguages: ['zh_CN']`）。钩子和须知文件保存为带 BOM 的 UTF-8，否则 makensis 会按构建机的 ANSI 代码页解码中文；
 - `package.json` 的 `author` 写入 CompanyName，exe 版本资源不再出现 Electron 默认值；
 - 图标由 electron-builder 写入。resedit 只保留为[只读校验](../../../../tools/verification/desktop-executable.mjs)：比对图标、读取版本资源。
 
@@ -51,6 +55,15 @@ Status: implemented
 - 页面通过专用 preload 只能调用两个通道：`yumpoo:diagnostics:report` 与 `yumpoo:diagnostics:action`。主进程只接受该窗口主框架、且 URL 正是打包页面的调用；工作区边界规则让两个 preload 入口的通道互不相通；
 - 诊断窗自身打不开时，回退到 DESK-1 的[启动失败对话框](../../../../desktop/desktop-shell/src/main/startup-failure.ts)；冒烟模式仍直接以非零码退出；
 - 主窗没有成功加载过时，关闭诊断窗即退出应用，不留下看不见的进程。
+
+**启动遮罩与首屏**（1.0 试装修正）：
+
+- 主窗口创建后立即显示（冒烟和自检除外），不再等 `ready-to-show`。此前托盘在主窗加载前就已出现，点击托盘或再次启动会显示一个尚未绘制的空白窗口，远程页面要到首次绘制（慢网络下 10 秒以上）才会自动弹出；
+- 窗口上叠一层 `WebContentsView` [启动遮罩](../../../../desktop/desktop-shell/src/main/launch-overlay.ts)，显示安装包内的 `launch.html`：品牌图标、进度条、「正在连接 YumpooPlatform…」，8 秒后用纯 CSS 显示「连接较慢」与诊断入口提示。页面没有 preload 和脚本，CSP 只允许同源样式和图片；
+- 遮罩与诊断窗共用同一个本地页面分区和 `yumpoo-diagnostics://app/` 协议（会话准备只做一次），资源白名单增加 `launch.html`、`launch.css` 和品牌导出的 `mark.png`；诊断 IPC 仍只认诊断页 URL，遮罩无法调用；
+- 主框架首次 `did-finish-load` 时撤下遮罩并关闭它的 webContents；启动失败时随隐藏主窗一起撤下，交给诊断窗；
+- Web 的 `index.html` 有一个静态[启动页](../../../../frontend/web-app/public/boot-splash.css)，外观与遮罩一致，从首个 HTML 字节一直显示到首个路由完成（首屏要等会话检查），浏览器用户也不再看到空白。透明的计时窗共用这个页面，由 `appearance-bootstrap.js` 在绘制前隐藏启动页；
+- `main-loaded` 日志带 `elapsedMs`，慢启动可直接从日志判断。
 
 **诊断项**：[采集逻辑](../../../../desktop/desktop-shell/src/main/diagnostics.ts)与 Electron 实现分开，可以注入替身测试。
 
@@ -120,7 +133,7 @@ Status: implemented
 
 - 打包版支持 `--self-check=<绝对路径>`：不联网，检查是否打包、分发配置、协议注册，并在隐藏窗口中离线渲染诊断页（等到页面状态变为 `ready`）；报告 safeStorage 可用性，把 JSON 报告写到指定文件后退出。报告写文件而不走 stdout，因为 GUI 子系统 exe 的标准输出不可靠；
 - [打包校验](../../../../tools/verification/package-m0-15-win.mjs)在 `win-unpacked` 上检查图标、版本资源、fuse 状态、`resources` 白名单和 asar 白名单，生成原有 schema 的 M0-15 manifest，另写一份 `desktop-installer.json`，记录安装包名称、大小和 SHA-256；
-- [安装冒烟](../../../../tools/verification/verify-desktop-installer.mjs)在 Windows 门禁中依次执行：静默安装、核对快捷方式（含安全模式快捷方式的目标和参数）和协议键、自检（含诊断页离线渲染）、预置会话与偏好数据、同版本覆盖安装、静默卸载，并断言上面的卸载边界。它会改动当前用户的配置，所以只在 `CI=true` 或 `YUMPOO_DESKTOP_INSTALLER_SMOKE=1` 时运行，并先把已有的 userData、更新缓存目录和协议键移到临时备份目录（更新端到端验证同样如此），结束后恢复。备份与运行处于同一个 try 内，中途失败也会恢复已移开的部分；任何一项恢复失败时保留备份目录并让冒烟失败，报错中给出目录位置。NSIS 卸载程序会从 %TEMP% 重新启动自身，所以由 Windows PowerShell 临时编译[进程树助手](../../../../tools/verification/windows-process-tree.cs)：挂起创建根进程、加入 Job Object 后才恢复执行，直到内核报告该 Job 没有活动进程，再返回根进程退出码。Job 禁止子进程脱离，且关闭最后一个句柄会终止全部成员，因此外层超时结束助手时也会结束分离的子孙进程。收尾卸载失败或超时时仍不恢复配置，保留备份并报出路径，由人确认卸载结束后手动恢复。Windows 门禁覆盖快速原生启动器、真实分离子孙进程、参数传递、退出码及超时终止行为。
+- [安装冒烟](../../../../tools/verification/verify-desktop-installer.mjs)在 Windows 门禁中依次执行：静默安装、核对快捷方式（含安全模式快捷方式的目标和参数）和协议键、自检（含诊断页离线渲染）、预置会话与偏好数据、同版本覆盖安装、静默卸载，并断言上面的卸载边界；再以 `/D=` 指定的自定义目录重复安装，核对 exe 位置、`InstallLocation` 与协议键命令路径，要求不带 `/D=` 的同版本覆盖安装沿用该目录、卸载后目录被删除。每次安装都要求 `QuietUninstallString` 带 `/S`。它会改动当前用户的配置，所以只在 `CI=true` 或 `YUMPOO_DESKTOP_INSTALLER_SMOKE=1` 时运行，并先把已有的 userData、更新缓存目录和协议键移到临时备份目录（更新端到端验证同样如此），结束后恢复。备份与运行处于同一个 try 内，中途失败也会恢复已移开的部分；任何一项恢复失败时保留备份目录并让冒烟失败，报错中给出目录位置。NSIS 卸载程序会从 %TEMP% 重新启动自身，所以由 Windows PowerShell 临时编译[进程树助手](../../../../tools/verification/windows-process-tree.cs)：挂起创建根进程、加入 Job Object 后才恢复执行，直到内核报告该 Job 没有活动进程，再返回根进程退出码。Job 禁止子进程脱离，且关闭最后一个句柄会终止全部成员，因此外层超时结束助手时也会结束分离的子孙进程。收尾卸载失败或超时时仍不恢复配置，保留备份并报出路径，由人确认卸载结束后手动恢复。Windows 门禁覆盖快速原生启动器、真实分离子孙进程、参数传递、退出码及超时终止行为。
 
 **更新端到端验证**（DESK-3）：
 
@@ -156,7 +169,10 @@ Status: implemented
 ## Alternatives considered
 
 - **继续使用自写打包脚本，再自己补安装器**：要重写快捷方式、卸载登记、覆盖安装和更新安装器握手，这些正是 electron-builder 与 electron-updater 已经配套的部分。
-- **按机器安装**：每次安装和更新都要管理员权限并弹 UAC，30 人规模的自动更新会被打断。
+- **按机器安装**：每次安装和更新都要管理员权限并弹 UAC，30 人规模的自动更新会被打断。辅助安装器默认会提供「为所有用户」选项，所以用 `customInstallMode` 把它隐藏。
+- **继续用 oneClick 安装器**：零点击、更新天然静默，但员工看不到安装位置、须知与隐私说明，也不能选目录和桌面快捷方式。强制按用户的辅助安装器同样不需要管理员权限，更新同样静默，代价只是首次安装多点几次「下一步」。
+- **用 MUI 目录页的 leave 回调检查写入权限**：electron-builder 自己的目录页不开放 leave 钩子，且它要到安装进度页的 pre 回调才追加 `yumpoo-desktop` 子目录；在目录页之后的附加选项页里先补上子目录再检查，测的就是实际安装位置。
+- **安装器提供开机自启选项**：员工没有这个需求，开机即加载远程页面会占用内存；用户自己启动即可。
 - **MSIX / Squirrel.Windows**：MSIX 必须签名才能安装，当前没有 Authenticode 证书；Squirrel 已不再积极维护，electron-updater 也不支持它。
 - **用环境变量或首次启动向导配置 origin**：每台机器都要手工配置，且可以被改成任意站点；把配置打进 asar 后受 asar 完整性校验保护。
 - **只删除 `auth\` 目录**：已经足以退出登录，但会留下缓存、本地存储和崩溃转储等数据；卸载应当清理到只剩偏好文件。
@@ -164,6 +180,9 @@ Status: implemented
 - **任何时候都设置 AUMID**：开发运行没有带同一 AUMID 的快捷方式，Windows 可能不显示 balloon 和 toast。
 - **根据 PID 快照追踪卸载进程树**：根 PID 和已观察的子 PID 都可能被无关进程复用；创建时间也无法补回两次快照之间已退出的中间进程。采用 Windows [Job Object](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects) 的内核成员计数，避免自行推断进程身份与亲缘关系。
 - **直接使用 Windows PowerShell 5.1 的 `Start-Process -Wait`**：它先启动根进程，再检查 `HasExited` 并登记 Job，快速启动器可能已退出或创建了不在 Job 中的后代；PR #146 的 Windows 门禁出现等待提前结束。挂起创建、先登记再恢复关闭了这个竞态窗口；仅增加测试延时或轮询卸载目录不能证明用户配置已可安全恢复。
+- **只在托盘点击时才显示加载页**：首次启动仍是「只有托盘图标」，用户容易以为没有打开而反复双击；启动即显示带遮罩的主窗口更符合桌面应用习惯。
+- **先在主窗口加载本地启动页、再导航到 Web**：跨源导航没有 paint holding，提交新页面到首次绘制之间仍会闪白；主窗口的 preload 和会话也会暴露给本地页面。独立的 `WebContentsView` 叠层与主窗口内容互不影响。
+- **启动页用 vBrandLoading 的分片动画**：需要内联约 150 KB 的品牌 SVG 及其纹理，Web 的 CSP 还会拦截 data: 纹理；首屏只用导出的 PNG 加轻微呼吸动效，进入应用后的加载仍由 vBrandLoading 负责。
 - **用 `file:` 加载诊断页**：`GrantFileProtocolExtraPrivileges` 关闭后，`file:` 无法读取 app.asar 内的页面（实测 `ERR_FILE_NOT_FOUND`）。为此重新打开这个 fuse 会削弱加固；自定义协议正是 Electron 推荐的替代做法，还能给页面一个确定的来源。
 - **把诊断页放在远程 Web 应用里**：最需要诊断的正是 Web 加载不出来的时候；本地页面断网也能使用，也不会把诊断通道暴露给远程内容。
 - **诊断入口加进 Web 快捷面板**：需要同时改契约、Web 与壳的能力协商；托盘原生菜单、安全模式快捷方式和自动弹出已经覆盖故障场景，所以暂缓。

@@ -20,7 +20,7 @@ pnpm run ci
 | `pnpm ci:static` | 上述契约检查各一次，加文档/归档完整性、校验器故障测试、前端/桌面 lint、架构、类型、构建与全部现有测试、历史证据结构和当前资产 |
 | `pnpm ci:backend` | 一次 `clean verify`：单元/集成、安全、架构、PostgreSQL/Flyway、备份恢复；随后单独执行 96 MiB JVM 的附件流式探针 |
 | `pnpm ci:portable` | 校验当前源码的 static/backend 成功记录与新鲜备份恢复报告；运行 packaged JAR + SPA HTTP；生成和验证 JAR/Web handoff |
-| `pnpm ci:windows` | 复核 handoff，真实 Electron smoke、Windows 桌面安装包（EXE 图标/版本资源/fuse/ASAR 白名单，静默安装、自检、覆盖安装与卸载边界）、ZIP、PowerShell 行为及服务器包验证；服务器包逐文件对照同一 handoff；生成并核对后端与 Web 的 CycloneDX SBOM；把经过冒烟的安装包、blockmap、`latest.yml`、桌面 SBOM 与 manifest 收集到 `out/desktop` |
+| `pnpm ci:windows` | 复核 handoff，真实 Electron smoke、Windows 桌面安装包（EXE 图标/版本资源/fuse/ASAR 白名单，默认目录与 `/D=` 自定义目录的静默安装、自检、覆盖安装与卸载边界）、ZIP、PowerShell 行为及服务器包验证；服务器包逐文件对照同一 handoff；生成并核对后端与 Web 的 CycloneDX SBOM；把经过冒烟的安装包、blockmap、`latest.yml`、桌面 SBOM 与 manifest 收集到 `out/desktop` |
 
 [plan.mjs](../tools/ci/plan.mjs) 是统一入口的执行清单。M2-23 的 `:assets` 检查当前切片资产，完整契约检查归 `ci:contracts`；类别资产只执行一次，M2-03、M2-07、M2-24 等旧切片由 [historical-assets.mjs](../tools/ci/historical-assets.mjs) 校验历史报告与验收矩阵。类型检查由各包实际构建或专用类型测试承担，不再重复运行同一整套 Node 入口。Windows smoke 使用 handoff 的 Web 字节；服务器不重复编译。
 
@@ -72,11 +72,11 @@ Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必
 
 ## 依赖与供应链
 
-决策与取舍见[供应链基线](../.agents/notes/implemented/process/2026-10-16-supply-chain-baseline.md)。
+决策与取舍见[供应链基线](../.agents/notes/implemented/process/2026-10-16-supply-chain-baseline.md)和[仅自动提出安全更新](../.agents/notes/implemented/process/2026-10-18-dependabot-security-only.md)。
 
 | 机制 | 触发 | 职责 |
 | --- | --- | --- |
-| [Dependabot](dependabot.yml) | 每周一 | github-actions、npm（根 workspace）、Maven（`/backend`）更新指向 `dev`；小版本与补丁分组，大版本单独 PR，冷却 7 天 |
+| [Dependabot](dependabot.yml) | 已知漏洞触发安全更新 | github-actions、npm（根 workspace）、Maven（`/backend`）只自动提出安全修复，指向默认分支 `dev`；小版本与补丁分组，必要的大版本修复单独 PR |
 | [Supply Chain](workflows/supply-chain.yml) `Dependency Review` | 指向 `dev`/`main` 的 PR | 拒绝新引入的 moderate 及以上已知漏洞（runtime、development、unknown） |
 | `Workflow Audit` | PR 与每周一 | 固定版本 zizmor 审计工作流与 Dependabot 配置；有发现即失败 |
 | `OSV Scan` | 每周一 | 分别扫描 `dev` 与 `main` 的锁文件和 Maven 依赖 |
@@ -85,6 +85,8 @@ Windows 本机不能构造的大小写碰撞与无特权符号链接夹具由必
 | Maven enforcer | `ci:backend` | `requireJavaVersion [21,)`、`requireReleaseDeps` |
 
 本地复现：`uvx zizmor@1.30.1 .` 审计工作流；`pnpm sbom --sbom-format cyclonedx --filter @yumpoo/web-app --prod --lockfile-only` 查看 Web SBOM；`./mvnw generate-resources` 后在 `backend/target/classes/META-INF/sbom/` 查看后端 SBOM。
+
+Dependabot 的 `open-pull-requests-limit: 0` 关闭常规版本更新；配置中保留的每周 schedule 是必填字段，不控制安全更新时效。安全更新仍需在仓库设置中启用，且不受版本更新数量限制或冷却期影响。常规升级、运行时结束支持或工具链迁移由维护任务按实际需要发起，不自动追到最新版。
 
 Dependabot 生成的 PR 标题不带步骤编号，squash 合并时按提交规范补齐。工作流审计的确有理由的例外，用行内 `zizmor: ignore[...]` 注释并写明理由。每周检查失败时，若配置了 `WECOM_RELEASE_WEBHOOK` 会推送企业微信。
 
