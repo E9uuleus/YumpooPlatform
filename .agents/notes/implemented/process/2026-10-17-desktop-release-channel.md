@@ -52,6 +52,15 @@ Status: implemented
 - 诊断窗自身打不开时，回退到 DESK-1 的[启动失败对话框](../../../../desktop/desktop-shell/src/main/startup-failure.ts)；冒烟模式仍直接以非零码退出；
 - 主窗没有成功加载过时，关闭诊断窗即退出应用，不留下看不见的进程。
 
+**启动遮罩与首屏**（1.0 试装修正）：
+
+- 主窗口创建后立即显示（冒烟和自检除外），不再等 `ready-to-show`。此前托盘在主窗加载前就已出现，点击托盘或再次启动会显示一个尚未绘制的空白窗口，远程页面要到首次绘制（慢网络下 10 秒以上）才会自动弹出；
+- 窗口上叠一层 `WebContentsView` [启动遮罩](../../../../desktop/desktop-shell/src/main/launch-overlay.ts)，显示安装包内的 `launch.html`：品牌图标、进度条、「正在连接 YumpooPlatform…」，8 秒后用纯 CSS 显示「连接较慢」与诊断入口提示。页面没有 preload 和脚本，CSP 只允许同源样式和图片；
+- 遮罩与诊断窗共用同一个本地页面分区和 `yumpoo-diagnostics://app/` 协议（会话准备只做一次），资源白名单增加 `launch.html`、`launch.css` 和品牌导出的 `mark.png`；诊断 IPC 仍只认诊断页 URL，遮罩无法调用；
+- 主框架首次 `did-finish-load` 时撤下遮罩并关闭它的 webContents；启动失败时随隐藏主窗一起撤下，交给诊断窗；
+- Web 的 `index.html` 有一个静态[启动页](../../../../frontend/web-app/public/boot-splash.css)，外观与遮罩一致，从首个 HTML 字节一直显示到首个路由完成（首屏要等会话检查），浏览器用户也不再看到空白。透明的计时窗共用这个页面，由 `appearance-bootstrap.js` 在绘制前隐藏启动页；
+- `main-loaded` 日志带 `elapsedMs`，慢启动可直接从日志判断。
+
 **诊断项**：[采集逻辑](../../../../desktop/desktop-shell/src/main/diagnostics.ts)与 Electron 实现分开，可以注入替身测试。
 
 - 网络：DNS、TLS 证书主体/签发者/剩余天数、`/healthz`、`/version.json`（服务版本取 `release.tag`，时钟偏差取响应 `Date` 头与请求中点之差）、系统代理；
@@ -164,6 +173,9 @@ Status: implemented
 - **任何时候都设置 AUMID**：开发运行没有带同一 AUMID 的快捷方式，Windows 可能不显示 balloon 和 toast。
 - **根据 PID 快照追踪卸载进程树**：根 PID 和已观察的子 PID 都可能被无关进程复用；创建时间也无法补回两次快照之间已退出的中间进程。采用 Windows [Job Object](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects) 的内核成员计数，避免自行推断进程身份与亲缘关系。
 - **直接使用 Windows PowerShell 5.1 的 `Start-Process -Wait`**：它先启动根进程，再检查 `HasExited` 并登记 Job，快速启动器可能已退出或创建了不在 Job 中的后代；PR #146 的 Windows 门禁出现等待提前结束。挂起创建、先登记再恢复关闭了这个竞态窗口；仅增加测试延时或轮询卸载目录不能证明用户配置已可安全恢复。
+- **只在托盘点击时才显示加载页**：首次启动仍是「只有托盘图标」，用户容易以为没有打开而反复双击；启动即显示带遮罩的主窗口更符合桌面应用习惯。
+- **先在主窗口加载本地启动页、再导航到 Web**：跨源导航没有 paint holding，提交新页面到首次绘制之间仍会闪白；主窗口的 preload 和会话也会暴露给本地页面。独立的 `WebContentsView` 叠层与主窗口内容互不影响。
+- **启动页用 vBrandLoading 的分片动画**：需要内联约 150 KB 的品牌 SVG 及其纹理，Web 的 CSP 还会拦截 data: 纹理；首屏只用导出的 PNG 加轻微呼吸动效，进入应用后的加载仍由 vBrandLoading 负责。
 - **用 `file:` 加载诊断页**：`GrantFileProtocolExtraPrivileges` 关闭后，`file:` 无法读取 app.asar 内的页面（实测 `ERR_FILE_NOT_FOUND`）。为此重新打开这个 fuse 会削弱加固；自定义协议正是 Electron 推荐的替代做法，还能给页面一个确定的来源。
 - **把诊断页放在远程 Web 应用里**：最需要诊断的正是 Web 加载不出来的时候；本地页面断网也能使用，也不会把诊断通道暴露给远程内容。
 - **诊断入口加进 Web 快捷面板**：需要同时改契约、Web 与壳的能力协商；托盘原生菜单、安全模式快捷方式和自动弹出已经覆盖故障场景，所以暂缓。

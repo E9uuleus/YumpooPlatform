@@ -8,11 +8,17 @@ export const DIAGNOSTICS_ACTION_CHANNEL = 'yumpoo:diagnostics:action'
 export const DIAGNOSTICS_SCHEME = 'yumpoo-diagnostics'
 const DIAGNOSTICS_ORIGIN = `${DIAGNOSTICS_SCHEME}://app`
 export const DIAGNOSTICS_PAGE_URL = `${DIAGNOSTICS_ORIGIN}/diagnostics.html`
-const DIAGNOSTICS_PARTITION = 'yumpoo-diagnostics'
+/** The launch screen shown over the main window until the web app has loaded; it has no preload and no script. */
+export const LAUNCH_PAGE_URL = `${DIAGNOSTICS_ORIGIN}/launch.html`
+/** Shared by the diagnostics window and the launch screen: both show only packaged pages. */
+export const LOCAL_PAGES_PARTITION = 'yumpoo-diagnostics'
 const DIAGNOSTICS_ASSETS: ReadonlyMap<string, string> = new Map([
   ['/diagnostics.html', 'text/html; charset=utf-8'],
   ['/diagnostics.css', 'text/css; charset=utf-8'],
   ['/page.js', 'text/javascript; charset=utf-8'],
+  ['/launch.html', 'text/html; charset=utf-8'],
+  ['/launch.css', 'text/css; charset=utf-8'],
+  ['/mark.png', 'image/png'],
 ])
 const DIAGNOSTICS_ACTIONS: ReadonlySet<string> = new Set<DiagnosticsAction>([
   'retry', 'restart-normal', 'open-web', 'reset-preferences', 'sign-out', 'register-protocol', 'open-logs', 'export',
@@ -29,7 +35,7 @@ export function registerDiagnosticsScheme(protocol: Pick<Protocol, 'registerSche
   protocol.registerSchemesAsPrivileged([{ scheme: DIAGNOSTICS_SCHEME, privileges: { standard: true, secure: true } }])
 }
 
-/** Maps a request to one of the three packaged files; anything else is not found. */
+/** Maps a request to one of the packaged local-page files; anything else is not found. */
 export function resolveDiagnosticsAsset(requestUrl: string): { file: string; contentType: string } | undefined {
   let url: URL
   try {
@@ -55,8 +61,33 @@ export function isTrustedDiagnosticsSender(event: Pick<IpcMainInvokeEvent, 'send
     && event.senderFrame?.url === DIAGNOSTICS_PAGE_URL
 }
 
+let localPagesPrepared = false
+
+/**
+ * Locks down the local-pages session once: every permission and download refused, only the packaged files
+ * reachable, served by the privileged scheme registered on this partition alone.
+ */
+export function prepareLocalPagesSession(pageDirectory: string): void {
+  if (localPagesPrepared) return
+  localPagesPrepared = true
+  const localSession = session.fromPartition(LOCAL_PAGES_PARTITION)
+  localSession.setPermissionCheckHandler(() => false)
+  localSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+  localSession.on('will-download', event => event.preventDefault())
+  // Only the local-pages scheme is reachable from this session; every other request is refused.
+  localSession.webRequest.onBeforeRequest((details, callback) => {
+    callback({ cancel: !details.url.startsWith(`${DIAGNOSTICS_ORIGIN}/`) && !details.url.startsWith('devtools:') })
+  })
+  localSession.protocol.handle(DIAGNOSTICS_SCHEME, async request => {
+    const asset = resolveDiagnosticsAsset(request.url)
+    if (!asset) return new Response(null, { status: 404 })
+    const body = await readFile(path.join(pageDirectory, asset.file))
+    return new Response(body, { headers: { 'content-type': asset.contentType, 'cache-control': 'no-store' } })
+  })
+}
+
 export interface DiagnosticsWindowOptions {
-  /** Directory holding diagnostics.html, diagnostics.css and page.js. */
+  /** Directory holding the packaged local pages (diagnostics.html, page.js, launch.html, …). */
   readonly pageDirectory: string
   readonly preloadPath: string
   readonly icon: () => NativeImage
@@ -74,7 +105,6 @@ export interface DiagnosticsWindowOptions {
  */
 export class DiagnosticsWindow {
   private window: BrowserWindow | null = null
-  private sessionPrepared = false
 
   constructor(private readonly options: DiagnosticsWindowOptions) {}
 
@@ -107,7 +137,7 @@ export class DiagnosticsWindow {
       }
       return this.window
     }
-    this.prepareSession()
+    prepareLocalPagesSession(this.options.pageDirectory)
     const window = new BrowserWindow({
       width: 760,
       height: 720,
@@ -127,7 +157,7 @@ export class DiagnosticsWindow {
         webviewTag: false,
         allowRunningInsecureContent: false,
         devTools: !this.options.isPackaged,
-        partition: DIAGNOSTICS_PARTITION,
+        partition: LOCAL_PAGES_PARTITION,
         spellcheck: false,
       },
     })
@@ -149,25 +179,6 @@ export class DiagnosticsWindow {
 
   close(): void {
     if (this.window && !this.window.isDestroyed()) this.window.close()
-  }
-
-  private prepareSession(): void {
-    if (this.sessionPrepared) return
-    this.sessionPrepared = true
-    const diagnosticsSession = session.fromPartition(DIAGNOSTICS_PARTITION)
-    diagnosticsSession.setPermissionCheckHandler(() => false)
-    diagnosticsSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
-    diagnosticsSession.on('will-download', event => event.preventDefault())
-    // Only the diagnostics scheme is reachable from this session; every other request is refused.
-    diagnosticsSession.webRequest.onBeforeRequest((details, callback) => {
-      callback({ cancel: !details.url.startsWith(`${DIAGNOSTICS_ORIGIN}/`) && !details.url.startsWith('devtools:') })
-    })
-    diagnosticsSession.protocol.handle(DIAGNOSTICS_SCHEME, async request => {
-      const asset = resolveDiagnosticsAsset(request.url)
-      if (!asset) return new Response(null, { status: 404 })
-      const body = await readFile(path.join(this.options.pageDirectory, asset.file))
-      return new Response(body, { headers: { 'content-type': asset.contentType, 'cache-control': 'no-store' } })
-    })
   }
 
   private assertTrusted(event: IpcMainInvokeEvent): void {

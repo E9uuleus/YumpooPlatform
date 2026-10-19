@@ -31,6 +31,7 @@ const outputs = new Map([
   ['frontend/web-app/src/assets/brand/logo.svg', Buffer.from(logo)],
   ['frontend/web-app/public/brand/favicon.svg', Buffer.from(logo.replace('125 123 1187 871', '125 -35 1187 1187'))],
   ['frontend/web-app/public/brand/favicon.ico', ico],
+  ['frontend/web-app/public/brand/mark.png', images.at(-1)],
   ['desktop/desktop-shell/assets/application.png', images.at(-1)],
   ['desktop/desktop-shell/assets/application.ico', ico],
 ])
