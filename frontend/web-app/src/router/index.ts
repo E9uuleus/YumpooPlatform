@@ -3,6 +3,7 @@ import { watch } from 'vue'
 import {
   createRouter,
   createWebHistory,
+  START_LOCATION,
   type RouteLocationNormalized,
   type RouteRecordRaw,
 } from 'vue-router'
@@ -204,7 +205,9 @@ router.beforeEach(async (to) => {
 
 watch(useSession().phase, (next) => {
   const current = router.currentRoute.value
-  if (current.meta.public) return
+  // Until the first navigation lands, its guard owns the redirect. Replacing here would cancel it, and the next
+  // guard's failed session check would replace again: an endless /auth/me loop with nothing ever rendered.
+  if (current === START_LOCATION || current.meta.public) return
   if (next === 'anonymous') {
     if (current.name !== 'login') {
       rememberReturnPath(current.fullPath)

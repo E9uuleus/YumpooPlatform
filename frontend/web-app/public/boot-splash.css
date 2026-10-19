@@ -1,0 +1,28 @@
+/* Painted from the first HTML bytes until the first route renders; main.ts removes it. Colors mirror the canvas tokens. */
+#boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #ffffff;
+  color: #5b6070;
+  font: 14px/1.6 "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+}
+
+:root[data-theme='dark'] #boot-splash { background: #202128; color: #c2c6d0; }
+:root[data-theme='night'] #boot-splash { background: #0d1b2a; color: #bdcae0; }
+:root.timer-surface #boot-splash { display: none; }
+
+#boot-splash img { animation: yp-boot-enter .45s cubic-bezier(.34, 1.56, .64, 1) both, yp-boot-breathe 2.4s .45s ease-in-out infinite; }
+#boot-splash p { margin: 8px 0 0; }
+
+@keyframes yp-boot-enter { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes yp-boot-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+
+@media (prefers-reduced-motion: reduce) {
+  #boot-splash img { animation: none; }
+}
