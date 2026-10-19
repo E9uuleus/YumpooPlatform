@@ -206,18 +206,21 @@ test('CI signs the deployable package and its SBOMs; release paths verify the si
   }
 })
 
-test('Dependabot updates actions, npm and Maven into dev on a weekly, grouped, cooled-down cadence', () => {
+test('Dependabot proposes only security fixes on the default branch without suppressing major fixes', () => {
   assert.equal(dependabot.version, 2)
   assert.deepEqual(dependabot.updates.map(update => [update['package-ecosystem'], update.directory]),
     [['github-actions', '/'], ['npm', '/'], ['maven', '/backend']])
   for (const update of dependabot.updates) {
-    assert.equal(update['target-branch'], 'dev')
+    assert.equal(update['open-pull-requests-limit'], 0, 'routine version-update PRs are disabled')
+    assert.equal(update['target-branch'], undefined, 'security settings apply to the default branch')
+    assert.equal(update.ignore, undefined, 'ignore rules must not hide required security fixes')
+    assert.equal(update.allow, undefined, 'security fixes include direct, transitive and development dependencies')
     assert.equal(update.schedule.interval, 'weekly')
-    assert(update.cooldown['default-days'] >= 7, 'fresh releases wait out the cooldown')
-    assert(Object.keys(update.groups ?? {}).length > 0, 'updates are grouped')
-    // Without update-types a group also takes majors (REL-P5 F14); majors must stay separate PRs.
+    assert(update.cooldown['default-days'] >= 7, 'restoring routine updates must retain the audited cooldown')
+    assert(Object.keys(update.groups ?? {}).length > 0, 'security fixes are grouped')
     for (const [name, group] of Object.entries(update.groups)) {
-      assert.deepEqual(group['update-types'], ['minor', 'patch'], `${update['package-ecosystem']}/${name}: majors are reviewed one by one`)
+      assert.equal(group['applies-to'], 'security-updates', `${update['package-ecosystem']}/${name}: only security fixes are grouped`)
+      assert.deepEqual(group['update-types'], ['minor', 'patch'], `${update['package-ecosystem']}/${name}: major fixes remain separate PRs`)
     }
   }
 })

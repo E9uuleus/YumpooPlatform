@@ -1,10 +1,11 @@
 version: 2
 
-# 依赖更新进入集成分支 dev，经常规 PR 门禁后随晋升发布。安全更新不受冷却期限制。
+# 只自动提出漏洞修复；安全更新使用仓库默认分支 dev，经常规 PR 门禁后随晋升发布。
+# open-pull-requests-limit: 0 只关闭常规版本更新，不限制安全更新。
 updates:
   - package-ecosystem: github-actions
     directory: /
-    target-branch: dev
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
       day: monday
@@ -17,12 +18,13 @@ updates:
       include: scope
     groups:
       github-actions:
+        applies-to: security-updates
         patterns: ['*']
         update-types: [minor, patch]
 
   - package-ecosystem: npm
     directory: /
-    target-branch: dev
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
       day: monday
@@ -33,21 +35,22 @@ updates:
     commit-message:
       prefix: chore
       include: scope
-    open-pull-requests-limit: 5
-    # 小版本与补丁合并为一个 PR；大版本各自单独评审。
+    # 安全修复的小版本与补丁分组；必须跨大版本的修复单独评审。
     groups:
       npm-production:
+        applies-to: security-updates
         patterns: ['*']
         dependency-type: production
         update-types: [minor, patch]
       npm-development:
+        applies-to: security-updates
         patterns: ['*']
         dependency-type: development
         update-types: [minor, patch]
 
   - package-ecosystem: maven
     directory: /backend
-    target-branch: dev
+    open-pull-requests-limit: 0
     schedule:
       interval: weekly
       day: monday
@@ -58,8 +61,8 @@ updates:
     commit-message:
       prefix: chore
       include: scope
-    open-pull-requests-limit: 5
     groups:
       maven:
+        applies-to: security-updates
         patterns: ['*']
         update-types: [minor, patch]
