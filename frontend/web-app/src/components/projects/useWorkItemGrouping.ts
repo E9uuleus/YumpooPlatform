@@ -33,6 +33,9 @@ interface Options {
   protectedIds?: () => Set<string>
 }
 
+/** 与 WorkItemTableSettingsService.MAX_GROUPING_KEYS 一致。 */
+const MAX_SAVED_COLORS = 500
+
 /** 比较时忽略颜色映射的键顺序：服务端 jsonb 会重排对象键。 */
 function canonical(value: unknown): string | undefined {
   return JSON.stringify(value, (key, item: unknown) => key === 'colors' && item && typeof item === 'object'
@@ -80,12 +83,18 @@ export function useWorkItemGrouping(options: Options) {
   function page(key: string): GroupPage {
     return pages[key] ??= { items: [], nextCursor: null, loaded: false, loading: false, error: undefined }
   }
+  /** 只保存当前有工作项的处理人分组颜色：项目成员可能多于服务端上限，其余分组按稳定散列重新分配。 */
+  const savedColors = () => {
+    const used = new Set(field.value === 'ASSIGNEE' ? facets.value.map(option => option.value) : [])
+    return Object.fromEntries(Object.entries(colors).filter(([key]) => used.has(key)).slice(0, MAX_SAVED_COLORS))
+  }
   const snapshot = (): WorkItemTableGrouping => ({ field: (field.value || null) as WorkItemGroupingField | null,
-    order: order.value as WorkItemGroupingOrder, showEmpty: showEmpty.value, collapsed: [...collapsed.value], colors: { ...colors } })
+    order: order.value as WorkItemGroupingOrder, showEmpty: showEmpty.value, collapsed: [...collapsed.value], colors: savedColors() })
   function persist(): void {
     if (restoringPrefs) return
     const value = snapshot()
-    if (options.save) {
+    // 个人表格设置读取完成前（加载中或读取失败）先存本机，读取后由 restorePrefs 上传或丢弃。
+    if (options.save && options.stored?.() !== undefined) {
       if (canonical(value) !== canonical(options.stored?.())) options.save(value)
       return
     }
@@ -259,7 +268,10 @@ export function useWorkItemGrouping(options: Options) {
   function localPrefs(): unknown {
     try { return JSON.parse(localStorage.getItem(options.preferenceKey()) ?? 'null') ?? undefined } catch { /* 损坏的偏好恢复默认值。 */ return {} }
   }
-  /** 项目表以个人表格设置为准，设置为空时上传旧版本留在本机的分组并删除本机键；内嵌表优先本机分组。 */
+  /**
+   * 项目表以个人表格设置为准：设置为空时上传本机分组（旧版本留下的，或设置读取失败期间保存的），设置已有分组时丢弃本机分组；
+   * 两种情况都删除本机键。内嵌表优先本机分组。
+   */
   function restorePrefs(keyChanged: boolean): void {
     const stored = options.stored?.()
     const local = localPrefs()
@@ -267,8 +279,8 @@ export function useWorkItemGrouping(options: Options) {
     const changed = keyChanged || canonical(normalizeGrouping(saved)) !== canonical(snapshot())
     const wasActive = active.value
     if (changed) readPrefs(saved)
-    if (options.save && stored === null && local !== undefined) {
-      options.save(snapshot())
+    if (options.save && stored !== undefined && local !== undefined) {
+      if (stored === null) options.save(snapshot())
       try { localStorage.removeItem(options.preferenceKey()) } catch { /* 本地存储不可用时只上传。 */ }
     }
     // 切换项目时由页面加载负责刷新；同一项目内设置晚到或被其他窗口改动时在这里重新分组。

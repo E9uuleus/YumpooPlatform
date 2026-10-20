@@ -117,6 +117,26 @@ describe('分组分页与本地偏好', () => {
     expect(grouping.field.value).toBe('STATUS')
     expect(api.listProjectWorkItemFilterOptions.mock.lastCall![0]).toMatchObject({ field: 'STATUS' })
   })
+  it('只把当前有工作项的处理人分组颜色写入个人表格设置', async () => {
+    const stored = ref<WorkItemTableGrouping | null | undefined>({ field: WorkItemGroupingField.Assignee, order: WorkItemGroupingOrder.Default,
+      showEmpty: false, collapsed: [], colors: { a: 'BRIGHT_GREEN', gone: 'SALADISH' } })
+    const save = vi.fn((value: WorkItemTableGrouping) => { stored.value = value })
+    const { grouping } = harness([], new Set(), { stored: () => stored.value, save })
+    await grouping.refresh()
+    grouping.toggle('a')
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ collapsed: ['ASSIGNEE:a'], colors: { a: 'BRIGHT_GREEN' } }))
+  })
+  it('个人表格设置未就绪时分组先存本机，读取到空设置后上传并删除本机键', async () => {
+    const stored = ref<WorkItemTableGrouping | null | undefined>()
+    const save = vi.fn((value: WorkItemTableGrouping) => { stored.value = value })
+    const { grouping } = harness([], new Set(), { stored: () => stored.value, save })
+    await grouping.setField('STATUS')
+    expect(save).not.toHaveBeenCalled()
+    expect(JSON.parse(localStorage.getItem('grouping:user:company:project')!)).toMatchObject({ field: 'STATUS' })
+    stored.value = null; await flushPromises()
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ field: 'STATUS' }))
+    expect(localStorage.getItem('grouping:user:company:project')).toBeNull()
+  })
   it('编辑字段后重新归组并校准完整数量，跨午夜重算日期', async () => {
     const { grouping, items, today } = harness([item('a1')])
     await grouping.setField('ASSIGNEE')
