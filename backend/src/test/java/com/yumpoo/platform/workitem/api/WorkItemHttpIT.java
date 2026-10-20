@@ -101,6 +101,32 @@ class WorkItemHttpIT {
     }
 
     @Test
+    void tableSettingsKeepGroupingAndCompletionOutsideTheLegacyDocument() throws Exception {
+        String path = "/api/v1/me/projects/" + PROJECT_ID + "/work-item-table-settings";
+        String legacy = """
+            {"pinnedColumnCount":0,"headerHeight":"SINGLE","rowHeight":"SINGLE","coloringRules":[],
+             "defaultValues":{"assigneeUserIds":[],"statusCode":null,"priority":null,"contentId":null,"dueDateOffsetDays":null}}
+            """;
+        String extended = """
+            {"pinnedColumnCount":0,"headerHeight":"SINGLE","rowHeight":"SINGLE","coloringRules":[],
+             "defaultValues":{"assigneeUserIds":[],"statusCode":null,"priority":null,"contentId":null,"dueDateOffsetDays":null},
+             "grouping":{"field":"STATUS","order":"DEFAULT","showEmpty":true,"collapsed":["STATUS:DONE"],"colors":{}},
+             "completedStatusCodes":["DONE"]}
+            """;
+        JsonNode saved = ok(mutate("PUT", path, member, extended, "\"0\"", null));
+        assertThat(saved.path("grouping").path("field").asText()).isEqualTo("STATUS");
+        assertThat(saved.path("completedStatusCodes").toString()).isEqualTo("[\"DONE\"]");
+        JsonNode kept = ok(mutate("PUT", path, member, legacy.replace("\"rowHeight\":\"SINGLE\"", "\"rowHeight\":\"DOUBLE\""),
+                saved.path("etag").asText(), null));
+        assertThat(kept.path("rowHeight").asText()).isEqualTo("DOUBLE");
+        assertThat(kept.path("grouping")).isEqualTo(saved.path("grouping"));
+        assertThat(kept.path("completedStatusCodes")).isEqualTo(saved.path("completedStatusCodes"));
+        assertThat(jdbc.sql("SELECT settings::text FROM yumpoo.work_item_table_settings WHERE project_id=:project AND user_id=:user")
+                .param("project", PROJECT_ID).param("user", member.userId()).query(String.class).single())
+                .doesNotContain("grouping", "completedStatusCodes");
+    }
+
+    @Test
     void tableSettingsDefaultsReplaceValidateAndRequireVisibleProject() throws Exception {
         String path = "/api/v1/me/projects/" + PROJECT_ID + "/work-item-table-settings";
         JsonNode defaults = ok(get(path, member));

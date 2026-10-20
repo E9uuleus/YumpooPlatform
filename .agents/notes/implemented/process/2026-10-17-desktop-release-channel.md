@@ -32,7 +32,7 @@ Status: implemented
 
 - 关闭：`RunAsNode`、`EnableNodeOptionsEnvironmentVariable`、`EnableNodeCliInspectArguments`、`GrantFileProtocolExtraPrivileges`；
 - 开启：`EnableEmbeddedAsarIntegrityValidation`、`OnlyLoadAppFromAsar`，篡改过的 asar 无法启动；
-- 开启 `EnableCookieEncryption`，作为纵深防御。业务窗口使用不带 `persist:` 前缀的内存分区，会话 cookie 不落盘，每次启动时从 safeStorage 加密的凭据存储重新注入；如果以后改用持久分区，cookie 也不会以明文写入磁盘。
+- 开启 `EnableCookieEncryption`，作为纵深防御。业务窗口使用持久分区 `persist:yumpoo-authenticated`，主进程以 `cache: false` 建立，不在磁盘留业务响应；登录 cookie 不带过期时间，不写入磁盘，每次启动从 safeStorage 加密的凭据存储重新注入，不勾选「7 天内免登录」时不保存凭据，见[会话保持 Note](../security/2026-10-19-session-remember-and-desktop-guards.md)。
 
 **分发配置**：
 
@@ -76,7 +76,7 @@ Status: implemented
 
 - 重试（保持当前模式重启）、以正常模式重启（清零失败计数）；
 - 用浏览器打开 Web 版、打开日志文件夹、重新注册 `yumpoo:` 协议；
-- 退出登录并清除本机凭据、重置本机偏好，这两项先弹窗确认；
+- 退出登录并清除本机凭据、重置本机偏好（重置同时清空业务分区的 localStorage），这两项先弹窗确认；
 - 导出诊断包：用户选择保存位置，内容为报告、轮转日志和最近 5 个崩溃转储，用不依赖第三方库的仅存储 ZIP 写出。
 
 重启时不重放 `yumpoo:` 回调、`--self-check` 和 `--diagnostics` 参数。
@@ -110,7 +110,7 @@ Status: implemented
 
 **应用内更新**（DESK-3）：
 
-- [UpdateController](../../../../desktop/desktop-shell/src/main/update-controller.ts) 驱动 electron-updater 的 NSIS 更新：`autoDownload=true`、`autoInstallOnAppQuit=false`、`allowDowngrade=false`、关闭 web installer；
+- [UpdateController](../../../../desktop/desktop-shell/src/main/update-controller.ts) 驱动 electron-updater 的 NSIS 更新：`autoDownload` 取偏好「自动下载更新」（默认 true；关闭时进入 `available`，经 `yumpoo:update:download` 手动下载）、`autoInstallOnAppQuit=false`、`allowDowngrade=false`、关闭 web installer；
 - 检查时机：启动后 30 秒首次检查，之后每 4 小时一次，加最多 30 分钟抖动；系统唤醒时，若距上次检查超过 15 分钟，再检查一次；
 - `update-downloaded` 之后从更新源取 `.sig.json`（30 秒超时，超时即取消请求，按取不到授权处理并回到可重试状态，避免一直卡在 `verifying` 拦住之后的检查），按上面的规则核验。通过才进入 `ready`；不通过就删除已下载的文件并记录原因码，永不安装。同时删除 electron-updater 写入缓存根目录的 `current.blockmap`：它描述的是刚下载、却没有安装的版本，留着会让之后的每次差分下载都校验失败；
 - electron-updater 的代码签名钩子在没有 `publisherName` 时会被跳过（已读源码确认），所以本期不依赖它；
@@ -127,7 +127,7 @@ Status: implemented
 **卸载边界**：
 
 - 更新（NSIS 以 `--updated` 运行旧卸载器）保留全部数据；
-- 真正卸载时删除 `yumpoo:` 协议键，并删除 userData 中除 `timer-preferences.json` 和 `inbox-preferences.json` 以外的全部内容：`auth\` 中的加密凭据存储（唯一落盘的会话）以及 Chromium 的缓存、本地存储等运行数据；同时删除 `%LOCALAPPDATA%\yumpoo-desktop-updater`。安装器会把自身复制到这里作为差分更新的基准（约 100 MB），electron-updater 的下载缓存也放在这里。
+- 真正卸载时删除 `yumpoo:` 协议键、`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 与 `StartupApproved\Run` 的 `com.yumpoo.desktop` 值，并删除 userData 中除 `timer-preferences.json`、`inbox-preferences.json` 和 `desktop-preferences.json` 以外的全部内容：`auth\` 中的加密凭据存储（唯一落盘的会话）以及 Chromium 的缓存、本地存储等运行数据；同时删除 `%LOCALAPPDATA%\yumpoo-desktop-updater`。安装器会把自身复制到这里作为差分更新的基准（约 100 MB），electron-updater 的下载缓存也放在这里。
 
 **安装自检与门禁**：
 
@@ -172,7 +172,7 @@ Status: implemented
 - **按机器安装**：每次安装和更新都要管理员权限并弹 UAC，30 人规模的自动更新会被打断。辅助安装器默认会提供「为所有用户」选项，所以用 `customInstallMode` 把它隐藏。
 - **继续用 oneClick 安装器**：零点击、更新天然静默，但员工看不到安装位置、须知与隐私说明，也不能选目录和桌面快捷方式。强制按用户的辅助安装器同样不需要管理员权限，更新同样静默，代价只是首次安装多点几次「下一步」。
 - **用 MUI 目录页的 leave 回调检查写入权限**：electron-builder 自己的目录页不开放 leave 钩子，且它要到安装进度页的 pre 回调才追加 `yumpoo-desktop` 子目录；在目录页之后的附加选项页里先补上子目录再检查，测的就是实际安装位置。
-- **安装器提供开机自启选项**：员工没有这个需求，开机即加载远程页面会占用内存；用户自己启动即可。
+- **安装器提供开机自启选项**：安装器本身仍不提供；开机自启改为应用内默认关闭的「登录时启动」，理由与取舍见[桌面快捷工时与偏好设置](../product/2026-10-19-desktop-quick-time-and-preferences.md)。
 - **MSIX / Squirrel.Windows**：MSIX 必须签名才能安装，当前没有 Authenticode 证书；Squirrel 已不再积极维护，electron-updater 也不支持它。
 - **用环境变量或首次启动向导配置 origin**：每台机器都要手工配置，且可以被改成任意站点；把配置打进 asar 后受 asar 完整性校验保护。
 - **只删除 `auth\` 目录**：已经足以退出登录，但会留下缓存、本地存储和崩溃转储等数据；卸载应当清理到只剩偏好文件。
@@ -211,7 +211,7 @@ Status: implemented
 - 开启 cookie 加密是单向的：以后关闭这个 fuse，已有的持久 cookie 库会失效。当前业务会话不依赖持久 cookie，因此不受影响。
 - 安装冒烟让 Windows 门禁多出一次安装和卸载，时间要计入 `Windows Delivery` 的超时预算。
 - 诊断页只在自检中离线渲染过；安全模式和崩溃循环的真实启动、断网和证书错误下诊断窗的弹出，靠单元测试与实机核验覆盖，Windows 门禁不模拟这些场景。
-- 卸载会删除日志、崩溃转储和启动计数，只保留两个偏好文件，与 DESK-1 的卸载边界一致。
+- 卸载会删除日志、崩溃转储和启动计数，只保留计时器、提醒与桌面偏好文件，与 DESK-1 的卸载边界一致。
 - 生产安装包从 DESK-4 起检查 `https://wecom-dev.yumpoo.com/desktop/stable/`。更新源上线前检查只会得到 404，客户端记为错误并照常重试，不影响使用。
 - 桌面发布要同时等服务器的部署锁：长时间的服务器部署或待恢复状态会延后桌面发布。
 - 签名私钥泄露时，攻击者在同时控制分发主机的前提下可以推送更新。缓解措施：Environment 只允许 dev ref、离线备用钥匙、轮换预案（用备用钥匙签一个过渡版本，在其中换掉公钥）。

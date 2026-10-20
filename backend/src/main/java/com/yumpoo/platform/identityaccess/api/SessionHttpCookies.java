@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseCookie;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -32,6 +33,17 @@ final class SessionHttpCookies {
             throw new IllegalArgumentException("duplicate security cookie");
         }
         return values.stream().findFirst();
+    }
+
+    /**
+     * 勾选「7 天内免登录」时 Cookie 存活到会话绝对到期；不勾选时不带 Max-Age，关闭浏览器即失效。
+     */
+    static Duration maxAge(boolean rememberMe, Instant absoluteExpiresAt, Instant now) {
+        if (!rememberMe) {
+            return Duration.ofSeconds(-1);
+        }
+        Duration remaining = Duration.between(now, absoluteExpiresAt);
+        return remaining.isNegative() ? Duration.ZERO : remaining;
     }
 
     static ResponseCookie session(String value, Duration maxAge) {

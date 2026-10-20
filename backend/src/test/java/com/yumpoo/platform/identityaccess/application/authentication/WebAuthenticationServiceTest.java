@@ -46,11 +46,11 @@ class WebAuthenticationServiceTest {
         String state = query(authorization.authorizationUri(), "state");
 
         assertError(
-                () -> service.complete("one-time-code", state, authorization.nonce().value()),
+                () -> service.complete("one-time-code", state, authorization.nonce().value(), true),
                 StandardErrorCode.DEPENDENCY_UNAVAILABLE
         );
         assertError(
-                () -> service.complete("one-time-code", state, authorization.nonce().value()),
+                () -> service.complete("one-time-code", state, authorization.nonce().value(), true),
                 StandardErrorCode.AUTHENTICATION_REQUIRED
         );
         assertThat(exchanges).hasValue(1);
@@ -73,11 +73,12 @@ class WebAuthenticationServiceTest {
                 () -> service.complete(
                         "one-time-code",
                         query(authorization.authorizationUri(), "state"),
-                        authorization.nonce().value()
+                        authorization.nonce().value(),
+                        true
                 ),
                 StandardErrorCode.AUTHENTICATION_REQUIRED
         );
-        verify(completion, never()).complete("member-test");
+        verify(completion, never()).complete("member-test", true);
     }
 
     @Test
@@ -88,7 +89,7 @@ class WebAuthenticationServiceTest {
         );
         WebLoginCompletionService completion = mock(WebLoginCompletionService.class);
         IssuedSession issued = mock(IssuedSession.class);
-        when(completion.complete("member-test")).thenReturn(issued);
+        when(completion.complete("member-test", false)).thenReturn(issued);
         WebAuthenticationService service = service(
                 store,
                 provider,
@@ -100,7 +101,8 @@ class WebAuthenticationServiceTest {
         assertThat(service.complete(
                 "one-time-code",
                 query(authorization.authorizationUri(), "state"),
-                authorization.nonce().value()
+                authorization.nonce().value(),
+                false
         )).isSameAs(issued);
     }
 

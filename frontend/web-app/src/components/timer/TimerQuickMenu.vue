@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { TimerMenuAction, TimerMenuState } from '@yumpoo/preload-contract'
-import { Bell } from '@element-plus/icons-vue'
+import { Bell, Setting } from '@element-plus/icons-vue'
 import { formatDuration } from '../../composables/useTimeTracker'
 import brandLogo from '../../assets/brand/logo.svg'
 import TimerIcon from './TimerIcon.vue'
 
 const desktop = window.yumpooDesktop?.timer
 const inbox = window.yumpooDesktop?.inbox
+/** Shells before 1.1.0 have no settings bridge and reject the `preferences` action. */
+const hasPreferences = !!window.yumpooDesktop?.preferences
 const toasts = ref(true)
 const preferencesReady = ref(false)
 const savingPreferences = ref(false)
@@ -156,6 +158,15 @@ onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener
           @click="run('open-main')"
         >
           <TimerIcon name="window" /><span>打开主界面</span>
+        </button>
+        <button
+          v-if="hasPreferences"
+          class="menu-item"
+          role="menuitem"
+          data-menu-item
+          @click="run('preferences')"
+        >
+          <Setting /><span>偏好设置…</span>
         </button>
         <div
           v-if="state?.inbox"

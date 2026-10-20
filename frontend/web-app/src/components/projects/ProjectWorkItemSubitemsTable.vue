@@ -93,6 +93,8 @@ const props = defineProps<{
   workflowStatuses: StatusOption[]
   priorityOptions: PriorityOption[]
   labelCatalog?: WorkItemLabelCatalog | undefined
+  /** 隐没已完成开启时，按本人完成定义淡化的子项。 */
+  completed?: ((item: ProjectWorkItemListItem) => boolean) | undefined
   canCreate: boolean
   editingCell: boolean
   selectedCellKey?: string | undefined
@@ -381,7 +383,8 @@ function subitemRowElements(): HTMLTableRowElement[] {
 
 function subitemRowClassName({ row: item }: { row: ProjectWorkItemListItem }): string {
   return ['subitem-table-row', isDraft(item) ? 'work-item-draft-row' : '',
-    draggingItem.value?.id === item.id ? 'subitem-table-row--dragging' : ''].filter(Boolean).join(' ')
+    draggingItem.value?.id === item.id ? 'subitem-table-row--dragging' : '',
+    props.completed?.(item) ? 'work-item-table-row--completed' : ''].filter(Boolean).join(' ')
 }
 
 function subitemRowStyle({ rowIndex }: { rowIndex: number }): CSSProperties {

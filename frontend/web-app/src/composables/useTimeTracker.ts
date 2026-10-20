@@ -21,7 +21,7 @@ let channel: BroadcastChannel | undefined
 let cleanup: (() => void) | undefined
 const retries = new Map<string, string>()
 const listeners = new Set<() => void>()
-export const DEFAULT_TIME_PREFERENCES: TimeTrackingPreferences = { timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080 }
+export const DEFAULT_TIME_PREFERENCES: TimeTrackingPreferences = { timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080, hideCompleted: false }
 const PREFERENCES_KEY = 'yumpoo.time-tracking.preferences.v1'
 /** Last known preferences, so timer controls do not flash in before the first poll for someone who switched the timer off. */
 const cachedPreferences = shallowRef<TimeTrackingPreferences | undefined>(readCachedPreferences())
@@ -56,10 +56,12 @@ export function formatDuration(ms: number): string {
 /** Server clock minus local clock from the latest poll, published so other desktop surfaces tick the same duration. */
 export function timerClockOffset(): number { return offset }
 
+/** Shared like the rest of the state, so callers inside computed getters do not allocate one per evaluation. */
+const wallDuration = computed(() => running.value.length ? Math.max(0, now.value - Math.min(...running.value.map(timer => timer.session.startedAt.getTime()))) : 0)
+
 export function useTimeTracker() {
   return { current, running, isRunning, runningFor, now, busy, problem, connected, savedAt, refresh, toggle, start, startMany, switchTo, stop, stopAll, notify, summaries,
-    preferences, timerEnabled, setPreferences,
-    wallDuration: computed(() => running.value.length ? Math.max(0, now.value - Math.min(...running.value.map(timer => timer.session.startedAt.getTime()))) : 0) }
+    preferences, timerEnabled, setPreferences, wallDuration }
 }
 
 function runningFor(workItemId: string) { return running.value.find(timer => timer.session.workItemId === workItemId) }
@@ -107,7 +109,9 @@ export function activateTimeTracker(active: boolean): void {
   }
   if (channel) channel.onmessage = invalidate
   const tick = window.setInterval(() => { now.value = Date.now() + offset }, 1000)
-  const poll = window.setInterval(() => { if (window.yumpooDesktop || document.visibilityState === 'visible') void refresh().catch(() => undefined) }, 5000)
+  // Desktop windows keep polling while hidden in the tray, except the prewarmed quick panel: it refreshes when shown (visibilitychange below).
+  const pollHidden = !!window.yumpooDesktop && window.location.pathname !== '/desktop/quick'
+  const poll = window.setInterval(() => { if (pollHidden || document.visibilityState === 'visible') void refresh().catch(() => undefined) }, 5000)
   const focus = () => { if (document.visibilityState === 'visible') void refresh().catch(() => undefined) }
   window.addEventListener('focus', focus)
   window.addEventListener('online', focus)

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { DesktopAuthErrorCode, DesktopAuthStatus } from '@yumpoo/preload-contract'
-import { ElAlert, ElButton, ElCard } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ElAlert, ElButton, ElCard, ElCheckbox } from 'element-plus'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   beginAuthentication,
   consumeReturnPath,
+  readRememberLogin,
   resetAuthenticationNavigation,
+  saveRememberLogin,
 } from '../../auth/navigation'
 import BrandConstellation from '../../components/motion/BrandConstellation.vue'
 import YpThemeSwitcher from '../../components/yp/YpThemeSwitcher.vue'
@@ -18,13 +20,18 @@ const route = useRoute()
 const router = useRouter()
 const appearance = useAppearance()
 const isDesktop = Boolean(window.yumpooDesktop)
+// Shells older than the cancel channel only offer reopening the browser.
+const canCancel = typeof window.yumpooDesktop?.auth.cancel === 'function'
 const desktopEnabled = ref(false)
 const status = ref<DesktopAuthStatus>({ phase: 'IDLE' })
+const remember = ref(readRememberLogin())
 let stopStatus: (() => void) | undefined
 
-const inProgress = computed(() => [
-  'OPENING_BROWSER', 'WAITING_FOR_CALLBACK', 'EXCHANGING',
-].includes(status.value.phase))
+watch(remember, saveRememberLogin)
+
+// Waiting for the browser is not busy: the person may reopen the page or give up at any time.
+const busy = computed(() => status.value.phase === 'OPENING_BROWSER' || status.value.phase === 'EXCHANGING')
+const waiting = computed(() => status.value.phase === 'WAITING_FOR_CALLBACK')
 const callbackMessage = computed(() => {
   if (route.query.reason === 'unavailable') return '企业微信服务暂时不可用，请稍后重试。'
   if (route.query.reason === 'authentication') return '登录未完成或账号无权访问，请重新扫码。'
@@ -37,7 +44,7 @@ const errorLabels: Record<DesktopAuthErrorCode, string> = {
   BROWSER_OPEN_FAILED: '无法打开系统浏览器。',
   INVALID_CALLBACK: '登录回调格式无效。',
   NO_PENDING_ATTEMPT: '登录请求不存在，请重新开始。',
-  ATTEMPT_EXPIRED: '登录请求已过期。',
+  ATTEMPT_EXPIRED: '登录请求已过期，请重新登录。',
   STATE_MISMATCH: '登录回调校验失败。',
   EXCHANGE_FAILED: '桌面会话兑换失败。',
   IPC_REJECTED: '桌面安全桥不可用。',
@@ -46,10 +53,11 @@ const errorLabels: Record<DesktopAuthErrorCode, string> = {
 const UNKNOWN_ERROR_LABEL = '桌面登录未完成，请重试；如持续失败，可在托盘菜单中选择「诊断与修复」。'
 const desktopMessage = computed(() => status.value.errorCode
   ? (errorLabels[status.value.errorCode] as string | undefined) ?? UNKNOWN_ERROR_LABEL
-  : status.value.phase === 'WAITING_FOR_CALLBACK'
-    ? '请在系统浏览器中使用企业微信扫码。'
+  : waiting.value
+    ? '已在系统浏览器中打开登录页，扫码完成后会自动返回。'
     : undefined)
 const visibleMessage = computed(() => callbackMessage.value ?? desktopMessage.value ?? '')
+const messageType = computed(() => callbackMessage.value || status.value.errorCode ? 'warning' : 'info')
 
 async function login(): Promise<void> {
   if (!isDesktop) {
@@ -57,7 +65,15 @@ async function login(): Promise<void> {
     return
   }
   try {
-    await window.yumpooDesktop?.auth.start()
+    await window.yumpooDesktop?.auth.start({ remember: remember.value })
+  } catch {
+    status.value = { phase: 'FAILED', errorCode: 'IPC_REJECTED' }
+  }
+}
+
+async function cancel(): Promise<void> {
+  try {
+    await window.yumpooDesktop?.auth.cancel?.()
   } catch {
     status.value = { phase: 'FAILED', errorCode: 'IPC_REJECTED' }
   }
@@ -130,7 +146,7 @@ onBeforeUnmount(() => stopStatus?.())
           v-if="visibleMessage"
           class="login-alert"
           :title="visibleMessage"
-          type="warning"
+          :type="messageType"
           :closable="false"
           show-icon
         />
@@ -138,12 +154,27 @@ onBeforeUnmount(() => stopStatus?.())
           class="login-action"
           type="primary"
           size="large"
-          :loading="inProgress"
-          :disabled="inProgress || (isDesktop && !desktopEnabled)"
+          :loading="busy"
+          :disabled="busy || (isDesktop && !desktopEnabled)"
           @click="login"
         >
-          {{ isDesktop ? '在系统浏览器中登录' : '使用企业微信扫码登录' }}
+          {{ waiting ? '重新打开浏览器' : isDesktop ? '在系统浏览器中登录' : '使用企业微信扫码登录' }}
         </el-button>
+        <el-button
+          v-if="waiting && canCancel"
+          class="login-action login-action--secondary"
+          size="large"
+          @click="cancel"
+        >
+          取消
+        </el-button>
+        <el-checkbox
+          v-model="remember"
+          class="login-remember"
+          :disabled="busy"
+        >
+          7 天内免登录
+        </el-checkbox>
         <p
           v-if="isDesktop && !desktopEnabled"
           class="hint"

@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, ref, watch, type Ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { TimeSessionFillMode, type MyTimeSessionPage, type TeamTimesheetDay } from '@yumpoo/api-client'
+import { TimeSessionFillMode, type MyTimeSessionPage, type TeamTimesheetDay, type TimeSessionFillResult } from '@yumpoo/api-client'
 import { myWorkApi, timeTrackingApi } from '../../../api/client'
 import { timeProblemMessage } from '../../../composables/timeTrackingProblems'
 import { onTimeTrackingChanged, timerMutation, useTimeTracker } from '../../../composables/useTimeTracker'
@@ -98,14 +98,15 @@ export function useDayTimeline(date: Ref<string>, timezone: Ref<string>) {
       timeTrackingApi.fillMyTimeSessions({ idempotencyKey, xXSRFTOKEN, timeSessionFillCommand: body }))
   }
 
-  async function create(mode: TimeSessionFillMode, workItemIds: string[], ranges: Range[]): Promise<boolean> {
+  /** Resolves to the fill result, which the quick panel reads for the duration actually recorded; undefined when it failed. */
+  async function create(mode: TimeSessionFillMode, workItemIds: string[], ranges: Range[]): Promise<TimeSessionFillResult | undefined> {
     const result = await fill(mode, workItemIds, ranges)
-    if (!result) return false
+    if (!result) return undefined
     if (!result.createdCount && !result.changedCount && !result.deletedCount) ElMessage.warning('这段时间已全部有记录，没有新增。')
     else if (result.skippedDurationMs > 0) ElMessage.info(mode === TimeSessionFillMode.Replace
       ? `已更新记录；所选工作项已有的 ${durationLabel(result.skippedDurationMs)} 记录已保留。`
       : `已补录；其中 ${durationLabel(result.skippedDurationMs)} 已有记录，已跳过。`)
-    return true
+    return result
   }
 
   async function edit(block: DayBlock, range: Range): Promise<boolean> {

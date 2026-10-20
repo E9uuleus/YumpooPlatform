@@ -133,10 +133,11 @@ final class SessionAuthenticationFilter extends OncePerRequestFilter {
     private Optional<IssuedSession> issueLocalSession(HttpServletResponse response) {
         Optional<IssuedSession> issued = localSessionIssuer.issue();
         issued.ifPresent(session -> {
-            Duration remaining = Duration.between(clock.instant(), session.absoluteExpiresAt());
-            if (remaining.isNegative()) {
-                remaining = Duration.ZERO;
-            }
+            Duration remaining = SessionHttpCookies.maxAge(
+                    session.rememberMe(),
+                    session.absoluteExpiresAt(),
+                    clock.instant()
+            );
             response.addHeader(
                     HttpHeaders.SET_COOKIE,
                     SessionHttpCookies.session(

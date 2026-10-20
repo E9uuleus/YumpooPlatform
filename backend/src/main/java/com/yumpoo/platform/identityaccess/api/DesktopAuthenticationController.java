@@ -62,9 +62,10 @@ public final class DesktopAuthenticationController {
                     || !"S256".equals(body.codeChallengeMethod())) {
                 throw malformedRequest();
             }
+            // Shells before the 7-day sign-in option send no remember field and keep remembering.
             ProductDesktopAuthorization authorization = authenticationService.begin(
                     parseToken(body.state()), new PkceS256Challenge(body.codeChallenge()),
-                    requestId, clientVersion, protocolVersion
+                    requestId, clientVersion, protocolVersion, !Boolean.FALSE.equals(body.remember())
             );
             writeJson(response, HttpStatus.CREATED, new DesktopAuthAttemptResponse(
                     authorization.authorizationUri(), authorization.expiresAt()

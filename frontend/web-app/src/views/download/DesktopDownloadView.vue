@@ -3,40 +3,18 @@ import { ElButton } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import StatusScene from '../../components/motion/StatusScene.vue'
 import YpResultPage from '../../components/yp/YpResultPage.vue'
+import { CHANNEL_PATH, loadDesktopRelease, type DesktopRelease } from './desktopRelease'
 
-// The deployment engine writes release.json last, from the published desktop Release; this page only reads it.
-export interface DesktopRelease {
-  version: string
-  tag: string
-  installer: { name: string, bytes: number, sha256: string }
-  notes: string[]
-}
-
-const CHANNEL_PATH = '/desktop/stable/'
 const release = ref<DesktopRelease>()
 const failed = ref(false)
 // The shell refuses downloads other than attachments; installing a new version starts from a browser.
 const inDesktopShell = window.yumpooDesktop?.client === 'electron'
 const pageUrl = `${window.location.origin}/download`
 
-function parseRelease(value: unknown): DesktopRelease {
-  const data = value as Partial<DesktopRelease> | null
-  const installer = data?.installer
-  if (typeof data?.version !== 'string' || !/^\d+\.\d+\.\d+$/u.test(data.version) || typeof data.tag !== 'string'
-    || typeof installer?.name !== 'string' || !/^YumpooDesktop-Setup-[\d.]+-x64\.exe$/u.test(installer.name)
-    || !Number.isSafeInteger(installer.bytes) || !/^[0-9a-f]{64}$/u.test(String(installer.sha256))
-    || !Array.isArray(data.notes) || !data.notes.every(note => typeof note === 'string')) {
-    throw new Error('Unexpected release.json')
-  }
-  return { version: data.version, tag: data.tag, installer: { name: installer.name, bytes: installer.bytes, sha256: installer.sha256 }, notes: data.notes }
-}
-
 async function load(): Promise<void> {
   failed.value = false
   try {
-    const response = await fetch(`${CHANNEL_PATH}release.json`, { cache: 'no-store', credentials: 'omit' })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    release.value = parseRelease(await response.json())
+    release.value = await loadDesktopRelease()
   } catch {
     release.value = undefined
     failed.value = true
@@ -99,12 +77,12 @@ onMounted(load)
         <details class="desktop-download__section desktop-download__privacy">
           <summary>安装说明与隐私</summary>
           <ul>
-            <li>只为当前 Windows 用户安装，不需要管理员权限。默认安装到 <code>%LOCALAPPDATA%\Programs\YumpooDesktop</code>，安装时可以更改目录、选择是否创建桌面快捷方式；不设置开机自启。</li>
+            <li>只为当前 Windows 用户安装，不需要管理员权限。默认安装到 <code>%LOCALAPPDATA%\Programs\YumpooDesktop</code>，安装时可以更改目录、选择是否创建桌面快捷方式；默认不开机自启，可在偏好设置中开启「登录时启动」。</li>
             <li>网页、接口和自动更新只连接本站（公司服务器）。登录时在系统浏览器中打开企业微信官方授权页。不含第三方统计或广告。</li>
             <li>唯一的例外：内置拼写检查会从 Google 下载服务器（redirector.gvt1.com）下载一次英文词典文件，请求不带账号信息或输入内容。</li>
-            <li>登录凭据经 Windows 数据保护（DPAPI）加密保存在本机。日志已脱敏，崩溃转储只保存在本机；导出的诊断包可能含内存片段，请只发给管理员。</li>
-            <li>自动更新在后台下载，核对公司签发的更新授权后在退出时安装，不能关闭。</li>
-            <li>在「设置 → 应用」中卸载会删除程序、登录凭据、缓存和日志，只保留计时器与提醒偏好。</li>
+            <li>勾选「7 天内免登录」时，登录凭据经 Windows 数据保护（DPAPI）加密保存在本机。日志已脱敏，崩溃转储只保存在本机；导出的诊断包可能含内存片段，请只发给管理员。</li>
+            <li>自动更新在后台检查和下载，核对公司签发的更新授权后在退出时安装；可在偏好设置中关闭自动下载，改为手动下载。</li>
+            <li>在「设置 → 应用」中卸载会删除程序、登录凭据、缓存和日志，只保留计时器、提醒与桌面偏好。</li>
           </ul>
         </details>
       </template>

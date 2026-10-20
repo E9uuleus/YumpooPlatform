@@ -340,6 +340,20 @@ class TimeTrackingHttpIT {
     }
 
     @Test
+    void hideCompletedIsKeptWhenARequestOmitsIt() throws Exception {
+        String path="/api/v1/me/time-tracker/preferences";
+        JsonNode initial=ok(get("/api/v1/me/time-tracker",member));
+        assertThat(initial.path("preferences").path("hideCompleted").asBoolean()).isFalse();
+        JsonNode hidden=ok(mutate("PUT",path,member,json.writeValueAsString(Map.of("timerEnabled",true,"workdayStartMinute",540,
+                "workdayEndMinute",1080,"hideCompleted",true)),initial.path("etag").asText()));
+        assertThat(hidden.path("preferences").path("hideCompleted").asBoolean()).isTrue();
+        JsonNode kept=ok(mutate("PUT",path,member,json.writeValueAsString(Map.of("timerEnabled",true,"workdayStartMinute",510,
+                "workdayEndMinute",1080)),hidden.path("etag").asText()));
+        assertThat(kept.path("preferences").path("workdayStartMinute").asInt()).isEqualTo(510);
+        assertThat(kept.path("preferences").path("hideCompleted").asBoolean()).isTrue();
+    }
+
+    @Test
     void reassignMovesAStoppedRecordToAnotherItemWithoutChangingTheDayTotal() throws Exception {
         JsonNode moved=ok(mutate("POST","/api/v1/work-items/"+source.itemId()+"/time-sessions",member,
                 json.writeValueAsString(Map.of("startedAt","2026-09-02T09:00:00Z","stoppedAt","2026-09-02T10:00:00Z")),null));
@@ -382,6 +396,21 @@ class TimeTrackingHttpIT {
         JsonNode first=ok(get(candidates,member)).path("items").get(0);
         assertThat(first.path("workItemId").asText()).isEqualTo(manualOnly.toString());
         assertThat(first.path("lastTrackedAt").asText()).isEqualTo("2026-09-01T09:00:00Z");
+    }
+
+    @Test
+    void candidatesMarkCompletionByThePersonalProjectDefinition() throws Exception {
+        createItem(source.id(),"completion-check");
+        String candidates="/api/v1/me/time-tracker/candidates?scope=ALL&q=completion-check";
+        assertThat(ok(get(candidates,member)).path("items").get(0).path("completed").asBoolean()).isFalse();
+        String settings="""
+            {"pinnedColumnCount":0,"headerHeight":"SINGLE","rowHeight":"SINGLE","coloringRules":[],
+             "defaultValues":{"assigneeUserIds":[],"statusCode":null,"priority":null,"contentId":null,"dueDateOffsetDays":null},
+             "completedStatusCodes":["NOT_STARTED"]}
+            """;
+        ok(mutate("PUT","/api/v1/me/projects/"+source.id()+"/work-item-table-settings",member,settings,"\"0\""));
+        assertThat(ok(get(candidates,member)).path("items").get(0).path("completed").asBoolean()).isTrue();
+        assertThat(ok(get(candidates,owner)).path("items").get(0).path("completed").asBoolean()).isFalse();
     }
 
     private String fillBody(String mode,UUID item,String start,String stop) {

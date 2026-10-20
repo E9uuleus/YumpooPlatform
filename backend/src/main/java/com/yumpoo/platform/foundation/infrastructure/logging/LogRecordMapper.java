@@ -25,6 +25,8 @@ public final class LogRecordMapper {
     private static final java.util.regex.Pattern INVALID_KEY = java.util.regex.Pattern.compile("[^a-zA-Z0-9_]");
     static final java.util.regex.Pattern IDENTIFIER = java.util.regex.Pattern.compile("[A-Za-z0-9._:-]{1,128}");
     private static final DateTimeFormatter TIME = new DateTimeFormatterBuilder().appendInstant(3).toFormatter();
+    /** Frames of each throwable kept regardless of package, so the actual throw site survives the filter below. */
+    private static final int UNFILTERED_TOP_FRAMES = 8;
     private static final Set<String> RESERVED = Set.of(
         "schema",
         "time",
@@ -172,16 +174,18 @@ public final class LogRecordMapper {
                 .append('\n');
             frames.append(part.getClassName()).append('\n');
             int count = 0;
+            int position = 0;
             if (part.getStackTraceElementProxyArray() != null) for (var proxy : part.getStackTraceElementProxyArray()) {
                 var frame = proxy.getStackTraceElement();
                 frames.append(frame).append('\n');
                 if (count >= 40) continue;
                 String name = frame.getClassName();
                 if (
+                    position++ >= UNFILTERED_TOP_FRAMES && (
                     name.startsWith("org.apache.") ||
                     name.startsWith("org.springframework.web.filter.") ||
                     name.startsWith("org.springframework.security.web.") ||
-                    name.startsWith("jdk.internal.reflect.")
+                    name.startsWith("jdk.internal.reflect."))
                 ) continue;
                 stack.append("  at ").append(frame).append('\n');
                 count++;

@@ -38,6 +38,7 @@ import {
   type ProjectWorkItemListItem,
   type WorkItemTransitionOption,
   type WorkItemLabelCatalog,
+  type WorkItemTableGrouping,
 } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -81,9 +82,11 @@ import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import WorkItemGroupingPopover from './WorkItemGroupingPopover.vue'
 import WorkItemTableSettingsMenu from './WorkItemTableSettingsMenu.vue'
+import WorkItemCompletedMenu from './WorkItemCompletedMenu.vue'
+import { useHideCompleted } from '../../composables/useHideCompleted'
 import { useWorkItemTableSettings } from './useWorkItemTableSettings'
 import { applyDefaultStatus } from './workItemDefaultStatus'
-import { DEFAULT_VALUE_COLUMN_KEYS, heightOption, resolveWorkItemCreateDefaults, type DefaultValueColumnKey,
+import { DEFAULT_VALUE_COLUMN_KEYS, isCompletedStatus, heightOption, resolveWorkItemCreateDefaults, type DefaultValueColumnKey,
   type TableSettingsCatalog, evaluateWorkItemColoring, type ColoringColumnKey, type WorkItemColoring } from './workItemTableSettings'
 import { useWorkItemGrouping, isGroupDisplayRow, type WorkItemGroupDisplayRow } from './useWorkItemGrouping'
 import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from './workItemGrouping'
@@ -731,9 +734,10 @@ watch(() => [[...pinnedColumnKeys.value].join('|'), tableViewSettings.value.head
 const projectGroupingPrefsKey = () => `yumpoo:project-work-items:grouping:v1:${session.authentication.value?.company.id ?? 'unknown'}:${session.authentication.value?.user.id ?? 'unknown'}:${projectId.value}`
 const grouping = useWorkItemGrouping({
   source: () => tableSource,
-  fallbackPreferenceKey: projectGroupingPrefsKey,
   items: tableItems,
   preferenceKey: () => props.preferenceScope ? `${props.preferenceScope}:grouping` : projectGroupingPrefsKey(),
+  stored: () => tableSettingsState.value === 'ready' ? tableViewSettings.value.grouping : undefined,
+  ...(props.preferenceScope ? {} : { save: (value: WorkItemTableGrouping) => updateTableSettings({ grouping: value }) }),
   request: () => listRequest(null),
   sources: () => ({ members: members.value, statuses: labelCatalog.value?.statuses ?? [],
     priorities: labelCatalog.value?.priorities ?? [], contents: catalog.value?.items ?? [] }),
@@ -745,6 +749,28 @@ const grouping = useWorkItemGrouping({
 })
 const { active: grouped, field: groupingField, order: groupingOrder, showEmpty: showEmptyGroups,
   groups: workItemGroups, countsReady: groupCountsReady, error: groupingError, loading: groupsLoading } = grouping
+const expandedSubitemsKey = () => props.preferenceScope ? `${props.preferenceScope}:expanded-subitems`
+  : `yumpoo:project-work-items:expanded-subitems:v1:${session.authentication.value?.company.id ?? 'unknown'}:${session.authentication.value?.user.id ?? 'unknown'}:${projectId.value}`
+// 子项展开按设备保存，只在收起或删除时移除；不在当前数据里的 ID 保留但不生效，只保存最近展开的 100 项。
+const MAX_SAVED_EXPANDED = 100
+watch(expandedSubitemsKey, key => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) ?? '[]') as unknown
+    expandedSubitemIds.value = Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []
+  } catch { expandedSubitemIds.value = [] }
+}, { immediate: true, flush: 'sync' })
+watch(expandedSubitemIds, ids => {
+  try { localStorage.setItem(expandedSubitemsKey(), JSON.stringify(ids.slice(-MAX_SAVED_EXPANDED))) } catch { /* 本地存储不可用时只在当前页面保留展开。 */ }
+})
+const visibleExpandedIds = computed(() => {
+  const loaded = new Set(tableItems.value.map(item => item.id))
+  return expandedSubitemIds.value.filter(id => loaded.has(id))
+})
+watch(() => visibleExpandedIds.value.join('|'), () => visibleExpandedIds.value.forEach(id => void loadSubitems(id)))
+const { hideCompleted } = useHideCompleted()
+function isCompletedRow(item: ProjectWorkItemListItem): boolean {
+  return hideCompleted.value && isCompletedStatus(tableViewSettings.value.completedStatusCodes, item.statusCode, item.statusCategory)
+}
 const groupingSwitching = ref(false)
 const onboardingReady = computed(() => !embedded.value && Boolean(project.value) && !loading.value && !tableLoading.value && !error.value
   && (selectedView.value === 'kanban'
@@ -1021,12 +1047,10 @@ async function loadSubitems(parentId: string, force = false): Promise<void> {
 function onTableExpandChange(row: TableDisplayRow,
   expanded: TableDisplayRow[] | boolean): void {
   if (isGroupDisplayRow(row)) return
-  const expandedRows = Array.isArray(expanded) ? expanded.filter(item => !isGroupDisplayRow(item)) : expanded
-    ? [...tableItems.value.filter(item => expandedSubitemIds.value.includes(item.id)), row]
-    : tableItems.value.filter(item => item.id !== row.id
-      && expandedSubitemIds.value.includes(item.id))
-  expandedSubitemIds.value = [...new Set(expandedRows.map(item => item.id))]
-  if (expandedRows.some(item => item.id === row.id)) void loadSubitems(row.id)
+  const open = Array.isArray(expanded) ? expanded.includes(row) : expanded
+  expandedSubitemIds.value = open ? [...new Set([...expandedSubitemIds.value, row.id])]
+    : expandedSubitemIds.value.filter(id => id !== row.id)
+  if (open) void loadSubitems(row.id)
   schedulePageScrollbarSync()
 }
 
@@ -1073,7 +1097,7 @@ async function restoreArchivedItem(): Promise<void> {
       ifMatch: restoringItem.etag, idempotencyKey: crypto.randomUUID() })
     if (detail.value?.id === restoringItem.id) detail.value = restored
     void connect.refreshCells([restoringItem.id])
-    await onRelationsChanged([restoringItem.id, ...expandedSubitemIds.value])
+    await onRelationsChanged([restoringItem.id, ...visibleExpandedIds.value])
     ElMessage.success('工作项已恢复')
   } catch (reason) {
     error.value = await toApiProblem(reason)
@@ -1474,7 +1498,7 @@ async function reloadSortedTableInPlace(revealWorkItemId?: string): Promise<void
       nextCursor = result.nextCursor
       if (!nextCursor || nextCursor === cursor
         || (loaded.size >= minimumItemCount && (!revealWorkItemId || loaded.has(revealWorkItemId))
-          && expandedSubitemIds.value.every(id => loaded.has(id))
+          && visibleExpandedIds.value.every(id => loaded.has(id))
           && (!inlineDraft.value?.anchorId || loaded.has(inlineDraft.value.anchorId)))) break
       cursor = nextCursor
     }
@@ -1699,7 +1723,7 @@ async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> 
   }
   if (selectedView.value === 'table') await reloadSortedTableInPlace()
   else await refreshCurrentView()
-  await Promise.all(expandedSubitemIds.value
+  await Promise.all(visibleExpandedIds.value
     .filter(id => affectedWorkItemIds.includes(id))
     .map(id => loadSubitems(id, true)))
 }
@@ -2492,6 +2516,7 @@ function tableRowClassName({ row }: { row: ProjectWorkItemListItem; rowIndex: nu
   if (tableSorting.value) classes.push('work-item-table-row--sorting')
   if (isRowSelected(row.id)) classes.push('work-item-table-row--selected')
   if (rowColoring(row)?.row) classes.push('work-item-table-row--colored')
+  if (isCompletedRow(row)) classes.push('work-item-table-row--completed')
   return classes.join(' ')
 }
 
@@ -2778,7 +2803,6 @@ function resetCurrentData(): void {
   Object.keys(lanes).forEach(key => delete lanes[key])
   Object.keys(subitems).forEach(key => delete subitems[key])
   Object.keys(subitemSelections).forEach(key => delete subitemSelections[key])
-  expandedSubitemIds.value = []
   if (selectedView.value === 'kanban') void loadKanban(revision); else void loadTable(null, false, revision)
 }
 
@@ -2805,7 +2829,7 @@ watch(projectId, () => {
 watch(() => props.refreshKey, async () => {
   if (!project.value) return
   await reloadSortedTableInPlace()
-  await Promise.all(expandedSubitemIds.value.map(id => loadSubitems(id, true)))
+  await Promise.all(visibleExpandedIds.value.map(id => loadSubitems(id, true)))
 })
 async function canClose(): Promise<boolean> {
   if (batchBusy.value) { ElMessage.info('批量操作正在执行，请停止或等待完成。'); return false }
@@ -3156,6 +3180,9 @@ onBeforeUnmount(() => {
           <work-item-grouping-popover :field="groupingField" :order="groupingOrder" :show-empty="showEmptyGroups"
             :disabled="selectedView === 'kanban' || savingSortOrder"
             @field="changeGrouping" @order="groupingOrder = $event" @show-empty="showEmptyGroups = $event" />
+          <work-item-completed-menu :statuses="workflowStatuses" :codes="tableViewSettings.completedStatusCodes"
+            :disabled="selectedView === 'kanban'" :editable="tableSettingsState === 'ready'"
+            @update="codes => updateTableSettings({ completedStatusCodes: codes })" />
           <button v-if="timerEnabled" class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
           <work-item-table-settings-menu
             :settings="tableViewSettings"
@@ -3273,6 +3300,7 @@ onBeforeUnmount(() => {
                     :workflow-statuses="workflowStatuses"
                     :priority-options="priorityOptions"
                     :label-catalog="labelCatalog"
+                    :completed="isCompletedRow"
                     :can-create="canCreate"
                     :editing-cell="Boolean(editingCell) || batchBusy"
                     :before-remove="beforeRowRemove"
@@ -4427,6 +4455,13 @@ onBeforeUnmount(() => {
   background-color: var(--work-item-condition-cell-bg);
 }
 
+/* 隐没已完成：只淡化单元格内容，单元格背景保持不透明，固定列下不透出滚动内容；主表与子项表共用。 */
+:deep(tr.work-item-table-row > td.el-table__cell > .cell), :deep(tr.subitem-table-row > td.el-table__cell > .cell) {
+  transition: opacity var(--yp-motion-overlay) var(--yp-ease-standard);
+}
+:deep(tr.work-item-table-row--completed > td.el-table__cell > .cell) { opacity: .5; }
+:deep(tr.work-item-table-row--completed .work-item-title-text) { color: var(--yp-text-muted); text-decoration: line-through; }
+
 :deep(.monday-table .el-table__body tr.work-item-table-row--selected > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
   background-color: var(--yp-bg-selected) !important;
 }
@@ -5573,6 +5608,11 @@ onBeforeUnmount(() => {
 
 .work-items-detail-drawer--resizing {
   transition: none !important;
+}
+
+/* 加载时详情为空：面板撑满抽屉内容区，品牌加载遮罩才能完整居中，不被抽屉滚动区裁掉。 */
+.work-items-detail-drawer .detail-panel {
+  min-height: 100%;
 }
 
 /* 抽屉左侧拖动手柄 */
