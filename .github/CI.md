@@ -26,6 +26,8 @@ pnpm run ci
 
 Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.test.mjs)验证卸载等待不会漏掉已分离的子孙进程，也不等待无关进程，并覆盖参数、退出码和超时终止。卸载助手先将挂起的根进程加入 Job Object，再恢复执行；完整进程树退出后才能恢复本机配置。失败与超时继续保留备份，具体边界见[桌面交付决策](../.agents/notes/implemented/process/2026-10-17-desktop-release-channel.md)。
 
+[部署引擎行为测试](../deployment/windows/cd/Test-YumpooDeployment.ps1)使用含中文说明的无 BOM UTF-8 桌面更新描述，并模拟非 UTF-8 的默认读取编码，验证已有版本的校验与重发不依赖主机代码页，也不改写 Release 文件字节。
+
 `out/ci/<stage>.json` 记录步骤、起止时间、状态、解析后的基线提交及源码指纹。中途失败立即非零退出；重跑会覆盖本阶段结果，不缓存跳过步骤。后续阶段拒绝旧源码、旧基线、不完整或失败报告。输出、构建目录和测试夹具不写入 Git。子进程清除继承的 `SPRING_*`、`YUMPOO_*` 和 JVM/Maven/Node 注入选项，再显式设置本次验证需要的值；不连接开发或生产数据库，也不继承受控身份 fixture。
 
 ## 四种事实来源

@@ -941,7 +941,7 @@ function Publish-YumpooDesktopFeed($Settings, $Request, $Files, [string]$Version
     $latestFile = Assert-YumpooPath (Join-Path $directory 'latest.yml') $directory
     $pointerVersions = @{}
     if (Test-Path -LiteralPath $currentFile) {
-        $current = Get-Content -LiteralPath $currentFile -Raw | ConvertFrom-Json
+        $current = Get-Content -LiteralPath $currentFile -Raw -Encoding UTF8 | ConvertFrom-Json
         if ([string]$current.version -cnotmatch ('^' + $script:DesktopVersionPattern + '$')) { throw 'The live feed release.json is invalid; reconcile it as an administrator.' }
         $pointerVersions['release.json'] = [string]$current.version
         if ($Version -ceq [string]$current.version -and [string]$current.sourceCommit -cne $Request.sourceCommit) { throw 'Desktop version reuse is forbidden.' }
