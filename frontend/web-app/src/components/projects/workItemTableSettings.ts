@@ -3,6 +3,7 @@ import {
   WorkItemColoringOperator,
   WorkItemColoringTarget,
   WorkItemTableHeight,
+  WorkItemStatusCategory,
   type ProjectWorkItemListItem,
   type WorkItemColoringRule,
   type WorkItemCreateDefaultValues,
@@ -155,6 +156,11 @@ export function evaluateWorkItemColoring(rules: readonly WorkItemColoringRule[],
     else result.cells[coloringColumn(rule.column)!.key] ??= color
   }
   return result
+}
+
+/** 本人对项目的完成定义；未设置时 DONE 与 CANCELED 两类状态视为完成，与计时候选接口的 completed 一致。 */
+export function isCompletedStatus(codes: ReadonlySet<string> | null, code: string, category: string): boolean {
+  return codes ? codes.has(code) : category === WorkItemStatusCategory.Done || category === WorkItemStatusCategory.Canceled
 }
 
 export interface WorkItemCreateDefaults {

@@ -82,9 +82,11 @@ import YpAssignee from '../../components/yp/YpAssignee.vue'
 import YpPriorityBadge from '../../components/yp/YpPriorityBadge.vue'
 import WorkItemGroupingPopover from './WorkItemGroupingPopover.vue'
 import WorkItemTableSettingsMenu from './WorkItemTableSettingsMenu.vue'
+import WorkItemCompletedMenu from './WorkItemCompletedMenu.vue'
+import { useHideCompleted } from '../../composables/useHideCompleted'
 import { useWorkItemTableSettings } from './useWorkItemTableSettings'
 import { applyDefaultStatus } from './workItemDefaultStatus'
-import { DEFAULT_VALUE_COLUMN_KEYS, heightOption, resolveWorkItemCreateDefaults, type DefaultValueColumnKey,
+import { DEFAULT_VALUE_COLUMN_KEYS, isCompletedStatus, heightOption, resolveWorkItemCreateDefaults, type DefaultValueColumnKey,
   type TableSettingsCatalog, evaluateWorkItemColoring, type ColoringColumnKey, type WorkItemColoring } from './workItemTableSettings'
 import { useWorkItemGrouping, isGroupDisplayRow, type WorkItemGroupDisplayRow } from './useWorkItemGrouping'
 import { EMPTY_GROUP, type GroupField, type WorkItemGroup } from './workItemGrouping'
@@ -764,6 +766,10 @@ const visibleExpandedIds = computed(() => {
   return expandedSubitemIds.value.filter(id => loaded.has(id))
 })
 watch(() => visibleExpandedIds.value.join('|'), () => visibleExpandedIds.value.forEach(id => void loadSubitems(id)))
+const { hideCompleted } = useHideCompleted()
+function isCompletedRow(item: ProjectWorkItemListItem): boolean {
+  return hideCompleted.value && isCompletedStatus(tableViewSettings.value.completedStatusCodes, item.statusCode, item.statusCategory)
+}
 const groupingSwitching = ref(false)
 const onboardingReady = computed(() => !embedded.value && Boolean(project.value) && !loading.value && !tableLoading.value && !error.value
   && (selectedView.value === 'kanban'
@@ -2509,6 +2515,7 @@ function tableRowClassName({ row }: { row: ProjectWorkItemListItem; rowIndex: nu
   if (tableSorting.value) classes.push('work-item-table-row--sorting')
   if (isRowSelected(row.id)) classes.push('work-item-table-row--selected')
   if (rowColoring(row)?.row) classes.push('work-item-table-row--colored')
+  if (isCompletedRow(row)) classes.push('work-item-table-row--completed')
   return classes.join(' ')
 }
 
@@ -3172,6 +3179,9 @@ onBeforeUnmount(() => {
           <work-item-grouping-popover :field="groupingField" :order="groupingOrder" :show-empty="showEmptyGroups"
             :disabled="selectedView === 'kanban' || savingSortOrder"
             @field="changeGrouping" @order="groupingOrder = $event" @show-empty="showEmptyGroups = $event" />
+          <work-item-completed-menu :statuses="workflowStatuses" :codes="tableViewSettings.completedStatusCodes"
+            :disabled="selectedView === 'kanban'" :editable="tableSettingsState === 'ready'"
+            @update="codes => updateTableSettings({ completedStatusCodes: codes })" />
           <button v-if="timerEnabled" class="toolbar-button" @click="openSmallTimer">◷ 小计时器</button>
           <work-item-table-settings-menu
             :settings="tableViewSettings"
@@ -3289,6 +3299,7 @@ onBeforeUnmount(() => {
                     :workflow-statuses="workflowStatuses"
                     :priority-options="priorityOptions"
                     :label-catalog="labelCatalog"
+                    :completed="isCompletedRow"
                     :can-create="canCreate"
                     :editing-cell="Boolean(editingCell) || batchBusy"
                     :before-remove="beforeRowRemove"
@@ -4442,6 +4453,13 @@ onBeforeUnmount(() => {
 :deep(.monday-table .el-table__body tr.work-item-table-row > td.el-table__cell.work-item-cell--colored:not(.work-item-menu-column):not(.monday-expand-column)) {
   background-color: var(--work-item-condition-cell-bg);
 }
+
+/* 隐没已完成：只淡化单元格内容，单元格背景保持不透明，固定列下不透出滚动内容；主表与子项表共用。 */
+:deep(tr.work-item-table-row > td.el-table__cell > .cell), :deep(tr.subitem-table-row > td.el-table__cell > .cell) {
+  transition: opacity var(--yp-motion-overlay) var(--yp-ease-standard);
+}
+:deep(tr.work-item-table-row--completed > td.el-table__cell > .cell) { opacity: .5; }
+:deep(tr.work-item-table-row--completed .work-item-title-text) { color: var(--yp-text-muted); text-decoration: line-through; }
 
 :deep(.monday-table .el-table__body tr.work-item-table-row--selected > td.el-table__cell:not(.work-item-menu-column):not(.monday-expand-column)) {
   background-color: var(--yp-bg-selected) !important;
