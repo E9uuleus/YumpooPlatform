@@ -3,6 +3,7 @@ import type { RailState, TimerDockSide } from '@yumpoo/preload-contract'
 import { isTrustedAuthIpcSender } from './auth-ipc'
 import { createWindowOptions } from './window-policy'
 import { installSecurityGuards } from './security-guards'
+import { loadSurface } from './surface-load'
 import { applicationIcon } from './application-icon'
 import { validRailProjects, type DesktopPreferenceStore } from './desktop-preferences'
 import type { TimerPreferenceStore } from './timer-preferences'
@@ -208,8 +209,8 @@ export class RailController {
       this.window = null
     })
     window.once('ready-to-show', () => { if (this.window === window) { this.ready = true; this.sync() } })
-    window.loadURL(new URL('/desktop/rail', this.origin).href).catch(() => {
-      console.error('[YUMPOO_RAIL_WINDOW_LOAD_FAILED]')
+    loadSurface(window, new URL('/timer/rail', this.origin).href).catch((error: unknown) => {
+      console.error('[YUMPOO_RAIL_WINDOW_LOAD_FAILED]', error instanceof Error ? error.message : '')
       if (!window.isDestroyed()) window.destroy()
     })
   }
