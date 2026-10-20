@@ -64,7 +64,8 @@ public class ProductDesktopAuthenticationService {
             PkceS256Challenge challenge,
             String requestId,
             String clientVersion,
-            String clientProtocolVersion
+            String clientProtocolVersion,
+            boolean rememberMe
     ) {
         Instant createdAt = clock.instant();
         Instant expiresAt = createdAt.plus(AUTHORIZE_TTL);
@@ -73,7 +74,7 @@ public class ProductDesktopAuthenticationService {
             authorizationUri = identityProvider.buildElectronAuthorizationUri(state.value());
             attemptStore.createProduct(new ProductDesktopAuthAttempt(
                     tokenHasher.hash(state), challenge, requestId, clientVersion,
-                    clientProtocolVersion, createdAt, expiresAt
+                    clientProtocolVersion, createdAt, expiresAt, rememberMe
             ));
         } catch (WeComAuthenticationFailedException | IllegalArgumentException exception) {
             throw authenticationRequired();
@@ -139,7 +140,7 @@ public class ProductDesktopAuthenticationService {
                 )
                 .orElseThrow(ProductDesktopAuthenticationService::authenticationRequired);
         IssuedSession issued = sessionService.issueElectronSession(
-                exchange.userId(), exchange.clientVersion()
+                exchange.userId(), exchange.clientVersion(), exchange.rememberMe()
         );
         AuthenticationUser user = userRepository.findByUserId(exchange.userId())
                 .orElseThrow(ProductDesktopAuthenticationService::authenticationRequired);

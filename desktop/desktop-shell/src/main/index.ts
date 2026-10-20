@@ -65,6 +65,8 @@ const selfCheckPath = app.isPackaged ? selfCheckReportPath(process.argv) : undef
 const updateCheckPath = app.isPackaged && !selfCheckPath ? selfCheckReportPath(process.argv, UPDATE_CHECK_ARGUMENT) : undefined
 const UPDATE_CHECK_TIMEOUT_MS = 180_000
 const userDataPath = app.getPath('userData')
+/** The first call creates the partition, so every call passes the options: no HTTP cache on disk for business responses. */
+const authenticatedSession = () => session.fromPartition(AUTHENTICATED_PARTITION, { cache: false })
 const logger = new DesktopLogger(path.join(userDataPath, 'logs'))
 const startupState = new StartupStateStore(userDataPath)
 const launchHealth = new LaunchHealth(startupState)
@@ -259,7 +261,7 @@ async function signOut(): Promise<void> {
   inboxNotifier?.reset()
   await (credentialStore ?? new DesktopCredentialStore(userDataPath, safeStorage)).clear()
   const origin = diagnosticsOrigin()
-  if (origin) await clearSessionCookies(session.fromPartition(AUTHENTICATED_PARTITION).cookies, origin)
+  if (origin) await clearSessionCookies(authenticatedSession().cookies, origin)
   if (mainWindow && !mainWindow.isDestroyed() && webAppUrl) void mainWindow.loadURL(webAppUrl.href).catch(() => undefined)
 }
 
@@ -285,8 +287,9 @@ function diagnostics(offline = false): DiagnosticsWindow {
       confirm: async (window, message, detail, confirmLabel) => (await dialog.showMessageBox(window, {
         type: 'warning', message, detail, buttons: [confirmLabel, '取消'], defaultId: 1, cancelId: 1, noLink: true,
       })).response === 0,
-      removePreferences: () => {
+      removePreferences: async () => {
         for (const name of PREFERENCE_FILES) rmSync(path.join(userDataPath, name), { force: true })
+        await authenticatedSession().clearStorageData({ storages: ['localstorage'] })
       },
       signOut,
       registerProtocol: () => registerYumpooProtocolClient(app, {
@@ -523,7 +526,7 @@ async function startApplication(): Promise<void> {
     logger.warn('certificate-rejected', { url, error })
   })
   installAppSecurityGuards(app)
-  installClientHeaders(session.fromPartition(AUTHENTICATED_PARTITION), webAppUrl.origin, app.getVersion())
+  installClientHeaders(authenticatedSession(), webAppUrl.origin, app.getVersion())
   credentialStore = new DesktopCredentialStore(userDataPath, safeStorage)
   // Chromium's stack, like the main window: same system proxy, Windows certificate store and no cookies.
   const authRequest = {
@@ -533,12 +536,14 @@ async function startApplication(): Promise<void> {
   }
   const controller = new DesktopAuthController({
     enabled: electronAuthEnabled(),
-    authorize: (attempt) => requestDesktopAuthorization(attempt, authRequest),
+    authorize: (attempt, remember) => requestDesktopAuthorization(attempt, remember, authRequest),
     openExternal: (url) => shell.openExternal(url, { activate: true }),
     logFailure: (stage, reason) => logger.warn('desktop-auth-failed', { stage, reason }),
-    exchange: async (input) => {
+    exchange: async (input, remember) => {
       const bundle = await exchangeDesktopAuthCode(input, authRequest)
-      await credentialStore?.save(bundle, webAppUrl?.origin ?? '')
+      // Without the 7-day sign-in the next launch starts signed out: the session lives only in this run's cookies.
+      if (remember) await credentialStore?.save(bundle, webAppUrl?.origin ?? '')
+      else await credentialStore?.clear()
       if (!mainWindow || mainWindow.isDestroyed() || !webAppUrl) {
         throw new Error('Main window is unavailable')
       }

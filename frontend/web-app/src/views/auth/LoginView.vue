@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { DesktopAuthErrorCode, DesktopAuthStatus } from '@yumpoo/preload-contract'
-import { ElAlert, ElButton, ElCard } from 'element-plus'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ElAlert, ElButton, ElCard, ElCheckbox } from 'element-plus'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   beginAuthentication,
   consumeReturnPath,
   resetAuthenticationNavigation,
+  readRememberLogin,
+  saveRememberLogin,
 } from '../../auth/navigation'
 import BrandConstellation from '../../components/motion/BrandConstellation.vue'
 import YpThemeSwitcher from '../../components/yp/YpThemeSwitcher.vue'
@@ -20,6 +22,8 @@ const appearance = useAppearance()
 const isDesktop = Boolean(window.yumpooDesktop)
 const desktopEnabled = ref(false)
 const status = ref<DesktopAuthStatus>({ phase: 'IDLE' })
+const remember = ref(readRememberLogin())
+watch(remember, saveRememberLogin)
 let stopStatus: (() => void) | undefined
 
 const inProgress = computed(() => [
@@ -57,7 +61,7 @@ async function login(): Promise<void> {
     return
   }
   try {
-    await window.yumpooDesktop?.auth.start()
+    await window.yumpooDesktop?.auth.start({ remember: remember.value })
   } catch {
     status.value = { phase: 'FAILED', errorCode: 'IPC_REJECTED' }
   }
@@ -144,6 +148,13 @@ onBeforeUnmount(() => stopStatus?.())
         >
           {{ isDesktop ? '在系统浏览器中登录' : '使用企业微信扫码登录' }}
         </el-button>
+        <el-checkbox
+          v-model="remember"
+          class="login-remember"
+          :disabled="inProgress"
+        >
+          7 天内免登录
+        </el-checkbox>
         <p
           v-if="isDesktop && !desktopEnabled"
           class="hint"

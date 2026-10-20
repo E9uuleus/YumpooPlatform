@@ -130,7 +130,7 @@ describe('desktop timer and tray', () => {
     const { event } = setup()
     await invoke('show', event, 'compact', false)
     expect(mocks.windows[0]?.options).toMatchObject({ frame: false, transparent: true, resizable: false, skipTaskbar: true, x: 966, y: 702, width: 314, height: 84, alwaysOnTop: true, show: false,
-      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'yumpoo-authenticated' } })
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'persist:yumpoo-authenticated' } })
     mini().events.get('ready-to-show')?.()
     expect(mini().showInactive).toHaveBeenCalledOnce()
     if (shaped) {

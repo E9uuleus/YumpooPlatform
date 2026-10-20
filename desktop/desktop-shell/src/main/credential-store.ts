@@ -73,21 +73,21 @@ interface StoredDesktopSession extends DesktopSessionBundle {
   readonly webOrigin: string
 }
 
+/** Session cookies without an expiry are never written to the persistent partition's cookie store. */
 export async function installSessionCookies(
   cookies: Cookies,
   webOrigin: string,
   bundle: DesktopSessionBundle,
 ): Promise<void> {
   const origin = new URL(webOrigin).origin
-  const expirationDate = Date.parse(bundle.absoluteExpiresAt) / 1000
   await Promise.all([
     cookies.set({
       url: `${origin}/`, name: SESSION_COOKIE, value: bundle.sessionCredential,
-      path: '/', secure: true, httpOnly: true, sameSite: 'lax', expirationDate,
+      path: '/', secure: true, httpOnly: true, sameSite: 'lax',
     }),
     cookies.set({
       url: `${origin}/`, name: CSRF_COOKIE, value: bundle.csrfCredential,
-      path: '/', secure: true, httpOnly: false, sameSite: 'lax', expirationDate,
+      path: '/', secure: true, httpOnly: false, sameSite: 'lax',
     }),
   ])
 }

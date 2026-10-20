@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -87,7 +88,8 @@ class SessionServiceTest {
                 NOW.plusSeconds(28_800),
                 null,
                 null,
-                NOW.plusSeconds(28_800 + 86_400)
+                NOW.plusSeconds(28_800 + 86_400),
+                false
         );
         authenticated = new AuthenticatedSession(
                 session,
@@ -146,5 +148,22 @@ class SessionServiceTest {
                             .doesNotContain("a".repeat(64), "b".repeat(64));
                 });
         verifyNoInteractions(credentialGenerator);
+    }
+
+    @Test
+    void rememberedSessionIdlesOnlyAtAbsoluteExpiryAndTouchKeepsIt() {
+        UserAuthorizationRecord user = authenticated.user();
+        when(repository.lockUser(user.userId())).thenReturn(Optional.of(user));
+        when(credentialGenerator.generate()).thenReturn(
+                new SessionCredential("A".repeat(43)),
+                new SessionCredential("B".repeat(43))
+        );
+
+        LoginSession remembered = service.issueWebSession(user.userId(), null, true).session();
+        service.touch(new AuthenticatedSession(remembered, user));
+
+        assertThat(remembered.rememberMe()).isTrue();
+        assertThat(remembered.idleExpiresAt()).isEqualTo(remembered.absoluteExpiresAt()).isEqualTo(NOW.plus(Duration.ofHours(8)));
+        verify(repository).touchIfActive(remembered.id(), 0, NOW, remembered.absoluteExpiresAt());
     }
 }

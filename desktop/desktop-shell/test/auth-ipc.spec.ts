@@ -70,7 +70,7 @@ describe('Electron 认证 IPC 门禁', () => {
 
     expect(handlers.get(AUTH_IS_ENABLED_CHANNEL)?.(fixture.event)).toBe(true)
     await handlers.get(AUTH_START_CHANNEL)?.(fixture.event)
-    expect(controller.start).toHaveBeenCalledOnce()
+    expect(controller.start).toHaveBeenCalledWith({ remember: true })
     await handlers.get(AUTH_CLEAR_CHANNEL)?.(fixture.event)
 
     const forgedEvent = {

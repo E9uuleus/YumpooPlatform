@@ -1,7 +1,10 @@
 import type { BrowserWindowConstructorOptions } from 'electron'
 
-/** In-memory session: credentials persist only in the safeStorage-encrypted store and are re-injected at launch. */
-export const AUTHENTICATED_PARTITION = 'yumpoo-authenticated'
+/**
+ * Persistent so the web app's local preferences survive restarts. The HTTP cache is off (see index.ts) and the
+ * session cookies carry no expiry, so credentials persist only in the safeStorage store and are re-injected at launch.
+ */
+export const AUTHENTICATED_PARTITION = 'persist:yumpoo-authenticated'
 
 export function createWindowOptions(
   preloadPath: string,

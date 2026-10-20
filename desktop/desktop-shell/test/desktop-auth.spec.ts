@@ -39,14 +39,14 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     const fetchImplementation = vi.fn(async () => new Response(JSON.stringify(authorization()), {
       status: 201, headers: { 'Content-Type': 'application/json' },
     }))
-    const result = await requestDesktopAuthorization(fixedAttempt(), {
+    const result = await requestDesktopAuthorization(fixedAttempt(), false, {
       webOrigin: 'https://yumpoo.example.com/nested/app', clientVersion: '0.1.0', fetchImplementation,
     })
     expect(result.authorizationUrl).toContain('https://open.work.weixin.qq.com/wwopen/sso/qrConnect')
     const [url, request] = fetchImplementation.mock.calls[0] ?? []
     expect(new URL(url as string).pathname).toBe('/api/v1/electron/auth/attempts')
     expect(JSON.parse(String(request?.body))).toEqual({
-      state: STATE, codeChallenge: CHALLENGE, codeChallengeMethod: 'S256',
+      state: STATE, codeChallenge: CHALLENGE, codeChallengeMethod: 'S256', remember: false,
     })
   })
 
@@ -193,7 +193,7 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     const fetchImplementation = vi.fn(async () => new Response('{}', { status: 401 }))
     const controller = new DesktopAuthController({
       enabled: true,
-      authorize: (attempt) => requestDesktopAuthorization(attempt, {
+      authorize: (attempt, remember) => requestDesktopAuthorization(attempt, remember, {
         webOrigin: 'https://yumpoo.example.com', clientVersion: '1.0.0', fetchImplementation,
       }),
       createAttempt: fixedAttempt,
@@ -222,7 +222,7 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     }), { status: 201 }))
     const controller = new DesktopAuthController({
       enabled: true,
-      authorize: (attempt) => requestDesktopAuthorization(attempt, {
+      authorize: (attempt, remember) => requestDesktopAuthorization(attempt, remember, {
         webOrigin: 'https://yumpoo.example.com', clientVersion: '1.0.0', fetchImplementation,
       }),
       createAttempt: fixedAttempt,

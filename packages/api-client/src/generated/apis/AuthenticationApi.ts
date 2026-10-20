@@ -36,6 +36,10 @@ import {
     ErrorResponseToJSON,
 } from '../models/index';
 
+export interface AuthorizeWeComLoginRequest {
+    remember?: boolean;
+}
+
 export interface CompleteElectronWeComLoginRequest {
     code?: string;
     state?: string;
@@ -73,8 +77,12 @@ export class AuthenticationApi extends runtime.BaseAPI {
      * 创建一次性 OAuth state/nonce，并跳转到当前启用的身份提供者。
      * 发起企微 Web 登录
      */
-    async authorizeWeComLoginRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+    async authorizeWeComLoginRaw(requestParameters: AuthorizeWeComLoginRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
         const queryParameters: any = {};
+
+        if (requestParameters['remember'] != null) {
+            queryParameters['remember'] = requestParameters['remember'];
+        }
 
         const headerParameters: runtime.HTTPHeaders = {};
 
@@ -95,8 +103,8 @@ export class AuthenticationApi extends runtime.BaseAPI {
      * 创建一次性 OAuth state/nonce，并跳转到当前启用的身份提供者。
      * 发起企微 Web 登录
      */
-    async authorizeWeComLogin(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
-        await this.authorizeWeComLoginRaw(initOverrides);
+    async authorizeWeComLogin(requestParameters: AuthorizeWeComLoginRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
+        await this.authorizeWeComLoginRaw(requestParameters, initOverrides);
     }
 
     /**
@@ -136,7 +144,7 @@ export class AuthenticationApi extends runtime.BaseAPI {
     }
 
     /**
-     * 原子消费 OAuth attempt，解析已同步的企微身份并签发 Web Session。 成功固定跳转到 `/`；无论成功失败均清除 nonce Cookie。
+     * 原子消费 OAuth attempt，解析已同步的企微身份并按发起时的免登录选择签发 Web Session。 成功固定跳转到 `/`；无论成功失败均清除 nonce 与免登录选择 Cookie。
      * 完成企微 Web 登录
      */
     async completeWeComLoginRaw(requestParameters: CompleteWeComLoginRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
@@ -166,7 +174,7 @@ export class AuthenticationApi extends runtime.BaseAPI {
     }
 
     /**
-     * 原子消费 OAuth attempt，解析已同步的企微身份并签发 Web Session。 成功固定跳转到 `/`；无论成功失败均清除 nonce Cookie。
+     * 原子消费 OAuth attempt，解析已同步的企微身份并按发起时的免登录选择签发 Web Session。 成功固定跳转到 `/`；无论成功失败均清除 nonce 与免登录选择 Cookie。
      * 完成企微 Web 登录
      */
     async completeWeComLogin(requestParameters: CompleteWeComLoginRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {

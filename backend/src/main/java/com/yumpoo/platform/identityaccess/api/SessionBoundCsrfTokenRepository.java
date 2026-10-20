@@ -53,13 +53,11 @@ final class SessionBoundCsrfTokenRepository implements CsrfTokenRepository {
             return;
         }
         AuthenticatedSession authenticated = SessionRequestContext.required(request);
-        Duration remaining = Duration.between(
-                clock.instant(),
-                authenticated.absoluteExpiresAt()
+        Duration remaining = SessionHttpCookies.maxAge(
+                authenticated.rememberMe(),
+                authenticated.absoluteExpiresAt(),
+                clock.instant()
         );
-        if (remaining.isNegative()) {
-            remaining = Duration.ZERO;
-        }
         response.addHeader(
                 HttpHeaders.SET_COOKIE,
                 SessionHttpCookies.csrf(token.getToken(), remaining).toString()

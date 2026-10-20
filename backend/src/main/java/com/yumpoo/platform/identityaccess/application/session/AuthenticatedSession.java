@@ -19,6 +19,10 @@ public record AuthenticatedSession(
         return session.absoluteExpiresAt();
     }
 
+    public boolean rememberMe() {
+        return session.rememberMe();
+    }
+
     public Instant authenticatedAt() {
         return session.issuedAt();
     }

@@ -12,7 +12,8 @@ public record ProductDesktopAuthAttempt(
         String clientVersion,
         String clientProtocolVersion,
         Instant createdAt,
-        Instant authorizeExpiresAt
+        Instant authorizeExpiresAt,
+        boolean rememberMe
 ) {
     public ProductDesktopAuthAttempt {
         Objects.requireNonNull(stateHash, "stateHash must not be null");

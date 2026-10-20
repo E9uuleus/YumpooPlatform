@@ -52,9 +52,10 @@ export function installAuthIpc(options: AuthIpcOptions): void {
     assertTrusted(event)
     return options.controller.isEnabled()
   })
-  options.ipcMain.handle(AUTH_START_CHANNEL, async (event) => {
+  options.ipcMain.handle(AUTH_START_CHANNEL, async (event, start: unknown) => {
     assertTrusted(event)
-    await options.controller.start()
+    // Older web builds send no options; only an explicit false opts out of the 7-day sign-in.
+    await options.controller.start({ remember: (start as { remember?: unknown } | undefined)?.remember !== false })
   })
   options.ipcMain.handle(AUTH_CLEAR_CHANNEL, async (event) => {
     assertTrusted(event)

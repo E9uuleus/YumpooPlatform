@@ -307,7 +307,7 @@ function createRule() {
           channel?.type === 'Literal' && typeof channel.value === 'string'
             ? channel.value
             : undefined
-        const timerArguments = { 'yumpoo:timer:show': 3, 'yumpoo:timer:mode': 2, 'yumpoo:timer:orb-layout': 2, 'yumpoo:timer:state': 2, 'yumpoo:timer:command-complete': 3, 'yumpoo:timer:exit-received': 2, 'yumpoo:timer:pin': 2, 'yumpoo:timer:exit-complete': 3, 'yumpoo:timer:open-item': 3, 'yumpoo:timer:preferences': 2, 'yumpoo:timer:menu-action': 2, 'yumpoo:timer:drag': 2, 'yumpoo:inbox:state': 2, 'yumpoo:inbox:preferences': 2, 'yumpoo:files:save-export': 2, 'yumpoo:diagnostics:action': 2 }
+        const timerArguments = { 'yumpoo:auth:start': 2, 'yumpoo:timer:show': 3, 'yumpoo:timer:mode': 2, 'yumpoo:timer:orb-layout': 2, 'yumpoo:timer:state': 2, 'yumpoo:timer:command-complete': 3, 'yumpoo:timer:exit-received': 2, 'yumpoo:timer:pin': 2, 'yumpoo:timer:exit-complete': 3, 'yumpoo:timer:open-item': 3, 'yumpoo:timer:preferences': 2, 'yumpoo:timer:menu-action': 2, 'yumpoo:timer:drag': 2, 'yumpoo:inbox:state': 2, 'yumpoo:inbox:preferences': 2, 'yumpoo:files:save-export': 2, 'yumpoo:diagnostics:action': 2 }
         const expectedArguments = method === 'invoke' ? (timerArguments[channelName] ?? 1) : 2
         if (
           !allowedChannels?.has(channelName) ||

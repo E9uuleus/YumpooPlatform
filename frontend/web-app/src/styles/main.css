@@ -616,6 +616,16 @@ code {
   margin-top: var(--yp-space-4);
 }
 
+.login-card .login-action--secondary {
+  margin-top: var(--yp-space-2);
+  margin-left: 0;
+}
+
+.login-card .login-remember {
+  display: flex;
+  margin-top: var(--yp-space-3);
+}
+
 .status-page,
 .result-page {
   display: grid;
