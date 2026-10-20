@@ -13,8 +13,9 @@ const backMerge = read('back-merge.yml')
 const supplyChain = read('supply-chain.yml')
 const desktopPrepare = read('prepare-desktop-release.yml')
 const desktopRelease = read('desktop-release.yml')
+const releaseNotesPolicy = read('release-notes-policy.yml')
 const dependabot = parse(fs.readFileSync(new URL('../../.github/dependabot.yml', import.meta.url), 'utf8'))
-const releaseWorkflows = { release, prepare, rollback, promotion, backMerge, supplyChain, desktopPrepare, desktopRelease }
+const releaseWorkflows = { release, prepare, rollback, promotion, backMerge, supplyChain, desktopPrepare, desktopRelease, releaseNotesPolicy }
 const allWorkflows = { ci, ...releaseWorkflows }
 const signingSecret = 'DESKTOP_UPDATE_SIGNING_KEY'
 const steps = job => job.steps ?? []
@@ -80,7 +81,7 @@ test('drafts are prepared only from successful main push CI and never touch depl
   for (const fragment of ["github.event.workflow_run.conclusion == 'success'", "github.event.workflow_run.event == 'push'", 'github.event.workflow_run.head_repository.full_name == github.repository']) {
     assert(job.if.includes(fragment), `draft job must require ${fragment}`)
   }
-  assert.deepEqual(job.permissions, { actions: 'read', attestations: 'read', contents: 'write' })
+  assert.deepEqual(job.permissions, { actions: 'read', attestations: 'read', contents: 'write', 'pull-requests': 'read' })
   assert.equal(job.environment, undefined)
   assert(!steps(job).some(step => deploySecrets.some(secret => secret in (step.env ?? {}))))
   assert(steps(job).some(step => step.run === 'node tools/release/prepare-release.mjs'))
@@ -94,7 +95,7 @@ test('desktop drafts come from the same main push CI; only the sign job enters t
     assert(draft.if.includes(fragment), `desktop preparation guard missing: ${fragment}`)
   }
   assert.equal(draft.environment, undefined)
-  assert.deepEqual(draft.permissions, { actions: 'read', attestations: 'read', contents: 'write' })
+  assert.deepEqual(draft.permissions, { actions: 'read', attestations: 'read', contents: 'write', 'pull-requests': 'read' })
   assert(steps(draft).some(step => step.run === 'node tools/release/prepare-desktop-release.mjs draft' && step.id === 'draft'))
   assert.equal(draft.outputs.tag, '${{ steps.draft.outputs.tag }}')
   assert.deepEqual(sign.needs, ['draft'])
@@ -165,6 +166,16 @@ test('PRs into main get the promotion check and hotfixes on main are merged back
   assert.equal(steps(promotion.jobs.promotion).find(step => step.uses?.startsWith('actions/checkout@')).with['fetch-depth'], 0)
   assert.deepEqual(backMerge.on, { push: { branches: ['main', 'dev'] } })
   assert.deepEqual(backMerge.jobs['back-merge'].permissions, { contents: 'write', 'pull-requests': 'write' })
+})
+
+test('every PR into dev or main is checked for release notes, including edits to its description', () => {
+  assert.deepEqual(releaseNotesPolicy.on.pull_request.branches, ['dev', 'main'])
+  assert.deepEqual(releaseNotesPolicy.on.pull_request.types, ['opened', 'synchronize', 'reopened', 'edited'])
+  const job = releaseNotesPolicy.jobs.notes
+  assert.equal(job.name, 'Release Notes Policy')
+  assert.deepEqual(job.permissions, { contents: 'read' })
+  assert(!job.if, 'the check never skips itself')
+  assert(steps(job).some(step => step.run === 'node tools/release/release-notes-policy.mjs'))
 })
 
 test('supply-chain checks gate every PR and the weekly run scans, audits and rehearses read-only', () => {
