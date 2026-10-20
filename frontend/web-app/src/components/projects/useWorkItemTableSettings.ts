@@ -46,7 +46,8 @@ function merge(earlier: SettingsPatch, later: SettingsPatch): SettingsPatch {
 function apply(base: TableSettings, patch: SettingsPatch): TableSettings {
   return {
     pinnedColumnCount: base.pinnedColumnCount, headerHeight: base.headerHeight, rowHeight: base.rowHeight,
-    coloringRules: base.coloringRules, ...patch, defaultValues: { ...base.defaultValues, ...patch.defaultValues },
+    coloringRules: base.coloringRules, grouping: base.grouping, completedStatusCodes: base.completedStatusCodes,
+    ...patch, defaultValues: { ...base.defaultValues, ...patch.defaultValues },
   }
 }
 

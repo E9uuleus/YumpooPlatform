@@ -1,7 +1,8 @@
 import { workItemAssignees } from './workItemAssignees'
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch, type Ref } from 'vue'
 import { ListProjectWorkItemFilterOptionsFieldEnum, type ListProjectWorkItemsRequest,
-  type ProjectWorkItemListItem, type ProjectWorkItemFilterOption } from '@yumpoo/api-client'
+  type ProjectWorkItemListItem, type ProjectWorkItemFilterOption, type WorkItemGroupingField, type WorkItemGroupingOrder,
+  type WorkItemTableGrouping } from '@yumpoo/api-client'
 import type { WorkItemTableSource } from './workItemTableSource'
 import { workItemsApi } from '../../api/client'
 import { localProblem, toApiProblem, type ApiProblem } from '../../api/problems'
@@ -17,15 +18,40 @@ interface GroupPage {
 }
 interface Options {
   source?: () => WorkItemTableSource
-  fallbackPreferenceKey?: () => string
   items: Ref<ProjectWorkItemListItem[]>
+  /** 本机分组偏好键：内嵌表在这里保存分组；项目表只从这里迁移旧版本留下的分组。 */
   preferenceKey: () => string
+  /** 个人表格设置中的分组；undefined 表示尚未读取。 */
+  stored?: () => WorkItemTableGrouping | null | undefined
+  /** 提供时分组写入个人表格设置（项目表）；省略时写入本机，本机尚无分组时沿用 stored（内嵌表）。 */
+  save?: (value: WorkItemTableGrouping) => void
   request: () => ListProjectWorkItemsRequest
   sources: () => GroupSources
   today: () => string
   ready: () => boolean
   restore: () => Promise<void>
   protectedIds?: () => Set<string>
+}
+
+/** 比较时忽略颜色映射的键顺序：服务端 jsonb 会重排对象键。 */
+function canonical(value: unknown): string | undefined {
+  return JSON.stringify(value, (key, item: unknown) => key === 'colors' && item && typeof item === 'object'
+    ? Object.fromEntries(Object.entries(item).sort(([left], [right]) => left < right ? -1 : 1)) : item)
+}
+
+/** 把服务端、本机或损坏的分组值规整为当前支持的字段与顺序。 */
+function normalizeGrouping(value: unknown): WorkItemTableGrouping {
+  const saved = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  const field = groupingFields.find(option => option.value === saved.field)?.value ?? ''
+  const orders = groupOrders(field)
+  return {
+    field: (field || null) as WorkItemGroupingField | null,
+    order: (orders.find(option => option.value === saved.order) ?? orders[0]!).value as WorkItemGroupingOrder,
+    showEmpty: saved.showEmpty === true,
+    collapsed: Array.isArray(saved.collapsed) ? saved.collapsed.filter((key): key is string => typeof key === 'string') : [],
+    colors: saved.colors && typeof saved.colors === 'object' && !Array.isArray(saved.colors)
+      ? Object.fromEntries(Object.entries(saved.colors).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) : {},
+  }
 }
 
 export function useWorkItemGrouping(options: Options) {
@@ -54,10 +80,16 @@ export function useWorkItemGrouping(options: Options) {
   function page(key: string): GroupPage {
     return pages[key] ??= { items: [], nextCursor: null, loaded: false, loading: false, error: undefined }
   }
+  const snapshot = (): WorkItemTableGrouping => ({ field: (field.value || null) as WorkItemGroupingField | null,
+    order: order.value as WorkItemGroupingOrder, showEmpty: showEmpty.value, collapsed: [...collapsed.value], colors: { ...colors } })
   function persist(): void {
     if (restoringPrefs) return
-    try { localStorage.setItem(options.preferenceKey(), JSON.stringify({ field: field.value, order: order.value,
-      showEmpty: showEmpty.value, collapsed: [...collapsed.value], colors })) } catch { /* 本地存储不可用时仍可分组。 */ }
+    const value = snapshot()
+    if (options.save) {
+      if (canonical(value) !== canonical(options.stored?.())) options.save(value)
+      return
+    }
+    try { localStorage.setItem(options.preferenceKey(), JSON.stringify(value)) } catch { /* 本地存储不可用时仍可分组。 */ }
   }
   function syncItems(): void {
     if (!active.value || stopped) return
@@ -210,27 +242,42 @@ export function useWorkItemGrouping(options: Options) {
     if (value) await refresh()
     else if (options.ready()) await options.restore()
   }
-  function readPrefs(): void {
+  function readPrefs(value: unknown): void {
+    const saved = normalizeGrouping(value)
     stop()
     restoringPrefs = true
-    field.value = ''; order.value = 'DEFAULT'; showEmpty.value = false
-    collapsed.value = new Set()
+    field.value = (saved.field ?? '') as GroupField | ''
+    order.value = saved.order as GroupOrder
+    showEmpty.value = saved.showEmpty
+    collapsed.value = new Set(saved.collapsed)
     Object.keys(colors).forEach(key => delete colors[key])
+    Object.assign(colors, saved.colors)
     facets.value = []
     Object.keys(pages).forEach(key => delete pages[key])
-    try {
-      const saved = JSON.parse(localStorage.getItem(options.preferenceKey()) ?? (options.fallbackPreferenceKey ? localStorage.getItem(options.fallbackPreferenceKey()) : null) ?? '{}') as Record<string, unknown>
-      if (groupingFields.some(option => option.value === saved.field)) field.value = saved.field as GroupField
-      order.value = groupOrders(field.value).find(option => option.value === saved.order)?.value ?? groupOrders(field.value)[0]!.value
-      showEmpty.value = saved.showEmpty === true
-      if (Array.isArray(saved.collapsed)) collapsed.value = new Set(saved.collapsed.filter((v): v is string => typeof v === 'string'))
-      if (saved.colors && typeof saved.colors === 'object' && !Array.isArray(saved.colors)) {
-        for (const [key, value] of Object.entries(saved.colors)) if (typeof value === 'string') colors[key] = value
-      }
-    } catch { /* 损坏的偏好恢复默认值。 */ }
     restoringPrefs = false
   }
-  watch(options.preferenceKey, readPrefs, { immediate: true, flush: 'sync' })
+  function localPrefs(): unknown {
+    try { return JSON.parse(localStorage.getItem(options.preferenceKey()) ?? 'null') ?? undefined } catch { /* 损坏的偏好恢复默认值。 */ return {} }
+  }
+  /** 项目表以个人表格设置为准，设置为空时上传旧版本留在本机的分组并删除本机键；内嵌表优先本机分组。 */
+  function restorePrefs(keyChanged: boolean): void {
+    const stored = options.stored?.()
+    const local = localPrefs()
+    const saved = options.save ? stored ?? local : local ?? stored
+    const changed = keyChanged || canonical(normalizeGrouping(saved)) !== canonical(snapshot())
+    const wasActive = active.value
+    if (changed) readPrefs(saved)
+    if (options.save && stored === null && local !== undefined) {
+      options.save(snapshot())
+      try { localStorage.removeItem(options.preferenceKey()) } catch { /* 本地存储不可用时只上传。 */ }
+    }
+    // 切换项目时由页面加载负责刷新；同一项目内设置晚到或被其他窗口改动时在这里重新分组。
+    if (!changed || keyChanged || !options.ready()) return
+    if (active.value) void refresh()
+    else if (wasActive) void options.restore()
+  }
+  watch(() => [options.preferenceKey(), canonical(options.stored?.())] as const,
+    ([key], previous) => restorePrefs(key !== previous?.[0]), { immediate: true })
   watch([order, showEmpty], () => { if (!restoringPrefs) syncItems() })
   watch(() => JSON.stringify(options.sources()), () => { if (active.value && !restoringPrefs) syncItems() })
   watch(options.today, () => { if (field.value === 'DUE_DATE') void refresh() })

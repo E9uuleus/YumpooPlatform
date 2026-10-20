@@ -38,6 +38,7 @@ import {
   type ProjectWorkItemListItem,
   type WorkItemTransitionOption,
   type WorkItemLabelCatalog,
+  type WorkItemTableGrouping,
 } from '@yumpoo/api-client'
 import {
   ElButton,
@@ -731,9 +732,10 @@ watch(() => [[...pinnedColumnKeys.value].join('|'), tableViewSettings.value.head
 const projectGroupingPrefsKey = () => `yumpoo:project-work-items:grouping:v1:${session.authentication.value?.company.id ?? 'unknown'}:${session.authentication.value?.user.id ?? 'unknown'}:${projectId.value}`
 const grouping = useWorkItemGrouping({
   source: () => tableSource,
-  fallbackPreferenceKey: projectGroupingPrefsKey,
   items: tableItems,
   preferenceKey: () => props.preferenceScope ? `${props.preferenceScope}:grouping` : projectGroupingPrefsKey(),
+  stored: () => tableSettingsState.value === 'ready' ? tableViewSettings.value.grouping : undefined,
+  ...(props.preferenceScope ? {} : { save: (value: WorkItemTableGrouping) => updateTableSettings({ grouping: value }) }),
   request: () => listRequest(null),
   sources: () => ({ members: members.value, statuses: labelCatalog.value?.statuses ?? [],
     priorities: labelCatalog.value?.priorities ?? [], contents: catalog.value?.items ?? [] }),

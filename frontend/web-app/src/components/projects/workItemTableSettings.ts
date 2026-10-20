@@ -13,7 +13,8 @@ import { workItemAssigneeIds } from './workItemAssignees'
 import { dueDateKey } from './workItemDueDate'
 import { workItemLabelColorValue } from './workItemLabelColors'
 
-export type TableSettings = WorkItemTableSettingsUpdateRequest
+/** grouping 与 completedStatusCodes 在请求中可省略；页面内始终带上已读取的值。 */
+export type TableSettings = Required<WorkItemTableSettingsUpdateRequest>
 export type ColoringColumnKey = 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate'
 export type DefaultValueColumnKey = 'assignee' | 'status' | 'priority' | 'content' | 'dueDate'
 export type ColoringValueKind = 'list' | 'text' | 'date' | 'none'
@@ -201,5 +202,7 @@ export function emptyTableSettings(): TableSettings {
     rowHeight: WorkItemTableHeight.Single,
     coloringRules: [],
     defaultValues: { assigneeUserIds: new Set<string>(), statusCode: null, priority: null, contentId: null, dueDateOffsetDays: null },
+    grouping: null,
+    completedStatusCodes: null,
   }
 }
