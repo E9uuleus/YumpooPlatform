@@ -183,6 +183,28 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     })
   })
 
+  it('被新 attempt 替换的旧 attempt 晚到失败时不覆盖新状态', async () => {
+    const statuses: unknown[] = []
+    let rejectFirst: ((reason: unknown) => void) | undefined
+    let calls = 0
+    const controller = new DesktopAuthController({
+      enabled: true,
+      authorize: () => calls++ === 0
+        ? new Promise<ReturnType<typeof authorization>>((_resolve, reject) => { rejectFirst = reject })
+        : Promise.resolve(authorization()),
+      createAttempt: () => ({ ...fixedAttempt(), state: String(calls).repeat(43) }),
+      openExternal: async () => undefined,
+      exchange: async () => undefined,
+      publishStatus: (value) => statuses.push(value),
+    })
+
+    const first = controller.start()
+    await controller.start()
+    rejectFirst?.(new Error('offline'))
+    await first
+    expect(statuses.at(-1)).toEqual({ phase: 'WAITING_FOR_CALLBACK' })
+  })
+
   it('授权服务拒绝时报 AUTH_SERVICE_FAILED 并记录 HTTP 状态，不尝试打开浏览器', async () => {
     const openExternal = vi.fn(async () => undefined)
     const statuses: unknown[] = []
