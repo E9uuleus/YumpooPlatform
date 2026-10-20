@@ -1,6 +1,8 @@
 import type { App, WebContents } from 'electron'
 
 const securedSessions = new WeakSet<object>()
+/** navigator.clipboard.writeText; reading the clipboard stays denied. */
+const CLIPBOARD_WRITE = 'clipboard-sanitized-write'
 
 function hasSameOrigin(candidate: string, allowedOrigin: string): boolean {
   try {
@@ -35,9 +37,13 @@ export function installSecurityGuards(
   const browserSession = webContents.session
   if (!securedSessions.has(browserSession)) {
     securedSessions.add(browserSession)
-    browserSession.setPermissionCheckHandler(() => false)
+    browserSession.setPermissionCheckHandler(
+      (_webContents, permission, requestingOrigin) =>
+        permission === CLIPBOARD_WRITE && hasSameOrigin(requestingOrigin, allowedOrigin),
+    )
     browserSession.setPermissionRequestHandler(
-      (_requestingWebContents, _permission, callback) => callback(false),
+      (_requestingWebContents, permission, callback, details) =>
+        callback(permission === CLIPBOARD_WRITE && hasSameOrigin(details.requestingUrl, allowedOrigin)),
     )
     browserSession.on('will-download', (event) => {
       event.preventDefault()

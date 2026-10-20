@@ -6,13 +6,13 @@ import {
 } from '../src/main/security-guards'
 
 describe('Electron 导航与权限门禁', () => {
-  it('拒绝新窗口、权限、WebView 和跨源导航', () => {
+  it('拒绝新窗口、WebView 和跨源导航，权限只对受信来源放行剪贴板写入，下载只放行附件内容', () => {
     const listeners = new Map<string, (...args: never[]) => void>()
     let windowHandler: (() => { action: 'deny' }) | undefined
     let permissionHandler:
-      | ((_webContents: unknown, _permission: unknown, callback: (allowed: boolean) => void) => void)
+      | ((_webContents: unknown, permission: string, callback: (allowed: boolean) => void, details: { requestingUrl: string }) => void)
       | undefined
-    let permissionCheckHandler: (() => boolean) | undefined
+    let permissionCheckHandler: ((_webContents: unknown, permission: string, requestingOrigin: string) => boolean) | undefined
     const sessionListeners = new Map<string, (...args: never[]) => void>()
 
     const webContents = {
@@ -65,9 +65,13 @@ describe('Electron 导航与权限门禁', () => {
     expect(webviewEvent.preventDefault).toHaveBeenCalledOnce()
 
     const permissionCallback = vi.fn()
-    permissionHandler?.(undefined, undefined, permissionCallback)
-    expect(permissionCallback).toHaveBeenCalledWith(false)
-    expect(permissionCheckHandler?.()).toBe(false)
+    permissionHandler?.(undefined, 'clipboard-sanitized-write', permissionCallback, { requestingUrl: 'https://yumpoo.example.com/work' })
+    permissionHandler?.(undefined, 'clipboard-sanitized-write', permissionCallback, { requestingUrl: 'https://attacker.example.com/' })
+    permissionHandler?.(undefined, 'clipboard-read', permissionCallback, { requestingUrl: 'https://yumpoo.example.com/work' })
+    expect(permissionCallback.mock.calls).toEqual([[true], [false], [false]])
+    expect(permissionCheckHandler?.(undefined, 'clipboard-sanitized-write', 'https://yumpoo.example.com/')).toBe(true)
+    expect(permissionCheckHandler?.(undefined, 'clipboard-sanitized-write', 'https://attacker.example.com')).toBe(false)
+    expect(permissionCheckHandler?.(undefined, 'media', 'https://yumpoo.example.com')).toBe(false)
 
     const downloadEvent = { preventDefault: vi.fn() }
     sessionListeners.get('will-download')?.(downloadEvent as never)
