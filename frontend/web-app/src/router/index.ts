@@ -178,6 +178,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { shellSection: 'work' },
       },
       {
+        path: 'settings',
+        name: 'settings',
+        component: () => import('../views/settings/SettingsView.vue'),
+        meta: { shellSection: 'work' },
+      },
+      {
         path: 'inbox',
         name: 'inbox',
         component: () => import('../views/inbox/InboxView.vue'),
