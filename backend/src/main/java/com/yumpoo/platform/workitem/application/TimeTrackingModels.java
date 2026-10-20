@@ -49,12 +49,13 @@ public final class TimeTrackingModels {
 
     public record RecentTimeTrackingItem(UUID workItemId, UUID projectId, String title) {}
 
+    /** completed 按本人对该项目的完成定义计算，未设置时 DONE 与 CANCELED 两类状态视为完成。 */
     public record TimerCandidate(UUID workItemId, UUID projectId, String projectName, String itemNo,
-            String title, String contentName, String contentCode, String contentColorToken, String statusCategory, boolean assignedToMe,
-            Instant lastTrackedAt, long ownDurationMs) {
+            String title, String contentName, String contentCode, String contentColorToken, String statusCategory, boolean completed,
+            boolean assignedToMe, Instant lastTrackedAt, long ownDurationMs) {
         public TimerCandidate withProjectName(String name) {
             return new TimerCandidate(workItemId, projectId, name, itemNo, title, contentName, contentCode, contentColorToken,
-                    statusCategory, assignedToMe, lastTrackedAt, ownDurationMs);
+                    statusCategory, completed, assignedToMe, lastTrackedAt, ownDurationMs);
         }
     }
 
@@ -62,11 +63,12 @@ public final class TimeTrackingModels {
 
     public record CurrentRunningTimer(TimeTrackingSession session, String workItemTitle) {}
 
-    public record TimeTrackingPreferences(boolean timerEnabled, int workdayStartMinute, int workdayEndMinute) {
-        public static final TimeTrackingPreferences DEFAULT=new TimeTrackingPreferences(true,540,1080);
+    public record TimeTrackingPreferences(boolean timerEnabled, int workdayStartMinute, int workdayEndMinute, boolean hideCompleted) {
+        public static final TimeTrackingPreferences DEFAULT=new TimeTrackingPreferences(true,540,1080,false);
     }
 
-    public record TimeTrackingPreferencesCommand(Boolean timerEnabled, Integer workdayStartMinute, Integer workdayEndMinute) {}
+    /** hideCompleted 省略时保留原值。 */
+    public record TimeTrackingPreferencesCommand(Boolean timerEnabled, Integer workdayStartMinute, Integer workdayEndMinute, Boolean hideCompleted) {}
 
     public record CurrentTimeTracker(TimeTrackingSession session, String workItemTitle,
             long rowVersion, String etag, Instant serverNow, List<RecentTimeTrackingItem> recentItems,

@@ -3,6 +3,7 @@ import {
   WorkItemColoringOperator,
   WorkItemColoringTarget,
   WorkItemTableHeight,
+  WorkItemStatusCategory,
   type ProjectWorkItemListItem,
   type WorkItemColoringRule,
   type WorkItemCreateDefaultValues,
@@ -13,7 +14,8 @@ import { workItemAssigneeIds } from './workItemAssignees'
 import { dueDateKey } from './workItemDueDate'
 import { workItemLabelColorValue } from './workItemLabelColors'
 
-export type TableSettings = WorkItemTableSettingsUpdateRequest
+/** grouping 与 completedStatusCodes 在请求中可省略；页面内始终带上已读取的值。 */
+export type TableSettings = Required<WorkItemTableSettingsUpdateRequest>
 export type ColoringColumnKey = 'title' | 'assignee' | 'status' | 'priority' | 'content' | 'dueDate'
 export type DefaultValueColumnKey = 'assignee' | 'status' | 'priority' | 'content' | 'dueDate'
 export type ColoringValueKind = 'list' | 'text' | 'date' | 'none'
@@ -156,6 +158,11 @@ export function evaluateWorkItemColoring(rules: readonly WorkItemColoringRule[],
   return result
 }
 
+/** 本人对项目的完成定义；未设置时 DONE 与 CANCELED 两类状态视为完成，与计时候选接口的 completed 一致。 */
+export function isCompletedStatus(codes: ReadonlySet<string> | null, code: string, category: string): boolean {
+  return codes ? codes.has(code) : category === WorkItemStatusCategory.Done || category === WorkItemStatusCategory.Canceled
+}
+
 export interface WorkItemCreateDefaults {
   /** undefined 时沿用"第一个启用类别"。 */
   contentId: string | undefined
@@ -201,5 +208,7 @@ export function emptyTableSettings(): TableSettings {
     rowHeight: WorkItemTableHeight.Single,
     coloringRules: [],
     defaultValues: { assigneeUserIds: new Set<string>(), statusCode: null, priority: null, contentId: null, dueDateOffsetDays: null },
+    grouping: null,
+    completedStatusCodes: null,
   }
 }

@@ -4,6 +4,8 @@ import { ElButton, ElInput } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import type { TimerCandidate } from '@yumpoo/api-client'
 import { useTimerCandidates } from '../../../composables/useTimerCandidates'
+import { useHideCompleted } from '../../../composables/useHideCompleted'
+import HideCompletedSwitch from '../../timer/HideCompletedSwitch.vue'
 import WorkItemGlyph from '../../timer/WorkItemGlyph.vue'
 import { MAX_PARALLEL_ITEMS } from './dayModel'
 
@@ -15,7 +17,10 @@ const input = ref<InstanceType<typeof ElInput>>()
 const listbox = ref<HTMLElement>()
 const id = useId()
 const { query, items, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true))
-const options = computed(() => items.value.filter(item => !props.exclude.includes(item.workItemId)))
+const { hideCompleted, visibleCandidates } = useHideCompleted()
+const visible = computed(() => visibleCandidates(items.value, query.value))
+const hiddenCount = computed(() => items.value.length - visible.value.length)
+const options = computed(() => visible.value.filter(item => !props.exclude.includes(item.workItemId)))
 const active = ref(0)
 const picking = computed(() => props.multiple && props.selected.length > 0)
 const isSelected = (item: TimerCandidate) => props.selected.some(selected => selected.workItemId === item.workItemId)
@@ -74,9 +79,10 @@ defineExpose({ focus: () => input.value?.focus() })
       :aria-activedescendant="options.length ? `${id}-${active}` : undefined"
       @keydown="keydown"
     />
-    <p class="item-picker__label">
-      {{ searching ? '搜索结果' : '最近与我的' }}
-    </p>
+    <div class="item-picker__label">
+      <span>{{ searching ? '搜索结果' : '最近与我的' }}</span>
+      <HideCompletedSwitch :hidden-count="hiddenCount" />
+    </div>
     <ul
       :id="`${id}-list`"
       ref="listbox"
@@ -92,7 +98,7 @@ defineExpose({ focus: () => input.value?.focus() })
         :data-index="index"
         role="option"
         class="item-picker__option"
-        :class="{ 'is-active': index === active, 'is-selected': isSelected(item) }"
+        :class="{ 'is-active': index === active, 'is-selected': isSelected(item), 'is-completed': hideCompleted && item.completed }"
         :aria-selected="isSelected(item)"
         @mousedown.prevent
         @mouseenter="active = index"
@@ -115,6 +121,10 @@ defineExpose({ focus: () => input.value?.focus() })
           <strong>{{ item.title }}</strong>
           <small>{{ item.projectName }}</small>
         </span>
+        <span
+          v-if="hideCompleted && item.completed"
+          class="item-picker__done"
+        >已完成</span>
       </li>
     </ul>
     <p
@@ -156,7 +166,7 @@ defineExpose({ focus: () => input.value?.focus() })
 
 <style scoped>
 .item-picker{display:flex;flex-direction:column;min-height:0}
-.item-picker__label{margin:10px 2px 4px;color:var(--yp-text-muted);font-size:11px}
+.item-picker__label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 2px 4px;color:var(--yp-text-muted);font-size:11px}
 .item-picker__list{max-height:232px;margin:0;padding:0;overflow:auto;list-style:none;overscroll-behavior:contain}
 .item-picker__option{display:flex;align-items:center;gap:8px;min-height:40px;padding:4px 8px;border-radius:var(--yp-radius-sm);cursor:pointer}
 .item-picker__option.is-active{background:var(--yp-bg-selected)}
@@ -166,6 +176,9 @@ defineExpose({ focus: () => input.value?.focus() })
 .item-picker__text{display:grid;flex:1;min-width:0;gap:1px}
 .item-picker__text strong{overflow:hidden;color:var(--yp-text-primary);font-size:13px;font-weight:500;white-space:nowrap;text-overflow:ellipsis}
 .item-picker__text small{overflow:hidden;color:var(--yp-text-muted);font-size:11px;white-space:nowrap;text-overflow:ellipsis}
+.item-picker__option.is-completed .item-picker__text{opacity:.5}
+.item-picker__option.is-completed .item-picker__text strong{text-decoration:line-through}
+.item-picker__done{flex:none;padding:1px 6px;border-radius:var(--yp-radius-pill);background:var(--yp-bg-hover);color:var(--yp-text-muted);font-size:11px;line-height:16px}
 .item-picker__status{margin:6px 4px;color:var(--yp-text-muted);font-size:12px;line-height:18px}
 .item-picker__more{align-self:center}
 </style>

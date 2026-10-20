@@ -3871,7 +3871,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 要求会话、XSRF 和最近读取的 If-Match。ETag 由 updatedAt 的微秒时间戳生成，保存以原子比较更新防止覆盖其他窗口或设备的修改；版本过期返回 412。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
+     * 要求会话、XSRF 和最近读取的 If-Match。ETag 由 updatedAt 的微秒时间戳生成，保存以原子比较更新防止覆盖其他窗口或设备的修改；版本过期返回 412。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。grouping 与 completedStatusCodes 省略或为 null 时保留原值，其余字段整体替换。
      * 整体替换本人在项目中的工作项表格设置
      */
     async updateMyWorkItemTableSettingsRaw(requestParameters: UpdateMyWorkItemTableSettingsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<WorkItemTableSettings>> {
@@ -3933,7 +3933,7 @@ export class WorkItemsApi extends runtime.BaseAPI {
     }
 
     /**
-     * 要求会话、XSRF 和最近读取的 If-Match。ETag 由 updatedAt 的微秒时间戳生成，保存以原子比较更新防止覆盖其他窗口或设备的修改；版本过期返回 412。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。
+     * 要求会话、XSRF 和最近读取的 If-Match。ETag 由 updatedAt 的微秒时间戳生成，保存以原子比较更新防止覆盖其他窗口或设备的修改；版本过期返回 412。不校验规则与默认值引用的成员、标签或类别是否仍有效，客户端使用时忽略失效值。grouping 与 completedStatusCodes 省略或为 null 时保留原值，其余字段整体替换。
      * 整体替换本人在项目中的工作项表格设置
      */
     async updateMyWorkItemTableSettings(requestParameters: UpdateMyWorkItemTableSettingsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<WorkItemTableSettings> {

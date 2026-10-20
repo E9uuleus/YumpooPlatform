@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -25,6 +26,9 @@ public class WorkItemTableSettingsService {
     private static final int MAX_VALUES = 20;
     private static final int MAX_VALUE_LENGTH = 100;
     private static final int MAX_DUE_OFFSET_DAYS = 365;
+    private static final int MAX_GROUPING_KEYS = 500;
+    private static final int MAX_GROUPING_KEY_LENGTH = 800;
+    private static final int MAX_COMPLETED_STATUSES = 50;
     private static final Pattern CODE = Pattern.compile("[A-Z][A-Z0-9_]{1,31}");
 
     private final WorkItemTableSettingsRepository repository;
@@ -84,10 +88,23 @@ public class WorkItemTableSettingsService {
                 || !code(d.statusCode()) || !code(d.priority())
                 || d.dueDateOffsetDays() != null && (d.dueDateOffsetDays() < 0 || d.dueDateOffsetDays() > MAX_DUE_OFFSET_DAYS))
             throw invalid("defaultValues", "新建默认值无效");
+        Grouping g = w.grouping();
+        if (g != null && (g.order() == null || g.collapsed() == null || g.colors() == null
+                || g.collapsed().size() > MAX_GROUPING_KEYS || g.colors().size() > MAX_GROUPING_KEYS
+                || g.collapsed().stream().anyMatch(key -> key == null || key.isEmpty() || key.length() > MAX_GROUPING_KEY_LENGTH)
+                || g.colors().entrySet().stream().anyMatch(color -> color.getKey().length() > MAX_GROUPING_KEY_LENGTH
+                        || color.getValue() == null || !CODE.matcher(color.getValue()).matches())))
+            throw invalid("grouping", "分组设置无效");
+        List<String> completed = w.completedStatusCodes();
+        if (completed != null && (completed.size() > MAX_COMPLETED_STATUSES || completed.stream().anyMatch(code -> code == null || !code(code))
+                || new HashSet<>(completed).size() != completed.size()))
+            throw invalid("completedStatusCodes", "已完成状态无效");
         List<ColoringRule> rules = w.coloringRules().stream().map(rule -> new ColoringRule(rule.id(), rule.target(),
                 rule.colorToken(), rule.column(), rule.operator(), List.copyOf(rule.values()))).toList();
         return new Write(w.pinnedColumnCount(), w.headerHeight(), w.rowHeight(), rules,
-                new DefaultValues(List.copyOf(d.assigneeUserIds()), d.statusCode(), d.priority(), d.contentId(), d.dueDateOffsetDays()));
+                new DefaultValues(List.copyOf(d.assigneeUserIds()), d.statusCode(), d.priority(), d.contentId(), d.dueDateOffsetDays()),
+                g == null ? null : new Grouping(g.field(), g.order(), g.showEmpty(), List.copyOf(g.collapsed()), Map.copyOf(g.colors())),
+                completed == null ? null : List.copyOf(completed));
     }
 
     private static boolean code(String value) { return value == null || CODE.matcher(value).matches(); }

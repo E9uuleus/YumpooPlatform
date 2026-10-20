@@ -33,9 +33,11 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
               FROM last_tracked t LEFT JOIN allocated a ON a.work_item_id=t.work_item_id)
             SELECT w.id, w.project_id, w.item_no, w.title, c.name AS content_name, c.code AS content_code,
               c.color_token AS content_color_token, w.status_category,
+              COALESCE(s.completed_status_codes @> jsonb_build_array(w.status_code), w.status_category IN ('DONE','CANCELED')) AS completed,
               EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) AS assigned, own.last_tracked_at, COALESCE(own.duration,0) AS duration
             FROM yumpoo.work_item w JOIN yumpoo.content c ON c.id=w.content_id AND c.company_id=w.company_id
             LEFT JOIN own ON own.work_item_id=w.id
+            LEFT JOIN yumpoo.work_item_table_settings s ON s.company_id=w.company_id AND s.project_id=w.project_id AND s.user_id=:user
             WHERE w.company_id=:company AND w.project_id IN (:projects) AND w.deleted_at IS NULL AND NOT w.archived
               AND (:personal=false OR EXISTS (SELECT 1 FROM yumpoo.work_item_assignee a WHERE a.work_item_id=w.id AND a.user_id=:user) OR own.last_tracked_at IS NOT NULL)
               AND (:empty OR lower(w.title) LIKE :query ESCAPE '\\' OR lower(w.item_no) LIKE :query ESCAPE '\\'
@@ -51,7 +53,7 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
         return statement.query((rs,n) -> new TimerCandidate(rs.getObject("id",UUID.class),
                 rs.getObject("project_id",UUID.class), "", rs.getString("item_no"), rs.getString("title"),
                 rs.getString("content_name"), rs.getString("content_code"), rs.getString("content_color_token"),
-                rs.getString("status_category"), rs.getBoolean("assigned"),
+                rs.getString("status_category"), rs.getBoolean("completed"), rs.getBoolean("assigned"),
                 instant(rs,"last_tracked_at"), rs.getLong("duration"))).list();
     }
 
@@ -94,15 +96,15 @@ public class JdbcTimeTrackingRepository implements TimeTrackingRepository {
                 .param("c", companyId).param("u", userId).update();
     }
     public Optional<TimeTrackingPreferences> preferences(UUID companyId, UUID userId) {
-        return jdbc.sql("SELECT timer_enabled,workday_start_minute,workday_end_minute FROM yumpoo.work_item_timer_state WHERE company_id=:c AND user_id=:u")
+        return jdbc.sql("SELECT timer_enabled,workday_start_minute,workday_end_minute,hide_completed FROM yumpoo.work_item_timer_state WHERE company_id=:c AND user_id=:u")
                 .param("c", companyId).param("u", userId)
-                .query((rs,n) -> new TimeTrackingPreferences(rs.getBoolean("timer_enabled"),rs.getInt("workday_start_minute"),rs.getInt("workday_end_minute")))
+                .query((rs,n) -> new TimeTrackingPreferences(rs.getBoolean("timer_enabled"),rs.getInt("workday_start_minute"),rs.getInt("workday_end_minute"), rs.getBoolean("hide_completed")))
                 .optional();
     }
     public void savePreferences(UUID companyId, UUID userId, TimeTrackingPreferences p) {
-        jdbc.sql("UPDATE yumpoo.work_item_timer_state SET timer_enabled=:enabled,workday_start_minute=:start,workday_end_minute=:end WHERE company_id=:c AND user_id=:u")
+        jdbc.sql("UPDATE yumpoo.work_item_timer_state SET timer_enabled=:enabled,workday_start_minute=:start,workday_end_minute=:end,hide_completed=:hide WHERE company_id=:c AND user_id=:u")
                 .param("c", companyId).param("u", userId).param("enabled", p.timerEnabled())
-                .param("start", p.workdayStartMinute()).param("end", p.workdayEndMinute()).update();
+                .param("start", p.workdayStartMinute()).param("end", p.workdayEndMinute()).param("hide", p.hideCompleted()).update();
     }
     public List<Session> running(UUID companyId, UUID userId) {
         return jdbc.sql("SELECT * FROM yumpoo.work_item_time_session WHERE company_id=:c AND user_id=:u AND stopped_at IS NULL AND deleted_at IS NULL ORDER BY started_at DESC,id DESC")

@@ -1,7 +1,7 @@
 import { mount, enableAutoUnmount, flushPromises } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ProjectWorkItemListItem, ListProjectWorkItemsRequest } from '@yumpoo/api-client'
+import { WorkItemGroupingField, WorkItemGroupingOrder, type ProjectWorkItemListItem, type ListProjectWorkItemsRequest, type WorkItemTableGrouping } from '@yumpoo/api-client'
 import { useWorkItemGrouping } from './useWorkItemGrouping'
 import { EMPTY_GROUP } from './workItemGrouping'
 
@@ -9,7 +9,8 @@ const api = vi.hoisted(() => ({ listProjectWorkItems: vi.fn(), listProjectWorkIt
 vi.mock('../../api/client', () => ({ workItemsApi: api }))
 enableAutoUnmount(afterEach)
 const item = (id: string, assigneeUserId: string | null = 'a') => ({ id, assigneeUserId, statusCode: 'TODO', priority: null, dueDate: null } as ProjectWorkItemListItem)
-function harness(initial: ProjectWorkItemListItem[] = [], protectedIds = new Set<string>()) {
+type ServerOptions = Pick<Parameters<typeof useWorkItemGrouping>[0], 'stored' | 'save'>
+function harness(initial: ProjectWorkItemListItem[] = [], protectedIds = new Set<string>(), server: ServerOptions = {}) {
   const items = ref(initial)
   const today = ref('2026-09-14')
   const preferenceKey = ref('grouping:user:company:project')
@@ -19,7 +20,7 @@ function harness(initial: ProjectWorkItemListItem[] = [], protectedIds = new Set
   mount(defineComponent({ setup() {
     grouping = useWorkItemGrouping({ items, request: () => request.value, preferenceKey: () => preferenceKey.value,
       sources: () => ({ members: [], contents: [], statuses: [], priorities: [] }), today: () => today.value,
-      ready: () => true, restore, protectedIds: () => protectedIds })
+      ready: () => true, restore, protectedIds: () => protectedIds, ...server })
     return () => null
   } }))
   return { grouping, items, today, preferenceKey, restore, request }
@@ -102,6 +103,19 @@ describe('分组分页与本地偏好', () => {
     expect(grouping.order.value).toBe('NAME_DESC')
     expect(grouping.showEmpty.value).toBe(true)
     await grouping.setField(''); expect(restore).toHaveBeenCalledOnce()
+  })
+  it('项目表以个人表格设置为准，设置为空时上传并删除本机旧分组，晚到的设置重新分组', async () => {
+    localStorage.setItem('grouping:user:company:project', JSON.stringify({ field: 'ASSIGNEE', order: 'NAME_DESC', showEmpty: false, collapsed: [], colors: {} }))
+    const stored = ref<WorkItemTableGrouping | null | undefined>()
+    const save = vi.fn((value: WorkItemTableGrouping) => { stored.value = value })
+    const { grouping } = harness([], new Set(), { stored: () => stored.value, save })
+    stored.value = null; await flushPromises()
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ field: 'ASSIGNEE', order: 'NAME_DESC' }))
+    expect(localStorage.getItem('grouping:user:company:project')).toBeNull()
+    stored.value = { field: WorkItemGroupingField.Status, order: WorkItemGroupingOrder.Default, showEmpty: true, collapsed: [], colors: {} }
+    await flushPromises()
+    expect(grouping.field.value).toBe('STATUS')
+    expect(api.listProjectWorkItemFilterOptions.mock.lastCall![0]).toMatchObject({ field: 'STATUS' })
   })
   it('编辑字段后重新归组并校准完整数量，跨午夜重算日期', async () => {
     const { grouping, items, today } = harness([item('a1')])

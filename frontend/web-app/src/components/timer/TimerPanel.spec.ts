@@ -11,7 +11,8 @@ vi.mock('../../composables/useTimeTracker', async () => {
   const current = ref<import('@yumpoo/api-client').CurrentTimeTracker>()
   const running = computed(() => current.value?.runningSessions ?? [])
   const tracker = { current, running, isRunning: (id: string) => running.value.some(timer => timer.session.workItemId === id), now: ref(Date.now()),
-    busy: ref(false), problem: ref(''), connected: ref(true), savedAt: ref(0), wallDuration: ref(120000), start: vi.fn(), startMany: vi.fn(), switchTo: vi.fn(), stop: vi.fn(), stopAll: vi.fn() }
+    busy: ref(false), problem: ref(''), connected: ref(true), savedAt: ref(0), wallDuration: ref(120000), start: vi.fn(), startMany: vi.fn(), switchTo: vi.fn(), stop: vi.fn(), stopAll: vi.fn(),
+    preferences: ref({ timerEnabled: true, workdayStartMinute: 540, workdayEndMinute: 1080, hideCompleted: false }), setPreferences: vi.fn() }
   return { useTimeTracker: () => tracker, formatDuration: () => '0:02:00', formatTrackingDuration: () => '2m 0s', onTimeTrackingChanged: () => () => undefined }
 })
 import { useTimeTracker } from '../../composables/useTimeTracker'
@@ -24,7 +25,7 @@ function runningState(id = 's', workItemTitle = '工作a') {
 }
 function item(id: string, projectName = '项目甲'): TimerCandidate {
   return { workItemId: id, projectId: `${id}-project`, projectName, itemNo: `TASK-${id}`, title: `工作${id}`,
-    contentName: '任务', contentCode: 'TASKS', contentColorToken: WorkItemLabelColorToken.BrightBlue, statusCategory: 'TODO', assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }
+    contentName: '任务', contentCode: 'TASKS', contentColorToken: WorkItemLabelColorToken.BrightBlue, statusCategory: 'TODO', completed: false, assignedToMe: true, lastTrackedAt: null, ownDurationMs: 0 }
 }
 async function panel(initialExpanded = true, attachTo?: HTMLElement) {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/timer', component: { template: '<div />' } }] })

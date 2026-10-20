@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemTableGrouping } from './WorkItemTableGrouping';
+import {
+    WorkItemTableGroupingFromJSON,
+    WorkItemTableGroupingFromJSONTyped,
+    WorkItemTableGroupingToJSON,
+    WorkItemTableGroupingToJSONTyped,
+} from './WorkItemTableGrouping';
 import type { WorkItemTableHeight } from './WorkItemTableHeight';
 import {
     WorkItemTableHeightFromJSON,
@@ -77,6 +84,18 @@ export interface WorkItemTableSettings {
      */
     defaultValues: WorkItemCreateDefaultValues;
     /**
+     * null 表示从未保存过分组。
+     * @type {WorkItemTableGrouping}
+     * @memberof WorkItemTableSettings
+     */
+    grouping: WorkItemTableGrouping | null;
+    /**
+     * null 表示按 DONE 与 CANCELED 两类状态判定已完成。
+     * @type {Set<string>}
+     * @memberof WorkItemTableSettings
+     */
+    completedStatusCodes: Set<string> | null;
+    /**
      *
      * @type {Date}
      * @memberof WorkItemTableSettings
@@ -102,6 +121,8 @@ export function instanceOfWorkItemTableSettings(value: object): value is WorkIte
     if (!('rowHeight' in value) || value['rowHeight'] === undefined) return false;
     if (!('coloringRules' in value) || value['coloringRules'] === undefined) return false;
     if (!('defaultValues' in value) || value['defaultValues'] === undefined) return false;
+    if (!('grouping' in value) || value['grouping'] === undefined) return false;
+    if (!('completedStatusCodes' in value) || value['completedStatusCodes'] === undefined) return false;
     if (!('updatedAt' in value) || value['updatedAt'] === undefined) return false;
     if (!('etag' in value) || value['etag'] === undefined) return false;
     return true;
@@ -123,6 +144,8 @@ export function WorkItemTableSettingsFromJSONTyped(json: any, ignoreDiscriminato
         'rowHeight': WorkItemTableHeightFromJSON(json['rowHeight']),
         'coloringRules': ((json['coloringRules'] as Array<any>).map(WorkItemColoringRuleFromJSON)),
         'defaultValues': WorkItemCreateDefaultValuesFromJSON(json['defaultValues']),
+        'grouping': WorkItemTableGroupingFromJSON(json['grouping']),
+        'completedStatusCodes': json['completedStatusCodes'] == null ? null : new Set(json['completedStatusCodes']),
         'updatedAt': (json['updatedAt'] == null ? null : new Date(json['updatedAt'])),
         'etag': json['etag'],
     };
@@ -145,6 +168,8 @@ export function WorkItemTableSettingsToJSONTyped(value?: Omit<WorkItemTableSetti
         'rowHeight': WorkItemTableHeightToJSON(value['rowHeight']),
         'coloringRules': ((value['coloringRules'] as Array<any>).map(WorkItemColoringRuleToJSON)),
         'defaultValues': WorkItemCreateDefaultValuesToJSON(value['defaultValues']),
+        'grouping': WorkItemTableGroupingToJSON(value['grouping']),
+        'completedStatusCodes': value['completedStatusCodes'] == null ? null : Array.from(value['completedStatusCodes'] as Set<any>),
         'updatedAt': value['updatedAt'] == null ? value['updatedAt'] : value['updatedAt'].toISOString(),
     };
 }
