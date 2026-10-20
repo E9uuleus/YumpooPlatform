@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   repository, releaseAssetNames, expectedArtifactName, nextReleaseTag, validateTag, validateProvenance, validateAssetDigest,
 } from './policy.mjs'
@@ -10,15 +10,18 @@ import { createGithub, fileDigest, readJson, unpackArtifact } from './github.mjs
 import {
   assertOnReleaseBranch, ciWorkflowId, downloadAsset, downloadCiPackage, indexAssets, inspectPackage, resolveTagCommit, selectCiAttempt, verifyCiAttempt,
 } from './promote-release.mjs'
-import { releaseNotes } from './release-notes.mjs'
+import { collectReleaseEntries, releaseNotes } from './release-notes.mjs'
+import { missingSummary } from './release-notes-policy.mjs'
+import { migrationInventory } from '../ci/migration-policy.mjs'
 import { notifyWeCom } from './notify.mjs'
 import { verifyBuildAttestations } from './attestation.mjs'
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const serverRelease = release => typeof release.tag_name === 'string' && release.tag_name.startsWith('server-v')
 
 // Builds the draft that a person publishes: tag, notes and every verified asset are fixed before publishing,
 // because an immutable Release can no longer change its assets afterwards.
-export async function prepareDraft({ github, sourceCommit, env, directory, now = new Date(), unpack = unpackArtifact, attest = verifyBuildAttestations, log = console.log }) {
+export async function prepareDraft({ github, sourceCommit, env, directory, now = new Date(), unpack = unpackArtifact, attest = verifyBuildAttestations, log = console.log, inventory = () => migrationInventory(root) }) {
   assert(/^[0-9a-f]{40}$/u.test(sourceCommit), 'Invalid source commit')
   assert.equal(env.GITHUB_REPOSITORY, repository, 'Unexpected repository')
   assert(['workflow_run', 'workflow_dispatch'].includes(env.GITHUB_EVENT_NAME), 'Unsupported draft trigger')
@@ -63,14 +66,18 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
   const run = pinned
     ? await verifyCiAttempt(github, workflowId, sourceCommit, pinned.ciRunId, pinned.ciRunAttempt)
     : await selectCiAttempt(github, workflowId, sourceCommit)
+  // The body is regenerated on every run while the draft is unpublished, so fixing a PR's release notes and rerunning
+  // the workflow refreshes it; the checkout is the released commit, which classifies its own migrations.
+  const comparison = previous ? await github.get(`/compare/${encodeURIComponent(previous.tag_name)}...${sourceCommit}`) : null
+  const collected = await collectReleaseEntries(github, comparison?.commits ?? [])
+  const notes = tag => releaseNotes({ tag, sourceCommit, run, previousTag: previous?.tag_name, comparison, collected, inventory: inventory(), supersededDrafts, otherDrafts })
   if (!draft) {
     const tags = (await github.list('/git/matching-refs/tags/server-v')).map(ref => String(ref.ref).replace(/^refs\/tags\//u, ''))
     const tag = nextReleaseTag([...tags, ...releases.map(release => release.tag_name)], now)
-    const comparison = previous ? await github.get(`/compare/${encodeURIComponent(previous.tag_name)}...${sourceCommit}`) : null
-    draft = await github.send('POST', '/releases', {
-      tag_name: tag, target_commitish: sourceCommit, name: tag, draft: true,
-      body: releaseNotes({ tag, sourceCommit, run, previousTag: previous?.tag_name, comparison, supersededDrafts, otherDrafts }),
-    })
+    draft = await github.send('POST', '/releases', { tag_name: tag, target_commitish: sourceCommit, name: tag, draft: true, body: notes(tag) })
+  } else {
+    const body = notes(draft.tag_name)
+    if (draft.body !== body) draft = await github.send('PATCH', `/releases/${draft.id}`, { body })
   }
   assert.equal(draft.draft, true, 'Prepared Release must stay a draft')
   assert.equal(draft.target_commitish, sourceCommit, 'Draft targets another commit')
@@ -110,7 +117,7 @@ export async function prepareDraft({ github, sourceCommit, env, directory, now =
   for (const name of releaseAssetNames.filter(name => name !== 'provenance.json')) await downloadAsset(github, final.get(name), verified)
   await inspectPackage(verified, sourceCommit, provenance)
   await attest(verified, run, { env, log, label: 'persisted draft assets' })
-  return { tag, releaseId: draft.id, url: draft.html_url, created, published: false, provenance, supersededDrafts, otherDrafts }
+  return { tag, releaseId: draft.id, url: draft.html_url, created, published: false, provenance, supersededDrafts, otherDrafts, missing: collected.missing }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
@@ -121,8 +128,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       const stale = result.supersededDrafts.length ? ` Older drafts ${result.supersededDrafts.join(', ')} are superseded: do not publish them; delete them manually.` : ''
       const other = result.otherDrafts.length ? ` Drafts ${result.otherDrafts.join(', ')} are not older than this commit: compare source SHAs before publishing.` : ''
       const summary = `Draft **${result.tag}** is ready for ${process.env.SOURCE_COMMIT}: ${result.url}. Build attestations of the package and SBOMs verified against CI run ${result.provenance.ciRunId} attempt ${result.provenance.ciRunAttempt}.${stale}${other}`
-      console.log(summary)
-      if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`)
+      const warning = result.missing.length ? `\n\n${missingSummary(result.missing)}` : ''
+      console.log(`${summary}${warning}`)
+      if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}${warning}\n`)
       await notifyWeCom(process.env, [
         `**Yumpoo 发布草稿已就绪：${result.tag}**`,
         `> 提交：${process.env.SOURCE_COMMIT.slice(0, 8)}`,

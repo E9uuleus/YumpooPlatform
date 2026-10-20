@@ -82,16 +82,17 @@ function fixture(t, { version = '1.1.0', published = [{ tag: 'desktop-v1.0.0', s
       const tagRef = endpoint.match(/^\/git\/ref\/tags\/(desktop-v[\d.]+)$/u)
       if (tagRef) return { object: { type: 'commit', sha: tagRef[1] === `desktop-v${version}` ? sha : previousSha } }
       if (endpoint === `/compare/${previousSha}...${sha}`) {
-        return { commits: [{ sha: 'c'.repeat(40) }, { sha: 'd'.repeat(40) }, { sha: 'e'.repeat(40) }] }
-      }
-      if (endpoint === `/commits?sha=${sha}&path=desktop&per_page=100`) {
-        return [
-          { sha: 'e'.repeat(40), parents: [{}], commit: { message: 'fix(desktop): 修复托盘 (DESK-9)\n\nbody' } },
+        return { commits: [
           { sha: 'c'.repeat(40), parents: [{}], commit: { message: 'feat(desktop): 新增深链 (DESK-8)' } },
-          { sha: 'f'.repeat(40), parents: [{}], commit: { message: 'feat(desktop): 上一版已发布的提交' } },
-        ]
+          { sha: 'd'.repeat(40), parents: [{}, {}], commit: { message: 'Merge dev' } },
+          { sha: 'e'.repeat(40), parents: [{}], commit: { message: 'fix(platform): 修复托盘与表格 (DESK-9)\n\nbody' } },
+        ] }
       }
-      if (endpoint === `/commits?sha=${sha}&path=packages%2Fpreload-contract&per_page=100`) return [{ sha: 'd'.repeat(40), parents: [{}, {}], commit: { message: 'Merge dev' } }]
+      const pulls = endpoint.match(/^\/commits\/([0-9a-f])\1{39}\/pulls$/u)
+      if (pulls) {
+        const pull = (number, notes) => ({ number, title: `PR ${number}`, merged_at: '2026-10-19T00:00:00Z', user: { login: 'm' }, head: { ref: 'feature/x' }, base: { ref: 'dev' }, body: `## 发布说明\n${notes}` })
+        return { c: [pull(201, '- 新增｜桌面：支持从链接直接打开工作项。')], e: [pull(202, '- 修复｜桌面：托盘菜单不再闪烁。\n- 修复｜Web：表格滚动不再跳回开头。\n- 运维｜桌面：发布后核对更新源。')] }[pulls[1]] ?? []
+      }
       const releaseByTag = endpoint.match(/^\/releases\/tags\/(desktop-v[\d.]+)$/u)
       if (releaseByTag) return this.releases.find(release => release.tag_name === releaseByTag[1] && !release.draft)
       throw new Error(`Unexpected GitHub request: ${endpoint}`)
@@ -120,6 +121,8 @@ function fixture(t, { version = '1.1.0', published = [{ tag: 'desktop-v1.0.0', s
     },
     send(method, endpoint, body) {
       this.calls.push(`${method} ${endpoint}`)
+      const patch = endpoint.match(/^\/releases\/(\d+)$/u)
+      if (method === 'PATCH' && patch) return Object.assign(this.releases.find(release => release.id === Number(patch[1])), body)
       assert.equal(`${method} ${endpoint}`, 'POST /releases')
       const release = { id: ++releaseId, html_url: `https://github.com/${repository}/releases/tag/untagged-${releaseId}`, ...body }
       this.releases.push(release)
@@ -232,14 +235,16 @@ test('a draft carries the attested CI bytes, provenance first, notes limited to 
   assert.deepEqual(github.attestations.map(entry => [entry.label, entry.uploadsSoFar]),
     [['desktop CI bytes before upload', 0], ['persisted desktop draft assets', 7]])
   const draft = draftOf(github)
-  assert.match(draft.body, /新增深链[\s\S]*修复托盘/u, 'oldest first, merge commits and earlier releases excluded')
-  assert.doesNotMatch(draft.body, /上一版已发布|Merge dev/u)
+  assert.match(draft.body, /\*\*新增\*\*\n\n- 桌面｜支持从链接直接打开工作项。（#201）\n\n\*\*修复\*\*\n\n- 桌面｜托盘菜单不再闪烁。（#202）/u, 'commit order, desktop scope only')
+  assert.doesNotMatch(draft.body, /表格滚动|Merge dev|DESK-/u)
+  assert.match(draft.body, /- 管理员操作：\n {2}- 桌面｜发布后核对更新源。（#202）/u)
   const releaseJson = JSON.parse(github.assets.get(`${draft.id}/release.json`).bytes)
-  assert.deepEqual(releaseJson.notes, ['feat(desktop): 新增深链 (DESK-8)', 'fix(desktop): 修复托盘 (DESK-9)'])
+  assert.deepEqual(releaseJson.notes, ['新增：支持从链接直接打开工作项。', '修复：托盘菜单不再闪烁。'])
   assert.equal(releaseJson.installer.name, installerName(version))
   // A rerun finds every asset in place and uploads nothing.
   await prepareDesktopDraft(options())
   assert.equal(github.uploads.length, 7)
+  assert(!github.calls.some(call => call.startsWith('PATCH ')), 'an unchanged body is not rewritten')
 })
 
 test('the first channel release says so instead of claiming a maintenance update', async t => {
