@@ -1,4 +1,4 @@
-import type { TimerDockSide, TimerOrbLayout, TimerOrbSize } from '@yumpoo/preload-contract'
+import type { QuickPanelOrigin, RailSize, TimerDockSide, TimerOrbLayout, TimerOrbSize } from '@yumpoo/preload-contract'
 
 export interface Rect { x: number; y: number; width: number; height: number }
 
@@ -10,7 +10,16 @@ export const CAPSULE_WIDTH = 216
 export const DOCK_TAB = { width: 32, height: 112 } as const
 export const DOCK_CARD = { width: 288, height: 152 } as const
 export const PANEL = { width: 360 + PANEL_MARGIN * 2, height: 480 + PANEL_MARGIN * 2 } as const
-export const MENU = { width: 288 + PANEL_MARGIN * 2, height: 372 + PANEL_MARGIN * 2 } as const
+export const MENU = { width: 288 + PANEL_MARGIN * 2, height: 408 + PANEL_MARGIN * 2 } as const
+
+export const QUICK_PANEL = { width: 340 + PANEL_MARGIN * 2, height: 476 + PANEL_MARGIN * 2 } as const
+export const RAIL_ICONS: Readonly<Record<RailSize, number>> = { small: 30, medium: 34, large: 40 }
+/** Space between the rail and the screen edge; tucked, the rail keeps RAIL_PEEK - RAIL_EDGE_GAP pixels in view. */
+export const RAIL_EDGE_GAP = 6
+export const RAIL_PEEK = 10
+export const MAX_RAIL_PROJECTS = 6
+// Mirrors ProjectRailView: 10px padding, 8px gaps, a 14px time label under the timer ring and a 1px divider.
+const RAIL_PADDING = 10, RAIL_GAP = 8, RAIL_LABEL = 14
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max))
 
@@ -101,17 +110,25 @@ export function panelVisual(bounds: Rect): Rect {
   return { x: bounds.x + PANEL_MARGIN, y: bounds.y + PANEL_MARGIN, width: bounds.width - PANEL_MARGIN * 2, height: bounds.height - PANEL_MARGIN * 2 }
 }
 
+/** Taskbar edge inferred from the work area, because tray bounds are unreliable for overflow icons; auto-hidden taskbars count as bottom. */
+export function taskbarEdge(display: { bounds: Rect; workArea: Rect }): QuickPanelOrigin {
+  const work = display.workArea, screen = display.bounds
+  return work.y > screen.y ? 'top' : work.x > screen.x ? 'left' : work.x + work.width < screen.x + screen.width ? 'right' : 'bottom'
+}
+
 /**
- * Tray menus open against the taskbar edge (inferred from the work area because tray bounds are unreliable for
- * overflow icons); surface menus open at the pointer and flip when they would overflow.
+ * Tray menus open against the taskbar edge at the pointer, `corner` ones at the far end of that edge where the tray
+ * sits (the shortcut has no pointer to follow); surface menus open at the pointer and flip when they would overflow.
  */
-export function placeMenu(kind: 'tray' | 'pointer', cursor: { x: number; y: number }, display: { bounds: Rect; workArea: Rect }): Rect {
-  const { width, height } = MENU, work = display.workArea, screen = display.bounds
+export function placeMenu(kind: 'tray' | 'corner' | 'pointer', cursor: { x: number; y: number }, display: { bounds: Rect; workArea: Rect },
+  size: { width: number; height: number } = MENU): Rect {
+  const { width, height } = size, work = display.workArea
   let x: number, y: number
-  if (kind === 'tray') {
-    const edge = work.y > screen.y ? 'top' : work.x > screen.x ? 'left' : work.x + work.width < screen.x + screen.width ? 'right' : 'bottom'
-    x = edge === 'left' ? work.x : edge === 'right' ? work.x + work.width - width : cursor.x - width / 2
-    y = edge === 'top' ? work.y : edge === 'bottom' ? work.y + work.height - height : cursor.y - height / 2
+  if (kind !== 'pointer') {
+    const edge = taskbarEdge(display)
+    const along = kind === 'corner' ? { x: work.x + work.width, y: work.y + work.height } : cursor
+    x = edge === 'left' ? work.x : edge === 'right' ? work.x + work.width - width : along.x - width / 2
+    y = edge === 'top' ? work.y : edge === 'bottom' ? work.y + work.height - height : along.y - height / 2
   } else {
     x = cursor.x - PANEL_MARGIN + 2
     y = cursor.y - PANEL_MARGIN + 2
@@ -119,4 +136,30 @@ export function placeMenu(kind: 'tray' | 'pointer', cursor: { x: number; y: numb
     if (y + height > work.y + work.height) y = cursor.y - height + PANEL_MARGIN - 2
   }
   return clampRect({ x, y, width, height }, work)
+}
+
+export function railLength(size: RailSize, projects: number, timer: boolean): number {
+  const icon = RAIL_ICONS[size], items = projects + 1
+  return RAIL_PADDING * 2 + items * icon + (items - 1) * RAIL_GAP + (timer ? icon + RAIL_LABEL + RAIL_GAP * 2 + 1 : 0)
+}
+
+/** Rail window against the screen edge: the rail, its gap to the edge, and a shadow margin on the inner side and both ends. */
+export function placeRail(side: TimerDockSide, dockY: number, size: RailSize, projects: number, timer: boolean, area: Rect): { bounds: Rect; rail: Rect } {
+  const width = RAIL_ICONS[size] + 14, length = railLength(size, projects, timer)
+  const windowWidth = RAIL_EDGE_GAP + width + SHADOW_PAD, height = length + SHADOW_PAD * 2
+  const y = clamp(Math.round(area.y + dockY * area.height - height / 2), area.y, area.y + area.height - height)
+  const x = side === 'left' ? area.x : area.x + area.width - windowWidth
+  return { bounds: { x, y, width: windowWidth, height }, rail: { x: side === 'left' ? RAIL_EDGE_GAP : SHADOW_PAD, y: SHADOW_PAD, width, height: length } }
+}
+
+/** Out, the whole window is hit-testable; tucked, only the strip along the screen edge. */
+export function railShape(bounds: Rect, side: TimerDockSide, tucked: boolean): Rect[] {
+  if (!tucked) return [{ x: 0, y: 0, width: bounds.width, height: bounds.height }]
+  return [{ x: side === 'left' ? 0 : bounds.width - RAIL_PEEK, y: SHADOW_PAD, width: RAIL_PEEK, height: bounds.height - SHADOW_PAD * 2 }]
+}
+
+/** The quick panel 12px beside the rail with its top 40px above `anchor`, the clicked icon in screen coordinates. */
+export function placeBeside(anchor: Rect, side: TimerDockSide, area: Rect, size: { width: number; height: number } = QUICK_PANEL): Rect {
+  const x = side === 'right' ? anchor.x - 12 - size.width + PANEL_MARGIN : anchor.x + anchor.width + 12 - PANEL_MARGIN
+  return clampRect({ x, y: anchor.y - 40 - PANEL_MARGIN, width: size.width, height: size.height }, area)
 }

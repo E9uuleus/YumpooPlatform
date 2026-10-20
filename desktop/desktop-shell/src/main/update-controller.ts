@@ -17,6 +17,7 @@ export interface UpdaterLike {
   disableWebInstaller: boolean
   setFeedURL(url: string): void
   checkForUpdates(): Promise<unknown>
+  downloadUpdate(): Promise<unknown>
   install(isSilent: boolean, isForceRunAfter: boolean): boolean
   on(event: string, listener: (...args: never[]) => void): unknown
 }
@@ -30,6 +31,8 @@ export interface UpdateControllerOptions {
   readonly updater: UpdaterLike
   readonly update: DesktopUpdateDistribution
   readonly currentVersion: string
+  /** When off, a discovered update waits in available until download() is called. */
+  readonly autoDownload: boolean
   /** Should give up when `signal` aborts; the controller stops waiting for it either way. */
   fetchJson(url: string, signal: AbortSignal): Promise<unknown>
   digest(file: string): Promise<FileDigest>
@@ -50,7 +53,7 @@ interface VerifiedUpdate {
 }
 
 /**
- * Drives electron-updater with automatic download but never automatic install. A downloaded installer becomes
+ * Drives electron-updater with optional automatic download but never automatic install. A downloaded installer becomes
  * "ready" only after its Ed25519 authorization from the feed checks out against the pinned keys; installation
  * then happens on quit, re-checking the digest so a file swapped after verification is never run.
  */
@@ -65,7 +68,7 @@ export class UpdateController {
 
   constructor(private readonly options: UpdateControllerOptions) {
     const updater = options.updater
-    updater.autoDownload = true
+    updater.autoDownload = options.autoDownload
     updater.autoInstallOnAppQuit = false
     updater.allowDowngrade = false
     updater.disableWebInstaller = true
@@ -74,6 +77,7 @@ export class UpdateController {
     updater.on('update-not-available', () => this.set('idle'))
     updater.on('update-available', (info: { version?: string }) => {
       this.version = typeof info?.version === 'string' ? info.version : undefined
+      if (!updater.autoDownload) { this.set('available'); return }
       this.percent = 0
       this.set('downloading')
     })
@@ -125,6 +129,20 @@ export class UpdateController {
     if (this.phase === 'checking' || this.phase === 'downloading' || this.phase === 'verifying' || this.phase === 'ready') return
     this.lastCheck = this.options.now()
     this.options.updater.checkForUpdates().catch(() => undefined)
+  }
+
+  /** Downloads the update a check found while automatic download was off. */
+  download(): void {
+    if (this.phase !== 'available') return
+    this.percent = 0
+    this.set('downloading')
+    this.options.updater.downloadUpdate().catch(() => undefined)
+  }
+
+  /** Turning automatic download back on also starts a download that is waiting. */
+  setAutoDownload(value: boolean): void {
+    this.options.updater.autoDownload = value
+    if (value) this.download()
   }
 
   /** Called from the quit path; installs silently and optionally relaunches. Returns whether an installer started. */

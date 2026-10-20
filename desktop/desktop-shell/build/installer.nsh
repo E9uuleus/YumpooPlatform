@@ -100,10 +100,13 @@
 
 ; Updates run the old uninstaller with --updated and keep everything. A real uninstall signs the
 ; user out (auth\ holds the only persisted session) and clears Chromium runtime data, keeping only
-; the two preference files.
+; the preference files.
 !macro customUnInstall
   ${ifNot} ${isUpdated}
     DeleteRegKey HKCU "Software\Classes\yumpoo"
+    ; "Start at sign-in" registers this value (named after the AppUserModelID); updates keep it, uninstall removes it.
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.yumpoo.desktop"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "com.yumpoo.desktop"
     Delete "$SMPROGRAMS\Yumpoo Desktop (Safe Mode).lnk"
     ; The installer keeps a copy of itself here as the base for differential updates (about 100 MB).
     RMDir /r "$LOCALAPPDATA\yumpoo-desktop-updater"
@@ -115,6 +118,7 @@
         ${andIf} $R1 != ".."
         ${andIf} $R1 != "timer-preferences.json"
         ${andIf} $R1 != "inbox-preferences.json"
+        ${andIf} $R1 != "desktop-preferences.json"
           ${if} ${FileExists} "$R9\$R1\*.*"
             RMDir /r "$R9\$R1"
           ${else}

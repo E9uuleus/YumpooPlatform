@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   cursor: { x: -9999, y: -9999 },
   menuOpen: vi.fn((): boolean => false), menuPrewarm: vi.fn(), menuUpdate: vi.fn(), menuSender: vi.fn((): boolean => false), menuHide: vi.fn(),
   menuAction: undefined as ((action: TimerMenuAction) => void) | undefined,
+  quickToggle: vi.fn((): boolean => false), railHost: undefined as { timer: () => boolean } | undefined,
 }))
 vi.mock('electron', () => ({
   app: { isPackaged: false, quit: mocks.quit, on: (name: string, fn: (...args: unknown[]) => void) => mocks.appEvents.set(name, fn) },
@@ -64,6 +65,25 @@ vi.mock('../src/main/timer-menu', () => ({
     constructor(_origin: string, _preload: string, onAction: (action: TimerMenuAction) => void) { mocks.menuAction = onAction }
   },
 }))
+vi.mock('../src/main/quick-panel', () => ({
+  QuickPanelController: class {
+    install = vi.fn()
+    prewarm = vi.fn()
+    destroy = vi.fn()
+    railProject = vi.fn(() => null)
+    isSender = vi.fn(() => false)
+    toggle = mocks.quickToggle
+  },
+}))
+vi.mock('../src/main/rail-window', () => ({
+  RailController: class {
+    install = vi.fn()
+    sync = vi.fn()
+    destroy = vi.fn()
+    isSender = vi.fn(() => false)
+    constructor(_origin: string, _preload: string, _timer: unknown, _prefs: unknown, host: { timer: () => boolean }) { mocks.railHost = host }
+  },
+}))
 import { TimerWindowController } from '../src/main/timer-window'
 import { TimerPreferenceStore } from '../src/main/timer-preferences'
 
@@ -94,7 +114,7 @@ async function drop() { mini().events.get('moved')?.(); mini().events.get('move'
 beforeEach(() => {
   mocks.handlers.clear(); mocks.appEvents.clear(); mocks.trayEvents.clear(); mocks.windows.length = 0
   mocks.area = { x: 0, y: 0, width: 1280, height: 800 }; mocks.cursor = { x: -9999, y: -9999 }
-  vi.clearAllMocks(); mocks.menuOpen.mockReturnValue(false); mocks.menuSender.mockReturnValue(false); vi.useFakeTimers()
+  vi.clearAllMocks(); mocks.quickToggle.mockReturnValue(false); mocks.menuOpen.mockReturnValue(false); mocks.menuSender.mockReturnValue(false); vi.useFakeTimers()
 })
 afterEach(() => { mocks.appEvents.get('will-quit')?.(); vi.useRealTimers() })
 
@@ -225,32 +245,25 @@ describe('desktop timer and tray', () => {
     const restarted = setup(store)
     expect(invoke('window-state', restarted.event)).toMatchObject({ pinned: false, preferences: { display: 'dock', orbSize: 'large' } })
   })
-  it('docks to the saved edge, reveals the card by shape and snaps to the nearer edge after a drag', async () => {
+  it('hands the compact surface to the rail while the display style is the rail', async () => {
     const store = new TimerPreferenceStore()
     store.update({ display: 'dock' })
     const { event } = setup(store)
-    await invoke('show', event, 'compact')
-    expect(mocks.windows[0]?.options).toMatchObject({ x: 982, y: 314, width: 298, height: 172 })
-    expect(invoke('window-state', source())).toMatchObject({ orb: { dock: { side: 'right', expanded: false }, canvas: { left: 10, top: 10 } } })
-    if (shaped) expect(lastShape()).toEqual([{ x: 256, y: 20, width: 42, height: 132 }])
-    mocks.cursor = { x: 1262, y: 400 }
-    await vi.advanceTimersByTimeAsync(100)
-    expect(mini().webContents.send).toHaveBeenLastCalledWith('yumpoo:timer:orb-hover', true)
-    mocks.cursor = { x: 1082, y: 400 }
-    await vi.advanceTimersByTimeAsync(100)
-    expect(mini().webContents.send).toHaveBeenLastCalledWith('yumpoo:timer:orb-hover', false)
-    expect(invoke('orb-layout', source(), { details: true })).toMatchObject({ dock: { side: 'right', expanded: true } })
-    if (shaped) expect(lastShape()).toEqual([{ x: 0, y: 0, width: 298, height: 172 }])
-    await vi.advanceTimersByTimeAsync(100)
-    expect(mini().webContents.send).toHaveBeenLastCalledWith('yumpoo:timer:orb-hover', true)
-    mini().setBounds({ x: 100, y: 50, width: 298, height: 172 })
-    await drop()
-    expect(mini().setBounds).toHaveBeenLastCalledWith({ x: 0, y: 50, width: 298, height: 172 })
-    expect(invoke('window-state', source())).toMatchObject({ preferences: { dockSide: 'left' }, orb: { dock: { side: 'left', expanded: true }, canvas: { left: 0 } } })
-    expect(store.get().dockY).toBeCloseTo(136 / 800)
-    invoke('mode', source(), 'picker')
-    expect(mini().setBounds).toHaveBeenLastCalledWith({ x: 0, y: 0, width: 384, height: 504 })
+    invoke('state', event, state())
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.windows).toHaveLength(0)
+    expect(mocks.railHost?.timer()).toBe(true)
+    await invoke('show', event, 'picker')
+    expect(mocks.windows).toHaveLength(1)
+    invoke('mode', source(), 'compact')
+    expect(mini().hide).toHaveBeenCalledOnce()
+    mocks.menuAction?.('hide')
+    expect(mocks.railHost?.timer()).toBe(false)
+    expect(mocks.menuUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ display: 'dock', visible: false }))
+    mocks.menuAction?.('show-dock')
+    expect(mocks.railHost?.timer()).toBe(true)
   })
+
   it('closes the quick panel and keeps a closed capsule shut while the orb is dragged natively', async () => {
     const { event } = setup()
     await invoke('show', event, 'compact')
@@ -295,46 +308,46 @@ describe('desktop timer and tray', () => {
     expect(mini().webContents.send.mock.calls).toHaveLength(sends)
     expect(invoke('window-state', source())).toMatchObject({ orb: { side: null }, hovered: false })
   })
-  it('keeps an open card while it is dragged and moves the window with the cursor for a drag that starts on a button', async () => {
-    const store = new TimerPreferenceStore()
-    store.update({ display: 'dock' })
-    const { event } = setup(store)
+  it('moves the orb with the cursor for a drag that starts on a button', async () => {
+    const { event } = setup()
     await invoke('show', event, 'compact')
     expect(() => invoke('drag', event, true)).toThrow('UNTRUSTED')
     expect(() => invoke('drag', source(), 'yes')).toThrow('INVALID_TIMER_DRAG')
-    invoke('orb-layout', source(), { details: true })
-    mocks.cursor = { x: 1100, y: 400 }
+    mocks.cursor = { x: 1224, y: 744 }
     await vi.advanceTimersByTimeAsync(100)
     invoke('drag', source(), true)
     expect(mini().webContents.send).toHaveBeenLastCalledWith('yumpoo:timer:dragging', true)
-    expect(mini().webContents.send).not.toHaveBeenCalledWith('yumpoo:timer:orb-hover', false)
     mocks.cursor = { x: 400, y: 300 }
     await vi.advanceTimersByTimeAsync(20)
-    expect(mini().setPosition).toHaveBeenLastCalledWith(282, 214)
+    expect(mini().setPosition).toHaveBeenLastCalledWith(142, 258)
     invoke('drag', source(), false)
-    expect(mini().setBounds).toHaveBeenLastCalledWith({ x: 0, y: 214, width: 298, height: 172 })
     expect(mini().webContents.send).toHaveBeenLastCalledWith('yumpoo:timer:dragging', false)
-    expect(invoke('window-state', source())).toMatchObject({ preferences: { dockSide: 'left' }, orb: { dock: { side: 'left', expanded: true } } })
     const moves = mini().setPosition.mock.calls.length
     await vi.advanceTimersByTimeAsync(100)
     expect(mini().setPosition.mock.calls).toHaveLength(moves)
   })
-  it('switches a visible orb into the dock from the quick panel', async () => {
+
+  it('moves a visible orb into the rail from the quick panel', async () => {
     const { event, store } = setup()
     invoke('state', event, state())
     await vi.advanceTimersByTimeAsync(0)
     mocks.menuAction?.('show-dock')
     expect(store.get().display).toBe('dock')
-    expect(mini().setBounds).toHaveBeenLastCalledWith({ x: 982, y: 314, width: 298, height: 172 })
+    expect(mini().hide).toHaveBeenCalledOnce()
+    expect(mocks.railHost?.timer()).toBe(true)
     mocks.menuAction?.('hide')
+    expect(mocks.railHost?.timer()).toBe(false)
     expect(mini().hide).toHaveBeenCalledOnce()
     mocks.menuAction?.('toggle-pin')
     expect(mini().setAlwaysOnTop).toHaveBeenLastCalledWith(false)
-    expect(mocks.menuUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ signedIn: true, display: 'dock', pinned: false }))
+    expect(mocks.menuUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ signedIn: true, display: 'dock', visible: false, pinned: false }))
   })
-  it('opens the shared quick panel from the tray and falls back to the native menu until it is ready', () => {
+
+  it('toggles the quick time panel on tray click and opens the shared quick menu on right-click', () => {
     const { main, event } = setup()
+    expect(mocks.trayEvents.has('double-click')).toBe(false)
     mocks.trayEvents.get('click')?.()
+    expect(mocks.quickToggle).not.toHaveBeenCalled()
     expect(main.show).toHaveBeenCalledOnce()
     expect(main.setIcon).toHaveBeenCalledOnce()
     expect(mocks.windows).toHaveLength(0)
@@ -352,6 +365,12 @@ describe('desktop timer and tray', () => {
     invoke('state', event, { ...state(), clockOffsetMs: 1500 })
     expect(mocks.menuPrewarm).toHaveBeenCalledOnce()
     expect(mocks.menuUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ signedIn: true, clockOffsetMs: 1500, recent: { title: '最近工作' } }))
+    mocks.trayEvents.get('click')?.()
+    expect(mocks.quickToggle).toHaveBeenLastCalledWith({ source: 'tray' }, [])
+    expect(main.show).toHaveBeenCalledTimes(3)
+    mocks.quickToggle.mockReturnValue(true)
+    mocks.trayEvents.get('click')?.()
+    expect(main.show).toHaveBeenCalledTimes(3)
     expect(menu('窗口置顶').checked).toBe(true)
     menu('窗口置顶').click?.()
     expect(menu('窗口置顶').checked).toBe(false)

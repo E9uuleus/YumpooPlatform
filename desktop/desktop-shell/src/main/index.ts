@@ -46,6 +46,8 @@ import { DesktopLogger } from './logger'
 import { runSelfCheck, selfCheckReportPath, UPDATE_CHECK_ARGUMENT } from './self-check'
 import { handleStartupFailure } from './startup-failure'
 import { CRASH_LOOP_THRESHOLD, LaunchHealth, StartupStateStore } from './startup-state'
+import { DesktopPreferenceStore } from './desktop-preferences'
+import { DesktopSettingsController, HIDDEN_ARGUMENT } from './desktop-settings'
 import { UpdateController, type FileDigest, type UpdaterLike } from './update-controller'
 import { installClientHeaders, installUpdateIpc, UPDATE_STATE_CHANNEL } from './update-ipc'
 import { resolveWebAppUrl } from './url-policy'
@@ -57,7 +59,7 @@ const DIAGNOSTICS_PAGE_TIMEOUT_MS = 15_000
 const ERR_ABORTED = -3
 // Must equal electron-builder appId: the installer stamps it on the shortcuts that Windows notifications resolve.
 const APP_USER_MODEL_ID = 'com.yumpoo.desktop'
-const PREFERENCE_FILES = ['timer-preferences.json', 'inbox-preferences.json']
+const PREFERENCE_FILES = ['timer-preferences.json', 'inbox-preferences.json', 'desktop-preferences.json']
 const LOCAL_PAGE_DIRECTORY = path.join(__dirname, '..', 'diagnostics')
 const launchStartedAt = Date.now()
 const smokeTest = process.argv.includes(SMOKE_TEST_ARGUMENT)
@@ -71,6 +73,9 @@ const logger = new DesktopLogger(path.join(userDataPath, 'logs'))
 const startupState = new StartupStateStore(userDataPath)
 const launchHealth = new LaunchHealth(startupState)
 const protocolDispatcher = new ProtocolLaunchDispatcher()
+const desktopPreferences = new DesktopPreferenceStore(userDataPath)
+// Start at sign-in passes this: the main window loads but stays hidden, leaving the tray and the rail.
+const hiddenLaunch = process.argv.includes(HIDDEN_ARGUMENT)
 
 class StartupError extends Error {
   constructor(readonly reason: DiagnosticsStartupFailure, cause: unknown) {
@@ -203,6 +208,8 @@ function startUpdates(schedule = true): void {
     updater: autoUpdater as unknown as UpdaterLike,
     update,
     currentVersion: app.getVersion(),
+    // The headless update check always downloads; it verifies the whole update path.
+    autoDownload: !schedule || desktopPreferences.get().autoDownload,
     fetchJson: fetchAuthorization,
     digest: digestFile,
     digestSync,
@@ -214,6 +221,7 @@ function startUpdates(schedule = true): void {
     schedule: (callback, delayMs) => { setTimeout(callback, delayMs).unref() },
   })
   if (!schedule) return
+  desktopPreferences.onChange(value => updateController?.setAutoDownload(value.autoDownload))
   powerMonitor.on('resume', () => updateController?.onResume())
   updateController.start()
 }
@@ -423,7 +431,7 @@ async function createMainWindow(): Promise<void> {
   // Safe mode keeps only the main window: the timer surfaces and inbox alerts are the optional extras.
   if (!smokeTest && !safeMode) {
     timerController ??= new TimerWindowController(() => mainWindow, webAppUrl.origin, preloadPath,
-      new TimerPreferenceStore(userDataPath), () => openDiagnostics())
+      new TimerPreferenceStore(userDataPath), () => openDiagnostics(), desktopPreferences)
     timerController.onExitCancelled(() => { restartAfterUpdate = false })
     timerController.install()
     timerController.attachMain(mainWindow)
@@ -458,7 +466,7 @@ async function createMainWindow(): Promise<void> {
         }
       },
     )
-  } else {
+  } else if (!hiddenLaunch) {
     showWithLaunchOverlay(mainWindow)
   }
 
@@ -576,8 +584,17 @@ async function startApplication(): Promise<void> {
     allowedOrigin: webAppUrl.origin,
     getState: updateState,
     check: () => updateController?.check(),
+    download: () => updateController?.download(),
     restart: restartForUpdate,
   })
+  if (!smokeTest) {
+    new DesktopSettingsController({
+      store: desktopPreferences,
+      main: () => mainWindow,
+      origin: webAppUrl.origin,
+      toggleQuick: () => timerController?.toggleQuick('shortcut'),
+    }).install()
+  }
   startUpdates()
   if (safeMode) openDiagnostics()
   await createMainWindow()

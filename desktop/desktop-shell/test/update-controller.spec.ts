@@ -22,13 +22,15 @@ class FakeUpdater extends EventEmitter implements UpdaterLike {
   disableWebInstaller = false
   feed: string | undefined
   checks = 0
+  downloads = 0
   installs: Array<[boolean, boolean]> = []
   setFeedURL(url: string) { this.feed = url }
   checkForUpdates() { this.checks += 1; return Promise.resolve(null) }
+  downloadUpdate() { this.downloads += 1; return Promise.resolve(null) }
   install(isSilent: boolean, isForceRunAfter: boolean) { this.installs.push([isSilent, isForceRunAfter]); return true }
 }
 
-function setup(overrides: { authorization?: unknown; digest?: typeof goodDigest; digestSync?: () => typeof goodDigest } = {}) {
+function setup(overrides: { autoDownload?: boolean; authorization?: unknown; digest?: typeof goodDigest; digestSync?: () => typeof goodDigest } = {}) {
   const updater = new FakeUpdater()
   const states: DesktopUpdateState[] = []
   const scheduled: Array<{ callback: () => void; delayMs: number }> = []
@@ -39,6 +41,7 @@ function setup(overrides: { authorization?: unknown; digest?: typeof goodDigest;
     updater,
     update: { feed: 'https://yumpoo.example.com/desktop/stable/', channel: 'stable', publicKeys: [{ keyId: fixture.signed.keyId, publicKey: fixture.publicKey }] },
     currentVersion: '1.0.0',
+    autoDownload: overrides.autoDownload ?? true,
     fetchJson,
     digest: async () => overrides.digest ?? goodDigest,
     digestSync: overrides.digestSync ?? (() => goodDigest),
@@ -61,13 +64,27 @@ async function download(updater: FakeUpdater) {
 }
 
 describe('应用内更新', () => {
-  it('自动下载但从不自动安装，禁止降级', () => {
+  it('按偏好自动下载，但从不自动安装，禁止降级', () => {
+    expect(setup({ autoDownload: false }).updater.autoDownload).toBe(false)
     const { updater } = setup()
     expect(updater.autoDownload).toBe(true)
     expect(updater.autoInstallOnAppQuit).toBe(false)
     expect(updater.allowDowngrade).toBe(false)
     expect(updater.disableWebInstaller).toBe(true)
     expect(updater.feed).toBe('https://yumpoo.example.com/desktop/stable/')
+  })
+
+  it('关闭自动下载时停在可下载，重新开启或手动下载后才下载', () => {
+    const { updater, controller } = setup({ autoDownload: false })
+    updater.emit('checking-for-update')
+    updater.emit('update-available', { version: '1.0.1' })
+    expect(controller.getState()).toEqual({ phase: 'available', currentVersion: '1.0.0', channel: 'stable', version: '1.0.1' })
+    expect(updater.downloads).toBe(0)
+    controller.setAutoDownload(true)
+    expect(updater.autoDownload).toBe(true)
+    expect(controller.getState()).toMatchObject({ phase: 'downloading', percent: 0, version: '1.0.1' })
+    controller.download()
+    expect(updater.downloads).toBe(1)
   })
 
   it('下载完成后从更新源取授权签名，校验通过才进入就绪', async () => {

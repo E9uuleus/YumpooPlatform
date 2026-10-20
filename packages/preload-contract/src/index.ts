@@ -46,9 +46,15 @@ export interface DesktopBridge {
   readonly files?: DesktopFilesBridge
   /** Present only on shells with in-app updates; the web app shows update prompts only when it exists. */
   readonly update?: DesktopUpdateBridge
+  /** Shells from 1.1.0: the settings page shows its window and general cards only when this exists. */
+  readonly preferences?: DesktopPreferencesBridge
+  /** Quick time panel window (`/desktop/quick`) only. */
+  readonly quick?: DesktopQuickBridge
+  /** Project rail window (`/desktop/rail`) only. */
+  readonly rail?: DesktopRailBridge
 }
 
-export type DesktopUpdatePhase = 'disabled' | 'idle' | 'checking' | 'downloading' | 'verifying' | 'ready' | 'error'
+export type DesktopUpdatePhase = 'disabled' | 'idle' | 'checking' | 'available' | 'downloading' | 'verifying' | 'ready' | 'error'
 
 export interface DesktopUpdateState {
   phase: DesktopUpdatePhase
@@ -66,7 +72,97 @@ export interface DesktopUpdateBridge {
   check(): Promise<void>
   /** Quits through the normal exit confirmation, installs the verified update and relaunches. */
   restart(): Promise<void>
+  /** Downloads a discovered update when automatic download is off; absent before 1.1.0. */
+  download?(): Promise<void>
   onState(listener: (state: DesktopUpdateState) => void): () => void
+}
+
+export type RailMode = 'autohide' | 'always'
+export type RailSize = 'small' | 'medium' | 'large'
+
+export interface RailProject {
+  id: string
+  /** At most 64 characters; the rail shows its first character and the full name as a tooltip. */
+  name: string
+}
+
+/** The rail's projects belong to one person: `owner` is `${companyId}:${userId}`, the same scope as project recents. */
+export interface RailProjects {
+  owner: string
+  items: RailProject[]
+}
+
+export interface DesktopPreferences {
+  railEnabled: boolean
+  railMode: RailMode
+  railSize: RailSize
+  /** Null until the rail seeds itself from the person's recent projects. */
+  railProjects: RailProjects | null
+  /** Raises the orb and rail to the screen-saver level so they stay above the taskbar. */
+  aboveTaskbar: boolean
+  /** Electron accelerator such as `Ctrl+Alt+Y`; null when the person cleared it. */
+  shortcut: string | null
+  autoDownload: boolean
+}
+
+export interface DesktopPreferencesState extends DesktopPreferences {
+  /** Null on unpackaged runs, which never register themselves to start at sign-in. */
+  launchAtLogin: boolean | null
+  /** False when another application holds the shortcut. */
+  shortcutActive: boolean
+}
+
+export type DesktopPreferencesChange = Partial<Omit<DesktopPreferences, 'shortcut'>> & { launchAtLogin?: boolean }
+
+export interface DesktopPreferencesBridge {
+  get(): Promise<DesktopPreferencesState>
+  set(change: DesktopPreferencesChange): Promise<DesktopPreferencesState>
+  /** Registers the global shortcut, or clears it with null; resolves false when the system refuses it and the previous one stays. */
+  setShortcut(accelerator: string | null): Promise<boolean>
+  onChange(listener: (state: DesktopPreferencesState) => void): () => void
+}
+
+/** Where the panel grows from: the taskbar edge for the tray and the shortcut, the rail's side for the rail. */
+export type QuickPanelOrigin = 'top' | 'bottom' | 'left' | 'right'
+
+export interface QuickPanelContext {
+  /** The rail project the panel opened for; null from the tray or the shortcut. */
+  projectId: string | null
+  /** The rail's projects in rail order, so groups and colours match the rail. */
+  projects: RailProject[]
+  origin: QuickPanelOrigin
+}
+
+export interface DesktopQuickBridge {
+  onOpen(listener: (context: QuickPanelContext) => void): () => void
+  /** Sent 180ms before the window hides, so the panel can play its closing transition. */
+  onClosing(listener: () => void): () => void
+  close(): Promise<void>
+  /** Closes the panel and shows the main window, first loading `path` (`/settings` or a My Day date) when given. */
+  openMain(path?: string): Promise<void>
+}
+
+export interface RailState {
+  side: TimerDockSide
+  size: RailSize
+  mode: RailMode
+  /** Slid into the screen edge; only a thin strip stays visible. */
+  tucked: boolean
+  /** Whether the top timer slot is shown: the timer is on and its display style is the rail. */
+  timer: boolean
+  projects: RailProjects | null
+  /** Project whose quick panel is open from the rail. */
+  active: string | null
+}
+
+export interface DesktopRailBridge {
+  getState(): Promise<RailState>
+  onState(listener: (state: RailState) => void): () => void
+  /** `top` is the icon's top edge in the rail window's CSS pixels; the panel opens level with it. */
+  openProject(projectId: string, top: number): Promise<void>
+  setProjects(projects: RailProjects): Promise<void>
+  /** Shows the main window on the rail section of the settings page. */
+  openSettings(): Promise<void>
 }
 
 export interface DesktopExportFile {
@@ -173,6 +269,7 @@ export type TimerMenuAction =
   | 'show-dock'
   | 'hide'
   | 'toggle-pin'
+  | 'preferences'
   | 'exit'
   | 'close'
 
