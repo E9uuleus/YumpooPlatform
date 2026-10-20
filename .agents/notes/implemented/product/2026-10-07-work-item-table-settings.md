@@ -8,7 +8,7 @@ Status: implemented
 
 ## Decision
 
-workitem 模块提供 `GET/PUT /me/projects/{projectId}/work-item-table-settings`（[契约](../../../../contracts/openapi/yumpoo-v1.yaml)），由 `work_item_table_settings`（V67）按 Company、Project、User 保存一个 jsonb，只对 company 建外键。只要项目对当前账号可见，就能读写自己的设置。PUT 整体替换，写入前置条件、并发合并与失败处理由[表格设置并发与默认状态](2026-10-08-table-settings-concurrency-and-defaults.md)拥有。服务端只校验结构与上限，不校验引用是否仍有效：固定列不超过 50，规则不超过 20 条，每条值不超过 20 个且每个不超过 100 字，默认处理人不超过 20 人，截止日期偏移 0–365 天。离开的成员、停用的标签与类别由 Web 在使用时静默忽略。内置列的顺序、宽度、隐藏与折叠仍按原决策存在本机，不迁移。
+workitem 模块提供 `GET/PUT /me/projects/{projectId}/work-item-table-settings`（[契约](../../../../contracts/openapi/yumpoo-v1.yaml)），由 `work_item_table_settings`（V67）按 Company、Project、User 保存一个 jsonb，只对 company 建外键。V80 增加两个可空 jsonb 列：`grouping_settings` 保存项目表分组（归属见[字段分组](2026-09-14-work-item-field-grouping.md)），`completed_status_codes` 保存本人在该项目视为已完成的状态代码（归属见[工作项隐没已完成](2026-10-19-work-item-hide-completed.md)）。`settings` jsonb 的字段集合冻结：回退后的旧版本按 `fail-on-unknown-properties` 读取它，新增设置一律放独立可空列。PUT 中这两项省略或为 null 时保留原值，GET 总是返回，从未保存为 null。只要项目对当前账号可见，就能读写自己的设置。PUT 整体替换，写入前置条件、并发合并与失败处理由[表格设置并发与默认状态](2026-10-08-table-settings-concurrency-and-defaults.md)拥有。服务端只校验结构与上限，不校验引用是否仍有效：固定列不超过 50，规则不超过 20 条，每条值不超过 20 个且每个不超过 100 字，默认处理人不超过 20 人，截止日期偏移 0–365 天。离开的成员、停用的标签与类别由 Web 在使用时静默忽略。内置列的顺序、宽度、隐藏与折叠仍按原决策存在本机，不迁移。
 
 [Web 菜单](../../../../frontend/web-app/src/components/projects/WorkItemTableSettingsMenu.vue)位于工具栏"小计时器"右侧。选项修改即时生效，条件文本停顿 400ms、失焦或离开面板后提交；设置修改停顿 400ms 后串行保存。读取失败时菜单只提供重试，不会用默认值覆盖服务端。着色结果按当前工作项与规则计算一次，行与单元格复用；内容修改会使缓存失效。菜单只把自己的子弹层视为内部点击，Escape 优先关闭当前子弹层。
 
@@ -30,4 +30,4 @@ workitem 模块提供 `GET/PUT /me/projects/{projectId}/work-item-table-settings
 
 ## Consequences
 
-项目或成员被移除时，设置不会自动删除，重新可见后沿用原设置。内置列顺序仍是本机偏好，因此具体被冻结的列会随本机列顺序变化，这是冻结前 N 列语义的预期结果。后续如果要支持连接列默认值、更多条件列或子项表，应扩展本设置结构，不得新增第二份个人表格设置。测试覆盖如下：`WorkItemHttpIT` 验证默认值、整体替换、校验与不可见项目返回 404；`workItemTableSettings.spec.ts` 与 `useWorkItemGroupCreate.spec.ts` 验证着色优先级、默认值解析与分组字段优先。
+项目或成员被移除时，设置不会自动删除，重新可见后沿用原设置。内置列顺序仍是本机偏好，因此具体被冻结的列会随本机列顺序变化，这是冻结前 N 列语义的预期结果。后续如果要支持连接列默认值、更多条件列或子项表，应扩展本设置结构，不得新增第二份个人表格设置；扩展时新增独立可空列，不写入 `settings` jsonb。测试覆盖如下：`WorkItemHttpIT` 验证默认值、整体替换、校验与不可见项目返回 404；`workItemTableSettings.spec.ts` 与 `useWorkItemGroupCreate.spec.ts` 验证着色优先级、默认值解析与分组字段优先。
