@@ -13,7 +13,8 @@ const ACCELERATOR = /^(?=.*(?:Ctrl|Alt|Super)\+)(?:Ctrl\+)?(?:Alt\+)?(?:Shift\+)
 
 export const DEFAULT_DESKTOP_PREFERENCES: Readonly<DesktopPreferences> = Object.freeze({
   railEnabled: true, railMode: 'autohide', railSize: 'medium', railProjects: null,
-  aboveTaskbar: false, shortcut: 'Ctrl+Alt+Y', autoDownload: true,
+  // A global shortcut takes the keys from every other application (Ctrl+Alt is AltGr on Windows), so the person records one.
+  aboveTaskbar: false, shortcut: null, autoDownload: true,
 })
 
 export const validRailMode = (value: unknown): value is RailMode => value === 'autohide' || value === 'always'

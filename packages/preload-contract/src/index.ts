@@ -100,7 +100,7 @@ export interface DesktopPreferences {
   railProjects: RailProjects | null
   /** Raises the orb and rail to the screen-saver level so they stay above the taskbar. */
   aboveTaskbar: boolean
-  /** Electron accelerator such as `Ctrl+Alt+Y`; null when the person cleared it. */
+  /** Electron accelerator such as `Ctrl+Alt+Y`; null until the person records one, or after they clear it. */
   shortcut: string | null
   autoDownload: boolean
 }
