@@ -6,8 +6,11 @@ import { createWindowOptions } from './window-policy'
 import { installSecurityGuards } from './security-guards'
 import { applicationIcon } from './application-icon'
 import { TimerQuickMenu } from './timer-menu'
+import { QuickPanelController } from './quick-panel'
+import { RailController } from './rail-window'
+import { DesktopPreferenceStore } from './desktop-preferences'
 import { TimerPreferenceStore, validDisplay, validDockSide, validOrbSize } from './timer-preferences'
-import { compactVisual, dockShape, hitTest, ORB_SIZES, orbDetails, orbShape, panelVisual, placeDock, placeOrb, placePanel, snapDock, type Rect } from './timer-geometry'
+import { compactVisual, hitTest, ORB_SIZES, orbDetails, orbShape, panelVisual, placeOrb, placePanel, type Rect } from './timer-geometry'
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function validTimerId(value: unknown): value is string { return typeof value === 'string' && uuid.test(value) }
@@ -42,7 +45,6 @@ function validPreferencesChange(value: unknown): value is TimerPreferencesChange
 
 const sameLayout = (a: TimerOrbLayout, b: TimerOrbLayout) => a.size === b.size && a.side === b.side && a.detailWidth === b.detailWidth
   && a.canvas?.left === b.canvas?.left && a.canvas?.top === b.canvas?.top && a.canvas?.width === b.canvas?.width && a.canvas?.height === b.canvas?.height
-  && a.dock?.side === b.dock?.side && a.dock?.expanded === b.dock?.expanded
 const sameRect = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 
 export class TimerWindowController {
@@ -52,6 +54,10 @@ export class TimerWindowController {
   private installed = false
   private contextMenu: Menu | undefined
   private readonly menu: TimerQuickMenu
+  private readonly quick: QuickPanelController
+  private readonly rail: RailController
+  /** "Hide" in the timer menu while the rail hosts the timer: the slot goes away until the next show. */
+  private slotHidden = false
   private menuWarmed = false
   private mode: TimerWindowMode = 'picker'
   private pinned: boolean
@@ -77,10 +83,23 @@ export class TimerWindowController {
   private exitCancelled: (() => void) | undefined
 
   constructor(private readonly main: () => BrowserWindow | null, private readonly origin: string, private readonly preload: string,
-    private readonly prefs = new TimerPreferenceStore(), private readonly openDiagnostics?: () => void) {
+    private readonly prefs = new TimerPreferenceStore(), private readonly openDiagnostics?: () => void,
+    private readonly desktopPrefs = new DesktopPreferenceStore()) {
     this.pinned = prefs.get().pinned
     this.orb = { size: ORB_SIZES[prefs.get().orbSize], side: null, detailWidth: 0 }
     this.menu = new TimerQuickMenu(origin, preload, action => this.menuAction(action))
+    this.quick = new QuickPanelController(origin, preload, { openMain: path => void this.openMain(path), changed: () => this.rail.sync() })
+    this.rail = new RailController(origin, preload, prefs, desktopPrefs, {
+      signedIn: () => !!this.state?.accountId,
+      timer: () => this.railTimer(),
+      pinned: () => this.pinned,
+      quickProject: () => this.quick.railProject(),
+      openProject: (projectId, anchor, side) => {
+        if (!this.quick.toggle({ source: 'rail', projectId, anchor, side }, this.railProjects())) this.showMain()
+      },
+      openSettings: () => void this.openMain('/settings?section=rail'),
+      openMenu: () => this.openSurfaceMenu(),
+    })
   }
 
   private trusted(event: IpcMainInvokeEvent, mainOnly = false): void {
@@ -91,13 +110,15 @@ export class TimerWindowController {
     if (this.installed) return
     this.installed = true
     this.tray = new Tray(applicationIcon())
-    this.tray.on('click', () => this.showMain())
-    this.tray.on('double-click', () => this.showMain())
+    this.tray.on('click', () => this.toggleQuick('tray'))
     this.tray.on('right-click', () => {
       this.updateTray()
       if (!this.menu.open('tray', this.menuState())) this.tray?.popUpContextMenu(this.contextMenu)
     })
     this.menu.install()
+    this.quick.install()
+    this.rail.install()
+    this.desktopPrefs.onChange(() => { this.applyLevel(); this.rail.sync(); this.updateTray() })
     this.updateTray()
     ipcMain.handle('yumpoo:timer:show', async (event, mode: unknown = 'picker', activate: unknown = true) => {
       this.trusted(event)
@@ -145,17 +166,24 @@ export class TimerWindowController {
       this.trusted(event, true)
       if (!validTimerState(state)) throw new Error('INVALID_TIMER_STATE')
       if (this.state?.accountId === state.accountId && state.rowVersion < this.state.rowVersion) return
-      const saved = state.accountId && state.savedAt > (this.state?.savedAt ?? 0) && Date.now() - state.savedAt < 2600 && !state.running
+      const previous = this.state
+      const saved = state.accountId && state.savedAt > (previous?.savedAt ?? 0) && Date.now() - state.savedAt < 2600 && !state.running
+      // Timers also start from the quick panel and the rail, which cannot show the compact surface themselves.
+      const started = !!state.running && !previous?.running && previous?.accountId === state.accountId
       this.state = state
       this.stateAt = Date.now()
+      // Another account, or none: the quick panel and the rail reload instead of showing the previous person's work.
+      if (previous?.accountId !== state.accountId) { this.quick.destroy(); this.rail.destroy(); this.slotHidden = false }
       if (!this.menuWarmed) { this.menuWarmed = true; this.menu.prewarm() }
+      if (state.accountId) this.quick.prewarm()
       if (!state.accountId || this.timerOff()) this.window?.hide()
       this.updateTray()
+      this.rail.sync()
       if (this.timerOff()) this.startupShown = true
       else if (state.accountId && !this.startupShown) {
         this.startupShown = true
         void this.show('compact', false)
-      } else if (saved && !this.window?.isVisible()) void this.show('compact', false)
+      } else if ((saved || started) && !this.surfaceVisible()) void this.show('compact', false)
     })
     ipcMain.handle('yumpoo:timer:command-complete', async (event, id: unknown, success: unknown) => {
       this.trusted(event, true)
@@ -166,7 +194,8 @@ export class TimerWindowController {
       if (!success) await this.commandFailed()
     })
     ipcMain.handle('yumpoo:timer:refresh', event => {
-      this.trusted(event)
+      // Saves in the quick panel and the rail go through timerMutation too, which announces them here.
+      if (!this.quick.isSender(event) && !this.rail.isSender(event)) this.trusted(event)
       for (const target of [this.main(), this.window]) {
         if (target && !target.isDestroyed() && target.webContents !== event.sender) target.webContents.send('yumpoo:timer:changed')
       }
@@ -216,6 +245,34 @@ export class TimerWindowController {
     main.show(); main.focus()
   }
 
+  /** Tray left-click and the global shortcut; signed out, or before the panel has loaded, the main window opens instead. */
+  toggleQuick(source: 'tray' | 'shortcut'): void {
+    if (!this.state?.accountId || !this.quick.toggle({ source }, this.railProjects())) this.showMain()
+  }
+
+  /** Loads `path` in the main window first when given, the same way `open-item` does. */
+  private async openMain(path?: string): Promise<void> {
+    const main = this.main()
+    if (!main || main.isDestroyed()) return
+    if (path) await main.loadURL(new URL(path, this.origin).href)
+    this.showMain()
+  }
+
+  private railProjects() { return this.desktopPrefs.get().railProjects?.items ?? [] }
+
+  /** The rail's top slot stands in for the compact surface while the display style is the rail and the rail is on. */
+  private railHostsTimer(): boolean {
+    return this.prefs.get().display === 'dock' && this.desktopPrefs.get().railEnabled
+  }
+
+  private railTimer(): boolean {
+    return this.railHostsTimer() && !this.slotHidden && !!this.state?.accountId && !this.timerOff()
+  }
+
+  private surfaceVisible(): boolean {
+    return this.railHostsTimer() ? this.railTimer() : !!this.window && !this.window.isDestroyed() && this.window.isVisible()
+  }
+
   inboxTray(): Tray | undefined { return this.tray }
 
   isInboxPreferencesSender(event: IpcMainInvokeEvent): boolean { return this.menu.isSender(event) }
@@ -247,7 +304,7 @@ export class TimerWindowController {
       running: state?.running ? { title: state.running.title, startedAt: state.running.startedAt } : null,
       recent: state?.recent ? { title: state.recent.title } : null,
       clockOffsetMs: state?.clockOffsetMs ?? 0, savedAt: state?.savedAt ?? 0,
-      visible: !!this.window && !this.window.isDestroyed() && this.window.isVisible(),
+      visible: this.surfaceVisible(),
       display: this.prefs.get().display, pinned: this.pinned, timerEnabled: !this.timerOff(),
       ...(this.inboxCount === undefined ? {} : { inbox: { unreadCount: this.inboxCount } }),
     }
@@ -264,7 +321,7 @@ export class TimerWindowController {
     this.tray?.setToolTip(`YumpooPlatform${this.inboxCount === undefined ? '' : `\n${this.inboxCount} 条未读`}${state?.running ? `\n${title}` : ''}${this.readyUpdate ? `\n新版本 ${this.readyUpdate.version} 已就绪` : ''}`.slice(0, 120))
     const running = state?.running
     const recent = state?.recent
-    const visible = !!this.window?.isVisible()
+    const visible = this.surfaceVisible()
     const display = this.prefs.get().display
     this.contextMenu = Menu.buildFromTemplate([
       { label: 'YumpooPlatform', enabled: false },
@@ -274,6 +331,7 @@ export class TimerWindowController {
         : recent && !off ? [{ label: `继续 · ${recent.title.slice(0, 50)}`, enabled, click: () => this.toggleTimer() }] : []),
       ...(off ? [] : [{ label: '查找工作项…', click: () => this.menuAction('find') }]),
       { label: '打开主界面', click: () => this.showMain() },
+      { label: '偏好设置…', click: () => void this.openMain('/settings') },
       ...(this.inboxCount === undefined ? [] : [{ label: `收件箱 · ${this.inboxCount} 条未读`, click: () => this.menuAction('open-inbox') }]),
       { type: 'separator' },
       ...(off ? [] : [
@@ -320,11 +378,16 @@ export class TimerWindowController {
       case 'show-orb':
       case 'show-dock':
         if (!signedIn) { this.showMain(); break }
+        if (action === 'show-dock') this.desktopPrefs.update({ railEnabled: true })
         this.applyPreferences({ display: action === 'show-orb' ? 'orb' : 'dock' })
         void this.show('compact', false)
         break
-      case 'hide': this.window?.hide(); break
+      case 'hide':
+        if (this.railHostsTimer()) { this.slotHidden = true; this.rail.sync() }
+        else this.window?.hide()
+        break
       case 'toggle-pin': if (signedIn) this.setPinned(!this.pinned); break
+      case 'preferences': void this.openMain('/settings'); break
       case 'exit': this.requestExit(); break
       case 'close': break
     }
@@ -347,29 +410,35 @@ export class TimerWindowController {
   private setPinned(pinned: boolean): void {
     this.pinned = pinned
     this.prefs.update({ pinned })
-    this.window?.setAlwaysOnTop(pinned)
+    this.applyLevel()
+    this.rail.sync()
     this.window?.webContents.send('yumpoo:timer:mode-changed', this.mode)
     this.updateTray()
   }
 
+  /** "Keep above the taskbar" lifts pinned surfaces to the screen-saver level; otherwise pinned is the normal floating level. */
+  private applyLevel(): void {
+    const window = this.window
+    if (!window || window.isDestroyed()) return
+    if (this.desktopPrefs.get().aboveTaskbar && this.pinned) window.setAlwaysOnTop(true, 'screen-saver')
+    else window.setAlwaysOnTop(this.pinned)
+  }
+
+  /** `dockSide` and `dockY` now place the rail; the orb only follows its size. */
   private applyPreferences(change: TimerPreferencesChange): void {
     const before = this.prefs.get()
     const after = this.prefs.update(change)
     if (before.display === after.display && before.orbSize === after.orbSize && before.dockSide === after.dockSide) return
+    this.rail.sync()
     const window = this.window
     if (window && !window.isDestroyed()) {
-      if (this.mode === 'compact') {
+      if (before.orbSize !== after.orbSize && this.mode === 'compact') {
         const bounds = window.getBounds()
-        const area = screen.getDisplayMatching(bounds).workArea
         const visual = compactVisual(bounds, this.orb)
-        const size = ORB_SIZES[after.orbSize]
-        const anchor = this.orb.dock
-          ? { x: this.orb.dock.side === 'right' ? area.x + area.width - size - 24 : area.x + 24, bottom: visual.y + (visual.height + size) / 2 }
-          : { x: visual.x, bottom: visual.y + visual.height }
-        const next = this.placeCompact(anchor, area)
+        const next = this.placeCompact({ x: visual.x, bottom: visual.y + visual.height }, screen.getDisplayMatching(bounds).workArea)
         if (!sameRect(next, bounds)) window.setBounds(next)
         this.applyShape()
-      } else this.orb = { ...this.orb, size: ORB_SIZES[after.orbSize] }
+      } else if (before.orbSize !== after.orbSize) this.orb = { ...this.orb, size: ORB_SIZES[after.orbSize] }
       window.webContents.send('yumpoo:timer:mode-changed', this.mode)
     }
     this.updateTray()
@@ -419,13 +488,10 @@ export class TimerWindowController {
     else { this.updateTray(); this.exitCancelled?.() }
   }
 
-  /** Lays out the compact surface for the saved display style; an orb keeps its circle's bottom-left near `anchor`. */
+  /** Lays out the orb so its circle's bottom-left stays near `anchor`. */
   private placeCompact(anchor: { x: number; bottom: number } | undefined, area: Rect): Rect {
-    const prefs = this.prefs.get()
-    const size = ORB_SIZES[prefs.orbSize]
-    const placed = prefs.display === 'dock'
-      ? placeDock(prefs.dockSide, prefs.dockY, area)
-      : placeOrb(size, anchor?.x ?? area.x + area.width - size - 24, anchor?.bottom ?? area.y + area.height - 24, area)
+    const size = ORB_SIZES[this.prefs.get().orbSize]
+    const placed = placeOrb(size, anchor?.x ?? area.x + area.width - size - 24, anchor?.bottom ?? area.y + area.height - 24, area)
     this.orb = placed.layout
     return placed.bounds
   }
@@ -441,8 +507,10 @@ export class TimerWindowController {
     if (mode === 'compact') {
       const visual = panelVisual(bounds), size = ORB_SIZES[this.prefs.get().orbSize]
       this.window.setBounds(this.placeCompact({ x: visual.x + visual.width - size, bottom: visual.y + visual.height }, area))
+      // The work panel collapses into the rail's slot; the hidden window keeps the orb's place for next time.
+      if (this.railHostsTimer()) { this.window.hide(); this.rail.sync(); this.updateTray() }
     } else {
-      this.window.setBounds(placePanel(compactVisual(bounds, this.orb), area, this.orb.dock?.side))
+      this.window.setBounds(placePanel(compactVisual(bounds, this.orb), area))
       this.orb = { size: this.orb.size, side: null, detailWidth: 0 }
     }
     this.applyShape()
@@ -450,27 +518,20 @@ export class TimerWindowController {
   }
 
   private setDetails(open: boolean): void {
-    const next = this.orb.dock ? { ...this.orb, dock: { ...this.orb.dock, expanded: open } } : orbDetails(this.orb, open)
+    const next = orbDetails(this.orb, open)
     const changed = !sameLayout(next, this.orb)
     this.orb = next
     if (changed) this.applyShape()
   }
 
-  /** Re-fits the transparent canvas after a drag; a dock also snaps to the nearest edge and remembers where it was left. */
+  /** Re-fits the transparent canvas after a drag. */
   private reframe(force = false): void {
     const window = this.window
     if (!window || window.isDestroyed() || this.mode !== 'compact' || !this.orb.canvas || (this.dragging && !force)) return
     const bounds = window.getBounds(), area = screen.getDisplayMatching(bounds).workArea
-    let next: { bounds: Rect; layout: TimerOrbLayout }
-    if (this.orb.dock) {
-      const snapped = snapDock(bounds, this.orb.dock.side, area)
-      this.prefs.update({ dockSide: snapped.side, dockY: snapped.dockY })
-      next = placeDock(snapped.side, snapped.dockY, area, this.orb.dock.expanded)
-    } else {
-      const visual = compactVisual(bounds, this.orb)
-      next = placeOrb(ORB_SIZES[this.prefs.get().orbSize], visual.x, visual.y + visual.height, area)
-      next.layout = orbDetails(next.layout, this.orb.side !== null)
-    }
+    const visual = compactVisual(bounds, this.orb)
+    const next = placeOrb(ORB_SIZES[this.prefs.get().orbSize], visual.x, visual.y + visual.height, area)
+    next.layout = orbDetails(next.layout, this.orb.side !== null)
     if (!sameRect(next.bounds, bounds)) window.setBounds(next.bounds)
     if (sameLayout(next.layout, this.orb)) return
     this.orb = next.layout
@@ -478,18 +539,16 @@ export class TimerWindowController {
     window.webContents.send('yumpoo:timer:mode-changed', 'compact')
   }
 
-  /** Dragging hides the quick panel and keeps the capsule, or a closed card, from opening until the pointer has left once. */
+  /** Dragging hides the quick panel and keeps the capsule from opening until the pointer has left once. */
   private beginDrag(): void {
     const window = this.window
     if (this.dragging || !window || window.isDestroyed() || this.mode !== 'compact') return
     this.dragging = true
     this.menu.hide()
-    // The orb travels alone: an open capsule is clipped away at once, while an open dock card is carried along.
-    if (!this.orb.dock) this.setDetails(false)
-    if (!this.orb.dock?.expanded) {
-      this.suppressHover = true
-      if (this.hovered) { this.hovered = false; window.webContents.send('yumpoo:timer:orb-hover', false) }
-    }
+    // The orb travels alone: an open capsule is clipped away at once.
+    this.setDetails(false)
+    this.suppressHover = true
+    if (this.hovered) { this.hovered = false; window.webContents.send('yumpoo:timer:orb-hover', false) }
     window.webContents.send('yumpoo:timer:dragging', true)
   }
 
@@ -518,7 +577,7 @@ export class TimerWindowController {
   }
 
   private applyShape(): void {
-    this.shape = this.mode !== 'compact' || !this.orb.canvas ? [] : this.orb.dock ? dockShape(this.orb) : orbShape(this.orb)
+    this.shape = this.mode !== 'compact' || !this.orb.canvas ? [] : orbShape(this.orb)
     if (process.platform === 'win32' || process.platform === 'linux') this.window?.setShape(this.shape)
   }
 
@@ -538,6 +597,14 @@ export class TimerWindowController {
 
   private async show(mode: TimerWindowMode = 'picker', activate = true): Promise<void> {
     if (this.timerOff()) { this.showMain(); return }
+    if (mode === 'compact' && this.railHostsTimer()) {
+      this.resize(mode)
+      this.window?.hide()
+      this.slotHidden = false
+      this.rail.sync()
+      this.updateTray()
+      return
+    }
     const reveal = (window: BrowserWindow) => {
       if (window.isMinimized()) window.restore()
       if (activate) { window.show(); window.focus() }
@@ -552,7 +619,7 @@ export class TimerWindowController {
     this.mode = mode
     const area = screen.getPrimaryDisplay().workArea
     const compact = this.placeCompact(undefined, area)
-    const bounds = mode === 'compact' ? compact : placePanel(compactVisual(compact, this.orb), area, this.orb.dock?.side)
+    const bounds = mode === 'compact' ? compact : placePanel(compactVisual(compact, this.orb), area)
     if (expanded(mode)) this.orb = { size: this.orb.size, side: null, detailWidth: 0 }
     const window = new BrowserWindow({ ...createWindowOptions(this.preload, app.isPackaged), ...bounds,
       minWidth: 0, minHeight: 0,
@@ -561,6 +628,7 @@ export class TimerWindowController {
       alwaysOnTop: this.pinned, title: 'YumpooPlatform · 计时器', icon: applicationIcon(),
     })
     this.window = window
+    this.applyLevel()
     this.hovered = false
     clearInterval(this.hoverTimer)
     this.hoverTimer = setInterval(() => this.updateHover(), 100)
@@ -569,7 +637,7 @@ export class TimerWindowController {
     window.on('blur', () => {
       clearTimeout(this.blurTimer)
       this.blurTimer = setTimeout(() => {
-        if (!window.isDestroyed() && window.isVisible() && !this.pinned && this.mode === 'compact') window.moveTop()
+        if (!window.isDestroyed() && window.isVisible() && (!this.pinned || this.desktopPrefs.get().aboveTaskbar) && this.mode === 'compact') window.moveTop()
       }, 0)
     })
     // Windows announces manual moves and reports their end once; elsewhere `move` streams during the drag, so it is debounced.

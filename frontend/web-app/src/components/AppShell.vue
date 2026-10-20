@@ -433,6 +433,9 @@ onBeforeUnmount(() => {
               >
                 查看本页引导
               </el-dropdown-item>
+              <el-dropdown-item @click="router.push({ name: 'settings' })">
+                偏好设置
+              </el-dropdown-item>
               <el-dropdown-item
                 v-if="!inDesktopShell"
                 @click="router.push({ name: 'desktop-download' })"

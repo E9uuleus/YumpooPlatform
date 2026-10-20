@@ -7,7 +7,8 @@ const emit = defineEmits<{ update: [change: TimerPreferencesChange]; pin: [] }>(
 
 const displays: Array<{ value: TimerDisplayStyle; label: string; hint: string }> = [
   { value: 'orb', label: '悬浮球', hint: '可拖到任意位置的迷你计时球' },
-  { value: 'dock', label: '侧边栏', hint: '贴在屏幕边缘，悬停展开' },
+  // From 1.1.0 the shell shows the timer in the project rail instead of its own edge tab.
+  { value: 'dock', label: '侧边栏', hint: window.yumpooDesktop?.preferences ? '显示在项目侧边栏顶部' : '贴在屏幕边缘，悬停展开' },
 ]
 const sizes: Array<{ value: TimerOrbSize; label: string }> = [{ value: 'small', label: '小' }, { value: 'medium', label: '中' }, { value: 'large', label: '大' }]
 const sides: Array<{ value: TimerDockSide; label: string }> = [{ value: 'left', label: '左侧' }, { value: 'right', label: '右侧' }]

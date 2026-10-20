@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CAPSULE_WIDTH, compactVisual, dockShape, hitTest, MENU, orbDetails, orbShape, placeDock, placeMenu, placeOrb, placePanel, snapDock, stadiumRows } from '../src/main/timer-geometry'
+import { placeBeside, placeRail, QUICK_PANEL, railShape, CAPSULE_WIDTH, compactVisual, dockShape, hitTest, MENU, orbDetails, orbShape, placeDock, placeMenu, placeOrb, placePanel, snapDock, stadiumRows } from '../src/main/timer-geometry'
 
 const area = { x: 0, y: 0, width: 1280, height: 800 }
 
@@ -86,5 +86,16 @@ describe('timer surface geometry', () => {
     const work = { x: 0, y: 0, width: 1280, height: 752 }
     expect(placeMenu('pointer', { x: 100, y: 100 }, { bounds, workArea: work })).toMatchObject({ x: 90, y: 90 })
     expect(placeMenu('pointer', { x: 1250, y: 700 }, { bounds, workArea: work })).toMatchObject({ x: 1250 - MENU.width + 10, y: 700 - MENU.height + 10 })
+  })
+
+  it('sizes the rail to its icons, tucks it to a 10px edge strip and opens the quick panel beside it', () => {
+    const { bounds, rail } = placeRail('right', .5, 'medium', 3, true, area)
+    expect(rail).toEqual({ x: 10, y: 10, width: 48, height: 245 })
+    expect(bounds).toEqual({ x: 1216, y: 268, width: 64, height: 265 })
+    expect(placeRail('left', 0, 'large', 0, false, area)).toEqual({ bounds: { x: 0, y: 0, width: 70, height: 80 }, rail: { x: 6, y: 10, width: 54, height: 60 } })
+    expect(railShape(bounds, 'right', true)).toEqual([{ x: 54, y: 10, width: 10, height: 245 }])
+    expect(railShape(bounds, 'right', false)).toEqual([{ x: 0, y: 0, width: 64, height: 265 }])
+    expect(placeBeside({ x: 1226, y: 200, width: 48, height: 0 }, 'right', area)).toEqual({ x: 1226 - 12 - QUICK_PANEL.width + 12, y: 148, ...QUICK_PANEL })
+    expect(placeBeside({ x: 6, y: 20, width: 48, height: 0 }, 'left', area)).toMatchObject({ x: 54, y: 0 })
   })
 })
