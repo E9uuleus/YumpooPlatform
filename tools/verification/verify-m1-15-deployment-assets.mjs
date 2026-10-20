@@ -57,9 +57,28 @@ for (const [probe, target] of [['/healthz', '/actuator/health/readiness'], ['/ve
   assert(location > 0 && location < deny, `Nginx 公开探测 ${probe} 必须是先于 actuator 拒绝规则的精确匹配`)
   assert(nginx.includes(`proxy_pass http://127.0.0.1:8100${target};`), `Nginx 探测 ${probe} 目标错误`)
 }
+// Every SPA route must reach the SPA: a 443 location that serves or denies something else (such as the update feed at
+// /desktop/) would answer it with nginx's own page, which no dev server or unit test exercises.
+const publicLocations = [...nginx.slice(nginx.indexOf('listen 443 ssl;')).matchAll(/^\s*location\s+(?:(=|\^~|~\*?)\s+)?(\S+)\s*\{/gmu)]
+  .map(([, modifier = '', target]) => ({ modifier, target }))
+  .filter(({ modifier, target }) => modifier || target !== '/')
+const webSource = path.join(root, 'frontend', 'web-app', 'src')
+const routePaths = [
+  ...[...fs.readFileSync(path.join(webSource, 'router', 'index.ts'), 'utf8').matchAll(/\bpath:\s*'([^']*)'/gu)].map(([, value]) => value),
+  ...[...fs.readFileSync(path.join(webSource, 'components', 'desktop', 'surfaces.ts'), 'utf8').matchAll(/:\s*'(\/[^']*)'/gu)].map(([, value]) => value),
+].filter(value => value && !value.includes('*')).map(value => (value.startsWith('/') ? value : `/${value}`))
+assert(routePaths.includes('/timer/menu') && routePaths.includes('/login'), '未能读取 SPA 路由')
+for (const route of routePaths) {
+  const sample = route.replace(/:[^/]+/gu, 'x')
+  const fixed = route.split('/:')[0]
+  const shadow = publicLocations.find(({ modifier, target }) => modifier === '=' ? sample === target
+    : modifier.startsWith('~') ? new RegExp(target, modifier === '~*' ? 'iu' : 'u').test(sample)
+      : fixed.startsWith(target) || `${fixed}/`.startsWith(target))
+  assert(!shadow, `SPA 路由 ${route} 被 Nginx location ${shadow?.modifier} ${shadow?.target} 遮蔽，生产会返回 Nginx 页面而不是 SPA`)
+}
 assert(script.includes('YUMPOO_INITIAL_IDENTITY_BOOTSTRAP_ENABLED'), '维护脚本未显式启用 Runner')
 assert(script.includes('Remove-Item -LiteralPath $resolvedInput -Force'), '维护脚本未在成功后删除输入')
-console.log('Windows Release 资产、生产文件日志与 M1-15 首次引导历史边界有效')
+console.log('Windows Release 资产、生产文件日志、SPA 路由与 M1-15 首次引导历史边界有效')
 
 function assert(condition, message) {
   if (!condition) throw new Error(`M1-15 部署资产验证失败：${message}`)
