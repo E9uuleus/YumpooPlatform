@@ -14,11 +14,13 @@ import { createStatement, signStatement } from './desktop-update-signature.mjs'
 import {
   describeFile, desktopReleases, downloadDesktopCiPackage, inspectDesktopPackage, latestPublished, readDesktopSource,
 } from './desktop-release.mjs'
-import { desktopChanges, desktopNoteTitles, desktopReleaseBody } from './desktop-release-notes.mjs'
+import { desktopCollected } from './desktop-release-notes.mjs'
+import { desktopNotes, desktopReleaseBody } from './release-notes.mjs'
 import { createGithub, readJson, unpackArtifact } from './github.mjs'
 import { assertOnReleaseBranch, ciWorkflowId, downloadAsset, indexAssets, selectCiAttempt, verifyCiAttempt } from './promote-release.mjs'
 import { verifyBuildAttestations } from './attestation.mjs'
 import { notifyWeCom } from './notify.mjs'
+import { missingSummary } from './release-notes-policy.mjs'
 
 /**
  * Decides whether this main commit gets a desktop draft. The desktop channel moves only when the shell's own
@@ -75,13 +77,15 @@ export async function prepareDesktopDraft({ github, sourceCommit, env, directory
     ? await verifyCiAttempt(github, workflowId, sourceCommit, pinned.ciRunId, pinned.ciRunAttempt)
     : await selectCiAttempt(github, workflowId, sourceCommit)
   const created = !draft
-  let changes
+  const collected = await desktopCollected(github, { sourceCommit, previous: latest })
+  const body = desktopReleaseBody({ tag, version, sourceCommit, run, previous: latest, collected })
   if (!draft) {
-    changes = await desktopChanges(github, { sourceCommit, previous: latest })
     draft = await github.send('POST', '/releases', {
-      tag_name: tag, target_commitish: sourceCommit, name: `Yumpoo Desktop ${version}`, draft: true,
-      body: desktopReleaseBody({ tag, version, sourceCommit, run, previous: latest, changes }),
+      tag_name: tag, target_commitish: sourceCommit, name: `Yumpoo Desktop ${version}`, draft: true, body,
     })
+  } else if (draft.body !== body) {
+    // A rerun after PR release notes were fixed refreshes the draft text; release.json, once uploaded, is never replaced.
+    draft = await github.send('PATCH', `/releases/${draft.id}`, { body })
   }
   assert.equal(draft.draft, true, 'Prepared desktop Release must stay a draft')
   assert.equal(draft.target_commitish, sourceCommit, 'Desktop draft targets another commit')
@@ -102,8 +106,7 @@ export async function prepareDesktopDraft({ github, sourceCommit, env, directory
     fs.writeFileSync(path.join(retained, 'provenance.json'), `${JSON.stringify(provenance, null, 2)}\n`, { mode: 0o600 })
     for (const name of desktopArtifactFileNames(version)) fs.copyFileSync(path.join(downloaded, name), path.join(retained, name))
     if (!assets.has('release.json')) {
-      changes ??= await desktopChanges(github, { sourceCommit, previous: latest })
-      const releaseJson = desktopReleaseJson({ version, channel: distribution.update.channel, sourceCommit, installer, notes: desktopNoteTitles(changes, latest) })
+      const releaseJson = desktopReleaseJson({ version, channel: distribution.update.channel, sourceCommit, installer, notes: desktopNotes(collected, latest) })
       fs.writeFileSync(path.join(retained, 'release.json'), `${JSON.stringify(releaseJson, null, 2)}\n`, 'utf8')
     }
     // Existing assets are verified and never replaced; provenance goes up first to pin the CI attempt.
@@ -118,7 +121,7 @@ export async function prepareDesktopDraft({ github, sourceCommit, env, directory
     }
   }
   const provenance = await verifyDraftAssets({ github, draft, tag, version, sourceCommit, distribution, run, env, directory, attest, log, names: uploadNames })
-  return { tag, version, releaseId: draft.id, url: draft.html_url, created, provenance }
+  return { tag, version, releaseId: draft.id, url: draft.html_url, created, provenance, missing: collected.missing }
 }
 
 async function verifyDraftAssets({ github, draft, tag, version, sourceCommit, distribution, run, env, directory, attest, log, names }) {
@@ -195,6 +198,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     if (step === 'draft') {
       const result = await prepareDesktopDraft(options)
       summary(result.skipped ? `No desktop draft: ${result.skipped}.` : `Desktop draft **${result.tag}** holds the attested CI bytes from run ${result.provenance.ciRunId} attempt ${result.provenance.ciRunAttempt}: ${result.url}`)
+      if (result.missing?.length) summary(missingSummary(result.missing))
       // The signing job, and with it the signing Environment, runs only when a draft is waiting for authorization.
       if (!result.skipped && process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=${result.tag}\n`)
     } else {
