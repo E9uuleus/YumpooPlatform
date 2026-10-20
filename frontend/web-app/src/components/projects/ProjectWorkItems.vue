@@ -751,7 +751,8 @@ const { active: grouped, field: groupingField, order: groupingOrder, showEmpty: 
   groups: workItemGroups, countsReady: groupCountsReady, error: groupingError, loading: groupsLoading } = grouping
 const expandedSubitemsKey = () => props.preferenceScope ? `${props.preferenceScope}:expanded-subitems`
   : `yumpoo:project-work-items:expanded-subitems:v1:${session.authentication.value?.company.id ?? 'unknown'}:${session.authentication.value?.user.id ?? 'unknown'}:${projectId.value}`
-// 子项展开按设备保存，只在收起或删除时移除；不在当前数据里的 ID 保留但不生效。
+// 子项展开按设备保存，只在收起或删除时移除；不在当前数据里的 ID 保留但不生效，只保存最近展开的 100 项。
+const MAX_SAVED_EXPANDED = 100
 watch(expandedSubitemsKey, key => {
   try {
     const saved = JSON.parse(localStorage.getItem(key) ?? '[]') as unknown
@@ -759,7 +760,7 @@ watch(expandedSubitemsKey, key => {
   } catch { expandedSubitemIds.value = [] }
 }, { immediate: true, flush: 'sync' })
 watch(expandedSubitemIds, ids => {
-  try { localStorage.setItem(expandedSubitemsKey(), JSON.stringify(ids)) } catch { /* 本地存储不可用时只在当前页面保留展开。 */ }
+  try { localStorage.setItem(expandedSubitemsKey(), JSON.stringify(ids.slice(-MAX_SAVED_EXPANDED))) } catch { /* 本地存储不可用时只在当前页面保留展开。 */ }
 })
 const visibleExpandedIds = computed(() => {
   const loaded = new Set(tableItems.value.map(item => item.id))
