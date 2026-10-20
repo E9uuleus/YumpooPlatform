@@ -26,7 +26,7 @@ Release 发布即为上线决定。主机初始化、Environment 配置和发布
 
 - 草稿只来自 `main` 推送且全部 required jobs 成功的 Platform CI。
 - 标签按北京时间日期自动编号，格式为 `server-vYYYY.MM.DD.N`。已有标签都占号，包括草稿和已删除的 Release 留下的标签。
-- 发布说明按提交类型分组。
+- 发布说明由各 PR 正文的「## 发布说明」段生成，分为更新内容、升级影响（迁移分类、契约、部署引擎、管理员操作、回退能力）和发布信息。缺少发布说明的 PR 列在「发布信息」中并写入工作流摘要；补写 PR 正文后在草稿未发布时重跑 Prepare Release 即可刷新正文。不要手改草稿正文，重跑会覆盖。
 - 来源清单与 CI 原包在**草稿阶段**就校验并上传；中断后重跑会沿用已钉住的 CI attempt，不会换到另一次构建。
 - 草稿永不自动删除：GitHub 按 ID 无条件删除 Release，清理与人工 Publish 交错时可能删掉刚发布的版本。新草稿生成时，源码是其祖先的旧草稿会在发布说明、工作流摘要和通知中标为「已被取代，请勿发布」；源码不早于它的其他草稿另行提示「发布前核对来源 SHA」。这些草稿都由发布负责人手动删除。
 - 已发布更新版本时，拒绝为更旧的提交生成草稿。
@@ -480,7 +480,7 @@ Invoke-RestMethod http://127.0.0.1:8100/actuator/health/readiness
 - `yumpoo-desktop.cdx.json`：桌面 CycloneDX SBOM，列出 Electron 运行时和打进主进程的全部依赖；
 - `desktop-manifest.json`：上述文件的大小与摘要；
 - `provenance.json`：钉住的 CI 运行与 attempt；
-- `release.json`：下载页读取的版本、大小、SHA-256 与改动摘要；
+- `release.json`：下载页读取的版本、大小、SHA-256 与更新内容（范围为「桌面」的 PR 发布说明，不含运维条目；上传后不再替换）；
 - `YumpooDesktop-Setup-X.Y.Z-x64.exe.sig.json`：Ed25519 更新授权。
 
 CI 为前五个文件签署构建证明；草稿上传前后、发布前都会核验证明。不要手工新建 `desktop-v*` 草稿、打标签或替换附件。可以离线复核安装包：

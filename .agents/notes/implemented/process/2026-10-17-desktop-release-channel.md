@@ -164,7 +164,7 @@ Status: implemented
 - `host.json` 的 `desktopFeed` 默认关闭，由管理员用 `Update-YumpooEngine.ps1 -EnableDesktopFeed` 启用；Nginx 用 `root` 把 `/desktop/` 映射到 `desktopFeed.root`，`latest.yml`、`release.json` 不缓存，带版本号的文件长期缓存；
 - 每周发布演练要求更新源上的 `latest.yml`、`release.json` 与最新已发布桌面 Release 的附件逐字节一致。
 
-**下载页**（DESK-4）：Web 新增匿名路由 `/download`，读取更新源的 `release.json`，展示版本、大小、SHA-256、改动摘要和 SmartScreen 首装指引；路由守卫和会话跳转都不处理它。浏览器账户菜单和升级页链接到这里。桌面壳仍拒绝附件以外的下载，所以在壳内只提示改用浏览器打开。
+**下载页**（DESK-4）：Web 新增匿名路由 `/download`，读取更新源的 `release.json`，展示版本、大小、SHA-256、改动摘要和 SmartScreen 首装指引；改动摘要取范围为「桌面」的 [PR 发布说明](2026-10-20-release-notes-from-pull-requests.md)，不含运维条目；路由守卫和会话跳转都不处理它。浏览器账户菜单和升级页链接到这里。桌面壳仍拒绝附件以外的下载，所以在壳内只提示改用浏览器打开。
 
 ## Alternatives considered
 
