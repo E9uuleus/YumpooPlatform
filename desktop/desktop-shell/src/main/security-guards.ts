@@ -1,8 +1,10 @@
-import type { App, WebContents } from 'electron'
+import path from 'node:path'
+import { app, type App, type WebContents } from 'electron'
 
 const securedSessions = new WeakSet<object>()
 /** navigator.clipboard.writeText; reading the clipboard stays denied. */
 const CLIPBOARD_WRITE = 'clipboard-sanitized-write'
+const ATTACHMENT_CONTENT = /^\/api\/v1\/attachments\/[0-9a-f-]{36}\/content$/u
 
 function hasSameOrigin(candidate: string, allowedOrigin: string): boolean {
   try {
@@ -45,8 +47,14 @@ export function installSecurityGuards(
       (_requestingWebContents, permission, callback, details) =>
         callback(permission === CLIPBOARD_WRITE && hasSameOrigin(details.requestingUrl, allowedOrigin)),
     )
-    browserSession.on('will-download', (event) => {
-      event.preventDefault()
+    // Only attachment content of the web app may be saved, and only where the person picks in the save dialog.
+    browserSession.on('will-download', (event, item) => {
+      const url = new URL(item.getURL())
+      if (url.origin !== allowedOrigin || !ATTACHMENT_CONTENT.test(url.pathname)) {
+        event.preventDefault()
+        return
+      }
+      item.setSaveDialogOptions({ defaultPath: path.join(app.getPath('downloads'), item.getFilename()) })
     })
   }
 }

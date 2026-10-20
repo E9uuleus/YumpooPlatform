@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ElImageViewer, ElPopover, ElTooltip } from 'element-plus'
+import { ElPopover, ElTooltip } from 'element-plus'
 import { MoreFilled, Edit, Delete, CollectionTag, ChatLineSquare } from '@element-plus/icons-vue'
 import type { WorkItemUpdate } from '@yumpoo/api-client'
 import { formatChineseTimestamp, formatRelativeTime } from '../../design-system/dates'
 import { decorateAttachmentCards } from './descriptionImages'
 import YpAssignee from '../yp/YpAssignee.vue'
+import AttachmentImageViewer from './AttachmentImageViewer.vue'
 const props = defineProps<{ item: WorkItemUpdate; now: Date; timezone: string; busy: boolean; reply?: boolean }>()
 const emit = defineEmits<{ edit: []; delete: []; pin: []; reply: [] }>()
 const menu = ref(false)
@@ -163,12 +164,10 @@ function navigateMenu(event: KeyboardEvent) {
       </button>
     </div>
     <slot />
-    <el-image-viewer
+    <attachment-image-viewer
       v-if="viewerIndex !== undefined"
       :url-list="imageSources"
       :initial-index="viewerIndex"
-      hide-on-click-modal
-      teleported
       @close="viewerIndex = undefined"
     />
   </article>

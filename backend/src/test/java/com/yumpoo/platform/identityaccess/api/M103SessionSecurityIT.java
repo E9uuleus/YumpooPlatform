@@ -10,6 +10,13 @@ import com.yumpoo.platform.identityaccess.application.session.IssuedSession;
 import com.yumpoo.platform.identityaccess.application.session.SessionService;
 import com.yumpoo.platform.identityaccess.domain.identity.AccountStatus;
 import com.yumpoo.platform.testing.PostgreSqlTestContainerConfiguration;
+import jakarta.servlet.http.Cookie;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -42,12 +49,17 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Import({
         PostgreSqlTestContainerConfiguration.class,
         M103SessionSecurityIT.ProbeConfiguration.class
 })
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureMockMvc
 class M103SessionSecurityIT {
 
     private static final UUID COMPANY_ID = UUID.fromString(
@@ -74,6 +86,9 @@ class M103SessionSecurityIT {
 
     @Autowired
     private RevocationGate revocationGate;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     private IssuedSession issued;
 
@@ -137,6 +152,18 @@ class M103SessionSecurityIT {
         jdbcClient.sql("DELETE FROM yumpoo.identity_user WHERE id = :userId")
                 .param("userId", USER_ID)
                 .update();
+    }
+
+    @Test
+    void streamingResponseFinishesItsAsyncDispatchWithoutReauthentication() throws Exception {
+        MvcResult started = mockMvc.perform(get(API + "/stream").cookie(
+                        new Cookie(SessionHttpCookies.SESSION_COOKIE, issued.sessionCredential().value())))
+                .andExpect(MockMvcResultMatchers.request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(started))
+                .andExpect(status().isOk())
+                .andExpect(content().string("streamed"));
     }
 
     @Test
@@ -378,6 +405,12 @@ class M103SessionSecurityIT {
         @GetMapping
         CurrentActor get() {
             return currentActorProvider.requiredActive();
+        }
+
+        @GetMapping("/stream")
+        ResponseEntity<StreamingResponseBody> stream() {
+            currentActorProvider.requiredActive();
+            return ResponseEntity.ok(output -> output.write("streamed".getBytes(StandardCharsets.UTF_8)));
         }
 
         @PostMapping
