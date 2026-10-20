@@ -4,11 +4,11 @@
 
 ## 1. 摘要
 
-- 只为当前 Windows 用户安装，不需要管理员权限，不弹 UAC，自动更新同样静默完成。不设置开机自启，不注册服务或计划任务，不写 HKLM。
+- 只为当前 Windows 用户安装，不需要管理员权限，不弹 UAC，自动更新同样静默完成。默认不开机自启，用户可在偏好设置中开启「登录时启动」（写入 HKCU 的 Run 值，卸载时删除），不注册服务或计划任务，不写 HKLM。
 - 网页、接口和自动更新只连接公司服务器 `https://wecom-dev.yumpoo.com`。登录时用系统默认浏览器打开企业微信官方扫码页。没有第三方统计、广告或崩溃自动上传。
 - 唯一的第三方请求：Chromium 内置拼写检查会从 Google 下载服务器下载一次英文词典（[3.3](#33-已知的第三方请求拼写检查词典)）。
 - 勾选「7 天内免登录」时，登录凭据用 Windows DPAPI 加密保存在本机；不勾选则不保存，每次启动重新登录。登录 cookie 不写入磁盘。日志已脱敏，崩溃转储只保存在本机。
-- 自动更新会核对公司签发的 Ed25519 授权，在退出时安装，用户不能关闭。
+- 自动更新会核对公司签发的 Ed25519 授权，在退出时安装，用户可在偏好设置中关闭自动下载（仍自动检查，改为手动下载）。
 - 主要风险：安装包尚未做 Authenticode 签名；更新签名私钥需要妥善保管；客户端展示的是远程网页内容；共用电脑需要手动退出登录。
 
 ## 2. 安装机制
@@ -40,6 +40,7 @@
 | `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\<GUID>` | 卸载登记：名称、版本、发布者 `Yumpoo`、`UninstallString`，以及带 `/S` 的 `QuietUninstallString` |
 | `HKCU\Software\<GUID>` | `InstallLocation`（安装目录）、快捷方式名等；覆盖安装和自动更新据此找到原目录 |
 | `HKCU\Software\Classes\yumpoo` | `yumpoo:` 登录回调协议，命令为 `"<安装目录>\YumpooDesktop.exe" "%1"` |
+| `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 的 `com.yumpoo.desktop` | 仅在开启「登录时启动」后写入，值为带 `--hidden` 的程序路径 |
 | `%APPDATA%\Yumpoo Desktop` | userData，首次运行时创建，内容见[第 4 节](#4-本机数据) |
 | `%LOCALAPPDATA%\yumpoo-desktop-updater` | 更新缓存：安装包副本 `installer.exe`（约 100 MB，作为差分更新的基准）和下载中的更新 |
 
@@ -106,7 +107,7 @@ userData 位于 `%APPDATA%\Yumpoo Desktop`：
 | --- | --- | --- |
 | `auth\electron-session.bin` | 会话凭据、CSRF 凭据、过期时间、所属站点 | 仅在勾选「7 天内免登录」时写入；用 Electron safeStorage（Windows DPAPI，绑定当前 Windows 用户）加密，最大 16 KB；过期、站点不符或解密失败即删除；退出登录或卸载时删除 |
 | `Partitions\yumpoo-authenticated\` | 网页的本机偏好（Local Storage，如主题、密度、免登录选择）与 Chromium 运行数据；登录 cookie | 持久分区，关闭 HTTP 缓存，不保存业务接口响应；登录 cookie 不带过期时间、不写入磁盘，每次启动从上面的加密文件重新注入；「诊断与修复 → 重置本机偏好」会清空其中的 Local Storage；卸载时删除 |
-| `timer-preferences.json`、`inbox-preferences.json` | 计时器窗口和提醒的偏好 | 明文 JSON，不含业务内容；卸载时保留 |
+| `timer-preferences.json`、`inbox-preferences.json`、`desktop-preferences.json` | 计时器窗口、提醒与桌面（侧边栏、快捷键、更新）的偏好 | 明文 JSON，不含业务内容；卸载时保留 |
 | `startup-state.json` | 连续启动失败计数，用于自动进入安全模式 | 主窗口加载成功并运行 60 秒，或加载后正常退出时清零 |
 | `logs\desktop.log`（及 `.1`、`.2`） | 主进程 JSON 行日志 | 单文件 5 MB 轮转，共 3 个文件。URL 只留协议、主机和路径；名称涉及 cookie、凭据、授权、正文、标题、`code`、`state`、`session`、`text`、`message` 的字段整项丢弃 |
 | `Crashpad\` | 崩溃转储 | `uploadToServer: false`，只保存在本机，只随用户自己导出的诊断包离开本机 |
@@ -133,7 +134,7 @@ DPAPI 只能防止其他 Windows 用户或拿走磁盘的人读取凭据，不�
 - **检查时机**：启动后 30 秒，之后每 4 小时一次（加最多 30 分钟随机抖动）；系统从睡眠唤醒、且距上次检查超过 15 分钟时再查一次。安全模式下照常更新。
 - **授权校验**：下载完成后，客户端从更新源取 `.sig.json`，用内置公钥（主钥匙和离线备用钥匙）核对 Ed25519 签名，再逐项核对渠道、版本（必须高于当前版本）、文件名、大小和 SHA-512。任一项不符就删除下载的文件，永不安装。
 - **安装时机**：任何正常退出（含托盘退出）都会静默安装已核对的更新；「重启以更新」走同一次退出，安装后自动重新启动。安装前会再算一次 SHA-512。
-- **用户不能关闭**：客户端没有关闭或推迟更新的设置。这样 Chromium 安全补丁和修复版能持续送达；客户端只接受更高版本，坏版本只能用更高版本号的修复版前滚。
+- **可关闭自动下载**：偏好设置里的「自动下载更新」默认开启；关闭后仍按上述时机检查，发现新版本时在设置页手动下载。安全补丁可能因此延后送达；客户端只接受更高版本，坏版本只能用更高版本号的修复版前滚。
 - 更新源上线前，检查会得到 404，客户端记录错误后照常重试，不影响使用。
 
 ## 7. 卸载
@@ -143,10 +144,11 @@ DPAPI 只能防止其他 Windows 用户或拿走磁盘的人读取凭据，不�
 卸载会删除：
 
 - 整个安装目录、三个快捷方式、卸载登记和 `HKCU\Software\Classes\yumpoo`；
+- `Run` 与 `StartupApproved\Run` 中的 `com.yumpoo.desktop` 值；
 - 更新缓存 `%LOCALAPPDATA%\yumpoo-desktop-updater`；
-- userData 中除 `timer-preferences.json` 和 `inbox-preferences.json` 以外的全部内容，包括加密的登录凭据、日志、崩溃转储和 Chromium 运行数据。
+- userData 中除 `timer-preferences.json`、`inbox-preferences.json` 和 `desktop-preferences.json` 以外的全部内容，包括加密的登录凭据、日志、崩溃转储和 Chromium 运行数据。
 
-保留的两个偏好文件让重新安装后计时器和提醒设置不变。需要彻底清除时，卸载后手动删除 `%APPDATA%\Yumpoo Desktop`。
+保留的偏好文件让重新安装后计时器、提醒与桌面设置不变。需要彻底清除时，卸载后手动删除 `%APPDATA%\Yumpoo Desktop`。
 
 卸载程序不联网，只删除本机凭据，不会向服务器注销会话。需要立即作废会话时，先在客户端里退出登录再卸载。自动更新以「更新」模式运行旧卸载程序，不删除任何数据。
 
@@ -168,7 +170,7 @@ DPAPI 只能防止其他 Windows 用户或拿走磁盘的人读取凭据，不�
 | 更新签名私钥泄露 | 攻击者若同时控制分发主机，可以推送被客户端接受的更新 | 私钥只在只允许 `dev` 的 `desktop-signing` Environment 中；另有离线备用钥匙，泄露时用它签过渡版本并替换公钥（RUNBOOK 第 11 节） |
 | 客户端加载远程网页 | 公司站点被攻破时，网页能读取员工在网页中可见的业务数据，与浏览器访问相同 | 网页运行在沙箱中，所有网页权限被拒，只能导航到本站，只能调用固定的预加载接口，无法执行本机程序 |
 | 按用户安装的目录对当前用户可写 | 以同一用户身份运行的恶意程序可以替换安装目录里的文件 | asar 完整性校验与 `OnlyLoadAppFromAsar` 阻止篡改 `app.asar`，但不能阻止替换整个程序；这与所有按用户安装的软件相同，依赖终端防护 |
-| 自动更新不能关闭 | 有问题的版本会推送到所有人 | 草稿先在 2–3 台机器试装再 Publish；安全模式和诊断窗可以自救；用更高版本前滚修复，紧急时改用浏览器 |
+| 自动更新可被关闭自动下载 | 有问题的版本会推送到开启自动下载的机器，关闭的机器可能长期停在旧版本 | 草稿先在 2–3 台机器试装再 Publish；安全模式和诊断窗可以自救；用更高版本前滚修复，紧急时改用浏览器 |
 | 系统代理或 VPN | 网页加载、登录和更新变慢或失败 | 诊断窗显示 DNS、TLS、代理和服务健康状况；导出诊断包交管理员排查（RUNBOOK 第 10 节） |
 | 共用电脑 | 同一 Windows 账户下的其他人直接处于登录状态 | 登录时取消勾选「7 天内免登录」，关闭客户端后不保留登录；离开前在客户端退出登录；需要时卸载以删除本机凭据 |
 | 拼写检查词典请求 Google | 向 Google 暴露出口 IP 与客户端版本 | 出口拦截 `*.gvt1.com` 不影响其他功能；关闭该请求需要改壳，已上报 |
