@@ -109,7 +109,8 @@ public class TimeTrackingService {
         int start=command.workdayStartMinute(), end=command.workdayEndMinute();
         if(start<0 || start>1439 || end<1 || end>1440 || end<=start)
             throw validation("workdayEndMinute","INVALID_RANGE","下班时间须晚于上班时间，且都在当天之内");
-        var next=new TimeTrackingPreferences(command.timerEnabled(),start,end);
+        var next=new TimeTrackingPreferences(command.timerEnabled(),start,end,
+                command.hideCompleted()==null ? preferences(actor).hideCompleted() : command.hideCompleted());
         Set<UUID> projects=new TreeSet<>();
         if(!next.timerEnabled()) {
             timers.running(actor.companyId(),actor.userId()).forEach(s -> projects.add(s.projectId()));

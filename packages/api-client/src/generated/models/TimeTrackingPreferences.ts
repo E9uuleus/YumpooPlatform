@@ -36,6 +36,12 @@ export interface TimeTrackingPreferences {
      * @memberof TimeTrackingPreferences
      */
     workdayEndMinute: number;
+    /**
+     * 在工作项表格淡化、在计时与补录选择列表隐藏已完成项；默认 false。请求省略时保留原值，响应总是返回。
+     * @type {boolean}
+     * @memberof TimeTrackingPreferences
+     */
+    hideCompleted?: boolean;
 }
 
 /**
@@ -61,6 +67,7 @@ export function TimeTrackingPreferencesFromJSONTyped(json: any, ignoreDiscrimina
         'timerEnabled': json['timerEnabled'],
         'workdayStartMinute': json['workdayStartMinute'],
         'workdayEndMinute': json['workdayEndMinute'],
+        'hideCompleted': json['hideCompleted'] == null ? undefined : json['hideCompleted'],
     };
 }
 
@@ -78,5 +85,6 @@ export function TimeTrackingPreferencesToJSONTyped(value?: TimeTrackingPreferenc
         'timerEnabled': value['timerEnabled'],
         'workdayStartMinute': value['workdayStartMinute'],
         'workdayEndMinute': value['workdayEndMinute'],
+        'hideCompleted': value['hideCompleted'],
     };
 }

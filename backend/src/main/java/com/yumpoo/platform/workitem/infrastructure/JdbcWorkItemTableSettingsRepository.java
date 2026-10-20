@@ -1,5 +1,9 @@
 package com.yumpoo.platform.workitem.infrastructure;
 
+import com.yumpoo.platform.workitem.application.WorkItemTableSettingsModels.ColoringRule;
+import com.yumpoo.platform.workitem.application.WorkItemTableSettingsModels.DefaultValues;
+import com.yumpoo.platform.workitem.application.WorkItemTableSettingsModels.Grouping;
+import com.yumpoo.platform.workitem.application.WorkItemTableSettingsModels.Height;
 import com.yumpoo.platform.workitem.application.WorkItemTableSettingsModels.Write;
 import com.yumpoo.platform.workitem.application.WorkItemTableSettingsRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -9,6 +13,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,34 +23,53 @@ public class JdbcWorkItemTableSettingsRepository implements WorkItemTableSetting
     private final ObjectMapper json;
     public JdbcWorkItemTableSettingsRepository(JdbcClient jdbc, ObjectMapper json) { this.jdbc = jdbc; this.json = json; }
 
+    /** settings 列只保存 V67 的字段集合，回退后的旧版本仍能按原结构读取；分组与完成定义保存在独立列。 */
+    private record Settings(Integer pinnedColumnCount, Height headerHeight, Height rowHeight,
+            List<ColoringRule> coloringRules, DefaultValues defaultValues) {}
+
     @Override public Optional<Stored> find(UUID company, UUID project, UUID user) {
         return jdbc.sql("""
-            SELECT settings, updated_at FROM yumpoo.work_item_table_settings
+            SELECT settings, grouping_settings, completed_status_codes, updated_at FROM yumpoo.work_item_table_settings
             WHERE company_id=:company AND project_id=:project AND user_id=:user
             """).param("company", company).param("project", project).param("user", user)
                 .query(this::map).optional();
     }
 
     @Override public Optional<Stored> save(UUID company, UUID project, UUID user, Write settings, long expectedVersion) {
+        String document = json.writeValueAsString(new Settings(settings.pinnedColumnCount(), settings.headerHeight(),
+                settings.rowHeight(), settings.coloringRules(), settings.defaultValues()));
+        String grouping = settings.grouping() == null ? null : json.writeValueAsString(settings.grouping());
+        String completed = settings.completedStatusCodes() == null ? null : json.writeValueAsString(settings.completedStatusCodes());
         if (expectedVersion == 0) return jdbc.sql("""
-            INSERT INTO yumpoo.work_item_table_settings (company_id,project_id,user_id,settings)
-            VALUES (:company,:project,:user,CAST(:settings AS jsonb))
+            INSERT INTO yumpoo.work_item_table_settings (company_id,project_id,user_id,settings,grouping_settings,completed_status_codes)
+            VALUES (:company,:project,:user,CAST(:settings AS jsonb),CAST(:grouping AS jsonb),CAST(:completed AS jsonb))
             ON CONFLICT (company_id,project_id,user_id) DO NOTHING
-            RETURNING settings, updated_at
+            RETURNING settings, grouping_settings, completed_status_codes, updated_at
             """).param("company", company).param("project", project).param("user", user)
-                .param("settings", json.writeValueAsString(settings)).query(this::map).optional();
+                .param("settings", document).param("grouping", grouping).param("completed", completed).query(this::map).optional();
         Instant expected = Instant.ofEpochSecond(expectedVersion / 1_000_000, (expectedVersion % 1_000_000) * 1_000);
         return jdbc.sql("""
             UPDATE yumpoo.work_item_table_settings
-            SET settings=CAST(:settings AS jsonb), updated_at=GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+            SET settings=CAST(:settings AS jsonb),
+                grouping_settings=COALESCE(CAST(:grouping AS jsonb), grouping_settings),
+                completed_status_codes=COALESCE(CAST(:completed AS jsonb), completed_status_codes),
+                updated_at=GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
             WHERE company_id=:company AND project_id=:project AND user_id=:user AND updated_at=:expected
-            RETURNING settings, updated_at
+            RETURNING settings, grouping_settings, completed_status_codes, updated_at
             """).param("company", company).param("project", project).param("user", user)
-                .param("expected", Timestamp.from(expected)).param("settings", json.writeValueAsString(settings))
+                .param("expected", Timestamp.from(expected)).param("settings", document)
+                .param("grouping", grouping).param("completed", completed)
                 .query(this::map).optional();
     }
 
     private Stored map(ResultSet rs, int row) throws SQLException {
-        return new Stored(json.readValue(rs.getString("settings"), Write.class), rs.getTimestamp("updated_at").toInstant());
+        Settings settings = json.readValue(rs.getString("settings"), Settings.class);
+        String grouping = rs.getString("grouping_settings");
+        String completed = rs.getString("completed_status_codes");
+        return new Stored(new Write(settings.pinnedColumnCount(), settings.headerHeight(), settings.rowHeight(),
+                settings.coloringRules(), settings.defaultValues(),
+                grouping == null ? null : json.readValue(grouping, Grouping.class),
+                completed == null ? null : List.of(json.readValue(completed, String[].class))),
+                rs.getTimestamp("updated_at").toInstant());
     }
 }

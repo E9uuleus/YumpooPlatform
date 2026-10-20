@@ -12,6 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WorkItemTableGrouping } from './WorkItemTableGrouping';
+import {
+    WorkItemTableGroupingFromJSON,
+    WorkItemTableGroupingFromJSONTyped,
+    WorkItemTableGroupingToJSON,
+    WorkItemTableGroupingToJSONTyped,
+} from './WorkItemTableGrouping';
 import type { WorkItemTableHeight } from './WorkItemTableHeight';
 import {
     WorkItemTableHeightFromJSON,
@@ -70,6 +77,18 @@ export interface WorkItemTableSettingsUpdateRequest {
      * @memberof WorkItemTableSettingsUpdateRequest
      */
     defaultValues: WorkItemCreateDefaultValues;
+    /**
+     * 省略或 null 时保留原值。
+     * @type {WorkItemTableGrouping}
+     * @memberof WorkItemTableSettingsUpdateRequest
+     */
+    grouping?: WorkItemTableGrouping | null;
+    /**
+     * 本人在该项目中视为已完成的状态代码；省略或 null 时保留原值。
+     * @type {Set<string>}
+     * @memberof WorkItemTableSettingsUpdateRequest
+     */
+    completedStatusCodes?: Set<string> | null;
 }
 
 
@@ -101,6 +120,8 @@ export function WorkItemTableSettingsUpdateRequestFromJSONTyped(json: any, ignor
         'rowHeight': WorkItemTableHeightFromJSON(json['rowHeight']),
         'coloringRules': ((json['coloringRules'] as Array<any>).map(WorkItemColoringRuleFromJSON)),
         'defaultValues': WorkItemCreateDefaultValuesFromJSON(json['defaultValues']),
+        ...(json['grouping'] === undefined ? {} : { 'grouping': json['grouping'] === null ? null : WorkItemTableGroupingFromJSON(json['grouping']) }),
+        ...(json['completedStatusCodes'] === undefined ? {} : { 'completedStatusCodes': json['completedStatusCodes'] === null ? null : new Set(json['completedStatusCodes']) }),
     };
 }
 
@@ -120,5 +141,7 @@ export function WorkItemTableSettingsUpdateRequestToJSONTyped(value?: WorkItemTa
         'rowHeight': WorkItemTableHeightToJSON(value['rowHeight']),
         'coloringRules': ((value['coloringRules'] as Array<any>).map(WorkItemColoringRuleToJSON)),
         'defaultValues': WorkItemCreateDefaultValuesToJSON(value['defaultValues']),
+        'grouping': WorkItemTableGroupingToJSON(value['grouping']),
+        'completedStatusCodes': value['completedStatusCodes'] == null ? undefined : Array.from(value['completedStatusCodes'] as Set<any>),
     };
 }
