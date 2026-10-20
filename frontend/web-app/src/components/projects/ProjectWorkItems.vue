@@ -747,6 +747,23 @@ const grouping = useWorkItemGrouping({
 })
 const { active: grouped, field: groupingField, order: groupingOrder, showEmpty: showEmptyGroups,
   groups: workItemGroups, countsReady: groupCountsReady, error: groupingError, loading: groupsLoading } = grouping
+const expandedSubitemsKey = () => props.preferenceScope ? `${props.preferenceScope}:expanded-subitems`
+  : `yumpoo:project-work-items:expanded-subitems:v1:${session.authentication.value?.company.id ?? 'unknown'}:${session.authentication.value?.user.id ?? 'unknown'}:${projectId.value}`
+// 子项展开按设备保存，只在收起或删除时移除；不在当前数据里的 ID 保留但不生效。
+watch(expandedSubitemsKey, key => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) ?? '[]') as unknown
+    expandedSubitemIds.value = Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []
+  } catch { expandedSubitemIds.value = [] }
+}, { immediate: true, flush: 'sync' })
+watch(expandedSubitemIds, ids => {
+  try { localStorage.setItem(expandedSubitemsKey(), JSON.stringify(ids)) } catch { /* 本地存储不可用时只在当前页面保留展开。 */ }
+})
+const visibleExpandedIds = computed(() => {
+  const loaded = new Set(tableItems.value.map(item => item.id))
+  return expandedSubitemIds.value.filter(id => loaded.has(id))
+})
+watch(() => visibleExpandedIds.value.join('|'), () => visibleExpandedIds.value.forEach(id => void loadSubitems(id)))
 const groupingSwitching = ref(false)
 const onboardingReady = computed(() => !embedded.value && Boolean(project.value) && !loading.value && !tableLoading.value && !error.value
   && (selectedView.value === 'kanban'
@@ -1023,12 +1040,10 @@ async function loadSubitems(parentId: string, force = false): Promise<void> {
 function onTableExpandChange(row: TableDisplayRow,
   expanded: TableDisplayRow[] | boolean): void {
   if (isGroupDisplayRow(row)) return
-  const expandedRows = Array.isArray(expanded) ? expanded.filter(item => !isGroupDisplayRow(item)) : expanded
-    ? [...tableItems.value.filter(item => expandedSubitemIds.value.includes(item.id)), row]
-    : tableItems.value.filter(item => item.id !== row.id
-      && expandedSubitemIds.value.includes(item.id))
-  expandedSubitemIds.value = [...new Set(expandedRows.map(item => item.id))]
-  if (expandedRows.some(item => item.id === row.id)) void loadSubitems(row.id)
+  const open = Array.isArray(expanded) ? expanded.includes(row) : expanded
+  expandedSubitemIds.value = open ? [...new Set([...expandedSubitemIds.value, row.id])]
+    : expandedSubitemIds.value.filter(id => id !== row.id)
+  if (open) void loadSubitems(row.id)
   schedulePageScrollbarSync()
 }
 
@@ -1075,7 +1090,7 @@ async function restoreArchivedItem(): Promise<void> {
       ifMatch: restoringItem.etag, idempotencyKey: crypto.randomUUID() })
     if (detail.value?.id === restoringItem.id) detail.value = restored
     void connect.refreshCells([restoringItem.id])
-    await onRelationsChanged([restoringItem.id, ...expandedSubitemIds.value])
+    await onRelationsChanged([restoringItem.id, ...visibleExpandedIds.value])
     ElMessage.success('工作项已恢复')
   } catch (reason) {
     error.value = await toApiProblem(reason)
@@ -1476,7 +1491,7 @@ async function reloadSortedTableInPlace(revealWorkItemId?: string): Promise<void
       nextCursor = result.nextCursor
       if (!nextCursor || nextCursor === cursor
         || (loaded.size >= minimumItemCount && (!revealWorkItemId || loaded.has(revealWorkItemId))
-          && expandedSubitemIds.value.every(id => loaded.has(id))
+          && visibleExpandedIds.value.every(id => loaded.has(id))
           && (!inlineDraft.value?.anchorId || loaded.has(inlineDraft.value.anchorId)))) break
       cursor = nextCursor
     }
@@ -1701,7 +1716,7 @@ async function onRelationsChanged(affectedWorkItemIds: string[]): Promise<void> 
   }
   if (selectedView.value === 'table') await reloadSortedTableInPlace()
   else await refreshCurrentView()
-  await Promise.all(expandedSubitemIds.value
+  await Promise.all(visibleExpandedIds.value
     .filter(id => affectedWorkItemIds.includes(id))
     .map(id => loadSubitems(id, true)))
 }
@@ -2780,7 +2795,6 @@ function resetCurrentData(): void {
   Object.keys(lanes).forEach(key => delete lanes[key])
   Object.keys(subitems).forEach(key => delete subitems[key])
   Object.keys(subitemSelections).forEach(key => delete subitemSelections[key])
-  expandedSubitemIds.value = []
   if (selectedView.value === 'kanban') void loadKanban(revision); else void loadTable(null, false, revision)
 }
 
@@ -2807,7 +2821,7 @@ watch(projectId, () => {
 watch(() => props.refreshKey, async () => {
   if (!project.value) return
   await reloadSortedTableInPlace()
-  await Promise.all(expandedSubitemIds.value.map(id => loadSubitems(id, true)))
+  await Promise.all(visibleExpandedIds.value.map(id => loadSubitems(id, true)))
 })
 async function canClose(): Promise<boolean> {
   if (batchBusy.value) { ElMessage.info('批量操作正在执行，请停止或等待完成。'); return false }
