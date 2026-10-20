@@ -587,7 +587,8 @@ async function startApplication(): Promise<void> {
     download: () => updateController?.download(),
     restart: restartForUpdate,
   })
-  if (!smokeTest) {
+  // Safe mode has no quick panel or rail, so the settings bridge and its global shortcut stay off with them.
+  if (!smokeTest && !safeMode) {
     new DesktopSettingsController({
       store: desktopPreferences,
       main: () => mainWindow,

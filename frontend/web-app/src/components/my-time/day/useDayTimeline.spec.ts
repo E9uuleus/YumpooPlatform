@@ -63,14 +63,14 @@ describe('我的一天写入反馈', () => {
 
   it('覆盖补录仅删除其他记录时也视为有效变化', async () => {
     api.fillMyTimeSessions.mockResolvedValue({ createdCount: 0, changedCount: 0, deletedCount: 1, skippedDurationMs: 3_600_000 })
-    expect(await timeline.create(TimeSessionFillMode.Replace, ['item'], [{ start: block.start, end: block.end! }])).toBe(true)
+    expect(await timeline.create(TimeSessionFillMode.Replace, ['item'], [{ start: block.start, end: block.end! }])).toMatchObject({ deletedCount: 1 })
     expect(ElMessage.warning).not.toHaveBeenCalled()
     expect(ElMessage.info).toHaveBeenCalledWith('已更新记录；所选工作项已有的 1h 记录已保留。')
   })
 
   it('仅补空白没有任何变化时保留没有新增的提示', async () => {
     api.fillMyTimeSessions.mockResolvedValue({ createdCount: 0, changedCount: 0, deletedCount: 0, skippedDurationMs: 3_600_000 })
-    expect(await timeline.create(TimeSessionFillMode.Gaps, ['item'], [{ start: block.start, end: block.end! }])).toBe(true)
+    expect(await timeline.create(TimeSessionFillMode.Gaps, ['item'], [{ start: block.start, end: block.end! }])).toMatchObject({ createdCount: 0 })
     expect(ElMessage.warning).toHaveBeenCalledWith('这段时间已全部有记录，没有新增。')
     expect(ElMessage.success).not.toHaveBeenCalled()
   })

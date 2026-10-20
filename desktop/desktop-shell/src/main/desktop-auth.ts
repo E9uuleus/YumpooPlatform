@@ -221,10 +221,10 @@ export class DesktopAuthController {
     error: unknown,
     errorCode: DesktopAuthErrorCode,
   ): void {
-    if (this.pending === localPending || this.pending?.state === attempt.state) {
-      this.setPending(undefined)
-    }
     this.options.logFailure?.(stage, desktopAuthFailureReason(error))
+    // A newer start or a cancel already replaced this attempt; its failure must not overwrite that status.
+    if (this.pending !== localPending && this.pending?.state !== attempt.state) return
+    this.setPending(undefined)
     this.fail(errorCode)
   }
 

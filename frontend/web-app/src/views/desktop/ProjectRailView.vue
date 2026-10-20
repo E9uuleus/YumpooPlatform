@@ -37,11 +37,12 @@ void bridge?.getState().then(value => { state.value ??= value }).catch(() => und
 onBeforeUnmount(() => offState?.())
 
 // Until the person arranges it, the rail starts from their most recent projects; another account's list is replaced the same way.
-watch([state, scope], ([value, owner]) => {
+// With no recents yet (a fresh install or partition) nothing is saved, so the rail seeds once the main window records some.
+watch([state, scope, () => recents.items.value], ([value, owner]) => {
   if (!bridge || !value || !owner || value.projects?.owner === owner) return
   const items = recents.items.value.filter(project => project.lifecycle === ProjectLifecycle.Active).slice(0, 6)
     .map(project => ({ id: project.id, name: project.name.slice(0, 64) }))
-  void bridge.setProjects({ owner, items }).catch(() => undefined)
+  if (items.length) void bridge.setProjects({ owner, items }).catch(() => undefined)
 })
 
 async function toggleTimer() {
