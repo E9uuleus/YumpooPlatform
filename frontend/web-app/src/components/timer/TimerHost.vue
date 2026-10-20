@@ -26,9 +26,11 @@ let openRevision = 0
 let disposed = false
 let themeObserver: MutationObserver | undefined
 let endDrag: (() => void) | undefined
-const standalone = computed(() => route.path === '/timer')
+// The desktop quick panel and rail are their own surfaces: they keep the tracker running but are never timer surfaces.
+const desktopPage = window.location.pathname.startsWith('/desktop/')
+const standalone = computed(() => route.path === '/timer' || desktopPage)
 const authenticated = computed(() => session.phase.value === 'authenticated')
-if (desktop) void desktop.getWindowState().then(state => { if (!disposed) surface.value = state.surface }).catch(() => undefined)
+if (desktop && !desktopPage) void desktop.getWindowState().then(state => { if (!disposed) surface.value = state.surface }).catch(() => undefined)
 watch([authenticated, () => session.authentication.value?.user.id], ([active]) => {
   activateTimeTracker(active)
   if (!active) { inline.value = false; pipWindow?.close() }
@@ -77,7 +79,7 @@ const openFromToolbar = () => { if (tracker.timerEnabled.value) void open() }
 watch(() => tracker.timerEnabled.value, enabled => {
   if (enabled || tracker.running.value.length) return
   hide()
-  if (desktop) void desktop.hide().catch(() => undefined)
+  if (desktop && !desktopPage) void desktop.hide().catch(() => undefined)
 })
 const started = () => {
   if (standalone.value) return

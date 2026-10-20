@@ -28,6 +28,8 @@ import ProjectActivityView from '../views/projects/ProjectActivityView.vue'
 
 export const routes: RouteRecordRaw[] = [
   { path: '/timer', name: 'timer', component: TimerPanel, props: route => ({ initialExpanded: route.query.mode !== 'compact' }) },
+  // Desktop shell windows outside AppShell, like /timer; only shells from 1.1.0 load them.
+  { path: '/desktop/quick', name: 'desktop-quick', component: () => import('../views/desktop/QuickTimeView.vue') },
   {
     path: '/login',
     name: 'login',

@@ -16,7 +16,7 @@ import './styles/timer-surface.css'
 
 initializeAppearance()
 const desktopSurface = window.yumpooDesktop ? window.location.pathname : ''
-if (desktopSurface === '/timer' || desktopSurface === '/timer/menu') document.documentElement.classList.add('timer-surface')
+if (['/timer', '/timer/menu', '/desktop/quick', '/desktop/rail'].includes(desktopSurface)) document.documentElement.classList.add('timer-surface')
 // The quick panel is driven only by the desktop shell over IPC, so it mounts without the router, session or timer polling.
 if (desktopSurface === '/timer/menu') {
   createApp(TimerQuickMenu).mount('#app')
