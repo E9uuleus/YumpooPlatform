@@ -31,6 +31,8 @@ export interface DesktopAuthStartOptions {
 export interface DesktopAuthBridge {
   isEnabled(): Promise<boolean>
   start(options?: DesktopAuthStartOptions): Promise<void>
+  /** Optional because the remotely deployed web app can be newer than the installed shell. */
+  cancel?(): Promise<void>
   clear(): Promise<void>
   onStatus(listener: (status: DesktopAuthStatus) => void): () => void
 }

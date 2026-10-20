@@ -76,6 +76,9 @@ const desktopAuth = Object.freeze({
   start: async (options?: DesktopAuthStartOptions): Promise<void> => {
     await ipcRenderer.invoke('yumpoo:auth:start', { remember: options?.remember !== false })
   },
+  cancel: async (): Promise<void> => {
+    await ipcRenderer.invoke('yumpoo:auth:cancel')
+  },
   clear: async (): Promise<void> => {
     await ipcRenderer.invoke('yumpoo:auth:clear')
   },

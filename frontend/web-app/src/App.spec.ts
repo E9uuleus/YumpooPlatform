@@ -162,6 +162,41 @@ describe('M1-12 Web 全局壳', () => {
     expect(start).toHaveBeenCalledOnce()
   })
 
+  it('Electron 等待浏览器回调时可重新打开或取消，并按勾选传递 7 天免登录', async () => {
+    let publish: ((status: unknown) => void) | undefined
+    const start = vi.fn(async () => undefined)
+    const cancel = vi.fn(async () => undefined)
+    Object.defineProperty(window, 'yumpooDesktop', {
+      configurable: true,
+      value: Object.freeze({
+        client: 'electron',
+        auth: Object.freeze({
+          isEnabled: vi.fn(async () => true),
+          start,
+          cancel,
+          clear: vi.fn(async () => undefined),
+          onStatus: vi.fn((listener: (status: unknown) => void) => {
+            publish = listener
+            return vi.fn()
+          }),
+        }),
+      }),
+    })
+    const wrapper = await mountApplication('/login')
+    await flushPromises()
+    await wrapper.get('.login-remember input').setValue(false)
+    publish?.({ phase: 'WAITING_FOR_CALLBACK' })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('已在系统浏览器中打开登录页')
+    expect(wrapper.get('.login-action').attributes('disabled')).toBeUndefined()
+    await wrapper.get('.login-action').trigger('click')
+    expect(start).toHaveBeenCalledWith({ remember: false })
+    await wrapper.get('.login-action--secondary').trigger('click')
+    expect(cancel).toHaveBeenCalledOnce()
+    localStorage.removeItem('yumpoo.auth.remember.v1')
+  })
+
   it('Electron 登录失败时区分登录服务与浏览器，并为未知错误码兜底', async () => {
     let publish: ((status: unknown) => void) | undefined
     Object.defineProperty(window, 'yumpooDesktop', {

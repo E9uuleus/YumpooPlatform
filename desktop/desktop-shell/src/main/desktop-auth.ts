@@ -114,6 +114,7 @@ export class DesktopAuthController {
   private readonly now: () => number
   private readonly createAttempt: () => DesktopPkceAttempt
   private pending: PendingDesktopAuthAttempt | undefined
+  private expiryTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor(private readonly options: DesktopAuthControllerOptions) {
     this.now = options.now ?? Date.now
@@ -124,15 +125,10 @@ export class DesktopAuthController {
     return this.options.enabled
   }
 
+  /** A new start replaces any pending attempt: the browser page of the old one may be closed or lost after a reload. */
   async start(options: DesktopAuthStartOptions = { remember: true }): Promise<void> {
     if (!this.options.enabled) {
       this.fail('AUTH_DISABLED')
-      return
-    }
-
-    this.discardExpiredAttempt()
-    if (this.pending) {
-      this.fail('AUTH_IN_PROGRESS')
       return
     }
 
@@ -142,7 +138,7 @@ export class DesktopAuthController {
       remember: options.remember,
       expiresAt: this.now() + ATTEMPT_TTL_MS,
     })
-    this.pending = localPending
+    this.setPending(localPending)
     this.options.publishStatus(status('OPENING_BROWSER'))
 
     let authorization: DesktopAuthorizationResponse
@@ -162,7 +158,7 @@ export class DesktopAuthController {
     if (this.pending !== localPending) {
       return
     }
-    this.pending = pendingAttempt
+    this.setPending(pendingAttempt)
     try {
       await this.options.openExternal(authorization.authorizationUrl)
     } catch (error) {
@@ -186,7 +182,7 @@ export class DesktopAuthController {
       return
     }
     if (this.now() >= attempt.expiresAt) {
-      this.pending = undefined
+      this.setPending(undefined)
       this.fail('ATTEMPT_EXPIRED')
       return
     }
@@ -197,7 +193,7 @@ export class DesktopAuthController {
 
     // Consume locally before the network call. A failed or duplicated exchange must
     // require a completely new browser flow and can never reuse PKCE material.
-    this.pending = undefined
+    this.setPending(undefined)
     this.options.publishStatus(status('EXCHANGING'))
     try {
       await this.options.exchange({
@@ -212,6 +208,12 @@ export class DesktopAuthController {
     }
   }
 
+  /** The person gave up in the browser; a late callback for the dropped attempt then finds nothing pending. */
+  cancel(): void {
+    this.setPending(undefined)
+    this.options.publishStatus(status('IDLE'))
+  }
+
   private abandon(
     localPending: PendingDesktopAuthAttempt,
     attempt: DesktopPkceAttempt,
@@ -220,16 +222,22 @@ export class DesktopAuthController {
     errorCode: DesktopAuthErrorCode,
   ): void {
     if (this.pending === localPending || this.pending?.state === attempt.state) {
-      this.pending = undefined
+      this.setPending(undefined)
     }
     this.options.logFailure?.(stage, desktopAuthFailureReason(error))
     this.fail(errorCode)
   }
 
-  private discardExpiredAttempt(): void {
-    if (this.pending && this.now() >= this.pending.expiresAt) {
+  /** The browser never reports a cancelled or closed login page, so the attempt reports its own expiry. */
+  private setPending(attempt: PendingDesktopAuthAttempt | undefined): void {
+    clearTimeout(this.expiryTimer)
+    this.pending = attempt
+    if (!attempt) return
+    this.expiryTimer = setTimeout(() => {
+      if (this.pending !== attempt) return
       this.pending = undefined
-    }
+      this.fail('ATTEMPT_EXPIRED')
+    }, attempt.expiresAt - this.now())
   }
 
   private fail(errorCode: DesktopAuthErrorCode): void {

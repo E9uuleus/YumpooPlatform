@@ -138,6 +138,7 @@ test('preload 入口仅允许固定认证 IPC 包装', async () => {
         file,
         "import { contextBridge, ipcRenderer } from 'electron'\n" +
           "void ipcRenderer.invoke('yumpoo:auth:start', { remember: true })\n" +
+          "void ipcRenderer.invoke('yumpoo:auth:cancel')\n" +
           "void ipcRenderer.on('yumpoo:auth:status', () => undefined)\n" +
           "void ipcRenderer.removeListener('yumpoo:auth:status', () => undefined)\n" +
           'void contextBridge\n',

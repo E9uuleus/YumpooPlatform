@@ -4,6 +4,7 @@ import {
   AUTH_IS_ENABLED_CHANNEL,
   AUTH_CLEAR_CHANNEL,
   AUTH_START_CHANNEL,
+  AUTH_CANCEL_CHANNEL,
   installAuthIpc,
   isTrustedAuthIpcSender,
 } from '../src/main/auth-ipc'
@@ -54,6 +55,7 @@ describe('Electron 认证 IPC 门禁', () => {
     const controller = {
       isEnabled: vi.fn(() => true),
       start: vi.fn(async () => undefined),
+      cancel: vi.fn(),
     } as unknown as DesktopAuthController
     const fixture = trustedFixture()
     installAuthIpc({
@@ -71,6 +73,8 @@ describe('Electron 认证 IPC 门禁', () => {
     expect(handlers.get(AUTH_IS_ENABLED_CHANNEL)?.(fixture.event)).toBe(true)
     await handlers.get(AUTH_START_CHANNEL)?.(fixture.event)
     expect(controller.start).toHaveBeenCalledWith({ remember: true })
+    await handlers.get(AUTH_CANCEL_CHANNEL)?.(fixture.event)
+    expect(controller.cancel).toHaveBeenCalledOnce()
     await handlers.get(AUTH_CLEAR_CHANNEL)?.(fixture.event)
 
     const forgedEvent = {
