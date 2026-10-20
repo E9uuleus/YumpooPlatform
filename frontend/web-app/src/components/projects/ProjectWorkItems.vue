@@ -5575,6 +5575,11 @@ onBeforeUnmount(() => {
   transition: none !important;
 }
 
+/* 加载时详情为空：面板撑满抽屉内容区，品牌加载遮罩才能完整居中，不被抽屉滚动区裁掉。 */
+.work-items-detail-drawer .detail-panel {
+  min-height: 100%;
+}
+
 /* 抽屉左侧拖动手柄 */
 .drawer-resize-handle {
   position: absolute;
