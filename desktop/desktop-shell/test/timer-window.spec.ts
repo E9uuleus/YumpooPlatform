@@ -31,7 +31,7 @@ vi.mock('electron', () => ({
   BrowserWindow: class {
     events = new Map<string, (...args: unknown[]) => void>()
     contentEvents = new Map<string, (...args: unknown[]) => void>()
-    webContents = { mainFrame: { url: 'https://yumpoo.example/timer' }, send: vi.fn(), on: (name: string, fn: (...args: unknown[]) => void) => this.contentEvents.set(name, fn) }
+    webContents = { mainFrame: { url: 'https://yumpoo.example/timer' }, send: vi.fn(), on: (name: string, fn: (...args: unknown[]) => void) => this.contentEvents.set(name, fn), once: vi.fn(), removeListener: vi.fn() }
     isDestroyed = () => false
     isVisible = vi.fn(() => true)
     bounds = { x: 0, y: 0, width: 176, height: 176 }

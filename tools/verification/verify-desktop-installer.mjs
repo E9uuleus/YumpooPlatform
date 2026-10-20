@@ -3,10 +3,11 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import {
   INSTALL_DIRECTORY, PRODUCT_NAME, PROTOCOL_KEY, installLocation, installation, installedFrom, powershell, profileChangesAllowed,
-  registryKeyExists, requiredEnvironment, runInstaller, spawnAndWait, uninstall, updaterCachePath, userDataPath, withIsolatedProfile,
+  registryKeyExists, requiredEnvironment, runInstaller, spawnAndWait, spawnAndWaitForTree, uninstall, updaterCachePath, userDataPath, withIsolatedProfile,
 } from './desktop-profile.mjs'
 
 // Installs, re-installs and uninstalls the real NSIS package, in the default per-user directory and in a custom
@@ -58,6 +59,17 @@ try {
       assert(fs.existsSync(path.join(userData, ...relative)), `同版本覆盖安装不应删除 ${relative.join('/')}`)
     }
 
+    await withLockedShortcut(async () => {
+      const command = installed.quietUninstall.match(/^"([^"]+)"\s*(.*)$/u)
+      assert(command)
+      await spawnAndWaitForTree(command[1], command[2], 30_000)
+      assert(installation(), '快捷方式持续占用时卸载必须保留登记项以便重试')
+      assert(fs.existsSync(installed.executable), '快捷方式持续占用时不应删除安装文件')
+      assert(registryKeyExists(PROTOCOL_KEY), '快捷方式持续占用时不应删除协议登记')
+      for (const relative of [...PREFERENCE_FILES.map(name => [name]), ...SESSION_FIXTURES]) {
+        assert(fs.existsSync(path.join(userData, ...relative)), '快捷方式持续占用时不应删除用户数据')
+      }
+    })
     await uninstall(installed)
     assertUninstalled(installed)
 
@@ -66,7 +78,7 @@ try {
     installed = assertInstalled(customLocation)
     await runInstaller(installer)
     installed = assertInstalled(customLocation)
-    await uninstall(installed)
+    await withLockedShortcut(() => uninstall(installed), 4_000)
     assertUninstalled(installed)
   })
   console.log(`桌面安装冒烟通过：${descriptor.installer.name} 默认目录与自定义目录的安装、自检、覆盖安装与卸载边界均符合预期。`)
@@ -103,6 +115,41 @@ function assertUninstalled(installed) {
     assert(!fs.existsSync(path.join(userData, ...relative)), `卸载后会话数据仍存在：${relative.join('/')}`)
   }
   assert.deepEqual(fs.readdirSync(userData).sort(), [...PREFERENCE_FILES].sort(), '卸载后 userData 只应保留偏好文件')
+}
+
+/** A real Windows reader that denies delete sharing; the release marker also lets failure cleanup release it. */
+async function withLockedShortcut(body, releaseAfterMs) {
+  const marker = path.join(work, `shortcut-lock-${Date.now()}`)
+  const released = `${marker}-release`
+  const literal = value => `'${value.replaceAll("'", "''")}'`
+  const script = `$ErrorActionPreference = 'Stop'
+$file = [IO.File]::Open(${literal(safeModeShortcut)}, 'Open', 'Read', 'Read')
+try {
+  [IO.File]::WriteAllText(${literal(marker)}, 'locked')
+  $deadline = [DateTime]::UtcNow.AddSeconds(40)
+  while (-not [IO.File]::Exists(${literal(released)})) {
+    if ([DateTime]::UtcNow -ge $deadline) { throw 'Shortcut lock release timed out' }
+    Start-Sleep -Milliseconds 50
+  }
+} finally { $file.Dispose() }`
+  const finished = spawnAndWait('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], 45_000)
+    .then(code => ({ code }), error => ({ error }))
+  let timer
+  try {
+    const deadline = Date.now() + 10_000
+    while (!fs.existsSync(marker)) {
+      assert(Date.now() < deadline, '快捷方式文件锁未就绪')
+      await delay(50)
+    }
+    if (releaseAfterMs !== undefined) timer = setTimeout(() => fs.writeFileSync(released, 'release'), releaseAfterMs)
+    await body()
+  } finally {
+    clearTimeout(timer)
+    fs.writeFileSync(released, 'release')
+    const result = await finished
+    if (result.error) throw result.error
+    assert.equal(result.code, 0, '快捷方式文件锁进程失败')
+  }
 }
 
 /** %TEMP% may be an 8.3 short path while the installer, shortcuts and protocol key record the long one. */

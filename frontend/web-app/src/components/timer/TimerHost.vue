@@ -8,6 +8,7 @@ import { activateTimeTracker, timerExitPrompt, chooseTimerExit, confirmTimerExit
 import { logoutGuard } from '../../composables/logoutGuard'
 import TimerPanel from './TimerPanel.vue'
 import TimerIcon from './TimerIcon.vue'
+import { isPanelSurface, SHELL_SURFACE } from '../desktop/surfaces'
 
 const route = useRoute()
 const session = useSession()
@@ -26,9 +27,8 @@ let openRevision = 0
 let disposed = false
 let themeObserver: MutationObserver | undefined
 let endDrag: (() => void) | undefined
-// The desktop quick panel and rail are their own surfaces: they keep the tracker running but are never timer surfaces.
-const desktopPage = window.location.pathname.startsWith('/desktop/')
-const standalone = computed(() => route.path === '/timer' || desktopPage)
+const desktopPage = isPanelSurface(window.location.pathname)
+const standalone = computed(() => route.path === SHELL_SURFACE.timer || desktopPage)
 const authenticated = computed(() => session.phase.value === 'authenticated')
 if (desktop && !desktopPage) void desktop.getWindowState().then(state => { if (!disposed) surface.value = state.surface }).catch(() => undefined)
 watch([authenticated, () => session.authentication.value?.user.id], ([active]) => {

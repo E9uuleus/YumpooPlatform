@@ -24,8 +24,8 @@
   root.dataset.density = density
   root.classList.toggle('dark', resolvedTheme !== 'light')
   root.style.colorScheme = resolvedTheme === 'light' ? 'light' : 'dark'
-  // The transparent desktop timer surfaces share this page and must never paint the boot splash.
-  if (window.yumpooDesktop && ['/timer', '/timer/menu', '/desktop/quick', '/desktop/rail'].includes(window.location.pathname)) {
+  // The transparent desktop timer surfaces share this page and must never paint the boot splash (same list as src/components/desktop/surfaces.ts).
+  if (window.yumpooDesktop && ['/timer', '/timer/menu', '/timer/quick', '/timer/rail'].includes(window.location.pathname)) {
     root.classList.add('timer-surface')
   }
 })()

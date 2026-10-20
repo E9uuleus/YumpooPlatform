@@ -28,6 +28,8 @@ Status: implemented
 
 [桌面偏好](../../../../desktop/desktop-shell/src/main/desktop-preferences.ts)保存到 `userData/desktop-preferences.json`，格式为 `{version:1,railEnabled,railMode,railSize,railProjects:{owner,items}|null,aboveTaskbar,shortcut,autoDownload}`；沿用 4KB 上限、逐字段清洗、临时文件加 rename 串行写入。`owner` 是 `companyId:userId`；登录项以系统状态为准，不写入文件。新文件加入诊断「重置偏好」、卸载保留清单与隐私说明。
 
+小窗口与侧边栏页面是 `/timer/quick` 与 `/timer/rail`，与 `/timer`、`/timer/menu` 同属壳专用页面，路径集中在 [surfaces.ts](../../../../frontend/web-app/src/components/desktop/surfaces.ts)。`/desktop/` 只属于[更新源](../process/2026-10-17-desktop-release-channel.md)：生产 Nginx 以 `location ^~ /desktop/` 把它交给静态目录，1.1.0 曾把页面放在 `/desktop/quick`、`/desktop/rail`，生产只得到 Nginx 404；部署资产检查现在拒绝任何被非 SPA location 遮蔽的路由。四个壳页面经 [loadSurface](../../../../desktop/desktop-shell/src/main/surface-load.ts) 加载，服务端返回 4xx/5xx 时按加载失败处理：销毁窗口，小窗口回落主窗口，不把错误页当内容显示。
+
 IPC 按窗口主框架与来源校验：`yumpoo:preferences:*` 只接受主窗口，`yumpoo:quick:*` 只接受小窗口，`yumpoo:rail:*` 只接受侧边栏；`yumpoo:timer:refresh` 额外接受小窗口与侧边栏。所有窗口使用同一持久业务分区。新桥成员全部可选；Web 先于壳部署时，浏览器与旧壳的设置页只显示外观，旧壳快捷面板没有「偏好设置…」，`TimerSettings` 保留旧侧边栏说明，`TimerDock` 与 dock 几何继续为旧壳提供支持。
 
 本记录更新[桌面计时界面](2026-09-24-desktop-timer-surfaces.md)和[计时窗与托盘](2026-09-08-timer-work-picker.md)中的侧边栏与托盘语义，取代发布渠道记录中对应用内开机自启的否决。
@@ -43,10 +45,13 @@ IPC 按窗口主框架与来源校验：`yumpoo:preferences:*` 只接受主窗�
 - 另存侧边栏位置：与 `dockSide`、`dockY` 重复，原计时设置中的停靠位置也会失效。
 - 自动下载保持不可关闭：用户需要选择下载时机，仍保留自动检查、默认下载及原校验机制。
 - 默认启用 `Ctrl+Alt+Y`：未经本人同意即在全系统截获组合键，与 AltGr 输入冲突。
+- 保留 `/desktop/quick` 并把 Nginx 更新源收窄到 `/desktop/stable/`：可让 1.1.0 立即恢复，但两个所有者仍共用一个命名空间，渠道名不能与页面同名，且要管理员手工改主机配置，部署引擎不托管该文件。
 
 ## Consequences
 
 增加两个常驻渲染进程（小窗口预热与项目侧边栏，各约 50–80MB），侧边栏每五秒轮询计时状态，小窗口仅在显示时轮询。保持在任务栏上方为实验性，任务栏被点击后可能短暂覆盖侧边栏，直到指针进入。快捷键可能被其他应用占用，设置页显示未生效；关闭自动下载的机器可能长期停留在旧版本。
+
+1.1.0 壳仍请求 `/desktop/quick`、`/desktop/rail`，在自动更新到 1.1.1 之前小窗口与侧边栏继续显示 404；服务端须先于桌面 1.1.1 发布。
 
 「我的一天」、齿轮与侧边栏加号通过 `loadURL` 打开主窗口目标页，会重载主窗口。侧边栏保存项目名，项目改名后需要恢复默认或重新添加。减少动态效果时关闭 CSS 动画与过渡，主进程关闭窗口的 180ms 延后保持不变。
 
@@ -56,4 +61,5 @@ IPC 按窗口主框架与来源校验：`yumpoo:preferences:*` 只接受主窗�
 - `pnpm --filter @yumpoo/web-app exec vitest run src/components/desktop/quickTime.spec.ts src/components/timer src/components/inbox/InboxHost.spec.ts src/views/download/DesktopDownloadView.spec.ts`：11 个 spec 共 77 项通过。
 - preload-contract 构建、Web 与桌面 `typecheck`、`pnpm lint`（0 errors）、`pnpm run test:architecture`（15 项）、`pnpm run doc-sync`（88 份活动 Note 与 4 份冻结记录）、`pnpm run test:agent-notes -- --maxWorkers=1 --testTimeout=30000`（20 项）通过。
 - 本地独立数据库与浏览器走查：快捷页按提示排入一小时，今日合计从 30 分钟变为一小时 30 分钟；无搜索时隐藏已完成项并显示数量，搜索时保留、淡化并划线。
+- 迁移到 `/timer/quick`、`/timer/rail`：`test/surface-load.spec.ts` 覆盖 200、404 与网络失败；`node tools/verification/verify-m1-15-deployment-assets.mjs` 在路由仍为 `/desktop/quick` 时失败、迁移后通过。
 - 真实桌面托盘、系统快捷键、自动隐藏、安装版登录项及旧壳人工走查尚未完成，限制与其余验收证据记录在本 PR。

@@ -127,6 +127,7 @@ Status: implemented
 **卸载边界**：
 
 - 更新（NSIS 以 `--updated` 运行旧卸载器）保留全部数据；
+- 真正卸载先删除安全模式快捷方式；遇到文件被读者占用等删除错误时，每 250 毫秒重试一次、最多 40 次。持续失败则以错误中止，保留安装文件、登记项、协议与用户数据，让用户释放占用后重试；不把残留留给重启，也不让验证脚本代为删除。安装冒烟用真实的 Windows 文件共享锁覆盖短暂占用后成功、持续占用后保留安装以及释放后重试成功。
 - 真正卸载时删除 `yumpoo:` 协议键、`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 与 `StartupApproved\Run` 的 `com.yumpoo.desktop` 值，并删除 userData 中除 `timer-preferences.json`、`inbox-preferences.json` 和 `desktop-preferences.json` 以外的全部内容：`auth\` 中的加密凭据存储（唯一落盘的会话）以及 Chromium 的缓存、本地存储等运行数据；同时删除 `%LOCALAPPDATA%\yumpoo-desktop-updater`。安装器会把自身复制到这里作为差分更新的基准（约 100 MB），electron-updater 的下载缓存也放在这里。
 
 **安装自检与门禁**：
