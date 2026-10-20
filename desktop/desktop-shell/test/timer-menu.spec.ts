@@ -20,7 +20,7 @@ vi.mock('electron', () => ({
     static getFocusedWindow = () => mocks.focused
     events = new Map<string, (...args: unknown[]) => void>()
     contentEvents = new Map<string, (...args: unknown[]) => void>()
-    webContents = { mainFrame: { url: 'https://yumpoo.example/timer/menu' }, send: vi.fn(), on: (name: string, fn: (...args: unknown[]) => void) => this.contentEvents.set(name, fn) }
+    webContents = { mainFrame: { url: 'https://yumpoo.example/timer/menu' }, send: vi.fn(), on: (name: string, fn: (...args: unknown[]) => void) => this.contentEvents.set(name, fn), once: vi.fn(), removeListener: vi.fn() }
     destroyed = false
     visible = false
     isDestroyed = () => this.destroyed
@@ -150,7 +150,7 @@ describe('timer quick panel window', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     failed.prewarm()
     await vi.waitFor(() => expect(popup().destroy).toHaveBeenCalledOnce())
-    expect(error).toHaveBeenCalledWith('[YUMPOO_TIMER_MENU_LOAD_FAILED]')
+    expect(error).toHaveBeenCalledWith('[YUMPOO_TIMER_MENU_LOAD_FAILED]', 'offline')
     expect(failed.open('tray', state)).toBe(false)
     error.mockRestore()
   })

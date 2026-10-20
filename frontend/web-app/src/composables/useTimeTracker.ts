@@ -3,6 +3,7 @@ import { ElMessage } from 'element-plus'
 import { readCsrfToken, type CurrentTimeTracker, type TimeTrackingPreferences, type TimeTrackingSummary, type TimeTrackingCommand } from '@yumpoo/api-client'
 import { timeTrackingApi } from '../api/client'
 import { timeProblemMessage } from './timeTrackingProblems'
+import { SHELL_SURFACE } from '../components/desktop/surfaces'
 
 const current = shallowRef<CurrentTimeTracker>()
 const running = computed(() => current.value?.runningSessions ?? [])
@@ -110,7 +111,7 @@ export function activateTimeTracker(active: boolean): void {
   if (channel) channel.onmessage = invalidate
   const tick = window.setInterval(() => { now.value = Date.now() + offset }, 1000)
   // Desktop windows keep polling while hidden in the tray, except the prewarmed quick panel: it refreshes when shown (visibilitychange below).
-  const pollHidden = !!window.yumpooDesktop && window.location.pathname !== '/desktop/quick'
+  const pollHidden = !!window.yumpooDesktop && window.location.pathname !== SHELL_SURFACE.quick
   const poll = window.setInterval(() => { if (pollHidden || document.visibilityState === 'visible') void refresh().catch(() => undefined) }, 5000)
   const focus = () => { if (document.visibilityState === 'visible') void refresh().catch(() => undefined) }
   window.addEventListener('focus', focus)

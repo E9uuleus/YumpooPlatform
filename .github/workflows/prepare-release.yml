@@ -30,6 +30,8 @@ jobs:
       actions: read
       attestations: read
       contents: write
+      # Reads the PR behind each commit for its release notes.
+      pull-requests: read
     steps:
       # Only push runs on main of this repository reach here, so checking out their commit runs reviewed code.
       - name: Checkout the main commit being released

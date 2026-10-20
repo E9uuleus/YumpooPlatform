@@ -48,9 +48,9 @@ export interface DesktopBridge {
   readonly update?: DesktopUpdateBridge
   /** Shells from 1.1.0: the settings page shows its window and general cards only when this exists. */
   readonly preferences?: DesktopPreferencesBridge
-  /** Quick time panel window (`/desktop/quick`) only. */
+  /** Quick time panel window (`/timer/quick`) only. */
   readonly quick?: DesktopQuickBridge
-  /** Project rail window (`/desktop/rail`) only. */
+  /** Project rail window (`/timer/rail`) only. */
   readonly rail?: DesktopRailBridge
 }
 

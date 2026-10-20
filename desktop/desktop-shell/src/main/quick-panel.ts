@@ -3,6 +3,7 @@ import type { QuickPanelContext, RailProject, TimerDockSide } from '@yumpoo/prel
 import { isTrustedAuthIpcSender } from './auth-ipc'
 import { createWindowOptions } from './window-policy'
 import { installSecurityGuards } from './security-guards'
+import { loadSurface } from './surface-load'
 import { placeBeside, placeMenu, QUICK_PANEL, taskbarEdge, type Rect } from './timer-geometry'
 
 const CLOSE_MS = 180
@@ -17,7 +18,7 @@ export interface QuickPanelHost {
   changed(): void
 }
 
-/** The tray's quick time panel: a prewarmed popup like TimerQuickMenu that renders `/desktop/quick`. */
+/** The tray's quick time panel: a prewarmed popup like TimerQuickMenu that renders `/timer/quick`. */
 export class QuickPanelController {
   private window: BrowserWindow | null = null
   private ready = false
@@ -79,8 +80,8 @@ export class QuickPanelController {
     })
     window.webContents.on('did-finish-load', () => { if (this.window === window) this.ready = true })
     window.webContents.on('render-process-gone', () => { if (this.window === window) { this.ready = false; window.destroy() } })
-    window.loadURL(new URL('/desktop/quick', this.origin).href).catch(() => {
-      console.error('[YUMPOO_QUICK_PANEL_LOAD_FAILED]')
+    loadSurface(window, new URL('/timer/quick', this.origin).href).catch((error: unknown) => {
+      console.error('[YUMPOO_QUICK_PANEL_LOAD_FAILED]', error instanceof Error ? error.message : '')
       if (!window.isDestroyed()) window.destroy()
     })
   }

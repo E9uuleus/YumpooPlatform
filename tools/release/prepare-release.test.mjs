@@ -38,8 +38,15 @@ function fixture(t) {
     },
     archive: Buffer.from('main CI artifact archive'),
     jobs: requiredJobs.map(name => ({ name, run_id: 3001, run_attempt: 1, head_sha: sha, status: 'completed', conclusion: 'success' })),
+    pulls: {
+      ['c'.repeat(40)]: [{ number: 121, title: 'feat(timer): 支持并行计时', merged_at: '2026-10-19T09:00:00Z', user: { login: 'dev' }, head: { ref: 'feature/parallel' }, base: { ref: 'dev' },
+        body: '说明\n\n## 发布说明\n<!-- 每行一条 -->\n- 新增｜桌面：托盘左键直接打开快捷工时小窗口。\n- 运维｜服务端：发布后管理员核对 Nginx 配置。\n' }],
+      ['e'.repeat(40)]: [{ number: 120, title: 'fix(web): 修复表格滚动', merged_at: '2026-10-19T08:00:00Z', user: { login: 'dev' }, head: { ref: 'fix/scroll' }, base: { ref: 'dev' }, body: '旧 PR 没有发布说明段' }],
+    },
     get(endpoint) {
       this.calls.push(endpoint)
+      const pulls = endpoint.match(/^\/commits\/([0-9a-f]{40})\/pulls$/u)
+      if (pulls) return this.pulls[pulls[1]] ?? []
       if (endpoint === `/compare/${sha}...main?per_page=1`) return { status: this.comparison, merge_base_commit: { sha } }
       if (endpoint === '/git/ref/tags/server-v2026.10.19.1') return { object: { type: 'commit', sha: 'b'.repeat(40) } }
       if (endpoint === `/compare/${sha}...${'b'.repeat(40)}?per_page=1`) return { status: this.latestOrder }
@@ -87,6 +94,7 @@ function fixture(t) {
         return release
       }
       const match = endpoint.match(/^\/releases\/(\d+)$/u)
+      if (method === 'PATCH' && match) return Object.assign(this.releases.find(release => release.id === Number(match[1])), body)
       if (method === 'DELETE' && match) {
         this.deleted.push(Number(match[1]))
         this.releases = this.releases.filter(release => release.id !== Number(match[1]))
@@ -114,7 +122,7 @@ function fixture(t) {
     github.attestations.push({ runId: ciRun.id, attempt: ciRun.run_attempt, uploadsSoFar: github.uploads.length, label: options.label })
     if (github.attestationError) throw new Error(github.attestationError)
   }
-  const draft = (options = {}) => prepareDraft({ github, sourceCommit: sha, env, directory: fs.mkdtempSync(path.join(root, 'run-')), now, unpack, attest, log: () => {}, ...options })
+  const draft = (options = {}) => prepareDraft({ github, sourceCommit: sha, env, directory: fs.mkdtempSync(path.join(root, 'run-')), now, unpack, attest, log: () => {}, inventory: () => [{ file: 'workitem/V79__add_note.sql', classification: 'expand' }], ...options })
   return { github, draft, packageBytes }
 }
 
@@ -126,13 +134,31 @@ test('a main commit gets a numbered draft with notes and every verified asset, p
   const created = github.releases.find(release => release.id === result.releaseId)
   assert.equal(created.draft, true)
   assert.equal(created.target_commitish, sha)
-  assert.match(created.body, /### 新功能\n\n- feat\(timer\): 支持并行计时 \(TT-4\)/u)
-  assert.match(created.body, /### 问题修复/u)
-  assert.doesNotMatch(created.body, /Merge pull request/u)
-  assert.match(created.body, /V79__add_note\.sql/u)
+  assert.match(created.body, /^## 服务端 server-v2026\.10\.20\.3\n\n新增 1 · 改进 0 · 修复 0 · 安全 0 · 需要管理员操作：是/u)
+  assert.match(created.body, /### 更新内容\n\n\*\*新增\*\*\n\n- 桌面｜托盘左键直接打开快捷工时小窗口。（#121）/u)
+  assert.match(created.body, /- 管理员操作：\n  - 服务端｜发布后管理员核对 Nginx 配置。（#121）/u)
+  assert.match(created.body, /- 数据库迁移：`V79__add_note\.sql`（只扩展，可快速回退）/u)
+  assert.match(created.body, /- 回退：可用 Server Rollback 回退到 `server-v2026\.10\.19\.1`/u)
+  assert.match(created.body, /- 包含 PR：#121、#120/u)
+  assert.match(created.body, / {2}- #120 fix\(web\): 修复表格滚动：缺少「## 发布说明」段/u)
+  assert.doesNotMatch(created.body, /Merge pull request|TT-4/u)
+  assert.equal(result.missing.length, 1)
   assert.deepEqual(github.uploads, ['provenance.json', ...releaseAssetNames.filter(name => name !== 'provenance.json')])
   assert.equal(result.provenance.ciRunId, 3001)
   assert.equal(result.provenance.tag, result.tag)
+})
+
+test('a rerun on the unpublished draft refreshes its body once PR release notes are fixed', async t => {
+  const { github, draft } = fixture(t)
+  const first = await draft()
+  github.pulls['e'.repeat(40)][0].body = '## 发布说明\n- 修复｜Web：工作项表格横向滚动不再跳回开头。'
+  const again = await draft()
+  assert.equal(again.releaseId, first.releaseId)
+  assert(github.calls.includes(`PATCH /releases/${first.releaseId}`))
+  const body = github.releases.find(release => release.id === first.releaseId).body
+  assert.match(body, /\*\*修复\*\*\n\n- Web｜工作项表格横向滚动不再跳回开头。（#120）/u)
+  assert.match(body, /- 未提供发布说明：无/u)
+  assert.deepEqual(again.missing, [])
 })
 
 test('CI bytes are attested before any upload and the persisted assets are attested again', async t => {

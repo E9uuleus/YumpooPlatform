@@ -3,6 +3,7 @@ import type { TimerMenuAction, TimerMenuState } from '@yumpoo/preload-contract'
 import { isTrustedAuthIpcSender } from './auth-ipc'
 import { createWindowOptions } from './window-policy'
 import { installSecurityGuards } from './security-guards'
+import { loadSurface } from './surface-load'
 import { MENU, placeMenu } from './timer-geometry'
 
 const ACTIONS = new Set<TimerMenuAction>(['open-main', 'open-inbox', 'find', 'settings', 'toggle', 'show-orb', 'show-dock', 'hide', 'toggle-pin', 'preferences', 'exit', 'close'])
@@ -55,8 +56,8 @@ export class TimerQuickMenu {
     window.on('closed', () => { if (this.window === window) { this.window = null; this.ready = false; clearInterval(this.watch) } })
     window.webContents.on('did-finish-load', () => { if (this.window === window) this.ready = true })
     window.webContents.on('render-process-gone', () => { if (this.window === window) { this.ready = false; window.destroy() } })
-    window.loadURL(new URL('/timer/menu', this.origin).href).catch(() => {
-      console.error('[YUMPOO_TIMER_MENU_LOAD_FAILED]')
+    loadSurface(window, new URL('/timer/menu', this.origin).href).catch((error: unknown) => {
+      console.error('[YUMPOO_TIMER_MENU_LOAD_FAILED]', error instanceof Error ? error.message : '')
       if (!window.isDestroyed()) window.destroy()
     })
   }

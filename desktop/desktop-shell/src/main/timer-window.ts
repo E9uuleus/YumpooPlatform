@@ -4,6 +4,7 @@ import type { DesktopTimerCommand, DesktopTimerState, TimerMenuAction, TimerMenu
 import { isTrustedAuthIpcSender } from './auth-ipc'
 import { createWindowOptions } from './window-policy'
 import { installSecurityGuards } from './security-guards'
+import { loadSurface } from './surface-load'
 import { applicationIcon } from './application-icon'
 import { TimerQuickMenu } from './timer-menu'
 import { QuickPanelController } from './quick-panel'
@@ -657,11 +658,11 @@ export class TimerWindowController {
       this.window = null; this.dragging = false; this.updateTray()
     })
     window.once('ready-to-show', () => reveal(window))
-    try { await window.loadURL(new URL(`/timer?mode=${mode}`, this.origin).href) }
-    catch {
+    try { await loadSurface(window, new URL(`/timer?mode=${mode}`, this.origin).href) }
+    catch (error) {
       window.destroy()
       this.showMain()
-      console.error('[YUMPOO_TIMER_WINDOW_LOAD_FAILED]')
+      console.error('[YUMPOO_TIMER_WINDOW_LOAD_FAILED]', error instanceof Error ? error.message : '')
     }
   }
 }
