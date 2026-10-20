@@ -36,6 +36,7 @@ const shortcuts = [
 ]
 const safeModeShortcut = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${PRODUCT_NAME} (Safe Mode).lnk`)
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'yumpoo-installer-smoke-'))
+process.env.YUMPOO_INSTALLER_TRACE = path.join(work, 'uninstall-trace.log')
 const defaultLocation = path.join(requiredEnvironment('LOCALAPPDATA'), 'Programs', INSTALL_DIRECTORY)
 // Stands in for the directory page's choice; a silent install takes /D= as is.
 const customLocation = path.join(work, 'YumpooCustom')
@@ -71,6 +72,7 @@ try {
   })
   console.log(`桌面安装冒烟通过：${descriptor.installer.name} 默认目录与自定义目录的安装、自检、覆盖安装与卸载边界均符合预期。`)
 } finally {
+  if (fs.existsSync(process.env.YUMPOO_INSTALLER_TRACE)) console.log(fs.readFileSync(process.env.YUMPOO_INSTALLER_TRACE, 'utf8'))
   fs.rmSync(work, { recursive: true, force: true })
 }
 
@@ -95,6 +97,19 @@ function assertInstalled(expectedLocation) {
 }
 
 function assertUninstalled(installed) {
+  console.log('卸载现场：', JSON.stringify({
+    location: installed.location,
+    quietUninstall: installed.quietUninstall,
+    registration: installation(),
+    protocolExists: registryKeyExists(PROTOCOL_KEY),
+    updaterCacheExists: fs.existsSync(updaterCachePath()),
+    shortcuts: [...shortcuts, safeModeShortcut].map(file => ({
+      file,
+      exists: fs.existsSync(file),
+      modifiedAt: fs.existsSync(file) ? fs.statSync(file).mtime.toISOString() : null,
+    })),
+    processes: powershell("Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Yumpoo*' } | Select-Object ProcessId, ParentProcessId, Name, CommandLine | ConvertTo-Json -Compress"),
+  }))
   assert(!fs.existsSync(installed.location), '卸载后安装目录仍存在')
   for (const shortcut of [...shortcuts, safeModeShortcut]) assert(!fs.existsSync(shortcut), `卸载后快捷方式仍存在：${path.basename(shortcut)}`)
   assert(!registryKeyExists(PROTOCOL_KEY), '卸载后 yumpoo 协议键仍存在')

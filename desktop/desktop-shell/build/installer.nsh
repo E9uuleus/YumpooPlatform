@@ -107,7 +107,18 @@
     ; "Start at sign-in" registers this value (named after the AppUserModelID); updates keep it, uninstall removes it.
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.yumpoo.desktop"
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "com.yumpoo.desktop"
+    ClearErrors
     Delete "$SMPROGRAMS\Yumpoo Desktop (Safe Mode).lnk"
+    StrCpy $R7 "deleted"
+    ${if} ${Errors}
+      StrCpy $R7 "delete failed"
+    ${endif}
+    ReadEnvStr $R9 "YUMPOO_INSTALLER_TRACE"
+    ${if} $R9 != ""
+      FileOpen $R8 "$R9" a
+      FileWrite $R8 "$CMDLINE | $SMPROGRAMS | $R7$\r$\n"
+      FileClose $R8
+    ${endif}
     ; The installer keeps a copy of itself here as the base for differential updates (about 100 MB).
     RMDir /r "$LOCALAPPDATA\yumpoo-desktop-updater"
     StrCpy $R9 "$APPDATA\Yumpoo Desktop"
