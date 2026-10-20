@@ -501,6 +501,7 @@ gh attestation verify '<下载目录>\YumpooDesktop-Setup-X.Y.Z-x64.exe' -R E9uu
 
 - 部署引擎的 `desktop-publish` 请求与服务器部署共用部署锁，但不进入维护、不写 `active.json`、`current.json`；服务器处于 `running` 或 `recovery_required` 时同样拒绝桌面请求。
 - 引擎逐个核对上传文件与已发布不可变 Release 附件的 digest、标签提交、`main` 祖先关系和 CI 推送运行，然后写入 `<desktopFeed.root>/desktop/stable/`：先写安装包、blockmap 和授权签名，最后分别原子替换 `latest.yml` 与 `release.json`。以两个指针中的最高版本防止降级，拒绝同版本不同提交或更新元数据以及任何重解析点。
+- `release.json` 按 UTF-8 读取，包括不带 BOM 的中文发布说明；不依赖 Windows PowerShell 5.1 的系统代码页。旧引擎若因中文说明报 JSON 未终止字符串，先用 `Update-YumpooEngine.ps1` 安装包含此修复的已验证服务器包，再重跑同一桌面 tag；不要改写更新源文件的编码或内容，避免与 Release 摘要不一致。
 - 两个指针的替换不是事务。若第二次替换失败，自动更新可能已发现新版本，而下载页仍显示旧版本；发布报告失败不代表新版本尚未公开。重跑同一 tag 的 Desktop Release 可以补齐指针与缺失文件；只有全部内容已一致才返回 `already_current`。不要手工降低指针或改发较低版本。
 - 保留最近 3 个版本的安装包与签名、最近 20 个版本的 blockmap（旧版本客户端做差分下载要用自己版本的 blockmap）。
 - 状态与通知沿用服务器的 `status/<requestId>.json` 与企业微信通知，阶段为 `desktop_verify`、`desktop_publish`、`complete` 或 `already_current`。
