@@ -36,6 +36,12 @@ export interface ElectronAuthAttemptRequest {
      * @memberof ElectronAuthAttemptRequest
      */
     codeChallengeMethod: ElectronAuthAttemptRequestCodeChallengeMethodEnum;
+    /**
+     * 「7 天内免登录」。缺省按 true；false 时兑换出的会话闲置 8 小时失效。
+     * @type {boolean}
+     * @memberof ElectronAuthAttemptRequest
+     */
+    remember?: boolean;
 }
 
 /**
@@ -71,6 +77,7 @@ export function ElectronAuthAttemptRequestFromJSONTyped(json: any, ignoreDiscrim
         'state': json['state'],
         'codeChallenge': json['codeChallenge'],
         'codeChallengeMethod': json['codeChallengeMethod'],
+        'remember': json['remember'] == null ? undefined : json['remember'],
     };
 }
 
@@ -88,5 +95,6 @@ export function ElectronAuthAttemptRequestToJSONTyped(value?: ElectronAuthAttemp
         'state': value['state'],
         'codeChallenge': value['codeChallenge'],
         'codeChallengeMethod': value['codeChallengeMethod'],
+        'remember': value['remember'],
     };
 }

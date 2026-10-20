@@ -62,7 +62,7 @@ describe('timer quick panel window', () => {
     menu.prewarm()
     expect(mocks.windows).toHaveLength(1)
     expect(mocks.windows[0]!.options).toMatchObject({ frame: false, transparent: true, resizable: false, movable: false, skipTaskbar: true, type: 'toolbar', show: false, width: 312, height: 396,
-      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'yumpoo-authenticated' } })
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, partition: 'persist:yumpoo-authenticated' } })
     expect(popup().setAlwaysOnTop).toHaveBeenCalledWith(true, 'pop-up-menu')
     expect(mocks.load).toHaveBeenCalledWith('https://yumpoo.example/timer/menu')
     expect(menu.open('tray', state)).toBe(false)

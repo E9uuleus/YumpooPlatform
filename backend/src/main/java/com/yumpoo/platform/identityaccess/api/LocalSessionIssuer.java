@@ -26,6 +26,6 @@ final class LocalSessionIssuer {
         if (!properties.isEnabled()) {
             return Optional.empty();
         }
-        return Optional.of(completionService.complete(properties.getMemberId()));
+        return Optional.of(completionService.complete(properties.getMemberId(), true));
     }
 }

@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -60,29 +61,43 @@ public final class RequestIdFilter extends OncePerRequestFilter {
                       .register(registry);
     }
 
+    /** Streaming downloads finish in an async dispatch; its failures need the same requestId and error handling. */
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        return false;
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
         throws ServletException, IOException {
         long started = System.nanoTime();
-        String requestId = trustedRequestId(request);
+        // 异步与错误派发沿用首次派发的 requestId，响应头已在首次派发写出。
+        Object dispatched = request.getAttribute(RequestIdContext.ATTRIBUTE_NAME);
+        boolean initial = dispatched == null;
+        String requestId = initial ? trustedRequestId(request) : dispatched.toString();
         if (requestId == null) {
             requestId = UUID.randomUUID().toString();
         }
-
-        request.setAttribute(RequestIdContext.ATTRIBUTE_NAME, requestId);
-        response.setHeader(RequestIdContext.HEADER_NAME, requestId);
+        if (initial) {
+            request.setAttribute(RequestIdContext.ATTRIBUTE_NAME, requestId);
+            response.setHeader(RequestIdContext.HEADER_NAME, requestId);
+        }
         preventOperationsCaching(request, response);
         RequestCorrelation correlation = RequestCorrelation.root(requestId);
+        Map<String, Object> logging = new LinkedHashMap<>();
+        logging.put(StructuredLoggingContext.REQUEST_ID, requestId);
+        logging.put(StructuredLoggingContext.CORRELATION_ID, requestId);
+        // 后续派发不再经过会话认证，用户与客户端类型取自首次派发留下的请求属性。
+        logging.put(StructuredLoggingContext.USER_ID, request.getAttribute(HttpAccessLog.USER_ID));
+        logging.put(StructuredLoggingContext.CLIENT_TYPE, request.getAttribute(HttpAccessLog.CLIENT_TYPE));
         try (
             RequestCorrelationContext.Scope ignoredCorrelation = RequestCorrelationContext.open(correlation);
-            StructuredLoggingContext.Scope ignoredLogging = StructuredLoggingContext.open(
-                Map.of(
-                    StructuredLoggingContext.REQUEST_ID,
-                    requestId,
-                    StructuredLoggingContext.CORRELATION_ID,
-                    requestId
-                )
-            )
+            StructuredLoggingContext.Scope ignoredLogging = StructuredLoggingContext.open(logging)
         ) {
             try {
                 filterChain.doFilter(request, response);
@@ -108,14 +123,17 @@ public final class RequestIdFilter extends OncePerRequestFilter {
                 resetAndWrite(request, response, new ApplicationException(StandardErrorCode.INTERNAL_ERROR), requestId);
             } finally {
                 preventOperationsCaching(request, response);
-                HttpAccessLog.completed(request, response, started);
-                String path = request.getRequestURI();
-                if (
-                    businessRequests != null &&
-                    !path.startsWith("/api/v1/admin/operations") &&
-                    !path.startsWith("/actuator")
-                ) {
-                    businessRequests.record(System.nanoTime() - started, java.util.concurrent.TimeUnit.NANOSECONDS);
+                // 访问日志与业务耗时只记首次派发，异步收尾不重复计数。
+                if (initial) {
+                    HttpAccessLog.completed(request, response, started);
+                    String path = request.getRequestURI();
+                    if (
+                        businessRequests != null &&
+                        !path.startsWith("/api/v1/admin/operations") &&
+                        !path.startsWith("/actuator")
+                    ) {
+                        businessRequests.record(System.nanoTime() - started, java.util.concurrent.TimeUnit.NANOSECONDS);
+                    }
                 }
             }
         }

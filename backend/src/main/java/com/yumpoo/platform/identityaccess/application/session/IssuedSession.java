@@ -25,4 +25,8 @@ public record IssuedSession(
     public Instant absoluteExpiresAt() {
         return session.absoluteExpiresAt();
     }
+
+    public boolean rememberMe() {
+        return session.rememberMe();
+    }
 }

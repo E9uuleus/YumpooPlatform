@@ -22,7 +22,8 @@ public record LoginSession(
         Instant absoluteExpiresAt,
         Instant revokedAt,
         SessionRevocationReason revokeReason,
-        Instant purgeAfter
+        Instant purgeAfter,
+        boolean rememberMe
 ) {
 
     public LoginSession {

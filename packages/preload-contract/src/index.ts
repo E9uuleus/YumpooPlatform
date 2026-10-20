@@ -23,9 +23,16 @@ export interface DesktopAuthStatus {
   readonly errorCode?: DesktopAuthErrorCode
 }
 
+export interface DesktopAuthStartOptions {
+  /** 「7 天内免登录」；省略时按勾选处理。 */
+  readonly remember: boolean
+}
+
 export interface DesktopAuthBridge {
   isEnabled(): Promise<boolean>
-  start(): Promise<void>
+  start(options?: DesktopAuthStartOptions): Promise<void>
+  /** Optional because the remotely deployed web app can be newer than the installed shell. */
+  cancel?(): Promise<void>
   clear(): Promise<void>
   onStatus(listener: (status: DesktopAuthStatus) => void): () => void
 }

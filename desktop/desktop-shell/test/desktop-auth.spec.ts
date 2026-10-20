@@ -39,18 +39,18 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     const fetchImplementation = vi.fn(async () => new Response(JSON.stringify(authorization()), {
       status: 201, headers: { 'Content-Type': 'application/json' },
     }))
-    const result = await requestDesktopAuthorization(fixedAttempt(), {
+    const result = await requestDesktopAuthorization(fixedAttempt(), false, {
       webOrigin: 'https://yumpoo.example.com/nested/app', clientVersion: '0.1.0', fetchImplementation,
     })
     expect(result.authorizationUrl).toContain('https://open.work.weixin.qq.com/wwopen/sso/qrConnect')
     const [url, request] = fetchImplementation.mock.calls[0] ?? []
     expect(new URL(url as string).pathname).toBe('/api/v1/electron/auth/attempts')
     expect(JSON.parse(String(request?.body))).toEqual({
-      state: STATE, codeChallenge: CHALLENGE, codeChallengeMethod: 'S256',
+      state: STATE, codeChallenge: CHALLENGE, codeChallengeMethod: 'S256', remember: false,
     })
   })
 
-  it('只允许一个 pending attempt，并在匹配后先本地消费再兑换', async () => {
+  it('再次登录替换旧 attempt 并重开浏览器，匹配后先本地消费再兑换', async () => {
     const openedUrls: string[] = []
     const exchanges: unknown[] = []
     const statuses: unknown[] = []
@@ -61,23 +61,20 @@ describe('Electron PKCE 与浏览器登录交接', () => {
       openExternal: async (url) => {
         openedUrls.push(url)
       },
-      exchange: async (input) => {
-        exchanges.push(input)
+      exchange: async (input, remember) => {
+        exchanges.push({ input, remember })
       },
       publishStatus: (value) => statuses.push(value),
     })
 
     await controller.start()
-    await controller.start()
-    expect(openedUrls).toHaveLength(1)
-    expect(statuses).toContainEqual({
-      phase: 'FAILED',
-      errorCode: 'AUTH_IN_PROGRESS',
-    })
+    await controller.start({ remember: false })
+    expect(openedUrls).toHaveLength(2)
+    expect(statuses.at(-1)).toEqual({ phase: 'WAITING_FOR_CALLBACK' })
 
     await controller.handleCallback({ code: CODE, state: STATE })
     expect(exchanges).toEqual([
-      { code: CODE, state: STATE, codeVerifier: VERIFIER },
+      { input: { code: CODE, state: STATE, codeVerifier: VERIFIER }, remember: false },
     ])
     expect(statuses.at(-1)).toEqual({ phase: 'SUCCEEDED' })
 
@@ -193,7 +190,7 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     const fetchImplementation = vi.fn(async () => new Response('{}', { status: 401 }))
     const controller = new DesktopAuthController({
       enabled: true,
-      authorize: (attempt) => requestDesktopAuthorization(attempt, {
+      authorize: (attempt, remember) => requestDesktopAuthorization(attempt, remember, {
         webOrigin: 'https://yumpoo.example.com', clientVersion: '1.0.0', fetchImplementation,
       }),
       createAttempt: fixedAttempt,
@@ -222,7 +219,7 @@ describe('Electron PKCE 与浏览器登录交接', () => {
     }), { status: 201 }))
     const controller = new DesktopAuthController({
       enabled: true,
-      authorize: (attempt) => requestDesktopAuthorization(attempt, {
+      authorize: (attempt, remember) => requestDesktopAuthorization(attempt, remember, {
         webOrigin: 'https://yumpoo.example.com', clientVersion: '1.0.0', fetchImplementation,
       }),
       createAttempt: fixedAttempt,
@@ -265,6 +262,35 @@ describe('Electron PKCE 与浏览器登录交接', () => {
       { stage: 'open-browser', reason: 'Error' },
       { stage: 'exchange', reason: 'ERR_CONNECTION_RESET' },
     ])
+  })
+
+  it('到期主动推送 ATTEMPT_EXPIRED，取消后推送 IDLE 且忽略迟到的回调', async () => {
+    vi.useFakeTimers()
+    try {
+      const exchange = vi.fn(async () => undefined)
+      const statuses: unknown[] = []
+      const controller = new DesktopAuthController({
+        enabled: true,
+        authorize: async () => ({ ...authorization(), expiresAt: new Date(Date.now() + 10 * 60 * 1_000).toISOString() }),
+        createAttempt: fixedAttempt,
+        openExternal: async () => undefined,
+        exchange,
+        publishStatus: (value) => statuses.push(value),
+      })
+
+      await controller.start()
+      vi.advanceTimersByTime(5 * 60 * 1_000)
+      expect(statuses.at(-1)).toEqual({ phase: 'FAILED', errorCode: 'ATTEMPT_EXPIRED' })
+
+      await controller.start()
+      controller.cancel()
+      expect(statuses.at(-1)).toEqual({ phase: 'IDLE' })
+      await controller.handleCallback({ code: CODE, state: STATE })
+      expect(exchange).not.toHaveBeenCalled()
+      expect(statuses.at(-1)).toEqual({ phase: 'FAILED', errorCode: 'NO_PENDING_ATTEMPT' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('失败原因只保留状态码、网络错误码或错误类名', () => {

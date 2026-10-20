@@ -48,26 +48,32 @@ public class SessionService {
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
+    /** 未指定「7 天内免登录」时按勾选签发，与登录参数缺省为 true 一致。 */
     @Transactional
     public IssuedSession issueWebSession(UUID userId, String clientVersion) {
-        UserAuthorizationRecord user = repository.lockUser(userId).orElseThrow(
-                SessionService::authenticationRequired
-        );
-        if (!user.activeAndEnabled()) {
-            throw authenticationRequired();
-        }
-        return insertSession(user, SessionClientType.WEB, clientVersion, clock.instant());
+        return issueWebSession(userId, clientVersion, true);
     }
 
     @Transactional
-    public IssuedSession issueElectronSession(UUID userId, String clientVersion) {
+    public IssuedSession issueWebSession(UUID userId, String clientVersion, boolean rememberMe) {
         UserAuthorizationRecord user = repository.lockUser(userId).orElseThrow(
                 SessionService::authenticationRequired
         );
         if (!user.activeAndEnabled()) {
             throw authenticationRequired();
         }
-        return insertSession(user, SessionClientType.ELECTRON, clientVersion, clock.instant());
+        return insertSession(user, SessionClientType.WEB, clientVersion, clock.instant(), rememberMe);
+    }
+
+    @Transactional
+    public IssuedSession issueElectronSession(UUID userId, String clientVersion, boolean rememberMe) {
+        UserAuthorizationRecord user = repository.lockUser(userId).orElseThrow(
+                SessionService::authenticationRequired
+        );
+        if (!user.activeAndEnabled()) {
+            throw authenticationRequired();
+        }
+        return insertSession(user, SessionClientType.ELECTRON, clientVersion, clock.instant(), rememberMe);
     }
 
     @Transactional
@@ -91,7 +97,7 @@ public class SessionService {
         )) {
             throw authenticationRequired();
         }
-        return insertSession(user, locked.clientType(), locked.clientVersion(), now);
+        return insertSession(user, locked.clientType(), locked.clientVersion(), now, locked.rememberMe());
     }
 
     @Transactional
@@ -216,7 +222,10 @@ public class SessionService {
     public void touch(AuthenticatedSession authenticatedSession) {
         Instant now = clock.instant();
         LoginSession session = authenticatedSession.session();
-        Instant idleExpiresAt = now.plus(settings.idleTimeout());
+        // 勾选免登录的会话闲置到期即绝对到期，续期不得把它缩短回闲置窗口。
+        Instant idleExpiresAt = session.rememberMe()
+                ? session.absoluteExpiresAt()
+                : now.plus(settings.idleTimeout());
         if (idleExpiresAt.isAfter(session.absoluteExpiresAt())) {
             idleExpiresAt = session.absoluteExpiresAt();
         }
@@ -265,7 +274,8 @@ public class SessionService {
             UserAuthorizationRecord user,
             SessionClientType clientType,
             String clientVersion,
-            Instant now
+            Instant now,
+            boolean rememberMe
     ) {
         SessionCredential sessionCredential = credentialGenerator.generate();
         SessionCredential csrfCredential = credentialGenerator.generate();
@@ -278,7 +288,7 @@ public class SessionService {
                 csrfCredential
         );
         Instant absoluteExpiresAt = now.plus(settings.absoluteTimeout());
-        Instant idleExpiresAt = now.plus(settings.idleTimeout());
+        Instant idleExpiresAt = rememberMe ? absoluteExpiresAt : now.plus(settings.idleTimeout());
         if (idleExpiresAt.isAfter(absoluteExpiresAt)) {
             idleExpiresAt = absoluteExpiresAt;
         }
@@ -300,7 +310,8 @@ public class SessionService {
                 absoluteExpiresAt,
                 null,
                 null,
-                absoluteExpiresAt.plus(settings.revokedRetention())
+                absoluteExpiresAt.plus(settings.revokedRetention()),
+                rememberMe
         );
         repository.insert(session);
         return new IssuedSession(session, sessionCredential, csrfCredential);

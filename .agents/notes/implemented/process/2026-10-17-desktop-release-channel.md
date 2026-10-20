@@ -32,7 +32,7 @@ Status: implemented
 
 - 关闭：`RunAsNode`、`EnableNodeOptionsEnvironmentVariable`、`EnableNodeCliInspectArguments`、`GrantFileProtocolExtraPrivileges`；
 - 开启：`EnableEmbeddedAsarIntegrityValidation`、`OnlyLoadAppFromAsar`，篡改过的 asar 无法启动；
-- 开启 `EnableCookieEncryption`，作为纵深防御。业务窗口使用不带 `persist:` 前缀的内存分区，会话 cookie 不落盘，每次启动时从 safeStorage 加密的凭据存储重新注入；如果以后改用持久分区，cookie 也不会以明文写入磁盘。
+- 开启 `EnableCookieEncryption`，作为纵深防御。业务窗口使用持久分区 `persist:yumpoo-authenticated`，主进程以 `cache: false` 建立，不在磁盘留业务响应；登录 cookie 不带过期时间，不写入磁盘，每次启动从 safeStorage 加密的凭据存储重新注入，不勾选「7 天内免登录」时不保存凭据，见[会话保持 Note](../security/2026-10-19-session-remember-and-desktop-guards.md)。
 
 **分发配置**：
 
@@ -76,7 +76,7 @@ Status: implemented
 
 - 重试（保持当前模式重启）、以正常模式重启（清零失败计数）；
 - 用浏览器打开 Web 版、打开日志文件夹、重新注册 `yumpoo:` 协议；
-- 退出登录并清除本机凭据、重置本机偏好，这两项先弹窗确认；
+- 退出登录并清除本机凭据、重置本机偏好（重置同时清空业务分区的 localStorage），这两项先弹窗确认；
 - 导出诊断包：用户选择保存位置，内容为报告、轮转日志和最近 5 个崩溃转储，用不依赖第三方库的仅存储 ZIP 写出。
 
 重启时不重放 `yumpoo:` 回调、`--self-check` 和 `--diagnostics` 参数。

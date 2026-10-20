@@ -2511,9 +2511,17 @@ paths:
       summary: 发起企微 Web 登录
       description: 创建一次性 OAuth state/nonce，并跳转到当前启用的身份提供者。
       security: []
+      parameters:
+        - name: remember
+          in: query
+          required: false
+          description: 「7 天内免登录」。缺省按 true；false 时会话闲置 8 小时失效，Session/CSRF Cookie 不带 Max-Age。
+          schema:
+            type: boolean
+            default: true
       responses:
         '302':
-          description: 跳转到身份提供者，并设置 HttpOnly nonce Cookie。
+          description: 跳转到身份提供者，并设置 HttpOnly nonce 与免登录选择 Cookie。
           headers:
             Location:
               $ref: '#/components/headers/Location'
@@ -2530,8 +2538,8 @@ paths:
       operationId: completeWeComLogin
       summary: 完成企微 Web 登录
       description: |
-        原子消费 OAuth attempt，解析已同步的企微身份并签发 Web Session。
-        成功固定跳转到 `/`；无论成功失败均清除 nonce Cookie。
+        原子消费 OAuth attempt，解析已同步的企微身份并按发起时的免登录选择签发 Web Session。
+        成功固定跳转到 `/`；无论成功失败均清除 nonce 与免登录选择 Cookie。
       security: []
       parameters:
         - name: code
@@ -10778,6 +10786,10 @@ components:
           type: string
           enum: [S256]
 
+        remember:
+          type: boolean
+          default: true
+          description: 「7 天内免登录」。缺省按 true；false 时兑换出的会话闲置 8 小时失效。
     ElectronAuthAttemptResponse:
       type: object
       additionalProperties: false

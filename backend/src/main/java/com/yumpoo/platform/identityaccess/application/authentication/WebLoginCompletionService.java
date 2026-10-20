@@ -31,7 +31,7 @@ public class WebLoginCompletionService {
     }
 
     @Transactional
-    public IssuedSession complete(String externalUserId) {
+    public IssuedSession complete(String externalUserId, boolean rememberMe) {
         Objects.requireNonNull(externalUserId, "externalUserId must not be null");
         AuthenticationUser user = userRepository.lockByWeComIdentity(
                         companyQuery.current().companyId(),
@@ -39,7 +39,7 @@ public class WebLoginCompletionService {
                 )
                 .filter(AuthenticationUser::loginEligible)
                 .orElseThrow(WebLoginCompletionService::authenticationRequired);
-        IssuedSession issued = sessionService.issueWebSession(user.userId(), null);
+        IssuedSession issued = sessionService.issueWebSession(user.userId(), null, rememberMe);
         eventService.loginSucceeded(user, issued);
         return issued;
     }

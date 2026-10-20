@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { beginAuthentication, consumeReturnPath, resetAuthenticationNavigation } from './navigation'
+import { beginAuthentication, consumeReturnPath, resetAuthenticationNavigation, saveRememberLogin } from './navigation'
 
 describe('认证返回路径', () => {
   afterEach(() => {
     sessionStorage.clear()
+    localStorage.clear()
     resetAuthenticationNavigation()
     vi.restoreAllMocks()
   })
@@ -12,9 +13,21 @@ describe('认证返回路径', () => {
     const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined)
     vi.spyOn(Date, 'now').mockReturnValue(1_000)
     beginAuthentication('/admin/identity/members?page=2#detail')
-    expect(assign).toHaveBeenCalledWith('/api/v1/auth/wecom/authorize')
+    expect(assign).toHaveBeenCalledWith('/api/v1/auth/wecom/authorize?remember=true')
     expect(consumeReturnPath(1_001)).toBe('/admin/identity/members?page=2#detail')
     expect(consumeReturnPath(1_001)).toBe('/')
+  })
+
+  it('授权地址带上本机记住的免登录选择，页面从 bfcache 恢复后允许再次发起', () => {
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined)
+    saveRememberLogin(false)
+    beginAuthentication()
+    beginAuthentication()
+    window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }))
+    beginAuthentication()
+    expect(assign.mock.calls).toEqual([
+      ['/api/v1/auth/wecom/authorize?remember=false'], ['/api/v1/auth/wecom/authorize?remember=false'],
+    ])
   })
 
   it('并发认证只导航一次且不覆盖首个返回地址', () => {

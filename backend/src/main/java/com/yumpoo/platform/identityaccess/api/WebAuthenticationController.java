@@ -27,6 +27,8 @@ import java.time.Duration;
 public final class WebAuthenticationController {
 
     public static final String OAUTH_NONCE_COOKIE = "__Host-yumpoo-oauth-nonce";
+    /** 「7 天内免登录」的选择与 nonce 一起绑定到本次浏览器登录，回调签发会话时读取。 */
+    public static final String OAUTH_REMEMBER_COOKIE = "__Host-yumpoo-oauth-remember";
     private static final String NO_STORE = "no-store, no-cache, must-revalidate";
 
     private final WebAuthenticationService authenticationService;
@@ -53,7 +55,11 @@ public final class WebAuthenticationController {
     }
 
     @GetMapping("/auth/wecom/authorize")
-    void authorize(HttpServletRequest request, HttpServletResponse response) throws IOException {
+    void authorize(
+            @RequestParam(defaultValue = "true") boolean remember,
+            HttpServletRequest request,
+            HttpServletResponse response
+    ) throws IOException {
         applySecurityHeaders(response);
         String requestId = requestId(request);
         try {
@@ -65,7 +71,11 @@ public final class WebAuthenticationController {
             );
             response.addHeader(
                     HttpHeaders.SET_COOKIE,
-                    nonceCookie(authorization.nonce().value()).toString()
+                    attemptCookie(OAUTH_NONCE_COOKIE, authorization.nonce().value()).toString()
+            );
+            response.addHeader(
+                    HttpHeaders.SET_COOKIE,
+                    attemptCookie(OAUTH_REMEMBER_COOKIE, Boolean.toString(remember)).toString()
             );
         } catch (ApplicationException exception) {
             response.setStatus(HttpStatus.FOUND.value());
@@ -83,18 +93,21 @@ public final class WebAuthenticationController {
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
             @CookieValue(name = OAUTH_NONCE_COOKIE, required = false) String nonce,
+            @CookieValue(name = OAUTH_REMEMBER_COOKIE, defaultValue = "true") boolean remember,
             HttpServletRequest request,
             HttpServletResponse response
     ) throws IOException {
         applySecurityHeaders(response);
-        response.addHeader(HttpHeaders.SET_COOKIE, clearNonceCookie().toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, clearAttemptCookie(OAUTH_NONCE_COOKIE).toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, clearAttemptCookie(OAUTH_REMEMBER_COOKIE).toString());
         String requestId = requestId(request);
         try {
-            IssuedSession issued = authenticationService.complete(code, state, nonce);
-            Duration remaining = Duration.between(clock.instant(), issued.absoluteExpiresAt());
-            if (remaining.isNegative()) {
-                remaining = Duration.ZERO;
-            }
+            IssuedSession issued = authenticationService.complete(code, state, nonce, remember);
+            Duration remaining = SessionHttpCookies.maxAge(
+                    remember,
+                    issued.absoluteExpiresAt(),
+                    clock.instant()
+            );
             response.addHeader(
                     HttpHeaders.SET_COOKIE,
                     SessionHttpCookies.session(
@@ -150,8 +163,8 @@ public final class WebAuthenticationController {
         );
     }
 
-    private static ResponseCookie nonceCookie(String value) {
-        return ResponseCookie.from(OAUTH_NONCE_COOKIE, value)
+    private static ResponseCookie attemptCookie(String name, String value) {
+        return ResponseCookie.from(name, value)
                 .secure(true)
                 .httpOnly(true)
                 .sameSite("Lax")
@@ -160,8 +173,8 @@ public final class WebAuthenticationController {
                 .build();
     }
 
-    private static ResponseCookie clearNonceCookie() {
-        return ResponseCookie.from(OAUTH_NONCE_COOKIE, "")
+    private static ResponseCookie clearAttemptCookie(String name) {
+        return ResponseCookie.from(name, "")
                 .secure(true)
                 .httpOnly(true)
                 .sameSite("Lax")

@@ -2,6 +2,7 @@ import type {
   DesktopAuthErrorCode,
   DesktopAuthPhase,
   DesktopAuthStatus,
+  DesktopAuthStartOptions,
   DesktopBridge,
   DesktopExportFile,
   DesktopFilesBridge,
@@ -72,8 +73,11 @@ function sanitizeStatus(value: unknown): DesktopAuthStatus | undefined {
 const desktopAuth = Object.freeze({
   isEnabled: async (): Promise<boolean> =>
     Boolean(await ipcRenderer.invoke('yumpoo:auth:is-enabled')),
-  start: async (): Promise<void> => {
-    await ipcRenderer.invoke('yumpoo:auth:start')
+  start: async (options?: DesktopAuthStartOptions): Promise<void> => {
+    await ipcRenderer.invoke('yumpoo:auth:start', { remember: options?.remember !== false })
+  },
+  cancel: async (): Promise<void> => {
+    await ipcRenderer.invoke('yumpoo:auth:cancel')
   },
   clear: async (): Promise<void> => {
     await ipcRenderer.invoke('yumpoo:auth:clear')

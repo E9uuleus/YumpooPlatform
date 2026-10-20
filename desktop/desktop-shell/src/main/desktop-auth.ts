@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import type {
   DesktopAuthErrorCode,
   DesktopAuthStatus,
+  DesktopAuthStartOptions,
 } from '@yumpoo/preload-contract'
 
 const AUTHORIZATION_PATH = '/api/v1/electron/auth/attempts'
@@ -39,9 +40,10 @@ export type DesktopAuthStage = 'authorize' | 'open-browser' | 'exchange'
 
 export interface DesktopAuthControllerOptions {
   readonly enabled: boolean
-  readonly authorize: (attempt: DesktopPkceAttempt) => Promise<DesktopAuthorizationResponse>
+  readonly authorize: (attempt: DesktopPkceAttempt, remember: boolean) => Promise<DesktopAuthorizationResponse>
   readonly openExternal: (url: string) => Promise<unknown>
-  readonly exchange: (input: DesktopAuthExchangeInput) => Promise<void>
+  /** Without remember the credentials stay in memory only: nothing is written to the safeStorage store. */
+  readonly exchange: (input: DesktopAuthExchangeInput, remember: boolean) => Promise<void>
   readonly publishStatus: (status: DesktopAuthStatus) => void
   /** Receives only the stage and a non-secret reason; state, codes and verifiers never reach it. */
   readonly logFailure?: (stage: DesktopAuthStage, reason: string) => void
@@ -60,6 +62,7 @@ export interface DesktopAuthExchangeOptions {
 export type DesktopAuthAuthorizationOptions = DesktopAuthExchangeOptions
 
 interface PendingDesktopAuthAttempt extends DesktopPkceAttempt {
+  readonly remember: boolean
   readonly expiresAt: number
 }
 
@@ -111,6 +114,7 @@ export class DesktopAuthController {
   private readonly now: () => number
   private readonly createAttempt: () => DesktopPkceAttempt
   private pending: PendingDesktopAuthAttempt | undefined
+  private expiryTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor(private readonly options: DesktopAuthControllerOptions) {
     this.now = options.now ?? Date.now
@@ -121,36 +125,32 @@ export class DesktopAuthController {
     return this.options.enabled
   }
 
-  async start(): Promise<void> {
+  /** A new start replaces any pending attempt: the browser page of the old one may be closed or lost after a reload. */
+  async start(options: DesktopAuthStartOptions = { remember: true }): Promise<void> {
     if (!this.options.enabled) {
       this.fail('AUTH_DISABLED')
-      return
-    }
-
-    this.discardExpiredAttempt()
-    if (this.pending) {
-      this.fail('AUTH_IN_PROGRESS')
       return
     }
 
     const attempt = this.createAttempt()
     const localPending = Object.freeze({
       ...attempt,
+      remember: options.remember,
       expiresAt: this.now() + ATTEMPT_TTL_MS,
     })
-    this.pending = localPending
+    this.setPending(localPending)
     this.options.publishStatus(status('OPENING_BROWSER'))
 
     let authorization: DesktopAuthorizationResponse
     try {
-      authorization = await this.options.authorize(attempt)
+      authorization = await this.options.authorize(attempt, options.remember)
     } catch (error) {
       this.abandon(localPending, attempt, 'authorize', error, 'AUTH_SERVICE_FAILED')
       return
     }
     const serverExpiry = Date.parse(authorization.expiresAt)
     const pendingAttempt = Object.freeze({
-      ...attempt,
+      ...localPending,
       expiresAt: Number.isFinite(serverExpiry)
         ? Math.min(serverExpiry, this.now() + ATTEMPT_TTL_MS)
         : this.now() + ATTEMPT_TTL_MS,
@@ -158,7 +158,7 @@ export class DesktopAuthController {
     if (this.pending !== localPending) {
       return
     }
-    this.pending = pendingAttempt
+    this.setPending(pendingAttempt)
     try {
       await this.options.openExternal(authorization.authorizationUrl)
     } catch (error) {
@@ -182,7 +182,7 @@ export class DesktopAuthController {
       return
     }
     if (this.now() >= attempt.expiresAt) {
-      this.pending = undefined
+      this.setPending(undefined)
       this.fail('ATTEMPT_EXPIRED')
       return
     }
@@ -193,19 +193,25 @@ export class DesktopAuthController {
 
     // Consume locally before the network call. A failed or duplicated exchange must
     // require a completely new browser flow and can never reuse PKCE material.
-    this.pending = undefined
+    this.setPending(undefined)
     this.options.publishStatus(status('EXCHANGING'))
     try {
       await this.options.exchange({
         code: callback.code,
         state: callback.state,
         codeVerifier: attempt.verifier,
-      })
+      }, attempt.remember)
       this.options.publishStatus(status('SUCCEEDED'))
     } catch (error) {
       this.options.logFailure?.('exchange', desktopAuthFailureReason(error))
       this.fail('EXCHANGE_FAILED')
     }
+  }
+
+  /** The person gave up in the browser; a late callback for the dropped attempt then finds nothing pending. */
+  cancel(): void {
+    this.setPending(undefined)
+    this.options.publishStatus(status('IDLE'))
   }
 
   private abandon(
@@ -216,16 +222,22 @@ export class DesktopAuthController {
     errorCode: DesktopAuthErrorCode,
   ): void {
     if (this.pending === localPending || this.pending?.state === attempt.state) {
-      this.pending = undefined
+      this.setPending(undefined)
     }
     this.options.logFailure?.(stage, desktopAuthFailureReason(error))
     this.fail(errorCode)
   }
 
-  private discardExpiredAttempt(): void {
-    if (this.pending && this.now() >= this.pending.expiresAt) {
+  /** The browser never reports a cancelled or closed login page, so the attempt reports its own expiry. */
+  private setPending(attempt: PendingDesktopAuthAttempt | undefined): void {
+    clearTimeout(this.expiryTimer)
+    this.pending = attempt
+    if (!attempt) return
+    this.expiryTimer = setTimeout(() => {
+      if (this.pending !== attempt) return
       this.pending = undefined
-    }
+      this.fail('ATTEMPT_EXPIRED')
+    }, attempt.expiresAt - this.now())
   }
 
   private fail(errorCode: DesktopAuthErrorCode): void {
@@ -235,12 +247,14 @@ export class DesktopAuthController {
 
 export async function requestDesktopAuthorization(
   attempt: DesktopPkceAttempt,
+  remember: boolean,
   options: DesktopAuthAuthorizationOptions,
 ): Promise<DesktopAuthorizationResponse> {
   const response = await desktopAuthFetch(AUTHORIZATION_PATH, options, {
     state: attempt.state,
     codeChallenge: attempt.challenge,
     codeChallengeMethod: 'S256',
+    remember,
   })
   const body = await response.json() as Partial<DesktopAuthorizationResponse>
   if (typeof body.authorizationUrl !== 'string' || typeof body.expiresAt !== 'string') {

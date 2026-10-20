@@ -82,7 +82,8 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
                 client_version,
                 client_protocol_version,
                 created_at,
-                authorize_expires_at
+                authorize_expires_at,
+                remember_me
             ) VALUES (
                 :stateHash,
                 :stateHash,
@@ -91,7 +92,8 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
                 :clientVersion,
                 :clientProtocolVersion,
                 :createdAt,
-                :authorizeExpiresAt
+                :authorizeExpiresAt,
+                :rememberMe
             )
             """;
 
@@ -140,7 +142,8 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
                       client_version,
                       client_protocol_version,
                       handoff_issued_at,
-                      consumed_at
+                      consumed_at,
+                      remember_me
             """;
 
     private final JdbcClient jdbcClient;
@@ -233,6 +236,7 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
                 .param("clientProtocolVersion", attempt.clientProtocolVersion())
                 .param("createdAt", utc(attempt.createdAt()))
                 .param("authorizeExpiresAt", utc(attempt.authorizeExpiresAt()))
+                .param("rememberMe", attempt.rememberMe())
                 .update();
         if (rows != 1) {
             throw new IllegalStateException("product desktop auth attempt was not created");
@@ -289,7 +293,8 @@ public class JdbcDesktopAuthAttemptRepository implements DesktopAuthAttemptStore
                         resultSet.getString("client_version"),
                         resultSet.getString("client_protocol_version"),
                         resultSet.getObject("handoff_issued_at", OffsetDateTime.class).toInstant(),
-                        resultSet.getObject("consumed_at", OffsetDateTime.class).toInstant()
+                        resultSet.getObject("consumed_at", OffsetDateTime.class).toInstant(),
+                        resultSet.getBoolean("remember_me")
                 ))
                 .optional();
     }

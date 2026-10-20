@@ -2,8 +2,14 @@ const RETURN_PATH_KEY = 'yumpoo.auth.return-path.v1'
 const RETURN_PATH_TTL_MS = 5 * 60 * 1000
 const MAX_RETURN_PATH_LENGTH = 2048
 const AUTHORIZE_PATH = '/api/v1/auth/wecom/authorize'
+const REMEMBER_LOGIN_KEY = 'yumpoo.auth.remember.v1'
 
 let authorizationStarted = false
+
+// A page restored from the back-forward cache keeps this module's state although the authorization navigation left it.
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) authorizationStarted = false
+})
 
 interface StoredReturnPath {
   path: string
@@ -16,7 +22,24 @@ export function beginAuthentication(path?: string): void {
   }
   if (path) saveReturnPath(path)
   authorizationStarted = true
-  window.location.assign(AUTHORIZE_PATH)
+  window.location.assign(`${AUTHORIZE_PATH}?remember=${readRememberLogin()}`)
+}
+
+/** 「7 天内免登录」默认勾选，并记住本机上次的选择。 */
+export function readRememberLogin(): boolean {
+  try {
+    return window.localStorage.getItem(REMEMBER_LOGIN_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+export function saveRememberLogin(remember: boolean): void {
+  try {
+    window.localStorage.setItem(REMEMBER_LOGIN_KEY, String(remember))
+  } catch {
+    // Storage can be unavailable in hardened browser contexts; the login then keeps the default.
+  }
 }
 
 export function rememberReturnPath(path: string): void {
