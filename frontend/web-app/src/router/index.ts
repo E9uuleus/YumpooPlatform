@@ -9,6 +9,7 @@ import {
 } from 'vue-router'
 import { consumeReturnPath, rememberReturnPath } from '../auth/navigation'
 import TimerPanel from '../components/timer/TimerPanel.vue'
+import { SHELL_SURFACE } from '../components/desktop/surfaces'
 import AppShell from '../components/AppShell.vue'
 import { useSession } from '../composables/useSession'
 import LoginView from '../views/auth/LoginView.vue'
@@ -27,10 +28,10 @@ import ProjectSettingsView from '../views/projects/ProjectSettingsView.vue'
 import ProjectActivityView from '../views/projects/ProjectActivityView.vue'
 
 export const routes: RouteRecordRaw[] = [
-  { path: '/timer', name: 'timer', component: TimerPanel, props: route => ({ initialExpanded: route.query.mode !== 'compact' }) },
-  // Desktop shell windows outside AppShell, like /timer; only shells from 1.1.0 load them.
-  { path: '/desktop/quick', name: 'desktop-quick', component: () => import('../views/desktop/QuickTimeView.vue') },
-  { path: '/desktop/rail', name: 'desktop-rail', component: () => import('../views/desktop/ProjectRailView.vue') },
+  { path: SHELL_SURFACE.timer, name: 'timer', component: TimerPanel, props: route => ({ initialExpanded: route.query.mode !== 'compact' }) },
+  // Desktop shell windows outside AppShell, like /timer; only shells from 1.1.1 load them.
+  { path: SHELL_SURFACE.quick, name: 'desktop-quick', component: () => import('../views/desktop/QuickTimeView.vue') },
+  { path: SHELL_SURFACE.rail, name: 'desktop-rail', component: () => import('../views/desktop/ProjectRailView.vue') },
   {
     path: '/login',
     name: 'login',

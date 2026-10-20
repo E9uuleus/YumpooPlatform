@@ -5,6 +5,7 @@ import type { DesktopInboxReason } from '@yumpoo/preload-contract'
 import { activateInbox, useInbox } from '../../composables/useInbox'
 import { useSession } from '../../composables/useSession'
 import { notificationLink } from './inboxPresentation'
+import { isPanelSurface } from '../desktop/surfaces'
 
 const route = useRoute(), router = useRouter(), session = useSession(), inbox = useInbox()
 const bridge = window.yumpooDesktop?.inbox
@@ -17,10 +18,10 @@ const knownReasons = new Set<DesktopInboxReason>([...legacyReasons, 'CONNECTION_
 const supportedReasons = new Set<DesktopInboxReason>(bridge?.supportedReasons ?? legacyReasons)
 const surface = ref<'main' | 'timer' | undefined>(window.yumpooDesktop ? undefined : 'main')
 let disposed = false
-if (window.yumpooDesktop?.timer && !window.location.pathname.startsWith('/desktop/')) void window.yumpooDesktop.timer.getWindowState()
+if (window.yumpooDesktop?.timer && !isPanelSurface(window.location.pathname)) void window.yumpooDesktop.timer.getWindowState()
   .then(state => { if (!disposed) surface.value = state.surface }).catch(() => undefined)
 else if (window.yumpooDesktop) surface.value = 'main'
-const active = computed(() => session.phase.value === 'authenticated' && !route.path.startsWith('/timer') && !route.path.startsWith('/desktop/') && surface.value === 'main')
+const active = computed(() => session.phase.value === 'authenticated' && !route.path.startsWith('/timer') && surface.value === 'main')
 watch([active, () => session.authentication.value?.user.id], ([value]) => activateInbox(value), { immediate: true })
 const state = computed(() => ({
   accountId: active.value ? session.authentication.value?.user.id ?? null : null,
