@@ -31,6 +31,13 @@ test('release notes parse one strict section and ignore the template guidance', 
   assert.deepEqual(parseReleaseNotes('## 发布说明\n- 无\n'), { entries: [], none: true, errors: [] })
 })
 
+test('comment removal also strips comment delimiters reconstructed by an earlier removal', () => {
+  const parsed = parseReleaseNotes('## 发布说明\n- 修复｜Web：网页加载后显示正确内容。<!<!-- 模板说明 -->-- 隐藏说明 -->')
+  assert.deepEqual(parsed.errors, [])
+  assert.deepEqual(parsed.entries, [{ category: '修复', scope: 'Web', text: '网页加载后显示正确内容。' }])
+  assert.match(parseReleaseNotes('## 发布说明\n<!<!-- 模板说明 -->-- 隐藏说明 -->').errors[0], /段为空/u)
+})
+
 test('release notes reject missing, empty, malformed and leaking entries', () => {
   const errors = body => parseReleaseNotes(body).errors
   assert.deepEqual(errors('没有段落'), ['缺少「## 发布说明」段'])

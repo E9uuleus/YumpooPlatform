@@ -33,7 +33,13 @@ const forbidden = [
  * HTML comments (the template's guidance) are ignored; anything else in the section is an error.
  */
 export function parseReleaseNotes(body) {
-  const lines = String(body ?? '').replace(/<!--[\s\S]*?-->/gu, '').split(/\r?\n/u)
+  let content = String(body ?? '')
+  let previous
+  do {
+    previous = content
+    content = content.replace(/<!--[\s\S]*?-->/gu, '')
+  } while (content !== previous)
+  const lines = content.split(/\r?\n/u)
   const starts = lines.flatMap((line, index) => /^##\s+发布说明\s*$/u.test(line.trim()) ? [index] : [])
   if (starts.length !== 1) return { entries: [], none: false, errors: [starts.length ? '「## 发布说明」段只能有一个' : '缺少「## 发布说明」段'] }
   const entries = []
