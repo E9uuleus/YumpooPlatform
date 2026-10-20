@@ -103,22 +103,29 @@
 ; the preference files.
 !macro customUnInstall
   ${ifNot} ${isUpdated}
+    ; A reader can briefly hold a newly created shortcut open. Finish this before removing registration
+    ; or data, and leave a retryable installation if the handle is not released within ten seconds.
+    Push $R7
+    StrCpy $R7 40
+    ${Do}
+      ClearErrors
+      Delete "$SMPROGRAMS\Yumpoo Desktop (Safe Mode).lnk"
+      ${ifNot} ${Errors}
+        ${ExitDo}
+      ${endif}
+      IntOp $R7 $R7 - 1
+      ${if} $R7 == 0
+        Pop $R7
+        SetErrorLevel 1
+        Abort "无法删除安全模式快捷方式，请关闭占用该文件的程序后重试卸载。"
+      ${endif}
+      Sleep 250
+    ${Loop}
+    Pop $R7
     DeleteRegKey HKCU "Software\Classes\yumpoo"
     ; "Start at sign-in" registers this value (named after the AppUserModelID); updates keep it, uninstall removes it.
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.yumpoo.desktop"
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "com.yumpoo.desktop"
-    ClearErrors
-    Delete "$SMPROGRAMS\Yumpoo Desktop (Safe Mode).lnk"
-    StrCpy $R7 "deleted"
-    ${if} ${Errors}
-      StrCpy $R7 "delete failed"
-    ${endif}
-    ReadEnvStr $R9 "YUMPOO_INSTALLER_TRACE"
-    ${if} $R9 != ""
-      FileOpen $R8 "$R9" a
-      FileWrite $R8 "$CMDLINE | $SMPROGRAMS | $R7$\r$\n"
-      FileClose $R8
-    ${endif}
     ; The installer keeps a copy of itself here as the base for differential updates (about 100 MB).
     RMDir /r "$LOCALAPPDATA\yumpoo-desktop-updater"
     StrCpy $R9 "$APPDATA\Yumpoo Desktop"
