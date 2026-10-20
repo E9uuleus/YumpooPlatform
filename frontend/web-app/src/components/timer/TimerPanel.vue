@@ -5,6 +5,8 @@ import type { TimerOrbChange, TimerOrbLayout, TimerPreferences, TimerPreferences
 import { ListTimerCandidatesScopeEnum, type TimerCandidate } from '@yumpoo/api-client'
 import { formatTrackingDuration, useTimeTracker } from '../../composables/useTimeTracker'
 import { useTimerCandidates } from '../../composables/useTimerCandidates'
+import { useHideCompleted } from '../../composables/useHideCompleted'
+import HideCompletedSwitch from './HideCompletedSwitch.vue'
 import TimerIcon from './TimerIcon.vue'
 import TimerDigits from './TimerDigits.vue'
 import TimerDock from './TimerDock.vue'
@@ -47,7 +49,10 @@ const { query, scope, items, loading, problem, nextOffset, searching, load } = u
 const title = computed(() => running.value
   ? `${runningSessions.value[0]!.workItemTitle ?? '不可见工作项'}${runningSessions.value.length > 1 ? ` 等 ${runningSessions.value.length} 项` : ''}`
   : resume.value ? `${resume.value.title}${resumeItems.value.length > 1 ? ` 等 ${resumeItems.value.length} 项` : ''}` : undefined)
-const candidates = computed(() => items.value.filter(item => !tracker.isRunning(item.workItemId) && (running.value || !saved.value || item.workItemId !== resume.value?.workItemId)))
+const { hideCompleted, visibleCandidates } = useHideCompleted()
+const visible = computed(() => visibleCandidates(items.value, query.value))
+const hiddenCount = computed(() => items.value.length - visible.value.length)
+const candidates = computed(() => visible.value.filter(item => !tracker.isRunning(item.workItemId) && (running.value || !saved.value || item.workItemId !== resume.value?.workItemId)))
 const focusedItem = ref<TimerCandidate>()
 const focusedId = computed(() => running.value ? running.value.workItemId : resume.value?.workItemId)
 const currentItem = computed(() => items.value.find(item => item.workItemId === focusedId.value)
@@ -548,24 +553,27 @@ function keydown(event: KeyboardEvent) {
             aria-hidden="true"
           >Ctrl K</kbd>
         </div>
-        <div
-          v-if="!searching"
-          class="picker-scope"
-        >
-          <button
-            :class="{ 'is-active': scope === ListTimerCandidatesScopeEnum.Personal }"
-            :aria-pressed="scope === ListTimerCandidatesScopeEnum.Personal"
-            @click="scope = ListTimerCandidatesScopeEnum.Personal"
+        <div class="picker-toolbar">
+          <div
+            v-if="!searching"
+            class="picker-scope"
           >
-            最近与我的
-          </button>
-          <button
-            :class="{ 'is-active': scope === ListTimerCandidatesScopeEnum.All }"
-            :aria-pressed="scope === ListTimerCandidatesScopeEnum.All"
-            @click="scope = ListTimerCandidatesScopeEnum.All"
-          >
-            全部
-          </button>
+            <button
+              :class="{ 'is-active': scope === ListTimerCandidatesScopeEnum.Personal }"
+              :aria-pressed="scope === ListTimerCandidatesScopeEnum.Personal"
+              @click="scope = ListTimerCandidatesScopeEnum.Personal"
+            >
+              最近与我的
+            </button>
+            <button
+              :class="{ 'is-active': scope === ListTimerCandidatesScopeEnum.All }"
+              :aria-pressed="scope === ListTimerCandidatesScopeEnum.All"
+              @click="scope = ListTimerCandidatesScopeEnum.All"
+            >
+              全部
+            </button>
+          </div>
+          <HideCompletedSwitch :hidden-count="hiddenCount" />
         </div>
         <div
           ref="results"
@@ -582,7 +590,7 @@ function keydown(event: KeyboardEvent) {
               :id="`timer-option-${item.workItemId}`"
               :key="item.workItemId"
               class="candidate"
-              :class="{ 'is-selected': selected === index }"
+              :class="{ 'is-selected': selected === index, 'is-completed': hideCompleted && item.completed }"
               role="option"
               :aria-selected="selected === index"
               :disabled="tracker.busy.value || loading"
@@ -596,6 +604,10 @@ function keydown(event: KeyboardEvent) {
                 :color-token="item.contentColorToken"
               />
               <span class="candidate-copy"><strong>{{ item.title }}</strong><span class="candidate-context">{{ item.projectName }}</span></span>
+              <span
+                v-if="hideCompleted && item.completed"
+                class="candidate-done"
+              >已完成</span>
               <TimerIcon
                 name="play"
                 class="candidate-action"
@@ -682,7 +694,9 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px
 .picker-search input{width:100%;min-width:0;height:100%;background:transparent;border:0;outline:none;color:var(--yp-text-primary);font-size:12.5px}
 .picker-search input::placeholder{color:var(--yp-text-muted)}
 .picker-search kbd{flex-shrink:0;padding:1px 6px;border-radius:5px;font:500 10px/16px var(--yp-font-family);color:var(--yp-text-muted);background:var(--yp-timer-sunken);box-shadow:inset 0 0 0 1px var(--yp-timer-hairline)}
-.picker-scope{display:flex;align-self:flex-start;margin:8px 12px 4px;padding:2px;border-radius:9px;background:var(--yp-timer-sunken);box-shadow:inset 0 0 0 1px var(--yp-timer-hairline);flex-shrink:0}
+.picker-toolbar{display:flex;align-items:center;gap:8px;margin:8px 12px 4px;flex-shrink:0}
+.picker-toolbar>.hide-completed{margin-left:auto}
+.picker-scope{display:flex;padding:2px;border-radius:9px;background:var(--yp-timer-sunken);box-shadow:inset 0 0 0 1px var(--yp-timer-hairline);flex-shrink:0}
 .picker-scope button{border:0;border-radius:7px;background:transparent;padding:4px 12px;font-size:11.5px;color:var(--yp-text-secondary)}
 .picker-scope button.is-active{background:var(--yp-timer-chip);color:var(--yp-text-primary);font-weight:600;box-shadow:var(--yp-timer-shadow-soft)}
 .picker-results{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:4px 8px 10px}
@@ -693,6 +707,9 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:2px
 .candidate-copy{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
 .candidate-copy strong{font-size:12.5px;font-weight:600;line-height:18px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
 .candidate-context{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;line-height:15px;color:var(--yp-text-muted)}
+.candidate.is-completed .candidate-copy{opacity:.5}
+.candidate.is-completed .candidate-copy strong{text-decoration:line-through}
+.candidate-done{flex-shrink:0;padding:1px 6px;border-radius:999px;background:var(--yp-timer-sunken);color:var(--yp-text-muted);font-size:11px;line-height:15px}
 .candidate-action{width:24px;height:24px;padding:6px;box-sizing:border-box;border-radius:50%;flex-shrink:0;color:#fff;background:var(--yp-timer-accent);opacity:0;transform:scale(.8);transition:opacity .18s,transform .18s}
 .candidate:hover .candidate-action,.candidate.is-selected .candidate-action,.candidate:focus-visible .candidate-action{opacity:1;transform:none}
 .empty-state{min-height:135px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px;color:var(--yp-text-muted);font-size:12px;text-align:center}
