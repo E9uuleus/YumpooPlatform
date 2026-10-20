@@ -102,6 +102,8 @@ const offOpen = bridge?.onOpen(value => {
   openId.value = null
   closing.value = false
   dateChoice.value = 'today'
+  // The prewarmed panel can live for days; the date picker starts from the current day on every open.
+  pickedDate.value = today.value
   custom.value = false
   durationMs.value = HOUR
   opening.value++
@@ -127,13 +129,15 @@ async function record(item: TimerCandidate) {
   const entries = plan.value.entries
   recording.value = 'saving'
   countNext = targetDate.value === today.value
-  if (!await targetDay.create(TimeSessionFillMode.Gaps, [item.workItemId], entries)) {
+  const result = await targetDay.create(TimeSessionFillMode.Gaps, [item.workItemId], entries)
+  // Nothing new because the range was already recorded: create() has already said so, and there is nothing to celebrate.
+  if (!result || !(result.createdCount || result.changedCount || result.deletedCount)) {
     countNext = false
     recording.value = 'idle'
     return
   }
   recording.value = 'done'
-  const recorded = entries.reduce((sum, range) => sum + range.end - range.start, 0)
+  const recorded = entries.reduce((sum, range) => sum + range.end - range.start, 0) - result.skippedDurationMs
   setTimeout(() => {
     openId.value = null
     recording.value = 'idle'
