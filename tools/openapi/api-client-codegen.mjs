@@ -238,6 +238,17 @@ function applyStrictTypeScriptCompatibility(sourceRoot) {
   }
   fs.writeFileSync(timerCandidatePath, timerCandidate, 'utf8')
 
+  const timerCandidatePagePath = path.join(sourceRoot, 'models', 'TimerCandidatePage.ts')
+  let timerCandidatePage = normalizeText(fs.readFileSync(timerCandidatePagePath, 'utf8'))
+  for (const [field, conversion] of [['projects', "((json['projects'] as Array<any>).map(TimerCandidateProjectCountFromJSON))"],
+    ['hiddenCompletedCount', "json['hiddenCompletedCount']"]]) {
+    timerCandidatePage = replaceExactlyOnce(timerCandidatePage,
+      `        '${field}': json['${field}'] == null ? undefined : ${conversion},`,
+      `        ...(json['${field}'] == null ? {} : { '${field}': ${conversion} }),`,
+      `计时候选分页 ${field} 精确可选属性`)
+  }
+  fs.writeFileSync(timerCandidatePagePath, timerCandidatePage, 'utf8')
+
   const attachmentMetadataPath = path.join(sourceRoot, 'models', 'AttachmentMetadata.ts')
   let attachmentMetadata = normalizeText(fs.readFileSync(attachmentMetadataPath, 'utf8'))
   attachmentMetadata = replaceExactlyOnce(

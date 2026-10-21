@@ -80,8 +80,8 @@ export function TimerCandidatePageFromJSONTyped(json: any, ignoreDiscriminator: 
 
         'items': ((json['items'] as Array<any>).map(TimerCandidateFromJSON)),
         'nextOffset': json['nextOffset'],
-        'projects': json['projects'] == null ? undefined : ((json['projects'] as Array<any>).map(TimerCandidateProjectCountFromJSON)),
-        'hiddenCompletedCount': json['hiddenCompletedCount'] == null ? undefined : json['hiddenCompletedCount'],
+        ...(json['projects'] == null ? {} : { 'projects': ((json['projects'] as Array<any>).map(TimerCandidateProjectCountFromJSON)) }),
+        ...(json['hiddenCompletedCount'] == null ? {} : { 'hiddenCompletedCount': json['hiddenCompletedCount'] }),
     };
 }
 
