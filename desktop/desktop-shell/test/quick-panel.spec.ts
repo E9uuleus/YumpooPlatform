@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('electron', () => ({
   app: { isPackaged: false, on: (name: string, fn: () => void) => mocks.appEvents.set(name, fn) },
   ipcMain: { handle: (name: string, fn: (...args: unknown[]) => unknown) => mocks.handlers.set(name, fn) },
+  nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => false })) },
   screen: { getCursorScreenPoint: () => mocks.cursor, getDisplayMatching: () => mocks.display, getDisplayNearestPoint: () => mocks.display },
   BrowserWindow: class {
     static getFocusedWindow = () => null

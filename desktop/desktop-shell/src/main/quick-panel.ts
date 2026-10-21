@@ -4,6 +4,7 @@ import { isTrustedAuthIpcSender } from './auth-ipc'
 import { createWindowOptions } from './window-policy'
 import { installSecurityGuards } from './security-guards'
 import { loadSurface } from './surface-load'
+import { applicationIcon } from './application-icon'
 import { clampRect, placeBeside, placeMenu, QUICK_PANEL, QUICK_PANEL_MAX, resizeFrom, taskbarEdge, type Rect } from './timer-geometry'
 import type { TimerPreferenceStore } from './timer-preferences'
 
@@ -130,7 +131,7 @@ export class QuickPanelController {
       maxWidth: QUICK_PANEL_MAX.width, maxHeight: QUICK_PANEL_MAX.height,
       frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, thickFrame: false,
       resizable: false, movable: true, minimizable: false, maximizable: false, fullscreenable: false,
-      skipTaskbar: !this.pinned(), alwaysOnTop: true, title: 'YumpooPlatform · 快捷工时',
+      skipTaskbar: !this.pinned(), alwaysOnTop: true, title: 'YumpooPlatform · 快捷工时', icon: applicationIcon(),
     })
     this.window = window
     this.ready = false
