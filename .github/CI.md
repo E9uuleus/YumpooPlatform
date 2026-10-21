@@ -114,4 +114,6 @@ Dependabot 生成的 PR 标题不带步骤编号，squash 合并时按提交规�
 
 ## 暂时冻结的交付标识
 
+部署配置中的 XML 在 Linux 使用 runner 已提供的 Python 3 标准库解析，在 Windows 使用 PowerShell 解析；解析工具缺失或 XML 无效都会使门禁失败。
+
 工作流 `.github/workflows/m0-18-ci.yml` 与 `Platform CI`、Job ID `linux/windows_delivery/windows` 及名称 `M0 Portable Gate/Windows Delivery/M0 Windows x64 Gate` 保持不变。服务器 artifact `m1-15-server-<sha>-<attempt>`、桌面 artifact `desktop-<sha>-<attempt>`、`out/m1-15/`、`yumpoo-windows-server-m1-15.zip`、服务器 manifest 的 `M1-15` 与验证报告字段也保持不变：发布工具、Sigstore 构建证明和已安装主机引擎依赖它们。后续需先让发布工具与主机引擎接受新旧标识，再协调切换工作流和规则集，回退窗口结束后移除旧标识。

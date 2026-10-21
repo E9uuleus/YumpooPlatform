@@ -209,7 +209,11 @@ function walkFiles(root) {
 }
 
 function parseXml(filePath, label) {
-  if (process.platform !== 'win32') return
+  if (process.platform !== 'win32') {
+    const result = spawnSync('python3', ['-c', 'import sys, xml.etree.ElementTree as ET; ET.parse(sys.argv[1])', filePath], { stdio: 'ignore' })
+    assert(result.status === 0, `${label} 不是有效 XML 或 Python 3 不可用`)
+    return
+  }
   const command = `$m016Xml = [xml](Get-Content -LiteralPath '${filePath.replaceAll("'", "''")}' -Raw); if ($null -eq $m016Xml.DocumentElement) { exit 1 }`
   const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { stdio: 'ignore' })
   assert(result.status === 0, `${label} 不是有效 XML`)
