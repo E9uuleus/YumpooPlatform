@@ -71,7 +71,10 @@ describe('工作项侧栏', () => {
   it('候选重载后保留已选项目和复选框，能单独取消零结果项目', async () => {
     const a = { ...candidate('a', '写周报'), projectId: 'pa', projectName: '项目 A' }
     const b = { ...candidate('b', '评审'), projectId: 'pb', projectName: '项目 B' }
-    api.listTimerCandidates.mockImplementation(async ({ scope }) => ({ items: scope === 'ALL' ? [a, b] : [a], nextOffset: null }))
+    api.listTimerCandidates.mockImplementation(async ({ scope, projectId }) => ({
+      items: (scope === 'ALL' ? [a, b] : [a]).filter(item => !projectId?.length || projectId.includes(item.projectId)), nextOffset: null,
+      projects: (scope === 'ALL' ? [a, b] : [a]).map(item => ({ projectId: item.projectId, projectName: item.projectName, count: 1 })),
+    }))
     const wrapper = mount(ItemShelf, { props: { totals: [], busy: false }, attachTo: document.body })
     await settle()
     await wrapper.findAll('[role="radio"]')[1]!.trigger('click')
@@ -81,7 +84,8 @@ describe('工作项侧栏', () => {
     await flushPromises()
     const projectB = () => [...document.querySelectorAll<HTMLElement>('.item-shelf-projects__option')].find(option => option.textContent?.includes('项目 B'))!
     projectB().querySelector<HTMLInputElement>('input[type="checkbox"]')!.click()
-    await flushPromises()
+    await settle()
+    expect(api.listTimerCandidates).toHaveBeenLastCalledWith(expect.objectContaining({ projectId: ['pb'] }), expect.anything())
     expect(wrapper.get('.item-shelf__section h3').text()).toContain('筛选结果1')
     await projectTrigger.trigger('click')
     await wrapper.findAll('[role="radio"]')[0]!.trigger('click')
@@ -92,8 +96,24 @@ describe('工作项侧栏', () => {
     expect(projectB().querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true)
     expect(wrapper.text()).toContain('没有匹配的工作项')
     projectB().querySelector<HTMLInputElement>('input[type="checkbox"]')!.click()
-    await flushPromises()
+    await settle()
     expect(wrapper.findAll('.item-shelf__row').map(row => row.text())).toEqual([expect.stringContaining('写周报')])
+    wrapper.unmount()
+  })
+
+  it('项目选项采用首段全量计数，分配给我交给服务端筛选', async () => {
+    api.listTimerCandidates.mockResolvedValue({ items: [candidate('a', '写周报')], nextOffset: null,
+      projects: [{ projectId: 'unloaded', projectName: '尚未加载的项目', count: 31 }], hiddenCompletedCount: 40 })
+    const wrapper = mount(ItemShelf, { props: { totals: [], busy: false }, attachTo: document.body })
+    await settle()
+    await wrapper.findAll('.item-shelf__filter')[1]!.trigger('click')
+    await flushPromises()
+    const options = [...document.querySelectorAll<HTMLElement>('.item-shelf-projects__option')]
+    expect(options.map(option => option.textContent)).toEqual([expect.stringContaining('尚未加载的项目')])
+    expect(options[0]!.textContent).toContain('31')
+    await wrapper.findAll('.item-shelf__filter')[0]!.trigger('click')
+    await settle()
+    expect(api.listTimerCandidates).toHaveBeenLastCalledWith(expect.objectContaining({ assignedToMe: true }), expect.anything())
     wrapper.unmount()
   })
 })

@@ -16,32 +16,25 @@ const props = defineProps<{ totals: ItemTotal[]; busy: boolean }>()
 const emit = defineEmits<{ place: [item: ShelfItem, durationMs: number]; preview: [item: ShelfItem | null, durationMs: number] }>()
 
 const presets = [30 * MINUTE, HOUR, 2 * HOUR, 4 * HOUR]
-const { query, scope, items, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true))
-const { hideCompleted, visibleCandidates } = useHideCompleted()
-const visible = computed(() => visibleCandidates(items.value, query.value))
-const hiddenCount = computed(() => items.value.length - visible.value.length)
+const mine = ref(false)
+const projects = ref(new Map<string, string>())
+const { query, scope, items, projectCounts, hiddenCount, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true), {
+  projects: computed(() => [...projects.value.keys()]), assignedToMe: mine,
+})
+const { hideCompleted } = useHideCompleted()
 const scopes = computed(() => [
   { value: ListTimerCandidatesScopeEnum.Personal, label: '最近与我的', disabled: searching.value },
   { value: ListTimerCandidatesScopeEnum.All, label: '全部', disabled: searching.value },
 ])
-const mine = ref(false)
-const projects = ref(new Map<string, string>())
 const projectOptions = computed(() => {
-  const options = new Map<string, { id: string; name: string; count: number }>()
-  for (const [id, name] of projects.value) options.set(id, { id, name, count: 0 })
-  for (const item of visible.value) {
-    const option = options.get(item.projectId) ?? { id: item.projectId, name: item.projectName, count: 0 }
-    option.name = item.projectName
-    option.count++
-    options.set(item.projectId, option)
-  }
-  return [...options.values()].sort((a, b) => b.count - a.count)
+  const options = projectCounts.value.map(item => ({ id: item.projectId, name: item.projectName, count: item.count }))
+  for (const [id, name] of projects.value) if (!options.some(option => option.id === id)) options.push({ id, name, count: 0 })
+  return options
 })
 const filtering = computed(() => searching.value || scope.value !== ListTimerCandidatesScopeEnum.Personal || mine.value || projects.value.size > 0)
 const recorded = computed(() => new Set(props.totals.map(item => item.workItemId)))
-const candidates = computed<ShelfItem[]>(() => visible.value
-  .filter(item => (filtering.value || !recorded.value.has(item.workItemId)) && (!mine.value || item.assignedToMe)
-    && (!projects.value.size || projects.value.has(item.projectId)))
+const candidates = computed<ShelfItem[]>(() => items.value
+  .filter(item => filtering.value || !recorded.value.has(item.workItemId))
   .map(item => ({ workItemId: item.workItemId, title: item.title, itemNo: item.itemNo, projectName: item.projectName,
     colorToken: item.contentColorToken ?? null, completed: item.completed })))
 interface ShelfSection { key: string; title: string; list: (ShelfItem & { ms?: number | undefined })[] }
@@ -180,7 +173,7 @@ const color = (item: ShelfItem) => ({ '--work-item-accent': workItemLabelColorVa
               v-if="!projectOptions.length"
               class="item-shelf__empty"
             >
-              当前列表中没有项目
+              没有可记录的项目
             </p>
           </div>
         </el-popover>

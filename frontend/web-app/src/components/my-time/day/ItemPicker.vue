@@ -16,10 +16,9 @@ const emit = defineEmits<{ pick: [item: TimerCandidate]; 'update:selected': [ite
 const input = ref<InstanceType<typeof ElInput>>()
 const listbox = ref<HTMLElement>()
 const id = useId()
-const { query, items, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true))
-const { hideCompleted, visibleCandidates } = useHideCompleted()
-const visible = computed(() => visibleCandidates(items.value, query.value))
-const hiddenCount = computed(() => items.value.length - visible.value.length)
+const { query, items, hiddenCount, loading, problem, nextOffset, searching, load } = useTimerCandidates(ref(true))
+const { hideCompleted } = useHideCompleted()
+const visible = items
 const options = computed(() => visible.value.filter(item => !props.exclude.includes(item.workItemId)))
 const active = ref(0)
 const picking = computed(() => props.multiple && props.selected.length > 0)

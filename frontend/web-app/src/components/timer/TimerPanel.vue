@@ -45,13 +45,12 @@ const running = computed(() => runningSessions.value[0]?.session)
 const resumeItems = computed(() => tracker.current.value?.resumeItems ?? [])
 const resume = computed(() => resumeItems.value.length > 1 ? resumeItems.value[0] : tracker.current.value?.recentItems[0])
 const needsCandidates = computed(() => expanded.value || !!running.value || !!resume.value)
-const { query, scope, items, loading, problem, nextOffset, searching, load } = useTimerCandidates(needsCandidates)
+const { query, scope, items, hiddenCount, loading, problem, nextOffset, searching, load } = useTimerCandidates(needsCandidates)
 const title = computed(() => running.value
   ? `${runningSessions.value[0]!.workItemTitle ?? '不可见工作项'}${runningSessions.value.length > 1 ? ` 等 ${runningSessions.value.length} 项` : ''}`
   : resume.value ? `${resume.value.title}${resumeItems.value.length > 1 ? ` 等 ${resumeItems.value.length} 项` : ''}` : undefined)
-const { hideCompleted, visibleCandidates } = useHideCompleted()
-const visible = computed(() => visibleCandidates(items.value, query.value))
-const hiddenCount = computed(() => items.value.length - visible.value.length)
+const { hideCompleted } = useHideCompleted()
+const visible = items
 const candidates = computed(() => visible.value.filter(item => !tracker.isRunning(item.workItemId) && (running.value || !saved.value || item.workItemId !== resume.value?.workItemId)))
 const focusedItem = ref<TimerCandidate>()
 const focusedId = computed(() => running.value ? running.value.workItemId : resume.value?.workItemId)

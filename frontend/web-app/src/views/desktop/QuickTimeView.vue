@@ -26,11 +26,13 @@ const tracker = useTimeTracker()
 useDesktopSurfaceOpacity()
 const timezone = computed(() => session.authentication.value?.company.timezone ?? 'Asia/Shanghai')
 const today = computed(() => todayIn(timezone.value, new Date(tracker.now.value)))
-const candidates = useTimerCandidates(computed(() => session.phase.value === 'authenticated'))
-const { hideCompleted, visibleCandidates } = useHideCompleted()
+const project = ref<string | null>(null)
+const candidates = useTimerCandidates(computed(() => session.phase.value === 'authenticated'), {
+  projects: computed(() => project.value ? [project.value] : []),
+})
+const { hideCompleted } = useHideCompleted()
 
 const context = ref<QuickPanelContext>({ projectId: null, projects: [], origin: 'bottom' })
-const project = ref<string | null>(null)
 const openId = ref<string | null>(null)
 const dateChoice = ref<DateChoice>('today')
 const pickedDate = ref(today.value)
@@ -54,13 +56,14 @@ const todayDay = useDayTimeline(today, timezone)
 const targetDay = useDayTimeline(targetDate, timezone)
 
 const query = candidates.query
-const inScope = computed(() => project.value ? candidates.items.value.filter(item => item.projectId === project.value) : candidates.items.value)
-const shown = computed(() => visibleCandidates(inScope.value, query.value))
-const hiddenCount = computed(() => inScope.value.length - shown.value.length)
+const shown = candidates.items
+const hiddenCount = candidates.hiddenCount
 const groups = computed(() => groupCandidates(shown.value, context.value.projects))
 const chips = computed(() => {
-  const list = groupCandidates(visibleCandidates(candidates.items.value, query.value), context.value.projects)
-    .map(group => ({ id: group.projectId, name: group.projectName }))
+  const counts = candidates.projectCounts.value
+  const list = context.value.projects.filter(item => counts.some(count => count.projectId === item.id))
+    .map(item => ({ id: item.id, name: item.name }))
+  for (const item of counts) if (!list.some(project => project.id === item.projectId)) list.push({ id: item.projectId, name: item.projectName })
   const locked = context.value.projects.find(item => item.id === project.value)
   return locked && !list.some(item => item.id === locked.id) ? [{ id: locked.id, name: locked.name }, ...list] : list
 })
