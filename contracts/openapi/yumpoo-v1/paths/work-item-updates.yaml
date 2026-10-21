@@ -1,0 +1,329 @@
+paths:
+  /work-items/{workItemId}/updates:
+    get:
+      tags:
+        - WorkItemUpdates
+      operationId: listWorkItemUpdates
+      summary: 读取 Work Item 讨论窗口
+      description: 仅返回未删除主评论。首窗附带全部置顶评论，普通窗口仍包含置顶记录，客户端按 ID 去重；窗口按 createdAt、id 升序，nextCursor 加载更早记录。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: cursor
+          in: query
+          description: 服务端签发的不透明 Base64URL v1 向前游标。
+          schema:
+            type: string
+            maxLength: 256
+        - name: size
+          in: query
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: 可见讨论窗口；归档 Project 或 Content 的历史仍可读取。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemUpdatePage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      tags:
+        - WorkItemUpdates
+      operationId: publishWorkItemUpdate
+      summary: 发布 Work Item 讨论
+      description: 正文中的 Mention 是唯一提及输入；服务端净化 HTML、重写权威显示名并原子发布事件。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemUpdateCreateRequest"
+            examples:
+              richText:
+                $ref: "#/components/examples/WorkItemUpdateRichText"
+      responses:
+        "201":
+          description: Update 已发布或精确幂等重放；父 Work Item 的版本与更新时间不变。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemUpdate"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-item-updates/{updateId}/pin:
+    patch:
+      tags:
+        - WorkItemUpdates
+      operationId: pinWorkItemUpdate
+      summary: 置顶或取消置顶主评论
+      description: 可发表评论的项目成员均可操作任意主评论，子评论不可置顶；重复状态不增版。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemUpdatePinRequest"
+      responses:
+        "200":
+          description: 置顶状态已更新或没有变化。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemUpdate"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /work-item-updates/{updateId}/replies:
+    get:
+      tags:
+        - WorkItemUpdates
+      operationId: listWorkItemUpdateReplies
+      summary: 按创建时间正序分页读取未删除回复
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 256
+        - name: size
+          in: query
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: 正序回复窗口，pinnedItems 恒为空。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemUpdatePage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-item-updates/{updateId}:
+    get:
+      tags:
+        - WorkItemUpdates
+      operationId: getWorkItemUpdate
+      summary: 查询单条 Work Item 讨论
+      description: 返回当前调用人的操作能力；删除记录仅返回占位事实，不返回原正文。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+      responses:
+        "200":
+          description: 当前可见 Update。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemUpdate"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+    patch:
+      tags:
+        - WorkItemUpdates
+      operationId: editWorkItemUpdate
+      summary: 编辑 Work Item 讨论
+      description: 仅作者可编辑，不限制发布时间；正文和 Mention 重新净化并原子替换。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemUpdateEditRequest"
+      responses:
+        "200":
+          description: Update 已编辑，或净化后的正文没有变化。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemUpdate"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+    delete:
+      tags:
+        - WorkItemUpdates
+      operationId: deleteWorkItemUpdate
+      summary: 删除 Work Item 评论或讨论串
+      description: 可写项目中作者可不限时删除自己的评论，当前 ProjectOwner 可删除所有评论。归档项目只读，需先恢复才能删除；删除主评论会原子删除全部回复。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: updateId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkItemUpdateDeleteRequest"
+      responses:
+        "200":
+          description: Update 已转为不可恢复的删除占位。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemUpdate"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"

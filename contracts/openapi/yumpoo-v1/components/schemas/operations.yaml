@@ -1,0 +1,642 @@
+components:
+  schemas:
+    OperationsVolume:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - label
+        - totalBytes
+        - freeBytes
+        - purposes
+      properties:
+        id: &a1
+          type: string
+        label: *a1
+        totalBytes: &a2
+          type: integer
+          format: int64
+        freeBytes: *a2
+        purposes:
+          type: array
+          items: *a1
+    OperationsHost:
+      type: object
+      additionalProperties: false
+      required:
+        - hostName
+        - os
+        - architecture
+        - cpuModel
+        - processors
+        - javaVersion
+        - pid
+        - startedAt
+        - uptimeMs
+        - heapMax
+        - version
+        - commit
+        - buildTime
+        - schemaVersion
+        - databaseVersion
+        - garbageCollectors
+        - defaultCharset
+        - timeZone
+        - profiles
+        - volumes
+      properties:
+        hostName: *a1
+        os: *a1
+        architecture: *a1
+        cpuModel:
+          type: string
+          nullable: true
+        processors: *a2
+        javaVersion: *a1
+        pid: *a2
+        startedAt: &a3
+          type: string
+          format: date-time
+        uptimeMs: *a2
+        heapMax: *a2
+        version: *a1
+        commit: *a1
+        buildTime:
+          type: string
+          format: date-time
+          nullable: true
+        schemaVersion: *a1
+        databaseVersion: *a1
+        garbageCollectors:
+          type: array
+          items: *a1
+        defaultCharset: *a1
+        timeZone: *a1
+        profiles:
+          type: array
+          items: *a1
+        volumes:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsVolume"
+    OperationsComponentHealth:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - status
+        - checkedAt
+        - detail
+      properties:
+        code: *a1
+        status: *a1
+        checkedAt:
+          type: string
+          format: date-time
+          nullable: true
+        detail: *a1
+    OperationsPostureCheck:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - severity
+        - status
+      properties:
+        code: *a1
+        severity: *a1
+        status: *a1
+    OperationsMetricPoint:
+      type: object
+      additionalProperties: false
+      required:
+        - at
+        - values
+      properties:
+        at: *a3
+        values:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            nullable: true
+    OperationsRuntime:
+      type: object
+      additionalProperties: false
+      required:
+        - sampledAt
+        - ioUpdatedAt
+        - health
+        - metrics
+        - components
+        - posture
+        - host
+        - lostSamples
+      properties:
+        sampledAt: *a3
+        ioUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        health: *a1
+        metrics:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+            nullable: true
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsComponentHealth"
+        posture:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsPostureCheck"
+        host:
+          $ref: "#/components/schemas/OperationsHost"
+        lostSamples: *a2
+    OperationsSeries:
+      type: object
+      additionalProperties: false
+      required:
+        - key
+        - unit
+        - values
+      properties:
+        key: *a1
+        unit: *a1
+        values:
+          type: array
+          items:
+            type: number
+            format: double
+            nullable: true
+    OperationsMetricSeries:
+      type: object
+      additionalProperties: false
+      required:
+        - range
+        - resolutionSeconds
+        - timestamps
+        - series
+        - restarts
+      properties:
+        range: *a1
+        resolutionSeconds: *a2
+        timestamps:
+          type: array
+          items: *a3
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsSeries"
+        restarts:
+          type: array
+          items: *a3
+      description: 1h 默认 15 秒（内存不足回退 60 秒）；6h/24h 为分钟，7d 为 15 分钟，14d 为 30 分钟。缺失采样保持 null；HTTP P95 来自无路由标签的全局业务请求计时器，排除运维与 Actuator 请求。
+    OperationsSessionInfo:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - clientType
+        - clientVersion
+        - issuedAt
+        - lastSeenAt
+        - expiresAt
+      properties:
+        id: &a4
+          type: string
+          format: uuid
+        clientType: *a1
+        clientVersion:
+          type: string
+          nullable: true
+        issuedAt: *a3
+        lastSeenAt: *a3
+        expiresAt: *a3
+    OperationsSessionUser:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - displayName
+        - presence
+        - lastSeenAt
+        - sessions
+      properties:
+        userId: *a4
+        displayName: *a1
+        presence: *a1
+        lastSeenAt: *a3
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsSessionInfo"
+    OperationsVersionCount:
+      type: object
+      additionalProperties: false
+      required:
+        - clientType
+        - clientVersion
+        - count
+      properties:
+        clientType: *a1
+        clientVersion:
+          type: string
+          nullable: true
+        count: *a2
+    OperationsSessionSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - online
+        - idle
+        - away
+        - activeSessions
+        - byClientVersion
+      properties:
+        online: *a2
+        idle: *a2
+        away: *a2
+        activeSessions: *a2
+        byClientVersion:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsVersionCount"
+    OperationsSessionPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - totalElements
+        - page
+        - size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsSessionUser"
+        totalElements: *a2
+        page: *a2
+        size: *a2
+    OperationsLogError:
+      type: object
+      nullable: true
+      additionalProperties: false
+      required:
+        - type
+        - msg
+        - stack
+        - hash
+      properties:
+        type: *a1
+        msg: *a1
+        stack: *a1
+        hash: *a1
+    OperationsLogRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - time
+        - level
+        - module
+        - event
+        - msg
+        - logger
+        - thread
+        - requestId
+        - correlationId
+        - userId
+        - fields
+        - error
+      properties:
+        time: *a3
+        level: *a1
+        module: *a1
+        event:
+          type: string
+          nullable: true
+        msg: *a1
+        logger: *a1
+        thread: *a1
+        requestId:
+          type: string
+          nullable: true
+        correlationId:
+          type: string
+          nullable: true
+        userId:
+          type: string
+          nullable: true
+        fields:
+          type: object
+          additionalProperties: {}
+        error:
+          allOf:
+            - $ref: "#/components/schemas/OperationsLogError"
+          type: object
+          nullable: true
+    OperationsLogEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - seq
+        - record
+      properties:
+        id: *a1
+        seq:
+          type: string
+          pattern: ^[0-9]+$
+          nullable: true
+        record:
+          $ref: "#/components/schemas/OperationsLogRecord"
+    OperationsLogPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - source
+        - nextCursor
+        - partial
+        - partialReason
+        - scannedBytes
+        - skippedLines
+        - droppedCount
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsLogEntry"
+        source: *a1
+        nextCursor:
+          type: string
+          nullable: true
+        partial: &a5
+          type: boolean
+        partialReason:
+          type: string
+          nullable: true
+        scannedBytes: *a2
+        skippedLines: *a2
+        droppedCount: *a2
+      description: 每次查询范围至多 24h。文件查询预算 256MiB/3s、并发 1；partial 为 true 时结果并不完整。cursor 为进程内、5 分钟有效且绑定全部过滤条件的 opaque handle；文件变化时显式返回 partial。
+    OperationsLogTail:
+      type: object
+      additionalProperties: false
+      required:
+        - bootId
+        - items
+        - nextAfterSeq
+        - latestSeq
+        - hasMore
+        - gap
+        - gapReason
+        - droppedCount
+      properties:
+        bootId: *a1
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsLogEntry"
+        nextAfterSeq:
+          type: string
+          pattern: ^[0-9]+$
+        latestSeq:
+          type: string
+          pattern: ^[0-9]+$
+        hasMore: *a5
+        gap: *a5
+        gapReason:
+          type: string
+          nullable: true
+        droppedCount: *a2
+      description: seq 均使用十进制字符串；仅同一 bootId 内可比较。nextAfterSeq 推进所有已检查记录，过滤无结果也会推进；hasMore 时应继续补齐。gap 表示进程重启、缓冲淘汰或非法未来水位。
+    OperationsLogBucket:
+      type: object
+      additionalProperties: false
+      required:
+        - time
+        - counts
+      properties:
+        time: *a3
+        counts:
+          type: object
+          additionalProperties: *a2
+    OperationsLogHistogram:
+      type: object
+      additionalProperties: false
+      required:
+        - buckets
+        - bucketSeconds
+        - partial
+        - partialReason
+      properties:
+        buckets:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsLogBucket"
+        bucketSeconds: *a2
+        partial: *a5
+        partialReason:
+          type: string
+          nullable: true
+    OperationsRule:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - enabled
+        - warningThreshold
+        - criticalThreshold
+        - forSeconds
+        - rowVersion
+        - etag
+        - comparison
+        - unit
+      properties:
+        code: *a1
+        enabled: *a5
+        warningThreshold:
+          type: number
+          format: double
+          nullable: true
+        criticalThreshold: &a6
+          type: number
+          format: double
+        forSeconds: *a2
+        rowVersion: *a2
+        etag: *a1
+        comparison: *a1
+        unit: *a1
+    OperationsRuleUpdate:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - warningThreshold
+        - criticalThreshold
+        - forSeconds
+      properties:
+        enabled: *a5
+        warningThreshold:
+          type: number
+          format: double
+          nullable: true
+        criticalThreshold: *a6
+        forSeconds:
+          type: integer
+          minimum: 0
+          maximum: 3600
+          multipleOf: 15
+    OperationsAlert:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - ruleCode
+        - subjectKey
+        - severity
+        - status
+        - startedAt
+        - evaluatedAt
+        - peakValue
+        - lastValue
+        - params
+        - acknowledgedAt
+        - acknowledgedByUserId
+        - acknowledgeNote
+        - resolvedAt
+        - resolution
+      properties:
+        id: *a4
+        ruleCode: *a1
+        subjectKey: *a1
+        severity: *a1
+        status: *a1
+        startedAt: *a3
+        evaluatedAt: *a3
+        peakValue:
+          type: number
+          format: double
+          nullable: true
+        lastValue:
+          type: number
+          format: double
+          nullable: true
+        params:
+          type: object
+          additionalProperties: {}
+        acknowledgedAt:
+          type: string
+          format: date-time
+          nullable: true
+        acknowledgedByUserId:
+          type: string
+          format: uuid
+          nullable: true
+        acknowledgeNote:
+          type: string
+          nullable: true
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        resolution:
+          type: string
+          nullable: true
+    OperationsAlertEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - eventType
+        - severity
+        - value
+        - actorUserId
+        - occurredAt
+      properties:
+        id: *a4
+        eventType: *a1
+        severity: *a1
+        value:
+          type: number
+          format: double
+          nullable: true
+        actorUserId:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt: *a3
+    OperationsAlertDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - alert
+        - events
+      properties:
+        alert:
+          $ref: "#/components/schemas/OperationsAlert"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsAlertEvent"
+    OperationsAlertSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - warning
+        - critical
+      properties:
+        warning: *a2
+        critical: *a2
+    OperationsAlertPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - totalElements
+        - page
+        - size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsAlert"
+        totalElements: *a2
+        page: *a2
+        size: *a2
+    OperationsAcknowledge:
+      type: object
+      additionalProperties: false
+      required: []
+      properties:
+        note:
+          type: string
+          maxLength: 200
+          nullable: true
+    OperationsOverview:
+      type: object
+      additionalProperties: false
+      required:
+        - runtime
+        - sparkline
+        - alerts
+        - recentErrors
+      properties:
+        runtime:
+          $ref: "#/components/schemas/OperationsRuntime"
+        sparkline:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsMetricPoint"
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsAlert"
+        recentErrors:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationsLogEntry"
