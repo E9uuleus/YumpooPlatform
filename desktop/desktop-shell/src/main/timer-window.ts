@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { DesktopUpdateState } from '@yumpoo/preload-contract'
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, Tray, type IpcMainInvokeEvent, type NativeImage } from 'electron'
 import type { DesktopTimerCommand, DesktopTimerState, TimerMenuAction, TimerMenuState, TimerWindowMode, TimerOrbLayout, TimerPreferencesChange } from '@yumpoo/preload-contract'
 import { isTrustedAuthIpcSender } from './auth-ipc'
@@ -48,6 +49,8 @@ const sameLayout = (a: TimerOrbLayout, b: TimerOrbLayout) => a.size === b.size &
   && a.canvas?.left === b.canvas?.left && a.canvas?.top === b.canvas?.top && a.canvas?.width === b.canvas?.width && a.canvas?.height === b.canvas?.height
 const sameRect = (a: Rect, b: Rect) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 
+export interface TimerUpdateActions { check(): void; download(): void; restart(): void }
+
 export class TimerWindowController {
   private window: BrowserWindow | null = null
   private tray: Tray | undefined
@@ -80,7 +83,8 @@ export class TimerWindowController {
   private approvedExit = false
   private exitRequest: string | undefined
   private exitTimeout: ReturnType<typeof setTimeout> | undefined
-  private readyUpdate: { version: string; restart: () => void } | undefined
+  private update: DesktopUpdateState | undefined
+  private updateActions: TimerUpdateActions | undefined
   private exitCancelled: (() => void) | undefined
 
   constructor(private readonly main: () => BrowserWindow | null, private readonly origin: string, private readonly preload: string,
@@ -309,6 +313,7 @@ export class TimerWindowController {
       visible: this.surfaceVisible(),
       display: this.prefs.get().display, pinned: this.pinned, timerEnabled: !this.timerOff(),
       ...(this.inboxCount === undefined ? {} : { inbox: { unreadCount: this.inboxCount } }),
+      ...(this.update ? { update: this.update } : {}),
     }
   }
 
@@ -320,7 +325,7 @@ export class TimerWindowController {
     const off = this.timerOff()
     const title = state?.running ? `计时中 · ${state.running.title}` : off ? '计时器已关闭' : '计时已暂停'
     // The update line comes last so the unread count and timer title are never cut off by the 120-character limit.
-    this.tray?.setToolTip(`YumpooPlatform${this.inboxCount === undefined ? '' : `\n${this.inboxCount} 条未读`}${state?.running ? `\n${title}` : ''}${this.readyUpdate ? `\n新版本 ${this.readyUpdate.version} 已就绪` : ''}`.slice(0, 120))
+    this.tray?.setToolTip(`YumpooPlatform${this.inboxCount === undefined ? '' : `\n${this.inboxCount} 条未读`}${state?.running ? `\n${title}` : ''}${this.update?.phase === 'ready' && this.update.version ? `\n新版本 ${this.update.version} 已就绪` : ''}`.slice(0, 120))
     const running = state?.running
     const recent = state?.recent
     const visible = this.surfaceVisible()
@@ -344,7 +349,9 @@ export class TimerWindowController {
         { type: 'separator' as const },
       ]),
       // The native menu is what appears when the web quick panel cannot load, which is when diagnostics matter.
-      ...(this.readyUpdate ? [{ label: `重启以更新到 ${this.readyUpdate.version}`, click: () => this.readyUpdate?.restart() }] : []),
+      ...(this.update?.phase === 'ready' ? [{ label: `重启以更新到 ${this.update.version}`, click: () => this.updateActions?.restart() }]
+        : this.update?.phase === 'idle' || this.update?.phase === 'error' ? [{ label: '检查更新', click: () => this.updateActions?.check() }]
+        : this.update?.phase === 'available' ? [{ label: `下载更新 ${this.update.version}`, click: () => this.updateActions?.download() }] : []),
       ...(this.openDiagnostics ? [{ label: '诊断与修复…', click: () => this.openDiagnostics?.() }] : []),
       { label: '退出 YumpooPlatform…', click: () => this.requestExit() },
     ])
@@ -357,15 +364,19 @@ export class TimerWindowController {
     this.exitCancelled = listener
   }
 
-  /** Shows a verified update in the tray; `undefined` clears it. */
-  setUpdateReady(update: { version: string; restart: () => void } | undefined): void {
-    this.readyUpdate = update
+  /** The tray menus show the update state and offer the next step. */
+  setUpdate(state: DesktopUpdateState, actions: TimerUpdateActions): void {
+    this.update = state
+    this.updateActions = actions
     this.updateTray()
   }
 
   private menuAction(action: TimerMenuAction): void {
     const signedIn = !!this.state?.accountId
     switch (action) {
+      case 'check-update': this.updateActions?.check(); break
+      case 'download-update': this.updateActions?.download(); break
+      case 'restart-update': this.updateActions?.restart(); break
       case 'open-main': this.showMain(); break
       case 'open-inbox':
         this.showMain()

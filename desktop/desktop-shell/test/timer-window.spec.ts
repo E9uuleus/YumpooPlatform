@@ -120,6 +120,28 @@ beforeEach(() => {
 afterEach(() => { mocks.appEvents.get('will-quit')?.(); vi.useRealTimers() })
 
 describe('desktop timer and tray', () => {
+  it('将更新状态推送到菜单，并在两个菜单中执行更新动作', () => {
+    const { controller } = setup()
+    const actions = { check: vi.fn(), download: vi.fn(), restart: vi.fn() }
+    const update = { phase: 'idle' as const, currentVersion: '1.1.2', channel: null }
+    controller.setUpdate(update, actions)
+    expect(mocks.menuUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ update }))
+    menu('检查更新').click!(); mocks.menuAction!('check-update')
+    expect(actions.check).toHaveBeenCalledTimes(2)
+    controller.setUpdate({ ...update, phase: 'available', version: '1.1.3' }, actions)
+    menu('下载更新 1.1.3').click!(); mocks.menuAction!('download-update')
+    expect(actions.download).toHaveBeenCalledTimes(2)
+    controller.setUpdate({ ...update, phase: 'ready', version: '1.1.3' }, actions)
+    menu('重启以更新到 1.1.3').click!(); mocks.menuAction!('restart-update')
+    expect(actions.restart).toHaveBeenCalledTimes(2)
+    expect(mocks.tooltip).toHaveBeenLastCalledWith('YumpooPlatform\n新版本 1.1.3 已就绪')
+    controller.setUpdate({ ...update, phase: 'error' }, actions)
+    expect(menu('检查更新')).toBeDefined()
+    for (const phase of ['disabled', 'checking', 'downloading', 'verifying'] as const) {
+      controller.setUpdate({ ...update, phase }, actions)
+      expect(mocks.menu.some(item => item.label?.includes('更新'))).toBe(false)
+    }
+  })
   it('keeps inbox badges in timer tooltips and exposes an inbox action in both menus', () => {
     const { controller, main } = setup()
     controller.setInboxBadge(7, {} as Parameters<typeof controller.setInboxBadge>[1])

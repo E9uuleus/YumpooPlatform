@@ -6,8 +6,8 @@ import { installSecurityGuards } from './security-guards'
 import { loadSurface } from './surface-load'
 import { MENU, placeMenu } from './timer-geometry'
 
-const ACTIONS = new Set<TimerMenuAction>(['open-main', 'open-inbox', 'find', 'settings', 'toggle', 'show-orb', 'show-dock', 'hide', 'toggle-pin', 'preferences', 'exit', 'close'])
-const KEEP_OPEN = new Set<TimerMenuAction>(['toggle', 'show-orb', 'show-dock', 'hide', 'toggle-pin'])
+const ACTIONS = new Set<TimerMenuAction>(['open-main', 'open-inbox', 'find', 'settings', 'toggle', 'show-orb', 'show-dock', 'hide', 'toggle-pin', 'preferences', 'exit', 'close', 'check-update', 'download-update', 'restart-update'])
+const KEEP_OPEN = new Set<TimerMenuAction>(['toggle', 'show-orb', 'show-dock', 'hide', 'toggle-pin', 'check-update', 'download-update'])
 export const validMenuAction = (value: unknown): value is TimerMenuAction => typeof value === 'string' && ACTIONS.has(value as TimerMenuAction)
 
 /** A prewarmed popup that renders the shared quick panel for the tray and the compact timer surfaces. */

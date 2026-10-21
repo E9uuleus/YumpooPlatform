@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { TimerMenuAction, TimerMenuState } from '@yumpoo/preload-contract'
-import { Bell, Setting } from '@element-plus/icons-vue'
+import { Bell, Refresh, Setting } from '@element-plus/icons-vue'
 import { formatDuration } from '../../composables/useTimeTracker'
 import brandLogo from '../../assets/brand/logo.svg'
 import TimerIcon from './TimerIcon.vue'
+import { menuUpdate } from './menuUpdate'
 
 const desktop = window.yumpooDesktop?.timer
 const inbox = window.yumpooDesktop?.inbox
@@ -14,6 +15,7 @@ const toasts = ref(true)
 const preferencesReady = ref(false)
 const savingPreferences = ref(false)
 const state = ref<TimerMenuState>()
+const u = computed(() => state.value?.update ? menuUpdate(state.value.update) : undefined)
 const now = ref(Date.now())
 const root = ref<HTMLElement>()
 let tick: ReturnType<typeof setInterval> | undefined
@@ -238,6 +240,17 @@ onBeforeUnmount(() => { clearInterval(tick); off?.(); window.removeEventListener
       </div>
       <div class="menu-foot">
         <button
+          v-if="u"
+          class="menu-item"
+          role="menuitem"
+          data-menu-item
+          :disabled="!u.action"
+          :class="{ 'is-accent': u.accent }"
+          @click="u.action && run(u.action)"
+        >
+          <Refresh :class="{ 'is-spinning': u.busy }" /><span>{{ u.label }}</span><span class="menu-meta">{{ u.detail }}</span>
+        </button>
+        <button
           class="menu-item is-exit"
           role="menuitem"
           data-menu-item
@@ -304,6 +317,10 @@ button:focus-visible{outline:2px solid var(--yp-timer-accent);outline-offset:-2p
 .menu-switch span{position:absolute;left:2px;top:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px color-mix(in srgb,#0b1220 30%,transparent);transition:transform .18s var(--yp-timer-ease)}
 .menu-switch.is-on{background:var(--yp-timer-accent)}.menu-switch.is-on span{transform:translateX(13px)}
 .menu-foot{padding-top:5px;border-top:1px solid var(--yp-timer-hairline);flex-shrink:0}
+.menu-meta{margin-left:auto;color:var(--yp-text-secondary);font-size:12px;font-variant-numeric:tabular-nums}
+.menu-item.is-accent{color:var(--yp-timer-accent)}
+.is-spinning{animation:menu-spin 1s linear infinite}
+@keyframes menu-spin{to{transform:rotate(360deg)}}
 .is-exit:hover svg,.is-exit:focus-visible svg{color:var(--yp-status-red)}
 @keyframes menu-in{from{opacity:0;transform:translateY(4px) scale(.98)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}

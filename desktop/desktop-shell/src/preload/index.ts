@@ -218,6 +218,7 @@ function sanitizeUpdateState(value: unknown): DesktopUpdateState | undefined {
     ...(shortText(state.version) ? { version: state.version as string } : {}),
     ...(typeof state.percent === 'number' && state.percent >= 0 && state.percent <= 100 ? { percent: state.percent } : {}),
     ...(shortText(state.error) ? { error: state.error as string } : {}),
+    ...(typeof state.checkedAt === 'number' && Number.isFinite(state.checkedAt) && state.checkedAt > 0 ? { checkedAt: state.checkedAt } : {}),
   })
 }
 

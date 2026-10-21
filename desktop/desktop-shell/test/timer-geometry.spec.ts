@@ -5,6 +5,7 @@ import { placeBeside, placeRail, QUICK_PANEL, railShape, CAPSULE_WIDTH, compactV
 const area = { x: 0, y: 0, width: 1280, height: 800 }
 
 describe('timer surface geometry', () => {
+  it('reserves an update row in the menu', () => { expect(MENU).toEqual({ width: 312, height: 472 }) })
   it('resizes within minimum, maximum and work area bounds', () => {
     const start = { x: 100, y: 100, ...QUICK_PANEL }
     const large = { x: 0, y: 0, width: 1920, height: 1080 }
