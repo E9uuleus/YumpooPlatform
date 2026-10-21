@@ -1,6 +1,6 @@
 # Agent Note: 前端视觉语言与三主题设计系统
 
-Status: proposed
+Status: rejected — 统一视觉语言提案不再整体推进；主题、密度与 Yp* 组件已由各功能 Note 分别决定。
 
 ## Problem
 

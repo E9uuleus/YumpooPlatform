@@ -4,6 +4,7 @@ const mvn = (id, ...args) => ({ id, tool: 'maven', args })
 
 export function contractSteps(baseRef) {
   return [
+    node('openapi-bundle', 'tools/openapi/openapi-bundle.mjs', '--check'),
     node('openapi-baseline', 'tools/openapi/extract-openapi-baseline.mjs', baseRef,
       'out/contracts/openapi-baseline.yaml', 'out/contracts/openapi-baseline.metadata.json'),
     node('openapi-compatibility', 'tools/openapi/check-openapi-compat.mjs', 'out/contracts/openapi-baseline.yaml'),

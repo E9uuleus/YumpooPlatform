@@ -1,0 +1,205 @@
+paths:
+  /workspaces:
+    get:
+      tags:
+        - Workspaces
+      operationId: listWorkspaces
+      summary: 查询当前公司的 MAIN 主工作空间
+      description: 每个 Company 永远只返回一个 code=MAIN、status=ACTIVE 的内部工作空间；保留 status 仅用于 v1 客户端兼容。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          deprecated: true
+          schema:
+            $ref: "#/components/schemas/WorkspaceStatusFilter"
+            default: ACTIVE
+      responses:
+        "200":
+          description: 当前 Company 的 MAIN 主工作空间。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceList"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - Workspaces
+      operationId: createWorkspace
+      summary: 已弃用的 Workspace 创建兼容入口
+      description: MAIN 单例启用后不再创建 Workspace；合法旧请求固定返回 409 INVALID_STATE_TRANSITION。
+      deprecated: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceCreateRequest"
+      responses:
+        "201":
+          description: 历史 v1 成功响应形状；MAIN 单例部署不再产生此结果。
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /workspaces/{workspaceId}:
+    get:
+      tags:
+        - Workspaces
+      operationId: getWorkspace
+      summary: 查询 Workspace 详情
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: 当前可见的 Workspace；ARCHIVED 仅 COMPANY_ADMIN 可见。
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+    patch:
+      tags:
+        - Workspaces
+      operationId: updateWorkspace
+      summary: 修改 MAIN 主工作空间的名称与描述
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceUpdateRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/WorkspaceChanged"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /workspaces/{workspaceId}/archive:
+    post:
+      tags:
+        - Workspaces
+      operationId: archiveWorkspace
+      summary: 已弃用的 Workspace 归档兼容入口
+      description: MAIN 必须保持 ACTIVE；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+      deprecated: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/WorkspaceChanged"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /workspaces/{workspaceId}/restore:
+    post:
+      tags:
+        - Workspaces
+      operationId: restoreWorkspace
+      summary: 已弃用的 Workspace 恢复兼容入口
+      description: MAIN 已固定为 ACTIVE；通过身份、资源与前置条件校验后固定返回 409 INVALID_STATE_TRANSITION。
+      deprecated: true
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          $ref: "#/components/responses/WorkspaceChanged"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/VersionConflict"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/InternalError"

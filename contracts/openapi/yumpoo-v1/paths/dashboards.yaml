@@ -1,0 +1,306 @@
+paths:
+  /me/dashboards:
+    get:
+      tags:
+        - Dashboards
+      operationId: listDashboards
+      summary: 查询本人私人仪表板
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: 查询本人私人仪表板
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardList"
+        "400": &a1
+          $ref: "#/components/responses/ValidationFailed"
+        "401": &a2
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403": &a3
+          $ref: "#/components/responses/Forbidden"
+        "404": &a4
+          $ref: "#/components/responses/ResourceNotFound"
+        "409": &a5
+          $ref: "#/components/responses/Conflict"
+        "412": &a6
+          $ref: "#/components/responses/VersionConflict"
+        "422": &a7
+          $ref: "#/components/responses/ValidationFailed"
+        "428": &a8
+          $ref: "#/components/responses/PreconditionRequired"
+    post:
+      tags:
+        - Dashboards
+      operationId: createDashboard
+      summary: 创建私人仪表板
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardWrite"
+      responses:
+        "201":
+          description: 创建私人仪表板
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardView"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+  /me/dashboard-projects:
+    get:
+      tags:
+        - Dashboards
+      operationId: listDashboardProjects
+      summary: 查询本人有效成员关系内的项目
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+        - name: includeArchived
+          in: query
+          schema:
+            type: boolean
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            maximum: 100000
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: 查询本人有效成员关系内的项目
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardProjectPage"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+  /me/dashboards/{id}:
+    get:
+      tags:
+        - Dashboards
+      operationId: getDashboard
+      summary: 读取本人仪表板
+      security:
+        - sessionCookie: []
+      parameters:
+        - &a9
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 读取本人仪表板
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardView"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+    patch:
+      tags:
+        - Dashboards
+      operationId: updateDashboard
+      summary: 更新本人仪表板完整配置
+      security:
+        - sessionCookie: []
+      parameters:
+        - *a9
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardWrite"
+      responses:
+        "200":
+          description: 更新本人仪表板完整配置
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardView"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+    delete:
+      tags:
+        - Dashboards
+      operationId: deleteDashboard
+      summary: 删除本人仪表板
+      security:
+        - sessionCookie: []
+      parameters:
+        - *a9
+        - $ref: "#/components/parameters/XsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: 删除本人仪表板
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardDeleted"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+  /me/dashboards/{id}/query:
+    post:
+      tags:
+        - Dashboards
+      operationId: queryDashboard
+      summary: 按统一筛选统计有权限的已连接项目
+      security:
+        - sessionCookie: []
+      parameters:
+        - *a9
+        - $ref: "#/components/parameters/XsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardQuery"
+      responses:
+        "200":
+          description: 按统一筛选统计有权限的已连接项目
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSnapshot"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+  /me/dashboards/{id}/items/query:
+    post:
+      tags:
+        - Dashboards
+      operationId: queryDashboardItems
+      summary: 分页查询统计对应的工作项明细
+      security:
+        - sessionCookie: []
+      parameters:
+        - *a9
+        - $ref: "#/components/parameters/XsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardItemsQuery"
+      responses:
+        "200":
+          description: 分页查询统计对应的工作项明细
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardItemPage"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8
+  /me/dashboards/{id}/table/query:
+    post:
+      tags:
+        - Dashboards
+      operationId: queryDashboardTable
+      summary: 查询图表范围内的项目工作项表格、分组选项或子项
+      security:
+        - sessionCookie: []
+      parameters:
+        - *a9
+        - $ref: "#/components/parameters/XsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DashboardTableQuery"
+      responses:
+        "200":
+          description: 查询图表范围内的项目工作项表格、分组选项或子项
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardTablePage"
+        "400": *a1
+        "401": *a2
+        "403": *a3
+        "404": *a4
+        "409": *a5
+        "412": *a6
+        "422": *a7
+        "428": *a8

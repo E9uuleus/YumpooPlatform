@@ -1,0 +1,46 @@
+components:
+  schemas:
+    OnboardingTourId:
+      type: string
+      pattern: ^[a-z][a-z0-9-]{1,47}$
+      description: 前端定义的新手引导标识，例如 welcome、project-work-items。
+    OnboardingTourRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - tourId
+        - version
+        - completedAt
+      properties:
+        tourId:
+          $ref: "#/components/schemas/OnboardingTourId"
+        version:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: 已处理的引导内容版本。
+        completedAt:
+          type: string
+          format: date-time
+          description: 最近一次版本提升的时间。
+    OnboardingState:
+      type: object
+      additionalProperties: false
+      required:
+        - tours
+      properties:
+        tours:
+          type: array
+          items:
+            $ref: "#/components/schemas/OnboardingTourRecord"
+    OnboardingTourCompleteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - version
+      properties:
+        version:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: 本次处理的引导内容版本。

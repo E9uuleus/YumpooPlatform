@@ -1,0 +1,236 @@
+components:
+  schemas:
+    PlatformRoleChangeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - role
+        - reason
+      properties:
+        role:
+          $ref: "#/components/schemas/PlatformRoleTier"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 160
+    PlatformRoleChangeResult:
+      type: object
+      required:
+        - userId
+        - role
+        - previousRole
+        - userRowVersion
+        - authorizationVersion
+        - changedAt
+      properties:
+        userId:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/PlatformRoleTier"
+        previousRole:
+          $ref: "#/components/schemas/PlatformRoleTier"
+        userRowVersion:
+          type: integer
+          format: int64
+        authorizationVersion:
+          type: integer
+          format: int64
+        changedAt:
+          type: string
+          format: date-time
+    RoleAssignmentStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - REVOKED
+    GovernanceReasonRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 160
+    RoleGrantRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - reason
+      properties:
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 160
+    GovernanceState:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - displayName
+        - employmentStatus
+        - accountStatus
+        - platformRoles
+        - authorizationVersion
+        - rowVersion
+      properties:
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        displayName:
+          type: string
+          minLength: 1
+        employmentStatus:
+          $ref: "#/components/schemas/EmploymentStatus"
+        accountStatus:
+          $ref: "#/components/schemas/AccountStatus"
+        platformRoles:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/ManagedPlatformRole"
+        authorizationVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+    RoleAssignment:
+      type: object
+      additionalProperties: false
+      required:
+        - assignmentId
+        - userId
+        - role
+        - scopeType
+        - scopeId
+        - status
+        - grantedAt
+        - revokedAt
+        - rowVersion
+        - etag
+      properties:
+        assignmentId:
+          $ref: "#/components/schemas/Uuid"
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        role:
+          $ref: "#/components/schemas/ManagedPlatformRole"
+        scopeType:
+          type: string
+          enum:
+            - COMPANY
+            - PLATFORM
+        scopeId:
+          $ref: "#/components/schemas/Uuid"
+        status:
+          $ref: "#/components/schemas/RoleAssignmentStatus"
+        grantedAt:
+          $ref: "#/components/schemas/Instant"
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        etag:
+          type: string
+          pattern: ^"[0-9]+"$
+    RoleAssignmentPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoleAssignment"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+    RoleMutationResult:
+      type: object
+      additionalProperties: false
+      required:
+        - assignmentId
+        - companyId
+        - userId
+        - role
+        - status
+        - assignmentRowVersion
+        - userRowVersion
+        - authorizationVersion
+        - changedAt
+      properties:
+        assignmentId:
+          $ref: "#/components/schemas/Uuid"
+        companyId:
+          $ref: "#/components/schemas/Uuid"
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        role:
+          $ref: "#/components/schemas/ManagedPlatformRole"
+        status:
+          $ref: "#/components/schemas/RoleAssignmentStatus"
+        assignmentRowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        userRowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        authorizationVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        changedAt:
+          $ref: "#/components/schemas/Instant"
+    AccountStatusChangeResult:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - employmentStatus
+        - accountStatus
+        - authorizationVersion
+        - rowVersion
+      properties:
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        employmentStatus:
+          $ref: "#/components/schemas/EmploymentStatus"
+        accountStatus:
+          $ref: "#/components/schemas/AccountStatus"
+        authorizationVersion:
+          type: integer
+          format: int64
+          minimum: 0
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0

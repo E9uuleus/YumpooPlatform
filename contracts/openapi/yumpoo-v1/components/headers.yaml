@@ -1,0 +1,27 @@
+components:
+  headers:
+    Location:
+      description: 跳转目标 URI。
+      schema:
+        type: string
+        format: uri-reference
+    SetCookie:
+      description: 一个或多个安全 Cookie；客户端必须按 HTTP 多值头语义处理。
+      schema:
+        type: string
+    XRequestId:
+      description: 请求关联标识；错误响应中必须与 body.requestId 完全一致。
+      schema:
+        $ref: "#/components/schemas/RequestId"
+    ETag:
+      description: 当前资源 rowVersion 对应的单个强 ETag。
+      schema:
+        type: string
+        pattern: ^"[0-9]+"$
+      example: '"5"'
+    RetryAfter:
+      description: 允许再次尝试前应等待的秒数。
+      schema:
+        type: integer
+        format: int32
+        minimum: 1

@@ -96,6 +96,9 @@ test('workflow preserves mandatory gates, immutable actions and exact artifact h
 
 test('flat static plan runs shared capabilities once and Windows reuses the tested server payload', () => {
   const steps = plan('static')
+  assert.deepEqual(plan('contracts')[0], {
+    id: 'openapi-bundle', tool: 'node', args: ['tools/openapi/openapi-bundle.mjs', '--check'],
+  })
   assert.equal(new Set(steps.map(step => step.id)).size, steps.length)
   assert.equal(new Set(steps.map(step => JSON.stringify([step.tool, step.args]))).size, steps.length)
   assert(!steps.some(step => step.args.some(arg => /^(?:verify|package|validate):m/u.test(arg))))

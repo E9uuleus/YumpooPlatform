@@ -1,0 +1,345 @@
+components:
+  schemas:
+    ActivityAudienceType:
+      type: string
+      enum:
+        - PROJECT
+    ActivityActor:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - userId
+        - displayName
+      properties:
+        type:
+          type: string
+          enum:
+            - USER
+            - SYSTEM
+            - ADMIN_OVERRIDE
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 200
+    ActivityItem:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - audienceType
+        - sourceEventType
+        - entityType
+        - entityId
+        - entityRef
+        - relatedWorkItemIds
+        - actor
+        - occurredAt
+        - templateCode
+        - summary
+        - safeParameters
+        - requestId
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        audienceType:
+          $ref: "#/components/schemas/ActivityAudienceType"
+        sourceEventType:
+          type: string
+          minLength: 3
+          maxLength: 128
+        entityType:
+          type: string
+          minLength: 2
+          maxLength: 32
+        entityId:
+          $ref: "#/components/schemas/Uuid"
+        entityRef:
+          type: string
+          minLength: 1
+          maxLength: 320
+          nullable: true
+        relatedWorkItemIds:
+          type: array
+          maxItems: 2
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/Uuid"
+        actor:
+          $ref: "#/components/schemas/ActivityActor"
+        occurredAt:
+          type: string
+          format: date-time
+        templateCode:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]{2,95}$
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 500
+        safeParameters:
+          type: object
+          additionalProperties: true
+          description: 仅包含契约白名单内的安全展示参数。
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 64
+    ActivityPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - nextCursor
+        - historyStartedAt
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityItem"
+        nextCursor:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          nullable: true
+        historyStartedAt:
+          type: string
+          format: date-time
+          description: Activity V1 投影开始接收事件的明确切点，更早历史未回填。
+    CompanyActivityItem:
+      type: object
+      additionalProperties: false
+      required:
+        - projectId
+        - projectName
+        - activity
+      properties:
+        projectId:
+          $ref: "#/components/schemas/Uuid"
+        projectName:
+          type: string
+          nullable: true
+          description: 项目处于清除流程时为 null。
+        activity:
+          $ref: "#/components/schemas/ActivityItem"
+    CompanyActivityPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - nextCursor
+        - historyStartedAt
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CompanyActivityItem"
+        nextCursor:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          nullable: true
+        historyStartedAt:
+          type: string
+          format: date-time
+          description: Activity V1 投影开始接收事件的明确切点，更早历史未回填。
+    WorkItemCellActivityColumn:
+      type: string
+      enum:
+        - WORK_ITEM_NAME
+        - ASSIGNEE
+        - STATUS
+        - PRIORITY
+        - DUE_DATE
+        - CONTENT
+        - TIME_TRACKING
+    WorkItemCellActivityChangeType:
+      type: string
+      enum:
+        - CREATED
+        - ADDED
+        - REMOVED
+        - CHANGED
+    WorkItemCellActivityValueType:
+      type: string
+      enum:
+        - TEXT
+        - MEMBER
+        - LABEL
+        - DATE
+    WorkItemCellActivityTimeRange:
+      type: string
+      enum:
+        - TODAY
+        - YESTERDAY
+        - THIS_WEEK
+        - THIS_MONTH
+        - THIS_YEAR
+    WorkItemCellActivityValue:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - referenceId
+        - displayName
+        - colorToken
+      properties:
+        type:
+          $ref: "#/components/schemas/WorkItemCellActivityValueType"
+        referenceId:
+          type: string
+          nullable: true
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 300
+        colorToken:
+          type: string
+          nullable: true
+    WorkItemCellActivityEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - eventType
+        - actor
+        - occurredAt
+        - column
+        - changeType
+        - beforeValue
+        - afterValue
+        - contentId
+        - contentDisplayName
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        eventType:
+          type: string
+          minLength: 3
+          maxLength: 128
+        actor:
+          $ref: "#/components/schemas/ActivityActor"
+        occurredAt:
+          type: string
+          format: date-time
+        column:
+          $ref: "#/components/schemas/WorkItemCellActivityColumn"
+        changeType:
+          $ref: "#/components/schemas/WorkItemCellActivityChangeType"
+        beforeValue:
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/WorkItemCellActivityValue"
+          nullable: true
+        afterValue:
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/WorkItemCellActivityValue"
+          nullable: true
+        contentId:
+          $ref: "#/components/schemas/Uuid"
+        contentDisplayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+    WorkItemCellActivityTimeRangeFacet:
+      type: object
+      additionalProperties: false
+      required:
+        - value
+        - count
+        - selected
+      properties:
+        value:
+          $ref: "#/components/schemas/WorkItemCellActivityTimeRange"
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+        selected:
+          type: boolean
+    WorkItemCellActivityActorFacet:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - displayName
+        - count
+        - selected
+      properties:
+        userId:
+          $ref: "#/components/schemas/Uuid"
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+        selected:
+          type: boolean
+    WorkItemCellActivityColumnFacet:
+      type: object
+      additionalProperties: false
+      required:
+        - value
+        - count
+        - selected
+      properties:
+        value:
+          $ref: "#/components/schemas/WorkItemCellActivityColumn"
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+        selected:
+          type: boolean
+    WorkItemCellActivityFacets:
+      type: object
+      additionalProperties: false
+      required:
+        - timeRanges
+        - actors
+        - columns
+      properties:
+        timeRanges:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemCellActivityTimeRangeFacet"
+        actors:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemCellActivityActorFacet"
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemCellActivityColumnFacet"
+    WorkItemCellActivityPage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - nextCursor
+        - historyStartedAt
+        - facets
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkItemCellActivityEntry"
+        nextCursor:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          nullable: true
+        historyStartedAt:
+          type: string
+          format: date-time
+          description: 单元格动态专用投影开始接收事件的明确切点，更早历史未回填。
+        facets:
+          $ref: "#/components/schemas/WorkItemCellActivityFacets"

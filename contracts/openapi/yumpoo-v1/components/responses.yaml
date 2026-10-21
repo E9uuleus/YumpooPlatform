@@ -1,0 +1,235 @@
+components:
+  responses:
+    ProjectChanged:
+      description: Project 已更新，或返回同一幂等命令的既有成功结果。
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Project"
+    ProjectMemberChanged:
+      description: Project membership 已更新，或返回同一幂等命令的既有成功结果。
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectMember"
+    ProjectMemberCreated:
+      description: Project membership 已创建。
+      headers:
+        Location:
+          $ref: "#/components/headers/Location"
+        ETag:
+          $ref: "#/components/headers/ETag"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectMember"
+    WorkspaceChanged:
+      description: Workspace 已更新，或返回同一幂等命令的既有成功结果。
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Workspace"
+    RoleGranted:
+      description: 角色授予成功。
+      headers:
+        Location:
+          $ref: "#/components/headers/Location"
+        ETag:
+          $ref: "#/components/headers/ETag"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RoleMutationResult"
+    RoleChanged:
+      description: 角色撤销成功。
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RoleMutationResult"
+    AccountChanged:
+      description: 账号状态变更成功。
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccountStatusChangeResult"
+    InternalError:
+      description: 系统错误或高风险操作因 Security Audit 不可写而失败关闭。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            internalError:
+              $ref: "#/components/examples/InternalError"
+    MalformedRequest:
+      description: 请求 JSON、类型、参数格式或条件头无法解析。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            malformedRequest:
+              $ref: "#/components/examples/MalformedRequest"
+    AuthenticationRequired:
+      description: 未建立有效 CurrentActor。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            authenticationRequired:
+              $ref: "#/components/examples/AuthenticationRequired"
+    Forbidden:
+      description: 可识别账号已禁用，或有效主体缺少可见资源上的动作权限。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            accountDisabled:
+              $ref: "#/components/examples/AccountDisabled"
+            accessDenied:
+              $ref: "#/components/examples/AccessDenied"
+    ResourceNotFound:
+      description: 资源不存在，或资源存在性对当前主体不可见。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            resourceNotFound:
+              $ref: "#/components/examples/ResourceNotFound"
+    Conflict:
+      description: 幂等、处理中、状态迁移或工时锁定冲突。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            idempotencyKeyReused:
+              $ref: "#/components/examples/IdempotencyKeyReused"
+            requestInProgress:
+              $ref: "#/components/examples/RequestInProgress"
+            invalidStateTransition:
+              $ref: "#/components/examples/InvalidStateTransition"
+            worklogLocked:
+              $ref: "#/components/examples/WorklogLocked"
+    VersionConflict:
+      description: If-Match 与当前可见资源版本不一致。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            versionConflict:
+              $ref: "#/components/examples/VersionConflict"
+    FileTooLarge:
+      description: 上传内容超过服务端允许的最大字节数。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            fileTooLarge:
+              $ref: "#/components/examples/FileTooLarge"
+    FileTypeNotAllowed:
+      description: 文件扩展名、声明 MIME 或服务端内容识别结果不符合允许策略。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            fileTypeNotAllowed:
+              $ref: "#/components/examples/FileTypeNotAllowed"
+    ValidationFailed:
+      description: 请求格式正确，但字段、必填项或业务规则不满足。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            validationFailed:
+              $ref: "#/components/examples/ValidationFailed"
+    ClientUpgradeRequired:
+      description: Electron 客户端低于最低支持版本。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            clientUpgradeRequired:
+              $ref: "#/components/examples/ClientUpgradeRequired"
+    PreconditionRequired:
+      description: 条件写入缺少必需的 If-Match。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            preconditionRequired:
+              $ref: "#/components/examples/PreconditionRequired"
+    DependencyUnavailable:
+      description: 完成请求所需的外部依赖暂时不可用。
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/XRequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            dependencyUnavailable:
+              $ref: "#/components/examples/DependencyUnavailable"
