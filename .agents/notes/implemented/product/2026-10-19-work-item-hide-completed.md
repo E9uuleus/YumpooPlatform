@@ -24,4 +24,4 @@ Status: implemented
 
 ## Consequences
 
-开关与完成定义分别存于计时状态与表格设置的新列，回退后的旧版本忽略这两列。完成定义引用的状态停用或删除后静默失效。选择列表在已加载的候选上过滤，“已隐藏 N 项”只统计当前已加载的页。`TimeTrackingHttpIT` 验证偏好省略时保留，以及候选 `completed` 按本人定义计算；`WorkItemHttpIT` 验证分组与完成定义不写入 `settings` jsonb；`useHideCompleted.spec.ts` 验证无搜索词时隐藏、搜索时保留与保存。
+开关与完成定义分别存于计时状态与表格设置的新列，回退后的旧版本忽略这两列。完成定义引用的状态停用或删除后静默失效。选择列表由服务端按本人完成定义排除已完成项；隐藏数是全量的 `hiddenCompletedCount`；搜索时不排除，只淡化显示。`TimeTrackingHttpIT` 验证偏好省略时保留，以及候选 `completed` 按本人定义计算；`WorkItemHttpIT` 验证分组与完成定义不写入 `settings` jsonb；`useTimerCandidates.spec.ts` 验证服务端筛选参数、搜索时保留已完成项，以及首段计数和筛选重载。
