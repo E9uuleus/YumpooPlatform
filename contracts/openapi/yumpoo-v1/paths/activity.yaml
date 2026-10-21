@@ -1,0 +1,192 @@
+paths:
+  /projects/{projectId}/activity:
+    get:
+      tags:
+        - Activity
+      operationId: listProjectActivity
+      summary: 查询项目动态
+      description: 仅返回 V44 切点后的白名单事实；每次请求按当前 Project 可见性重新鉴权。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/ActivityCursor"
+        - $ref: "#/components/parameters/ActivitySize"
+        - $ref: "#/components/parameters/ActivityEventType"
+        - $ref: "#/components/parameters/ActivityEntityType"
+        - $ref: "#/components/parameters/ActivityOccurredFrom"
+        - $ref: "#/components/parameters/ActivityOccurredTo"
+      responses:
+        "200":
+          description: 按 occurredAt、id 倒序的项目动态。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-items/{workItemId}/activity:
+    get:
+      tags:
+        - Activity
+      operationId: listWorkItemActivity
+      summary: 查询事项动态
+      description: 软删除事项仍可在当前 Project 可见时读取历史；游标不可跨事项或筛选复用。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/ActivityCursor"
+        - $ref: "#/components/parameters/ActivitySize"
+        - $ref: "#/components/parameters/ActivityEventType"
+        - $ref: "#/components/parameters/ActivityEntityType"
+        - $ref: "#/components/parameters/ActivityOccurredFrom"
+        - $ref: "#/components/parameters/ActivityOccurredTo"
+      responses:
+        "200":
+          description: 按 occurredAt、id 倒序的事项动态。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /work-items/{workItemId}/cell-activity:
+    get:
+      tags:
+        - Activity
+      operationId: listWorkItemCellActivity
+      summary: 查询工作项单元格动态
+      description: 仅返回专用投影切点后的字段白名单动态；游标绑定事项、全部筛选和首次请求时间锚点。
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: workItemId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/ActivityCursor"
+        - $ref: "#/components/parameters/ActivitySize"
+        - name: timeRange
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/WorkItemCellActivityTimeRange"
+        - name: actorUserId
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: column
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/WorkItemCellActivityColumn"
+      responses:
+        "200":
+          description: 按 occurredAt、id 倒序的工作项单元格动态及完整投影统计。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItemCellActivityPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /admin/company/activity:
+    get:
+      tags:
+        - Activity
+      operationId: listCompanyActivity
+      summary: 公司管理员查询全公司项目动态
+      description: 仅 COMPANY_ADMIN（含 APP_MANAGER）可读；返回 V44 切点后全部项目动态，项目清除中时 projectName 为 null。游标绑定 Company 与全部筛选。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ActivityCursor"
+        - $ref: "#/components/parameters/ActivitySize"
+        - $ref: "#/components/parameters/ActivityEventType"
+        - name: projectId
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - name: actorUserId
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/Uuid"
+        - $ref: "#/components/parameters/ActivityOccurredFrom"
+        - $ref: "#/components/parameters/ActivityOccurredTo"
+      responses:
+        "200":
+          description: 按 occurredAt、id 倒序的全公司项目动态。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyActivityPage"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"

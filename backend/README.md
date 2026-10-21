@@ -283,7 +283,7 @@ java -jar .\target\yumpoo-server.jar
 - `GET /actuator/health/liveness`
 - `GET /actuator/health/readiness`
 
-M0-12 与 M0-13 不增加生产探针、正式业务 Controller 或 OpenAPI path；双门禁诊断能力只用于真实企微验证。`/api/v1` 的统一错误、分页、条件头和客户端头以仓库根目录 `contracts/openapi/yumpoo-v1.yaml` 为唯一 HTTP 契约；内部事件信封、目录、payload Schema 和样例位于 `contracts/events`。
+M0-12 与 M0-13 不增加生产探针、正式业务 Controller 或 OpenAPI path；双门禁诊断能力只用于真实企微验证。`/api/v1` 的统一错误、分页、条件头和客户端头编辑于仓库根目录 `contracts/openapi/yumpoo-v1/`，运行 `pnpm generate:openapi` 生成 `contracts/openapi/yumpoo-v1.yaml`，禁止手改生成文件；消费方继续读取生成的单文件。内部事件信封、目录、payload Schema 和样例位于 `contracts/events`。
 
 ## 模块
 

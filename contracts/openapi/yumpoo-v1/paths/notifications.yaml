@@ -1,0 +1,282 @@
+paths:
+  /me/notifications:
+    get:
+      tags:
+        - Notifications
+      operationId: listNotifications
+      summary: 查询本人收件箱
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: state
+          in: query
+          schema:
+            $ref: "#/components/schemas/NotificationListState"
+        - name: group
+          in: query
+          schema:
+            $ref: "#/components/schemas/NotificationGroup"
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 2048
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationPage"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /me/notifications/unread-count:
+    get:
+      tags:
+        - Notifications
+      operationId: getNotificationUnreadCounts
+      summary: 查询本人收件箱
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCounts"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /me/notifications/{id}/read:
+    post:
+      tags:
+        - Notifications
+      operationId: markNotificationRead
+      summary: 更新本人通知状态
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCounts"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /me/notifications/{id}/unread:
+    post:
+      tags:
+        - Notifications
+      operationId: markNotificationUnread
+      summary: 更新本人通知状态
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCounts"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /me/notifications/{id}/archive:
+    post:
+      tags:
+        - Notifications
+      operationId: archiveNotification
+      summary: 更新本人通知状态
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCounts"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /me/notifications/read-all:
+    post:
+      tags:
+        - Notifications
+      operationId: markAllNotificationsRead
+      summary: 更新本人通知状态
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationReadAllRequest"
+      responses:
+        "200":
+          description: 查询或更新成功。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadCounts"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /me/projects/{projectId}/notification-preference:
+    get:
+      tags:
+        - Notifications
+      operationId: getMyProjectNotificationPreference
+      summary: 查询本人在项目中的通知偏好
+      description: 仅项目 ACTIVE 成员可读；从未设置时返回 ALL 默认值且 updatedAt 为 null。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: 本人项目通知偏好。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectNotificationPreference"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+    put:
+      tags:
+        - Notifications
+      operationId: updateMyProjectNotificationPreference
+      summary: 整体替换本人在项目中的通知偏好
+      description: 天然幂等，仅要求会话与 XSRF；只影响此后产生的通知。成员加入、移出与负责人变更通知不受偏好影响。
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/XsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectNotificationPreferenceUpdateRequest"
+      responses:
+        "200":
+          description: 保存后的本人项目通知偏好。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: 固定为 no-store。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectNotificationPreference"
+        "400":
+          $ref: "#/components/responses/MalformedRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"

@@ -1,0 +1,340 @@
+components:
+  schemas:
+    ScheduledJob:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - available
+        - enabled
+        - cron
+        - zoneId
+        - nextRunAt
+        - lastStartedAt
+        - lastFinishedAt
+        - lastOutcome
+        - lastErrorCode
+        - lastRequestId
+        - etag
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]{0,63}$
+        available:
+          type: boolean
+          description: 当前部署是否启用该任务依赖；为 false 时到点记录 SKIPPED。
+        enabled:
+          type: boolean
+        cron:
+          type: string
+          minLength: 1
+          maxLength: 64
+        zoneId:
+          type: string
+          minLength: 1
+          maxLength: 100
+        nextRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastStartedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastFinishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastOutcome:
+          type: string
+          nullable: true
+          enum:
+            - SUCCEEDED
+            - PARTIAL
+            - FAILED
+            - SKIPPED
+        lastErrorCode:
+          type: string
+          maxLength: 96
+          nullable: true
+        lastRequestId:
+          type: string
+          maxLength: 64
+          nullable: true
+        etag:
+          type: string
+          pattern: ^"[0-9]+"$
+    ScheduledJobList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduledJob"
+    CalendarDaySource:
+      type: string
+      enum:
+        - MANUAL
+        - IMPORT
+      nullable: true
+      description: 显式日期的最近编辑来源；未设置日期为空，写入省略时默认 MANUAL。
+    WorkCalendarDay:
+      type: object
+      additionalProperties: false
+      required:
+        - date
+        - dayType
+        - standardMinutes
+        - note
+        - explicit
+        - configuredStandardMinutes
+        - source
+      properties:
+        date:
+          type: string
+          format: date
+        dayType:
+          $ref: "#/components/schemas/CalendarDayType"
+        standardMinutes:
+          type: integer
+          minimum: 0
+          maximum: 720
+        configuredStandardMinutes:
+          type: integer
+          minimum: 1
+          maximum: 720
+          nullable: true
+          description: 工作日原始标准工时设置；为空表示继承公司默认值，非工作日及未设置日期也为空。
+        source:
+          $ref: "#/components/schemas/CalendarDaySource"
+        note:
+          type: string
+          nullable: true
+          maxLength: 30
+        explicit:
+          type: boolean
+          description: 是否为管理员显式设置；否则按默认周末规则。
+    WorkCalendarYear:
+      type: object
+      additionalProperties: false
+      required:
+        - year
+        - defaultWorkdayMinutes
+        - etag
+        - days
+      properties:
+        year:
+          type: integer
+          minimum: 2000
+          maximum: 2100
+        defaultWorkdayMinutes:
+          type: integer
+          minimum: 1
+          maximum: 720
+        etag:
+          type: string
+          pattern: ^"[0-9]+"$
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkCalendarDay"
+    WorkCalendarDayInput:
+      type: object
+      additionalProperties: false
+      required:
+        - date
+        - dayType
+      properties:
+        date:
+          type: string
+          format: date
+        dayType:
+          $ref: "#/components/schemas/CalendarDayType"
+        standardMinutes:
+          type: integer
+          minimum: 1
+          maximum: 720
+          nullable: true
+          description: 仅工作日可填，为空沿用公司默认标准工时。
+        source:
+          $ref: "#/components/schemas/CalendarDaySource"
+        note:
+          type: string
+          nullable: true
+          maxLength: 30
+    WorkCalendarUpdateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - days
+      properties:
+        days:
+          type: array
+          maxItems: 366
+          items:
+            $ref: "#/components/schemas/WorkCalendarDayInput"
+    WorkHoursAlertSetting:
+      type: object
+      additionalProperties: false
+      required:
+        - dailyThresholdMinutes
+        - etag
+      properties:
+        dailyThresholdMinutes:
+          type: integer
+          minimum: 60
+          maximum: 1440
+        etag:
+          type: string
+          pattern: ^"[0-9]+"$
+    WorkHoursAlertUpdateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - dailyThresholdMinutes
+      properties:
+        dailyThresholdMinutes:
+          type: integer
+          minimum: 60
+          maximum: 1440
+    ScheduledJobUpdateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - enabled
+        - cron
+      properties:
+        enabled:
+          type: boolean
+        cron:
+          type: string
+          minLength: 1
+          maxLength: 64
+    GovernanceOverrideAction:
+      type: string
+      enum:
+        - PROJECT_ARCHIVE_WITH_OPEN_ITEMS
+        - WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS
+    GovernanceOverrideCreateAction:
+      type: string
+      enum:
+        - PROJECT_ARCHIVE_WITH_OPEN_ITEMS
+        - WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS
+      description: WORKSPACE_ARCHIVE_WITH_ACTIVE_PROJECTS 仅为 v1 请求兼容保留，提交后返回稳定失败结果。
+    GovernanceTargetType:
+      type: string
+      enum:
+        - PROJECT
+        - WORKSPACE
+    GovernanceOverrideResult:
+      type: string
+      enum:
+        - SUCCEEDED
+        - FAILED
+    GovernanceOverrideRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - action
+        - targetType
+        - targetId
+        - reason
+      properties:
+        action:
+          $ref: "#/components/schemas/GovernanceOverrideCreateAction"
+        targetType:
+          type: string
+          enum:
+            - PROJECT
+            - WORKSPACE
+        targetId:
+          $ref: "#/components/schemas/Uuid"
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+    GovernanceOverrideRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - companyId
+        - action
+        - targetType
+        - targetId
+        - reason
+        - requestHash
+        - idempotencyKey
+        - actorUserId
+        - beforeSnapshot
+        - blockerCounts
+        - result
+        - occurredAt
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        companyId:
+          $ref: "#/components/schemas/Uuid"
+        action:
+          $ref: "#/components/schemas/GovernanceOverrideAction"
+        targetType:
+          $ref: "#/components/schemas/GovernanceTargetType"
+        targetId:
+          $ref: "#/components/schemas/Uuid"
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+        requestHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        idempotencyKey:
+          $ref: "#/components/schemas/Uuid"
+        actorUserId:
+          $ref: "#/components/schemas/Uuid"
+        beforeSnapshot:
+          type: object
+          additionalProperties: true
+        afterSnapshot:
+          type: object
+          additionalProperties: true
+          nullable: true
+        blockerCounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/SafeBlocker"
+        result:
+          $ref: "#/components/schemas/GovernanceOverrideResult"
+        errorCode:
+          type: string
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+    GovernanceOverridePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - offset
+        - size
+        - totalElements
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceOverrideRecord"
+        offset:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0

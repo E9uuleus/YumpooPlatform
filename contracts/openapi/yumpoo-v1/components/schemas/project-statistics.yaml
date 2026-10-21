@@ -1,0 +1,98 @@
+components:
+  schemas:
+    ProjectStatisticsQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - filters
+        - widgets
+      properties:
+        filters:
+          $ref: "#/components/schemas/DashboardFilters"
+        widgets:
+          type: array
+          maxItems: 40
+          items:
+            $ref: "#/components/schemas/DashboardWidget"
+    ProjectStatisticsSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - asOf
+        - charts
+      properties:
+        asOf:
+          type: string
+          format: date-time
+        charts:
+          type: array
+          items:
+            $ref: "#/components/schemas/DashboardChartResult"
+    ProjectWorklogMember:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - displayName
+        - projectMember
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+          description: 已无资料的成员显示为“历史成员”。
+        projectMember:
+          type: boolean
+          description: 当前仍是项目有效成员。
+    ProjectWorklogEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - workItemId
+        - itemNo
+        - title
+        - durationMs
+      properties:
+        userId:
+          type: string
+          format: uuid
+        workItemId:
+          type: string
+          format: uuid
+        itemNo:
+          type: string
+        title:
+          type: string
+        durationMs:
+          type: integer
+          format: int64
+          minimum: 1
+    ProjectWorklog:
+      type: object
+      additionalProperties: false
+      required:
+        - from
+        - to
+        - asOf
+        - members
+        - entries
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        asOf:
+          type: string
+          format: date-time
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectWorklogMember"
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectWorklogEntry"

@@ -33,7 +33,7 @@ Windows 打包前的[配置隔离测试](../tools/verification/desktop-profile.t
 ## 四种事实来源
 
 - **冻结历史**：归档 Agent Note 的 manifest、已在目标分支存在的 SQL 迁移、M2-23 冻结清单与既有 OpenAPI 精确例外不可改写。换行按仓库 LF 约定比较；迁移追加更高且唯一的版本，不能删除、移动或回填旧版本。
-- **当前规范**：`contracts/openapi/yumpoo-v1.yaml`、事件目录与 Schema、生产代码和行为测试。历史验收的 Flyway 版本、旧 UI 尺寸、源码片段及 Note 措辞不定义当前行为。
+- **当前规范**：编辑 `contracts/openapi/yumpoo-v1/` 下的分域源文件，运行 `pnpm generate:openapi` 生成 `contracts/openapi/yumpoo-v1.yaml`，禁止手改生成文件。契约阶段首先校验源文件与生成物逐字节同步，现有消费方继续读取单文件。事件目录与 Schema、生产代码和行为测试同样定义当前规范；历史验收的 Flyway 版本、旧 UI 尺寸、源码片段及 Note 措辞不定义当前行为。
 - **兼容性基线**：PR 取 `pull_request.base.sha`（晋升 PR 即线上 `main`），`dev`/`main` push 取 `before`，本地默认取 `origin/dev`，手动 Actions 使用 `base_ref`。开始时解析为完整 commit，缺失、全零或无效引用失败；不复制永久规范基线。用 `YUMPOO_CI_BASE_REF` 可以显式指定本地比较基线。
 - **例外**：已有条目只授权其原始 `oldSha256/newSha256` 对；原因、唯一 ID、活动决策链接必须完整。后续兼容演进不需要把当前规范连到旧例外。额外不兼容变更仍失败；真正破坏变更须先作明确产品/迁移决定，不能为过 CI 自动批准或刷新哈希。请求枚举缩减和响应枚举扩展恢复严格检测。
 

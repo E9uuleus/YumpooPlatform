@@ -1,0 +1,117 @@
+components:
+  schemas:
+    WorkspaceStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - ARCHIVED
+    WorkspaceStatusFilter:
+      type: string
+      enum:
+        - ACTIVE
+        - ARCHIVED
+        - ALL
+    Workspace:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - code
+        - name
+        - description
+        - sortOrder
+        - status
+        - visibleProjectCount
+        - rowVersion
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        code:
+          type: string
+          minLength: 2
+          maxLength: 32
+          pattern: ^[A-Z][A-Z0-9_]{1,31}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+          nullable: true
+        sortOrder:
+          type: integer
+          format: int32
+          minimum: 0
+        status:
+          $ref: "#/components/schemas/WorkspaceStatus"
+        visibleProjectCount:
+          type: integer
+          format: int64
+          minimum: 0
+          readOnly: true
+          description: 调用人可见的 ACTIVE Project 数量；管理员统计全公司，普通用户统计 ACTIVE membership。
+        rowVersion:
+          type: integer
+          format: int64
+          minimum: 0
+          readOnly: true
+    WorkspaceList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Workspace"
+    WorkspaceCreateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - name
+        - sortOrder
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 32
+          pattern: ^[A-Z][A-Z0-9_]{1,31}$
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+          nullable: true
+        sortOrder:
+          type: integer
+          format: int32
+          minimum: 0
+    WorkspaceUpdateRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+          nullable: true
+        sortOrder:
+          type: integer
+          format: int32
+          minimum: 0
+          deprecated: true
+          description: v1 兼容字段；MAIN 的 sortOrder 永远保持 0。

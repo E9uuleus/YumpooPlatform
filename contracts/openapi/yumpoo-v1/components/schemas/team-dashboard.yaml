@@ -1,0 +1,195 @@
+components:
+  schemas:
+    TeamDashboardProject:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - code
+        - lifecycle
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        lifecycle:
+          type: string
+          enum:
+            - ACTIVE
+            - ARCHIVED
+    TeamDashboardOptions:
+      type: object
+      additionalProperties: false
+      required:
+        - projects
+        - members
+        - timezone
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamDashboardProject"
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamDashboardMember"
+        timezone:
+          type: string
+          description: 公司 IANA 时区，自然日与逾期判断均以此为准。
+    TeamTimesheetQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - from
+        - to
+        - projectIds
+        - userIds
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+          description: 含当天；与 from 最多相差 92 天。
+        projectIds:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        userIds:
+          type: array
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    TeamWorkloadQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - projectIds
+        - userIds
+      properties:
+        projectIds:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        userIds:
+          type: array
+          maxItems: 1000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    TeamWorkloadCounts:
+      type: object
+      additionalProperties: false
+      required:
+        - todo
+        - inProgress
+        - overdue
+      properties:
+        todo:
+          type: integer
+          format: int64
+          minimum: 0
+        inProgress:
+          type: integer
+          format: int64
+          minimum: 0
+        overdue:
+          type: integer
+          format: int64
+          minimum: 0
+    TeamWorkloadMember:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - displayName
+        - active
+        - todo
+        - inProgress
+        - overdue
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        active:
+          type: boolean
+        todo:
+          type: integer
+          format: int64
+          minimum: 0
+        inProgress:
+          type: integer
+          format: int64
+          minimum: 0
+        overdue:
+          type: integer
+          format: int64
+          minimum: 0
+    TeamWorkload:
+      type: object
+      additionalProperties: false
+      required:
+        - asOf
+        - today
+        - members
+        - unassigned
+      properties:
+        asOf:
+          type: string
+          format: date-time
+        today:
+          type: string
+          format: date
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamWorkloadMember"
+        unassigned:
+          $ref: "#/components/schemas/TeamWorkloadCounts"
+    TeamMemberTasksQuery:
+      type: object
+      additionalProperties: false
+      required:
+        - userId
+        - projectIds
+        - offset
+        - limit
+      properties:
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+          description: null 表示未分配。
+        projectIds:
+          type: array
+          maxItems: 500
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        offset:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100000
+        limit:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
